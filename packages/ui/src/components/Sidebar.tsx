@@ -5,6 +5,7 @@ import { useAppState, useConnection, useDispatch } from '../context'
 import { worktreeStatus } from '../lib/status'
 import { AddRepoForm } from './AddRepoForm'
 import { NewWorktreeDialog } from './NewWorktreeDialog'
+import { SettingsDialog } from './SettingsDialog'
 import { StatusDot } from './StatusDot'
 
 function WorktreeRow({ worktree }: { worktree: Worktree }) {
@@ -67,6 +68,7 @@ function RepoSection({ repo, worktrees }: { repo: Repo; worktrees: Worktree[] })
 
 export function Sidebar() {
   const state = useAppState()
+  const [settingsOpen, setSettingsOpen] = useState(false)
 
   return (
     <aside className="sidebar">
@@ -81,6 +83,17 @@ export function Sidebar() {
         ))}
       </div>
       <AddRepoForm />
+      <footer className="sidebar-footer">
+        <button
+          className="icon-button gear"
+          aria-label="Settings"
+          title="Settings"
+          onClick={() => setSettingsOpen(true)}
+        >
+          ⚙
+        </button>
+      </footer>
+      {settingsOpen && <SettingsDialog onClose={() => setSettingsOpen(false)} />}
     </aside>
   )
 }

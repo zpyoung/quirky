@@ -8,7 +8,12 @@ import type {
   Worktree
 } from '@quirky/protocol'
 
-export type ConnectionStatus = 'connecting' | 'connected' | 'reconnecting' | 'no-token'
+export type ConnectionStatus =
+  | 'connecting'
+  | 'connected'
+  | 'reconnecting'
+  | 'unreachable'
+  | 'no-token'
 
 export type Toast = {
   id: number
@@ -34,6 +39,8 @@ export type AppState = {
   toasts: Toast[]
   nextToastId: number
   scmOpen: boolean
+  /** True once the first snapshot arrived; before it, a restored selection must not be reset. */
+  loaded: boolean
 }
 
 export type Action =
@@ -56,8 +63,12 @@ export type Action =
   | { type: 'toast'; toast: Omit<Toast, 'id'> }
   | { type: 'dismissToast'; id: number }
   | { type: 'toggleScm' }
+  | { type: 'settings'; settings: Settings }
 
-export function initialState(): AppState {
+export function initialState(selection?: {
+  worktreeId: string | null
+  sessionId: string | null
+}): AppState {
   return {
     connection: 'connecting',
     epoch: 0,
@@ -66,13 +77,14 @@ export function initialState(): AppState {
     sessions: [],
     asks: [],
     settings: null,
-    selectedWorktreeId: null,
-    selectedSessionId: null,
+    selectedWorktreeId: selection?.worktreeId ?? null,
+    selectedSessionId: selection?.sessionId ?? null,
     lastSessionByWorktree: {},
     structured: {},
     toasts: [],
     nextToastId: 1,
-    scmOpen: false
+    scmOpen: false,
+    loaded: false
   }
 }
 
@@ -104,6 +116,7 @@ function upsert<T extends { id: string }>(list: T[], item: T): T[] {
 
 /** Keeps the selection pointing at things that exist, falling back to the first available. */
 function normalizeSelection(state: AppState): AppState {
+  if (!state.loaded) return state
   let worktreeId = state.selectedWorktreeId
   if (!worktreeId || !state.worktrees.some((w) => w.id === worktreeId)) {
     worktreeId = state.worktrees[0]?.id ?? null
@@ -189,7 +202,8 @@ export function reduce(state: AppState, action: Action): AppState {
         worktrees: sortWorktrees(action.worktrees),
         sessions: sortSessions(action.sessions),
         asks: action.asks,
-        settings: action.settings
+        settings: action.settings,
+        loaded: true
       })
     case 'repos':
       return { ...state, repos: [...action.repos].sort((a, b) => a.addedAt - b.addedAt) }
@@ -234,5 +248,7 @@ export function reduce(state: AppState, action: Action): AppState {
       return { ...state, toasts: state.toasts.filter((t) => t.id !== action.id) }
     case 'toggleScm':
       return { ...state, scmOpen: !state.scmOpen }
+    case 'settings':
+      return { ...state, settings: action.settings }
   }
 }

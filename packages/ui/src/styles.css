@@ -273,11 +273,25 @@ textarea {
 }
 
 .worktree .icon-button {
-  visibility: hidden;
+  opacity: 0;
 }
 
-.worktree:hover .icon-button {
-  visibility: visible;
+.worktree:hover .icon-button,
+.worktree:focus-within .icon-button,
+.worktree.selected .icon-button {
+  opacity: 1;
+}
+
+.sidebar-footer {
+  display: flex;
+  justify-content: flex-start;
+  padding: 2px 8px 6px;
+}
+
+.sidebar-footer .gear {
+  font-size: 16px;
+  min-width: 28px;
+  min-height: 28px;
 }
 
 .add-repo {
@@ -497,6 +511,37 @@ textarea {
   white-space: pre-wrap;
 }
 
+.transcript-bar {
+  display: flex;
+  justify-content: flex-end;
+  padding: 4px 14px 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.transcript-bar label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.session-ended {
+  padding: 8px 12px;
+  border-top: 1px solid var(--border);
+  background: var(--bg-raised);
+  color: var(--muted);
+}
+
+.check-row {
+  flex-direction: row !important;
+  align-items: center;
+}
+
+.form-error {
+  margin: 0;
+  color: var(--danger);
+}
+
 .structured-input {
   display: flex;
   gap: 8px;
@@ -549,6 +594,12 @@ textarea {
   color: var(--muted);
   font-size: 11px;
   text-transform: uppercase;
+}
+
+.file-group .icon-button,
+.file-group header button {
+  min-width: 24px;
+  min-height: 24px;
 }
 
 .file-group ul {
@@ -688,12 +739,11 @@ textarea {
 
 .ask-stack {
   position: absolute;
-  top: 10px;
-  left: 50%;
-  transform: translateX(-50%);
+  right: 12px;
+  bottom: 12px;
   z-index: 30;
-  width: min(520px, calc(100% - 24px));
-  max-height: calc(100% - 20px);
+  width: min(420px, calc(100% - 24px));
+  max-height: calc(100% - 24px);
   overflow-y: auto;
   display: flex;
   flex-direction: column;
