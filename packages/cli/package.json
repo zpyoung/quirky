@@ -1,0 +1,12 @@
+{
+  "name": "@quirky/cli",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "quirky": "src/main.ts"
+  },
+  "dependencies": {
+    "@quirky/protocol": "workspace:*"
+  }
+}
