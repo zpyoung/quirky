@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import type { GitDiff, GitFileStatus, GitStatus } from '@quirky/protocol'
+import type { GitDiff, GitStatus } from '@quirky/protocol'
 import { useConnection } from '../context'
+import { keepSelection, reuseDiff, type DiffSelection } from '../lib/diffRefresh'
 import { splitFiles } from '../lib/scm'
 import { CommitBox } from './CommitBox'
 import { DiffView } from './DiffView'
@@ -8,14 +9,12 @@ import { FileList, fileKey } from './FileList'
 
 const POLL_MS = 3000
 
-type Selection = { path: string; staged: boolean }
-
 /** Source control for one worktree: polls `git.status` while mounted and shows a diff for the chosen file. */
 export function SourceControl({ worktreeId }: { worktreeId: string }) {
   const connection = useConnection()
   const [status, setStatus] = useState<GitStatus | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [selection, setSelection] = useState<Selection | null>(null)
+  const [selection, setSelection] = useState<DiffSelection | null>(null)
   const [diff, setDiff] = useState<GitDiff | null>(null)
 
   const refresh = useCallback(async () => {
@@ -38,21 +37,23 @@ export function SourceControl({ worktreeId }: { worktreeId: string }) {
 
   const { staged, unstaged } = useMemo(() => splitFiles(status?.files ?? []), [status])
 
-  const selectedFile: GitFileStatus | undefined = selection
-    ? (selection.staged ? staged : unstaged).find((f) => f.path === selection.path)
-    : undefined
-  const revision = selectedFile ? `${selectedFile.index}${selectedFile.worktree}` : null
+  const selectionPath = selection?.path
+  const selectionStaged = selection?.staged
 
   useEffect(() => {
-    if (!selection || revision === null) {
+    if (status && selection && !keepSelection(selection, staged, unstaged)) setSelection(null)
+  }, [status, selection, staged, unstaged])
+
+  useEffect(() => {
+    if (selectionPath === undefined || selectionStaged === undefined) {
       setDiff(null)
       return
     }
     let cancelled = false
     connection
-      .call('git.diff', { worktreeId, path: selection.path, staged: selection.staged })
+      .call('git.diff', { worktreeId, path: selectionPath, staged: selectionStaged })
       .then((result) => {
-        if (!cancelled) setDiff(result)
+        if (!cancelled) setDiff((prev) => reuseDiff(prev, result))
       })
       .catch((e: Error) => {
         if (!cancelled) setError(e.message)
@@ -60,7 +61,7 @@ export function SourceControl({ worktreeId }: { worktreeId: string }) {
     return () => {
       cancelled = true
     }
-  }, [connection, worktreeId, selection?.path, selection?.staged, revision])
+  }, [connection, worktreeId, selectionPath, selectionStaged, status])
 
   const toggle = (method: 'git.stage' | 'git.unstage') => async (paths: string[]) => {
     await connection.attempt(method, { worktreeId, paths }, 'Git failed')
