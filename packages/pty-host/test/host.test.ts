@@ -280,7 +280,24 @@ describe('read', () => {
     const result = await readUntil(client, 'r', 0, (r) => r.lines.includes('world'))
     expect(result.lines.slice(0, 2)).toEqual(['hello', 'world'])
     expect(result).toMatchObject({ cols: 40, rows: 6, alt: false })
-    expect(result.lines).toHaveLength(6)
+  })
+
+  test('drops trailing blank rows of the screen but keeps interior blanks', async () => {
+    const host = startHost()
+    const client = await host.connect()
+    await client.request('create', createParams('tb', sh('printf "a\\n\\n\\nb"; sleep 5'), { cols: 40, rows: 10 }))
+    const result = await readUntil(client, 'tb', 0, (r) => r.lines.includes('b'))
+    expect(result.lines).toEqual(['a', '', '', 'b'])
+    expect(result).toMatchObject({ cols: 40, rows: 10 })
+  })
+
+  test('a blank screen reads as no lines and keeps its dimensions', async () => {
+    const host = startHost()
+    const client = await host.connect()
+    await client.request('create', createParams('blank', sh('sleep 5'), { cols: 30, rows: 8 }))
+    const result = await client.request('read', { sessionId: 'blank', lines: 0 })
+    expect(result.lines).toEqual([])
+    expect(result).toMatchObject({ cols: 30, rows: 8 })
   })
 
   test('includes the requested amount of scrollback above the screen', async () => {
@@ -288,9 +305,8 @@ describe('read', () => {
     const client = await host.connect()
     await client.request('create', createParams('sb', sh('seq 1 50; sleep 5'), { rows: 5 }))
     const result = await readUntil(client, 'sb', 3, (r) => r.lines.includes('50'))
-    expect(result.lines).toHaveLength(8)
     expect(result.lines[0]).toBe('44')
-    expect(result.lines.filter((l) => l !== '').at(-1)).toBe('50')
+    expect(result.lines.at(-1)).toBe('50')
   })
 
   test('reports alt when the alternate screen is active', async () => {

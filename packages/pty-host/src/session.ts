@@ -223,7 +223,11 @@ export class SessionManager {
     for (const session of this.sessions.values()) session.subscribers.delete(sink)
   }
 
-  /** The visible screen plus up to `lines` rows of scrollback, with trailing whitespace trimmed. */
+  /**
+   * The visible screen plus up to `lines` rows of scrollback, with trailing whitespace trimmed from
+   * each row and trailing blank rows dropped. A blank screen reads as `[]`; `rows` and `cols` always
+   * report the emulator size.
+   */
   async read(sessionId: string, lines: number): Promise<PtyResults['read']> {
     const session = this.require(sessionId)
     if (!Number.isInteger(lines) || lines < 0) throw new Error('lines must be a non-negative integer')
@@ -235,6 +239,7 @@ export class SessionManager {
     for (let y = Math.max(0, buffer.baseY - lines); y < buffer.baseY + term.rows; y++) {
       out.push(buffer.getLine(y)?.translateToString(true).trimEnd() ?? '')
     }
+    while (out.length > 0 && out[out.length - 1] === '') out.pop()
     return { lines: out, cols: term.cols, rows: term.rows, alt: buffer.type === 'alternate' }
   }
 
