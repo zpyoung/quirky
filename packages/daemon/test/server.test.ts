@@ -153,6 +153,13 @@ describe('static ui', () => {
     expect((await fetch(url(harness, '/../../etc/passwd'))).status).not.toBe(500)
   })
 
+  test('answers /favicon.ico with 204', async () => {
+    harness = await startHarness()
+    const response = await fetch(url(harness, '/favicon.ico'))
+    expect(response.status).toBe(204)
+    expect(await response.text()).toBe('')
+  })
+
   test('returns 404 when the ui dir is missing', async () => {
     harness = await startHarness()
     expect((await fetch(url(harness, '/'))).status).toBe(404)

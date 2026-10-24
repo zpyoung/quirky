@@ -40,22 +40,38 @@ describe('launch commands', () => {
   test('each agent gets its documented argv', () => {
     const base = { home: '/h', shell: '/bin/zsh' }
     expect(buildArgv({ ...base, agent: 'shell' })).toEqual(['/bin/zsh', '-l'])
+    const exportPath = `export PATH="/h/bin:$PATH"; `
     expect(buildArgv({ ...base, agent: 'claude' })).toEqual([
       '/bin/zsh',
       '-l',
       '-c',
-      `exec claude --settings '/h/hooks/claude-settings.json'`
+      `${exportPath}exec claude --settings '/h/hooks/claude-settings.json'`
     ])
     expect(buildArgv({ ...base, agent: 'claude', prompt: "fix it's bug" })[3]).toBe(
-      `exec claude --settings '/h/hooks/claude-settings.json' 'fix it'\\''s bug'`
+      `${exportPath}exec claude --settings '/h/hooks/claude-settings.json' 'fix it'\\''s bug'`
     )
     expect(buildArgv({ ...base, agent: 'codex', prompt: 'hi' })[3]).toBe(
-      `exec codex -c 'notify=["/h/bin/quirky-hook","codex"]' 'hi'`
+      `${exportPath}exec codex -c 'notify=["/h/bin/quirky-hook","codex"]' 'hi'`
     )
-    expect(buildArgv({ ...base, agent: 'opencode', prompt: 'hi' })[3]).toBe(`exec opencode --prompt 'hi'`)
-    expect(buildArgv({ ...base, agent: 'opencode' })[3]).toBe('exec opencode')
-    expect(buildArgv({ ...base, agent: 'gemini', prompt: 'hi' })[3]).toBe(`exec gemini --prompt-interactive 'hi'`)
-    expect(buildArgv({ ...base, agent: 'gemini', prompt: '   ' })[3]).toBe('exec gemini')
+    expect(buildArgv({ ...base, agent: 'opencode', prompt: 'hi' })[3]).toBe(
+      `${exportPath}exec opencode --prompt 'hi'`
+    )
+    expect(buildArgv({ ...base, agent: 'opencode' })[3]).toBe(`${exportPath}exec opencode`)
+    expect(buildArgv({ ...base, agent: 'gemini', prompt: 'hi' })[3]).toBe(
+      `${exportPath}exec gemini --prompt-interactive 'hi'`
+    )
+    expect(buildArgv({ ...base, agent: 'gemini', prompt: '   ' })[3]).toBe(`${exportPath}exec gemini`)
+  })
+
+  test('bash shells start through the wrapper rcfile and other shells stay plain', () => {
+    expect(buildArgv({ home: '/h', shell: '/bin/bash', agent: 'shell' })).toEqual([
+      '/bin/bash',
+      '--rcfile',
+      '/h/shell/bash/rcfile',
+      '-i'
+    ])
+    expect(buildArgv({ home: '/h', shell: '/usr/bin/fish', agent: 'shell' })).toEqual(['/usr/bin/fish', '-l'])
+    expect(buildArgv({ home: '/h', shell: '/usr/bin/fish', agent: 'codex' })[3]).toBe('exec codex -c \'notify=["/h/bin/quirky-hook","codex"]\'')
   })
 })
 
@@ -105,16 +121,52 @@ describe('session.create', () => {
       '/bin/zsh',
       '-l',
       '-c',
-      `exec claude --settings '${h.home}/hooks/claude-settings.json' 'do the thing'`
+      `export PATH="${h.home}/bin:$PATH"; exec claude --settings '${h.home}/hooks/claude-settings.json' 'do the thing'`
     ])
     const codex = await client.call('session.create', { worktreeId: worktree.id, agent: 'codex' })
-    expect(created(codex.id).argv[3]).toBe(`exec codex -c 'notify=["${h.home}/bin/quirky-hook","codex"]'`)
+    expect(created(codex.id).argv[3]).toBe(
+      `export PATH="${h.home}/bin:$PATH"; exec codex -c 'notify=["${h.home}/bin/quirky-hook","codex"]'`
+    )
     const gemini = await client.call('session.create', {
       worktreeId: worktree.id,
       agent: 'gemini',
       prompt: 'x'
     })
-    expect(created(gemini.id).argv[3]).toBe(`exec gemini --prompt-interactive 'x'`)
+    expect(created(gemini.id).argv[3]).toBe(
+      `export PATH="${h.home}/bin:$PATH"; exec gemini --prompt-interactive 'x'`
+    )
+  })
+
+  test('numbers titles per worktree when one is taken', async () => {
+    const create = async (agent: 'shell' | 'claude') =>
+      (await client.call('session.create', { worktreeId: worktree.id, agent })).title
+    expect(await create('shell')).toBe('Shell')
+    expect(await create('shell')).toBe('Shell 2')
+    expect(await create('claude')).toBe('Claude')
+    expect(await create('claude')).toBe('Claude 2')
+    expect(await create('shell')).toBe('Shell 3')
+    const sessions = await client.call('session.list', { worktreeId: worktree.id })
+    await client.call('session.close', { sessionId: sessions.find((s) => s.title === 'Shell')!.id })
+    expect(await create('shell')).toBe('Shell')
+
+    h.git.worktreesByRepo.get('/fake/alpha')!.push({
+      path: '/fake/other',
+      branch: 'other',
+      head: 'c'.repeat(40),
+      isMain: false
+    })
+    const [, other] = await client.call('worktree.list', { repoId: worktree.repoId })
+    const otherSession = await client.call('session.create', { worktreeId: other!.id, agent: 'shell' })
+    expect(otherSession.title).toBe('Shell')
+  })
+
+  test('shell sessions in zsh get the ZDOTDIR wrapper and the user dir to hand back to', async () => {
+    const session = await client.call('session.create', { worktreeId: worktree.id, agent: 'shell' })
+    const env = created(session.id).env
+    expect(env.ZDOTDIR).toBe(join(h.home, 'shell', 'zsh'))
+    expect(env.QUIRKY_ORIG_ZDOTDIR).toBe((process.env.ZDOTDIR || process.env.HOME) as string)
+    const claude = await client.call('session.create', { worktreeId: worktree.id, agent: 'claude' })
+    expect(created(claude.id).env.ZDOTDIR).toBe(process.env.ZDOTDIR as string)
   })
 
   test('writes the Claude settings file and executable shims', async () => {

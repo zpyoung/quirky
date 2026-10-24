@@ -1,5 +1,5 @@
 import { randomBytes } from 'node:crypto'
-import { mkdirSync, rmSync } from 'node:fs'
+import { mkdirSync, readFileSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { PROTOCOL_VERSION } from '@quirky/protocol'
@@ -25,7 +25,7 @@ import type { StructuredRunnerFactory } from './structured/runner'
 
 export type DaemonOptions = {
   home: string
-  /** Listen port; 0 picks a free one. */
+  /** Listen port; 0 tries the previous port from `daemon-identity.json`, then any free one. */
   port?: number
   git?: GitApi
   notifier?: Notifier
@@ -49,6 +49,28 @@ export type DaemonHandle = {
 }
 
 export const daemonVersion: string = pkg.version
+
+type DaemonIdentity = { port: number; token: string }
+
+function identityFilePath(home: string): string {
+  return join(home, 'daemon-identity.json')
+}
+
+function readIdentity(home: string): Partial<DaemonIdentity> {
+  try {
+    const value = JSON.parse(readFileSync(identityFilePath(home), 'utf8'))
+    return {
+      port: Number.isInteger(value.port) && value.port > 0 && value.port < 65536 ? value.port : undefined,
+      token: typeof value.token === 'string' && value.token.length >= 16 ? value.token : undefined
+    }
+  } catch {
+    return {}
+  }
+}
+
+function isAddressInUse(error: unknown): boolean {
+  return (error as { code?: string })?.code === 'EADDRINUSE'
+}
 
 function defaultUiDir(): string {
   return process.env.QUIRKY_UI_DIR ?? fileURLToPath(new URL('../../ui/dist', import.meta.url))
@@ -77,7 +99,8 @@ export async function startDaemon(options: DaemonOptions): Promise<DaemonHandle>
   const startedAt = Date.now()
   const shell = options.shell ?? process.env.SHELL ?? '/bin/zsh'
   const cliEntry = options.cliEntry ?? defaultCliEntry()
-  const rpcToken = randomBytes(24).toString('hex')
+  const identity = readIdentity(home)
+  const rpcToken = identity.token ?? randomBytes(24).toString('hex')
   const hookToken = randomBytes(24).toString('hex')
 
   const store = new Store(join(home, 'quirky.db'))
@@ -114,16 +137,31 @@ export async function startDaemon(options: DaemonOptions): Promise<DaemonHandle>
     log(`pty host unavailable at startup: ${(error as Error).message}`)
   }
 
-  const server = startServer({
-    core,
-    handlers: createHandlers(core),
-    port: options.port ?? Number(process.env.QUIRKY_PORT ?? 0),
-    rpcToken,
-    daemonVersion,
-    uiDir: options.uiDir ?? defaultUiDir(),
-    log
-  })
+  const requestedPort = options.port ?? Number(process.env.QUIRKY_PORT ?? 0)
+  const listen = (listenPort: number) =>
+    startServer({
+      core,
+      handlers: createHandlers(core),
+      port: listenPort,
+      rpcToken,
+      daemonVersion,
+      uiDir: options.uiDir ?? defaultUiDir(),
+      log
+    })
+  let server: ReturnType<typeof listen>
+  if (requestedPort === 0 && identity.port) {
+    try {
+      server = listen(identity.port)
+    } catch (error) {
+      if (!isAddressInUse(error)) throw error
+      log(`previous port ${identity.port} is taken; using a free one`)
+      server = listen(0)
+    }
+  } else {
+    server = listen(requestedPort)
+  }
   port = server.port as number
+  writePrivateJson(identityFilePath(home), { port, token: rpcToken } satisfies DaemonIdentity)
 
   const runtime: RuntimeInfo = {
     pid: process.pid,

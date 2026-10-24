@@ -2,7 +2,7 @@
  * Git operations for the daemon, done by spawning the `git` binary (no git library), the same
  * approach Orca uses. Every function throws `GitError` with git's stderr on a non-zero exit.
  */
-import { existsSync } from 'node:fs'
+import { existsSync, statSync } from 'node:fs'
 import { mkdir, stat } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import type { GitDiff, GitFileStatus, GitStatus } from '@quirky/protocol'
@@ -19,6 +19,30 @@ export class GitError extends Error {
   }
 }
 
+/** The requested branch is already checked out in another worktree. */
+export class BranchCheckedOutError extends GitError {
+  constructor(
+    readonly branch: string,
+    readonly worktreePath: string | null,
+    stderr = ''
+  ) {
+    super(
+      `branch '${branch}' is already checked out${worktreePath ? ` at ${worktreePath}` : ' in another worktree'}`,
+      stderr,
+      128
+    )
+    this.name = 'BranchCheckedOutError'
+  }
+}
+
+/** The path given to `resolveRepoRoot` is not an existing directory. */
+export class NoSuchDirectoryError extends GitError {
+  constructor(readonly path: string) {
+    super(`no such directory: ${path}`, '', -1)
+    this.name = 'NoSuchDirectoryError'
+  }
+}
+
 export type GitWorktreeInfo = {
   path: string
   branch: string | null
@@ -28,8 +52,20 @@ export type GitWorktreeInfo = {
 
 const MAX_TEXT_BYTES = 2 * 1024 * 1024
 
-/** The repository toplevel containing `path`; throws GitError when it isn't inside a repo. */
+function isDirectory(path: string): boolean {
+  try {
+    return statSync(path).isDirectory()
+  } catch {
+    return false
+  }
+}
+
+/**
+ * The repository toplevel containing `path`. Throws NoSuchDirectoryError when `path` is not a
+ * directory and GitError when it isn't inside a repo.
+ */
 export async function resolveRepoRoot(path: string): Promise<string> {
+  if (!isDirectory(path)) throw new NoSuchDirectoryError(path)
   return (await git(path, ['rev-parse', '--show-toplevel'])).trim()
 }
 
@@ -59,7 +95,11 @@ export async function listWorktrees(repoPath: string): Promise<GitWorktreeInfo[]
   return result
 }
 
-/** `git worktree add -b <branch> <path> <baseRef>`; baseRef defaults to HEAD. Creates parent dirs. */
+/**
+ * Adds a worktree at `path` for `branch`, creating parent dirs. A new branch is cut from `baseRef`
+ * (default HEAD). When a local branch of that name already exists it is checked out as is and
+ * `baseRef` is ignored; if another worktree has it checked out this throws BranchCheckedOutError.
+ */
 export async function addWorktree(
   repoPath: string,
   path: string,
@@ -67,7 +107,22 @@ export async function addWorktree(
   baseRef?: string
 ): Promise<void> {
   await mkdir(dirname(path), { recursive: true })
-  await git(repoPath, ['worktree', 'add', '-b', branch, path, baseRef ?? 'HEAD'])
+  const exists = (await runGit(repoPath, ['show-ref', '--verify', '--quiet', `refs/heads/${branch}`])).exitCode === 0
+  if (!exists) {
+    await git(repoPath, ['worktree', 'add', '-b', branch, path, baseRef ?? 'HEAD'])
+    return
+  }
+  const holder = (await listWorktrees(repoPath)).find((w) => w.branch === branch)
+  if (holder) throw new BranchCheckedOutError(branch, holder.path)
+  try {
+    await git(repoPath, ['worktree', 'add', path, branch])
+  } catch (error) {
+    const stderr = error instanceof GitError ? error.stderr : ''
+    if (/already (checked out|used by worktree)/.test(stderr)) {
+      throw new BranchCheckedOutError(branch, /at '([^']+)'/.exec(stderr)?.[1] ?? null, stderr)
+    }
+    throw error
+  }
 }
 
 export async function removeWorktree(repoPath: string, path: string, force: boolean): Promise<void> {
