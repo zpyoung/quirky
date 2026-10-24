@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "QUIRKY_REPO_ROOT=\"$(cd ../.. && pwd)\" hutch electrobun dev",
     "bundle": "bun scripts/bundle.ts",
-    "build": "bun scripts/bundle.ts && hutch electrobun build --env=stable",
+    "build": "bun scripts/bundle.ts --strict && rm -rf build artifacts && hutch electrobun build --env=stable && bun scripts/unpack.ts",
     "typecheck": "hutch electrobun prepare && tsc --noEmit -p tsconfig.json",
     "test": "bun test"
   },

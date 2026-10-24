@@ -40,11 +40,11 @@ for (const { entry, out } of bundles) {
 }
 
 rmSync(join(resources, 'ui'), { recursive: true, force: true })
-if (existsSync(uiDist)) {
+if (existsSync(join(uiDist, 'index.html'))) {
   cpSync(uiDist, join(resources, 'ui'), { recursive: true })
   console.log('copied packages/ui/dist -> resources/ui')
 } else {
-  skip(uiDist)
+  skip(join(uiDist, 'index.html'))
 }
 
 if (strict && missing > 0) {
