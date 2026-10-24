@@ -81,15 +81,29 @@ What the selection implies:
 
 ## Open decision: which stack
 
-Two builds are on the table. Both shells are thin; the shell opens a window and a webview, shows
-tray icons and notifications, handles updates and connects to the daemon.
+Three builds are on the table. In the first two the shell is thin: it opens a window and a webview,
+shows tray icons and notifications, handles updates and connects to the daemon. The third replaces
+the webview UI with a native one.
 
-| | Lowest memory | Least rewriting |
-| --- | --- | --- |
-| Daemon | Go (chromedp, go-github) | TypeScript on Bun |
-| Shell | Tauri (system webview) | Electrobun (system webview) |
-| Reuse | Little; everything is rewritten | Heimdall, sitter, objective runner, loops and ledger (about 100k lines) port with little change |
-| Risk | Go terminal emulation is weak (tuios.dev/vt, vt-go are young); mitigate by replaying a raw-byte ring buffer with screen checkpoints | Bun daemon is heavier; Windows ConPTY under Bun is unproven. Bun 1.4's native `Bun.spawn({terminal})` worked on macOS without node-pty |
+| | Lowest memory, cross-platform | Least rewriting | Native, macOS only |
+| --- | --- | --- | --- |
+| Daemon | Go (chromedp, go-github) | TypeScript on Bun | TypeScript on Bun, Go or Swift |
+| Shell | Tauri (system webview) | Electrobun (system webview) | Swift and AppKit; WKWebView only for HTML-shaped views |
+| Terminals | xterm.js in the webview | xterm.js in the webview | libghostty (Metal, capped native scrollback); SwiftTerm as fallback |
+| Reuse | Little; everything is rewritten | Heimdall, sitter, objective runner, loops and ledger (about 100k lines) port with little change | UI rewritten in Swift; daemon reuse as in the Bun column if the daemon stays TypeScript |
+| Risk | Go terminal emulation is weak (tuios.dev/vt, vt-go are young); mitigate by replaying a raw-byte ring buffer with screen checkpoints | Bun daemon is heavier; Windows ConPTY under Bun is unproven. Bun 1.4's native `Bun.spawn({terminal})` worked on macOS without node-pty | Drops Linux and Windows. No native Monaco (CodeEditSourceEditor, STTextView, or CodeMirror in a WKWebView). SwiftUI struggles with long lists and complex layouts, so heavy screens need AppKit |
+
+The native option targets the largest measured cost directly: the 25–35 MB per pane was xterm.js
+and its WebGL state inside the webview, and a native terminal moves that out. cmux (Swift, AppKit,
+libghostty, with a browser pane) is the closest existing app to this shape. PR, issue and checks
+pages, diffs and markdown with comments stay in WKWebView, because they are much faster to build
+in HTML. SwiftUI code could be shared with an iOS mobile client.
+
+The browser problem is the same in all three: the visible pane is the system webview, and agent
+automation needs a separate Chrome launched on demand and driven over CDP.
+
+Choosing the native option means dropping the cross-platform requirement below. That is the
+user's call; include it in the stack proposal rather than assuming it.
 
 Ruled out: Electron and NW.js (bundled Chromium), and the herdr and cmux multiplexers as the base
 (herdr's license is disputed; cmux is macOS-only). Servo is embeddable from crates.io but its
