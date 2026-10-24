@@ -1,0 +1,36 @@
+ghostty/a run1: app 17.0 webkit 0 daemon 14.0 pty 12.0
+ghostty/a run2: app 17.0 webkit 0 daemon 14.0 pty 12.0
+ghostty/a run3: app 17.0 webkit 0 daemon 14.0 pty 12.0
+ghostty/b run1: app 53.0 webkit 0 daemon 14.0 pty 14.0
+ghostty/b run2: app 53.0 webkit 0 daemon 14.0 pty 14.0
+ghostty/b run3: app 53.0 webkit 0 daemon 14.0 pty 15.0
+ghostty/c run1: app 56.0 webkit 0 daemon 14.0 pty 24.0
+ghostty/c run2: app 58.0 webkit 0 daemon 15.0 pty 22.0
+ghostty/c run3: app 58.0 webkit 0 daemon 16.0 pty 24.0
+ghostty/d run1: app 74.0 webkit 0 daemon 15.0 pty 25.0
+ghostty/d run2: app 76.0 webkit 0 daemon 15.0 pty 27.0
+ghostty/d run3: app 74.0 webkit 0 daemon 15.0 pty 26.0
+ghostty/e run1: app 58.0 webkit 0 daemon 16.0 pty 23.0 | +web app 62.0 webkit 57.1 daemon 16.0
+ghostty/e run2: app 56.0 webkit 0 daemon 15.0 pty 23.0 | +web app 60.0 webkit 50.9 daemon 15.0
+ghostty/e run3: app 57.0 webkit 0 daemon 14.0 pty 23.0 | +web app 62.0 webkit 50.8 daemon 15.0
+ghostty/e-blank run1: app 58.0 webkit 0 daemon 14.0 pty 23.0 | +web app 65.0 webkit 18.3 daemon 14.0
+ghostty/e-blank run2: app 58.0 webkit 0 daemon 15.0 pty 23.0 | +web app 65.0 webkit 18.2 daemon 15.0
+ghostty/e-blank run3: app 58.0 webkit 0 daemon 14.0 pty 23.0 | +web app 65.0 webkit 18.3 daemon 14.0
+swiftterm/a run1: app 16.0 webkit 0 daemon 13.0 pty 12.0
+swiftterm/a run2: app 16.0 webkit 0 daemon 13.0 pty 12.0
+swiftterm/a run3: app 17.0 webkit 0 daemon 14.0 pty 12.0
+swiftterm/b run1: app 20.0 webkit 0 daemon 14.0 pty 15.0
+swiftterm/b run2: app 20.0 webkit 0 daemon 14.0 pty 14.0
+swiftterm/b run3: app 20.0 webkit 0 daemon 13.0 pty 15.0
+swiftterm/c run1: app 38.0 webkit 0 daemon 15.0 pty 23.0
+swiftterm/c run2: app 39.0 webkit 0 daemon 15.0 pty 23.0
+swiftterm/c run3: app 38.0 webkit 0 daemon 15.0 pty 24.0
+swiftterm/d run1: app 58.0 webkit 0 daemon 15.0 pty 25.0
+swiftterm/d run2: app 57.0 webkit 0 daemon 15.0 pty 23.0
+swiftterm/d run3: app 58.0 webkit 0 daemon 15.0 pty 26.0
+swiftterm/e run1: app 38.0 webkit 0 daemon 14.0 pty 24.0 | +web app 46.0 webkit 50.8 daemon 15.0
+swiftterm/e run2: app 38.0 webkit 0 daemon 15.0 pty 22.0 | +web app 46.0 webkit 50.6 daemon 15.0
+swiftterm/e run3: app 38.0 webkit 0 daemon 15.0 pty 23.0 | +web app 46.0 webkit 50.9 daemon 15.0
+swiftterm/e-blank run1: app 39.0 webkit 0 daemon 15.0 pty 22.0 | +web app 46.0 webkit 18.2 daemon 14.0
+swiftterm/e-blank run2: app 38.0 webkit 0 daemon 14.0 pty 21.0 | +web app 46.0 webkit 18.3 daemon 14.0
+swiftterm/e-blank run3: app 39.0 webkit 0 daemon 15.0 pty 22.0 | +web app 46.0 webkit 18.3 daemon 15.0

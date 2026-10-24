@@ -1,0 +1,2558 @@
+{
+ "ghostty/a": [
+  {
+   "base": {
+    "procs": [
+     {
+      "role": "app",
+      "pid": 18495,
+      "name": "QuirkyShell",
+      "rss": 66.1,
+      "fp": 17.0
+     },
+     {
+      "role": "daemon",
+      "pid": 18419,
+      "name": "bun",
+      "rss": 29.3,
+      "fp": 14.0
+     },
+     {
+      "role": "pty-host",
+      "pid": 18441,
+      "name": "bun",
+      "rss": 21.0,
+      "fp": 12.0
+     }
+    ],
+    "app_fp": 17.0,
+    "webkit_fp": 0,
+    "daemon_fp": 14.0,
+    "pty_host_fp": 12.0,
+    "shells_fp": 0,
+    "shell_total_fp": 17.0,
+    "quirky_total_fp": 43.0
+   }
+  },
+  {
+   "base": {
+    "procs": [
+     {
+      "role": "app",
+      "pid": 19127,
+      "name": "QuirkyShell",
+      "rss": 66.1,
+      "fp": 17.0
+     },
+     {
+      "role": "daemon",
+      "pid": 19113,
+      "name": "bun",
+      "rss": 37.0,
+      "fp": 14.0
+     },
+     {
+      "role": "pty-host",
+      "pid": 19114,
+      "name": "bun",
+      "rss": 30.1,
+      "fp": 12.0
+     }
+    ],
+    "app_fp": 17.0,
+    "webkit_fp": 0,
+    "daemon_fp": 14.0,
+    "pty_host_fp": 12.0,
+    "shells_fp": 0,
+    "shell_total_fp": 17.0,
+    "quirky_total_fp": 43.0
+   }
+  },
+  {
+   "base": {
+    "procs": [
+     {
+      "role": "app",
+      "pid": 19656,
+      "name": "QuirkyShell",
+      "rss": 60.0,
+      "fp": 17.0
+     },
+     {
+      "role": "daemon",
+      "pid": 19640,
+      "name": "bun",
+      "rss": 28.7,
+      "fp": 14.0
+     },
+     {
+      "role": "pty-host",
+      "pid": 19641,
+      "name": "bun",
+      "rss": 23.0,
+      "fp": 12.0
+     }
+    ],
+    "app_fp": 17.0,
+    "webkit_fp": 0,
+    "daemon_fp": 14.0,
+    "pty_host_fp": 12.0,
+    "shells_fp": 0,
+    "shell_total_fp": 17.0,
+    "quirky_total_fp": 43.0
+   }
+  }
+ ],
+ "ghostty/b": [
+  {
+   "base": {
+    "procs": [
+     {
+      "role": "app",
+      "pid": 20510,
+      "name": "QuirkyShell",
+      "rss": 89.5,
+      "fp": 53.0
+     },
+     {
+      "role": "daemon",
+      "pid": 20457,
+      "name": "bun",
+      "rss": 37.1,
+      "fp": 14.0
+     },
+     {
+      "role": "pty-host",
+      "pid": 20459,
+      "name": "bun",
+      "rss": 37.9,
+      "fp": 14.0
+     },
+     {
+      "role": "shell",
+      "pid": 20527,
+      "name": "zsh",
+      "rss": 6.4,
+      "fp": 4.953125
+     },
+     {
+      "role": "shell",
+      "pid": 20540,
+      "name": "zsh",
+      "rss": 6.5,
+      "fp": 5.09375
+     }
+    ],
+    "app_fp": 53.0,
+    "webkit_fp": 0,
+    "daemon_fp": 14.0,
+    "pty_host_fp": 14.0,
+    "shells_fp": 10.0,
+    "shell_total_fp": 53.0,
+    "quirky_total_fp": 81.0
+   }
+  },
+  {
+   "base": {
+    "procs": [
+     {
+      "role": "app",
+      "pid": 22345,
+      "name": "QuirkyShell",
+      "rss": 89.4,
+      "fp": 53.0
+     },
+     {
+      "role": "daemon",
+      "pid": 22199,
+      "name": "bun",
+      "rss": 37.3,
+      "fp": 14.0
+     },
+     {
+      "role": "pty-host",
+      "pid": 22200,
+      "name": "bun",
+      "rss": 38.4,
+      "fp": 14.0
+     },
+     {
+      "role": "shell",
+      "pid": 22362,
+      "name": "zsh",
+      "rss": 6.3,
+      "fp": 4.90625
+     },
+     {
+      "role": "shell",
+      "pid": 22375,
+      "name": "zsh",
+      "rss": 6.4,
+      "fp": 5.03125
+     }
+    ],
+    "app_fp": 53.0,
+    "webkit_fp": 0,
+    "daemon_fp": 14.0,
+    "pty_host_fp": 14.0,
+    "shells_fp": 9.9,
+    "shell_total_fp": 53.0,
+    "quirky_total_fp": 81.0
+   }
+  },
+  {
+   "base": {
+    "procs": [
+     {
+      "role": "app",
+      "pid": 24246,
+      "name": "QuirkyShell",
+      "rss": 89.6,
+      "fp": 53.0
+     },
+     {
+      "role": "daemon",
+      "pid": 24187,
+      "name": "bun",
+      "rss": 37.5,
+      "fp": 14.0
+     },
+     {
+      "role": "pty-host",
+      "pid": 24189,
+      "name": "bun",
+      "rss": 38.9,
+      "fp": 15.0
+     },
+     {
+      "role": "shell",
+      "pid": 24261,
+      "name": "zsh",
+      "rss": 6.3,
+      "fp": 4.9375
+     },
+     {
+      "role": "shell",
+      "pid": 24275,
+      "name": "zsh",
+      "rss": 6.4,
+      "fp": 5.03125
+     }
+    ],
+    "app_fp": 53.0,
+    "webkit_fp": 0,
+    "daemon_fp": 14.0,
+    "pty_host_fp": 15.0,
+    "shells_fp": 10.0,
+    "shell_total_fp": 53.0,
+    "quirky_total_fp": 82.0
+   }
+  }
+ ],
+ "ghostty/c": [
+  {
+   "base": {
+    "procs": [
+     {
+      "role": "app",
+      "pid": 26130,
+      "name": "QuirkyShell",
+      "rss": 104.9,
+      "fp": 56.0
+     },
+     {
+      "role": "daemon",
+      "pid": 26056,
+      "name": "bun",
+      "rss": 41.5,
+      "fp": 14.0
+     },
+     {
+      "role": "pty-host",
+      "pid": 26058,
+      "name": "bun",
+      "rss": 65.7,
+      "fp": 24.0
+     },
+     {
+      "role": "shell",
+      "pid": 26146,
+      "name": "zsh",
+      "rss": 6.4,
+      "fp": 4.96875
+     },
+     {
+      "role": "shell",
+      "pid": 26160,
+      "name": "zsh",
+      "rss": 6.6,
+      "fp": 5.171875
+     }
+    ],
+    "app_fp": 56.0,
+    "webkit_fp": 0,
+    "daemon_fp": 14.0,
+    "pty_host_fp": 24.0,
+    "shells_fp": 10.1,
+    "shell_total_fp": 56.0,
+    "quirky_total_fp": 94.0
+   }
+  },
+  {
+   "base": {
+    "procs": [
+     {
+      "role": "app",
+      "pid": 27847,
+      "name": "QuirkyShell",
+      "rss": 105.3,
+      "fp": 58.0
+     },
+     {
+      "role": "daemon",
+      "pid": 27817,
+      "name": "bun",
+      "rss": 40.8,
+      "fp": 15.0
+     },
+     {
+      "role": "pty-host",
+      "pid": 27819,
+      "name": "bun",
+      "rss": 63.3,
+      "fp": 22.0
+     },
+     {
+      "role": "shell",
+      "pid": 27854,
+      "name": "zsh",
+      "rss": 6.5,
+      "fp": 5.125
+     },
+     {
+      "role": "shell",
+      "pid": 27865,
+      "name": "zsh",
+      "rss": 6.5,
+      "fp": 5.046875
+     }
+    ],
+    "app_fp": 58.0,
+    "webkit_fp": 0,
+    "daemon_fp": 15.0,
+    "pty_host_fp": 22.0,
+    "shells_fp": 10.2,
+    "shell_total_fp": 58.0,
+    "quirky_total_fp": 95.0
+   }
+  },
+  {
+   "base": {
+    "procs": [
+     {
+      "role": "app",
+      "pid": 29856,
+      "name": "QuirkyShell",
+      "rss": 73.7,
+      "fp": 58.0
+     },
+     {
+      "role": "daemon",
+      "pid": 29785,
+      "name": "bun",
+      "rss": 31.4,
+      "fp": 16.0
+     },
+     {
+      "role": "pty-host",
+      "pid": 29786,
+      "name": "bun",
+      "rss": 42.7,
+      "fp": 24.0
+     },
+     {
+      "role": "shell",
+      "pid": 29862,
+      "name": "zsh",
+      "rss": 4.8,
+      "fp": 4.921875
+     },
+     {
+      "role": "shell",
+      "pid": 29873,
+      "name": "zsh",
+      "rss": 4.8,
+      "fp": 5.140625
+     }
+    ],
+    "app_fp": 58.0,
+    "webkit_fp": 0,
+    "daemon_fp": 16.0,
+    "pty_host_fp": 24.0,
+    "shells_fp": 10.1,
+    "shell_total_fp": 58.0,
+    "quirky_total_fp": 98.0
+   }
+  }
+ ],
+ "ghostty/d": [
+  {
+   "base": {
+    "procs": [
+     {
+      "role": "app",
+      "pid": 31934,
+      "name": "QuirkyShell",
+      "rss": 133.0,
+      "fp": 74.0
+     },
+     {
+      "role": "daemon",
+      "pid": 31897,
+      "name": "bun",
+      "rss": 44.1,
+      "fp": 15.0
+     },
+     {
+      "role": "pty-host",
+      "pid": 31898,
+      "name": "bun",
+      "rss": 73.6,
+      "fp": 25.0
+     },
+     {
+      "role": "shell",
+      "pid": 31940,
+      "name": "zsh",
+      "rss": 6.5,
+      "fp": 5.0625
+     },
+     {
+      "role": "shell",
+      "pid": 31952,
+      "name": "zsh",
+      "rss": 6.5,
+      "fp": 5.09375
+     },
+     {
+      "role": "shell",
+      "pid": 31972,
+      "name": "zsh",
+      "rss": 6.6,
+      "fp": 5.203125
+     },
+     {
+      "role": "shell",
+      "pid": 32000,
+      "name": "zsh",
+      "rss": 6.5,
+      "fp": 5.109375
+     }
+    ],
+    "app_fp": 74.0,
+    "webkit_fp": 0,
+    "daemon_fp": 15.0,
+    "pty_host_fp": 25.0,
+    "shells_fp": 20.5,
+    "shell_total_fp": 74.0,
+    "quirky_total_fp": 114.0
+   }
+  },
+  {
+   "base": {
+    "procs": [
+     {
+      "role": "app",
+      "pid": 34322,
+      "name": "QuirkyShell",
+      "rss": 61.3,
+      "fp": 76.0
+     },
+     {
+      "role": "daemon",
+      "pid": 34232,
+      "name": "bun",
+      "rss": 27.3,
+      "fp": 15.0
+     },
+     {
+      "role": "pty-host",
+      "pid": 34233,
+      "name": "bun",
+      "rss": 40.1,
+      "fp": 27.0
+     },
+     {
+      "role": "shell",
+      "pid": 34339,
+      "name": "zsh",
+      "rss": 2.1,
+      "fp": 5.1875
+     },
+     {
+      "role": "shell",
+      "pid": 34353,
+      "name": "zsh",
+      "rss": 1.8,
+      "fp": 5.078125
+     },
+     {
+      "role": "shell",
+      "pid": 34368,
+      "name": "zsh",
+      "rss": 2.0,
+      "fp": 5.109375
+     },
+     {
+      "role": "shell",
+      "pid": 34398,
+      "name": "zsh",
+      "rss": 2.0,
+      "fp": 5.078125
+     }
+    ],
+    "app_fp": 76.0,
+    "webkit_fp": 0,
+    "daemon_fp": 15.0,
+    "pty_host_fp": 27.0,
+    "shells_fp": 20.5,
+    "shell_total_fp": 76.0,
+    "quirky_total_fp": 118.0
+   }
+  },
+  {
+   "base": {
+    "procs": [
+     {
+      "role": "app",
+      "pid": 37860,
+      "name": "QuirkyShell",
+      "rss": 91.5,
+      "fp": 74.0
+     },
+     {
+      "role": "daemon",
+      "pid": 37609,
+      "name": "bun",
+      "rss": 30.7,
+      "fp": 15.0
+     },
+     {
+      "role": "pty-host",
+      "pid": 37623,
+      "name": "bun",
+      "rss": 47.5,
+      "fp": 26.0
+     },
+     {
+      "role": "shell",
+      "pid": 37897,
+      "name": "zsh",
+      "rss": 5.4,
+      "fp": 5.140625
+     },
+     {
+      "role": "shell",
+      "pid": 37945,
+      "name": "zsh",
+      "rss": 5.5,
+      "fp": 5.125
+     },
+     {
+      "role": "shell",
+      "pid": 37965,
+      "name": "zsh",
+      "rss": 5.6,
+      "fp": 5.109375
+     },
+     {
+      "role": "shell",
+      "pid": 37990,
+      "name": "zsh",
+      "rss": 5.3,
+      "fp": 5.109375
+     }
+    ],
+    "app_fp": 74.0,
+    "webkit_fp": 0,
+    "daemon_fp": 15.0,
+    "pty_host_fp": 26.0,
+    "shells_fp": 20.5,
+    "shell_total_fp": 74.0,
+    "quirky_total_fp": 115.0
+   }
+  }
+ ],
+ "ghostty/e": [
+  {
+   "base": {
+    "procs": [
+     {
+      "role": "app",
+      "pid": 40591,
+      "name": "QuirkyShell",
+      "rss": 71.0,
+      "fp": 58.0
+     },
+     {
+      "role": "daemon",
+      "pid": 40420,
+      "name": "bun",
+      "rss": 28.2,
+      "fp": 16.0
+     },
+     {
+      "role": "pty-host",
+      "pid": 40433,
+      "name": "bun",
+      "rss": 38.0,
+      "fp": 23.0
+     },
+     {
+      "role": "shell",
+      "pid": 40600,
+      "name": "zsh",
+      "rss": 4.6,
+      "fp": 4.96875
+     },
+     {
+      "role": "shell",
+      "pid": 40611,
+      "name": "zsh",
+      "rss": 4.6,
+      "fp": 5.125
+     }
+    ],
+    "app_fp": 58.0,
+    "webkit_fp": 0,
+    "daemon_fp": 16.0,
+    "pty_host_fp": 23.0,
+    "shells_fp": 10.1,
+    "shell_total_fp": 58.0,
+    "quirky_total_fp": 97.0
+   },
+   "web": {
+    "procs": [
+     {
+      "role": "app",
+      "pid": 40591,
+      "name": "QuirkyShell",
+      "rss": 94.5,
+      "fp": 62.0
+     },
+     {
+      "role": "webkit",
+      "pid": 42469,
+      "name": "com.apple.WebKit.GPU",
+      "rss": 18.8,
+      "fp": 17.0
+     },
+     {
+      "role": "webkit",
+      "pid": 42472,
+      "name": "com.apple.WebKit.Networking",
+      "rss": 15.1,
+      "fp": 9.0947265625
+     },
+     {
+      "role": "webkit",
+      "pid": 42474,
+      "name": "com.apple.WebKit.WebContent",
+      "rss": 56.3,
+      "fp": 31.0
+     },
+     {
+      "role": "daemon",
+      "pid": 40420,
+      "name": "bun",
+      "rss": 31.6,
+      "fp": 16.0
+     },
+     {
+      "role": "pty-host",
+      "pid": 40433,
+      "name": "bun",
+      "rss": 40.0,
+      "fp": 24.0
+     },
+     {
+      "role": "shell",
+      "pid": 40600,
+      "name": "zsh",
+      "rss": 4.5,
+      "fp": 4.96875
+     },
+     {
+      "role": "shell",
+      "pid": 40611,
+      "name": "zsh",
+      "rss": 4.3,
+      "fp": 5.125
+     }
+    ],
+    "app_fp": 62.0,
+    "webkit_fp": 57.1,
+    "daemon_fp": 16.0,
+    "pty_host_fp": 24.0,
+    "shells_fp": 10.1,
+    "shell_total_fp": 119.1,
+    "quirky_total_fp": 159.1
+   }
+  },
+  {
+   "base": {
+    "procs": [
+     {
+      "role": "app",
+      "pid": 43027,
+      "name": "QuirkyShell",
+      "rss": 105.7,
+      "fp": 56.0
+     },
+     {
+      "role": "daemon",
+      "pid": 42981,
+      "name": "bun",
+      "rss": 40.6,
+      "fp": 15.0
+     },
+     {
+      "role": "pty-host",
+      "pid": 42982,
+      "name": "bun",
+      "rss": 63.8,
+      "fp": 23.0
+     },
+     {
+      "role": "shell",
+      "pid": 43033,
+      "name": "zsh",
+      "rss": 6.4,
+      "fp": 4.953125
+     },
+     {
+      "role": "shell",
+      "pid": 43044,
+      "name": "zsh",
+      "rss": 6.3,
+      "fp": 4.9375
+     }
+    ],
+    "app_fp": 56.0,
+    "webkit_fp": 0,
+    "daemon_fp": 15.0,
+    "pty_host_fp": 23.0,
+    "shells_fp": 9.9,
+    "shell_total_fp": 56.0,
+    "quirky_total_fp": 94.0
+   },
+   "web": {
+    "procs": [
+     {
+      "role": "app",
+      "pid": 43027,
+      "name": "QuirkyShell",
+      "rss": 131.4,
+      "fp": 60.0
+     },
+     {
+      "role": "webkit",
+      "pid": 44265,
+      "name": "com.apple.WebKit.GPU",
+      "rss": 29.0,
+      "fp": 15.0
+     },
+     {
+      "role": "webkit",
+      "pid": 44266,
+      "name": "com.apple.WebKit.Networking",
+      "rss": 23.6,
+      "fp": 7.8603515625
+     },
+     {
+      "role": "webkit",
+      "pid": 44267,
+      "name": "com.apple.WebKit.WebContent",
+      "rss": 110.1,
+      "fp": 28.0
+     },
+     {
+      "role": "daemon",
+      "pid": 42981,
+      "name": "bun",
+      "rss": 42.3,
+      "fp": 15.0
+     },
+     {
+      "role": "pty-host",
+      "pid": 42982,
+      "name": "bun",
+      "rss": 66.0,
+      "fp": 23.0
+     },
+     {
+      "role": "shell",
+      "pid": 43033,
+      "name": "zsh",
+      "rss": 6.4,
+      "fp": 4.953125
+     },
+     {
+      "role": "shell",
+      "pid": 43044,
+      "name": "zsh",
+      "rss": 6.3,
+      "fp": 4.9375
+     }
+    ],
+    "app_fp": 60.0,
+    "webkit_fp": 50.9,
+    "daemon_fp": 15.0,
+    "pty_host_fp": 23.0,
+    "shells_fp": 9.9,
+    "shell_total_fp": 110.9,
+    "quirky_total_fp": 148.9
+   }
+  },
+  {
+   "base": {
+    "procs": [
+     {
+      "role": "app",
+      "pid": 45144,
+      "name": "QuirkyShell",
+      "rss": 105.1,
+      "fp": 57.0
+     },
+     {
+      "role": "daemon",
+      "pid": 45075,
+      "name": "bun",
+      "rss": 41.5,
+      "fp": 14.0
+     },
+     {
+      "role": "pty-host",
+      "pid": 45076,
+      "name": "bun",
+      "rss": 62.6,
+      "fp": 23.0
+     },
+     {
+      "role": "shell",
+      "pid": 45158,
+      "name": "zsh",
+      "rss": 6.5,
+      "fp": 5.140625
+     },
+     {
+      "role": "shell",
+      "pid": 45173,
+      "name": "zsh",
+      "rss": 6.6,
+      "fp": 5.15625
+     }
+    ],
+    "app_fp": 57.0,
+    "webkit_fp": 0,
+    "daemon_fp": 14.0,
+    "pty_host_fp": 23.0,
+    "shells_fp": 10.3,
+    "shell_total_fp": 57.0,
+    "quirky_total_fp": 94.0
+   },
+   "web": {
+    "procs": [
+     {
+      "role": "app",
+      "pid": 45144,
+      "name": "QuirkyShell",
+      "rss": 130.7,
+      "fp": 62.0
+     },
+     {
+      "role": "webkit",
+      "pid": 46557,
+      "name": "com.apple.WebKit.GPU",
+      "rss": 29.1,
+      "fp": 15.0
+     },
+     {
+      "role": "webkit",
+      "pid": 46558,
+      "name": "com.apple.WebKit.Networking",
+      "rss": 23.5,
+      "fp": 7.8134765625
+     },
+     {
+      "role": "webkit",
+      "pid": 46559,
+      "name": "com.apple.WebKit.WebContent",
+      "rss": 109.2,
+      "fp": 28.0
+     },
+     {
+      "role": "daemon",
+      "pid": 45075,
+      "name": "bun",
+      "rss": 43.2,
+      "fp": 15.0
+     },
+     {
+      "role": "pty-host",
+      "pid": 45076,
+      "name": "bun",
+      "rss": 64.4,
+      "fp": 23.0
+     },
+     {
+      "role": "shell",
+      "pid": 45158,
+      "name": "zsh",
+      "rss": 6.5,
+      "fp": 5.109375
+     },
+     {
+      "role": "shell",
+      "pid": 45173,
+      "name": "zsh",
+      "rss": 6.6,
+      "fp": 5.125
+     }
+    ],
+    "app_fp": 62.0,
+    "webkit_fp": 50.8,
+    "daemon_fp": 15.0,
+    "pty_host_fp": 23.0,
+    "shells_fp": 10.2,
+    "shell_total_fp": 112.8,
+    "quirky_total_fp": 150.8
+   }
+  }
+ ],
+ "ghostty/e-blank": [
+  {
+   "base": {
+    "procs": [
+     {
+      "role": "app",
+      "pid": 47635,
+      "name": "QuirkyShell",
+      "rss": 105.7,
+      "fp": 58.0
+     },
+     {
+      "role": "daemon",
+      "pid": 47590,
+      "name": "bun",
+      "rss": 41.7,
+      "fp": 14.0
+     },
+     {
+      "role": "pty-host",
+      "pid": 47591,
+      "name": "bun",
+      "rss": 63.7,
+      "fp": 23.0
+     },
+     {
+      "role": "shell",
+      "pid": 47653,
+      "name": "zsh",
+      "rss": 6.4,
+      "fp": 4.96875
+     },
+     {
+      "role": "shell",
+      "pid": 47664,
+      "name": "zsh",
+      "rss": 6.3,
+      "fp": 4.9375
+     }
+    ],
+    "app_fp": 58.0,
+    "webkit_fp": 0,
+    "daemon_fp": 14.0,
+    "pty_host_fp": 23.0,
+    "shells_fp": 9.9,
+    "shell_total_fp": 58.0,
+    "quirky_total_fp": 95.0
+   },
+   "web": {
+    "procs": [
+     {
+      "role": "app",
+      "pid": 47635,
+      "name": "QuirkyShell",
+      "rss": 124.2,
+      "fp": 65.0
+     },
+     {
+      "role": "webkit",
+      "pid": 49373,
+      "name": "com.apple.WebKit.GPU",
+      "rss": 13.8,
+      "fp": 4.3291015625
+     },
+     {
+      "role": "webkit",
+      "pid": 49374,
+      "name": "com.apple.WebKit.Networking",
+      "rss": 15.7,
+      "fp": 5.2666015625
+     },
+     {
+      "role": "webkit",
+      "pid": 49375,
+      "name": "com.apple.WebKit.WebContent",
+      "rss": 27.9,
+      "fp": 8.7509765625
+     },
+     {
+      "role": "daemon",
+      "pid": 47590,
+      "name": "bun",
+      "rss": 41.6,
+      "fp": 14.0
+     },
+     {
+      "role": "pty-host",
+      "pid": 47591,
+      "name": "bun",
+      "rss": 63.6,
+      "fp": 23.0
+     },
+     {
+      "role": "shell",
+      "pid": 47653,
+      "name": "zsh",
+      "rss": 6.4,
+      "fp": 4.9375
+     },
+     {
+      "role": "shell",
+      "pid": 47664,
+      "name": "zsh",
+      "rss": 6.3,
+      "fp": 4.90625
+     }
+    ],
+    "app_fp": 65.0,
+    "webkit_fp": 18.3,
+    "daemon_fp": 14.0,
+    "pty_host_fp": 23.0,
+    "shells_fp": 9.8,
+    "shell_total_fp": 83.3,
+    "quirky_total_fp": 120.3
+   }
+  },
+  {
+   "base": {
+    "procs": [
+     {
+      "role": "app",
+      "pid": 50389,
+      "name": "QuirkyShell",
+      "rss": 105.6,
+      "fp": 58.0
+     },
+     {
+      "role": "daemon",
+      "pid": 50314,
+      "name": "bun",
+      "rss": 41.2,
+      "fp": 15.0
+     },
+     {
+      "role": "pty-host",
+      "pid": 50316,
+      "name": "bun",
+      "rss": 63.9,
+      "fp": 23.0
+     },
+     {
+      "role": "shell",
+      "pid": 50406,
+      "name": "zsh",
+      "rss": 6.5,
+      "fp": 5.125
+     },
+     {
+      "role": "shell",
+      "pid": 50419,
+      "name": "zsh",
+      "rss": 6.5,
+      "fp": 5.125
+     }
+    ],
+    "app_fp": 58.0,
+    "webkit_fp": 0,
+    "daemon_fp": 15.0,
+    "pty_host_fp": 23.0,
+    "shells_fp": 10.2,
+    "shell_total_fp": 58.0,
+    "quirky_total_fp": 96.0
+   },
+   "web": {
+    "procs": [
+     {
+      "role": "app",
+      "pid": 50389,
+      "name": "QuirkyShell",
+      "rss": 123.6,
+      "fp": 65.0
+     },
+     {
+      "role": "webkit",
+      "pid": 52317,
+      "name": "com.apple.WebKit.GPU",
+      "rss": 13.8,
+      "fp": 4.2666015625
+     },
+     {
+      "role": "webkit",
+      "pid": 52319,
+      "name": "com.apple.WebKit.Networking",
+      "rss": 15.5,
+      "fp": 5.2353515625
+     },
+     {
+      "role": "webkit",
+      "pid": 52320,
+      "name": "com.apple.WebKit.WebContent",
+      "rss": 28.0,
+      "fp": 8.7353515625
+     },
+     {
+      "role": "daemon",
+      "pid": 50314,
+      "name": "bun",
+      "rss": 41.1,
+      "fp": 15.0
+     },
+     {
+      "role": "pty-host",
+      "pid": 50316,
+      "name": "bun",
+      "rss": 63.8,
+      "fp": 22.0
+     },
+     {
+      "role": "shell",
+      "pid": 50406,
+      "name": "zsh",
+      "rss": 6.5,
+      "fp": 5.125
+     },
+     {
+      "role": "shell",
+      "pid": 50419,
+      "name": "zsh",
+      "rss": 6.5,
+      "fp": 5.125
+     }
+    ],
+    "app_fp": 65.0,
+    "webkit_fp": 18.2,
+    "daemon_fp": 15.0,
+    "pty_host_fp": 22.0,
+    "shells_fp": 10.2,
+    "shell_total_fp": 83.2,
+    "quirky_total_fp": 120.2
+   }
+  },
+  {
+   "base": {
+    "procs": [
+     {
+      "role": "app",
+      "pid": 53387,
+      "name": "QuirkyShell",
+      "rss": 105.5,
+      "fp": 58.0
+     },
+     {
+      "role": "daemon",
+      "pid": 53313,
+      "name": "bun",
+      "rss": 39.8,
+      "fp": 14.0
+     },
+     {
+      "role": "pty-host",
+      "pid": 53315,
+      "name": "bun",
+      "rss": 63.0,
+      "fp": 23.0
+     },
+     {
+      "role": "shell",
+      "pid": 53400,
+      "name": "zsh",
+      "rss": 6.6,
+      "fp": 5.203125
+     },
+     {
+      "role": "shell",
+      "pid": 53414,
+      "name": "zsh",
+      "rss": 6.6,
+      "fp": 5.171875
+     }
+    ],
+    "app_fp": 58.0,
+    "webkit_fp": 0,
+    "daemon_fp": 14.0,
+    "pty_host_fp": 23.0,
+    "shells_fp": 10.4,
+    "shell_total_fp": 58.0,
+    "quirky_total_fp": 95.0
+   },
+   "web": {
+    "procs": [
+     {
+      "role": "app",
+      "pid": 53387,
+      "name": "QuirkyShell",
+      "rss": 123.7,
+      "fp": 65.0
+     },
+     {
+      "role": "webkit",
+      "pid": 55108,
+      "name": "com.apple.WebKit.GPU",
+      "rss": 13.7,
+      "fp": 4.2509765625
+     },
+     {
+      "role": "webkit",
+      "pid": 55109,
+      "name": "com.apple.WebKit.Networking",
+      "rss": 15.5,
+      "fp": 5.3447265625
+     },
+     {
+      "role": "webkit",
+      "pid": 55110,
+      "name": "com.apple.WebKit.WebContent",
+      "rss": 27.9,
+      "fp": 8.7197265625
+     },
+     {
+      "role": "daemon",
+      "pid": 53313,
+      "name": "bun",
+      "rss": 39.8,
+      "fp": 14.0
+     },
+     {
+      "role": "pty-host",
+      "pid": 53315,
+      "name": "bun",
+      "rss": 62.9,
+      "fp": 22.0
+     },
+     {
+      "role": "shell",
+      "pid": 53400,
+      "name": "zsh",
+      "rss": 6.6,
+      "fp": 5.203125
+     },
+     {
+      "role": "shell",
+      "pid": 53414,
+      "name": "zsh",
+      "rss": 6.5,
+      "fp": 5.171875
+     }
+    ],
+    "app_fp": 65.0,
+    "webkit_fp": 18.3,
+    "daemon_fp": 14.0,
+    "pty_host_fp": 22.0,
+    "shells_fp": 10.4,
+    "shell_total_fp": 83.3,
+    "quirky_total_fp": 119.3
+   }
+  }
+ ],
+ "swiftterm/a": [
+  {
+   "base": {
+    "procs": [
+     {
+      "role": "app",
+      "pid": 56131,
+      "name": "QuirkyShell",
+      "rss": 66.0,
+      "fp": 16.0
+     },
+     {
+      "role": "daemon",
+      "pid": 56053,
+      "name": "bun",
+      "rss": 36.5,
+      "fp": 13.0
+     },
+     {
+      "role": "pty-host",
+      "pid": 56054,
+      "name": "bun",
+      "rss": 30.9,
+      "fp": 12.0
+     }
+    ],
+    "app_fp": 16.0,
+    "webkit_fp": 0,
+    "daemon_fp": 13.0,
+    "pty_host_fp": 12.0,
+    "shells_fp": 0,
+    "shell_total_fp": 16.0,
+    "quirky_total_fp": 41.0
+   }
+  },
+  {
+   "base": {
+    "procs": [
+     {
+      "role": "app",
+      "pid": 57160,
+      "name": "QuirkyShell",
+      "rss": 66.0,
+      "fp": 16.0
+     },
+     {
+      "role": "daemon",
+      "pid": 57089,
+      "name": "bun",
+      "rss": 36.8,
+      "fp": 13.0
+     },
+     {
+      "role": "pty-host",
+      "pid": 57090,
+      "name": "bun",
+      "rss": 31.0,
+      "fp": 12.0
+     }
+    ],
+    "app_fp": 16.0,
+    "webkit_fp": 0,
+    "daemon_fp": 13.0,
+    "pty_host_fp": 12.0,
+    "shells_fp": 0,
+    "shell_total_fp": 16.0,
+    "quirky_total_fp": 41.0
+   }
+  },
+  {
+   "base": {
+    "procs": [
+     {
+      "role": "app",
+      "pid": 58214,
+      "name": "QuirkyShell",
+      "rss": 50.5,
+      "fp": 17.0
+     },
+     {
+      "role": "daemon",
+      "pid": 58149,
+      "name": "bun",
+      "rss": 24.4,
+      "fp": 14.0
+     },
+     {
+      "role": "pty-host",
+      "pid": 58150,
+      "name": "bun",
+      "rss": 21.5,
+      "fp": 12.0
+     }
+    ],
+    "app_fp": 17.0,
+    "webkit_fp": 0,
+    "daemon_fp": 14.0,
+    "pty_host_fp": 12.0,
+    "shells_fp": 0,
+    "shell_total_fp": 17.0,
+    "quirky_total_fp": 43.0
+   }
+  }
+ ],
+ "swiftterm/b": [
+  {
+   "base": {
+    "procs": [
+     {
+      "role": "app",
+      "pid": 59651,
+      "name": "QuirkyShell",
+      "rss": 62.4,
+      "fp": 20.0
+     },
+     {
+      "role": "daemon",
+      "pid": 59534,
+      "name": "bun",
+      "rss": 34.6,
+      "fp": 14.0
+     },
+     {
+      "role": "pty-host",
+      "pid": 59535,
+      "name": "bun",
+      "rss": 35.0,
+      "fp": 15.0
+     },
+     {
+      "role": "shell",
+      "pid": 59674,
+      "name": "zsh",
+      "rss": 6.2,
+      "fp": 5.09375
+     },
+     {
+      "role": "shell",
+      "pid": 59688,
+      "name": "zsh",
+      "rss": 6.1,
+      "fp": 5.15625
+     }
+    ],
+    "app_fp": 20.0,
+    "webkit_fp": 0,
+    "daemon_fp": 14.0,
+    "pty_host_fp": 15.0,
+    "shells_fp": 10.2,
+    "shell_total_fp": 20.0,
+    "quirky_total_fp": 49.0
+   }
+  },
+  {
+   "base": {
+    "procs": [
+     {
+      "role": "app",
+      "pid": 61126,
+      "name": "QuirkyShell",
+      "rss": 61.6,
+      "fp": 20.0
+     },
+     {
+      "role": "daemon",
+      "pid": 61111,
+      "name": "bun",
+      "rss": 27.8,
+      "fp": 14.0
+     },
+     {
+      "role": "pty-host",
+      "pid": 61112,
+      "name": "bun",
+      "rss": 32.1,
+      "fp": 14.0
+     },
+     {
+      "role": "shell",
+      "pid": 61132,
+      "name": "zsh",
+      "rss": 4.4,
+      "fp": 4.875
+     },
+     {
+      "role": "shell",
+      "pid": 61146,
+      "name": "zsh",
+      "rss": 3.7,
+      "fp": 4.875
+     }
+    ],
+    "app_fp": 20.0,
+    "webkit_fp": 0,
+    "daemon_fp": 14.0,
+    "pty_host_fp": 14.0,
+    "shells_fp": 9.8,
+    "shell_total_fp": 20.0,
+    "quirky_total_fp": 48.0
+   }
+  },
+  {
+   "base": {
+    "procs": [
+     {
+      "role": "app",
+      "pid": 63253,
+      "name": "QuirkyShell",
+      "rss": 70.9,
+      "fp": 20.0
+     },
+     {
+      "role": "daemon",
+      "pid": 63236,
+      "name": "bun",
+      "rss": 36.6,
+      "fp": 13.0
+     },
+     {
+      "role": "pty-host",
+      "pid": 63237,
+      "name": "bun",
+      "rss": 38.9,
+      "fp": 15.0
+     },
+     {
+      "role": "shell",
+      "pid": 63259,
+      "name": "zsh",
+      "rss": 6.3,
+      "fp": 4.90625
+     },
+     {
+      "role": "shell",
+      "pid": 63270,
+      "name": "zsh",
+      "rss": 6.4,
+      "fp": 5.03125
+     }
+    ],
+    "app_fp": 20.0,
+    "webkit_fp": 0,
+    "daemon_fp": 13.0,
+    "pty_host_fp": 15.0,
+    "shells_fp": 9.9,
+    "shell_total_fp": 20.0,
+    "quirky_total_fp": 48.0
+   }
+  }
+ ],
+ "swiftterm/c": [
+  {
+   "base": {
+    "procs": [
+     {
+      "role": "app",
+      "pid": 65512,
+      "name": "QuirkyShell",
+      "rss": 72.5,
+      "fp": 38.0
+     },
+     {
+      "role": "daemon",
+      "pid": 65474,
+      "name": "bun",
+      "rss": 32.8,
+      "fp": 15.0
+     },
+     {
+      "role": "pty-host",
+      "pid": 65477,
+      "name": "bun",
+      "rss": 59.2,
+      "fp": 23.0
+     },
+     {
+      "role": "shell",
+      "pid": 65520,
+      "name": "zsh",
+      "rss": 6.0,
+      "fp": 4.71875
+     },
+     {
+      "role": "shell",
+      "pid": 65533,
+      "name": "zsh",
+      "rss": 6.0,
+      "fp": 4.703125
+     }
+    ],
+    "app_fp": 38.0,
+    "webkit_fp": 0,
+    "daemon_fp": 15.0,
+    "pty_host_fp": 23.0,
+    "shells_fp": 9.4,
+    "shell_total_fp": 38.0,
+    "quirky_total_fp": 76.0
+   }
+  },
+  {
+   "base": {
+    "procs": [
+     {
+      "role": "app",
+      "pid": 67685,
+      "name": "QuirkyShell",
+      "rss": 89.9,
+      "fp": 39.0
+     },
+     {
+      "role": "daemon",
+      "pid": 67649,
+      "name": "bun",
+      "rss": 42.5,
+      "fp": 15.0
+     },
+     {
+      "role": "pty-host",
+      "pid": 67650,
+      "name": "bun",
+      "rss": 63.2,
+      "fp": 23.0
+     },
+     {
+      "role": "shell",
+      "pid": 67691,
+      "name": "zsh",
+      "rss": 6.3,
+      "fp": 4.921875
+     },
+     {
+      "role": "shell",
+      "pid": 67705,
+      "name": "zsh",
+      "rss": 6.5,
+      "fp": 5.109375
+     }
+    ],
+    "app_fp": 39.0,
+    "webkit_fp": 0,
+    "daemon_fp": 15.0,
+    "pty_host_fp": 23.0,
+    "shells_fp": 10.0,
+    "shell_total_fp": 39.0,
+    "quirky_total_fp": 77.0
+   }
+  },
+  {
+   "base": {
+    "procs": [
+     {
+      "role": "app",
+      "pid": 69711,
+      "name": "QuirkyShell",
+      "rss": 61.2,
+      "fp": 38.0
+     },
+     {
+      "role": "daemon",
+      "pid": 69640,
+      "name": "bun",
+      "rss": 30.9,
+      "fp": 15.0
+     },
+     {
+      "role": "pty-host",
+      "pid": 69641,
+      "name": "bun",
+      "rss": 43.7,
+      "fp": 24.0
+     },
+     {
+      "role": "shell",
+      "pid": 69718,
+      "name": "zsh",
+      "rss": 4.7,
+      "fp": 4.71875
+     },
+     {
+      "role": "shell",
+      "pid": 69729,
+      "name": "zsh",
+      "rss": 5.0,
+      "fp": 4.71875
+     }
+    ],
+    "app_fp": 38.0,
+    "webkit_fp": 0,
+    "daemon_fp": 15.0,
+    "pty_host_fp": 24.0,
+    "shells_fp": 9.4,
+    "shell_total_fp": 38.0,
+    "quirky_total_fp": 77.0
+   }
+  }
+ ],
+ "swiftterm/d": [
+  {
+   "base": {
+    "procs": [
+     {
+      "role": "app",
+      "pid": 71765,
+      "name": "QuirkyShell",
+      "rss": 109.2,
+      "fp": 58.0
+     },
+     {
+      "role": "daemon",
+      "pid": 71720,
+      "name": "bun",
+      "rss": 46.4,
+      "fp": 15.0
+     },
+     {
+      "role": "pty-host",
+      "pid": 71721,
+      "name": "bun",
+      "rss": 71.7,
+      "fp": 25.0
+     },
+     {
+      "role": "shell",
+      "pid": 71771,
+      "name": "zsh",
+      "rss": 6.5,
+      "fp": 5.0625
+     },
+     {
+      "role": "shell",
+      "pid": 71780,
+      "name": "zsh",
+      "rss": 6.5,
+      "fp": 5.15625
+     },
+     {
+      "role": "shell",
+      "pid": 71815,
+      "name": "zsh",
+      "rss": 6.5,
+      "fp": 5.09375
+     },
+     {
+      "role": "shell",
+      "pid": 71841,
+      "name": "zsh",
+      "rss": 6.5,
+      "fp": 5.109375
+     }
+    ],
+    "app_fp": 58.0,
+    "webkit_fp": 0,
+    "daemon_fp": 15.0,
+    "pty_host_fp": 25.0,
+    "shells_fp": 20.4,
+    "shell_total_fp": 58.0,
+    "quirky_total_fp": 98.0
+   }
+  },
+  {
+   "base": {
+    "procs": [
+     {
+      "role": "app",
+      "pid": 73913,
+      "name": "QuirkyShell",
+      "rss": 108.9,
+      "fp": 57.0
+     },
+     {
+      "role": "daemon",
+      "pid": 73895,
+      "name": "bun",
+      "rss": 43.5,
+      "fp": 15.0
+     },
+     {
+      "role": "pty-host",
+      "pid": 73896,
+      "name": "bun",
+      "rss": 68.9,
+      "fp": 23.0
+     },
+     {
+      "role": "shell",
+      "pid": 73929,
+      "name": "zsh",
+      "rss": 6.5,
+      "fp": 5.09375
+     },
+     {
+      "role": "shell",
+      "pid": 73939,
+      "name": "zsh",
+      "rss": 6.6,
+      "fp": 5.15625
+     },
+     {
+      "role": "shell",
+      "pid": 73960,
+      "name": "zsh",
+      "rss": 6.6,
+      "fp": 5.203125
+     },
+     {
+      "role": "shell",
+      "pid": 73987,
+      "name": "zsh",
+      "rss": 6.5,
+      "fp": 5.09375
+     }
+    ],
+    "app_fp": 57.0,
+    "webkit_fp": 0,
+    "daemon_fp": 15.0,
+    "pty_host_fp": 23.0,
+    "shells_fp": 20.5,
+    "shell_total_fp": 57.0,
+    "quirky_total_fp": 95.0
+   }
+  },
+  {
+   "base": {
+    "procs": [
+     {
+      "role": "app",
+      "pid": 76075,
+      "name": "QuirkyShell",
+      "rss": 109.2,
+      "fp": 58.0
+     },
+     {
+      "role": "daemon",
+      "pid": 76059,
+      "name": "bun",
+      "rss": 44.8,
+      "fp": 15.0
+     },
+     {
+      "role": "pty-host",
+      "pid": 76060,
+      "name": "bun",
+      "rss": 73.3,
+      "fp": 26.0
+     },
+     {
+      "role": "shell",
+      "pid": 76092,
+      "name": "zsh",
+      "rss": 6.5,
+      "fp": 4.6875
+     },
+     {
+      "role": "shell",
+      "pid": 76101,
+      "name": "zsh",
+      "rss": 6.5,
+      "fp": 4.6875
+     },
+     {
+      "role": "shell",
+      "pid": 76122,
+      "name": "zsh",
+      "rss": 6.5,
+      "fp": 4.703125
+     },
+     {
+      "role": "shell",
+      "pid": 76149,
+      "name": "zsh",
+      "rss": 6.6,
+      "fp": 4.734375
+     }
+    ],
+    "app_fp": 58.0,
+    "webkit_fp": 0,
+    "daemon_fp": 15.0,
+    "pty_host_fp": 26.0,
+    "shells_fp": 18.8,
+    "shell_total_fp": 58.0,
+    "quirky_total_fp": 99.0
+   }
+  }
+ ],
+ "swiftterm/e": [
+  {
+   "base": {
+    "procs": [
+     {
+      "role": "app",
+      "pid": 78240,
+      "name": "QuirkyShell",
+      "rss": 89.8,
+      "fp": 38.0
+     },
+     {
+      "role": "daemon",
+      "pid": 78234,
+      "name": "bun",
+      "rss": 40.8,
+      "fp": 14.0
+     },
+     {
+      "role": "pty-host",
+      "pid": 78235,
+      "name": "bun",
+      "rss": 63.6,
+      "fp": 24.0
+     },
+     {
+      "role": "shell",
+      "pid": 78246,
+      "name": "zsh",
+      "rss": 6.5,
+      "fp": 4.71875
+     },
+     {
+      "role": "shell",
+      "pid": 78256,
+      "name": "zsh",
+      "rss": 6.5,
+      "fp": 4.71875
+     }
+    ],
+    "app_fp": 38.0,
+    "webkit_fp": 0,
+    "daemon_fp": 14.0,
+    "pty_host_fp": 24.0,
+    "shells_fp": 9.4,
+    "shell_total_fp": 38.0,
+    "quirky_total_fp": 76.0
+   },
+   "web": {
+    "procs": [
+     {
+      "role": "app",
+      "pid": 78240,
+      "name": "QuirkyShell",
+      "rss": 116.2,
+      "fp": 46.0
+     },
+     {
+      "role": "webkit",
+      "pid": 79449,
+      "name": "com.apple.WebKit.GPU",
+      "rss": 28.9,
+      "fp": 15.0
+     },
+     {
+      "role": "webkit",
+      "pid": 79450,
+      "name": "com.apple.WebKit.Networking",
+      "rss": 24.1,
+      "fp": 7.8447265625
+     },
+     {
+      "role": "webkit",
+      "pid": 79451,
+      "name": "com.apple.WebKit.WebContent",
+      "rss": 110.2,
+      "fp": 28.0
+     },
+     {
+      "role": "daemon",
+      "pid": 78234,
+      "name": "bun",
+      "rss": 42.5,
+      "fp": 15.0
+     },
+     {
+      "role": "pty-host",
+      "pid": 78235,
+      "name": "bun",
+      "rss": 65.3,
+      "fp": 24.0
+     },
+     {
+      "role": "shell",
+      "pid": 78246,
+      "name": "zsh",
+      "rss": 6.5,
+      "fp": 4.71875
+     },
+     {
+      "role": "shell",
+      "pid": 78256,
+      "name": "zsh",
+      "rss": 6.5,
+      "fp": 4.71875
+     }
+    ],
+    "app_fp": 46.0,
+    "webkit_fp": 50.8,
+    "daemon_fp": 15.0,
+    "pty_host_fp": 24.0,
+    "shells_fp": 9.4,
+    "shell_total_fp": 96.8,
+    "quirky_total_fp": 135.8
+   }
+  },
+  {
+   "base": {
+    "procs": [
+     {
+      "role": "app",
+      "pid": 79756,
+      "name": "QuirkyShell",
+      "rss": 89.7,
+      "fp": 38.0
+     },
+     {
+      "role": "daemon",
+      "pid": 79737,
+      "name": "bun",
+      "rss": 41.6,
+      "fp": 15.0
+     },
+     {
+      "role": "pty-host",
+      "pid": 79738,
+      "name": "bun",
+      "rss": 62.8,
+      "fp": 22.0
+     },
+     {
+      "role": "shell",
+      "pid": 79772,
+      "name": "zsh",
+      "rss": 6.3,
+      "fp": 4.90625
+     },
+     {
+      "role": "shell",
+      "pid": 79781,
+      "name": "zsh",
+      "rss": 6.3,
+      "fp": 4.953125
+     }
+    ],
+    "app_fp": 38.0,
+    "webkit_fp": 0,
+    "daemon_fp": 15.0,
+    "pty_host_fp": 22.0,
+    "shells_fp": 9.9,
+    "shell_total_fp": 38.0,
+    "quirky_total_fp": 75.0
+   },
+   "web": {
+    "procs": [
+     {
+      "role": "app",
+      "pid": 79756,
+      "name": "QuirkyShell",
+      "rss": 115.8,
+      "fp": 46.0
+     },
+     {
+      "role": "webkit",
+      "pid": 80915,
+      "name": "com.apple.WebKit.GPU",
+      "rss": 29.0,
+      "fp": 15.0
+     },
+     {
+      "role": "webkit",
+      "pid": 80916,
+      "name": "com.apple.WebKit.Networking",
+      "rss": 23.4,
+      "fp": 7.6103515625
+     },
+     {
+      "role": "webkit",
+      "pid": 80917,
+      "name": "com.apple.WebKit.WebContent",
+      "rss": 109.0,
+      "fp": 28.0
+     },
+     {
+      "role": "daemon",
+      "pid": 79737,
+      "name": "bun",
+      "rss": 43.3,
+      "fp": 15.0
+     },
+     {
+      "role": "pty-host",
+      "pid": 79738,
+      "name": "bun",
+      "rss": 65.0,
+      "fp": 23.0
+     },
+     {
+      "role": "shell",
+      "pid": 79772,
+      "name": "zsh",
+      "rss": 6.3,
+      "fp": 4.90625
+     },
+     {
+      "role": "shell",
+      "pid": 79781,
+      "name": "zsh",
+      "rss": 6.3,
+      "fp": 4.953125
+     }
+    ],
+    "app_fp": 46.0,
+    "webkit_fp": 50.6,
+    "daemon_fp": 15.0,
+    "pty_host_fp": 23.0,
+    "shells_fp": 9.9,
+    "shell_total_fp": 96.6,
+    "quirky_total_fp": 134.6
+   }
+  },
+  {
+   "base": {
+    "procs": [
+     {
+      "role": "app",
+      "pid": 81273,
+      "name": "QuirkyShell",
+      "rss": 89.5,
+      "fp": 38.0
+     },
+     {
+      "role": "daemon",
+      "pid": 81258,
+      "name": "bun",
+      "rss": 41.2,
+      "fp": 15.0
+     },
+     {
+      "role": "pty-host",
+      "pid": 81259,
+      "name": "bun",
+      "rss": 62.4,
+      "fp": 23.0
+     },
+     {
+      "role": "shell",
+      "pid": 81279,
+      "name": "zsh",
+      "rss": 6.4,
+      "fp": 4.953125
+     },
+     {
+      "role": "shell",
+      "pid": 81288,
+      "name": "zsh",
+      "rss": 6.3,
+      "fp": 4.9375
+     }
+    ],
+    "app_fp": 38.0,
+    "webkit_fp": 0,
+    "daemon_fp": 15.0,
+    "pty_host_fp": 23.0,
+    "shells_fp": 9.9,
+    "shell_total_fp": 38.0,
+    "quirky_total_fp": 76.0
+   },
+   "web": {
+    "procs": [
+     {
+      "role": "app",
+      "pid": 81273,
+      "name": "QuirkyShell",
+      "rss": 116.0,
+      "fp": 46.0
+     },
+     {
+      "role": "webkit",
+      "pid": 82450,
+      "name": "com.apple.WebKit.GPU",
+      "rss": 29.1,
+      "fp": 15.0
+     },
+     {
+      "role": "webkit",
+      "pid": 82451,
+      "name": "com.apple.WebKit.Networking",
+      "rss": 24.0,
+      "fp": 7.9228515625
+     },
+     {
+      "role": "webkit",
+      "pid": 82452,
+      "name": "com.apple.WebKit.WebContent",
+      "rss": 109.9,
+      "fp": 28.0
+     },
+     {
+      "role": "daemon",
+      "pid": 81258,
+      "name": "bun",
+      "rss": 42.9,
+      "fp": 15.0
+     },
+     {
+      "role": "pty-host",
+      "pid": 81259,
+      "name": "bun",
+      "rss": 64.6,
+      "fp": 23.0
+     },
+     {
+      "role": "shell",
+      "pid": 81279,
+      "name": "zsh",
+      "rss": 6.4,
+      "fp": 4.953125
+     },
+     {
+      "role": "shell",
+      "pid": 81288,
+      "name": "zsh",
+      "rss": 6.3,
+      "fp": 4.9375
+     }
+    ],
+    "app_fp": 46.0,
+    "webkit_fp": 50.9,
+    "daemon_fp": 15.0,
+    "pty_host_fp": 23.0,
+    "shells_fp": 9.9,
+    "shell_total_fp": 96.9,
+    "quirky_total_fp": 134.9
+   }
+  }
+ ],
+ "swiftterm/e-blank": [
+  {
+   "base": {
+    "procs": [
+     {
+      "role": "app",
+      "pid": 82861,
+      "name": "QuirkyShell",
+      "rss": 89.8,
+      "fp": 39.0
+     },
+     {
+      "role": "daemon",
+      "pid": 82814,
+      "name": "bun",
+      "rss": 41.9,
+      "fp": 15.0
+     },
+     {
+      "role": "pty-host",
+      "pid": 82815,
+      "name": "bun",
+      "rss": 62.0,
+      "fp": 22.0
+     },
+     {
+      "role": "shell",
+      "pid": 82866,
+      "name": "zsh",
+      "rss": 6.6,
+      "fp": 5.1875
+     },
+     {
+      "role": "shell",
+      "pid": 82891,
+      "name": "zsh",
+      "rss": 6.3,
+      "fp": 4.9375
+     }
+    ],
+    "app_fp": 39.0,
+    "webkit_fp": 0,
+    "daemon_fp": 15.0,
+    "pty_host_fp": 22.0,
+    "shells_fp": 10.1,
+    "shell_total_fp": 39.0,
+    "quirky_total_fp": 76.0
+   },
+   "web": {
+    "procs": [
+     {
+      "role": "app",
+      "pid": 82861,
+      "name": "QuirkyShell",
+      "rss": 108.3,
+      "fp": 46.0
+     },
+     {
+      "role": "webkit",
+      "pid": 84034,
+      "name": "com.apple.WebKit.GPU",
+      "rss": 13.8,
+      "fp": 4.2822265625
+     },
+     {
+      "role": "webkit",
+      "pid": 84035,
+      "name": "com.apple.WebKit.Networking",
+      "rss": 15.5,
+      "fp": 5.265625
+     },
+     {
+      "role": "webkit",
+      "pid": 84036,
+      "name": "com.apple.WebKit.WebContent",
+      "rss": 27.7,
+      "fp": 8.6884765625
+     },
+     {
+      "role": "daemon",
+      "pid": 82814,
+      "name": "bun",
+      "rss": 41.8,
+      "fp": 14.0
+     },
+     {
+      "role": "pty-host",
+      "pid": 82815,
+      "name": "bun",
+      "rss": 61.9,
+      "fp": 21.0
+     },
+     {
+      "role": "shell",
+      "pid": 82866,
+      "name": "zsh",
+      "rss": 6.6,
+      "fp": 5.1875
+     },
+     {
+      "role": "shell",
+      "pid": 82891,
+      "name": "zsh",
+      "rss": 6.3,
+      "fp": 4.9375
+     }
+    ],
+    "app_fp": 46.0,
+    "webkit_fp": 18.2,
+    "daemon_fp": 14.0,
+    "pty_host_fp": 21.0,
+    "shells_fp": 10.1,
+    "shell_total_fp": 64.2,
+    "quirky_total_fp": 99.2
+   }
+  },
+  {
+   "base": {
+    "procs": [
+     {
+      "role": "app",
+      "pid": 84427,
+      "name": "QuirkyShell",
+      "rss": 89.6,
+      "fp": 38.0
+     },
+     {
+      "role": "daemon",
+      "pid": 84411,
+      "name": "bun",
+      "rss": 42.0,
+      "fp": 14.0
+     },
+     {
+      "role": "pty-host",
+      "pid": 84412,
+      "name": "bun",
+      "rss": 60.5,
+      "fp": 21.0
+     },
+     {
+      "role": "shell",
+      "pid": 84433,
+      "name": "zsh",
+      "rss": 6.3,
+      "fp": 4.875
+     },
+     {
+      "role": "shell",
+      "pid": 84448,
+      "name": "zsh",
+      "rss": 6.3,
+      "fp": 4.875
+     }
+    ],
+    "app_fp": 38.0,
+    "webkit_fp": 0,
+    "daemon_fp": 14.0,
+    "pty_host_fp": 21.0,
+    "shells_fp": 9.8,
+    "shell_total_fp": 38.0,
+    "quirky_total_fp": 73.0
+   },
+   "web": {
+    "procs": [
+     {
+      "role": "app",
+      "pid": 84427,
+      "name": "QuirkyShell",
+      "rss": 108.1,
+      "fp": 46.0
+     },
+     {
+      "role": "webkit",
+      "pid": 85626,
+      "name": "com.apple.WebKit.GPU",
+      "rss": 13.7,
+      "fp": 4.2666015625
+     },
+     {
+      "role": "webkit",
+      "pid": 85627,
+      "name": "com.apple.WebKit.Networking",
+      "rss": 15.6,
+      "fp": 5.328125
+     },
+     {
+      "role": "webkit",
+      "pid": 85628,
+      "name": "com.apple.WebKit.WebContent",
+      "rss": 27.7,
+      "fp": 8.6728515625
+     },
+     {
+      "role": "daemon",
+      "pid": 84411,
+      "name": "bun",
+      "rss": 41.9,
+      "fp": 14.0
+     },
+     {
+      "role": "pty-host",
+      "pid": 84412,
+      "name": "bun",
+      "rss": 60.4,
+      "fp": 20.0
+     },
+     {
+      "role": "shell",
+      "pid": 84433,
+      "name": "zsh",
+      "rss": 6.3,
+      "fp": 4.875
+     },
+     {
+      "role": "shell",
+      "pid": 84448,
+      "name": "zsh",
+      "rss": 6.3,
+      "fp": 4.875
+     }
+    ],
+    "app_fp": 46.0,
+    "webkit_fp": 18.3,
+    "daemon_fp": 14.0,
+    "pty_host_fp": 20.0,
+    "shells_fp": 9.8,
+    "shell_total_fp": 64.3,
+    "quirky_total_fp": 98.3
+   }
+  },
+  {
+   "base": {
+    "procs": [
+     {
+      "role": "app",
+      "pid": 85972,
+      "name": "QuirkyShell",
+      "rss": 89.8,
+      "fp": 39.0
+     },
+     {
+      "role": "daemon",
+      "pid": 85946,
+      "name": "bun",
+      "rss": 42.5,
+      "fp": 15.0
+     },
+     {
+      "role": "pty-host",
+      "pid": 85947,
+      "name": "bun",
+      "rss": 62.9,
+      "fp": 22.0
+     },
+     {
+      "role": "shell",
+      "pid": 85991,
+      "name": "zsh",
+      "rss": 6.3,
+      "fp": 4.9375
+     },
+     {
+      "role": "shell",
+      "pid": 86002,
+      "name": "zsh",
+      "rss": 6.5,
+      "fp": 5.109375
+     }
+    ],
+    "app_fp": 39.0,
+    "webkit_fp": 0,
+    "daemon_fp": 15.0,
+    "pty_host_fp": 22.0,
+    "shells_fp": 10.0,
+    "shell_total_fp": 39.0,
+    "quirky_total_fp": 76.0
+   },
+   "web": {
+    "procs": [
+     {
+      "role": "app",
+      "pid": 85972,
+      "name": "QuirkyShell",
+      "rss": 108.6,
+      "fp": 46.0
+     },
+     {
+      "role": "webkit",
+      "pid": 87135,
+      "name": "com.apple.WebKit.GPU",
+      "rss": 13.8,
+      "fp": 4.2978515625
+     },
+     {
+      "role": "webkit",
+      "pid": 87136,
+      "name": "com.apple.WebKit.Networking",
+      "rss": 15.6,
+      "fp": 5.2509765625
+     },
+     {
+      "role": "webkit",
+      "pid": 87137,
+      "name": "com.apple.WebKit.WebContent",
+      "rss": 27.9,
+      "fp": 8.7509765625
+     },
+     {
+      "role": "daemon",
+      "pid": 85946,
+      "name": "bun",
+      "rss": 42.5,
+      "fp": 15.0
+     },
+     {
+      "role": "pty-host",
+      "pid": 85947,
+      "name": "bun",
+      "rss": 62.8,
+      "fp": 22.0
+     },
+     {
+      "role": "shell",
+      "pid": 85991,
+      "name": "zsh",
+      "rss": 6.3,
+      "fp": 4.9375
+     },
+     {
+      "role": "shell",
+      "pid": 86002,
+      "name": "zsh",
+      "rss": 6.5,
+      "fp": 5.109375
+     }
+    ],
+    "app_fp": 46.0,
+    "webkit_fp": 18.3,
+    "daemon_fp": 15.0,
+    "pty_host_fp": 22.0,
+    "shells_fp": 10.0,
+    "shell_total_fp": 64.3,
+    "quirky_total_fp": 101.3
+   }
+  }
+ ]
+}
