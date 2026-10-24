@@ -20,7 +20,8 @@ import { PtyClient } from './pty-client'
 import { startServer } from './server'
 import { Core } from './service'
 import { Store } from './store'
-import { createStubRunner, type StructuredRunnerFactory } from './structured/runner'
+import { createClaudeRunner } from './structured/claude-runner'
+import type { StructuredRunnerFactory } from './structured/runner'
 
 export type DaemonOptions = {
   home: string
@@ -93,7 +94,7 @@ export async function startDaemon(options: DaemonOptions): Promise<DaemonHandle>
     git: options.git ?? realGit,
     pty,
     notifier: options.notifier ?? osascriptNotifier,
-    runnerFactory: options.runnerFactory ?? createStubRunner,
+    runnerFactory: options.runnerFactory ?? createClaudeRunner,
     resolveClaudePath: options.resolveClaudePath ?? (() => resolveClaudeThroughLoginShell(shell)),
     shell,
     cliEntry,
