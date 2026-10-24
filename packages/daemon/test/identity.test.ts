@@ -34,11 +34,11 @@ function setup() {
 }
 
 describe('daemon identity', () => {
-  test('a restarted daemon keeps its port and rpc token and rotates the hook token', async () => {
+  test('a restarted daemon keeps its port, rpc token and hook token', async () => {
     const { home, start } = setup()
     const first = await start()
     const identity = JSON.parse(await Bun.file(join(home, 'daemon-identity.json')).text())
-    expect(identity).toEqual({ port: first.port, token: first.runtime.token })
+    expect(identity).toEqual({ port: first.port, token: first.runtime.token, hookToken: first.runtime.hookToken })
     expect(statSync(join(home, 'daemon-identity.json')).mode & 0o777).toBe(0o600)
     const url = rpcUrl(first.runtime)
     await first.stop()
@@ -46,7 +46,7 @@ describe('daemon identity', () => {
     const second = await start()
     expect(second.port).toBe(first.port)
     expect(second.runtime.token).toBe(first.runtime.token)
-    expect(second.runtime.hookToken).not.toBe(first.runtime.hookToken)
+    expect(second.runtime.hookToken).toBe(first.runtime.hookToken)
     const client = await QuirkyClient.connect(url, { role: 'cli' })
     expect((await client.call('status.get', {})).pid).toBe(process.pid)
     client.close()
@@ -71,6 +71,21 @@ describe('daemon identity', () => {
     const daemon = await start()
     expect(daemon.runtime.token).toHaveLength(48)
     expect(JSON.parse(await Bun.file(join(home, 'daemon-identity.json')).text()).token).toBe(daemon.runtime.token)
+  })
+
+  test('an identity file from before hook tokens were stored gains one and keeps the rpc token', async () => {
+    const { home, start } = setup()
+    const first = await start()
+    await first.stop()
+    writeFileSync(
+      join(home, 'daemon-identity.json'),
+      JSON.stringify({ port: first.port, token: first.runtime.token })
+    )
+    const second = await start()
+    expect(second.runtime.token).toBe(first.runtime.token)
+    expect(second.runtime.hookToken).toHaveLength(48)
+    const stored = JSON.parse(await Bun.file(join(home, 'daemon-identity.json')).text())
+    expect(stored.hookToken).toBe(second.runtime.hookToken)
   })
 
   test('an explicit port is used as given and the token is still kept', async () => {

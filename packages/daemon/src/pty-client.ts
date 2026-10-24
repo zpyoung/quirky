@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process'
-import { closeSync, existsSync, mkdirSync, openSync, readFileSync } from 'node:fs'
+import { closeSync, existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import type { Socket } from 'bun'
@@ -13,6 +13,7 @@ import {
   type PtyRequest,
   type PtyResults
 } from '@quirky/protocol'
+import { openPrivateLog } from '@quirky/protocol/node'
 
 type PtyParams<T extends PtyRequest['type']> = Omit<Extract<PtyRequest, { type: T }>, 'id' | 'type'>
 
@@ -283,8 +284,7 @@ export class PtyClient {
   private spawnHost(): void {
     const entry = this.options.hostEntry ?? defaultPtyHostEntry()
     if (!existsSync(entry)) throw new Error(`quirky-pty entry not found: ${entry}`)
-    mkdirSync(join(this.options.home, 'logs'), { recursive: true })
-    const log = openSync(join(this.options.home, 'logs', 'pty-host.log'), 'a')
+    const log = openPrivateLog(join(this.options.home, 'logs', 'pty-host.log'))
     const child = spawn(process.execPath, [entry], {
       detached: true,
       stdio: ['ignore', log, log],

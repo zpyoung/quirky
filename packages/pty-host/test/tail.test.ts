@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 import { TailBuffer } from '../src/tail'
 import { RotatingLog } from '../src/log'
-import { mkdtempSync, existsSync, readFileSync, rmSync, statSync } from 'node:fs'
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -84,6 +84,23 @@ describe('RotatingLog', () => {
     second.close()
     expect(readFileSync(join(d, 'output.log'), 'utf8')).toBe('fresh')
     expect(existsSync(join(d, 'output.1.log'))).toBe(false)
+    rmSync(d, { recursive: true })
+  })
+
+  test('keeps the directory 0700 and the files 0600, including ones left by an earlier host', () => {
+    const d = dir()
+    const sessionDir = join(d, 'sessions', 's_1')
+    mkdirSync(sessionDir, { recursive: true, mode: 0o755 })
+    chmodSync(sessionDir, 0o755)
+    writeFileSync(join(sessionDir, 'output.log'), 'old', { mode: 0o644 })
+    chmodSync(join(sessionDir, 'output.log'), 0o644)
+    const log = new RotatingLog(sessionDir, 10)
+    expect(statSync(sessionDir).mode & 0o777).toBe(0o700)
+    expect(statSync(join(sessionDir, 'output.log')).mode & 0o777).toBe(0o600)
+    log.append(enc('aaaaaaaaaaaa'))
+    log.close()
+    expect(statSync(join(sessionDir, 'output.log')).mode & 0o777).toBe(0o600)
+    expect(statSync(join(sessionDir, 'output.1.log')).mode & 0o777).toBe(0o600)
     rmSync(d, { recursive: true })
   })
 })

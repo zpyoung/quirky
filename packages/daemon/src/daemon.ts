@@ -50,18 +50,23 @@ export type DaemonHandle = {
 
 export const daemonVersion: string = pkg.version
 
-type DaemonIdentity = { port: number; token: string }
+/** Survives restarts so agents that outlive the daemon keep working: both tokens are reused. */
+type DaemonIdentity = { port: number; token: string; hookToken: string }
 
 function identityFilePath(home: string): string {
   return join(home, 'daemon-identity.json')
 }
+
+const validToken = (value: unknown): string | undefined =>
+  typeof value === 'string' && value.length >= 16 ? value : undefined
 
 function readIdentity(home: string): Partial<DaemonIdentity> {
   try {
     const value = JSON.parse(readFileSync(identityFilePath(home), 'utf8'))
     return {
       port: Number.isInteger(value.port) && value.port > 0 && value.port < 65536 ? value.port : undefined,
-      token: typeof value.token === 'string' && value.token.length >= 16 ? value.token : undefined
+      token: validToken(value.token),
+      hookToken: validToken(value.hookToken)
     }
   } catch {
     return {}
@@ -94,14 +99,14 @@ async function resolveClaudeThroughLoginShell(shell: string): Promise<string> {
  */
 export async function startDaemon(options: DaemonOptions): Promise<DaemonHandle> {
   const home = ensureHome(options.home)
-  mkdirSync(join(home, 'logs'), { recursive: true })
+  mkdirSync(join(home, 'logs'), { recursive: true, mode: 0o700 })
   const log = options.log ?? ((message: string) => console.error(`[quirkyd] ${message}`))
   const startedAt = Date.now()
   const shell = options.shell ?? process.env.SHELL ?? '/bin/zsh'
   const cliEntry = options.cliEntry ?? defaultCliEntry()
   const identity = readIdentity(home)
   const rpcToken = identity.token ?? randomBytes(24).toString('hex')
-  const hookToken = randomBytes(24).toString('hex')
+  const hookToken = identity.hookToken ?? randomBytes(24).toString('hex')
 
   const store = new Store(join(home, 'quirky.db'))
   const pty = new PtyClient({
@@ -161,7 +166,7 @@ export async function startDaemon(options: DaemonOptions): Promise<DaemonHandle>
     server = listen(requestedPort)
   }
   port = server.port as number
-  writePrivateJson(identityFilePath(home), { port, token: rpcToken } satisfies DaemonIdentity)
+  writePrivateJson(identityFilePath(home), { port, token: rpcToken, hookToken } satisfies DaemonIdentity)
 
   const runtime: RuntimeInfo = {
     pid: process.pid,

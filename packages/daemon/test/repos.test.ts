@@ -145,6 +145,29 @@ describe('worktrees', () => {
     }
   })
 
+  test('repo.remove closes the repo sessions even when git can no longer list its worktrees', async () => {
+    h.git.addRepo('/fake/beta')
+    const alpha = await client.call('repo.add', { path: '/fake/alpha' })
+    const beta = await client.call('repo.add', { path: '/fake/beta' })
+    const [alphaMain] = await client.call('worktree.list', { repoId: alpha.id })
+    const [betaMain] = await client.call('worktree.list', { repoId: beta.id })
+    const extra = await client.call('worktree.create', { repoId: alpha.id, name: 'extra' })
+    const closing = [
+      await client.call('session.create', { worktreeId: alphaMain!.id, agent: 'shell' }),
+      await client.call('session.create', { worktreeId: extra.id, agent: 'shell' })
+    ]
+    const staying = await client.call('session.create', { worktreeId: betaMain!.id, agent: 'shell' })
+    h.git.worktreesByRepo.delete('/fake/alpha')
+
+    await client.call('repo.remove', { repoId: alpha.id })
+    expect(await client.call('repo.list', {})).toHaveLength(1)
+    expect((await client.call('session.list', {})).map((s) => s.id)).toEqual([staying.id])
+    for (const session of closing) {
+      expect(h.pty.requests.some((r) => r.type === 'forget' && r.sessionId === session.id)).toBe(true)
+      await waitFor(() => events.find((e) => e.type === 'session.removed' && e.sessionId === session.id))
+    }
+  })
+
   test('remove without force leaves sessions alone when git refuses', async () => {
     const repo = await client.call('repo.add', { path: '/fake/alpha' })
     const worktree = await client.call('worktree.create', { repoId: repo.id, name: 'dirty' })
