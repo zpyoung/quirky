@@ -56,6 +56,10 @@ export class Store {
         last_activity_at INTEGER NOT NULL,
         exit_code INTEGER
       );
+      CREATE TABLE IF NOT EXISTS worktrees (
+        id TEXT PRIMARY KEY,
+        repo_id TEXT NOT NULL
+      );
       CREATE TABLE IF NOT EXISTS asks (
         id TEXT PRIMARY KEY,
         spec TEXT NOT NULL,
@@ -80,6 +84,10 @@ export class Store {
         value TEXT NOT NULL
       );
     `)
+    const sessionColumns = this.db.query('PRAGMA table_info(sessions)').all() as Row[]
+    if (!sessionColumns.some((column) => column.name === 'repo_id')) {
+      this.db.exec('ALTER TABLE sessions ADD COLUMN repo_id TEXT')
+    }
   }
 
   close(): void {
@@ -108,6 +116,36 @@ export class Store {
 
   deleteRepo(id: string): void {
     this.db.query('DELETE FROM repos WHERE id = ?').run(id)
+    this.db.query('DELETE FROM worktrees WHERE repo_id = ?').run(id)
+  }
+
+  /** Remembers which repo each worktree id belongs to, so ownership never depends on git later. */
+  recordWorktrees(repoId: string, worktreeIds: string[]): void {
+    const upsert = this.db.query(
+      'INSERT INTO worktrees (id, repo_id) VALUES (?, ?) ON CONFLICT(id) DO UPDATE SET repo_id = excluded.repo_id'
+    )
+    this.db.transaction(() => {
+      for (const id of worktreeIds) upsert.run(id, repoId)
+    })()
+  }
+
+  /**
+   * Sessions owned by a repo: those created for it, plus rows that predate recorded ownership
+   * whose worktree id is recorded for the repo or listed in `legacyWorktreeIds`.
+   */
+  listSessionsForRepo(repoId: string, legacyWorktreeIds: string[] = []): Session[] {
+    const legacy = new Set(legacyWorktreeIds)
+    const recorded = new Set(
+      (this.db.query('SELECT id FROM worktrees WHERE repo_id = ?').all(repoId) as Row[]).map((row) => row.id)
+    )
+    const rows = this.db.query('SELECT * FROM sessions ORDER BY created_at, id').all() as Row[]
+    return rows
+      .filter((row) =>
+        row.repo_id === null
+          ? recorded.has(row.worktree_id) || legacy.has(row.worktree_id)
+          : row.repo_id === repoId
+      )
+      .map(toSession)
   }
 
   listSessions(worktreeId?: string): Session[] {
@@ -122,11 +160,11 @@ export class Store {
     return row ? toSession(row) : null
   }
 
-  insertSession(session: Session): void {
+  insertSession(session: Session, repoId: string | null = null): void {
     this.db
       .query(
-        `INSERT INTO sessions (id, kind, agent, worktree_id, cwd, title, status, created_at, last_activity_at, exit_code)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        `INSERT INTO sessions (id, kind, agent, worktree_id, cwd, title, status, created_at, last_activity_at, exit_code, repo_id)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       )
       .run(
         session.id,
@@ -138,7 +176,8 @@ export class Store {
         session.status,
         session.createdAt,
         session.lastActivityAt,
-        session.exitCode
+        session.exitCode,
+        repoId
       )
   }
 
