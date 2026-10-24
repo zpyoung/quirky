@@ -70,6 +70,7 @@ export function startServer(options: ServerOptions) {
       if (url.pathname === HEALTH_PATH) {
         return json({ ok: true, pid: process.pid, daemonVersion: options.daemonVersion })
       }
+      if (url.pathname === '/favicon.ico') return new Response(null, { status: 204 })
       if (url.pathname === RPC_PATH) {
         if (!tokensMatch(options.rpcToken, url.searchParams.get('token'))) {
           return json({ error: 'unauthorized' }, 401)

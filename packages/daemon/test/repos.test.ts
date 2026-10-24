@@ -1,8 +1,10 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 import { createHash } from 'node:crypto'
+import { realpathSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { RpcErrorCode, RpcError, type QuirkyClient, type QuirkyEvent } from '@quirky/protocol'
+import { GitError } from '../src/git'
 import { startHarness, waitFor, type Harness } from './helpers'
 
 let h: Harness
@@ -76,6 +78,7 @@ describe('worktrees', () => {
   })
 
   test('create validates the name and builds the path under worktreesRoot', async () => {
+    const tmp = realpathSync('/tmp')
     await client.call('settings.set', { worktreesRoot: '/tmp/wtroot' })
     const repo = await client.call('repo.add', { path: '/fake/alpha' })
     for (const name of ['-bad', 'a..b', 'has space', '', 'semi;colon']) {
@@ -89,14 +92,14 @@ describe('worktrees', () => {
       baseRef: 'develop'
     })
     expect(worktree).toMatchObject({
-      path: '/tmp/wtroot/alpha/feat-login',
+      path: `${tmp}/wtroot/alpha/feat-login`,
       branch: 'feat/login',
       isMain: false,
       repoId: repo.id
     })
     expect(h.git.calls.find((c) => c.fn === 'addWorktree')?.args).toEqual([
       '/fake/alpha',
-      '/tmp/wtroot/alpha/feat-login',
+      `${tmp}/wtroot/alpha/feat-login`,
       'feat/login',
       'develop'
     ])
@@ -120,6 +123,45 @@ describe('worktrees', () => {
       true
     ])
     expect(await client.call('worktree.list', { repoId: repo.id })).toHaveLength(1)
+  })
+
+  test('repo.remove closes the repo sessions and leaves other repos alone', async () => {
+    h.git.addRepo('/fake/beta')
+    const alpha = await client.call('repo.add', { path: '/fake/alpha' })
+    const beta = await client.call('repo.add', { path: '/fake/beta' })
+    const [alphaMain] = await client.call('worktree.list', { repoId: alpha.id })
+    const [betaMain] = await client.call('worktree.list', { repoId: beta.id })
+    const extra = await client.call('worktree.create', { repoId: alpha.id, name: 'extra' })
+    const closing = [
+      await client.call('session.create', { worktreeId: alphaMain!.id, agent: 'shell' }),
+      await client.call('session.create', { worktreeId: extra.id, agent: 'shell' })
+    ]
+    const staying = await client.call('session.create', { worktreeId: betaMain!.id, agent: 'shell' })
+
+    await client.call('repo.remove', { repoId: alpha.id })
+    expect((await client.call('session.list', {})).map((s) => s.id)).toEqual([staying.id])
+    for (const session of closing) {
+      expect(h.pty.requests.some((r) => r.type === 'forget' && r.sessionId === session.id)).toBe(true)
+    }
+  })
+
+  test('remove without force leaves sessions alone when git refuses', async () => {
+    const repo = await client.call('repo.add', { path: '/fake/alpha' })
+    const worktree = await client.call('worktree.create', { repoId: repo.id, name: 'dirty' })
+    const session = await client.call('session.create', { worktreeId: worktree.id, agent: 'shell' })
+    h.git.removeWorktree = async () => {
+      throw new GitError('git worktree failed', "fatal: 'x' contains modified or untracked files, use --force to delete it", 128)
+    }
+    const failure = await errorCode(client.call('worktree.remove', { worktreeId: worktree.id }))
+    expect(failure).toBe(RpcErrorCode.Conflict)
+    expect((await client.call('session.list', {})).map((s) => s.id)).toEqual([session.id])
+    expect(h.pty.requests.some((r) => r.type === 'forget')).toBe(false)
+  })
+
+  test('~ in repo.add is expanded before git sees the path', async () => {
+    h.git.addRepo(join(homedir(), 'proj'))
+    const repo = await client.call('repo.add', { path: '~/proj' })
+    expect(repo.path).toBe(join(homedir(), 'proj'))
   })
 
   test('git methods run in the worktree path and report changes', async () => {

@@ -3,7 +3,9 @@ import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSy
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import {
+  BranchCheckedOutError,
   GitError,
+  NoSuchDirectoryError,
   addWorktree,
   commit,
   diff,
@@ -240,6 +242,32 @@ describe('worktrees', () => {
     expect(branchErr).toBeInstanceOf(GitError)
     const pathErr = await addWorktree(dir, join(base, 'one'), 'other').catch((e) => e)
     expect(pathErr).toBeInstanceOf(GitError)
+  })
+
+  test('addWorktree checks out an existing branch that nothing else has', async () => {
+    const dir = repoWithCommit()
+    git(dir, 'branch', 'old')
+    const wtPath = join(freshDir('wts'), 'old')
+    await addWorktree(dir, wtPath, 'old')
+    expect(git(wtPath, 'rev-parse', '--abbrev-ref', 'HEAD')).toBe('old')
+  })
+
+  test('addWorktree reports a branch checked out elsewhere as BranchCheckedOutError', async () => {
+    const dir = repoWithCommit()
+    const base = freshDir('wts')
+    await addWorktree(dir, join(base, 'one'), 'taken')
+    const fromLinked = await addWorktree(dir, join(base, 'two'), 'taken').catch((e) => e)
+    expect(fromLinked).toBeInstanceOf(BranchCheckedOutError)
+    expect(fromLinked.message).toContain(join(base, 'one'))
+    const fromMain = await addWorktree(dir, join(base, 'three'), 'main').catch((e) => e)
+    expect(fromMain).toBeInstanceOf(BranchCheckedOutError)
+  })
+
+  test('resolveRepoRoot names a missing directory', async () => {
+    const missing = join(freshDir('plain'), 'nope')
+    const err = await resolveRepoRoot(missing).catch((e) => e)
+    expect(err).toBeInstanceOf(NoSuchDirectoryError)
+    expect(err.message).toBe(`no such directory: ${missing}`)
   })
 
   test('detached worktree has null branch', async () => {

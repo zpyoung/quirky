@@ -79,6 +79,37 @@ describe('claude hooks', () => {
     expect((await client.call('session.list', {}))[0].lastActivityAt).toBeGreaterThan(before)
   })
 
+  test('an idle reminder after done changes nothing and does not notify', async () => {
+    await post('claude', { hook_event_name: 'Stop' })
+    const before = (await client.call('session.list', {}))[0]
+    const notifies = events.filter((e) => e.type === 'notify').length
+    await Bun.sleep(5)
+    await post('claude', {
+      hook_event_name: 'Notification',
+      notification_type: 'idle_prompt',
+      message: 'Claude is waiting for your input'
+    })
+    await post('claude', { hook_event_name: 'Notification', message: 'Claude is waiting for your input' })
+    expect((await client.call('session.list', {}))[0]).toEqual(before)
+    expect(events.filter((e) => e.type === 'notify')).toHaveLength(notifies)
+  })
+
+  test('a permission notification still sets waiting after done', async () => {
+    await post('claude', { hook_event_name: 'Stop' })
+    await post('claude', {
+      hook_event_name: 'Notification',
+      notification_type: 'permission_prompt',
+      message: 'Claude needs your permission to use Bash'
+    })
+    expect(await statusOf()).toBe('waiting')
+  })
+
+  test('an idle reminder while working still sets waiting', async () => {
+    await post('claude', { hook_event_name: 'UserPromptSubmit' })
+    await post('claude', { hook_event_name: 'Notification', notification_type: 'idle_prompt' })
+    expect(await statusOf()).toBe('waiting')
+  })
+
   test('rejects unknown sessions and bad bodies; exited sessions ignore hooks', async () => {
     expect((await post('claude', { hook_event_name: 'Stop' }, 's_missing')).status).toBe(404)
     const bad = await fetch(`http://127.0.0.1:${h.runtime.port}/hook/claude?session=${session.id}`, {

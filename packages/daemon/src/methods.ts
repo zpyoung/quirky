@@ -103,8 +103,8 @@ export function createHandlers(core: Core): Handlers {
 
     'repo.list': () => core.listRepos(),
     'repo.add': (params) => core.addRepo(str(params, 'path')),
-    'repo.remove': (params) => {
-      core.removeRepo(str(params, 'repoId'))
+    'repo.remove': async (params) => {
+      await core.removeRepo(str(params, 'repoId'))
       return OK
     },
 

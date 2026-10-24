@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto'
-import { basename, join } from 'node:path'
+import { realpathSync } from 'node:fs'
+import { basename, dirname, join } from 'node:path'
 import {
   base64ToBytes,
   encodeTerminalOutput,
@@ -13,8 +14,9 @@ import {
 } from '@quirky/protocol'
 import { AskService, randomId } from './asks'
 import { DaemonError, conflict, internal, invalidParams, notFound } from './errors'
+import { BranchCheckedOutError, GitError, NoSuchDirectoryError } from './git'
 import type { GitApi } from './git-api'
-import { statusForHook } from './hooks'
+import { isClaudeIdleNotification, statusForHook } from './hooks'
 import {
   AGENT_TITLES,
   buildArgv,
@@ -53,8 +55,21 @@ export type CoreOptions = {
 
 type Stream = { conn: ClientConn; streamId: number }
 
+/**
+ * `path` with symlinks resolved. The deepest existing ancestor is resolved and the rest appended,
+ * so a path that doesn't exist yet gets the same prefix git will report once it does.
+ */
+export function resolveRealPath(path: string): string {
+  try {
+    return realpathSync(path)
+  } catch {
+    const parent = dirname(path)
+    return parent === path ? path : join(resolveRealPath(parent), basename(path))
+  }
+}
+
 export function worktreeIdForPath(path: string): string {
-  return `wt_${createHash('sha1').update(path).digest('hex').slice(0, 12)}`
+  return `wt_${createHash('sha1').update(resolveRealPath(path)).digest('hex').slice(0, 12)}`
 }
 
 /** The daemon's domain logic: repos, worktrees, sessions, terminals, hooks, asks and events. */
@@ -156,11 +171,13 @@ export class Core {
   }
 
   async addRepo(path: string): Promise<Repo> {
+    const expanded = expandHome(path)
     let root: string
     try {
-      root = await this.options.git.resolveRepoRoot(path)
+      root = resolveRealPath(await this.options.git.resolveRepoRoot(expanded))
     } catch (error) {
-      throw invalidParams(`not a git repository: ${path} (${gitMessage(error)})`)
+      if (error instanceof NoSuchDirectoryError) throw invalidParams(`no such directory: ${expanded}`)
+      throw invalidParams(`not a git repository: ${expanded}`)
     }
     const existing = this.options.store.getRepoByPath(root)
     if (existing) return existing
@@ -170,8 +187,10 @@ export class Core {
     return repo
   }
 
-  removeRepo(repoId: string): void {
-    this.requireRepo(repoId)
+  async removeRepo(repoId: string): Promise<void> {
+    const repo = this.requireRepo(repoId)
+    const worktrees = await this.repoWorktrees(repo).catch(() => [])
+    for (const worktree of worktrees) await this.closeWorktreeSessions(worktree.id)
     this.options.store.deleteRepo(repoId)
     this.broadcast({ type: 'repo.changed' })
   }
@@ -198,11 +217,12 @@ export class Core {
         'name may contain letters, digits, - _ . and /, cannot start with - or /, and cannot contain ..'
       )
     }
-    const root = this.getSettings().worktreesRoot
+    const root = resolveRealPath(this.getSettings().worktreesRoot)
     const path = join(root, repo.name, name.replaceAll('/', '-'))
     try {
       await this.options.git.addWorktree(repo.path, path, name, baseRef)
     } catch (error) {
+      if (error instanceof BranchCheckedOutError) throw conflict(error.message)
       throw internal(gitMessage(error))
     }
     const created = (await this.repoWorktrees(repo).catch(() => [])).find((w) => w.path === path)
@@ -219,17 +239,24 @@ export class Core {
     return worktree
   }
 
+  /**
+   * Removes a worktree. Without `force`, git decides first and a refusal (dirty or untracked
+   * files) is a Conflict that leaves the worktree's sessions running; with `force` the sessions
+   * are closed before the forced removal.
+   */
   async removeWorktree(worktreeId: string, force: boolean): Promise<void> {
     const { repo, worktree } = await this.requireWorktree(worktreeId)
     if (worktree.isMain) throw conflict('the main worktree cannot be removed')
-    for (const session of this.options.store.listSessions(worktreeId)) {
-      await this.closeSession(session.id)
-    }
+    if (force) await this.closeWorktreeSessions(worktreeId)
     try {
       await this.options.git.removeWorktree(repo.path, worktree.path, force)
     } catch (error) {
+      if (error instanceof GitError && error.exitCode > 0) {
+        throw conflict(`could not remove ${worktree.name}: ${gitMessage(error)}`)
+      }
       throw internal(gitMessage(error))
     }
+    if (!force) await this.closeWorktreeSessions(worktreeId)
     this.broadcast({ type: 'worktree.changed', repoId: repo.id })
   }
 
@@ -254,7 +281,7 @@ export class Core {
       agent: params.agent,
       worktreeId: worktree.id,
       cwd: worktree.path,
-      title: AGENT_TITLES[params.agent],
+      title: this.sessionTitle(worktree.id, AGENT_TITLES[params.agent]),
       status: 'starting',
       createdAt: now,
       lastActivityAt: now,
@@ -271,7 +298,9 @@ export class Core {
           sessionId: session.id,
           worktreeId: worktree.id,
           hookUrl: this.options.hookUrl(),
-          hookToken: this.options.hookToken
+          hookToken: this.options.hookToken,
+          shell: this.options.shell,
+          agent: params.agent
         }),
         cols: params.cols ?? 80,
         rows: params.rows ?? 24
@@ -295,7 +324,7 @@ export class Core {
       agent: 'claude',
       worktreeId: worktree.id,
       cwd: worktree.path,
-      title: AGENT_TITLES.claude,
+      title: this.sessionTitle(worktree.id, AGENT_TITLES.claude),
       status: 'starting',
       createdAt: now,
       lastActivityAt: now,
@@ -445,6 +474,7 @@ export class Core {
     const session = this.options.store.getSession(sessionId)
     if (!session) return false
     if (session.status === 'exited' || session.kind !== 'terminal') return true
+    if (session.status === 'done' && isClaudeIdleNotification(agent, payload)) return true
     const status = statusForHook(agent, payload)
     if (status) await this.setSessionStatus(sessionId, status)
     return true
@@ -473,6 +503,18 @@ export class Core {
     } catch (error) {
       throw internal(gitMessage(error))
     }
+  }
+
+  private sessionTitle(worktreeId: string, base: string): string {
+    const taken = new Set(this.options.store.listSessions(worktreeId).map((session) => session.title))
+    for (let n = 1; ; n++) {
+      const title = n === 1 ? base : `${base} ${n}`
+      if (!taken.has(title)) return title
+    }
+  }
+
+  private async closeWorktreeSessions(worktreeId: string): Promise<void> {
+    for (const session of this.options.store.listSessions(worktreeId)) await this.closeSession(session.id)
   }
 
   private async setSessionStatus(sessionId: string, status: SessionStatus): Promise<void> {
@@ -616,7 +658,7 @@ export class Core {
     return infos.map((info) => ({
       id: worktreeIdForPath(info.path),
       repoId: repo.id,
-      path: info.path,
+      path: resolveRealPath(info.path),
       branch: info.branch,
       head: info.head,
       isMain: info.isMain,
