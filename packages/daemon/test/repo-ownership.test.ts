@@ -22,7 +22,7 @@ async function start(options: Parameters<typeof startHarness>[0] = {}): Promise<
 }
 
 async function sessionIds(client: QuirkyClient): Promise<string[]> {
-  return (await client.call('session.list', {})).map((s) => s.id)
+  return (await client.call('session.list', {})).map((s) => s.id).sort()
 }
 
 describe('repo.remove ownership', () => {
@@ -46,7 +46,7 @@ describe('repo.remove ownership', () => {
     ]
 
     await client.call('repo.remove', { repoId: one.id })
-    expect(await sessionIds(client)).toEqual(staying.map((s) => s.id))
+    expect(await sessionIds(client)).toEqual(staying.map((s) => s.id).sort())
     for (const session of closing) {
       expect(h.pty.requests.some((r) => r.type === 'forget' && r.sessionId === session.id)).toBe(true)
     }
