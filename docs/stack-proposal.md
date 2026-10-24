@@ -34,6 +34,16 @@ already answered.
 It has to run with its own data directory and ports so it can't adopt the PTY daemon of the Orca
 you're using. It runs Orca's code but doesn't modify the repo.
 
+**Result (2026-10-23): it doesn't answer the daemon question.**
+
+| Workload | orcad and its terminal daemon |
+| --- | --- |
+| Idle | about 290 MB |
+| Four terminals after `seq 1 10000` | about 360 MB |
+| Eight terminals after `seq 1 10000` | about 550 MB |
+
+orcad also always starts an Electron browser sidecar of 135–150 MB. Orca's runtime as it stands is far over the Go budget. So the comparison has to come from Quirky's own Bun daemon, which carries only the kept features and keeps terminal history out of the daemon's heap. Method and raw numbers are in `research/memory-probe/orcad-baseline.md`.
+
 ## Step 1: two daemon prototypes
 
 Each prototype implements the same thin slice of the API in [architecture.md](architecture.md) on
