@@ -8,8 +8,8 @@ sessions, two terminals on screen, the editor open), against Orca's 2,461 MB.
 
 This document is for whoever builds Quirky next. It fixes the process boundaries, the API shape,
 where terminal history lives, how structured agent sessions run, the browser approach and a memory
-budget. It doesn't choose between Go and Bun for the daemon or between Tauri and Electrobun for the
-shell; [stack-proposal.md](stack-proposal.md) says how that gets settled. Scope decisions made so far
+budget. It doesn't choose the daemon's language (Go or Bun) or the shell (Tauri, Electrobun, or a
+native Swift app); [stack-proposal.md](stack-proposal.md) says how that gets settled. Scope decisions made so far
 are in [Decisions](#decisions).
 
 Orca file references are relative to the Orca repo (`~/PycharmProjects/orca`).
@@ -218,6 +218,11 @@ the renderer costs comes from how much it keeps mounted, not from the framework.
   self-contained, such as PR pages, diff comments, the composer and the ask card. The 208-slice
   store and the IPC bridge don't port, because Quirky's state is server-owned.
 
+That describes a webview shell. Under the native Swift option, the window, sidebar, tabs and
+terminals are AppKit with libghostty, and this single-page app shrinks to the views that are HTML
+by nature, each loaded in a WKWebView panel. Both kinds of UI are clients of the same daemon API.
+[stack-proposal.md](stack-proposal.md#the-native-option) covers what that changes.
+
 ## Where the code comes from
 
 Orca's runtime is already free of Electron, which makes the TypeScript daemon's reuse case much
@@ -286,7 +291,9 @@ the probe's four workloads plus the typical-day workload above.
 Decided with the user on 2026-10-23:
 
 - **Stack:** settled by separate daemon and shell prototypes, measured on macOS only
-  ([stack-proposal.md](stack-proposal.md)). Linux and Windows checks come after the choice.
+  ([stack-proposal.md](stack-proposal.md)). Linux and Windows checks come after the choice. A
+  third option, a native Swift app, was added the same day, and whether to pursue it is with the
+  user.
 - **Mobile:** fork Orca's phone app onto Quirky's API rather than reimplementing Orca's mobile
   contract (about 193 RPC methods, `src/main/runtime/rpc/e2ee-channel.ts`). Quirky doesn't use
   upstream's hosted relay (`relay.onorca.dev`). Phones connect directly over LAN or a tailnet, and a
