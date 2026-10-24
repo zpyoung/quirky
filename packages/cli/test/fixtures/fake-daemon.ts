@@ -19,6 +19,8 @@ export type FakeDaemonOptions = {
   answerAfterMs?: number | null
   /** Close the socket on the first `ask.wait`, to exercise client reconnects. */
   dropFirstWait?: boolean
+  /** Make `ask.cancel` fail with an internal error. */
+  failCancel?: boolean
 }
 
 class FakeRpcError extends Error {
@@ -232,6 +234,7 @@ export class FakeDaemon {
         return state.envelope
       }
       case 'ask.cancel': {
+        if (this.options.failCancel) throw new FakeRpcError(RpcErrorCode.Internal, 'cancel failed')
         const state = this.requireAsk(params.askId)
         if (state.envelope.status === 'pending') this.resolve(params.askId, 'declined')
         return state.envelope

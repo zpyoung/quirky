@@ -16,9 +16,9 @@ function timeoutFlag(args: ParsedArgs): number | undefined {
 
 /**
  * Long-polls `ask.wait` until the ask reaches a terminal status or `timeoutMs` elapses, then prints
- * the envelope as one JSON line. On timeout the last pending envelope is printed with status
- * `timed_out` and the ask itself is left open. A dropped connection is re-established and the
- * wait continues.
+ * the envelope as one JSON line. On timeout the ask is cancelled so its card leaves the UI, and the
+ * last pending envelope is printed with status `timed_out`. A dropped connection is re-established
+ * and the wait continues.
  */
 export async function waitForAsk(ctx: Context, askId: string, timeoutMs?: number): Promise<void> {
   const startedAt = ctx.now()
@@ -27,6 +27,7 @@ export async function waitForAsk(ctx: Context, askId: string, timeoutMs?: number
   for (;;) {
     const remaining = timeoutMs === undefined ? Infinity : timeoutMs - (ctx.now() - startedAt)
     if (remaining <= 0) {
+      await ctx.rpc.call('ask.cancel', { askId }).catch(() => {})
       ctx.out.jsonLine({ ...last, status: 'timed_out' })
       return
     }
@@ -51,7 +52,7 @@ export async function waitForAsk(ctx: Context, askId: string, timeoutMs?: number
 export const ask: Command = {
   name: 'ask',
   usage: 'ask --spec <json|@file> [--timeout-ms N]',
-  summary: 'ask the user questions and wait for the answers (same output shape as `orca ask`)',
+  summary: 'ask the user questions and wait for the answers (same output shape as `orca ask`); on --timeout-ms the ask is cancelled and printed as timed_out',
   flags: { spec: 'string', 'timeout-ms': 'int' },
   async run(args, ctx) {
     takePositionals(args, [])
@@ -72,7 +73,7 @@ export const ask: Command = {
 export const askWait: Command = {
   name: 'ask wait',
   usage: 'ask wait --id <askId> [--timeout-ms N]',
-  summary: 'resume waiting for an ask',
+  summary: 'resume waiting for an ask; on --timeout-ms the ask is cancelled and printed as timed_out',
   flags: { id: 'string', 'timeout-ms': 'int' },
   async run(args, ctx) {
     takePositionals(args, [])

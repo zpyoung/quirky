@@ -209,7 +209,7 @@ describe('ask', () => {
     expect(result.stdout.trim().split('\n')).toHaveLength(2)
   })
 
-  test('--timeout-ms prints the pending envelope as timed_out and exits 0', async () => {
+  test('--timeout-ms cancels the ask, prints it as timed_out and exits 0', async () => {
     daemon.stop()
     start({ answerAfterMs: null })
     const result = await run(['ask', '--spec', spec, '--timeout-ms', '400'])
@@ -217,18 +217,39 @@ describe('ask', () => {
     const lines = result.stdout.trim().split('\n')
     expect(JSON.parse(lines[0]).status).toBe('registered')
     expect(JSON.parse(lines[1])).toEqual({ status: 'timed_out', askId: 'ask_1', answers: {}, skipped: [] })
-    expect(daemon.methodCalls('ask.cancel')).toEqual([])
+    expect(daemon.methodCalls('ask.cancel')).toEqual([{ askId: 'ask_1' }])
     expect(daemon.methodCalls('ask.wait')[0].timeoutMs).toBeLessThanOrEqual(400)
   })
 
-  test('ask wait --id resumes and ask cancel --id prints the envelope', async () => {
+  test('an ask that is answered before --timeout-ms is not cancelled', async () => {
+    daemon.stop()
+    start({ answerAfterMs: 100 })
+    const result = await run(['ask', '--spec', spec, '--timeout-ms', '5000'])
+    expect(JSON.parse(result.stdout.trim().split('\n')[1]).status).toBe('answered')
+    expect(daemon.methodCalls('ask.cancel')).toEqual([])
+  })
+
+  test('--timeout-ms still prints timed_out when the cancel call fails', async () => {
+    daemon.stop()
+    start({ answerAfterMs: null, failCancel: true })
+    const result = await run(['ask', '--spec', spec, '--timeout-ms', '200'])
+    expect(result.code).toBe(0)
+    expect(JSON.parse(result.stdout.trim().split('\n')[1]).status).toBe('timed_out')
+  })
+
+  test('ask wait --id resumes an abandoned ask and ask cancel --id prints the envelope', async () => {
     daemon.stop()
     start({ answerAfterMs: null })
-    const registered = await run(['ask', '--spec', spec, '--timeout-ms', '100'])
-    const askId = JSON.parse(registered.stdout.split('\n')[0]).askId
+    const first = spawnCli(['ask', '--spec', spec], { home: daemon.home })
+    const reader = first.stdout.getReader()
+    const { value } = await reader.read()
+    const askId = JSON.parse(new TextDecoder().decode(value).split('\n')[0]).askId
+    first.kill()
+    await first.exited
     const resumed = await run(['ask', 'wait', '--id', askId, '--timeout-ms', '100'])
     expect(resumed.code).toBe(0)
     expect(JSON.parse(resumed.stdout).status).toBe('timed_out')
+    expect(daemon.methodCalls('ask.cancel')).toEqual([{ askId }])
     const cancelled = await run(['ask', 'cancel', '--id', askId])
     expect(cancelled.code).toBe(0)
     expect(JSON.parse(cancelled.stdout)).toEqual({ status: 'declined', askId, answers: {}, skipped: [] })
