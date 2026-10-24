@@ -147,6 +147,31 @@ correctly in `claude`, `codex` and `vim`, and measures idle memory with no WKWeb
 The 100 MB threshold is a proposal. It weighs the memory saved against rewriting the UI in Swift
 and giving up two platforms.
 
+**Prototype result (2026-10-23): the native shell clears the bar on memory, with one dependency
+risk.** Results are in `prototypes/swift-shell/`, measured against v1's real daemon and PTY host.
+
+| Workload | Native + libghostty | Native + SwiftTerm | Electrobun probe |
+| --- | --- | --- | --- |
+| Four panes with 10,000 lines, total including daemon and PTY host | 115 MB | 98 MB | 301 MB |
+| Idle, no terminals open | 43 MB | 41 MB | n/a |
+
+- **Memory:** about 190 MB less than Electrobun at four filled panes. The Electrobun run had a
+  plain PTY server and no daemon, so the comparison is approximate.
+- **No webview until needed:** no WebKit process starts until an HTML view opens. A WKWebView
+  panel costs 18 MB blank and 51 MB with the full React UI loaded.
+- **External streams (the main unknown):** upstream Ghostty can't render a stream it doesn't own,
+  since its only backend runs its own PTY. cmux's fork (`manaflow-ai/ghostty`) adds a manual IO
+  mode that works: libghostty rendered the daemon's stream, repainted vim correctly after reopen,
+  and redrew it after a resize.
+- **The cost of libghostty:** choosing it means carrying that fork, or upstreaming a C bridge.
+- **SwiftTerm:** needs no fork, and uses less memory at two to four panes.
+- **Shared hazard:** both engines answered terminal queries inside the replayed output, as the
+  webview UI did before its fix. Any client has to mute replies during replay.
+
+On these numbers the native option meets the memory rule. Whether to give up Linux and Windows,
+and whether to take on the Ghostty fork or use SwiftTerm, are still the user's calls. Tauri wasn't
+measured.
+
 ### What it changes in the v1 plan
 
 v1 is already macOS only and is being built as a React UI in Electrobun ([v1.md](v1.md)). Choosing
