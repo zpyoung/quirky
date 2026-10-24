@@ -66,8 +66,8 @@ lines. Go runs this with both screen-state approaches (a VT library, and redraw-
 **Early result (2026-10-23):** v1's Bun daemon and PTY host measured about 43 MB together with
 eight 10,000-line shells (single run, no UI attached;
 `research/memory-probe/quirky-v1-daemon.md`). That is inside the 25–50 MB budget set for a Go
-daemon alone. A Go daemon would have to come in below about 0 MB to beat Bun by the 50 MB
-threshold, so it can't. The Go prototype is only worth building if the full-feature Bun daemon
+daemon alone. Bun can't lose by the 50 MB threshold when both of its processes together use 43 MB.
+The Go prototype is only worth building if the full-feature Bun daemon
 grows far past this, or if the snapshot correctness check fails on Bun.
 
 **Decision rule:** choose Bun unless one of these holds:
