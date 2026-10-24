@@ -7,7 +7,7 @@
     "build": "bun run --filter './packages/ui' build && bun run --filter './apps/desktop' build",
     "dev": "bun run --filter './packages/ui' build && bun run --filter './apps/desktop' dev",
     "daemon": "bun packages/daemon/src/main.ts",
-    "test": "bun test packages",
+    "test": "bun test packages apps",
     "typecheck": "bunx tsc --noEmit -p tsconfig.json"
   },
   "devDependencies": {
