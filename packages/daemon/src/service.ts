@@ -192,31 +192,16 @@ export class Core {
   }
 
   /**
-   * Forgets a repo and closes every session that belongs to it. Git cannot be relied on here (the
-   * directory may be gone), so membership comes from stored data: worktree ids git still reports,
-   * the main worktree's id derived from the repo path, and sessions whose `cwd` lies inside the
-   * repo path or inside `<worktreesRoot>/<repo name>/`, where worktrees created by Quirky live.
-   * Sessions inside another stored repo's path are never taken. Worktrees made elsewhere by hand
-   * are only recognised while git can still list them, and two repos sharing a name share the
-   * worktrees directory, so removing one of them also closes sessions in the other's directory.
+   * Forgets a repo and closes every session that belongs to it. Ownership is recorded data: the
+   * repo id stored with each session, and for rows that predate it the worktree ids recorded
+   * whenever worktrees were listed or created. If any close fails the repo stays, so removal can
+   * be retried.
    */
   async removeRepo(repoId: string): Promise<void> {
     const repo = this.requireRepo(repoId)
-    const listed = await this.repoWorktrees(repo).catch(() => [])
-    const worktreeIds = new Set([worktreeIdForPath(repo.path), ...listed.map((worktree) => worktree.id)])
-    const ownedRoots = [repo.path, join(resolveRealPath(this.getSettings().worktreesRoot), repo.name)]
-    const otherRepoPaths = this.options.store
-      .listRepos()
-      .filter((other) => other.id !== repo.id)
-      .map((other) => other.path)
-    const inside = (path: string, root: string) => path === root || path.startsWith(`${root}/`)
-    for (const session of this.options.store.listSessions()) {
-      const belongs =
-        worktreeIds.has(session.worktreeId) ||
-        (ownedRoots.some((root) => inside(session.cwd, root)) &&
-          !otherRepoPaths.some((other) => inside(session.cwd, other)))
-      if (belongs) await this.closeSession(session.id)
-    }
+    await this.repoWorktrees(repo).catch(() => [])
+    const owned = this.options.store.listSessionsForRepo(repo.id, [worktreeIdForPath(repo.path)])
+    for (const session of owned) await this.closeSession(session.id)
     this.options.store.deleteRepo(repoId)
     this.broadcast({ type: 'repo.changed' })
   }
@@ -244,7 +229,7 @@ export class Core {
       )
     }
     const root = resolveRealPath(this.getSettings().worktreesRoot)
-    const path = join(root, repo.name, name.replaceAll('/', '-'))
+    const path = join(root, this.worktreeDirName(repo), name.replaceAll('/', '-'))
     try {
       await this.options.git.addWorktree(repo.path, path, name, baseRef)
     } catch (error) {
@@ -261,6 +246,7 @@ export class Core {
       isMain: false,
       name
     }
+    this.options.store.recordWorktrees(repo.id, [worktree.id])
     this.broadcast({ type: 'worktree.changed', repoId: repo.id })
     return worktree
   }
@@ -297,7 +283,7 @@ export class Core {
     cols?: number
     rows?: number
   }): Promise<Session> {
-    const { worktree } = await this.requireWorktree(params.worktreeId)
+    const { repo, worktree } = await this.requireWorktree(params.worktreeId)
     const { home, store, pty } = this.options
     installIntegrationFiles(home, this.options.cliEntry)
     const now = Date.now()
@@ -313,7 +299,7 @@ export class Core {
       lastActivityAt: now,
       exitCode: null
     }
-    store.insertSession(session)
+    store.insertSession(session, repo.id)
     try {
       await pty.request('create', {
         sessionId: session.id,
@@ -342,7 +328,7 @@ export class Core {
 
   async createStructuredSession(params: { worktreeId: string; agent: AgentKind; prompt: string }): Promise<Session> {
     if (params.agent !== 'claude') throw invalidParams('structured sessions support only the claude agent')
-    const { worktree } = await this.requireWorktree(params.worktreeId)
+    const { repo, worktree } = await this.requireWorktree(params.worktreeId)
     const now = Date.now()
     const session: Session = {
       id: `s_${randomId()}`,
@@ -356,7 +342,7 @@ export class Core {
       lastActivityAt: now,
       exitCode: null
     }
-    this.options.store.insertSession(session)
+    this.options.store.insertSession(session, repo.id)
     this.broadcast({ type: 'session.changed', session })
     this.runner.start(session, params.prompt).catch((error: Error) => {
       this.appendStructuredMessage({ sessionId: session.id, role: 'system', text: `could not start: ${error.message}` })
@@ -692,7 +678,7 @@ export class Core {
 
   private async repoWorktrees(repo: Repo): Promise<Worktree[]> {
     const infos = await this.options.git.listWorktrees(repo.path)
-    return infos.map((info) => ({
+    const worktrees = infos.map((info) => ({
       id: worktreeIdForPath(info.path),
       repoId: repo.id,
       path: resolveRealPath(info.path),
@@ -701,6 +687,17 @@ export class Core {
       isMain: info.isMain,
       name: info.branch ?? basename(info.path)
     }))
+    this.options.store.recordWorktrees(
+      repo.id,
+      worktrees.map((worktree) => worktree.id)
+    )
+    return worktrees
+  }
+
+  /** The directory under the worktrees root for a repo's worktrees; unique even for repos sharing a name. */
+  private worktreeDirName(repo: Repo): string {
+    const shareName = this.options.store.listRepos().some((other) => other.id !== repo.id && other.name === repo.name)
+    return shareName ? `${repo.name}-${repo.id.replace(/^repo_/, '').slice(0, 6)}` : repo.name
   }
 
   private async findWorktree(worktreeId: string): Promise<{ repo: Repo; worktree: Worktree } | null> {
