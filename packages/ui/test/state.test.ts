@@ -133,3 +133,47 @@ test('removing a session drops its structured messages', () => {
   state = reduce(state, { type: 'event', event: { type: 'session.removed', sessionId: 's1' } })
   expect(state.structured.s1).toBeUndefined()
 })
+
+test('a restored selection survives events that arrive before the first snapshot', () => {
+  let state = initialState({ worktreeId: 'w2', sessionId: 's3' })
+  state = reduce(state, { type: 'event', event: { type: 'session.changed', session: sess('s3', 'w2', 3) } })
+  expect(state.selectedWorktreeId).toBe('w2')
+  state = reduce(state, {
+    type: 'snapshot',
+    repos: [repo],
+    worktrees: [wt('w1', 'main', true), wt('w2', 'zeta')],
+    sessions: [sess('s1', 'w1', 1), sess('s3', 'w2', 3)],
+    asks: [],
+    settings
+  })
+  expect(state.selectedWorktreeId).toBe('w2')
+  expect(state.selectedSessionId).toBe('s3')
+})
+
+test('a restored selection that no longer exists falls back to the first worktree', () => {
+  const state = reduce(initialState({ worktreeId: 'gone', sessionId: 'gone' }), {
+    type: 'snapshot',
+    repos: [repo],
+    worktrees: [wt('w1', 'main', true)],
+    sessions: [sess('s1', 'w1', 1)],
+    asks: [],
+    settings
+  })
+  expect(state.selectedWorktreeId).toBe('w1')
+  expect(state.selectedSessionId).toBe('s1')
+})
+
+test('selecting a newly listed worktree switches to it', () => {
+  let state = loaded()
+  state = reduce(state, { type: 'worktrees', worktrees: [wt('w1', 'main', true), wt('w2', 'zeta'), wt('w3', 'new')] })
+  state = reduce(state, { type: 'selectWorktree', id: 'w3' })
+  expect(state.selectedWorktreeId).toBe('w3')
+})
+
+test('settings replaces the stored settings; unreachable is a connection status', () => {
+  let state = reduce(loaded(), { type: 'settings', settings: { ...settings, terminalScrollback: 5000 } })
+  expect(state.settings?.terminalScrollback).toBe(5000)
+  state = reduce(state, { type: 'connection', status: 'unreachable' })
+  expect(state.connection).toBe('unreachable')
+  expect(state.epoch).toBe(0)
+})

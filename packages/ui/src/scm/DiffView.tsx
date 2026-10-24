@@ -8,6 +8,7 @@ import { json } from '@codemirror/lang-json'
 import { markdown } from '@codemirror/lang-markdown'
 import { python } from '@codemirror/lang-python'
 import type { GitDiff } from '@quirky/protocol'
+import { withoutTrailingNewline } from '../lib/diffText'
 import { languageForPath, type LanguageId } from '../lib/language'
 
 function languageExtension(id: LanguageId): Extension[] {
@@ -47,8 +48,8 @@ export function DiffView({ diff }: { diff: GitDiff }) {
       ...languageExtension(languageForPath(diff.path))
     ]
     const view = new MergeView({
-      a: { doc: diff.original, extensions },
-      b: { doc: diff.modified, extensions },
+      a: { doc: withoutTrailingNewline(diff.original), extensions },
+      b: { doc: withoutTrailingNewline(diff.modified), extensions },
       parent,
       gutter: true,
       highlightChanges: true,

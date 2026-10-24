@@ -20,7 +20,16 @@ const worktrees: Worktree[] = [
 const sessions: Session[] = [
   mkSession('s1', 'w1', 'shell', 'running', 'Shell'),
   mkSession('s2', 'w1', 'claude', 'waiting', 'Claude'),
-  mkSession('s3', 'w2', 'shell', 'working', 'Shell')
+  mkSession('s3', 'w2', 'shell', 'working', 'Shell'),
+  { ...mkSession('s4', 'w2', 'claude', 'running', 'Claude (bg)'), kind: 'structured' },
+  { ...mkSession('s5', 'w2', 'claude', 'exited', 'Claude (done)'), kind: 'structured', exitCode: 0 }
+]
+const transcript = (sessionId: string) => [
+  { sessionId, seq: 1, role: 'system', text: 'hook_started: SessionStart', at: 0 },
+  { sessionId, seq: 2, role: 'system', text: 'hook_response: ok', at: 0 },
+  { sessionId, seq: 3, role: 'user', text: 'say hi', at: 0 },
+  { sessionId, seq: 4, role: 'assistant', text: '', at: 0 },
+  { sessionId, seq: 5, role: 'assistant', text: 'hi there', at: 0 }
 ]
 const asks: Ask[] = [
   {
@@ -98,7 +107,7 @@ function handle(method: string, params: any, send: (bytes: Uint8Array) => void):
         binary: false
       }
     case 'structured.messages':
-      return []
+      return transcript(params.sessionId)
     default:
       throw new Error(`mock daemon: unhandled ${method}`)
   }
@@ -111,6 +120,7 @@ export function startMockDaemon(port = 0): { url: string; stop: () => void } {
     hostname: '127.0.0.1',
     async fetch(request, server) {
       const url = new URL(request.url)
+      if (url.pathname === '/health') return Response.json({ ok: true })
       if (url.pathname === '/rpc') {
         if (url.searchParams.get('token') !== TOKEN) return new Response('unauthorized', { status: 401 })
         return server.upgrade(request) ? undefined : new Response('upgrade failed', { status: 400 })

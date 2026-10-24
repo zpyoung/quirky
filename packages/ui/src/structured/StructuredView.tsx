@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import type { Session, StructuredMessage } from '@quirky/protocol'
 import { useAppState, useConnection, useDispatch } from '../context'
+import { visibleMessages } from '../lib/transcript'
 import { MessageRow } from './MessageRow'
 
 const NO_MESSAGES: StructuredMessage[] = []
@@ -11,8 +12,9 @@ export function StructuredView({ session }: { session: Session }) {
   const connection = useConnection()
   const dispatch = useDispatch()
   const [text, setText] = useState('')
+  const [showAll, setShowAll] = useState(false)
   const scroller = useRef<HTMLDivElement>(null)
-  const messages = state.structured[session.id] ?? NO_MESSAGES
+  const messages = visibleMessages(state.structured[session.id] ?? NO_MESSAGES, showAll)
 
   useEffect(() => {
     let cancelled = false
@@ -44,36 +46,45 @@ export function StructuredView({ session }: { session: Session }) {
 
   return (
     <div className="structured">
+      <div className="transcript-bar">
+        <label>
+          <input type="checkbox" checked={showAll} onChange={(event) => setShowAll(event.target.checked)} />
+          Show all events
+        </label>
+      </div>
       <div className="transcript" ref={scroller}>
         {messages.length === 0 && <p className="muted pad">No messages yet.</p>}
         {messages.map((message) => (
           <MessageRow key={message.seq} message={message} />
         ))}
       </div>
-      <form
-        className="structured-input"
-        onSubmit={(event: FormEvent) => {
-          event.preventDefault()
-          void send()
-        }}
-      >
-        <textarea
-          rows={2}
-          value={text}
-          disabled={exited}
-          placeholder={exited ? 'Session has ended' : 'Message (Enter to send, Shift+Enter for a new line)'}
-          onChange={(event) => setText(event.target.value)}
-          onKeyDown={(event) => {
-            if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) {
-              event.preventDefault()
-              void send()
-            }
+      {exited ? (
+        <div className="session-ended">session ended</div>
+      ) : (
+        <form
+          className="structured-input"
+          onSubmit={(event: FormEvent) => {
+            event.preventDefault()
+            void send()
           }}
-        />
-        <button type="submit" className="primary" disabled={exited || !text.trim()}>
-          Send
-        </button>
-      </form>
+        >
+          <textarea
+            rows={2}
+            value={text}
+            placeholder="Message (Enter to send, Shift+Enter for a new line)"
+            onChange={(event) => setText(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) {
+                event.preventDefault()
+                void send()
+              }
+            }}
+          />
+          <button type="submit" className="primary" disabled={!text.trim()}>
+            Send
+          </button>
+        </form>
+      )}
     </div>
   )
 }

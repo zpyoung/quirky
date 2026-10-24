@@ -4,6 +4,7 @@ import { FitAddon } from '@xterm/addon-fit'
 import { WebglAddon } from '@xterm/addon-webgl'
 import { base64ToBytes } from '@quirky/protocol'
 import type { Connection } from '../connection'
+import { createInputGate, writeReplay } from '../lib/replayGate'
 
 type Props = {
   connection: Connection
@@ -56,8 +57,9 @@ export function TerminalPane({ connection, sessionId, scrollback, epoch, interac
     let streamId: number | null = null
     let unsubscribe: (() => void) | null = null
 
+    const inputGate = createInputGate()
     term.onData((data) => {
-      if (!interactiveRef.current) return
+      if (!interactiveRef.current || !inputGate.allows()) return
       void client.call('terminal.write', { sessionId, data }).catch(() => {})
     })
     term.onResize(({ cols, rows }) => {
@@ -72,7 +74,7 @@ export function TerminalPane({ connection, sessionId, scrollback, epoch, interac
           return
         }
         streamId = result.streamId
-        term.write(base64ToBytes(result.replay))
+        writeReplay(term, base64ToBytes(result.replay), inputGate)
         unsubscribe = client.onTerminalOutput(result.streamId, (bytes) => term.write(bytes))
       })
       .catch((error: Error) => {

@@ -6,12 +6,20 @@ import {
   type ResultOf
 } from '@quirky/protocol'
 import { INITIAL_DELAY_MS, nextDelay } from './lib/backoff'
+import { daemonAnswers } from './lib/probe'
 import { parseHashToken, rpcUrl } from './lib/token'
 import type { Store } from './store'
 
+/** Consecutive socket failures after which the page checks whether the daemon is up at all. */
+export const FAILURES_BEFORE_PROBE = 3
+
+type ConnectionOptions = { initialDelayMs?: number }
+
 /**
  * Owns the daemon connection for the page: connects, keeps the store current from events, and
- * reconnects with backoff, refetching all state each time.
+ * reconnects with backoff, refetching all state each time. The daemon keeps its port and token
+ * across restarts, so every retry uses the same URL; after repeated failures it also checks
+ * `/health` to tell a down daemon from a slow one.
  */
 export class Connection {
   client: QuirkyClient | null = null
@@ -19,7 +27,8 @@ export class Connection {
 
   constructor(
     readonly store: Store,
-    private readonly where: { hash: string; host: string } = location
+    private readonly where: { hash: string; host: string } = location,
+    private readonly options: ConnectionOptions = {}
   ) {}
 
   start(): void {
@@ -85,7 +94,9 @@ export class Connection {
   }
 
   private async loop(url: string): Promise<void> {
-    let delay = INITIAL_DELAY_MS
+    const initialDelay = this.options.initialDelayMs ?? INITIAL_DELAY_MS
+    let delay = initialDelay
+    let failures = 0
     while (!this.stopped) {
       try {
         const client = await QuirkyClient.connect(url, {
@@ -96,16 +107,20 @@ export class Connection {
         const closed = new Promise<void>((resolve) => client.onClose(resolve))
         client.onEvent((event) => this.handleEvent(event))
         this.client = client
-        delay = INITIAL_DELAY_MS
+        delay = initialDelay
+        failures = 0
         await this.refreshAll()
         this.store.dispatch({ type: 'connection', status: 'connected' })
         await closed
       } catch {
+        failures += 1
         this.client?.close()
       }
       this.client = null
       if (this.stopped) return
-      this.store.dispatch({ type: 'connection', status: 'reconnecting' })
+      const down = failures >= FAILURES_BEFORE_PROBE && !(await daemonAnswers(this.where.host))
+      if (this.stopped) return
+      this.store.dispatch({ type: 'connection', status: down ? 'unreachable' : 'reconnecting' })
       await new Promise((resolve) => setTimeout(resolve, delay))
       delay = nextDelay(delay)
     }
