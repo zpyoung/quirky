@@ -34,6 +34,8 @@ export type FakePtyHost = {
   exit(sessionId: string, exitCode: number | null): void
   dropConnections(): void
   setReadResult(result: { lines: string[]; cols: number; rows: number; alt: boolean }): void
+  /** Makes every request of `type` fail with `error`; `null` clears it. */
+  failRequests(type: PtyRequest['type'], error: string | null): void
   stop(): void
 }
 
@@ -50,6 +52,7 @@ export function startFakePtyHost(home: string, options: { onShutdown?: () => voi
   const connections = new Set<Socket<ConnState>>()
   let readResult = { lines: ['hello from the screen'], cols: 80, rows: 24, alt: false }
   let nextPid = 4000
+  const failures = new Map<PtyRequest['type'], string>()
 
   function reply(socket: Socket<ConnState>, id: number, result: unknown) {
     socket.write(encodePtyJson({ id, ok: true, result }))
@@ -69,6 +72,8 @@ export function startFakePtyHost(home: string, options: { onShutdown?: () => voi
       reply(socket, request.id, { version: 1, pid: process.pid })
       return
     }
+    const injected = failures.get(request.type)
+    if (injected !== undefined) return fail(socket, request.id, injected)
     switch (request.type) {
       case 'hello':
         reply(socket, request.id, { version: 1, pid: process.pid })
@@ -109,7 +114,7 @@ export function startFakePtyHost(home: string, options: { onShutdown?: () => voi
         return
       }
       case 'forget':
-        sessions.delete(request.sessionId)
+        if (!sessions.delete(request.sessionId)) return fail(socket, request.id, `unknown session: ${request.sessionId}`)
         reply(socket, request.id, {})
         return
       case 'list':
@@ -194,6 +199,10 @@ export function startFakePtyHost(home: string, options: { onShutdown?: () => voi
     },
     setReadResult(result) {
       readResult = result
+    },
+    failRequests(type, error) {
+      if (error === null) failures.delete(type)
+      else failures.set(type, error)
     },
     stop() {
       for (const socket of [...connections]) socket.end()

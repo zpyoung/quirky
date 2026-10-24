@@ -68,6 +68,10 @@ export function resolveRealPath(path: string): string {
   }
 }
 
+function isUnknownSessionError(error: unknown): boolean {
+  return error instanceof Error && /^unknown session\b/.test(error.message)
+}
+
 export function worktreeIdForPath(path: string): string {
   return `wt_${createHash('sha1').update(resolveRealPath(path)).digest('hex').slice(0, 12)}`
 }
@@ -187,10 +191,32 @@ export class Core {
     return repo
   }
 
+  /**
+   * Forgets a repo and closes every session that belongs to it. Git cannot be relied on here (the
+   * directory may be gone), so membership comes from stored data: worktree ids git still reports,
+   * the main worktree's id derived from the repo path, and sessions whose `cwd` lies inside the
+   * repo path or inside `<worktreesRoot>/<repo name>/`, where worktrees created by Quirky live.
+   * Sessions inside another stored repo's path are never taken. Worktrees made elsewhere by hand
+   * are only recognised while git can still list them, and two repos sharing a name share the
+   * worktrees directory, so removing one of them also closes sessions in the other's directory.
+   */
   async removeRepo(repoId: string): Promise<void> {
     const repo = this.requireRepo(repoId)
-    const worktrees = await this.repoWorktrees(repo).catch(() => [])
-    for (const worktree of worktrees) await this.closeWorktreeSessions(worktree.id)
+    const listed = await this.repoWorktrees(repo).catch(() => [])
+    const worktreeIds = new Set([worktreeIdForPath(repo.path), ...listed.map((worktree) => worktree.id)])
+    const ownedRoots = [repo.path, join(resolveRealPath(this.getSettings().worktreesRoot), repo.name)]
+    const otherRepoPaths = this.options.store
+      .listRepos()
+      .filter((other) => other.id !== repo.id)
+      .map((other) => other.path)
+    const inside = (path: string, root: string) => path === root || path.startsWith(`${root}/`)
+    for (const session of this.options.store.listSessions()) {
+      const belongs =
+        worktreeIds.has(session.worktreeId) ||
+        (ownedRoots.some((root) => inside(session.cwd, root)) &&
+          !otherRepoPaths.some((other) => inside(session.cwd, other)))
+      if (belongs) await this.closeSession(session.id)
+    }
     this.options.store.deleteRepo(repoId)
     this.broadcast({ type: 'repo.changed' })
   }
@@ -339,12 +365,23 @@ export class Core {
     return session
   }
 
+  /**
+   * Stops a session and deletes its record. A terminal session is only deleted once the PTY host
+   * has forgotten it or reports it unknown; any other failure leaves the record and streams intact
+   * and surfaces as an internal error, since the process may still be running.
+   */
   async closeSession(sessionId: string): Promise<void> {
     const session = this.requireSession(sessionId)
     if (session.kind === 'structured') {
       await this.runner.stop(sessionId).catch(() => {})
     } else {
-      await this.options.pty.request('forget', { sessionId }).catch(() => {})
+      try {
+        await this.options.pty.request('forget', { sessionId })
+      } catch (error) {
+        if (!isUnknownSessionError(error)) {
+          throw internal(`could not close session ${sessionId}: ${(error as Error).message}`)
+        }
+      }
     }
     const streams = this.streamsBySession.get(sessionId)
     for (const stream of streams ?? []) stream.conn.streams.delete(stream.streamId)

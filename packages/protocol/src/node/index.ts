@@ -3,7 +3,18 @@
  * module; it reaches the daemon through the URL the desktop shell gives it.
  */
 import { spawn } from 'node:child_process'
-import { chmodSync, existsSync, mkdirSync, openSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
+import {
+  chmodSync,
+  closeSync,
+  existsSync,
+  fchmodSync,
+  mkdirSync,
+  openSync,
+  readFileSync,
+  renameSync,
+  statSync,
+  writeFileSync
+} from 'node:fs'
 import { homedir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -29,9 +40,31 @@ export function quirkyHome(): string {
   return process.env.QUIRKY_HOME ?? join(homedir(), '.quirky')
 }
 
+/**
+ * Creates the Quirky home (0700) if needed and returns it. An existing home owned by the current
+ * user is tightened to 0700 because it holds credentials; one owned by anyone else is refused.
+ */
 export function ensureHome(home = quirkyHome()): string {
   mkdirSync(home, { recursive: true, mode: 0o700 })
+  const stats = statSync(home)
+  if (process.getuid && stats.uid !== process.getuid()) {
+    throw new Error(`${home} is not owned by the current user; set QUIRKY_HOME to a directory you own`)
+  }
+  if ((stats.mode & 0o777) !== 0o700) chmodSync(home, 0o700)
   return home
+}
+
+/**
+ * Opens `path` for appending as a private log: the file is 0600 and its directory 0700, including
+ * when either already existed with looser permissions. Returns the file descriptor.
+ */
+export function openPrivateLog(path: string): number {
+  const dir = dirname(path)
+  mkdirSync(dir, { recursive: true, mode: 0o700 })
+  chmodSync(dir, 0o700)
+  const fd = openSync(path, 'a', 0o600)
+  fchmodSync(fd, 0o600)
+  return fd
 }
 
 export function runtimeFilePath(home = quirkyHome()): string {
@@ -94,14 +127,14 @@ export async function ensureDaemon(
 
   const entry = options.daemonEntry ?? defaultDaemonEntry()
   if (!existsSync(entry)) throw new Error(`quirkyd entry not found: ${entry}`)
-  mkdirSync(join(home, 'logs'), { recursive: true })
-  const log = openSync(join(home, 'logs', 'daemon.log'), 'a')
+  const log = openPrivateLog(join(home, 'logs', 'daemon.log'))
   const child = spawn(options.bunPath ?? process.execPath, [entry], {
     detached: true,
     stdio: ['ignore', log, log],
     env: { ...process.env, QUIRKY_HOME: home }
   })
   child.unref()
+  closeSync(log)
 
   const deadline = Date.now() + (options.timeoutMs ?? 15000)
   while (Date.now() < deadline) {

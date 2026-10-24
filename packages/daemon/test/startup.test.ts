@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from 'bun:test'
-import { existsSync, readFileSync } from 'node:fs'
+import { existsSync, readFileSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import { QuirkyClient } from '@quirky/protocol'
 import { isDaemonAlive, readRuntime, rpcUrl } from '@quirky/protocol/node'
@@ -83,6 +83,7 @@ describe('pty host startup', () => {
       }
     })
     expect(existsSync(join(home, 'logs', 'pty-host.log'))).toBe(true)
+    expect(statSync(join(home, 'logs', 'pty-host.log')).mode & 0o777).toBe(0o600)
 
     const repo = await client.call('repo.add', { path: '/fake/alpha' })
     const [worktree] = await client.call('worktree.list', { repoId: repo.id })
@@ -139,5 +140,33 @@ describe('single instance per home', () => {
     await first.exited
     expect(existsSync(join(home, 'runtime.json'))).toBe(false)
     expect(readFileSync(join(home, 'quirky.db')).length).toBeGreaterThan(0)
+  })
+
+  test('does not print the rpc token and points at runtime.json', async () => {
+    const home = makeTempHome()
+    const pty = startFakePtyHost(home)
+    cleanups.push(() => pty.stop())
+    const proc = Bun.spawn([process.execPath, MAIN], {
+      env: {
+        ...process.env,
+        QUIRKY_HOME: home,
+        QUIRKY_PORT: '0',
+        QUIRKY_UI_DIR: join(home, 'none'),
+        QUIRKY_PTY_HOST_ENTRY: FAKE_HOST_MAIN
+      },
+      stdout: 'pipe',
+      stderr: 'ignore'
+    })
+    cleanups.push(() => {
+      proc.kill()
+    })
+    const info = await waitFor(() => readRuntime(home), 10000)
+    proc.kill('SIGTERM')
+    await proc.exited
+    const output = await new Response(proc.stdout).text()
+    expect(output).toContain(`http://127.0.0.1:${info.port}`)
+    expect(output).toContain(join(home, 'runtime.json'))
+    expect(output).not.toContain(info.token)
+    expect(output).not.toContain(info.hookToken)
   })
 })

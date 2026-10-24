@@ -124,6 +124,7 @@ export function createClaudeRunner(context: StructuredContext, deps: ClaudeRunne
 
 class ClaudeRunner implements StructuredRunner {
   private readonly running = new Map<string, Running>()
+  private readonly starting = new Map<string, { stopped: boolean }>()
 
   constructor(
     private readonly context: StructuredContext,
@@ -132,8 +133,25 @@ class ClaudeRunner implements StructuredRunner {
 
   async start(session: Session, prompt: string): Promise<void> {
     if (session.agent !== 'claude') throw new Error('structured sessions support claude only')
-    const query = this.deps.query ?? (await import('@anthropic-ai/claude-agent-sdk')).query
-    const pathToClaudeCodeExecutable = await this.context.resolveClaudePath()
+    const startup = { stopped: false }
+    this.starting.set(session.id, startup)
+    try {
+      const query = this.deps.query ?? (await import('@anthropic-ai/claude-agent-sdk')).query
+      if (startup.stopped) return
+      const pathToClaudeCodeExecutable = await this.context.resolveClaudePath()
+      if (startup.stopped) return
+      this.launch(session, prompt, query, pathToClaudeCodeExecutable)
+    } finally {
+      if (this.starting.get(session.id) === startup) this.starting.delete(session.id)
+    }
+  }
+
+  private launch(
+    session: Session,
+    prompt: string,
+    query: NonNullable<ClaudeRunnerDeps['query']>,
+    pathToClaudeCodeExecutable: string
+  ): void {
     const claudeSessionId = randomUUID()
     const input = createInputStream()
     const first = userMessage(prompt, claudeSessionId)
@@ -170,6 +188,8 @@ class ClaudeRunner implements StructuredRunner {
   }
 
   async stop(sessionId: string): Promise<void> {
+    const startup = this.starting.get(sessionId)
+    if (startup) startup.stopped = true
     const run = this.running.get(sessionId)
     if (!run || run.stopped) return
     run.stopped = true

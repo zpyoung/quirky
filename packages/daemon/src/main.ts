@@ -1,4 +1,4 @@
-import { ensureHome, isDaemonAlive, quirkyHome, readRuntime } from '@quirky/protocol/node'
+import { ensureHome, isDaemonAlive, quirkyHome, readRuntime, runtimeFilePath } from '@quirky/protocol/node'
 import { startDaemon } from './daemon'
 import { acquireDaemonLock } from './lock'
 
@@ -19,7 +19,7 @@ const daemon = await startDaemon({ home }).catch((error) => {
   lock.release()
   throw error
 })
-console.log(`quirkyd listening on http://127.0.0.1:${daemon.port}/#token=${daemon.runtime.token}`)
+console.log(`quirkyd listening on http://127.0.0.1:${daemon.port}; connection details are in ${runtimeFilePath(home)}`)
 
 const shutdown = () => {
   void daemon.stop().finally(() => {

@@ -20,6 +20,15 @@ beforeEach(async () => {
 })
 afterEach(() => h.cleanup())
 
+async function code(promise: Promise<unknown>): Promise<number | null> {
+  try {
+    await promise
+    return null
+  } catch (error) {
+    return (error as RpcError).code
+  }
+}
+
 function created(sessionId: string) {
   const request = h.pty.requests.find((r) => r.type === 'create' && r.sessionId === sessionId)
   if (!request || request.type !== 'create') throw new Error('no create request')
@@ -223,6 +232,25 @@ describe('session.create', () => {
     expect(await unreachable.exited).toBe(0)
   })
 
+  test('the quirky-hook shim follows the port in runtime.json when the inherited url is stale', async () => {
+    await client.call('session.create', { worktreeId: worktree.id, agent: 'claude' })
+    const session = (await client.call('session.list', {}))[0]
+    const run = Bun.spawn([join(h.home, 'bin', 'quirky-hook'), 'claude'], {
+      env: {
+        PATH: process.env.PATH ?? '',
+        QUIRKY_HOME: h.home,
+        QUIRKY_HOOK_URL: 'http://127.0.0.1:1/hook',
+        QUIRKY_HOOK_TOKEN: h.runtime.hookToken,
+        QUIRKY_SESSION_ID: session.id
+      },
+      stdin: new Blob([JSON.stringify({ hook_event_name: 'UserPromptSubmit' })]),
+      stdout: 'ignore',
+      stderr: 'ignore'
+    })
+    expect(await run.exited).toBe(0)
+    await waitForAsync(async () => events.find((e) => e.type === 'session.changed' && e.session.status === 'working'))
+  })
+
   test('rejects unknown worktrees, agents and failed starts', async () => {
     const code = async (promise: Promise<unknown>) => {
       try {
@@ -244,6 +272,26 @@ describe('session.create', () => {
     const session = await client.call('session.create', { worktreeId: worktree.id, agent: 'shell' })
     await client.call('session.close', { sessionId: session.id })
     expect(h.pty.requests.some((r) => r.type === 'forget' && r.sessionId === session.id)).toBe(true)
+    expect(await client.call('session.list', {})).toEqual([])
+    await waitFor(() => events.find((e) => e.type === 'session.removed' && e.sessionId === session.id))
+  })
+
+  test('close keeps the session when the pty host fails to forget it, and succeeds on retry', async () => {
+    const session = await client.call('session.create', { worktreeId: worktree.id, agent: 'shell' })
+    h.pty.failRequests('forget', 'pty host connection lost')
+    expect(await code(client.call('session.close', { sessionId: session.id }))).toBe(RpcErrorCode.Internal)
+    expect((await client.call('session.list', {})).map((s) => s.id)).toEqual([session.id])
+    expect(events.some((e) => e.type === 'session.removed')).toBe(false)
+
+    h.pty.failRequests('forget', null)
+    await client.call('session.close', { sessionId: session.id })
+    expect(await client.call('session.list', {})).toEqual([])
+  })
+
+  test('close still removes a session the pty host no longer knows', async () => {
+    const session = await client.call('session.create', { worktreeId: worktree.id, agent: 'shell' })
+    h.pty.sessions.delete(session.id)
+    await client.call('session.close', { sessionId: session.id })
     expect(await client.call('session.list', {})).toEqual([])
     await waitFor(() => events.find((e) => e.type === 'session.removed' && e.sessionId === session.id))
   })

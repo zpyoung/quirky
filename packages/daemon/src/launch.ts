@@ -128,9 +128,19 @@ export function claudeSettingsPath(home: string): string {
   return join(home, 'hooks', 'claude-settings.json')
 }
 
+/**
+ * The hook shim agents call. It posts to the daemon's current port from `$QUIRKY_HOME/runtime.json`
+ * so sessions that outlive a restart still reach it, falling back to the URL in their environment.
+ * Always exits 0 so a hook failure never disturbs the agent.
+ */
 export const QUIRKY_HOOK_SCRIPT = `#!/bin/sh
 agent="$1"
-[ -n "$QUIRKY_HOOK_URL" ] || exit 0
+url="$QUIRKY_HOOK_URL"
+if [ -n "$QUIRKY_HOME" ] && [ -r "$QUIRKY_HOME/runtime.json" ]; then
+  port="$(sed -n 's/.*"port": *\\([0-9][0-9]*\\).*/\\1/p' "$QUIRKY_HOME/runtime.json" | head -n 1)"
+  [ -n "$port" ] && url="http://127.0.0.1:$port/hook"
+fi
+[ -n "$url" ] || exit 0
 if [ "$agent" = "codex" ]; then
   for last; do :; done
   payload="$last"
@@ -141,7 +151,7 @@ printf '%s' "$payload" | curl -s -m 5 -o /dev/null -X POST \\
   -H "x-quirky-hook-token: $QUIRKY_HOOK_TOKEN" \\
   -H 'content-type: application/json' \\
   --data-binary @- \\
-  "$QUIRKY_HOOK_URL/$agent?session=$QUIRKY_SESSION_ID" >/dev/null 2>&1
+  "$url/$agent?session=$QUIRKY_SESSION_ID" >/dev/null 2>&1
 exit 0
 `
 

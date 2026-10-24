@@ -156,6 +156,33 @@ describe('start', () => {
     expect(statuses).toEqual(['working'])
   })
 
+  test('a stop that arrives while the claude path is resolving prevents the query from starting', async () => {
+    let release: (path: string) => void = () => {}
+    const resolving = new Promise<string>((resolve) => {
+      release = resolve
+    })
+    const slow = createClaudeRunner(
+      { ...makeContext(), resolveClaudePath: () => resolving },
+      {
+        query: (params: ClaudeQueryParams) => {
+          const query = new FakeQuery(params)
+          queries.push(query)
+          return query
+        }
+      }
+    )
+    const starting = slow.start(session, 'hello')
+    await tick()
+    await slow.stop(session.id)
+    release('/usr/local/bin/claude')
+    await starting
+    await tick()
+    expect(queries).toHaveLength(0)
+    expect(messages).toHaveLength(0)
+    expect(statuses).not.toContain('working')
+    await expect(slow.send(session.id, 'late')).rejects.toThrow('session is not running')
+  })
+
   test('rejects agents other than claude', async () => {
     await expect(runner.start({ ...session, agent: 'codex' }, 'x')).rejects.toThrow(
       'structured sessions support claude only'
