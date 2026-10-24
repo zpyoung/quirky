@@ -3,7 +3,17 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
+  "scripts": {
+    "dev": "QUIRKY_REPO_ROOT=\"$(cd ../.. && pwd)\" hutch electrobun dev",
+    "bundle": "bun scripts/bundle.ts",
+    "build": "bun scripts/bundle.ts && hutch electrobun build --env=stable",
+    "typecheck": "hutch electrobun prepare && tsc --noEmit -p tsconfig.json",
+    "test": "bun test"
+  },
   "dependencies": {
     "@quirky/protocol": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/bun": "1.4.0"
   }
 }

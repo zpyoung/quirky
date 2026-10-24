@@ -1,0 +1,6 @@
+.hutch/
+build/
+artifacts/
+resources/*
+!resources/.gitkeep
+.cottontail-tmp/
