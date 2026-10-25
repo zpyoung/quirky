@@ -41,4 +41,6 @@ Inside any Quirky terminal, the `quirky` command is on PATH: try `quirky status`
   decisions made so far.
 - [docs/stack-proposal.md](docs/stack-proposal.md): how the stack choice gets settled, including
   the native Swift option, with the measurements so far.
+- [research/orca-features/](research/orca-features/README.md): how each Orca feature Quirky keeps
+  works, verified in the running app, with screenshots.
 - [BRIEF.md](BRIEF.md): the project's starting brief.
