@@ -7,6 +7,8 @@ import {
   type AskEnvelope,
   type AskSpec,
   type ContributionInfo,
+  type JobInfo,
+  type JobRun,
   type PluginInfo,
   type Repo,
   type Session,
@@ -49,6 +51,8 @@ export class FakeDaemon {
   readonly sessions: Session[] = []
   readonly plugins: PluginInfo[] = []
   readonly contributions: ContributionInfo[] = []
+  readonly jobs: JobInfo[] = []
+  readonly jobRuns = new Map<string, JobRun>()
   readonly asks = new Map<string, AskState>()
   connections = 0
   private server!: ReturnType<typeof Bun.serve>
@@ -174,6 +178,21 @@ export class FakeDaemon {
     return contribution
   }
 
+  addJob(id: string, overrides: Partial<JobInfo> = {}): JobInfo {
+    const job: JobInfo = {
+      id,
+      plugin: id.slice(id.indexOf(':') + 1, id.indexOf('/')),
+      intervalMs: 60_000,
+      timeoutMs: 300_000,
+      state: 'idle',
+      nextRunAt: null,
+      lastRun: null,
+      ...overrides
+    }
+    this.jobs.push(job)
+    return job
+  }
+
   private async handle(method: string, params: any, ws: { close(): void }): Promise<unknown> {
     this.calls.push({ method, params })
     switch (method) {
@@ -295,6 +314,14 @@ export class FakeDaemon {
         if (!plugin) throw new FakeRpcError(RpcErrorCode.NotFound, `unknown plugin ${params.pluginId}`)
         plugin.state = 'active'
         return plugin
+      }
+      case 'job.list':
+        return this.jobs
+      case 'job.run': {
+        if (!this.jobs.some((job) => job.id === params.id)) {
+          throw new FakeRpcError(RpcErrorCode.NotFound, `unknown job ${params.id}`)
+        }
+        return this.jobRuns.get(params.id) ?? { startedAt: 1_000, finishedAt: 1_042, status: 'ok' }
       }
       default:
         throw new FakeRpcError(RpcErrorCode.MethodNotFound, `method not found: ${method}`)

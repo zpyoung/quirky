@@ -8,6 +8,7 @@ import {
   type PluginManifest,
   type PluginSource,
 } from '@quirky/protocol'
+import { checkKindEntry } from './kinds'
 
 export const MANIFEST_FILE = 'quirky-plugin.json'
 
@@ -103,6 +104,7 @@ function checkContributes(value: unknown, errors: string[]): void {
       if (!isContributionName(entry.id)) errors.push(`contributes.${kind}: name '${entry.id}' is not valid`)
       if (names.has(entry.id)) errors.push(`contributes.${kind}: duplicate name '${entry.id}'`)
       names.add(entry.id)
+      checkKindEntry(kind, `${kind} ${entry.id}`, entry, errors)
     })
   }
 }
@@ -121,7 +123,10 @@ function checkOverrides(value: unknown, id: string | null, errors: string[]): vo
     }
     const parsed = parseContributionId(entry.id)
     if (!parsed) errors.push(`overrides: override ID '${entry.id}' is not a valid contribution ID`)
-    else if (parsed.namespace === id) errors.push(`overrides: '${entry.id}' is in the plugin's own namespace, use contributes for your own IDs`)
+    else {
+      if (parsed.namespace === id) errors.push(`overrides: '${entry.id}' is in the plugin's own namespace, use contributes for your own IDs`)
+      checkKindEntry(parsed.kind, `override ${entry.id}`, entry, errors)
+    }
     if (seen.has(entry.id)) errors.push(`overrides: duplicate override ID '${entry.id}'`)
     seen.add(entry.id)
   })
