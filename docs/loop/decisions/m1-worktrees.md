@@ -671,5 +671,16 @@
 - **Revisit if:** a W2 fix changes a `quirky.repo` contract W3 builds on
 - **Source:** assumed — autonomous
 
+## D62: W2 checkpoint: accept all six findings, which collapse to five defects, and narrow X3
+- **Question:** W2 checkpoint adjudication (subagent-driven-development step 9)
+- **Options:** accept; reject; accept narrowed
+- **Chose:** accept X1 (HIGH: `hooks` passes an unchecked ref to `git show`, so an option-shaped ref reaches git as an option), C1 and S1 as one defect (CLI clone resolves a relative source against the destination), S2 (enum project settings can't be cleared), X2 (a git operational failure registers a repo as a folder project); accept X3 narrowed: the default worktrees folder applies only when `quirky.worktree`'s setting is absent (NotFound), every other failure propagates
+- **Why:** each has a reproduction in its evidence; X3's fallback was the brief's own wording for a disabled `quirky.worktree`, which still needs it
+- **Evidence:** scratchpad cp2/{C,S,X}/gate.json (reviewer gpt-6.1-sol, standard depth, independence full)
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** never
+- **Source:** assumed — autonomous
+
 ## Progress
 Step 5 in progress: W1 dispatched (see D59). If stopped early: check `git log` for merged waves, then continue with the next wave per D59 against tech.md.
