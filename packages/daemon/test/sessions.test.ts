@@ -1,10 +1,11 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
-import { readFileSync, statSync } from 'node:fs'
+import { readFileSync, statSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { RpcErrorCode, RpcError, type QuirkyClient, type QuirkyEvent, type Worktree } from '@quirky/protocol'
 import { buildArgv, buildSessionEnv, shellQuote } from '../src/launch'
 import { notificationScript } from '../src/notify'
-import { startHarness, waitFor, type Harness, waitForAsync } from './helpers'
+import { makeTempHome, startHarness, waitFor, type Harness, waitForAsync } from './helpers'
+import { makeTempDir, readMarker, removeTempDirs, waitForFile, writeModulePlugin } from './plugins/fixtures'
 
 let h: Harness
 let client: QuirkyClient
@@ -18,7 +19,10 @@ beforeEach(async () => {
   const repo = await client.call('repo.add', { path: '/fake/alpha' })
   ;[worktree] = await client.call('worktree.list', { repoId: repo.id })
 })
-afterEach(() => h.cleanup())
+afterEach(async () => {
+  await h.cleanup()
+  removeTempDirs()
+})
 
 async function code(promise: Promise<unknown>): Promise<number | null> {
   try {
@@ -323,6 +327,54 @@ describe('session.create', () => {
     h.pty.failRequests('forget', null)
     await client.call('session.close', { sessionId: session.id })
     expect(await client.call('session.list', {})).toEqual([])
+  })
+
+  test('closing a session while its launch hooks are pending never spawns its terminal', async () => {
+    const home = makeTempHome()
+    const workDir = makeTempDir()
+    const marker = join(workDir, 'marker.log')
+    const release = join(workDir, 'release')
+    writeModulePlugin(
+      join(home, 'plugins'),
+      marker,
+      { id: 'acme.slow', contributes: { 'launch-hook': [{ id: 'wait', agents: ['claude'] }] } },
+      {
+        activate: `context.provide('launch-hook:acme.slow/wait', async () => {
+          record('hook waiting')
+          ${waitForFile(release)}
+          return { env: {}, args: [] }
+        })`
+      }
+    )
+    const slow = await startHarness({ home, builtinPluginsDir: null })
+    try {
+      const slowClient = await slow.connect('cli')
+      slow.git.addRepo('/fake/alpha')
+      const repo = await slowClient.call('repo.add', { path: '/fake/alpha' })
+      const [wt] = await slowClient.call('worktree.list', { repoId: repo.id })
+
+      const creating = slowClient.call('session.create', { worktreeId: wt!.id, agent: 'claude' })
+      const failure = creating.then(
+        () => null,
+        (error: RpcError) => error
+      )
+      await waitFor(() => readMarker(marker).includes('hook waiting') || undefined)
+      const [pending] = await slowClient.call('session.list', { worktreeId: wt!.id })
+      expect(pending).toMatchObject({ status: 'starting' })
+
+      await slowClient.call('session.close', { sessionId: pending!.id })
+      writeFileSync(release, '')
+
+      const error = await failure
+      expect(error?.code).toBe(RpcErrorCode.Conflict)
+      expect(error?.message).toContain('closed before its terminal started')
+      expect(slow.pty.requests.some((r) => r.type === 'create' && r.sessionId === pending!.id)).toBe(false)
+      expect(slow.pty.sessions.has(pending!.id)).toBe(false)
+      expect(await slowClient.call('session.list', {})).toEqual([])
+    } finally {
+      writeFileSync(release, '')
+      await slow.cleanup()
+    }
   })
 
   test('close still removes a session the pty host no longer knows', async () => {

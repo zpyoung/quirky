@@ -311,6 +311,8 @@ export class Core {
       exitCode: null
     }
     store.insertSession(session, repo.id)
+    const closedWhileStarting = () =>
+      conflict(`session ${session.id} was closed before its terminal started`)
     try {
       const additions = (await this.options.prepareLaunch?.({
         sessionId: session.id,
@@ -320,6 +322,7 @@ export class Core {
         agent: params.agent,
         ...(params.prompt === undefined ? {} : { prompt: params.prompt })
       })) ?? { env: {}, args: [] }
+      if (!store.getSession(session.id)) throw closedWhileStarting()
       await pty.request('create', {
         sessionId: session.id,
         cwd: worktree.path,
@@ -343,8 +346,13 @@ export class Core {
         cols: params.cols ?? 80,
         rows: params.rows ?? 24
       })
+      if (!store.getSession(session.id)) {
+        await pty.request('forget', { sessionId: session.id }).catch(() => {})
+        throw closedWhileStarting()
+      }
     } catch (error) {
       store.deleteSession(session.id)
+      if (error instanceof DaemonError) throw error
       throw internal(`could not start ${params.agent}: ${(error as Error).message}`)
     }
     const running = store.updateSession(session.id, { status: 'running' }) as Session
