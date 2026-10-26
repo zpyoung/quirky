@@ -213,6 +213,19 @@ describe('distro commands', () => {
     ])
   })
 
+  test('a keybinding on a chord the window keeps for itself prints the daemon\'s warning', async () => {
+    daemon.results.set('distro.inspect', {
+      ...NIGHT,
+      manifest: { ...NIGHT.manifest, keybindings: { 'mod+shift+p': 'command:night/palette' } }
+    })
+    const result = await run(['distro', 'inspect', './night'], { cwd })
+    expect(result.code).toBe(0)
+    expect(result.stdout.trimEnd().split('\n').slice(-2)).toEqual([
+      'keybinding mod+shift+p  command:night/palette',
+      'warning    mod+shift+p is a shortcut the window keeps for itself, so command:night/palette will not run on it'
+    ])
+  })
+
   test('SC-54: distro install prints the listing, then installs', async () => {
     daemon.results.set('distro.install', { id: 'night', name: 'Night', version: '1.0.0', plugins: ['night.extras'], installedAt: 1 })
     const result = await run(['distro', 'install', './night'], { cwd })
