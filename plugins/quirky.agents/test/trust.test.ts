@@ -279,6 +279,23 @@ describe('codex', () => {
     expect(text.endsWith(`\n${header()}\ntrust_level = "trusted"\n`)).toBe(true)
   })
 
+  test.each([
+    ['basic', '"""'],
+    ['literal', "'''"]
+  ])('replaces a multiline %s trust_level value as a whole', (_name, quote) => {
+    put(file(), `${header()}\ntrust_level = ${quote}\nuntrusted${quote}\nnote = 1\n\n[other]\na = 1\n`)
+    writeTrust('codex', folder, home)
+    const text = readFileSync(file(), 'utf8')
+    expect(text).toBe(`${header()}\ntrust_level = "trusted"\nnote = 1\n\n[other]\na = 1\n`)
+    expect(Bun.TOML.parse(text)).toEqual({ projects: { [real()]: { trust_level: 'trusted', note: 1 } }, other: { a: 1 } })
+  })
+
+  test('replaces a multiline trust_level value that holds table-like lines and keeps CRLF', () => {
+    put(file(), `${header()}\r\ntrust_level = """\r\n[other]\r\nx""" # why\r\nnote = 1\r\n`)
+    writeTrust('codex', folder, home)
+    expect(readFileSync(file(), 'utf8')).toBe(`${header()}\r\ntrust_level = "trusted"\r\nnote = 1\r\n`)
+  })
+
   test('escapes quotes and backslashes in the path', () => {
     const odd = join(area, 'a"b\\c')
     mkdirSync(odd)
