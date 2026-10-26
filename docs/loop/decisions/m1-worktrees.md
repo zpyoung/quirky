@@ -627,5 +627,38 @@
 - **Revisit if:** the build finds a fix contradicts code
 - **Source:** assumed — autonomous
 
+## D58: Build with Claude subagents implementing and Codex reviewing
+- **Question:** subagent-driven-development's preflight backend pairing
+- **Options:** claude-task + codex; claude-task + gemini; pi-codex + opus; same-family pairs
+- **Chose:** claude-task + codex. `pi-watch --check` verified codex (`openai-codex/gpt-6.1-sol`), gemini and opus; the tree was clean on `build/m1-worktrees` at `e735df3`; the suite commands are `bun run test`, `bun test scripts`, `bun run typecheck`, all green at the start (1990, 30, clean).
+- **Why:** LOOP.md names this pairing, and the skill marks it recommended
+- **Evidence:** docs/loop/LOOP.md step 5; scratchpad journal.md
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** Codex becomes unreachable mid-run
+- **Source:** locked by docs/loop/LOOP.md
+
+## D59: Build in four waves: types and git primitives, the repo plugin and pure worktree modules, the worktree daemon, then the window
+- **Question:** subagent-driven-development's decomposition into waves
+- **Options:** one task per plugin; waves by dependency with each task carrying its own scenario tests
+- **Chose:** W1: protocol types (T1), git primitives (T2), session title and command (T3), CLI JSON `reason` (T4). W2: `quirky.repo` with hooks loading, groups and settings (T5), pure naming and generated names (T6), `quirky.git` folder refusal (T8). W3: the worktree daemon as one chain, list and metadata (T7a), create (T7b), remove (T7c). W4: the window as one chain (T9a tree and menus, T9b create and edit dialogs, T9c project, group and delete dialogs). Each task writes the scenario tests of its area, so there is no separate test wave.
+- **Why:** each later wave needs the earlier one's contracts at run time (the worktree daemon calls `quirky.repo/hooks`; the window calls every method), and the worktree daemon and window each share one manifest and main module, so they chain
+- **Evidence:** tech.md Architecture; plugins/quirky.worktree/main.ts
+- **Reversibility:** easy
+- **Confidence:** medium
+- **Revisit if:** a chain runs out of room in one iteration
+- **Source:** assumed — autonomous
+
+## D60: Skip W1's checkpoint review
+- **Question:** the checkpoint review after a non-final wave
+- **Options:** run it; skip it for a wave of types and primitives
+- **Chose:** skip W1's. W2 and W3 get theirs.
+- **Why:** W1 adds types, git wrappers and two small parameters, each unit-tested, and the W2 checkpoint diff and the final round both cover them again; m0-scripting D33 skipped its first checkpoint for the same reason
+- **Evidence:** docs/loop/decisions/m0-scripting.md D33
+- **Reversibility:** easy
+- **Confidence:** medium
+- **Revisit if:** the final round finds defects in W1's code
+- **Source:** assumed — autonomous
+
 ## Progress
-Step 4 done: specs reviewed (D56, D57) and committed. Next: step 5, quirk:subagent-driven-development against tech.md, in waves W1 protocol+git, W2 repo/session/git plugins, W3 worktree daemon+CLI, W4 window, W5 scenario tests.
+Step 5 in progress: W1 dispatched (see D59). If stopped early: check `git log` for merged waves, then continue with the next wave per D59 against tech.md.
