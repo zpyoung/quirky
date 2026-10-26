@@ -437,6 +437,16 @@
 - **Confidence:** high
 - **Source:** assumed — autonomous
 
+## D44: W4 calls the tasks made inside their briefs, accepted at audit
+- **Question:** what to accept from the W4 switch-over tasks' own judgment calls, and how to close the merged tree's leftovers
+- **Options:** accept each call; send it back; fix at integration
+- **Chose:** accepted these. The session view binds `mod+1`..`mod+9` to commands `select-tab-1`..`select-tab-9` (the keybinding kind carries no args) and keeps `select-tab {index}`. Creating a worktree opens its session view, as v1 selected it. The shell deleted v1-only modules with nothing left to serve (`actions.ts`, `lib/persist.ts`, `lib/settingsForm.ts`, `AddRepoForm.tsx`, `StatusDot.tsx`). Plugin UI modules carry their own copies of `Dialog` and `StatusDot` because they may not import the shell. The questions panel overrides `ask-stack`'s absolute position inline. The 19 typecheck errors and 5 test failures left by parallel tasks (stale v1 names in tests) were fixed in one integration task. `plugins/*/dist/` is ignored. Logic examples that write a setting as `<pluginId>/<name>` stay as written, since the kernel accepts that form beside the full ID (SC-54's test covers it), so no amendment.
+- **Why:** each keeps v1's behaviour or follows a constraint the spec sets (public API only, keybinding shape)
+- **Evidence:** run journal; merges 00211d8 (W4), U1's merge, 7ca3d23 (integration)
+- **Reversibility:** easy
+- **Confidence:** medium
+- **Source:** assumed — autonomous
+
 ## Progress
 
-Step 5, build. W1, W2 and its fix batch, and W3 (P1-P6, eight built-in plugins) merged; W3 at 932d679, gate 1976 pass, typecheck clean. W4 dependency setup committed. W3 checkpoint review running. Next: adjudicate the W3 findings (D43), fix batch, then dispatch W4 (U0a, U0b, U1, U2a-d, U3; briefs in the run journal's scratch) per D39, then W5, Final Round 1, verify and merge.
+Step 5, build. W1 to W4 merged with their checkpoint fix batches for W2 and W3; W4 plus integration plus W5's V2 (SC-24 import fence, SC-26 v1 import) at 6b4d904, gate 1963 pass, typecheck clean. Running: W4 checkpoint review (a066ea4..6b4d904) and W5-V1 (sample distro, SC-59 exit test). Next: adjudicate W4 findings (D45) and fix, merge V1, then Final Round 1 over 0c6a3c0..HEAD, one fix batch, verify and merge into build/roadmap.
