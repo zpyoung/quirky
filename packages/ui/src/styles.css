@@ -136,8 +136,20 @@ textarea {
   grid-template-columns: 240px minmax(0, 1fr);
 }
 
-.layout.with-scm {
+.layout.with-panel {
   grid-template-columns: 240px minmax(0, 1fr) minmax(360px, 50%);
+}
+
+.layout.no-sidebar {
+  grid-template-columns: 44px minmax(0, 1fr);
+}
+
+.layout.no-sidebar.with-panel {
+  grid-template-columns: 44px minmax(0, 1fr) minmax(360px, 50%);
+}
+
+[data-region]:focus {
+  outline: none;
 }
 
 .banner {
@@ -210,6 +222,12 @@ textarea {
   flex: 1;
   overflow-y: auto;
   padding-top: 6px;
+}
+
+.sidebar-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
 }
 
 .repo-header {
@@ -844,10 +862,21 @@ textarea {
 }
 
 .sidebar-sections {
-  flex: none;
-  max-height: 40%;
-  overflow-y: auto;
-  border-top: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+}
+
+.badge {
+  display: inline-block;
+  min-width: 16px;
+  margin-left: 6px;
+  padding: 0 5px;
+  border-radius: 8px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 11px;
+  line-height: 16px;
+  text-align: center;
 }
 
 .plugin-slot {
