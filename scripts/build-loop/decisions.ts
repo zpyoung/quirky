@@ -64,13 +64,13 @@ export function render(decisions: Decision[]): string {
   ].join('\n')
 }
 
-function main(): number {
-  const dir = resolve(BUILD_DIR, 'decisions')
+/** Rewrites `<loopDir>/DECISIONS.md` from the logs in `<loopDir>/decisions/`. */
+export function rebuild(loopDir = BUILD_DIR): void {
+  const dir = resolve(loopDir, 'decisions')
   const decisions = readdirSync(dir)
     .filter((name) => name.endsWith('.md'))
     .flatMap((name) => parse(basename(name, '.md'), readFileSync(resolve(dir, name), 'utf8')))
-  writeFileSync(resolve(BUILD_DIR, 'DECISIONS.md'), render(decisions))
-  return 0
+  writeFileSync(resolve(loopDir, 'DECISIONS.md'), render(decisions))
 }
 
-if (import.meta.main) process.exit(main())
+if (import.meta.main) rebuild()
