@@ -350,5 +350,15 @@
 - **Revisit if:** users set QUIRKY_HOME to a deep path
 - **Source:** deferred: platform
 
+## D34: The final review loop closed after three rounds with no open finding
+- **Question:** subagent-driven-development Steps 8-10, adjudicating the final deep review (Tier 3) and when to exit
+- **Options:** fix each accepted finding and run another closure round; exit with findings open
+- **Chose:** round 1 (whole branch, three Codex lenses, deep) found four defects, all fixed: a plugin disabled mid-activation skipped its deactivate when activate then failed or timed out (HIGH); resolve could hand back a result after a disable completed in between; multi-line plugin log messages lost the plugin prefix after the first line; and a repeated invalid contribution name hid its duplicate error (LOW). Round 2 (closure over the fix delta) kept one: an import slower than the activation timeout still called activate later. Fixed. Round 3 passed on all three lenses with no findings.
+- **Why:** the loop exits on a completed round with no accepted finding above LOW and a green build; that held at round 3 with 535 tests passing
+- **Evidence:** run journal rounds 1-3; reviewer gpt-6.1-sol (openai), independence full, depth deep, profile code-diff
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** assumed — autonomous
+
 ## Progress
-Waves 1 and 2 merged with checkpoint fixes; gate green (469 tests). Wave 3 (PluginHost, daemon wiring, plugin.* handlers, host and API tests) dispatched on branch sdd/w3-host in a scratch worktree. If this iteration stops early: if sdd/w3-host has no usable work, re-dispatch wave 3 from tech.md (PluginHost, Daemon API, Daemon wiring, Testing strategy). Then run the final deep 3-lens review, fix, verify, and merge per LOOP.md step 7.
+Built, reviewed (final loop closed at round 3) and verified on build/m0-registry. Next: merge into build/roadmap per LOOP.md step 7.
