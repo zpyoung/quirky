@@ -4,6 +4,7 @@
   "version": "0.1.0",
   "description": "Branch status, diffs, staging and commits for a worktree.",
   "main": "main.ts",
+  "ui": "dist/ui.js",
   "activation": "lazy",
   "dependencies": [
     "quirky.worktree"

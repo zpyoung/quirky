@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test'
 import type { GitDiff, GitFileStatus } from '@quirky/protocol'
-import { keepSelection, reuseDiff } from '../src/lib/diffRefresh'
+import { keepSelection, reuseDiff } from '../src/diffRefresh'
 
 const file = (path: string, index: string, worktree: string): GitFileStatus => ({
   path,

@@ -8,8 +8,8 @@ import { json } from '@codemirror/lang-json'
 import { markdown } from '@codemirror/lang-markdown'
 import { python } from '@codemirror/lang-python'
 import type { GitDiff } from '@quirky/protocol'
-import { withoutTrailingNewline } from '../lib/diffText'
-import { languageForPath, type LanguageId } from '../lib/language'
+import { withoutTrailingNewline } from './diffText'
+import { languageForPath, type LanguageId } from './language'
 
 function languageExtension(id: LanguageId): Extension[] {
   switch (id) {

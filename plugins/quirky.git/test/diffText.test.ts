@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test'
-import { withoutTrailingNewline } from '../src/lib/diffText'
+import { withoutTrailingNewline } from '../src/diffText'
 
 test('drops one trailing newline so the editor has no empty last line', () => {
   expect(withoutTrailingNewline('a\nb\n')).toBe('a\nb')
