@@ -6,6 +6,8 @@ import {
   RpcErrorCode,
   type AskEnvelope,
   type AskSpec,
+  type ContributionInfo,
+  type PluginInfo,
   type Repo,
   type Session,
   type Worktree
@@ -45,6 +47,8 @@ export class FakeDaemon {
   readonly repos: Repo[] = []
   readonly worktrees: Worktree[] = []
   readonly sessions: Session[] = []
+  readonly plugins: PluginInfo[] = []
+  readonly contributions: ContributionInfo[] = []
   readonly asks = new Map<string, AskState>()
   connections = 0
   private server!: ReturnType<typeof Bun.serve>
@@ -136,6 +140,38 @@ export class FakeDaemon {
     }
     this.worktrees.push(worktree)
     return worktree
+  }
+
+  addPlugin(id: string, overrides: Partial<PluginInfo> = {}): PluginInfo {
+    const plugin: PluginInfo = {
+      id,
+      name: id,
+      version: '1.0.0',
+      source: 'installed',
+      dir: join(this.home, 'plugins', id),
+      activation: 'lazy',
+      dependencies: [],
+      state: 'inactive',
+      diagnostics: [],
+      ...overrides
+    }
+    this.plugins.push(plugin)
+    return plugin
+  }
+
+  addContribution(plugin: string, kind: string, name: string, overrides: Partial<ContributionInfo> = {}): ContributionInfo {
+    const contribution: ContributionInfo = {
+      id: `${plugin}:${kind}.${name}`,
+      kind,
+      name,
+      plugin,
+      override: false,
+      status: 'effective',
+      data: {},
+      ...overrides
+    }
+    this.contributions.push(contribution)
+    return contribution
   }
 
   private async handle(method: string, params: any, ws: { close(): void }): Promise<unknown> {
@@ -238,6 +274,27 @@ export class FakeDaemon {
         const state = this.requireAsk(params.askId)
         if (state.envelope.status === 'pending') this.resolve(params.askId, 'declined')
         return state.envelope
+      }
+      case 'plugin.list':
+        return this.plugins
+      case 'plugin.contributions':
+        return this.contributions.filter(
+          (item) =>
+            (params.all || item.status === 'effective') &&
+            (!params.kind || item.kind === params.kind) &&
+            (!params.pluginId || item.plugin === params.pluginId)
+        )
+      case 'plugin.enable':
+      case 'plugin.disable':
+        if (!this.plugins.some((p) => p.id === params.id) && !this.contributions.some((c) => c.id === params.id)) {
+          throw new FakeRpcError(RpcErrorCode.NotFound, `unknown plugin or contribution ${params.id}`)
+        }
+        return { ok: true }
+      case 'plugin.activate': {
+        const plugin = this.plugins.find((p) => p.id === params.pluginId)
+        if (!plugin) throw new FakeRpcError(RpcErrorCode.NotFound, `unknown plugin ${params.pluginId}`)
+        plugin.state = 'active'
+        return plugin
       }
       default:
         throw new FakeRpcError(RpcErrorCode.MethodNotFound, `method not found: ${method}`)
