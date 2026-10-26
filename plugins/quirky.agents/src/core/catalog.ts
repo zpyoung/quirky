@@ -55,11 +55,11 @@ const compare = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0)
 
 const isBuiltin = (plugin: string) => plugin.startsWith('quirky.')
 
-/** Auto-pick position for the listed built-ins; unlisted built-ins follow them, then every other plugin's agents. */
+/** Auto-pick position of a listed agent whichever plugin supplies it; unlisted built-ins follow, then every other plugin's agents. */
 function rank(entry: AgentEntry): number {
-  if (!isBuiltin(entry.plugin)) return AUTO_PICK_ORDER.length + 1
   const index = AUTO_PICK_ORDER.indexOf(entry.id)
-  return index === -1 ? AUTO_PICK_ORDER.length : index
+  if (index !== -1) return index
+  return isBuiltin(entry.plugin) ? AUTO_PICK_ORDER.length : AUTO_PICK_ORDER.length + 1
 }
 
 const byAutoPick = (a: AgentEntry, b: AgentEntry) =>

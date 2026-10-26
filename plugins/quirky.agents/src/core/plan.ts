@@ -6,8 +6,8 @@ export class PlanError extends Error {}
 
 const COMMAND_LINE_PROMPT_LIMIT_BYTES = 131_072
 const HERMES_QUERY_LIMIT_BYTES = 24_000
-const HERMES_QUERY_ENV = 'QUIRKY_HERMES_STARTUP_QUERY'
-const HERMES_QUERY_ARG = '--query=__QUIRKY_HERMES_STARTUP_QUERY__'
+const HERMES_QUERY_ENV = 'HERMES_QUIRKY_STARTUP_QUERY'
+const HERMES_QUERY_ARG = '--query=__HERMES_QUIRKY_STARTUP_QUERY__'
 const HERMES_QUERY_VARIABLE = '__quirky_hermes_startup_query'
 
 type Resolve = (name: string) => string | null
