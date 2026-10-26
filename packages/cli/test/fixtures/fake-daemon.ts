@@ -52,7 +52,7 @@ export type ConfirmationGate = {
 const READ_ONLY_NAME = /(^|[./])(list|get|describe|state|read|wait|inspect)$/
 
 /** What a seeded plugin method does when called: return `result`, or fail with `error`. */
-export type MethodBehavior = { result?: unknown; error?: { code: number; message: string } }
+export type MethodBehavior = { result?: unknown; error?: { code: number; message: string; data?: unknown } }
 
 /**
  * A stand-in for quirkyd: serves `/health` and the `/rpc` WebSocket on a free loopback port, and
@@ -523,7 +523,7 @@ export class FakeDaemon {
       default: {
         if (this.results.has(method)) return this.results.get(method)
         const seeded = this.methods.get(method)
-        if (seeded?.behavior.error) throw new FakeRpcError(seeded.behavior.error.code, seeded.behavior.error.message)
+        if (seeded?.behavior.error) throw new FakeRpcError(seeded.behavior.error.code, seeded.behavior.error.message, seeded.behavior.error.data)
         if (seeded) return seeded.behavior.result === undefined ? { ok: true } : seeded.behavior.result
         throw new FakeRpcError(RpcErrorCode.MethodNotFound, `method not found: ${method}`)
       }
