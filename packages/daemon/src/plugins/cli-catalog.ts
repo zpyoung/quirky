@@ -1,5 +1,4 @@
-import { readFileSync } from 'node:fs'
-import { join, resolve } from 'node:path'
+import { resolve } from 'node:path'
 import {
   flagNameOf,
   KERNEL_METHOD_SCHEMAS,
@@ -14,7 +13,6 @@ import {
   type Schema,
 } from '@quirky/protocol'
 import type { PluginHost } from './host'
-import { MANIFEST_FILE } from './manifest'
 import { cliGroupWord, effectiveCliWords } from './kinds'
 
 /** CLI group words the kernel owns; a plugin alias equal to one is dropped. */
@@ -42,18 +40,6 @@ const isReserved = (flag: string) => (RESERVED_FLAG_NAMES as readonly string[]).
 
 function isRecord(value: unknown): value is Entry {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
-}
-
-/** The manifest fields the catalog needs that `PluginInfo` does not carry; empty when the file can't be read. */
-function readCliFields(dir: string): { cli?: string; cliAliases: string[] } {
-  try {
-    const raw: unknown = JSON.parse(readFileSync(join(dir, MANIFEST_FILE), 'utf8'))
-    if (!isRecord(raw)) return { cliAliases: [] }
-    const aliases = Array.isArray(raw.cliAliases) ? raw.cliAliases.filter((alias) => typeof alias === 'string') : []
-    return { ...(typeof raw.cli === 'string' ? { cli: raw.cli } : {}), cliAliases: aliases }
-  } catch {
-    return { cliAliases: [] }
-  }
 }
 
 function derivedFlag(property: string, schema: Schema, required: boolean): ApiCliFlag | null {
@@ -117,6 +103,51 @@ function declaredPositionals(positionals: unknown): ApiCliPositional[] {
   })
 }
 
+/** A plugin with a CLI group and the alias words its manifest asks for. */
+export type CliAliasClaimant = { id: string; source: 'builtin' | 'installed'; aliases: string[] }
+
+/** The outcome of alias collision checks across every plugin with a CLI group. */
+export type CliAliasResolution = {
+  /** Plugin ID to the aliases it kept, in the order it wrote them. */
+  accepted: Map<string, string[]>
+  /** Plugin ID to the aliases it lost, each with the reason shown in the warning. */
+  dropped: Map<string, { alias: string; reason: string }[]>
+}
+
+/**
+ * Settles which plugin keeps each alias word. Built-ins come before installed plugins, then by
+ * plugin ID. A word is dropped when it is a kernel group, another plugin's group word, or already
+ * taken by an earlier plugin.
+ */
+export function resolveCliAliases(claimants: readonly CliAliasClaimant[]): CliAliasResolution {
+  const ordered = [...claimants].sort((a, b) =>
+    a.source === b.source ? (a.id < b.id ? -1 : a.id > b.id ? 1 : 0) : a.source === 'builtin' ? -1 : 1
+  )
+  const groupWords = new Map(ordered.map((claimant) => [cliGroupWord(claimant.id), claimant.id]))
+  const holders = new Map<string, string>()
+  const accepted = new Map<string, string[]>()
+  const dropped = new Map<string, { alias: string; reason: string }[]>()
+  for (const claimant of ordered) {
+    const kept: string[] = []
+    const lost: { alias: string; reason: string }[] = []
+    for (const alias of claimant.aliases) {
+      const groupOwner = groupWords.get(alias)
+      const holder = holders.get(alias)
+      if ((KERNEL_CLI_GROUPS as readonly string[]).includes(alias)) lost.push({ alias, reason: 'it is a built-in CLI group' })
+      else if (groupOwner !== undefined && groupOwner !== claimant.id) {
+        lost.push({ alias, reason: `it is the CLI group word of plugin ${groupOwner}` })
+      } else if (holder !== undefined) lost.push({ alias, reason: `plugin ${holder} already uses it` })
+      else {
+        holders.set(alias, claimant.id)
+        kept.push(alias)
+      }
+    }
+    accepted.set(claimant.id, kept)
+    if (lost.length > 0) dropped.set(claimant.id, lost)
+  }
+  return { accepted, dropped }
+}
+
 type Group = { info: PluginInfo; words: string; aliases: string[]; cli?: string }
 
 /** Plugins with a CLI presence, built-ins first and then by ID, each with the aliases it won. */
@@ -128,27 +159,12 @@ function resolveGroups(plugins: PluginHost, owners: ReadonlySet<string>): Group[
     .filter((info): info is PluginInfo => info !== undefined)
     .sort((a, b) => (a.source === b.source ? (a.id < b.id ? -1 : a.id > b.id ? 1 : 0) : a.source === 'builtin' ? -1 : 1))
 
-  const groupWords = new Map(claimed.map((info) => [cliGroupWord(info.id), info.id]))
-  const aliasOwner = new Map<string, string>()
   return claimed.map((info) => {
-    const { cli, cliAliases } = readCliFields(info.dir)
-    const aliases: string[] = []
-    const drop = (alias: string, reason: string) => {
+    for (const { alias, reason } of plugins.droppedCliAliases(info.id)) {
       const message = `cliAliases: '${alias}' is dropped because ${reason}`
       if (!info.diagnostics.some((item) => item.message === message)) plugins.addWarning(info.id, message)
     }
-    for (const alias of cliAliases) {
-      const groupOwner = groupWords.get(alias)
-      const aliasHolder = aliasOwner.get(alias)
-      if ((KERNEL_CLI_GROUPS as readonly string[]).includes(alias)) drop(alias, 'it is a built-in CLI group')
-      else if (groupOwner !== undefined && groupOwner !== info.id) drop(alias, `it is the CLI group word of plugin ${groupOwner}`)
-      else if (aliasHolder !== undefined) drop(alias, `plugin ${aliasHolder} already uses it`)
-      else {
-        aliasOwner.set(alias, info.id)
-        aliases.push(alias)
-      }
-    }
-    return { info, words: cliGroupWord(info.id), aliases, cli }
+    return { info, words: cliGroupWord(info.id), aliases: info.cliAliases ?? [], cli: plugins.cliOf(info.id).cli }
   })
 }
 

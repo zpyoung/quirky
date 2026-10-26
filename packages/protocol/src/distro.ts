@@ -15,7 +15,7 @@ export type DistroManifest = {
   plugins?: string[]
   /** Plugin or contribution IDs to turn off. */
   disable?: string[]
-  /** Setting ID to the value the distro layers under the user's own. */
+  /** Setting ID to the value the distro layers under the user's own. Parsed manifests hold full IDs. */
   settings?: Record<string, boolean | number | string>
   /** A theme contribution ID. */
   theme?: string
@@ -130,6 +130,12 @@ function checkDisable(raw: JsonRecord, errors: string[]): void {
   }
 }
 
+/** The full setting ID for a key written as `setting:<pluginId>/<name>` or `<pluginId>/<name>`, else null. */
+function settingIdOf(key: string): string | null {
+  const full = key.includes(':') ? key : `setting:${key}`
+  return parseContributionId(full)?.kind === 'setting' ? full : null
+}
+
 function checkSettings(raw: JsonRecord, errors: string[]): void {
   const settings = raw.settings
   if (settings === undefined) return
@@ -137,8 +143,12 @@ function checkSettings(raw: JsonRecord, errors: string[]): void {
     errors.push("field 'settings' must be an object")
     return
   }
-  for (const [id, value] of Object.entries(settings)) {
-    if (parseContributionId(id)?.kind !== 'setting') errors.push(`settings: '${id}' is not a setting contribution ID`)
+  const written = new Map<string, string>()
+  for (const [key, value] of Object.entries(settings)) {
+    const id = settingIdOf(key)
+    if (id === null) errors.push(`settings: '${key}' is not a setting contribution ID`)
+    else if (written.has(id)) errors.push(`settings: '${key}' repeats the setting ${id}`)
+    else written.set(id, key)
     const scalar = typeof value === 'boolean' || typeof value === 'string' || (typeof value === 'number' && Number.isFinite(value))
     if (!scalar) errors.push(`settings: value of '${id}' must be a boolean, number or string`)
   }
@@ -175,7 +185,8 @@ function checkKeybindings(raw: JsonRecord, errors: string[]): void {
 
 /**
  * Validates the text of a `quirky-distro.json` without touching the filesystem. Reports every
- * problem in one pass; on success keybinding chords are in canonical form.
+ * problem in one pass; on success keybinding chords are in canonical form and setting keys are
+ * full setting IDs.
  */
 export function parseDistroManifest(
   text: string
@@ -211,6 +222,11 @@ export function parseDistroManifest(
         (parseChord(written) as { ok: true; chord: string }).chord,
         command
       ])
+    )
+  }
+  if (isRecord(raw.settings)) {
+    manifest.settings = Object.fromEntries(
+      Object.entries(raw.settings as Record<string, boolean | number | string>).map(([key, value]) => [settingIdOf(key)!, value])
     )
   }
   return { ok: true, manifest }

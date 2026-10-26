@@ -1,16 +1,24 @@
 import { mkdirSync } from 'node:fs'
 import { join } from 'node:path'
-import { isReservedLaunchEnv, type LaunchHookInput, type PluginStore, type StoreMigration } from '@quirky/protocol'
+import {
+  isReservedLaunchEnv,
+  KERNEL_METHOD_SCHEMAS,
+  type LaunchHookInput,
+  type PluginStore,
+  type StoreMigration
+} from '@quirky/protocol'
 import { conflict, invalidParams, notFound } from '../errors'
 import { buildSessionEnv, commandArgv, shellArgv } from '../launch'
 import { createHandlers } from '../methods'
 import type { Core } from '../service'
 import type { Store } from '../store'
-import { DistroService } from './distros'
+import { fillConfirm } from './confirm'
+import { DistroService, renderDistroInspection } from './distros'
 import { Dispatcher } from './dispatch'
 import { PluginEvents } from './events'
 import type { ContextExtension, PluginHost } from './host'
 import { runLaunchHooks, type LaunchAdditions } from './launch-hooks'
+import { inspectPlugin, renderInspection, type PluginInstallDeps } from './install'
 import { LayoutService } from './layout'
 import { createPtyApi } from './pty-api'
 import { Scheduler } from './scheduler'
@@ -62,8 +70,20 @@ export function createPluginRuntime(options: PluginRuntimeOptions): PluginRuntim
 
   const events = new PluginEvents(plugins, (event) => core.broadcast(event), log)
   const scheduler = new Scheduler({ plugins, store, log, recheckMs: options.schedulerRecheckMs })
-  const layout = new LayoutService()
-  const distros = new DistroService({ home, store, plugins, log, safeMode: options.safeMode ?? false })
+  const distros = new DistroService({
+    home,
+    store,
+    plugins,
+    log,
+    safeMode: options.safeMode ?? false,
+    broadcast: (event) => core.broadcast(event)
+  })
+  const installDeps: PluginInstallDeps = {
+    home,
+    plugins,
+    log,
+    distroOf: (id) => distros.list().find((distro) => distro.plugins.includes(id))?.id ?? null
+  }
   const ui = new UiService({
     plugins,
     store,
@@ -71,13 +91,31 @@ export function createPluginRuntime(options: PluginRuntimeOptions): PluginRuntim
     distro: () => distros.active(),
     safeMode: options.safeMode
   })
+  const layout = new LayoutService({
+    plugins,
+    store,
+    ui,
+    clients: () => core.clients(),
+    broadcast: (event) => core.broadcast(event),
+    sendTo: (conn, event) => core.sendTo(conn, event)
+  })
   const handlers = createHandlers(core, plugins, scheduler, ui, {
     layout,
     distros,
-    install: { home, plugins, log },
+    install: installDeps,
     stopDaemon: options.stopDaemon
   })
-  const dispatcher = new Dispatcher(handlers, plugins, log)
+  const confirmText = (method: 'plugin.install' | 'distro.install', params: Record<string, unknown>) =>
+    fillConfirm(KERNEL_METHOD_SCHEMAS[method].destructive.confirm, params)
+  const dispatcher = new Dispatcher(handlers, plugins, log, {
+    store,
+    kernelDescribers: {
+      'plugin.install': async (params) =>
+        `${confirmText('plugin.install', params)}\n\n${renderInspection(inspectPlugin(installDeps, String(params.path)))}`,
+      'distro.install': async (params) =>
+        `${confirmText('distro.install', params)}\n\n${renderDistroInspection(await distros.inspect(String(params.path)))}`
+    }
+  })
   const openedStores = new Map<string, OpenedStore>()
   const ptyApis = new Map<string, { revoke(): void }>()
 
