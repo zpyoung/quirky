@@ -17,6 +17,7 @@ import { defaultCliEntry, installIntegrationFiles } from './launch'
 import { osascriptNotifier, type Notifier } from './notify'
 import { PluginHost } from './plugins/host'
 import { createPluginRuntime, type PluginRuntime } from './plugins/runtime'
+import { buildUiModel } from './plugins/ui-model'
 import { PtyClient } from './pty-client'
 import { startServer } from './server'
 import { Core } from './service'
@@ -163,6 +164,7 @@ export async function startDaemon(options: DaemonOptions): Promise<DaemonHandle>
     },
     log,
     activationTimeoutMs: options.pluginActivationTimeoutMs,
+    deriveDiagnostics: (view) => buildUiModel({ ...view, chosenTheme: 'default' }).warnings,
     extension: {
       create: (plugin, isRevoked) => lateRuntime!.extension.create(plugin, isRevoked),
       revoke: (pluginId) => lateRuntime?.extension.revoke(pluginId)
@@ -197,6 +199,7 @@ export async function startDaemon(options: DaemonOptions): Promise<DaemonHandle>
     startServer({
       core,
       dispatcher: pluginRuntime.dispatcher,
+      pluginFile: (id) => plugins.pluginFiles(id),
       port: listenPort,
       rpcToken,
       daemonVersion,

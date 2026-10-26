@@ -24,6 +24,8 @@ type ConnectionOptions = { initialDelayMs?: number }
 export class Connection {
   client: QuirkyClient | null = null
   private stopped = false
+  private readonly eventListeners = new Set<(event: QuirkyEvent) => void>()
+  private readonly connectedListeners = new Set<() => void>()
 
   constructor(
     readonly store: Store,
@@ -48,6 +50,24 @@ export class Connection {
   call<M extends MethodName>(method: M, params: ParamsOf<M>): Promise<ResultOf<M>> {
     if (!this.client || this.client.isClosed) return Promise.reject(new Error('Not connected'))
     return this.client.call(method, params)
+  }
+
+  /** Like `call`, for any method name including ones plugins provide; the result is untyped. */
+  callAny(method: string, params: Record<string, unknown>): Promise<unknown> {
+    if (!this.client || this.client.isClosed) return Promise.reject(new Error('Not connected'))
+    return this.client.callAny(method, params)
+  }
+
+  /** Receives every daemon event, in addition to the store dispatch; the returned function unsubscribes. */
+  onEvent(listener: (event: QuirkyEvent) => void): () => void {
+    this.eventListeners.add(listener)
+    return () => this.eventListeners.delete(listener)
+  }
+
+  /** Runs after each successful (re)connect once the store holds a fresh snapshot. */
+  onConnected(listener: () => void): () => void {
+    this.connectedListeners.add(listener)
+    return () => this.connectedListeners.delete(listener)
   }
 
   /** Calls a method and reports a failure as an error toast; resolves undefined on failure. */
@@ -111,6 +131,7 @@ export class Connection {
         failures = 0
         await this.refreshAll()
         this.store.dispatch({ type: 'connection', status: 'connected' })
+        this.notify(this.connectedListeners)
         await closed
       } catch {
         failures += 1
@@ -126,7 +147,19 @@ export class Connection {
     }
   }
 
+  /** A throwing listener must not fail the connection loop or starve the other listeners. */
+  private notify<A extends unknown[]>(listeners: Set<(...args: A) => void>, ...args: A): void {
+    for (const listener of [...listeners]) {
+      try {
+        listener(...args)
+      } catch {
+        // listeners report their own failures
+      }
+    }
+  }
+
   private handleEvent(event: QuirkyEvent): void {
+    this.notify(this.eventListeners, event)
     if (event.type === 'repo.changed') {
       void this.refreshRepos().catch(() => {})
     } else if (event.type === 'worktree.changed') {

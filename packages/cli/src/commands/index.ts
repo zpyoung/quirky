@@ -5,8 +5,11 @@ import { open } from './open'
 import { pluginActivate, pluginContributions, pluginDisable, pluginEnable, pluginList } from './plugin'
 import { repoAdd, repoList, repoRm } from './repo'
 import { sessionClose, sessionList, sessionNew } from './session'
+import { settingGet, settingList, settingReset, settingSet } from './setting'
 import { status } from './status'
 import { termRead, termSend } from './term'
+import { themeList, themeSet } from './theme'
+import { uiContributions } from './ui'
 import type { Command, Context } from './types'
 import { wtCreate, wtList, wtRm } from './worktree'
 
@@ -42,6 +45,13 @@ export const COMMANDS: Command[] = [
   pluginActivate,
   jobList,
   jobRun,
+  uiContributions,
+  settingList,
+  settingGet,
+  settingSet,
+  settingReset,
+  themeList,
+  themeSet,
   ask,
   askWait,
   askCancel,

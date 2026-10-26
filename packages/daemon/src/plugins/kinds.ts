@@ -1,4 +1,5 @@
 import { MAX_JOB_DURATION_MS, MIN_JOB_INTERVAL_MS, parseDuration } from '@quirky/protocol'
+import { checkUiKindEntry, isUiKind } from './ui-kinds'
 
 type Entry = Record<string, unknown>
 
@@ -32,10 +33,15 @@ function checkAgents(label: string, agents: unknown, errors: string[]): void {
 
 /**
  * Checks the fields of a contribution of one of the daemon's own kinds (`method`, `event`, `job`,
- * `launch-hook`) and appends one message per problem to `errors`. Other kinds are left alone.
+ * `launch-hook`) or of a UI kind (delegated to `ui-kinds.ts`) and appends one message per problem
+ * to `errors`. Other kinds are left alone.
  * `label` prefixes every message and names the entry, e.g. `job tick` or `override job:acme.poll/tick`.
  */
 export function checkKindEntry(kind: string, label: string, entry: Entry, errors: string[]): void {
+  if (isUiKind(kind)) {
+    checkUiKindEntry(kind, label, entry, errors)
+    return
+  }
   if (!Object.hasOwn(ALLOWED_FIELDS, kind)) return
   const allowed = ALLOWED_FIELDS[kind]
   for (const field of Object.keys(entry)) {

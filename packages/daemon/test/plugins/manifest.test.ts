@@ -110,7 +110,7 @@ describe('parseManifest', () => {
   test('rejects a duplicate name within one kind but allows it across kinds', () => {
     const dup = { command: [{ id: 'a' }, { id: 'a' }] }
     expect(errorsOf({ ...base, contributes: dup }).join('\n')).toContain("duplicate name 'a'")
-    const ok = { command: [{ id: 'a' }], panel: [{ id: 'a' }] }
+    const ok = { command: [{ id: 'a' }], panel: [{ id: 'a', title: 'A' }] }
     expect(parse({ ...base, contributes: ok }).ok).toBe(true)
   })
 

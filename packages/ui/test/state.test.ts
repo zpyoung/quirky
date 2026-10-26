@@ -177,3 +177,12 @@ test('settings replaces the stored settings; unreachable is a connection status'
   expect(state.connection).toBe('unreachable')
   expect(state.epoch).toBe(0)
 })
+
+test('setScm sets source control open or closed and is a no-op when unchanged', () => {
+  const state = initialState()
+  const open = reduce(state, { type: 'setScm', open: true })
+  expect(open.scmOpen).toBe(true)
+  expect(reduce(open, { type: 'setScm', open: true })).toBe(open)
+  expect(reduce(open, { type: 'setScm', open: false }).scmOpen).toBe(false)
+  expect(reduce(state, { type: 'setScm', open: false })).toBe(state)
+})

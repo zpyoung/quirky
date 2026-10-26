@@ -63,6 +63,7 @@ export type Action =
   | { type: 'toast'; toast: Omit<Toast, 'id'> }
   | { type: 'dismissToast'; id: number }
   | { type: 'toggleScm' }
+  | { type: 'setScm'; open: boolean }
   | { type: 'settings'; settings: Settings }
 
 export function initialState(selection?: {
@@ -248,6 +249,8 @@ export function reduce(state: AppState, action: Action): AppState {
       return { ...state, toasts: state.toasts.filter((t) => t.id !== action.id) }
     case 'toggleScm':
       return { ...state, scmOpen: !state.scmOpen }
+    case 'setScm':
+      return state.scmOpen === action.open ? state : { ...state, scmOpen: action.open }
     case 'settings':
       return { ...state, settings: action.settings }
   }

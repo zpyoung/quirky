@@ -71,7 +71,7 @@ describe('computeRegistry: declarations', () => {
   test('declarations are sorted by id then plugin', () => {
     const registry = compute([
       plugin('b', { contributes: cmd('x') }),
-      plugin('a', { contributes: { panel: [{ id: 'y' }], command: [{ id: 'z' }] } }),
+      plugin('a', { contributes: { panel: [{ id: 'y', title: 'Y' }], command: [{ id: 'z' }] } }),
     ])
     expect(registry.declarations.map((d) => d.id)).toEqual(['command:a/z', 'command:b/x', 'panel:a/y'])
   })

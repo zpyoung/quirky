@@ -4,7 +4,9 @@ import { FitAddon } from '@xterm/addon-fit'
 import { WebglAddon } from '@xterm/addon-webgl'
 import { base64ToBytes } from '@quirky/protocol'
 import type { Connection } from '../connection'
+import { usePluginState } from '../context'
 import { createInputGate, writeReplay } from '../lib/replayGate'
+import { terminalColors } from '../lib/terminalTheme'
 
 type Props = {
   connection: Connection
@@ -26,6 +28,10 @@ export function TerminalPane({ connection, sessionId, scrollback, epoch, interac
   const host = useRef<HTMLDivElement>(null)
   const interactiveRef = useRef(interactive)
   interactiveRef.current = interactive
+  const colors = terminalColors(usePluginState().themeVariables)
+  const colorsRef = useRef(colors)
+  colorsRef.current = colors
+  const termRef = useRef<Terminal | null>(null)
 
   useEffect(() => {
     const element = host.current
@@ -39,8 +45,9 @@ export function TerminalPane({ connection, sessionId, scrollback, epoch, interac
       fontSize: 13,
       cursorBlink: true,
       allowProposedApi: true,
-      theme: { background: '#16181d', foreground: '#d7dae0', cursor: '#d7dae0' }
+      theme: { ...colorsRef.current }
     })
+    termRef.current = term
     const fit = new FitAddon()
     term.loadAddon(fit)
     term.open(element)
@@ -99,9 +106,14 @@ export function TerminalPane({ connection, sessionId, scrollback, epoch, interac
       if (streamId !== null && !client.isClosed) {
         void client.call('terminal.detach', { streamId }).catch(() => {})
       }
+      termRef.current = null
       term.dispose()
     }
   }, [connection, sessionId, scrollback, epoch])
+
+  useEffect(() => {
+    if (termRef.current) termRef.current.options.theme = { ...colors }
+  }, [colors.background, colors.foreground, colors.cursor])
 
   return <div className="terminal-host" ref={host} />
 }

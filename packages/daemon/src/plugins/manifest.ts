@@ -18,6 +18,7 @@ const FIELDS = new Set([
   'version',
   'description',
   'main',
+  'ui',
   'activation',
   'dependencies',
   'contributes',
@@ -59,15 +60,24 @@ function stringList(manifest: Record_, field: string, errors: string[]): string[
   return strings
 }
 
-function checkMain(main: unknown, dir: string, errors: string[]): void {
-  if (main === undefined) return
-  if (typeof main !== 'string' || main === '') {
-    errors.push("field 'main' must be a non-empty string")
+function hasLoneSurrogate(value: string): boolean {
+  return /[\ud800-\udbff](?![\udc00-\udfff])|(?<![\ud800-\udbff])[\udc00-\udfff]/.test(value)
+}
+
+function checkPluginPath(manifest: Record_, field: 'main' | 'ui', dir: string, errors: string[]): void {
+  const value = manifest[field]
+  if (value === undefined) return
+  if (typeof value !== 'string' || value === '') {
+    errors.push(`field '${field}' must be a non-empty string`)
     return
   }
-  const rel = relative(dir, resolve(dir, main))
-  if (isAbsolute(main) || rel === '' || rel === '..' || rel.startsWith('../') || isAbsolute(rel)) {
-    errors.push(`field 'main' must be a relative path inside the plugin directory, got '${main}'`)
+  if (hasLoneSurrogate(value)) {
+    errors.push(`field '${field}' must be a well-formed path`)
+    return
+  }
+  const rel = relative(dir, resolve(dir, value))
+  if (isAbsolute(value) || rel === '' || rel === '..' || rel.startsWith('../') || isAbsolute(rel)) {
+    errors.push(`field '${field}' must be a relative path inside the plugin directory, got '${value}'`)
   }
 }
 
@@ -174,7 +184,8 @@ export function parseManifest(
       errors.push(`id '${id}': the ${BUILTIN_PLUGIN_PREFIX} prefix is reserved for built-ins`)
     }
   }
-  checkMain(raw.main, at.dir, errors)
+  checkPluginPath(raw, 'main', at.dir, errors)
+  checkPluginPath(raw, 'ui', at.dir, errors)
   checkDependencies(raw, id, errors)
   checkContributes(raw.contributes, errors)
   checkOverrides(raw.overrides, id, errors)

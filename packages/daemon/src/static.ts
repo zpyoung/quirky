@@ -1,7 +1,8 @@
 import { existsSync, statSync } from 'node:fs'
 import { extname, join, normalize, sep } from 'node:path'
 
-const CONTENT_TYPES: Record<string, string> = {
+/** File extension to content type for everything the daemon serves over HTTP. */
+export const CONTENT_TYPES: Record<string, string> = {
   '.html': 'text/html; charset=utf-8',
   '.js': 'text/javascript; charset=utf-8',
   '.mjs': 'text/javascript; charset=utf-8',

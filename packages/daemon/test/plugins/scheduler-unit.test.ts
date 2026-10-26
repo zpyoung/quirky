@@ -493,6 +493,7 @@ describe('failed activation', () => {
         openStore: () => {
           throw new Error('unused')
         },
+        getSetting: () => undefined,
         error: (_kind, message) => new Error(message)
       }),
       revoke: (pluginId) => scheduler.revokePlugin(pluginId)

@@ -2,6 +2,7 @@ import { mkdtempSync, mkdirSync, realpathSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import {
+  DEFAULT_THEME,
   PROTOCOL_VERSION,
   RpcErrorCode,
   type AskEnvelope,
@@ -12,6 +13,12 @@ import {
   type PluginInfo,
   type Repo,
   type Session,
+  type SettingInfo,
+  type ThemeInfo,
+  type UiCommandEntry,
+  type UiKeybinding,
+  type UiModel,
+  type UiSlotEntry,
   type Worktree
 } from '@quirky/protocol'
 import { writePrivateJson, runtimeFilePath, type RuntimeInfo } from '@quirky/protocol/node'
@@ -54,6 +61,20 @@ export class FakeDaemon {
   readonly jobs: JobInfo[] = []
   readonly jobRuns = new Map<string, JobRun>()
   readonly asks = new Map<string, AskState>()
+  readonly ui: UiModel = {
+    sidebarSections: [],
+    panels: [],
+    views: [],
+    commands: [],
+    keybindings: [],
+    settings: [],
+    themes: [DEFAULT_THEME],
+    theme: { chosen: 'default', active: 'default' },
+    modules: {}
+  }
+  readonly settings: SettingInfo[] = []
+  /** Errors `setting.set` throws for a setting ID, to exercise error exit codes. */
+  readonly settingErrors = new Map<string, { code: number; message: string }>()
   connections = 0
   private server!: ReturnType<typeof Bun.serve>
   private waitCalls = 0
@@ -193,6 +214,83 @@ export class FakeDaemon {
     return job
   }
 
+  addUiSlot(
+    kind: UiSlotEntry['kind'],
+    plugin: string,
+    name: string,
+    overrides: Partial<UiSlotEntry> = {}
+  ): UiSlotEntry {
+    const entry: UiSlotEntry = {
+      id: `${kind}:${plugin}/${name}`,
+      kind,
+      plugin,
+      title: name,
+      order: 100,
+      module: null,
+      ...overrides
+    }
+    const list = kind === 'sidebar-section' ? this.ui.sidebarSections : kind === 'panel' ? this.ui.panels : this.ui.views
+    list.push(entry)
+    return entry
+  }
+
+  addUiCommand(plugin: string, name: string, overrides: Partial<UiCommandEntry> = {}): UiCommandEntry {
+    const entry: UiCommandEntry = { id: `command:${plugin}/${name}`, plugin, title: name, module: null, ...overrides }
+    this.ui.commands.push(entry)
+    return entry
+  }
+
+  addKeybinding(plugin: string, name: string, key: string, command: string, overrides: Partial<UiKeybinding> = {}): UiKeybinding {
+    const entry: UiKeybinding = { id: `keybinding:${plugin}/${name}`, plugin, key, command, status: 'active', ...overrides }
+    this.ui.keybindings.push(entry)
+    return entry
+  }
+
+  /** Seeds a setting into both the UI model and `setting.*`; the value defaults to the declared default. */
+  addSetting(plugin: string, name: string, overrides: Partial<SettingInfo> = {}): SettingInfo {
+    const setting: SettingInfo = {
+      id: `setting:${plugin}/${name}`,
+      plugin,
+      type: 'number',
+      title: name,
+      default: 13,
+      value: overrides.default ?? 13,
+      ...overrides
+    }
+    this.settings.push(setting)
+    this.ui.settings.push({ id: setting.id, plugin, type: setting.type, title: setting.title, default: setting.default })
+    return setting
+  }
+
+  addTheme(plugin: string, name: string, overrides: Partial<ThemeInfo> = {}): ThemeInfo {
+    const theme: ThemeInfo = {
+      id: `theme:${plugin}/${name}`,
+      plugin,
+      title: name,
+      appearance: 'light',
+      colors: DEFAULT_THEME.colors,
+      ...overrides
+    }
+    this.ui.themes.push(theme)
+    return theme
+  }
+
+  /** Chooses `id` the way the daemon does: the active theme falls back to the default when it is gone. */
+  chooseTheme(id: string): void {
+    const active = this.ui.themes.some((theme) => theme.id === id) ? id : 'default'
+    this.ui.theme = { chosen: id, active }
+  }
+
+  private themeList() {
+    return { ...this.ui.theme, themes: this.ui.themes }
+  }
+
+  private requireSetting(id: string): SettingInfo {
+    const setting = this.settings.find((candidate) => candidate.id === id)
+    if (!setting) throw new FakeRpcError(RpcErrorCode.NotFound, `no setting ${id}`)
+    return setting
+  }
+
   private async handle(method: string, params: any, ws: { close(): void }): Promise<unknown> {
     this.calls.push({ method, params })
     switch (method) {
@@ -323,6 +421,34 @@ export class FakeDaemon {
         }
         return this.jobRuns.get(params.id) ?? { startedAt: 1_000, finishedAt: 1_042, status: 'ok' }
       }
+      case 'ui.contributions':
+        return this.ui
+      case 'setting.list':
+        return this.settings.filter((setting) => !params.pluginId || setting.plugin === params.pluginId)
+      case 'setting.get':
+        return this.requireSetting(params.id)
+      case 'setting.set': {
+        const setting = this.requireSetting(params.id)
+        const seeded = this.settingErrors.get(params.id)
+        if (seeded) throw new FakeRpcError(seeded.code, seeded.message)
+        setting.value = params.value
+        setting.stored = { value: params.value, valid: true }
+        return setting
+      }
+      case 'setting.reset': {
+        const setting = this.requireSetting(params.id)
+        setting.value = setting.default
+        delete setting.stored
+        return setting
+      }
+      case 'theme.list':
+        return this.themeList()
+      case 'theme.set':
+        if (!this.ui.themes.some((theme) => theme.id === params.id)) {
+          throw new FakeRpcError(RpcErrorCode.NotFound, `no theme ${params.id}`)
+        }
+        this.chooseTheme(params.id)
+        return this.themeList()
       default:
         throw new FakeRpcError(RpcErrorCode.MethodNotFound, `method not found: ${method}`)
     }

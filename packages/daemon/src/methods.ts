@@ -9,6 +9,7 @@ import {
 import { conflict, invalidParams } from './errors'
 import type { PluginHost } from './plugins/host'
 import type { Scheduler } from './plugins/scheduler'
+import type { UiService } from './plugins/ui-service'
 import type { Core } from './service'
 import type { ClientConn } from './types'
 
@@ -74,7 +75,7 @@ function agent(params: Params): AgentKind {
 }
 
 /** Maps every RPC method to the core or the plugin host, validating params so bad input becomes InvalidParams. */
-export function createHandlers(core: Core, plugins: PluginHost, scheduler: Scheduler): Handlers {
+export function createHandlers(core: Core, plugins: PluginHost, scheduler: Scheduler, ui: UiService): Handlers {
   return {
     'client.hello': (params, conn) => {
       const role = params.role
@@ -211,6 +212,18 @@ export function createHandlers(core: Core, plugins: PluginHost, scheduler: Sched
     'plugin.activate': (params) => plugins.activate(str(params, 'pluginId')),
 
     'job.list': () => scheduler.list(),
-    'job.run': (params) => scheduler.run(str(params, 'id'))
+    'job.run': (params) => scheduler.run(str(params, 'id')),
+
+    'ui.contributions': () => ui.contributions(),
+    'setting.list': (params) => ui.listSettings({ pluginId: optStr(params, 'pluginId') }),
+    'setting.get': (params) => ui.getSetting(str(params, 'id')),
+    'setting.set': (params) => {
+      const id = str(params, 'id')
+      if (params.value === undefined) throw invalidParams('value is required')
+      return ui.setSetting(id, params.value)
+    },
+    'setting.reset': (params) => ui.resetSetting(str(params, 'id')),
+    'theme.list': () => ui.listThemes(),
+    'theme.set': (params) => ui.setTheme(str(params, 'id'))
   }
 }
