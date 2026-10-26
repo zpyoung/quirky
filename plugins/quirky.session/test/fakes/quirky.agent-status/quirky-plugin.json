@@ -1,0 +1,10 @@
+{
+  "id": "quirky.agent-status",
+  "name": "Agent status (test fake)",
+  "version": "0.0.0",
+  "main": "main.ts",
+  "activation": "startup",
+  "contributes": {
+    "launch-hook": [{ "id": "agent-hooks", "agents": ["claude", "codex"] }]
+  }
+}

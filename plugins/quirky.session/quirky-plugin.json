@@ -1,0 +1,717 @@
+{
+  "id": "quirky.session",
+  "name": "Sessions",
+  "version": "0.1.0",
+  "description": "Terminal and structured agent sessions in a worktree.",
+  "main": "main.ts",
+  "cli": "cli.ts",
+  "activation": "startup",
+  "dependencies": [
+    "quirky.worktree"
+  ],
+  "contributes": {
+    "method": [
+      {
+        "id": "list",
+        "description": "Sessions, optionally only those of one worktree.",
+        "readOnly": true,
+        "params": {
+          "type": "object",
+          "properties": {
+            "worktree": {
+              "type": "string",
+              "description": "Only sessions in this worktree (selector); omitted lists all."
+            }
+          }
+        },
+        "result": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "terminal",
+                  "structured"
+                ]
+              },
+              "agent": {
+                "type": "string",
+                "enum": [
+                  "shell",
+                  "claude",
+                  "codex",
+                  "opencode",
+                  "gemini"
+                ],
+                "description": "The agent to run."
+              },
+              "worktreeId": {
+                "type": "string"
+              },
+              "cwd": {
+                "type": "string"
+              },
+              "title": {
+                "type": "string"
+              },
+              "status": {
+                "type": "string",
+                "enum": [
+                  "starting",
+                  "running",
+                  "working",
+                  "waiting",
+                  "done",
+                  "exited"
+                ]
+              },
+              "createdAt": {
+                "type": "number"
+              },
+              "lastActivityAt": {
+                "type": "number"
+              },
+              "exitCode": {
+                "description": "The exit code, or null while the process is alive."
+              }
+            },
+            "required": [
+              "id",
+              "kind",
+              "agent",
+              "worktreeId",
+              "cwd",
+              "title",
+              "status",
+              "createdAt",
+              "lastActivityAt",
+              "exitCode"
+            ]
+          }
+        }
+      },
+      {
+        "id": "get",
+        "description": "One session by ID.",
+        "readOnly": true,
+        "params": {
+          "type": "object",
+          "properties": {
+            "session": {
+              "type": "string",
+              "description": "The session ID."
+            }
+          },
+          "required": [
+            "session"
+          ]
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "kind": {
+              "type": "string",
+              "enum": [
+                "terminal",
+                "structured"
+              ]
+            },
+            "agent": {
+              "type": "string",
+              "enum": [
+                "shell",
+                "claude",
+                "codex",
+                "opencode",
+                "gemini"
+              ],
+              "description": "The agent to run."
+            },
+            "worktreeId": {
+              "type": "string"
+            },
+            "cwd": {
+              "type": "string"
+            },
+            "title": {
+              "type": "string"
+            },
+            "status": {
+              "type": "string",
+              "enum": [
+                "starting",
+                "running",
+                "working",
+                "waiting",
+                "done",
+                "exited"
+              ]
+            },
+            "createdAt": {
+              "type": "number"
+            },
+            "lastActivityAt": {
+              "type": "number"
+            },
+            "exitCode": {
+              "description": "The exit code, or null while the process is alive."
+            }
+          },
+          "required": [
+            "id",
+            "kind",
+            "agent",
+            "worktreeId",
+            "cwd",
+            "title",
+            "status",
+            "createdAt",
+            "lastActivityAt",
+            "exitCode"
+          ]
+        }
+      },
+      {
+        "id": "create",
+        "description": "Starts a terminal session; `prompt` is passed to agents that accept an initial prompt.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "worktree": {
+              "type": "string",
+              "description": "Worktree selector; default: the caller's current worktree."
+            },
+            "agent": {
+              "type": "string",
+              "enum": [
+                "shell",
+                "claude",
+                "codex",
+                "opencode",
+                "gemini"
+              ],
+              "description": "The agent to run."
+            },
+            "prompt": {
+              "type": "string"
+            },
+            "cols": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "rows": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          "required": [
+            "agent"
+          ]
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "kind": {
+              "type": "string",
+              "enum": [
+                "terminal",
+                "structured"
+              ]
+            },
+            "agent": {
+              "type": "string",
+              "enum": [
+                "shell",
+                "claude",
+                "codex",
+                "opencode",
+                "gemini"
+              ],
+              "description": "The agent to run."
+            },
+            "worktreeId": {
+              "type": "string"
+            },
+            "cwd": {
+              "type": "string"
+            },
+            "title": {
+              "type": "string"
+            },
+            "status": {
+              "type": "string",
+              "enum": [
+                "starting",
+                "running",
+                "working",
+                "waiting",
+                "done",
+                "exited"
+              ]
+            },
+            "createdAt": {
+              "type": "number"
+            },
+            "lastActivityAt": {
+              "type": "number"
+            },
+            "exitCode": {
+              "description": "The exit code, or null while the process is alive."
+            }
+          },
+          "required": [
+            "id",
+            "kind",
+            "agent",
+            "worktreeId",
+            "cwd",
+            "title",
+            "status",
+            "createdAt",
+            "lastActivityAt",
+            "exitCode"
+          ]
+        }
+      },
+      {
+        "id": "register",
+        "description": "Records a session that runs without a terminal; `title` is the base title, numbered when taken in the worktree.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "worktree": {
+              "type": "string",
+              "description": "Worktree selector; default: the caller's current worktree."
+            },
+            "agent": {
+              "type": "string",
+              "enum": [
+                "shell",
+                "claude",
+                "codex",
+                "opencode",
+                "gemini"
+              ],
+              "description": "The agent to run."
+            },
+            "kind": {
+              "type": "string",
+              "enum": [
+                "structured"
+              ]
+            },
+            "title": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "agent",
+            "kind",
+            "title"
+          ]
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "kind": {
+              "type": "string",
+              "enum": [
+                "terminal",
+                "structured"
+              ]
+            },
+            "agent": {
+              "type": "string",
+              "enum": [
+                "shell",
+                "claude",
+                "codex",
+                "opencode",
+                "gemini"
+              ],
+              "description": "The agent to run."
+            },
+            "worktreeId": {
+              "type": "string"
+            },
+            "cwd": {
+              "type": "string"
+            },
+            "title": {
+              "type": "string"
+            },
+            "status": {
+              "type": "string",
+              "enum": [
+                "starting",
+                "running",
+                "working",
+                "waiting",
+                "done",
+                "exited"
+              ]
+            },
+            "createdAt": {
+              "type": "number"
+            },
+            "lastActivityAt": {
+              "type": "number"
+            },
+            "exitCode": {
+              "description": "The exit code, or null while the process is alive."
+            }
+          },
+          "required": [
+            "id",
+            "kind",
+            "agent",
+            "worktreeId",
+            "cwd",
+            "title",
+            "status",
+            "createdAt",
+            "lastActivityAt",
+            "exitCode"
+          ]
+        }
+      },
+      {
+        "id": "close",
+        "description": "Kills the process if alive and forgets the session.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "session": {
+              "type": "string",
+              "description": "The session ID."
+            }
+          },
+          "required": [
+            "session"
+          ]
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "ok": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "ok"
+          ]
+        }
+      },
+      {
+        "id": "setStatus",
+        "description": "Sets a session's status; `exitCode` is recorded with `exited`.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "session": {
+              "type": "string",
+              "description": "The session ID."
+            },
+            "status": {
+              "type": "string",
+              "enum": [
+                "starting",
+                "running",
+                "working",
+                "waiting",
+                "done",
+                "exited"
+              ]
+            },
+            "exitCode": {
+              "type": "integer"
+            }
+          },
+          "required": [
+            "session",
+            "status"
+          ]
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "kind": {
+              "type": "string",
+              "enum": [
+                "terminal",
+                "structured"
+              ]
+            },
+            "agent": {
+              "type": "string",
+              "enum": [
+                "shell",
+                "claude",
+                "codex",
+                "opencode",
+                "gemini"
+              ],
+              "description": "The agent to run."
+            },
+            "worktreeId": {
+              "type": "string"
+            },
+            "cwd": {
+              "type": "string"
+            },
+            "title": {
+              "type": "string"
+            },
+            "status": {
+              "type": "string",
+              "enum": [
+                "starting",
+                "running",
+                "working",
+                "waiting",
+                "done",
+                "exited"
+              ]
+            },
+            "createdAt": {
+              "type": "number"
+            },
+            "lastActivityAt": {
+              "type": "number"
+            },
+            "exitCode": {
+              "description": "The exit code, or null while the process is alive."
+            }
+          },
+          "required": [
+            "id",
+            "kind",
+            "agent",
+            "worktreeId",
+            "cwd",
+            "title",
+            "status",
+            "createdAt",
+            "lastActivityAt",
+            "exitCode"
+          ]
+        }
+      }
+    ],
+    "event": [
+      {
+        "id": "changed",
+        "description": "A session was created or its state changed.",
+        "data": {
+          "type": "object",
+          "properties": {
+            "session": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "kind": {
+                  "type": "string",
+                  "enum": [
+                    "terminal",
+                    "structured"
+                  ]
+                },
+                "agent": {
+                  "type": "string",
+                  "enum": [
+                    "shell",
+                    "claude",
+                    "codex",
+                    "opencode",
+                    "gemini"
+                  ],
+                  "description": "The agent to run."
+                },
+                "worktreeId": {
+                  "type": "string"
+                },
+                "cwd": {
+                  "type": "string"
+                },
+                "title": {
+                  "type": "string"
+                },
+                "status": {
+                  "type": "string",
+                  "enum": [
+                    "starting",
+                    "running",
+                    "working",
+                    "waiting",
+                    "done",
+                    "exited"
+                  ]
+                },
+                "createdAt": {
+                  "type": "number"
+                },
+                "lastActivityAt": {
+                  "type": "number"
+                },
+                "exitCode": {
+                  "description": "The exit code, or null while the process is alive."
+                }
+              },
+              "required": [
+                "id",
+                "kind",
+                "agent",
+                "worktreeId",
+                "cwd",
+                "title",
+                "status",
+                "createdAt",
+                "lastActivityAt",
+                "exitCode"
+              ]
+            }
+          },
+          "required": [
+            "session"
+          ]
+        }
+      },
+      {
+        "id": "removed",
+        "description": "A session was closed.",
+        "data": {
+          "type": "object",
+          "properties": {
+            "sessionId": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "sessionId"
+          ]
+        }
+      }
+    ],
+    "view": [
+      {
+        "id": "worktree",
+        "title": "Sessions"
+      }
+    ],
+    "command": [
+      {
+        "id": "new-shell",
+        "title": "New shell"
+      },
+      {
+        "id": "close-session",
+        "title": "Close session"
+      },
+      {
+        "id": "select-tab",
+        "title": "Select tab",
+        "args": {
+          "type": "object",
+          "properties": {
+            "index": {
+              "type": "integer"
+            }
+          },
+          "required": [
+            "index"
+          ]
+        }
+      }
+    ],
+    "keybinding": [
+      {
+        "id": "new-shell",
+        "key": "mod+t",
+        "command": "new-shell"
+      },
+      {
+        "id": "close-session",
+        "key": "mod+w",
+        "command": "close-session"
+      }
+    ],
+    "cli-command": [
+      {
+        "id": "list",
+        "words": "list",
+        "summary": "list sessions (all worktrees unless filtered)",
+        "flags": {
+          "worktree": {
+            "type": "string",
+            "description": "only sessions in this worktree"
+          }
+        },
+        "methods": [
+          "quirky.session/list"
+        ]
+      },
+      {
+        "id": "new",
+        "words": "new",
+        "summary": "start a session (shell, claude, codex, opencode, gemini); --background runs a structured session",
+        "flags": {
+          "agent": {
+            "type": "string",
+            "description": "agent kind to start",
+            "required": true
+          },
+          "worktree": {
+            "type": "string",
+            "description": "worktree selector (default: the current worktree)"
+          },
+          "prompt": {
+            "type": "string",
+            "description": "initial prompt"
+          },
+          "background": {
+            "type": "boolean",
+            "description": "run a structured session; needs --prompt"
+          }
+        },
+        "methods": [
+          "quirky.session/create",
+          "quirky.structured/create"
+        ]
+      },
+      {
+        "id": "close",
+        "words": "close",
+        "summary": "close a session and forget it",
+        "positionals": [
+          {
+            "name": "session",
+            "description": "the session to close",
+            "required": true
+          }
+        ],
+        "methods": [
+          "quirky.session/close"
+        ]
+      }
+    ]
+  }
+}

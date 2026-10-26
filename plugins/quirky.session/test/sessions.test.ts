@@ -1,0 +1,430 @@
+import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
+import { writeFileSync } from 'node:fs'
+import { join } from 'node:path'
+import { RpcErrorCode, QuirkyClient, type QuirkyEvent, type RpcError, type Session } from '@quirky/protocol'
+import { rpcUrl } from '@quirky/protocol/node'
+import { makeTempHome, waitFor, type Harness } from '../../../packages/daemon/test/helpers'
+import {
+  makeTempDir,
+  readMarker,
+  removeTempDirs,
+  waitForFile,
+  writeModulePlugin
+} from '../../../packages/daemon/test/plugins/fixtures'
+import { call, code, createSession, restartDaemon, SESSION_PLUGINS, startPluginHarness } from './support'
+
+let h: Harness
+let client: QuirkyClient
+let events: QuirkyEvent[]
+
+beforeEach(async () => {
+  h = await startPluginHarness(SESSION_PLUGINS)
+  ;({ client, events } = await h.connectWithEvents('cli'))
+})
+afterEach(async () => {
+  delete process.env.QUIRKY_TEST_VANISHED_WORKTREES
+  await h.cleanup()
+  removeTempDirs()
+})
+
+function spawned(sessionId: string) {
+  const request = h.pty.requests.find((r) => r.type === 'create' && r.sessionId === sessionId)
+  if (!request || request.type !== 'create') throw new Error('no create request')
+  return request
+}
+
+const eventsOf = (type: string) => events.filter((e) => e.type === type)
+const changedTo = (status: string) =>
+  events.find((e) => e.type === 'quirky.session/changed' && (e.data as { session: Session }).session.status === status)
+
+const exportPath = () => `export PATH="${h.home}/bin:$PATH"; `
+
+describe('quirky.session/create', () => {
+  test('starts a shell with the documented env and emits changed', async () => {
+    const session = await createSession(client, { worktree: 'id:wt_main', agent: 'shell', cols: 100, rows: 30 })
+    expect(session).toMatchObject({
+      kind: 'terminal',
+      agent: 'shell',
+      title: 'Shell',
+      status: 'running',
+      worktreeId: 'wt_main',
+      cwd: '/fake/alpha',
+      exitCode: null
+    })
+    expect(session.id).toMatch(/^s_[0-9a-f]+$/)
+
+    const request = spawned(session.id)
+    expect(request).toMatchObject({ cwd: '/fake/alpha', argv: ['/bin/zsh', '-l'], cols: 100, rows: 30 })
+    expect(request.env).toMatchObject({
+      TERM: 'xterm-256color',
+      COLORTERM: 'truecolor',
+      QUIRKY_HOME: h.home,
+      QUIRKY_SESSION_ID: session.id,
+      QUIRKY_WORKTREE_ID: 'wt_main',
+      QUIRKY_HOOK_URL: `http://127.0.0.1:${h.runtime.port}/hook`,
+      QUIRKY_HOOK_TOKEN: h.runtime.hookToken
+    })
+    expect(request.env.PATH.startsWith(`${h.home}/bin:`)).toBe(true)
+    await waitFor(() => events.find((e) => e.type === 'quirky.session/changed'))
+    expect(await call(client, 'quirky.session/list', { worktree: 'id:wt_main' })).toHaveLength(1)
+  })
+
+  test('uses a 80x24 terminal unless told otherwise', async () => {
+    const session = await createSession(client, { worktree: 'id:wt_main', agent: 'shell' })
+    expect(spawned(session.id)).toMatchObject({ cols: 80, rows: 24 })
+  })
+
+  test('claude, codex and gemini run under the login shell with their prompt and launch-hook args', async () => {
+    const claude = await createSession(client, { worktree: 'id:wt_main', agent: 'claude', prompt: 'do the thing' })
+    expect(claude.title).toBe('Claude')
+    expect(spawned(claude.id).argv).toEqual([
+      '/bin/zsh',
+      '-l',
+      '-c',
+      `${exportPath()}exec claude '--settings' '${h.home}/hooks/claude-settings.json' 'do the thing'`
+    ])
+    const codex = await createSession(client, { worktree: 'id:wt_main', agent: 'codex' })
+    expect(spawned(codex.id).argv[3]).toBe(
+      `${exportPath()}exec codex '-c' 'notify=["${h.home}/bin/quirky-hook","codex"]'`
+    )
+    const gemini = await createSession(client, { worktree: 'id:wt_main', agent: 'gemini', prompt: 'x' })
+    expect(spawned(gemini.id).argv[3]).toBe(`${exportPath()}exec gemini --prompt-interactive 'x'`)
+    const opencode = await createSession(client, { worktree: 'id:wt_main', agent: 'opencode', prompt: 'x' })
+    expect(spawned(opencode.id).argv[3]).toBe(`${exportPath()}exec opencode --prompt 'x'`)
+  })
+
+  test('numbers titles per worktree when one is taken', async () => {
+    const create = async (agent: 'shell' | 'claude', worktree = 'id:wt_main') =>
+      (await createSession(client, { worktree, agent })).title
+    expect(await create('shell')).toBe('Shell')
+    expect(await create('shell')).toBe('Shell 2')
+    expect(await create('claude')).toBe('Claude')
+    expect(await create('claude')).toBe('Claude 2')
+    expect(await create('shell')).toBe('Shell 3')
+    const sessions = await call<Session[]>(client, 'quirky.session/list', { worktree: 'id:wt_main' })
+    await call(client, 'quirky.session/close', { session: sessions.find((s) => s.title === 'Shell')!.id })
+    expect(await create('shell')).toBe('Shell')
+    expect(await create('shell', 'id:wt_other')).toBe('Shell')
+  })
+
+  test('shell sessions in zsh get the ZDOTDIR wrapper and the user dir to hand back to', async () => {
+    const session = await createSession(client, { worktree: 'id:wt_main', agent: 'shell' })
+    const env = spawned(session.id).env
+    expect(env.ZDOTDIR).toBe(join(h.home, 'shell', 'zsh'))
+    expect(env.QUIRKY_ORIG_ZDOTDIR).toBe((process.env.ZDOTDIR || process.env.HOME) as string)
+    const claude = await createSession(client, { worktree: 'id:wt_main', agent: 'claude' })
+    expect(spawned(claude.id).env.ZDOTDIR).toBe(process.env.ZDOTDIR as string)
+  })
+
+  test('rejects unknown worktrees and agents', async () => {
+    expect(await code(createSession(client, { worktree: 'id:wt_nope', agent: 'shell' }))).toBe(RpcErrorCode.NotFound)
+    expect(await code(createSession(client, { worktree: 'id:wt_main', agent: 'vim' }))).toBe(RpcErrorCode.InvalidParams)
+    expect(await call(client, 'quirky.session/list')).toEqual([])
+  })
+
+  test('a failed spawn leaves no record and says which agent did not start', async () => {
+    h.pty.failRequests('create', 'no such shell')
+    const error = await createSession(client, { worktree: 'id:wt_main', agent: 'codex' }).catch((e: RpcError) => e)
+    expect((error as RpcError).code).toBe(RpcErrorCode.Internal)
+    expect((error as RpcError).message).toContain('could not start codex: no such shell')
+    expect(await call(client, 'quirky.session/list')).toEqual([])
+  })
+
+  test('SC-22: sessions run under the login shell with the launch environment', async () => {
+    await h.cleanup()
+    removeTempDirs()
+    const home = makeTempHome()
+    const marker = join(makeTempDir(), 'marker.log')
+    writeModulePlugin(
+      join(home, 'plugins'),
+      marker,
+      { id: 'acme.env', contributes: { 'launch-hook': [{ id: 'vars', agents: ['claude'] }] } },
+      { activate: `context.provide('launch-hook:acme.env/vars', () => ({ env: { FOO: '1' } }))` }
+    )
+    h = await startPluginHarness(SESSION_PLUGINS, { home })
+    client = await h.connect('cli')
+
+    const claude = await createSession(client, { worktree: 'id:wt_main', agent: 'claude', prompt: 'hi' })
+    const request = spawned(claude.id)
+    expect(request.cwd).toBe('/fake/alpha')
+    expect(request.argv).toEqual([
+      '/bin/zsh',
+      '-l',
+      '-c',
+      `${exportPath()}exec claude '--settings' '${h.home}/hooks/claude-settings.json' 'hi'`
+    ])
+    expect(request.env).toMatchObject({
+      FOO: '1',
+      QUIRKY_HOME: h.home,
+      QUIRKY_SESSION_ID: claude.id,
+      QUIRKY_WORKTREE_ID: 'wt_main',
+      QUIRKY_HOOK_URL: `http://127.0.0.1:${h.runtime.port}/hook`,
+      QUIRKY_HOOK_TOKEN: h.runtime.hookToken
+    })
+    expect(request.env.PATH.startsWith(`${h.home}/bin:`)).toBe(true)
+
+    const codex = await createSession(client, { worktree: 'id:wt_main', agent: 'codex' })
+    expect(spawned(codex.id).argv[3]).toContain(`'-c' 'notify=[`)
+    expect(spawned(codex.id).env.FOO).toBeUndefined()
+  })
+
+  test('a launch hook removing an env name removes it from the session', async () => {
+    await h.cleanup()
+    const home = makeTempHome()
+    const marker = join(makeTempDir(), 'marker.log')
+    writeModulePlugin(
+      join(home, 'plugins'),
+      marker,
+      { id: 'acme.drop', contributes: { 'launch-hook': [{ id: 'drop', agents: ['shell'] }] } },
+      { activate: `context.provide('launch-hook:acme.drop/drop', () => ({ env: { HOME: null, FOO: '2' } }))` }
+    )
+    h = await startPluginHarness(SESSION_PLUGINS, { home })
+    client = await h.connect('cli')
+    const session = await createSession(client, { worktree: 'id:wt_main', agent: 'shell' })
+    const env = spawned(session.id).env
+    expect('HOME' in env).toBe(false)
+    expect(env.FOO).toBe('2')
+  })
+
+  test('closing a session while its launch hooks are pending never spawns its terminal', async () => {
+    await h.cleanup()
+    const home = makeTempHome()
+    const workDir = makeTempDir()
+    const marker = join(workDir, 'marker.log')
+    const release = join(workDir, 'release')
+    writeModulePlugin(
+      join(home, 'plugins'),
+      marker,
+      { id: 'acme.slow', contributes: { 'launch-hook': [{ id: 'wait', agents: ['claude'] }] } },
+      {
+        activate: `context.provide('launch-hook:acme.slow/wait', async () => {
+          record('hook waiting')
+          ${waitForFile(release)}
+          return { env: {}, args: [] }
+        })`
+      }
+    )
+    h = await startPluginHarness(SESSION_PLUGINS, { home })
+    try {
+      client = await h.connect('cli')
+      const creating = createSession(client, { worktree: 'id:wt_main', agent: 'claude' })
+      const failure = creating.then(
+        () => null,
+        (error: RpcError) => error
+      )
+      await waitFor(() => readMarker(marker).includes('hook waiting') || undefined)
+      const [pending] = await call<Session[]>(client, 'quirky.session/list', { worktree: 'id:wt_main' })
+      expect(pending).toMatchObject({ status: 'starting' })
+
+      await call(client, 'quirky.session/close', { session: pending!.id })
+      writeFileSync(release, '')
+
+      const error = await failure
+      expect(error?.code).toBe(RpcErrorCode.Conflict)
+      expect(error?.message).toContain('closed before its terminal started')
+      expect(h.pty.requests.some((r) => r.type === 'create' && r.sessionId === pending!.id)).toBe(false)
+      expect(h.pty.sessions.has(pending!.id)).toBe(false)
+      expect(await call(client, 'quirky.session/list')).toEqual([])
+    } finally {
+      writeFileSync(release, '')
+    }
+  })
+})
+
+describe('SC-21: defaults come from the caller identity', () => {
+  const connect = (hello: { cwd?: string; sessionId?: string; worktreeId?: string }) =>
+    QuirkyClient.connect(rpcUrl(h.runtime), { role: 'cli', ...hello })
+
+  test('a call without a worktree uses the caller worktree over its cwd', async () => {
+    const inside = await connect({ cwd: '/fake/other/src', worktreeId: 'wt_main' })
+    try {
+      const session = await createSession(inside, { agent: 'shell' })
+      expect(session.worktreeId).toBe('wt_main')
+      expect(spawned(session.id).cwd).toBe('/fake/alpha')
+    } finally {
+      inside.close()
+    }
+  })
+
+  test('a call without a worktree falls back to the worktree containing the cwd', async () => {
+    const inside = await connect({ cwd: '/fake/other/src' })
+    try {
+      expect((await createSession(inside, { agent: 'shell' })).worktreeId).toBe('wt_other')
+    } finally {
+      inside.close()
+    }
+  })
+
+  test('a call without a worktree from nowhere is NotFound', async () => {
+    expect(await code(createSession(client, { agent: 'shell' }))).toBe(RpcErrorCode.NotFound)
+  })
+
+  test('selectors name the worktree', async () => {
+    expect((await createSession(client, { worktree: 'branch:other', agent: 'shell' })).worktreeId).toBe('wt_other')
+    expect((await createSession(client, { worktree: 'wt_other', agent: 'shell' })).worktreeId).toBe('wt_other')
+    expect(await code(createSession(client, { worktree: 'main', agent: 'shell' }))).toBe(RpcErrorCode.Conflict)
+  })
+})
+
+describe('quirky.session/close', () => {
+  test('forgets the session and emits removed', async () => {
+    const session = await createSession(client, { worktree: 'id:wt_main', agent: 'shell' })
+    await call(client, 'quirky.session/close', { session: session.id })
+    expect(h.pty.requests.some((r) => r.type === 'forget' && r.sessionId === session.id)).toBe(true)
+    expect(await call(client, 'quirky.session/list')).toEqual([])
+    await waitFor(() => events.find((e) => e.type === 'quirky.session/removed'))
+    expect(eventsOf('quirky.session/removed')[0]).toMatchObject({ data: { sessionId: session.id } })
+  })
+
+  test('keeps the session when the pty host fails to forget it, and succeeds on retry', async () => {
+    const session = await createSession(client, { worktree: 'id:wt_main', agent: 'shell' })
+    h.pty.failRequests('forget', 'pty host connection lost')
+    expect(await code(call(client, 'quirky.session/close', { session: session.id }))).toBe(RpcErrorCode.Internal)
+    expect((await call<Session[]>(client, 'quirky.session/list')).map((s) => s.id)).toEqual([session.id])
+    expect(eventsOf('quirky.session/removed')).toHaveLength(0)
+
+    h.pty.failRequests('forget', null)
+    await call(client, 'quirky.session/close', { session: session.id })
+    expect(await call(client, 'quirky.session/list')).toEqual([])
+  })
+
+  test('still removes a session the pty host no longer knows', async () => {
+    const session = await createSession(client, { worktree: 'id:wt_main', agent: 'shell' })
+    h.pty.sessions.delete(session.id)
+    await call(client, 'quirky.session/close', { session: session.id })
+    expect(await call(client, 'quirky.session/list')).toEqual([])
+    await waitFor(() => events.find((e) => e.type === 'quirky.session/removed'))
+  })
+
+  test('an unknown session is NotFound', async () => {
+    expect(await code(call(client, 'quirky.session/close', { session: 's_nope' }))).toBe(RpcErrorCode.NotFound)
+    expect(await code(call(client, 'quirky.session/get', { session: 's_nope' }))).toBe(RpcErrorCode.NotFound)
+  })
+})
+
+describe('registered sessions', () => {
+  test('a structured session is a record with no terminal, closed without touching the pty host', async () => {
+    const session = await call<Session>(client, 'quirky.session/register', {
+      worktree: 'id:wt_main',
+      agent: 'claude',
+      kind: 'structured',
+      title: 'Claude'
+    })
+    expect(session).toMatchObject({ kind: 'structured', agent: 'claude', title: 'Claude', status: 'starting', worktreeId: 'wt_main' })
+    await waitFor(() => changedTo('starting'))
+    const second = await call<Session>(client, 'quirky.session/register', {
+      worktree: 'id:wt_main',
+      agent: 'claude',
+      kind: 'structured',
+      title: 'Claude'
+    })
+    expect(second.title).toBe('Claude 2')
+    expect(h.pty.requests.some((r) => r.type === 'create')).toBe(false)
+
+    await call(client, 'quirky.session/close', { session: session.id })
+    expect(h.pty.requests.some((r) => r.type === 'forget')).toBe(false)
+    expect((await call<Session[]>(client, 'quirky.session/list')).map((s) => s.id)).toEqual([second.id])
+    await waitFor(() => events.find((e) => e.type === 'quirky.session/removed'))
+  })
+
+  test('only structured sessions can be registered', async () => {
+    expect(
+      await code(call(client, 'quirky.session/register', { worktree: 'id:wt_main', agent: 'claude', kind: 'terminal', title: 'x' }))
+    ).toBe(RpcErrorCode.InvalidParams)
+  })
+})
+
+describe('quirky.session/setStatus', () => {
+  test('records the status, emits changed only when it differs, and bumps activity', async () => {
+    const session = await createSession(client, { worktree: 'id:wt_main', agent: 'claude' })
+    await waitFor(() => changedTo('running'))
+    const before = eventsOf('quirky.session/changed').length
+    const working = await call<Session>(client, 'quirky.session/setStatus', { session: session.id, status: 'working' })
+    expect(working).toMatchObject({ id: session.id, status: 'working' })
+    expect(working.lastActivityAt).toBeGreaterThanOrEqual(session.lastActivityAt)
+    await waitFor(() => eventsOf('quirky.session/changed').length === before + 1 || undefined)
+
+    await call(client, 'quirky.session/setStatus', { session: session.id, status: 'working' })
+    await Bun.sleep(40)
+    expect(eventsOf('quirky.session/changed')).toHaveLength(before + 1)
+    expect(await call(client, 'quirky.session/get', { session: session.id })).toMatchObject({ status: 'working' })
+  })
+
+  test('exited records the exit code once', async () => {
+    const session = await createSession(client, { worktree: 'id:wt_main', agent: 'shell' })
+    await call(client, 'quirky.session/setStatus', { session: session.id, status: 'exited', exitCode: 7 })
+    expect(await call(client, 'quirky.session/get', { session: session.id })).toMatchObject({ status: 'exited', exitCode: 7 })
+    await call(client, 'quirky.session/setStatus', { session: session.id, status: 'exited', exitCode: 9 })
+    expect(await call(client, 'quirky.session/get', { session: session.id })).toMatchObject({ exitCode: 7 })
+  })
+
+  test('an unknown session is NotFound and a bad status is InvalidParams', async () => {
+    expect(await code(call(client, 'quirky.session/setStatus', { session: 's_nope', status: 'working' }))).toBe(RpcErrorCode.NotFound)
+    const session = await createSession(client, { worktree: 'id:wt_main', agent: 'shell' })
+    expect(await code(call(client, 'quirky.session/setStatus', { session: session.id, status: 'sleeping' }))).toBe(
+      RpcErrorCode.InvalidParams
+    )
+  })
+})
+
+describe('quirky.session/list', () => {
+  test('lists all sessions, or those of one worktree selector', async () => {
+    const main = await createSession(client, { worktree: 'id:wt_main', agent: 'shell' })
+    const other = await createSession(client, { worktree: 'id:wt_other', agent: 'shell' })
+    expect((await call<Session[]>(client, 'quirky.session/list')).map((s) => s.id)).toEqual([main.id, other.id])
+    expect((await call<Session[]>(client, 'quirky.session/list', { worktree: 'name:other' })).map((s) => s.id)).toEqual([other.id])
+    expect(await code(call(client, 'quirky.session/list', { worktree: 'name:nope' }))).toBe(RpcErrorCode.NotFound)
+  })
+
+  test('a worktree that no longer resolves can still be listed while sessions point at it', async () => {
+    const session = await createSession(client, { worktree: 'id:wt_other', agent: 'shell' })
+    process.env.QUIRKY_TEST_VANISHED_WORKTREES = 'wt_other'
+    expect((await call<Session[]>(client, 'quirky.session/list', { worktree: 'id:wt_other' })).map((s) => s.id)).toEqual([session.id])
+    expect((await call<Session[]>(client, 'quirky.session/list', { worktree: 'wt_other' })).map((s) => s.id)).toEqual([session.id])
+    expect(await code(call(client, 'quirky.session/list', { worktree: 'name:other' }))).toBe(RpcErrorCode.NotFound)
+    expect(await code(call(client, 'quirky.session/list', { worktree: 'id:wt_never' }))).toBe(RpcErrorCode.NotFound)
+  })
+})
+
+describe('exit and reconciliation', () => {
+  test('pty exit marks the session exited with its code', async () => {
+    const session = await createSession(client, { worktree: 'id:wt_main', agent: 'shell' })
+    h.pty.exit(session.id, 3)
+    const event = await waitFor(() => changedTo('exited'))
+    expect(event).toMatchObject({ data: { session: { id: session.id, exitCode: 3 } } })
+    expect((await call<Session[]>(client, 'quirky.session/list'))[0]).toMatchObject({ status: 'exited', exitCode: 3 })
+  })
+
+  test('a pty host that lost a session marks it exited after the connection comes back', async () => {
+    const lost = await createSession(client, { worktree: 'id:wt_main', agent: 'shell' })
+    const kept = await createSession(client, { worktree: 'id:wt_main', agent: 'shell' })
+    h.pty.sessions.delete(lost.id)
+    h.pty.dropConnections()
+    await waitFor(() => events.find((e) => e.type === 'quirky.session/changed' && (e.data as { session: Session }).session.id === lost.id && (e.data as { session: Session }).session.status === 'exited'), 5000)
+    const sessions = await call<Session[]>(client, 'quirky.session/list')
+    expect(sessions.find((s) => s.id === lost.id)).toMatchObject({ status: 'exited', exitCode: null })
+    expect(sessions.find((s) => s.id === kept.id)).toMatchObject({ status: 'running' })
+  })
+
+  test('a daemon restart marks sessions the host no longer has as exited and leaves live ones', async () => {
+    const lost = await createSession(client, { worktree: 'id:wt_main', agent: 'shell' })
+    const kept = await createSession(client, { worktree: 'id:wt_main', agent: 'shell' })
+    const structured = await call<Session>(client, 'quirky.session/register', {
+      worktree: 'id:wt_main',
+      agent: 'claude',
+      kind: 'structured',
+      title: 'Claude'
+    })
+    await call(client, 'quirky.session/setStatus', { session: structured.id, status: 'working' })
+    h.pty.sessions.delete(lost.id)
+    const again = await restartDaemon(h)
+    try {
+      const sessions = await call<Session[]>(again.client, 'quirky.session/list')
+      expect(sessions.find((s) => s.id === lost.id)).toMatchObject({ status: 'exited' })
+      expect(sessions.find((s) => s.id === kept.id)).toMatchObject({ status: 'running' })
+      expect(sessions.find((s) => s.id === structured.id)).toMatchObject({ status: 'exited' })
+    } finally {
+      await again.stop()
+    }
+  })
+})
