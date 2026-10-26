@@ -29,6 +29,7 @@ const SCHEMA_KEYWORDS = [
   'maximum',
   'default'
 ]
+const MAX_SCHEMA_DEPTH = 32
 const SCHEMA_TYPES: readonly string[] = ['string', 'integer', 'number', 'boolean', 'array', 'object', 'null']
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
@@ -43,7 +44,7 @@ function ownValue(object: Record<string, unknown>, key: string): unknown {
   return Object.hasOwn(object, key) ? object[key] : undefined
 }
 
-function checkSchemaNode(node: Record<string, unknown>, at: string, problems: string[]): void {
+function checkSchemaNode(node: Record<string, unknown>, at: string, problems: string[], depth: number): void {
   const problem = (text: string) => problems.push(`${at}: ${text}`)
   const type = node.type
   const typeIsKnown = typeof type === 'string' && SCHEMA_TYPES.includes(type)
@@ -75,7 +76,7 @@ function checkSchemaNode(node: Record<string, unknown>, at: string, problems: st
 
   if ('items' in node) {
     if (type !== undefined && type !== 'array') problem('items is only allowed for an array')
-    else collectSchemaProblems(node.items, `${at}.items`, problems)
+    else collectSchemaProblems(node.items, `${at}.items`, problems, depth + 1)
   }
 
   const properties = node.properties
@@ -85,7 +86,7 @@ function checkSchemaNode(node: Record<string, unknown>, at: string, problems: st
     else if (!typeIs('object')) problem('properties is only allowed for an object')
     else {
       declared = Object.keys(properties)
-      for (const name of declared) collectSchemaProblems(properties[name], `${at}.properties.${name}`, problems)
+      for (const name of declared) collectSchemaProblems(properties[name], `${at}.properties.${name}`, problems, depth + 1)
     }
   }
 
@@ -117,9 +118,10 @@ function checkSchemaNode(node: Record<string, unknown>, at: string, problems: st
   }
 }
 
-function collectSchemaProblems(value: unknown, at: string, problems: string[]): void {
-  if (!isPlainObject(value)) problems.push(`${at} must be a schema object`)
-  else checkSchemaNode(value, at, problems)
+function collectSchemaProblems(value: unknown, at: string, problems: string[], depth: number): void {
+  if (depth > MAX_SCHEMA_DEPTH) problems.push(`${at}: schema nests deeper than ${MAX_SCHEMA_DEPTH} levels`)
+  else if (!isPlainObject(value)) problems.push(`${at} must be a schema object`)
+  else checkSchemaNode(value, at, problems, depth)
 }
 
 /**
@@ -130,7 +132,7 @@ export function checkSchemaDeclaration(value: unknown, at: string, options: { ob
   const problems: string[] = []
   if (!isPlainObject(value)) return [`${at} must be a schema object`]
   if (options.object && value.type !== 'object') problems.push(`${at} must be an object schema`)
-  checkSchemaNode(value, at, problems)
+  checkSchemaNode(value, at, problems, 1)
   return problems
 }
 

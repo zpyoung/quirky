@@ -128,6 +128,15 @@ describe('valid schema declarations', () => {
     expect(result(method({ result: { type: 'array', items: { type: 'string' } } })).ok).toBe(true)
   })
 
+  test('a result schema nested far beyond the call stack makes the plugin invalid without throwing', () => {
+    const levels = 20_000
+    const deep = '{"type":"array","items":'.repeat(levels) + '{}' + '}'.repeat(levels)
+    const text = `{"id":"acme","name":"Acme","version":"1.0.0","contributes":{"method":[{"id":"m","result":${deep}}]}}`
+    const parsed = parseManifest(text, { dirName: 'acme', dir: '/plugins/acme', source: 'installed' })
+    expect(parsed.ok).toBe(false)
+    if (!parsed.ok) expect(parsed.errors.some((error) => error.startsWith('method m: result'))).toBe(true)
+  })
+
   test('properties that differ only after the flag mapping are distinct', () => {
     const params = { type: 'object', properties: { fooBar: { type: 'string' }, foobar: { type: 'string' } } }
     expect(result(method({ params })).ok).toBe(true)
