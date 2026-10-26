@@ -92,14 +92,21 @@ export function paramsFromArgs(command: Command, args: ParsedArgs, schema: Schem
   return params
 }
 
-function generatedCommand(entry: ApiMethodEntry, plugin: string): Command {
+/**
+ * A command that calls one catalog method with flags derived from its params schema. Plugin methods
+ * get CLI words (`<group> <name>`); kernel methods keep their wire name, since only `api call` uses them.
+ */
+export function commandForMethod(entry: ApiMethodEntry): Command {
   const command: Command = {
-    name: `${groupOf(plugin)} ${entry.name.slice(entry.name.indexOf('/') + 1)}`,
+    name:
+      entry.plugin === null
+        ? entry.name
+        : `${groupOf(entry.plugin)} ${entry.name.slice(entry.name.indexOf('/') + 1)}`,
     summary: entry.description?.split('\n')[0] ?? '',
     positionals: [],
     flags: flagsFor(entry.params),
     methods: [entry.name],
-    plugin,
+    plugin: entry.plugin,
     deferRequired: true,
     async run(args, ctx) {
       const params = paramsFromArgs(command, args, entry.params)
@@ -112,5 +119,5 @@ function generatedCommand(entry: ApiMethodEntry, plugin: string): Command {
 
 /** One CLI command per plugin method in the daemon's catalog; kernel methods are not commands. */
 export function generatedCommands(description: ApiDescription): Command[] {
-  return description.methods.flatMap((entry) => (entry.plugin === null ? [] : [generatedCommand(entry, entry.plugin)]))
+  return description.methods.filter((entry) => entry.plugin !== null).map(commandForMethod)
 }

@@ -104,7 +104,7 @@ describe('kernel command declarations', () => {
     if (!sources.has(file)) sources.set(file, readFileSync(join(import.meta.dir, '../src/commands', `${file}.ts`), 'utf8'))
     return sources.get(file) as string
   }
-  const sourceFiles = ['ask', 'job', 'open', 'plugin', 'repo', 'session', 'setting', 'status', 'term', 'theme', 'ui', 'worktree', 'support']
+  const sourceFiles = ['api', 'ask', 'job', 'open', 'plugin', 'repo', 'session', 'setting', 'status', 'term', 'theme', 'ui', 'worktree', 'support']
 
   test('every kernel command is declared as a kernel command with a summary', () => {
     for (const command of COMMANDS) {
