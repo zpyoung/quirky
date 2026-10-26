@@ -186,6 +186,27 @@ describe('OutputScanner split safety', () => {
     }
   })
 
+  test('an OSC that ends while its payload is a marker prefix passes through in order at every split position', () => {
+    const cases: { input: string; facts: ScanFact[] }[] = [
+      { input: `${ESC}]7;file://h/tmp${BEL}`, facts: [{ kind: 'cwd', cwd: '/tmp' }] },
+      { input: `${ESC}]777${BEL}`, facts: [] },
+      { input: `${ESC}]777;quirky${BEL}`, facts: [] },
+      { input: `${ESC}]777;quirky${ST}`, facts: [] },
+      { input: `${ESC}]7${ST}`, facts: [] },
+      { input: `${ESC}]7${BEL}X`, facts: [] },
+    ]
+    for (const { input, facts } of cases) {
+      const bytes = enc(input)
+      expect(scanAll([bytes]).bytes).toEqual(bytes)
+      for (let i = 0; i <= bytes.length; i++) {
+        const r = scanAll([bytes.subarray(0, i), bytes.subarray(i)])
+        expect(dec(r.bytes)).toBe(input)
+        expect(r.facts).toEqual(facts)
+      }
+      expect(byteWise(bytes).bytes).toEqual(bytes)
+    }
+  })
+
   test('held marker bytes are released in the push that rules out the marker', () => {
     const scanner = new OutputScanner()
     expect(dec(scanner.push(enc(`a${ESC}]777;quirk`)).bytes)).toBe('a')
