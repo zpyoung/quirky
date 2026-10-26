@@ -84,7 +84,8 @@ export function createPluginRuntime(options: PluginRuntimeOptions): PluginRuntim
             }
             return opened.store
           }
-          const created = openPluginStore({ home, pluginId: id, migrations, isActive: () => !isRevoked() })
+          // the handle stays usable inside deactivate; extension.revoke closes it afterwards
+          const created = openPluginStore({ home, pluginId: id, migrations, isActive: () => true })
           opened = { ...created, migrations: migrations.length }
           openedStores.set(id, opened)
           return opened.store
