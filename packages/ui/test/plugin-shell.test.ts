@@ -1,5 +1,6 @@
 import { expect, test } from 'bun:test'
 import type { SettingInfo } from '@quirky/protocol'
+import { sessionForDigit } from '../src/lib/shortcuts'
 import { terminalColors } from '../src/lib/terminalTheme'
 import { isPaletteChord, paletteKey } from '../src/plugins/palette'
 import { changedSettings, draftOf } from '../src/plugins/settingsDraft'
@@ -86,4 +87,13 @@ test('terminalColors reads the three tokens and falls back per color', () => {
     foreground: '#d7dae0',
     cursor: '#000'
   })
+})
+
+test('Cmd+digit picks the session at that position and nothing else', () => {
+  const sessions = ['a', 'b', 'c']
+  expect(sessionForDigit(sessions, '1')).toBe('a')
+  expect(sessionForDigit(sessions, '3')).toBe('c')
+  expect(sessionForDigit(sessions, '4')).toBeUndefined()
+  expect(sessionForDigit(sessions, '0')).toBeUndefined()
+  expect(sessionForDigit(sessions, 'a')).toBeUndefined()
 })

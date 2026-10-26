@@ -18,11 +18,15 @@ export function PluginSlot({ id, input }: Props) {
   ].find((candidate) => candidate.id === id)
   const slot = state.slots[id] ?? { status: 'loading' as const }
 
+  const plugin = entry?.plugin
+  const module = entry?.module
+
+  // the host drops a mount whose owner changed, so the owner and its module are part of the mount's identity
   useEffect(() => {
     const element = body.current
     if (!element) return
     return host.mount(id, element, { input })
-  }, [host, id, input])
+  }, [host, id, input, plugin, module])
 
   return (
     <section className="plugin-slot" data-plugin-slot={id}>

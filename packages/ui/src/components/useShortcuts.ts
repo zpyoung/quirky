@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react'
 import { closeSession, createSession } from '../actions'
 import { useAppState, useConnection, useDispatch, usePluginHost } from '../context'
+import { sessionForDigit } from '../lib/shortcuts'
 import { sessionsOf } from '../lib/state'
 import { isPaletteChord } from '../plugins/palette'
 
@@ -32,10 +33,12 @@ export function useShortcuts(togglePalette: () => void): void {
         event.preventDefault()
         const session = sessions.find((s) => s.id === current.selectedSessionId)
         if (session) void closeSession(connection, session)
-      } else if (/^[1-9]$/.test(event.key)) {
-        const session = sessions[Number(event.key) - 1]
+      } else {
+        const session = sessionForDigit(sessions, event.key)
         if (session) {
           event.preventDefault()
+          // selecting the already-selected session changes no state, so MainArea can't close the view
+          host.closeView()
           dispatch({ type: 'selectSession', id: session.id })
         }
       }
