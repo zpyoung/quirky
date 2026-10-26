@@ -407,4 +407,5 @@
 - **Source:** assumed — autonomous
 
 ## Progress
-Step 5: specs reviewed and committed. Next: build per D39, W1 scaffold first. Run journal: scratchpad journal.md of the current session.
+
+Step 5, build. W1 (scaffold) merged at 33aa410; its checkpoint skipped (types and stubs; W2 checkpoint covers it). W2 (kernel modules K1-K7) in progress on sdd/w2-* worktrees. If this iteration stops, the next one restarts W2 from 33aa410 (worktrees under the old session scratchpad are disposable) and follows D39.
