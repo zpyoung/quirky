@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test'
-import { UsageError, flagBoolean, flagInt, flagString, parseArgs, wantsHelp } from '../src/args'
+import { UsageError, extractGlobals, flagBoolean, flagInt, flagString, parseArgs, wantsHelp } from '../src/args'
+import { isGlobalToken } from '../src/commands'
 import type { FlagSpec } from '../src/command-spec'
 
 const defs: Record<string, FlagSpec> = {
@@ -72,7 +73,7 @@ describe('parseArgs', () => {
   test('unknown long flags name the command and the valid flags', () => {
     const only: Record<string, FlagSpec> = { repo: { type: 'string', description: 'r' } }
     expect(() => parseArgs(['--bogus'], only, 'wt list')).toThrow(
-      'unknown flag --bogus for wt list\nvalid flags: --repo, --json, --help'
+      'unknown flag --bogus for wt list\nvalid flags: --repo, --json, --help, --yes, --retry-request'
     )
     expect(() => parseArgs(['--bogus'], only, 'wt list')).toThrow(UsageError)
   })
@@ -139,5 +140,33 @@ describe('wantsHelp', () => {
     expect(wantsHelp(['--name=--help'], defs)).toBe(false)
     expect(wantsHelp(['--name', '--help'], defs)).toBe(false)
     expect(wantsHelp(['--name'], defs)).toBe(false)
+  })
+})
+
+describe('extractGlobals', () => {
+  test('takes --yes and --retry-request out wherever they stand before --', () => {
+    expect(extractGlobals(['--yes', 'wt', 'rm', 'x', '--retry-request', 'r-1', '--force'])).toEqual({
+      argv: ['wt', 'rm', 'x', '--force'],
+      options: { yes: true, retryRequest: 'r-1' }
+    })
+    expect(extractGlobals(['status', '--retry-request=r-2', '--yes=false']).options).toEqual({ yes: false, retryRequest: 'r-2' })
+  })
+
+  test('leaves everything after -- alone', () => {
+    expect(extractGlobals(['api', 'call', 'x', '--', '--yes']).argv).toEqual(['api', 'call', 'x', '--', '--yes'])
+    expect(extractGlobals(['api', '--', '--yes']).options.yes).toBe(false)
+  })
+
+  test('a missing, empty or over-long request ID is a usage error', () => {
+    expect(() => extractGlobals(['status', '--retry-request'])).toThrow('--retry-request requires a value')
+    expect(() => extractGlobals(['--retry-request', '--json'])).toThrow('--retry-request requires a value')
+    expect(() => extractGlobals(['--retry-request='])).toThrow(UsageError)
+    expect(() => extractGlobals(['--retry-request', 'x'.repeat(64)])).not.toThrow()
+    expect(() => extractGlobals(['--retry-request', 'x'.repeat(65)])).toThrow('at most 64 characters')
+  })
+
+  test('the global switches are known to routing', () => {
+    for (const token of ['--yes', '--version', '-v', '--json', '-h']) expect(isGlobalToken(token)).toBe(true)
+    expect(isGlobalToken('--retry-request')).toBe(false)
   })
 })

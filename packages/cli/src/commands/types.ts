@@ -33,5 +33,7 @@ export type Command = {
   deferRequired?: true
   /** The `kernel <name>` or `<plugin> <name>` command that wins over this generated one. */
   shadowedBy?: string
+  /** Set on an alias word: the primary command's name, whose listing carries it. */
+  aliasOf?: string
   run(args: ParsedArgs, ctx: Context): Promise<void>
 }
