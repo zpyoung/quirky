@@ -277,5 +277,26 @@
 - **Confidence:** medium
 - **Source:** assumed — autonomous
 
+## D28: Root help and kernel help stay offline and point to `quirky api` for plugin commands
+- **Question:** tech-spec feasibility: SC-16 had root help list plugin groups, which needs the daemon, and `packages/cli/test/cli.e2e.test.ts:310` pins that help never contacts the daemon
+- **Options:** fetch the catalog for root help and change the test; keep kernel help offline and add a pointer to `quirky api`
+- **Chose:** keep it offline. Root help and help for a group with kernel commands print kernel commands and end with `run 'quirky api' to list every command, including plugins'`. Help for a plugin-only group or command reads the catalog. The logic spec's SC-16 is amended.
+- **Why:** help that works with no daemon, and fast, is behavior v1 tests lock and Orca's CLI also keeps (`--help` and flag errors never load the runtime client). Agents discover through `quirky api` anyway.
+- **Evidence:** packages/cli/test/cli.e2e.test.ts:310; research/orca-features/cli.md "Processes and files"
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** people miss plugin groups in `quirky --help`
+- **Source:** assumed — autonomous
+
+## D29: Tech-spec mechanisms: one shared validator in protocol, validation in the dispatcher, declarative command specs, a JSON-mode pre-scan
+- **Question:** the `[tech-spec]` Deferred Ideas from the logic spec
+- **Options:** validator in the daemon only or in protocol shared with the CLI; validation at the WebSocket layer or in `Dispatcher.dispatch`; command specs beside `FlagDefs` or replacing them; JSON error mode from parsed flags or from a pre-scan
+- **Chose:** `validateValue` and `checkSchemaDeclaration` in `packages/protocol/src/schema.ts`, so the CLI and daemon print the same messages; validation in `Dispatcher.dispatch`, which also covers plugins' `context.call`; `Command` gains positionals, typed flags, methods and source, and usage lines are derived; `--json` is found by a pre-scan so parse errors can be JSON; `job run` gets a `CommandFailed` error so its stdout stays one JSON document; suggestions by Levenshtein distance up to 2 or a prefix, from the commands known after the catalog fetch.
+- **Why:** each is the smallest change that keeps an existing contract: plugins' calls go through the dispatcher (`packages/daemon/src/plugins/runtime.ts:75-80`), and `job.test.ts` parses stdout of a failed run
+- **Evidence:** packages/daemon/src/plugins/dispatch.ts:34-53; packages/cli/src/main.ts:47-50; packages/cli/test/job.test.ts
+- **Reversibility:** medium
+- **Confidence:** medium
+- **Source:** assumed — autonomous
+
 ## Progress
 Logic spec written, reviewed and amended (D26). Next: write tech.md beside it and review it with Codex.

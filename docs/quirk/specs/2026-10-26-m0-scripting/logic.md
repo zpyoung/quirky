@@ -5,6 +5,7 @@
 **Status:** Approved (headless build loop; decisions in [m0-scripting.md](../../../loop/decisions/m0-scripting.md)). Tech spec: requested.
 
 **Amendments:**
+- 2026-10-26, tech-spec authoring: root help and help for kernel groups stay offline, as an existing test requires, and point to `quirky api` for plugin commands (SC-16, decision D28).
 - 2026-10-26, before approval: Codex adversarial review. The CLI checks a generated command's whole params object against the schema, `--params` included (SC-11, SC-19); a kernel command shadows generated commands that extend its words (SC-13); a valued flag followed by `--...` is missing its value (SC-11, SC-18); catalog commands list every method they may call (SC-20); enums need a type (SC-2); SC-23 enables a plugin instead of installing one, since discovery runs at startup.
 
 ## Conceptual model
@@ -277,7 +278,7 @@ Most scenarios use the installed plugin `acme.notes`, with lazy activation and t
 16. **SC-16: help covers kernel and plugin commands from their declarations** (CLI)
     - **Given** `acme.notes` is installed
     - **When** the agent runs `quirky --help`, `quirky acme.notes --help`, `quirky acme.notes add --help` and `quirky wt create --help`
-    - **Then** root help lists every kernel group and `acme.notes`; group help lists `add`, `count`, `list` with their descriptions; command help shows a usage line, the description, and one line per flag with its type, whether it is required, its enum values and its description; `wt create --help` has the same shape, from its declaration
+    - **Then** root help lists the kernel commands and ends with `run 'quirky api' to list every command, including plugins'`, without contacting the daemon; group help for `acme.notes` lists `add`, `count`, `list` with their descriptions; command help shows a usage line, the description, and one line per flag with its type, whether it is required, its enum values and its description; `wt create --help` has the same shape, from its declaration. Help for a kernel command or a group that has kernel commands never contacts the daemon, as today; help for a plugin-only group or command reads the catalog.
     - **Command help:**
 
       ```
