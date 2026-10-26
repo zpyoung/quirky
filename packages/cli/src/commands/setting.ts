@@ -24,9 +24,13 @@ function parseValue(raw: string): unknown {
 
 export const settingList: Command = {
   name: 'setting list',
-  usage: 'setting list [--plugin <id>]',
   summary: 'list settings with their value and default',
-  flags: { plugin: 'string' },
+  positionals: [],
+  flags: {
+    plugin: { type: 'string', description: 'only this plugin' }
+  },
+  methods: ['setting.list'],
+  plugin: null,
   async run(args, ctx) {
     takePositionals(args, [])
     const pluginId = flagString(args, 'plugin')
@@ -44,9 +48,11 @@ export const settingList: Command = {
 
 export const settingGet: Command = {
   name: 'setting get',
-  usage: 'setting get <id>',
   summary: 'print a setting value as JSON',
+  positionals: [{ name: 'id', description: 'the setting ID', required: true }],
   flags: {},
+  methods: ['setting.get'],
+  plugin: null,
   async run(args, ctx) {
     const [id] = takePositionals(args, ['id'])
     const setting = await ctx.rpc.call('setting.get', { id })
@@ -56,9 +62,11 @@ export const settingGet: Command = {
 
 export const settingSet: Command = {
   name: 'setting set',
-  usage: 'setting set <id> <value>',
   summary: 'set a setting; <value> is read as JSON when it parses, else as a string',
+  positionals: [{ name: 'id', description: 'the setting ID', required: true }, { name: 'value', description: 'the new value, read as JSON when it parses', required: true }],
   flags: {},
+  methods: ['setting.set'],
+  plugin: null,
   async run(args, ctx) {
     const [id, raw] = takePositionals(args, ['id', 'value'])
     const setting = await ctx.rpc.call('setting.set', { id, value: parseValue(raw) })
@@ -68,9 +76,11 @@ export const settingSet: Command = {
 
 export const settingReset: Command = {
   name: 'setting reset',
-  usage: 'setting reset <id>',
   summary: 'drop the stored value and print the default as JSON',
+  positionals: [{ name: 'id', description: 'the setting ID', required: true }],
   flags: {},
+  methods: ['setting.reset'],
+  plugin: null,
   async run(args, ctx) {
     const [id] = takePositionals(args, ['id'])
     const setting = await ctx.rpc.call('setting.reset', { id })

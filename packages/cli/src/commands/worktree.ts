@@ -5,9 +5,13 @@ import type { Command } from './types'
 
 export const wtList: Command = {
   name: 'wt list',
-  usage: 'wt list [--repo <id>]',
   summary: 'list worktrees',
-  flags: { repo: 'string' },
+  positionals: [],
+  flags: {
+    repo: { type: 'string', description: 'only worktrees of this repository' }
+  },
+  methods: ['worktree.list'],
+  plugin: null,
   async run(args, ctx) {
     takePositionals(args, [])
     const repoId = flagString(args, 'repo')
@@ -25,9 +29,13 @@ export const wtList: Command = {
 
 export const wtCreate: Command = {
   name: 'wt create',
-  usage: 'wt create <repoId> <name> [--base <ref>]',
   summary: 'create a worktree and branch',
-  flags: { base: 'string' },
+  positionals: [{ name: 'repoId', description: 'the repository', required: true }, { name: 'name', description: 'name for the worktree and branch', required: true }],
+  flags: {
+    base: { type: 'string', description: 'ref to branch from' }
+  },
+  methods: ['worktree.create'],
+  plugin: null,
   async run(args, ctx) {
     const [repoId, name] = takePositionals(args, ['repoId', 'name'])
     const baseRef = flagString(args, 'base')
@@ -40,9 +48,13 @@ export const wtCreate: Command = {
 
 export const wtRm: Command = {
   name: 'wt rm',
-  usage: 'wt rm <worktreeId> [--force]',
   summary: 'remove a worktree',
-  flags: { force: 'boolean' },
+  positionals: [{ name: 'worktreeId', description: 'the worktree to remove', required: true }],
+  flags: {
+    force: { type: 'boolean', description: 'remove even with uncommitted changes' }
+  },
+  methods: ['worktree.remove'],
+  plugin: null,
   async run(args, ctx) {
     const [worktreeId] = takePositionals(args, ['worktreeId'])
     const force = flagBoolean(args, 'force')

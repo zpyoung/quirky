@@ -15,9 +15,13 @@ const sessionRecord = (session: Session) =>
 
 export const sessionList: Command = {
   name: 'session list',
-  usage: 'session list [--worktree <id>]',
   summary: 'list sessions (all worktrees unless filtered)',
-  flags: { worktree: 'string' },
+  positionals: [],
+  flags: {
+    worktree: { type: 'string', description: 'only sessions in this worktree' }
+  },
+  methods: ['session.list'],
+  plugin: null,
   async run(args, ctx) {
     takePositionals(args, [])
     const worktreeId = flagString(args, 'worktree')
@@ -35,9 +39,16 @@ export const sessionList: Command = {
 
 export const sessionNew: Command = {
   name: 'session new',
-  usage: 'session new --agent <kind> [--worktree <id>] [--prompt <text>] [--background]',
   summary: `start a session (${AGENT_KINDS.join(', ')}); --background runs a structured session`,
-  flags: { agent: 'string', worktree: 'string', prompt: 'string', background: 'boolean' },
+  positionals: [],
+  flags: {
+    agent: { type: 'string', description: 'agent kind to start', required: true },
+    worktree: { type: 'string', description: 'worktree ID (default: QUIRKY_WORKTREE_ID, else the worktree containing the cwd)' },
+    prompt: { type: 'string', description: 'initial prompt' },
+    background: { type: 'boolean', description: 'run a structured session; needs --prompt' }
+  },
+  methods: ['worktree.list', 'session.create', 'session.createStructured'],
+  plugin: null,
   async run(args, ctx) {
     takePositionals(args, [])
     const agent = requireFlag(args, 'agent')
@@ -61,9 +72,11 @@ export const sessionNew: Command = {
 
 export const sessionClose: Command = {
   name: 'session close',
-  usage: 'session close <id>',
   summary: 'close a session and forget it',
+  positionals: [{ name: 'id', description: 'the session to close', required: true }],
   flags: {},
+  methods: ['session.close'],
+  plugin: null,
   async run(args, ctx) {
     const [sessionId] = takePositionals(args, ['id'])
     const result = await ctx.rpc.call('session.close', { sessionId })

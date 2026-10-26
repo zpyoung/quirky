@@ -51,9 +51,14 @@ export async function waitForAsk(ctx: Context, askId: string, timeoutMs?: number
 
 export const ask: Command = {
   name: 'ask',
-  usage: 'ask --spec <json|@file> [--timeout-ms N]',
   summary: 'ask the user questions and wait for the answers (same output shape as `orca ask`); on --timeout-ms the ask is cancelled and printed as timed_out',
-  flags: { spec: 'string', 'timeout-ms': 'int' },
+  positionals: [],
+  flags: {
+    spec: { type: 'string', description: 'ask spec as JSON, or @path to a file', required: true },
+    'timeout-ms': { type: 'integer', description: 'give up after this many milliseconds' }
+  },
+  methods: ['ask.create', 'ask.wait', 'ask.cancel'],
+  plugin: null,
   async run(args, ctx) {
     takePositionals(args, [])
     const spec = parseAskSpec(requireFlag(args, 'spec'), (path) => ctx.readFile(path))
@@ -72,9 +77,14 @@ export const ask: Command = {
 
 export const askWait: Command = {
   name: 'ask wait',
-  usage: 'ask wait --id <askId> [--timeout-ms N]',
   summary: 'resume waiting for an ask; on --timeout-ms the ask is cancelled and printed as timed_out',
-  flags: { id: 'string', 'timeout-ms': 'int' },
+  positionals: [],
+  flags: {
+    id: { type: 'string', description: 'the ask to resume', required: true },
+    'timeout-ms': { type: 'integer', description: 'give up after this many milliseconds' }
+  },
+  methods: ['ask.wait', 'ask.cancel'],
+  plugin: null,
   async run(args, ctx) {
     takePositionals(args, [])
     const askId = requireFlag(args, 'id')
@@ -84,9 +94,13 @@ export const askWait: Command = {
 
 export const askCancel: Command = {
   name: 'ask cancel',
-  usage: 'ask cancel --id <askId>',
   summary: 'cancel a pending ask and print its envelope',
-  flags: { id: 'string' },
+  positionals: [],
+  flags: {
+    id: { type: 'string', description: 'the ask to cancel', required: true }
+  },
+  methods: ['ask.cancel'],
+  plugin: null,
   async run(args, ctx) {
     takePositionals(args, [])
     const envelope = await ctx.rpc.call('ask.cancel', { askId: requireFlag(args, 'id') })
