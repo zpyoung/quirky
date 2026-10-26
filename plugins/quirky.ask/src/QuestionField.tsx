@@ -1,5 +1,5 @@
 import type { AskQuestion } from '@quirky/protocol'
-import { OTHER, type Draft } from '../lib/askAnswers'
+import { OTHER, type Draft } from './askAnswers'
 
 type Props = {
   question: AskQuestion

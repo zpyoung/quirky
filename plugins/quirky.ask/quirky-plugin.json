@@ -5,6 +5,7 @@
   "description": "Questions an agent or the kernel puts to the person at the window, with answers returned to whoever is waiting.",
   "main": "main.ts",
   "cli": "cli.ts",
+  "ui": "dist/ui.js",
   "activation": "lazy",
   "contributes": {
     "method": [

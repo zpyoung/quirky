@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test'
 import type { AskSpec } from '@quirky/protocol'
-import { OTHER, buildAnswers, emptyDrafts } from '../src/lib/askAnswers'
+import { OTHER, buildAnswers, emptyDrafts } from '../src/askAnswers'
 
 const spec: AskSpec = {
   questions: [
