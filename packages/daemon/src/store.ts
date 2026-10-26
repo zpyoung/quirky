@@ -36,7 +36,7 @@ export interface JobRun {
   error?: string
 }
 
-/** SQLite persistence for repos, sessions, asks, structured messages, settings, disabled IDs and job runs. */
+/** SQLite persistence for repos, sessions, asks, structured messages, settings, plugin setting values, UI state, disabled IDs and job runs. */
 export class Store {
   private readonly db: Database
 
@@ -87,6 +87,15 @@ export class Store {
         PRIMARY KEY (session_id, seq)
       );
       CREATE TABLE IF NOT EXISTS settings (
+        key TEXT PRIMARY KEY,
+        value TEXT NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS setting_values (
+        id TEXT PRIMARY KEY,
+        value TEXT NOT NULL,
+        updated_at INTEGER NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS ui_state (
         key TEXT PRIMARY KEY,
         value TEXT NOT NULL
       );
@@ -317,6 +326,39 @@ export class Store {
       if (value !== undefined) upsert.run(key, JSON.stringify(value))
     }
     return this.getSettings()
+  }
+
+  /** The stored value of the plugin setting `id`, or null when none is stored. */
+  getSettingValue(id: string): { value: unknown } | null {
+    const row = this.db.query('SELECT value FROM setting_values WHERE id = ?').get(id) as Row | null
+    return row ? { value: JSON.parse(row.value) } : null
+  }
+
+  /** Stores `value` as the plugin setting `id`, replacing any earlier value. */
+  setSettingValue(id: string, value: unknown): void {
+    this.db
+      .query(
+        'INSERT INTO setting_values (id, value, updated_at) VALUES (?, ?, ?) ON CONFLICT(id) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at'
+      )
+      .run(id, JSON.stringify(value), Date.now())
+  }
+
+  /** Drops the stored value of the plugin setting `id`; a no-op when none is stored. */
+  deleteSettingValue(id: string): void {
+    this.db.query('DELETE FROM setting_values WHERE id = ?').run(id)
+  }
+
+  /** The window state stored under `key` (such as the chosen theme), or null when none is stored. */
+  getUiState(key: string): unknown | null {
+    const row = this.db.query('SELECT value FROM ui_state WHERE key = ?').get(key) as Row | null
+    return row ? JSON.parse(row.value) : null
+  }
+
+  /** Stores `value` as the window state under `key`, replacing any earlier value. */
+  setUiState(key: string, value: unknown): void {
+    this.db
+      .query('INSERT INTO ui_state (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value')
+      .run(key, JSON.stringify(value))
   }
 
   /** IDs of contributions and plugins the user has disabled, sorted ascending. */
