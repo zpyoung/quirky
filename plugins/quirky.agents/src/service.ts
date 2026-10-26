@@ -95,16 +95,20 @@ export class AgentsService {
     const entry = this.entryOf(params.agent as string)
     const enabled = params.enabled as boolean
     const config = this.configs.get(entry.id)
-    if (config.disabled === !enabled) return this.info(entry)
-    this.configs.put(entry.id, { ...config, disabled: !enabled })
-    if (!enabled && this.defaultAgent() === entry.id) await this.writeSetting(DEFAULT_SETTING, 'auto')
-    this.changed()
+    const flips = config.disabled === enabled
+    if (flips) this.configs.put(entry.id, { ...config, disabled: !enabled })
+    const resetsDefault = !enabled && this.defaultAgent() === entry.id
+    if (resetsDefault) await this.writeSetting(DEFAULT_SETTING, 'auto')
+    if (flips || resetsDefault) this.changed()
     return this.info(entry)
   }
 
   setDefault = async (params: Params): Promise<AgentListing> => {
     const value = params.agent as string
-    if (value !== 'auto' && value !== 'shell') this.entryOf(value, 'invalid-params')
+    if (value !== 'auto' && value !== 'shell') {
+      const entry = this.entryOf(value, 'invalid-params')
+      if (this.configs.get(entry.id).disabled) throw this.context.error('invalid-params', `agent ${entry.id} is disabled`)
+    }
     const before = this.defaultAgent()
     if (this.context.getSetting(DEFAULT_SETTING) !== value) await this.writeSetting(DEFAULT_SETTING, value)
     if (this.defaultAgent() !== before) this.changed()
@@ -166,11 +170,18 @@ export class AgentsService {
   pick = (params: Params): { agent: string } => {
     const forAgentTab = params.forAgentTab === true
     const configs = this.configs.all()
+    const installed = (id: string) => this.detection.installed(id)
+    const disabled = (id: string) => configs.get(id)?.disabled === true
+    const requested = params.preferred as string | undefined
+    const requestedUsable =
+      requested === 'auto' ||
+      requested === 'shell' ||
+      (requested !== undefined && this.catalog.agents.some((entry) => entry.id === requested) && installed(requested) && !disabled(requested))
     const agent = pickAgent({
       entries: this.catalog.agents,
-      installed: (id) => this.detection.installed(id),
-      disabled: (id) => configs.get(id)?.disabled === true,
-      preferred: (params.preferred as string | undefined) ?? this.defaultAgent(),
+      installed,
+      disabled,
+      preferred: requested !== undefined && requestedUsable ? requested : this.defaultAgent(),
       forAgentTab
     })
     if (agent === null) throw this.context.error('conflict', 'No installed agent is enabled.')

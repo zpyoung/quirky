@@ -28,6 +28,10 @@ class FakePty {
   replay = ''
   subscribeError: Error | null = null
   writeError: Error | null = null
+  alive = true
+  listError: Error | null = null
+  /** Holds every subscribe until released; null lets it return at once. */
+  subscribeGate: Promise<void> | null = null
   private data = new Set<(sessionId: string, bytes: Uint8Array) => void>()
   private exits = new Set<(sessionId: string, exitCode: number | null) => void>()
   private reconnects = new Set<() => void>()
@@ -38,8 +42,13 @@ class FakePty {
     connected: true,
     subscribe: async (sessionId: string) => {
       this.subscribed.push(sessionId)
+      if (this.subscribeGate) await this.subscribeGate
       if (this.subscribeError) throw this.subscribeError
       return { replay: this.replay, offset: 0 }
+    },
+    list: async () => {
+      if (this.listError) throw this.listError
+      return ['s1', 'a', 'b'].map((sessionId) => ({ sessionId, alive: this.alive }))
     },
     unsubscribe: async (sessionId: string) => {
       this.unsubscribed.push(sessionId)
@@ -194,7 +203,73 @@ describe('DeliveryRunner', () => {
     pty.setReplay(`${PASTE_ON}${CURSOR}`)
     expect(await result).toBe('not-delivered')
     expect(pty.writes).toEqual([])
+    await until(() => pty.unsubscribed.length === 1)
     expect(pty.unsubscribed).toEqual([SESSION])
+  })
+
+  test('SC-24: a session removed while a subscribe stalls settles at once and frees its listeners', async () => {
+    const { pty, runner } = setup()
+    pty.subscribeGate = new Promise(() => {})
+    const result = runner.deliver(SESSION, entry('goose', { readyTimeoutMs: 60000 }), 'hi', true)
+    sessionGone()
+    expect(await Promise.race([result, Bun.sleep(100).then(() => 'pending')])).toBe('not-delivered')
+    expect(pty.writes).toEqual([])
+    expect(pty.listenerCount()).toBe(0)
+    expect(goneListeners.size).toBe(0)
+  })
+
+  test('SC-24: an exit while a subscribe stalls settles at once', async () => {
+    const { pty, runner } = setup()
+    pty.subscribeGate = new Promise(() => {})
+    const result = runner.deliver(SESSION, entry('goose', { readyTimeoutMs: 60000 }), 'hi', true)
+    pty.exit()
+    expect(await Promise.race([result, Bun.sleep(100).then(() => 'pending')])).toBe('not-delivered')
+  })
+
+  test('SC-22: a subscribe that outlasts the deadline is not delivered, even with a blind paste allowed', async () => {
+    const { pty, runner } = setup()
+    pty.subscribeGate = new Promise(() => {})
+    const result = runner.deliver(SESSION, entry('goose', { readyTimeoutMs: 100, blindPaste: true }), 'hi', true)
+    expect(await Promise.race([result, Bun.sleep(500).then(() => 'pending')])).toBe('not-delivered')
+    expect(pty.writes).toEqual([])
+  })
+
+  test('SC-22: a ready signal in a replay that arrives after the deadline never writes', async () => {
+    const { pty, runner } = setup()
+    pty.setReplay(`${PASTE_ON}${CURSOR}`)
+    let release = () => {}
+    pty.subscribeGate = new Promise<void>((resolve) => (release = resolve))
+    const result = runner.deliver(SESSION, fast('amp', { readyTimeoutMs: 10, blindPaste: false }), 'hi', true)
+    await Bun.sleep(30)
+    release()
+    expect(await result).toBe('not-delivered')
+    expect(pty.writes).toEqual([])
+    await until(() => pty.unsubscribed.length === 1)
+    expect(pty.listenerCount()).toBe(0)
+  })
+
+  test('SC-24: a session that exited before the subscribe is not written to, though its replay shows ready', async () => {
+    const { pty, runner } = setup()
+    pty.alive = false
+    pty.setReplay(`${PASTE_ON}${CURSOR}`)
+    expect(await runner.deliver(SESSION, fast('amp'), 'hi', true)).toBe('not-delivered')
+    expect(pty.writes).toEqual([])
+    expect(pty.listenerCount()).toBe(0)
+  })
+
+  test('SC-24: a session that exited before the subscribe gets no blind paste at the deadline', async () => {
+    const { pty, runner } = setup()
+    pty.alive = false
+    expect(await runner.deliver(SESSION, entry('goose', { readyTimeoutMs: 100 }), 'hi', true)).toBe('not-delivered')
+    expect(pty.writes).toEqual([])
+  })
+
+  test('a liveness check that fails is not delivered and writes nothing', async () => {
+    const { pty, runner } = setup()
+    pty.listError = new Error('pty host down')
+    pty.setReplay(`${PASTE_ON}${CURSOR}`)
+    expect(await runner.deliver(SESSION, fast('amp'), 'hi', true)).toBe('not-delivered')
+    expect(pty.writes).toEqual([])
   })
 
   test('SC-24: another session exiting or sending output changes nothing', async () => {

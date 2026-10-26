@@ -356,6 +356,18 @@ describe('choosing the agent', () => {
     expect(await pick({ preferred: 'gemini' })).toBe('gemini')
   })
 
+  test('SC-8: an unusable preferred agent falls back to the stored default, then to auto-pick order', async () => {
+    const t = await start({ installed: ['codex', 'gemini'] })
+    const pick = async (params: Record<string, unknown> = {}) => (await t.call(A('pick'), params)).agent
+    await t.call(A('setDefault'), { agent: 'gemini' })
+    expect(await pick({ preferred: 'claude' })).toBe('gemini')
+    expect(await pick({ preferred: 'no-such-agent' })).toBe('gemini')
+    await t.call(A('setEnabled'), { agent: 'codex', enabled: false })
+    expect(await pick({ preferred: 'codex' })).toBe('gemini')
+    await t.call(A('setDefault'), { agent: 'auto' })
+    expect(await pick({ preferred: 'claude' })).toBe('gemini')
+  })
+
   test('SC-8: with nothing installed a launch gets a shell', async () => {
     const t = await start()
     expect((await t.call(A('pick'))).agent).toBe('shell')
@@ -395,6 +407,22 @@ describe('choosing the agent', () => {
     const restored = await t.call(A('list'))
     expect(find(restored, 'claude').enabled).toBe(true)
     expect(restored.defaultAgent).toBe('auto')
+  })
+
+  test('SC-10: disabling an already-disabled default resets the default, and setDefault refuses a disabled agent', async () => {
+    const t = await start({ installed: ['claude', 'codex'] })
+    await t.call(A('setEnabled'), { agent: 'claude', enabled: false })
+    const refusal = await failure(t.call(A('setDefault'), { agent: 'claude' }))
+    expect(refusal).toMatchObject({ code: RpcErrorCode.InvalidParams, message: 'agent claude is disabled' })
+
+    await t.call('setting.set', { id: 'setting:quirky.agents/default-agent', value: 'claude' })
+    await waitFor(() => t.changes() >= 2)
+    expect((await t.call(A('list'))).defaultAgent).toBe('claude')
+    const before = t.changes()
+
+    await t.call(A('setEnabled'), { agent: 'claude', enabled: false })
+    expect((await t.call(A('list'))).defaultAgent).toBe('auto')
+    await waitFor(() => t.changes() > before)
   })
 
   test('setDefault refuses an unknown agent, and a repeat or a no-op change announces nothing', async () => {
