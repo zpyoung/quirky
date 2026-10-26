@@ -1,6 +1,5 @@
 import { isDaemonAlive, ensureDaemon, quirkyHome, readRuntime } from '@quirky/protocol/node'
-import { StderrFailure, flagBoolean } from '../args'
-import { takePositionals } from './support'
+import { StderrFailure, flagBoolean, takePositionals } from '../args'
 import type { Command } from './types'
 
 const STOP_TIMEOUT_MS = 10_000

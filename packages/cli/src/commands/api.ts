@@ -1,11 +1,10 @@
 import { CONNECTION_METHODS, type ApiCatalog } from '@quirky/protocol'
-import { UsageError, parseArgs } from '../args'
+import { UsageError, parseArgs, takePositionals } from '../args'
 import { buildCatalog, resolveCommands } from '../catalog'
 import { commandHelp } from '../command-spec'
 import { formatGeneric } from '../format'
 import { commandForMethod, generatedCommands, paramsFromArgs } from '../generated'
 import { declaredCommands } from '../plugin-commands'
-import { takePositionals } from './support'
 import type { Command, Context } from './types'
 
 /**

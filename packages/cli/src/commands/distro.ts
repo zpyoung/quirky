@@ -1,7 +1,7 @@
+import { takePositionals } from '../args'
 import { resolve } from 'node:path'
 import { renderDistroInspection } from '../inspection'
 import { formatTable } from '../output'
-import { takePositionals } from './support'
 import type { Command } from './types'
 
 export const distroInspect: Command = {

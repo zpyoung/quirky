@@ -1,9 +1,8 @@
 import { resolve } from 'node:path'
 import type { ContributionInfo } from '@quirky/protocol'
-import { flagBoolean, flagString } from '../args'
+import { flagBoolean, flagString, takePositionals } from '../args'
 import { renderPluginInspection } from '../inspection'
 import { formatRecord, formatTable } from '../output'
-import { takePositionals } from './support'
 import type { Command } from './types'
 
 function contributionStatus(item: ContributionInfo): string {

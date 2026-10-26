@@ -1,5 +1,5 @@
+import { takePositionals } from '../args'
 import { formatTable } from '../output'
-import { takePositionals } from './support'
 import type { Command } from './types'
 
 /** Keeps a cell on one line so an embedded line break can't split a table row. */

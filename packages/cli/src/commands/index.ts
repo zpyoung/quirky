@@ -1,7 +1,6 @@
 import { parseArgs, type ParsedArgs } from '../args'
 import { commandHelp, usageOf } from '../command-spec'
 import { api, apiCall } from './api'
-import { ask, askCancel, askWait } from './ask'
 import { jobList, jobRun } from './job'
 import { daemonRestart } from './daemon'
 import { distroInspect, distroInstall, distroList, distroRemove } from './distro'
@@ -16,12 +15,9 @@ import {
   pluginList,
   pluginUninstall
 } from './plugin'
-import { repoAdd, repoList, repoRm } from './repo'
-import { sessionClose, sessionList, sessionNew } from './session'
 import { settingGet, settingList, settingReset, settingSet } from './setting'
 import { skillInstall, skillShow, skillStatus } from './skill'
 import { status } from './status'
-import { termRead, termSend } from './term'
 import { themeList, themeSet } from './theme'
 import {
   uiClosePanel,
@@ -35,7 +31,6 @@ import {
   uiState
 } from './ui'
 import type { Command, Context } from './types'
-import { wtCreate, wtList, wtRm } from './worktree'
 
 export const USAGE_LINE = 'usage: quirky [--json] <command> [options]'
 
@@ -53,17 +48,6 @@ const help: Command = {
 
 export const COMMANDS: Command[] = [
   status,
-  repoAdd,
-  repoList,
-  repoRm,
-  wtList,
-  wtCreate,
-  wtRm,
-  sessionList,
-  sessionNew,
-  sessionClose,
-  termRead,
-  termSend,
   pluginList,
   pluginContributions,
   pluginEnable,
@@ -94,9 +78,6 @@ export const COMMANDS: Command[] = [
   settingReset,
   themeList,
   themeSet,
-  ask,
-  askWait,
-  askCancel,
   open,
   api,
   apiCall,

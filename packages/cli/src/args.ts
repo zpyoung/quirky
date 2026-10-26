@@ -208,3 +208,22 @@ export function flagInt(args: ParsedArgs, name: string): number | undefined {
 export function flagBoolean(args: ParsedArgs, name: string): boolean {
   return args.flags[name] === true
 }
+
+/** Rejects missing or surplus positionals; `names` labels the required ones for the error message. */
+export function takePositionals(args: ParsedArgs, names: string[], optional = 0): string[] {
+  const { positionals } = args
+  if (positionals.length < names.length) {
+    throw new UsageError(`missing <${names[positionals.length]}>`)
+  }
+  if (positionals.length > names.length + optional) {
+    throw new UsageError(`unexpected argument "${positionals[names.length + optional]}"`)
+  }
+  return positionals
+}
+
+/** The value of a required string flag; an absent or empty value is a usage error. */
+export function requireFlag(args: ParsedArgs, name: string): string {
+  const value = flagString(args, name)
+  if (value === undefined || value === '') throw new UsageError(`--${name} is required`)
+  return value
+}

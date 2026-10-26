@@ -219,13 +219,13 @@ describe('schema property names that collide with object internals or reserved f
 
 describe('SC-13 groups and shadowing', () => {
   beforeEach(() => {
-    daemon.addMethod('quirky.repo/list', { plugin: 'quirky.repo' })
-    daemon.addMethod('quirky.repo/rename', {
-      plugin: 'quirky.repo',
+    daemon.addMethod('quirky.theme/list', { plugin: 'quirky.theme' })
+    daemon.addMethod('quirky.theme/rename', {
+      plugin: 'quirky.theme',
       params: {
         type: 'object',
-        properties: { repoId: { type: 'string' }, name: { type: 'string' } },
-        required: ['repoId', 'name']
+        properties: { themeId: { type: 'string' }, name: { type: 'string' } },
+        required: ['themeId', 'name']
       }
     })
     daemon.addMethod('job/list', { plugin: 'job' })
@@ -233,17 +233,17 @@ describe('SC-13 groups and shadowing', () => {
   })
 
   test('a built-in plugin is a group without the quirky. prefix', async () => {
-    const result = await run(['repo', 'rename', '--repo-id', 'r1', '--name', 'x'])
+    const result = await run(['theme', 'rename', '--theme-id', 't1', '--name', 'x'])
     expect(result.code).toBe(0)
-    expect(daemon.methodCalls('quirky.repo/rename')).toEqual([{ repoId: 'r1', name: 'x' }])
+    expect(daemon.methodCalls('quirky.theme/rename')).toEqual([{ themeId: 't1', name: 'x' }])
   })
 
   test('a bare kernel group lists its generated commands too', async () => {
-    const result = await run(['repo'])
+    const result = await run(['theme'])
     expect(result.code).toBe(2)
-    expect(result.stderr).toContain('incomplete command "repo"')
-    expect(result.stderr).toMatch(/repo rename /)
-    expect(result.stderr).toMatch(/repo list /)
+    expect(result.stderr).toContain('incomplete command "theme"')
+    expect(result.stderr).toMatch(/theme rename /)
+    expect(result.stderr).toMatch(/theme list /)
   })
 
   describe.each([
@@ -253,7 +253,7 @@ describe('SC-13 groups and shadowing', () => {
     test('a bare kernel group falls back to the kernel listing', async () => {
       const err: string[] = []
       const code = await runMain({
-        argv: ['repo'],
+        argv: ['theme'],
         env: {},
         cwd: '/',
         writer: { stdout: () => {}, stderr: (text) => err.push(text) },
@@ -261,22 +261,21 @@ describe('SC-13 groups and shadowing', () => {
         openDesktopApp: async () => ({ ok: true })
       })
       expect(code).toBe(2)
-      expect(err.join('')).toContain('incomplete command "repo"')
-      expect(err.join('')).toMatch(/repo list /)
-      expect(err.join('')).not.toMatch(/repo rename /)
+      expect(err.join('')).toContain('incomplete command "theme"')
+      expect(err.join('')).toMatch(/theme list /)
+      expect(err.join('')).not.toMatch(/theme rename /)
     })
   })
 
   test('kernel group help never contacts the daemon', async () => {
-    for (const args of [['repo', '--help'], ['repo', '-h'], ['help', 'repo']]) {
+    for (const args of [['theme', '--help'], ['theme', '-h'], ['help', 'theme']]) {
       expect((await run(args)).code).toBe(0)
     }
     expect(daemon.calls).toEqual([])
   })
 
   test('kernel commands win on shared words', async () => {
-    daemon.addRepo('alpha')
-    expect(JSON.parse((await run(['repo', 'list', '--json'])).stdout)).toHaveLength(1)
+    expect(JSON.parse((await run(['theme', 'list', '--json'])).stdout).themes).toHaveLength(1)
     expect((await run(['job', 'list'])).stdout).toBe('no jobs\n')
     expect(methodCalls()).toEqual([])
   })
@@ -352,7 +351,7 @@ describe('SC-15 a disabled method is unknown', () => {
     expect(result.code).toBe(2)
     expect(result.stderr).toContain('quirky: unknown command "acme.notes add"')
     expect(result.stderr).toMatch(/did you mean: .*quirky acme\.notes list/)
-    expect(result.stderr).not.toContain('quirky wt')
+    expect(result.stderr).not.toContain('quirky setting')
   })
 })
 
@@ -403,7 +402,7 @@ describe('SC-16 help', () => {
   })
 
   test('root and kernel help never contact the daemon', async () => {
-    for (const args of [[], ['--help'], ['help'], ['wt', '--help'], ['wt', 'create', '--help'], ['help', 'wt', 'create']]) {
+    for (const args of [[], ['--help'], ['help'], ['setting', '--help'], ['setting', 'set', '--help'], ['help', 'setting', 'set']]) {
       expect((await run(args)).code).toBe(0)
     }
     expect(daemon.calls).toEqual([])
@@ -412,10 +411,10 @@ describe('SC-16 help', () => {
 
 describe('SC-17 unknown commands', () => {
   test('a typo in a kernel command suggests the real one', async () => {
-    const result = await run(['wt', 'lst'])
+    const result = await run(['plugin', 'lst'])
     expect(result.code).toBe(2)
     expect(result.stderr).toBe(
-      'quirky: unknown command "wt lst"\ndid you mean: quirky wt list\nrun \'quirky help\' for usage\n'
+      'quirky: unknown command "plugin lst"\ndid you mean: quirky plugin list\nrun \'quirky help\' for usage\n'
     )
   })
 
@@ -449,9 +448,9 @@ describe('SC-19 JSON errors', () => {
   }
 
   test('an unknown command carries suggestions', async () => {
-    expect(await failure(['wt', 'lst'])).toEqual({
+    expect(await failure(['plugin', 'lst'])).toEqual({
       code: 2,
-      body: { error: { code: 'usage', message: 'unknown command "wt lst"', suggestions: ['wt list'] } }
+      body: { error: { code: 'usage', message: 'unknown command "plugin lst"', suggestions: ['plugin list'] } }
     })
   })
 
@@ -487,11 +486,11 @@ describe('SC-19 JSON errors', () => {
   })
 
   test('the flag position of --json does not matter, and the last --json=<bool> wins', async () => {
-    const early = await run(['--json', 'wt', 'lst'])
+    const early = await run(['--json', 'plugin', 'lst'])
     expect(JSON.parse(early.stdout).error.code).toBe('usage')
-    const off = await run(['wt', 'lst', '--json', '--json=false'])
+    const off = await run(['plugin', 'lst', '--json', '--json=false'])
     expect(off.stdout).toBe('')
-    expect(off.stderr).toContain('quirky: unknown command "wt lst"')
+    expect(off.stderr).toContain('quirky: unknown command "plugin lst"')
   })
 
   test('an unreachable daemon is daemon-unavailable, exit 1', async () => {
@@ -589,12 +588,12 @@ describe('generatedCommands', () => {
   })
 
   test('groupOf drops only a leading quirky.', () => {
-    expect(groupOf('quirky.repo')).toBe('repo')
+    expect(groupOf('quirky.theme')).toBe('theme')
     expect(groupOf('acme.quirky.x')).toBe('acme.quirky.x')
   })
 
   test('kernel methods produce no command', () => {
-    expect(generatedCommands(description(entry({ name: 'repo.list', plugin: null })))).toEqual([])
+    expect(generatedCommands(description(entry({ name: 'status.get', plugin: null })))).toEqual([])
   })
 
   test('maps schema types to flags, skipping reserved flag names', () => {
@@ -635,7 +634,7 @@ describe('generatedCommands', () => {
 })
 
 describe('resolveCommands', () => {
-  const kernel = COMMANDS.filter((command) => ['status', 'repo list', 'job list'].includes(command.name))
+  const kernel = COMMANDS.filter((command) => ['status', 'theme list', 'job list'].includes(command.name))
   const gen = (plugin: string, name: string): Command => ({
     name,
     summary: '',
@@ -648,14 +647,14 @@ describe('resolveCommands', () => {
 
   test('kernel commands shadow equal names and extensions of their words', () => {
     const { active, shadowed } = resolveCommands(kernel, [], [
-      gen('quirky.repo', 'repo list'),
-      gen('quirky.repo', 'repo rename'),
+      gen('quirky.theme', 'theme list'),
+      gen('quirky.theme', 'theme rename'),
       gen('status', 'status list'),
       gen('job', 'job list')
     ])
-    expect(active.map((command) => command.name)).toEqual(['repo rename'])
+    expect(active.map((command) => command.name)).toEqual(['theme rename'])
     expect(shadowed.map((command) => [command.name, command.shadowedBy])).toEqual([
-      ['repo list', 'kernel repo list'],
+      ['theme list', 'kernel theme list'],
       ['job list', 'kernel job list'],
       ['status list', 'kernel status']
     ])
@@ -673,10 +672,10 @@ describe('resolveCommands', () => {
 })
 
 describe('suggestCommands', () => {
-  const names = ['wt list', 'wt create', 'acme.notes add', 'acme.notes list', 'status']
+  const names = ['plugin list', 'plugin contributions', 'acme.notes add', 'acme.notes list', 'status']
 
   test('offers near misses, prefixes and group members, closest first', () => {
-    expect(suggestCommands('wt lst', names)).toEqual(['wt list'])
+    expect(suggestCommands('plugin lst', names)).toEqual(['plugin list'])
     expect(suggestCommands('acme.note add', names)).toEqual(['acme.notes add'])
     expect(suggestCommands('stat', names)).toEqual(['status'])
   })

@@ -1,41 +1,27 @@
-import { mkdtempSync, mkdirSync, realpathSync, rmSync } from 'node:fs'
+import { mkdtempSync, realpathSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import {
   DEFAULT_THEME,
   CATALOG_SCHEMA_VERSION,
   PROTOCOL_VERSION,
   RpcErrorCode,
-  type AskEnvelope,
   type ApiMethodEntry,
-  type AskSpec,
   type ApiCliCommandEntry,
   type ApiDescription,
   type ContributionInfo,
   type JobInfo,
   type JobRun,
   type PluginInfo,
-  type Repo,
-  type Session,
   type SettingInfo,
   type ThemeInfo,
   type UiCommandEntry,
   type UiKeybinding,
   type UiModel,
-  type UiSlotEntry,
-  type Worktree
+  type UiSlotEntry
 } from '@quirky/protocol'
 import { writePrivateJson, runtimeFilePath, type RuntimeInfo } from '@quirky/protocol/node'
 
 export type FakeCall = { method: string; params: any; requestId?: string; transport?: 'socket' | 'websocket' }
-
-export type FakeDaemonOptions = {
-  /** Delay before a pending ask is answered; `null` leaves asks pending until cancelled. */
-  answerAfterMs?: number | null
-  /** Close the socket on the first `ask.wait`, to exercise client reconnects. */
-  dropFirstWait?: boolean
-  /** Make `ask.cancel` fail with an internal error. */
-  failCancel?: boolean
-}
 
 class FakeRpcError extends Error {
   constructor(
@@ -68,8 +54,6 @@ const READ_ONLY_NAME = /(^|[./])(list|get|describe|state|read|wait|inspect)$/
 /** What a seeded plugin method does when called: return `result`, or fail with `error`. */
 export type MethodBehavior = { result?: unknown; error?: { code: number; message: string } }
 
-type AskState = { envelope: AskEnvelope; spec: AskSpec; waiters: Set<() => void> }
-
 /**
  * A stand-in for quirkyd: serves `/health` and the `/rpc` WebSocket on a free loopback port, and
  * writes `runtime.json` into a private temp `QUIRKY_HOME`. Records every call for assertions.
@@ -78,14 +62,12 @@ export class FakeDaemon {
   readonly home = realpathSync(mkdtempSync('/tmp/qcli-'))
   readonly token = 'fake-token'
   readonly calls: FakeCall[] = []
-  readonly repos: Repo[] = []
-  readonly worktrees: Worktree[] = []
-  readonly sessions: Session[] = []
+  /** Methods that ran, as opposed to being answered from a recorded request ID. */
+  readonly executions: string[] = []
   readonly plugins: PluginInfo[] = []
   readonly contributions: ContributionInfo[] = []
   readonly jobs: JobInfo[] = []
   readonly jobRuns = new Map<string, JobRun>()
-  readonly asks = new Map<string, AskState>()
   readonly ui: UiModel = {
     sidebarSections: [],
     panels: [],
@@ -115,11 +97,6 @@ export class FakeDaemon {
   private listener!: ReturnType<typeof Bun.listen>
   private readonly outcomes = new Map<string, Outcome>()
   private readonly drops = new Map<string, number>()
-  private waitCalls = 0
-  private nextAsk = 1
-  private nextSession = 1
-
-  constructor(private readonly options: FakeDaemonOptions = {}) {}
 
   get port(): number {
     return this.server.port as number
@@ -248,29 +225,6 @@ export class FakeDaemon {
 
   methodCalls(method: string): any[] {
     return this.calls.filter((call) => call.method === method).map((call) => call.params)
-  }
-
-  addRepo(name: string): Repo {
-    const path = join(this.home, 'repos', name)
-    mkdirSync(path, { recursive: true })
-    const repo: Repo = { id: `repo_${name}`, name, path, addedAt: 1 }
-    this.repos.push(repo)
-    return repo
-  }
-
-  addWorktree(repo: Repo, name: string, path = join(this.home, 'worktrees', repo.name, name)): Worktree {
-    mkdirSync(path, { recursive: true })
-    const worktree: Worktree = {
-      id: `wt_${repo.name}_${name}`,
-      repoId: repo.id,
-      path,
-      branch: name,
-      head: 'abc1234',
-      isMain: false,
-      name
-    }
-    this.worktrees.push(worktree)
-    return worktree
   }
 
   addPlugin(id: string, overrides: Partial<PluginInfo> = {}): PluginInfo {
@@ -461,6 +415,7 @@ export class FakeDaemon {
   }
 
   private async settle(method: string, params: any, conn: Conn): Promise<Outcome> {
+    this.executions.push(method)
     try {
       return { ok: true, value: await this.dispatch(method, params, conn) }
     } catch (error) {
@@ -493,93 +448,6 @@ export class FakeDaemon {
           safeMode: false,
           socket: null
         }
-      case 'repo.list':
-        return this.repos
-      case 'repo.add': {
-        const repo: Repo = { id: `repo_${this.repos.length + 1}`, name: 'added', path: params.path, addedAt: 2 }
-        this.repos.push(repo)
-        return repo
-      }
-      case 'repo.remove': {
-        const index = this.repos.findIndex((repo) => repo.id === params.repoId)
-        if (index === -1) throw new FakeRpcError(RpcErrorCode.NotFound, `repo not found: ${params.repoId}`)
-        this.repos.splice(index, 1)
-        return { ok: true }
-      }
-      case 'worktree.list':
-        return this.worktrees.filter((wt) => !params.repoId || wt.repoId === params.repoId)
-      case 'worktree.create': {
-        const repo = this.repos.find((candidate) => candidate.id === params.repoId)
-        if (!repo) throw new FakeRpcError(RpcErrorCode.NotFound, `repo not found: ${params.repoId}`)
-        return this.addWorktree(repo, params.name)
-      }
-      case 'worktree.remove':
-        return { ok: true }
-      case 'session.list':
-        return this.sessions.filter((session) => !params.worktreeId || session.worktreeId === params.worktreeId)
-      case 'session.create':
-      case 'session.createStructured': {
-        const session: Session = {
-          id: `sess_${this.nextSession++}`,
-          kind: method === 'session.create' ? 'terminal' : 'structured',
-          agent: params.agent,
-          worktreeId: params.worktreeId,
-          cwd: '/tmp',
-          title: params.agent,
-          status: 'running',
-          createdAt: 1,
-          lastActivityAt: 1,
-          exitCode: null
-        }
-        this.sessions.push(session)
-        return session
-      }
-      case 'session.close':
-        return { ok: true }
-      case 'terminal.read':
-        return { lines: ['first line', 'second line'], cols: 80, rows: 24, alt: false }
-      case 'terminal.send':
-        return { ok: true }
-      case 'ask.create': {
-        const askId = `ask_${this.nextAsk++}`
-        const state: AskState = {
-          envelope: { status: 'pending', askId, answers: {}, skipped: [] },
-          spec: params.spec,
-          waiters: new Set()
-        }
-        this.asks.set(askId, state)
-        if (typeof this.options.answerAfterMs === 'number') {
-          setTimeout(() => this.resolve(askId, 'answered'), this.options.answerAfterMs)
-        } else if (this.options.answerAfterMs === undefined) {
-          setTimeout(() => this.resolve(askId, 'answered'), 300)
-        }
-        return { askId }
-      }
-      case 'ask.wait': {
-        this.waitCalls++
-        if (this.options.dropFirstWait && this.waitCalls === 1) {
-          conn.close()
-          return DROP
-        }
-        const state = this.requireAsk(params.askId)
-        if (state.envelope.status !== 'pending') return state.envelope
-        await new Promise<void>((resolve) => {
-          const done = () => {
-            clearTimeout(timer)
-            state.waiters.delete(done)
-            resolve()
-          }
-          const timer = setTimeout(done, params.timeoutMs ?? 60000)
-          state.waiters.add(done)
-        })
-        return state.envelope
-      }
-      case 'ask.cancel': {
-        if (this.options.failCancel) throw new FakeRpcError(RpcErrorCode.Internal, 'cancel failed')
-        const state = this.requireAsk(params.askId)
-        if (state.envelope.status === 'pending') this.resolve(params.askId, 'declined')
-        return state.envelope
-      }
       case 'plugin.list':
         return this.plugins
       case 'plugin.contributions':
@@ -660,25 +528,6 @@ export class FakeDaemon {
         throw new FakeRpcError(RpcErrorCode.MethodNotFound, `method not found: ${method}`)
       }
     }
-  }
-
-  private requireAsk(askId: string): AskState {
-    const state = this.asks.get(askId)
-    if (!state) throw new FakeRpcError(RpcErrorCode.NotFound, `ask not found: ${askId}`)
-    return state
-  }
-
-  private resolve(askId: string, status: 'answered' | 'declined'): void {
-    const state = this.asks.get(askId)
-    if (!state || state.envelope.status !== 'pending') return
-    const first = state.spec.questions[0]
-    state.envelope = {
-      status,
-      askId,
-      answers: status === 'answered' && first ? { [first.id]: { value: 'yes', source: 'input' } } : {},
-      skipped: []
-    }
-    for (const wake of [...state.waiters]) wake()
   }
 }
 
