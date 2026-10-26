@@ -92,7 +92,7 @@ bun add --cwd packages/pty-host @xterm/addon-serialize@0.13.0 --exact
 | `plugins/quirky.session/src/window/SessionView.tsx:48-58` | When the shown session turns `exited` with `restorable: true`, re-attach once (remount the pane), which restores it. |
 | `plugins/quirky.terminal/quirky-plugin.json` | `activation: "startup"`; `attach` params gain `historyLines` and result fields; new methods, events, CLI commands, panel, command and `ui` entry per [Manifest](#manifest). |
 | `plugins/quirky.terminal/main.ts` | Register new handlers; `context.pty.onFact` → `context.emit(<fact kind>, ...)`. |
-| `plugins/quirky.terminal/src/terminal.ts` | `attach` restores a restorable session first and uses `subscribe` mode `screen`; `onReconnect` uses mode `raw`; `write`/`send` refuse ended sessions ([D9](../../../loop/decisions/m1-term-daemon.md)); new `snapshot`, `history`, `sessions`, `kill`, `killAll`, `restartHost`. `killAll` calls the kill path directly, not through `context.call` (the dispatcher would ask again: only kernel calls skip confirmation, `dispatch.ts:188-193`). |
+| `plugins/quirky.terminal/src/terminal.ts` | `attach` restores a restorable session first and uses `subscribe` mode `screen`; on an ended, non-restorable session it returns the read-only replay with `live: false` and a stream that carries nothing (the pane shows the final screen and history, input stays off); `onReconnect` uses mode `raw`; `write`/`send` refuse ended sessions ([D9](../../../loop/decisions/m1-term-daemon.md)); new `snapshot`, `history`, `sessions`, `kill`, `killAll`, `restartHost`. `killAll` calls the kill path directly, not through `context.call` (the dispatcher would ask again: only kernel calls skip confirmation, `dispatch.ts:188-193`). |
 | `plugins/quirky.terminal/cli.ts` | Commands `snapshot`, `history`, `sessions`, `kill`, `kill-all`, `restart-host`. |
 | `plugins/quirky.terminal/src/ui.tsx` (new), `src/window/SessionsPanel.tsx` (new) | `activate(context: UiPluginContext)` provides `panel:quirky.terminal/sessions` (mount pattern of `plugins/quirky.git/src/ui.tsx:7-17`, reporting its rows through `report`) and `command:quirky.terminal/manage-sessions` (`context.togglePanel('panel:quirky.terminal/sessions', true)`). Kill and restart use `context.confirm({title, body, confirmLabel})` then call with `yes: true`, as `plugins/quirky.worktree/src/actions.ts:52-79` does. A row click calls `context.openView('view:quirky.session/worktree', { worktree, session })` (the string is inlined; plugins can't import each other). Refreshes on `quirky.session/changed` and `quirky.session/removed` and on Refresh. |
 | `plugins/quirky.terminal/package.json` | `dependencies` gain `react`, `react-dom` (same versions as `plugins/quirky.session/package.json`); the fence test reads only `dependencies`. Dev: `@types/react`, `@types/react-dom`, `@happy-dom/global-registrator` as in quirky.session. |
@@ -133,7 +133,7 @@ PtySessionInfo = { sessionId, state: 'running' | 'exited' | 'restorable', pid (0
                    alive, exitCode: number|null, exitSignal: string|null, exitCause: ExitCause|null,
                    cols, rows, argv, cwd (last known: OSC 7 else start cwd), title: string|null,
                    shellState, createdAt, offset }
-PtySubscription = { replay: base64, offset, historyCursor: string|null, cols, rows, shellState }
+PtySubscription = { replay: base64, offset, historyCursor: string|null, cols, rows, shellState, live: boolean }
 PtySnapshot = { ansi, cols, rows, cursor: { x, y }, modes: { alternateScreen, bracketedPaste,
                 mouseTracking, applicationCursor }, cwd, title: string|null, shellState, offset }
 PtyHistoryPage = { lines: string[], cursor: string|null }
@@ -161,8 +161,11 @@ Contracts:
 - **`subscribe` mode `screen`** (default) returns the composed replay
   ([History paging](#history-paging)) of `historyLines` (default 2000, clamped 0..10000); mode
   `raw` returns today's contract: base64 of the hot tail ending at `offset`, from a line boundary
-  once wrapped. In both modes the first DATA frame after the response starts at `offset`. A stored
-  (not running) session can't be subscribed: `session <id> is not running`.
+  once wrapped. In both modes the first DATA frame after the response starts at `offset`. A
+  **stored** (not running) session can be subscribed in mode `screen` only: the replay is built the
+  same way from its log and checkpoint screen, `PtySubscription.live` is false, and no DATA frames
+  follow; mode `raw` on it fails `session <id> is not running`. A session that exited while in memory
+  stays subscribable as today, with `live` false once it has exited.
 - **`read`** returns `lines` history lines (text) above the visible screen rows, trailing blank rows
   dropped, as today's shape. Works on stored sessions.
 - **`kill`** with `reason: 'killed'` sends `signal` (default `SIGKILL` when a reason is given, else
@@ -219,9 +222,15 @@ record  [kind u8][length u32le][payload]
 - `startOffset` is the output position of the segment's first output byte. Output positions are
   absolute for the session's whole life, across rotations and restores.
 - Every new segment's first record is a resize carrying the current size.
-- A segment passing 16 MiB is renamed over `output.1.log` and a new `output.log` starts.
+- A segment passing 16 MiB is renamed over `output.1.log` and a new `output.log` starts, so the log
+  retains between the newest 16 MiB and the newest 32 MiB of output (plus at most one record of
+  overshoot), depending on where the current segment is.
 - Reading: a record whose length runs past the end of file is a torn tail and is dropped with
   everything after it; an unknown kind or a bad magic makes that segment unreadable.
+- Reopening for append (restore) first validates `output.log` and **truncates the file to the end of
+  its last complete record** (or to a fresh header if the header itself is bad), so new records never
+  follow a torn one. A second crash and restore after appending must still read every record written
+  after the first restore (tested in `log.test.ts` and `restore.test.ts`).
 - Writes go through one fd with `writeSync`; an I/O error disables the session's history
   (logged once to stderr, which the kernel sends to `logs/pty-host.log`) and the terminal goes on.
 
@@ -233,6 +242,18 @@ Back-links: [SC-15](logic.md#checkpoints-and-cold-restore).
   `SessionManagerOptions` for tests). On fire: await `screen.settled()` (an empty write's
   callback), record `offset` = bytes fed to the screen, serialize, write the checkpoint and meta.
   Up to 4 sessions write at once.
+- **A checkpoint is taken only at a parser-safe offset**: one where the scanner is in its ground
+  state and no UTF-8 sequence is incomplete (the scanner tracks both and exposes `atBoundary`). The
+  emulator's own parser state is then empty, so writing the checkpoint `ansi` and replaying the log
+  from `offset` reproduces the screen exactly. If the settled offset is not safe, the checkpoint
+  waits for the next chunk that ends at a safe offset (re-checked on each chunk, giving up for this
+  tick after 1 s and re-arming the timer). A final checkpoint at exit or `shutdown` that can't reach a
+  safe offset is skipped, and restore replays from the previous checkpoint instead. The same rule
+  places the restore ground (it is appended only after the scanner is at a boundary; a dangling
+  sequence from the dead process is terminated first by writing `CAN` (0x18) into the log and the
+  seeded screen).
+- Tested by a checkpoint forced while output ends mid-CSI (`\x1b[31` then `mRED`): restore must show
+  `RED` in red, not `mRED`.
 - A final checkpoint is written at exit and during `shutdown`. An idle session writes nothing.
 
 ### Restore algorithm
@@ -257,21 +278,27 @@ Back-links: [D6](../../../loop/decisions/m1-term-daemon.md), [D7](../../../loop/
 - **Cursor:** opaque string `h1.<output position>` (base 10). Callers must treat it as opaque. A
   position older than the oldest retained output clamps to the oldest; a malformed cursor fails
   `invalid history cursor`.
-- **Window:** for "the N lines before position P", read records backwards from P through the
-  segments until the window holds N + rows newlines, the oldest output is reached, or 8 MiB has been
-  read; move the window start forward to just after a newline (unless it is the oldest output);
-  note the size in force at the window start (the last resize record before it).
-- **Render:** a scratch `Terminal` at that size with `scrollback = N + rows + 64`, fed the window's
-  outputs and resizes in order, `seeding` style (no reply sink).
-- **`history` page before cursor P:** rows are all the scratch buffer's rows except trailing blank
-  ones; when P is "now" (no `before`), the scratch screen's rows are excluded so the page ends where
-  the live screen begins. Return the last `lines` of them that start a line (a wrapped row stays with
-  its line), oldest first; `cursor` is the window start, or null if it is the oldest output.
-  `text` rows are `translateToString(true)`; `ansi` rows are the serializer's output for the same
-  range, split per line.
+- **Window:** for "about N lines before position P", read records backwards from P through the
+  segments until the window holds W newlines (W = N for an explicit cursor, N + rows when P is
+  "now"), the oldest output is reached, or 8 MiB has been read; move the window start forward to just
+  after a newline (unless it is the oldest output); note the size in force at the window start (the
+  last resize record before it).
+- **Render:** a scratch `Terminal` at that size, with scrollback large enough that no row the window
+  produces is trimmed (the count of newlines plus wrapped rows is bounded by the window's bytes and
+  width; size it from both), fed the window's outputs and resizes in order, `seeding` style (no reply
+  sink).
+- **`history` page before cursor P:** the page is **every** row the window rendered, oldest first,
+  trailing blank rows dropped; when P is "now" (no `before`), the scratch screen's rows are excluded
+  so the page ends where the live screen begins. Nothing is trimmed to `lines`: `lines` only sizes the
+  window, so a page holds about that many rows (more when lines wrap, fewer when output redrew in
+  place). `cursor` is the window start, or null if it is the oldest output. Because the next page's
+  window ends exactly where this one starts, consecutive pages are contiguous and no row is skipped
+  or repeated (SC-11). `text` rows are `translateToString(true)`; `ansi` rows are the serializer's
+  output for the same range, split per line.
 - **Attach replay (`subscribe` mode `screen`):** render the window before "now", then write
   `ESC[H ESC[2J` and the live `Screen.snapshot().ansi` into the scratch terminal, then serialize the
-  scratch terminal with `scrollback: historyLines`, then append an absolute cursor position
+  scratch terminal with all of its scrollback rows (none are trimmed, so `historyCursor` stays
+  contiguous with the oldest replayed row), then append an absolute cursor position
   (`ESC[<y+1>;<x+1>H` from the live cursor). `historyCursor` is the window start when older output
   exists, else null. A prototype of this composition reproduced scrollback and screen exactly in
   a fresh terminal.
@@ -466,18 +493,18 @@ Back-links: every scenario in [Behavior & scenarios](logic.md#behavior--scenario
 | `packages/pty-host/test/restore.test.ts` (new) | Checkpoint cadence and idle cost, restore from checkpoint plus log, the four damage cases, queries in history produce no input, stored sessions served from disk, `forget` on stored (SC-15, SC-19, SC-20, SC-21, SC-39) |
 | `packages/pty-host/test/host.test.ts` | Version 2 hello; exit details for status, signal (143, SIGTERM), `kill` reason (137, SIGKILL, `killed`); `shutdown` → `host-restart`; `list` states (SC-23, SC-34, SC-36) |
 | `packages/pty-host/test/memory.test.ts` (new) | SC-37 against the real host process, measuring its RSS with `ps -o rss=` |
-| `packages/daemon/test/launch.test.ts` | Wrappers: real zsh and bash emit 133 A/C/D, OSC 7 and the marker; user rc still sourced first (SC-1, SC-31) |
-| `packages/daemon/test/pty-client.test.ts` | Retire a version 1 fake host; refuse a version 3 one; `restartHost` (SC-38, SC-25) |
+| `packages/daemon/test/shell-path.test.ts` (extend) | Wrappers: real zsh and bash emit 133 A/C/D, OSC 7 and the marker; user rc still sourced first (SC-1, SC-31) |
+| `packages/daemon/test/pty-client.test.ts` (new) | Retire a version 1 fake host; refuse a version 3 one; `restartHost` (SC-38, SC-25) |
 | `plugins/quirky.session/test/sessions.test.ts` | Migration, reconcile matrix, restore matrix, exit details (SC-16, SC-18, SC-22) |
 | `plugins/quirky.terminal/test/terminal.test.ts`, `cli.test.ts` | New methods, confirm and `--yes`, events from facts, refusals, attach restores (SC-22 to SC-25, SC-40) |
 | `plugins/quirky.terminal/test/ui.test.ts` (new) | The panel with `fakeContext` from `plugins/quirky.session/test/ui-fake.ts` (SC-26 to SC-29) |
-| `plugins/quirky.session/test/ui.test.ts` | Pane passes `historyLines`; a restorable session re-attaches once (SC-17, SC-28) |
-| `plugins/quirky.terminal/test/e2e.test.ts` (new) | Real `quirkyd` process, real host, real CLI (`spawnCli`/`runCli` from `packages/cli/test/fixtures/fake-daemon.ts:536-565`, passing `QUIRKY_PTY_HOST_ENTRY` unset so the real host runs), a real temp git repo: SC-1, SC-2, SC-6, SC-9, SC-16, SC-17 (API attach), SC-18, SC-19, SC-23 to SC-25, SC-34, SC-35, SC-39. Kills the daemon and the host (`<home>/pty.pid`) in cleanup |
+| `plugins/quirky.session/test/ui.test.ts` | Pane passes `historyLines`; a restorable session re-attaches once; an ended session's pane writes the read-only replay and sends no input (SC-17, SC-28, SC-42) |
+| `plugins/quirky.terminal/test/e2e.test.ts` (new) | Real `quirkyd` process, real host, real CLI (`spawnCli`/`runCli` from `packages/cli/test/fixtures/fake-daemon.ts:536-565`, passing `QUIRKY_PTY_HOST_ENTRY` unset so the real host runs), a real temp git repo: SC-1, SC-2, SC-6, SC-9, SC-16, SC-17 (API attach), SC-18, SC-19, SC-23 to SC-25, SC-34, SC-35, SC-39, SC-42 (API attach after a host restart). Kills the daemon and the host (`<home>/pty.pid`) in cleanup |
 | `plugins/test/imports.test.ts` | Unchanged; must still pass (SC-41) |
 | Literal fixes | `Session` literals in `plugins/quirky.session/test/{support.ts:104, ui-fake.ts:20}`, `plugins/quirky.terminal/test/{support.ts:60, fakes/quirky.session/main.ts:43}`, `plugins/quirky.worktree/test/{ui-report.test.ts:27, status.test.ts:15, ui.test.ts:51}`, `plugins/quirky.agent-status/test/agent-status.test.ts:33`, `plugins/quirky.structured/test/{claude-runner.test.ts:68, fakes/world.ts:47,125}`, `apps/desktop/test/events.test.ts:22`; `ui-fake.ts:139` attach result gains the new fields |
 
 Acceptance bar: `bun run test`, `bun test scripts` and `bun run typecheck` pass; every SC has a named
-test; the UI scenarios (SC-6, SC-17, SC-26 to SC-29) pass under `quirk:using-apps-like-a-user` on a
+test; the UI scenarios (SC-6, SC-17, SC-26 to SC-29, SC-42) pass under `quirk:using-apps-like-a-user` on a
 built app.
 
 ## Non-goals

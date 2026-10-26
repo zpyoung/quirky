@@ -5,6 +5,7 @@
 **Status:** Approved (headless build loop; decisions in [m1-term-daemon.md](../../../loop/decisions/m1-term-daemon.md)). Tech spec: requested.
 
 **Amendments:**
+- 2026-10-26, spec review (Codex adversarial review, D33): history pages are contiguous and sized by `lines` rather than trimmed to it (SC-11); SC-12 states the two-segment retention range; an ended session's pane shows its final screen read only, even after a host restart (new SC-42).
 - 2026-10-26, tech-spec authoring: methods follow the plugins' camelCase naming (`killAll`, `restartHost`) and the finished-command event is `commandFinished`; CLI words stay `kill-all` and `restart-host` ([D29](../../../loop/decisions/m1-term-daemon.md)). SC-38: a protocol 1 host's session is not restorable, since that host kept no restorable history.
 
 ## Conceptual model
@@ -41,7 +42,7 @@ differently:
 |---|---|---|
 | The window, or `quirkyd` | keeps running | its screen and recent history, exactly as they were (**reattach**) |
 | The host (crash, `restart-host`, reboot) | is gone | after a **restore**, a new shell in the old directory with the old screen and history above its prompt (**cold restore**) |
-| Nothing; the session was killed or exited | is gone | its final screen and history, read only |
+| Nothing; the session was killed or exited | is gone | its final screen and history, read only, even after the host restarted |
 
 A session whose host went away is **restorable**. It stays exited until someone opens its pane or
 runs `quirky session restore`, which starts the user's shell in its place under the same session id
@@ -204,7 +205,7 @@ Most scenarios use repo **api** at `/tmp/w/api` with worktrees **main** (at `/tm
 11. **SC-11: history pages back to the oldest output** (CLI)
     - **Given** **s1** has printed lines `h-1` to `h-1000`
     - **When** the agent runs `quirky terminal history s1 --lines 300`, then repeats it with `--before` set to each returned cursor
-    - **Then** each page prints about 300 lines oldest first, ending just before the previous page; together the pages hold every line once, in order; the last page starts with the session's first output and has no next cursor; `--ansi` returns the same rows with their colours
+    - **Then** each page prints about 300 lines (more when long lines wrap) oldest first, ending exactly where the previous page began; together the pages hold every line once, in order; the last page starts with the session's first output and has no next cursor; `--ansi` returns the same rows with their colours
     - **Data before:** **s1** history: `h-1` to `h-1000`
     - **Walkthrough:**
       1. Page 1 returns the lines ending at the screen's top, with cursor **c1**
@@ -214,7 +215,7 @@ Most scenarios use repo **api** at `/tmp/w/api` with worktrees **main** (at `/tm
 12. **SC-12: a long session keeps its newest 32 MiB** (API)
     - **Given** **s1** has printed 40 MiB of numbered lines
     - **When** a client pages history to the end
-    - **Then** the oldest page starts at a whole line from roughly the last 32 MiB, every later line is present, and the session's log on disk is never over 32 MiB in total
+    - **Then** the oldest page starts at a whole line no older than the newest 32 MiB and no newer than the newest 16 MiB (two 16 MiB segments are kept, so how much survives depends on where the current segment is; at 40 MiB it is about the newest 24 MiB), every later line is present once, and the session's log on disk never holds more than 32 MiB of output plus one record
 
 13. **SC-13: `read` returns the screen plus history lines** (CLI)
     - **Given** **s1** has printed `r-1` to `r-500`
@@ -393,7 +394,12 @@ Most scenarios use repo **api** at `/tmp/w/api` with worktrees **main** (at `/tm
     - **Then** it lists `quirky.terminal/snapshot`, `history`, `sessions`, `kill`, `killAll`, `restartHost` and `quirky.session/restore` with their argument schemas, the `terminal` group has `snapshot`, `history`, `sessions`, `kill`, `kill-all` and `restart-host` commands, `session` has `restore`, and the events `bell`, `commandFinished`, `title` and `cwd` are declared
     - **Data after:** **quirky api --json**: ✓ the seven methods with schemas; ✓ the four events
 
-41. **SC-41: the feature uses only the public plugin API** (API)
+41. **SC-42: an ended session's pane shows its final screen, read only** (UI, API)
+    - **Given** **s3** ended by `exit 0` after printing `bye`, and then the host was restarted
+    - **When** the person opens **s3**'s pane (or a client attaches to it)
+    - **Then** the pane shows **s3**'s history and final screen including `bye`, the attach result says `live: false`, no shell is started, and typing in the pane sends nothing
+
+42. **SC-41: the feature uses only the public plugin API** (API)
     - **Given** the built-in plugins
     - **When** the plugin fence test runs
     - **Then** `quirky.terminal` and `quirky.session` import nothing from the daemon's private modules; what they need from the host comes through `context.pty`

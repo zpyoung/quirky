@@ -325,5 +325,15 @@
 - **Confidence:** high
 - **Source:** locked by docs/loop/LOOP.md
 
+## D33: Spec review: fix all five Codex findings and the two misnamed test files; reject the rest of the pre-pass
+- **Question:** what to do with the adversarial review's results (LOOP.md step 4)
+- **Options:** fix each confirmed finding; record why not
+- **Chose:** the gate returned NEEDS_FIXES, 5 findings (3 HIGH, 2 MEDIUM), 0 suppressed, none contested (no tiebreak needed); reviewer codex gpt-6.1-sol, independence full, depth deep. All five fixed: (F1) history pages are now every row of a window that ends where the previous page began, so pages can't skip rows; (F2) checkpoints are taken only at a parser-safe offset (scanner in ground state, no partial UTF-8), with the restore ground terminating any dangling sequence; (F3) stored and exited sessions can be subscribed read only (`live: false`), so an ended session's pane shows its final screen after a host restart (new SC-42); (F4) SC-12 states the 16-32 MiB two-segment range; (F5) reopening a log for append truncates a torn tail first. From the per-file pre-passes, two test files the tech spec named as existing don't exist: `launch.test.ts` became the existing `shell-path.test.ts`, and `pty-client.test.ts` is marked new. The other pre-pass findings are rejected: they name files and symbols the tech spec plans to create, scenario paths and CLI commands that are illustrative, abbreviated paths inside a table whose directory is in the row header, and two missing headings (`Purpose`/`Overview`, `Decisions Locked` in tech.md) that the writing-specs rubrics don't require.
+- **Why:** LOOP.md: fix every confirmed finding or record why not
+- **Evidence:** review bundle in the session scratchpad (ar1/gate.json, ar1/manifest.json); docs/quirk/specs/2026-10-26-m1-term-daemon/logic.md amendments
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** assumed — autonomous
+
 ## Progress
-Step 4: specs written and committed; adversarial review running. Next: fix confirmed findings, commit, then step 5 (subagent-driven-development).
+Step 4 done: specs reviewed, fixed and committed. Next: step 5, run quirk:subagent-driven-development against the specs.
