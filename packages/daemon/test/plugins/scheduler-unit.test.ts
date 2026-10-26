@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from 'bun:test'
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { RpcErrorCode } from '@quirky/protocol'
-import { PluginHost } from '../../src/plugins/host'
+import { PluginHost, type ContextExtension } from '../../src/plugins/host'
 import { Scheduler } from '../../src/plugins/scheduler'
 import { Store } from '../../src/store'
 import { makeTempDir, readMarker, removeTempDirs, waitForFile, writeModulePlugin } from './fixtures'
@@ -474,6 +474,60 @@ describe('revokePlugin', () => {
     await until(() => t.starts().length === 1)
     scheduler.revokePlugin('someone.else')
     expect(scheduler.list()[0]?.state).toBe('running')
+  })
+})
+
+describe('failed activation', () => {
+  test('records the activation error even though the host revokes the plugin first', async () => {
+    const root = makeTempDir()
+    const installedDir = join(root, 'installed')
+    mkdirSync(installedDir)
+    const store = new Store(join(root, 'quirky.db'))
+    let scheduler!: Scheduler
+    const extension: ContextExtension = {
+      create: () => ({
+        dataDir: root,
+        emit: () => true,
+        subscribe: () => () => undefined,
+        call: async () => null,
+        openStore: () => {
+          throw new Error('unused')
+        },
+        error: (_kind, message) => new Error(message)
+      }),
+      revoke: (pluginId) => scheduler.revokePlugin(pluginId)
+    }
+    const host = new PluginHost({
+      builtinDir: null,
+      installedDir,
+      store,
+      emit: () => {},
+      log: () => {},
+      extension
+    })
+    cleanups.push(async () => {
+      scheduler.stop()
+      await host.stop()
+      store.close()
+    })
+    writeModulePlugin(
+      installedDir,
+      join(root, 'marker.log'),
+      { id: 'acme.broken', contributes: { job: [{ id: 'tick', interval: '1h' }] } },
+      { activate: "throw new Error('bad config')" }
+    )
+    host.load()
+    scheduler = new Scheduler({ plugins: host, store, log: () => {} })
+    scheduler.start()
+
+    const jobId = 'job:acme.broken/tick'
+    const run = await scheduler.run(jobId)
+    const expected = 'acme.broken failed to activate: bad config'
+    expect(run).toMatchObject({ status: 'failed', error: expected })
+    expect(run.finishedAt).not.toBeNull()
+    expect(store.listJobRuns().get(jobId)).toMatchObject({ status: 'failed', error: expected })
+    expect(store.listJobRuns().get(jobId)?.finishedAt).not.toBeNull()
+    expect(scheduler.list()[0]).toMatchObject({ state: 'idle', lastRun: { status: 'failed', error: expected } })
   })
 })
 
