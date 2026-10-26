@@ -15,7 +15,15 @@ import { SelectorSyntaxError, matchRepos } from './selector'
 
 type RepoRow = { id: string; name: string; path: string; added_at: number }
 
-const toRepo = (row: RepoRow): Repo => ({ id: row.id, name: row.name, path: row.path, addedAt: row.added_at })
+const toRepo = (row: RepoRow): Repo => ({
+  id: row.id,
+  name: row.name,
+  path: row.path,
+  addedAt: row.added_at,
+  kind: 'git',
+  displayName: null,
+  groupId: null
+})
 
 function randomId(length = 12): string {
   return crypto.randomUUID().replaceAll('-', '').slice(0, length)
@@ -104,7 +112,15 @@ export function activate(context: PluginContext): void {
     const real = resolveRealPath(root)
     const existing = store.get<RepoRow>('SELECT * FROM repos WHERE path = ?', real)
     if (existing) return toRepo(existing)
-    const repo: Repo = { id: `repo_${randomId()}`, name: basename(real), path: real, addedAt: Date.now() }
+    const repo: Repo = {
+      id: `repo_${randomId()}`,
+      name: basename(real),
+      path: real,
+      addedAt: Date.now(),
+      kind: 'git',
+      displayName: null,
+      groupId: null
+    }
     store.run('INSERT INTO repos (id, name, path, added_at) VALUES (?, ?, ?, ?)', repo.id, repo.name, repo.path, repo.addedAt)
     context.emit('changed', {})
     return repo
