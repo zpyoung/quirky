@@ -1,0 +1,13 @@
+{
+  "name": "@quirky/git",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/api.ts",
+    "./testing": "./src/testing.ts"
+  },
+  "dependencies": {
+    "@quirky/protocol": "workspace:*"
+  }
+}
