@@ -27,7 +27,7 @@ export type Command = {
   methods: readonly string[]
   /** The contributing plugin's ID; `null` for kernel commands. */
   plugin: string | null
-  /** Receives the tokens after the command words unparsed in `args.positionals`. */
+  /** Receives every token after the command words, global switches included, unparsed in `args.positionals`. */
   rawArgs?: true
   /** Required flags are documentation only; the run code checks them after merging `--params`. */
   deferRequired?: true

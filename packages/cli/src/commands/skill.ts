@@ -1,5 +1,6 @@
-import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
-import { dirname, join, resolve } from 'node:path'
+import { randomBytes } from 'node:crypto'
+import { mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs'
+import { basename, dirname, join, resolve } from 'node:path'
 import type { ParsedArgs } from '../args'
 import { renderSkill } from '../skill'
 import { loadCatalog } from './api'
@@ -15,6 +16,18 @@ function installed(path: string): string | null {
     return readFileSync(path, 'utf8')
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === 'ENOENT') return null
+    throw error
+  }
+}
+
+/** Replaces `path` with `text` through an exclusively created temp file beside it, which is removed on failure. */
+function writeAtomically(path: string, text: string): void {
+  const temp = join(dirname(path), `.${basename(path)}.${randomBytes(8).toString('hex')}.tmp`)
+  try {
+    writeFileSync(temp, text, { flag: 'wx', mode: 0o644 })
+    renameSync(temp, path)
+  } catch (error) {
+    rmSync(temp, { force: true })
     throw error
   }
 }
@@ -53,9 +66,7 @@ export const skillInstall: Command = {
     const { path, text, status } = await inspect(args, ctx)
     if (status !== 'up-to-date') {
       mkdirSync(dirname(path), { recursive: true })
-      const temp = `${path}.${process.pid}.tmp`
-      writeFileSync(temp, text)
-      renameSync(temp, path)
+      writeAtomically(path, text)
     }
     const result = status === 'up-to-date' ? status : 'installed'
     ctx.out.result({ status: result, path }, () => result)

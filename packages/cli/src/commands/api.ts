@@ -1,6 +1,7 @@
 import { CONNECTION_METHODS, type ApiCatalog } from '@quirky/protocol'
 import { UsageError, parseArgs } from '../args'
 import { buildCatalog, resolveCommands } from '../catalog'
+import { commandHelp } from '../command-spec'
 import { formatGeneric } from '../format'
 import { commandForMethod, generatedCommands, paramsFromArgs } from '../generated'
 import { takePositionals } from './support'
@@ -50,6 +51,8 @@ export const api: Command = {
   }
 }
 
+const GLOBAL_TOKENS = new Set(['--json', '--json=true', '--json=false'])
+
 export const apiCall: Command = {
   name: 'api call',
   summary: 'call any method by name, with flags taken from its params schema',
@@ -59,8 +62,10 @@ export const apiCall: Command = {
   plugin: null,
   rawArgs: true,
   async run(args, ctx) {
-    const [method, ...rest] = args.positionals
+    const methodAt = args.positionals.findIndex((token) => !GLOBAL_TOKENS.has(token))
+    const method = args.positionals[methodAt]
     if (method === undefined || method.startsWith('-')) throw new UsageError('missing <method>')
+    const rest = args.positionals.slice(methodAt + 1)
     const description = await ctx.rpc.call('api.describe', {})
     const entry = description.methods.find((candidate) => candidate.name === method)
     if (!entry) throw new UsageError(`unknown method ${method}`)
@@ -69,6 +74,10 @@ export const apiCall: Command = {
     }
     const command = commandForMethod(entry)
     const parsed = parseArgs(rest, command.flags, command.name, { checkRequired: false })
+    if (parsed.flags.help === true) {
+      ctx.out.line(commandHelp(command))
+      return
+    }
     const params = paramsFromArgs(command, parsed, entry.params)
     const result = await ctx.rpc.callAny(method, params)
     ctx.out.result(result, () => formatGeneric(result))
