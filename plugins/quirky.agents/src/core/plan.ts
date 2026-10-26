@@ -153,6 +153,80 @@ function hermesQueryCommand(argv: string[]): string {
   return `sh -c ${quote(script, true)}`
 }
 
+const OPENCODE_RUN_VALUE_FLAGS = new Set([
+  '--log-level',
+  '--completions',
+  '--server',
+  '--session',
+  '-s',
+  '--model',
+  '-m',
+  '--agent',
+  '--format',
+  '--file',
+  '-f',
+  '--title'
+])
+const ENV_VALUE_FLAGS = new Set(['-u', '--unset', '-C', '--chdir', '-P'])
+const ENV_EMPTY_FLAGS = new Set(['-i', '--ignore-environment', '-'])
+const ENV_ASSIGNMENT = /^[A-Za-z_][A-Za-z0-9_]*=/
+
+function skipAssignments(tokens: readonly string[], from: number): number {
+  let index = from
+  while (index < tokens.length && ENV_ASSIGNMENT.test(tokens[index])) index += 1
+  return index
+}
+
+function commandPositionAfterEnv(tokens: readonly string[], from: number): number {
+  let index = from
+  while (index < tokens.length) {
+    const token = tokens[index]
+    if (token === '--') {
+      index += 1
+      break
+    }
+    if (ENV_EMPTY_FLAGS.has(token)) index += 1
+    else if (ENV_VALUE_FLAGS.has(token)) index += 2
+    else if (/^(?:-[uCP].+|--(?:unset|chdir)=)/.test(token)) index += 1
+    else if (token.startsWith('-')) return tokens.length
+    else break
+  }
+  return skipAssignments(tokens, index)
+}
+
+/**
+ * Where an OpenCode `run` subcommand sits in `tokens` (past NAME=value prefixes and an `env`
+ * wrapper) and the index of its `--` message separator, or null when the command is not `run`.
+ */
+function findOpenCodeRun(tokens: readonly string[]): { messageSeparator: number | null } | null {
+  let position = skipAssignments(tokens, 0)
+  if ((tokens[position]?.split('/').pop() ?? '') === 'env') position = commandPositionAfterEnv(tokens, position + 1)
+  if (position > 0) {
+    const binary = (tokens[position]?.split(/[/\\]/).pop() ?? '').toLowerCase().replace(/\.(?:exe|cmd)$/, '')
+    if (binary !== 'opencode' && binary !== 'opencode2') return null
+  }
+  for (let index = position + 1; index < tokens.length; index += 1) {
+    const token = tokens[index]
+    if (!token.startsWith('-')) {
+      if (token !== 'run') return null
+      for (let at = index + 1; at < tokens.length; at += 1) {
+        if (tokens[at] === '--') return { messageSeparator: at }
+        if (OPENCODE_RUN_VALUE_FLAGS.has(tokens[at])) at += 1
+      }
+      return { messageSeparator: null }
+    }
+    if (token === '--log-level') index += 1
+  }
+  return null
+}
+
+/** The flag-prompt suffix: OpenCode `run` takes the prompt as a positional message, everything else `--prompt`. */
+function flagPromptSuffix(entry: AgentEntry, head: readonly string[], quoted: string): string {
+  const run = entry.id === 'opencode' || entry.id === 'opencode2' ? findOpenCodeRun(head) : null
+  if (!run) return ` --prompt ${quoted}`
+  return run.messageSeparator === null ? ` -- ${quoted}` : ` ${quoted}`
+}
+
 export type LaunchPlanInput = {
   entry: AgentEntry
   config: AgentConfig
@@ -193,7 +267,11 @@ export function buildLaunchPlan(input: LaunchPlanInput): LaunchPlan {
     planEnv = env
   ): LaunchPlan => ({ agent: entry.id, command, env: planEnv, record, promptDelivery, paste })
 
-  const head = [...base, ...userArgs, ...hookArgs]
+  const terminator = userArgs.indexOf('--')
+  const head =
+    terminator === -1
+      ? [...base, ...userArgs, ...hookArgs]
+      : [...base, ...userArgs.slice(0, terminator), ...hookArgs, ...userArgs.slice(terminator)]
   const plain = joinCommand(head)
   const prompt = input.prompt?.trim() ?? ''
   if (!prompt) return finish(plain, null, null)
@@ -215,7 +293,7 @@ export function buildLaunchPlan(input: LaunchPlanInput): LaunchPlan {
     case 'argv':
       return finish(`${plain}${entry.promptSeparator ? ` ${entry.promptSeparator}` : ''} ${quoted}`, 'command-line', null)
     case 'flag-prompt':
-      return finish(`${plain} --prompt ${quoted}`, 'command-line', null)
+      return finish(`${plain}${flagPromptSuffix(entry, head, quoted)}`, 'command-line', null)
     case 'flag-prompt-interactive':
       return finish(`${plain} --prompt-interactive ${quoted}`, 'command-line', null)
     case 'flag-interactive':

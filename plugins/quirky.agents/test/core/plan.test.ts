@@ -280,6 +280,65 @@ describe('prompt delivery', () => {
     for (const e of [OPENCODE, GEMINI, COPILOT]) expect(plan(e, 'fix the bug').promptDelivery).toBe('command-line')
   })
 
+  describe('flag-prompt for an OpenCode run command', () => {
+    const run = (command: string, e = OPENCODE) => buildLaunchPlan({ entry: e, config: config({ command }), prompt: 'fix the bug' })
+
+    test('a run subcommand takes the prompt as a positional message after --', () => {
+      const result = run('opencode run')
+      expect(result.command).toBe(`opencode run -- 'fix the bug'`)
+      expect(result.promptDelivery).toBe('command-line')
+    })
+
+    test('a run command with a message separator already present gets the bare prompt', () => {
+      expect(run('opencode run --model x --').command).toBe(`opencode run --model x -- 'fix the bug'`)
+    })
+
+    test('a value flag consumes a following -- so it is not taken for the message separator', () => {
+      expect(run('opencode run --title --').command).toBe(`opencode run --title -- -- 'fix the bug'`)
+    })
+
+    test('NAME=value prefixes, an env wrapper and an absolute path still find run', () => {
+      expect(run('FOO=1 opencode run').command).toBe(`FOO=1 opencode run -- 'fix the bug'`)
+      expect(run('env -u X FOO=1 /usr/bin/opencode run').command).toBe(`env -u X FOO=1 /usr/bin/opencode run -- 'fix the bug'`)
+    })
+
+    test('user arguments and hook arguments after run stay before the message', () => {
+      const result = buildLaunchPlan({
+        entry: OPENCODE,
+        config: config({ command: 'opencode run', args: '--model x' }),
+        hookArgs: ['--h'],
+        prompt: 'fix the bug'
+      })
+      expect(result.command).toBe(`opencode run --model x --h -- 'fix the bug'`)
+    })
+
+    test('other subcommands, the bare TUI and other agents keep --prompt; global options before run are skipped', () => {
+      expect(run('opencode').command).toBe(`opencode --prompt 'fix the bug'`)
+      expect(run('opencode serve').command).toBe(`opencode serve --prompt 'fix the bug'`)
+      expect(run('opencode --log-level DEBUG run').command).toBe(`opencode --log-level DEBUG run -- 'fix the bug'`)
+      expect(run('opencode run', entry('mimo-code', { prompt: 'flag-prompt' })).command).toBe(`opencode run --prompt 'fix the bug'`)
+    })
+
+    test('opencode2 gets the same treatment', () => {
+      expect(run('opencode2 run', entry('opencode2', { prompt: 'flag-prompt' })).command).toBe(`opencode2 run -- 'fix the bug'`)
+    })
+  })
+
+  test('hook arguments land before a -- in the user arguments, and the prompt still goes last', () => {
+    expect(
+      buildLaunchPlan({ entry: CLAUDE, config: config({ args: '--continue --model x -- extra' }), hookArgs: ['--settings', 'f.json'] })
+        .command
+    ).toBe('claude --continue --model x --settings f.json -- extra')
+    expect(
+      buildLaunchPlan({
+        entry: CLAUDE,
+        config: config({ args: '--model x -- extra' }),
+        hookArgs: ['--settings', 'f.json'],
+        prompt: 'hi'
+      }).command
+    ).toBe(`claude --model x --settings f.json -- extra 'hi'`)
+  })
+
   test('SC-19: hook arguments sit before the prompt part', () => {
     expect(plan(COPILOT, 'hi', { hookArgs: ['--h'] }).command).toBe(`copilot --h -i 'hi'`)
   })
