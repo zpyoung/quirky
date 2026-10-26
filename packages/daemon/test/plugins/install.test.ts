@@ -3,6 +3,7 @@ import { existsSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync
 import { join } from 'node:path'
 import { RpcError, RpcErrorCode, type PluginInspection } from '@quirky/protocol'
 import { inspectPlugin, installPlugin, renderInspection, uninstallPlugin } from '../../src/plugins/install'
+import { PluginHost } from '../../src/plugins/host'
 import { makeTempHome, startHarness, waitFor, type Harness } from '../helpers'
 import { makeTempDir, readMarker, removeTempDirs, writeModulePlugin, writePlugin } from './fixtures'
 
@@ -330,6 +331,51 @@ describe('plugin install', () => {
     expect(inspection.id).toBe('acme.tools')
     await installPlugin(deps, source)
     expect(inspectPlugin(deps, source).installed).toEqual({ version: '1.0.0', added: [], removed: [] })
+  })
+})
+
+describe('reinstalling an activated plugin', () => {
+  /** A method plugin whose main module and helper both return `n`, so a stale cache of either shows. */
+  function writeCounter(root: string, n: number, version: string): string {
+    return writePlugin(
+      root,
+      { id: 'acme.counter', name: 'Counter', version, main: 'main.ts', contributes: { method: [{ id: 'get' }] } },
+      {
+        'main.ts': [
+          "import { helper } from './lib/helper'",
+          'export function activate(context: any) {',
+          `  context.provide('method:acme.counter/get', () => ({ main: ${n}, helper: helper() }))`,
+          '}',
+          ''
+        ].join('\n'),
+        'lib/helper.ts': `export const helper = () => ${n}\n`
+      }
+    )
+  }
+
+  test('the next activation runs the newly installed code, not the module Bun cached', async () => {
+    const home = makeTempHome()
+    const scratch = makeTempDir()
+    const host = new PluginHost({
+      builtinDir: null,
+      installedDir: join(home, 'plugins'),
+      store: { listDisabledIds: () => [], setDisabledId: () => {} },
+      emit: () => {},
+      log: () => {}
+    })
+    host.load()
+    const deps = { home, plugins: host, log: () => {} }
+    const call = async () => ((await host.resolveImplementation('method:acme.counter/get')) as () => unknown)()
+
+    await installPlugin(deps, writeCounter(join(scratch, 'v1'), 1, '1.0.0'))
+    expect(await call()).toEqual({ main: 1, helper: 1 })
+
+    await installPlugin(deps, writeCounter(join(scratch, 'v2'), 2, '1.0.0'))
+    expect(await call()).toEqual({ main: 2, helper: 2 })
+
+    await installPlugin(deps, writeCounter(join(scratch, 'v3'), 3, '1.0.0'))
+    expect(await call()).toEqual({ main: 3, helper: 3 })
+    await host.stop()
   })
 })
 

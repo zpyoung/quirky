@@ -139,16 +139,24 @@ export class DistroService {
       for (const { temp } of staged) rmSync(temp, { recursive: true, force: true })
       throw internal(`could not copy the distro's plugins: ${messageOf(error)}`)
     }
-    for (const { temp, to } of staged) {
-      rmSync(to, { recursive: true, force: true })
-      renameSync(temp, to)
-    }
     const ids = staged.map(({ id }) => id)
-    for (const stale of (earlier?.plugins ?? []).filter((id) => !ids.includes(id))) this.deletePlugin(stale)
-
+    const dropped = (earlier?.plugins ?? []).filter((id) => !ids.includes(id))
     const row = { id: prepared.manifest.id, manifest: prepared.manifest, plugins: ids, installedAt: Date.now() }
-    store.putDistro(row)
-    await plugins.rescan()
+    try {
+      await plugins.replacePlugins([...ids, ...dropped], () => {
+        const backups = this.swapIn(staged)
+        try {
+          store.putDistro(row)
+        } catch (error) {
+          backups.restore()
+          throw error
+        }
+        backups.discard()
+        for (const stale of dropped) this.deletePlugin(stale)
+      })
+    } finally {
+      for (const { temp } of staged) rmSync(temp, { recursive: true, force: true })
+    }
     this.announce(prepared.manifest, earlier?.manifest ?? null)
     log(`distro ${row.id} installed with ${ids.length} plugin(s)`)
     return this.infoOf(row)
@@ -164,9 +172,10 @@ export class DistroService {
     const { store, plugins, log } = this.options
     const row = store.getDistro()
     if (!row || row.id !== id) throw notFound(`no distro ${id}`)
-    store.deleteDistro(id)
-    for (const pluginId of row.plugins) this.deletePlugin(pluginId)
-    await plugins.rescan()
+    await plugins.replacePlugins(row.plugins, () => {
+      store.deleteDistro(id)
+      for (const pluginId of row.plugins) this.deletePlugin(pluginId)
+    })
     this.announce(row.manifest, null)
     log(`distro ${id} removed`)
   }
@@ -187,6 +196,48 @@ export class DistroService {
       plugins: row.plugins,
       installedAt: row.installedAt
     }
+  }
+
+  /**
+   * Moves each staged copy into place, keeping the copy it replaces aside until `discard`. A
+   * failure here puts every earlier plugin back and leaves no `.tmp-` or `.old-` directory behind;
+   * `restore` does the same after a later failure.
+   */
+  private swapIn(staged: { id: string; temp: string; to: string }[]): { restore: () => void; discard: () => void } {
+    const installedDir = join(this.options.home, 'plugins')
+    const placed: { to: string; backup: string; hadOld: boolean }[] = []
+    const cleanup = () => {
+      for (const { id, temp } of staged) {
+        for (const leftover of [temp, join(installedDir, `.old-${id}`)]) {
+          try {
+            rmSync(leftover, { recursive: true, force: true })
+          } catch (error) {
+            this.options.log(`could not remove ${leftover}: ${messageOf(error)}`)
+          }
+        }
+      }
+    }
+    const restore = () => {
+      for (const { to, backup, hadOld } of [...placed].reverse()) {
+        rmSync(to, { recursive: true, force: true })
+        if (hadOld) renameSync(backup, to)
+      }
+      cleanup()
+    }
+    try {
+      for (const { id, temp, to } of staged) {
+        const backup = join(installedDir, `.old-${id}`)
+        rmSync(backup, { recursive: true, force: true })
+        const hadOld = existsSync(to)
+        if (hadOld) renameSync(to, backup)
+        placed.push({ to, backup, hadOld })
+        renameSync(temp, to)
+      }
+    } catch (error) {
+      restore()
+      throw internal(`could not install the distro's plugins: ${messageOf(error)}`)
+    }
+    return { restore, discard: cleanup }
   }
 
   private deletePlugin(id: string): void {
