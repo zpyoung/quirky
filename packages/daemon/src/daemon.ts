@@ -16,6 +16,7 @@ import type { GitApi } from './git-api'
 import { defaultCliEntry, installIntegrationFiles } from './launch'
 import { createHandlers } from './methods'
 import { osascriptNotifier, type Notifier } from './notify'
+import { PluginHost } from './plugins/host'
 import { PtyClient } from './pty-client'
 import { startServer } from './server'
 import { Core } from './service'
@@ -31,6 +32,10 @@ export type DaemonOptions = {
   notifier?: Notifier
   runnerFactory?: StructuredRunnerFactory
   uiDir?: string
+  /** Directory of built-in plugins; null for none. Defaults to `$QUIRKY_BUILTIN_PLUGINS_DIR` or the repo's `plugins/`. */
+  builtinPluginsDir?: string | null
+  /** Bounds each plugin activation and deactivate; defaults to 10 seconds. */
+  pluginActivationTimeoutMs?: number
   ptyHostEntry?: string
   cliEntry?: string
   /** Login shell that agents run under; defaults to `$SHELL`. */
@@ -45,6 +50,7 @@ export type DaemonOptions = {
 export type DaemonHandle = {
   port: number
   runtime: RuntimeInfo
+  plugins: PluginHost
   stop(): Promise<void>
 }
 
@@ -81,6 +87,10 @@ function defaultUiDir(): string {
   return process.env.QUIRKY_UI_DIR ?? fileURLToPath(new URL('../../ui/dist', import.meta.url))
 }
 
+function defaultBuiltinPluginsDir(): string {
+  return process.env.QUIRKY_BUILTIN_PLUGINS_DIR ?? fileURLToPath(new URL('../../../plugins', import.meta.url))
+}
+
 async function resolveClaudeThroughLoginShell(shell: string): Promise<string> {
   const proc = Bun.spawn([shell, '-l', '-c', 'command -v claude'], {
     stdin: 'ignore',
@@ -100,6 +110,8 @@ async function resolveClaudeThroughLoginShell(shell: string): Promise<string> {
 export async function startDaemon(options: DaemonOptions): Promise<DaemonHandle> {
   const home = ensureHome(options.home)
   mkdirSync(join(home, 'logs'), { recursive: true, mode: 0o700 })
+  const installedPluginsDir = join(home, 'plugins')
+  mkdirSync(installedPluginsDir, { recursive: true, mode: 0o700 })
   const log = options.log ?? ((message: string) => console.error(`[quirkyd] ${message}`))
   const startedAt = Date.now()
   const shell = options.shell ?? process.env.SHELL ?? '/bin/zsh'
@@ -133,6 +145,15 @@ export async function startDaemon(options: DaemonOptions): Promise<DaemonHandle>
     hookUrl: () => `http://127.0.0.1:${port}/hook`
   })
 
+  const plugins = new PluginHost({
+    builtinDir: options.builtinPluginsDir === undefined ? defaultBuiltinPluginsDir() : options.builtinPluginsDir,
+    installedDir: installedPluginsDir,
+    store,
+    emit: (event) => core.broadcast(event),
+    log,
+    activationTimeoutMs: options.pluginActivationTimeoutMs
+  })
+
   installIntegrationFiles(home, cliEntry)
 
   try {
@@ -142,11 +163,14 @@ export async function startDaemon(options: DaemonOptions): Promise<DaemonHandle>
     log(`pty host unavailable at startup: ${(error as Error).message}`)
   }
 
+  plugins.load()
+  await plugins.activateStartup()
+
   const requestedPort = options.port ?? Number(process.env.QUIRKY_PORT ?? 0)
   const listen = (listenPort: number) =>
     startServer({
       core,
-      handlers: createHandlers(core),
+      handlers: createHandlers(core, plugins),
       port: listenPort,
       rpcToken,
       daemonVersion,
@@ -183,11 +207,13 @@ export async function startDaemon(options: DaemonOptions): Promise<DaemonHandle>
   return {
     port,
     runtime,
+    plugins,
     async stop() {
       if (stopped) return
       stopped = true
       if (readRuntime(home)?.pid === process.pid) rmSync(runtimeFilePath(home), { force: true })
       await server.stop(true)
+      await plugins.stop()
       pty.close()
       store.close()
     }
