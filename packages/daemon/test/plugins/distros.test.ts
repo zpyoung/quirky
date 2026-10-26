@@ -357,6 +357,65 @@ describe('SC-56: refusals change nothing', () => {
     await expectUntouched(layer, () => layer.distros.install(day), RpcErrorCode.Conflict, /night is installed/)
   })
 
+  test('two concurrent installs of different distros: the second is a Conflict and only one row persists', async () => {
+    const layer = makeLayer()
+    const night = writeDistro(makeTempDir('qd-n-'))
+    const day = writeDistro(makeTempDir('qd-d-'), { id: 'day', name: 'Day', version: '1.0.0', plugins: ['plugins/day.extras'] }, [
+      { id: 'day.extras', name: 'Day', version: '1.0.0' }
+    ])
+
+    const [first, second] = await Promise.allSettled([layer.distros.install(night), layer.distros.install(day)])
+
+    expect(first.status).toBe('fulfilled')
+    expect(second.status).toBe('rejected')
+    expect((second as PromiseRejectedResult).reason).toMatchObject({ code: RpcErrorCode.Conflict })
+    expect(layer.distros.list().map((info) => info.id)).toEqual(['night'])
+    expect(layer.installedIds()).toEqual(['night.extras'])
+  })
+
+  test('an install queued behind a remove of the installed distro sees it gone and succeeds', async () => {
+    const layer = makeLayer()
+    await layer.distros.install(writeDistro(makeTempDir('qd-n-')))
+    const day = writeDistro(makeTempDir('qd-d-'), { id: 'day', name: 'Day', version: '1.0.0', plugins: ['plugins/day.extras'] }, [
+      { id: 'day.extras', name: 'Day', version: '1.0.0' }
+    ])
+
+    const [removed, installed] = await Promise.allSettled([layer.distros.remove('night'), layer.distros.install(day)])
+
+    expect(removed.status).toBe('fulfilled')
+    expect(installed.status).toBe('fulfilled')
+    expect(layer.distros.list().map((info) => info.id)).toEqual(['day'])
+    expect(layer.installedIds()).toEqual(['day.extras'])
+  })
+
+  test('an install ahead of a remove of the installed distro is refused and the remove still lands', async () => {
+    const layer = makeLayer()
+    await layer.distros.install(writeDistro(makeTempDir('qd-n-')))
+    const day = writeDistro(makeTempDir('qd-d-'), { id: 'day', name: 'Day', version: '1.0.0', plugins: ['plugins/day.extras'] }, [
+      { id: 'day.extras', name: 'Day', version: '1.0.0' }
+    ])
+
+    const [installed, removed] = await Promise.allSettled([layer.distros.install(day), layer.distros.remove('night')])
+
+    expect(installed.status).toBe('rejected')
+    expect((installed as PromiseRejectedResult).reason).toMatchObject({ code: RpcErrorCode.Conflict })
+    expect(removed.status).toBe('fulfilled')
+    expect(layer.distros.list()).toEqual([])
+    expect(layer.installedIds()).toEqual([])
+  })
+
+  test('a remove queued behind an install of the same distro removes it', async () => {
+    const layer = makeLayer()
+    const night = writeDistro(makeTempDir('qd-n-'))
+
+    const [installed, removed] = await Promise.allSettled([layer.distros.install(night), layer.distros.remove('night')])
+
+    expect(installed.status).toBe('fulfilled')
+    expect(removed.status).toBe('fulfilled')
+    expect(layer.distros.list()).toEqual([])
+    expect(layer.installedIds()).toEqual([])
+  })
+
   test('SC-56: a plugin ID that is already installed on its own is a Conflict', async () => {
     const layer = makeLayer()
     writePlugin(join(layer.home, 'plugins'), nightExtras({ version: '0.1.0' }))
