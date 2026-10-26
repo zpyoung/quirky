@@ -186,6 +186,7 @@ export class Dispatcher {
     confirmation: string | undefined
   ): Promise<unknown> {
     if (target.destructive && !yes && !('kernel' in from)) {
+      if (confirmation !== undefined) this.confirmations.assertUnused(confirmation)
       const prepared = await this.confirmations.prepare(target.destructive, params, from)
       if (confirmation === undefined) await this.confirmations.request(target.name, prepared, from)
       else await this.confirmations.consume(confirmation, target.name, prepared.digest)

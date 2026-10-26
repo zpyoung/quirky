@@ -100,9 +100,6 @@ export function createRpcHandler(options: RpcHandlerOptions): RpcHandler {
           return 'close'
         }
       }
-      if (method === 'terminal.attach') {
-        return fail(id, RpcErrorCode.InvalidParams, 'this method needs the WebSocket transport')
-      }
     }
     try {
       const result = await options.dispatcher.dispatch(

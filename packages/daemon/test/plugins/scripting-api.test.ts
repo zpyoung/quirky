@@ -111,39 +111,39 @@ describe('SC-1: a plugin method\'s schema is in the catalog, and listing it load
 describe('SC-13: a built-in\'s group drops quirky., and kernel commands win on shared words', () => {
   const listAndRename: [Manifest, ModuleBehavior] = [
     {
-      id: 'quirky.repo',
+      id: 'quirky.theme',
       contributes: {
         method: [
-          { id: 'list', description: 'List repos.' },
+          { id: 'list', description: 'List themes.' },
           {
             id: 'rename',
-            description: 'Rename a repo.',
-            params: { type: 'object', required: ['repoId', 'name'], properties: { repoId: { type: 'string' }, name: { type: 'string' } } }
+            description: 'Rename a theme.',
+            params: { type: 'object', required: ['themeId', 'name'], properties: { themeId: { type: 'string' }, name: { type: 'string' } } }
           }
         ]
       }
     },
     {
       activate: `
-        context.provide('method:quirky.repo/list', () => [{ id: 'builtin-repo' }])
-        context.provide('method:quirky.repo/rename', (params) => { record('rename ' + JSON.stringify(params)); return params })`
+        context.provide('method:quirky.theme/list', () => [{ id: 'builtin-theme' }])
+        context.provide('method:quirky.theme/rename', (params) => { record('rename ' + JSON.stringify(params)); return params })`
     }
   ]
   const listOnly = (id: string): [Manifest] => [{ id, contributes: { method: [{ id: 'list', description: `List ${id}.` }] } }]
 
-  test('repo rename calls the built-in and the shared words run the kernel commands', async () => {
+  test('theme rename calls the built-in and the shared words run the kernel commands', async () => {
     const s = await boot({ builtin: [listAndRename], installed: [listOnly('job'), listOnly('status')] })
 
-    const rename = await s.cli('repo', 'rename', '--repo-id', 'r1', '--name', 'x')
+    const rename = await s.cli('theme', 'rename', '--theme-id', 't1', '--name', 'x')
     expect(rename.code).toBe(0)
-    expect(s.lines()).toContain('rename {"repoId":"r1","name":"x"}')
+    expect(s.lines()).toContain('rename {"themeId":"t1","name":"x"}')
 
-    const repoList = await s.cli('repo', 'list')
-    expect(repoList.code).toBe(0)
-    expect(repoList.stdout).not.toContain('builtin-repo')
+    const themeList = await s.cli('theme', 'list')
+    expect(themeList.code).toBe(0)
+    expect(themeList.stdout).not.toContain('builtin-theme')
     const jobList = await s.cli('job', 'list')
     expect(jobList.code).toBe(0)
-    expect(s.lines().filter((line) => line.startsWith('activate'))).toEqual(['activate quirky.repo'])
+    expect(s.lines().filter((line) => line.startsWith('activate'))).toEqual(['activate quirky.theme'])
 
     const statusList = await s.cli('status', 'list')
     expect(statusList.code).toBe(2)
@@ -156,16 +156,16 @@ describe('SC-13: a built-in\'s group drops quirky., and kernel commands win on s
     const catalog = await s.catalog()
     const entry = (command: string, plugin: string | null) =>
       catalog.commands.find((c) => c.command === command && c.plugin === plugin)
-    expect(entry('repo list', 'quirky.repo')?.shadowedBy).toBe('kernel repo list')
+    expect(entry('theme list', 'quirky.theme')?.shadowedBy).toBe('kernel theme list')
     expect(entry('job list', 'job')?.shadowedBy).toBe('kernel job list')
     expect(entry('status list', 'status')?.shadowedBy).toBe('kernel status')
-    expect(entry('repo rename', 'quirky.repo')).toMatchObject({ methods: ['quirky.repo/rename'] })
-    expect(entry('repo rename', 'quirky.repo')?.shadowedBy).toBeUndefined()
-    expect(entry('repo list', null)?.methods).toEqual(['repo.list'])
+    expect(entry('theme rename', 'quirky.theme')).toMatchObject({ methods: ['quirky.theme/rename'] })
+    expect(entry('theme rename', 'quirky.theme')?.shadowedBy).toBeUndefined()
+    expect(entry('theme list', null)?.methods).toEqual(['theme.list'])
 
-    const called = await s.cli('api', 'call', 'quirky.repo/list', '--json')
+    const called = await s.cli('api', 'call', 'quirky.theme/list', '--json')
     expect(called.code).toBe(0)
-    expect(JSON.parse(called.stdout)).toEqual([{ id: 'builtin-repo' }])
+    expect(JSON.parse(called.stdout)).toEqual([{ id: 'builtin-theme' }])
   })
 })
 
@@ -221,11 +221,11 @@ describe('SC-20: quirky api lists everything, and --json is the catalog', () => 
     sorted(catalog.uiCommands.map((c) => c.id))
     sorted(catalog.commands.map((c) => c.command))
 
-    const repoAdd = catalog.commands.find((c) => c.command === 'repo add')!
-    expect(repoAdd.plugin).toBeNull()
-    expect(repoAdd.methods).toEqual(['repo.add'])
-    expect(repoAdd.positionals.map((p) => p.name)).toEqual(['path'])
-    expect(repoAdd.positionals[0].required).toBe(true)
+    const pluginEnable = catalog.commands.find((c) => c.command === 'plugin enable')!
+    expect(pluginEnable.plugin).toBeNull()
+    expect(pluginEnable.methods).toEqual(['plugin.enable'])
+    expect(pluginEnable.positionals.map((p) => p.name)).toEqual(['id'])
+    expect(pluginEnable.positionals[0].required).toBe(true)
 
     const add = catalog.commands.find((c) => c.command === 'acme.notes add')!
     expect(add.summary).toBe('Add a note.')
@@ -236,21 +236,19 @@ describe('SC-20: quirky api lists everything, and --json is the catalog', () => 
 describe('SC-21: quirky api call reaches any method', () => {
   test('calls kernel and plugin methods and refuses connection and unknown methods', async () => {
     const s = await boot({ installed: [notes] })
-    s.harness.git.addRepo('/fake/alpha')
-    const repo = await s.client.call('repo.add', { path: '/fake/alpha' })
 
-    const list = await s.cli('api', 'call', 'repo.list', '--json')
+    const list = await s.cli('api', 'call', 'plugin.list', '--json')
     expect(list.code).toBe(0)
-    expect(JSON.parse(list.stdout)).toEqual(await s.client.call('repo.list', {}))
-    expect(JSON.parse(list.stdout).map((r: { id: string }) => r.id)).toContain(repo.id)
+    expect(JSON.parse(list.stdout)).toEqual(await s.client.call('plugin.list', {}))
+    expect(JSON.parse(list.stdout).map((p: { id: string }) => p.id)).toContain('acme.notes')
 
     const count = await s.cli('api', 'call', 'acme.notes/count')
     expect(count.code).toBe(0)
     expect(count.stdout.trim()).toBe('3')
 
-    const attach = await s.cli('api', 'call', 'terminal.attach')
-    expect(attach.code).toBe(2)
-    expect(attach.stderr).toContain("terminal.attach needs a live connection and can't be called from the CLI")
+    const report = await s.cli('api', 'call', 'ui.report')
+    expect(report.code).toBe(2)
+    expect(report.stderr).toContain("ui.report needs a live connection and can't be called from the CLI")
 
     const unknown = await s.cli('api', 'call', 'nope.nothing')
     expect(unknown.code).toBe(2)
@@ -259,7 +257,7 @@ describe('SC-21: quirky api call reaches any method', () => {
 
   test('a daemon refusal under --json is a JSON error on stdout with nothing on stderr', async () => {
     const s = await boot({ installed: [notes] })
-    const refused = await s.cli('api', 'call', 'repo.add', '--path', '', '--json')
+    const refused = await s.cli('api', 'call', 'plugin.enable', '--id', '', '--json')
     expect(refused.code).toBe(1)
     expect(refused.stderr).toBe('')
     expect(JSON.parse(refused.stdout)).toMatchObject({ error: { code: 'invalid-params' } })

@@ -79,6 +79,17 @@ export class Confirmations {
   }
 
   /**
+   * Rejects with Conflict when `askId` names no confirmation or one already used. Runs before the
+   * action text is computed, so a replay after the target is gone reports the reuse and not the
+   * `describe` method's NotFound.
+   */
+  assertUnused(askId: string): void {
+    const row = this.store.getConfirmation(askId)
+    if (!row) throw conflict('confirmation is for another call')
+    if (row.used) throw conflict('confirmation already used')
+  }
+
+  /**
    * Opens a confirm ask for the call and rejects with ConfirmationRequired naming it. Rejects with
    * Conflict when `quirky.ask` is not available.
    */

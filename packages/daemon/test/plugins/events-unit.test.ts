@@ -142,7 +142,7 @@ describe('PluginEvents.emit', () => {
 })
 
 describe('PluginEvents listeners', () => {
-  const event: QuirkyEvent = { type: 'repo.changed' }
+  const event: QuirkyEvent = { type: 'plugin.changed' }
 
   test('listeners run after queued microtasks, in registration order', async () => {
     const t = setup()

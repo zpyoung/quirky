@@ -217,21 +217,8 @@ export type UiPluginModule = {
 /** Platform whose chord conventions apply: on `darwin`, `cmd` means `mod` and `metaKey` is `mod`. */
 export const CHORD_PLATFORM: string = 'darwin'
 
-/** Chords the window keeps for itself: new tab, close tab, tabs 1 to 9 and the command palette. */
-export const RESERVED_CHORDS: readonly string[] = [
-  'mod+t',
-  'mod+w',
-  'mod+1',
-  'mod+2',
-  'mod+3',
-  'mod+4',
-  'mod+5',
-  'mod+6',
-  'mod+7',
-  'mod+8',
-  'mod+9',
-  'mod+shift+p'
-]
+/** Chords the window keeps for itself: the command palette. */
+export const RESERVED_CHORDS: readonly string[] = ['mod+shift+p']
 
 const MODIFIER_ORDER = ['mod', 'ctrl', 'alt', 'shift'] as const
 type Modifier = (typeof MODIFIER_ORDER)[number]

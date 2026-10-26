@@ -141,17 +141,17 @@ describe('SC-5: additionalProperties true lets undeclared properties through', (
 })
 
 describe('SC-6: kernel methods have schemas, and the daemon checks them', () => {
-  test('repo.add with a path that is not a string is refused', async () => {
+  test('plugin.enable with an id that is not a string is refused', async () => {
     const s = await boot([])
-    expect(await rejection(s.client.callAny('repo.add', { path: 5 }))).toMatchObject({
+    expect(await rejection(s.client.callAny('plugin.enable', { id: 5 }))).toMatchObject({
       code: RpcErrorCode.InvalidParams,
-      message: 'params.path must be a string'
+      message: 'params.id must be a string'
     })
   })
 
   test('a kernel method refuses a property its schema does not declare', async () => {
     const s = await boot([])
-    expect(await rejection(s.client.callAny('repo.list', { extra: 1 }))).toMatchObject({
+    expect(await rejection(s.client.callAny('job.list', { extra: 1 }))).toMatchObject({
       code: RpcErrorCode.InvalidParams,
       message: 'params.extra is not allowed'
     })
@@ -170,9 +170,7 @@ describe('SC-6: kernel methods have schemas, and the daemon checks them', () => 
 
   test('calls the clients make keep working', async () => {
     const s = await boot([])
-    s.harness.git.addRepo('/fake/alpha')
-    const repo = await s.client.call('repo.add', { path: '/fake/alpha' })
-    expect((await s.client.call('repo.list', {})).map((entry) => entry.id)).toEqual([repo.id])
+    expect(await s.client.call('job.list', {})).toEqual([])
     expect(await s.client.call('status.get', {})).toMatchObject({ daemonVersion: expect.any(String) })
   })
 
@@ -201,14 +199,14 @@ describe('SC-6: kernel methods have schemas, and the daemon checks them', () => 
         behavior: {
           activate: `
             context.provide('method:acme.caller/bad', async () => {
-              try { await context.call('repo.add', { path: 5 }) } catch (error) { return { code: error.code, message: error.message } }
+              try { await context.call('plugin.enable', { id: 5 }) } catch (error) { return { code: error.code, message: error.message } }
             })`
         }
       }
     ])
     expect(await s.client.callAny('acme.caller/bad', {})).toEqual({
       code: RpcErrorCode.InvalidParams,
-      message: 'params.path must be a string'
+      message: 'params.id must be a string'
     })
   })
 })

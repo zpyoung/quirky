@@ -165,11 +165,11 @@ describe('calling plugin methods', () => {
           activate: `
             context.provide('method:acme.caller/relay', async () => ({
               refreshed: await context.call('acme.tools/refresh', { count: 3 }),
-              repos: await context.call('repo.list', {})
+              jobs: await context.call('job.list', {})
             }))
             context.provide('method:acme.caller/connection', async () => {
               const outcomes = {}
-              for (const name of ['client.hello', 'events.subscribe', 'terminal.attach', 'terminal.detach']) {
+              for (const name of ['client.hello', 'events.subscribe', 'ui.report', 'ui.window.focused']) {
                 try {
                   await context.call(name, {})
                   outcomes[name] = 'resolved'
@@ -182,20 +182,18 @@ describe('calling plugin methods', () => {
         }
       }
     ])
-    s.harness.git.addRepo('/fake/alpha')
-    const repo = await s.client.call('repo.add', { path: '/fake/alpha' })
     expect((await s.state('acme.tools')).state).toBe('inactive')
 
-    const result = (await call(s.client, 'acme.caller/relay')) as { refreshed: unknown; repos: { id: string }[] }
+    const result = (await call(s.client, 'acme.caller/relay')) as { refreshed: unknown; jobs: unknown[] }
     expect(result.refreshed).toEqual({ refreshed: 3 })
-    expect(result.repos.map((entry) => entry.id)).toEqual([repo.id])
+    expect(result.jobs).toEqual([])
     expect((await s.state('acme.tools')).state).toBe('active')
     expect(s.lines()).toContain('caller {"role":"plugin","pluginId":"acme.caller"}')
 
     const outcomes = await call(s.client, 'acme.caller/connection')
     expect(outcomes).toEqual(
       Object.fromEntries(
-        ['client.hello', 'events.subscribe', 'terminal.attach', 'terminal.detach'].map((name) => [
+        ['client.hello', 'events.subscribe', 'ui.report', 'ui.window.focused'].map((name) => [
           name,
           { code: RpcErrorCode.InvalidParams, message: `${name} needs a client connection` }
         ])

@@ -114,8 +114,13 @@ export type PluginNotification = {
 export type PluginLaunch = {
   readonly shell: string
   readonly binDir: string
-  /** The `QUIRKY_*` and PATH environment for a session; reserved names in `envPatch` are dropped. */
-  env(input: { sessionId: string; worktreeId: string; agent: string; envPatch?: Record<string, string> }): Record<string, string>
+  /** The `QUIRKY_*` and PATH environment for a session; reserved names in `envPatch` are dropped and a `null` value removes the variable. */
+  env(input: {
+    sessionId: string
+    worktreeId: string
+    agent: string
+    envPatch?: Record<string, string | null>
+  }): Record<string, string>
   shellArgv(): string[]
   commandArgv(command: string): string[]
   /** Runs the launch hooks for a session about to start. */

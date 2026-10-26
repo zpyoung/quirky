@@ -54,9 +54,9 @@ describe('setting values', () => {
 
   test('values stay out of the v1 settings table', () => {
     const store = new Store(dbPath())
-    const before = store.getSettings()
+    const before = store.legacySettings()
     store.setSettingValue('a.number', 1)
-    expect(store.getSettings()).toEqual(before)
+    expect(store.legacySettings()).toEqual(before)
     store.close()
   })
 

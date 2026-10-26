@@ -364,7 +364,7 @@ describe('commands and keybindings', () => {
       ui: 'ui.js',
       contributes: {
         command: [{ id: 'term', title: 'Term' }],
-        keybinding: [{ id: 't', key: 'mod+t', command: 'term' }]
+        keybinding: [{ id: 't', key: 'mod+shift+p', command: 'term' }]
       }
     })
     const harness = await env.start()
@@ -375,7 +375,7 @@ describe('commands and keybindings', () => {
       {
         id: 'keybinding:acme.keys/t',
         plugin: 'acme.keys',
-        key: 'mod+t',
+        key: 'mod+shift+p',
         command: 'command:acme.keys/term',
         status: 'shadowed',
         shadowedBy: 'kernel'
@@ -383,11 +383,11 @@ describe('commands and keybindings', () => {
     ])
     const [warning] = warnings(await pluginInfo(client, 'acme.keys'))
     expect(warning).toContain('keybinding:acme.keys/t is shadowed by')
-    expect(warning).toContain('mod+t')
+    expect(warning).toContain('mod+shift+p')
 
     const listed = await env.cli('ui', 'contributions')
     expect(tableRows(listed.stdout, 'KEYBINDINGS')).toEqual([
-      ['keybinding:acme.keys/t', 'mod+t', 'command:acme.keys/term', 'shadowed by kernel']
+      ['keybinding:acme.keys/t', 'mod+shift+p', 'command:acme.keys/term', 'shadowed by kernel']
     ])
   })
 
