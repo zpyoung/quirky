@@ -75,8 +75,9 @@ function checkDependencies(manifest: Record_, id: string | null, errors: string[
   if (!dependencies) return
   const seen = new Set<string>()
   for (const dependency of dependencies) {
+    if (!isPluginId(dependency)) errors.push(`dependencies: invalid plugin ID '${dependency}'`)
     if (dependency === id) errors.push('dependencies: a plugin cannot depend on itself')
-    else if (seen.has(dependency)) errors.push(`dependencies: duplicate dependency '${dependency}'`)
+    if (seen.has(dependency)) errors.push(`dependencies: duplicate dependency '${dependency}'`)
     seen.add(dependency)
   }
 }

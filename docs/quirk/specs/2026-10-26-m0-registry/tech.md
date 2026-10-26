@@ -97,6 +97,8 @@ type PluginManifest = {
 Manifest errors (each a separate string, all reported):
 
 - not valid JSON / not an object; a required field missing or of the wrong type; unknown field
+- a dependency that isn't a valid plugin ID (each check runs independently of the duplicate and
+  self-dependency checks)
 - a regex failing for the plugin ID, a kind, a name, an override ID or a disables ID
 - a duplicate name within one kind, a duplicate override ID, a duplicate dependency
 - an override whose namespace is the plugin's own ID ("use contributes for your own IDs")
@@ -127,7 +129,8 @@ discoverPlugins(dirs: { builtin: string | null; installed: string }): Discovered
 - Reads immediate subdirectories of each directory, skipping names starting with `.`. A missing
   directory yields nothing (not an error).
 - A subdirectory without `quirky-plugin.json` is a `DiscoveredPlugin` with the error "no
-  quirky-plugin.json".
+  quirky-plugin.json". One that isn't a regular file (a FIFO, a directory) gets "quirky-plugin.json
+  is not a regular file" and is never opened, so discovery can't block.
 - Built-ins come first, each list sorted by directory name. An installed plugin whose `id` equals
   a built-in's gets "duplicates the built-in plugin <id>". The built-in keeps working. This
   includes an unusable installed manifest whose fallback ID (its directory name) equals a
@@ -171,7 +174,8 @@ Rules, applied in this order:
 4. **Disabled IDs:** the union of `disabled` contribution IDs and the `disables` lists of enabled
    plugins. Every declaration of such an ID gets status `disabled`, with `disabledBy: 'user'` when
    the user list has it (user wins), else `'plugin'` and `disablingPlugin` (the lowest such plugin
-   ID). Declarations from disabled plugins get `disabled` / `disabledBy: 'owner'`.
+   ID). Declarations from disabled plugins get `disabled` / `disabledBy: 'owner'`, which takes
+   precedence over both: the owner being off is the more fundamental cause.
 5. **Winner** among the remaining declarations of an ID (all from enabled plugins). Override
    candidates beat the base. Among overrides, `a` beats `b` when `a` is installed and `b`
    built-in, or both have the same source and `a` depends on `b` transitively. The unbeaten

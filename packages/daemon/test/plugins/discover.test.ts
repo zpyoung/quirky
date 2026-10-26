@@ -124,4 +124,16 @@ describe('discoverPlugins', () => {
     writePlugin(installed, manifest('acme'))
     expect(discoverPlugins({ builtin: null, installed })).toHaveLength(1)
   })
+
+  test('a manifest that is not a regular file is an error without being read', () => {
+    const { installed } = setup()
+    const dir = join(installed, 'acme')
+    mkdirSync(dir)
+    const made = Bun.spawnSync(['mkfifo', join(dir, 'quirky-plugin.json')])
+    expect(made.exitCode).toBe(0)
+    const found = discoverPlugins({ builtin: null, installed })
+    expect(found).toHaveLength(1)
+    expect(found[0].manifest).toBeNull()
+    expect(found[0].errors).toEqual(['quirky-plugin.json is not a regular file'])
+  })
 })

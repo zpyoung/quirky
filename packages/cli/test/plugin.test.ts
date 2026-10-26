@@ -35,6 +35,18 @@ describe('plugin list', () => {
     expect(daemon.methodCalls('plugin.list')).toEqual([{}])
   })
 
+  test('a line break inside a cell cannot break the table', async () => {
+    daemon.addPlugin('acme.alpha', { version: '1\n2', diagnostics: [{ level: 'warning', message: 'w' }] })
+    daemon.addPlugin('acme.beta')
+    const result = await run(['plugin', 'list'])
+    expect(result.code).toBe(0)
+    const lines = result.stdout.trimEnd().split('\n')
+    expect(lines).toHaveLength(4)
+    expect(lines[1].split(/\s+/)).toEqual(['acme.alpha', 'inactive', 'installed', '1\\n2'])
+    expect(lines[2]).toBe('  warning: w')
+    expect(lines[3].split(/\s+/)).toEqual(['acme.beta', 'inactive', 'installed', '1.0.0'])
+  })
+
   test('says so when there are no plugins', async () => {
     expect((await run(['plugin', 'list'])).stdout).toBe('no plugins\n')
   })

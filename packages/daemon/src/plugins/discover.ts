@@ -37,6 +37,13 @@ function readPlugin(root: string, dirName: string, source: PluginSource): Discov
   const dir = resolve(root, dirName)
   const file = join(dir, MANIFEST_FILE)
   if (!existsSync(file)) return { id: dirName, dir, source, manifest: null, errors: [`no ${MANIFEST_FILE}`] }
+  try {
+    if (!statSync(file).isFile()) {
+      return { id: dirName, dir, source, manifest: null, errors: [`${MANIFEST_FILE} is not a regular file`] }
+    }
+  } catch (error) {
+    return { id: dirName, dir, source, manifest: null, errors: [`${MANIFEST_FILE} can't be read: ${(error as Error).message}`] }
+  }
   let text: string
   try {
     text = readFileSync(file, 'utf8')

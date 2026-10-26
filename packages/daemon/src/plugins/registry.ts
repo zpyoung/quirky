@@ -184,16 +184,16 @@ function applyDisabledIds(
   const remaining: ContributionInfo[] = []
   for (const declaration of declarations) {
     const disablingPlugin = disabledByPlugin.get(declaration.id)
-    if (disabled.has(declaration.id)) {
+    if (plugins.get(declaration.plugin)?.status === 'disabled') {
+      declaration.status = 'disabled'
+      declaration.disabledBy = 'owner'
+    } else if (disabled.has(declaration.id)) {
       declaration.status = 'disabled'
       declaration.disabledBy = 'user'
     } else if (disablingPlugin !== undefined) {
       declaration.status = 'disabled'
       declaration.disabledBy = 'plugin'
       declaration.disablingPlugin = disablingPlugin
-    } else if (plugins.get(declaration.plugin)?.status === 'disabled') {
-      declaration.status = 'disabled'
-      declaration.disabledBy = 'owner'
     } else {
       remaining.push(declaration)
     }

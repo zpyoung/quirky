@@ -127,6 +127,21 @@ describe('parseManifest', () => {
     expect(errorsOf({ ...base, dependencies: ['acme'] }).join('\n')).toContain('itself')
   })
 
+  test('rejects malformed dependency IDs, naming each', () => {
+    const errors = errorsOf({ ...base, dependencies: ['Bad ID', 'command:other/run', ''] })
+    expect(errors).toEqual([
+      "dependencies: invalid plugin ID 'Bad ID'",
+      "dependencies: invalid plugin ID 'command:other/run'",
+      "dependencies: invalid plugin ID ''",
+    ])
+  })
+
+  test('reports a self-dependency and its duplicate independently', () => {
+    const errors = errorsOf({ ...base, dependencies: ['acme', 'acme'] })
+    expect(errors.filter((e) => e.includes('cannot depend on itself'))).toHaveLength(2)
+    expect(errors).toContain("dependencies: duplicate dependency 'acme'")
+  })
+
   test('rejects an override of its own namespace', () => {
     const errors = errorsOf({ ...base, overrides: [{ id: 'command:acme/run' }] })
     expect(errors.join('\n')).toContain('use contributes for your own IDs')

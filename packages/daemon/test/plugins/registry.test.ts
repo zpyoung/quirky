@@ -175,6 +175,11 @@ describe('computeRegistry: disabled plugins', () => {
     expect(registry.effective.size).toBe(0)
   })
 
+  test('a declaration of a disabled plugin is attributed to the owner even when its ID is also disabled', () => {
+    const registry = compute([plugin('a', { contributes: cmd('run') })], ['a', 'command:a/run'])
+    expect(declaration(registry, 'command:a/run', 'a')).toMatchObject({ status: 'disabled', disabledBy: 'owner' })
+  })
+
   test('disabling cascades to dependents transitively', () => {
     const registry = compute(
       [plugin('a'), plugin('b', { dependencies: ['a'] }), plugin('c', { dependencies: ['b'] }), plugin('d')],

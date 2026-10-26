@@ -19,6 +19,11 @@ function contributionStatus(item: ContributionInfo): string {
   }
 }
 
+/** Keeps a cell on one line so an embedded line break can't split a table row. */
+function singleLine(text: string): string {
+  return text.replace(/\r\n|\r|\n/g, '\\n')
+}
+
 export const pluginList: Command = {
   name: 'plugin list',
   usage: 'plugin list',
@@ -31,11 +36,14 @@ export const pluginList: Command = {
       if (!plugins.length) return 'no plugins'
       const [header, ...rows] = formatTable(
         ['ID', 'STATE', 'SOURCE', 'VERSION'],
-        plugins.map((p) => [p.id, p.state, p.source, p.version])
+        plugins.map((p) => [p.id, p.state, p.source, p.version].map(singleLine))
       ).split('\n')
       return [
         header,
-        ...rows.flatMap((row, index) => [row, ...plugins[index].diagnostics.map((d) => `  ${d.level}: ${d.message}`)])
+        ...plugins.flatMap((plugin, index) => [
+          rows[index],
+          ...plugin.diagnostics.map((d) => `  ${singleLine(d.level)}: ${singleLine(d.message)}`)
+        ])
       ].join('\n')
     })
   }
