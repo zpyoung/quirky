@@ -1,5 +1,6 @@
 import { parseArgs, type ParsedArgs } from '../args'
 import { commandHelp, usageOf } from '../command-spec'
+import { api, apiCall } from './api'
 import { ask, askCancel, askWait } from './ask'
 import { jobList, jobRun } from './job'
 import { open } from './open'
@@ -7,6 +8,7 @@ import { pluginActivate, pluginContributions, pluginDisable, pluginEnable, plugi
 import { repoAdd, repoList, repoRm } from './repo'
 import { sessionClose, sessionList, sessionNew } from './session'
 import { settingGet, settingList, settingReset, settingSet } from './setting'
+import { skillInstall, skillShow, skillStatus } from './skill'
 import { status } from './status'
 import { termRead, termSend } from './term'
 import { themeList, themeSet } from './theme'
@@ -59,6 +61,11 @@ export const COMMANDS: Command[] = [
   askWait,
   askCancel,
   open,
+  api,
+  apiCall,
+  skillShow,
+  skillInstall,
+  skillStatus,
   help
 ]
 
