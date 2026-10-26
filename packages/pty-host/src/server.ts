@@ -10,6 +10,7 @@ import {
   type PtyRequest,
   type PtyResults
 } from '@quirky/protocol'
+import { socketPath as resolveSocketPath } from '@quirky/protocol/node'
 import { SessionManager, type DataSink, type SessionManagerOptions } from './session'
 import { SocketWriter } from './writer'
 
@@ -36,16 +37,13 @@ type Connection = {
   closed: boolean
 }
 
-const MAX_UNIX_PATH_BYTES = 103
-
 /**
- * Serves the PTY host protocol on `<home>/pty.sock`. Writes a fresh token to `pty.token` and
+ * Serves the PTY host protocol on `socketPath(home, 'pty.sock')`. Writes a fresh token to `pty.token` and
  * the pid to `pty.pid`; the caller is responsible for ensuring no other host owns the home.
  */
 export function startPtyServer(options: PtyServerOptions): PtyServer {
   const { home } = options
-  const socketPath = join(home, 'pty.sock')
-  if (Buffer.byteLength(socketPath) > MAX_UNIX_PATH_BYTES) throw new Error(`socket path too long: ${socketPath}`)
+  const socketPath = resolveSocketPath(home, 'pty.sock')
   mkdirSync(home, { recursive: true, mode: 0o700 })
 
   const token = randomBytes(32).toString('hex')

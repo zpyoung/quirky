@@ -1,5 +1,5 @@
 /**
- * An in-process stand-in for quirky-pty that speaks the control protocol over `<home>/pty.sock`.
+ * An in-process stand-in for quirky-pty that speaks the control protocol over `socketPath(home, 'pty.sock')`.
  * Tests drive it with `emit`, `exit` and `dropConnections`, and inspect what the daemon sent.
  */
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs'
@@ -14,6 +14,7 @@ import {
   type PtyRequest,
   type PtySessionInfo
 } from '@quirky/protocol'
+import { socketPath as resolveSocketPath } from '@quirky/protocol/node'
 
 type ConnState = { decoder: PtyFrameDecoder; authed: boolean }
 
@@ -41,7 +42,7 @@ export type FakePtyHost = {
 
 export function startFakePtyHost(home: string, options: { onShutdown?: () => void } = {}): FakePtyHost {
   mkdirSync(home, { recursive: true })
-  const socketPath = join(home, 'pty.sock')
+  const socketPath = resolveSocketPath(home, 'pty.sock')
   const token = crypto.randomUUID()
   rmSync(socketPath, { force: true })
   writeFileSync(join(home, 'pty.token'), token, { mode: 0o600 })

@@ -13,7 +13,7 @@ import {
   type PtyRequest,
   type PtyResults
 } from '@quirky/protocol'
-import { openPrivateLog } from '@quirky/protocol/node'
+import { openPrivateLog, socketPath } from '@quirky/protocol/node'
 
 type PtyParams<T extends PtyRequest['type']> = Omit<Extract<PtyRequest, { type: T }>, 'id' | 'type'>
 
@@ -39,7 +39,7 @@ export function defaultPtyHostEntry(): string {
 }
 
 /**
- * The daemon's connection to quirky-pty over `<home>/pty.sock`. It starts the host if nothing
+ * The daemon's connection to quirky-pty over `socketPath(home, 'pty.sock')`. It starts the host if nothing
  * answers and reconnects when the socket drops, since sessions outlive the connection.
  */
 export class PtyClient {
@@ -174,7 +174,7 @@ export class PtyClient {
     const decoder = new PtyFrameDecoder()
     this.decoder = decoder
     const socket = await Bun.connect<undefined>({
-      unix: join(this.options.home, 'pty.sock'),
+      unix: socketPath(this.options.home, 'pty.sock'),
       socket: {
         data: (sock, chunk) => {
           if (this.socket === sock) this.handleChunk(sock, chunk)
