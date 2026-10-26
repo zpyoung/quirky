@@ -63,7 +63,7 @@
       "deps": [
         "m0-core"
       ],
-      "status": "todo"
+      "status": "waiting"
     },
     {
       "id": "m1-term-daemon",
