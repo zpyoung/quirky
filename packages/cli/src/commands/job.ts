@@ -3,8 +3,24 @@ import { formatTable } from '../output'
 import { takePositionals } from './support'
 import type { Command } from './types'
 
+const pad = (value: number, width = 2) => String(Math.abs(value)).padStart(width, '0')
+
+/** Local ISO 8601 time with the UTC offset, e.g. 2023-11-14T14:13:20-08:00. */
+function localIso(ms: number): string {
+  const date = new Date(ms)
+  const offset = -date.getTimezoneOffset()
+  const sign = offset < 0 ? '-' : '+'
+  const year = date.getFullYear()
+  const yearText = year < 0 || year > 9999 ? `${year < 0 ? '-' : '+'}${pad(year, 6)}` : pad(year, 4)
+  return (
+    `${yearText}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}` +
+    `T${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}` +
+    `${sign}${pad(Math.trunc(offset / 60))}:${pad(offset % 60)}`
+  )
+}
+
 function isoOrDash(ms: number | null): string {
-  return ms === null ? '-' : new Date(ms).toISOString()
+  return ms === null ? '-' : localIso(ms)
 }
 
 function lastRun(run: JobRun | null): string {
