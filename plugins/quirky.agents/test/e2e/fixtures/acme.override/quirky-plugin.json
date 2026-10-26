@@ -1,0 +1,30 @@
+{
+  "id": "acme.override",
+  "name": "Acme override",
+  "version": "1.0.0",
+  "description": "Replaces the built-in codex entry for e2e tests.",
+  "overrides": [
+    {
+      "id": "agent:quirky.agents/codex",
+      "label": "Codex",
+      "detect": "codex",
+      "launch": "codex --profile acme",
+      "prompt": "argv",
+      "yolo": "--dangerously-bypass-approvals-and-sandbox",
+      "auto": "--approve-for-me",
+      "resume": [
+        "resume",
+        "{id}"
+      ],
+      "fork": [
+        "fork",
+        "{id}"
+      ],
+      "readySignal": "codex-composer-prompt",
+      "readyTimeoutMs": 20000,
+      "blindPaste": false,
+      "submitRetryMs": 1200,
+      "trust": "codex"
+    }
+  ]
+}

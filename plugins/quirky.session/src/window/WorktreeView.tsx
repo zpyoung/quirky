@@ -51,7 +51,7 @@ export function WorktreeView({
           )}
         </div>
       </div>
-      {worktree && <SessionTabs store={store} sessions={sessions} active={active} />}
+      {worktree && <SessionTabs context={context} store={store} sessions={sessions} active={active} />}
       <div className="main-body">
         {status === 'ready' && !active && (
           <div className="empty">

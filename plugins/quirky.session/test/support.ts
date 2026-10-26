@@ -19,7 +19,7 @@ export type PluginSet = {
 
 export const SESSION_PLUGINS: PluginSet = {
   real: ['quirky.session'],
-  fakes: ['quirky.worktree', 'quirky.agent-status', 'quirky.structured']
+  fakes: ['quirky.worktree', 'quirky.agents', 'quirky.agent-status', 'quirky.structured']
 }
 
 /** A built-in plugins directory that links the named plugins, so the daemon sees them as built-ins. */
