@@ -535,3 +535,73 @@ describe('settings', () => {
     ])
   })
 })
+
+describe('distro keybindings', () => {
+  const key = (owner: string, name: string, chord: string, command = 'go') =>
+    decl('keybinding', owner, name, { key: chord, command })
+  const withDistro = (
+    declarations: ContributionInfo[],
+    plugins: PluginInfo[],
+    distroKeybindings: { key: string; command: string }[]
+  ) => buildUiModel({ declarations, plugins, chosenTheme: 'default', distroKeybindings, distroId: 'night' })
+
+  test('gets the ID keybinding:<distro>/k<n> in manifest order and plugin <distro>', () => {
+    const { model } = withDistro(
+      [decl('command', 'a.p', 'go'), decl('command', 'a.p', 'stop')],
+      [withUi('a.p')],
+      [
+        { key: 'mod+shift+d', command: 'command:a.p/go' },
+        { key: 'mod+shift+s', command: 'command:a.p/stop' },
+      ]
+    )
+    expect(model.keybindings).toEqual([
+      { id: 'keybinding:night/k1', plugin: 'night', key: 'mod+shift+d', command: 'command:a.p/go', status: 'active' },
+      { id: 'keybinding:night/k2', plugin: 'night', key: 'mod+shift+s', command: 'command:a.p/stop', status: 'active' },
+    ])
+  })
+
+  test('beats an installed plugin and a builtin on its chord, and the losers carry a warning', () => {
+    const { model, warnings } = withDistro(
+      [
+        decl('command', 'quirky.sample', 'go'),
+        decl('command', 'acme.keys', 'go'),
+        key('quirky.sample', 'k', 'mod+k'),
+        key('acme.keys', 'k', 'mod+k'),
+      ],
+      [withUi('quirky.sample', 'builtin'), withUi('acme.keys')],
+      [{ key: 'mod+k', command: 'command:acme.keys/go' }]
+    )
+    const byId = Object.fromEntries(model.keybindings.map((k) => [k.id, k]))
+    expect(byId['keybinding:night/k1'].status).toBe('active')
+    expect(byId['keybinding:acme.keys/k']).toMatchObject({ status: 'shadowed', shadowedBy: 'keybinding:night/k1' })
+    expect(byId['keybinding:quirky.sample/k']).toMatchObject({ status: 'shadowed', shadowedBy: 'keybinding:night/k1' })
+    expect(warnings.get('acme.keys')?.[0].message).toBe('keybinding:acme.keys/k is shadowed by keybinding:night/k1 on mod+k')
+  })
+
+  test('on a reserved chord it is shadowed by the kernel like any other binding', () => {
+    const { model } = withDistro([decl('command', 'a.p', 'go')], [withUi('a.p')], [
+      { key: 'mod+t', command: 'command:a.p/go' },
+    ])
+    expect(model.keybindings).toEqual([
+      { id: 'keybinding:night/k1', plugin: 'night', key: 'mod+t', command: 'command:a.p/go', status: 'shadowed', shadowedBy: 'kernel' },
+    ])
+  })
+
+  test('a command that is not effective leaves it unbound and does not shadow others', () => {
+    const { model } = withDistro(
+      [decl('command', 'a.p', 'go'), key('a.p', 'k', 'mod+k')],
+      [withUi('a.p')],
+      [{ key: 'mod+k', command: 'command:a.p/ghost' }]
+    )
+    const byId = Object.fromEntries(model.keybindings.map((k) => [k.id, k]))
+    expect(byId['keybinding:night/k1'].status).toBe('unbound')
+    expect(byId['keybinding:a.p/k'].status).toBe('active')
+  })
+
+  test('without distro input the model is unchanged', () => {
+    const { model } = build([decl('command', 'a.p', 'go'), key('a.p', 'k', 'mod+k')], [withUi('a.p')])
+    expect(model.keybindings.map((k) => k.id)).toEqual(['keybinding:a.p/k'])
+    const empty = withDistro([decl('command', 'a.p', 'go')], [withUi('a.p')], [])
+    expect(empty.model.keybindings).toEqual([])
+  })
+})
