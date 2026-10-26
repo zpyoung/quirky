@@ -2,18 +2,16 @@ import { useEffect, useRef } from 'react'
 import { Terminal } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import { WebglAddon } from '@xterm/addon-webgl'
-import { base64ToBytes } from '@quirky/protocol'
-import type { Connection } from '../connection'
-import { usePluginState } from '../context'
-import { createInputGate, writeReplay } from '../lib/replayGate'
-import { terminalColors } from '../lib/terminalTheme'
+import { base64ToBytes, type UiPluginContext } from '@quirky/protocol'
+import { createInputGate, writeReplay } from './replayGate'
+import { readTerminalColors } from './terminalTheme'
 
 type Props = {
-  connection: Connection
+  context: UiPluginContext
+  /** The element whose `--terminal-*` custom properties give the colors. */
+  themeSource: Element
   sessionId: string
   scrollback: number
-  /** Changes on every reconnect so the pane attaches again on the new socket. */
-  epoch: number
   /** False once the process has exited, so keystrokes are not sent to a dead session. */
   interactive: boolean
 }
@@ -24,20 +22,14 @@ const RESIZE_DEBOUNCE_MS = 50
  * One xterm instance attached to one session's output. The parent mounts only the active tab,
  * so mounting attaches and unmounting detaches and disposes.
  */
-export function TerminalPane({ connection, sessionId, scrollback, epoch, interactive }: Props) {
+export function TerminalPane({ context, themeSource, sessionId, scrollback, interactive }: Props) {
   const host = useRef<HTMLDivElement>(null)
   const interactiveRef = useRef(interactive)
   interactiveRef.current = interactive
-  const colors = terminalColors(usePluginState().themeVariables)
-  const colorsRef = useRef(colors)
-  colorsRef.current = colors
-  const termRef = useRef<Terminal | null>(null)
 
   useEffect(() => {
     const element = host.current
     if (!element) return
-    const client = connection.client
-    if (!client) return
 
     const term = new Terminal({
       scrollback,
@@ -45,9 +37,8 @@ export function TerminalPane({ connection, sessionId, scrollback, epoch, interac
       fontSize: 13,
       cursorBlink: true,
       allowProposedApi: true,
-      theme: { ...colorsRef.current }
+      theme: { ...readTerminalColors(themeSource) }
     })
-    termRef.current = term
     const fit = new FitAddon()
     term.loadAddon(fit)
     term.open(element)
@@ -67,26 +58,38 @@ export function TerminalPane({ connection, sessionId, scrollback, epoch, interac
     const inputGate = createInputGate()
     term.onData((data) => {
       if (!interactiveRef.current || !inputGate.allows()) return
-      void client.call('terminal.write', { sessionId, data }).catch(() => {})
+      void context.call('quirky.terminal/write', { session: sessionId, data }).catch(() => {})
     })
     term.onResize(({ cols, rows }) => {
-      void client.call('terminal.resize', { sessionId, cols, rows }).catch(() => {})
+      void context.call('quirky.terminal/resize', { session: sessionId, cols, rows }).catch(() => {})
     })
 
-    client
-      .call('terminal.attach', { sessionId, cols: term.cols, rows: term.rows })
-      .then((result) => {
+    const detach = (id: number) => void context.call('quirky.terminal/detach', { streamId: id }).catch(() => {})
+    context
+      .call('quirky.terminal/attach', { session: sessionId, cols: term.cols, rows: term.rows })
+      .then((value) => {
+        const result = value as { streamId: number; replay: string }
         if (disposed) {
-          void client.call('terminal.detach', { streamId: result.streamId }).catch(() => {})
+          detach(result.streamId)
           return
         }
         streamId = result.streamId
         writeReplay(term, base64ToBytes(result.replay), inputGate)
-        unsubscribe = client.onTerminalOutput(result.streamId, (bytes) => term.write(bytes))
+        unsubscribe = context.onStream(result.streamId, (bytes) => term.write(bytes))
       })
       .catch((error: Error) => {
         if (!disposed) term.write(`\r\n\x1b[31mCould not attach: ${error.message}\x1b[0m\r\n`)
       })
+
+    // the host may apply the new theme variables after this listener runs
+    let themeTimer: ReturnType<typeof setTimeout> | undefined
+    const unsubscribeEvents = context.subscribe((event) => {
+      if (event.type !== 'theme.changed') return
+      clearTimeout(themeTimer)
+      themeTimer = setTimeout(() => {
+        if (!disposed) term.options.theme = { ...readTerminalColors(themeSource) }
+      }, 0)
+    })
 
     let resizeTimer: ReturnType<typeof setTimeout> | undefined
     const observer = new ResizeObserver(() => {
@@ -101,19 +104,14 @@ export function TerminalPane({ connection, sessionId, scrollback, epoch, interac
     return () => {
       disposed = true
       clearTimeout(resizeTimer)
+      clearTimeout(themeTimer)
       observer.disconnect()
+      unsubscribeEvents()
       unsubscribe?.()
-      if (streamId !== null && !client.isClosed) {
-        void client.call('terminal.detach', { streamId }).catch(() => {})
-      }
-      termRef.current = null
+      if (streamId !== null) detach(streamId)
       term.dispose()
     }
-  }, [connection, sessionId, scrollback, epoch])
-
-  useEffect(() => {
-    if (termRef.current) termRef.current.options.theme = { ...colors }
-  }, [colors.background, colors.foreground, colors.cursor])
+  }, [context, themeSource, sessionId, scrollback])
 
   return <div className="terminal-host" ref={host} />
 }

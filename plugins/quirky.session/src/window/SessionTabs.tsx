@@ -1,23 +1,18 @@
 import { useState } from 'react'
-import type { Session, Worktree } from '@quirky/protocol'
-import { closeSession, createSession } from '../actions'
-import { useAppState, useConnection, useDispatch, usePluginHost } from '../context'
-import { displayStatus } from '../lib/status'
+import type { Session } from '@quirky/protocol'
+import type { WorktreeSessions } from './model'
 import { NewSessionMenu } from './NewSessionMenu'
 import { PromptDialog, type NewSessionRequest } from './PromptDialog'
+import { displayStatus } from './status'
 import { StatusDot } from './StatusDot'
 
-type Props = { worktree: Worktree; sessions: Session[] }
+type Props = { store: WorktreeSessions; sessions: Session[]; active: Session | null }
 
-export function SessionTabs({ worktree, sessions }: Props) {
-  const state = useAppState()
-  const connection = useConnection()
-  const dispatch = useDispatch()
-  const host = usePluginHost()
+export function SessionTabs({ store, sessions, active }: Props) {
   const [pending, setPending] = useState<NewSessionRequest | null>(null)
 
   const pick = (request: NewSessionRequest) => {
-    if (request.agent === 'shell') void createSession(connection, worktree.id, 'shell', '', false)
+    if (request.agent === 'shell') void store.create('shell', '', false)
     else setPending(request)
   }
 
@@ -28,12 +23,9 @@ export function SessionTabs({ worktree, sessions }: Props) {
           <div
             key={session.id}
             role="tab"
-            aria-selected={session.id === state.selectedSessionId}
-            className={`tab${session.id === state.selectedSessionId ? ' active' : ''}`}
-            onClick={() => {
-              dispatch({ type: 'selectSession', id: session.id })
-              host.closeView()
-            }}
+            aria-selected={session.id === active?.id}
+            className={`tab${session.id === active?.id ? ' active' : ''}`}
+            onClick={() => store.open(session.id)}
             title={`${session.title} (${session.status})${index < 9 ? ` - Cmd+${index + 1}` : ''}`}
           >
             <StatusDot status={displayStatus(session.status)} />
@@ -43,7 +35,7 @@ export function SessionTabs({ worktree, sessions }: Props) {
               aria-label={`Close ${session.title}`}
               onClick={(event) => {
                 event.stopPropagation()
-                void closeSession(connection, session)
+                void store.close(session)
               }}
             >
               ×
@@ -59,7 +51,7 @@ export function SessionTabs({ worktree, sessions }: Props) {
           onSubmit={(prompt) => {
             const request = pending
             setPending(null)
-            void createSession(connection, worktree.id, request.agent, prompt, request.background)
+            void store.create(request.agent, prompt, request.background)
           }}
         />
       )}

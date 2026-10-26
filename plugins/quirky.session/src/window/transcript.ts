@@ -10,3 +10,10 @@ function isNoise(message: StructuredMessage): boolean {
 export function visibleMessages(messages: StructuredMessage[], showAll: boolean): StructuredMessage[] {
   return showAll ? messages : messages.filter((message) => !isNoise(message))
 }
+
+/** `existing` plus `incoming`, one message per `seq` (the incoming one wins), in `seq` order. */
+export function mergeMessages(existing: StructuredMessage[], incoming: StructuredMessage[]): StructuredMessage[] {
+  const bySeq = new Map(existing.map((message) => [message.seq, message]))
+  for (const message of incoming) bySeq.set(message.seq, message)
+  return [...bySeq.values()].sort((a, b) => a.seq - b.seq)
+}

@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test'
-import { createInputGate, writeReplay } from '../src/lib/replayGate'
+import { createInputGate, writeReplay } from '../src/window/replayGate'
 
 function fakeTerminal() {
   const writes: { data: Uint8Array; done?: () => void }[] = []

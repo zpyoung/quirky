@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test'
 import type { StructuredMessage } from '@quirky/protocol'
-import { visibleMessages } from '../src/lib/transcript'
+import { visibleMessages } from '../src/window/transcript'
 
 const m = (seq: number, role: StructuredMessage['role'], text: string): StructuredMessage => ({
   sessionId: 's',
