@@ -1,6 +1,18 @@
 import { describe, expect, test } from 'bun:test'
 import { checkSchemaDeclaration, flagNameOf, validateValue, type Schema } from '../src/schema'
 
+function nestedSchema(levels: number): Schema {
+  let schema: Schema = { type: 'string' }
+  for (let level = 1; level < levels; level++) schema = { type: 'array', items: schema }
+  return schema
+}
+
+function nestedValue(levels: number): unknown {
+  let value: unknown = []
+  for (let level = 1; level < levels; level++) value = [value]
+  return value
+}
+
 const objectCheck = (value: unknown) => checkSchemaDeclaration(value, 'params', { object: true })
 
 describe('checkSchemaDeclaration', () => {
@@ -132,6 +144,19 @@ describe('checkSchemaDeclaration', () => {
     ])
     expect(checkSchemaDeclaration({ minimum: 1, maximum: 1 }, 'data')).toEqual([])
   })
+
+  test('accepts a schema nested 32 levels deep', () => {
+    expect(checkSchemaDeclaration(nestedSchema(32), 'data')).toEqual([])
+  })
+
+  test('reports one message at the first path past 32 levels and stops descending', () => {
+    const deepest = '.items'.repeat(32)
+    expect(checkSchemaDeclaration(nestedSchema(40), 'data')).toEqual([`data${deepest}: schema nests deeper than 32 levels`])
+  })
+
+  test('survives a schema nested far beyond the call stack', () => {
+    expect(checkSchemaDeclaration(nestedSchema(20_000), 'data')).toHaveLength(1)
+  })
 })
 
 const params: Schema = {
@@ -221,6 +246,12 @@ describe('validateValue', () => {
     expect(validateValue({ minimum: 2 }, 'x', 'v')).toBeNull()
     expect(validateValue({ properties: { a: { type: 'string' } } }, { a: 1 }, 'v')).toBe('v.a must be a string')
     expect(validateValue({ required: ['a'] }, {}, 'v')).toBe('v.a is required')
+  })
+
+  test('does not descend into a deeply nested value its schema does not describe', () => {
+    const value = nestedValue(20_000)
+    expect(validateValue({}, value, 'v')).toBeNull()
+    expect(validateValue({ type: 'array' }, value, 'v')).toBeNull()
   })
 })
 
