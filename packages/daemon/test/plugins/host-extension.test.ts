@@ -37,6 +37,7 @@ function setup(options: { withExtension?: boolean; throwOnRevoke?: boolean; thro
         openStore: () => {
           throw new Error('unused')
         },
+        getSetting: () => undefined,
         error: (_kind, message) => new Error(`ext:${message}`)
       }
     },

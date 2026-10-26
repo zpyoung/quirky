@@ -9,6 +9,7 @@ import {
 } from '@quirky/protocol'
 import { HEALTH_PATH } from '@quirky/protocol/node'
 import { DaemonError } from './errors'
+import { servePluginFile } from './plugin-files'
 import type { Dispatcher } from './plugins/dispatch'
 import type { Core } from './service'
 import { serveStatic } from './static'
@@ -23,6 +24,8 @@ export type ServerOptions = {
   rpcToken: string
   daemonVersion: string
   uiDir: string
+  /** Maps a plugin ID to the directory its `/plugins/<id>/` files come from, or null for none. */
+  pluginFile: (pluginId: string) => { dir: string } | null
   log: (message: string) => void
 }
 
@@ -93,6 +96,9 @@ export function startServer(options: ServerOptions) {
         return handleHook(request, url)
       }
       if (request.method === 'GET' || request.method === 'HEAD') {
+        if (url.pathname.startsWith('/plugins/')) {
+          return servePluginFile(options.pluginFile, url.pathname, request.method)
+        }
         return serveStatic(options.uiDir, url.pathname, request.method)
       }
       return json({ error: 'method not allowed' }, 405)
