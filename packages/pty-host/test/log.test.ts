@@ -1,8 +1,9 @@
-import { afterEach, describe, expect, test } from 'bun:test'
+import { afterEach, describe, expect, mock, test } from 'bun:test'
+import * as fs from 'node:fs'
 import { appendFileSync, closeSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { HistoryLog, newestOffset, oldestOffset, readSegments } from '../src/history/log'
+import { HistoryLog, LogReader, newestOffset, oldestOffset, readSegments } from '../src/history/log'
 
 const enc = (s: string) => new TextEncoder().encode(s)
 const dec = (b: Uint8Array | undefined) => new TextDecoder().decode(b)
@@ -260,6 +261,150 @@ describe('readSegments damage handling', () => {
     expect(readSegments(dir)).toEqual({ segments: [], unreadable: [] })
     expect(oldestOffset(dir)).toBe(0)
     expect(newestOffset(dir)).toBe(0)
+  })
+})
+
+describe('LogReader', () => {
+  /** What `readSegments` reports, read back through the indexed reader. */
+  function viaReader(dir: string) {
+    const reader = LogReader.open(dir)
+    try {
+      return {
+        unreadable: reader.unreadable,
+        segments: reader.segments.map((segment) => ({
+          path: segment.path,
+          startOffset: segment.startOffset,
+          endOffset: segment.endOffset,
+          records: segment.records.map((record) => ({
+            kind: record.kind,
+            offset: record.offset,
+            ...(record.kind === 'output' ? { bytes: reader.readOutput(segment, record, 0, record.length) } : {}),
+            ...(record.kind === 'resize' ? { cols: record.cols, rows: record.rows } : {})
+          }))
+        }))
+      }
+    } finally {
+      reader.close()
+    }
+  }
+
+  function viaReadSegments(dir: string) {
+    const { segments, unreadable } = readSegments(dir)
+    return {
+      unreadable,
+      segments: segments.map((segment) => ({
+        path: segment.path,
+        startOffset: segment.startOffset,
+        endOffset: segment.endOffset,
+        records: segment.records.map((record) => ({
+          kind: record.kind,
+          offset: record.offset,
+          ...(record.kind === 'output' ? { bytes: record.bytes } : {}),
+          ...(record.kind === 'resize' ? { cols: record.cols, rows: record.rows } : {})
+        }))
+      }))
+    }
+  }
+
+  test('reports the same segments and records as readSegments, across rotation and many small records', () => {
+    const dir = freshDir()
+    const log = HistoryLog.create(dir, { cols: 80, rows: 24, maxSegmentBytes: 9000 })
+    for (let i = 0; i < 2000; i++) {
+      log.appendOutput(enc(`line ${i}\n`))
+      if (i % 300 === 0) log.appendResize(60 + (i % 7), 20)
+      if (i % 700 === 0) log.appendRestore()
+    }
+    log.close()
+    expect(viaReader(dir).segments).toHaveLength(2)
+    expect(viaReader(dir)).toEqual(viaReadSegments(dir))
+  })
+
+  test('treats a torn tail, bad magic, unknown format, unknown kind and a bad resize like readSegments', () => {
+    const dir = freshDir()
+    const log = HistoryLog.create(dir, { cols: 80, rows: 24, maxSegmentBytes: OPENING_BYTES + 10 })
+    log.appendOutput(enc('0123456789AB'))
+    log.appendOutput(enc('tail'))
+    log.close()
+    const current = join(dir, 'output.log')
+    const rotated = join(dir, 'output.1.log')
+    const goodCurrent = readFileSync(current)
+    const goodRotated = readFileSync(rotated)
+
+    appendFileSync(current, tornRecord())
+    expect(viaReader(dir)).toEqual(viaReadSegments(dir))
+    expect(viaReader(dir).unreadable).toEqual([])
+
+    const badMagic = Buffer.from(goodRotated)
+    badMagic.write('NOPE', 0, 'latin1')
+    writeFileSync(rotated, badMagic)
+    writeFileSync(current, goodCurrent)
+    expect(viaReader(dir)).toEqual(viaReadSegments(dir))
+    expect(viaReader(dir).unreadable).toEqual([rotated])
+
+    writeFileSync(rotated, goodRotated)
+    const badFormat = Buffer.from(goodCurrent)
+    badFormat[4] = 9
+    writeFileSync(current, badFormat)
+    expect(viaReader(dir)).toEqual(viaReadSegments(dir))
+    expect(viaReader(dir).unreadable).toEqual([current])
+
+    writeFileSync(current, Buffer.concat([goodCurrent, Buffer.from([0x7f, 0, 0, 0, 0])]))
+    expect(viaReader(dir)).toEqual(viaReadSegments(dir))
+    expect(viaReader(dir).unreadable).toEqual([current])
+
+    const wrongResize = Buffer.concat([goodCurrent, Buffer.from([0x02, 2, 0, 0, 0, 1, 2])])
+    writeFileSync(current, wrongResize)
+    expect(viaReader(dir)).toEqual(viaReadSegments(dir))
+    expect(viaReader(dir).unreadable).toEqual([current])
+
+    writeFileSync(current, Buffer.alloc(3))
+    expect(viaReader(dir)).toEqual(viaReadSegments(dir))
+  })
+
+  test('a missing directory reads as nothing', () => {
+    const reader = LogReader.open(freshDir())
+    expect(reader.segments).toEqual([])
+    expect(reader.unreadable).toEqual([])
+    reader.close()
+  })
+
+  test('indexing and a ranged read touch only the framing and the bytes asked for', () => {
+    const mib = 1024 * 1024
+    const dir = freshDir()
+    const log = HistoryLog.create(dir, { cols: 80, rows: 24 })
+    const body = new Uint8Array(mib).map((_, i) => i % 251)
+    for (let i = 0; i < 8; i++) log.appendOutput(body)
+    log.close()
+
+    const real = { ...fs }
+    let total = 0
+    mock.module('node:fs', () => ({
+      ...real,
+      readSync: (...args: Parameters<typeof fs.readSync>) => {
+        const n = real.readSync(...args)
+        total += n
+        return n
+      },
+      readFileSync: (...args: Parameters<typeof fs.readFileSync>) => {
+        const data = real.readFileSync(...args)
+        total += data.length
+        return data
+      }
+    }))
+    try {
+      const reader = LogReader.open(dir)
+      expect(reader.segments[0]!.endOffset).toBe(8 * mib)
+      expect(total).toBeLessThan(64 * 1024)
+
+      const record = reader.segments[0]!.records.filter((r) => r.kind === 'output')[3]!
+      total = 0
+      const bytes = reader.readOutput(reader.segments[0]!, record, 1000, 1500)
+      expect(total).toBe(500)
+      expect(bytes).toEqual(body.subarray(1000, 1500))
+      reader.close()
+    } finally {
+      mock.module('node:fs', () => real)
+    }
   })
 })
 

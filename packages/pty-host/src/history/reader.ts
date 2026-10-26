@@ -1,9 +1,13 @@
 import type { SerializeAddon } from '@xterm/addon-serialize'
 import { Screen } from '../screen'
-import { readSegments, type LogSegment } from './log'
+import { LogReader } from './log'
 
 /** The most output bytes one window reads, so a single page or attach stays bounded. */
 const READ_CAP_BYTES = 8 * 1024 * 1024
+
+/** How far past the oldest retained byte to look for the end of a cut-off first line. */
+const LINE_START_SCAN_BYTES = 64 * 1024
+const READ_BLOCK_BYTES = 64 * 1024
 
 const NEWLINE = 0x0a
 const CURSOR_PATTERN = /^h1\.(\d+)$/
@@ -23,6 +27,8 @@ type WindowEvent = { kind: 'output'; bytes: Uint8Array } | { kind: 'resize'; col
 /** A stretch of the log, `[start, end)` in output positions, with `oldest` the first line the log still holds whole. */
 type Located = { start: number; end: number; oldest: number }
 
+type Piece = { offset: number; bytes: Uint8Array }
+
 type Window = Located & { size: Size | null; events: WindowEvent[] }
 
 export type HistoryPage = { lines: string[]; cursor: string | null }
@@ -40,112 +46,151 @@ export function parseCursor(cursor: string): number {
   return offset
 }
 
-/** Absolute output position of the first line start at or after the oldest retained byte. */
-function wholeLineStart(segments: LogSegment[], retainedStart: number, newest: number): number {
+/**
+ * Absolute output position of the first line start at or after the oldest retained byte. Looks
+ * ahead only `LINE_START_SCAN_BYTES`, so a line longer than that at the edge counts as whole.
+ */
+function wholeLineStart(reader: LogReader, retainedStart: number, newest: number): number {
   if (retainedStart === 0) return 0
-  const newline = firstNewline(segments, retainedStart, newest)
-  return newline < 0 ? retainedStart : newline + 1
+  let budget = LINE_START_SCAN_BYTES
+  for (const segment of reader.segments) {
+    for (const record of segment.records) {
+      if (record.kind !== 'output' || record.offset + record.length <= retainedStart || record.offset >= newest) continue
+      const limit = Math.min(record.length, newest - record.offset)
+      for (let from = Math.max(0, retainedStart - record.offset); from < limit && budget > 0; ) {
+        const to = from + Math.min(limit - from, READ_BLOCK_BYTES, budget)
+        const found = reader.readOutput(segment, record, from, to).indexOf(NEWLINE)
+        if (found >= 0) return record.offset + from + found + 1
+        budget -= to - from
+        from = to
+      }
+    }
+  }
+  return retainedStart
 }
 
-function firstNewline(segments: LogSegment[], from: number, end: number): number {
-  for (const segment of segments) {
-    for (const record of segment.records) {
-      if (record.kind !== 'output') continue
-      const bytes = record.bytes!
-      if (record.offset + bytes.length <= from || record.offset >= end) continue
-      const skip = Math.max(0, from - record.offset)
-      const found = bytes.subarray(skip, Math.min(bytes.length, end - record.offset)).indexOf(NEWLINE)
-      if (found >= 0) return record.offset + skip + found
-    }
+function firstNewline(pieces: Piece[], from: number, end: number): number {
+  for (const piece of pieces) {
+    if (piece.offset + piece.bytes.length <= from || piece.offset >= end) continue
+    const skip = Math.max(0, from - piece.offset)
+    const found = piece.bytes.subarray(skip, Math.min(piece.bytes.length, end - piece.offset)).indexOf(NEWLINE)
+    if (found >= 0) return piece.offset + skip + found
   }
   return -1
 }
 
 /**
- * Walks the log backwards from `end` to the position of the `wanted`-th newline, stopping early
- * at the read cap; returns `oldest` when the log runs out first.
+ * Reads the log backwards from `end` until the `wanted`-th newline, the oldest whole line or the
+ * read cap, whichever comes first. Returns where it stopped and the bytes it read, oldest first.
  */
-function findStart(segments: LogSegment[], oldest: number, end: number, wanted: number): number {
+function readBackwards(reader: LogReader, oldest: number, end: number, wanted: number): { start: number; pieces: Piece[] } {
+  const pieces: Piece[] = []
   let newlines = 0
   let budget = READ_CAP_BYTES
-  for (let s = segments.length - 1; s >= 0; s--) {
-    const records = segments[s].records
-    for (let r = records.length - 1; r >= 0; r--) {
-      const record = records[r]
-      if (record.kind !== 'output' || record.offset >= end) continue
-      let bytes = record.bytes!.subarray(0, Math.min(record.bytes!.length, end - record.offset))
-      let from = record.offset
-      if (bytes.length > budget) {
-        from += bytes.length - budget
-        bytes = bytes.subarray(bytes.length - budget)
+  const stopAt = (start: number) => ({ start, pieces: pieces.reverse() })
+  for (let s = reader.segments.length - 1; s >= 0; s--) {
+    const segment = reader.segments[s]
+    for (let r = segment.records.length - 1; r >= 0; r--) {
+      const record = segment.records[r]
+      if (record.kind !== 'output' || record.offset >= end || record.offset + record.length <= oldest) continue
+      const floor = Math.max(0, oldest - record.offset)
+      for (let hi = Math.min(record.length, end - record.offset); hi > floor; ) {
+        const lo = hi - Math.min(hi - floor, READ_BLOCK_BYTES, budget)
+        const bytes = reader.readOutput(segment, record, lo, hi)
+        pieces.push({ offset: record.offset + lo, bytes })
+        budget -= hi - lo
+        for (let at = bytes.length; at > 0; ) {
+          at = bytes.lastIndexOf(NEWLINE, at - 1)
+          if (at < 0) break
+          if (++newlines === wanted) return stopAt(record.offset + lo + at)
+        }
+        if (budget === 0) return stopAt(record.offset + lo)
+        hi = lo
       }
-      budget -= bytes.length
-      let at = bytes.length
-      while (at > 0) {
-        at = bytes.lastIndexOf(NEWLINE, at - 1)
-        if (at < 0) break
-        if (++newlines === wanted) return from + at
-      }
-      if (budget === 0) return from
     }
   }
-  return oldest
+  return stopAt(oldest)
 }
 
-function locate(segments: LogSegment[], before: number | undefined, lines: number, screenRows: number): Located {
-  if (segments.length === 0) return { start: 0, end: 0, oldest: 0 }
+function locate(reader: LogReader, before: number | undefined, lines: number, screenRows: number): Located & { pieces: Piece[] } {
+  const { segments } = reader
+  if (segments.length === 0) return { start: 0, end: 0, oldest: 0, pieces: [] }
   const newest = segments[segments.length - 1].endOffset
-  const oldest = wholeLineStart(segments, segments[0].startOffset, newest)
+  const oldest = wholeLineStart(reader, segments[0].startOffset, newest)
   const end = before === undefined ? newest : Math.min(Math.max(before, oldest), newest)
-  if (end <= oldest) return { start: oldest, end: oldest, oldest }
+  if (end <= oldest) return { start: oldest, end: oldest, oldest, pieces: [] }
 
   const wanted = before === undefined ? lines + screenRows : lines
-  let start = wanted > 0 ? Math.max(findStart(segments, oldest, end, wanted), oldest) : end
+  if (wanted <= 0) return { start: end, end, oldest, pieces: [] }
+  const read = readBackwards(reader, oldest, end, wanted)
+  let start = Math.max(read.start, oldest)
   if (start > oldest) {
-    const newline = firstNewline(segments, start, end)
+    const newline = firstNewline(read.pieces, start, end)
     // a window with no newline before its end keeps its cut, so paging always moves
     if (newline >= 0 && newline + 1 < end) start = newline + 1
   }
-  return { start, end, oldest }
+  return { start, end, oldest, pieces: read.pieces }
 }
 
-function buildWindow(segments: LogSegment[], located: Located): Window {
-  const { start, end } = located
+function buildWindow(reader: LogReader, located: Located & { pieces: Piece[] }): Window {
+  const { start, end, pieces } = located
   let size: Size | null = null
   const events: WindowEvent[] = []
-  for (const segment of segments) {
+  let at = start
+  const outputUpTo = (to: number) => {
+    for (const piece of pieces) {
+      const from = Math.max(at, piece.offset)
+      const upto = Math.min(to, piece.offset + piece.bytes.length)
+      if (upto > from) events.push({ kind: 'output', bytes: piece.bytes.subarray(from - piece.offset, upto - piece.offset) })
+    }
+    at = Math.max(at, to)
+  }
+  for (const segment of reader.segments) {
     for (const record of segment.records) {
-      if (record.kind === 'resize') {
-        if (record.offset <= start) size = { cols: record.cols!, rows: record.rows! }
-        else if (record.offset < end) events.push({ kind: 'resize', cols: record.cols!, rows: record.rows! })
-      } else if (record.kind === 'output') {
-        const bytes = record.bytes!
-        if (record.offset + bytes.length <= start || record.offset >= end) continue
-        const slice = bytes.subarray(Math.max(0, start - record.offset), Math.min(bytes.length, end - record.offset))
-        events.push({ kind: 'output', bytes: slice })
+      if (record.kind !== 'resize') continue
+      if (record.offset <= start) {
+        size = { cols: record.cols!, rows: record.rows! }
+      } else if (record.offset < end) {
+        outputUpTo(record.offset)
+        events.push({ kind: 'resize', cols: record.cols!, rows: record.rows! })
       }
     }
   }
-  return { ...located, size, events }
+  outputUpTo(end)
+  return { start, end, oldest: located.oldest, size, events }
 }
 
-/** Rows a window can produce: its newlines, plus wraps bounded by its bytes and narrowest width. */
+/** Opens the log, reads the window a page or attach needs, and closes the log again. */
+function readWindow(dir: string, before: number | undefined, lines: number, screenRows: number): Window {
+  const reader = LogReader.open(dir)
+  try {
+    return buildWindow(reader, locate(reader, before, lines, screenRows))
+  } finally {
+    reader.close()
+  }
+}
+
+/**
+ * Rows a window can produce. A byte advances at most one row whatever advances it (a line feed,
+ * VT, FF, NEL, IND or a wrap), and a narrower width after a resize reflows what is already there.
+ */
 function scrollbackFor(window: Window, initial: Size): number {
-  let newlines = 0
   let bytes = 0
+  let resizes = 0
   let minCols = initial.cols
   let maxRows = initial.rows
   for (const event of window.events) {
     if (event.kind === 'resize') {
+      resizes++
       minCols = Math.min(minCols, event.cols)
       maxRows = Math.max(maxRows, event.rows)
-      continue
+    } else {
+      bytes += event.bytes.length
     }
-    bytes += event.bytes.length
-    for (let at = event.bytes.indexOf(NEWLINE); at >= 0; at = event.bytes.indexOf(NEWLINE, at + 1)) newlines++
   }
-  // a wide character is two cells in three bytes, so wraps are at most 2 * bytes / cols
-  return newlines + Math.ceil((2 * bytes) / Math.max(2, minCols)) + 2 * maxRows + 16
+  // a wide character is two cells in three bytes, so a reflow adds at most 2 * bytes / cols rows
+  const reflow = resizes > 0 ? Math.ceil((2 * bytes) / Math.max(2, minCols)) : 0
+  return bytes + reflow + maxRows * (resizes + 2) + 16
 }
 
 /**
@@ -199,13 +244,12 @@ export async function pageBefore(
   dir: string,
   options: { before?: number; lines: number; format: 'text' | 'ansi'; screenRows: number }
 ): Promise<HistoryPage> {
-  const { segments } = readSegments(dir)
-  const located = locate(segments, options.before, options.lines, options.screenRows)
-  const cursor = located.start > located.oldest ? formatCursor(located.start) : null
-  if (located.start >= located.end) return { lines: [], cursor }
+  const window = readWindow(dir, options.before, options.lines, options.screenRows)
+  const cursor = window.start > window.oldest ? formatCursor(window.start) : null
+  if (window.start >= window.end) return { lines: [], cursor }
 
   const fallback = { cols: DEFAULT_COLS, rows: options.screenRows || DEFAULT_ROWS }
-  const { screen } = await renderWindow(buildWindow(segments, located), fallback)
+  const { screen } = await renderWindow(window, fallback)
   try {
     const rows = screen.lines()
     let count = options.before === undefined ? Math.max(0, rows.length - options.screenRows) : rows.length
@@ -234,9 +278,7 @@ export async function composeReplay(
 ): Promise<{ replay: Uint8Array; historyCursor: string | null }> {
   const { live } = options
   const cursorMove = `\x1b[${live.cursor.y + 1};${live.cursor.x + 1}H`
-  const { segments } = readSegments(dir)
-  const located = locate(segments, undefined, options.historyLines, live.rows)
-  const window = buildWindow(segments, located)
+  const window = readWindow(dir, undefined, options.historyLines, live.rows)
   if (!window.events.some((event) => event.kind === 'output')) {
     return { replay: encoder.encode(live.ansi + cursorMove), historyCursor: null }
   }
@@ -248,7 +290,7 @@ export async function composeReplay(
     await screen.settled()
     return {
       replay: encoder.encode(screen.serialize() + cursorMove),
-      historyCursor: located.start > located.oldest ? formatCursor(located.start) : null
+      historyCursor: window.start > window.oldest ? formatCursor(window.start) : null
     }
   } finally {
     screen.dispose()

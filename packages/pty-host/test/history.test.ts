@@ -1,10 +1,37 @@
-import { afterEach, describe, expect, test } from 'bun:test'
+import { afterEach, describe, expect, mock, test } from 'bun:test'
+import * as fs from 'node:fs'
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { HistoryLog, newestOffset, oldestOffset } from '../src/history/log'
 import { composeReplay, formatCursor, pageBefore, parseCursor, textLinesAbove } from '../src/history/reader'
 import { Screen } from '../src/screen'
+
+const realFs = { ...fs }
+
+/** Runs `work` and returns how many bytes the log reader pulled from disk meanwhile. */
+async function bytesRead(work: () => Promise<unknown>): Promise<number> {
+  let total = 0
+  mock.module('node:fs', () => ({
+    ...realFs,
+    readSync: (...args: Parameters<typeof fs.readSync>) => {
+      const n = realFs.readSync(...args)
+      total += n
+      return n
+    },
+    readFileSync: (...args: Parameters<typeof fs.readFileSync>) => {
+      const data = realFs.readFileSync(...args)
+      total += data.length
+      return data
+    }
+  }))
+  try {
+    await work()
+  } finally {
+    mock.module('node:fs', () => realFs)
+  }
+  return total
+}
 
 const enc = (s: string) => new TextEncoder().encode(s)
 const dec = (b: Uint8Array) => new TextDecoder().decode(b)
@@ -203,6 +230,65 @@ describe('pageBefore', () => {
     expect((first - 1) * 80).toBeLessThanOrEqual(oldestOffset(dir) + 80)
   })
 
+  test.each([
+    ['ESC E (NEL)', (i: number) => `${i}\x1bE`],
+    ['ESC D (IND)', (i: number) => `${i}\x1bD\r`],
+    ['LF', (i: number) => `${i}\n\r`],
+    ['VT', (i: number) => `${i}\v\r`],
+    ['FF', (i: number) => `${i}\f\r`],
+    ['U+0085 (NEL)', (i: number) => `${i}\u0085`]
+  ])('every row survives when lines advance by %s', async (_name, advance) => {
+    const dir = logWith(Array.from({ length: 1000 }, (_, i) => advance(i + 1)).join(''))
+    const page = await pageBefore(dir, { before: newestOffset(dir), lines: 5000, format: 'text', screenRows: 24 })
+    expect(page.cursor).toBeNull()
+    expect(page.lines).toEqual(Array.from({ length: 1000 }, (_, i) => String(i + 1)))
+  })
+
+  test('every row survives when the only line advance is a wrap', async () => {
+    const rows = Array.from({ length: 600 }, (_, i) => String(i % 10).repeat(80))
+    const dir = logWith(rows.join(''))
+    const page = await pageBefore(dir, { before: newestOffset(dir), lines: 5000, format: 'text', screenRows: 24 })
+    expect(page.lines).toEqual(rows)
+  })
+
+  test('every row survives wrapping at a narrow width mixed with line feeds', async () => {
+    const dir = freshDir()
+    const log = HistoryLog.create(dir, { cols: 10, rows: 5 })
+    const expected: string[] = []
+    for (let i = 0; i < 300; i++) {
+      log.appendOutput(enc(`${'a'.repeat(35)}\x1bE`))
+      expected.push('a'.repeat(10), 'a'.repeat(10), 'a'.repeat(10), 'a'.repeat(5))
+    }
+    log.close()
+    const page = await pageBefore(dir, { before: newestOffset(dir), lines: 5000, format: 'text', screenRows: 5 })
+    expect(page.lines).toEqual(expected)
+  })
+
+  test('a resize is applied after the output before it has been parsed', async () => {
+    const dir = freshDir()
+    const log = HistoryLog.create(dir, { cols: 80, rows: 24 })
+    // the cursor jump only lands in column 70 while the screen is still 80 wide
+    log.appendOutput(enc('abc\x1b[1;70Hq\r\n'))
+    log.appendResize(40, 24)
+    log.appendOutput(enc('next\r\n'))
+    log.close()
+
+    const reference = new Screen({ cols: 80, rows: 24, scrollback: 100 })
+    reference.write('abc\x1b[1;70Hq\r\n')
+    await reference.settled()
+    reference.resize(40, 24)
+    reference.write('next\r\n')
+    await reference.settled()
+    const expected = reference.lines().map((row) => row.text)
+    while (expected.at(-1) === '') expected.pop()
+    reference.dispose()
+
+    const page = await pageBefore(dir, { before: newestOffset(dir), lines: 50, format: 'text', screenRows: 24 })
+    expect(page.lines).toEqual(expected)
+    expect(page.lines.join('\n')).toContain('abc')
+    expect(page.lines.at(-1)).toBe('next')
+  })
+
   test('a page never reads past the 8 MiB cap', async () => {
     const mib = 1024 * 1024
     const dir = freshDir()
@@ -211,7 +297,11 @@ describe('pageBefore', () => {
     for (let i = 0; i < 9; i++) log.appendOutput(block)
     log.close()
 
-    const page = await pageBefore(dir, { lines: 10, format: 'text', screenRows: 24 })
+    let page!: Awaited<ReturnType<typeof pageBefore>>
+    const read = await bytesRead(async () => {
+      page = await pageBefore(dir, { lines: 10, format: 'text', screenRows: 24 })
+    })
+    expect(read).toBeLessThanOrEqual(8 * mib + 128 * 1024)
     expect(page.cursor).toBe(formatCursor(9 * mib - 8 * mib))
     expect(page.lines.join('').length).toBeLessThanOrEqual(8 * mib)
     expect(page.lines.join('').length).toBeGreaterThan(8 * mib - 24 * 80)
@@ -219,6 +309,61 @@ describe('pageBefore', () => {
     const older = await pageBefore(dir, { before: parseCursor(page.cursor!), lines: 10, format: 'text', screenRows: 24 })
     expect(older.cursor).toBeNull()
     expect(older.lines.join('').length).toBe(mib)
+  }, 60_000)
+
+  test('one record larger than the cap is read only from its tail', async () => {
+    const mib = 1024 * 1024
+    const dir = freshDir()
+    const log = HistoryLog.create(dir, { cols: 80, rows: 24 })
+    log.appendOutput(new Uint8Array(9 * mib).fill(0x78))
+    log.close()
+
+    let page!: Awaited<ReturnType<typeof pageBefore>>
+    const read = await bytesRead(async () => {
+      page = await pageBefore(dir, { lines: 1, format: 'text', screenRows: 24 })
+    })
+    expect(read).toBeLessThanOrEqual(8 * mib + 128 * 1024)
+    expect(page.cursor).toBe(formatCursor(mib))
+  }, 60_000)
+
+  test('an attach reads only the bytes its window needs, not the retained segments', async () => {
+    const mib = 1024 * 1024
+    const dir = freshDir()
+    const log = HistoryLog.create(dir, { cols: 80, rows: 24 })
+    const chunk = enc(numbered('h', 1, 800))
+    let appended = 0
+    while (appended < 12 * mib) {
+      log.appendOutput(chunk)
+      appended += chunk.length
+    }
+    log.close()
+
+    const live = new Screen({ cols: 80, rows: 24, scrollback: 100 })
+    live.write('prompt')
+    await live.settled()
+    const snapshot = live.snapshot()
+    live.dispose()
+
+    const replayRead = await bytesRead(() => composeReplay(dir, { historyLines: 2000, live: snapshot }))
+    expect(replayRead).toBeLessThan(mib / 2)
+    const before = newestOffset(dir)
+    const pageRead = await bytesRead(() => pageBefore(dir, { before, lines: 100, format: 'text', screenRows: 24 }))
+    expect(pageRead).toBeLessThan(mib / 2)
+  }, 60_000)
+
+  test('a replay of a log with no newlines still stops at the cap', async () => {
+    const mib = 1024 * 1024
+    const dir = freshDir()
+    const log = HistoryLog.create(dir, { cols: 80, rows: 24 })
+    for (let i = 0; i < 9; i++) log.appendOutput(new Uint8Array(mib).fill(0x78))
+    log.close()
+    const live = new Screen({ cols: 80, rows: 24 })
+    await live.settled()
+    const snapshot = live.snapshot()
+    live.dispose()
+
+    const read = await bytesRead(() => composeReplay(dir, { historyLines: 2000, live: snapshot }))
+    expect(read).toBeLessThanOrEqual(8 * mib + 128 * 1024)
   }, 60_000)
 
   test('a damaged or missing log yields an empty page instead of throwing', async () => {
