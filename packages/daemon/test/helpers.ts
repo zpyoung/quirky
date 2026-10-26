@@ -39,6 +39,7 @@ export async function startHarness(options: Partial<DaemonOptions> = {}): Promis
     notifier: (title, body) => notifications.push({ title, body }),
     cliEntry: '/opt/quirky/cli/main.ts',
     uiDir: join(home, 'no-ui'),
+    builtinPluginsDir: null,
     ...options
   })
   const clients: QuirkyClient[] = []

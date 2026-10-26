@@ -406,6 +406,17 @@
 - **Confidence:** high
 - **Source:** assumed — autonomous
 
+## D41: W3 starts while W2's checkpoint review runs, with fakes of sibling plugins in each plugin's tests
+- **Question:** subagent-driven-development ordering (checkpoint review before the next wave) and how plugins that depend on each other are built in parallel
+- **Options:** wait for the review, then build the plugins in dependency order across three waves; build all eight in one wave against fake siblings, while the review of W2 runs
+- **Chose:** W3 dispatches during the W2 checkpoint review, because W3 writes only `plugins/**` and any W2 fix writes only `packages/**`, so neither can see the other's half-finished work. Each plugin's tests run it against small fake plugins with its siblings' IDs. Real plugins meet in W4's integration and W5's scenario tests. During the coexistence wave the test harness loads no built-ins by default (`builtinPluginsDir: null`), so v1's tests don't pick up half-built plugins. Test seams are in-process globals (`@quirky/git` `useTestGit`, `__QUIRKY_TEST_STRUCTURED_RUNNER__`) and `QUIRKY_TEST_ENTER_DELAY_MS`, instead of tech.md's module-path variables, since the harness runs the daemon in the test's process.
+- **Why:** dependency-ordered waves would turn six parallel tasks into a three-deep chain with three extra checkpoints
+- **Evidence:** packages/daemon/test/helpers.ts:28 (in-process daemon); docs/quirk/specs/2026-10-26-m0-core/tech.md "Test seams"
+- **Reversibility:** easy
+- **Confidence:** medium
+- **Revisit if:** W4's integration finds plugins that pass against fakes and fail against each other
+- **Source:** assumed — autonomous
+
 ## Progress
 
-Step 5, build. W1 (scaffold) merged at 33aa410; its checkpoint skipped (types and stubs; W2 checkpoint covers it). W2 (kernel modules K1-K7) in progress on sdd/w2-* worktrees. If this iteration stops, the next one restarts W2 from 33aa410 (worktrees under the old session scratchpad are disposable) and follows D39.
+Step 5, build. W1 and W2 merged (W2 at 247471b, gate 1705 pass). W2 checkpoint review running; W3 (eight built-in plugins, six tasks P1-P6) dispatched from the setup commit after it. Next: adjudicate W2 findings, fix in packages/**, then the W3 barrier and checkpoint, then W4 per D39.

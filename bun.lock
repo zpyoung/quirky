@@ -81,6 +81,66 @@
         "@types/react-dom": "^19.3.0",
       },
     },
+    "plugins/quirky.agent-status": {
+      "name": "@quirky/plugin-agent-status",
+      "version": "0.1.0",
+      "dependencies": {
+        "@quirky/protocol": "workspace:*",
+      },
+    },
+    "plugins/quirky.ask": {
+      "name": "@quirky/plugin-ask",
+      "version": "0.1.0",
+      "dependencies": {
+        "@quirky/protocol": "workspace:*",
+      },
+    },
+    "plugins/quirky.git": {
+      "name": "@quirky/plugin-git",
+      "version": "0.1.0",
+      "dependencies": {
+        "@quirky/git": "workspace:*",
+        "@quirky/protocol": "workspace:*",
+      },
+    },
+    "plugins/quirky.repo": {
+      "name": "@quirky/plugin-repo",
+      "version": "0.1.0",
+      "dependencies": {
+        "@quirky/git": "workspace:*",
+        "@quirky/protocol": "workspace:*",
+      },
+    },
+    "plugins/quirky.session": {
+      "name": "@quirky/plugin-session",
+      "version": "0.1.0",
+      "dependencies": {
+        "@quirky/protocol": "workspace:*",
+      },
+    },
+    "plugins/quirky.structured": {
+      "name": "@quirky/plugin-structured",
+      "version": "0.1.0",
+      "dependencies": {
+        "@anthropic-ai/claude-agent-sdk": "0.3.284",
+        "@quirky/protocol": "workspace:*",
+      },
+    },
+    "plugins/quirky.terminal": {
+      "name": "@quirky/plugin-terminal",
+      "version": "0.1.0",
+      "dependencies": {
+        "@quirky/protocol": "workspace:*",
+      },
+    },
+    "plugins/quirky.worktree": {
+      "name": "@quirky/plugin-worktree",
+      "version": "0.1.0",
+      "dependencies": {
+        "@quirky/git": "workspace:*",
+        "@quirky/protocol": "workspace:*",
+      },
+    },
   },
   "packages": {
     "@anthropic-ai/claude-agent-sdk": ["@anthropic-ai/claude-agent-sdk@0.3.284", "", { "optionalDependencies": { "@anthropic-ai/claude-agent-sdk-darwin-arm64": "0.3.284", "@anthropic-ai/claude-agent-sdk-darwin-x64": "0.3.284", "@anthropic-ai/claude-agent-sdk-linux-arm64": "0.3.284", "@anthropic-ai/claude-agent-sdk-linux-arm64-musl": "0.3.284", "@anthropic-ai/claude-agent-sdk-linux-x64": "0.3.284", "@anthropic-ai/claude-agent-sdk-linux-x64-musl": "0.3.284", "@anthropic-ai/claude-agent-sdk-win32-arm64": "0.3.284", "@anthropic-ai/claude-agent-sdk-win32-x64": "0.3.284" }, "peerDependencies": { "@anthropic-ai/sdk": ">=0.93.0", "@modelcontextprotocol/sdk": "^1.29.0", "zod": "^4.0.0" } }, "sha512-NSoJwEq6nFSf8dtaacYx37QdGgqApI3eHFUlxclMLYi8irb6ZJwEaUnPnLUCyAyg9W/tMkgZC0GXWLRCc01I0w=="],
@@ -166,6 +226,22 @@
     "@quirky/desktop": ["@quirky/desktop@workspace:apps/desktop"],
 
     "@quirky/git": ["@quirky/git@workspace:packages/git"],
+
+    "@quirky/plugin-agent-status": ["@quirky/plugin-agent-status@workspace:plugins/quirky.agent-status"],
+
+    "@quirky/plugin-ask": ["@quirky/plugin-ask@workspace:plugins/quirky.ask"],
+
+    "@quirky/plugin-git": ["@quirky/plugin-git@workspace:plugins/quirky.git"],
+
+    "@quirky/plugin-repo": ["@quirky/plugin-repo@workspace:plugins/quirky.repo"],
+
+    "@quirky/plugin-session": ["@quirky/plugin-session@workspace:plugins/quirky.session"],
+
+    "@quirky/plugin-structured": ["@quirky/plugin-structured@workspace:plugins/quirky.structured"],
+
+    "@quirky/plugin-terminal": ["@quirky/plugin-terminal@workspace:plugins/quirky.terminal"],
+
+    "@quirky/plugin-worktree": ["@quirky/plugin-worktree@workspace:plugins/quirky.worktree"],
 
     "@quirky/protocol": ["@quirky/protocol@workspace:packages/protocol"],
 
