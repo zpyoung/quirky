@@ -15,7 +15,11 @@ if (!lock) {
   process.exit(0)
 }
 
-const daemon = await startDaemon({ home }).catch((error) => {
+const daemon = await startDaemon({
+  home,
+  safeMode: process.argv.includes('--disable-plugins') || process.env.QUIRKY_DISABLE_PLUGINS === '1',
+  onStopRequested: () => shutdown()
+}).catch((error) => {
   lock.release()
   throw error
 })

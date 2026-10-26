@@ -1,13 +1,17 @@
 import { mkdirSync } from 'node:fs'
+import { join } from 'node:path'
 import type { LaunchHookInput, PluginStore, StoreMigration } from '@quirky/protocol'
-import { conflict, invalidParams, notFound } from '../errors'
+import { conflict, internal, invalidParams, notFound } from '../errors'
 import { createHandlers } from '../methods'
 import type { Core } from '../service'
 import type { Store } from '../store'
+import { DistroService } from './distros'
 import { Dispatcher } from './dispatch'
 import { PluginEvents } from './events'
 import type { ContextExtension, PluginHost } from './host'
 import { runLaunchHooks, type LaunchAdditions } from './launch-hooks'
+import { LayoutService } from './layout'
+import { createPtyApi } from './pty-api'
 import { Scheduler } from './scheduler'
 import { openPluginStore, pluginDataDir } from './stores'
 import { UiService } from './ui-service'
@@ -22,6 +26,12 @@ export type PluginRuntimeOptions = {
   launchHookTimeoutMs: number
   /** Longest a job timer sleeps before re-checking the clock. */
   schedulerRecheckMs?: number
+  /** Login shell that agents run under; reported by `context.launch.shell`. */
+  shell: string
+  /** True in safe mode: the stored distro is ignored. */
+  safeMode?: boolean
+  /** Stops the daemon process; `daemon.stop` calls it after replying. */
+  stopDaemon: () => void
 }
 
 type LaunchInput = Omit<LaunchHookInput, 'env' | 'args'>
@@ -31,6 +41,8 @@ export type PluginRuntime = {
   dispatcher: Dispatcher
   events: PluginEvents
   scheduler: Scheduler
+  layout: LayoutService
+  distros: DistroService
   /** Runs the launch hooks for a session about to start. Never rejects; failures yield no additions. */
   prepareLaunch(input: LaunchInput): Promise<LaunchAdditions>
 }
@@ -49,9 +61,24 @@ export function createPluginRuntime(options: PluginRuntimeOptions): PluginRuntim
 
   const events = new PluginEvents(plugins, (event) => core.broadcast(event), log)
   const scheduler = new Scheduler({ plugins, store, log, recheckMs: options.schedulerRecheckMs })
-  const ui = new UiService({ plugins, store, broadcast: (event) => core.broadcast(event) })
-  const dispatcher = new Dispatcher(createHandlers(core, plugins, scheduler, ui), plugins, log)
+  const layout = new LayoutService()
+  const distros = new DistroService({ home, store, plugins, log, safeMode: options.safeMode ?? false })
+  const ui = new UiService({
+    plugins,
+    store,
+    broadcast: (event) => core.broadcast(event),
+    distro: () => distros.active(),
+    safeMode: options.safeMode
+  })
+  const handlers = createHandlers(core, plugins, scheduler, ui, {
+    layout,
+    distros,
+    install: { home, plugins, log },
+    stopDaemon: options.stopDaemon
+  })
+  const dispatcher = new Dispatcher(handlers, plugins, log)
   const openedStores = new Map<string, OpenedStore>()
+  const ptyApis = new Map<string, { revoke(): void }>()
 
   const extension: ContextExtension = {
     create({ id }, isRevoked) {
@@ -61,9 +88,25 @@ export function createPluginRuntime(options: PluginRuntimeOptions): PluginRuntim
       const dataDir = pluginDataDir(home, id)
       mkdirSync(dataDir, { recursive: true, mode: 0o700 })
       let opened: OpenedStore | undefined
+      const ptyApi = createPtyApi(core.pty, id)
+      ptyApis.set(id, ptyApi)
+      const notImplemented = (name: string) => () => {
+        throw internal(`not implemented: ${name}`)
+      }
 
       return {
         dataDir,
+        home,
+        pty: ptyApi.api,
+        notify: notImplemented('notify'),
+        launch: {
+          shell: options.shell,
+          binDir: join(home, 'bin'),
+          env: notImplemented('launch.env'),
+          shellArgv: notImplemented('launch.shellArgv'),
+          commandArgv: notImplemented('launch.commandArgv'),
+          hooks: notImplemented('launch.hooks')
+        },
         emit(event, data) {
           guard()
           return events.emit(id, event, data)
@@ -108,6 +151,8 @@ export function createPluginRuntime(options: PluginRuntimeOptions): PluginRuntim
     revoke(pluginId) {
       events.removeAll(pluginId)
       scheduler.revokePlugin(pluginId)
+      ptyApis.get(pluginId)?.revoke()
+      ptyApis.delete(pluginId)
       const opened = openedStores.get(pluginId)
       openedStores.delete(pluginId)
       opened?.close()
@@ -128,5 +173,5 @@ export function createPluginRuntime(options: PluginRuntimeOptions): PluginRuntim
     }
   }
 
-  return { extension, dispatcher, events, scheduler, prepareLaunch }
+  return { extension, dispatcher, events, scheduler, layout, distros, prepareLaunch }
 }

@@ -32,6 +32,8 @@ export type RuntimeInfo = {
   daemonVersion: string
   protocolVersion: number
   startedAt: number
+  /** The unix socket the CLI connects to. */
+  socket?: string
 }
 
 export const HEALTH_PATH = '/health'
@@ -119,7 +121,7 @@ export function defaultDaemonEntry(): string {
  * The daemon outlives its starter. Its output goes to `<home>/logs/daemon.log`.
  */
 export async function ensureDaemon(
-  options: { home?: string; daemonEntry?: string; bunPath?: string; timeoutMs?: number } = {}
+  options: { home?: string; daemonEntry?: string; bunPath?: string; timeoutMs?: number; args?: string[] } = {}
 ): Promise<RuntimeInfo> {
   const home = ensureHome(options.home ?? quirkyHome())
   const existing = readRuntime(home)
@@ -128,7 +130,7 @@ export async function ensureDaemon(
   const entry = options.daemonEntry ?? defaultDaemonEntry()
   if (!existsSync(entry)) throw new Error(`quirkyd entry not found: ${entry}`)
   const log = openPrivateLog(join(home, 'logs', 'daemon.log'))
-  const child = spawn(options.bunPath ?? process.execPath, [entry], {
+  const child = spawn(options.bunPath ?? process.execPath, [entry, ...(options.args ?? [])], {
     detached: true,
     stdio: ['ignore', log, log],
     env: { ...process.env, QUIRKY_HOME: home }
@@ -146,7 +148,17 @@ export async function ensureDaemon(
 }
 
 export async function connectDaemon(
-  options: { role: ClientRole; name?: string; subscribe?: boolean; home?: string; autostart?: boolean }
+  options: {
+    role: ClientRole
+    name?: string
+    subscribe?: boolean
+    home?: string
+    autostart?: boolean
+    /** `socket` falls back to the WebSocket until the socket client exists. */
+    transport?: 'socket' | 'websocket'
+    /** Forwarded in `client.hello`. */
+    identity?: { cwd?: string; sessionId?: string; worktreeId?: string }
+  }
 ): Promise<QuirkyClient> {
   const home = options.home ?? quirkyHome()
   let info = readRuntime(home)
@@ -154,5 +166,5 @@ export async function connectDaemon(
     if (options.autostart === false) throw new Error('quirkyd is not running')
     info = await ensureDaemon({ home })
   }
-  return QuirkyClient.connect(rpcUrl(info as RuntimeInfo), options)
+  return QuirkyClient.connect(rpcUrl(info as RuntimeInfo), { ...options, ...options.identity })
 }

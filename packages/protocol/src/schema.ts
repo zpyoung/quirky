@@ -15,7 +15,7 @@ export type Schema = {
 }
 
 /** Params properties whose flag name is one of these get no flag on a generated command. */
-export const RESERVED_FLAG_NAMES = ['help', 'json', 'params'] as const
+export const RESERVED_FLAG_NAMES = ['help', 'json', 'params', 'yes', 'retry-request', 'version', 'confirmation'] as const
 
 const SCHEMA_KEYWORDS = [
   'type',

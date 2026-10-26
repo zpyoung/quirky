@@ -212,7 +212,7 @@ describe('SC-20: quirky api lists everything, and --json is the catalog', () => 
     const status = await s.client.call('status.get', {})
 
     expect(catalog.schemaVersion).toBe(CATALOG_SCHEMA_VERSION)
-    expect(catalog.schemaVersion).toBe(1)
+    expect(catalog.schemaVersion).toBe(2)
     expect(catalog.daemonVersion).toBe(status.daemonVersion)
     expect(catalog.protocolVersion).toBe(PROTOCOL_VERSION)
     const sorted = (names: string[]) => expect(names).toEqual([...names].sort())

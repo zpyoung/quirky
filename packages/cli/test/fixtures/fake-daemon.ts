@@ -289,7 +289,8 @@ export class FakeDaemon {
       protocolVersion: PROTOCOL_VERSION,
       methods: [...this.methods.values()].map(({ entry }) => entry).sort((a, b) => (a.name < b.name ? -1 : 1)),
       events: [],
-      uiCommands: []
+      uiCommands: [],
+      cli: { groups: [], commands: [] }
     }
   }
 
@@ -334,7 +335,9 @@ export class FakeDaemon {
           startedAt: 1_700_000_000_000,
           home: this.home,
           ptyHost: { pid: 4242, alive: true },
-          clients: [{ role: 'cli', name: 'quirky' }]
+          clients: [{ role: 'cli', name: 'quirky' }],
+          safeMode: false,
+          socket: null
         }
       case 'repo.list':
         return this.repos

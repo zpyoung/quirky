@@ -9,12 +9,17 @@ import {
   type ApiDescription,
   type ClientRole,
   type ContributionInfo,
+  type KernelMethodSchema,
   type MethodName,
   type ResultOf,
   type Schema
 } from '@quirky/protocol'
 import { conflict, invalidParams } from './errors'
+import { describeCli } from './plugins/cli-catalog'
+import type { DistroService } from './plugins/distros'
 import type { PluginHost } from './plugins/host'
+import { inspectPlugin, installPlugin, uninstallPlugin, type PluginInstallDeps } from './plugins/install'
+import type { LayoutService } from './plugins/layout'
 import type { Scheduler } from './plugins/scheduler'
 import type { UiService } from './plugins/ui-service'
 import type { Core } from './service'
@@ -81,6 +86,14 @@ function agent(params: Params): AgentKind {
   return value as AgentKind
 }
 
+function focusTarget(params: Params): 'sidebar' | 'view' | 'panel' {
+  const value = params.target
+  if (value !== 'sidebar' && value !== 'view' && value !== 'panel') {
+    throw invalidParams('target must be one of sidebar, view, panel')
+  }
+  return value
+}
+
 function byName<T>(key: (entry: T) => string): (a: T, b: T) => number {
   return (a, b) => (key(a) < key(b) ? -1 : key(a) > key(b) ? 1 : 0)
 }
@@ -101,20 +114,26 @@ function describeApi(core: Core, plugins: PluginHost): ApiDescription {
   const connection: readonly string[] = CONNECTION_METHODS
 
   const methods: ApiDescription['methods'] = [
-    ...Object.entries(KERNEL_METHOD_SCHEMAS).map(([name, entry]) => ({
+    ...Object.entries(KERNEL_METHOD_SCHEMAS as Record<string, KernelMethodSchema>).map(([name, entry]) => ({
       name,
       plugin: null,
       description: entry.description,
       params: entry.params,
       result: entry.result,
-      ...(connection.includes(name) ? { connection: true as const } : {})
+      ...(connection.includes(name) ? { connection: true as const } : {}),
+      ...(entry.readOnly ? { readOnly: true as const } : {}),
+      ...(entry.destructive ? { destructive: true as const, confirm: entry.destructive.confirm } : {})
     })),
     ...effective('method').map((contribution) => ({
       name: shortId(contribution),
       plugin: contribution.plugin,
       ...descriptionOf(contribution.data),
       params: schemaField(contribution.data, 'params', { type: 'object' })!,
-      result: schemaField(contribution.data, 'result', {})!
+      result: schemaField(contribution.data, 'result', {})!,
+      ...(contribution.data.connection === true ? { connection: true as const } : {}),
+      ...(contribution.data.readOnly === true ? { readOnly: true as const } : {}),
+      ...(contribution.data.destructive === true ? { destructive: true as const } : {}),
+      ...(typeof contribution.data.confirm === 'string' ? { confirm: contribution.data.confirm } : {})
     }))
   ]
   const events: ApiDescription['events'] = [
@@ -145,12 +164,29 @@ function describeApi(core: Core, plugins: PluginHost): ApiDescription {
     protocolVersion: PROTOCOL_VERSION,
     methods: methods.sort(byName((entry) => entry.name)),
     events: events.sort(byName((entry) => entry.name)),
-    uiCommands: uiCommands.sort(byName((entry) => entry.id))
+    uiCommands: uiCommands.sort(byName((entry) => entry.id)),
+    cli: describeCli(plugins)
   }
 }
 
+/** The services the kernel's own methods delegate to. */
+export type HandlerServices = {
+  layout: LayoutService
+  distros: DistroService
+  install: PluginInstallDeps
+  /** Stops the daemon process; called after `daemon.stop` has replied. */
+  stopDaemon: () => void
+}
+
 /** Maps every RPC method to the core or the plugin host, validating params so bad input becomes InvalidParams. */
-export function createHandlers(core: Core, plugins: PluginHost, scheduler: Scheduler, ui: UiService): Handlers {
+export function createHandlers(
+  core: Core,
+  plugins: PluginHost,
+  scheduler: Scheduler,
+  ui: UiService,
+  services: HandlerServices
+): Handlers {
+  const { layout, distros } = services
   return {
     'client.hello': (params, conn) => {
       const role = params.role
@@ -164,6 +200,9 @@ export function createHandlers(core: Core, plugins: PluginHost, scheduler: Sched
       }
       conn.role = role as ClientRole
       conn.name = name
+      conn.cwd = optStr(params, 'cwd')
+      conn.sessionId = optStr(params, 'sessionId')
+      conn.worktreeId = optStr(params, 'worktreeId')
       return { protocolVersion: PROTOCOL_VERSION, daemonVersion: core.status().daemonVersion }
     },
     'events.subscribe': (_params, conn) => {
@@ -171,6 +210,10 @@ export function createHandlers(core: Core, plugins: PluginHost, scheduler: Sched
       return OK
     },
     'status.get': () => core.status(),
+    'daemon.stop': () => {
+      setTimeout(services.stopDaemon, 0)
+      return OK
+    },
     'settings.get': () => core.getSettings(),
     'settings.set': (params) =>
       core.setSettings({
@@ -284,11 +327,56 @@ export function createHandlers(core: Core, plugins: PluginHost, scheduler: Sched
       await plugins.setEnabled(str(params, 'id'), false)
       return OK
     },
+    'plugin.inspect': (params) => inspectPlugin(services.install, str(params, 'path')),
+    'plugin.install': (params) => installPlugin(services.install, str(params, 'path')),
+    'plugin.uninstall': async (params) => {
+      await uninstallPlugin(services.install, str(params, 'id'))
+      return OK
+    },
     'plugin.activate': (params) => plugins.activate(str(params, 'pluginId')),
     'api.describe': () => describeApi(core, plugins),
 
     'job.list': () => scheduler.list(),
     'job.run': (params) => scheduler.run(str(params, 'id')),
+
+    'distro.inspect': (params) => distros.inspect(str(params, 'path')),
+    'distro.install': (params) => distros.install(str(params, 'path')),
+    'distro.list': () => distros.list(),
+    'distro.remove': async (params) => {
+      await distros.remove(str(params, 'id'))
+      return OK
+    },
+
+    'ui.state': () => layout.state(),
+    'ui.view.open': (params) => layout.openView(str(params, 'id'), params.input),
+    'ui.view.close': () => layout.closeView(),
+    'ui.panel.open': (params) => layout.openPanel(str(params, 'id')),
+    'ui.panel.close': () => layout.closePanel(),
+    'ui.sidebar.set': (params) => {
+      const visible = optBool(params, 'visible')
+      if (visible === undefined) throw invalidParams('visible must be a boolean')
+      return layout.setSidebar(visible)
+    },
+    'ui.focus': (params) => layout.focus(focusTarget(params)),
+    'ui.command.run': (params) => layout.runCommand(str(params, 'id'), params.args),
+    'ui.report': (params, conn) => {
+      layout.report(conn, str(params, 'slot'), params.state ?? null)
+      return OK
+    },
+    'ui.window.focused': (params, conn) => {
+      const focused = optBool(params, 'focused')
+      if (focused === undefined) throw invalidParams('focused must be a boolean')
+      layout.windowFocused(conn, focused)
+      return OK
+    },
+    'ui.command.reply': (params, conn) => {
+      const error = params.error as { message?: unknown } | undefined
+      layout.commandReply(conn, str(params, 'requestId'), {
+        result: params.result,
+        error: error && typeof error.message === 'string' ? { message: error.message } : undefined
+      })
+      return OK
+    },
 
     'ui.contributions': () => ui.contributions(),
     'setting.list': (params) => ui.listSettings({ pluginId: optStr(params, 'pluginId') }),

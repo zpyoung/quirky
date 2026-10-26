@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test'
-import { AGENT_KINDS, CONNECTION_METHODS, KERNEL_EVENT_SCHEMAS, KERNEL_METHOD_SCHEMAS, type Schema } from '../src'
+import { AGENT_KINDS, CONNECTION_METHODS, KERNEL_EVENT_SCHEMAS, KERNEL_METHOD_SCHEMAS, type KernelMethodSchema, type Schema } from '../src'
 
-const METHOD_COUNT = 48
+const METHOD_COUNT = 67
 const EVENT_TYPES = [
   'repo.changed',
   'worktree.changed',
@@ -14,7 +14,10 @@ const EVENT_TYPES = [
   'structured.message',
   'plugin.changed',
   'setting.changed',
-  'theme.changed'
+  'theme.changed',
+  'ui.state.changed',
+  'ui.command.request',
+  'hook.received'
 ]
 
 const methodNames = Object.keys(KERNEL_METHOD_SCHEMAS)
@@ -35,6 +38,31 @@ describe('kernel method schemas', () => {
     expect(methodNames).toHaveLength(METHOD_COUNT)
     for (const name of ['api.describe', 'repo.add', 'client.hello', 'theme.set', 'plugin.activate']) {
       expect(methodNames).toContain(name)
+    }
+  })
+
+  test('read-only and destructive methods are flagged', () => {
+    const entries = KERNEL_METHOD_SCHEMAS as Record<string, KernelMethodSchema>
+    const readOnly = Object.keys(entries).filter((name) => entries[name]!.readOnly)
+    expect(readOnly.sort()).toEqual(
+      [
+        'status.get', 'plugin.list', 'plugin.contributions', 'plugin.inspect', 'api.describe', 'job.list',
+        'ui.contributions', 'ui.state', 'setting.list', 'setting.get', 'theme.list', 'distro.list',
+        'distro.inspect', 'repo.list', 'worktree.list', 'session.list', 'terminal.read', 'git.status',
+        'git.diff', 'ask.wait', 'ask.list', 'structured.messages'
+      ].sort()
+    )
+    const destructive = Object.keys(entries).filter((name) => entries[name]!.destructive)
+    expect(destructive.sort()).toEqual(['distro.install', 'distro.remove', 'plugin.install', 'plugin.uninstall'])
+    for (const name of destructive) {
+      expect(entries[name]!.destructive!.confirm, name).not.toBe('')
+      expect(Object.keys(entries[name]!.params.properties!), name).toEqual(expect.arrayContaining(['yes', 'confirmation']))
+    }
+  })
+
+  test('ui window methods are connection methods', () => {
+    for (const name of ['ui.report', 'ui.window.focused', 'ui.command.reply']) {
+      expect(CONNECTION_METHODS).toContain(name as (typeof CONNECTION_METHODS)[number])
     }
   })
 
