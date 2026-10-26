@@ -1,13 +1,11 @@
 import { useState, type FormEvent } from 'react'
-import type { Repo } from '@quirky/protocol'
-import { createWorktree } from '../actions'
-import { useConnection } from '../context'
+import type { Repo, UiPluginContext } from '@quirky/protocol'
+import { createWorktree } from './actions'
 import { Dialog } from './Dialog'
 
-type Props = { repo: Repo; onClose: () => void }
+type Props = { context: UiPluginContext; repo: Repo; onClose: () => void }
 
-export function NewWorktreeDialog({ repo, onClose }: Props) {
-  const connection = useConnection()
+export function NewWorktreeDialog({ context, repo, onClose }: Props) {
   const [name, setName] = useState('')
   const [baseRef, setBaseRef] = useState('')
   const [busy, setBusy] = useState(false)
@@ -16,7 +14,7 @@ export function NewWorktreeDialog({ repo, onClose }: Props) {
     event.preventDefault()
     if (!name.trim()) return
     setBusy(true)
-    const ok = await createWorktree(connection, repo.id, name.trim(), baseRef.trim())
+    const ok = await createWorktree(context, repo.id, name.trim(), baseRef.trim())
     setBusy(false)
     if (ok) onClose()
   }

@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test'
 import type { Session } from '@quirky/protocol'
-import { mostUrgent, worktreeStatus } from '../src/lib/status'
+import { mostUrgent, worktreeStatus } from '../src/status'
 
 const session = (id: string, worktreeId: string, status: Session['status']): Session => ({
   id,

@@ -4,6 +4,7 @@
   "version": "0.1.0",
   "description": "Git worktrees of the added repositories, and the selectors that name them.",
   "main": "main.ts",
+  "ui": "dist/ui.js",
   "cli": "cli.ts",
   "cliAliases": [
     "wt"
