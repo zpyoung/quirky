@@ -40,7 +40,17 @@ describe('SC-26: a v1 home carries over', () => {
     t.git!.addRepo('/fake/api')
 
     const repos = (await call(t.client, 'quirky.repo/list')) as Repo[]
-    expect(repos).toEqual([{ id: 'repo_v1api', name: 'api', path: '/fake/api', addedAt: 1700000000000 }])
+    expect(repos).toEqual([
+      {
+        id: 'repo_v1api',
+        name: 'api',
+        path: '/fake/api',
+        addedAt: 1700000000000,
+        kind: 'git',
+        displayName: null,
+        groupId: null
+      }
+    ])
 
     const owned = (await call(t.client, 'quirky.worktree/ownedIds', { repo: 'repo_v1api' })) as string[]
     expect(owned).toContain(EXTERNAL_ID)

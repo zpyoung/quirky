@@ -101,14 +101,27 @@ export async function activate(context: PluginContext): Promise<void> {
 
   async function repoWorktrees(repo: Repo): Promise<Worktree[]> {
     const infos = await gitApi().listWorktrees(repo.path)
-    const worktrees = infos.map((info) => ({
+    const worktrees: Worktree[] = infos.map((info) => ({
       id: worktreeIdForPath(info.path),
       repoId: repo.id,
       path: resolveRealPath(info.path),
       branch: info.branch,
       head: info.head,
       isMain: info.isMain,
-      name: info.branch ?? basename(info.path)
+      name: info.branch ?? basename(info.path),
+      kind: 'git',
+      displayName: null,
+      comment: '',
+      status: 'in-progress',
+      pinned: false,
+      unread: false,
+      parentId: null,
+      createdAt: 0,
+      createdBy: 'external',
+      baseRef: null,
+      keepBranch: false,
+      removing: false,
+      groupId: null
     }))
     recordWorktrees(repo.id, worktrees.map((worktree) => worktree.id))
     return worktrees
@@ -192,7 +205,20 @@ export async function activate(context: PluginContext): Promise<void> {
       branch: name,
       head: '',
       isMain: false,
-      name
+      name,
+      kind: 'git',
+      displayName: null,
+      comment: '',
+      status: 'in-progress',
+      pinned: false,
+      unread: false,
+      parentId: null,
+      createdAt: 0,
+      createdBy: 'external',
+      baseRef: null,
+      keepBranch: false,
+      removing: false,
+      groupId: null
     }
     recordWorktrees(repo.id, [worktree.id])
     context.emit('changed', { repoId: repo.id })

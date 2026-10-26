@@ -1,5 +1,21 @@
 import type { Ask, AskEnvelope, Session, SessionStatus, Worktree } from '@quirky/protocol'
 
+const WORKTREE_DEFAULTS = {
+  kind: 'git',
+  displayName: null,
+  comment: '',
+  status: 'in-progress',
+  pinned: false,
+  unread: false,
+  parentId: null,
+  createdAt: 0,
+  createdBy: 'external',
+  baseRef: null,
+  keepBranch: false,
+  removing: false,
+  groupId: null
+} as const
+
 type PluginCtx = { error(kind: 'invalid-params' | 'not-found' | 'conflict', message: string): Error }
 
 /**
@@ -14,7 +30,8 @@ export class FakeWorld {
     branch: 'main',
     head: 'abc123',
     isMain: true,
-    name: 'main'
+    name: 'main',
+    ...WORKTREE_DEFAULTS
   }
   readonly sessions = new Map<string, Session>()
   readonly statusLog: { sessionId: string; status: SessionStatus }[] = []

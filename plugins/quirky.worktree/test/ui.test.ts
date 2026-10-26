@@ -6,6 +6,24 @@ import { RpcErrorCode } from '@quirky/protocol'
 const SLOT = 'sidebar-section:quirky.worktree/worktrees'
 const SESSION_VIEW = 'view:quirky.session/worktree'
 
+const WORKTREE_DEFAULTS = {
+  kind: 'git',
+  displayName: null,
+  comment: '',
+  status: 'in-progress',
+  pinned: false,
+  unread: false,
+  parentId: null,
+  createdAt: 0,
+  createdBy: 'external',
+  baseRef: null,
+  keepBranch: false,
+  removing: false,
+  groupId: null
+} as const
+
+const REPO_DEFAULTS = { kind: 'git', displayName: null, groupId: null } as const
+
 type Mount = (element: HTMLElement, props: { input?: unknown; report?(state: unknown): void }) => () => void
 type Call = { method: string; params: Record<string, unknown> }
 
@@ -24,8 +42,8 @@ afterAll(async () => {
 })
 
 const repos: Repo[] = [
-  { id: 'r1', name: 'api', path: '/r/api', addedAt: 0 },
-  { id: 'r2', name: 'web', path: '/r/web', addedAt: 0 }
+  { id: 'r1', name: 'api', path: '/r/api', addedAt: 0, ...REPO_DEFAULTS },
+  { id: 'r2', name: 'web', path: '/r/web', addedAt: 0, ...REPO_DEFAULTS }
 ]
 
 const wt = (id: string, repoId: string, name: string, isMain = false): Worktree => ({
@@ -35,7 +53,8 @@ const wt = (id: string, repoId: string, name: string, isMain = false): Worktree 
   branch: name,
   head: 'abc',
   isMain,
-  name
+  name,
+  ...WORKTREE_DEFAULTS
 })
 
 const session = (id: string, worktreeId: string, status: Session['status']): Session => ({
@@ -270,7 +289,7 @@ test('refreshes the tree on repo and worktree changes', async () => {
   h.world.worktrees.push(wt('w4', 'r2', 'feature-x'))
   await h.emit({ type: 'quirky.worktree/changed', data: { repoId: 'r2' } })
   expect(rowOf('feature-x', 'web')).not.toBeUndefined()
-  h.world.repos.push({ id: 'r3', name: 'docs', path: '/r/docs', addedAt: 0 })
+  h.world.repos.push({ id: 'r3', name: 'docs', path: '/r/docs', addedAt: 0, ...REPO_DEFAULTS })
   await h.emit({ type: 'quirky.repo/changed', data: {} })
   expect([...host.querySelectorAll('.repo-name')].map((e) => e.textContent)).toEqual(['api', 'web', 'docs'])
   expect(lastReport(h).repos.length).toBe(3)

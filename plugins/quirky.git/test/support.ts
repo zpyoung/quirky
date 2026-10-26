@@ -9,8 +9,33 @@ import { startHarness, type Harness } from '../../../packages/daemon/test/helper
 const PLUGIN_DIR = join(dirname(fileURLToPath(import.meta.url)), '..')
 const FAKES_DIR = join(dirname(fileURLToPath(import.meta.url)), 'fakes')
 
+const WORKTREE_DEFAULTS = {
+  kind: 'git',
+  displayName: null,
+  comment: '',
+  status: 'in-progress',
+  pinned: false,
+  unread: false,
+  parentId: null,
+  createdAt: 0,
+  createdBy: 'external',
+  baseRef: null,
+  keepBranch: false,
+  removing: false,
+  groupId: null
+} as const
+
 function worktree(id: string, path: string, name: string, isMain: boolean): Worktree {
-  return { id, repoId: 'repo_api', path, branch: name, head: id.padEnd(40, 'a'), isMain, name }
+  return {
+    id,
+    repoId: 'repo_api',
+    path,
+    branch: name,
+    head: id.padEnd(40, 'a'),
+    isMain,
+    name,
+    ...WORKTREE_DEFAULTS
+  }
 }
 
 export type GitHarness = {

@@ -2,7 +2,31 @@ import { expect, test } from 'bun:test'
 import type { Repo, Session, Worktree } from '@quirky/protocol'
 import { buildReport } from '../src/report'
 
-const repo = (id: string, name: string): Repo => ({ id, name, path: `/r/${name}`, addedAt: 0 })
+const WORKTREE_DEFAULTS = {
+  kind: 'git',
+  displayName: null,
+  comment: '',
+  status: 'in-progress',
+  pinned: false,
+  unread: false,
+  parentId: null,
+  createdAt: 0,
+  createdBy: 'external',
+  baseRef: null,
+  keepBranch: false,
+  removing: false,
+  groupId: null
+} as const
+
+const repo = (id: string, name: string): Repo => ({
+  id,
+  name,
+  path: `/r/${name}`,
+  addedAt: 0,
+  kind: 'git',
+  displayName: null,
+  groupId: null
+})
 
 const worktree = (id: string, repoId: string, name: string, branch: string | null = name): Worktree => ({
   id,
@@ -11,7 +35,8 @@ const worktree = (id: string, repoId: string, name: string, branch: string | nul
   branch,
   head: 'abc',
   isMain: false,
-  name
+  name,
+  ...WORKTREE_DEFAULTS
 })
 
 const session = (id: string, worktreeId: string, status: Session['status']): Session => ({
