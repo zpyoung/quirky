@@ -26,9 +26,11 @@ function singleLine(text: string): string {
 
 export const pluginList: Command = {
   name: 'plugin list',
-  usage: 'plugin list',
   summary: 'list plugins with their state and diagnostics',
+  positionals: [],
   flags: {},
+  methods: ['plugin.list'],
+  plugin: null,
   async run(args, ctx) {
     takePositionals(args, [])
     const plugins = await ctx.rpc.call('plugin.list', {})
@@ -51,9 +53,15 @@ export const pluginList: Command = {
 
 export const pluginContributions: Command = {
   name: 'plugin contributions',
-  usage: 'plugin contributions [--kind <k>] [--plugin <id>] [--all]',
   summary: 'list contributions; --all includes overridden, disabled and rejected ones',
-  flags: { kind: 'string', plugin: 'string', all: 'boolean' },
+  positionals: [],
+  flags: {
+    kind: { type: 'string', description: 'only this contribution kind' },
+    plugin: { type: 'string', description: 'only this plugin' },
+    all: { type: 'boolean', description: 'include overridden, disabled and rejected contributions' }
+  },
+  methods: ['plugin.contributions'],
+  plugin: null,
   async run(args, ctx) {
     takePositionals(args, [])
     const kind = flagString(args, 'kind')
@@ -77,9 +85,11 @@ export const pluginContributions: Command = {
 
 export const pluginEnable: Command = {
   name: 'plugin enable',
-  usage: 'plugin enable <id>',
   summary: 'clear the disable on a plugin or contribution',
+  positionals: [{ name: 'id', description: 'plugin or contribution ID', required: true }],
   flags: {},
+  methods: ['plugin.enable'],
+  plugin: null,
   async run(args, ctx) {
     const [id] = takePositionals(args, ['id'])
     const result = await ctx.rpc.call('plugin.enable', { id })
@@ -89,9 +99,11 @@ export const pluginEnable: Command = {
 
 export const pluginDisable: Command = {
   name: 'plugin disable',
-  usage: 'plugin disable <id>',
   summary: 'disable a plugin (and its dependents) or one contribution',
+  positionals: [{ name: 'id', description: 'plugin or contribution ID', required: true }],
   flags: {},
+  methods: ['plugin.disable'],
+  plugin: null,
   async run(args, ctx) {
     const [id] = takePositionals(args, ['id'])
     const result = await ctx.rpc.call('plugin.disable', { id })
@@ -101,9 +113,11 @@ export const pluginDisable: Command = {
 
 export const pluginActivate: Command = {
   name: 'plugin activate',
-  usage: 'plugin activate <pluginId>',
   summary: 'activate a plugin now instead of on first use',
+  positionals: [{ name: 'pluginId', description: 'the plugin to activate', required: true }],
   flags: {},
+  methods: ['plugin.activate'],
+  plugin: null,
   async run(args, ctx) {
     const [pluginId] = takePositionals(args, ['pluginId'])
     const plugin = await ctx.rpc.call('plugin.activate', { pluginId })

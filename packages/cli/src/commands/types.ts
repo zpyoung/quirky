@@ -1,4 +1,5 @@
-import type { FlagDefs, ParsedArgs } from '../args'
+import type { ParsedArgs } from '../args'
+import type { FlagSpec, PositionalSpec } from '../command-spec'
 import type { DaemonLink } from '../link'
 import type { Printer } from '../output'
 
@@ -19,8 +20,16 @@ export type Context = {
 export type Command = {
   /** Space-separated words that select the command, e.g. `wt create`. */
   name: string
-  usage: string
   summary: string
-  flags: FlagDefs
+  positionals: PositionalSpec[]
+  flags: Record<string, FlagSpec>
+  /** Every RPC method the command's run code may call. */
+  methods: readonly string[]
+  /** The contributing plugin's ID; `null` for kernel commands. */
+  plugin: string | null
+  /** Receives the tokens after the command words unparsed in `args.positionals`. */
+  rawArgs?: true
+  /** The `kernel <name>` or `<plugin> <name>` command that wins over this generated one. */
+  shadowedBy?: string
   run(args: ParsedArgs, ctx: Context): Promise<void>
 }

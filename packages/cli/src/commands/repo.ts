@@ -8,9 +8,11 @@ const repoRecord = (repo: Repo) => formatRecord([['id', repo.id], ['name', repo.
 
 export const repoAdd: Command = {
   name: 'repo add',
-  usage: 'repo add <path>',
   summary: 'add a git repository',
+  positionals: [{ name: 'path', description: 'path to the git repository', required: true }],
   flags: {},
+  methods: ['repo.add'],
+  plugin: null,
   async run(args, ctx) {
     const [path] = takePositionals(args, ['path'])
     const repo = await ctx.rpc.call('repo.add', { path: resolve(ctx.cwd, path) })
@@ -20,9 +22,11 @@ export const repoAdd: Command = {
 
 export const repoList: Command = {
   name: 'repo list',
-  usage: 'repo list',
   summary: 'list repositories',
+  positionals: [],
   flags: {},
+  methods: ['repo.list'],
+  plugin: null,
   async run(args, ctx) {
     takePositionals(args, [])
     const repos = await ctx.rpc.call('repo.list', {})
@@ -34,9 +38,11 @@ export const repoList: Command = {
 
 export const repoRm: Command = {
   name: 'repo rm',
-  usage: 'repo rm <repoId>',
   summary: 'remove a repository from Quirky',
+  positionals: [{ name: 'repoId', description: 'the repository to remove', required: true }],
   flags: {},
+  methods: ['repo.remove'],
+  plugin: null,
   async run(args, ctx) {
     const [repoId] = takePositionals(args, ['repoId'])
     const result = await ctx.rpc.call('repo.remove', { repoId })

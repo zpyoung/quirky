@@ -68,9 +68,11 @@ function renderModel(model: UiModel): string {
 
 export const uiContributions: Command = {
   name: 'ui contributions',
-  usage: 'ui contributions',
   summary: 'list the UI contributions in effect: slots, commands, keybindings, settings and themes',
+  positionals: [],
   flags: {},
+  methods: ['ui.contributions'],
+  plugin: null,
   async run(args, ctx) {
     takePositionals(args, [])
     const model = await ctx.rpc.call('ui.contributions', {})

@@ -4,9 +4,11 @@ import type { Command } from './types'
 
 export const status: Command = {
   name: 'status',
-  usage: 'status',
   summary: 'show daemon status',
+  positionals: [],
   flags: {},
+  methods: ['status.get'],
+  plugin: null,
   async run(args, ctx) {
     takePositionals(args, [])
     const result = await ctx.rpc.call('status.get', {})
