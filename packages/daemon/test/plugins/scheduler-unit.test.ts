@@ -415,6 +415,25 @@ describe('sync', () => {
     expect(t.lines().map((line) => line.split(' ')[0])).toEqual(['import', 'activate', 'start', 'end', 'start', 'end'])
   })
 
+  test('reports a re-enabled job as running with no next run while its earlier run is unsettled', async () => {
+    const t = setup()
+    const scheduler = t.begin([{ name: 'tick', initialDelay: '0s', body: waitForFile(t.gate) }])
+    scheduler.start()
+    await until(() => t.starts().length === 1)
+
+    await t.host.setEnabled(TICK, false)
+    scheduler.sync()
+    await t.host.setEnabled(TICK, true)
+    scheduler.sync()
+    const [info] = scheduler.list()
+    expect(info?.state).toBe('running')
+    expect(info?.nextRunAt).toBeNull()
+    await expect(scheduler.run(TICK)).rejects.toMatchObject({ code: RpcErrorCode.Conflict })
+
+    t.release()
+    await until(() => t.writes.includes('ok'))
+  })
+
   test('arms a job that became effective after start', async () => {
     const t = setup()
     const scheduler = t.begin([{ name: 'tick', initialDelay: '0s' }])

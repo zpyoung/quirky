@@ -107,15 +107,18 @@ export class Scheduler {
   list(): JobInfo[] {
     return [...this.jobs.values()]
       .sort((a, b) => compare(a.id, b.id))
-      .map((entry) => ({
-        id: entry.id,
-        plugin: entry.owner,
-        intervalMs: entry.intervalMs,
-        timeoutMs: entry.timeoutMs,
-        state: entry.running ? 'running' : 'idle',
-        nextRunAt: entry.running ? null : entry.due,
-        lastRun: entry.lastRun ? { ...entry.lastRun } : null
-      }))
+      .map((entry) => {
+        const unsettled = entry.running !== null || this.lingering.has(entry.id)
+        return {
+          id: entry.id,
+          plugin: entry.owner,
+          intervalMs: entry.intervalMs,
+          timeoutMs: entry.timeoutMs,
+          state: unsettled ? ('running' as const) : ('idle' as const),
+          nextRunAt: unsettled ? null : entry.due,
+          lastRun: entry.lastRun ? { ...entry.lastRun } : null
+        }
+      })
   }
 
   /**
