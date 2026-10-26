@@ -169,6 +169,31 @@ describe('quirky.worktree remove', () => {
     await waitFor(() => events.find((e: QuirkyEvent) => e.type === 'quirky.worktree/changed'))
   })
 
+  test('a session that fails to close after git removed the worktree is reported, not thrown', async () => {
+    const { t, client, events, repo } = await start()
+    const worktree = (await call(client, 'quirky.worktree/create', { repo: repo.id, name: 'stuck' })) as Worktree
+    const first = (await call(client, 'quirky.session/create', { worktree: worktree.id, agent: 'shell' })) as { id: string }
+    const second = (await call(client, 'quirky.session/create', { worktree: worktree.id, agent: 'shell' })) as { id: string }
+    // the fake reads closeError twice per close (check, then throw), so serve the message for the first close only
+    let reads = 0
+    Object.defineProperty(t.sessions, 'closeError', { configurable: true, get: () => (reads++ < 2 ? 'pty is wedged' : null) })
+    events.length = 0
+    let result: { ok: boolean; sessionErrors?: string[] }
+    try {
+      result = (await call(client, 'quirky.worktree/remove', { worktree: worktree.id, yes: true })) as typeof result
+    } finally {
+      // the shared fake state is reset by plain assignment, which a getter-only property would reject
+      Object.defineProperty(t.sessions, 'closeError', { value: null, writable: true, configurable: true, enumerable: true })
+    }
+    expect(result.ok).toBe(true)
+    expect(result.sessionErrors).toHaveLength(1)
+    expect(result.sessionErrors![0]).toContain(first.id)
+    expect(result.sessionErrors![0]).toContain('pty is wedged')
+    expect(t.sessions.closed).toEqual([second.id])
+    expect(t.git!.calls.some((c) => c.fn === 'removeWorktree')).toBe(true)
+    await waitFor(() => events.find((e: QuirkyEvent) => e.type === 'quirky.worktree/changed'))
+  })
+
   test('works without quirky.session', async () => {
     const { client, repo } = await start({ fakeSession: false })
     const worktree = (await call(client, 'quirky.worktree/create', { repo: repo.id, name: 'solo' })) as Worktree
