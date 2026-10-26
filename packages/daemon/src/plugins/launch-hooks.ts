@@ -33,12 +33,17 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
-function timeBound<T>(work: () => Promise<T>, ms: number): Promise<T> {
+/** `work` receives `hasTimedOut`, so a step that has not started yet can be skipped once the deadline has passed. */
+function timeBound<T>(work: (hasTimedOut: () => boolean) => Promise<T>, ms: number): Promise<T> {
   let timer: ReturnType<typeof setTimeout>
+  let expired = false
   const timeout = new Promise<never>((_, reject) => {
-    timer = setTimeout(() => reject(new HookTimedOut()), ms)
+    timer = setTimeout(() => {
+      expired = true
+      reject(new HookTimedOut())
+    }, ms)
   })
-  return Promise.race([work(), timeout]).finally(() => clearTimeout(timer))
+  return Promise.race([work(() => expired), timeout]).finally(() => clearTimeout(timer))
 }
 
 /**
@@ -65,8 +70,9 @@ export async function runLaunchHooks(options: RunLaunchHooksOptions): Promise<La
     }
     let patch: unknown
     try {
-      patch = await timeBound(async () => {
+      patch = await timeBound(async (hasTimedOut) => {
         const implementation = (await plugins.resolveImplementation(hook.id)) as LaunchHook
+        if (hasTimedOut()) throw new HookTimedOut()
         return implementation(launch)
       }, timeoutMs)
     } catch (error) {
