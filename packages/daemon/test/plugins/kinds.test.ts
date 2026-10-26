@@ -114,8 +114,15 @@ describe('overrides and other kinds', () => {
     expect(result({ overrides: [{ id: 'job:acme.poll/tick', interval: '5m' }] }).ok).toBe(true)
   })
 
-  test('leaves a command entry with arbitrary fields alone', () => {
-    expect(result(contributes('command', { id: 'hello', title: 'Hello', anything: [1, 2], interval: 'soon' })).ok).toBe(true)
+  test('checks a command entry against the UI rules, rejecting arbitrary fields', () => {
+    expect(errorsOf(contributes('command', { id: 'hello', title: 'Hello', anything: [1, 2], interval: 'soon' }))).toEqual([
+      'command hello: unknown field `anything`',
+      'command hello: unknown field `interval`',
+    ])
+  })
+
+  test('leaves an entry of a kind with no checker alone', () => {
+    expect(result(contributes('widget', { id: 'hello', title: 1, anything: [1, 2], interval: 'soon' })).ok).toBe(true)
   })
 })
 
