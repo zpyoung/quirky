@@ -5,12 +5,13 @@ type Props = { id: string; input?: unknown }
 
 /**
  * One plugin contribution: the host's wrapper (title, loading line, error box) around a child
- * `div` the plugin owns. React never renders into that child, so the plugin may fill it freely.
+ * `div` the plugin owns. Each mount gets a fresh, empty child that is removed when the mount ends, so
+ * a plugin never inherits what an earlier mount left behind. React never renders into that child.
  */
 export function PluginSlot({ id, input }: Props) {
   const host = usePluginHost()
   const state = usePluginState()
-  const body = useRef<HTMLDivElement>(null)
+  const anchor = useRef<HTMLDivElement>(null)
   const entry = [
     ...(state.model?.sidebarSections ?? []),
     ...(state.model?.panels ?? []),
@@ -23,9 +24,16 @@ export function PluginSlot({ id, input }: Props) {
 
   // the host drops a mount whose owner changed, so the owner and its module are part of the mount's identity
   useEffect(() => {
-    const element = body.current
-    if (!element) return
-    return host.mount(id, element, { input })
+    const parent = anchor.current
+    if (!parent) return
+    const element = document.createElement('div')
+    element.className = 'plugin-slot-body'
+    parent.appendChild(element)
+    const unmount = host.mount(id, element, { input })
+    return () => {
+      unmount()
+      element.remove()
+    }
   }, [host, id, input, plugin, module])
 
   return (
@@ -41,7 +49,7 @@ export function PluginSlot({ id, input }: Props) {
           {slot.message}
         </div>
       )}
-      <div className="plugin-slot-body" ref={body} />
+      <div ref={anchor} style={{ display: 'contents' }} />
     </section>
   )
 }

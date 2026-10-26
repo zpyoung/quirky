@@ -28,6 +28,7 @@ function PluginField({
     ) : control.kind === 'number' ? (
       <input
         type="number"
+        step="any"
         min={control.min}
         max={control.max}
         value={String(value)}
