@@ -417,6 +417,16 @@
 - **Revisit if:** W4's integration finds plugins that pass against fakes and fail against each other
 - **Source:** assumed — autonomous
 
+## D42: W2 checkpoint: accept all nine findings, which collapse to seven defects
+- **Question:** subagent-driven-development Step 9, adjudicating the W2 checkpoint review (three Codex lenses, standard depth)
+- **Options:** accept; reject with a reason
+- **Chose:** accepted all. C1 and S1 (HIGH): module-backed CLI commands looked up handlers by full contribution ID instead of name. C2 (HIGH): a reinstalled plugin kept running its old module from Bun's import cache. C4: a distro reinstall with unchanged versions left old code active. C3 and S2: distro disables reported as the user's. X1: a failed rename during a distro reinstall lost the old plugin. X2: an oversized socket line was dispatched when its newline arrived in the same chunk. X3: a stream opened after its connection closed never cleaned up. Fixed in three disjoint fix components (CLI, plugin host lifecycle, socket and streams), dispatched beside W3 because W3 writes only `plugins/**`.
+- **Why:** each came with a reproduction against the code
+- **Evidence:** scratchpad cp-w2/{C,S,X}/gate.json
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** assumed — autonomous
+
 ## Progress
 
 Step 5, build. W1 and W2 merged (W2 at 247471b, gate 1705 pass). W2 checkpoint review running; W3 (eight built-in plugins, six tasks P1-P6) dispatched from the setup commit after it. Next: adjudicate W2 findings, fix in packages/**, then the W3 barrier and checkpoint, then W4 per D39.
