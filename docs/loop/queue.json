@@ -1,66 +1,646 @@
 {
   "items": [
-    { "id": "m0-registry", "milestone": "M0", "title": "Plugin kernel: manifests, loading, lazy activation, and the contribution registry with stable IDs, override and disable", "docs": [], "deps": [], "status": "todo" },
-    { "id": "m0-daemon-api", "milestone": "M0", "title": "Daemon plugin API: RPC methods, events, per-plugin store namespaces with migrations, scheduler, agent-launch hooks", "docs": [], "deps": ["m0-registry"], "status": "todo" },
-    { "id": "m0-ui-api", "milestone": "M0", "title": "UI plugin API: declared slots for views, panels, sidebar sections, commands, keybindings, settings and themes", "docs": [], "deps": ["m0-registry"], "status": "todo" },
-    { "id": "m0-scripting", "milestone": "M0", "title": "Scripting surface: schemas for every contribution, CLI generated from them, quirky api --json, generated agent skill", "docs": ["cli.md"], "deps": ["m0-daemon-api"], "status": "todo" },
-    { "id": "m0-cli-core", "milestone": "M0", "title": "CLI core: unix socket, selectors, --version, idempotent request ids", "docs": ["cli.md"], "deps": ["m0-scripting"], "status": "todo" },
-    { "id": "m0-ui-bridge", "milestone": "M0", "title": "UI bridge: UI commands as API commands routed to the window, layout and focus in the daemon, quirky ui state", "docs": [], "deps": ["m0-ui-api", "m0-scripting"], "status": "todo" },
-    { "id": "m0-port-v1", "milestone": "M0", "title": "Move v1's repos, worktrees, terminals, sessions, agent status, source control, asks and structured sessions into built-in plugins, each with its methods and CLI group", "docs": [], "deps": ["m0-cli-core", "m0-ui-bridge"], "status": "todo" },
-    { "id": "m0-distros", "milestone": "M0", "title": "Distros and safety: distro manifest, install consent, no silent auto-update, --disable-plugins, irreversible-action confirmations, sample distro and the M0 exit test", "docs": ["ask.md"], "deps": ["m0-port-v1"], "status": "todo" },
-    { "id": "gate-m0", "milestone": "M0", "kind": "gate", "title": "Review stop after M0", "docs": [], "deps": ["m0-distros"], "status": "todo" },
-
-    { "id": "m1-term-daemon", "milestone": "M1", "title": "Terminal host daemon: snapshot on attach, checkpoints and cold restore, paged history, bell and OSC 133, shell-ready barrier, correct exit codes", "docs": ["term-daemon.md"], "deps": ["gate-m0"], "status": "todo" },
-    { "id": "m1-providers", "milestone": "M1", "title": "Agent launch for all 45 CLIs: data table, detection, resume, permission modes, paste-after-ready", "docs": ["providers.md"], "deps": ["gate-m0"], "status": "todo" },
-    { "id": "m1-launch-settings", "milestone": "M1", "title": "Launch settings: per-agent model and effort catalog yielding argv and structured options", "docs": ["launch-settings.md"], "deps": ["m1-providers"], "status": "todo" },
-    { "id": "m1-agent-status", "milestone": "M1", "title": "Agent status: full state machine, hook installers beyond Claude and Codex, provider session id and transcript path, title and OSC fallback", "docs": ["agent-status.md"], "deps": ["m1-term-daemon", "m1-providers"], "status": "todo" },
-    { "id": "m1-notifications", "milestone": "M1", "title": "Notifications: unread markers, cooldown, banner text, sounds, tray dot", "docs": ["notifications.md"], "deps": ["m1-agent-status"], "status": "todo" },
-    { "id": "m1-worktrees", "milestone": "M1", "title": "Worktrees: metadata model, create and delete flows, setup scripts, folder workspaces, project groups (not Create from PR)", "docs": ["worktrees.md"], "deps": ["gate-m0"], "status": "todo" },
-    { "id": "m1-term-ui-core", "milestone": "M1", "title": "Terminal panes: splits, tab groups, layout persistence", "docs": ["term-ui.md"], "deps": ["m1-term-daemon"], "status": "todo" },
-    { "id": "m1-term-ui-extras", "milestone": "M1", "title": "Terminal panes: search, floating terminal, quick commands, links, keybindings and the remaining term-ui flows", "docs": ["term-ui.md"], "deps": ["m1-term-ui-core"], "status": "todo" },
-
-    { "id": "m2-source-control-core", "milestone": "M2", "title": "Source control: remote operations, discard, branch compare, history, conflicts", "docs": ["source-control.md"], "deps": ["m1-worktrees"], "status": "todo" },
-    { "id": "m2-source-control-notes-ai", "milestone": "M2", "title": "Source control: diff notes sent to an agent, AI commit messages", "docs": ["source-control.md"], "deps": ["m2-source-control-core", "m1-launch-settings", "m1-agent-status"], "status": "todo" },
-    { "id": "m2-editor-core", "milestone": "M2", "title": "Editor: explorer, tabs, CodeMirror editing with the disk precondition, file watching, quick open and search", "docs": ["editor.md"], "deps": ["m1-worktrees"], "status": "todo" },
-    { "id": "m2-editor-markdown", "milestone": "M2", "title": "Editor: rich Markdown", "docs": ["editor.md"], "deps": ["m2-editor-core"], "status": "todo" },
-    { "id": "m2-editor-viewers", "milestone": "M2", "title": "Editor: notebooks and the CSV, image, PDF and media viewers", "docs": ["editor.md"], "deps": ["m2-editor-core"], "status": "todo" },
-    { "id": "m2-sidebar-extras", "milestone": "M2", "title": "Sidebar extras: dirty marker, separators, activity window, cross-repo groups (not review filters)", "docs": ["sidebar-extras.md"], "deps": ["m1-worktrees", "m2-source-control-core", "m1-agent-status"], "status": "todo" },
-    { "id": "m2-ask-parity", "milestone": "M2", "title": "orca ask parity: number and date questions, defaults, timeouts, credential refusal, drafts, fresh seq for a queued second ask", "docs": ["ask.md"], "deps": ["gate-m0"], "status": "todo" },
-
-    { "id": "m3-session-info", "milestone": "M3", "title": "Session info panel", "docs": ["session-info.md"], "deps": ["m1-agent-status"], "status": "todo" },
-    { "id": "m3-terminal-dock", "milestone": "M3", "title": "Terminal dock with its own composer", "docs": ["terminal-dock.md"], "deps": ["m1-term-ui-core", "m1-agent-status", "m1-providers"], "status": "todo" },
-    { "id": "m3-handoff", "milestone": "M3", "title": "Session handoff", "docs": ["handoff.md"], "deps": ["m1-agent-status", "m1-worktrees", "m2-source-control-core"], "status": "todo" },
-    { "id": "m3-accounts-usage", "milestone": "M3", "title": "Accounts: read-only usage meters and rate limits", "docs": ["accounts.md"], "deps": ["m1-providers"], "status": "todo" },
-    { "id": "m3-accounts-switching", "milestone": "M3", "title": "Accounts: Claude and Codex account switching", "docs": ["accounts.md"], "deps": ["m3-accounts-usage", "m1-agent-status"], "status": "todo" },
-    { "id": "m3-vault-browse", "milestone": "M3", "title": "AI vault: browse and resume sessions across agents", "docs": ["ai-vault.md"], "deps": ["m1-providers"], "status": "todo" },
-    { "id": "m3-vault-search", "milestone": "M3", "title": "AI vault: opt-in full-text search", "docs": ["ai-vault.md"], "deps": ["m3-vault-browse"], "status": "todo" },
-
-    { "id": "m4-hosting-api-github", "milestone": "M4", "title": "Git hosting API: GitHub, with one merge path shared by people and the sitter", "docs": ["hosting-api.md"], "deps": ["m1-worktrees", "m2-source-control-core"], "status": "todo" },
-    { "id": "m4-hosting-api-others", "milestone": "M4", "title": "Git hosting API: GitLab, Bitbucket, Gitea, Azure DevOps", "docs": ["hosting-api.md"], "deps": ["m4-hosting-api-github"], "status": "todo" },
-    { "id": "m4-hosting-ui-pr", "milestone": "M4", "title": "Checks panel, PR page, Create PR", "docs": ["hosting-ui.md"], "deps": ["m4-hosting-api-github"], "status": "todo" },
-    { "id": "m4-hosting-ui-tasks", "milestone": "M4", "title": "Tasks list, issue page, Projects", "docs": ["hosting-ui.md"], "deps": ["m4-hosting-ui-pr"], "status": "todo" },
-    { "id": "m4-worktrees-create-from", "milestone": "M4", "title": "Worktrees: Create from a PR, MR or issue", "docs": ["worktrees.md"], "deps": ["m4-hosting-api-github"], "status": "todo" },
-    { "id": "m4-sidebar-review-filters", "milestone": "M4", "title": "Sidebar extras: review filters", "docs": ["sidebar-extras.md"], "deps": ["m4-hosting-api-github", "m2-sidebar-extras"], "status": "todo" },
-
-    { "id": "sa-browser-agent", "milestone": "Side A", "title": "Browser: agent automation over an on-demand Chrome and CDP", "docs": ["browser.md"], "deps": ["m1-worktrees"], "status": "todo" },
-    { "id": "sa-browser-pane", "milestone": "Side A", "title": "Browser: visible pane and screencast", "docs": ["browser.md"], "deps": ["sa-browser-agent"], "status": "todo" },
-    { "id": "sa-browser-design", "milestone": "Side A", "title": "Browser: design mode", "docs": ["browser.md"], "deps": ["sa-browser-pane"], "status": "todo" },
-    { "id": "sa-browser-cookies", "milestone": "Side A", "title": "Browser: cookie import", "docs": ["browser.md"], "deps": ["sa-browser-agent"], "status": "todo" },
-
-    { "id": "m5-structured-runner", "milestone": "M5", "title": "Shared seams: Codex structured runner over app-server, structured resume, model and effort on structured launches, checks runner", "docs": ["automations.md", "fork-loops.md", "launch-settings.md"], "deps": ["m1-launch-settings", "m1-agent-status"], "status": "todo" },
-    { "id": "m5-automations", "milestone": "M5", "title": "Automations", "docs": ["automations.md"], "deps": ["m5-structured-runner", "m1-worktrees"], "status": "todo" },
-    { "id": "m5-loops", "milestone": "M5", "title": "Loops", "docs": ["fork-loops.md"], "deps": ["m5-structured-runner"], "status": "todo" },
-    { "id": "m5-ledger", "milestone": "M5", "title": "Project ledger", "docs": ["ledger.md"], "deps": ["gate-m0"], "status": "todo" },
-
-    { "id": "m6-orchestration", "milestone": "M6", "title": "Orchestration: tasks, dispatch, mailbox, worker start and done, gates", "docs": ["orchestration.md"], "deps": ["m5-structured-runner", "m1-worktrees", "m1-agent-status"], "status": "todo" },
-    { "id": "m6-heimdall", "milestone": "M6", "title": "Heimdall supervisor kernel, without leases, remote fleets or the judgment layer", "docs": ["heimdall.md"], "deps": ["m6-orchestration"], "status": "todo" },
-    { "id": "m6-objective", "milestone": "M6", "title": "Objective runner as a Heimdall kind", "docs": ["heimdall-objective.md"], "deps": ["m6-heimdall", "m4-hosting-api-github"], "status": "todo" },
-    { "id": "m6-sitter", "milestone": "M6", "title": "PR sitter as a Heimdall kind", "docs": ["hosted-review-sitter.md"], "deps": ["m6-heimdall", "m4-hosting-api-github"], "status": "todo" },
-
-    { "id": "sb-mobile-daemon", "milestone": "Side B", "title": "Mobile groundwork in the daemon: non-loopback listener, pairing, end-to-end encryption, method allowlist", "docs": ["mobile.md"], "deps": ["m1-term-daemon", "m1-agent-status"], "status": "todo" },
-    { "id": "sb-mobile-app", "milestone": "Side B", "title": "Mobile app: fork of Orca's Expo app onto Quirky's API", "docs": ["mobile.md"], "deps": ["sb-mobile-daemon"], "status": "todo" },
-
-    { "id": "m7-parity-sweep", "milestone": "M7", "title": "Parity sweep: every remaining flow in the 28 feature docs", "docs": [], "deps": ["*"], "status": "todo" },
-    { "id": "m7-api-freeze", "milestone": "M7", "title": "Plugin API 1.0: freeze and version the API, manifests declare their API version, publish an example distro", "docs": [], "deps": ["m7-parity-sweep"], "status": "todo" }
+    {
+      "id": "m0-registry",
+      "milestone": "M0",
+      "title": "Plugin kernel: manifests, loading, lazy activation, and the contribution registry with stable IDs, override and disable",
+      "docs": [],
+      "deps": [],
+      "status": "in-progress"
+    },
+    {
+      "id": "m0-daemon-api",
+      "milestone": "M0",
+      "title": "Daemon plugin API: RPC methods, events, per-plugin store namespaces with migrations, scheduler, agent-launch hooks",
+      "docs": [],
+      "deps": [
+        "m0-registry"
+      ],
+      "status": "todo"
+    },
+    {
+      "id": "m0-ui-api",
+      "milestone": "M0",
+      "title": "UI plugin API: declared slots for views, panels, sidebar sections, commands, keybindings, settings and themes",
+      "docs": [],
+      "deps": [
+        "m0-registry"
+      ],
+      "status": "todo"
+    },
+    {
+      "id": "m0-scripting",
+      "milestone": "M0",
+      "title": "Scripting surface: schemas for every contribution, CLI generated from them, quirky api --json, generated agent skill",
+      "docs": [
+        "cli.md"
+      ],
+      "deps": [
+        "m0-daemon-api"
+      ],
+      "status": "todo"
+    },
+    {
+      "id": "m0-cli-core",
+      "milestone": "M0",
+      "title": "CLI core: unix socket, selectors, --version, idempotent request ids",
+      "docs": [
+        "cli.md"
+      ],
+      "deps": [
+        "m0-scripting"
+      ],
+      "status": "todo"
+    },
+    {
+      "id": "m0-ui-bridge",
+      "milestone": "M0",
+      "title": "UI bridge: UI commands as API commands routed to the window, layout and focus in the daemon, quirky ui state",
+      "docs": [],
+      "deps": [
+        "m0-ui-api",
+        "m0-scripting"
+      ],
+      "status": "todo"
+    },
+    {
+      "id": "m0-port-v1",
+      "milestone": "M0",
+      "title": "Move v1's repos, worktrees, terminals, sessions, agent status, source control, asks and structured sessions into built-in plugins, each with its methods and CLI group",
+      "docs": [],
+      "deps": [
+        "m0-cli-core",
+        "m0-ui-bridge"
+      ],
+      "status": "todo"
+    },
+    {
+      "id": "m0-distros",
+      "milestone": "M0",
+      "title": "Distros and safety: distro manifest, install consent, no silent auto-update, --disable-plugins, irreversible-action confirmations, sample distro and the M0 exit test",
+      "docs": [
+        "ask.md"
+      ],
+      "deps": [
+        "m0-port-v1"
+      ],
+      "status": "todo"
+    },
+    {
+      "id": "gate-m0",
+      "milestone": "M0",
+      "kind": "gate",
+      "title": "Review stop after M0",
+      "docs": [],
+      "deps": [
+        "m0-distros"
+      ],
+      "status": "todo"
+    },
+    {
+      "id": "m1-term-daemon",
+      "milestone": "M1",
+      "title": "Terminal host daemon: snapshot on attach, checkpoints and cold restore, paged history, bell and OSC 133, shell-ready barrier, correct exit codes",
+      "docs": [
+        "term-daemon.md"
+      ],
+      "deps": [
+        "gate-m0"
+      ],
+      "status": "todo"
+    },
+    {
+      "id": "m1-providers",
+      "milestone": "M1",
+      "title": "Agent launch for all 45 CLIs: data table, detection, resume, permission modes, paste-after-ready",
+      "docs": [
+        "providers.md"
+      ],
+      "deps": [
+        "gate-m0"
+      ],
+      "status": "todo"
+    },
+    {
+      "id": "m1-launch-settings",
+      "milestone": "M1",
+      "title": "Launch settings: per-agent model and effort catalog yielding argv and structured options",
+      "docs": [
+        "launch-settings.md"
+      ],
+      "deps": [
+        "m1-providers"
+      ],
+      "status": "todo"
+    },
+    {
+      "id": "m1-agent-status",
+      "milestone": "M1",
+      "title": "Agent status: full state machine, hook installers beyond Claude and Codex, provider session id and transcript path, title and OSC fallback",
+      "docs": [
+        "agent-status.md"
+      ],
+      "deps": [
+        "m1-term-daemon",
+        "m1-providers"
+      ],
+      "status": "todo"
+    },
+    {
+      "id": "m1-notifications",
+      "milestone": "M1",
+      "title": "Notifications: unread markers, cooldown, banner text, sounds, tray dot",
+      "docs": [
+        "notifications.md"
+      ],
+      "deps": [
+        "m1-agent-status"
+      ],
+      "status": "todo"
+    },
+    {
+      "id": "m1-worktrees",
+      "milestone": "M1",
+      "title": "Worktrees: metadata model, create and delete flows, setup scripts, folder workspaces, project groups (not Create from PR)",
+      "docs": [
+        "worktrees.md"
+      ],
+      "deps": [
+        "gate-m0"
+      ],
+      "status": "todo"
+    },
+    {
+      "id": "m1-term-ui-core",
+      "milestone": "M1",
+      "title": "Terminal panes: splits, tab groups, layout persistence",
+      "docs": [
+        "term-ui.md"
+      ],
+      "deps": [
+        "m1-term-daemon"
+      ],
+      "status": "todo"
+    },
+    {
+      "id": "m1-term-ui-extras",
+      "milestone": "M1",
+      "title": "Terminal panes: search, floating terminal, quick commands, links, keybindings and the remaining term-ui flows",
+      "docs": [
+        "term-ui.md"
+      ],
+      "deps": [
+        "m1-term-ui-core"
+      ],
+      "status": "todo"
+    },
+    {
+      "id": "m2-source-control-core",
+      "milestone": "M2",
+      "title": "Source control: remote operations, discard, branch compare, history, conflicts",
+      "docs": [
+        "source-control.md"
+      ],
+      "deps": [
+        "m1-worktrees"
+      ],
+      "status": "todo"
+    },
+    {
+      "id": "m2-source-control-notes-ai",
+      "milestone": "M2",
+      "title": "Source control: diff notes sent to an agent, AI commit messages",
+      "docs": [
+        "source-control.md"
+      ],
+      "deps": [
+        "m2-source-control-core",
+        "m1-launch-settings",
+        "m1-agent-status"
+      ],
+      "status": "todo"
+    },
+    {
+      "id": "m2-editor-core",
+      "milestone": "M2",
+      "title": "Editor: explorer, tabs, CodeMirror editing with the disk precondition, file watching, quick open and search",
+      "docs": [
+        "editor.md"
+      ],
+      "deps": [
+        "m1-worktrees"
+      ],
+      "status": "todo"
+    },
+    {
+      "id": "m2-editor-markdown",
+      "milestone": "M2",
+      "title": "Editor: rich Markdown",
+      "docs": [
+        "editor.md"
+      ],
+      "deps": [
+        "m2-editor-core"
+      ],
+      "status": "todo"
+    },
+    {
+      "id": "m2-editor-viewers",
+      "milestone": "M2",
+      "title": "Editor: notebooks and the CSV, image, PDF and media viewers",
+      "docs": [
+        "editor.md"
+      ],
+      "deps": [
+        "m2-editor-core"
+      ],
+      "status": "todo"
+    },
+    {
+      "id": "m2-sidebar-extras",
+      "milestone": "M2",
+      "title": "Sidebar extras: dirty marker, separators, activity window, cross-repo groups (not review filters)",
+      "docs": [
+        "sidebar-extras.md"
+      ],
+      "deps": [
+        "m1-worktrees",
+        "m2-source-control-core",
+        "m1-agent-status"
+      ],
+      "status": "todo"
+    },
+    {
+      "id": "m2-ask-parity",
+      "milestone": "M2",
+      "title": "orca ask parity: number and date questions, defaults, timeouts, credential refusal, drafts, fresh seq for a queued second ask",
+      "docs": [
+        "ask.md"
+      ],
+      "deps": [
+        "gate-m0"
+      ],
+      "status": "todo"
+    },
+    {
+      "id": "m3-session-info",
+      "milestone": "M3",
+      "title": "Session info panel",
+      "docs": [
+        "session-info.md"
+      ],
+      "deps": [
+        "m1-agent-status"
+      ],
+      "status": "todo"
+    },
+    {
+      "id": "m3-terminal-dock",
+      "milestone": "M3",
+      "title": "Terminal dock with its own composer",
+      "docs": [
+        "terminal-dock.md"
+      ],
+      "deps": [
+        "m1-term-ui-core",
+        "m1-agent-status",
+        "m1-providers"
+      ],
+      "status": "todo"
+    },
+    {
+      "id": "m3-handoff",
+      "milestone": "M3",
+      "title": "Session handoff",
+      "docs": [
+        "handoff.md"
+      ],
+      "deps": [
+        "m1-agent-status",
+        "m1-worktrees",
+        "m2-source-control-core"
+      ],
+      "status": "todo"
+    },
+    {
+      "id": "m3-accounts-usage",
+      "milestone": "M3",
+      "title": "Accounts: read-only usage meters and rate limits",
+      "docs": [
+        "accounts.md"
+      ],
+      "deps": [
+        "m1-providers"
+      ],
+      "status": "todo"
+    },
+    {
+      "id": "m3-accounts-switching",
+      "milestone": "M3",
+      "title": "Accounts: Claude and Codex account switching",
+      "docs": [
+        "accounts.md"
+      ],
+      "deps": [
+        "m3-accounts-usage",
+        "m1-agent-status"
+      ],
+      "status": "todo"
+    },
+    {
+      "id": "m3-vault-browse",
+      "milestone": "M3",
+      "title": "AI vault: browse and resume sessions across agents",
+      "docs": [
+        "ai-vault.md"
+      ],
+      "deps": [
+        "m1-providers"
+      ],
+      "status": "todo"
+    },
+    {
+      "id": "m3-vault-search",
+      "milestone": "M3",
+      "title": "AI vault: opt-in full-text search",
+      "docs": [
+        "ai-vault.md"
+      ],
+      "deps": [
+        "m3-vault-browse"
+      ],
+      "status": "todo"
+    },
+    {
+      "id": "m4-hosting-api-github",
+      "milestone": "M4",
+      "title": "Git hosting API: GitHub, with one merge path shared by people and the sitter",
+      "docs": [
+        "hosting-api.md"
+      ],
+      "deps": [
+        "m1-worktrees",
+        "m2-source-control-core"
+      ],
+      "status": "todo"
+    },
+    {
+      "id": "m4-hosting-api-others",
+      "milestone": "M4",
+      "title": "Git hosting API: GitLab, Bitbucket, Gitea, Azure DevOps",
+      "docs": [
+        "hosting-api.md"
+      ],
+      "deps": [
+        "m4-hosting-api-github"
+      ],
+      "status": "todo"
+    },
+    {
+      "id": "m4-hosting-ui-pr",
+      "milestone": "M4",
+      "title": "Checks panel, PR page, Create PR",
+      "docs": [
+        "hosting-ui.md"
+      ],
+      "deps": [
+        "m4-hosting-api-github"
+      ],
+      "status": "todo"
+    },
+    {
+      "id": "m4-hosting-ui-tasks",
+      "milestone": "M4",
+      "title": "Tasks list, issue page, Projects",
+      "docs": [
+        "hosting-ui.md"
+      ],
+      "deps": [
+        "m4-hosting-ui-pr"
+      ],
+      "status": "todo"
+    },
+    {
+      "id": "m4-worktrees-create-from",
+      "milestone": "M4",
+      "title": "Worktrees: Create from a PR, MR or issue",
+      "docs": [
+        "worktrees.md"
+      ],
+      "deps": [
+        "m4-hosting-api-github"
+      ],
+      "status": "todo"
+    },
+    {
+      "id": "m4-sidebar-review-filters",
+      "milestone": "M4",
+      "title": "Sidebar extras: review filters",
+      "docs": [
+        "sidebar-extras.md"
+      ],
+      "deps": [
+        "m4-hosting-api-github",
+        "m2-sidebar-extras"
+      ],
+      "status": "todo"
+    },
+    {
+      "id": "sa-browser-agent",
+      "milestone": "Side A",
+      "title": "Browser: agent automation over an on-demand Chrome and CDP",
+      "docs": [
+        "browser.md"
+      ],
+      "deps": [
+        "m1-worktrees"
+      ],
+      "status": "todo"
+    },
+    {
+      "id": "sa-browser-pane",
+      "milestone": "Side A",
+      "title": "Browser: visible pane and screencast",
+      "docs": [
+        "browser.md"
+      ],
+      "deps": [
+        "sa-browser-agent"
+      ],
+      "status": "todo"
+    },
+    {
+      "id": "sa-browser-design",
+      "milestone": "Side A",
+      "title": "Browser: design mode",
+      "docs": [
+        "browser.md"
+      ],
+      "deps": [
+        "sa-browser-pane"
+      ],
+      "status": "todo"
+    },
+    {
+      "id": "sa-browser-cookies",
+      "milestone": "Side A",
+      "title": "Browser: cookie import",
+      "docs": [
+        "browser.md"
+      ],
+      "deps": [
+        "sa-browser-agent"
+      ],
+      "status": "todo"
+    },
+    {
+      "id": "m5-structured-runner",
+      "milestone": "M5",
+      "title": "Shared seams: Codex structured runner over app-server, structured resume, model and effort on structured launches, checks runner",
+      "docs": [
+        "automations.md",
+        "fork-loops.md",
+        "launch-settings.md"
+      ],
+      "deps": [
+        "m1-launch-settings",
+        "m1-agent-status"
+      ],
+      "status": "todo"
+    },
+    {
+      "id": "m5-automations",
+      "milestone": "M5",
+      "title": "Automations",
+      "docs": [
+        "automations.md"
+      ],
+      "deps": [
+        "m5-structured-runner",
+        "m1-worktrees"
+      ],
+      "status": "todo"
+    },
+    {
+      "id": "m5-loops",
+      "milestone": "M5",
+      "title": "Loops",
+      "docs": [
+        "fork-loops.md"
+      ],
+      "deps": [
+        "m5-structured-runner"
+      ],
+      "status": "todo"
+    },
+    {
+      "id": "m5-ledger",
+      "milestone": "M5",
+      "title": "Project ledger",
+      "docs": [
+        "ledger.md"
+      ],
+      "deps": [
+        "gate-m0"
+      ],
+      "status": "todo"
+    },
+    {
+      "id": "m6-orchestration",
+      "milestone": "M6",
+      "title": "Orchestration: tasks, dispatch, mailbox, worker start and done, gates",
+      "docs": [
+        "orchestration.md"
+      ],
+      "deps": [
+        "m5-structured-runner",
+        "m1-worktrees",
+        "m1-agent-status"
+      ],
+      "status": "todo"
+    },
+    {
+      "id": "m6-heimdall",
+      "milestone": "M6",
+      "title": "Heimdall supervisor kernel, without leases, remote fleets or the judgment layer",
+      "docs": [
+        "heimdall.md"
+      ],
+      "deps": [
+        "m6-orchestration"
+      ],
+      "status": "todo"
+    },
+    {
+      "id": "m6-objective",
+      "milestone": "M6",
+      "title": "Objective runner as a Heimdall kind",
+      "docs": [
+        "heimdall-objective.md"
+      ],
+      "deps": [
+        "m6-heimdall",
+        "m4-hosting-api-github"
+      ],
+      "status": "todo"
+    },
+    {
+      "id": "m6-sitter",
+      "milestone": "M6",
+      "title": "PR sitter as a Heimdall kind",
+      "docs": [
+        "hosted-review-sitter.md"
+      ],
+      "deps": [
+        "m6-heimdall",
+        "m4-hosting-api-github"
+      ],
+      "status": "todo"
+    },
+    {
+      "id": "sb-mobile-daemon",
+      "milestone": "Side B",
+      "title": "Mobile groundwork in the daemon: non-loopback listener, pairing, end-to-end encryption, method allowlist",
+      "docs": [
+        "mobile.md"
+      ],
+      "deps": [
+        "m1-term-daemon",
+        "m1-agent-status"
+      ],
+      "status": "todo"
+    },
+    {
+      "id": "sb-mobile-app",
+      "milestone": "Side B",
+      "title": "Mobile app: fork of Orca's Expo app onto Quirky's API",
+      "docs": [
+        "mobile.md"
+      ],
+      "deps": [
+        "sb-mobile-daemon"
+      ],
+      "status": "todo"
+    },
+    {
+      "id": "m7-parity-sweep",
+      "milestone": "M7",
+      "title": "Parity sweep: every remaining flow in the 28 feature docs",
+      "docs": [],
+      "deps": [
+        "*"
+      ],
+      "status": "todo"
+    },
+    {
+      "id": "m7-api-freeze",
+      "milestone": "M7",
+      "title": "Plugin API 1.0: freeze and version the API, manifests declare their API version, publish an example distro",
+      "docs": [],
+      "deps": [
+        "m7-parity-sweep"
+      ],
+      "status": "todo"
+    }
   ]
 }
