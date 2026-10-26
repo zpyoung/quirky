@@ -68,6 +68,10 @@ function detailsRecord(ctx: CliContext, { repo, settings, hooks }: RepoDetails):
 
 const absolute = (ctx: CliContext, path: string): string => resolve(ctx.cwd, path)
 
+/** A clone source that is a URL or an scp-style `host:path` stays as given; a local path is made absolute. */
+const cloneSource = (ctx: CliContext, source: string): string =>
+  source.includes('://') || /^[^/\\:]+:/.test(source) ? source : absolute(ctx, source)
+
 /** The flags in `names` that were given, as params under `rename`'s names (default camelCase). */
 function flagParams(args: CliArgs, names: Record<string, string>): Record<string, unknown> {
   const params: Record<string, unknown> = {}
@@ -118,7 +122,7 @@ const named: CliModule['commands'] = {
 
   async clone(args, ctx) {
     const [url] = args.positionals as [string]
-    const params: Record<string, unknown> = { url, ...flagParams(args, { name: 'name' }) }
+    const params: Record<string, unknown> = { url: cloneSource(ctx, url), ...flagParams(args, { name: 'name' }) }
     resolvedFlag(ctx, args, 'location', params, 'location')
     const repo = (await ctx.call('quirky.repo/clone', params)) as Repo
     ctx.out.result(repo, () => repoRecord(ctx, repo))

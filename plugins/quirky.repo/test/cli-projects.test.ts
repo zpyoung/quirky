@@ -61,6 +61,27 @@ describe('SC-4 and SC-5: clone and create through the CLI', () => {
     expect(JSON.parse(named[0]!)).toMatchObject({ name: 'other', path: join(home, 'elsewhere', 'other') })
   })
 
+  test('a relative local source is resolved against the CLI cwd', async () => {
+    const { client, home, root } = await start()
+    const source = makeRepo(join(home, 'src'))
+    const bare = join(home, 'origin.git')
+    git(home, 'clone', '-q', '--bare', source, bare)
+    const { ctx, lines } = testCliContext(client, { cwd: home, json: true })
+    await commands.clone!({ positionals: ['origin.git'], flags: {} }, ctx)
+    expect(JSON.parse(lines[0]!)).toMatchObject({ name: 'origin', path: join(root, 'origin') })
+  })
+
+  test('a URL, a file:// URL and an scp-style source are passed through unchanged', async () => {
+    const { client, home } = await start()
+    const sent: unknown[] = []
+    const { ctx } = testCliContext(client, { cwd: home, json: true })
+    const spy = { ...ctx, call: async (_method: string, params: Record<string, unknown> = {}) => (sent.push(params.url), { id: 'r', name: 'r', path: '/r' }) }
+    const sources = ['https://example.com/org/repo.git', 'file:///srv/repo.git', 'git@example.com:org/repo.git', 'host:repo.git']
+    for (const source of sources) await commands.clone!({ positionals: [source], flags: {} }, spy)
+    await commands.clone!({ positionals: ['./dir:with-colon'], flags: {} }, spy)
+    expect(sent).toEqual([...sources, join(home, 'dir:with-colon')])
+  })
+
   test('create initialises a repo in the worktrees folder', async () => {
     const { client, root } = await start()
     const lines = await run('create', ['scratch'], {}, client, true)
@@ -151,6 +172,22 @@ describe('SC-60 and SC-34: set and show through the CLI', () => {
     expect(text).toContain('command source: run-both')
     expect(text).toContain('setup: quirky.yaml + local settings (shared script not trusted)')
     expect(text).toContain('warning: unrecognised key mystery')
+  })
+
+  test('--agent-startup "" and --command-source "" return them to inherited through the real CLI', async () => {
+    const { t: harness, client, home } = await start()
+    await call(client, 'quirky.repo/add', { path: makeRepo(join(home, 'api')) })
+    const cli = async (...args: string[]) => {
+      const proc = spawnCli(['repo', ...args, '--json'], { home: harness.h.home })
+      const [stdout, stderr, code] = await Promise.all([new Response(proc.stdout).text(), new Response(proc.stderr).text(), proc.exited])
+      expect({ code, stderr }).toEqual({ code: 0, stderr: '' })
+      return JSON.parse(stdout) as RepoDetails
+    }
+    expect((await cli('set', 'api', '--agent-startup', 'wait-for-setup', '--command-source', 'run-both')).settings).toMatchObject({
+      agentStartup: 'wait-for-setup',
+      commandSource: 'run-both'
+    })
+    expect((await cli('set', 'api', '--agent-startup', '', '--command-source', '')).settings).toMatchObject({ agentStartup: null, commandSource: null })
   })
 
   test('set with no flags is a usage error', async () => {

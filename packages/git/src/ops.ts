@@ -70,6 +70,7 @@ export async function refExists(repo: string, fullRef: string): Promise<boolean>
 
 /** The full sha `rev` resolves to as a commit, or null when it does not. */
 export async function resolveCommit(repo: string, rev: string): Promise<string | null> {
+  if (rev.startsWith('-')) return null
   const r = await runGit(repo, ['rev-parse', '--verify', '--quiet', `${rev}^{commit}`])
   if (r.exitCode !== 0) return null
   return text(r.stdout).trim() || null
@@ -281,8 +282,14 @@ export async function deleteRefIfAt(repo: string, branch: string, head: string):
   return (await runGit(repo, ['update-ref', '-d', `refs/heads/${branch}`, head])).exitCode === 0
 }
 
-/** The text of `path` at `ref`, or null when either is missing. */
+/**
+ * The text of `path` at `ref`, or null when either is missing. Throws GitError for a `ref` or
+ * `path` that starts with `-`, which git would read as an option.
+ */
 export async function showFile(repo: string, ref: string, path: string): Promise<string | null> {
+  if (ref.startsWith('-') || path.startsWith('-')) {
+    throw new GitError(`refusing ${ref.startsWith('-') ? 'ref' : 'path'} that starts with '-'`, '', -1)
+  }
   const r = await runGit(repo, ['show', `${ref}:${path}`])
   return r.exitCode === 0 ? text(r.stdout) : null
 }
@@ -316,12 +323,21 @@ export async function initRepo(path: string): Promise<void> {
   await git(path, ['init'])
 }
 
-/** Clones `url` into `dest`, creating its parent directory; never prompts for credentials. */
+/** Whether a clone source is a filesystem path rather than a URL (`scheme://`) or an scp-style `host:path`. */
+function isLocalSource(source: string): boolean {
+  return !source.includes('://') && !/^[^/\\:]+:/.test(source)
+}
+
+/**
+ * Clones `url` into `dest`, creating its parent directory; never prompts for credentials. A
+ * relative local source is resolved against this process's cwd, so it never depends on where git runs.
+ */
 export async function cloneRepo(url: string, dest: string): Promise<void> {
   const target = resolve(dest)
   const parent = dirname(target)
+  const source = isLocalSource(url) ? resolve(url) : url
   await mkdir(parent, { recursive: true })
-  await git(parent, ['clone', '--', url, target])
+  await git(parent, ['clone', '--', source, target])
 }
 
 const GH_FAILURE_TTL_MS = 5 * 60 * 1000

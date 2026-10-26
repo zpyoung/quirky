@@ -1,9 +1,10 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
 import { existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { basename, dirname, join } from 'node:path'
 import {
   BranchCheckedOutError,
+  GitError,
   addExistingBranchWorktree,
   addNewBranchWorktree,
   branchHead,
@@ -391,6 +392,16 @@ describe('files', () => {
     expect(await showFile(repo, 'nope', 'dir/c.txt')).toBeNull()
   })
 
+  test('showFile refuses a ref or path git would read as an option', async () => {
+    const repo = repoWithCommit()
+    const out = join(freshDir('out'), 'x')
+    await expect(showFile(repo, `--output=${out}`, 'a.txt')).rejects.toBeInstanceOf(GitError)
+    await expect(showFile(repo, '-p', 'a.txt')).rejects.toBeInstanceOf(GitError)
+    await expect(showFile(repo, 'HEAD', '-p')).rejects.toBeInstanceOf(GitError)
+    expect(existsSync(out)).toBe(false)
+    expect(await resolveCommit(repo, '--output=/dev/null')).toBeNull()
+  })
+
   test('ignoredUntracked expands directories; matchingExcludeFrom and isIgnored', async () => {
     const repo = repoWithCommit()
     commitFile(repo, '.gitignore', 'node_modules/\n.env\n')
@@ -435,6 +446,19 @@ describe('initRepo / cloneRepo', () => {
     await cloneRepo(origin, dest)
     expect(await hasCommits(dest)).toBe(true)
     expect(await remoteUrls(dest)).toEqual([origin])
+  })
+
+  test('cloneRepo resolves a relative local source against the process cwd, not the destination parent', async () => {
+    const { origin } = repoWithOrigin()
+    const dest = join(freshDir('x'), 'p', 'clone')
+    const saved = process.cwd()
+    process.chdir(dirname(origin))
+    try {
+      await cloneRepo(basename(origin), dest)
+    } finally {
+      process.chdir(saved)
+    }
+    expect(await hasCommits(dest)).toBe(true)
   })
 })
 

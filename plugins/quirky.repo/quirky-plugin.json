@@ -640,7 +640,8 @@
               "type": "string",
               "enum": [
                 "start-immediately",
-                "wait-for-setup"
+                "wait-for-setup",
+                ""
               ]
             },
             "commandSource": {
@@ -648,7 +649,8 @@
               "enum": [
                 "shared-only",
                 "local-only",
-                "run-both"
+                "run-both",
+                ""
               ]
             },
             "setupScript": {
@@ -1592,19 +1594,21 @@
           },
           "agent-startup": {
             "type": "string",
-            "description": "start the agent at once or after setup",
+            "description": "start the agent at once or after setup (empty returns to inherited)",
             "enum": [
               "start-immediately",
-              "wait-for-setup"
+              "wait-for-setup",
+              ""
             ]
           },
           "command-source": {
             "type": "string",
-            "description": "which setup and archive scripts run",
+            "description": "which setup and archive scripts run (empty returns to inherited)",
             "enum": [
               "shared-only",
               "local-only",
-              "run-both"
+              "run-both",
+              ""
             ]
           },
           "setup-script": {
