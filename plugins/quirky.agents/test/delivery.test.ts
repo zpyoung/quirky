@@ -30,6 +30,8 @@ class FakePty {
   writeError: Error | null = null
   alive = true
   listError: Error | null = null
+  /** Makes every list call hang, as a stalled PTY host would. */
+  listStalls = false
   /** Holds every subscribe until released; null lets it return at once. */
   subscribeGate: Promise<void> | null = null
   private data = new Set<(sessionId: string, bytes: Uint8Array) => void>()
@@ -47,6 +49,7 @@ class FakePty {
       return { replay: this.replay, offset: 0 }
     },
     list: async () => {
+      if (this.listStalls) await new Promise(() => {})
       if (this.listError) throw this.listError
       return ['s1', 'a', 'b'].map((sessionId) => ({ sessionId, alive: this.alive }))
     },
@@ -491,5 +494,45 @@ describe('DeliveryRunner', () => {
     expect(pty.paste).toEqual([frame('for b')])
     sessionGone('a')
     expect(await a).toBe('not-delivered')
+  })
+
+  test('a liveness check that never answers after quiet-window readiness settles at the deadline', async () => {
+    const { pty, runner } = setup()
+    pty.listStalls = true
+    pty.setReplay(PASTE_ON)
+    const result = await Promise.race([
+      runner.deliver(SESSION, entry('goose', { readyTimeoutMs: 2000 }), 'hi', true),
+      Bun.sleep(1000).then(() => 'pending')
+    ])
+    expect(result).toBe('not-delivered')
+    expect(pty.writes).toEqual([])
+    expect(pty.unsubscribed).toEqual([SESSION])
+    expect(pty.listenerCount()).toBe(0)
+    expect(goneListeners.size).toBe(0)
+  })
+
+  test('a liveness check that never answers at the blind-paste deadline is not delivered', async () => {
+    const { pty, runner } = setup()
+    pty.listStalls = true
+    const result = await Promise.race([
+      runner.deliver(SESSION, entry('aider', { readyTimeoutMs: 10 }), 'hi', false),
+      Bun.sleep(1000).then(() => 'pending')
+    ])
+    expect(result).toBe('not-delivered')
+    expect(pty.writes).toEqual([])
+    expect(pty.unsubscribed).toEqual([SESSION])
+    expect(pty.listenerCount()).toBe(0)
+    expect(goneListeners.size).toBe(0)
+  })
+
+  test('a liveness answer that arrives after settling writes nothing', async () => {
+    const { pty, runner } = setup()
+    let answer: (value: Array<{ sessionId: string; alive: boolean }>) => void = () => {}
+    pty.api.list = () => new Promise((resolve) => (answer = resolve as typeof answer))
+    pty.setReplay(`${PASTE_ON}${CURSOR}`)
+    expect(await runner.deliver(SESSION, fast('goose'), 'hi', false)).toBe('not-delivered')
+    answer([{ sessionId: SESSION, alive: true }])
+    await Bun.sleep(20)
+    expect(pty.writes).toEqual([])
   })
 })
