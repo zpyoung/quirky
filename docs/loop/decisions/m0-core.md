@@ -459,4 +459,4 @@
 
 ## Progress
 
-Step 5, build. W1 to W4 merged with their checkpoint fix batches for W2 and W3; W4 plus integration plus W5's V2 (SC-24 import fence, SC-26 v1 import) at 6b4d904, gate 1963 pass, typecheck clean. Running: W4 checkpoint review (a066ea4..6b4d904) and W5-V1 (sample distro, SC-59 exit test). Next: adjudicate W4 findings (D45) and fix, merge V1, then Final Round 1 over 0c6a3c0..HEAD, one fix batch, verify and merge into build/roadmap.
+Step 6, final review. W1 to W5 merged with checkpoint fix batches after W2, W3 and W4; HEAD 7ea2baa, gate 1976 pass, typecheck clean, every SC has a named test. Final Round 1 running over 0c6a3c0..7ea2baa in two partitions (kernel and CLI; window, desktop, plugins and distros) because the branch diff is too large for one prompt. Next: adjudicate (D46), one fix batch, leftovers to BLOCKERS.md, verify, merge into build/roadmap.
