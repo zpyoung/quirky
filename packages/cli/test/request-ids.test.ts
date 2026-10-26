@@ -1,5 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 import { createHash } from 'node:crypto'
+import { ConnectionLost, type QuirkyClient } from '@quirky/protocol'
+import { ConnectionLostError, DaemonUnavailableError, createDaemonLink } from '../src/link'
 import { FakeDaemon, runCli } from './fixtures/fake-daemon'
 
 let daemon: FakeDaemon
@@ -94,5 +96,37 @@ describe('SC-16: --retry-request reissues a command with a given ID', () => {
     expect(result.code).toBe(2)
     expect(result.stderr).toContain('--retry-request requires a value')
     expect(daemon.calls).toEqual([])
+  })
+})
+
+describe('a lost reply followed by a failed reconnect', () => {
+  const refused = () => Object.assign(new Error('connect ECONNREFUSED'), { code: 'ECONNREFUSED' })
+
+  test('surfaces the request base so the mutation can be retried', async () => {
+    let connects = 0
+    const link = createDaemonLink(
+      async () => {
+        if (++connects > 1) throw refused()
+        return {
+          callAny: async () => {
+            throw new ConnectionLost()
+          },
+          close() {}
+        } as unknown as QuirkyClient
+      },
+      { requestBase: 'recover-me' }
+    )
+    const error = await link.callAny('quirky.repo/add', { path: '/x' }).catch((e) => e)
+    expect(error).toBeInstanceOf(ConnectionLostError)
+    expect((error as ConnectionLostError).base).toBe('recover-me')
+    expect((error as Error).message).toBe('connection lost; rerun with --retry-request recover-me')
+  })
+
+  test('a call that never reached the daemon is still DaemonUnavailable', async () => {
+    const link = createDaemonLink(async () => {
+      throw refused()
+    })
+    const error = await link.callAny('quirky.repo/add', {}).catch((e) => e)
+    expect(error).toBeInstanceOf(DaemonUnavailableError)
   })
 })

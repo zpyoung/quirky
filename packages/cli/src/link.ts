@@ -99,7 +99,10 @@ export function createDaemonLink(connect: () => Promise<QuirkyClient>, options: 
       } catch (error) {
         if (!isConnectionLost(error)) throw error
         if (resends >= MAX_RESENDS) throw new ConnectionLostError(base)
-        await reconnect()
+        // the daemon may have run the call, so an unreachable daemon here still owes the user the base
+        await reconnect().catch(() => {
+          throw new ConnectionLostError(base)
+        })
       }
     }
   }
