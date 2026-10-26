@@ -20,7 +20,7 @@ export function createFakeGit(): FakeGit {
     calls,
     worktreesByRepo,
     addRepo(root) {
-      worktreesByRepo.set(root, [{ path: root, branch: 'main', head: 'a'.repeat(40), isMain: true }])
+      worktreesByRepo.set(root, [{ path: root, branch: 'main', head: 'a'.repeat(40), isMain: true, locked: null }])
     },
     async resolveRepoRoot(path) {
       record('resolveRepoRoot', path)
@@ -37,7 +37,7 @@ export function createFakeGit(): FakeGit {
     },
     async addWorktree(repoPath, path, branch, baseRef) {
       record('addWorktree', repoPath, path, branch, baseRef)
-      worktreesByRepo.get(repoPath)?.push({ path, branch, head: 'b'.repeat(40), isMain: false })
+      worktreesByRepo.get(repoPath)?.push({ path, branch, head: 'b'.repeat(40), isMain: false, locked: null })
     },
     async removeWorktree(repoPath, path, force) {
       record('removeWorktree', repoPath, path, force)

@@ -48,6 +48,8 @@ export type GitWorktreeInfo = {
   branch: string | null
   head: string
   isMain: boolean
+  /** `null` when unlocked; otherwise the lock reason (`''` when none was given). */
+  locked: string | null
 }
 
 const MAX_TEXT_BYTES = 2 * 1024 * 1024
@@ -81,16 +83,19 @@ export async function listWorktrees(repoPath: string): Promise<GitWorktreeInfo[]
     let head = ''
     let branch: string | null = null
     let skip = false
+    let locked: string | null = null
     for (const line of lines) {
       if (line.startsWith('worktree ')) path = line.slice('worktree '.length)
       else if (line.startsWith('HEAD ')) head = line.slice('HEAD '.length)
       else if (line.startsWith('branch ')) branch = line.slice('branch '.length).replace(/^refs\/heads\//, '')
+      else if (line === 'locked') locked = ''
+      else if (line.startsWith('locked ')) locked = line.slice('locked '.length)
       else if (line === 'bare' || line.startsWith('prunable')) skip = true
     }
     const isMain = isFirst
     isFirst = false
     if (skip || !path || !existsSync(path)) continue
-    result.push({ path, branch, head, isMain })
+    result.push({ path, branch, head, isMain, locked })
   }
   return result
 }
@@ -246,3 +251,5 @@ export async function commit(cwd: string, message: string): Promise<string> {
   await git(cwd, ['commit', '-m', message])
   return (await git(cwd, ['rev-parse', 'HEAD'])).trim()
 }
+
+export * from './ops'
