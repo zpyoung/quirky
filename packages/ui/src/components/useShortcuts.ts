@@ -1,18 +1,25 @@
 import { useEffect, useRef } from 'react'
 import { closeSession, createSession } from '../actions'
-import { useAppState, useConnection, useDispatch } from '../context'
+import { useAppState, useConnection, useDispatch, usePluginHost } from '../context'
 import { sessionsOf } from '../lib/state'
+import { isPaletteChord } from '../plugins/palette'
 
-/** Cmd+T new shell, Cmd+W close the current session, Cmd+1..9 switch tab. */
-export function useShortcuts(): void {
+/**
+ * Cmd+T new shell, Cmd+W close the current session, Cmd+1..9 switch tab, Cmd+Shift+P toggle the
+ * command palette; any other chord goes to the plugins' keybindings.
+ */
+export function useShortcuts(togglePalette: () => void): void {
   const state = useAppState()
   const connection = useConnection()
   const dispatch = useDispatch()
+  const host = usePluginHost()
   const latest = useRef(state)
   latest.current = state
+  const toggle = useRef(togglePalette)
+  toggle.current = togglePalette
 
   useEffect(() => {
-    const onKey = (event: KeyboardEvent) => {
+    const v1Shortcuts = (event: KeyboardEvent) => {
       if (!event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) return
       const current = latest.current
       const worktreeId = current.selectedWorktreeId
@@ -33,7 +40,20 @@ export function useShortcuts(): void {
         }
       }
     }
+    const onKey = (event: KeyboardEvent) => {
+      if (isPaletteChord(event)) {
+        event.preventDefault()
+        event.stopPropagation()
+        toggle.current()
+        return
+      }
+      v1Shortcuts(event)
+      if (host.handleKey(event)) {
+        event.preventDefault()
+        event.stopPropagation()
+      }
+    }
     window.addEventListener('keydown', onKey, true)
     return () => window.removeEventListener('keydown', onKey, true)
-  }, [connection, dispatch])
+  }, [connection, dispatch, host])
 }

@@ -3,6 +3,7 @@ import type { Repo, Worktree } from '@quirky/protocol'
 import { removeWorktree } from '../actions'
 import { useAppState, useConnection, useDispatch } from '../context'
 import { worktreeStatus } from '../lib/status'
+import { SidebarSections } from '../plugins/SidebarSections'
 import { AddRepoForm } from './AddRepoForm'
 import { NewWorktreeDialog } from './NewWorktreeDialog'
 import { SettingsDialog } from './SettingsDialog'
@@ -82,6 +83,7 @@ export function Sidebar() {
           />
         ))}
       </div>
+      <SidebarSections />
       <AddRepoForm />
       <footer className="sidebar-footer">
         <button
