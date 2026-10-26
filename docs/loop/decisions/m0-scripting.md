@@ -338,5 +338,15 @@
 - **Confidence:** medium
 - **Source:** assumed — autonomous
 
+## D34: Wave 2 checkpoint: accept all six findings, which collapse to four defects
+- **Question:** adjudicating the three-lens Codex checkpoint over waves 1 and 2 (`RUN_BASE..HEAD`, standard depth, since wave 1's checkpoint was skipped)
+- **Options:** for each finding, accept and fix or reject with a reason
+- **Chose:** accepted all. C1 and X2: generated commands read flags through the prototype chain, so a schema property named `constructor` counted as given; flag lookups become own-property only and schema-keyed maps prototype-free. C2 and S1: a required property named `params` (no flag of its own) was reported as a missing `--params`; reserved names are excluded from the missing-flag check. S2: a bare kernel group with no `--help` listed only kernel commands; it now reads the catalog to list the group's generated commands too, falling back to the kernel listing if the catalog can't be read, while help stays offline (D28). X1: an unbounded schema nesting crashed manifest parsing with a stack overflow; nesting is capped at 32 levels with a diagnostic.
+- **Why:** each is a reproducible defect with a command the reviewer ran
+- **Evidence:** scratchpad cp-w2/*/gate.json
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** assumed — autonomous
+
 ## Progress
-Building (D31-D33). Wave 1 merged (ccde010). Wave 2 (T3 daemon validation, T6a CLI generated commands) dispatched. If this iteration stops early, re-dispatch W2 from the tech spec, then W3 (T6b api/api call/skill/buildCatalog/renderSkill) and W4 (scenario tests).
+Building (D31-D33). Waves 1 and 2 merged (9e819b6); checkpoint fixes in flight (D34). If this iteration stops early, re-apply D34's fixes, then W3 (T6b api/api call/skill/buildCatalog/renderSkill) and W4 (scenario tests).
