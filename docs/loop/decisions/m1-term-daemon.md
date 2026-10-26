@@ -355,5 +355,25 @@
 - **Confidence:** medium
 - **Source:** assumed — autonomous
 
+## D36: Two W1 tasks hit one-line test assertions outside their scope; widen the owning chain or fix at the wave gate
+- **Question:** T1 and T8 returned BLOCKED because an existing test asserted the old exit-event shape (`packages/pty-host/test/host.test.ts:345`) and the old spawn result (`packages/daemon/test/plugins/context-growth.test.ts:108`), both outside their declared scope
+- **Options:** re-plan; widen scope; fix at the wave gate with a scoped test fixer
+- **Chose:** `host.test.ts` joined T8's scope (same chain, no concurrent owner); `context-growth.test.ts` went to the skill's wave-gate fixer case after merge, since the failure was only an unowned test asserting behavior the wave intentionally replaced
+- **Why:** neither file had another owner in the wave, so widening could not collide; the skill names the wave-gate fixer for exactly this case
+- **Evidence:** session run journal; commits "test(daemon): expect the grown spawn result"
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** assumed — autonomous
+
+## D37: W1 checkpoint: accept all eleven findings, which collapse to five defects
+- **Question:** adjudicating the W1 checkpoint review (three lenses, standard depth, codex, independence full, 0 suppressed)
+- **Options:** accept or reject each
+- **Chose:** accept all: the scanner reordered a held OSC that stopped matching the ready marker (C1/S1/X2; effective HIGH, since every OSC 7 starts like the marker); the screen dropped the DEC saved cursor at the origin and used its absolute row (C2/C3/S2); the client's retire and restart waits could hang (C4/S3/X1); the barrier let input from a state listener overtake held input (C5); history rotation ignored non-output records (X3). Five parallel fixers closed them with regression tests; the barrier fix then broke typecheck (its acceptance lacked typecheck) and a scoped fixer corrected it. Every later acceptance command includes `bun run typecheck`.
+- **Why:** each reproduced on the tree with the reviewer's command
+- **Evidence:** review bundle in the session scratchpad (rev-w1/*-gate.json); fix commits on build/m1-term-daemon
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** assumed — autonomous
+
 ## Progress
-Step 5: building. W1 dispatched (see D35). RUN_BASE is the commit that recorded D34/D35. If this iteration stops, the next one should read the run journal notes in this Progress section, merge any committed wave work, and continue with the next wave.
+Step 5: W1 merged, checkpoint-reviewed and fixed (D36, D37). Next: W2 (history reader, restore library, session plugin records/restore), then W3 and W4 as D35 says.
