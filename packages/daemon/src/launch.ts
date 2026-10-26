@@ -54,6 +54,8 @@ export function buildArgv(options: {
   prompt?: string
   home: string
   shell: string
+  /** Appended after the kernel's own agent arguments and before the prompt; ignored for `shell`. */
+  extraArgs?: string[]
 }): string[] {
   const { agent, home, shell } = options
   const kind = shellKind(shell)
@@ -61,24 +63,25 @@ export function buildArgv(options: {
     return kind === 'bash' ? [shell, '--rcfile', bashRcfilePath(home), '-i'] : [shell, '-l']
   }
   const prompt = options.prompt?.trim()
+  const extra = (options.extraArgs ?? []).map((arg) => ` ${shellQuote(arg)}`).join('')
   let command: string
   switch (agent) {
     case 'claude':
-      command = `claude --settings ${shellQuote(claudeSettingsPath(home))}`
+      command = `claude --settings ${shellQuote(claudeSettingsPath(home))}${extra}`
       if (prompt) command += ` ${shellQuote(prompt)}`
       break
     case 'codex': {
       const notify = `notify=${JSON.stringify([join(home, 'bin', 'quirky-hook'), 'codex'])}`
-      command = `codex -c ${shellQuote(notify)}`
+      command = `codex -c ${shellQuote(notify)}${extra}`
       if (prompt) command += ` ${shellQuote(prompt)}`
       break
     }
     case 'opencode':
-      command = 'opencode'
+      command = `opencode${extra}`
       if (prompt) command += ` --prompt ${shellQuote(prompt)}`
       break
     case 'gemini':
-      command = 'gemini'
+      command = `gemini${extra}`
       if (prompt) command += ` --prompt-interactive ${shellQuote(prompt)}`
       break
   }
@@ -97,10 +100,17 @@ export function buildSessionEnv(options: {
   shell?: string
   agent?: AgentKind
   base?: Record<string, string | undefined>
+  /** Applied over the base environment and `TERM`; a string sets, `null` deletes. Kernel variables and `PATH` still win, and reserved names are the caller's to filter. */
+  envPatch?: Record<string, string | null>
 }): Record<string, string> {
   const env: Record<string, string> = {}
   for (const [key, value] of Object.entries(options.base ?? process.env)) {
     if (value !== undefined && !key.startsWith('QUIRKY_')) env[key] = value
+  }
+  const baseEnv: Record<string, string> = { ...env, TERM: 'xterm-256color', COLORTERM: 'truecolor' }
+  for (const [key, value] of Object.entries(options.envPatch ?? {})) {
+    if (value === null) delete baseEnv[key]
+    else baseEnv[key] = value
   }
   const path = env.PATH ?? '/usr/bin:/bin:/usr/sbin:/sbin'
   const zsh: Record<string, string> =
@@ -111,9 +121,7 @@ export function buildSessionEnv(options: {
         }
       : {}
   return {
-    ...env,
-    TERM: 'xterm-256color',
-    COLORTERM: 'truecolor',
+    ...baseEnv,
     QUIRKY_HOME: options.home,
     QUIRKY_SESSION_ID: options.sessionId,
     QUIRKY_WORKTREE_ID: options.worktreeId,
