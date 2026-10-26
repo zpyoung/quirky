@@ -308,5 +308,25 @@
 - **Confidence:** high
 - **Source:** assumed — autonomous
 
+## D31: Build with Claude subagents implementing and Codex reviewing
+- **Question:** subagent-driven-development's preflight backend pairing
+- **Options:** claude-task + codex (recommended); claude-task + gemini; pi-codex + opus; same-family pairs
+- **Chose:** claude-task + codex. `pi-watch --check codex` and `--check gemini` passed. The tree was clean on `build/m0-scripting` with both specs committed (RUN_BASE 126c402). Baseline: 1085 tests pass, typecheck clean, `bun test scripts` 13 of 14 (the D31 queue-state test of m0-daemon-api).
+- **Why:** LOOP.md step 5 names this pairing
+- **Evidence:** docs/loop/LOOP.md step 5; scratchpad journal.md
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** locked by docs/loop/LOOP.md
+
+## D32: Build in four waves after a type scaffold: protocol and CLI specs, then validation and generated commands, then discovery and the skill, then scenario tests
+- **Question:** subagent-driven-development Step 3 decomposition
+- **Options:** one task per package; foundations first with scenario tests last, as m0-daemon-api D34 and m0-ui-api D39 did
+- **Chose:** the orchestrator commits a scaffold (schema types and stubs, catalog types, an empty kernel table, index exports) so wave 1 runs three disjoint tasks: T1 the schema validator, T2 the kernel schema tables and `api.describe`, T5 the CLI's declarative command specs and parser rules. W2: T3 manifest fields and dispatcher validation (with fixture updates), T6a generated commands, routing, JSON errors and suggestions. W3: T6b `quirky api`, `api call`, `skill` and the catalog. W4: scenario tests against a real daemon, split into daemon-side and CLI-side files, each allowed to fix only its own area (as m0-daemon-api D40).
+- **Why:** every later task needs the schema type and the command spec type; the scaffold lets the three foundations run in parallel without sharing `index.ts`
+- **Evidence:** docs/quirk/specs/2026-10-26-m0-scripting/tech.md "Code references"
+- **Reversibility:** easy
+- **Confidence:** medium
+- **Source:** assumed — autonomous
+
 ## Progress
-Specs written, reviewed and committed (D26, D30). Next: subagent-driven-development preflight and build.
+Building (D31, D32). Wave 1 dispatched from scaffold e036826 on build/m0-scripting. If this iteration stops early: check scratchpad journal; otherwise re-dispatch W1 tasks (T1 schema.ts, T2 kernel-schemas/api.describe, T5 CLI specs) from the tech spec.
