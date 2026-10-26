@@ -7,6 +7,8 @@ import {
   mkdirSync,
   openSync,
   readFileSync,
+  readSync,
+  fstatSync,
   renameSync,
   rmSync,
   writeSync
@@ -25,6 +27,9 @@ const KIND_RESTORE = 0x03
 
 const CURRENT_NAME = 'output.log'
 const PREVIOUS_NAME = 'output.1.log'
+
+const INDEX_MIN_READ_BYTES = 32
+const INDEX_MAX_READ_BYTES = 4096
 
 export type HistoryLogOptions = {
   cols: number
@@ -151,6 +156,146 @@ export function readSegments(dir: string): { segments: LogSegment[]; unreadable:
     else segments.push({ path, startOffset: scan.startOffset, endOffset: scan.endOffset, records: scan.records })
   }
   return { segments, unreadable }
+}
+
+/** One record of an indexed segment; `at` is where its payload starts in the file. */
+export type IndexedRecord = {
+  kind: 'output' | 'resize' | 'restore'
+  /** Absolute output position where the record starts. */
+  offset: number
+  /** Payload bytes; for output this is the span of output positions it covers. */
+  length: number
+  at: number
+  cols?: number
+  rows?: number
+}
+
+export type IndexedSegment = {
+  path: string
+  startOffset: number
+  endOffset: number
+  records: IndexedRecord[]
+  fd: number
+}
+
+function readFully(fd: number, buffer: Uint8Array, position: number): number {
+  let filled = 0
+  while (filled < buffer.length) {
+    const n = readSync(fd, buffer, filled, buffer.length - filled, position + filled)
+    if (n === 0) break
+    filled += n
+  }
+  return filled
+}
+
+/**
+ * Walks one open segment's record heads without reading output payloads, so the cost is the
+ * framing, not the file. Applies the same validity rules as `scanSegment`.
+ */
+function indexSegment(fd: number, path: string): IndexedSegment | null {
+  const size = fstatSync(fd).size
+  if (size < HEADER_BYTES) return null
+  const header = Buffer.alloc(HEADER_BYTES)
+  readFully(fd, header, 0)
+  if (header.toString('latin1', 0, MAGIC.length) !== MAGIC || header[4] !== FORMAT) return null
+  const startOffset = Number(header.readBigUInt64LE(8))
+
+  let block = Buffer.alloc(0)
+  let blockAt = 0
+  const view = (position: number, length: number): Buffer => {
+    if (position < blockAt || position + length > blockAt + block.length) {
+      // heads that follow each other closely (small records) share ever larger reads; a head
+      // after a big payload costs only a small one
+      const contiguous = position <= blockAt + block.length
+      const want = contiguous ? Math.min(block.length * 2, INDEX_MAX_READ_BYTES) : INDEX_MIN_READ_BYTES
+      block = Buffer.alloc(Math.min(Math.max(length, want, INDEX_MIN_READ_BYTES), size - position))
+      blockAt = position
+      readFully(fd, block, position)
+    }
+    return block.subarray(position - blockAt, position - blockAt + length)
+  }
+
+  const records: IndexedRecord[] = []
+  let pos = HEADER_BYTES
+  let offset = startOffset
+  while (pos + RECORD_HEAD_BYTES <= size) {
+    const head = view(pos, RECORD_HEAD_BYTES)
+    const kind = head[0]
+    const length = head.readUInt32LE(1)
+    const end = pos + RECORD_HEAD_BYTES + length
+    if (end > size) break
+    const at = pos + RECORD_HEAD_BYTES
+    if (kind === KIND_OUTPUT) {
+      records.push({ kind: 'output', offset, length, at })
+      offset += length
+    } else if (kind === KIND_RESIZE) {
+      if (length !== 4) return null
+      const payload = view(at, 4)
+      records.push({ kind: 'resize', offset, length, at, cols: payload.readUInt16LE(0), rows: payload.readUInt16LE(2) })
+    } else if (kind === KIND_RESTORE) {
+      records.push({ kind: 'restore', offset, length, at })
+    } else {
+      return null
+    }
+    pos = end
+  }
+  return { path, startOffset, endOffset: offset, records, fd }
+}
+
+/**
+ * Random access to the retained segments for readers that need only part of the log. `open`
+ * indexes record heads and leaves payloads on disk; `readOutput` then fetches just the output
+ * bytes asked for, so a reader's I/O is bounded by what it requests rather than by file size.
+ * Segments hold their file descriptor, so a rotation after `open` does not disturb reads.
+ */
+export class LogReader {
+  private constructor(
+    readonly segments: IndexedSegment[],
+    readonly unreadable: string[]
+  ) {}
+
+  /** Same segments and unreadable rules as `readSegments`. */
+  static open(dir: string): LogReader {
+    const segments: IndexedSegment[] = []
+    const unreadable: string[] = []
+    for (const name of [PREVIOUS_NAME, CURRENT_NAME]) {
+      const path = join(dir, name)
+      if (!existsSync(path)) continue
+      let fd: number | null = null
+      try {
+        fd = openSync(path, 'r')
+        const segment = indexSegment(fd, path)
+        if (segment) {
+          segments.push(segment)
+          continue
+        }
+      } catch {
+        // an unreadable file is reported below like a malformed one
+      }
+      if (fd !== null) closeQuietly(fd)
+      unreadable.push(path)
+    }
+    return new LogReader(segments, unreadable)
+  }
+
+  /** Bytes `[from, to)` of an output record's payload (positions relative to the record). */
+  readOutput(segment: IndexedSegment, record: IndexedRecord, from: number, to: number): Uint8Array {
+    const bytes = Buffer.alloc(Math.max(0, Math.min(to, record.length) - from))
+    const filled = readFully(segment.fd, bytes, record.at + from)
+    return filled === bytes.length ? bytes : bytes.subarray(0, filled)
+  }
+
+  close(): void {
+    for (const segment of this.segments) closeQuietly(segment.fd)
+  }
+}
+
+function closeQuietly(fd: number): void {
+  try {
+    closeSync(fd)
+  } catch {
+    // already closed
+  }
 }
 
 /** Absolute output position of the first retained byte, or 0 when nothing is readable. */
