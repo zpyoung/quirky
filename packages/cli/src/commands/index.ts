@@ -1,6 +1,7 @@
 import { GLOBAL_FLAGS, parseArgs, type FlagDefs, type ParsedArgs } from '../args'
 import { ask, askCancel, askWait } from './ask'
 import { open } from './open'
+import { pluginActivate, pluginContributions, pluginDisable, pluginEnable, pluginList } from './plugin'
 import { repoAdd, repoList, repoRm } from './repo'
 import { sessionClose, sessionList, sessionNew } from './session'
 import { status } from './status'
@@ -33,6 +34,11 @@ export const COMMANDS: Command[] = [
   sessionClose,
   termRead,
   termSend,
+  pluginList,
+  pluginContributions,
+  pluginEnable,
+  pluginDisable,
+  pluginActivate,
   ask,
   askWait,
   askCancel,

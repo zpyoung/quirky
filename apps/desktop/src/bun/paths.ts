@@ -5,6 +5,7 @@ export type RuntimeEnv = {
   QUIRKY_PTY_HOST_ENTRY: string
   QUIRKY_CLI_ENTRY: string
   QUIRKY_UI_DIR: string
+  QUIRKY_BUILTIN_PLUGINS_DIR: string
 }
 
 const DAEMON_SOURCE = join('packages', 'daemon', 'src', 'main.ts')
@@ -40,7 +41,8 @@ export function resolveRuntimeEnv(options: {
         QUIRKY_DAEMON_ENTRY: join(root, 'packages', 'daemon', 'src', 'main.ts'),
         QUIRKY_PTY_HOST_ENTRY: join(root, 'packages', 'pty-host', 'src', 'main.ts'),
         QUIRKY_CLI_ENTRY: join(root, 'packages', 'cli', 'src', 'main.ts'),
-        QUIRKY_UI_DIR: join(root, 'packages', 'ui', 'dist')
+        QUIRKY_UI_DIR: join(root, 'packages', 'ui', 'dist'),
+        QUIRKY_BUILTIN_PLUGINS_DIR: join(root, 'plugins')
       }
     : bundledEnv(join(dirname(moduleDir), 'resources'))
 
@@ -56,6 +58,7 @@ function bundledEnv(resources: string): RuntimeEnv {
     QUIRKY_DAEMON_ENTRY: join(resources, 'daemon.js'),
     QUIRKY_PTY_HOST_ENTRY: join(resources, 'pty-host.js'),
     QUIRKY_CLI_ENTRY: join(resources, 'cli.js'),
-    QUIRKY_UI_DIR: join(resources, 'ui')
+    QUIRKY_UI_DIR: join(resources, 'ui'),
+    QUIRKY_BUILTIN_PLUGINS_DIR: join(resources, 'plugins')
   }
 }

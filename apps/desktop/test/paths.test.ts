@@ -13,7 +13,8 @@ describe('resolveRuntimeEnv', () => {
       QUIRKY_DAEMON_ENTRY: join(resources, 'daemon.js'),
       QUIRKY_PTY_HOST_ENTRY: join(resources, 'pty-host.js'),
       QUIRKY_CLI_ENTRY: join(resources, 'cli.js'),
-      QUIRKY_UI_DIR: join(resources, 'ui')
+      QUIRKY_UI_DIR: join(resources, 'ui'),
+      QUIRKY_BUILTIN_PLUGINS_DIR: join(resources, 'plugins')
     })
   })
 
@@ -28,7 +29,8 @@ describe('resolveRuntimeEnv', () => {
       QUIRKY_DAEMON_ENTRY: '/repo/packages/daemon/src/main.ts',
       QUIRKY_PTY_HOST_ENTRY: '/repo/packages/pty-host/src/main.ts',
       QUIRKY_CLI_ENTRY: '/repo/packages/cli/src/main.ts',
-      QUIRKY_UI_DIR: '/repo/packages/ui/dist'
+      QUIRKY_UI_DIR: '/repo/packages/ui/dist',
+      QUIRKY_BUILTIN_PLUGINS_DIR: '/repo/plugins'
     })
   })
 
@@ -50,7 +52,21 @@ describe('resolveRuntimeEnv', () => {
       env: { QUIRKY_DAEMON_ENTRY: '/custom/daemon.ts', QUIRKY_UI_DIR: '/custom/ui' },
       exists: () => true
     })
-    expect(Object.keys(result).sort()).toEqual(['QUIRKY_CLI_ENTRY', 'QUIRKY_PTY_HOST_ENTRY'])
+    expect(Object.keys(result).sort()).toEqual([
+      'QUIRKY_BUILTIN_PLUGINS_DIR',
+      'QUIRKY_CLI_ENTRY',
+      'QUIRKY_PTY_HOST_ENTRY'
+    ])
+  })
+
+  test('an already-set built-in plugins directory is left alone', () => {
+    const result = resolveRuntimeEnv({
+      packaged: false,
+      moduleDir: '/anywhere',
+      env: { QUIRKY_REPO_ROOT: '/repo', QUIRKY_BUILTIN_PLUGINS_DIR: '/custom/plugins' },
+      exists: () => true
+    })
+    expect(result).not.toHaveProperty('QUIRKY_BUILTIN_PLUGINS_DIR')
   })
 
   test('source mode without a findable repo root falls back to the bundled resources', () => {

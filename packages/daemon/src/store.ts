@@ -29,7 +29,7 @@ export function defaultSettings(): Settings {
 
 type Row = Record<string, any>
 
-/** SQLite persistence for repos, sessions, asks, structured messages and settings. */
+/** SQLite persistence for repos, sessions, asks, structured messages, settings and disabled IDs. */
 export class Store {
   private readonly db: Database
 
@@ -83,6 +83,7 @@ export class Store {
         key TEXT PRIMARY KEY,
         value TEXT NOT NULL
       );
+      CREATE TABLE IF NOT EXISTS disabled_ids (id TEXT PRIMARY KEY, disabled_at INTEGER NOT NULL);
     `)
     const sessionColumns = this.db.query('PRAGMA table_info(sessions)').all() as Row[]
     if (!sessionColumns.some((column) => column.name === 'repo_id')) {
@@ -305,6 +306,20 @@ export class Store {
       if (value !== undefined) upsert.run(key, JSON.stringify(value))
     }
     return this.getSettings()
+  }
+
+  /** IDs of contributions and plugins the user has disabled, sorted ascending. */
+  listDisabledIds(): string[] {
+    return (this.db.query('SELECT id FROM disabled_ids ORDER BY id').all() as Row[]).map((row) => row.id)
+  }
+
+  /** Marks `id` disabled (keeping the original timestamp if it already is) or clears it. */
+  setDisabledId(id: string, disabled: boolean): void {
+    if (disabled) {
+      this.db.query('INSERT OR IGNORE INTO disabled_ids (id, disabled_at) VALUES (?, ?)').run(id, Date.now())
+    } else {
+      this.db.query('DELETE FROM disabled_ids WHERE id = ?').run(id)
+    }
   }
 }
 

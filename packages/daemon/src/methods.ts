@@ -7,6 +7,7 @@ import {
   type ResultOf
 } from '@quirky/protocol'
 import { conflict, invalidParams } from './errors'
+import type { PluginHost } from './plugins/host'
 import type { Core } from './service'
 import type { ClientConn } from './types'
 
@@ -71,8 +72,8 @@ function agent(params: Params): AgentKind {
   return value as AgentKind
 }
 
-/** Maps every RPC method to the core, validating params so bad input becomes InvalidParams. */
-export function createHandlers(core: Core): Handlers {
+/** Maps every RPC method to the core or the plugin host, validating params so bad input becomes InvalidParams. */
+export function createHandlers(core: Core, plugins: PluginHost): Handlers {
   return {
     'client.hello': (params, conn) => {
       const role = params.role
@@ -189,6 +190,23 @@ export function createHandlers(core: Core): Handlers {
     'structured.send': async (params) => {
       await core.sendStructured(str(params, 'sessionId'), str(params, 'text'))
       return OK
-    }
+    },
+
+    'plugin.list': () => plugins.list(),
+    'plugin.contributions': (params) =>
+      plugins.contributions({
+        kind: optStr(params, 'kind'),
+        pluginId: optStr(params, 'pluginId'),
+        all: optBool(params, 'all')
+      }),
+    'plugin.enable': async (params) => {
+      await plugins.setEnabled(str(params, 'id'), true)
+      return OK
+    },
+    'plugin.disable': async (params) => {
+      await plugins.setEnabled(str(params, 'id'), false)
+      return OK
+    },
+    'plugin.activate': (params) => plugins.activate(str(params, 'pluginId'))
   }
 }
