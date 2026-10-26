@@ -25,6 +25,17 @@ export type SessionExit = {
   restorable?: boolean
 }
 
+function exitFields(details: SessionExit) {
+  return {
+    status: 'exited' as const,
+    exitCode: details.exitCode,
+    exitSignal: details.exitSignal ?? null,
+    exitCause: details.exitCause ?? 'exited',
+    restorable: details.restorable ?? false,
+    lastActivityAt: Date.now()
+  }
+}
+
 /** The caller's cwd and worktree, which selectors such as `current` resolve against. */
 function identityOf(caller: PluginCaller): { cwd?: string; worktreeId?: string } {
   if (caller.role === 'plugin') return {}
@@ -42,6 +53,8 @@ export class SessionService {
   ) {}
 
   private readonly restoring = new Map<string, Promise<Session>>()
+  /** Exit details that arrived while a restore was spawning; a key is present for the whole spawn. */
+  private readonly restoreExits = new Map<string, SessionExit | null>()
 
   list = async (params: Record<string, unknown>, caller: PluginCaller): Promise<Session[]> => {
     if (params.worktree === undefined) return this.records.list()
@@ -144,21 +157,19 @@ export class SessionService {
     return updated
   }
 
-  /** Marks a live session exited; null for one that is unknown or already exited. */
+  /**
+   * Marks a live session exited; null for one that is unknown or already exited. An exit that
+   * arrives while the session's restore is spawning is held and applied when the spawn returns.
+   */
   finish(sessionId: string, exit: SessionExit | number | null): Session | null {
     const session = this.records.get(sessionId)
-    if (!session || session.status === 'exited') return null
+    if (!session) return null
     const details = typeof exit === 'object' && exit !== null ? exit : { exitCode: exit }
-    return this.publish(
-      this.records.update(sessionId, {
-        status: 'exited',
-        exitCode: details.exitCode,
-        exitSignal: details.exitSignal ?? null,
-        exitCause: details.exitCause ?? 'exited',
-        restorable: details.restorable ?? false,
-        lastActivityAt: Date.now()
-      }) as Session
-    )
+    if (session.status === 'exited') {
+      if (this.restoreExits.get(sessionId) === null) this.restoreExits.set(sessionId, details)
+      return null
+    }
+    return this.publish(this.records.update(sessionId, exitFields(details)) as Session)
   }
 
   /**
@@ -216,41 +227,52 @@ export class SessionService {
   }
 
   private async startRestore(session: Session): Promise<Session> {
-    const additions = await this.context.launch.hooks({
-      sessionId: session.id,
-      worktreeId: session.worktreeId,
-      repoId: this.records.repoIdOf(session.id) ?? '',
-      cwd: session.cwd,
-      agent: 'shell'
-    })
-    await this.context.pty.spawn(session.id, {
-      argv: this.context.launch.shellArgv(),
-      cwd: session.cwd,
-      env: this.context.launch.env({
+    this.restoreExits.set(session.id, null)
+    try {
+      const additions = await this.context.launch.hooks({
         sessionId: session.id,
         worktreeId: session.worktreeId,
-        agent: 'shell',
-        envPatch: additions.env as Record<string, string>
-      }),
-      cols: 80,
-      rows: 24,
-      shellReady: this.context.launch.shellReady(),
-      restore: true
-    })
-    const restored = this.records.update(session.id, {
-      status: 'running',
-      agent: 'shell',
-      exitCode: null,
-      exitSignal: null,
-      exitCause: null,
-      restorable: false,
-      lastActivityAt: Date.now()
-    })
-    if (!restored) {
-      await this.context.pty.forget(session.id).catch(() => {})
-      throw this.context.error('conflict', `session ${session.id} was closed while it was restoring`)
+        repoId: this.records.repoIdOf(session.id) ?? '',
+        cwd: session.cwd,
+        agent: 'shell'
+      })
+      await this.context.pty.spawn(session.id, {
+        argv: this.context.launch.shellArgv(),
+        cwd: session.cwd,
+        env: this.context.launch.env({
+          sessionId: session.id,
+          worktreeId: session.worktreeId,
+          agent: 'shell',
+          envPatch: additions.env as Record<string, string>
+        }),
+        cols: 80,
+        rows: 24,
+        shellReady: this.context.launch.shellReady(),
+        restore: true
+      })
+      const earlyExit = this.restoreExits.get(session.id)
+      const restored = this.records.update(
+        session.id,
+        earlyExit
+          ? { ...exitFields(earlyExit), agent: 'shell' }
+          : {
+              status: 'running',
+              agent: 'shell',
+              exitCode: null,
+              exitSignal: null,
+              exitCause: null,
+              restorable: false,
+              lastActivityAt: Date.now()
+            }
+      )
+      if (!restored) {
+        await this.context.pty.forget(session.id).catch(() => {})
+        throw this.context.error('conflict', `session ${session.id} was closed while it was restoring`)
+      }
+      return this.publish(restored)
+    } finally {
+      this.restoreExits.delete(session.id)
     }
-    return this.publish(restored)
   }
 
   private require(sessionId: string): Session {
