@@ -252,7 +252,7 @@ describe('provide checks function-valued kinds', () => {
   ]
   const manifest = {
     id: 'acme.fn',
-    contributes: { method: [{ id: 'ping' }], job: [{ id: 'tick' }], 'launch-hook': [{ id: 'patch' }], command: [{ id: 'go' }] }
+    contributes: { method: [{ id: 'ping' }], job: [{ id: 'tick', interval: '1m' }], 'launch-hook': [{ id: 'patch' }], command: [{ id: 'go' }] }
   }
 
   for (const [kind, id] of cases) {

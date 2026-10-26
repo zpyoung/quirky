@@ -206,9 +206,29 @@ describe('scheduling', () => {
     await until(() => t.starts().length === 2)
   })
 
-  test('skips a job whose interval does not parse, once, and still arms the others', async () => {
+  test('skips a job whose interval does not parse, once, and still arms the others', () => {
     const t = setup()
-    const scheduler = t.begin([{ name: 'tick', interval: 'soon' }, { name: 'other', interval: '1h' }])
+    const contribution = (name: string, interval: string) => ({
+      id: id(name),
+      kind: 'job',
+      name,
+      plugin: 'acme.poll',
+      override: false,
+      status: 'active',
+      data: { interval }
+    })
+    // manifest validation rejects these intervals, so the scheduler is fed contributions directly
+    const plugins = {
+      contributions: () => [contribution('tick', 'soon'), contribution('other', '1h')],
+      resolveImplementation: async () => undefined
+    } as unknown as PluginHost
+    const scheduler = new Scheduler({
+      plugins,
+      store: t.store,
+      log: (message) => t.logs.push(message),
+      now: () => t.clock.t
+    })
+    cleanups.push(() => scheduler.stop())
     scheduler.start()
     scheduler.sync()
     expect(scheduler.list().map((job) => job.id)).toEqual([id('other')])
@@ -273,13 +293,13 @@ describe('timeout', () => {
   test('aborts the signal, records timed-out at once, and keeps a stubborn job running until it settles', async () => {
     const t = setup()
     const body = `${WAIT_FOR_ABORT}; ${waitForFile(t.gate)}`
-    const scheduler = t.begin([{ name: 'tick', initialDelay: '0s', timeout: '200ms', body }])
+    const scheduler = t.begin([{ name: 'tick', initialDelay: '0s', timeout: '1s', body }])
     // the timeout clock starts with the run, so a cold first import must not eat into it
     await t.host.resolveImplementation(TICK)
     scheduler.start()
     await until(() => t.has('aborted tick'))
     const timedOutAt = t.clock.t
-    expect(t.row()).toMatchObject({ status: 'timed-out', error: 'timed out after 200 ms', finishedAt: timedOutAt })
+    expect(t.row()).toMatchObject({ status: 'timed-out', error: 'timed out after 1000 ms', finishedAt: timedOutAt })
     expect(scheduler.list()[0]).toMatchObject({ state: 'running', nextRunAt: null, lastRun: { status: 'timed-out' } })
 
     t.clock.t += 5000
@@ -289,7 +309,7 @@ describe('timeout', () => {
     const settledAt = t.clock.t
     t.release()
     await until(() => scheduler.list()[0]?.state === 'idle')
-    expect(t.row()).toMatchObject({ status: 'timed-out', error: 'timed out after 200 ms', finishedAt: settledAt })
+    expect(t.row()).toMatchObject({ status: 'timed-out', error: 'timed out after 1000 ms', finishedAt: settledAt })
     expect(scheduler.list()[0]).toMatchObject({ nextRunAt: settledAt + 1000, lastRun: { finishedAt: settledAt } })
 
     t.clock.t += 1000
@@ -343,10 +363,10 @@ describe('run', () => {
 
   test('resolves a timed-out run when the timeout fires, not when the handler settles', async () => {
     const t = setup()
-    const scheduler = t.begin([{ name: 'tick', interval: '1h', timeout: '150ms', body: waitForFile(t.gate) }])
+    const scheduler = t.begin([{ name: 'tick', interval: '1h', timeout: '1s', body: waitForFile(t.gate) }])
     scheduler.start()
     const run = await scheduler.run(TICK)
-    expect(run).toMatchObject({ status: 'timed-out', error: 'timed out after 150 ms' })
+    expect(run).toMatchObject({ status: 'timed-out', error: 'timed out after 1000 ms' })
     expect(scheduler.list()[0]?.state).toBe('running')
   })
 })
