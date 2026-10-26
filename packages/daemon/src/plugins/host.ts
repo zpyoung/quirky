@@ -348,8 +348,9 @@ export class PluginHost {
       for (const item of items) allowed.add(formatContributionId(kind, id, item.id))
     }
     for (const override of manifest.overrides ?? []) allowed.add(override.id)
-    const created = this.options.extension?.create({ id, dir: discovered.dir }, () => attempt.revoked)
+    // marked live before create runs: a create that throws after partial setup still needs its revoke
     if (this.options.extension) attempt.extensionLive = true
+    const created = this.options.extension?.create({ id, dir: discovered.dir }, () => attempt.revoked)
     const defaults: Pick<PluginContext, 'dataDir' | 'emit' | 'subscribe' | 'call' | 'openStore' | 'error'> = {
       dataDir: '',
       emit: () => {

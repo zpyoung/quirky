@@ -9,7 +9,7 @@ afterEach(removeTempDirs)
 
 type Setup = ReturnType<typeof setup>
 
-function setup(options: { withExtension?: boolean; throwOnRevoke?: boolean } = {}) {
+function setup(options: { withExtension?: boolean; throwOnRevoke?: boolean; throwOnCreate?: boolean } = {}) {
   const root = makeTempDir()
   const builtinDir = join(root, 'builtin')
   const installedDir = join(root, 'installed')
@@ -28,6 +28,7 @@ function setup(options: { withExtension?: boolean; throwOnRevoke?: boolean } = {
       created.push(plugin.id)
       appendFileSync(marker, `create ${plugin.id}\n`)
       isRevokedByPlugin.set(plugin.id, isRevoked)
+      if (options.throwOnCreate) throw new Error('create blew up')
       return {
         dataDir: `/data/${plugin.id}`,
         emit: () => true,
@@ -231,6 +232,22 @@ describe('context extension', () => {
     await t.host.stop()
     expect(t.revoked).toEqual(['acme.one'])
     expect(t.logs.some((line) => line.includes('acme.one') && line.includes('revoke blew up'))).toBe(true)
+  })
+
+  test('revoke runs once when create itself throws', async () => {
+    const t = setup({ throwOnCreate: true })
+    t.installed({ id: 'acme.bad' })
+    t.host.load()
+    await expect(t.host.activate('acme.bad')).rejects.toMatchObject({
+      code: RpcErrorCode.Conflict,
+      message: 'acme.bad failed to activate: create blew up'
+    })
+    expect(t.created).toEqual(['acme.bad'])
+    expect(t.revoked).toEqual(['acme.bad'])
+    expect(t.lines()).toEqual(['create acme.bad', 'revoke acme.bad'])
+    expect(t.stateOf('acme.bad')).toBe('failed')
+    await t.host.stop()
+    expect(t.revoked).toEqual(['acme.bad'])
   })
 
   test('a plugin that fails to activate again gets a fresh create and revoke each attempt', async () => {
