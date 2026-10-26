@@ -26,7 +26,16 @@ function isCodeBacked(kind: string): boolean {
   return (CODE_BACKED_KINDS as readonly string[]).includes(kind)
 }
 
-function moduleUrl(pluginId: string, ui: string): string {
+/** The module URL for a plugin's ui path, or null when the path cannot be encoded (never throws). */
+function moduleUrl(pluginId: string, ui: string): string | null {
+  try {
+    return encodeModuleUrl(pluginId, ui)
+  } catch {
+    return null
+  }
+}
+
+function encodeModuleUrl(pluginId: string, ui: string): string {
   const segments = ui
     .replace(/\\/g, '/')
     .split('/')
@@ -177,7 +186,9 @@ export function buildUiModel(input: {
       addWarning(warnings, pluginId, 'declares commands, views, panels or sidebar sections but has no ui module')
       continue
     }
-    modules[pluginId] = { url: moduleUrl(pluginId, ui), provides: [...(provides.get(pluginId) ?? [])].sort(compare) }
+    const url = moduleUrl(pluginId, ui)
+    if (url === null) continue
+    modules[pluginId] = { url, provides: [...(provides.get(pluginId) ?? [])].sort(compare) }
   }
   const moduleOf = (pluginId: string): string | null => modules[pluginId]?.url ?? null
 

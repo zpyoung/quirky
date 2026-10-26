@@ -135,6 +135,22 @@ describe('slots', () => {
     expect(model.modules).toEqual({})
   })
 
+  test('a plugin whose ui path cannot be encoded gets a null module without hiding anyone else', () => {
+    const { model } = build(
+      [
+        decl('command', 'a.bad', 'run', { title: 'Run' }),
+        decl('setting', 'a.bad', 'size', { type: 'number', title: 'Size', default: 1 }),
+        decl('command', 'a.ok', 'go', { title: 'Go' }),
+      ],
+      [plugin('a.bad', { ui: '\ud800.js' }), withUi('a.ok')]
+    )
+    expect(model.modules['a.bad']).toBeUndefined()
+    expect(Object.keys(model.modules)).toEqual(['a.ok'])
+    expect(model.commands.find((c) => c.plugin === 'a.bad')?.module).toBeNull()
+    expect(model.commands.find((c) => c.plugin === 'a.ok')?.module).toBe('/plugins/a.ok/ui.js')
+    expect(model.settings.map((s) => s.id)).toEqual(['setting:a.bad/size'])
+  })
+
   test('slot without a ui module has a null module', () => {
     const { model } = build([decl('view', 'a.bare', 'v')], [plugin('a.bare')])
     expect(model.views[0].module).toBeNull()
