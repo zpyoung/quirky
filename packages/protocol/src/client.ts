@@ -84,10 +84,19 @@ export class QuirkyClient {
   }
 
   call<M extends MethodName>(method: M, params: ParamsOf<M>): Promise<ResultOf<M>> {
+    return this.send(method, params) as Promise<ResultOf<M>>
+  }
+
+  /** Like `call`, but for any method name, including ones plugins provide; the result is untyped. */
+  callAny(method: string, params: Record<string, unknown>): Promise<unknown> {
+    return this.send(method, params)
+  }
+
+  private send(method: string, params: unknown): Promise<unknown> {
     if (this.closed) return Promise.reject(new Error('quirkyd connection is closed'))
     const id = this.nextId++
-    return new Promise<ResultOf<M>>((resolve, reject) => {
-      this.pending.set(id, { resolve: resolve as (value: unknown) => void, reject })
+    return new Promise<unknown>((resolve, reject) => {
+      this.pending.set(id, { resolve, reject })
       this.socket.send(JSON.stringify({ jsonrpc: '2.0', id, method, params }))
     })
   }
