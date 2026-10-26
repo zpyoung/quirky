@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
-import { mkdtempSync, readFileSync, realpathSync, rmSync, statSync, utimesSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, statSync, symlinkSync, utimesSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { ApiCatalog, Schema } from '@quirky/protocol'
@@ -89,6 +89,18 @@ describe('SC-23: the skill installs into a folder and reports when it is stale',
     expect((await run(['skill', 'install', '--dir', '.'])).stdout).toBe('installed\n')
     expect(readFileSync(skillFile(), 'utf8')).toContain('quirky acme.extra ping')
     expect(await status()).toBe('up-to-date')
+  })
+
+  test('install does not follow a symlink at an old-style temp path and leaves no temp file', async () => {
+    const victim = join(skills, 'victim.txt')
+    writeFileSync(victim, 'untouched')
+    mkdirSync(join(skills, 'quirky'))
+    symlinkSync(victim, `${skillFile()}.${process.pid}.tmp`)
+    const result = await run(['skill', 'install', '--dir', '.'])
+    expect(result.code).toBe(0)
+    expect(readFileSync(victim, 'utf8')).toBe('untouched')
+    expect(readFileSync(skillFile(), 'utf8')).toBe((await run(['skill', 'show'])).stdout)
+    expect(readdirSync(join(skills, 'quirky')).filter((name) => name.endsWith('.tmp') && name.startsWith('.'))).toEqual([])
   })
 
   test('--json prints the status and the absolute path, and --dir is resolved against the cwd', async () => {

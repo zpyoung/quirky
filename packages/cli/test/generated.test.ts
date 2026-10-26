@@ -516,7 +516,7 @@ describe('SC-19 JSON errors', () => {
 })
 
 describe('rawArgs commands', () => {
-  test('receive the tokens after their words, without the global switches', async () => {
+  test('receive every token after their words, global switches included', async () => {
     const seen: string[][] = []
     const raw: Command = {
       name: 'rawtest',
@@ -541,7 +541,7 @@ describe('rawArgs commands', () => {
         openDesktopApp: async () => ({ ok: true })
       })
       expect(code).toBe(0)
-      expect(seen).toEqual([['x', '--weird', 'y', '--', '--json']])
+      expect(seen).toEqual([['--json', 'x', '--weird', 'y', '--', '--json']])
     } finally {
       COMMANDS.pop()
     }

@@ -163,6 +163,42 @@ describe('SC-21: quirky api call reaches any method', () => {
     expect(daemon.methodCalls('repo.add')).toEqual([{ path: '' }])
   })
 
+  test('a valued flag followed by a global switch is missing its value, not given the next word', async () => {
+    const message = '--path requires a value; write --path=<value> for a value starting with --'
+    const result = await run(['api', 'call', 'repo.add', '--path', '--json', '/tmp/repo'])
+    expect(result.code).toBe(2)
+    expect(JSON.parse(result.stdout)).toEqual({ error: { code: 'usage', message } })
+    const before = await run(['api', 'call', '--json', 'repo.add', '--path', '/tmp/repo', '--path', '--json'])
+    expect(before.code).toBe(2)
+    expect(daemon.methodCalls('repo.add')).toEqual([])
+    const help = await run(['api', 'call', 'repo.add', '--path', '--help'])
+    expect(help.code).toBe(2)
+    expect(help.stderr).toContain(message)
+    expect(daemon.methodCalls('repo.add')).toEqual([])
+  })
+
+  test('--json before or after the method name still gives JSON output', async () => {
+    for (const args of [
+      ['api', 'call', '--json', 'git.status', '--worktree-id', 'w1'],
+      ['api', 'call', 'git.status', '--json', '--worktree-id', 'w1'],
+      ['api', 'call', 'git.status', '--worktree-id', 'w1', '--json']
+    ]) {
+      const result = await run(args)
+      expect(result.code).toBe(0)
+      expect(JSON.parse(result.stdout)).toEqual({ branch: 'main', dirty: false })
+    }
+  })
+
+  test('help after the method prints that method\'s help and calls nothing', async () => {
+    for (const flag of ['--help', '-h']) {
+      const result = await run(['api', 'call', 'git.status', flag])
+      expect(result.code).toBe(0)
+      expect(result.stdout).toContain('usage: quirky git.status --worktree-id <string>')
+      expect(result.stdout).toContain('--worktree-id')
+    }
+    expect(daemon.methodCalls('git.status')).toEqual([])
+  })
+
   test('help for api call lists the method argument without contacting the daemon', async () => {
     const before = daemon.calls.length
     const result = await run(['api', 'call', '--help'])

@@ -34,6 +34,12 @@ function wantsJson(argv: readonly string[]): boolean {
 
 const hasHelpFlag = (rest: readonly string[]) => rest.some((token) => token === '--help' || token === '-h')
 
+/** The global switches before the first other token; later help flags belong to a `rawArgs` command. */
+function leadingGlobals(tokens: readonly string[]): string[] {
+  const end = tokens.findIndex((token) => !isGlobalToken(token))
+  return end === -1 ? [...tokens] : tokens.slice(0, end)
+}
+
 /** True when the first token that is not a global switch is a word rather than a flag. */
 function startsWithWord(tokens: readonly string[]): boolean {
   const first = tokens.find((token) => !isGlobalToken(token))
@@ -59,13 +65,6 @@ function unknownCommand(argv: readonly string[], commands: readonly Command[]): 
       commands.map((command) => command.name)
     )
   )
-}
-
-/** Tokens a `rawArgs` command parses itself: everything after its words except the global switches. */
-function withoutGlobals(rest: readonly string[]): string[] {
-  const end = rest.indexOf('--')
-  const head = end === -1 ? rest : rest.slice(0, end)
-  return [...head.filter((token) => !isGlobalToken(token)), ...(end === -1 ? [] : rest.slice(end))]
 }
 
 async function dispatch(runtime: Runtime, out: Printer, argv: readonly string[]): Promise<void> {
@@ -106,7 +105,7 @@ async function dispatch(runtime: Runtime, out: Printer, argv: readonly string[])
     writer.stdout(`${helpText()}\n`)
     return
   }
-  const wantsHelp = hasHelpFlag(target.rest)
+  const wantsHelp = hasHelpFlag(target.kind === 'command' && target.command.rawArgs ? leadingGlobals(target.rest) : target.rest)
   if (target.kind === 'group') {
     if (startsWithWord(target.rest)) throw unknownCommand(argv, commands)
     const text = helpText(target.words, commands)
@@ -122,7 +121,7 @@ async function dispatch(runtime: Runtime, out: Printer, argv: readonly string[])
     return
   }
   const args = command.rawArgs
-    ? { positionals: withoutGlobals(target.rest), flags: { json: out.json } }
+    ? { positionals: target.rest, flags: { json: out.json } }
     : parseFor(command, target.rest)
   await command.run(args, ctx)
 }
