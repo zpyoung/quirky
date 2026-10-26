@@ -322,6 +322,7 @@ export class PluginHost {
     return {
       pluginId: id,
       dir: discovered.dir,
+      dataDir: '',
       log: (message) => {
         for (const line of String(message).split(/\r\n|\r|\n/)) this.options.log(`${id}: ${line}`)
       },
@@ -329,7 +330,20 @@ export class PluginHost {
         if (attempt.revoked) throw new Error(`${id} is no longer active`)
         if (!allowed.has(contributionId)) throw new Error(`${id} does not declare ${contributionId}`)
         attempt.implementations.set(contributionId, implementation)
-      }
+      },
+      emit: () => {
+        throw new Error(`${id}: context.emit is not available`)
+      },
+      subscribe: () => {
+        throw new Error(`${id}: context.subscribe is not available`)
+      },
+      call: () => {
+        throw new Error(`${id}: context.call is not available`)
+      },
+      openStore: () => {
+        throw new Error(`${id}: context.openStore is not available`)
+      },
+      error: (_kind, message) => new Error(message)
     }
   }
 

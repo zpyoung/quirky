@@ -6,7 +6,7 @@ import {
   type MethodName,
   type ResultOf
 } from '@quirky/protocol'
-import { conflict, invalidParams } from './errors'
+import { conflict, invalidParams, notFound } from './errors'
 import type { PluginHost } from './plugins/host'
 import type { Core } from './service'
 import type { ClientConn } from './types'
@@ -207,6 +207,11 @@ export function createHandlers(core: Core, plugins: PluginHost): Handlers {
       await plugins.setEnabled(str(params, 'id'), false)
       return OK
     },
-    'plugin.activate': (params) => plugins.activate(str(params, 'pluginId'))
+    'plugin.activate': (params) => plugins.activate(str(params, 'pluginId')),
+
+    'job.list': () => [],
+    'job.run': (params) => {
+      throw notFound(`no job ${str(params, 'id')} is in effect`)
+    }
   }
 }
