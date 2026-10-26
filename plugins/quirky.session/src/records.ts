@@ -1,7 +1,7 @@
 import { Database } from 'bun:sqlite'
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
-import type { PluginStore, Session, SessionStatus, StoreMigration } from '@quirky/protocol'
+import type { ExitCause, PluginStore, Session, SessionStatus, StoreMigration } from '@quirky/protocol'
 
 type Row = {
   id: string
@@ -14,6 +14,9 @@ type Row = {
   created_at: number
   last_activity_at: number
   exit_code: number | null
+  exit_signal: string | null
+  exit_cause: ExitCause | null
+  restorable: number
 }
 
 const toSession = (row: Row): Session => ({
@@ -26,11 +29,18 @@ const toSession = (row: Row): Session => ({
   status: row.status,
   createdAt: row.created_at,
   lastActivityAt: row.last_activity_at,
-  exitCode: row.exit_code
+  exitCode: row.exit_code,
+  exitSignal: row.exit_signal,
+  exitCause: row.exit_cause,
+  restorable: row.restorable === 1
 })
 
-const INSERT = `INSERT OR IGNORE INTO sessions (id, kind, agent, worktree_id, cwd, title, status, created_at, last_activity_at, exit_code, repo_id)
+/** Frozen at the shape of migration 1: the exit columns do not exist yet when the v1 import runs. */
+const IMPORT_V1 = `INSERT OR IGNORE INTO sessions (id, kind, agent, worktree_id, cwd, title, status, created_at, last_activity_at, exit_code, repo_id)
   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+
+const INSERT = `INSERT OR IGNORE INTO sessions (id, kind, agent, worktree_id, cwd, title, status, created_at, last_activity_at, exit_code, exit_signal, exit_cause, restorable, repo_id)
+  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
 
 /** Copies the sessions table of a v1 home, if it has one; a home that never had `repo_id` imports it as null. */
 function importV1Sessions(store: PluginStore, home: string): void {
@@ -42,7 +52,7 @@ function importV1Sessions(store: PluginStore, home: string): void {
     const rows = v1.query('SELECT * FROM sessions ORDER BY created_at, id').all() as (Row & { repo_id?: string | null })[]
     for (const row of rows) {
       store.run(
-        INSERT,
+        IMPORT_V1,
         row.id,
         row.kind,
         row.agent,
@@ -80,6 +90,13 @@ export function sessionMigrations(home: string): StoreMigration[] {
         )
       `)
       importV1Sessions(store, home)
+    },
+    (store) => {
+      store.exec(`
+        ALTER TABLE sessions ADD COLUMN exit_signal TEXT;
+        ALTER TABLE sessions ADD COLUMN exit_cause TEXT;
+        ALTER TABLE sessions ADD COLUMN restorable INTEGER NOT NULL DEFAULT 0;
+      `)
     }
   ]
 }
@@ -119,19 +136,34 @@ export class SessionRecords {
       session.createdAt,
       session.lastActivityAt,
       session.exitCode,
+      session.exitSignal,
+      session.exitCause,
+      session.restorable ? 1 : 0,
       repoId
     )
   }
 
-  update(id: string, fields: { status?: SessionStatus; lastActivityAt?: number; exitCode?: number | null }): Session | null {
+  /** The repo that owned the session when it was created; null for a record imported without one. */
+  repoIdOf(id: string): string | null {
+    return this.store.get<{ repo_id: string | null }>('SELECT repo_id FROM sessions WHERE id = ?', id)?.repo_id ?? null
+  }
+
+  update(
+    id: string,
+    fields: Partial<Pick<Session, 'status' | 'agent' | 'lastActivityAt' | 'exitCode' | 'exitSignal' | 'exitCause' | 'restorable'>>
+  ): Session | null {
     const current = this.get(id)
     if (!current) return null
     const next = { ...current, ...fields }
     this.store.run(
-      'UPDATE sessions SET status = ?, last_activity_at = ?, exit_code = ? WHERE id = ?',
+      'UPDATE sessions SET status = ?, agent = ?, last_activity_at = ?, exit_code = ?, exit_signal = ?, exit_cause = ?, restorable = ? WHERE id = ?',
       next.status,
+      next.agent,
       next.lastActivityAt,
       next.exitCode,
+      next.exitSignal,
+      next.exitCause,
+      next.restorable ? 1 : 0,
       id
     )
     return next

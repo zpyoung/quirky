@@ -1,9 +1,10 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
-import { writeFileSync } from 'node:fs'
+import { Database } from 'bun:sqlite'
+import { mkdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { RpcErrorCode, QuirkyClient, type QuirkyEvent, type RpcError, type Session } from '@quirky/protocol'
 import { rpcUrl } from '@quirky/protocol/node'
-import { makeTempHome, waitFor, type Harness } from '../../../packages/daemon/test/helpers'
+import { makeTempHome, waitFor, waitForAsync, type Harness } from '../../../packages/daemon/test/helpers'
 import {
   makeTempDir,
   readMarker,
@@ -67,6 +68,13 @@ describe('quirky.session/create', () => {
     expect(request.env.PATH.startsWith(`${h.home}/bin:`)).toBe(true)
     await waitFor(() => events.find((e) => e.type === 'quirky.session/changed'))
     expect(await call(client, 'quirky.session/list', { worktree: 'id:wt_main' })).toHaveLength(1)
+  })
+
+  test('asks the host for the shell-ready wrapper for a zsh shell session and not for an agent', async () => {
+    const shell = await createSession(client, { worktree: 'id:wt_main', agent: 'shell' })
+    expect(spawned(shell.id).shellReady).toBe(true)
+    const claude = await createSession(client, { worktree: 'id:wt_main', agent: 'claude' })
+    expect(spawned(claude.id).shellReady).toBe(false)
   })
 
   test('uses a 80x24 terminal unless told otherwise', async () => {
@@ -426,5 +434,233 @@ describe('exit and reconciliation', () => {
     } finally {
       await again.stop()
     }
+  })
+})
+
+const hostInfo = (sessionId: string) => h.pty.sessions.get(sessionId)!.info
+const sessionOf = (sessionId: string) => call<Session>(client, 'quirky.session/get', { session: sessionId })
+const shellSession = () => createSession(client, { worktree: 'id:wt_main', agent: 'shell' })
+
+/** Makes the fake host hold `sessionId` as the real host does after its own restart or a reboot. */
+function storeInHost(sessionId: string, exitCause: 'host-lost' | 'host-restart') {
+  const info = hostInfo(sessionId)
+  Object.assign(info, { state: 'restorable', alive: false, pid: 0, exitCode: null, exitSignal: null, exitCause })
+}
+
+const restoreRequests = (sessionId: string) =>
+  h.pty.requests.filter((r) => r.type === 'create' && r.sessionId === sessionId && r.restore === true)
+
+describe('the session store migration', () => {
+  test('keeps rows from before the exit columns, not restorable', async () => {
+    await h.cleanup()
+    const home = makeTempHome()
+    const dir = join(home, 'plugin-data', 'quirky.session')
+    mkdirSync(dir, { recursive: true })
+    const db = new Database(join(dir, 'store.db'), { create: true })
+    db.exec(`CREATE TABLE sessions (
+      id TEXT PRIMARY KEY, kind TEXT NOT NULL, agent TEXT NOT NULL, worktree_id TEXT NOT NULL, cwd TEXT NOT NULL,
+      title TEXT NOT NULL, status TEXT NOT NULL, created_at INTEGER NOT NULL, last_activity_at INTEGER NOT NULL,
+      exit_code INTEGER, repo_id TEXT)`)
+    db.query("INSERT INTO sessions VALUES ('s_old', 'terminal', 'shell', 'wt_main', '/fake/alpha', 'Shell', 'exited', 1, 1, 5, 'repo_alpha')").run()
+    db.exec('PRAGMA user_version = 1')
+    db.close()
+    h = await startPluginHarness(SESSION_PLUGINS, { home })
+    client = await h.connect('cli')
+    expect(await call<Session[]>(client, 'quirky.session/list')).toEqual([
+      {
+        id: 's_old',
+        kind: 'terminal',
+        agent: 'shell',
+        worktreeId: 'wt_main',
+        cwd: '/fake/alpha',
+        title: 'Shell',
+        status: 'exited',
+        createdAt: 1,
+        lastActivityAt: 1,
+        exitCode: 5,
+        exitSignal: null,
+        exitCause: null,
+        restorable: false
+      }
+    ])
+  })
+})
+
+describe('exit details', () => {
+  test('a process that exits on its own records its code and cause', async () => {
+    const session = await shellSession()
+    h.pty.exit(session.id, 3)
+    await waitFor(() => changedTo('exited'))
+    expect(await sessionOf(session.id)).toMatchObject({
+      status: 'exited',
+      exitCode: 3,
+      exitSignal: null,
+      exitCause: 'exited',
+      restorable: false
+    })
+  })
+
+  test('a death by signal records the signal beside 128+n', async () => {
+    const session = await shellSession()
+    h.pty.exit(session.id, 143, { exitSignal: 'SIGTERM' })
+    await waitFor(() => changedTo('exited'))
+    expect(await sessionOf(session.id)).toMatchObject({ exitCode: 143, exitSignal: 'SIGTERM', exitCause: 'exited', restorable: false })
+  })
+
+  test('a requested kill records cause killed', async () => {
+    const session = await shellSession()
+    h.pty.exit(session.id, 137, { exitSignal: 'SIGKILL', exitCause: 'killed' })
+    await waitFor(() => changedTo('exited'))
+    expect(await sessionOf(session.id)).toMatchObject({ exitCode: 137, exitSignal: 'SIGKILL', exitCause: 'killed', restorable: false })
+  })
+
+  test('an exit caused by the host restarting leaves the session restorable', async () => {
+    const session = await shellSession()
+    h.pty.exit(session.id, null, { exitSignal: 'SIGHUP', exitCause: 'host-restart' })
+    await waitFor(() => changedTo('exited'))
+    expect(await sessionOf(session.id)).toMatchObject({
+      status: 'exited',
+      exitCode: null,
+      exitSignal: 'SIGHUP',
+      exitCause: 'host-restart',
+      restorable: true
+    })
+  })
+})
+
+describe('reconcile with the host listing', () => {
+  test('each record follows what the host reports for it', async () => {
+    const running = await shellSession()
+    const exited = await shellSession()
+    const lost = await shellSession()
+    const restarted = await shellSession()
+    const absent = await shellSession()
+    const late = await shellSession()
+    h.pty.exit(late.id, 0)
+    await waitFor(() => changedTo('exited'))
+    expect((await sessionOf(late.id)).restorable).toBe(false)
+
+    Object.assign(hostInfo(exited.id), { state: 'exited', alive: false, exitCode: 9, exitSignal: null, exitCause: 'exited' })
+    storeInHost(lost.id, 'host-lost')
+    storeInHost(restarted.id, 'host-restart')
+    h.pty.sessions.delete(absent.id)
+    storeInHost(late.id, 'host-restart')
+
+    h.pty.dropConnections()
+    await waitForAsync(async () => (await sessionOf(absent.id)).status === 'exited', 5000)
+    await waitForAsync(async () => (await sessionOf(late.id)).restorable, 5000)
+
+    expect(await sessionOf(running.id)).toMatchObject({ status: 'running', exitCause: null, restorable: false })
+    expect(await sessionOf(exited.id)).toMatchObject({ status: 'exited', exitCode: 9, exitCause: 'exited', restorable: false })
+    expect(await sessionOf(lost.id)).toMatchObject({ status: 'exited', exitCode: null, exitCause: 'host-lost', restorable: true })
+    expect(await sessionOf(restarted.id)).toMatchObject({ status: 'exited', exitCode: null, exitCause: 'host-restart', restorable: true })
+    expect(await sessionOf(absent.id)).toMatchObject({ status: 'exited', exitCode: null, exitCause: 'host-lost', restorable: false })
+    expect(await sessionOf(late.id)).toMatchObject({ status: 'exited', exitCause: 'host-restart', restorable: true })
+  })
+
+  test('a daemon restart finds sessions the host stored while it was away restorable', async () => {
+    const session = await shellSession()
+    storeInHost(session.id, 'host-lost')
+    const again = await restartDaemon(h)
+    try {
+      expect(await call<Session>(again.client, 'quirky.session/get', { session: session.id })).toMatchObject({
+        status: 'exited',
+        exitCause: 'host-lost',
+        restorable: true
+      })
+    } finally {
+      await again.stop()
+    }
+  })
+})
+
+describe('quirky.session/restore', () => {
+  const restore = (sessionId: string) => call<Session>(client, 'quirky.session/restore', { session: sessionId })
+
+  test('a running session comes back unchanged and nothing is sent to the host', async () => {
+    const session = await shellSession()
+    const before = h.pty.requests.length
+    expect(await restore(session.id)).toEqual(session)
+    expect(h.pty.requests.slice(before).filter((r) => r.type === 'create')).toEqual([])
+  })
+
+  test('a session that ended normally is a conflict', async () => {
+    const session = await shellSession()
+    h.pty.exit(session.id, 0)
+    await waitFor(() => changedTo('exited'))
+    const error = await restore(session.id).catch((e: RpcError) => e)
+    expect((error as RpcError).code).toBe(RpcErrorCode.Conflict)
+    expect((error as RpcError).message).toBe(`session ${session.id} ended normally and can't be restored`)
+  })
+
+  test('a session killed on request is a conflict that says so', async () => {
+    const session = await shellSession()
+    h.pty.exit(session.id, 137, { exitSignal: 'SIGKILL', exitCause: 'killed' })
+    await waitFor(() => changedTo('exited'))
+    const error = await restore(session.id).catch((e: RpcError) => e)
+    expect((error as RpcError).code).toBe(RpcErrorCode.Conflict)
+    expect((error as RpcError).message).toBe(`session ${session.id} was killed and can't be restored`)
+  })
+
+  test('a restorable session starts a shell as the same session and clears its exit details', async () => {
+    const claude = await createSession(client, { worktree: 'id:wt_main', agent: 'claude' })
+    h.pty.exit(claude.id, null, { exitSignal: 'SIGHUP', exitCause: 'host-restart' })
+    await waitFor(() => changedTo('exited'))
+    const before = eventsOf('quirky.session/changed').length
+
+    const restored = await restore(claude.id)
+    expect(restored).toMatchObject({
+      id: claude.id,
+      status: 'running',
+      agent: 'shell',
+      exitCode: null,
+      exitSignal: null,
+      exitCause: null,
+      restorable: false
+    })
+    expect(await sessionOf(claude.id)).toEqual(restored)
+    const [request] = restoreRequests(claude.id)
+    expect(request).toMatchObject({
+      restore: true,
+      shellReady: true,
+      argv: ['/bin/zsh', '-l'],
+      cwd: '/fake/alpha',
+      cols: 80,
+      rows: 24
+    })
+    expect((request as { env: Record<string, string> }).env).toMatchObject({
+      QUIRKY_SESSION_ID: claude.id,
+      ZDOTDIR: join(h.home, 'shell', 'zsh')
+    })
+    await waitFor(() => eventsOf('quirky.session/changed').length > before || undefined)
+    expect(eventsOf('quirky.session/changed').at(-1)).toMatchObject({ data: { session: { id: claude.id, status: 'running' } } })
+  })
+
+  test('two restores at once send the host one create', async () => {
+    const session = await shellSession()
+    h.pty.exit(session.id, null, { exitCause: 'host-restart' })
+    await waitFor(() => changedTo('exited'))
+    const [first, second] = await Promise.all([restore(session.id), restore(session.id)])
+    expect(first).toEqual(second)
+    expect(first.status).toBe('running')
+    expect(restoreRequests(session.id)).toHaveLength(1)
+  })
+
+  test('a failed spawn leaves the session exited and restorable, and a retry works', async () => {
+    const session = await shellSession()
+    h.pty.exit(session.id, null, { exitCause: 'host-restart' })
+    await waitFor(() => changedTo('exited'))
+
+    h.pty.failRequests('create', 'no such shell')
+    const error = await restore(session.id).catch((e: RpcError) => e)
+    expect((error as RpcError).message).toContain('no such shell')
+    expect(await sessionOf(session.id)).toMatchObject({ status: 'exited', restorable: true })
+
+    h.pty.failRequests('create', null)
+    expect(await restore(session.id)).toMatchObject({ status: 'running', restorable: false })
+  })
+
+  test('an unknown session is NotFound', async () => {
+    expect(await code(restore('s_nope'))).toBe(RpcErrorCode.NotFound)
   })
 })

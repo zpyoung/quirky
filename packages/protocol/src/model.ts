@@ -1,5 +1,7 @@
 /** Domain types shared by the daemon, the PTY host, the UI, the CLI and the desktop shell. */
 
+import type { ExitCause } from './pty'
+
 export type Repo = {
   id: string
   name: string
@@ -44,6 +46,12 @@ export type Session = {
   createdAt: number
   lastActivityAt: number
   exitCode: number | null
+  /** The signal that ended the process, when one did; null while it is alive. */
+  exitSignal: string | null
+  /** Why the session ended; null while it is alive and for records from before causes were kept. */
+  exitCause: ExitCause | null
+  /** True when the PTY host still holds the session's history, so `restore` can start a shell in it. */
+  restorable: boolean
 }
 
 export type GitFileStatus = {

@@ -18,6 +18,9 @@ export function session(over: Partial<Session> & Pick<Session, 'id'>): Session {
     createdAt: 1,
     lastActivityAt: 1,
     exitCode: null,
+    exitSignal: null,
+    exitCause: null,
+    restorable: false,
     ...over
   }
 }
