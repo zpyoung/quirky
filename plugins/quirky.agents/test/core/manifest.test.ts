@@ -117,7 +117,7 @@ const entries = (): AgentEntry[] =>
 const byId = (id: string) => entries().find((entry) => entry.id === id)!
 
 describe('quirky.agents manifest', () => {
-  test('declares the plugin with startup activation, no dependencies and only agent and setting contributions', () => {
+  test('declares the plugin with startup activation, no dependencies and its agent, method, event and setting contributions', () => {
     expect(manifest).toMatchObject({
       id: 'quirky.agents',
       name: 'Agents',
@@ -126,7 +126,7 @@ describe('quirky.agents manifest', () => {
       activation: 'startup',
       dependencies: []
     })
-    expect(Object.keys(manifest.contributes).sort()).toEqual(['agent', 'setting'])
+    expect(Object.keys(manifest.contributes)).toEqual(expect.arrayContaining(['agent', 'event', 'method', 'setting']))
   })
 
   test('SC-1: all 45 entries validate and appear in Orca\'s auto-pick order', () => {

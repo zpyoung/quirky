@@ -90,7 +90,7 @@ afterAll(() => rmSync(scratch, { recursive: true, force: true }))
 function runFake(name: string, command: string, env: Record<string, string | null>) {
   const dir = mkdtempSync(join(scratch, 'bin-'))
   const bin = join(dir, name)
-  writeFileSync(bin, '#!/bin/sh\nfor a in "$@"; do printf "%s\\0" "$a"; done\nprintf "ENV=%s\\0" "${QUIRKY_HERMES_STARTUP_QUERY-unset}"\n')
+  writeFileSync(bin, '#!/bin/sh\nfor a in "$@"; do printf "%s\\0" "$a"; done\nprintf "ENV=%s\\0" "${HERMES_QUIRKY_STARTUP_QUERY-unset}"\n')
   chmodSync(bin, 0o755)
   const childEnv: Record<string, string> = { PATH: `${dir}:/usr/bin:/bin` }
   for (const [key, value] of Object.entries(env)) if (value !== null) childEnv[key] = value
@@ -289,7 +289,7 @@ describe('prompt delivery', () => {
     expect(result.promptDelivery).toBe('command-line')
     expect(result.paste).toBeNull()
     expect(result.command).not.toContain('fix the bug')
-    expect(result.env).toEqual({ QUIRKY_HERMES_STARTUP_QUERY: 'fix the bug' })
+    expect(result.env).toEqual({ HERMES_QUIRKY_STARTUP_QUERY: 'fix the bug' })
     const ran = runFake('hermes', result.command, result.env)
     expect(ran.argv).toEqual(['chat', '--query=fix the bug', '--tui'])
     expect(ran.startupVariable).toBe('unset')

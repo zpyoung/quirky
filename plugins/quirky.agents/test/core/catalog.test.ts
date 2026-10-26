@@ -53,6 +53,16 @@ describe('buildCatalog', () => {
     expect(ids(input)).toEqual(['jcode', 'extra', 'bot'])
   })
 
+  test('SC-3: an override of a listed built-in keeps that agent\'s place in the auto-pick order', () => {
+    const override: ContributionInfo = {
+      ...agent('acme.override', 'codex', { launch: 'codex --profile acme' }),
+      id: 'agent:quirky.agents/codex',
+      override: true
+    }
+    const input = [agent('quirky.agents', 'gemini'), override, agent('quirky.agents', 'claude'), agent('quirky.agents', 'aider')]
+    expect(ids(input)).toEqual(['claude', 'codex', 'gemini', 'aider'])
+  })
+
   test('SC-2: a plugin\'s agent is validated and carries its plugin ID', () => {
     const catalog = buildCatalog([agent('acme.agents', 'acme-bot', { prompt: 'flag-prompt', yolo: '--yes' })])
     expect(catalog.agents).toHaveLength(1)
