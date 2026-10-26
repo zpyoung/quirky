@@ -440,5 +440,25 @@
 - **Revisit if:** a plugin needs its listeners to observe a method's reply before reacting to that method's events
 - **Source:** assumed — autonomous
 
+## D43: The final review loop ends after the closure round passes on all three lenses
+- **Question:** when the final review loop may exit (subagent-driven-development Step 10)
+- **Options:** another discovery round; exit on the clean closure round
+- **Chose:** exit. Round 1 (whole branch, three Codex lenses, deep) found five defects, four fixed and one settled in the spec (D42). Round 2 (closure over the fix delta, deep) passed on all three lenses with no findings, no advisories, no limitations and no unreviewed paths; one spec-lens claim was refuted.
+- **Why:** the loop exits on a completed round with no accepted finding above LOW and a green build; that held at round 2 with 769 tests passing
+- **Evidence:** scratchpad r1/ and r2/ gate.json and manifest.json; reviewer gpt-6.1-sol (openai), independence full, depth deep, profile code-diff
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** assumed — autonomous
+
+## D44: Every scenario has an API test, and there are no Orca defects to test
+- **Question:** LOOP.md step 6's verification checklist
+- **Options:** n/a (a check, recorded for review)
+- **Chose:** SC-1 to SC-7 are in methods.test.ts, SC-8 to SC-10 in events.test.ts, SC-11 to SC-15 in stores-api.test.ts, SC-16 to SC-21 in scheduler.test.ts, SC-22 to SC-26 in launch-hooks.test.ts, SC-27 in lifecycle.test.ts and SC-28 in manifests.test.ts, all under packages/daemon/test/plugins and all driving a real `quirkyd` through a client. The item has no feature docs, so no Orca defects (D26). The API is kernel rather than a built-in plugin (D41). `bun run test` and `bun run typecheck` pass; `bun test scripts` passes except the queue-state test from D31.
+- **Why:** LOOP.md step 6 lists these as the conditions for done
+- **Evidence:** packages/daemon/test/plugins/*.test.ts test names; gate runs on the merge result
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** locked by docs/loop/LOOP.md
+
 ## Progress
-All four waves merged (6aa2257): `bun run test` 763 pass, typecheck clean, `bun test scripts` only the D31 failure. Final round 1 fixed (D42). Next: closure round 2 over the round-1 fix delta, then more rounds until one finds nothing above LOW (cap 5), then LOOP.md step 7 (merge). Review driver: iteration-3 scratchpad `/private/tmp/claude-502/-Users-zpyoung-orca-workspaces-quirky-build-roadmap/20ad4b75-27c9-48ea-8053-2da47b7b6d4e/scratchpad/round.py`.
+Done. Merged into build/roadmap.
