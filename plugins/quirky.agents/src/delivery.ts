@@ -3,6 +3,9 @@ import { encodeBracketedPaste, submitDelayMs } from './core/paste'
 import { createReadyScanner } from './core/ready'
 import type { AgentEntry, DeliveryOutcome } from './core/types'
 
+/** How long a liveness check may go unanswered before the delivery gives up on it. */
+const LIVENESS_TIMEOUT_MS = 2000
+
 type DeliveryRunnerOptions = {
   pty: PluginPty
   /** Registers a listener for sessions that were closed or forgotten; returns its remover. */
@@ -38,8 +41,9 @@ export class DeliveryRunner {
    * signalled and the entry allows a blind paste, `not-delivered` when the session ended first or
    * nothing could be written. With `submit` false the text is left in the input as a draft.
    *
-   * The readiness deadline runs from the call, so a stalled subscribe cannot outlast it, and
-   * nothing is written to a session that is no longer alive.
+   * The readiness deadline runs from the call and stays armed until the delivery settles, and a
+   * liveness check gets its own short timeout, so a stalled PTY host cannot leave this pending.
+   * Nothing is written to a session that is no longer alive.
    */
   deliver(sessionId: string, entry: AgentEntry, text: string, submit: boolean): Promise<DeliveryOutcome> {
     return new Promise((resolve) => {
@@ -58,14 +62,23 @@ export class DeliveryRunner {
       let pasteOutcome: DeliveryOutcome = 'pasted'
       let timer: ReturnType<typeof setTimeout> | null = null
       let deadlineTimer: ReturnType<typeof setTimeout> | null = null
+      let livenessTimer: ReturnType<typeof setTimeout> | null = null
       const early: Uint8Array[] = []
       const removers: Array<() => void> = []
+
+      const clearLivenessTimer = () => {
+        if (livenessTimer !== null) {
+          clearTimeout(livenessTimer)
+          livenessTimer = null
+        }
+      }
 
       const clearTimer = () => {
         if (timer !== null) {
           clearTimeout(timer)
           timer = null
         }
+        clearLivenessTimer()
         if (deadlineTimer !== null) {
           clearTimeout(deadlineTimer)
           deadlineTimer = null
@@ -91,7 +104,9 @@ export class DeliveryRunner {
       }
 
       const after = (virtualMs: number, then: () => void) => {
-        clearTimer()
+        if (timer !== null) {
+          clearTimeout(timer)
+        }
         timer = setTimeout(() => {
           timer = null
           then()
@@ -155,10 +170,15 @@ export class DeliveryRunner {
 
       const paste = (outcome: DeliveryOutcome) => {
         pasting = true
+        livenessTimer = setTimeout(() => {
+          livenessTimer = null
+          settle('not-delivered')
+        }, Math.max(0, LIVENESS_TIMEOUT_MS * this.timeScale))
         isAlive().then((alive) => {
           if (settled) {
             return
           }
+          clearLivenessTimer()
           if (alive) {
             writePaste(outcome)
           } else {
