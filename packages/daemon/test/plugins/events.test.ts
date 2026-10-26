@@ -35,7 +35,7 @@ describe('plugin events', () => {
   test('SC-8: a plugin event reaches subscribed clients', async () => {
     const s = await boot([
       {
-        manifest: { id: 'acme.tools', contributes: { method: [{ id: 'fire' }], ...declares('refreshed') } },
+        manifest: { id: 'acme.tools', contributes: { method: [{ id: 'fire', params: { type: 'object', additionalProperties: true } }], ...declares('refreshed') } },
         behavior: {
           activate: "context.provide('method:acme.tools/fire', (params) => context.emit('refreshed', { count: params.count }))"
         }
@@ -52,7 +52,7 @@ describe('plugin events', () => {
   test("SC-9: only a plugin's own events in effect are emitted", async () => {
     const s = await boot([
       {
-        manifest: { id: 'acme.tools', contributes: { method: [{ id: 'emit' }], ...declares('refreshed', 'sentinel') } },
+        manifest: { id: 'acme.tools', contributes: { method: [{ id: 'emit', params: { type: 'object', additionalProperties: true } }], ...declares('refreshed', 'sentinel') } },
         behavior: {
           activate: `
             context.provide('method:acme.tools/emit', (params) => {
@@ -65,7 +65,7 @@ describe('plugin events', () => {
         }
       },
       {
-        manifest: { id: 'acme.better', contributes: { method: [{ id: 'emit' }] }, overrides: [{ id: 'event:acme.tools/refreshed' }] },
+        manifest: { id: 'acme.better', contributes: { method: [{ id: 'emit', params: { type: 'object', additionalProperties: true } }] }, overrides: [{ id: 'event:acme.tools/refreshed' }] },
         behavior: {
           activate: `
             context.provide('method:acme.better/emit', (params) => {

@@ -57,7 +57,7 @@ export function activate(context: any) {
 `
   writePlugin(
     join(home, 'plugins'),
-    { id, name: id, version: tag, main: `main-${tag}.ts`, contributes: { method: METHODS.map((name) => ({ id: name })) } },
+    { id, name: id, version: tag, main: `main-${tag}.ts`, contributes: { method: METHODS.map((name) => ({ id: name, params: { type: 'object', additionalProperties: true } })) } },
     { [`main-${tag}.ts`]: source }
   )
 }
