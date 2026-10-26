@@ -1,0 +1,29 @@
+{
+  "id": "quirky.session",
+  "name": "Fake session",
+  "version": "0.0.0",
+  "main": "main.ts",
+  "activation": "startup",
+  "contributes": {
+    "method": [
+      { "id": "seed", "params": { "type": "object", "additionalProperties": true } },
+      { "id": "list", "readOnly": true, "params": { "type": "object", "properties": { "worktree": { "type": "string" } } } },
+      { "id": "get", "readOnly": true, "params": { "type": "object", "properties": { "session": { "type": "string" } }, "required": ["session"] } },
+      {
+        "id": "setStatus",
+        "params": {
+          "type": "object",
+          "properties": { "session": { "type": "string" }, "status": { "type": "string" } },
+          "required": ["session", "status"]
+        }
+      },
+      { "id": "calls", "readOnly": true, "params": { "type": "object" } },
+      { "id": "remove", "params": { "type": "object", "additionalProperties": true } },
+      { "id": "create", "params": { "type": "object", "additionalProperties": true } }
+    ],
+    "event": [
+      { "id": "changed" },
+      { "id": "removed" }
+    ]
+  }
+}
