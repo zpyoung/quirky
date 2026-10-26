@@ -325,5 +325,46 @@
 - **Revisit if:** a person fixes the test; then all 14 must pass
 - **Source:** assumed — autonomous
 
+## D32: Build with Claude subagents implementing and Codex reviewing
+- **Question:** subagent-driven-development preflight `backend_pairing`
+- **Options:** claude-task + codex (recommended); claude-task + gemini; same-family pairs
+- **Chose:** claude-task + codex. `pi-watch --check codex` and `--check gemini` both passed in a scratch directory. AUTHOR_FAMILY is anthropic.
+- **Why:** LOOP.md step 5 names this pairing, and Codex was reachable
+- **Evidence:** docs/loop/LOOP.md step 5
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** locked by docs/loop/LOOP.md
+
+## D33: The build starts on a clean `build/m0-daemon-api` with the specs committed
+- **Question:** preflight `dirty_tree_action`, the start-on-main check and `FULL_SUITE_CMD`
+- **Options:** stash; commit; abort. Test command: the three LOOP.md commands
+- **Chose:** no action needed: the tree was clean after the spec commit (3ce0c32), not on main. FULL_SUITE_CMD is `bun run test && bun run typecheck && bun test scripts`, with the one known scripts failure from D31.
+- **Why:** git status was empty; LOOP.md step 6 names the three commands
+- **Evidence:** `git status --porcelain` empty; baseline 535 pass, typecheck clean
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** locked by docs/loop/LOOP.md
+
+## D34: Build in four waves, modules before wiring before API scenarios
+- **Question:** the inline decomposition (subagent-driven-development Step 3)
+- **Options:** vertical slices each owning module, wiring and tests (they would all share the wiring files `daemon.ts`, `server.ts`, `service.ts` and serialize into one chain); layered waves
+- **Chose:** wave 1: protocol types (T1), launch patching and the job-run table (T2). Wave 2: host extension (T3), kind validation and the `quirky job` CLI (T4), events and the dispatcher (T5), stores (T6), scheduler (T7), launch hooks (T8), each with unit tests. Wave 3: the wiring (T9). Wave 4: the API scenario tests SC-1 to SC-28, four tasks that each own one area's module and test files so they can fix what the scenarios expose.
+- **Why:** every slice touches the same wiring files, so true vertical slices would serialize; layering keeps wave 2 six-wide with disjoint files
+- **Evidence:** docs/quirk/specs/2026-10-26-m0-daemon-api/tech.md "Architecture"
+- **Reversibility:** easy
+- **Confidence:** medium
+- **Revisit if:** wave 4 finds wiring defects that need a re-plan
+- **Source:** assumed — autonomous
+
+## D35: Resume wave 2 by finishing the interrupted drafts rather than discarding them
+- **Question:** iteration 2 stopped with wave 2 dispatched; T3, T4, T6 and T8 left uncommitted drafts in their worktrees and T5, T7 left nothing (subagent-driven-development Step 5, resume)
+- **Options:** reset the worktrees and redispatch from scratch; keep the drafts and redispatch each task with the draft as its starting point; accept the drafts that pass acceptance as is
+- **Chose:** keep the drafts and redispatch every wave 2 task, telling the implementer the draft is unverified and must be checked against each numbered item. Each component is a single task, so the wave-end audit against WAVE_BASE covers the draft and the new work together.
+- **Why:** all drafts sit inside their task's scope and T3, T4, T6 already pass acceptance, so a reset throws away work; accepting them untouched would skip checking items the killed worker may not have reached
+- **Evidence:** audit of each worktree against its scope file; acceptance runs on T3 (166 pass), T4 (129 pass), T6 (29 pass)
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** assumed — autonomous
+
 ## Progress
-Brainstorming done and the logic spec drafted. Next: adversarial review of the logic spec with Codex, then the tech spec and its review, then commit both and run quirk:subagent-driven-development.
+Specs committed (3ce0c32). Wave 1 (T1, T2) merged at 1b98ac8. Wave 2 (T3 to T8) redispatched this iteration. Run journal, task prompts and worktrees live under the iteration-2 session scratchpad `/private/tmp/claude-502/-Users-zpyoung-orca-workspaces-quirky-build-roadmap/4046a813-d881-42f9-afa2-3f0d85441e3d/scratchpad/` (sdd/journal.md, sdd/tasks/, wt/T*). If that is gone, re-derive tasks from D34 and tech.md and continue from the first wave not merged into `build/m0-daemon-api`.
