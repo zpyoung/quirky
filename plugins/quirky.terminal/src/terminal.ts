@@ -50,13 +50,16 @@ export class TerminalService {
   private readonly attaching = new Map<string, number>()
   private readonly attachQueue = new Map<string, Promise<unknown>>()
   private readonly forgotten = new Set<string>()
+  private closed = false
 
   constructor(private readonly context: PluginContext) {}
 
   attach = async (params: Record<string, unknown>, caller: PluginCaller) => {
+    this.refuseWhenClosed()
     const session = await this.requireTerminal(params.session as string)
     const connection = caller.role === 'plugin' ? undefined : caller.connection
     if (!connection) throw this.context.error('invalid-params', 'quirky.terminal/attach needs a client connection')
+    this.refuseWhenClosed()
     const stream = connection.openStream()
     const attachment: Attachment = { connectionId: connection.id, stream, sessionId: session.id }
     let open = true
@@ -168,11 +171,16 @@ export class TerminalService {
     }
   }
 
-  /** Ends every stream and drops the host subscriptions. */
+  /** Ends every stream and drops the host subscriptions; attaches still in flight are closed when they finish, and new ones are refused. */
   shutdown(): void {
+    this.closed = true
     for (const attachments of [...this.bySession.values()]) {
       for (const attachment of [...attachments]) attachment.stream.close()
     }
+  }
+
+  private refuseWhenClosed(): void {
+    if (this.closed) throw this.context.error('conflict', 'quirky.terminal is shut down')
   }
 
   private sendAll(attachments: Iterable<Attachment>, bytes: Uint8Array): void {
@@ -211,6 +219,7 @@ export class TerminalService {
     const { sessionId, stream } = attachment
     this.attaching.set(sessionId, (this.attaching.get(sessionId) ?? 0) + 1)
     try {
+      this.refuseWhenClosed()
       await this.context.pty.resize(sessionId, cols, rows).catch(() => {})
       const start = this.received.get(sessionId)
       const tap: Tap = { chunks: [], total: 0 }
@@ -220,6 +229,10 @@ export class TerminalService {
         result = await this.context.pty.subscribe(sessionId)
       } finally {
         this.taps.delete(sessionId)
+      }
+      if (this.closed) {
+        stream.close()
+        this.refuseWhenClosed()
       }
       // output after the response is everything the tap holds when this is the first subscription,
       // else what the running offset has gained beyond the replay's end
