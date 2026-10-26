@@ -177,7 +177,7 @@ function writeCodexTrust(folder: string, home: string): void {
   // codex checks the start folder's own entry before its repo root, so the folder itself is enough
   const path = join(home, '.codex', 'config.toml')
   const existing = readText(path) ?? ''
-  const next = upsertProjectTrust(existing, canonicalize(folder))
+  const next = upsertProjectTrust(existing, canonicalize(folder), path)
   if (next !== existing) writeFileAtomic(path, next)
 }
 
@@ -369,10 +369,36 @@ function multilineValueEnd(content: string, open: number): number | null {
 }
 
 /**
- * Sets `trust_level = "trusted"` in the `[projects."<path>"]` table of a Codex config, creating
- * the table when absent. Every other byte of the file, including line endings, is kept.
+ * Throws when `projects` is defined by anything other than `[projects."<path>"]` headers (an
+ * inline table, a dotted key, an array of tables, or keys inside a bare `[projects]`), because
+ * appending a header after those forms would make the file invalid TOML.
  */
-function upsertProjectTrust(existing: string, projectPath: string): string {
+function assertProjectsAppendable(content: string, configPath: string): void {
+  let table: string[] | null = []
+  for (const line of tomlLines(content)) {
+    if (!line.structural) continue
+    const trimmed = line.text.trim()
+    if (trimmed === '' || trimmed.startsWith('#')) continue
+    if (trimmed.startsWith('[')) {
+      const array = trimmed.startsWith('[[')
+      table = array ? parseKeyPath(trimmed, 2)?.segments ?? null : tableHeaderSegments(line.text)
+      if (array && table?.[0] === 'projects') throw new Error(`${configPath}: projects is an array of tables`)
+      continue
+    }
+    const key = parseKeyPath(line.text, 0)
+    if (!key || line.text[key.end] !== '=') continue
+    const inRoot = table?.length === 0 && key.segments[0] === 'projects'
+    const inBareProjects = table?.length === 1 && table[0] === 'projects'
+    if (inRoot || inBareProjects) throw new Error(`${configPath}: projects is not a set of [projects."<path>"] tables`)
+  }
+}
+
+/**
+ * Sets `trust_level = "trusted"` in the `[projects."<path>"]` table of a Codex config, creating
+ * the table when absent. Every other byte of the file, including line endings, is kept. Throws
+ * instead of producing invalid TOML when `projects` is written in a form that can't be extended.
+ */
+function upsertProjectTrust(existing: string, projectPath: string, configPath: string): string {
   const content = existing.charCodeAt(0) === 0xfeff ? existing.slice(1) : existing
   const eol = content.includes('\r\n') ? '\r\n' : '\n'
   const trustLine = 'trust_level = "trusted"'
@@ -392,6 +418,7 @@ function upsertProjectTrust(existing: string, projectPath: string): string {
     }
   }
   if (headerEnd === null) {
+    assertProjectsAppendable(content, configPath)
     const block = [`[projects."${escapeBasicString(projectPath)}"]`, trustLine].join(eol)
     if (content.length === 0) return `${block}${eol}`
     const separator = content.endsWith(`${eol}${eol}`) ? '' : content.endsWith(eol) ? eol : eol + eol
