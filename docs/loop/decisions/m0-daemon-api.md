@@ -366,5 +366,36 @@
 - **Confidence:** high
 - **Source:** assumed — autonomous
 
+## D36: A flaky scheduler test was a test race, fixed in the test
+- **Question:** T7's acceptance run failed 2 of 5 times on "sync > does not record the outcome of a run whose job was disarmed" (subagent-driven-development Step 6, task acceptance failure)
+- **Options:** accept as a flake; retry with a fresh worker told to find the root cause; change the scheduler
+- **Chose:** retried once with a fresh worker. It found the scheduler correct: after re-enabling, the job is due at once, so a second legitimate run sometimes overwrote the row before the test read it. The test now asserts the sequence of store writes and marker order instead of reading the row, and failed 3 of 3 with the guard it checks removed.
+- **Why:** the skill routes a failed acceptance to one retry; a timing-dependent assertion would keep failing the gate
+- **Evidence:** packages/daemon/test/plugins/scheduler-unit.test.ts; 8 of 8 orchestrator reruns passed after the fix
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** assumed — autonomous
+
+## D37: Wave 2's own fixtures broke under its kind validation, and a scoped fixer made them valid
+- **Question:** after merging wave 2, 10 tests in host-extension.test.ts and scheduler-unit.test.ts failed because T4's new kind validation rejected their fixture manifests (a job with no interval, timeouts under 1s, an unparseable interval) (Step 7, red gate)
+- **Options:** loosen validation for tests; let the scheduler accept sub-second timeouts; fix the fixtures
+- **Chose:** a wave-gate fixer owning only the two test files made every fixture manifest valid, used `1s` timeouts, and moved the "interval does not parse" test onto a stub host, since a manifest can no longer carry such a job
+- **Why:** the validation is the contract (logic SC-28), and the defensive check in the scheduler still needs coverage
+- **Evidence:** commit bdc67a9; `bun run test` 716 pass after it
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** assumed — autonomous
+
+## D38: Wave 2 checkpoint review: fix three defects, reject calling deactivate after a failed activate
+- **Question:** adjudicating the wave 2 checkpoint review (three Codex lenses, depth standard, 10 findings that collapse to four defects) (Step 9)
+- **Options:** for each defect, accept and fix or reject
+- **Chose:** accepted, effective MEDIUM each: a throwing `extension.create` never got its `revoke` (C3, S2, X3); a custom kind named after an Object.prototype member such as `constructor` crashed manifest parsing and so discovery (C2, S3, X1); `job.list` reported a re-enabled job idle while its earlier run was still unsettled (S4). Rejected C1, S1, X2 (call the module's `deactivate` before `revoke` when `activate` fails).
+- **Why:** the rejected change would alter when the host calls `deactivate`, which m0-registry's activation rules own (fence in the tech spec); the registry never calls `deactivate` for a failed `activate`. `revoke` already closes everything the context handed out (store, listeners, job signals), so nothing the plugin got from Quirky leaks. The tech spec's "after the module's deactivate settles" applies when a deactivate runs.
+- **Evidence:** scratchpad cp-w2/{C,S,X}/gate.json; docs/quirk/specs/2026-10-26-m0-daemon-api/tech.md "Host changes" and "DO-NOT-CHANGE fences"; docs/loop/decisions/m0-registry.md D34
+- **Reversibility:** easy
+- **Confidence:** medium
+- **Revisit if:** a plugin needs cleanup for resources it allocated itself before a failed activate; that is a registry change
+- **Source:** assumed — autonomous
+
 ## Progress
-Specs committed (3ce0c32). Wave 1 (T1, T2) merged at 1b98ac8. Wave 2 (T3 to T8) redispatched this iteration. Run journal, task prompts and worktrees live under the iteration-2 session scratchpad `/private/tmp/claude-502/-Users-zpyoung-orca-workspaces-quirky-build-roadmap/4046a813-d881-42f9-afa2-3f0d85441e3d/scratchpad/` (sdd/journal.md, sdd/tasks/, wt/T*). If that is gone, re-derive tasks from D34 and tech.md and continue from the first wave not merged into `build/m0-daemon-api`.
+Wave 1 (T1, T2) and wave 2 (T3 to T8) merged, wave 2 checkpoint review fixed (870e312), `bun run test` 724 pass. Next: wave 3 (T9, wiring), then wave 4 (T10 to T13, the SC-1 to SC-28 scenario tests), then the final review loop. Run journal, task files and prompts: iteration-2 scratchpad `/private/tmp/claude-502/-Users-zpyoung-orca-workspaces-quirky-build-roadmap/4046a813-d881-42f9-afa2-3f0d85441e3d/scratchpad/sdd/` (journal.md, tasks/T9.*) and iteration-3 scratchpad `/private/tmp/claude-502/-Users-zpyoung-orca-workspaces-quirky-build-roadmap/20ad4b75-27c9-48ea-8053-2da47b7b6d4e/scratchpad/` (w4/T10 to T13 task files, round.py review driver). If those are gone, re-derive tasks from D34 and tech.md.
