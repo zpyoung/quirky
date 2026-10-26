@@ -6,16 +6,22 @@ files, not this one.
 
 | Reversibility | Confidence | Entry | Decision | Source |
 | --- | --- | --- | --- | --- |
+| hard | medium | [m0-scripting D10](decisions/m0-scripting.md) | A plugin's methods become `quirky <group> <method>`, where the group is the plugin ID without the `quirky.` prefix | assumed — autonomous |
+| hard | medium | [m0-scripting D12](decisions/m0-scripting.md) | Each param is a kebab-case flag, objects take JSON, and `--params` passes the whole object | assumed — autonomous |
 | hard | medium | [m0-daemon-api D4](decisions/m0-daemon-api.md) | Plugin method wire names are `<pluginId>/<name>` | assumed — autonomous |
 | hard | medium | [m0-daemon-api D9](decisions/m0-daemon-api.md) | Each plugin gets one SQLite file and a data directory of its own | assumed — autonomous |
 | hard | medium | [m0-ui-api D6](decisions/m0-ui-api.md) | A slot gives the plugin one container element to mount into, and nothing else of the page | assumed — autonomous |
 | hard | medium | [m0-registry D4](decisions/m0-registry.md) | Contribution IDs are `<kind>:<pluginId>/<name>` | assumed — autonomous |
+| hard | high | [m0-scripting D4](decisions/m0-scripting.md) | Schemas are a flat subset of JSON Schema | assumed — autonomous |
+| hard | high | [m0-scripting D24](decisions/m0-scripting.md) | Choose schemas declared in the manifest, a daemon catalog, and a CLI that builds plugin commands from it at run time | assumed — autonomous |
 | hard | high | [m0-daemon-api D7](decisions/m0-daemon-api.md) | The four kinds are `method`, `event`, `job` and `launch-hook` | assumed — autonomous |
 | hard | high | [m0-daemon-api D13](decisions/m0-daemon-api.md) | Choose declared contributions with provided implementations | supersedes nothing; extends m0-registry D23 |
 | hard | high | [m0-ui-api D4](decisions/m0-ui-api.md) | The seven UI kinds are `view`, `panel`, `sidebar-section`, `command`, `keybinding`, `setting` and `theme` | assumed — autonomous |
 | hard | high | [m0-ui-api D29](decisions/m0-ui-api.md) | Choose declared slots with lazily imported modules that mount into host elements | assumed — autonomous |
 | hard | high | [m0-registry D12](decisions/m0-registry.md) | Every contribution is declared in the manifest, and code can only provide declared ones | assumed — autonomous |
 | hard | high | [m0-registry D23](decisions/m0-registry.md) | Choose declarative contributions with lazily loaded code | assumed — autonomous |
+| medium | medium | [m0-scripting D6](decisions/m0-scripting.md) | The daemon validates every call's params against the method's schema, and leaves results and event data unchecked | assumed — autonomous |
+| medium | medium | [m0-scripting D29](decisions/m0-scripting.md) | Tech-spec mechanisms: one shared validator in protocol, validation in the dispatcher, declarative command specs, a JSON-mode pre-scan | assumed — autonomous |
 | medium | medium | [m0-daemon-api D6](decisions/m0-daemon-api.md) | Plugin events arrive as `{ type: "<pluginId>/<name>", data }` | assumed — autonomous |
 | medium | medium | [m0-daemon-api D15](decisions/m0-daemon-api.md) | Jobs run on a fixed delay, at least one second apart, never overlapping | assumed — autonomous |
 | medium | medium | [m0-daemon-api D19](decisions/m0-daemon-api.md) | Launch hooks are a sequential pipeline in contribution-ID order | assumed — autonomous |
@@ -29,6 +35,11 @@ files, not this one.
 | medium | medium | [m0-registry D8](decisions/m0-registry.md) | Override precedence is installed over built-in, then dependent over dependency, then a reported conflict | assumed — autonomous |
 | medium | medium | [m0-registry D10](decisions/m0-registry.md) | Enable and disable apply live, without a restart | assumed — autonomous |
 | medium | medium | [m0-registry D16](decisions/m0-registry.md) | The manifest is `quirky-plugin.json` in the plugin's directory | assumed — autonomous |
+| medium | high | [m0-scripting D5](decisions/m0-scripting.md) | Methods declare `params` and `result`, events declare `data`, UI commands declare `args` | assumed — autonomous |
+| medium | high | [m0-scripting D7](decisions/m0-scripting.md) | Kernel methods and events get schemas too, in one table checked against the protocol types | assumed — autonomous |
+| medium | high | [m0-scripting D9](decisions/m0-scripting.md) | One command table drives parsing, validation, help, suggestions and the catalog | locked by research/orca-features/cli.md |
+| medium | high | [m0-scripting D15](decisions/m0-scripting.md) | Under `--json`, errors are a JSON document on stdout, and the exit codes stay 0, 1 and 2 | assumed — autonomous |
+| medium | high | [m0-scripting D17](decisions/m0-scripting.md) | `quirky api --json` returns one versioned catalog of methods, events, UI commands and CLI commands | assumed — autonomous |
 | medium | high | [m0-daemon-api D8](decisions/m0-daemon-api.md) | Method results and errors | assumed — autonomous |
 | medium | high | [m0-daemon-api D10](decisions/m0-daemon-api.md) | Stores migrate forward only, by an ordered list, and refuse a downgrade | assumed — autonomous |
 | medium | high | [m0-daemon-api D24](decisions/m0-daemon-api.md) | Plugin methods use the daemon's token, and any client may call any method | locked by docs/roadmap.md |
@@ -41,6 +52,12 @@ files, not this one.
 | medium | high | [m0-registry D6](decisions/m0-registry.md) | A plugin's own contributions use short names, overrides use full IDs | assumed — autonomous |
 | medium | high | [m0-registry D9](decisions/m0-registry.md) | Disable works by plugin ID or contribution ID, before any code loads, and persists | locked by docs/roadmap.md (disable by ID); assumed — autonomous (cascade and persistence) |
 | medium | high | [m0-registry D11](decisions/m0-registry.md) | Plugins activate lazily on first use by default, or at startup when the manifest says so | locked by docs/roadmap.md (lazy); assumed — autonomous (trigger set) |
+| easy | medium | [m0-scripting D14](decisions/m0-scripting.md) | Generated commands print a generic text form, and `--json` prints the raw result | assumed — autonomous |
+| easy | medium | [m0-scripting D19](decisions/m0-scripting.md) | The agent skill is generated from the live catalog and shown or installed through `quirky skill` | assumed — autonomous |
+| easy | medium | [m0-scripting D27](decisions/m0-scripting.md) | No closure review round on the logic spec | assumed — autonomous |
+| easy | medium | [m0-scripting D32](decisions/m0-scripting.md) | Build in four waves after a type scaffold: protocol and CLI specs, then validation and generated commands, then discovery and the skill, then scenario tests | assumed — autonomous |
+| easy | medium | [m0-scripting D33](decisions/m0-scripting.md) | Skip wave 1's checkpoint review | assumed — autonomous |
+| easy | medium | [m0-scripting D35](decisions/m0-scripting.md) | Implementers' judgment calls kept: group suggestions only as a fallback, `skill show --json` wraps the text, `quirky help <words>` acts like `--help` | assumed — autonomous |
 | easy | medium | [m0-daemon-api D22](decisions/m0-daemon-api.md) | A launch hook that fails or times out is skipped | assumed — autonomous |
 | easy | medium | [m0-daemon-api D23](decisions/m0-daemon-api.md) | Launch hooks apply to terminal sessions only | assumed — autonomous |
 | easy | medium | [m0-daemon-api D25](decisions/m0-daemon-api.md) | No rate limits on plugin events or method calls, and no event filters yet | assumed — autonomous |
@@ -62,6 +79,29 @@ files, not this one.
 | easy | medium | [m0-registry D24](decisions/m0-registry.md) | Built-in plugins live in a top-level `plugins/` directory, and packaging them waits for m0-port-v1 | assumed — autonomous |
 | easy | medium | [m0-registry D25](decisions/m0-registry.md) | Activation failures surface as Conflict errors, unknown IDs as NotFound | assumed — autonomous |
 | easy | medium | [m0-registry D30](decisions/m0-registry.md) | No closure review round on the specs | assumed — autonomous |
+| easy | high | [m0-scripting D1](decisions/m0-scripting.md) | Classify the item as a CLI and API design, and run both research phases | assumed — autonomous |
+| easy | high | [m0-scripting D2](decisions/m0-scripting.md) | Skip the visual companion and the adhd offer, use the standard gray-area set | locked by docs/loop/LOOP.md |
+| easy | high | [m0-scripting D3](decisions/m0-scripting.md) | Select every gray area that matters for the scripting surface | assumed — autonomous |
+| easy | high | [m0-scripting D8](decisions/m0-scripting.md) | UI commands' `args` are declared and listed here; running them from the CLI waits for m0-ui-bridge | locked by docs/loop/queue.json |
+| easy | high | [m0-scripting D11](decisions/m0-scripting.md) | When two sources give the same command words, kernel beats built-in beats installed, and the loser is reported | assumed — autonomous |
+| easy | high | [m0-scripting D13](decisions/m0-scripting.md) | The CLI parses flag values strictly and checks the schema before calling | assumed — autonomous |
+| easy | high | [m0-scripting D16](decisions/m0-scripting.md) | Unknown commands and flags get suggestions, drawn from generated commands too | locked by research/orca-features/cli.md |
+| easy | high | [m0-scripting D18](decisions/m0-scripting.md) | `quirky api call <method>` calls any method, with the same flag mapping | assumed — autonomous |
+| easy | high | [m0-scripting D20](decisions/m0-scripting.md) | The CLI reads the catalog from the daemon on each invocation that needs it, with no cache | assumed — autonomous |
+| easy | high | [m0-scripting D21](decisions/m0-scripting.md) | The scripting surface is kernel, not a built-in plugin | locked by docs/roadmap.md |
+| easy | high | [m0-scripting D22](decisions/m0-scripting.md) | The only Orca CLI defect belongs to m0-cli-core; this item tests the stale-surface hazard instead | locked by docs/loop/queue.json |
+| easy | high | [m0-scripting D23](decisions/m0-scripting.md) | cli.md's other flows are out of scope here | locked by docs/loop/queue.json |
+| easy | high | [m0-scripting D25](decisions/m0-scripting.md) | Fast-track the remaining defaults | locked by docs/loop/LOOP.md |
+| easy | high | [m0-scripting D26](decisions/m0-scripting.md) | Logic-spec review: fix six model findings, reject the pre-pass findings | assumed — autonomous |
+| easy | high | [m0-scripting D28](decisions/m0-scripting.md) | Root help and kernel help stay offline and point to `quirky api` for plugin commands | assumed — autonomous |
+| easy | high | [m0-scripting D30](decisions/m0-scripting.md) | Tech-spec review: fix seven model findings, reject the pre-pass findings | assumed — autonomous |
+| easy | high | [m0-scripting D31](decisions/m0-scripting.md) | Build with Claude subagents implementing and Codex reviewing | locked by docs/loop/LOOP.md |
+| easy | high | [m0-scripting D34](decisions/m0-scripting.md) | Wave 2 checkpoint: accept all six findings, which collapse to four defects | assumed — autonomous |
+| easy | high | [m0-scripting D36](decisions/m0-scripting.md) | Wave 3 checkpoint: fix both findings | assumed — autonomous |
+| easy | high | [m0-scripting D37](decisions/m0-scripting.md) | The root help footer keeps the spec's wording | assumed — autonomous |
+| easy | high | [m0-scripting D38](decisions/m0-scripting.md) | Final round 1: fix three findings, two of which share a cause | assumed — autonomous |
+| easy | high | [m0-scripting D39](decisions/m0-scripting.md) | The final review loop ends after the closure round passes on all three lenses | locked by docs/loop/LOOP.md |
+| easy | high | [m0-scripting D40](decisions/m0-scripting.md) | Every scenario has a named test through the CLI or the daemon API, and the item's one CLI defect belongs to m0-cli-core | locked by docs/loop/LOOP.md |
 | easy | high | [m0-daemon-api D1](decisions/m0-daemon-api.md) | Classify the item as an API design, and run both research phases | assumed — autonomous |
 | easy | high | [m0-daemon-api D2](decisions/m0-daemon-api.md) | Skip the visual companion and the adhd offer, use the standard gray-area set | locked by docs/loop/LOOP.md |
 | easy | high | [m0-daemon-api D3](decisions/m0-daemon-api.md) | Select every gray area that matters for the daemon plugin API | assumed — autonomous |

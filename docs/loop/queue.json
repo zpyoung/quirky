@@ -38,7 +38,7 @@
       "deps": [
         "m0-daemon-api"
       ],
-      "status": "in-progress"
+      "status": "done"
     },
     {
       "id": "m0-cli-core",
