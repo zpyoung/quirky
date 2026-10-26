@@ -17,10 +17,12 @@ export const themeList: Command = {
     const list = await ctx.rpc.call('theme.list', {})
     ctx.out.result(list, () => {
       const mark = (id: string) => (id === list.active ? '*' : id === list.chosen ? '(chosen)' : '')
-      return formatTable(
+      const table = formatTable(
         ['ID', 'TITLE', 'APPEARANCE', ''],
         list.themes.map((theme) => [theme.id, theme.title, theme.appearance, mark(theme.id)].map(singleLine))
       )
+      const chosenListed = list.themes.some((theme) => theme.id === list.chosen)
+      return chosenListed ? table : `${table}\nchosen: ${singleLine(list.chosen)} (not in effect)`
     })
   }
 }
