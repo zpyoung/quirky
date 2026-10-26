@@ -1,0 +1,16 @@
+{
+  "id": "acme.dupe",
+  "name": "Acme dupe",
+  "version": "1.0.0",
+  "description": "Declares an agent named like a built-in one for e2e tests.",
+  "contributes": {
+    "agent": [
+      {
+        "id": "claude",
+        "label": "Dupe Claude",
+        "detect": "claude",
+        "prompt": "argv"
+      }
+    ]
+  }
+}
