@@ -220,6 +220,44 @@ describe('rebuildScreen', () => {
     expect((await rebuilt(live.dir)).result.cwd).toBe('/fallback')
   })
 
+  test('cwd keeps the newest existing directory past hundreds of later missing ones', async () => {
+    const base = freshDir()
+    const kept = join(base, 'kept')
+    mkdirSync(kept)
+    const osc7 = (p: string) => `${ESC}]7;file://localhost${p}${BEL}`
+    const live = new Live(freshDir())
+    live.feed(osc7(kept))
+    for (let i = 0; i < 300; i++) live.feed(osc7(join(base, `missing-${i}`)))
+    await live.screen.settled()
+
+    expect((await rebuilt(live.dir)).result.cwd).toBe(kept)
+  })
+
+  test('a resize applies only after earlier output has been parsed', async () => {
+    const live = new Live(freshDir(), 5, 4)
+    live.feed('abcdefghij\r\n\x1b[2;1HZ')
+    await live.screen.settled()
+    live.resize(10, 4)
+    await live.screen.settled()
+
+    const { screen } = await rebuilt(live.dir, 5, 4)
+    expect(text(screen)).toEqual(text(live.screen))
+    expect(screen.lines().map((l) => l.wrapped)).toEqual(live.screen.lines().map((l) => l.wrapped))
+    expect(screen.snapshot().cursor).toEqual(live.screen.snapshot().cursor)
+  })
+
+  test('a cursor-addressed write keeps its column across a later widening', async () => {
+    const live = new Live(freshDir(), 40, 24)
+    live.feed('\x1b[60GX\r\n')
+    await live.screen.settled()
+    live.resize(80, 24)
+    await live.screen.settled()
+
+    const { screen } = await rebuilt(live.dir, 80, 24)
+    expect(text(screen)[0]).toBe(text(live.screen)[0])
+    expect(screen.snapshot().cursor).toEqual(live.screen.snapshot().cursor)
+  })
+
   test('cwd falls back to the checkpoint when replayed directories are gone', async () => {
     const base = freshDir()
     const kept = join(base, 'kept')
