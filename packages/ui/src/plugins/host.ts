@@ -554,6 +554,9 @@ export class WindowPluginHost {
         return fn(...args)
       }
     }
+    const notImplemented = (member: string) => () => {
+      throw new Error(`not implemented: ${member}`)
+    }
     return {
       pluginId,
       log: (message) => this.deps.log(`${pluginId}: ${message}`),
@@ -579,7 +582,14 @@ export class WindowPluginHost {
       }),
       openView: live((id: string, input?: unknown) => this.openView(id, input)),
       closeView: live(() => this.closeView()),
-      togglePanel: live((id: string, open?: boolean) => this.togglePanel(id, open))
+      togglePanel: live((id: string, open?: boolean) => this.togglePanel(id, open)),
+      getLayout: notImplemented('getLayout'),
+      onLayout: notImplemented('onLayout'),
+      onStream: notImplemented('onStream'),
+      onConnection: notImplemented('onConnection'),
+      confirm: notImplemented('confirm'),
+      toast: notImplemented('toast'),
+      setPanelBadge: notImplemented('setPanelBadge')
     }
   }
 

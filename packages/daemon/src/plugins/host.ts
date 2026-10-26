@@ -15,6 +15,11 @@ import type { Store } from '../store'
 import { discoverPlugins, type DiscoveredPlugin } from './discover'
 import { computeRegistry, type Registry, type RegistryPlugin } from './registry'
 
+type ExtensionMembers = Pick<
+  PluginContext,
+  'dataDir' | 'emit' | 'subscribe' | 'call' | 'openStore' | 'getSetting' | 'error' | 'home' | 'pty' | 'notify' | 'launch'
+>
+
 /** The daemon-side half of a plugin's context, created and torn down per activation attempt. */
 export type ContextExtension = {
   /**
@@ -24,7 +29,7 @@ export type ContextExtension = {
   create(
     plugin: { id: string; dir: string },
     isRevoked: () => boolean
-  ): Pick<PluginContext, 'dataDir' | 'emit' | 'subscribe' | 'call' | 'openStore' | 'getSetting' | 'error'>
+  ): ExtensionMembers
   /** Runs once per attempt that called `create`, after the module's `deactivate` settles. */
   revoke(pluginId: string): void
 }
@@ -39,6 +44,10 @@ export type PluginHostOptions = {
   log(message: string): void
   /** Bounds each activation and each deactivate; defaults to 10 seconds. */
   activationTimeoutMs?: number
+  /** True in safe mode: only built-ins load and nothing stored disables or layers anything. */
+  safeMode?: boolean
+  /** IDs the installed distro turns off. */
+  distroDisabled?: () => string[]
   /** Supplies the context members the host cannot; without it they throw or return defaults. */
   extension?: ContextExtension
   /**
@@ -121,6 +130,12 @@ export class PluginHost {
   /** Activates every enabled `startup` plugin. Failures are recorded on the plugin and logged, never thrown. */
   async activateStartup(): Promise<void> {
     await Promise.allSettled(this.startupCandidates().map((id) => this.activateQuietly(id)))
+  }
+
+  /** Re-runs discovery and recomputes the registry, then broadcasts `plugin.changed`. */
+  async rescan(): Promise<void> {
+    this.load()
+    this.options.emit({ type: 'plugin.changed' })
   }
 
   /** Every discovered entry sorted by ID, built-in first; a duplicate ID appears once per source. */
@@ -381,8 +396,21 @@ export class PluginHost {
     // marked live before create runs: a create that throws after partial setup still needs its revoke
     if (this.options.extension) attempt.extensionLive = true
     const created = this.options.extension?.create({ id, dir: discovered.dir }, () => attempt.revoked)
-    const defaults: Pick<PluginContext, 'dataDir' | 'emit' | 'subscribe' | 'call' | 'openStore' | 'getSetting' | 'error'> = {
+    const unavailable = (member: string) => () => {
+      throw new Error(`${id}: context.${member} is not available`)
+    }
+    const unavailableObject = <T extends object>(member: string): T =>
+      new Proxy({} as T, {
+        get() {
+          throw new Error(`${id}: context.${member} is not available`)
+        }
+      })
+    const defaults: ExtensionMembers = {
       dataDir: '',
+      home: '',
+      pty: unavailableObject<PluginContext['pty']>('pty'),
+      launch: unavailableObject<PluginContext['launch']>('launch'),
+      notify: unavailable('notify'),
       emit: () => {
         throw new Error(`${id}: context.emit is not available`)
       },

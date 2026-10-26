@@ -1,6 +1,7 @@
 import {
   checkSettingValue,
   parseContributionId,
+  type DistroManifest,
   type QuirkyEvent,
   type SettingInfo,
   type ThemeList,
@@ -16,6 +17,10 @@ export type UiServiceOptions = {
   plugins: PluginHost
   store: Store
   broadcast: (event: QuirkyEvent) => void
+  /** The distro layer in effect, or null. */
+  distro?: () => DistroManifest | null
+  /** True in safe mode: the distro layer is skipped. */
+  safeMode?: boolean
 }
 
 const DEFAULT_THEME_ID = 'default'

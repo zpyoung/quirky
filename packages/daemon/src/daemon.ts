@@ -11,6 +11,7 @@ import {
   type RuntimeInfo
 } from '@quirky/protocol/node'
 import pkg from '../package.json'
+import { internal } from './errors'
 import * as realGit from './git'
 import type { GitApi } from './git-api'
 import { defaultCliEntry, installIntegrationFiles } from './launch'
@@ -20,6 +21,7 @@ import { createPluginRuntime, type PluginRuntime } from './plugins/runtime'
 import { buildUiModel } from './plugins/ui-model'
 import { PtyClient } from './pty-client'
 import { startServer } from './server'
+import { startSocketServer } from './socket-server'
 import { Core } from './service'
 import { Store } from './store'
 import { createClaudeRunner } from './structured/claude-runner'
@@ -50,6 +52,12 @@ export type DaemonOptions = {
   resolveClaudePath?: () => Promise<string>
   ptyConnectTimeoutMs?: number
   log?: (message: string) => void
+  /** Run only plugins that ship with Quirky and ignore stored disables and the distro layer. */
+  safeMode?: boolean
+  /** Unix socket the CLI connects to; defaults to `<home>/quirkyd.sock`. */
+  socketPath?: string
+  /** Called when `daemon.stop` asks the daemon to stop; defaults to stopping this daemon handle. */
+  onStopRequested?: () => void
 }
 
 export type DaemonHandle = {
@@ -124,6 +132,7 @@ export async function startDaemon(options: DaemonOptions): Promise<DaemonHandle>
   const identity = readIdentity(home)
   const rpcToken = identity.token ?? randomBytes(24).toString('hex')
   const hookToken = identity.hookToken ?? randomBytes(24).toString('hex')
+  const socketPath = options.socketPath ?? join(home, 'quirkyd.sock')
 
   const store = new Store(join(home, 'quirky.db'))
   const pty = new PtyClient({
@@ -150,6 +159,9 @@ export async function startDaemon(options: DaemonOptions): Promise<DaemonHandle>
     startedAt,
     hookToken,
     hookUrl: () => `http://127.0.0.1:${port}/hook`,
+    safeMode: options.safeMode ?? false,
+    socketPath,
+    onRemoveClient: (conn) => lateRuntime?.layout.dropConnection(conn),
     onEvent: (event) => lateRuntime?.events.deliver(event),
     prepareLaunch: async (input) => (await lateRuntime?.prepareLaunch(input)) ?? { env: {}, args: [] }
   })
@@ -164,6 +176,8 @@ export async function startDaemon(options: DaemonOptions): Promise<DaemonHandle>
     },
     log,
     activationTimeoutMs: options.pluginActivationTimeoutMs,
+    safeMode: options.safeMode ?? false,
+    distroDisabled: () => lateRuntime?.distros.active()?.disable ?? [],
     deriveDiagnostics: (view) => buildUiModel({ ...view, chosenTheme: 'default' }).warnings,
     extension: {
       create: (plugin, isRevoked) => lateRuntime!.extension.create(plugin, isRevoked),
@@ -177,9 +191,13 @@ export async function startDaemon(options: DaemonOptions): Promise<DaemonHandle>
     store,
     log,
     launchHookTimeoutMs: options.launchHookTimeoutMs ?? 5000,
-    schedulerRecheckMs: options.schedulerRecheckMs ?? 60_000
+    schedulerRecheckMs: options.schedulerRecheckMs ?? 60_000,
+    shell,
+    safeMode: options.safeMode ?? false,
+    stopDaemon: () => (options.onStopRequested ?? (() => void handle?.stop()))()
   })
   lateRuntime = pluginRuntime
+  let handle: DaemonHandle | undefined
 
   installIntegrationFiles(home, cliEntry)
 
@@ -221,6 +239,16 @@ export async function startDaemon(options: DaemonOptions): Promise<DaemonHandle>
   port = server.port as number
   writePrivateJson(identityFilePath(home), { port, token: rpcToken, hookToken } satisfies DaemonIdentity)
 
+  const socketServer = startSocketServer({
+    path: socketPath,
+    rpcToken,
+    core,
+    handle: async () => {
+      throw internal('not implemented: socket rpc handler')
+    },
+    log
+  })
+
   const runtime: RuntimeInfo = {
     pid: process.pid,
     port,
@@ -228,12 +256,13 @@ export async function startDaemon(options: DaemonOptions): Promise<DaemonHandle>
     hookToken,
     daemonVersion,
     protocolVersion: PROTOCOL_VERSION,
-    startedAt
+    startedAt,
+    socket: socketServer.path
   }
   writePrivateJson(runtimeFilePath(home), runtime)
 
   let stopped = false
-  return {
+  handle = {
     port,
     runtime,
     plugins,
@@ -241,6 +270,7 @@ export async function startDaemon(options: DaemonOptions): Promise<DaemonHandle>
       if (stopped) return
       stopped = true
       if (readRuntime(home)?.pid === process.pid) rmSync(runtimeFilePath(home), { force: true })
+      await socketServer.stop()
       await server.stop(true)
       pluginRuntime.scheduler.stop()
       await plugins.stop()
@@ -248,4 +278,5 @@ export async function startDaemon(options: DaemonOptions): Promise<DaemonHandle>
       store.close()
     }
   }
+  return handle
 }

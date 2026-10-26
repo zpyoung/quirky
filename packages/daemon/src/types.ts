@@ -7,9 +7,17 @@ export type ClientConn = {
   name?: string
   subscribed: boolean
   closed: boolean
+  transport: 'websocket' | 'socket'
+  cwd?: string
+  sessionId?: string
+  worktreeId?: string
+  /** Epoch milliseconds of the last `ui.window.focused` with `focused: true`. */
+  focusedAt?: number
   /** terminal streamId -> sessionId */
   streams: Map<number, string>
   nextStreamId: number
   sendText(text: string): void
+  /** streamId -> closes that stream; run on disconnect. */
+  streamClosers: Map<number, () => void>
   sendBinary(bytes: Uint8Array): void
 }

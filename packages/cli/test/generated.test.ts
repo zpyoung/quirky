@@ -579,12 +579,13 @@ describe('generatedCommands', () => {
     ...overrides
   })
   const description = (...methods: ApiMethodEntry[]): ApiDescription => ({
-    schemaVersion: 1,
+    schemaVersion: 2,
     daemonVersion: 'x',
     protocolVersion: 1,
     methods,
     events: [],
-    uiCommands: []
+    uiCommands: [],
+    cli: { groups: [], commands: [] }
   })
 
   test('groupOf drops only a leading quirky.', () => {

@@ -22,6 +22,17 @@ export class RpcError extends Error {
   }
 }
 
+/** The connection dropped before a reply arrived; the call may or may not have run. */
+export class ConnectionLost extends Error {
+  constructor(message = 'quirkyd connection closed') {
+    super(message)
+    this.name = 'ConnectionLost'
+  }
+}
+
+/** Per-call options; `requestId` lets the daemon return the first outcome of a repeated call. */
+export type CallOptions = { requestId?: string }
+
 type Pending = { resolve: (value: unknown) => void; reject: (error: Error) => void }
 
 // frames can land before the caller registers a handler for a fresh stream id
@@ -48,7 +59,15 @@ export class QuirkyClient {
 
   static connect(
     url: string,
-    hello: { role: ClientRole; name?: string; subscribe?: boolean } = { role: 'ui' }
+    hello: {
+      role: ClientRole
+      name?: string
+      subscribe?: boolean
+      token?: string
+      cwd?: string
+      sessionId?: string
+      worktreeId?: string
+    } = { role: 'ui' }
   ): Promise<QuirkyClient> {
     return new Promise((resolve, reject) => {
       const socket = new WebSocket(url)
@@ -63,7 +82,11 @@ export class QuirkyClient {
             .call('client.hello', {
               role: hello.role,
               name: hello.name,
-              protocolVersion: PROTOCOL_VERSION
+              protocolVersion: PROTOCOL_VERSION,
+              ...(hello.token !== undefined ? { token: hello.token } : {}),
+              ...(hello.cwd !== undefined ? { cwd: hello.cwd } : {}),
+              ...(hello.sessionId !== undefined ? { sessionId: hello.sessionId } : {}),
+              ...(hello.worktreeId !== undefined ? { worktreeId: hello.worktreeId } : {})
             })
             .then(async () => {
               if (hello.subscribe) await client.call('events.subscribe', {})
@@ -83,21 +106,24 @@ export class QuirkyClient {
     return this.closed
   }
 
-  call<M extends MethodName>(method: M, params: ParamsOf<M>): Promise<ResultOf<M>> {
-    return this.send(method, params) as Promise<ResultOf<M>>
+  call<M extends MethodName>(method: M, params: ParamsOf<M>, options?: CallOptions): Promise<ResultOf<M>> {
+    return this.send(method, params, options) as Promise<ResultOf<M>>
   }
 
   /** Like `call`, but for any method name, including ones plugins provide; the result is untyped. */
-  callAny(method: string, params: Record<string, unknown>): Promise<unknown> {
-    return this.send(method, params)
+  callAny(method: string, params: Record<string, unknown>, options?: CallOptions): Promise<unknown> {
+    return this.send(method, params, options)
   }
 
-  private send(method: string, params: unknown): Promise<unknown> {
-    if (this.closed) return Promise.reject(new Error('quirkyd connection is closed'))
+  private send(method: string, params: unknown, options?: CallOptions): Promise<unknown> {
+    if (this.closed) return Promise.reject(new ConnectionLost('quirkyd connection is closed'))
     const id = this.nextId++
     return new Promise<unknown>((resolve, reject) => {
       this.pending.set(id, { resolve, reject })
-      this.socket.send(JSON.stringify({ jsonrpc: '2.0', id, method, params }))
+      const requestId = options?.requestId
+      this.socket.send(
+        JSON.stringify({ jsonrpc: '2.0', id, method, params, ...(requestId !== undefined ? { requestId } : {}) })
+      )
     })
   }
 
@@ -170,7 +196,7 @@ export class QuirkyClient {
   private handleClose(): void {
     if (this.closed) return
     this.closed = true
-    for (const { reject } of this.pending.values()) reject(new Error('quirkyd connection closed'))
+    for (const { reject } of this.pending.values()) reject(new ConnectionLost())
     this.pending.clear()
     for (const handler of this.closeHandlers) handler()
   }

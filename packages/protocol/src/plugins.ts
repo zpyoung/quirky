@@ -1,3 +1,4 @@
+import type { PtySessionInfo } from './pty'
 import type { ClientRole, QuirkyEvent } from './rpc'
 
 /** Where a plugin was found: shipped with Quirky, or installed by the user. */
@@ -21,6 +22,10 @@ export type PluginInfo = {
   ui?: string
   /** Registry diagnostics, then the last activation error if the plugin failed. */
   diagnostics: PluginDiagnostic[]
+  /** Extra CLI group words, after collision checks. */
+  cliAliases?: string[]
+  /** Why a `disabled` plugin is off. */
+  disabledReason?: 'user' | 'distro' | 'safe-mode' | 'dependency'
 }
 
 export type ContributionStatus = 'effective' | 'overridden' | 'disabled' | 'rejected'
@@ -34,7 +39,7 @@ export type ContributionInfo = {
   override: boolean
   status: ContributionStatus
   overriddenBy?: string
-  disabledBy?: 'user' | 'plugin' | 'owner'
+  disabledBy?: 'user' | 'plugin' | 'owner' | 'distro'
   disablingPlugin?: string
   conflictWith?: string
   data: Record<string, unknown>
@@ -62,13 +67,99 @@ export type PluginContext = {
   getSetting(name: string): unknown
   /** Builds an Error that the RPC layer reports with the code for `kind`. */
   error(kind: PluginErrorKind, message: string): Error
+  /** The Quirky home directory. */
+  readonly home: string
+  /** The PTY host connection; listeners registered through it are removed when the plugin is revoked. */
+  readonly pty: PluginPty
+  /** Broadcasts `notify` with `desktop` defaulting to true; with no desktop client connected, runs the kernel notifier. */
+  notify(notification: PluginNotification): void
+  /** The kernel's session launch environment and launch-hook pipeline. */
+  readonly launch: PluginLaunch
+}
+
+/** The PTY host operations a plugin may use. */
+export type PluginPty = {
+  readonly connected: boolean
+  spawn(
+    sessionId: string,
+    options: { argv: string[]; cwd: string; env: Record<string, string>; cols: number; rows: number }
+  ): Promise<{ pid: number }>
+  write(sessionId: string, data: string | Uint8Array): void
+  resize(sessionId: string, cols: number, rows: number): Promise<void>
+  read(sessionId: string, lines: number): Promise<{ lines: string[]; cols: number; rows: number; alt: boolean }>
+  kill(sessionId: string, signal?: string): Promise<void>
+  forget(sessionId: string): Promise<void>
+  list(): Promise<PtySessionInfo[]>
+  /** `replay` is base64 of recent output ending exactly at `offset`. */
+  subscribe(sessionId: string): Promise<{ replay: string; offset: number }>
+  unsubscribe(sessionId: string): Promise<void>
+  onData(listener: (sessionId: string, bytes: Uint8Array) => void): () => void
+  onExit(listener: (sessionId: string, exitCode: number | null) => void): () => void
+  onReconnect(listener: () => void): () => void
+}
+
+/** A notification a plugin asks the kernel to show. */
+export type PluginNotification = {
+  title: string
+  body: string
+  sessionId?: string
+  worktreeId?: string
+  /** A view for the window to open when the notification is clicked. */
+  open?: { view: string; input?: unknown }
+  /** Whether the desktop shell shows a native notification; defaults to true. */
+  desktop?: boolean
+}
+
+/** The kernel half of launching a session. */
+export type PluginLaunch = {
+  readonly shell: string
+  readonly binDir: string
+  /** The `QUIRKY_*` and PATH environment for a session; reserved names in `envPatch` are dropped. */
+  env(input: { sessionId: string; worktreeId: string; agent: string; envPatch?: Record<string, string> }): Record<string, string>
+  shellArgv(): string[]
+  commandArgv(command: string): string[]
+  /** Runs the launch hooks for a session about to start. */
+  hooks(input: {
+    sessionId: string
+    worktreeId: string
+    repoId: string
+    cwd: string
+    agent: string
+    prompt?: string
+  }): Promise<{ env: Record<string, string | null>; args: string[] }>
+}
+
+/** A binary stream to one client connection, opened by a `connection: true` method. */
+export type ClientStream = {
+  readonly streamId: number
+  send(bytes: Uint8Array): void
+  onClose(callback: () => void): void
+  close(): void
+}
+
+/** The client connection behind a call to a `connection: true` method. */
+export type CallerConnection = {
+  id: number
+  transport: 'websocket' | 'socket'
+  /** Throws InvalidParams on a socket connection. */
+  openStream(): ClientStream
 }
 
 /** How a plugin method failure maps to an RPC error code. */
 export type PluginErrorKind = 'invalid-params' | 'not-found' | 'conflict'
 
 /** Who invoked a plugin method: a connected client, or another plugin. */
-export type PluginCaller = { role: ClientRole; name?: string } | { role: 'plugin'; pluginId: string }
+export type PluginCaller =
+  | {
+      role: ClientRole
+      name?: string
+      cwd?: string
+      sessionId?: string
+      worktreeId?: string
+      /** Set only for `connection: true` methods. */
+      connection?: CallerConnection
+    }
+  | { role: 'plugin'; pluginId: string }
 
 /** A value that can be bound as an SQL parameter. */
 export type StoreValue = string | number | bigint | boolean | null | Uint8Array
@@ -186,6 +277,10 @@ export type PluginManifest = {
   main?: string
   /** Relative path of the webview ES module. */
   ui?: string
+  /** Relative path of the CLI module. */
+  cli?: string
+  /** Extra words that reach this plugin's CLI group. */
+  cliAliases?: string[]
   /** Defaults to `lazy`. */
   activation?: 'lazy' | 'startup'
   dependencies?: string[]

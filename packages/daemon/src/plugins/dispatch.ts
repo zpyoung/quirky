@@ -19,7 +19,18 @@ export type DispatchSource = { conn: ClientConn } | { pluginId: string }
 const unknownMethod = (method: string) => new DaemonError(RpcErrorCode.MethodNotFound, `unknown method: ${method}`)
 
 function detachedConn(): ClientConn {
-  return { id: 0, role: null, subscribed: false, closed: true, streams: new Map(), nextStreamId: 1, sendText() {}, sendBinary() {} }
+  return {
+    id: 0,
+    role: null,
+    transport: 'websocket',
+    subscribed: false,
+    closed: true,
+    streams: new Map(),
+    streamClosers: new Map(),
+    nextStreamId: 1,
+    sendText() {},
+    sendBinary() {}
+  }
 }
 
 /**

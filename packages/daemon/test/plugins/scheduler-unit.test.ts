@@ -487,6 +487,10 @@ describe('failed activation', () => {
     const extension: ContextExtension = {
       create: () => ({
         dataDir: root,
+        home: root,
+        pty: {} as never,
+        notify: () => undefined,
+        launch: {} as never,
         emit: () => true,
         subscribe: () => () => undefined,
         call: async () => null,

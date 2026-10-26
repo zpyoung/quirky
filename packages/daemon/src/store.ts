@@ -5,6 +5,7 @@ import type {
   Ask,
   AskEnvelope,
   AskSpec,
+  DistroManifest,
   Repo,
   Session,
   SessionStatus,
@@ -28,6 +29,34 @@ export function defaultSettings(): Settings {
 }
 
 type Row = Record<string, any>
+
+/** What a recorded request produced: its result, or the error it failed with. */
+export type RequestOutcome = { result: unknown } | { error: { code: number; message: string; data?: unknown } }
+
+/** One recorded call, kept so a repeat with the same request ID returns the first outcome. */
+export interface RequestRow {
+  requestId: string
+  digest: string
+  outcome: RequestOutcome
+  createdAt: number
+}
+
+/** A confirm ask issued for one destructive call; `used` flips once when the confirmation runs it. */
+export interface ConfirmationRow {
+  askId: string
+  method: string
+  digest: string
+  used: boolean
+  createdAt: number
+}
+
+/** The installed distro: its manifest and the IDs of the plugins it installed. */
+export interface DistroRow {
+  id: string
+  manifest: DistroManifest
+  plugins: string[]
+  installedAt: number
+}
 
 export interface JobRun {
   startedAt: number
@@ -103,6 +132,25 @@ export class Store {
       CREATE TABLE IF NOT EXISTS job_runs (
         id TEXT PRIMARY KEY, started_at INTEGER NOT NULL, finished_at INTEGER,
         status TEXT NOT NULL, error TEXT
+      );
+      CREATE TABLE IF NOT EXISTS request_log (
+        request_id TEXT PRIMARY KEY,
+        digest TEXT NOT NULL,
+        outcome TEXT NOT NULL,
+        created_at INTEGER NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS confirmations (
+        ask_id TEXT PRIMARY KEY,
+        method TEXT NOT NULL,
+        digest TEXT NOT NULL,
+        used INTEGER NOT NULL DEFAULT 0,
+        created_at INTEGER NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS distro (
+        id TEXT PRIMARY KEY,
+        manifest TEXT NOT NULL,
+        plugins TEXT NOT NULL,
+        installed_at INTEGER NOT NULL
       );
     `)
     const sessionColumns = this.db.query('PRAGMA table_info(sessions)').all() as Row[]
@@ -405,6 +453,80 @@ export class Store {
       .run(at, status, error ?? null, id)
   }
 
+  /** The recorded call with this request ID, or null. */
+  getRequest(requestId: string): RequestRow | null {
+    const row = this.db.query('SELECT * FROM request_log WHERE request_id = ?').get(requestId) as Row | null
+    return row
+      ? { requestId: row.request_id, digest: row.digest, outcome: JSON.parse(row.outcome), createdAt: row.created_at }
+      : null
+  }
+
+  /** Records a call's outcome under its request ID, replacing any earlier record. */
+  putRequest(request: RequestRow): void {
+    this.db
+      .query(
+        `INSERT INTO request_log (request_id, digest, outcome, created_at) VALUES (?, ?, ?, ?)
+         ON CONFLICT(request_id) DO UPDATE SET digest = excluded.digest, outcome = excluded.outcome, created_at = excluded.created_at`
+      )
+      .run(request.requestId, request.digest, JSON.stringify(request.outcome), request.createdAt)
+  }
+
+  /** Deletes records created before the epoch-millisecond cutoff `olderThanMs`; returns how many. */
+  pruneRequests(olderThanMs: number): number {
+    return this.db.query('DELETE FROM request_log WHERE created_at < ?').run(olderThanMs).changes
+  }
+
+  getConfirmation(askId: string): ConfirmationRow | null {
+    const row = this.db.query('SELECT * FROM confirmations WHERE ask_id = ?').get(askId) as Row | null
+    return row ? toConfirmation(row) : null
+  }
+
+  /** Records a confirm ask for a destructive call, replacing any earlier row for the same ask. */
+  putConfirmation(confirmation: ConfirmationRow): void {
+    this.db
+      .query(
+        `INSERT INTO confirmations (ask_id, method, digest, used, created_at) VALUES (?, ?, ?, ?, ?)
+         ON CONFLICT(ask_id) DO UPDATE SET method = excluded.method, digest = excluded.digest, used = excluded.used, created_at = excluded.created_at`
+      )
+      .run(confirmation.askId, confirmation.method, confirmation.digest, confirmation.used ? 1 : 0, confirmation.createdAt)
+  }
+
+  /** Marks the confirmation used; false when it is missing or already used, so only one caller wins. */
+  markConfirmationUsed(askId: string): boolean {
+    return this.db.query('UPDATE confirmations SET used = 1 WHERE ask_id = ? AND used = 0').run(askId).changes > 0
+  }
+
+  /** Deletes confirmations created before the epoch-millisecond cutoff `olderThanMs`; returns how many. */
+  pruneConfirmations(olderThanMs: number): number {
+    return this.db.query('DELETE FROM confirmations WHERE created_at < ?').run(olderThanMs).changes
+  }
+
+  /** The installed distro, or null; at most one is installed at a time. */
+  getDistro(): DistroRow | null {
+    const row = this.db.query('SELECT * FROM distro ORDER BY installed_at, id LIMIT 1').get() as Row | null
+    return row
+      ? {
+          id: row.id,
+          manifest: JSON.parse(row.manifest),
+          plugins: JSON.parse(row.plugins),
+          installedAt: row.installed_at
+        }
+      : null
+  }
+
+  putDistro(distro: DistroRow): void {
+    this.db
+      .query(
+        `INSERT INTO distro (id, manifest, plugins, installed_at) VALUES (?, ?, ?, ?)
+         ON CONFLICT(id) DO UPDATE SET manifest = excluded.manifest, plugins = excluded.plugins, installed_at = excluded.installed_at`
+      )
+      .run(distro.id, JSON.stringify(distro.manifest), JSON.stringify(distro.plugins), distro.installedAt)
+  }
+
+  deleteDistro(id: string): void {
+    this.db.query('DELETE FROM distro WHERE id = ?').run(id)
+  }
+
   /** Stamps the real finish time on a run that was marked timed-out earlier; other statuses are untouched. */
   recordJobSettled(id: string, at: number): void {
     this.db.query("UPDATE job_runs SET finished_at = ? WHERE id = ? AND status = 'timed-out'").run(at, id)
@@ -413,6 +535,10 @@ export class Store {
 
 function toRepo(row: Row): Repo {
   return { id: row.id, name: row.name, path: row.path, addedAt: row.added_at }
+}
+
+function toConfirmation(row: Row): ConfirmationRow {
+  return { askId: row.ask_id, method: row.method, digest: row.digest, used: row.used === 1, createdAt: row.created_at }
 }
 
 function toSession(row: Row): Session {

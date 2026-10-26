@@ -52,6 +52,12 @@ export type CoreOptions = {
   startedAt: number
   hookToken: string
   hookUrl: () => string
+  /** True when the daemon runs in safe mode; reported by `status`. */
+  safeMode?: boolean
+  /** The unix socket path the daemon listens on, or null; reported by `status`. */
+  socketPath?: string | null
+  /** Called after a client connection is removed. */
+  onRemoveClient?: (conn: ClientConn) => void
   /** Called at the end of `broadcast` with every event. */
   onEvent?: (event: QuirkyEvent) => void
   /**
@@ -124,6 +130,10 @@ export class Core {
     return this.options.hookToken
   }
 
+  get pty(): PtyClient {
+    return this.options.pty
+  }
+
   addClient(conn: ClientConn): void {
     this.clients.add(conn)
   }
@@ -132,6 +142,13 @@ export class Core {
     conn.closed = true
     this.clients.delete(conn)
     for (const streamId of [...conn.streams.keys()]) this.removeStream(conn, streamId)
+    this.options.onRemoveClient?.(conn)
+  }
+
+  /** Sends one event to one connection, whether or not it subscribed. */
+  sendTo(conn: ClientConn, event: QuirkyEvent): void {
+    if (conn.closed) return
+    conn.sendText(JSON.stringify({ jsonrpc: '2.0', method: 'event', params: event }))
   }
 
   broadcast(event: QuirkyEvent): void {
@@ -151,7 +168,9 @@ export class Core {
       ptyHost: { pid: this.options.pty.hostPid, alive: this.options.pty.connected },
       clients: [...this.clients]
         .filter((conn) => conn.role !== null)
-        .map((conn) => ({ role: conn.role!, ...(conn.name ? { name: conn.name } : {}) }))
+        .map((conn) => ({ role: conn.role!, ...(conn.name ? { name: conn.name } : {}) })),
+      safeMode: this.options.safeMode ?? false,
+      socket: this.options.socketPath ?? null
     }
   }
 

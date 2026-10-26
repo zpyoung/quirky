@@ -83,7 +83,9 @@ export function startServer(options: ServerOptions) {
           role: null,
           subscribed: false,
           closed: false,
+          transport: 'websocket',
           streams: new Map(),
+          streamClosers: new Map(),
           nextStreamId: 1,
           sendText: () => {},
           sendBinary: () => {}

@@ -43,7 +43,7 @@ describe('SC-20: quirky api lists everything; --json is the catalog', () => {
     expect(result.code).toBe(0)
     expect(result.stdout.trim().split('\n')).toHaveLength(1)
     const doc = JSON.parse(result.stdout) as ApiCatalog
-    expect(doc.schemaVersion).toBe(1)
+    expect(doc.schemaVersion).toBe(2)
     expect(doc.methods.map((m) => m.name)).toContain('acme.notes/add')
     expect(doc.events).toEqual([])
     expect(doc.uiCommands).toEqual([])
