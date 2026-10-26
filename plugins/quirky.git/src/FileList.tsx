@@ -1,5 +1,5 @@
 import type { GitFileStatus } from '@quirky/protocol'
-import { statusLetter } from '../lib/scm'
+import { statusLetter } from './scm'
 
 type Props = {
   title: string

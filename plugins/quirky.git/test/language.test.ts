@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test'
-import { languageForPath } from '../src/lib/language'
+import { languageForPath } from '../src/language'
 
 test('maps extensions to languages', () => {
   expect(languageForPath('src/a.js')).toBe('javascript')
