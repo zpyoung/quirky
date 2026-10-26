@@ -47,6 +47,7 @@ export class WorktreeSessions {
   private unsubscribes: (() => void)[] = []
   private requested: string | undefined
   private requestedSeen = false
+  private published: string | undefined
   private loading = false
   private reloadAfter = false
   private queued: QuirkyEvent[] = []
@@ -229,8 +230,9 @@ export class WorktreeSessions {
   }
 
   /**
-   * Keeps the daemon's view input, which every window shows, naming the active session: when the
-   * session the view showed is gone, the replacement is published there.
+   * Keeps the daemon's view input, which every window shows, naming the active session: a tab
+   * picked without one in the input, or the replacement for a session that is gone, is published
+   * there.
    */
   private syncDaemonLayout(previousActive: string | undefined): void {
     const { status, sessions, active } = this.snapshot
@@ -244,7 +246,13 @@ export class WorktreeSessions {
       if (this.requestedSeen) this.open(active?.id)
       return
     }
-    const lostActive = previousActive !== undefined && !sessions.some((session) => session.id === previousActive)
-    if (lostActive && active?.id !== previousActive) this.open(active?.id)
+    if (active === null) {
+      const lostActive = previousActive !== undefined && !sessions.some((session) => session.id === previousActive)
+      if (lostActive) this.open()
+      return
+    }
+    if (active.id === this.published) return
+    this.published = active.id
+    this.open(active.id)
   }
 }
