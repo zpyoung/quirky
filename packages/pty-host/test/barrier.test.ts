@@ -113,6 +113,44 @@ describe('ShellReadyBarrier', () => {
     expect(h.logs).toHaveLength(1)
   })
 
+  test('input submitted from an onState listener is delivered after the held input', () => {
+    const delivered: string[] = []
+    const decoder = new TextDecoder()
+    const b: ShellReadyBarrier = new ShellReadyBarrier({
+      enabled: true,
+      timeoutMs: 5000,
+      deliver: (x) => delivered.push(decoder.decode(x)),
+      onState: (s) => {
+        if (s === 'ready') b.input(bytes('new'))
+      }
+    })
+    b.input(bytes('old'))
+    b.ready()
+    expect(delivered.join('')).toBe('oldnew')
+    b.input(bytes('!'))
+    expect(delivered.join('')).toBe('oldnew!')
+    b.dispose()
+  })
+
+  test('input submitted from deliver during release stays behind older held input', () => {
+    const delivered: string[] = []
+    const decoder = new TextDecoder()
+    const b: ShellReadyBarrier = new ShellReadyBarrier({
+      enabled: true,
+      timeoutMs: 5000,
+      deliver: (x) => {
+        const chunk = decoder.decode(x)
+        delivered.push(chunk)
+        if (chunk === 'a') b.input(bytes('c'))
+      }
+    })
+    b.input(bytes('a'))
+    b.input(bytes('b'))
+    b.ready()
+    expect(delivered.join('')).toBe('abc')
+    b.dispose()
+  })
+
   test('restart returns an enabled barrier to pending with an empty queue and a fresh timer', async () => {
     const h = harness()
     h.barrier.input(bytes('old'))
