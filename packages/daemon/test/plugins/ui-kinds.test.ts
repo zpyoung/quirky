@@ -288,6 +288,12 @@ describe('the ui field', () => {
     }
   })
 
+  test('rejects a path that is not well-formed Unicode', () => {
+    expect(errorsOf({ ui: '\ud800.js' })).toEqual(["field 'ui' must be a well-formed path"])
+    expect(errorsOf({ main: 'dist/\udfff/x.js' })).toEqual(["field 'main' must be a well-formed path"])
+    expect(result({ ui: 'ui/\u{1F600}.js' }).ok).toBe(true)
+  })
+
   test('main keeps its own messages', () => {
     expect(errorsOf({ main: '../x.js' })).toEqual(["field 'main' must be a relative path inside the plugin directory, got '../x.js'"])
     expect(errorsOf({ main: 3 })).toEqual(["field 'main' must be a non-empty string"])

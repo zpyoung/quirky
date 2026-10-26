@@ -60,11 +60,19 @@ function stringList(manifest: Record_, field: string, errors: string[]): string[
   return strings
 }
 
+function hasLoneSurrogate(value: string): boolean {
+  return /[\ud800-\udbff](?![\udc00-\udfff])|(?<![\ud800-\udbff])[\udc00-\udfff]/.test(value)
+}
+
 function checkPluginPath(manifest: Record_, field: 'main' | 'ui', dir: string, errors: string[]): void {
   const value = manifest[field]
   if (value === undefined) return
   if (typeof value !== 'string' || value === '') {
     errors.push(`field '${field}' must be a non-empty string`)
+    return
+  }
+  if (hasLoneSurrogate(value)) {
+    errors.push(`field '${field}' must be a well-formed path`)
     return
   }
   const rel = relative(dir, resolve(dir, value))
