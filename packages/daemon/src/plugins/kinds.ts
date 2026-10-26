@@ -36,8 +36,8 @@ function checkAgents(label: string, agents: unknown, errors: string[]): void {
  * `label` prefixes every message and names the entry, e.g. `job tick` or `override job:acme.poll/tick`.
  */
 export function checkKindEntry(kind: string, label: string, entry: Entry, errors: string[]): void {
+  if (!Object.hasOwn(ALLOWED_FIELDS, kind)) return
   const allowed = ALLOWED_FIELDS[kind]
-  if (!allowed) return
   for (const field of Object.keys(entry)) {
     if (field !== 'id' && !allowed.includes(field)) errors.push(`${label}: unknown field \`${field}\``)
   }

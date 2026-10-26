@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test'
+import { checkKindEntry } from '../../src/plugins/kinds'
 import { parseManifest } from '../../src/plugins/manifest'
 
 const base = { id: 'acme', name: 'Acme', version: '1.0.0' }
@@ -115,5 +116,19 @@ describe('overrides and other kinds', () => {
 
   test('leaves a command entry with arbitrary fields alone', () => {
     expect(result(contributes('command', { id: 'hello', title: 'Hello', anything: [1, 2], interval: 'soon' })).ok).toBe(true)
+  })
+})
+
+describe('kinds the daemon does not own', () => {
+  const inherited = ['constructor', 'toString', 'hasOwnProperty', 'valueOf', '__proto__']
+
+  test.each(inherited)('checkKindEntry leaves %s untouched', (kind) => {
+    const errors: string[] = []
+    expect(() => checkKindEntry(kind, `${kind} go`, { id: 'go', description: 1, anything: true }, errors)).not.toThrow()
+    expect(errors).toEqual([])
+  })
+
+  test('a constructor contribution parses with extra fields', () => {
+    expect(result(contributes('constructor', { id: 'go', description: 'x', anything: 1 })).ok).toBe(true)
   })
 })
