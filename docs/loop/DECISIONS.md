@@ -8,12 +8,20 @@ files, not this one.
 | --- | --- | --- | --- | --- |
 | hard | medium | [m0-scripting D10](decisions/m0-scripting.md) | A plugin's methods become `quirky <group> <method>`, where the group is the plugin ID without the `quirky.` prefix | assumed — autonomous |
 | hard | medium | [m0-scripting D12](decisions/m0-scripting.md) | Each param is a kebab-case flag, objects take JSON, and `--params` passes the whole object | assumed — autonomous |
+| hard | medium | [m0-core D5](decisions/m0-core.md) | v1 moves into eight built-in plugins, one per roadmap feature | assumed — autonomous |
+| hard | medium | [m0-core D9](decisions/m0-core.md) | Plugins ship CLI commands as `cli-command` contributions, with an optional CLI module for custom run code | assumed — autonomous |
+| hard | medium | [m0-core D11](decisions/m0-core.md) | The plugin API grows by six members so the built-ins need nothing private | assumed — autonomous |
+| hard | medium | [m0-core D21](decisions/m0-core.md) | The daemon owns the window's layout, focus and visible view | locked by docs/roadmap.md (what lives in the daemon); assumed — autonomous (the shape) |
+| hard | medium | [m0-core D26](decisions/m0-core.md) | A distro is applied as an overlay that removing it takes away | locked by docs/roadmap.md (what the manifest names); assumed — autonomous (the overlay) |
 | hard | medium | [m0-daemon-api D4](decisions/m0-daemon-api.md) | Plugin method wire names are `<pluginId>/<name>` | assumed — autonomous |
 | hard | medium | [m0-daemon-api D9](decisions/m0-daemon-api.md) | Each plugin gets one SQLite file and a data directory of its own | assumed — autonomous |
 | hard | medium | [m0-ui-api D6](decisions/m0-ui-api.md) | A slot gives the plugin one container element to mount into, and nothing else of the page | assumed — autonomous |
 | hard | medium | [m0-registry D4](decisions/m0-registry.md) | Contribution IDs are `<kind>:<pluginId>/<name>` | assumed — autonomous |
 | hard | high | [m0-scripting D4](decisions/m0-scripting.md) | Schemas are a flat subset of JSON Schema | assumed — autonomous |
 | hard | high | [m0-scripting D24](decisions/m0-scripting.md) | Choose schemas declared in the manifest, a daemon catalog, and a CLI that builds plugin commands from it at run time | assumed — autonomous |
+| hard | high | [m0-core D6](decisions/m0-core.md) | v1's methods are renamed to their plugin's namespace, with no aliases, and the protocol version goes to 2 | supersedes m0-daemon-api D5 |
+| hard | high | [m0-core D7](decisions/m0-core.md) | v1's events become the plugins' events | assumed — autonomous |
+| hard | high | [m0-core D31](decisions/m0-core.md) | Port v1 for real, growing the public plugin API, rather than facades or raw RPC primitives | locked by docs/roadmap.md (built-ins use only the public API); assumed — autonomous (the approach) |
 | hard | high | [m0-daemon-api D7](decisions/m0-daemon-api.md) | The four kinds are `method`, `event`, `job` and `launch-hook` | assumed — autonomous |
 | hard | high | [m0-daemon-api D13](decisions/m0-daemon-api.md) | Choose declared contributions with provided implementations | supersedes nothing; extends m0-registry D23 |
 | hard | high | [m0-ui-api D4](decisions/m0-ui-api.md) | The seven UI kinds are `view`, `panel`, `sidebar-section`, `command`, `keybinding`, `setting` and `theme` | assumed — autonomous |
@@ -22,6 +30,11 @@ files, not this one.
 | hard | high | [m0-registry D23](decisions/m0-registry.md) | Choose declarative contributions with lazily loaded code | assumed — autonomous |
 | medium | medium | [m0-scripting D6](decisions/m0-scripting.md) | The daemon validates every call's params against the method's schema, and leaves results and event data unchecked | assumed — autonomous |
 | medium | medium | [m0-scripting D29](decisions/m0-scripting.md) | Tech-spec mechanisms: one shared validator in protocol, validation in the dispatcher, declarative command specs, a JSON-mode pre-scan | assumed — autonomous |
+| medium | medium | [m0-core D10](decisions/m0-core.md) | Repo and worktree selectors resolve in the daemon, with the caller's cwd and identity | assumed — autonomous |
+| medium | medium | [m0-core D20](decisions/m0-core.md) | Irreversible methods confirm through an ask unless the call passes `yes` | locked by docs/roadmap.md (ask unless `--yes`); assumed — autonomous (the protocol) |
+| medium | medium | [m0-core D22](decisions/m0-core.md) | Plugin slots report their own content as JSON | assumed — autonomous |
+| medium | medium | [m0-core D27](decisions/m0-core.md) | Plugin install lists what the plugin contributes and confirms through an ask | assumed — autonomous |
+| medium | medium | [m0-core D36](decisions/m0-core.md) | Tech-spec mechanisms: built-ins as workspace packages, UI modules built by the UI build, a headless window for tests | assumed — autonomous |
 | medium | medium | [m0-daemon-api D6](decisions/m0-daemon-api.md) | Plugin events arrive as `{ type: "<pluginId>/<name>", data }` | assumed — autonomous |
 | medium | medium | [m0-daemon-api D15](decisions/m0-daemon-api.md) | Jobs run on a fixed delay, at least one second apart, never overlapping | assumed — autonomous |
 | medium | medium | [m0-daemon-api D19](decisions/m0-daemon-api.md) | Launch hooks are a sequential pipeline in contribution-ID order | assumed — autonomous |
@@ -40,6 +53,13 @@ files, not this one.
 | medium | high | [m0-scripting D9](decisions/m0-scripting.md) | One command table drives parsing, validation, help, suggestions and the catalog | locked by research/orca-features/cli.md |
 | medium | high | [m0-scripting D15](decisions/m0-scripting.md) | Under `--json`, errors are a JSON document on stdout, and the exit codes stay 0, 1 and 2 | assumed — autonomous |
 | medium | high | [m0-scripting D17](decisions/m0-scripting.md) | `quirky api --json` returns one versioned catalog of methods, events, UI commands and CLI commands | assumed — autonomous |
+| medium | high | [m0-core D8](decisions/m0-core.md) | v1's CLI words stay, with `wt` and `term` as group aliases | assumed — autonomous |
+| medium | high | [m0-core D12](decisions/m0-core.md) | Notifications are a kernel service, and each plugin decides when to notify | locked by docs/architecture.md |
+| medium | high | [m0-core D13](decisions/m0-core.md) | v1's settings become plugin settings | supersedes m0-ui-api D18 |
+| medium | high | [m0-core D16](decisions/m0-core.md) | The CLI talks to the daemon over a unix socket, authenticated by the runtime token in `client.hello` | locked by docs/architecture.md |
+| medium | high | [m0-core D19](decisions/m0-core.md) | Mutating calls carry a request ID, and the daemon returns the first outcome to a retry | assumed — autonomous |
+| medium | high | [m0-core D23](decisions/m0-core.md) | Plugin UI commands run in the window when called through the API | locked by docs/roadmap.md |
+| medium | high | [m0-core D24](decisions/m0-core.md) | v1's window surfaces become the built-ins' UI contributions, and the shell keeps only the chrome | supersedes m0-ui-api D26 |
 | medium | high | [m0-daemon-api D8](decisions/m0-daemon-api.md) | Method results and errors | assumed — autonomous |
 | medium | high | [m0-daemon-api D10](decisions/m0-daemon-api.md) | Stores migrate forward only, by an ordered list, and refuse a downgrade | assumed — autonomous |
 | medium | high | [m0-daemon-api D24](decisions/m0-daemon-api.md) | Plugin methods use the daemon's token, and any client may call any method | locked by docs/roadmap.md |
@@ -58,6 +78,11 @@ files, not this one.
 | easy | medium | [m0-scripting D32](decisions/m0-scripting.md) | Build in four waves after a type scaffold: protocol and CLI specs, then validation and generated commands, then discovery and the skill, then scenario tests | assumed — autonomous |
 | easy | medium | [m0-scripting D33](decisions/m0-scripting.md) | Skip wave 1's checkpoint review | assumed — autonomous |
 | easy | medium | [m0-scripting D35](decisions/m0-scripting.md) | Implementers' judgment calls kept: group suggestions only as a fallback, `skill show --json` wraps the text, `quirky help <words>` acts like `--help` | assumed — autonomous |
+| easy | medium | [m0-core D14](decisions/m0-core.md) | v1 data carries over on upgrade | assumed — autonomous |
+| easy | medium | [m0-core D25](decisions/m0-core.md) | Ask cards move into a Questions panel that opens itself | assumed — autonomous |
+| easy | medium | [m0-core D39](decisions/m0-core.md) | Build in five waves: a scaffold, kernel modules, plugins beside v1, the switch-over with the UI port, then scenario tests | assumed — autonomous |
+| easy | medium | [m0-core D41](decisions/m0-core.md) | W3 starts while W2's checkpoint review runs, with fakes of sibling plugins in each plugin's tests | assumed — autonomous |
+| easy | medium | [m0-core D44](decisions/m0-core.md) | W4 calls the tasks made inside their briefs, accepted at audit | assumed — autonomous |
 | easy | medium | [m0-daemon-api D22](decisions/m0-daemon-api.md) | A launch hook that fails or times out is skipped | assumed — autonomous |
 | easy | medium | [m0-daemon-api D23](decisions/m0-daemon-api.md) | Launch hooks apply to terminal sessions only | assumed — autonomous |
 | easy | medium | [m0-daemon-api D25](decisions/m0-daemon-api.md) | No rate limits on plugin events or method calls, and no event filters yet | assumed — autonomous |
@@ -102,6 +127,27 @@ files, not this one.
 | easy | high | [m0-scripting D38](decisions/m0-scripting.md) | Final round 1: fix three findings, two of which share a cause | assumed — autonomous |
 | easy | high | [m0-scripting D39](decisions/m0-scripting.md) | The final review loop ends after the closure round passes on all three lenses | locked by docs/loop/LOOP.md |
 | easy | high | [m0-scripting D40](decisions/m0-scripting.md) | Every scenario has a named test through the CLI or the daemon API, and the item's one CLI defect belongs to m0-cli-core | locked by docs/loop/LOOP.md |
+| easy | high | [m0-core D1](decisions/m0-core.md) | Classify the item as an API, CLI, Organization and Visual design, and run every research phase | assumed — autonomous |
+| easy | high | [m0-core D2](decisions/m0-core.md) | Skip the visual companion and the adhd offer, use the standard gray-area set | locked by docs/loop/LOOP.md |
+| easy | high | [m0-core D3](decisions/m0-core.md) | Keep m0-core as one item with one pair of specs, built in waves | locked by docs/loop/queue.json |
+| easy | high | [m0-core D4](decisions/m0-core.md) | Select every gray area that matters for m0-core | assumed — autonomous |
+| easy | high | [m0-core D15](decisions/m0-core.md) | A disabled built-in takes its dependents with it, and the window shows what is left | locked by docs/loop/decisions/m0-registry.md |
+| easy | high | [m0-core D17](decisions/m0-core.md) | The PTY host's socket follows the same short-path rule | supersedes m0-registry D33 |
+| easy | high | [m0-core D18](decisions/m0-core.md) | `quirky --version` prints the CLI's version and works in a from-source build | locked by research/orca-features/cli.md |
+| easy | high | [m0-core D28](decisions/m0-core.md) | Quirky never updates plugin code on its own | locked by docs/roadmap.md |
+| easy | high | [m0-core D29](decisions/m0-core.md) | Safe mode runs stock Quirky for one daemon run and writes nothing | assumed — autonomous |
+| easy | high | [m0-core D30](decisions/m0-core.md) | The sample distro switches source control off and replaces the sidebar | locked by docs/roadmap.md |
+| easy | high | [m0-core D32](decisions/m0-core.md) | In scope from cli.md and ask.md: the CLI core and v1's ask flows | locked by docs/roadmap.md |
+| easy | high | [m0-core D33](decisions/m0-core.md) | Two Orca defects get tests here | locked by docs/loop/LOOP.md |
+| easy | high | [m0-core D34](decisions/m0-core.md) | Ported commands keep v1's text output, and exit codes stay 0, 1 and 2 | assumed — autonomous |
+| easy | high | [m0-core D35](decisions/m0-core.md) | Fast-track the remaining defaults | locked by docs/loop/LOOP.md |
+| easy | high | [m0-core D37](decisions/m0-core.md) | One spec review pass over both specs, with the tech-spec reviewer folded into it | locked by docs/loop/LOOP.md |
+| easy | high | [m0-core D38](decisions/m0-core.md) | Build with Claude subagents implementing and Codex reviewing | locked by docs/loop/LOOP.md |
+| easy | high | [m0-core D40](decisions/m0-core.md) | Spec review: fix five model findings, reject the pre-pass findings | assumed — autonomous |
+| easy | high | [m0-core D42](decisions/m0-core.md) | W2 checkpoint: accept all nine findings, which collapse to seven defects | assumed — autonomous |
+| easy | high | [m0-core D43](decisions/m0-core.md) | W3 checkpoint: accept all eight findings, which collapse to five defects | assumed — autonomous |
+| easy | high | [m0-core D45](decisions/m0-core.md) | W4 checkpoint: accept all six findings, which collapse to four defects | assumed — autonomous |
+| easy | high | [m0-core D46](decisions/m0-core.md) | Final Round 1: accept all thirteen findings, which collapse to seven defects | assumed — autonomous |
 | easy | high | [m0-daemon-api D1](decisions/m0-daemon-api.md) | Classify the item as an API design, and run both research phases | assumed — autonomous |
 | easy | high | [m0-daemon-api D2](decisions/m0-daemon-api.md) | Skip the visual companion and the adhd offer, use the standard gray-area set | locked by docs/loop/LOOP.md |
 | easy | high | [m0-daemon-api D3](decisions/m0-daemon-api.md) | Select every gray area that matters for the daemon plugin API | assumed — autonomous |
