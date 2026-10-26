@@ -460,5 +460,15 @@
 - **Confidence:** high
 - **Source:** locked by docs/loop/LOOP.md
 
+## D46: Wave 1 implementation choices accepted as built
+- **Question:** choices the wave 1 implementers made where the briefs were silent (subagent-driven development, wave 1 audit)
+- **Options:** accept; send back
+- **Chose:** accept: (a) the kernel test `context-growth.test.ts` "revoking a plugin removes its listeners" now subscribes its second plugin too, because it asserted the old shared-subscription behavior that D39 replaces (K1's scope widened by that one line); (b) no agent has an `install` URL, because Orca's catalog has only homepage links, so the Agents view's Install link uses the homepage; (c) quoting uses Orca's fish-safe splice and always single-quotes prompts; (d) the ready scanners keep Orca's 1,500 ms quiet window and 5,000 ms OpenCode grace; (e) the Claude trust writer creates `~/.claude.json` when missing, refuses to trust a filesystem root, the home or a folder above it (Orca's guard), and a corrupt config throws instead of being skipped; (f) Codex trust goes to `~/.codex/config.toml`, ignoring `CODEX_HOME`, as Orca does; (g) applying Yolo to an untouched agent stores the flag explicitly.
+- **Why:** each matches Orca or the logic spec, and none changes a scenario's Then
+- **Evidence:** wave 1 reports (journal); ~/PycharmProjects/orca/src/main/agent-trust-presets.ts; packages/daemon/test/plugins/context-growth.test.ts:180
+- **Reversibility:** easy
+- **Confidence:** medium
+- **Source:** assumed — autonomous
+
 ## Progress
-Logic spec (amended at tech-spec authoring and after the Codex spec review) and tech spec written and reviewed. Next: the Codex adversarial review of both specs, fixes, commit, then subagent-driven development.
+Wave 1 merged (pure modules, catalog data, detection, trust, kernel PTY holds, e2e harness); gate 2352 pass. Wave 2 in progress: delivery runner, agents service and CLI, session changes. Next: wave 3 (UI, e2e scenario tests), then Final Round 1.
