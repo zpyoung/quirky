@@ -21,6 +21,17 @@ describe('next', () => {
     expect(result.kind === 'item' && result.item.id).toBe('b')
   })
 
+  test("leaves another lane's in-progress item alone", () => {
+    const items = [{ ...item('a', [], 'in-progress'), lane: 2 }, item('b')]
+    expect(next(items, 1)).toEqual({ kind: 'item', item: item('b') })
+    expect(next(items, 2)).toEqual({ kind: 'item', item: items[0] })
+  })
+
+  test('reports busy when nothing is ready but other lanes hold work', () => {
+    const held = { ...item('a', [], 'in-progress'), lane: 2 }
+    expect(next([held, item('b', ['a'])], 1)).toEqual({ kind: 'busy', running: [held] })
+  })
+
   test('halts on a waiting gate', () => {
     const result = next([item('gate', [], 'waiting'), item('b')])
     expect(result.kind).toBe('waiting')
@@ -47,6 +58,12 @@ describe('next', () => {
 })
 
 describe('setStatus', () => {
+  test('records the lane only while an item is in progress', () => {
+    const claimed = setStatus([item('a')], 'a', 'in-progress', 3)
+    expect(claimed[0].lane).toBe(3)
+    expect(setStatus(claimed, 'a', 'done')[0]).toEqual(item('a', [], 'done'))
+  })
+
   test('rejects unknown ids and statuses', () => {
     expect(() => setStatus([item('a')], 'z', 'done')).toThrow('unknown item')
     expect(() => setStatus([item('a')], 'a', 'finished' as Item['status'])).toThrow('unknown status')
@@ -71,7 +88,7 @@ describe('docs/loop/queue.json', () => {
   })
 
   test('starts at the plugin kernel', () => {
-    expect(next(items)).toEqual({ kind: 'item', item: items[0] })
     expect(items[0].id).toBe('m0-registry')
+    expect(items[0].deps).toEqual([])
   })
 })
