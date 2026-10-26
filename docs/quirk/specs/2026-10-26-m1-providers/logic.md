@@ -4,7 +4,8 @@
 
 **Status:** Approved (headless build loop; decisions in [m1-providers.md](../../../loop/decisions/m1-providers.md)). Tech spec: requested.
 
-**Amendments:** none yet.
+**Amendments:**
+- 2026-10-26, tech-spec authoring: Claude Agent Teams launches `claude --teammate-mode in-process` with the Agent Teams environment directly, with no `quirky agents claude-teams` command, because plugin CLI commands can't pass arbitrary arguments through (SC-6, SC-37, [D29](../../../loop/decisions/m1-providers.md)). The "New <Agent> tab" commands are declared for the 45 built-in agents only, because UI commands must be declared in a manifest (SC-43, [D33](../../../loop/decisions/m1-providers.md)). `quirky agents list` returns an object holding the agent array, the default agent and the permission summary (SC-1). Resume has no `--wait`, since it carries no prompt (SC-31). A delivery still `pending` when the daemon restarts becomes `not-delivered` (SC-28).
 
 ## Conceptual model
 
@@ -161,7 +162,8 @@ Fake agents used below:
 1. **SC-1: the catalog lists the 45 built-in agents with what each can do** (CLI)
    - **Given** fakes for `claude` and `codex` on `PATH`, nothing else
    - **When** the agent runs `quirky agents list --json`
-   - **Then** the result has 45 entries in auto-pick order, each with its ID, label, plugin
+   - **Then** the result holds the default agent (`auto`), the permission summary (`yolo`) and an
+     agent list with 45 entries in auto-pick order, each with its ID, label, plugin
      `quirky.agents`, installed, enabled, whether it is the default, its permission mode (or none),
      its prompt mode, whether it can resume, and its homepage and install links. `claude` and
      `codex` are installed; the other 43 are not. All are enabled. None is the default, because the
@@ -212,8 +214,8 @@ Fake agents used below:
      the `quirky` shim (always present)
    - **When** the agent lists agents
    - **Then** `dsh` is not installed (it also needs `dsh`); `qoder-cn` is installed;
-     `claude-agent-teams` is installed (it needs `quirky` and `claude`). Removing `claude` and
-     refreshing makes both `claude` and `claude-agent-teams` not installed.
+     `claude-agent-teams` is installed (it runs `claude`). Removing `claude` and refreshing makes
+     both `claude` and `claude-agent-teams` not installed.
 
 7. **SC-7: Refresh picks up a newly installed agent** (CLI)
    - **Given** a running daemon that detected no `gemini`
@@ -434,7 +436,8 @@ Fake agents used below:
     - **When** a client creates a session with a prompt and no `waitForPrompt`
     - **Then** `create` returns with prompt delivery `pending` before the paste; later
       `quirky.session/changed` carries the session with delivery `pasted`. A prompt containing NUL
-      is refused before anything starts.
+      is refused before anything starts. A delivery still `pending` when the daemon restarts is
+      marked `not-delivered` at startup.
 
 29. **SC-29: `plan` shows a launch without starting it** (CLI)
     - **When** the agent runs `quirky agents plan grok --prompt "help"`
@@ -452,7 +455,7 @@ Fake agents used below:
 31. **SC-31: resume replays the launch record, not today's defaults, in the original folder** (CLI)
     - **Given** a claude session launched with arguments `--model haiku` and given provider session
       `abc`; afterwards the claude arguments were changed back to Yolo
-    - **When** the agent runs `quirky session resume <session> --wait` from another folder
+    - **When** the agent runs `quirky session resume <session>` from another folder
     - **Then** a new session starts in the old session's folder, running
       `claude --model haiku <hook args> --resume abc`; it has no `--dangerously-skip-permissions`.
       The old record is unchanged.
@@ -507,12 +510,12 @@ Fake agents used below:
 
 ### Claude Agent Teams
 
-37. **SC-37: `quirky agents claude-teams` runs Claude with in-process teammates** (CLI)
+37. **SC-37: Claude Agent Teams runs Claude with in-process teammates** (CLI)
     - **Given** fake `claude`
     - **When** a client starts agent `claude-agent-teams` with a prompt
-    - **Then** the session's command is `quirky agents claude-teams`; the fake `claude` ran with
-      `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` and argv starting `--teammate-mode in-process`, and
-      the prompt arrived by paste (its mode is stdin-after-start)
+    - **Then** the fake `claude` ran with `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` and argv starting
+      `--teammate-mode in-process --dangerously-skip-permissions`, and the prompt arrived by paste
+      (its mode is stdin-after-start)
 
 ### Compatibility
 

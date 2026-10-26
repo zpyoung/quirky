@@ -287,12 +287,12 @@
 - **Confidence:** high
 - **Source:** locked by research/orca-features/providers.md
 
-## D29: `claude-agent-teams` launches `quirky agents claude-teams`, which runs Claude with in-process teammates
+## D29: `claude-agent-teams` runs Claude with in-process teammates
 - **Question:** Orca's `orca claude-teams` opens teammates as native split panes, and Quirky has no splits yet
-- **Options:** leave the agent out (44 agents); include it and build native panes; include it with Claude's in-process teammate mode
-- **Chose:** include it. Detection needs `quirky` and `claude`; the `quirky` shim in `$QUIRKY_HOME/bin` is part of the searched path. The command lives in the plugin's CLI group, since plugin commands can't be top-level words. `quirky agents claude-teams [args]` runs `claude --teammate-mode in-process [args]` with `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`, which is what Orca does on Windows. Native teammate panes wait for splits.
-- **Why:** the roadmap asks for all 45; splits are m1-term-ui's
-- **Evidence:** research/orca-features/providers.md "Edge cases: Windows/WSL"; ~/PycharmProjects/orca/src/cli/handlers/core.ts:50-80
+- **Options:** leave the agent out (44 agents); include it and build native panes; include it with Claude's in-process teammate mode, through a `quirky agents claude-teams` wrapper command; include it with the command and environment in its catalog entry
+- **Chose:** include it with the command in its entry: detect `claude`, launch `claude --teammate-mode in-process`, launch environment `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`, process `claude`, prompt pasted after start, Claude's permission flags. This is what Orca does on Windows. Native teammate panes wait for splits.
+- **Why:** the roadmap asks for all 45; splits are m1-term-ui's. A wrapper command was the first choice, but the tech-spec survey found plugin CLI commands reject unknown flags and cap positionals, so `[claude args...]` can't pass through (packages/cli/src/args.ts:139-145, plugin-commands.ts:17-23).
+- **Evidence:** research/orca-features/providers.md "Edge cases: Windows/WSL"; ~/PycharmProjects/orca/src/cli/handlers/core.ts:50-80; ~/PycharmProjects/orca/src/shared/tui-agent-startup.test.ts (in-process env)
 - **Reversibility:** easy
 - **Confidence:** medium
 - **Revisit if:** m1-term-ui adds splits
@@ -331,12 +331,12 @@
 ## D33: "New agent tab" is Mod+Alt+T, and each agent gets a "New <Agent> tab" command with no chord
 - **Question:** the keybindings the doc lists
 - **Options:** —
-- **Chose:** command `new-agent-tab` ("New agent tab (default agent)") bound to Mod+Alt+T, and one command per catalog agent, "New <Label> tab", with no default chord. The per-agent commands come from the catalog at runtime, so contributed agents get one too. A command for a disabled agent does nothing but show "<Label> is disabled".
+- **Chose:** command `new-agent-tab` ("New agent tab (default agent)") bound to Mod+Alt+T, and one command per built-in agent, `new-<id>-tab` titled "New <Label> tab", with no default chord. A command for a disabled agent does nothing but show "<Label> is disabled". Agents other plugins contribute get no command; their plugin can declare one. (Amended at tech-spec authoring: the survey found UI commands must be declared in a manifest, packages/ui/src/plugins/host.ts:704-720, which this decision's Revisit-if named.)
 - **Why:** the doc's bindings
 - **Evidence:** research/orca-features/providers.md "Launch points"
 - **Reversibility:** easy
 - **Confidence:** medium
-- **Revisit if:** UI commands can't be generated at runtime (then they're declared for the 45 built-ins only)
+- **Revisit if:** the UI API gains runtime commands
 - **Source:** locked by research/orca-features/providers.md
 
 ## D34: CLI group `quirky agents`, generated from `quirky.agents` methods, plus session resume commands
@@ -389,5 +389,46 @@
 - **Confidence:** high
 - **Source:** locked by docs/loop/LOOP.md
 
+## D39: The kernel's PTY subscriptions become reference-counted per plugin
+- **Question:** prompt delivery must read a session's output, but PTY subscriptions are daemon-global and one plugin's `unsubscribe` stops output for every plugin (tech-spec survey)
+- **Options:** read the screen with `pty.read` polling (loses the escape sequences the ready signals need); never unsubscribe (output for every session keeps flowing to the daemon); count subscriptions per plugin in `createPtyApi`
+- **Chose:** count per plugin. A plugin's `unsubscribe` reaches the PTY host only when no plugin holds the session; `revoke` drops a plugin's holds by the same rule.
+- **Why:** the roadmap grows the plugin API in the milestone that needs it, and the fix is local to `packages/daemon/src/plugins/pty-api.ts`. Without it, `quirky.agents` finishing a delivery would cut off an attached terminal view.
+- **Evidence:** packages/daemon/src/plugins/pty-api.ts; packages/pty-host/src/session.ts:205-215; plugins/quirky.terminal/src/terminal.ts:157,229
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** assumed — autonomous
+
+## D40: Session and agents talk through four `quirky.agents` methods, and `deliver` settles before it returns
+- **Question:** the contract between `quirky.session` and `quirky.agents` (tech-spec contracts)
+- **Options:** one `launch` method in `quirky.agents` that calls back into `quirky.session` (a dependency cycle, which the kernel rejects); session calls `pick`, `prepareLaunch`, `prepareResume` and `deliver`, and stores what they return
+- **Chose:** the four methods. `prepareLaunch` returns the command, environment, launch record, initial delivery and any text to paste, and writes trust. `deliver` resolves with the outcome once settled; `quirky.session` awaits it only when the caller asked to wait, and records the outcome either way.
+- **Why:** `quirky.session` depends on `quirky.agents`, so `quirky.agents` can't call back without a cycle (registry.ts marks cycles invalid). The methods are public and schema'd like any other, which also lets a script call `plan` without launching.
+- **Evidence:** packages/daemon/src/plugins/registry.ts:48-124 (cycle check)
+- **Reversibility:** medium
+- **Confidence:** medium
+- **Revisit if:** a plugin-to-plugin call has a dispatch timeout shorter than a 20 s delivery
+- **Source:** assumed — autonomous
+
+## D41: Tests control detection and timing with two environment knobs and a fake login shell
+- **Question:** how e2e tests keep real agent CLIs out and avoid 20-second waits
+- **Options:** run against the real machine's PATH; put fakes in `$QUIRKY_HOME/bin`; a fake login shell plus `QUIRKY_AGENT_SEARCH_DIRS` and `QUIRKY_TEST_AGENT_TIME_SCALE`
+- **Chose:** the knobs and the fake shell. The fake `<tmp>/shells/sh` drops `-l` so macOS's `path_helper` can't put `/usr/local/bin` (where a real `claude` may live) ahead of the fakes; `QUIRKY_AGENT_SEARCH_DIRS` replaces the install-directory list; `QUIRKY_TEST_AGENT_TIME_SCALE` scales every delivery timer. The daemon runs as a subprocess with a temporary `HOME`, so trust writes land in the temp home.
+- **Why:** a test that finds the developer's real `claude` would launch it; LOOP.md forbids touching real state; `QUIRKY_TEST_ENTER_DELAY_MS` is the existing precedent for a test timing knob
+- **Evidence:** packages/daemon/test/startup.test.ts:96-145; packages/daemon/test/shell-path.test.ts:49-60; docs/loop/LOOP.md "Tests never touch real state"
+- **Reversibility:** easy
+- **Confidence:** medium
+- **Source:** assumed — autonomous
+
+## D42: One Codex adversarial review covers both specs and stands in for the tech-spec reviewer
+- **Question:** the tech-spec rubric dispatches its own reviewer; LOOP.md asks for one adversarial review of both specs
+- **Options:** run both reviews; run the adversarial review only
+- **Chose:** the adversarial review only, with the tech-spec reviewer's checks (pointer precision, fidelity to Decisions Locked, back-links, the no-code rule, contract completeness, buildability) added to its criteria
+- **Why:** LOOP.md replaces the spec review with one pass; folding the rubric's checks in keeps what the reviewer would catch
+- **Evidence:** docs/loop/LOOP.md step 4; quirk:writing-specs tech-spec.md "After authoring"
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** locked by docs/loop/LOOP.md
+
 ## Progress
-Brainstorming done (D1–D38). Next: write logic.md, then tech.md, then the Codex adversarial review of both.
+Logic spec (amended at tech-spec authoring) and tech spec written. Next: the Codex adversarial review of both specs, fixes, commit, then subagent-driven development.
