@@ -3,13 +3,15 @@ import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { RpcError, RpcErrorCode, type ApiDescription } from '@quirky/protocol'
 import { connectDaemon } from '@quirky/protocol/node'
-import { CommandFailed, UsageError, wantsHelp } from './args'
+import pkg from '../package.json'
+import { CommandFailed, StderrFailure, UsageError, extractGlobals, wantsHelp } from './args'
 import { resolveCommands } from './catalog'
 import { COMMANDS, helpText, isGlobalToken, parseFor, route } from './commands'
 import type { Command, Context, OpenResult } from './commands/types'
 import { generatedCommands } from './generated'
-import { DaemonUnavailableError, createDaemonLink, type DaemonLink } from './link'
+import { ConnectionLostError, DaemonUnavailableError, createDaemonLink, type DaemonLink } from './link'
 import { Printer, type Writer } from './output'
+import { declaredCommands } from './plugin-commands'
 import { suggestCommands } from './suggest'
 
 export type Runtime = {
@@ -30,6 +32,13 @@ function wantsJson(argv: readonly string[]): boolean {
     else if (token === '--json=false') json = false
   }
   return json
+}
+
+/** True when `--version` or `-v` is the only switch besides an optional `--json`. */
+function wantsVersion(argv: readonly string[]): boolean {
+  const versionFlag = (token: string) => token === '--version' || token === '-v'
+  const jsonFlag = (token: string) => token === '--json' || token === '--json=true' || token === '--json=false'
+  return argv.some(versionFlag) && argv.every((token) => versionFlag(token) || jsonFlag(token))
 }
 
 /** The global switches before the first other token; later help flags belong to a `rawArgs` command. */
@@ -89,7 +98,10 @@ async function dispatch(runtime: Runtime, out: Printer, argv: readonly string[])
   if (needsCatalog || groupWithoutHelp) {
     try {
       const description = (await ctx.rpc.callAny('api.describe', {})) as ApiDescription
-      commands = [...COMMANDS, ...resolveCommands(COMMANDS, generatedCommands(description)).active]
+      commands = [
+        ...COMMANDS,
+        ...resolveCommands(COMMANDS, declaredCommands(description), generatedCommands(description)).active
+      ]
       target = route(argv, commands)
     } catch (error) {
       // a bare group is a usage error whether or not the daemon can list its plugin commands
@@ -132,13 +144,17 @@ const RPC_ERROR_CODES: Record<number, string> = {
   [RpcErrorCode.NotFound]: 'not-found',
   [RpcErrorCode.Conflict]: 'conflict',
   [RpcErrorCode.MethodNotFound]: 'method-not-found',
-  [RpcErrorCode.Unauthorized]: 'unauthorized'
+  [RpcErrorCode.Unauthorized]: 'unauthorized',
+  [RpcErrorCode.ConfirmationRequired]: 'confirmation-required'
 }
 
 function errorCode(error: unknown): string {
   if (error instanceof UsageError) return 'usage'
   if (error instanceof DaemonUnavailableError) return 'daemon-unavailable'
-  if (error instanceof RpcError) return RPC_ERROR_CODES[error.code] ?? 'internal'
+  if (error instanceof ConnectionLostError) return 'connection-lost'
+  if (error instanceof RpcError) {
+    return error.code === RpcErrorCode.Conflict && error.message === 'declined' ? 'declined' : (RPC_ERROR_CODES[error.code] ?? 'internal')
+  }
   return 'internal'
 }
 
@@ -147,7 +163,7 @@ function report(error: unknown, out: Printer, writer: Writer): number {
   const message = error instanceof Error ? error.message : String(error)
   const code = error instanceof UsageError ? 2 : 1
   if (error instanceof CommandFailed) {
-    if (!out.json) writer.stderr(`quirky: ${message}\n`)
+    if (!out.json || error instanceof StderrFailure) writer.stderr(`quirky: ${message}\n`)
     return code
   }
   const suggestions = error instanceof UsageError ? error.suggestions : []
@@ -165,7 +181,11 @@ function report(error: unknown, out: Printer, writer: Writer): number {
 export async function run(runtime: Runtime): Promise<number> {
   const out = new Printer(runtime.writer, wantsJson(runtime.argv))
   try {
-    await dispatch(runtime, out, runtime.argv)
+    if (wantsVersion(runtime.argv)) {
+      out.result({ version: pkg.version }, () => `quirky ${pkg.version}`)
+      return 0
+    }
+    await dispatch(runtime, out, extractGlobals(runtime.argv).argv)
     return 0
   } catch (error) {
     return report(error, out, runtime.writer)
@@ -182,16 +202,35 @@ async function openDesktopApp(): Promise<OpenResult> {
   return { ok: false, reason: `the Quirky desktop app is not installed (${stderr.trim() || `open exited ${code}`})` }
 }
 
+/** The link's settings from the argv; a malformed switch is left for `run` to report as a usage error. */
+function linkOptions(argv: readonly string[]) {
+  try {
+    const { options } = extractGlobals(argv)
+    return { yes: options.yes, requestBase: options.retryRequest }
+  } catch {
+    return {}
+  }
+}
+
 if (import.meta.main) {
+  const argv = process.argv.slice(2)
+  const stderr = (text: string) => void process.stderr.write(text)
+  const connectOptions: Parameters<typeof connectDaemon>[0] = {
+    role: 'cli',
+    name: 'quirky',
+    transport: 'socket',
+    identity: {
+      cwd: process.cwd(),
+      sessionId: process.env.QUIRKY_SESSION_ID,
+      worktreeId: process.env.QUIRKY_WORKTREE_ID
+    }
+  }
   const code = await run({
-    argv: process.argv.slice(2),
+    argv,
     env: process.env,
     cwd: process.cwd(),
-    writer: {
-      stdout: (text) => void process.stdout.write(text),
-      stderr: (text) => void process.stderr.write(text)
-    },
-    link: createDaemonLink(() => connectDaemon({ role: 'cli', name: 'quirky' })),
+    writer: { stdout: (text) => void process.stdout.write(text), stderr },
+    link: createDaemonLink(() => connectDaemon(connectOptions), { ...linkOptions(argv), stderr }),
     openDesktopApp
   })
   process.exitCode = code

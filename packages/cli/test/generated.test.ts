@@ -647,7 +647,7 @@ describe('resolveCommands', () => {
   })
 
   test('kernel commands shadow equal names and extensions of their words', () => {
-    const { active, shadowed } = resolveCommands(kernel, [
+    const { active, shadowed } = resolveCommands(kernel, [], [
       gen('quirky.repo', 'repo list'),
       gen('quirky.repo', 'repo rename'),
       gen('status', 'status list'),
@@ -662,7 +662,7 @@ describe('resolveCommands', () => {
   })
 
   test('built-ins win over installed plugins, which win by sort order', () => {
-    const { active, shadowed } = resolveCommands([], [
+    const { active, shadowed } = resolveCommands([], [], [
       gen('zeta', 'dup x'),
       gen('alpha', 'dup x'),
       gen('quirky.dup', 'dup x')

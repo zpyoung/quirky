@@ -332,7 +332,7 @@ describe('flag parsing', () => {
   test('an unknown flag names the command and the valid flags', async () => {
     const result = await run(['wt', 'list', '--bogus'])
     expect(result.code).toBe(2)
-    expect(result.stderr).toContain('quirky: unknown flag --bogus for wt list\nvalid flags: --repo, --json, --help\n')
+    expect(result.stderr).toContain('quirky: unknown flag --bogus for wt list\nvalid flags: --repo, --json, --help, --yes, --retry-request\n')
     expect(result.stderr).toContain("run 'quirky help' for usage")
     expect(daemon.calls).toEqual([])
   })

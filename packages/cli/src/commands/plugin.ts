@@ -1,5 +1,7 @@
+import { resolve } from 'node:path'
 import type { ContributionInfo } from '@quirky/protocol'
 import { flagBoolean, flagString } from '../args'
+import { renderPluginInspection } from '../inspection'
 import { formatRecord, formatTable } from '../output'
 import { takePositionals } from './support'
 import type { Command } from './types'
@@ -122,5 +124,50 @@ export const pluginActivate: Command = {
     const [pluginId] = takePositionals(args, ['pluginId'])
     const plugin = await ctx.rpc.call('plugin.activate', { pluginId })
     ctx.out.result(plugin, () => formatRecord([['id', plugin.id], ['state', plugin.state]]))
+  }
+}
+
+export const pluginInspect: Command = {
+  name: 'plugin inspect',
+  summary: 'list what the plugin at <path> would add, without running it',
+  positionals: [{ name: 'path', description: 'the plugin directory', required: true }],
+  flags: {},
+  methods: ['plugin.inspect'],
+  plugin: null,
+  async run(args, ctx) {
+    const [path] = takePositionals(args, ['path'])
+    const inspection = await ctx.rpc.call('plugin.inspect', { path: resolve(ctx.cwd, path) })
+    ctx.out.result(inspection, () => renderPluginInspection(inspection))
+  }
+}
+
+export const pluginInstall: Command = {
+  name: 'plugin install',
+  summary: 'install the plugin at <path> after listing what it adds; confirms unless --yes',
+  positionals: [{ name: 'path', description: 'the plugin directory', required: true }],
+  flags: {},
+  methods: ['plugin.inspect', 'plugin.install'],
+  plugin: null,
+  async run(args, ctx) {
+    const [path] = takePositionals(args, ['path'])
+    const absolute = resolve(ctx.cwd, path)
+    const inspection = await ctx.rpc.call('plugin.inspect', { path: absolute })
+    if (!ctx.out.json) ctx.out.line(`${renderPluginInspection(inspection)}\n\n`)
+    const plugin = await ctx.rpc.call('plugin.install', { path: absolute })
+    ctx.out.result(plugin, () => `installed ${plugin.id} ${plugin.version}`)
+  }
+}
+
+export const pluginUninstall: Command = {
+  name: 'plugin uninstall',
+  summary: 'delete an installed plugin and its data; confirms unless --yes',
+  positionals: [{ name: 'id', description: 'the plugin to uninstall', required: true }],
+  flags: {},
+  methods: ['plugin.uninstall'],
+  plugin: null,
+  async run(args, ctx) {
+    const [id] = takePositionals(args, ['id'])
+    const result = await ctx.rpc.call('plugin.uninstall', { id })
+    ctx.out.result(result, () => `uninstalled ${id}`)
   }
 }

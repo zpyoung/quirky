@@ -9,17 +9,24 @@ function rank(command: Command): number {
 }
 
 /**
- * Decides which generated commands the CLI can run. A kernel command wins over a generated one
- * with the same name or whose name extends the kernel's words, and an earlier generated command
- * (built-ins first, then by name) wins over a later duplicate. Losers keep `shadowedBy`.
+ * Decides which plugin commands the CLI can run. A kernel command wins over a plugin command with
+ * the same name or whose name extends the kernel's words; a plugin's declared commands win over
+ * generated ones with the same name; within each group an earlier command (built-ins first, then by
+ * name, a primary before an alias word) wins over a later duplicate. Losers keep `shadowedBy`.
  */
-export function resolveCommands(kernel: Command[], generated: Command[]): { active: Command[]; shadowed: Command[] } {
-  const sorted = [...generated].sort(
-    (a, b) => rank(a) - rank(b) || byText(a.name, b.name) || byText(a.plugin ?? '', b.plugin ?? '')
-  )
+export function resolveCommands(
+  kernel: Command[],
+  declared: Command[],
+  generated: Command[]
+): { active: Command[]; shadowed: Command[] } {
+  const order = (a: Command, b: Command) =>
+    rank(a) - rank(b) ||
+    byText(a.name, b.name) ||
+    Number(a.aliasOf !== undefined) - Number(b.aliasOf !== undefined) ||
+    byText(a.plugin ?? '', b.plugin ?? '')
   const active: Command[] = []
   const shadowed: Command[] = []
-  for (const command of sorted) {
+  for (const command of [...declared].sort(order).concat([...generated].sort(order))) {
     const owner =
       kernel.find((candidate) => candidate.name === command.name) ??
       kernel.find((candidate) => command.name.startsWith(`${candidate.name} `))
@@ -61,13 +68,17 @@ export function compareEntries(a: ApiCommandEntry, b: ApiCommandEntry): number {
 
 /**
  * The document `quirky api --json` prints: the daemon's description plus every CLI command the
- * kernel, installed plugins and shadowed plugin methods give, so an agent sees what each does and why.
+ * kernel, installed plugins and shadowed plugin commands give, so an agent sees what each does and why.
+ * Alias words are not listed; they reach the command listed under its primary words.
  */
 export function buildCatalog(
   description: ApiDescription,
   kernel: Command[],
   resolved: { active: Command[]; shadowed: Command[] }
 ): ApiCatalog {
-  const commands = [...kernel, ...resolved.active, ...resolved.shadowed].map(entryOf).sort(compareEntries)
+  const commands = [...kernel, ...resolved.active, ...resolved.shadowed]
+    .filter((command) => command.aliasOf === undefined)
+    .map(entryOf)
+    .sort(compareEntries)
   return { ...description, commands }
 }

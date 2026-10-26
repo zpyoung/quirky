@@ -1,4 +1,6 @@
-import type { UiCommandEntry, UiKeybinding, UiModel, UiSlotEntry } from '@quirky/protocol'
+import type { UiCommandEntry, UiKeybinding, UiLayout, UiModel, UiSlotEntry } from '@quirky/protocol'
+import { UsageError } from '../args'
+import { formatGeneric } from '../format'
 import { formatTable } from '../output'
 import { takePositionals } from './support'
 import type { Command } from './types'
@@ -77,5 +79,140 @@ export const uiContributions: Command = {
     takePositionals(args, [])
     const model = await ctx.rpc.call('ui.contributions', {})
     ctx.out.result(model, () => renderModel(model))
+  }
+}
+
+const FOCUS_TARGETS = ['sidebar', 'view', 'panel'] as const
+
+function layoutLines(layout: UiLayout): string[] {
+  const view = layout.view
+    ? [layout.view.id, layout.view.input === undefined ? '' : JSON.stringify(layout.view.input)].filter(Boolean).join(' ')
+    : '-'
+  return [`view: ${view}`, `panel: ${layout.panel ?? '-'}`, `sidebar: ${layout.sidebar ? 'shown' : 'hidden'}`, `focus: ${layout.focus ?? '-'}`]
+}
+
+export const uiState: Command = {
+  name: 'ui state',
+  summary: 'show the window layout and what each shown slot reports',
+  positionals: [],
+  flags: {},
+  methods: ['ui.state'],
+  plugin: null,
+  async run(args, ctx) {
+    takePositionals(args, [])
+    const state = await ctx.rpc.call('ui.state', {})
+    ctx.out.result(state, () =>
+      [
+        `windows: ${state.windows.length}`,
+        ...layoutLines(state.layout),
+        ...state.slots
+          .filter((slot) => slot.shown)
+          .map((slot) => `slot ${slot.id}: ${cell(slot.title)}${slot.report === undefined ? '' : ` ${JSON.stringify(slot.report)}`}`)
+      ].join('\n')
+    )
+  }
+}
+
+export const uiOpenView: Command = {
+  name: 'ui open-view',
+  summary: 'open a view in the window, with optional input',
+  positionals: [{ name: 'id', description: 'the view contribution ID', required: true }],
+  flags: { input: { type: 'json', description: 'the input passed to the view, as JSON' } },
+  methods: ['ui.view.open'],
+  plugin: null,
+  async run(args, ctx) {
+    const [id] = takePositionals(args, ['id'])
+    const input = args.flags.input
+    const layout = await ctx.rpc.call('ui.view.open', { id, ...(input === undefined ? {} : { input }) })
+    ctx.out.result(layout, () => layoutLines(layout).join('\n'))
+  }
+}
+
+export const uiCloseView: Command = {
+  name: 'ui close-view',
+  summary: 'close the open view',
+  positionals: [],
+  flags: {},
+  methods: ['ui.view.close'],
+  plugin: null,
+  async run(args, ctx) {
+    takePositionals(args, [])
+    const layout = await ctx.rpc.call('ui.view.close', {})
+    ctx.out.result(layout, () => layoutLines(layout).join('\n'))
+  }
+}
+
+export const uiOpenPanel: Command = {
+  name: 'ui open-panel',
+  summary: 'open a panel in the window',
+  positionals: [{ name: 'id', description: 'the panel contribution ID', required: true }],
+  flags: {},
+  methods: ['ui.panel.open'],
+  plugin: null,
+  async run(args, ctx) {
+    const [id] = takePositionals(args, ['id'])
+    const layout = await ctx.rpc.call('ui.panel.open', { id })
+    ctx.out.result(layout, () => layoutLines(layout).join('\n'))
+  }
+}
+
+export const uiClosePanel: Command = {
+  name: 'ui close-panel',
+  summary: 'close the open panel',
+  positionals: [],
+  flags: {},
+  methods: ['ui.panel.close'],
+  plugin: null,
+  async run(args, ctx) {
+    takePositionals(args, [])
+    const layout = await ctx.rpc.call('ui.panel.close', {})
+    ctx.out.result(layout, () => layoutLines(layout).join('\n'))
+  }
+}
+
+export const uiSidebar: Command = {
+  name: 'ui sidebar',
+  summary: 'show or hide the sidebar',
+  positionals: [{ name: 'state', description: 'show or hide', required: true }],
+  flags: {},
+  methods: ['ui.sidebar.set'],
+  plugin: null,
+  async run(args, ctx) {
+    const [state] = takePositionals(args, ['state'])
+    if (state !== 'show' && state !== 'hide') throw new UsageError('<state> must be show or hide')
+    const layout = await ctx.rpc.call('ui.sidebar.set', { visible: state === 'show' })
+    ctx.out.result(layout, () => layoutLines(layout).join('\n'))
+  }
+}
+
+export const uiFocus: Command = {
+  name: 'ui focus',
+  summary: 'move focus to the sidebar, the view or the panel',
+  positionals: [{ name: 'target', description: FOCUS_TARGETS.join(', '), required: true }],
+  flags: {},
+  methods: ['ui.focus'],
+  plugin: null,
+  async run(args, ctx) {
+    const [target] = takePositionals(args, ['target'])
+    if (!(FOCUS_TARGETS as readonly string[]).includes(target)) {
+      throw new UsageError(`<target> must be one of ${FOCUS_TARGETS.join(', ')}`)
+    }
+    const layout = await ctx.rpc.call('ui.focus', { target: target as (typeof FOCUS_TARGETS)[number] })
+    ctx.out.result(layout, () => layoutLines(layout).join('\n'))
+  }
+}
+
+export const uiRun: Command = {
+  name: 'ui run',
+  summary: 'run a plugin UI command in the open window and print its result',
+  positionals: [{ name: 'command', description: 'the command contribution ID', required: true }],
+  flags: { args: { type: 'json', description: 'the command arguments, as JSON' } },
+  methods: ['ui.command.run'],
+  plugin: null,
+  async run(args, ctx) {
+    const [id] = takePositionals(args, ['command'])
+    const commandArgs = args.flags.args
+    const reply = await ctx.rpc.call('ui.command.run', { id, ...(commandArgs === undefined ? {} : { args: commandArgs }) })
+    ctx.out.result(reply, () => formatGeneric(reply.result))
   }
 }
