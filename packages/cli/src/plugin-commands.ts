@@ -78,9 +78,10 @@ async function runModule(entry: ApiCliCommandEntry, module: string, args: Parsed
   } catch (error) {
     throw new StderrFailure(`could not load the CLI module of ${entry.plugin}: ${error instanceof Error ? error.message : String(error)}`)
   }
-  const handler = loaded.commands && Object.hasOwn(loaded.commands, entry.id) ? loaded.commands[entry.id] : undefined
+  const name = entry.id.slice(entry.id.lastIndexOf('/') + 1)
+  const handler = loaded.commands && Object.hasOwn(loaded.commands, name) ? loaded.commands[name] : undefined
   if (typeof handler !== 'function') {
-    throw new StderrFailure(`the CLI module of ${entry.plugin} has no command "${entry.id}"`)
+    throw new StderrFailure(`the CLI module of ${entry.plugin} has no command "${name}"`)
   }
   const flags: Record<string, unknown> = {}
   for (const flag of entry.flags) if (Object.hasOwn(args.flags, flag.name)) flags[flag.name] = args.flags[flag.name]
