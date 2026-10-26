@@ -134,6 +134,20 @@ describe('the worktree view', () => {
     expect((mounted.lastReport() as { active: string }).active).toBe('s2')
   })
 
+  test('D21: a view opened on the worktree alone publishes the tab it picked, so a fresh window shows the same one', async () => {
+    start()
+    const first = await open({ worktree: WORKTREE.id, session: 's2' })
+    await first.unmount()
+    // the worktree alone, as `quirky ui open-view` or a sidebar click opens it; window memory picks s2
+    mounted = await mountView(fake, { worktree: WORKTREE.id })
+    await mounted.unmount()
+    mounted = null
+
+    resetSessionMemory()
+    mounted = await mountView(fake, fake.layout.view!.input)
+    expect((mounted.lastReport() as { active: string }).active).toBe('s2')
+  })
+
   test('closing the active tab shown through the window memory publishes the replacement to the daemon layout', async () => {
     start()
     const first = await open({ worktree: WORKTREE.id, session: 's2' })
@@ -141,9 +155,9 @@ describe('the worktree view', () => {
     mounted = null
     mounted = await mountView(fake, { worktree: WORKTREE.id })
     expect((mounted.lastReport() as { active: string }).active).toBe('s2')
-    expect(fake.opened).toEqual([])
+    expect(fake.opened).toEqual([{ id: VIEW, input: { worktree: WORKTREE.id, session: 's2' } }])
     await fake.emit({ type: 'quirky.session/removed', data: { sessionId: 's2' } })
-    expect(fake.opened).toEqual([{ id: VIEW, input: { worktree: WORKTREE.id, session: 's1' } }])
+    expect(fake.opened.at(-1)).toEqual({ id: VIEW, input: { worktree: WORKTREE.id, session: 's1' } })
   })
 
   test('SC-37: clicking a tab opens the view on that session', async () => {
@@ -276,9 +290,10 @@ describe('new sessions', () => {
   test('a failed start is shown as a toast', async () => {
     start([shell1], { 'quirky.session/create': () => Promise.reject(new Error('no pty')) })
     const view = await open({ worktree: WORKTREE.id })
+    const before = fake.opened.length
     await pickFromMenu(view, 'Shell')
     expect(fake.toasts).toEqual([{ title: 'Could not start session', body: 'no pty' }])
-    expect(fake.opened).toEqual([])
+    expect(fake.opened).toHaveLength(before)
   })
 })
 
@@ -365,9 +380,10 @@ describe('UI commands', () => {
     const view = await open({ worktree: WORKTREE.id })
     await view.unmount()
     mounted = null
+    const before = fake.opened.length
     await fake.command('select-tab', { index: 2 })
     await fake.command('close-session')
-    expect(fake.opened).toEqual([])
+    expect(fake.opened).toHaveLength(before)
     expect(fake.callsTo('quirky.session/close')).toEqual([])
   })
 })
