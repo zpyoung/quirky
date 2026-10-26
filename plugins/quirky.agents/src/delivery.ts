@@ -37,6 +37,9 @@ export class DeliveryRunner {
    * Delivers `text` to the session's agent: `pasted` once ready, `unconfirmed` when the agent never
    * signalled and the entry allows a blind paste, `not-delivered` when the session ended first or
    * nothing could be written. With `submit` false the text is left in the input as a draft.
+   *
+   * The readiness deadline runs from the call, so a stalled subscribe cannot outlast it, and
+   * nothing is written to a session that is no longer alive.
    */
   deliver(sessionId: string, entry: AgentEntry, text: string, submit: boolean): Promise<DeliveryOutcome> {
     return new Promise((resolve) => {
@@ -49,10 +52,12 @@ export class DeliveryRunner {
       let settled = false
       let subscribed = false
       let subscribing = true
-      let ended = false
+      let pasting = false
+      let deadlineHandled = false
       let pasteWritten = false
       let pasteOutcome: DeliveryOutcome = 'pasted'
       let timer: ReturnType<typeof setTimeout> | null = null
+      let deadlineTimer: ReturnType<typeof setTimeout> | null = null
       const early: Uint8Array[] = []
       const removers: Array<() => void> = []
 
@@ -60,6 +65,10 @@ export class DeliveryRunner {
         if (timer !== null) {
           clearTimeout(timer)
           timer = null
+        }
+        if (deadlineTimer !== null) {
+          clearTimeout(deadlineTimer)
+          deadlineTimer = null
         }
       }
 
@@ -113,7 +122,7 @@ export class DeliveryRunner {
         }
       }
 
-      const paste = (outcome: DeliveryOutcome) => {
+      const writePaste = (outcome: DeliveryOutcome) => {
         const enterNow = submit && entry.enterWithPaste
         if (!write(encodeBracketedPaste(text) + (enterNow ? '\r' : ''))) {
           settle('not-delivered')
@@ -134,32 +143,62 @@ export class DeliveryRunner {
         }
       }
 
+      // the exit may predate our subscribe, and its replay can still hold the ready signal
+      const isAlive = async (): Promise<boolean> => {
+        try {
+          const sessions = await this.pty.list()
+          return sessions.some((info) => info.sessionId === sessionId && info.alive)
+        } catch {
+          return false
+        }
+      }
+
+      const paste = (outcome: DeliveryOutcome) => {
+        pasting = true
+        isAlive().then((alive) => {
+          if (settled) {
+            return
+          }
+          if (alive) {
+            writePaste(outcome)
+          } else {
+            settle('not-delivered')
+          }
+        })
+      }
+
+      const onDeadline = () => {
+        if (settled || pasteWritten || deadlineHandled) {
+          return
+        }
+        deadlineHandled = true
+        if (!pasting && !subscribing && entry.blindPaste) {
+          paste('unconfirmed')
+        } else {
+          settle('not-delivered')
+        }
+      }
+
       const check = () => {
-        if (settled || pasteWritten || subscribing) {
+        if (settled || pasteWritten || pasting || subscribing) {
           return
         }
         const at = clock()
+        if (at >= deadline) {
+          onDeadline()
+          return
+        }
         if (scanner.isReady(at)) {
           paste('pasted')
           return
         }
-        if (at >= deadline) {
-          if (entry.blindPaste) {
-            paste('unconfirmed')
-          } else {
-            settle('not-delivered')
-          }
-          return
-        }
         const next = scanner.nextCheckAt()
-        after((next === null ? deadline : Math.min(next, deadline)) - at, check)
+        if (next !== null) {
+          after(Math.min(next, deadline) - at, check)
+        }
       }
 
       const sessionEnded = () => {
-        ended = true
-        if (subscribing) {
-          return
-        }
         if (pasteWritten) {
           settle(pasteOutcome)
         } else {
@@ -169,7 +208,7 @@ export class DeliveryRunner {
 
       removers.push(
         this.pty.onData((id, bytes) => {
-          if (id !== sessionId || settled || pasteWritten) {
+          if (id !== sessionId || settled || pasteWritten || pasting) {
             return
           }
           if (subscribing) {
@@ -196,12 +235,18 @@ export class DeliveryRunner {
         })
       )
 
+      deadlineTimer = setTimeout(() => {
+        deadlineTimer = null
+        onDeadline()
+      }, Math.max(0, entry.readyTimeoutMs * this.timeScale))
+
       this.pty.subscribe(sessionId).then(
         ({ replay }) => {
           subscribing = false
           subscribed = true
-          if (ended) {
-            settle('not-delivered')
+          if (settled) {
+            // settled while subscribing, so the settle skipped the unsubscribe
+            this.pty.unsubscribe(sessionId).catch(() => {})
             return
           }
           const at = clock()
