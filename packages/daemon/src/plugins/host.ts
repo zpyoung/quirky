@@ -62,6 +62,13 @@ export type PluginHostOptions = {
 
 const FUNCTION_KINDS = new Set(['method', 'job', 'launch-hook'])
 
+type ComputeRegistry = (
+  discovered: DiscoveredPlugin[],
+  disabled: ReadonlySet<string>,
+  distroDisabled?: ReadonlySet<string>
+) => Registry
+const compute: ComputeRegistry = computeRegistry
+
 const DEFAULT_TIMEOUT_MS = 10_000
 
 type RuntimeState = 'inactive' | 'activating' | 'active' | 'failed'
@@ -113,6 +120,10 @@ export class PluginHost {
   private readonly runtimes = new Map<string, Runtime>()
   private derivedDiagnostics = new Map<string, PluginDiagnostic[]>()
   private activationOrder: string[] = []
+  /** Why each disabled plugin is off, as of the last recompute. */
+  private disabledSets = { user: new Set<string>(), distro: new Set<string>(), safeMode: new Set<string>() }
+  /** Plugins whose directory is being swapped; they can't activate until the rescan that follows. */
+  private readonly replacing = new Set<string>()
   private queue: Promise<unknown> = Promise.resolve()
   private stopped = false
   private readonly timeoutMs: number
@@ -132,10 +143,30 @@ export class PluginHost {
     await Promise.allSettled(this.startupCandidates().map((id) => this.activateQuietly(id)))
   }
 
-  /** Re-runs discovery and recomputes the registry, then broadcasts `plugin.changed`. */
-  async rescan(): Promise<void> {
-    this.load()
-    this.options.emit({ type: 'plugin.changed' })
+  /**
+   * Re-runs discovery and recomputes the registry, deactivates plugins that vanished, changed
+   * version or are no longer enabled (and the plugins that depend on them), starts new `startup`
+   * plugins and broadcasts `plugin.changed`. Calls run one at a time with `setEnabled`.
+   */
+  rescan(): Promise<void> {
+    return this.enqueue(() => this.applyRescan())
+  }
+
+  /**
+   * Deactivates `pluginId`, runs `change` (which replaces or deletes its directory), then rescans.
+   * The plugin can't activate in between, so a same-version reinstall never runs half-swapped code.
+   */
+  replacePlugin(pluginId: string, change: () => void | Promise<void>): Promise<void> {
+    return this.enqueue(async () => {
+      this.replacing.add(pluginId)
+      try {
+        await this.release(new Set([pluginId]))
+        await change()
+      } finally {
+        this.replacing.delete(pluginId)
+        await this.applyRescan()
+      }
+    })
   }
 
   /** Every discovered entry sorted by ID, built-in first; a duplicate ID appears once per source. */
@@ -202,9 +233,7 @@ export class PluginHost {
    * enabling activates newly enabled startup plugins. Idempotent.
    */
   setEnabled(id: string, enabled: boolean): Promise<void> {
-    const run = this.queue.then(() => this.applyEnabled(id, enabled))
-    this.queue = run.catch(() => undefined)
-    return run
+    return this.enqueue(() => this.applyEnabled(id, enabled))
   }
 
   /** Appends a warning to a plugin's diagnostics until it next activates. Ignored for an unknown plugin. */
@@ -222,8 +251,21 @@ export class PluginHost {
     for (const id of [...this.activationOrder].reverse()) await this.deactivate(id)
   }
 
+  private enqueue(work: () => Promise<void>): Promise<void> {
+    const run = this.queue.then(work)
+    this.queue = run.catch(() => undefined)
+    return run
+  }
+
   private recompute(): void {
-    this.registry = computeRegistry(this.discovered, new Set(this.options.store.listDisabledIds()))
+    const safeMode = this.options.safeMode === true
+    const user = new Set(safeMode ? [] : this.options.store.listDisabledIds())
+    const distro = new Set(safeMode ? [] : (this.options.distroDisabled?.() ?? []))
+    const inSafeMode = new Set(
+      safeMode ? this.discovered.filter((plugin) => plugin.source === 'installed' && plugin.errors.length === 0).map((plugin) => plugin.id) : []
+    )
+    this.disabledSets = { user, distro, safeMode: inSafeMode }
+    this.registry = compute(this.discovered, new Set([...user, ...distro, ...inSafeMode]), distro)
     this.derivedDiagnostics = new Map()
     const derive = this.options.deriveDiagnostics
     if (!derive) return
@@ -262,7 +304,8 @@ export class PluginHost {
     const primary = this.registry.plugins.get(discovered.id) === entry
     const runtime = primary ? this.runtimes.get(discovered.id) : undefined
     const state = status === 'enabled' ? (runtime?.state ?? 'inactive') : status
-    const diagnostics = [...entry.diagnostics]
+    const reason = status === 'disabled' && primary ? this.disabledReasonOf(discovered.id) : undefined
+    const diagnostics = entry.diagnostics.map((item) => this.explainDisable(item, reason))
     if (primary) diagnostics.push(...(this.derivedDiagnostics.get(discovered.id) ?? []))
     if (status === 'enabled' && runtime?.state === 'failed' && runtime.error) {
       diagnostics.push({ level: 'error', message: runtime.error })
@@ -279,8 +322,24 @@ export class PluginHost {
       dependencies: manifest?.dependencies ?? [],
       ...(manifest?.ui === undefined ? {} : { ui: manifest.ui }),
       state,
+      ...(reason === undefined ? {} : { disabledReason: reason }),
       diagnostics
     }
+  }
+
+  private disabledReasonOf(id: string): NonNullable<PluginInfo['disabledReason']> {
+    if (this.disabledSets.safeMode.has(id)) return 'safe-mode'
+    if (this.disabledSets.user.has(id)) return 'user'
+    if (this.disabledSets.distro.has(id)) return 'distro'
+    return 'dependency'
+  }
+
+  /** The registry words every direct disable as the user's; say whose it actually is. */
+  private explainDisable(item: PluginDiagnostic, reason: PluginInfo['disabledReason']): PluginDiagnostic {
+    if (item.message !== 'disabled by the user') return item
+    if (reason === 'safe-mode') return { ...item, message: 'disabled by safe mode' }
+    if (reason === 'distro') return { ...item, message: 'disabled by the distro' }
+    return item
   }
 
   private startupCandidates(): string[] {
@@ -308,6 +367,7 @@ export class PluginHost {
     if (runtime.state === 'active') return
     if (runtime.state === 'activating') return runtime.inflight
     if (this.stopped) throw conflict('the plugin host is stopped')
+    if (this.replacing.has(id)) throw conflict(`${id} is being replaced`)
     runtime.error = undefined
     runtime.warnings = []
     this.setState(runtime, 'activating')
@@ -476,6 +536,49 @@ export class PluginHost {
     }
     if (enabled) await Promise.allSettled(this.startupCandidates().map((pluginId) => this.activateQuietly(pluginId)))
     this.changed()
+  }
+
+  private async applyRescan(): Promise<void> {
+    const previous = new Map(this.registry.plugins)
+    this.load()
+    const stale = new Set<string>()
+    for (const id of this.runtimes.keys()) {
+      const before = previous.get(id)?.discovered
+      const entry = this.registry.plugins.get(id)
+      const now = entry?.discovered
+      if (
+        !entry ||
+        entry.status !== 'enabled' ||
+        before?.manifest?.version !== now?.manifest?.version ||
+        before?.source !== now?.source
+      ) {
+        stale.add(id)
+      }
+    }
+    await this.release(stale)
+    if (!this.stopped) await Promise.allSettled(this.startupCandidates().map((id) => this.activateQuietly(id)))
+    this.changed()
+  }
+
+  /** Deactivates these plugins and every running plugin that depends on them, then forgets their runtime state. */
+  private async release(ids: Set<string>): Promise<void> {
+    const released = new Set(ids)
+    for (let grew = true; grew; ) {
+      grew = false
+      for (const [id, runtime] of this.runtimes) {
+        if (released.has(id) || runtime.state === 'inactive') continue
+        const dependencies = this.registry.plugins.get(id)?.discovered.manifest?.dependencies ?? []
+        if (dependencies.some((dependency) => released.has(dependency))) {
+          released.add(id)
+          grew = true
+        }
+      }
+    }
+    await Promise.allSettled([...released].map((id) => this.runtimes.get(id)?.inflight))
+    for (const id of [...this.activationOrder].reverse()) {
+      if (released.has(id)) await this.deactivate(id)
+    }
+    for (const id of released) this.runtimes.delete(id)
   }
 
   private async deactivate(id: string): Promise<void> {
