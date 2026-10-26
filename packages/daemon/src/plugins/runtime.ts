@@ -8,7 +8,7 @@ import {
   type StoreMigration
 } from '@quirky/protocol'
 import { conflict, invalidParams, notFound } from '../errors'
-import { buildSessionEnv, commandArgv, shellArgv } from '../launch'
+import { buildSessionEnv, commandArgv, shellArgv, shellKind } from '../launch'
 import { createHandlers } from '../methods'
 import type { Core } from '../service'
 import type { Store } from '../store'
@@ -161,6 +161,11 @@ export function createPluginRuntime(options: PluginRuntimeOptions): PluginRuntim
           shellArgv() {
             guard()
             return shellArgv(home, options.shell)
+          },
+          shellReady() {
+            guard()
+            const kind = shellKind(options.shell)
+            return kind === 'zsh' || kind === 'bash'
           },
           commandArgv(command) {
             guard()

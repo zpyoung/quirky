@@ -342,7 +342,7 @@ describe('resize, kill and exit', () => {
     const seen = events(other)
     await client.request('create', createParams('e', sh('printf hello; exit 3')))
     await waitFor(() => seen.length > 0, 5000, 'exit event')
-    expect(seen[0]).toEqual({ type: 'exit', sessionId: 'e', exitCode: 3 })
+    expect(seen[0]).toEqual({ type: 'exit', sessionId: 'e', exitCode: 3, exitSignal: null, exitCause: 'exited' })
     expect(await logText(host, 'e')).toBe('hello')
     const [info] = await client.request('list', {})
     expect(info).toMatchObject({ sessionId: 'e', alive: false, exitCode: 3, offset: 5 })

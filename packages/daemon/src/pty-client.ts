@@ -8,7 +8,9 @@ import {
   PtyFrameDecoder,
   encodePtyData,
   encodePtyJson,
+  type ExitCause,
   type PtyEvent,
+  type PtyFact,
   type PtyFrame,
   type PtyRequest,
   type PtyResults
@@ -31,6 +33,17 @@ export type PtyClientOptions = {
   log?: (message: string) => void
 }
 
+/** The host's rejection of a hello whose version it does not speak. */
+const VERSION_REJECTION = /^unsupported protocol version (\d+), host speaks (\d+)$/
+
+const RETIRE_WAIT_MS = 5000
+const RESTART_WAIT_MS = 15000
+
+export type PtyExitDetails = { exitSignal: string | null; exitCause: ExitCause }
+
+/** A host that speaks a newer protocol than this daemon; retrying cannot fix it. */
+class PtyProtocolRefused extends Error {}
+
 export function defaultPtyHostEntry(): string {
   return (
     process.env.QUIRKY_PTY_HOST_ENTRY ??
@@ -40,7 +53,8 @@ export function defaultPtyHostEntry(): string {
 
 /**
  * The daemon's connection to quirky-pty over `socketPath(home, 'pty.sock')`. It starts the host if nothing
- * answers and reconnects when the socket drops, since sessions outlive the connection.
+ * answers and reconnects when the socket drops, since sessions outlive the connection. A host speaking
+ * an older protocol is shut down and replaced; a newer one is refused.
  */
 export class PtyClient {
   private socket: Socket<undefined> | null = null
@@ -50,11 +64,17 @@ export class PtyClient {
   private readonly pending = new Map<number, Pending>()
   private readonly outQueue: Uint8Array[] = []
   private readonly dataHandlers = new Set<(sessionId: string, bytes: Uint8Array) => void>()
-  private readonly exitHandlers = new Set<(sessionId: string, exitCode: number | null) => void>()
+  private readonly exitHandlers = new Set<
+    (sessionId: string, exitCode: number | null, details: PtyExitDetails) => void
+  >()
+  private readonly factHandlers = new Set<(sessionId: string, fact: PtyFact) => void>()
   private readonly reconnectHandlers = new Set<() => void>()
   private connecting: Promise<void> | null = null
   private reconnecting = false
   private closing = false
+  private restarting: Promise<{ pid: number }> | null = null
+  private keepDown = false
+  private readonly closeWaiters = new Set<() => void>()
   hostPid: number | null = null
 
   constructor(private readonly options: PtyClientOptions) {}
@@ -67,8 +87,12 @@ export class PtyClient {
     this.dataHandlers.add(handler)
   }
 
-  onExit(handler: (sessionId: string, exitCode: number | null) => void): void {
+  onExit(handler: (sessionId: string, exitCode: number | null, details: PtyExitDetails) => void): void {
     this.exitHandlers.add(handler)
+  }
+
+  onFact(handler: (sessionId: string, fact: PtyFact) => void): void {
+    this.factHandlers.add(handler)
   }
 
   /** Called after the connection was re-established following a drop. */
@@ -98,6 +122,17 @@ export class PtyClient {
     return this.rawRequest(type, params, options.onResult as ((result: unknown) => void) | undefined)
   }
 
+  /**
+   * Replaces the PTY host: the running one ends every session as restorable and exits, then a fresh
+   * host starts. Reconnect handlers fire once afterwards. Concurrent calls share one restart.
+   */
+  restartHost(): Promise<{ pid: number }> {
+    this.restarting ??= this.replaceHost().finally(() => {
+      this.restarting = null
+    })
+    return this.restarting
+  }
+
   /** Sends input bytes to a session's terminal. */
   sendData(sessionId: string, bytes: Uint8Array): void {
     if (!this.ready) throw new Error('pty host is not connected')
@@ -111,6 +146,42 @@ export class PtyClient {
     this.ready = null
     socket?.end()
     this.failPending(new Error('pty client closed'))
+  }
+
+  private async replaceHost(): Promise<{ pid: number }> {
+    await this.connect()
+    this.keepDown = true
+    try {
+      if (!(await this.shutdownAndWait(RESTART_WAIT_MS))) throw new Error('quirky-pty did not stop after shutdown')
+    } finally {
+      this.keepDown = false
+    }
+    await this.connect()
+    this.notifyReconnect()
+    return { pid: this.hostPid as number }
+  }
+
+  /** Sends `shutdown` on the current socket and waits for it to close; false when it stays open past the wait. */
+  private async shutdownAndWait(waitMs: number): Promise<boolean> {
+    if (!this.socket) return true
+    let release!: () => void
+    const closed = new Promise<boolean>((resolve) => {
+      release = () => resolve(true)
+      this.closeWaiters.add(release)
+    })
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const timeout = new Promise<boolean>((resolve) => {
+      timer = setTimeout(() => resolve(false), waitMs)
+    })
+    try {
+      await this.rawRequest('shutdown', {})
+    } catch {
+      // the host may drop the connection before it replies
+    }
+    const result = await Promise.race([closed, timeout])
+    clearTimeout(timer)
+    this.closeWaiters.delete(release)
+    return result
   }
 
   private rawRequest(
@@ -154,7 +225,7 @@ export class PtyClient {
         await this.openAndHello()
         return
       } catch (error) {
-        if (this.closing) throw error
+        if (this.closing || error instanceof PtyProtocolRefused) throw error
         if (!spawned) {
           spawned = true
           this.spawnHost()
@@ -169,10 +240,8 @@ export class PtyClient {
     }
   }
 
-  private async openAndHello(): Promise<void> {
-    const token = readFileSync(join(this.options.home, 'pty.token'), 'utf8').trim()
-    const decoder = new PtyFrameDecoder()
-    this.decoder = decoder
+  private async openSocket(): Promise<Socket<undefined>> {
+    this.decoder = new PtyFrameDecoder()
     const socket = await Bun.connect<undefined>({
       unix: socketPath(this.options.home, 'pty.sock'),
       socket: {
@@ -185,6 +254,12 @@ export class PtyClient {
       }
     })
     this.socket = socket
+    return socket
+  }
+
+  private async openAndHello(): Promise<void> {
+    const token = readFileSync(join(this.options.home, 'pty.token'), 'utf8').trim()
+    const socket = await this.openSocket()
     try {
       const hello = await this.rawRequest('hello', { token, version: PTY_PROTOCOL_VERSION })
       this.hostPid = (hello as PtyResults['hello']).pid
@@ -192,7 +267,36 @@ export class PtyClient {
     } catch (error) {
       if (this.socket === socket) this.socket = null
       socket.end()
+      const rejection = VERSION_REJECTION.exec((error as Error).message)
+      const theirs = rejection ? Number(rejection[2]) : null
+      if (theirs !== null && theirs > PTY_PROTOCOL_VERSION) {
+        throw new PtyProtocolRefused(
+          `quirky-pty speaks protocol ${theirs}; this quirkyd speaks ${PTY_PROTOCOL_VERSION}. Stop it or upgrade Quirky.`
+        )
+      }
+      if (theirs !== null) await this.retireHost(theirs, token)
       throw error
+    }
+  }
+
+  /** Shuts down a host that speaks the older protocol `version`, so `establish` can start a current one. */
+  private async retireHost(version: number, token: string): Promise<void> {
+    try {
+      const socket = await this.openSocket()
+      try {
+        await this.rawRequest('hello', { token, version })
+        const stopped = await this.shutdownAndWait(RETIRE_WAIT_MS)
+        this.options.log?.(
+          stopped
+            ? `retired quirky-pty speaking protocol ${version}`
+            : `quirky-pty speaking protocol ${version} did not stop within ${RETIRE_WAIT_MS}ms`
+        )
+      } finally {
+        if (this.socket === socket) this.socket = null
+        socket.end()
+      }
+    } catch (error) {
+      this.options.log?.(`could not retire quirky-pty speaking protocol ${version}: ${(error as Error).message}`)
     }
   }
 
@@ -236,7 +340,13 @@ export class PtyClient {
       return
     }
     if (message.type === 'exit' && typeof message.sessionId === 'string') {
-      for (const handler of this.exitHandlers) handler(message.sessionId, message.exitCode ?? null)
+      const details: PtyExitDetails = {
+        exitSignal: message.exitSignal ?? null,
+        exitCause: message.exitCause ?? 'exited'
+      }
+      for (const handler of this.exitHandlers) handler(message.sessionId, message.exitCode ?? null, details)
+    } else if (message.type === 'fact' && typeof message.sessionId === 'string' && message.fact) {
+      for (const handler of this.factHandlers) handler(message.sessionId, message.fact)
     }
   }
 
@@ -247,7 +357,8 @@ export class PtyClient {
     this.failPending(new Error('pty host connection lost'))
     const wasReady = this.ready === socket
     this.ready = null
-    if (wasReady && !this.closing) void this.reconnectLoop()
+    for (const release of [...this.closeWaiters]) release()
+    if (wasReady && !this.closing && !this.keepDown) void this.reconnectLoop()
   }
 
   private failPending(error: Error): void {
@@ -272,6 +383,10 @@ export class PtyClient {
       this.reconnecting = false
     }
     if (this.closing) return
+    this.notifyReconnect()
+  }
+
+  private notifyReconnect(): void {
     for (const handler of this.reconnectHandlers) {
       try {
         handler()
