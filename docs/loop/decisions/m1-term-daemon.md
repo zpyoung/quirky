@@ -284,5 +284,36 @@
 - **Confidence:** high
 - **Source:** locked by docs/loop/LOOP.md
 
+## D29: Methods and events follow the plugins' camelCase naming; CLI words keep hyphens
+- **Question:** the tech-spec survey found the built-ins name methods in camelCase (`setStatus`, `describeRemove`) while the logic spec used `kill-all`, `restart-host` and `command-finished`
+- **Options:** keep hyphenated ids; camelCase ids with hyphenated CLI words
+- **Chose:** methods `killAll` and `restartHost`, event `commandFinished`; CLI words `kill-all` and `restart-host` through `cli-command` entries. Logic spec amended.
+- **Why:** one naming style across the plugin API; CLI words are independent of method ids (`cli-command.words`)
+- **Evidence:** plugins/quirky.session/quirky-plugin.json (`setStatus`); plugins/quirky.worktree/quirky-plugin.json:132 (`describeRemove`); packages/daemon/src/plugins/kinds.ts:16-22
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** assumed — autonomous
+
+## D30: The panel confirms in the window and calls with `yes`; CLI and agents confirm through the kernel's ask
+- **Question:** how the Terminal Sessions panel's kill and restart buttons confirm (D12, D13 make the methods destructive)
+- **Options:** let the call raise an ask card; show the panel's own dialog then pass `yes: true`
+- **Chose:** the panel's own dialog with Orca's text, then `yes: true`
+- **Why:** that is how the worktree panel does it (`plugins/quirky.worktree/src/actions.ts:52-79`), and the window doesn't handle ConfirmationRequired, so an ask card would leave the button looking dead
+- **Evidence:** packages/daemon/src/plugins/dispatch.ts:188-193; packages/daemon/src/plugins/confirm.ts:96-114
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** assumed — autonomous
+
+## D31: Tech-spec mechanisms: the host renders history windows through a scratch emulator, composes the attach replay by overlaying the live snapshot, and the wrappers report through hooks
+- **Question:** the tech spec's riskiest calls
+- **Options:** as written in tech.md; alternatives in D24
+- **Chose:** a framed segment log with absolute output positions; a cursor that is an output position; the attach replay built by rendering the log window, clearing the scratch screen, writing the live snapshot and serializing with scrollback; zsh `add-zsh-hook` and a bash `PROMPT_COMMAND` plus `DEBUG` trap for OSC 133 and the ready marker
+- **Why:** each was prototyped on this machine before writing the spec: the composed replay reproduced scrollback and screen exactly in a fresh terminal; zsh 5.9 and bash 3.2.57 reported `true`, `false` and `exit 7` as 0, 1, 7 with nothing for an empty line, and `exit 3` came through as 3
+- **Evidence:** scratchpad sertest/compose.ts, zt.ts, bt.ts (session scratchpad); docs/quirk/specs/2026-10-26-m1-term-daemon/tech.md
+- **Reversibility:** medium
+- **Confidence:** medium
+- **Revisit if:** a user's own `DEBUG` trap or prompt framework breaks the bash integration
+- **Source:** assumed — autonomous
+
 ## Progress
 Step 3 (brainstorm) in progress on `build/m1-term-daemon`.

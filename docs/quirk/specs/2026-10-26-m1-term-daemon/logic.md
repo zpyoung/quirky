@@ -5,7 +5,7 @@
 **Status:** Approved (headless build loop; decisions in [m1-term-daemon.md](../../../loop/decisions/m1-term-daemon.md)). Tech spec: requested.
 
 **Amendments:**
-- None yet.
+- 2026-10-26, tech-spec authoring: methods follow the plugins' camelCase naming (`killAll`, `restartHost`) and the finished-command event is `commandFinished`; CLI words stay `kill-all` and `restart-host` ([D29](../../../loop/decisions/m1-term-daemon.md)). SC-38: a protocol 1 host's session is not restorable, since that host kept no restorable history.
 
 ## Conceptual model
 
@@ -333,12 +333,12 @@ Most scenarios use repo **api** at `/tmp/w/api` with worktrees **main** (at `/tm
 31. **SC-31: a finished command reports its exit code** (API)
     - **Given** a zsh session and a bash session at their prompts, and a subscribed client
     - **When** each runs `true`, then `false`, then `sh -c 'exit 7'`
-    - **Then** each session gives three `quirky.terminal/command-finished` events with exit codes 0, 1 and 7, in order
+    - **Then** each session gives three `quirky.terminal/commandFinished` events with exit codes 0, 1 and 7, in order
 
 32. **SC-32: sequences split across reads are seen once** (API)
     - **Given** a session whose program writes a BEL, an OSC 133;D;4 and an OSC 7 one byte at a time with pauses between the bytes
     - **When** the output arrives in many small reads
-    - **Then** exactly one bell, one command-finished (exit code 4) and one cwd event arrive, and nothing is reported for the partial pieces
+    - **Then** exactly one bell, one commandFinished (exit code 4) and one cwd event arrive, and nothing is reported for the partial pieces
 
 33. **SC-33: title and cwd changes are reported once per change** (API)
     - **Given** **s1** and a subscribed client
@@ -378,7 +378,7 @@ Most scenarios use repo **api** at `/tmp/w/api` with worktrees **main** (at `/tm
 38. **SC-38: an older host is retired, a newer one refused** (API)
     - **Given** a home where a host speaking protocol 1 is running with one session
     - **When** `quirkyd` starts
-    - **Then** it shuts that host down, starts a protocol 2 host, and the old session is `exited` with cause `host-restart`; with a host speaking protocol 3 instead, `quirkyd` leaves it running and fails to connect with an error naming versions 2 and 3
+    - **Then** it shuts that host down, starts a protocol 2 host, and the old session is `exited` with cause `host-restart` and not restorable (a protocol 1 host kept no restorable history); with a host speaking protocol 3 instead, `quirkyd` leaves it running and fails to connect with an error naming versions 2 and 3
 
 ### Lifecycle and the plugin
 
@@ -390,7 +390,7 @@ Most scenarios use repo **api** at `/tmp/w/api` with worktrees **main** (at `/tm
 40. **SC-40: every terminal host flow is scriptable** (CLI)
     - **Given** a running daemon
     - **When** the agent runs `quirky api --json`
-    - **Then** it lists `quirky.terminal/snapshot`, `history`, `sessions`, `kill`, `kill-all`, `restart-host` and `quirky.session/restore` with their argument schemas, the `terminal` group has `snapshot`, `history`, `sessions`, `kill`, `kill-all` and `restart-host` commands, `session` has `restore`, and the events `bell`, `command-finished`, `title` and `cwd` are declared
+    - **Then** it lists `quirky.terminal/snapshot`, `history`, `sessions`, `kill`, `killAll`, `restartHost` and `quirky.session/restore` with their argument schemas, the `terminal` group has `snapshot`, `history`, `sessions`, `kill`, `kill-all` and `restart-host` commands, `session` has `restore`, and the events `bell`, `commandFinished`, `title` and `cwd` are declared
     - **Data after:** **quirky api --json**: ✓ the seven methods with schemas; ✓ the four events
 
 41. **SC-41: the feature uses only the public plugin API** (API)
