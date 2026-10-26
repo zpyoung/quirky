@@ -13,6 +13,7 @@ afterEach(async () => {
   await h?.cleanup()
   h = null
   delete (globalThis as Record<string, unknown>).__runtimeStore
+  delete (globalThis as Record<string, unknown>).__runtimeContext
   removeTempDirs()
 })
 
@@ -196,6 +197,36 @@ describe('plugin store', () => {
     expect(store.version).toBe(1)
     await s.client.call('plugin.disable', { id: 'acme.x' })
     expect(() => store.version).toThrow('acme.x is no longer active')
+  })
+
+  test('a saved store is writable inside deactivate and throws once the disable completes', async () => {
+    const s = await boot([
+      {
+        manifest: { id: 'acme.x', contributes: methods('rows') },
+        behavior: {
+          activate: `
+            const store = context.openStore(['CREATE TABLE t (n INTEGER)'])
+            globalThis.__runtimeStore = store
+            globalThis.__runtimeContext = context
+            context.provide('method:acme.x/rows', () => store.all('SELECT n FROM t'))`,
+          deactivate: `globalThis.__runtimeStore.run('INSERT INTO t (n) VALUES (42)')`
+        }
+      }
+    ])
+    expect(await call(s.client, 'acme.x/rows')).toEqual([])
+    const globals = globalThis as Record<string, any>
+    const { __runtimeStore: store, __runtimeContext: context } = globals
+
+    await s.client.call('plugin.disable', { id: 'acme.x' })
+    expect(s.lines()).toContain('deactivate acme.x')
+    expect(() => store.version).toThrow('acme.x is no longer active')
+    expect(() => store.run('INSERT INTO t (n) VALUES (1)')).toThrow('acme.x is no longer active')
+    expect(() => context.emit('ping', {})).toThrow('acme.x is no longer active')
+    expect(() => context.openStore([])).toThrow('acme.x is no longer active')
+    expect(s.lines().filter((line) => line.startsWith('deactivate'))).toEqual(['deactivate acme.x'])
+
+    await s.client.call('plugin.enable', { id: 'acme.x' })
+    expect(await call(s.client, 'acme.x/rows')).toEqual([{ n: 42 }])
   })
 })
 
