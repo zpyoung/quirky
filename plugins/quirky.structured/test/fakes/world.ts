@@ -79,7 +79,7 @@ export class FakeWorld {
         envelope: { status: 'pending', askId: id, answers: {}, skipped: [] }
       }
       this.asks.set(id, ask)
-      return ask
+      return { askId: id }
     },
     wait: async (params: any, context: PluginCtx): Promise<AskEnvelope> => {
       const ask = this.requireAsk(params.askId, context)

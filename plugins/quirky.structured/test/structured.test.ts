@@ -313,6 +313,46 @@ describe('the Claude runner inside the plugin', () => {
   })
 })
 
+describe('deactivating the plugin', () => {
+  test('stops a started Claude runner and denies its pending permission prompt', async () => {
+    const queries: FakeQuery[] = []
+    await boot({
+      factory: (context: StructuredContext) =>
+        createClaudeRunner(
+          { ...context, resolveClaudePath: async () => '/usr/local/bin/claude' },
+          {
+            query: (params: ClaudeQueryParams) => {
+              const query = new FakeQuery(params)
+              queries.push(query)
+              return query
+            }
+          }
+        )
+    })
+    await create('fix it')
+    await waitFor(() => queries.length === 1)
+    const query = queries[0]
+    const permission = (query.params.options!.canUseTool as any)('Bash', { command: 'ls' }, {
+      signal: new AbortController().signal,
+      toolUseID: 'tu'
+    })
+    await waitForAsync(async () => ((await call('quirky.ask/list', { pendingOnly: true })) as any[])[0])
+
+    await call('plugin.disable', { id: 'quirky.structured' })
+
+    expect(query.closed).toBe(1)
+    expect(await permission).toMatchObject({ behavior: 'deny' })
+  })
+
+  test('stops the runner for every live session', async () => {
+    await boot()
+    const first = await create('one')
+    const second = await create('two')
+    await call('plugin.disable', { id: 'quirky.structured' })
+    expect(runner.stopped.sort()).toEqual([first.id, second.id].sort())
+  })
+})
+
 describe('v1 journal import', () => {
   function writeV1Journal(home: string, rows: [string, number, string, string, string | null, number][]) {
     mkdirSync(home, { recursive: true })
