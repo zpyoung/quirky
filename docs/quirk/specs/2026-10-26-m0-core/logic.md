@@ -2,10 +2,10 @@
 
 ## Status & amendments
 
-**Status:** Approved (headless build loop; decisions in [m0-core.md](../../../loop/decisions/m0-core.md)). Tech spec: requested.
+**Status:** Approved (headless build loop; decisions in [m0-core.md](../../../loop/decisions/m0-core.md)). Tech spec: requested; authored as [tech.md](tech.md) (gate: requested, crosses subsystems).
 
 **Amendments:**
-- None yet.
+- 2026-10-26, tech-spec authoring: SC-23 keeps v1's rule that the setting gates only the OS notification; packaging the built-ins into the desktop bundle is in scope, since the packaged app has no features without them.
 
 ## Conceptual model
 
@@ -309,7 +309,7 @@ Most scenarios use repo **api** at `/tmp/w/api` with worktrees **main** (branch 
 23. **SC-23: agent hooks drive status and notifications** (API)
     - **Given** a Claude session in **main**, and no desktop client connected
     - **When** the hook script POSTs `UserPromptSubmit`, then `Notification`, then `Stop`
-    - **Then** the session goes working, waiting, done; `quirky.session/changed` is emitted each time; waiting and done each emit `notify` titled with the worktree name ("Claude needs input", "Claude finished") and show an osascript notification. With `setting:quirky.agent-status/notifications` false, no notification is sent. A POST with a wrong hook token is refused with 401 and changes nothing.
+    - **Then** the session goes working, waiting, done; `quirky.session/changed` is emitted each time; waiting and done each emit `notify` titled with the worktree name ("Claude needs input", "Claude finished") and show an osascript notification. With `setting:quirky.agent-status/notifications` false, the `notify` event still reaches the window as a toast, but no OS notification is shown, as in v1. A POST with a wrong hook token is refused with 401 and changes nothing.
 
 24. **SC-24: plugin code uses only the public API** (API)
     - **Given** the built-in plugins' source
@@ -566,7 +566,6 @@ In scope: the four parts above and the flows of cli.md and ask.md that
 - **Layout beyond one view and one panel:** tabs as a kernel model, splits and tab groups (M1's
   terminal panes).
 - **Several distros at once**, a distro registry or download, and plugin signing.
-- **Packaging the built-ins into the desktop app bundle**, beyond what `bun run build` already does.
 - **A safe-mode switch in the desktop shell**: the CLI's `daemon restart --disable-plugins` is the
   way in.
 
