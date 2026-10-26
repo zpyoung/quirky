@@ -442,3 +442,13 @@
 
 ## Progress
 Building. Waves 1-3 merged with checkpoints closed (D40-D43); wave 4 (T8 daemon scenario suite, T9 window scenario suite) dispatched from b6bb471. Next: audit and merge wave 4, full gate, final review loop over b7613ba..HEAD (deep, three Codex lenses), then LOOP.md step 6-7. If this session stops early, check for leftover worktrees under the session scratchpad wt/ and branches build/m0-ui-api-w4-*.
+## D44: Final round 1: fix all eight findings, which collapse to seven defects, and add the missing SC-17 window test
+- **Question:** adjudicating final review round 1 over the whole branch (three Codex lenses, deep, range b7613ba..d484470)
+- **Options:** fix or reject each
+- **Chose:** fixed all, in four parallel fixer components. Host: re-enabling a contribution while its orphaned load awaited `deactivate` left the slot in a "did not provide" error (C1); a provide breach inside a mount function was overwritten with `mounted` and leaked its cleanup (C2, X2); slot failures weren't logged (S3). Shell: a remount reused the previous plugin's element (S2); number settings rejected fractional values in the form (C3). CLI: `quirky theme list` lost a chosen theme that isn't in effect, now printed as `chosen: <id> (not in effect)` (S1). Daemon: a `ui` path with an unpaired surrogate passed validation and made the UI model throw for every plugin; manifests now reject it and the builder can't throw over one plugin (X1). Also added G1, a test that a plugin keybinding on `mod+t` is shadowed and Cmd+T runs nothing in the window, which SC-17 asks for and the scenario suites had left out.
+- **Why:** each finding came with a reproduction script against the code, and each broke a stated rule (the lifecycle rules, the mount contract, SC-26's kept choice, m0-registry D13's containment)
+- **Evidence:** scratchpad r1/{C,S,X}/gate.json; tests named C1, C2, S3, G1 in packages/ui/test/plugin-host*.test.ts, S1 in packages/cli/test/theme.test.ts, X1 in packages/daemon/test/plugins/ui-kinds.test.ts and ui-model.test.ts
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** assumed — autonomous
+
