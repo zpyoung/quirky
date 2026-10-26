@@ -61,6 +61,8 @@ export async function rebuildScreen(
   const scanner = new OutputScanner()
   // newest last; a repeated directory moves to the end
   const cwds = new Map<string, true>()
+  // newest directory that existed when the candidate cap pushed it out of `cwds`
+  let evictedExisting: string | null = null
 
   const resize = (c: number, r: number): void => {
     cols = Math.max(1, c)
@@ -73,7 +75,11 @@ export async function rebuildScreen(
       else if (fact.kind === 'cwd') {
         cwds.delete(fact.cwd)
         cwds.set(fact.cwd, true)
-        if (cwds.size > MAX_CWD_CANDIDATES) cwds.delete(cwds.keys().next().value!)
+        if (cwds.size > MAX_CWD_CANDIDATES) {
+          const oldest = cwds.keys().next().value!
+          cwds.delete(oldest)
+          if (isDirectory(oldest)) evictedExisting = oldest
+        }
       }
     }
     screen.write(bytes)
@@ -87,7 +93,10 @@ export async function rebuildScreen(
     for (const segment of segments) {
       for (const record of segment.records) {
         if (record.kind === 'resize') {
-          if (checkpoint === null || record.offset >= from) resize(record.cols!, record.rows!)
+          if (checkpoint === null || record.offset >= from) {
+            await screen.settled()
+            resize(record.cols!, record.rows!)
+          }
         } else if (record.kind === 'output') {
           const bytes = record.bytes!
           const end = record.offset + bytes.length
@@ -103,7 +112,8 @@ export async function rebuildScreen(
     screen.seeding = wasSeeding
   }
 
-  const cwd = [...cwds.keys()].reverse().find(isDirectory) ?? checkpoint?.cwd ?? fallback.cwd
+  const cwd =
+    [...cwds.keys()].reverse().find(isDirectory) ?? evictedExisting ?? checkpoint?.cwd ?? fallback.cwd
   const source: RestoreSource =
     checkpoint && segments.length > 0 ? 'checkpoint+log' : checkpoint ? 'checkpoint' : segments.length > 0 ? 'log' : 'none'
   return { source, cols, rows, cwd, title, offset: segments[segments.length - 1]?.endOffset ?? 0 }
