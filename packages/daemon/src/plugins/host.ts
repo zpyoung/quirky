@@ -351,7 +351,7 @@ export class PluginHost {
     // marked live before create runs: a create that throws after partial setup still needs its revoke
     if (this.options.extension) attempt.extensionLive = true
     const created = this.options.extension?.create({ id, dir: discovered.dir }, () => attempt.revoked)
-    const defaults: Pick<PluginContext, 'dataDir' | 'emit' | 'subscribe' | 'call' | 'openStore' | 'error'> = {
+    const defaults: Pick<PluginContext, 'dataDir' | 'emit' | 'subscribe' | 'call' | 'openStore' | 'getSetting' | 'error'> = {
       dataDir: '',
       emit: () => {
         throw new Error(`${id}: context.emit is not available`)
@@ -364,6 +364,9 @@ export class PluginHost {
       },
       openStore: () => {
         throw new Error(`${id}: context.openStore is not available`)
+      },
+      getSetting: () => {
+        throw new Error(`${id}: context.getSetting is not available`)
       },
       error: (_kind, message) => new Error(message)
     }

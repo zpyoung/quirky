@@ -17,6 +17,8 @@ export type PluginInfo = {
   activation: 'lazy' | 'startup'
   dependencies: string[]
   state: PluginState
+  /** Relative path of the webview ES module. */
+  ui?: string
   /** Registry diagnostics, then the last activation error if the plugin failed. */
   diagnostics: PluginDiagnostic[]
 }
@@ -56,6 +58,8 @@ export type PluginContext = {
   call(method: string, params?: Record<string, unknown>): Promise<unknown>
   /** Opens this plugin's private SQLite store, applying any migrations it has not yet run. */
   openStore(migrations: StoreMigration[]): PluginStore
+  /** The current value of a setting: a short name in this plugin's own namespace, or a full setting ID. */
+  getSetting(name: string): unknown
   /** Builds an Error that the RPC layer reports with the code for `kind`. */
   error(kind: PluginErrorKind, message: string): Error
 }
@@ -180,6 +184,8 @@ export type PluginManifest = {
   description?: string
   /** Relative path inside the plugin directory. */
   main?: string
+  /** Relative path of the webview ES module. */
+  ui?: string
   /** Defaults to `lazy`. */
   activation?: 'lazy' | 'startup'
   dependencies?: string[]

@@ -13,6 +13,7 @@ import type {
   Worktree
 } from './model'
 import type { ContributionInfo, JobInfo, JobRun, PluginEvent, PluginInfo } from './plugins'
+import type { SettingInfo, ThemeList, UiModel } from './ui'
 
 /** Bumped on any breaking change to `Methods`, `QuirkyEvent` or the frame layout. */
 export const PROTOCOL_VERSION = 1
@@ -138,6 +139,21 @@ export type Methods = {
   'job.list': { params: Record<string, never>; result: JobInfo[] }
   /** Runs job `id` now and resolves with the finished run. */
   'job.run': { params: { id: string }; result: JobRun }
+
+  /** The window's view of plugin UI: slots, commands, keybindings, settings, themes and module URLs. */
+  'ui.contributions': { params: Record<string, never>; result: UiModel }
+  /** Every plugin setting with its current value, or only those of plugin `pluginId`. */
+  'setting.list': { params: { pluginId?: string }; result: SettingInfo[] }
+  /** One plugin setting by full ID. */
+  'setting.get': { params: { id: string }; result: SettingInfo }
+  /** Validates `value` against the declaration, stores it and broadcasts `setting.changed`. */
+  'setting.set': { params: { id: string; value: unknown }; result: SettingInfo }
+  /** Drops the stored value so the setting reads as its default. */
+  'setting.reset': { params: { id: string }; result: SettingInfo }
+  /** Every available theme with the chosen and the active one. */
+  'theme.list': { params: Record<string, never>; result: ThemeList }
+  /** Chooses theme `id` (`default` or a theme ID) and broadcasts `theme.changed`. */
+  'theme.set': { params: { id: string }; result: ThemeList }
 }
 
 export type MethodName = keyof Methods
@@ -156,6 +172,8 @@ export type QuirkyEvent =
   | { type: 'notify'; title: string; body: string; sessionId?: string; worktreeId?: string }
   | { type: 'structured.message'; message: StructuredMessage }
   | { type: 'plugin.changed' }
+  | { type: 'setting.changed'; id: string; value: boolean | number | string }
+  | { type: 'theme.changed'; chosen: string; active: string }
   | PluginEvent
 
 export type RpcRequest = { jsonrpc: '2.0'; id: number; method: string; params?: unknown }
