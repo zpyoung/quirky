@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { RpcError, RpcErrorCode, type ApiDescription } from '@quirky/protocol'
 import { connectDaemon } from '@quirky/protocol/node'
-import { CommandFailed, UsageError } from './args'
+import { CommandFailed, UsageError, wantsHelp } from './args'
 import { resolveCommands } from './catalog'
 import { COMMANDS, helpText, isGlobalToken, parseFor, route } from './commands'
 import type { Command, Context, OpenResult } from './commands/types'
@@ -31,8 +31,6 @@ function wantsJson(argv: readonly string[]): boolean {
   }
   return json
 }
-
-const hasHelpFlag = (rest: readonly string[]) => rest.some((token) => token === '--help' || token === '-h')
 
 /** The global switches before the first other token; later help flags belong to a `rawArgs` command. */
 function leadingGlobals(tokens: readonly string[]): string[] {
@@ -85,7 +83,7 @@ async function dispatch(runtime: Runtime, out: Printer, argv: readonly string[])
     const words = target.rest.filter((token) => !isGlobalToken(token))
     if (words.length && !words.some((word) => word.startsWith('-'))) return dispatch(runtime, out, [...words, '--help'])
   }
-  const groupWithoutHelp = target.kind === 'group' && !startsWithWord(target.rest) && !hasHelpFlag(target.rest)
+  const groupWithoutHelp = target.kind === 'group' && !startsWithWord(target.rest) && !wantsHelp(target.rest, {})
   const needsCatalog =
     (target.kind === 'unknown' && !target.word.startsWith('-')) || (target.kind === 'group' && startsWithWord(target.rest))
   if (needsCatalog || groupWithoutHelp) {
@@ -105,18 +103,21 @@ async function dispatch(runtime: Runtime, out: Printer, argv: readonly string[])
     writer.stdout(`${helpText()}\n`)
     return
   }
-  const wantsHelp = hasHelpFlag(target.kind === 'command' && target.command.rawArgs ? leadingGlobals(target.rest) : target.rest)
+  const helpRequested =
+    target.kind === 'command' && !target.command.rawArgs
+      ? wantsHelp(target.rest, target.command.flags)
+      : wantsHelp(target.kind === 'command' ? leadingGlobals(target.rest) : target.rest, {})
   if (target.kind === 'group') {
     if (startsWithWord(target.rest)) throw unknownCommand(argv, commands)
     const text = helpText(target.words, commands)
-    if (wantsHelp) {
+    if (helpRequested) {
       writer.stdout(`${text}\n`)
       return
     }
     throw new UsageError(`incomplete command "${target.words.join(' ')}"\n${text}`)
   }
   const { command } = target
-  if (wantsHelp && command.name !== 'help') {
+  if (helpRequested && command.name !== 'help') {
     writer.stdout(`${helpText(command.name.split(' '), commands)}\n`)
     return
   }

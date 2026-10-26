@@ -130,6 +130,25 @@ export function parseArgs(
   return { positionals, flags }
 }
 
+/**
+ * True when `argv` carries `--help` or `-h` in a position `parseArgs` would read as the switch:
+ * before `--` and not as the value of a valued flag in `defs`. A valued flag followed by a `--...`
+ * token is the parser's missing-value error, so scanning stops there and the parser reports it.
+ */
+export function wantsHelp(argv: readonly string[], defs: Record<string, FlagSpec>): boolean {
+  for (let i = 0; i < argv.length; i++) {
+    const token = argv[i]
+    if (token === '--') return false
+    if (token === '--help' || token === '-h') return true
+    if (!token.startsWith('--') || token.includes('=')) continue
+    const name = token.slice(2)
+    if (!Object.hasOwn(defs, name) || defs[name].type === 'boolean') continue
+    if (i + 1 >= argv.length || argv[i + 1].startsWith('--')) return false
+    i++
+  }
+  return false
+}
+
 export function flagString(args: ParsedArgs, name: string): string | undefined {
   const value = args.flags[name]
   return typeof value === 'string' ? value : undefined
