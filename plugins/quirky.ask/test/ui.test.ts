@@ -45,6 +45,7 @@ function fakeContext(initial: Ask[]) {
   const listeners = new Set<(event: QuirkyEvent) => void | Promise<void>>()
   const connection = new Set<(status: 'connected' | 'reconnecting') => void>()
   let failWith: string | null = null
+  let listGate: Promise<void> | null = null
 
   const context = {
     pluginId: 'quirky.ask',
@@ -53,7 +54,11 @@ function fakeContext(initial: Ask[]) {
     async call(method: string, params?: Record<string, unknown>) {
       calls.push({ method, params })
       if (failWith && method !== 'quirky.ask/list') throw new Error(failWith)
-      if (method === 'quirky.ask/list') return asks
+      if (method === 'quirky.ask/list') {
+        const snapshot = asks
+        if (listGate) await listGate
+        return snapshot
+      }
       if (method === 'quirky.ask/answer' || method === 'quirky.ask/cancel') {
         asks = asks.filter((ask) => ask.id !== params?.askId)
         return { status: 'answered', askId: params?.askId, answers: {}, skipped: [] }
@@ -80,6 +85,14 @@ function fakeContext(initial: Ask[]) {
     provided,
     listeners,
     connection,
+    holdLists() {
+      let release!: () => void
+      listGate = new Promise<void>((resolve) => void (release = resolve))
+      return () => {
+        listGate = null
+        release()
+      }
+    },
     failAnswers: (message: string | null) => void (failWith = message),
     add(ask: Ask) {
       asks = [...asks, ask]
@@ -147,6 +160,30 @@ describe('the Questions panel module', () => {
     fake.drop('ask_1')
     await fake.emit(resolved('ask_1'))
     expect(fake.badges.at(-1)).toBe(2)
+  })
+
+  test('a local removal does not discard an in-flight refresh that carries a new ask', async () => {
+    const fake = fakeContext([selectAsk('ask_1', 'First', 1)])
+    await activated(fake)
+    const { element } = await mount(fake)
+
+    fake.add(selectAsk('ask_2', 'Second', 2))
+    const release = fake.holdLists()
+    await fake.emit(created(selectAsk('ask_2', 'Second', 2)))
+
+    await act(async () => {
+      ;([...element.querySelectorAll('button')].find((b) => b.textContent === 'Dismiss') as HTMLButtonElement).click()
+    })
+    await settled()
+    expect(element.querySelectorAll('.ask-card')).toHaveLength(0)
+
+    await act(async () => {
+      release()
+    })
+    await settled()
+
+    expect([...element.querySelectorAll('.ask-card h3')].map((node) => node.textContent)).toEqual(['Second'])
+    expect(fake.badges.at(-1)).toBe(1)
   })
 
   test('clears the badge when nothing is pending', async () => {

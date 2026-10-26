@@ -27,6 +27,8 @@ export function createAskStore(context: UiPluginContext): AskStore {
   let asks: readonly Ask[] = []
   let generation = 0
   let disposed = false
+  // ids removed locally while a refresh was in flight; that refresh's list may still hold them
+  const removedDuringRefresh = new Set<Set<string>>()
   const listeners = new Set<() => void>()
 
   const publish = (next: readonly Ask[]) => {
@@ -37,12 +39,16 @@ export function createAskStore(context: UiPluginContext): AskStore {
 
   const refresh = async () => {
     const mine = ++generation
+    const removed = new Set<string>()
+    removedDuringRefresh.add(removed)
     try {
       const list = (await context.call('quirky.ask/list', { pendingOnly: true })) as Ask[]
       if (disposed || mine !== generation) return
-      publish([...list].sort((a, b) => a.createdAt - b.createdAt || a.id.localeCompare(b.id)))
+      publish(list.filter((ask) => !removed.has(ask.id)).sort((a, b) => a.createdAt - b.createdAt || a.id.localeCompare(b.id)))
     } catch (error) {
       context.log(`could not list asks: ${error instanceof Error ? error.message : String(error)}`)
+    } finally {
+      removedDuringRefresh.delete(removed)
     }
   }
 
@@ -62,7 +68,7 @@ export function createAskStore(context: UiPluginContext): AskStore {
     },
     remove(askId) {
       if (!asks.some((ask) => ask.id === askId)) return
-      generation++
+      for (const removed of removedDuringRefresh) removed.add(askId)
       publish(asks.filter((ask) => ask.id !== askId))
     },
     dispose() {
