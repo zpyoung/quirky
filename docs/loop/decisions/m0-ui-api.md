@@ -440,15 +440,26 @@
 - **Confidence:** high
 - **Source:** assumed — autonomous
 
-## Progress
-Building. Waves 1-3 merged with checkpoints closed (D40-D43); wave 4 (T8 daemon scenario suite, T9 window scenario suite) dispatched from b6bb471. Next: audit and merge wave 4, full gate, final review loop over b7613ba..HEAD (deep, three Codex lenses), then LOOP.md step 6-7. If this session stops early, check for leftover worktrees under the session scratchpad wt/ and branches build/m0-ui-api-w4-*.
-## D44: Final round 1: fix all eight findings, which collapse to seven defects, and add the missing SC-17 window test
-- **Question:** adjudicating final review round 1 over the whole branch (three Codex lenses, deep, range b7613ba..d484470)
-- **Options:** fix or reject each
-- **Chose:** fixed all, in four parallel fixer components. Host: re-enabling a contribution while its orphaned load awaited `deactivate` left the slot in a "did not provide" error (C1); a provide breach inside a mount function was overwritten with `mounted` and leaked its cleanup (C2, X2); slot failures weren't logged (S3). Shell: a remount reused the previous plugin's element (S2); number settings rejected fractional values in the form (C3). CLI: `quirky theme list` lost a chosen theme that isn't in effect, now printed as `chosen: <id> (not in effect)` (S1). Daemon: a `ui` path with an unpaired surrogate passed validation and made the UI model throw for every plugin; manifests now reject it and the builder can't throw over one plugin (X1). Also added G1, a test that a plugin keybinding on `mod+t` is shadowed and Cmd+T runs nothing in the window, which SC-17 asks for and the scenario suites had left out.
-- **Why:** each finding came with a reproduction script against the code, and each broke a stated rule (the lifecycle rules, the mount contract, SC-26's kept choice, m0-registry D13's containment)
-- **Evidence:** scratchpad r1/{C,S,X}/gate.json; tests named C1, C2, S3, G1 in packages/ui/test/plugin-host*.test.ts, S1 in packages/cli/test/theme.test.ts, X1 in packages/daemon/test/plugins/ui-kinds.test.ts and ui-model.test.ts
+## D45: The final review loop ends after the closure round passes on all three lenses
+- **Question:** when the final review loop may exit (subagent-driven-development Step 10)
+- **Options:** another discovery round; exit on the clean closure round
+- **Chose:** exit. Round 1 (whole branch, three Codex lenses, deep) found seven defects, all fixed (D44). Round 2 (closure over the fix delta d484470..a67c5aa plus the log commit, deep) passed on all three lenses with no findings, no advisories, no limitations, no questions and no unreviewed paths; one spec-lens claim was refuted. After it, the only change was renaming the build tests under an `SC-29:` describe, with no behavior change.
+- **Why:** the loop exits on a completed round with no accepted finding above LOW and a green build
+- **Evidence:** scratchpad r1/ and r2/ gate.json and manifest.json; reviewer gpt-6.1-sol (openai), independence full, depth deep, profile code-diff
 - **Reversibility:** easy
 - **Confidence:** high
 - **Source:** assumed — autonomous
 
+## D46: Every scenario has a named test through the API, the CLI or the window host on a real daemon, and there are no Orca defects to test
+- **Question:** LOOP.md step 6's verification checklist
+- **Options:** n/a (a check, recorded for review)
+- **Chose:** SC-1 to SC-3, SC-5, SC-16 to SC-22, SC-25 to SC-28 are in packages/daemon/test/plugins/ui-api.test.ts against a real `quirkyd` through the API, the real `quirky` CLI (`runCli` on the harness home, the first test to do so) and HTTP. SC-4, SC-6 to SC-16, SC-18, SC-23 to SC-26 have window halves in packages/ui/test/plugin-host.test.ts, which drives the `WindowPluginHost` against a real daemon and its served plugin files (D28); G1 covers SC-17's window half. SC-24's grouping is also in settingsGroups.test.ts and SC-29 in build.test.ts. The item has no feature docs, so no Orca defects (D27). The UI API is kernel rather than a built-in plugin (D25). On the branch tip `bun run test` passes 1085 tests and `bun run typecheck` is clean; `bun test scripts` passes 13 of 14, the failure being the queue-state test recorded in m0-daemon-api D31.
+- **Why:** LOOP.md step 6 lists these as the conditions for done
+- **Evidence:** test names `SC-<n>:` in the files above; scratchpad gate-r1.log
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** m0-ui-bridge's `quirky ui state` shows a window behavior these host-level tests miss
+- **Source:** locked by docs/loop/LOOP.md
+
+## Progress
+Done. Merged into build/roadmap.
