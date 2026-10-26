@@ -29,7 +29,14 @@ export function defaultSettings(): Settings {
 
 type Row = Record<string, any>
 
-/** SQLite persistence for repos, sessions, asks, structured messages, settings and disabled IDs. */
+export interface JobRun {
+  startedAt: number
+  finishedAt: number | null
+  status: 'running' | 'ok' | 'failed' | 'timed-out'
+  error?: string
+}
+
+/** SQLite persistence for repos, sessions, asks, structured messages, settings, disabled IDs and job runs. */
 export class Store {
   private readonly db: Database
 
@@ -84,6 +91,10 @@ export class Store {
         value TEXT NOT NULL
       );
       CREATE TABLE IF NOT EXISTS disabled_ids (id TEXT PRIMARY KEY, disabled_at INTEGER NOT NULL);
+      CREATE TABLE IF NOT EXISTS job_runs (
+        id TEXT PRIMARY KEY, started_at INTEGER NOT NULL, finished_at INTEGER,
+        status TEXT NOT NULL, error TEXT
+      );
     `)
     const sessionColumns = this.db.query('PRAGMA table_info(sessions)').all() as Row[]
     if (!sessionColumns.some((column) => column.name === 'repo_id')) {
@@ -320,6 +331,41 @@ export class Store {
     } else {
       this.db.query('DELETE FROM disabled_ids WHERE id = ?').run(id)
     }
+  }
+
+  /** The last recorded run of each job, keyed by job id. */
+  listJobRuns(): Map<string, JobRun> {
+    const runs = new Map<string, JobRun>()
+    for (const row of this.db.query('SELECT * FROM job_runs').all() as Row[]) {
+      runs.set(row.id, {
+        startedAt: row.started_at,
+        finishedAt: row.finished_at,
+        status: row.status,
+        ...(row.error === null ? {} : { error: row.error })
+      })
+    }
+    return runs
+  }
+
+  /** Records a job as running from `at`, replacing any previous run of the same id. */
+  recordJobStart(id: string, at: number): void {
+    this.db
+      .query(
+        `INSERT INTO job_runs (id, started_at, finished_at, status, error) VALUES (?, ?, NULL, 'running', NULL)
+         ON CONFLICT(id) DO UPDATE SET started_at = excluded.started_at, finished_at = NULL, status = 'running', error = NULL`
+      )
+      .run(id, at)
+  }
+
+  recordJobFinish(id: string, at: number, status: 'ok' | 'failed' | 'timed-out', error?: string): void {
+    this.db
+      .query('UPDATE job_runs SET finished_at = ?, status = ?, error = ? WHERE id = ?')
+      .run(at, status, error ?? null, id)
+  }
+
+  /** Stamps the real finish time on a run that was marked timed-out earlier; other statuses are untouched. */
+  recordJobSettled(id: string, at: number): void {
+    this.db.query("UPDATE job_runs SET finished_at = ? WHERE id = ? AND status = 'timed-out'").run(at, id)
   }
 }
 

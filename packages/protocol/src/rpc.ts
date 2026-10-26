@@ -12,7 +12,7 @@ import type {
   StructuredMessage,
   Worktree
 } from './model'
-import type { ContributionInfo, PluginInfo } from './plugins'
+import type { ContributionInfo, JobInfo, JobRun, PluginEvent, PluginInfo } from './plugins'
 
 /** Bumped on any breaking change to `Methods`, `QuirkyEvent` or the frame layout. */
 export const PROTOCOL_VERSION = 1
@@ -133,6 +133,11 @@ export type Methods = {
   'plugin.disable': { params: { id: string }; result: Ok }
   /** Activates the plugin now instead of waiting for first use. */
   'plugin.activate': { params: { pluginId: string }; result: PluginInfo }
+
+  /** Every scheduled job with its schedule and last run. */
+  'job.list': { params: Record<string, never>; result: JobInfo[] }
+  /** Runs job `id` now and resolves with the finished run. */
+  'job.run': { params: { id: string }; result: JobRun }
 }
 
 export type MethodName = keyof Methods
@@ -151,6 +156,7 @@ export type QuirkyEvent =
   | { type: 'notify'; title: string; body: string; sessionId?: string; worktreeId?: string }
   | { type: 'structured.message'; message: StructuredMessage }
   | { type: 'plugin.changed' }
+  | PluginEvent
 
 export type RpcRequest = { jsonrpc: '2.0'; id: number; method: string; params?: unknown }
 export type RpcSuccess = { jsonrpc: '2.0'; id: number; result: unknown }

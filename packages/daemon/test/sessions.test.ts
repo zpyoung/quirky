@@ -1,10 +1,11 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
-import { readFileSync, statSync } from 'node:fs'
+import { readFileSync, statSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { RpcErrorCode, RpcError, type QuirkyClient, type QuirkyEvent, type Worktree } from '@quirky/protocol'
-import { buildArgv, shellQuote } from '../src/launch'
+import { buildArgv, buildSessionEnv, shellQuote } from '../src/launch'
 import { notificationScript } from '../src/notify'
-import { startHarness, waitFor, type Harness, waitForAsync } from './helpers'
+import { makeTempHome, startHarness, waitFor, type Harness, waitForAsync } from './helpers'
+import { makeTempDir, readMarker, removeTempDirs, waitForFile, writeModulePlugin } from './plugins/fixtures'
 
 let h: Harness
 let client: QuirkyClient
@@ -18,7 +19,10 @@ beforeEach(async () => {
   const repo = await client.call('repo.add', { path: '/fake/alpha' })
   ;[worktree] = await client.call('worktree.list', { repoId: repo.id })
 })
-afterEach(() => h.cleanup())
+afterEach(async () => {
+  await h.cleanup()
+  removeTempDirs()
+})
 
 async function code(promise: Promise<unknown>): Promise<number | null> {
   try {
@@ -70,6 +74,43 @@ describe('launch commands', () => {
       `${exportPath}exec gemini --prompt-interactive 'hi'`
     )
     expect(buildArgv({ ...base, agent: 'gemini', prompt: '   ' })[3]).toBe(`${exportPath}exec gemini`)
+  })
+
+  test('extraArgs sit after the kernel arguments and before the prompt', () => {
+    const base = { home: '/h', shell: '/bin/zsh', extraArgs: ['--model', 'opus'] }
+    const exportPath = `export PATH="/h/bin:$PATH"; `
+    expect(buildArgv({ ...base, agent: 'claude', prompt: 'hi' })[3]).toBe(
+      `${exportPath}exec claude --settings '/h/hooks/claude-settings.json' '--model' 'opus' 'hi'`
+    )
+    expect(buildArgv({ ...base, agent: 'claude' })[3]).toBe(
+      `${exportPath}exec claude --settings '/h/hooks/claude-settings.json' '--model' 'opus'`
+    )
+    expect(buildArgv({ ...base, agent: 'codex', prompt: 'hi' })[3]).toBe(
+      `${exportPath}exec codex -c 'notify=["/h/bin/quirky-hook","codex"]' '--model' 'opus' 'hi'`
+    )
+    expect(buildArgv({ ...base, agent: 'opencode', prompt: 'hi' })[3]).toBe(
+      `${exportPath}exec opencode '--model' 'opus' --prompt 'hi'`
+    )
+    expect(buildArgv({ ...base, agent: 'gemini', prompt: 'hi' })[3]).toBe(
+      `${exportPath}exec gemini '--model' 'opus' --prompt-interactive 'hi'`
+    )
+    expect(buildArgv({ ...base, agent: 'gemini' })[3]).toBe(`${exportPath}exec gemini '--model' 'opus'`)
+  })
+
+  test('extraArgs are ignored for shell sessions and empty extraArgs change nothing', () => {
+    const base = { home: '/h', shell: '/bin/zsh' }
+    expect(buildArgv({ ...base, agent: 'shell', extraArgs: ['--x'] })).toEqual(buildArgv({ ...base, agent: 'shell' }))
+    for (const agent of ['claude', 'codex', 'opencode', 'gemini'] as const) {
+      expect(buildArgv({ ...base, agent, prompt: 'hi', extraArgs: [] })).toEqual(
+        buildArgv({ ...base, agent, prompt: 'hi' })
+      )
+    }
+  })
+
+  test('extraArgs are shell-quoted', () => {
+    expect(buildArgv({ home: '/h', shell: '/bin/zsh', agent: 'claude', extraArgs: ["it's $x"] })[3]).toBe(
+      `export PATH="/h/bin:$PATH"; exec claude --settings '/h/hooks/claude-settings.json' 'it'\\''s $x'`
+    )
   })
 
   test('bash shells start through the wrapper rcfile and other shells stay plain', () => {
@@ -288,6 +329,54 @@ describe('session.create', () => {
     expect(await client.call('session.list', {})).toEqual([])
   })
 
+  test('closing a session while its launch hooks are pending never spawns its terminal', async () => {
+    const home = makeTempHome()
+    const workDir = makeTempDir()
+    const marker = join(workDir, 'marker.log')
+    const release = join(workDir, 'release')
+    writeModulePlugin(
+      join(home, 'plugins'),
+      marker,
+      { id: 'acme.slow', contributes: { 'launch-hook': [{ id: 'wait', agents: ['claude'] }] } },
+      {
+        activate: `context.provide('launch-hook:acme.slow/wait', async () => {
+          record('hook waiting')
+          ${waitForFile(release)}
+          return { env: {}, args: [] }
+        })`
+      }
+    )
+    const slow = await startHarness({ home, builtinPluginsDir: null })
+    try {
+      const slowClient = await slow.connect('cli')
+      slow.git.addRepo('/fake/alpha')
+      const repo = await slowClient.call('repo.add', { path: '/fake/alpha' })
+      const [wt] = await slowClient.call('worktree.list', { repoId: repo.id })
+
+      const creating = slowClient.call('session.create', { worktreeId: wt!.id, agent: 'claude' })
+      const failure = creating.then(
+        () => null,
+        (error: RpcError) => error
+      )
+      await waitFor(() => readMarker(marker).includes('hook waiting') || undefined)
+      const [pending] = await slowClient.call('session.list', { worktreeId: wt!.id })
+      expect(pending).toMatchObject({ status: 'starting' })
+
+      await slowClient.call('session.close', { sessionId: pending!.id })
+      writeFileSync(release, '')
+
+      const error = await failure
+      expect(error?.code).toBe(RpcErrorCode.Conflict)
+      expect(error?.message).toContain('closed before its terminal started')
+      expect(slow.pty.requests.some((r) => r.type === 'create' && r.sessionId === pending!.id)).toBe(false)
+      expect(slow.pty.sessions.has(pending!.id)).toBe(false)
+      expect(await slowClient.call('session.list', {})).toEqual([])
+    } finally {
+      writeFileSync(release, '')
+      await slow.cleanup()
+    }
+  })
+
   test('close still removes a session the pty host no longer knows', async () => {
     const session = await client.call('session.create', { worktreeId: worktree.id, agent: 'shell' })
     h.pty.sessions.delete(session.id)
@@ -304,5 +393,52 @@ describe('session.create', () => {
     )
     expect(event).toMatchObject({ session: { id: session.id, exitCode: 3 } })
     expect((await client.call('session.list', {}))[0]).toMatchObject({ status: 'exited', exitCode: 3 })
+  })
+})
+
+describe('buildSessionEnv', () => {
+  const options = {
+    home: '/h',
+    sessionId: 's1',
+    worktreeId: 'w1',
+    hookUrl: 'http://127.0.0.1:1/hook',
+    hookToken: 'tok',
+    base: { PATH: '/usr/bin', KEEP: 'yes', DROP: 'me', QUIRKY_OLD: 'x' }
+  }
+
+  test('without a patch the environment is unchanged', () => {
+    expect(buildSessionEnv(options)).toEqual(buildSessionEnv({ ...options, envPatch: {} }))
+  })
+
+  test('a patch string sets a variable and null deletes a base variable', () => {
+    const env = buildSessionEnv({ ...options, envPatch: { NEW: 'v', KEEP: 'changed', DROP: null } })
+    expect(env.NEW).toBe('v')
+    expect(env.KEEP).toBe('changed')
+    expect('DROP' in env).toBe(false)
+  })
+
+  test('TERM is patchable but kernel variables and PATH always win', () => {
+    const env = buildSessionEnv({
+      ...options,
+      envPatch: { TERM: 'dumb', QUIRKY_SESSION_ID: 'evil', QUIRKY_HOME: '/evil', PATH: '/evil' }
+    })
+    expect(env.TERM).toBe('dumb')
+    expect(env.QUIRKY_SESSION_ID).toBe('s1')
+    expect(env.QUIRKY_HOME).toBe('/h')
+    expect(env.PATH).toBe('/h/bin:/usr/bin')
+  })
+
+  test('a null patch for PATH does not remove the kernel PATH', () => {
+    expect(buildSessionEnv({ ...options, envPatch: { PATH: null } }).PATH).toBe('/h/bin:/usr/bin')
+  })
+
+  test('zsh wrapper variables win over the patch', () => {
+    const env = buildSessionEnv({
+      ...options,
+      shell: '/bin/zsh',
+      agent: 'shell',
+      envPatch: { ZDOTDIR: '/evil' }
+    })
+    expect(env.ZDOTDIR).toBe('/h/shell/zsh')
   })
 })

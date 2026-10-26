@@ -14,9 +14,9 @@ import pkg from '../package.json'
 import * as realGit from './git'
 import type { GitApi } from './git-api'
 import { defaultCliEntry, installIntegrationFiles } from './launch'
-import { createHandlers } from './methods'
 import { osascriptNotifier, type Notifier } from './notify'
 import { PluginHost } from './plugins/host'
+import { createPluginRuntime, type PluginRuntime } from './plugins/runtime'
 import { PtyClient } from './pty-client'
 import { startServer } from './server'
 import { Core } from './service'
@@ -36,6 +36,10 @@ export type DaemonOptions = {
   builtinPluginsDir?: string | null
   /** Bounds each plugin activation and deactivate; defaults to 10 seconds. */
   pluginActivationTimeoutMs?: number
+  /** Bounds each launch hook when a session starts; defaults to 5 seconds. */
+  launchHookTimeoutMs?: number
+  /** Longest a job timer sleeps before re-checking the clock; defaults to 60 seconds. */
+  schedulerRecheckMs?: number
   ptyHostEntry?: string
   cliEntry?: string
   /** Login shell that agents run under; defaults to `$SHELL`. */
@@ -128,6 +132,8 @@ export async function startDaemon(options: DaemonOptions): Promise<DaemonHandle>
     log
   })
   let port = 0
+  // the core and the host are built before the runtime that serves them, so they reach it late-bound
+  let lateRuntime: PluginRuntime | undefined
   const core = new Core({
     home,
     store,
@@ -142,17 +148,36 @@ export async function startDaemon(options: DaemonOptions): Promise<DaemonHandle>
     daemonVersion,
     startedAt,
     hookToken,
-    hookUrl: () => `http://127.0.0.1:${port}/hook`
+    hookUrl: () => `http://127.0.0.1:${port}/hook`,
+    onEvent: (event) => lateRuntime?.events.deliver(event),
+    prepareLaunch: async (input) => (await lateRuntime?.prepareLaunch(input)) ?? { env: {}, args: [] }
   })
 
   const plugins = new PluginHost({
     builtinDir: options.builtinPluginsDir === undefined ? defaultBuiltinPluginsDir() : options.builtinPluginsDir,
     installedDir: installedPluginsDir,
     store,
-    emit: (event) => core.broadcast(event),
+    emit: (event) => {
+      core.broadcast(event)
+      if (event.type === 'plugin.changed') lateRuntime?.scheduler.sync()
+    },
     log,
-    activationTimeoutMs: options.pluginActivationTimeoutMs
+    activationTimeoutMs: options.pluginActivationTimeoutMs,
+    extension: {
+      create: (plugin, isRevoked) => lateRuntime!.extension.create(plugin, isRevoked),
+      revoke: (pluginId) => lateRuntime?.extension.revoke(pluginId)
+    }
   })
+  const pluginRuntime = createPluginRuntime({
+    home,
+    plugins,
+    core,
+    store,
+    log,
+    launchHookTimeoutMs: options.launchHookTimeoutMs ?? 5000,
+    schedulerRecheckMs: options.schedulerRecheckMs ?? 60_000
+  })
+  lateRuntime = pluginRuntime
 
   installIntegrationFiles(home, cliEntry)
 
@@ -165,12 +190,13 @@ export async function startDaemon(options: DaemonOptions): Promise<DaemonHandle>
 
   plugins.load()
   await plugins.activateStartup()
+  pluginRuntime.scheduler.start()
 
   const requestedPort = options.port ?? Number(process.env.QUIRKY_PORT ?? 0)
   const listen = (listenPort: number) =>
     startServer({
       core,
-      handlers: createHandlers(core, plugins),
+      dispatcher: pluginRuntime.dispatcher,
       port: listenPort,
       rpcToken,
       daemonVersion,
@@ -213,6 +239,7 @@ export async function startDaemon(options: DaemonOptions): Promise<DaemonHandle>
       stopped = true
       if (readRuntime(home)?.pid === process.pid) rmSync(runtimeFilePath(home), { force: true })
       await server.stop(true)
+      pluginRuntime.scheduler.stop()
       await plugins.stop()
       pty.close()
       store.close()

@@ -5,6 +5,7 @@ import {
   base64ToBytes,
   encodeTerminalOutput,
   type AgentKind,
+  type LaunchHookInput,
   type QuirkyEvent,
   type Repo,
   type Session,
@@ -51,6 +52,15 @@ export type CoreOptions = {
   startedAt: number
   hookToken: string
   hookUrl: () => string
+  /** Called at the end of `broadcast` with every event. */
+  onEvent?: (event: QuirkyEvent) => void
+  /**
+   * Called for each terminal session after its row exists and before the PTY is asked to start it.
+   * Must not reject; the result adds environment changes and agent arguments to the launch.
+   */
+  prepareLaunch?: (
+    input: Omit<LaunchHookInput, 'env' | 'args'>
+  ) => Promise<{ env: Record<string, string | null>; args: string[] }>
 }
 
 type Stream = { conn: ClientConn; streamId: number }
@@ -129,6 +139,7 @@ export class Core {
     for (const conn of this.clients) {
       if (conn.subscribed) conn.sendText(text)
     }
+    this.options.onEvent?.(event)
   }
 
   status() {
@@ -300,11 +311,28 @@ export class Core {
       exitCode: null
     }
     store.insertSession(session, repo.id)
+    const closedWhileStarting = () =>
+      conflict(`session ${session.id} was closed before its terminal started`)
     try {
+      const additions = (await this.options.prepareLaunch?.({
+        sessionId: session.id,
+        worktreeId: worktree.id,
+        repoId: repo.id,
+        cwd: worktree.path,
+        agent: params.agent,
+        ...(params.prompt === undefined ? {} : { prompt: params.prompt })
+      })) ?? { env: {}, args: [] }
+      if (!store.getSession(session.id)) throw closedWhileStarting()
       await pty.request('create', {
         sessionId: session.id,
         cwd: worktree.path,
-        argv: buildArgv({ agent: params.agent, prompt: params.prompt, home, shell: this.options.shell }),
+        argv: buildArgv({
+          agent: params.agent,
+          prompt: params.prompt,
+          home,
+          shell: this.options.shell,
+          extraArgs: additions.args
+        }),
         env: buildSessionEnv({
           home,
           sessionId: session.id,
@@ -312,13 +340,19 @@ export class Core {
           hookUrl: this.options.hookUrl(),
           hookToken: this.options.hookToken,
           shell: this.options.shell,
-          agent: params.agent
+          agent: params.agent,
+          envPatch: additions.env
         }),
         cols: params.cols ?? 80,
         rows: params.rows ?? 24
       })
+      if (!store.getSession(session.id)) {
+        await pty.request('forget', { sessionId: session.id }).catch(() => {})
+        throw closedWhileStarting()
+      }
     } catch (error) {
       store.deleteSession(session.id)
+      if (error instanceof DaemonError) throw error
       throw internal(`could not start ${params.agent}: ${(error as Error).message}`)
     }
     const running = store.updateSession(session.id, { status: 'running' }) as Session

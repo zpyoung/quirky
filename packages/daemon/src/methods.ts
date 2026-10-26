@@ -8,6 +8,7 @@ import {
 } from '@quirky/protocol'
 import { conflict, invalidParams } from './errors'
 import type { PluginHost } from './plugins/host'
+import type { Scheduler } from './plugins/scheduler'
 import type { Core } from './service'
 import type { ClientConn } from './types'
 
@@ -73,7 +74,7 @@ function agent(params: Params): AgentKind {
 }
 
 /** Maps every RPC method to the core or the plugin host, validating params so bad input becomes InvalidParams. */
-export function createHandlers(core: Core, plugins: PluginHost): Handlers {
+export function createHandlers(core: Core, plugins: PluginHost, scheduler: Scheduler): Handlers {
   return {
     'client.hello': (params, conn) => {
       const role = params.role
@@ -207,6 +208,9 @@ export function createHandlers(core: Core, plugins: PluginHost): Handlers {
       await plugins.setEnabled(str(params, 'id'), false)
       return OK
     },
-    'plugin.activate': (params) => plugins.activate(str(params, 'pluginId'))
+    'plugin.activate': (params) => plugins.activate(str(params, 'pluginId')),
+
+    'job.list': () => scheduler.list(),
+    'job.run': (params) => scheduler.run(str(params, 'id'))
   }
 }

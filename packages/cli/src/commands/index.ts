@@ -1,5 +1,6 @@
 import { GLOBAL_FLAGS, parseArgs, type FlagDefs, type ParsedArgs } from '../args'
 import { ask, askCancel, askWait } from './ask'
+import { jobList, jobRun } from './job'
 import { open } from './open'
 import { pluginActivate, pluginContributions, pluginDisable, pluginEnable, pluginList } from './plugin'
 import { repoAdd, repoList, repoRm } from './repo'
@@ -39,6 +40,8 @@ export const COMMANDS: Command[] = [
   pluginEnable,
   pluginDisable,
   pluginActivate,
+  jobList,
+  jobRun,
   ask,
   askWait,
   askCancel,

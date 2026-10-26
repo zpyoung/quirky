@@ -9,7 +9,7 @@ import {
 } from '@quirky/protocol'
 import { HEALTH_PATH } from '@quirky/protocol/node'
 import { DaemonError } from './errors'
-import type { Handlers } from './methods'
+import type { Dispatcher } from './plugins/dispatch'
 import type { Core } from './service'
 import { serveStatic } from './static'
 import type { ClientConn } from './types'
@@ -18,7 +18,7 @@ type SocketData = { conn: ClientConn }
 
 export type ServerOptions = {
   core: Core
-  handlers: Handlers
+  dispatcher: Dispatcher
   port: number
   rpcToken: string
   daemonVersion: string
@@ -39,7 +39,7 @@ function json(body: unknown, status = 200): Response {
 
 /** The single loopback HTTP server: health, the RPC WebSocket, agent hooks and the static UI. */
 export function startServer(options: ServerOptions) {
-  const { core, handlers } = options
+  const { core, dispatcher } = options
   let nextConnId = 1
 
   async function handleHook(request: Request, url: URL): Promise<Response> {
@@ -143,14 +143,12 @@ export function startServer(options: ServerOptions) {
     if (conn.role === null && method !== 'client.hello') {
       return fail(id, RpcErrorCode.Unauthorized, 'client.hello must be the first call')
     }
-    const handler = Object.hasOwn(handlers, method) ? (handlers as Record<string, any>)[method] : undefined
-    if (!handler) return fail(id, RpcErrorCode.MethodNotFound, `unknown method: ${method}`)
     const params = request.params ?? {}
     if (typeof params !== 'object' || Array.isArray(params)) {
       return fail(id, RpcErrorCode.InvalidParams, 'params must be an object')
     }
     try {
-      reply({ jsonrpc: '2.0', id, result: await handler(params, conn) })
+      reply({ jsonrpc: '2.0', id, result: await dispatcher.dispatch(method, params, { conn }) })
     } catch (error) {
       if (error instanceof DaemonError) return fail(id, error.code, error.message)
       options.log(`rpc ${method} failed: ${(error as Error)?.stack ?? error}`)
