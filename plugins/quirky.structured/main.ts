@@ -1,5 +1,4 @@
 import type {
-  Ask,
   AskEnvelope,
   AskSpec,
   MethodHandler,
@@ -23,6 +22,8 @@ type LiveSession = { title: string; worktreeId: string; worktreeName: string; st
 function testRunnerFactory(): StructuredRunnerFactory | undefined {
   return (globalThis as { __QUIRKY_TEST_STRUCTURED_RUNNER__?: StructuredRunnerFactory }).__QUIRKY_TEST_STRUCTURED_RUNNER__
 }
+
+let shutdown: (() => Promise<void>) | undefined
 
 /**
  * Provides `create`, `messages` and `send`: background Claude sessions registered with
@@ -73,22 +74,22 @@ export function activate(context: PluginContext): void {
 
   const createAsk = async (spec: AskSpec, sessionId: string): Promise<AskEnvelope> => {
     const worktreeId = live.get(sessionId)?.worktreeId
-    const ask = (await context.call('quirky.ask/create', {
+    const { askId } = (await context.call('quirky.ask/create', {
       spec,
       session: sessionId,
       ...(worktreeId ? { worktree: worktreeId } : {})
-    })) as Ask
+    })) as { askId: string }
     const pending = pendingAsks.get(sessionId) ?? new Set<string>()
     pendingAsks.set(sessionId, pending)
-    pending.add(ask.id)
+    pending.add(askId)
     try {
       // the ask plugin caps one wait, so a prompt left open longer is waited on again
       for (;;) {
-        const envelope = (await context.call('quirky.ask/wait', { askId: ask.id })) as AskEnvelope
+        const envelope = (await context.call('quirky.ask/wait', { askId })) as AskEnvelope
         if (envelope.status !== 'pending') return envelope
       }
     } finally {
-      pending.delete(ask.id)
+      pending.delete(askId)
       if (pending.size === 0) pendingAsks.delete(sessionId)
     }
   }
@@ -163,18 +164,39 @@ export function activate(context: PluginContext): void {
   context.provide('method:quirky.structured/messages', messages)
   context.provide('method:quirky.structured/send', send)
 
+  const cancelAsk = async (askId: string): Promise<void> => {
+    try {
+      await context.call('quirky.ask/cancel', { askId })
+    } catch {
+      // the host revokes the context before deactivate runs, so a cancel there can only fail
+    }
+  }
+
+  const release = async (sessionId: string): Promise<void> => {
+    await Promise.all([...(pendingAsks.get(sessionId) ?? [])].map(cancelAsk))
+    await runner.stop(sessionId).catch(() => undefined)
+  }
+
   context.subscribe(async (event) => {
     if (event.type !== 'quirky.session/removed') return
     const sessionId = (event.data as { sessionId?: unknown } | null)?.sessionId
     if (typeof sessionId !== 'string') return
     // forgotten first so the runner's closing status report is not sent for a session that is gone
     live.delete(sessionId)
-    await Promise.all(
-      [...(pendingAsks.get(sessionId) ?? [])].map((askId) =>
-        context.call('quirky.ask/cancel', { askId }).catch(() => undefined)
-      )
-    )
-    await runner.stop(sessionId).catch(() => undefined)
+    await release(sessionId)
     journal.remove(sessionId)
   })
+
+  shutdown = async () => {
+    const sessionIds = [...live.keys()]
+    live.clear()
+    await Promise.all(sessionIds.map(release))
+  }
+}
+
+/** Stops every live runner and cancels its pending asks; the host closes the store afterwards. */
+export async function deactivate(): Promise<void> {
+  const stop = shutdown
+  shutdown = undefined
+  await stop?.()
 }
