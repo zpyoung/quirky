@@ -6,7 +6,8 @@ import {
   type MethodName,
   type ResultOf
 } from '@quirky/protocol'
-import { conflict, internal, invalidParams } from './errors'
+import { conflict, invalidParams } from './errors'
+import type { PluginHost } from './plugins/host'
 import type { Core } from './service'
 import type { ClientConn } from './types'
 
@@ -71,12 +72,8 @@ function agent(params: Params): AgentKind {
   return value as AgentKind
 }
 
-/** Maps every RPC method to the core, validating params so bad input becomes InvalidParams. */
-function notWired(): never {
-  throw internal('plugin host is not wired yet')
-}
-
-export function createHandlers(core: Core): Handlers {
+/** Maps every RPC method to the core or the plugin host, validating params so bad input becomes InvalidParams. */
+export function createHandlers(core: Core, plugins: PluginHost): Handlers {
   return {
     'client.hello': (params, conn) => {
       const role = params.role
@@ -195,10 +192,21 @@ export function createHandlers(core: Core): Handlers {
       return OK
     },
 
-    'plugin.list': notWired,
-    'plugin.contributions': notWired,
-    'plugin.enable': notWired,
-    'plugin.disable': notWired,
-    'plugin.activate': notWired
+    'plugin.list': () => plugins.list(),
+    'plugin.contributions': (params) =>
+      plugins.contributions({
+        kind: optStr(params, 'kind'),
+        pluginId: optStr(params, 'pluginId'),
+        all: optBool(params, 'all')
+      }),
+    'plugin.enable': async (params) => {
+      await plugins.setEnabled(str(params, 'id'), true)
+      return OK
+    },
+    'plugin.disable': async (params) => {
+      await plugins.setEnabled(str(params, 'id'), false)
+      return OK
+    },
+    'plugin.activate': (params) => plugins.activate(str(params, 'pluginId'))
   }
 }
