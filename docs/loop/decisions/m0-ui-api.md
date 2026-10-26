@@ -420,3 +420,13 @@
 - **Revisit if:** a review finds a file that doesn't match its task's report
 - **Source:** assumed — autonomous
 
+## D42: Wave 2 checkpoint: accept all nine findings, which collapse to six host defects
+- **Question:** adjudicating the wave 2 checkpoint review (three Codex lenses, standard depth, range 8917b45..4c0c8a2)
+- **Options:** for each finding, fix or reject
+- **Chose:** fixed all, in the window plugin host. A load that completes after `stop()` no longer activates (C1, S2, X2). `deactivate` is bounded by the activation timeout and the context is revoked when it settles or times out (C2, X1). A `setting.changed` during a refresh beats that refresh's snapshot (C3). Subscribers registered during `activate` receive events (C4). An undeclared `provide` after activation fails the plugin, as the provide contract says (S1). Command failures are logged with the plugin ID as well as toasted (S3).
+- **Why:** each was reproduced by the reviewer with a script against the host, and each would leave a plugin running or a value stale in a way the logic spec's lifecycle rules forbid
+- **Evidence:** scratchpad cp-w2/{C,S,X}/gate.json; regression tests named C1, C2, C3, C4, S1, S3 in packages/ui/test/plugin-host-unit.test.ts
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** assumed — autonomous
+
