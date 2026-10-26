@@ -194,6 +194,30 @@ describe('runLaunchHooks', () => {
     expect(t.warnings).toEqual([['acme.a', 'launch hook launch-hook:acme.a/vars timed out after 100 ms']])
   })
 
+  test('never invokes a hook whose resolution finishes after the timeout', async () => {
+    const warnings: Array<[string, string]> = []
+    let calls = 0
+    const result = await runLaunchHooks({
+      plugins: {
+        contributions: () => [{ id: 'launch-hook:acme.slow/vars', plugin: 'acme.slow', data: {} }],
+        resolveImplementation: async () => {
+          await Bun.sleep(60)
+          return () => {
+            calls++
+            return { env: { LATE: '1' } }
+          }
+        }
+      },
+      input: INPUT,
+      timeoutMs: 10,
+      warn: (pluginId, message) => warnings.push([pluginId, message])
+    })
+    await Bun.sleep(120)
+    expect(result).toEqual({ env: {}, args: [] })
+    expect(calls).toBe(0)
+    expect(warnings).toEqual([['acme.slow', 'launch hook launch-hook:acme.slow/vars timed out after 10 ms']])
+  })
+
   test('returns a null deletion and later hooks no longer see the name', async () => {
     const t = setup()
     t.hook('acme.a', `() => ({ env: { GONE: 'x', KEEP: 'k' } })`)
