@@ -12,6 +12,13 @@ import {
   type RepoDetails
 } from '@quirky/protocol'
 import { waitFor } from '../../../packages/daemon/test/helpers'
+import * as realGit from '@quirky/git'
+import { GitError } from '@quirky/git'
+import type { GitApi } from '@quirky/git'
+import { useTestGit } from '@quirky/git/testing'
+import { homedir } from 'node:os'
+import { cloneRepo } from '../src/projects'
+import type { Env } from '../src/env'
 import { call, commitFiles, failure, git, isolateGitConfig, makeRepo } from './git-fixtures'
 import { startPluginHarness, type PluginHarness } from './harness'
 
@@ -97,6 +104,74 @@ describe('SC-2: adding a plain folder', () => {
     const err = await failure(add(client, join(home, 'missing'), true))
     expect(err.code).toBe(RpcErrorCode.InvalidParams)
     expect(err.message).toBe(`no such directory: ${join(home, 'missing')}`)
+  })
+})
+
+describe('adding a folder when git cannot answer', () => {
+  test('a git that fails to run is an error, not a folder project', async () => {
+    const { client, home } = await start()
+    const notes = join(home, 'notes')
+    mkdirSync(notes, { recursive: true })
+    useTestGit({
+      ...realGit,
+      resolveRepoRoot: async () => {
+        throw new GitError('failed to run git: spawn git ENOENT', '', -1)
+      }
+    } as unknown as GitApi)
+    for (const folder of [true, false]) await expect(add(client, notes, folder)).rejects.toThrow()
+    expect(await list(client)).toEqual([])
+  })
+
+  test('only git saying the path is not a repository makes it a folder project', async () => {
+    const { client, home } = await start()
+    const notes = join(home, 'notes')
+    mkdirSync(notes, { recursive: true })
+    useTestGit({
+      ...realGit,
+      resolveRepoRoot: async () => {
+        throw new GitError('git rev-parse failed', 'fatal: not a git repository (or any of the parent directories): .git', 128)
+      }
+    } as unknown as GitApi)
+    expect(await add(client, notes, true)).toMatchObject({ kind: 'folder', path: realpathSync(notes) })
+  })
+})
+
+describe('the worktrees folder setting when cloning', () => {
+  test('a setting lookup that fails for another reason aborts the clone before anything is created', async () => {
+    const calls: string[] = []
+    const env = {
+      context: {
+        call: async (method: string) => {
+          calls.push(method)
+          throw Object.assign(new Error('settings store unavailable'), { code: RpcErrorCode.Internal })
+        }
+      },
+      fail: (_kind: string, message: string) => new Error(message)
+    } as unknown as Env
+    await expect(cloneRepo(env, { url: '/nonexistent/origin.git' })).rejects.toThrow('settings store unavailable')
+    expect(calls).toEqual(['setting.get'])
+  })
+
+  test('a setting that does not exist falls back to ~/quirky/workspaces', async () => {
+    const env = {
+      context: { call: async () => { throw Object.assign(new Error('no setting'), { code: RpcErrorCode.NotFound }) } },
+      fail: (_kind: string, message: string) => new Error(message)
+    } as unknown as Env
+    const cloned: string[] = []
+    useTestGit({
+      ...realGit,
+      cloneRepo: async (_url: string, dest: string) => {
+        cloned.push(dest)
+        throw new GitError('stub', 'stub', 1)
+      }
+    } as unknown as GitApi)
+    try {
+      const name = `fallback-${crypto.randomUUID()}`
+      await expect(cloneRepo(env, { url: '/nonexistent/origin.git', name })).rejects.toThrow('could not clone')
+      expect(cloned).toEqual([join(homedir(), 'quirky', 'workspaces', name)])
+    } finally {
+      useTestGit(null)
+    }
   })
 })
 
@@ -389,6 +464,17 @@ describe('SC-60: project settings through set and show', () => {
     expect(cleared.hooks.setup).toBeNull()
   })
 
+  test('an empty string returns agentStartup and commandSource to inherited', async () => {
+    const { client, home } = await start()
+    const repo = await add(client, makeRepo(join(home, 'api')))
+    const set = (await call(client, 'quirky.repo/set', { repo: repo.id, agentStartup: 'wait-for-setup', commandSource: 'run-both' })) as RepoDetails
+    expect(set.settings).toMatchObject({ agentStartup: 'wait-for-setup', commandSource: 'run-both' })
+    const cleared = (await call(client, 'quirky.repo/set', { repo: repo.id, agentStartup: '', commandSource: '' })) as RepoDetails
+    expect(cleared.settings).toMatchObject({ agentStartup: null, commandSource: null })
+    expect(cleared.hooks.agentStartup).toBe('start-immediately')
+    expect(((await show(client, repo.id)).settings)).toMatchObject({ agentStartup: null, commandSource: null })
+  })
+
   test('a set with only some fields keeps the rest', async () => {
     const { client, home } = await start()
     const repo = await add(client, makeRepo(join(home, 'api')))
@@ -446,7 +532,23 @@ describe('SC-34 and SC-35: hooks from the repo', () => {
     writeFileSync(join(dir, 'quirky.yaml'), 'scripts:\n  setup: dirty\n')
     expect((await hooks(client, repo.id)).setup?.text).toBe('two')
     expect((await hooks(client, repo.id, first)).setup?.text).toBe('one')
-    expect((await hooks(client, repo.id, 'no-such-ref')).file).toBeNull()
+  })
+
+  test('hooks refuses a ref that starts with a dash and one that names no commit', async () => {
+    const { client, home } = await start()
+    const dir = makeRepo(join(home, 'api'), { 'quirky.yaml': 'scripts:\n  setup: one\n' })
+    const repo = await add(client, dir)
+    const out = join(home, 'leaked')
+    for (const ref of [`--output=${out}`, '-p']) {
+      const err = await failure(hooks(client, repo.id, ref))
+      expect(err.code).toBe(RpcErrorCode.InvalidParams)
+      expect(err.data.reason).toBe('invalid-ref')
+    }
+    expect(existsSync(out)).toBe(false)
+    const unknown = await failure(hooks(client, repo.id, 'no-such-ref'))
+    expect(unknown.code).toBe(RpcErrorCode.InvalidParams)
+    expect(unknown.message).toBe('unknown ref no-such-ref')
+    expect((await hooks(client, repo.id, 'main')).setup?.text).toBe('one')
   })
 
   test('a repo with no commits has no hooks', async () => {

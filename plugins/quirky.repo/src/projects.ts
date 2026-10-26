@@ -33,6 +33,9 @@ async function callIfPresent<T>(context: PluginContext, method: string, params: 
   }
 }
 
+/** Whether git itself reported that the path is not inside a repository, as opposed to failing to run. */
+const isNotARepository = (error: unknown): boolean => error instanceof GitError && error.stderr.includes('not a git repository')
+
 /**
  * Registers the repository containing `path`, or with `folder` a plain directory, and returns it.
  * The same real path is one project, so adding it again returns the existing one.
@@ -44,6 +47,7 @@ export async function addRepo(env: Env, path: string, folder: boolean): Promise<
     root = await gitApi().resolveRepoRoot(expanded)
   } catch (error) {
     if (error instanceof NoSuchDirectoryError || !isDirectory(expanded)) throw env.fail('invalid-params', `no such directory: ${expanded}`)
+    if (!isNotARepository(error)) throw error
   }
   if (root === null && !folder) {
     throw env.fail('invalid-params', `not a git repository: ${expanded}; pass --folder to add it as a folder project`, {
@@ -69,12 +73,16 @@ export async function addRepo(env: Env, path: string, folder: boolean): Promise<
   return repo
 }
 
-/** The folder new projects are cloned or created in: the `quirky.worktree` setting, `~` expanded. */
+/**
+ * The folder new projects are cloned or created in: the `quirky.worktree` setting, `~` expanded.
+ * The default applies only when the setting doesn't exist (its plugin is off); any other failure propagates.
+ */
 async function worktreesRoot(env: Env): Promise<string> {
   let configured: unknown
   try {
     configured = ((await env.context.call('setting.get', { id: WORKTREES_ROOT_SETTING })) as { value?: unknown }).value
-  } catch {
+  } catch (error) {
+    if ((error as { code?: unknown } | null)?.code !== RpcErrorCode.NotFound) throw error
     configured = undefined
   }
   return expandHome(typeof configured === 'string' && configured.trim() !== '' ? configured.trim() : DEFAULT_WORKTREES_ROOT)

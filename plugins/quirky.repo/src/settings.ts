@@ -1,3 +1,4 @@
+import { gitApi } from '@quirky/git'
 import type { ProjectSettings, RepoDetails } from '@quirky/protocol'
 import type { Env } from './env'
 import { effectiveHooks, hashScript, readHooksFile, sharedScripts, type TrustedHashes } from './hooks'
@@ -9,8 +10,8 @@ export type SetParams = {
   defaultBase?: string
   worktreeLocation?: string
   setupPolicy?: ProjectSettings['setupPolicy']
-  agentStartup?: NonNullable<ProjectSettings['agentStartup']>
-  commandSource?: NonNullable<ProjectSettings['commandSource']>
+  agentStartup?: NonNullable<ProjectSettings['agentStartup']> | ''
+  commandSource?: NonNullable<ProjectSettings['commandSource']> | ''
   setupScript?: string
   archiveScript?: string
 }
@@ -40,13 +41,27 @@ export async function details(env: Env, selector: string, ref = DEFAULT_REF): Pr
 
 export const show = (env: Env, params: { repo: string }): Promise<RepoDetails> => details(env, params.repo)
 
+/**
+ * The hooks of a project as read at `ref`. A `ref` that starts with `-` or names no commit is
+ * refused before git sees it, so it can never be read as a git option.
+ */
 export async function hooks(env: Env, params: { repo: string; ref?: string }) {
-  return (await details(env, params.repo, params.ref)).hooks
+  const repo = env.resolve(params.repo)
+  let ref = params.ref
+  if (ref !== undefined) {
+    if (ref.startsWith('-')) throw env.fail('invalid-params', `invalid ref ${ref}`, { reason: 'invalid-ref', ref })
+    if (repo.kind === 'git') {
+      const commit = await gitApi().resolveCommit(repo.path, ref)
+      if (commit === null) throw env.fail('invalid-params', `unknown ref ${ref}`, { reason: 'unknown-ref', ref })
+      ref = commit
+    }
+  }
+  return (await details(env, repo.id, ref)).hooks
 }
 
 const orNull = (value: string): string | null => (value.trim() === '' ? null : value.trim())
 
-/** Applies the given fields only; an empty string clears a string field. */
+/** Applies the given fields only; an empty string clears a string field, and returns agentStartup and commandSource to inherited. */
 export async function set(env: Env, params: SetParams): Promise<RepoDetails> {
   const repo = env.resolve(params.repo)
   const row = loadRow(env, repo.id)
@@ -54,8 +69,8 @@ export async function set(env: Env, params: SetParams): Promise<RepoDetails> {
   if (params.defaultBase !== undefined) settings.defaultBase = orNull(params.defaultBase)
   if (params.worktreeLocation !== undefined) settings.worktreeLocation = orNull(params.worktreeLocation)
   if (params.setupPolicy !== undefined) settings.setupPolicy = params.setupPolicy
-  if (params.agentStartup !== undefined) settings.agentStartup = params.agentStartup
-  if (params.commandSource !== undefined) settings.commandSource = params.commandSource
+  if (params.agentStartup !== undefined) settings.agentStartup = params.agentStartup === '' ? null : params.agentStartup
+  if (params.commandSource !== undefined) settings.commandSource = params.commandSource === '' ? null : params.commandSource
   if (params.setupScript !== undefined) settings.setupScript = params.setupScript.trim() === '' ? '' : params.setupScript
   if (params.archiveScript !== undefined) settings.archiveScript = params.archiveScript.trim() === '' ? '' : params.archiveScript
   const displayName = params.displayName === undefined ? row.display_name : orNull(params.displayName)
