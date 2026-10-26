@@ -368,5 +368,25 @@
 - **Confidence:** high
 - **Source:** assumed — autonomous
 
+## D37: The root help footer keeps the spec's wording
+- **Question:** the CLI printed `... including plugins` while SC-16 says `... including plugins'`
+- **Options:** amend the logic spec; change the CLI string
+- **Chose:** change the CLI string and its two tests to the spec's wording (`every command, including plugins'`, meaning plugins' commands)
+- **Why:** the approved spec is the contract; a wording slip in code is cheaper to fix than an amendment
+- **Evidence:** packages/cli/src/commands/index.ts; docs/quirk/specs/2026-10-26-m0-scripting/logic.md SC-16
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** assumed — autonomous
+
+## D38: Final round 1: fix three findings, two of which share a cause
+- **Question:** adjudicating final review round 1 (three Codex lenses, deep, over the whole branch)
+- **Options:** accept and fix, or reject with a reason
+- **Chose:** accepted all. C1 and S1: help was detected anywhere in the arguments, so `acme.notes add -- --help` and `acme.notes add --title --help` printed help instead of the parser's errors; help now follows the parser's boundaries for every command. C2: the generic table formatter read cells through the prototype chain and crashed on a column named `constructor` missing from a row; cells are read as own properties. The security lens passed.
+- **Why:** each reproduced with a command the reviewer ran
+- **Evidence:** scratchpad r1/*/gate.json
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** assumed — autonomous
+
 ## Progress
-Building (D31-D33). Waves 1-3 merged (4063f9f) with the wave-2 fixes; wave-3 fixes in flight (D36). Next: W4 scenario tests through the real CLI and daemon, then the final review loop.
+Building (D31-D33). All four waves merged (5a60f30); final round 1 fixes in flight (D38). Next: closure round 2 over the fix delta, then merge per LOOP.md step 7.
