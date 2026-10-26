@@ -23,6 +23,10 @@ normally ask the user about, you make yourself and record for later review.
   `~/.codex` ([v1.md](../v1.md#running-it)).
 - **One item per iteration.** When the item is merged or blocked, end your turn. Don't start a second
   item.
+- **Never end your turn while work is still running.** The loop ends the iteration the moment your
+  turn ends, and that kills every subagent, `pi-watch` run and background command still going. Wait
+  for them in the same turn, with blocking Agent calls or Monitor, until each one has returned and its
+  result is committed. Only a merged or blocked item ends the turn.
 
 ## What is already decided
 
