@@ -8,7 +8,7 @@ import {
   type PluginManifest,
   type PluginSource,
 } from '@quirky/protocol'
-import { checkKindEntry } from './kinds'
+import { CLI_WORD_RE, checkKindEntry, cliGroupWord, effectiveCliWords, isMethodReference } from './kinds'
 
 export const MANIFEST_FILE = 'quirky-plugin.json'
 
@@ -19,6 +19,8 @@ const FIELDS = new Set([
   'description',
   'main',
   'ui',
+  'cli',
+  'cliAliases',
   'activation',
   'dependencies',
   'contributes',
@@ -64,7 +66,7 @@ function hasLoneSurrogate(value: string): boolean {
   return /[\ud800-\udbff](?![\udc00-\udfff])|(?<![\ud800-\udbff])[\udc00-\udfff]/.test(value)
 }
 
-function checkPluginPath(manifest: Record_, field: 'main' | 'ui', dir: string, errors: string[]): void {
+function checkPluginPath(manifest: Record_, field: 'main' | 'ui' | 'cli', dir: string, errors: string[]): void {
   const value = manifest[field]
   if (value === undefined) return
   if (typeof value !== 'string' || value === '') {
@@ -90,6 +92,56 @@ function checkDependencies(manifest: Record_, id: string | null, errors: string[
     if (dependency === id) errors.push('dependencies: a plugin cannot depend on itself')
     if (seen.has(dependency)) errors.push(`dependencies: duplicate dependency '${dependency}'`)
     seen.add(dependency)
+  }
+}
+
+function checkCliAliases(manifest: Record_, id: string | null, errors: string[]): void {
+  const aliases = stringList(manifest, 'cliAliases', errors)
+  if (!aliases) return
+  const own = id === null ? null : cliGroupWord(id)
+  const seen = new Set<string>()
+  for (const alias of aliases) {
+    if (!CLI_WORD_RE.test(alias)) errors.push(`cliAliases: '${alias}' must be a lowercase word such as 'tools' or 'my-tools'`)
+    else if (alias === own) errors.push(`cliAliases: '${alias}' is the plugin's own group word`)
+    else if (seen.has(alias)) errors.push(`cliAliases: duplicate alias '${alias}'`)
+    seen.add(alias)
+  }
+}
+
+function entriesOf(manifest: Record_, kind: string): Record_[] {
+  const entries = isRecord(manifest.contributes) ? manifest.contributes[kind] : undefined
+  return Array.isArray(entries) ? entries.filter(isRecord) : []
+}
+
+/** Rules that span entries: `describe` targets, `cli-command` methods, the `cli` module and distinct words. */
+function checkCrossReferences(manifest: Record_, id: string | null, errors: string[]): void {
+  const methods = new Map(entriesOf(manifest, 'method').map((entry) => [entry.id, entry]))
+  for (const entry of methods.values()) {
+    if (!isMethodReference(entry.describe) || entry.destructive !== true) continue
+    const describe = entry.describe as string
+    const slash = describe.indexOf('/')
+    const name = describe.slice(slash + 1)
+    const local = slash < 0 || describe.slice(0, slash) === id
+    if (!local || methods.get(name)?.readOnly !== true) {
+      errors.push(`method ${entry.id}: describe '${describe}' is not a readOnly method of this plugin`)
+    }
+  }
+
+  const owners = new Map<string, string>()
+  for (const entry of entriesOf(manifest, 'cli-command')) {
+    const label = `cli-command ${entry.id}`
+    if (entry.method === undefined && manifest.cli === undefined) {
+      errors.push(`${label}: needs the manifest field 'cli' because it declares no method`)
+    }
+    if (typeof entry.method === 'string' && !entry.method.includes('/') && !methods.has(entry.method)) {
+      errors.push(`${label}: method '${entry.method}' is not a method this plugin declares`)
+    }
+    if (typeof entry.id !== 'string' || (entry.words !== undefined && typeof entry.words !== 'string')) continue
+    const words = effectiveCliWords(entry.id, entry.words)
+    const first = owners.get(words)
+    if (first === undefined) owners.set(words, entry.id)
+    else if (words === '') errors.push(`${label}: words are already used by cli-command ${first} (the bare group command)`)
+    else errors.push(`${label}: words '${words}' are already used by cli-command ${first}`)
   }
 }
 
@@ -186,8 +238,11 @@ export function parseManifest(
   }
   checkPluginPath(raw, 'main', at.dir, errors)
   checkPluginPath(raw, 'ui', at.dir, errors)
+  checkPluginPath(raw, 'cli', at.dir, errors)
+  checkCliAliases(raw, id, errors)
   checkDependencies(raw, id, errors)
   checkContributes(raw.contributes, errors)
+  checkCrossReferences(raw, id, errors)
   checkOverrides(raw.overrides, id, errors)
   checkDisables(raw, errors)
 
