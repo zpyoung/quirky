@@ -116,6 +116,8 @@ export type UiSettingEntry = { id: string; plugin: string } & SettingDeclaration
 /** A setting with its current value; `stored` is absent when nothing is stored. */
 export type SettingInfo = UiSettingEntry & {
   value: boolean | number | string
+  /** Which layer `value` comes from: the user's stored value, the installed distro's, or the declared default; the daemon always sets it. */
+  source?: 'user' | 'distro' | 'default'
   /** `valid` is false when the stored value fails the current declaration. */
   stored?: { value: unknown; valid: boolean }
 }

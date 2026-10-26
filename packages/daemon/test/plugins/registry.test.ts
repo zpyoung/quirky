@@ -390,3 +390,42 @@ describe('computeRegistry: determinism', () => {
     expect(registry.effective.get('command:quirky.core/run')?.plugin).toBe('o1')
   })
 })
+
+describe('computeRegistry: distro-disabled IDs', () => {
+  const withDistro = (plugins: DiscoveredPlugin[], disabled: string[], distroDisabled: string[]) =>
+    computeRegistry(plugins, new Set(disabled), distroDisabled)
+
+  test('a distro-disabled plugin is disabled with the reason distro, and its contributions are disabled by the owner', () => {
+    const registry = withDistro([plugin('a', { contributes: cmd('x') })], [], ['a'])
+    expect(entry(registry, 'a')).toMatchObject({
+      status: 'disabled',
+      disabledReason: 'distro',
+      diagnostics: [{ level: 'error', message: 'disabled by the distro' }],
+    })
+    expect(declaration(registry, 'command:a/x', 'a')).toMatchObject({ status: 'disabled', disabledBy: 'owner' })
+  })
+
+  test('a distro-disabled contribution is disabled by the distro', () => {
+    const registry = withDistro([plugin('a', { contributes: cmd('x') })], [], ['command:a/x'])
+    expect(declaration(registry, 'command:a/x', 'a')).toMatchObject({ status: 'disabled', disabledBy: 'distro' })
+    expect(registry.effective.has('command:a/x')).toBe(false)
+  })
+
+  test('the user wins when both disabled the same ID', () => {
+    const registry = withDistro([plugin('a', { contributes: cmd('x') })], ['a'], ['a'])
+    expect(entry(registry, 'a')).toMatchObject({ status: 'disabled', disabledReason: 'user' })
+    const contribution = withDistro([plugin('b', { contributes: cmd('x') })], ['command:b/x'], ['command:b/x'])
+    expect(declaration(contribution, 'command:b/x', 'b').disabledBy).toBe('user')
+  })
+
+  test('a dependant of a distro-disabled plugin is disabled by dependency', () => {
+    const registry = withDistro([plugin('a'), plugin('b', { dependencies: ['a'] })], [], ['a'])
+    expect(entry(registry, 'b')).toMatchObject({ status: 'disabled', disabledReason: 'dependency' })
+  })
+
+  test('without distro IDs nothing changes and enabled plugins carry no reason', () => {
+    const registry = compute([plugin('a')], ['a'])
+    expect(entry(registry, 'a').disabledReason).toBe('user')
+    expect(entry(compute([plugin('b')]), 'b').disabledReason).toBeUndefined()
+  })
+})

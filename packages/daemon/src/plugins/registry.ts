@@ -12,6 +12,8 @@ export type RegistryPlugin = {
   status: 'enabled' | 'disabled' | 'invalid'
   /** Load errors, cascade reasons, then override conflicts and warnings. */
   diagnostics: PluginDiagnostic[]
+  /** Why a `disabled` plugin is off. */
+  disabledReason?: 'user' | 'distro' | 'dependency'
 }
 
 export type Registry = {
@@ -121,11 +123,21 @@ function findCycles(plugins: Map<string, RegistryPlugin>): RegistryPlugin[][] {
   return cycles
 }
 
-function markDisabled(plugins: Map<string, RegistryPlugin>, disabled: ReadonlySet<string>): void {
+function markDisabled(
+  plugins: Map<string, RegistryPlugin>,
+  disabled: ReadonlySet<string>,
+  distroDisabled: ReadonlySet<string>
+): void {
   for (const plugin of plugins.values()) {
-    if (plugin.status === 'enabled' && disabled.has(plugin.discovered.id)) {
+    if (plugin.status !== 'enabled') continue
+    if (disabled.has(plugin.discovered.id)) {
       plugin.status = 'disabled'
+      plugin.disabledReason = 'user'
       addError(plugin, 'disabled by the user')
+    } else if (distroDisabled.has(plugin.discovered.id)) {
+      plugin.status = 'disabled'
+      plugin.disabledReason = 'distro'
+      addError(plugin, 'disabled by the distro')
     }
   }
   for (;;) {
@@ -139,6 +151,7 @@ function markDisabled(plugins: Map<string, RegistryPlugin>, disabled: ReadonlySe
     if (cascading.length === 0) return
     for (const { plugin, reasons } of cascading) {
       plugin.status = 'disabled'
+      plugin.disabledReason = 'dependency'
       for (const dep of reasons) addError(plugin, `dependency ${dep} is disabled`)
     }
   }
@@ -173,6 +186,7 @@ function applyDisabledIds(
   declarations: ContributionInfo[],
   plugins: Map<string, RegistryPlugin>,
   disabled: ReadonlySet<string>,
+  distroDisabled: ReadonlySet<string>,
 ): ContributionInfo[] {
   const disabledByPlugin = new Map<string, string>()
   for (const plugin of [...plugins.values()].sort((a, b) => compare(a.discovered.id, b.discovered.id))) {
@@ -190,6 +204,9 @@ function applyDisabledIds(
     } else if (disabled.has(declaration.id)) {
       declaration.status = 'disabled'
       declaration.disabledBy = 'user'
+    } else if (distroDisabled.has(declaration.id)) {
+      declaration.status = 'disabled'
+      declaration.disabledBy = 'distro'
     } else if (disablingPlugin !== undefined) {
       declaration.status = 'disabled'
       declaration.disabledBy = 'plugin'
@@ -221,9 +238,16 @@ function transitiveDependencies(plugins: Map<string, RegistryPlugin>): (id: stri
 /**
  * Computes which plugins are usable and which declaration is in effect for every contribution ID.
  * Pure and deterministic: no filesystem, store or clock, and the result doesn't depend on the
- * order of `discovered`. Nothing here loads plugin code.
+ * order of `discovered`. Nothing here loads plugin code. `distroDisabled` IDs switch plugins and
+ * contributions off like `disabled` ones do, but are marked as the distro's; the user's mark wins
+ * when both name the same ID.
  */
-export function computeRegistry(discovered: DiscoveredPlugin[], disabled: ReadonlySet<string>): Registry {
+export function computeRegistry(
+  discovered: DiscoveredPlugin[],
+  disabled: ReadonlySet<string>,
+  distroDisabled: readonly string[] = [],
+): Registry {
+  const distroSet = new Set(distroDisabled)
   const entries: RegistryPlugin[] = [...discovered].sort(compareEntries).map((plugin) => ({
     discovered: plugin,
     status: plugin.errors.length > 0 ? ('invalid' as const) : ('enabled' as const),
@@ -240,10 +264,10 @@ export function computeRegistry(discovered: DiscoveredPlugin[], disabled: Readon
   }
 
   markInvalid(plugins)
-  markDisabled(plugins, disabled)
+  markDisabled(plugins, disabled, distroSet)
 
   const declarations = collectDeclarations([...plugins.values()].filter((plugin) => plugin.status !== 'invalid'))
-  const contenders = applyDisabledIds(declarations, plugins, disabled)
+  const contenders = applyDisabledIds(declarations, plugins, disabled, distroSet)
 
   const dependsOn = transitiveDependencies(plugins)
   const effective = new Map<string, ContributionInfo>()

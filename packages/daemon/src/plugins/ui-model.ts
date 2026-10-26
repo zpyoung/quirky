@@ -83,11 +83,25 @@ function dependencyClosure(byId: Map<string, PluginInfo>): (id: string) => Reado
 
 type Binding = { declaration: ContributionInfo; chord: string; command: string }
 
+export type DistroKeybinding = { key: string; command: string }
+
+/** Distro bindings by canonical chord, with their `keybinding:<distro>/k<n>` IDs; unparseable chords are dropped. */
+function distroBindings(
+  distroKeybindings: DistroKeybinding[],
+  distroId: string
+): { id: string; chord: string; command: string }[] {
+  return distroKeybindings.flatMap((binding, index) => {
+    const parsed = parseChord(binding.key)
+    return parsed.ok ? [{ id: `keybinding:${distroId}/k${index + 1}`, chord: parsed.chord, command: binding.command }] : []
+  })
+}
+
 function resolveKeybindings(
   effective: ContributionInfo[],
   effectiveCommands: Set<string>,
   byId: Map<string, PluginInfo>,
-  warnings: Map<string, PluginDiagnostic[]>
+  warnings: Map<string, PluginDiagnostic[]>,
+  distro: { id: string; bindings: { id: string; chord: string; command: string }[] }
 ): UiKeybinding[] {
   const dependsOn = dependencyClosure(byId)
   const sourceOf = (declaration: ContributionInfo) => byId.get(declaration.plugin)?.source
@@ -111,6 +125,14 @@ function resolveKeybindings(
     byChord.set(parsed.chord, [...(byChord.get(parsed.chord) ?? []), { declaration, chord: parsed.chord, command }])
   }
 
+  const distroByChord = new Map<string, { id: string; command: string }>()
+  for (const binding of distro.bindings) {
+    const base = { id: binding.id, plugin: distro.id, key: binding.chord, command: binding.command }
+    if (!effectiveCommands.has(binding.command)) result.push({ ...base, status: 'unbound' })
+    else if (RESERVED_CHORDS.includes(binding.chord)) result.push({ ...base, status: 'shadowed', shadowedBy: 'kernel' })
+    else distroByChord.set(binding.chord, binding)
+  }
+
   for (const [chord, bindings] of byChord) {
     const reserved = RESERVED_CHORDS.includes(chord)
     const maxima = bindings.filter(
@@ -126,6 +148,10 @@ function resolveKeybindings(
       if (reserved) {
         result.push({ ...base, status: 'shadowed', shadowedBy: 'kernel' })
         addWarning(warnings, declaration.plugin, `${declaration.id} is shadowed by the window's own shortcut ${chord}`)
+      } else if (distroByChord.has(chord)) {
+        const distroId = distroByChord.get(chord)!.id
+        result.push({ ...base, status: 'shadowed', shadowedBy: distroId })
+        addWarning(warnings, declaration.plugin, `${declaration.id} is shadowed by ${distroId} on ${chord}`)
       } else if (binding === winner) {
         result.push({ ...base, status: 'active' })
       } else {
@@ -137,6 +163,9 @@ function resolveKeybindings(
         )
       }
     }
+  }
+  for (const [chord, binding] of distroByChord) {
+    result.push({ id: binding.id, plugin: distro.id, key: chord, command: binding.command, status: 'active' })
   }
   return result.sort((a, b) => compare(a.id, b.id))
 }
@@ -165,6 +194,10 @@ export function buildUiModel(input: {
   declarations: ContributionInfo[]
   plugins: PluginInfo[]
   chosenTheme: string
+  /** The active distro's bindings in manifest order; they beat every plugin binding on their chord. */
+  distroKeybindings?: DistroKeybinding[]
+  /** The active distro's ID, which names its bindings. */
+  distroId?: string | null
 }): { model: UiModel; warnings: Map<string, PluginDiagnostic[]> } {
   const { declarations, chosenTheme } = input
   const byId = pluginsById(input.plugins)
@@ -223,7 +256,10 @@ export function buildUiModel(input: {
   settings.sort((a, b) => compare(a.id, b.id))
 
   const effectiveCommands = new Set(ofKind('command').map((declaration) => declaration.id))
-  const keybindings = resolveKeybindings(ofKind('keybinding'), effectiveCommands, byId, warnings)
+  const keybindings = resolveKeybindings(ofKind('keybinding'), effectiveCommands, byId, warnings, {
+    id: input.distroId ?? '',
+    bindings: input.distroId ? distroBindings(input.distroKeybindings ?? [], input.distroId) : []
+  })
 
   const themes = buildThemes(ofKind('theme'))
   const active = themes.some((theme) => theme.id === chosenTheme) ? chosenTheme : DEFAULT_THEME.id
