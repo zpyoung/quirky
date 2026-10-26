@@ -329,7 +329,10 @@ describe('flag parsing', () => {
     expect(atEnd.stderr).toContain('--prompt requires a value')
     const dashed = await run(['session', 'new', '--agent', 'claude', '--worktree', 'w1', '--prompt', '--json'], { env })
     expect(dashed.code).toBe(2)
-    expect(dashed.stderr).toContain('--prompt requires a value; write --prompt=<value> for a value starting with --')
+    expect(JSON.parse(dashed.stdout).error.message).toBe(
+      '--prompt requires a value; write --prompt=<value> for a value starting with --'
+    )
+    expect(dashed.stderr).toBe('')
     expect(daemon.methodCalls('session.create')).toEqual([])
     expect(daemon.methodCalls('session.createStructured')).toEqual([])
   })

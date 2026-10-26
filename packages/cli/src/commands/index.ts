@@ -62,7 +62,12 @@ export const COMMANDS: Command[] = [
   help
 ]
 
-const GLOBAL_TOKENS = new Set(['--json', '--help', '-h'])
+const GLOBAL_TOKENS = new Set(['--json', '--json=true', '--json=false', '--help', '-h'])
+
+/** True for the switches every command accepts: `--json` (with or without a value), `--help` and `-h`. */
+export function isGlobalToken(token: string): boolean {
+  return GLOBAL_TOKENS.has(token)
+}
 
 export type Route =
   | { kind: 'command'; command: Command; rest: string[] }
@@ -99,16 +104,19 @@ export function route(argv: readonly string[], commands: readonly Command[] = CO
 }
 
 export function parseFor(command: Command, rest: string[]): ParsedArgs {
-  return parseArgs(rest, command.flags, command.name)
+  return parseArgs(rest, command.flags, command.name, { checkRequired: !command.deferRequired })
 }
 
-/** Offline help for the whole CLI, a group of commands, or one command; never contacts the daemon. */
-export function helpText(topic: readonly string[] = []): string {
+/**
+ * Help for the whole CLI, a group of commands, or one command, from the declarations in `commands`
+ * (the kernel's by default, which never contacts the daemon).
+ */
+export function helpText(topic: readonly string[] = [], commands: readonly Command[] = COMMANDS): string {
   const name = topic.join(' ')
-  const exact = COMMANDS.find((command) => command.name === name)
+  const exact = commands.find((command) => command.name === name)
   if (exact) return commandHelp(exact)
-  const group = name ? COMMANDS.filter((command) => command.name.startsWith(`${name} `)) : []
-  const listed = group.length ? group : COMMANDS
+  const group = name ? commands.filter((command) => command.name.startsWith(`${name} `)) : []
+  const listed = group.length ? group : commands
   const usages = listed.map(usageOf)
   const width = Math.max(...usages.map((usage) => usage.length))
   const lines = listed.map((command, i) => `  ${usages[i].padEnd(width)}  ${command.summary}`)

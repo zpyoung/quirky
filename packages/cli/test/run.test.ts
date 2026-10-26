@@ -9,6 +9,7 @@ function harness(open: OpenResult) {
   const err: string[] = []
   const link: DaemonLink = {
     call: () => Promise.reject(new Error('daemon must not be contacted')),
+    callAny: () => Promise.reject(new Error('daemon must not be contacted')),
     reconnect: async () => {},
     close: () => {}
   }

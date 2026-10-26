@@ -1,10 +1,21 @@
 import type { FlagSpec } from './command-spec'
 
-/** Raised for bad invocations; `main` maps it to exit code 2. */
+/** Raised for bad invocations; `main` maps it to exit code 2. `suggestions` are commands the user may have meant. */
 export class UsageError extends Error {
-  constructor(message: string) {
+  constructor(
+    message: string,
+    readonly suggestions: string[] = []
+  ) {
     super(message)
     this.name = 'UsageError'
+  }
+}
+
+/** Raised by a command that already printed its result and then fails; `main` exits 1 without a second JSON document. */
+export class CommandFailed extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'CommandFailed'
   }
 }
 
@@ -50,9 +61,15 @@ function parseValue(name: string, spec: FlagSpec, raw: string): unknown {
  * Splits `argv` into positionals and the flags declared in `defs` (plus the global `--json` and
  * `--help`). Supports `--name value`, `--name=value`, `-h` for `--help`, and `--` to end flag
  * parsing. A value that starts with `--` must be written `--name=value`. Unknown flags, bad values
- * and missing required flags are usage errors naming `command`.
+ * and missing required flags are usage errors naming `command`; `checkRequired: false` skips the
+ * last check for commands that judge required flags after merging another source.
  */
-export function parseArgs(argv: readonly string[], defs: Record<string, FlagSpec>, command: string): ParsedArgs {
+export function parseArgs(
+  argv: readonly string[],
+  defs: Record<string, FlagSpec>,
+  command: string,
+  options: { checkRequired?: boolean } = {}
+): ParsedArgs {
   const all: Record<string, FlagSpec> = { ...GLOBAL_FLAGS, ...defs }
   const positionals: string[] = []
   const flags: Record<string, unknown> = {}
@@ -104,7 +121,7 @@ export function parseArgs(argv: readonly string[], defs: Record<string, FlagSpec
       flags[name] = value
     }
   }
-  if (flags.help !== true) {
+  if (flags.help !== true && options.checkRequired !== false) {
     const missing = Object.entries(defs)
       .filter(([name, spec]) => spec.required && flags[name] === undefined)
       .map(([name]) => `--${name}`)
