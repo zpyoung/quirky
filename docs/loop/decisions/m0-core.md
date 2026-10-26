@@ -1,0 +1,360 @@
+# m0-core decisions
+
+## D1: Classify the item as an API, CLI, Organization and Visual design, and run every research phase
+- **Question:** which domains the gray-area catalog draws from, and whether the research swarms run (quirk:brainstorming, checklist steps 2 and 7)
+- **Options:** one domain; several; skip research as covered by earlier items
+- **Chose:** API (plugin API growth, confirmations, request IDs), CLI (socket transport, selectors, `--version`, plugin command groups), Organization (which v1 feature goes in which built-in plugin, naming) and Visual (the window's layout moving into the daemon). Phase A ran two web-research agents (kernel-port and distro patterns; pitfalls). Phase B ran one per approach.
+- **Why:** the item is four earlier items merged into one. Its consumers are agents at a shell, plugin and distro authors, and the person at the window. Earlier items researched registries, daemon APIs, UI slots and CLI generation, not distros, safe mode, socket transports or moving features into plugins.
+- **Evidence:** docs/loop/queue.json m0-core; docs/roadmap.md M0
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** assumed — autonomous
+
+## D2: Skip the visual companion and the adhd offer, use the standard gray-area set
+- **Question:** brainstorming's visual companion offer and its Step 0 adhd offer
+- **Options:** run them; skip them
+- **Chose:** skip both
+- **Why:** LOOP.md says to skip the parts that assume a person is there
+- **Evidence:** docs/loop/LOOP.md "Skip the parts that assume a person is there"
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** locked by docs/loop/LOOP.md
+
+## D3: Keep m0-core as one item with one pair of specs, built in waves
+- **Question:** brainstorming's scope check says to decompose a request that spans independent subsystems
+- **Options:** split into four specs and build them across iterations; one logic spec and one tech spec covering all four parts, built in dependency-ordered waves
+- **Chose:** one pair of specs with four parts (CLI core, UI bridge, v1 as built-ins, distros and safety), built in waves. If an iteration runs out of room, the Progress section names the next wave.
+- **Why:** the user merged the four queue items into one on purpose (commit 9a0ae1e), and the parts share one exit test. The loop cannot split a queue item (LOOP.md: change queue.json only through `queue.ts set`).
+- **Evidence:** git show 9a0ae1e; docs/loop/LOOP.md "Hard rules"
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** locked by docs/loop/queue.json
+
+## D4: Select every gray area that matters for m0-core
+- **Question:** which gray areas to drill into (brainstorming Gray Areas Step 1)
+- **Options:** CLI: output-format, flag-design, progress-reporting, error-recovery, exit-codes; API: response-format, error-responses, authentication, versioning, rate-limiting, pagination; Organization: grouping-criteria, naming-convention, duplicate-handling, exception-handling; Visual: layout-style, empty-state, error-state, interaction-style; Data: idempotency
+- **Chose:** grouping-criteria (which feature goes in which plugin), naming-convention (plugin IDs, method and event names, CLI groups), duplicate-handling (CLI alias collisions), exception-handling (a disabled built-in and its dependents), flag-design (selectors, `--yes`, `--version`, `--retry-request`), output-format (ported commands' text), error-recovery and error-responses (selector, confirmation and request-ID errors), exit-codes, authentication (the unix socket), versioning (renamed methods), response-format (`quirky ui state`), idempotency (request IDs), layout-style (what the shell keeps and what moves into plugins), empty-state (a feature switched off)
+- **Why:** LOOP.md asks for every area that matters. Progress reporting matters only for confirmations, which error-recovery covers. Pagination and rate limiting have no new consumer here. Interaction style stays v1's.
+- **Evidence:** docs/loop/LOOP.md "Gray areas"
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** assumed — autonomous
+
+## D5: v1 moves into eight built-in plugins, one per roadmap feature
+- **Question:** grouping-criteria: which v1 feature goes in which built-in plugin
+- **Options:** one plugin for all of v1; one per roadmap feature; finer splits (separate launch, hook and notification plugins)
+- **Chose:** eight plugins, one per feature the roadmap names: `quirky.repo` (repos), `quirky.worktree` (worktrees and the sidebar), `quirky.session` (session records, agent launch, the session view), `quirky.terminal` (terminal input and output), `quirky.agent-status` (hooks, status changes, finish notifications), `quirky.git` (source control and its panel), `quirky.ask` (asks and the Questions panel) and `quirky.structured` (structured background sessions). Dependencies: worktree on repo; session on worktree; terminal, agent-status and structured on session; git on worktree; structured also on ask.
+- **Why:** the roadmap lists exactly these eight, and a distro can then switch off or replace each one by ID, which is the point of the move. Finer splits would add plugins no distro asked to replace.
+- **Evidence:** docs/roadmap.md M0 "v1 as built-ins"; docs/v1.md "Daemon behaviour"
+- **Reversibility:** hard
+- **Confidence:** medium
+- **Revisit if:** a distro needs to replace agent launch without replacing session records
+- **Source:** assumed — autonomous
+
+## D6: v1's methods are renamed to their plugin's namespace, with no aliases, and the protocol version goes to 2
+- **Question:** naming-convention and versioning: what v1's wire names become once their features are plugins
+- **Options:** keep `repo.list` and the rest as kernel aliases; rename to `<pluginId>/<name>` and bump the protocol version; rename and keep both names for a release
+- **Chose:** rename to `<pluginId>/<name>` (`repo.list` becomes `quirky.repo/list`, `session.createStructured` becomes `quirky.structured/create`, `git.status` becomes `quirky.git/status`), drop v1's `settings.get` and `settings.set` (their three settings become plugin settings), and set `PROTOCOL_VERSION` to 2. The UI, CLI and desktop shell move to the new names in the same change.
+- **Why:** m0-daemon-api D4 fixes plugin wire names as `<pluginId>/<name>`, and every client is in this repo, so aliases would only keep two names alive. The version bump makes an old client fail at `client.hello` instead of calling missing methods.
+- **Evidence:** docs/loop/decisions/m0-daemon-api.md D4, D5; packages/protocol/src/rpc.ts:20
+- **Reversibility:** hard
+- **Confidence:** high
+- **Source:** supersedes m0-daemon-api D5
+
+## D7: v1's events become the plugins' events
+- **Question:** naming-convention: what v1's events become
+- **Options:** keep them as kernel events that plugins emit through a privileged hook; rename them to plugin events
+- **Chose:** plugin events, shaped `{ type: "<pluginId>/<name>", data }` as m0-daemon-api D6 fixed: `quirky.repo/changed`, `quirky.worktree/changed`, `quirky.session/changed`, `quirky.session/removed`, `quirky.git/changed`, `quirky.ask/created`, `quirky.ask/resolved` and `quirky.structured/message`. `notify` stays a kernel event, because notifications are a kernel service (D12).
+- **Why:** a plugin can only emit events in its own namespace, and that is what makes a replacement plugin's events distinguishable
+- **Evidence:** docs/loop/decisions/m0-daemon-api.md D6; packages/protocol/src/rpc.ts QuirkyEvent
+- **Reversibility:** hard
+- **Confidence:** high
+- **Source:** assumed — autonomous
+
+## D8: v1's CLI words stay, with `wt` and `term` as group aliases
+- **Question:** naming-convention and duplicate-handling: the CLI groups of the new plugins, given m0-scripting D10 makes a group the plugin ID minus `quirky.`
+- **Options:** plugin IDs `quirky.wt` and `quirky.term` so the groups match v1; IDs named for the feature, with a manifest field for extra group words; v1's words dropped
+- **Chose:** IDs named for the feature, and a new manifest field `cliAliases` listing extra words for the plugin's group: `quirky.worktree` takes `wt`, `quirky.terminal` takes `term`. An alias that collides with another group or command loses by m0-scripting D11's precedence and is reported in `plugin.list` diagnostics.
+- **Why:** "v1 behaves as it does today", and agent skills already call `quirky wt` and `quirky term`. Feature-named IDs read better in contribution IDs, which are hard to change later.
+- **Evidence:** docs/v1.md "CLI"; docs/loop/decisions/m0-scripting.md D10, D11
+- **Reversibility:** medium
+- **Confidence:** high
+- **Source:** assumed — autonomous
+
+## D9: Plugins ship CLI commands as `cli-command` contributions, with an optional CLI module for custom run code
+- **Question:** flag-design and output-format: how a plugin keeps v1's positionals, env defaults, the `ask` long-poll loop and v1's text output, since generated commands have only flags
+- **Options:** keep v1's commands hand-written in the kernel CLI calling plugin methods; method-level CLI hints only; a `cli-command` kind declared in the manifest, run either generically against a method or by code from a manifest `cli` module the CLI imports
+- **Chose:** the `cli-command` kind. Each declares its words under the plugin's group (an empty `words` is the bare group, as `quirky ask` needs), a summary, positionals, flags and the methods it may call. One with a `method` and no code maps positionals and flags to that method's params and prints the generic form. Run code comes from the plugin's `cli` ES module, which the CLI imports only when that command runs. A plugin's own `cli-command` beats its generated command for the same words.
+- **Why:** kernel copies of v1's commands would shadow the plugins' groups, so the plugins wouldn't really own them. Hints can't express the `ask` loop. Declaring the commands keeps m0-registry D12 (every contribution is declared, code only provides it) and lets help, suggestions and `quirky api --json` list them without loading code.
+- **Evidence:** packages/cli/src/commands/ask.ts; packages/cli/src/generated.ts; docs/loop/decisions/m0-registry.md D12
+- **Reversibility:** hard
+- **Confidence:** medium
+- **Revisit if:** third-party plugins never use the CLI module and it costs more than it gives
+- **Source:** assumed — autonomous
+
+## D10: Repo and worktree selectors resolve in the daemon, with the caller's cwd and identity
+- **Question:** flag-design and error-recovery: the selector grammar and where it resolves
+- **Options:** resolve on the client as Orca does for `current`; resolve in the plugin, with the CLI sending its cwd and identity at `client.hello`
+- **Chose:** methods take `repo` and `worktree` params as selector strings. Repo: `id:<id>`, `name:<name>`, `path:<path>`. Worktree: `id:<id>`, `name:<name>`, `branch:<branch>`, `path:<path>` (the worktree containing that path, innermost first), and `current` or `active` (the caller's `QUIRKY_WORKTREE_ID`, else the worktree containing the caller's cwd). A bare value is tried as an ID, then a name, then (worktrees) a branch. An omitted `worktree` means `current`. No match is NotFound naming the selector and the grammar; several matches is Conflict listing each match's `id:` selector. The CLI sends `cwd`, `sessionId` and `worktreeId` (from its env) in `client.hello`, and plugin methods see them on the caller. `quirky.repo/resolve` and `quirky.worktree/resolve` expose the matcher. Session IDs stay plain IDs, defaulting to the caller's `QUIRKY_SESSION_ID`.
+- **Why:** generated commands and API callers then get selectors without client code, and the UI can pass plain IDs. There are no remote runtimes yet, so sending the cwd is safe. Orca's grammar is kept so agent habits carry over.
+- **Evidence:** research/orca-features/cli.md "Selectors"; packages/cli/src/commands/support.ts:43
+- **Reversibility:** medium
+- **Confidence:** medium
+- **Revisit if:** remote runtimes arrive and a remote cwd means nothing on the daemon's machine
+- **Source:** assumed — autonomous
+
+## D11: The plugin API grows by six members so the built-ins need nothing private
+- **Question:** grouping-criteria: what the v1 features need that m0-daemon-api's context lacks
+- **Options:** a privileged context for built-ins only; kernel RPC primitives (`pty.spawn` and the like) open to every client; new context members on the public plugin API
+- **Chose:** new public context members: `pty` (spawn, write, resize, read, kill, list and forget PTY sessions, with data and exit listeners), `notify` (D12), `launchEnvironment` (the kernel-reserved env every session needs: `PATH` with Quirky's `bin`, `ZDOTDIR`, `QUIRKY_HOME`, the hook URL and token), `runLaunchHooks` (the launch-hook pipeline, so a session plugin can apply other plugins' hooks), `home` (the state directory, read-only) and connection streams for methods declared `connection: true` (the caller gets `openStream`, so `terminal.attach` can send binary frames). The hook endpoint stays in the kernel and delivers each authenticated POST to plugins as a kernel `hook.received` event.
+- **Why:** the roadmap requires built-ins to use only the public API and lets the API grow in the same milestone. Public context members keep spawn access to plugins, which already run with full trust, rather than to every API client.
+- **Evidence:** docs/roadmap.md "When a milestone is done"; packages/protocol/src/plugins.ts PluginContext; packages/daemon/src/service.ts
+- **Reversibility:** hard
+- **Confidence:** medium
+- **Source:** assumed — autonomous
+
+## D12: Notifications are a kernel service, and each plugin decides when to notify
+- **Question:** grouping-criteria: where v1's notification logic lives
+- **Options:** in agent-status; a kernel service that plugins call
+- **Chose:** `context.notify({ title, body, sessionId?, worktreeId? })` broadcasts the `notify` event and, when no desktop client is connected, shows the notification with osascript, as v1 does. The `notifications` setting moves to `quirky.agent-status`, which skips the call when it is off. `quirky.ask` notifies when an ask is created.
+- **Why:** architecture.md puts desktop surfaces and the no-window fallback in the daemon, and more than one plugin notifies
+- **Evidence:** docs/architecture.md "Method groups" (last paragraph); docs/v1.md "Status transitions"
+- **Reversibility:** medium
+- **Confidence:** high
+- **Source:** locked by docs/architecture.md
+
+## D13: v1's settings become plugin settings
+- **Question:** naming-convention: where `worktreesRoot`, `terminalScrollback` and `notifications` go
+- **Options:** keep v1's kernel settings; move each to the plugin that reads it
+- **Chose:** `setting:quirky.worktree/worktreesRoot`, `setting:quirky.terminal/scrollback` (500 to 10000, default 2000) and `setting:quirky.agent-status/notifications`, read with `context.getSetting` and set with `setting.set`
+- **Why:** m0-ui-api D18 deferred this move to the port. Settings a plugin declares disappear with it, so a distro that turns a feature off takes its settings with it.
+- **Evidence:** docs/loop/decisions/m0-ui-api.md D18; packages/protocol/src/model.ts Settings
+- **Reversibility:** medium
+- **Confidence:** high
+- **Source:** supersedes m0-ui-api D18
+
+## D14: v1 data carries over on upgrade
+- **Question:** exception-handling: what happens to a v1 home's repos, sessions, asks and settings when the plugins take over
+- **Options:** start empty; each plugin imports its v1 table once from `quirky.db`
+- **Chose:** each plugin's first store migration copies its v1 rows from `<home>/quirky.db` when that file has them (repos; sessions; asks; structured messages; the three settings). The kernel leaves the v1 tables in place.
+- **Why:** sessions in the PTY host outlive the daemon, and losing their records on upgrade would orphan running agents. A one-time copy costs little.
+- **Evidence:** packages/daemon/src/store.ts; docs/v1.md "Files and environment"
+- **Reversibility:** easy
+- **Confidence:** medium
+- **Source:** assumed — autonomous
+
+## D15: A disabled built-in takes its dependents with it, and the window shows what is left
+- **Question:** exception-handling and empty-state: what the window and CLI do when a distro or the user turns a built-in off
+- **Options:** refuse to disable built-ins; disable with the m0-registry cascade and show empty states
+- **Chose:** the m0-registry cascade applies (disabling `quirky.session` also disables terminal, agent-status and structured). Its slots, commands, CLI group and methods disappear live. A call to its methods is MethodNotFound, and its CLI words become unknown commands. The shell keeps working with whatever slots remain, and an empty main area says so.
+- **Why:** the exit test turns source control off, and m0-registry D9 already defines the cascade
+- **Evidence:** docs/loop/decisions/m0-registry.md D9; docs/roadmap.md M0 "Exit test"
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** locked by docs/loop/decisions/m0-registry.md
+
+## D16: The CLI talks to the daemon over a unix socket, authenticated by the runtime token in `client.hello`
+- **Question:** authentication: how the CLI reaches and authenticates to the daemon
+- **Options:** keep the WebSocket; a unix socket with the token in each request line (Orca); a unix socket with the token once in `client.hello`
+- **Chose:** the daemon also listens on a unix socket, mode 0600, at `<home>/quirkyd.sock`, or under a private short directory `/tmp/quirky-<uid>/` (mode 0700) named by a hash of the home when that path would pass 100 bytes. `runtime.json` gains its path. Messages are the same JSON-RPC 2.0 objects, one per line. The first must be `client.hello` carrying the runtime token, and a wrong or missing token closes the connection. Connections over the socket carry no binary frames, so `connection: true` methods that stream refuse them with InvalidParams naming the WebSocket. A stale socket file is removed at startup once no daemon answers on it. The CLI uses only the socket. The desktop shell and the window keep the WebSocket.
+- **Why:** architecture.md fixes a unix socket and the same token file for the CLI. One hello carries the token, as the WebSocket's URL carries it once per connection. The short-directory rule is the fix the 104-byte `sun_path` limit needs on macOS.
+- **Evidence:** docs/architecture.md "Transport and auth"; research/orca-features/cli.md "How the CLI finds and authenticates"; https://github.com/zsa/kontroll/issues/27 ; https://github.com/raine/workmux/issues/293
+- **Reversibility:** medium
+- **Confidence:** high
+- **Source:** locked by docs/architecture.md
+
+## D17: The PTY host's socket follows the same short-path rule
+- **Question:** m0-registry D33 logged that a long `QUIRKY_HOME` breaks `pty.sock` and handed socket paths to the CLI-core item
+- **Options:** leave it; apply the daemon socket's rule to `pty.sock`
+- **Chose:** apply the same rule, so a home whose `pty.sock` path would pass 100 bytes puts it in the short private directory
+- **Why:** one rule for both sockets, and D33 named this item as the owner. Default homes are short, so nothing moves for them.
+- **Evidence:** docs/loop/decisions/m0-registry.md D33
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** supersedes m0-registry D33
+
+## D18: `quirky --version` prints the CLI's version and works in a from-source build
+- **Question:** flag-design: what `--version` prints, given Orca's fails in a from-source build
+- **Options:** the daemon's version (needs the daemon); the CLI's version from its own `package.json`, offline
+- **Chose:** `quirky --version` and `quirky -v`, as the only argument, print `quirky <version>` from `packages/cli/package.json` and exit 0 without contacting the daemon. `--json` prints `{"version":"..."}`. `quirky status` keeps reporting the daemon's version.
+- **Why:** Orca's defect is reading a version the from-source build never stamped. The CLI's `package.json` always has one, so the from-source run is the test.
+- **Evidence:** research/orca-features/cli.md "Version"; research/orca-features/README.md "Orca defects"
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** locked by research/orca-features/cli.md
+
+## D19: Mutating calls carry a request ID, and the daemon returns the first outcome to a retry
+- **Question:** idempotency: how a lost reply is retried without doing the work twice
+- **Options:** per-method idempotency keys in params (Orca's ask); one request-envelope `requestId` handled by the kernel for every method
+- **Chose:** a JSON-RPC request may carry a top-level `requestId` (1 to 128 characters). For a method not declared `readOnly`, the kernel records the outcome (result or error) with a digest of the method and params for 24 hours, in its own store. A repeat with the same ID and digest gets the recorded outcome without running again; one still running waits for it; one with a different digest is Conflict ("request ID reused with different params"). Kernel read methods and plugin methods declared `readOnly: true` are never recorded. The CLI sends a fresh UUID with every call, retries a call whose connection dropped before the reply up to twice with the same ID, and names the ID in the error so `--retry-request <id>` can reissue the command.
+- **Why:** this is Stripe's model (store the first response, reject reuse with different params, prune after a day), and one envelope field covers plugin methods without touching their schemas
+- **Evidence:** https://docs.stripe.com/api/idempotent_requests ; research/orca-features/cli.md "Lost reply on a mutating call"; research/orca-features/ask.md "Registration and the wait loop"
+- **Reversibility:** medium
+- **Confidence:** high
+- **Source:** assumed — autonomous
+
+## D20: Irreversible methods confirm through an ask unless the call passes `yes`
+- **Question:** error-recovery, error-responses and exit-codes: how confirmations work for agents and people
+- **Options:** the CLI prompts on a TTY; the daemon blocks the call until an ask is answered; the daemon refuses with a confirmation-required error naming a fresh ask, and the call is repeated with that ask's ID once it is answered
+- **Chose:** the third. Methods declare `destructive: true` and a `confirm` text with `{param}` placeholders. A call without `yes: true` or a `confirmation` ask ID creates a confirm ask (through `quirky.ask/create`) and fails with ConfirmationRequired (code -32010) whose data names the ask and the action. A repeat with `confirmation: <askId>` runs only if that ask was answered Yes for the same method and params, once. Declined fails with Conflict "declined". With `quirky.ask` off, the error says to pass `--yes`. The CLI turns ConfirmationRequired into a wait: it prints the action and the ask ID to stderr, waits on the ask as `quirky ask wait` does, then repeats the call. `--yes` skips it. A declined confirmation exits 1. The window asks with its own dialog and then passes `yes`. Destructive: `quirky.worktree/remove`, `plugin.install`, `plugin.uninstall`, `distro.install` and `distro.remove`.
+- **Why:** the roadmap's rule names exactly these actions, and agents in PTYs can answer TTY prompts themselves, so the gate has to be a person answering an ask. A blocking call would hide what it is waiting for. Failing closed with the flag's name in the message is what the research recommends.
+- **Evidence:** docs/roadmap.md "Agent access"; https://github.com/Kleanthismits/git_flash/issues/42 ; https://github.com/codekiln/langstar/pull/739
+- **Reversibility:** medium
+- **Confidence:** medium
+- **Revisit if:** agents find the two-step call awkward enough to pass `--yes` by habit
+- **Source:** locked by docs/roadmap.md (ask unless `--yes`); assumed — autonomous (the protocol)
+
+## D21: The daemon owns the window's layout, focus and visible view
+- **Question:** layout-style and response-format: what "layout and focus live in the daemon" covers, and the shape of `quirky ui state`
+- **Options:** the window reports its state and the daemon mirrors it; the daemon holds the layout and the window renders it; a generic tab model now
+- **Chose:** the daemon holds the layout: the open view (contribution ID and input), the open panel (or none), whether the sidebar is shown, and which of sidebar, view or panel has focus. It is persisted, so a reopened window shows the same thing. `ui.state` returns that layout, the connected windows, and each slot shown with its plugin, title and the JSON its plugin last reported. Layout changes are daemon methods (`ui.view.open`, `ui.view.close`, `ui.panel.open`, `ui.panel.close`, `ui.sidebar.set`, `ui.focus`), broadcast as `ui.state.changed`, and the window applies them. The selected worktree and session are the session view's input, so selection lives in the daemon too. No tabs model beyond that: the session view's tabs are the worktree's sessions, with the active one in the input.
+- **Why:** the roadmap requires layout, focus, open tabs and the visible view to live in the daemon. A daemon-held layout can't drift from what the window shows, which mirroring could. Tab groups and splits are M1's term-ui work.
+- **Evidence:** docs/roadmap.md M0 "UI bridge"; docs/roadmap.md M1 "Terminal panes"; https://github.com/contour-terminal/contour/pull/2176
+- **Reversibility:** hard
+- **Confidence:** medium
+- **Source:** locked by docs/roadmap.md (what lives in the daemon); assumed — autonomous (the shape)
+
+## D22: Plugin slots report their own content as JSON
+- **Question:** response-format: how an agent reads what a plugin's slot shows, since the daemon can't see inside a slot
+- **Options:** nothing inside slots; each mounted slot may report a JSON summary that `ui.state` includes
+- **Chose:** a mounted slot's context gets `report(state)`. The window sends it to the daemon (latest wins, 64 KiB cap, cleared on unmount), and `ui.state` includes it under the slot. The built-ins report what they show: the sidebar its repos and worktrees with status, the session view its tabs and active session, the source-control panel its worktree and file counts, the Questions panel its pending asks.
+- **Why:** agents read what the window shows as JSON, never screenshots, and only the plugin knows its own content
+- **Evidence:** docs/roadmap.md "Everything is scriptable"
+- **Reversibility:** medium
+- **Confidence:** medium
+- **Source:** assumed — autonomous
+
+## D23: Plugin UI commands run in the window when called through the API
+- **Question:** error-recovery: how `ui.command.run` reaches the window, and what happens with no window or several
+- **Options:** broadcast to every window; send to one window and wait for its reply
+- **Chose:** `ui.command.run { id, args }` checks `args` against the command's declared schema, sends it to one window (the last one to report focus, else the last to connect) and waits up to 30 seconds for that window's result. No window connected is Conflict "no Quirky window is open". A command whose module fails reports the error. CLI: `quirky ui run <commandId> [--args <json>]`, and each layout method has a `quirky ui` command (`open-view`, `close-view`, `open-panel`, `close-panel`, `sidebar`, `focus`).
+- **Why:** UI commands are API commands routed to the open window. One target window keeps a command from running twice. m0-scripting D8 left checking `args` to this item.
+- **Evidence:** docs/roadmap.md M0 "UI bridge"; docs/loop/decisions/m0-scripting.md D8
+- **Reversibility:** medium
+- **Confidence:** high
+- **Source:** locked by docs/roadmap.md
+
+## D24: v1's window surfaces become the built-ins' UI contributions, and the shell keeps only the chrome
+- **Question:** layout-style: what stays in the shell
+- **Options:** keep v1's surfaces hard-wired and add plugin copies; move each into its plugin's UI module
+- **Chose:** move them. `quirky.worktree` contributes the sidebar section with repos, worktrees, add-repo, new-worktree and remove-worktree; `quirky.session` the session view (tabs, new-session menu, terminal pane, structured transcript); `quirky.git` the source-control panel; `quirky.ask` the Questions panel. The shell keeps the header, panel toggles, command palette, settings dialog, toasts, the connection banner and the confirm dialog.
+- **Why:** a distro can only replace or switch off what is a contribution, and the exit test replaces the sidebar and switches source control off. m0-ui-api D26 deferred this move to the port.
+- **Evidence:** docs/loop/decisions/m0-ui-api.md D26; docs/roadmap.md M0 "Exit test"
+- **Reversibility:** medium
+- **Confidence:** high
+- **Source:** supersedes m0-ui-api D26
+
+## D25: Ask cards move into a Questions panel that opens itself
+- **Question:** layout-style: where asks show once they are a plugin, since a plugin can't draw over the main area
+- **Options:** a new overlay slot kind; a panel that opens when an ask is pending (Orca's right-sidebar Questions panel)
+- **Chose:** the `quirky.ask` panel `questions`. When an ask is created and no panel is open, the plugin opens it through `ui.panel.open`. Each pending ask shows as a card in creation order, so a second ask is visible at once (the Orca defect test).
+- **Why:** it is Orca's placement and needs no new slot kind. v1's cards over the main area move into the right column, which is the one visible change to v1.
+- **Evidence:** research/orca-features/ask.md "Where to find it", "Queued asks"
+- **Reversibility:** easy
+- **Confidence:** medium
+- **Revisit if:** opening the panel by itself steals the source-control panel at a bad moment often enough to matter
+- **Source:** assumed — autonomous
+
+## D26: A distro is applied as an overlay that removing it takes away
+- **Question:** what a distro manifest holds and how install and revert work
+- **Options:** copy the distro's values into the user's settings and record the old ones to restore; keep the distro as a separate layer under the user's own choices
+- **Chose:** `quirky-distro.json` holds `id`, `name`, `version`, optional `description`, `plugins` (directories inside the distro), `disable` (plugin or contribution IDs), `settings` (setting ID to value), optional `theme` and optional `keybindings` (chord to command ID). Installing copies its plugins into `<home>/plugins/` and records the distro. Its settings, theme and disables are a layer: a setting reads the user's stored value, else the distro's, else the default; the theme is the user's choice, else the distro's; an ID is off if the user or the distro turned it off. Distro keybindings beat built-in and plugin keybindings on the same chord. Removing the distro deletes its plugins and its layer, so everything it changed reads as before, and anything the user set afterwards stays. One distro at a time: installing a second is Conflict until the first is removed. A plugin ID already installed outside the distro is Conflict. Methods `distro.inspect`, `distro.install`, `distro.list`, `distro.remove`; CLI group `quirky distro`.
+- **Why:** the roadmap's distro is a manifest naming plugins, settings, keybindings, theme and which built-ins are off. Overrides that removal deletes are how VS Code profiles and LazyVim revert, with no restore bookkeeping that can drift.
+- **Evidence:** docs/roadmap.md "Distros"; https://code.visualstudio.com/docs/configure/profiles ; https://www.lazyvim.org/configuration/plugins
+- **Reversibility:** hard
+- **Confidence:** medium
+- **Revisit if:** users want two distros layered at once
+- **Source:** locked by docs/roadmap.md (what the manifest names); assumed — autonomous (the overlay)
+
+## D27: Plugin install lists what the plugin contributes and confirms through an ask
+- **Question:** what the "install screen listing what a plugin contributes" is
+- **Options:** a dedicated window view; the confirmation ask, whose question lists the contributions, plus `inspect` for the CLI
+- **Chose:** `plugin.inspect { path }` and `distro.inspect { path }` read a manifest without running code and return the plugin, version and every contribution by kind and ID, with overrides and disables. `plugin.install { path }` and `distro.install { path }` are destructive (D20), so their confirm ask's question carries that listing, and the window shows it as an ask card. Reinstalling an installed plugin asks again and shows the old and new versions and any contribution added or removed. `plugin.uninstall { id }` removes an installed plugin's directory and data. CLI: `quirky plugin inspect|install|uninstall`, and `install` prints the listing before it waits.
+- **Why:** consent has to show the contributions, and an update that adds capabilities should re-prompt, as Chrome does. Reusing the ask keeps one consent path for the CLI, the window and agents.
+- **Evidence:** https://developer.chrome.com/docs/extensions/develop/concepts/permission-warnings ; https://code.visualstudio.com/docs/configure/extensions/extension-runtime-security
+- **Reversibility:** medium
+- **Confidence:** medium
+- **Source:** assumed — autonomous
+
+## D28: Quirky never updates plugin code on its own
+- **Question:** what "no silent auto-update" requires
+- **Options:** an opt-in updater; no updater, only explicit installs
+- **Chose:** no updater. The daemon runs installed plugins from the copy made at install and never re-reads a distro's or plugin's source directory. Changed plugin code takes an explicit reinstall, which confirms. The desktop shell has no updater either.
+- **Why:** the 2026 Nx Console compromise reached users through automatic extension updates within minutes
+- **Evidence:** https://www.stepsecurity.io/blog/nx-console-vs-code-extension-compromised ; https://www.cisa.gov/news-events/alerts/2026/05/28/supply-chain-compromises-impact-nx-console-and-github-repositories
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** locked by docs/roadmap.md
+
+## D29: Safe mode runs stock Quirky for one daemon run and writes nothing
+- **Question:** what `--disable-plugins` does and how it is reached
+- **Options:** a persisted toggle; a launch flag for the daemon, reached through a restart command
+- **Chose:** `quirkyd --disable-plugins` (or `QUIRKY_DISABLE_PLUGINS=1`) loads built-ins only, ignores the user's and the distro's disables, and skips the distro layer, for that run only. Installed plugins are listed as disabled with the reason "safe mode". `status.get` reports `safeMode`. `quirky daemon restart [--disable-plugins]` stops the daemon (new kernel method `daemon.stop`) and starts it again, and sessions survive because the PTY host does.
+- **Why:** VS Code's `--disable-extensions` is launch-scoped and leaves installed extensions in place. Ignoring stored disables is what makes it stock Quirky.
+- **Evidence:** https://code.visualstudio.com/docs/configure/command-line ; docs/architecture.md "Processes"
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** assumed — autonomous
+
+## D30: The sample distro switches source control off and replaces the sidebar
+- **Question:** what the exit test's sample distro contains
+- **Options:** a test fixture; a distro shipped in the repo
+- **Chose:** `distros/sample/` in the repo, with plugin `sample.sidebar` overriding `sidebar-section:quirky.worktree/worktrees` with a flat worktree list, and `disable: ["quirky.git"]`. The exit test drives it only through the CLI: `quirky distro install distros/sample --yes`, `quirky ui state --json` (sidebar section owned by `sample.sidebar`, no source-control panel or `git` CLI group), then `quirky distro remove sample --yes` and the stock state again.
+- **Why:** the roadmap's exit test names exactly these steps, and a distro in the repo doubles as an example for authors
+- **Evidence:** docs/roadmap.md M0 "Exit test"
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** locked by docs/roadmap.md
+
+## D31: Port v1 for real, growing the public plugin API, rather than facades or raw RPC primitives
+- **Question:** brainstorming step 8: which approach moves v1 into plugins
+- **Options:** A, feature code moves into the plugins, and the kernel grows the public context (D11); B, facade plugins that declare methods and delegate to kernel internals through a privileged context; C, the kernel exposes low-level primitives (`pty.spawn` and the like) as public RPC methods and plugins use only `context.call`
+- **Chose:** A
+- **Why:** B fails the rule that built-ins use only the public API, and the research shows privileged-only APIs leave third parties unable to match or replace built-ins (VS Code proposed APIs, Firefox experiments, Chrome component extensions). C opens process spawning to every API client and pushes terminal streaming through JSON. A costs the most code, but it is the only one that tests the plugin API the way the roadmap asks.
+- **Evidence:** https://code.visualstudio.com/api/advanced-topics/using-proposed-api ; https://firefox-source-docs.mozilla.org/toolkit/components/extensions/webextensions/basics.html ; https://github.com/neovim/neovim/blob/master/runtime/doc/api.txt ; https://github.com/microsoft/vscode/blob/main/extensions/git/README.md
+- **Reversibility:** hard
+- **Confidence:** high
+- **Source:** locked by docs/roadmap.md (built-ins use only the public API); assumed — autonomous (the approach)
+
+## D32: In scope from cli.md and ask.md: the CLI core and v1's ask flows
+- **Question:** which flows of the two feature docs this item owns
+- **Options:** n/a
+- **Chose:** cli.md: running a command in text and JSON; error output and exit codes; finding and authenticating to the daemon over the socket; selectors; `--version`; idempotent retry of a lost reply; caller identity from the session env; `status` and `open` as v1 has them. ask.md: registering an ask and waiting in chunks, `ask wait`, `ask cancel`, answering or declining a card (answered, partial and declined), a second ask while one is pending, and asks surviving a daemon restart. Out of scope, in the spec's non-goals: remote runtimes, `serve`, environments, pairing, `agent-context` (covered by `quirky api`), M1's command groups, Windows and WSL paths; and ask.md's number and date questions, defaults, timeouts with defaults, credential refusal, drafts, previews, hand-off, liveness, the wait concurrency cap, the 3-minute notification and Claude suppression flags (M2's ask parity).
+- **Why:** roadmap M1 says the CLI core landed in M0 and M1 adds the command groups. M2 owns ask parity.
+- **Evidence:** docs/roadmap.md M1 "CLI", M2 "orca ask parity"
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** locked by docs/roadmap.md
+
+## D33: Two Orca defects get tests here
+- **Question:** LOOP.md step 4 asks for a test per Orca defect the item's docs record
+- **Options:** n/a
+- **Chose:** `orca --version` failing in a from-source build (D18), and the queued second ask that never appears. Quirky's Questions panel shows every pending ask, and the test registers two asks, answers the first and checks that the second is still listed by `quirky.ask/list`, still in the panel's reported state, and resolves its own waiter when answered. The fresh sequence number itself is M2's work.
+- **Why:** both are in the defect index for these docs. The second-ask test costs little and guards the port of asks.
+- **Evidence:** research/orca-features/README.md "Orca defects found along the way"; research/orca-features/ask.md "Queued asks"
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** locked by docs/loop/LOOP.md
+
+## D34: Ported commands keep v1's text output, and exit codes stay 0, 1 and 2
+- **Question:** output-format and exit-codes for the ported commands and the new ones
+- **Options:** generic output for every plugin command; v1's formatters moved into each plugin's CLI module
+- **Chose:** each plugin's CLI module keeps v1's tables and records for its commands. New kernel commands print short records. Exit codes stay as m0-scripting D15 fixed them: 0 ok, 1 runtime error (including a declined confirmation and a selector that matches nothing), 2 usage. Under `--json`, a confirmation-required, selector or request-ID error is the usual error document with codes `confirmation-required`, `declined`, `not-found` or `conflict`.
+- **Why:** "v1 behaves as it does today", and scripts parse `--json` rather than text
+- **Evidence:** docs/loop/decisions/m0-scripting.md D15; packages/cli/src/output.ts
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** assumed — autonomous
+
+## D35: Fast-track the remaining defaults
+- **Question:** brainstorming's essential-coverage gate and the remaining clarifying questions
+- **Options:** n/a
+- **Chose:** the six essentials are covered: purpose (the roadmap's M0 items), users (agents, people at the window, plugin and distro authors), success (the M0 exit test and LOOP.md step 6), constraints (the locked decisions, macOS only), scope (D32) and failure behavior (D15, D19, D20, D23). Remaining build-only questions go to the tech spec.
+- **Why:** LOOP.md treats the user as having elected the stated defaults
+- **Evidence:** docs/loop/LOOP.md "Answering a skill's questions"
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** locked by docs/loop/LOOP.md
+
+## Progress
+Step 4: brainstorming done (D1-D35). Next: write docs/quirk/specs/2026-10-26-m0-core/logic.md and tech.md, run one adversarial review over both, commit.
