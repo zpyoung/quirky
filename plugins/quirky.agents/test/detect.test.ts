@@ -197,4 +197,11 @@ describe('readLoginPath', () => {
     expect(await readLoginPath(shell, 200)).toBeNull()
     expect(Date.now() - started).toBeLessThan(3000)
   })
+
+  test('returns null within the timeout when a background child keeps stdout open after the shell exits', async () => {
+    const shell = script('shell-bg', 'sleep 3 &\nprintf /late/bin')
+    const started = Date.now()
+    expect(await readLoginPath(shell, 200)).toBeNull()
+    expect(Date.now() - started).toBeLessThan(1500)
+  })
 })

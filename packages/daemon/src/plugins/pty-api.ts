@@ -60,6 +60,7 @@ export function createPtyApi(
 ): { api: PluginPty; revoke(): void } {
   const fanout = fanoutFor(pty, log)
   const removers = new Set<() => void>()
+  const attempts = new Map<string, { inflight: number; succeeded: boolean }>()
   let revoked = false
 
   const live = () => {
@@ -119,18 +120,27 @@ export function createPtyApi(
     async subscribe(sessionId) {
       live()
       const holders = fanout.holds.get(sessionId) ?? new Set<string>()
-      const alreadyHeld = holders.has(pluginId)
       holders.add(pluginId)
       fanout.holds.set(sessionId, holders)
+      const attempt = attempts.get(sessionId) ?? { inflight: 0, succeeded: false }
+      attempts.set(sessionId, attempt)
+      attempt.inflight += 1
       try {
-        return await pty.request('subscribe', { sessionId })
+        const result = await pty.request('subscribe', { sessionId })
+        attempt.succeeded = true
+        return result
       } catch (error) {
-        if (!alreadyHeld) release(sessionId)
+        // only the last failing attempt may roll the hold back, and only if no attempt succeeded
+        if (attempt.inflight === 1 && !attempt.succeeded && attempts.get(sessionId) === attempt) release(sessionId)
         throw error
+      } finally {
+        attempt.inflight -= 1
+        if (attempt.inflight === 0 && !attempt.succeeded && attempts.get(sessionId) === attempt) attempts.delete(sessionId)
       }
     },
     async unsubscribe(sessionId) {
       live()
+      attempts.delete(sessionId)
       if (release(sessionId)) await pty.request('unsubscribe', { sessionId })
     },
     onData: (listener) => listen(fanout.data, { pluginId, listener }),
@@ -142,6 +152,7 @@ export function createPtyApi(
     api,
     revoke() {
       revoked = true
+      attempts.clear()
       for (const remove of [...removers]) remove()
       for (const [sessionId, holders] of [...fanout.holds]) {
         if (!holders.has(pluginId) || !release(sessionId)) continue

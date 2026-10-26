@@ -32,21 +32,36 @@ export async function readLoginPath(shell: string, timeoutMs = 5000): Promise<st
   } catch {
     return null
   }
-  const output = new Response(proc.stdout as ReadableStream).text().catch(() => '')
+  const reader = (proc.stdout as ReadableStream<Uint8Array>).getReader()
+  const chunks: Uint8Array[] = []
+  const collect = async () => {
+    for (;;) {
+      const { done, value } = await reader.read()
+      if (done) return
+      chunks.push(value)
+    }
+  }
+  const output = collect().then(
+    () => true,
+    () => false
+  )
   let timer: ReturnType<typeof setTimeout> | undefined
   const timedOut = new Promise<'timeout'>((resolve) => {
     timer = setTimeout(() => resolve('timeout'), timeoutMs)
   })
+  const finished = (async () => {
+    const [code, complete] = await Promise.all([proc.exited, output])
+    return code === 0 && complete ? 'done' : 'failed'
+  })()
   try {
-    const outcome = await Promise.race([proc.exited, timedOut])
-    if (outcome === 'timeout') {
-      proc.kill('SIGKILL')
-      return null
-    }
-    if (outcome !== 0) return null
-    return (await output).trim() || null
+    // a background child of the shell can hold stdout open after the shell exits, so the read is bounded too
+    const outcome = await Promise.race([finished, timedOut])
+    if (outcome !== 'done') return null
+    return Buffer.concat(chunks).toString('utf8').trim() || null
   } finally {
     clearTimeout(timer)
+    proc.kill('SIGKILL')
+    reader.cancel().catch(() => {})
   }
 }
 

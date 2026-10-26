@@ -85,4 +85,49 @@ describe('PTY subscription holds', () => {
     await a.unsubscribe('s1')
     expect(first.count('unsubscribe', 's1')).toBe(1)
   })
+
+  test('a failed subscribe does not erase a concurrent subscribe that succeeds', async () => {
+    const settle: Array<{ resolve(value: unknown): void; reject(error: Error): void }> = []
+    const requests: string[] = []
+    const client = {
+      connected: true,
+      onData() {},
+      onExit() {},
+      onReconnect() {},
+      request(type: string) {
+        requests.push(type)
+        if (type !== 'subscribe') return Promise.resolve({})
+        return new Promise((resolve, reject) => settle.push({ resolve, reject }))
+      }
+    } as unknown as PtyClient
+    const a = createPtyApi(client, 'a')
+    const first = a.api.subscribe('s1').catch(() => {})
+    const second = a.api.subscribe('s1')
+    settle[0]!.reject(new Error('first subscribe failed'))
+    await first
+    settle[1]!.resolve({ replay: '', offset: 0 })
+    await second
+    a.revoke()
+    await Promise.resolve()
+    expect(requests.filter((type) => type === 'unsubscribe')).toHaveLength(1)
+  })
+
+  test('a failed subscribe with no other attempt still releases its hold', async () => {
+    const requests: string[] = []
+    const client = {
+      connected: true,
+      onData() {},
+      onExit() {},
+      onReconnect() {},
+      request(type: string) {
+        requests.push(type)
+        return type === 'subscribe' ? Promise.reject(new Error('nope')) : Promise.resolve({})
+      }
+    } as unknown as PtyClient
+    const a = createPtyApi(client, 'a')
+    await expect(a.api.subscribe('s1')).rejects.toThrow('nope')
+    a.revoke()
+    await Promise.resolve()
+    expect(requests).not.toContain('unsubscribe')
+  })
 })

@@ -341,13 +341,31 @@ function* tomlLines(content: string): Generator<TomlLine> {
   }
 }
 
-/** Reads a `trust_level = "..."` line; null when the line is not that key. */
-function trustLevelLine(text: string): { value: string | null } | null {
+/** Reads a `trust_level = "..."` line; `multilineAt` is where a `"""`/`'''` value opens when it spans lines. */
+function trustLevelLine(text: string): { value: string | null; multilineAt: number | null } | null {
   const key = parseKeyPath(text, 0)
   if (!key || key.segments.length !== 1 || key.segments[0] !== 'trust_level' || text[key.end] !== '=') return null
+  let open = key.end + 1
+  while (text[open] === ' ' || text[open] === '\t') open += 1
+  if (text.startsWith('"""', open) || text.startsWith("'''", open)) return { value: null, multilineAt: open }
   const parsed = parseSingleLineString(text, key.end + 1)
   const clean = parsed !== null && /^[ \t]*(?:#.*)?$/.test(text.slice(parsed.end))
-  return { value: clean ? parsed.value : null }
+  return { value: clean ? parsed.value : null, multilineAt: null }
+}
+
+/** End of the line holding the delimiter that closes the multiline string opened at `open`; null when unterminated. */
+function multilineValueEnd(content: string, open: number): number | null {
+  const delimiter = content.slice(open, open + 3)
+  let index = open + 3
+  while (index < content.length) {
+    if (delimiter === '"""' && content[index] === '\\') index += 2
+    else if (content.startsWith(delimiter, index)) {
+      const newline = content.indexOf('\n', index)
+      const end = newline === -1 ? content.length : newline
+      return content[end - 1] === '\r' ? end - 1 : end
+    } else index += 1
+  }
+  return null
 }
 
 /**
@@ -368,7 +386,10 @@ function upsertProjectTrust(existing: string, projectPath: string): string {
     }
     if (line.text.trimStart().startsWith('[')) break
     const level = trustLevelLine(line.text)
-    if (level && !entry) entry = { start: line.start, end: line.end, value: level.value }
+    if (level && !entry) {
+      const end = level.multilineAt === null ? line.end : multilineValueEnd(content, line.start + level.multilineAt)
+      entry = { start: line.start, end: end ?? line.end, value: level.value }
+    }
   }
   if (headerEnd === null) {
     const block = [`[projects."${escapeBasicString(projectPath)}"]`, trustLine].join(eol)
