@@ -338,3 +338,13 @@
 - **Confidence:** high
 - **Source:** locked by docs/loop/LOOP.md
 
+## D34: Logic-spec review: fix four model findings, keep D28 against the fifth, reject the pre-pass findings
+- **Question:** adjudicating the Codex adversarial review of logic.md (spec-design profile, standard depth, reviewer gpt-6.1-sol, independence full)
+- **Options:** for each finding, amend the spec or reject it with a reason
+- **Chose:** amended for four. F2: unbound keybindings now drop out before clashes are settled, so they never take a chord from a working one (SC-18). F3: a disable during a module load lets the load and `activate` finish, mounts nothing and deactivates (SC-4, data flow). F5: a throwing cleanup or `deactivate` is logged and teardown and revocation complete anyway (SC-13). F6: the Settings dialog got its own scenario (SC-24). Kept D28 against F1 (window flows are driven through the window's plugin host rather than the CLI): the window's state has no API until m0-ui-bridge, and the host is driven against a real daemon over its API. Rejected F7 (the pre-pass wants a Purpose or Overview heading the rubric doesn't require, and the repo's writing rules forbid "Overview") and the 40 unresolvable-reference findings, which are fixture contribution IDs and paths the spec defines, not files.
+- **Why:** each amended finding named a real gap an implementer would otherwise fill two ways; F4 was refuted by the reviewer itself
+- **Evidence:** scratchpad lr1/gate.json and merged.json; docs/loop/decisions/m0-registry.md D29 (same pre-pass rejections)
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** assumed — autonomous
+

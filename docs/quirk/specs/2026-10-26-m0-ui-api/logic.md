@@ -4,7 +4,8 @@
 
 **Status:** Approved (headless build loop; decisions in [m0-ui-api.md](../../../loop/decisions/m0-ui-api.md)). Tech spec: requested.
 
-**Amendments:** none yet.
+**Amendments:**
+- 2026-10-26, before approval: Codex adversarial review. Unbound keybindings drop out before clashes are settled (SC-18); a disable during a module load and a throwing cleanup or `deactivate` now have defined outcomes (SC-4, SC-13); the Settings dialog has its own scenario (SC-24).
 
 ## Conceptual model
 
@@ -73,7 +74,9 @@ view with an input, close it, or toggle a panel, and it can call any daemon meth
 shortcuts already do, so a keybinding fires even when a terminal has focus. Only chords with a
 modifier (or a function key) can be bound, so typing is never captured. The model lists each
 keybinding as `active`, `shadowed` (another keybinding or the kernel owns the chord) or `unbound`
-(its command isn't in effect); only active ones fire.
+(its command isn't in effect); only active ones fire. Unbound keybindings are set aside before
+clashes are settled, so a keybinding whose command is gone never takes a chord from one that
+works.
 
 **Changing settings.** The Settings dialog shows v1's settings, then a generated form for every
 setting in effect, grouped by plugin, then the theme picker. Saving calls `setting.set` or
@@ -84,8 +87,12 @@ plugin's code reads current values through its context on either side.
 **A plugin is enabled or disabled.** The daemon sends `plugin.changed`. The window refetches the
 model, unmounts contributions that are no longer in effect (calling their cleanups), mounts new
 ones where their slot is showing, and recomputes keybindings and the theme. A plugin whose last
-shown contribution left has its UI `deactivate` called and its context revoked. Its module stays
-loaded, since a browser can't unload one.
+UI contribution left has its UI `deactivate` called and its context revoked. Its module stays
+loaded, since a browser can't unload one. If a contribution leaves while its module is still
+loading, the load and `activate` finish, nothing is mounted for it, and the plugin is deactivated
+straight away if none of its UI contributions remains. A cleanup or `deactivate` that throws is
+logged with the plugin's ID and doesn't stop the rest of the teardown: the context is revoked
+regardless.
 
 ## Key decisions
 
@@ -156,6 +163,7 @@ a real page ([D28](../../../loop/decisions/m0-ui-api.md)). Each scenario says wh
      3. The window host refetches the model and unmounts the section
      4. The agent enables the section, and the window host mounts it again
    - **Data after:** **Sidebar**: ✓ section back; **Module imports**: ✓ one
+   - When the disable arrives while the section's module is still loading, the module finishes loading and activating, the section is never mounted, and the plugin's UI is deactivated with its context revoked.
 
 5. **SC-5: malformed UI contributions make the plugin invalid** (API)
    - **Given** one installed plugin per problem below
@@ -233,6 +241,8 @@ a real page ([D28](../../../loop/decisions/m0-ui-api.md)). Each scenario says wh
       | `activate` throws `bad` | Section error: "acme.x failed to activate: bad" |
       | `mount` throws `boom` | Section error: "acme.throws: boom" |
       | Command throws `nope` | Toast: "command:acme.cmd/go failed: nope" |
+      | Cleanup throws during a disable | Logged as "acme.x: cleanup failed: …"; the section is removed and the context revoked |
+      | `deactivate` throws | Logged as "acme.x: deactivate failed: …"; the context is revoked |
 
 ### Commands and keybindings
 
@@ -259,7 +269,7 @@ a real page ([D28](../../../loop/decisions/m0-ui-api.md)). Each scenario says wh
 18. **SC-18: a keybinding whose command isn't in effect is unbound** (API, window)
     - **Given** keybinding `acme.notes/new-key` binds `mod+shift+n` to `command:acme.notes/new`, and the user has disabled the command
     - **When** a client calls `ui.contributions`, and the window host receives Cmd+Shift+N
-    - **Then** the keybinding is `unbound` and nothing runs; the event is not consumed
+    - **Then** the keybinding is `unbound` and nothing runs; the event is not consumed. When a lower-precedence keybinding of another plugin binds the same chord to a command that is in effect, that one is `active` and runs, because unbound keybindings never take part in a clash.
 
 ### Settings
 
@@ -303,25 +313,30 @@ a real page ([D28](../../../loop/decisions/m0-ui-api.md)). Each scenario says wh
     - **When** a client calls `acme.notes/size`, the section mounts, and then the agent sets `fontSize` to 20
     - **Then** the method returns 13 and then 20, and the section shows 13 and then 20. `getSetting` with a full ID reads another plugin's setting, and an unknown name throws.
 
+24. **SC-24: the Settings dialog lists every setting in effect, grouped by plugin** (window)
+    - **Given** `acme.notes` declares `fontSize` (number, 8 to 32) and `mode` (enum: list, grid), `acme.files` declares `hidden` (boolean), and `acme.solar` declares a theme
+    - **When** the window host builds the Settings dialog and the person changes `fontSize` to 18 and picks Solar
+    - **Then** the dialog shows v1's settings first, then an `acme.files` group with a checkbox for `hidden`, then an `acme.notes` group with a number field (8 to 32) for `fontSize` and a choice of list or grid for `mode`, each showing its current value, then the theme picker; saving calls `setting.set` for `fontSize` with 18 and `theme.set` with Solar's ID. A value the daemon refuses is shown as that setting's error and the dialog stays open.
+
 ### Themes
 
-24. **SC-24: a theme is listed, chosen and applied live, with missing colors filled in** (CLI, API, window)
+25. **SC-25: a theme is listed, chosen and applied live, with missing colors filled in** (CLI, API, window)
     - **Given** `acme.solar` declares theme `solar` (appearance light) with only `bg` and `text` set
     - **When** the agent runs `quirky theme list`, then `quirky theme set theme:acme.solar/solar`, restarts the daemon, and lists again
     - **Then** the list shows the default theme (active) and Solar; after the set, `theme.changed` arrives, the window host applies Solar's `bg` and `text` and the default theme's value for every other token, Solar is listed as active, and it is still active after the restart. `quirky theme set default` returns to the default.
 
-25. **SC-25: a chosen theme that goes away falls back, and comes back** (API, window)
+26. **SC-26: a chosen theme that goes away falls back, and comes back** (API, window)
     - **Given** Solar is the active theme
     - **When** the agent disables `acme.solar`, then enables it
     - **Then** while it is disabled, `theme.list` marks the default as in use and keeps Solar as the chosen theme, and the window host applies the default colors; after the enable, Solar applies again
 
-26. **SC-26: an unknown theme is refused** (CLI)
+27. **SC-27: an unknown theme is refused** (CLI)
     - **When** the agent runs `quirky theme set theme:acme.ghost/x`
     - **Then** it fails with NotFound and exits non-zero, and the active theme is unchanged
 
 ### Serving and sharing
 
-27. **SC-27: the daemon serves plugin UI files, and only those** (API)
+28. **SC-28: the daemon serves plugin UI files, and only those** (API)
     - **Given** `acme.notes` declares `ui: "dist/ui.js"`, which imports `./chunk.js`; `acme.bare` has no `ui`; `acme.bad` is invalid
     - **When** a client requests each path below
     - **Then** the responses are as listed
@@ -336,7 +351,7 @@ a real page ([D28](../../../loop/decisions/m0-ui-api.md)). Each scenario says wh
       | `/plugins/acme.bad/ui.js` | 404 |
       | `/plugins/acme.ghost/ui.js` | 404 |
 
-28. **SC-28: plugin UI modules share the window's React** (build)
+29. **SC-29: plugin UI modules share the window's React** (build)
     - **Given** the built window
     - **When** its page is inspected
     - **Then** it declares bare imports for `react`, `react-dom/client` and `react/jsx-runtime` that resolve to the same React module the window itself runs on, so a plugin importing `react` gets the window's copy
