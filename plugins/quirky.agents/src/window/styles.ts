@@ -13,6 +13,7 @@ export const s = {
   choices: { display: 'flex', flexWrap: 'wrap', gap: 6 },
   segments: { display: 'inline-flex', border: '1px solid var(--border)', borderRadius: 6, overflow: 'hidden' },
   segment: { border: 'none', borderRadius: 0, background: 'transparent' },
+  segmentSelected: { border: 'none', borderRadius: 0, background: 'var(--bg-active)', color: 'var(--text)' },
   list: { listStyle: 'none', margin: 0, padding: 0 },
   row: { padding: '10px 0', borderTop: '1px solid var(--border)' },
   rowMain: { display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' },

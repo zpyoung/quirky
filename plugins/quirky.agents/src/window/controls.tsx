@@ -59,7 +59,7 @@ export function Segmented<T extends string>({
           aria-checked={option.value === value}
           tabIndex={index === (selected === -1 ? 0 : selected) ? 0 : -1}
           className={option.value === value ? 'active' : undefined}
-          style={s.segment}
+          style={option.value === value ? s.segmentSelected : s.segment}
           onClick={() => onChange(option.value)}
           onKeyDown={(event) => onKeyDown(event, index)}
         >
