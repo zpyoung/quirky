@@ -4,7 +4,8 @@
 
 **Status:** Approved (headless build loop; decisions in [m1-worktrees.md](../../../loop/decisions/m1-worktrees.md)). Tech spec: requested; authored as [tech.md](tech.md) (gate: requested, crosses subsystems).
 
-**Amendments:** none yet.
+**Amendments:**
+- 2026-10-26, before build: Codex adversarial review. A create naming a project but no name uses `--repo` (one positional is always the name; SC-18, SC-21); a create from an existing branch with no name takes its folder from the branch (SC-18); an explicit `--setup skip` gives no warning, only an inherited skip does (SC-30); a wait-for-setup create returns with the agent pending (SC-38); an orphan stays deletable after a list, and Force deletes only inside the folder it was created under (SC-54); Mod+N opens the create dialog, also through the API (SC-62).
 
 ## Conceptual model
 
@@ -246,8 +247,8 @@ repository `/tmp/w/origin.git` with `main`; the worktrees folder `/tmp/w/ws`; an
 
 18. **SC-18: creating from an existing branch checks it out and keeps it** (CLI)
     - **Given** project **api** with local branch `feat/passing`, remote-only branch `origin/feat/remote`, and `main` checked out in the primary
-    - **When** the agent runs `quirky wt create api --branch feat/passing`, `quirky wt create api --branch feat/remote`, then `quirky wt create api --branch main`
-    - **Then** the first worktree is at `/tmp/w/ws/api/feat-passing` on `feat/passing`, marked to keep its branch; the second makes local `feat/remote` tracking `origin/feat/remote`; the third fails naming `/tmp/w/api` as where `main` is checked out
+    - **When** the agent runs `quirky wt create --repo api --branch feat/passing`, `quirky wt create --repo api --branch feat/remote`, then `quirky wt create --repo api --branch main`
+    - **Then** with no name given the folder comes from the branch, sanitised (`/` becomes `-`), and takes the next free suffix if taken: the first worktree is at `/tmp/w/ws/api/feat-passing` on `feat/passing`, marked to keep its branch, with name `feat-passing`; the second makes local `feat/remote` tracking `origin/feat/remote`; the third fails naming `/tmp/w/api` as where `main` is checked out
     - **Data after:** **Worktree feat-passing**: ✓ branch `feat/passing`, keeps branch; **Worktree feat-remote**: ✓ branch `feat/remote`, upstream `origin/feat/remote`
 
 19. **SC-19: the base is requested, saved or detected, and its absence is an error before git runs** (CLI)
@@ -275,7 +276,7 @@ repository `/tmp/w/origin.git` with `main`; the worktrees folder `/tmp/w/ws`; an
 
 21. **SC-21: a blank name gets a generated name that is never reused** (CLI)
     - **Given** project **api**
-    - **When** the agent runs `quirky wt create api` twice, deletes the first worktree, then runs `quirky wt create api` 30* more times
+    - **When** the agent runs `quirky wt create --repo api` twice, deletes the first worktree, then runs `quirky wt create --repo api` 30* more times
     - **Then** each worktree gets a different marine-creature name (such as `narwhal`*), and none of the later ones reuses the deleted worktree's name. A typed name that was used and deleted can be used again.
 
 22. **SC-22: two creates of one name at once both succeed** (API)
@@ -328,7 +329,7 @@ repository `/tmp/w/origin.git` with `main`; the worktrees folder `/tmp/w/ws`; an
 30. **SC-30: "ask" with no setup choice creates nothing and says how to answer** (CLI; Orca defect)
     - **Given** project **api** with policy ask and a local setup script
     - **When** the agent runs `quirky wt create api asked --json`, then `quirky wt create api asked --setup skip --json`
-    - **Then** the first fails with a Conflict whose reason is `setup-decision-required` (the JSON error carries it, not a generic code) and whose message says "Setup decision required for this repository; pass --setup run or --setup skip", and no branch or folder exists; the second creates the worktree, runs nothing, and warns "setup hook skipped for /tmp/w/ws/api/asked; pass --setup run to run it."
+    - **Then** the first fails with a Conflict whose reason is `setup-decision-required` (the JSON error carries it, not a generic code) and whose message says "Setup decision required for this repository; pass --setup run or --setup skip", and no branch or folder exists; the second creates the worktree and runs nothing, with no warning since skipping was asked for. With the policy set to skip by default instead, `quirky wt create api skipped` creates it, runs nothing, and warns "setup hook skipped for /tmp/w/ws/api/skipped; pass --setup run to run it."
 
 31. **SC-31: the window asks for the setup choice before it will create** (UI)
     - **Given** project **api** with policy ask and a local setup script
@@ -374,7 +375,7 @@ repository `/tmp/w/origin.git` with `main`; the worktrees folder `/tmp/w/ws`; an
 38. **SC-38: a create can start an agent, after setup when the project says to wait** (API)
     - **Given** project **api** with a local setup that sleeps 2* seconds, and agent startup policy wait for setup
     - **When** an agent creates `agented` with agent claude and prompt "fix the tests"
-    - **Then** the result names the Setup session and the agent session; the agent session is created only after the Setup session exits, in **agented**, with that prompt. With policy start immediately, both sessions start right away.
+    - **Then** the create returns at once with the Setup session's ID and the agent marked pending; an agent session is created in **agented**, with that prompt, only after the Setup session exits (seen in `quirky session list` and a `quirky.session/changed` event), exactly once even if Setup exited before the create returned. With policy start immediately, the result names both sessions.
 
 39. **SC-39: `.worktreeinclude` copies gitignored files and shared directories are linked** (CLI)
     - **Given** project **api** ignoring `.env*` and `cache/`, with `.env`, `.env.local` and `cache/` present in the primary, a tracked `README.md`, and `.worktreeinclude` listing `.env*`, `README.md` and `.git`; and `quirky.yaml` with `worktree.sharedDirectories: [cache, docs, ../out]`
@@ -485,8 +486,8 @@ repository `/tmp/w/origin.git` with `main`; the worktrees folder `/tmp/w/ws`; an
 
 54. **SC-54: orphaned worktrees are cleaned or refused** (CLI)
     - **Given** three worktrees made by Quirky: **gone** whose folder was deleted by hand, **forgot** which git no longer registers but whose folder remains, and a folder `/tmp/w/other` Quirky never made
-    - **When** the agent deletes **gone** with `--yes`, **forgot** with `--yes`, then **forgot** with `--yes --force`, and calls remove on `path:/tmp/w/other`
-    - **Then** **gone** is cleaned (pruned, metadata dropped, branch rules applied, no archive script); **forgot** is first refused with "Git already forgot this workspace, but its directory is still on disk. Use Force Delete to remove the orphaned directory." and then its folder is deleted; `/tmp/w/other` is refused and left alone
+    - **When** the agent runs `quirky wt list`, then deletes **gone** with `--yes`, **forgot** with `--yes`, then **forgot** with `--yes --force` (after the worktrees folder setting was changed to another folder), and calls remove on `path:/tmp/w/other`
+    - **Then** **gone** is cleaned (pruned, metadata dropped, branch rules applied, no archive script); **forgot** is first refused with "Git already forgot this workspace, but its directory is still on disk. Use Force Delete to remove the orphaned directory." and then its folder is deleted, because it lies inside the folder it was created under even though the setting changed since; `/tmp/w/other` is refused and left alone. A worktree Quirky found rather than made (no record of where it was created) is never force-deleted this way.
 
 55. **SC-55: concurrent deletes share one run** (API)
     - **Given** worktree **fix-login** with an archive script that sleeps 2* seconds
@@ -524,6 +525,11 @@ repository `/tmp/w/origin.git` with `main`; the worktrees folder `/tmp/w/ws`; an
     - **Given** a running daemon
     - **When** the agent runs `quirky api --json`
     - **Then** it lists `quirky.worktree/set`, `quirky.worktree/deleteBranch` (destructive) and the grown `create` and `remove` params, and `quirky.repo/clone`, `create`, `scan`, `import`, `set`, `show`, `trustHooks` and the group methods, each with its params schema, and the CLI commands `wt set`, `wt show`, `wt delete-branch`, `repo clone`, `repo create`, `repo scan`, `repo import`, `repo set`, `repo show`, `repo trust-hooks` and `repo group …`
+
+62. **SC-62: Mod+N and the API open the create dialog** (API, UI)
+    - **Given** the window showing **fix-login**
+    - **When** the person presses Mod+N, closes the dialog, then an agent runs `quirky ui run command:quirky.worktree/new-worktree --args '{"repo":"web"}'`
+    - **Then** the first opens the create dialog with project **api** (the open worktree's) selected, and the second opens it with **web** selected; `quirky ui state` reports the dialog open with its project
 
 ## Scope & non-goals
 

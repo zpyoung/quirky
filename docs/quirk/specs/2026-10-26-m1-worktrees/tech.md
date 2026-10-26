@@ -259,8 +259,10 @@ Back-link: [SC-45](logic.md#metadata), [D6](../../../loop/decisions/m1-worktrees
   the folder's current birth time (`statSync(path).birthtimeMs`, rounded to ms) is deleted and the
   worktree is shown with defaults. A worktree with no row gets one on first sight with defaults
   (`createdBy: 'external'`, status `in-progress`, `createdAt` the folder's birth time).
-- After a successful `listRegistrations` of a repo, rows of that repo whose IDs aren't registered
-  (and not folder workspaces) are deleted. A failed git call deletes nothing.
+- After a successful `listRegistrations` of a repo, a row of that repo is deleted only when its ID
+  isn't registered at all and its folder doesn't exist (and it isn't a folder workspace). An
+  unregistered row whose folder exists is kept as an orphan (hidden from `list`, found by
+  `remove`); a prunable registration keeps its row. A failed git call deletes nothing.
 - Folder projects: the primary is synthesised from the repo (`worktreeIdForPath(repo.path)`, kind
   folder, branch null, head ''); extra folder workspaces are rows of kind folder. Group folder
   workspaces are rows with `group_id`, `repoId: 'group:<groupId>'`.
@@ -287,7 +289,7 @@ Steps run in this order; any refusal before step 6 leaves git and the disk untou
    (`run-by-default` → run, `skip-by-default` → skip, `ask` → `setup-decision-required`). If the
    decision is run and the setup has an untrusted shared part and not `trustSetup` →
    `hooks-untrusted`.
-6. Name and branch: `name` sanitised ([Naming](#naming)) or generated (`names.ts`); folder =
+6. Name and branch: `name` sanitised ([Naming](#naming)); else, with `branch`, the branch's short name (minus a remote prefix) sanitised; else generated (`names.ts`). With `branch` (or a reused `branchName`) the branch is fixed and only the folder takes the suffix walk; folder =
    `<root>/<repoDir>/<name>` (nested) or `<root>/<name>`, where root is the project's
    `worktreeLocation` (relative → against `repo.path`) else `worktreesRoot`, and `repoDir` is
    `worktreeDirName` (`main.ts:117-120`); `ensureInside(root, folder)` or `invalid-name`. Walk
@@ -299,17 +301,19 @@ Steps run in this order; any refusal before step 6 leaves git and the disk untou
 8. Best-effort git config: `branch.<branch>.base = <fullBase>`; `push.autoSetupRemote true` unless
    `git config --get push.autoSetupRemote` returns anything; upstream when the branch name equals the
    remote base's branch name.
-9. Metadata row: `birthtime`, `createdAt = now`, `createdBy`, `baseRef` (the short form of the base),
+9. Metadata row: `birthtime`, `created_root` (the root from step 6), `createdAt = now`, `createdBy`, `baseRef` (the short form of the base),
    `keepBranch` (true for `branch`), `displayName`, `comment`, `parentId` (explicit, else caller's
    worktree, else the worktree containing the caller's cwd, unless `noParent` or `createdBy: window`),
    `status: in-progress`. A generated name is retired here, and also on a failure after step 6.
 10. Carry files ([Carried files](#carried-files)); warnings only.
 11. Leave the queue. Emit `changed { repoId, worktreeId }`.
 12. Setup ([Setup run](#setup-run)) when the decision is run; else if a script exists and the
-    decision wasn't skip, warn `setup hook skipped for <path>; pass --setup run to run it.`
+    caller didn't pass `setup: 'skip'` (an inherited skip-by-default counts), warn `setup hook skipped for <path>; pass --setup run to run it.`
 13. Agent: `quirky.session/create { worktree: id, agent, prompt }` now, or on the Setup session's
     exit when the agent startup policy is `wait-for-setup` and setup ran in a terminal. The result
-    carries `agentSessionId` when started now, else `agentPending: true`.
+    carries `agentSessionId` when started now, else `agentPending: true`; create never waits for
+    the agent. The pending agent's session is visible later only through `quirky.session/list` and
+    `quirky.session/changed`.
 14. `activate`: `context.call('ui.view.open', { id: 'view:quirky.session/worktree', input: { worktree: id } })`
     when true; nothing otherwise.
 
@@ -357,7 +361,8 @@ Back-link: [SC-15](logic.md#create), [SC-16](logic.md#create), [SC-17](logic.md#
   misses → `branch-exists` "Branch \"X\" already exists locally|on a remote." or
   "Could not find an available worktree path".
 - `branchName` existing: reused only if it points at the base commit and isn't checked out in any
-  worktree; else `branch-exists` "Branch <b> already exists".
+  worktree, and then checked out with the existing-branch form of step 7 (no `-b`), `keepBranch`
+  false; else `branch-exists` "Branch <b> already exists".
 
 ### Generated names
 
@@ -411,9 +416,12 @@ Back-link: [SC-29](logic.md#setup-and-archive-hooks)–[SC-38](logic.md#setup-an
   with cwd the worktree, the hook environment, stdin ignored, a detached process group, 2-minute
   timeout (SIGTERM to the group, then SIGKILL after 5 s), output capped at 10 MiB; the create waits
   for it. `setup.ran = 'daemon'`, `exitCode`, `timedOut`.
-- Wait-for-setup: subscribe to `quirky.session/changed` and `quirky.session/removed`; on the Setup
-  session's `exited` (any code) or removal, start the agent. The subscription is dropped after it
-  fires and on daemon stop.
+- Wait-for-setup: subscribe to `quirky.session/changed` and `quirky.session/removed` before calling
+  `quirky.session/create` for Setup, buffer events for the not-yet-known ID, then after create
+  returns check the returned session (and `quirky.session/get`) for `exited`; the first of these to
+  show the Setup session exited (any code) or removed starts the agent, guarded by a once-flag. The
+  subscription is dropped after it fires and on daemon stop. A pending agent is lost on a daemon
+  restart (logged).
 
 ### Remove pipeline
 
@@ -431,8 +439,9 @@ Back-link: [Delete](logic.md#delete), [D42](../../../loop/decisions/m1-worktrees
 5. Folder workspace: close its sessions, delete the row, done. Its folder is never touched.
 6. Orphans: row known and folder missing → `git worktree prune`, branch cleanup (step 11), drop row,
    done (no archive). Registered and prunable → same. Not registered but folder present →
-   `orphaned` unless `force`, in which case `rm -rf` the folder only if the row exists and the folder
-   is inside the root it was created under; a path with no row → `unregistered`.
+   `orphaned` unless `force`, in which case `rm -rf` the folder only if the row exists, its
+   `created_root` is set, and the folder is inside `created_root` (after `resolveRealPath`); a row
+   without `created_root` (external or v1) → `unregistered`; a path with no row → `unregistered`.
 7. `locked` from the registration → `locked` with the logic spec's message (force doesn't help).
 8. Unless `force`: `git status --porcelain -z --untracked-files=all --ignore-submodules=none` in the
    worktree; entries that are only the symlinked shared directories are ignored; any other →
@@ -495,6 +504,15 @@ Back-link: [SC-14](logic.md#create), [SC-40](logic.md#metadata), [SC-61](logic.m
 
 A module command that needs `data.reason` in text mode catches the `RpcError` itself; JSON mode
 relies on the kernel change.
+
+### Window commands
+
+`CONFIG:` `quirky.worktree` UI contributions
+- `command` `new-worktree` with `args` `{ type: object, properties: { repo: { type: string } } }`:
+  opens the create dialog with `repo` selected, else the open worktree's project, else the first.
+- `keybinding` `new-worktree` on `mod+n`.
+- The section's report carries `dialog: { kind: 'create', repoId } | null` while a dialog is open
+  (SC-62).
 
 ### Settings
 
@@ -559,7 +577,8 @@ Back-link: [Glossary](logic.md#glossary).
   `comment TEXT NOT NULL DEFAULT ''`, `status TEXT NOT NULL DEFAULT 'in-progress'`,
   `pinned INTEGER NOT NULL DEFAULT 0`, `unread INTEGER NOT NULL DEFAULT 0`, `parent_id TEXT`,
   `created_at INTEGER`, `created_by TEXT NOT NULL DEFAULT 'external'`, `base_ref TEXT`,
-  `keep_branch INTEGER NOT NULL DEFAULT 0`, `birthtime INTEGER`, `group_id TEXT`.
+  `keep_branch INTEGER NOT NULL DEFAULT 0`, `birthtime INTEGER`, `group_id TEXT`, `created_root TEXT`
+  (the resolved root the folder was created under; null for rows Quirky didn't create).
 - `CREATE TABLE retired_names (repo_id TEXT NOT NULL, name TEXT NOT NULL, PRIMARY KEY (repo_id, name))`.
 - v1 rows (id, repo_id only) keep defaults and get `birthtime` on first sight.
 

@@ -605,5 +605,27 @@
 - **Revisit if:** never
 - **Source:** locked by docs/loop/LOOP.md
 
+## D56: One Codex adversarial review over both specs, at deep depth, standing in for the tech-spec reviewer
+- **Question:** LOOP.md step 4 review, and the tech-spec rubric's reviewer dispatch
+- **Options:** the rubric's tech-spec reviewer plus an adversarial pass; one adversarial pass over both
+- **Chose:** one `quirk:adversarial-review` run over the range holding both specs (`c4957f7..HEAD`, spec-design profile, deep as the script suggested for a contract surface), Codex (`gpt-6.1-sol`) promoting and refuting in separate contexts, a third family only if a finding is contested. The criteria staged are LOOP.md's and the roadmap's requirements verbatim; the decision log's rationale is not staged.
+- **Why:** LOOP.md replaces the user's spec review with one adversarial pass over both specs, and m0-core D37 folded the tech-spec reviewer into it the same way
+- **Evidence:** docs/loop/LOOP.md step 4; docs/loop/decisions/m0-core.md D37
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** the pre-pass can't run on a range and a path target would give it ground truth
+- **Source:** locked by docs/loop/LOOP.md
+
+## D57: Spec review: fix all seven standing findings, accept the two refutations, and add Mod+N anyway
+- **Question:** what to do with the adversarial review's findings (LOOP.md step 4 "Fix every confirmed finding")
+- **Options:** fix the standing ones; also act on refuted ones
+- **Chose:** NEEDS_FIXES with seven standing (2 HIGH, 4 MEDIUM, 1 LOW advisory), two refuted. Fixed all seven: F1 a project with no name is `--repo` (SC-18, SC-21); F2 an existing-branch create with no name takes its folder from the branch; F3 a list keeps an unregistered row whose folder exists, so a later Force can find it; F4 rows record `created_root` and Force deletes only inside it; F6 an explicit `--setup skip` doesn't warn (Orca's rule); F7 a wait-for-setup create returns with the agent pending; F8 the Setup exit is watched race-free and the agent starts once. F5 (existing `branchName` reuse) was refuted but the tech spec now says it outright. F9 (API commands for dialog controls) was refuted; Orca's Mod+N create shortcut is in worktrees.md's shortcut table and cheap, so a `new-worktree` command with `mod+n` is added (SC-62).
+- **Why:** every standing finding named two readings with different outcomes; F6 matched Orca's create step 15 rule, so the logic spec moved, not the tech spec
+- **Evidence:** scratchpad ar1/gate.json and manifest.json (reviewer gpt-6.1-sol, independence full, depth deep, profile spec-design); logic.md amendments 2026-10-26
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** the build finds a fix contradicts code
+- **Source:** assumed — autonomous
+
 ## Progress
-Step 4: logic.md written and committed. Next: tech.md (deep-dive first), then the Codex adversarial review of both specs.
+Step 4 done: specs reviewed (D56, D57) and committed. Next: step 5, quirk:subagent-driven-development against tech.md, in waves W1 protocol+git, W2 repo/session/git plugins, W3 worktree daemon+CLI, W4 window, W5 scenario tests.
