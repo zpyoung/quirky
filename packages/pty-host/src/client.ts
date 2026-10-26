@@ -7,6 +7,7 @@ import {
   type PtyResponse,
   type PtyResults
 } from '@quirky/protocol'
+import { socketPath as resolveSocketPath } from '@quirky/protocol/node'
 import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { SocketWriter } from './writer'
@@ -111,7 +112,7 @@ export class PtyClient {
 
 /** True when a host already serving `home` accepts the token in `pty.token`. */
 export async function probeHost(home: string, timeoutMs = 2000): Promise<boolean> {
-  const socketPath = join(home, 'pty.sock')
+  const socketPath = resolveSocketPath(home, 'pty.sock')
   const tokenPath = join(home, 'pty.token')
   if (!existsSync(socketPath) || !existsSync(tokenPath)) return false
   let client: PtyClient | undefined

@@ -1,6 +1,8 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
+import { join } from 'node:path'
 import { HOOK_TOKEN_HEADER, type QuirkyClient, type QuirkyEvent, type Session } from '@quirky/protocol'
-import { startHarness, waitFor, type Harness, waitForAsync } from './helpers'
+import { makeTempHome, startHarness, waitFor, type Harness, waitForAsync } from './helpers'
+import { makeTempDir, readMarker, removeTempDirs, writeModulePlugin } from './plugins/fixtures'
 
 let h: Harness
 let client: QuirkyClient
@@ -16,7 +18,10 @@ async function setup(options: Parameters<typeof startHarness>[0] = {}) {
   session = await client.call('session.create', { worktreeId: worktree.id, agent: 'claude' })
 }
 
-afterEach(() => h.cleanup())
+afterEach(async () => {
+  await h.cleanup()
+  removeTempDirs()
+})
 
 function post(agent: string, payload: unknown, sessionId = session.id) {
   return fetch(`http://127.0.0.1:${h.runtime.port}/hook/${agent}?session=${sessionId}`, {
@@ -110,8 +115,10 @@ describe('claude hooks', () => {
     expect(await statusOf()).toBe('waiting')
   })
 
-  test('rejects unknown sessions and bad bodies; exited sessions ignore hooks', async () => {
-    expect((await post('claude', { hook_event_name: 'Stop' }, 's_missing')).status).toBe(404)
+  test('accepts hooks for unknown sessions, rejects bad bodies; exited sessions ignore hooks', async () => {
+    const unknown = await post('claude', { hook_event_name: 'Stop' }, 's_missing')
+    expect(unknown.status).toBe(200)
+    expect(await unknown.json()).toEqual({ ok: true })
     const bad = await fetch(`http://127.0.0.1:${h.runtime.port}/hook/claude?session=${session.id}`, {
       method: 'POST',
       headers: { [HOOK_TOKEN_HEADER]: h.runtime.hookToken },
@@ -146,5 +153,52 @@ describe('codex hooks', () => {
     await post('codex', { type: 'agent-turn-complete', 'turn-id': '1' })
     expect(await statusOf()).toBe('done')
     expect(h.notifications).toEqual([{ title: 'main', body: 'Claude finished' }])
+  })
+})
+
+describe('hook.received', () => {
+  test('is delivered to plugin listeners with the hook payload, never to clients, for known and unknown sessions', async () => {
+    const home = makeTempHome()
+    const marker = join(makeTempDir(), 'marker.log')
+    writeModulePlugin(
+      join(home, 'plugins'),
+      marker,
+      { id: 'acme.hear', activation: 'startup' },
+      { activate: "context.subscribe((event) => { if (event.type === 'hook.received') record(JSON.stringify(event)) })" }
+    )
+    await setup({ home, builtinPluginsDir: null })
+
+    expect((await post('claude', { hook_event_name: 'Stop' })).status).toBe(200)
+    expect((await post('codex', { type: 'x' }, 's_missing')).status).toBe(200)
+
+    const heard = await waitFor(() => {
+      const lines = readMarker(marker).filter((line) => line.startsWith('{'))
+      return lines.length === 2 ? lines.map((line) => JSON.parse(line)) : undefined
+    })
+    expect(heard).toEqual([
+      { type: 'hook.received', agent: 'claude', sessionId: session.id, payload: { hook_event_name: 'Stop' } },
+      { type: 'hook.received', agent: 'codex', sessionId: 's_missing', payload: { type: 'x' } }
+    ])
+    expect(events.some((event) => event.type === 'hook.received')).toBe(false)
+  })
+
+  test('is not delivered when the hook token is wrong', async () => {
+    const home = makeTempHome()
+    const marker = join(makeTempDir(), 'marker.log')
+    writeModulePlugin(
+      join(home, 'plugins'),
+      marker,
+      { id: 'acme.hear', activation: 'startup' },
+      { activate: "context.subscribe((event) => { if (event.type === 'hook.received') record('heard') })" }
+    )
+    await setup({ home, builtinPluginsDir: null })
+    const response = await fetch(`http://127.0.0.1:${h.runtime.port}/hook/claude?session=${session.id}`, {
+      method: 'POST',
+      headers: { [HOOK_TOKEN_HEADER]: 'wrong' },
+      body: '{}'
+    })
+    expect(response.status).toBe(401)
+    await Bun.sleep(50)
+    expect(readMarker(marker)).not.toContain('heard')
   })
 })

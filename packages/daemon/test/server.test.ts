@@ -123,7 +123,7 @@ describe('hook endpoint auth', () => {
       body: '{}',
       headers: { [HOOK_TOKEN_HEADER]: harness.runtime.hookToken }
     })
-    expect(right.status).toBe(404)
+    expect(right.status).toBe(200)
   })
 })
 

@@ -7,11 +7,11 @@ import {
   ensureHome,
   readRuntime,
   runtimeFilePath,
+  socketPath,
   writePrivateJson,
   type RuntimeInfo
 } from '@quirky/protocol/node'
 import pkg from '../package.json'
-import { internal } from './errors'
 import * as realGit from './git'
 import type { GitApi } from './git-api'
 import { defaultCliEntry, installIntegrationFiles } from './launch'
@@ -20,6 +20,7 @@ import { PluginHost } from './plugins/host'
 import { createPluginRuntime, type PluginRuntime } from './plugins/runtime'
 import { buildUiModel } from './plugins/ui-model'
 import { PtyClient } from './pty-client'
+import { createRpcHandler } from './rpc-handler'
 import { startServer } from './server'
 import { startSocketServer } from './socket-server'
 import { Core } from './service'
@@ -132,7 +133,7 @@ export async function startDaemon(options: DaemonOptions): Promise<DaemonHandle>
   const identity = readIdentity(home)
   const rpcToken = identity.token ?? randomBytes(24).toString('hex')
   const hookToken = identity.hookToken ?? randomBytes(24).toString('hex')
-  const socketPath = options.socketPath ?? join(home, 'quirkyd.sock')
+  const listenSocketPath = options.socketPath ?? socketPath(home, 'quirkyd.sock')
 
   const store = new Store(join(home, 'quirky.db'))
   const pty = new PtyClient({
@@ -160,7 +161,7 @@ export async function startDaemon(options: DaemonOptions): Promise<DaemonHandle>
     hookToken,
     hookUrl: () => `http://127.0.0.1:${port}/hook`,
     safeMode: options.safeMode ?? false,
-    socketPath,
+    socketPath: listenSocketPath,
     onRemoveClient: (conn) => lateRuntime?.layout.dropConnection(conn),
     onEvent: (event) => lateRuntime?.events.deliver(event),
     prepareLaunch: async (input) => (await lateRuntime?.prepareLaunch(input)) ?? { env: {}, args: [] }
@@ -212,17 +213,19 @@ export async function startDaemon(options: DaemonOptions): Promise<DaemonHandle>
   await plugins.activateStartup()
   pluginRuntime.scheduler.start()
 
+  const rpcHandler = createRpcHandler({ dispatcher: pluginRuntime.dispatcher, rpcToken, log })
   const requestedPort = options.port ?? Number(process.env.QUIRKY_PORT ?? 0)
   const listen = (listenPort: number) =>
     startServer({
       core,
-      dispatcher: pluginRuntime.dispatcher,
+      handle: rpcHandler,
       pluginFile: (id) => plugins.pluginFiles(id),
       port: listenPort,
       rpcToken,
       daemonVersion,
       uiDir: options.uiDir ?? defaultUiDir(),
-      log
+      log,
+      deliverHook: (event) => lateRuntime?.events.deliver(event)
     })
   let server: ReturnType<typeof listen>
   if (requestedPort === 0 && identity.port) {
@@ -240,12 +243,9 @@ export async function startDaemon(options: DaemonOptions): Promise<DaemonHandle>
   writePrivateJson(identityFilePath(home), { port, token: rpcToken, hookToken } satisfies DaemonIdentity)
 
   const socketServer = startSocketServer({
-    path: socketPath,
-    rpcToken,
+    path: listenSocketPath,
     core,
-    handle: async () => {
-      throw internal('not implemented: socket rpc handler')
-    },
+    handle: rpcHandler,
     log
   })
 

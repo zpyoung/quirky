@@ -33,14 +33,31 @@ export class ConnectionLost extends Error {
 /** Per-call options; `requestId` lets the daemon return the first outcome of a repeated call. */
 export type CallOptions = { requestId?: string }
 
+export type ClientHello = {
+  role: ClientRole
+  name?: string
+  subscribe?: boolean
+  token?: string
+  cwd?: string
+  sessionId?: string
+  worktreeId?: string
+}
+
+/** What the JSON-RPC core needs from a connection: send one JSON text, close. */
+type Transport = { send(text: string): void; close(): void }
+
+/** Unix socket messages are one JSON document per line; a longer pending line is a protocol error. */
+const MAX_SOCKET_LINE_BYTES = 16 * 1024 * 1024
+
 type Pending = { resolve: (value: unknown) => void; reject: (error: Error) => void }
 
 // frames can land before the caller registers a handler for a fresh stream id
 const MAX_BUFFERED_BYTES_PER_STREAM = 4 * 1024 * 1024
 
 /**
- * A daemon connection over WebSocket. Works in browsers and in Bun, since both have a global
- * WebSocket. `url` is the full `ws://127.0.0.1:<port>/rpc?token=<token>`.
+ * A daemon connection. `connect` uses WebSocket, which works in browsers and in Bun, with `url`
+ * the full `ws://127.0.0.1:<port>/rpc?token=<token>`. `connectSocket` uses the daemon's unix
+ * socket (Bun only) and carries no terminal output.
  */
 export class QuirkyClient {
   private nextId = 1
@@ -51,55 +68,107 @@ export class QuirkyClient {
   private readonly streamBuffers = new Map<number, Uint8Array[]>()
   private closed = false
 
-  private constructor(private readonly socket: WebSocket) {
-    socket.binaryType = 'arraybuffer'
-    socket.addEventListener('message', (event) => this.handleMessage(event.data))
-    socket.addEventListener('close', () => this.handleClose())
-  }
+  private constructor(private readonly transport: Transport) {}
 
-  static connect(
-    url: string,
-    hello: {
-      role: ClientRole
-      name?: string
-      subscribe?: boolean
-      token?: string
-      cwd?: string
-      sessionId?: string
-      worktreeId?: string
-    } = { role: 'ui' }
-  ): Promise<QuirkyClient> {
+  static connect(url: string, hello: ClientHello = { role: 'ui' }): Promise<QuirkyClient> {
     return new Promise((resolve, reject) => {
       const socket = new WebSocket(url)
+      socket.binaryType = 'arraybuffer'
       const fail = () => reject(new Error(`could not connect to quirkyd at ${redactToken(url)}`))
       socket.addEventListener('error', fail, { once: true })
       socket.addEventListener(
         'open',
         () => {
           socket.removeEventListener('error', fail)
-          const client = new QuirkyClient(socket)
-          client
-            .call('client.hello', {
-              role: hello.role,
-              name: hello.name,
-              protocolVersion: PROTOCOL_VERSION,
-              ...(hello.token !== undefined ? { token: hello.token } : {}),
-              ...(hello.cwd !== undefined ? { cwd: hello.cwd } : {}),
-              ...(hello.sessionId !== undefined ? { sessionId: hello.sessionId } : {}),
-              ...(hello.worktreeId !== undefined ? { worktreeId: hello.worktreeId } : {})
-            })
-            .then(async () => {
-              if (hello.subscribe) await client.call('events.subscribe', {})
-              resolve(client)
-            })
-            .catch((error) => {
-              client.close()
-              reject(error)
-            })
+          const client = new QuirkyClient({ send: (text) => socket.send(text), close: () => socket.close() })
+          socket.addEventListener('message', (event) => client.handleMessage(event.data))
+          socket.addEventListener('close', () => client.handleClose())
+          client.handshake(hello).then(() => resolve(client), reject)
         },
         { once: true }
       )
     })
+  }
+
+  /**
+   * Connects over the daemon's unix socket (newline-delimited JSON, Bun only). `hello.token`
+   * must be the runtime token; the daemon refuses any other first message.
+   */
+  static async connectSocket(path: string, hello: ClientHello): Promise<QuirkyClient> {
+    let client: QuirkyClient | undefined
+    const decoder = new TextDecoder()
+    let pendingLine = ''
+    let pendingBytes: Uint8Array | null = null
+    let socket: Bun.Socket<undefined>
+
+    const flush = () => {
+      while (pendingBytes && pendingBytes.length > 0) {
+        const written = socket.write(pendingBytes)
+        if (written <= 0) return
+        pendingBytes = written >= pendingBytes.length ? null : pendingBytes.subarray(written)
+      }
+    }
+
+    try {
+      socket = await Bun.connect<undefined>({
+        unix: path,
+        socket: {
+          data(_socket, chunk) {
+            pendingLine += decoder.decode(chunk, { stream: true })
+            let newline = pendingLine.indexOf('\n')
+            while (newline !== -1) {
+              const line = pendingLine.slice(0, newline)
+              pendingLine = pendingLine.slice(newline + 1)
+              if (line !== '') client?.handleMessage(line)
+              newline = pendingLine.indexOf('\n')
+            }
+            if (pendingLine.length > MAX_SOCKET_LINE_BYTES) {
+              pendingLine = ''
+              client?.close()
+            }
+          },
+          drain: flush,
+          close: () => client?.handleClose(),
+          error: () => client?.handleClose()
+        }
+      })
+    } catch (error) {
+      throw new Error(`could not connect to quirkyd at ${path}: ${(error as Error).message}`)
+    }
+
+    client = new QuirkyClient({
+      send(text) {
+        const bytes = new TextEncoder().encode(`${text}\n`)
+        pendingBytes = pendingBytes ? concat(pendingBytes, bytes) : bytes
+        flush()
+      },
+      close: () => socket.end()
+    })
+    try {
+      await client.handshake(hello)
+    } catch (error) {
+      client.close()
+      throw error
+    }
+    return client
+  }
+
+  private async handshake(hello: ClientHello): Promise<void> {
+    try {
+      await this.call('client.hello', {
+        role: hello.role,
+        name: hello.name,
+        protocolVersion: PROTOCOL_VERSION,
+        ...(hello.token !== undefined ? { token: hello.token } : {}),
+        ...(hello.cwd !== undefined ? { cwd: hello.cwd } : {}),
+        ...(hello.sessionId !== undefined ? { sessionId: hello.sessionId } : {}),
+        ...(hello.worktreeId !== undefined ? { worktreeId: hello.worktreeId } : {})
+      })
+      if (hello.subscribe) await this.call('events.subscribe', {})
+    } catch (error) {
+      this.close()
+      throw error
+    }
   }
 
   get isClosed(): boolean {
@@ -121,7 +190,7 @@ export class QuirkyClient {
     return new Promise<unknown>((resolve, reject) => {
       this.pending.set(id, { resolve, reject })
       const requestId = options?.requestId
-      this.socket.send(
+      this.transport.send(
         JSON.stringify({ jsonrpc: '2.0', id, method, params, ...(requestId !== undefined ? { requestId } : {}) })
       )
     })
@@ -151,7 +220,7 @@ export class QuirkyClient {
 
   close(): void {
     if (this.closed) return
-    this.socket.close()
+    this.transport.close()
     this.handleClose()
   }
 
@@ -200,6 +269,13 @@ export class QuirkyClient {
     this.pending.clear()
     for (const handler of this.closeHandlers) handler()
   }
+}
+
+function concat(a: Uint8Array, b: Uint8Array): Uint8Array {
+  const out = new Uint8Array(a.length + b.length)
+  out.set(a)
+  out.set(b, a.length)
+  return out
 }
 
 function redactToken(url: string): string {
