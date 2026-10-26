@@ -198,8 +198,8 @@ export class OutputScanner {
       this.facts.push({ kind: 'ready' })
       return
     }
-    for (const b of terminator) this.put(b)
     this.releaseHeld()
+    for (const b of terminator) this.put(b)
     if (!this.payloadOverflow) this.reportOsc(new TextDecoder().decode(this.payload.subarray(0, this.payloadLen)))
   }
 
