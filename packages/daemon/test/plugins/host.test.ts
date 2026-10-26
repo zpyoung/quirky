@@ -318,6 +318,14 @@ describe('activation', () => {
     expect(t.logs).toContain('acme.base: hello')
   })
 
+  test('every line of a multi-line plugin log message is prefixed with the plugin ID', async () => {
+    const t = setup()
+    t.installed({ id: 'acme.base' }, { activate: "context.log('one\\ntwo\\r\\nthree\\rfour')" })
+    t.host.load()
+    await t.host.activate('acme.base')
+    expect(t.logs).toEqual(['acme.base: one', 'acme.base: two', 'acme.base: three', 'acme.base: four'])
+  })
+
   test('activateStartup activates enabled startup plugins and never rejects', async () => {
     const t = setup({ disabled: ['acme.off'] })
     t.installed({ id: 'acme.watch', activation: 'startup' })
@@ -468,6 +476,51 @@ describe('SC-25: disabling while a plugin activates', () => {
     expect(t.stateOf('acme.base')).toBe('disabled')
     expect(t.stateOf('acme.tools')).toBe('disabled')
     expect(t.lines()).toEqual(['import acme.base', 'activate acme.base', 'deactivate acme.base'])
+  })
+
+  test('a disable during an activate that then rejects still calls deactivate and ends disabled', async () => {
+    const t = setup()
+    t.installed({ id: 'acme.slowfail' }, { activate: `${waitForFile(t.gate)}\n  throw new Error('boom')` })
+    t.host.load()
+    const outcome = t.host.activate('acme.slowfail').then(() => null, (error: unknown) => error)
+    await until(() => t.lines().includes('activate acme.slowfail'))
+    const disabling = t.host.setEnabled('acme.slowfail', false)
+    expect(await settled(disabling)).toBe(false)
+
+    t.release()
+    expect(await outcome).toMatchObject({ code: RpcErrorCode.Conflict, message: 'acme.slowfail was disabled during activation' })
+    await disabling
+    expect(t.lines()).toEqual(['import acme.slowfail', 'activate acme.slowfail', 'deactivate acme.slowfail'])
+    expect(t.stateOf('acme.slowfail')).toBe('disabled')
+  })
+
+  test('a disable during an activate that times out still calls deactivate and ends disabled', async () => {
+    const t = setup({ timeoutMs: 100 })
+    t.installed({ id: 'acme.hang' }, { activate: 'await new Promise(() => {})' })
+    t.host.load()
+    const outcome = t.host.activate('acme.hang').then(() => null, (error: unknown) => error)
+    await until(() => t.lines().includes('activate acme.hang'))
+    const disabling = t.host.setEnabled('acme.hang', false)
+
+    expect(await outcome).toMatchObject({ code: RpcErrorCode.Conflict, message: 'acme.hang was disabled during activation' })
+    await disabling
+    expect(t.lines()).toEqual(['import acme.hang', 'activate acme.hang', 'deactivate acme.hang'])
+    expect(t.stateOf('acme.hang')).toBe('disabled')
+  })
+
+  test('resolve is not found when the contribution is disabled while its owner activates', async () => {
+    const t = setup()
+    t.installed(
+      { id: 'acme.tools', contributes: { command: [{ id: 'refresh' }] } },
+      { activate: `${waitForFile(t.gate)}\n  ${provideRefresh}` }
+    )
+    t.host.load()
+    const resolving = t.host.resolve(COMMAND).then(() => null, (error: unknown) => error)
+    await until(() => t.lines().includes('activate acme.tools'))
+    await t.host.setEnabled(COMMAND, false)
+
+    t.release()
+    expect(await resolving).toMatchObject({ code: RpcErrorCode.NotFound, message: `no contribution ${COMMAND} is in effect` })
   })
 
   test('setEnabled calls run one at a time', async () => {

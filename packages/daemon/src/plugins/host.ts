@@ -126,7 +126,12 @@ export class PluginHost {
     const contribution = this.registry.effective.get(id)
     if (!contribution) throw notFound(`no contribution ${id} is in effect`)
     await this.activateInternal(contribution.plugin)
-    return { contribution, implementation: this.runtimeOf(contribution.plugin).attempt?.implementations.get(id) }
+    const current = this.registry.effective.get(id)
+    const runtime = this.runtimeOf(contribution.plugin)
+    if (current?.plugin !== contribution.plugin || runtime.state !== 'active') {
+      throw notFound(`no contribution ${id} is in effect`)
+    }
+    return { contribution: current, implementation: runtime.attempt?.implementations.get(id) }
   }
 
   /** Like `resolve`, but Conflict when the owner activated without providing the implementation. */
@@ -241,7 +246,7 @@ export class PluginHost {
   private async run(id: string, entry: RegistryPlugin, runtime: Runtime): Promise<void> {
     const attempt: Attempt = { revoked: false, implementations: new Map() }
     runtime.attempt = attempt
-    let module: PluginModule | undefined
+    const imported: { module?: PluginModule } = {}
     let disabledMidway = false
     try {
       this.assertEnabled(id)
@@ -255,7 +260,7 @@ export class PluginHost {
         }
       }
       this.assertEnabled(id)
-      module = await this.loadAndActivate(entry, attempt)
+      await this.loadAndActivate(entry, attempt, imported)
       this.assertEnabled(id)
     } catch (error) {
       disabledMidway = !this.isEnabled(id)
@@ -264,7 +269,7 @@ export class PluginHost {
       runtime.attempt = undefined
       runtime.module = undefined
       if (disabledMidway) {
-        if (module) await this.callDeactivate(id, module, runtime)
+        if (imported.module) await this.callDeactivate(id, imported.module, runtime)
         this.setState(runtime, 'inactive')
         throw conflict(`${id} was disabled during activation`)
       }
@@ -273,7 +278,7 @@ export class PluginHost {
       this.setState(runtime, 'failed')
       throw conflict(`${id} failed to activate: ${runtime.error}`)
     }
-    runtime.module = module
+    runtime.module = imported.module
     this.activationOrder.push(id)
     this.setState(runtime, 'active')
   }
@@ -282,18 +287,19 @@ export class PluginHost {
     if (!this.isEnabled(id)) throw new Error(`${id} was disabled during activation`)
   }
 
-  private async loadAndActivate(entry: RegistryPlugin, attempt: Attempt): Promise<PluginModule | undefined> {
+  /** Records the module in `imported` as soon as it imports, so a failed or timed-out activate can still be deactivated. */
+  private async loadAndActivate(entry: RegistryPlugin, attempt: Attempt, imported: { module?: PluginModule }): Promise<void> {
     const { discovered } = entry
     const manifest = discovered.manifest!
-    if (manifest.main === undefined) return undefined
+    if (manifest.main === undefined) return
     const context = this.contextFor(entry, attempt)
     const mainPath = join(discovered.dir, manifest.main)
-    return withTimeout(
+    await withTimeout(
       async () => {
         const loaded = (await import(mainPath)) as Partial<PluginModule>
         if (typeof loaded.activate !== 'function') throw new Error('main module has no activate export')
+        imported.module = loaded as PluginModule
         await loaded.activate(context)
-        return loaded as PluginModule
       },
       this.timeoutMs,
       `activation timed out after ${this.timeoutMs} ms`
@@ -312,7 +318,9 @@ export class PluginHost {
     return {
       pluginId: id,
       dir: discovered.dir,
-      log: (message) => this.options.log(`${id}: ${message}`),
+      log: (message) => {
+        for (const line of String(message).split(/\r\n|\r|\n/)) this.options.log(`${id}: ${line}`)
+      },
       provide: (contributionId, implementation) => {
         if (attempt.revoked) throw new Error(`${id} is no longer active`)
         if (!allowed.has(contributionId)) throw new Error(`${id} does not declare ${contributionId}`)

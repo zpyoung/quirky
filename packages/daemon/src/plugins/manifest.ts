@@ -101,7 +101,7 @@ function checkContributes(value: unknown, errors: string[]): void {
         return
       }
       if (!isContributionName(entry.id)) errors.push(`contributes.${kind}: name '${entry.id}' is not valid`)
-      else if (names.has(entry.id)) errors.push(`contributes.${kind}: duplicate name '${entry.id}'`)
+      if (names.has(entry.id)) errors.push(`contributes.${kind}: duplicate name '${entry.id}'`)
       names.add(entry.id)
     })
   }

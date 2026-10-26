@@ -114,6 +114,12 @@ describe('parseManifest', () => {
     expect(parse({ ...base, contributes: ok }).ok).toBe(true)
   })
 
+  test('reports a repeated name that is also invalid as both errors', () => {
+    const errors = errorsOf({ ...base, contributes: { command: [{ id: 'Bad Name' }, { id: 'Bad Name' }] } })
+    expect(errors).toContainEqual(expect.stringContaining("name 'Bad Name' is not valid"))
+    expect(errors).toContainEqual(expect.stringContaining("duplicate name 'Bad Name'"))
+  })
+
   test('rejects a duplicate override ID', () => {
     const overrides = [{ id: 'command:other/run' }, { id: 'command:other/run' }]
     expect(errorsOf({ ...base, overrides }).join('\n')).toContain("duplicate override ID 'command:other/run'")
