@@ -1,7 +1,8 @@
 import { mkdirSync } from 'node:fs'
 import { join } from 'node:path'
-import type { LaunchHookInput, PluginStore, StoreMigration } from '@quirky/protocol'
-import { conflict, internal, invalidParams, notFound } from '../errors'
+import { isReservedLaunchEnv, type LaunchHookInput, type PluginStore, type StoreMigration } from '@quirky/protocol'
+import { conflict, invalidParams, notFound } from '../errors'
+import { buildSessionEnv, commandArgv, shellArgv } from '../launch'
 import { createHandlers } from '../methods'
 import type { Core } from '../service'
 import type { Store } from '../store'
@@ -88,24 +89,49 @@ export function createPluginRuntime(options: PluginRuntimeOptions): PluginRuntim
       const dataDir = pluginDataDir(home, id)
       mkdirSync(dataDir, { recursive: true, mode: 0o700 })
       let opened: OpenedStore | undefined
-      const ptyApi = createPtyApi(core.pty, id)
+      const ptyApi = createPtyApi(core.pty, id, log)
       ptyApis.set(id, ptyApi)
-      const notImplemented = (name: string) => () => {
-        throw internal(`not implemented: ${name}`)
-      }
 
       return {
         dataDir,
         home,
         pty: ptyApi.api,
-        notify: notImplemented('notify'),
+        notify(notification) {
+          guard()
+          core.notify(notification)
+        },
         launch: {
           shell: options.shell,
           binDir: join(home, 'bin'),
-          env: notImplemented('launch.env'),
-          shellArgv: notImplemented('launch.shellArgv'),
-          commandArgv: notImplemented('launch.commandArgv'),
-          hooks: notImplemented('launch.hooks')
+          env(input) {
+            guard()
+            const envPatch: Record<string, string> = {}
+            for (const [name, value] of Object.entries(input.envPatch ?? {})) {
+              if (!isReservedLaunchEnv(name)) envPatch[name] = value
+            }
+            return buildSessionEnv({
+              home,
+              sessionId: input.sessionId,
+              worktreeId: input.worktreeId,
+              hookUrl: core.hookUrl,
+              hookToken: core.hookToken,
+              shell: options.shell,
+              agent: input.agent,
+              envPatch
+            })
+          },
+          shellArgv() {
+            guard()
+            return shellArgv(home, options.shell)
+          },
+          commandArgv(command) {
+            guard()
+            return commandArgv(home, options.shell, command)
+          },
+          hooks(input) {
+            guard()
+            return prepareLaunch(input)
+          }
         },
         emit(event, data) {
           guard()
