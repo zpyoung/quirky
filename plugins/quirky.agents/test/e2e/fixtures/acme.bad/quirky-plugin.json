@@ -1,0 +1,15 @@
+{
+  "id": "acme.bad",
+  "name": "Acme bad",
+  "version": "1.0.0",
+  "description": "Declares an agent with no detect command for e2e tests.",
+  "contributes": {
+    "agent": [
+      {
+        "id": "broken",
+        "label": "Broken",
+        "prompt": "argv"
+      }
+    ]
+  }
+}
