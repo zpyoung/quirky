@@ -182,7 +182,7 @@
       },
       {
         "id": "create",
-        "description": "Starts a terminal session; `prompt` is passed to agents that accept an initial prompt.",
+        "description": "Starts a terminal session; `prompt` is passed to agents that accept an initial prompt. `title` names the tab and `command` runs one shell command instead of an interactive shell (agent shell only).",
         "params": {
           "type": "object",
           "properties": {
@@ -203,6 +203,14 @@
             },
             "prompt": {
               "type": "string"
+            },
+            "title": {
+              "type": "string",
+              "description": "Tab title; numbered like the default titles when taken"
+            },
+            "command": {
+              "type": "string",
+              "description": "For agent shell only: a shell command string run under the login shell instead of an interactive shell; the session exits with its exit code"
             },
             "cols": {
               "type": "integer",
