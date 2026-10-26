@@ -339,5 +339,16 @@
 - **Confidence:** high
 - **Source:** assumed — autonomous
 
+## D33: A long QUIRKY_HOME breaks the PTY host's socket; logged, not fixed here
+- **Question:** a manual smoke test of `quirky plugin` against a real daemon in a scratch home found the first command waiting 15 s for the daemon
+- **Options:** fix it in this item; log it for a later item
+- **Chose:** log it. The cause is that `<QUIRKY_HOME>/pty.sock` was 140 bytes, over macOS's 104-byte unix socket path limit, so quirky-pty can't listen. It happens identically on the commit before this item. Every plugin command then worked against the real daemon: list, contributions, activate, disable, the not-found error with exit 1, and `--json`.
+- **Why:** it is pre-existing PTY host behavior and outside this item's scope; m0-cli-core (unix socket for the CLI) and m1-term-daemon own socket paths and should place sockets under a short runtime directory or fail with a clear message
+- **Evidence:** packages/pty-host/src/server.ts:47 `join(home, 'pty.sock')`; smoke run on 2026-10-26
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** users set QUIRKY_HOME to a deep path
+- **Source:** deferred: platform
+
 ## Progress
 Waves 1 and 2 merged with checkpoint fixes; gate green (469 tests). Wave 3 (PluginHost, daemon wiring, plugin.* handlers, host and API tests) dispatched on branch sdd/w3-host in a scratch worktree. If this iteration stops early: if sdd/w3-host has no usable work, re-dispatch wave 3 from tech.md (PluginHost, Daemon API, Daemon wiring, Testing strategy). Then run the final deep 3-lens review, fix, verify, and merge per LOOP.md step 7.
