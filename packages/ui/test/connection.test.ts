@@ -46,3 +46,43 @@ test('keeps retrying without the unreachable banner while /health answers', asyn
   await Bun.sleep(400)
   expect(store.getState().connection).toBe('reconnecting')
 })
+
+test('callAny reaches the daemon and rejects when not connected', async () => {
+  const daemon = startMockDaemon()
+  stops.push(daemon.stop)
+  const { store, connection } = connect(daemon.url)
+  await expect(connection.callAny('repo.list', {})).rejects.toThrow('Not connected')
+  await until(() => store.getState().connection === 'connected')
+  const repos = (await connection.callAny('repo.list', {})) as { id: string }[]
+  expect(repos.map((r) => r.id)).toEqual(['r1'])
+})
+
+test('onConnected runs after each connect once the snapshot is in the store', async () => {
+  const daemon = startMockDaemon()
+  stops.push(daemon.stop)
+  const { store, connection } = connect(daemon.url)
+  const seen: boolean[] = []
+  connection.onConnected(() => seen.push(store.getState().loaded))
+  await until(() => seen.length === 1)
+  expect(seen).toEqual([true])
+})
+
+test('onEvent receives every event as well as the store, and a throwing listener harms neither', () => {
+  const store = new Store()
+  const connection = new Connection(store, { hash: '', host: 'x' })
+  const received: string[] = []
+  connection.onEvent(() => {
+    throw new Error('listener bug')
+  })
+  const stop = connection.onEvent((event) => received.push(event.type))
+  const emit = (event: unknown) => (connection as unknown as { handleEvent(e: unknown): void }).handleEvent(event)
+
+  emit({ type: 'notify', title: 'hi', body: 'there' })
+  emit({ type: 'plugin.changed' })
+  expect(received).toEqual(['notify', 'plugin.changed'])
+  expect(store.getState().toasts.map((t) => t.title)).toEqual(['hi'])
+
+  stop()
+  emit({ type: 'plugin.changed' })
+  expect(received).toHaveLength(2)
+})

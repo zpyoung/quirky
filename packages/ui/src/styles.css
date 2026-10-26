@@ -838,3 +838,104 @@ textarea {
   top: 4px;
   right: 2px;
 }
+
+.main-title {
+  margin-right: auto;
+}
+
+.sidebar-sections {
+  flex: none;
+  max-height: 40%;
+  overflow-y: auto;
+  border-top: 1px solid var(--border);
+}
+
+.plugin-slot {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
+.plugin-slot-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 6px 12px;
+}
+
+.plugin-slot-title {
+  color: var(--muted);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.plugin-slot-error {
+  margin: 6px 8px;
+  padding: 6px 10px;
+  border: 1px solid var(--danger);
+  border-radius: 5px;
+  color: var(--danger);
+  overflow-wrap: anywhere;
+}
+
+.plugin-slot-body {
+  min-width: 0;
+}
+
+.plugin-panel,
+.main-body > .plugin-slot {
+  overflow: auto;
+}
+
+.main-body > .plugin-slot {
+  flex: 1;
+}
+
+.palette-list {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  max-height: 50vh;
+  overflow-y: auto;
+}
+
+.palette-item {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  text-align: left;
+  background: transparent;
+  border: none;
+}
+
+.palette-item.selected {
+  background: var(--bg-active);
+}
+
+.settings-group {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 0;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+}
+
+.settings-group legend {
+  padding: 0 4px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+select {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  padding: 4px 8px;
+  color: inherit;
+  font: inherit;
+}

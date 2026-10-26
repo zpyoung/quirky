@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import type { Session, Worktree } from '@quirky/protocol'
 import { closeSession, createSession } from '../actions'
-import { useAppState, useConnection, useDispatch } from '../context'
+import { useAppState, useConnection, useDispatch, usePluginHost } from '../context'
 import { displayStatus } from '../lib/status'
 import { NewSessionMenu } from './NewSessionMenu'
 import { PromptDialog, type NewSessionRequest } from './PromptDialog'
@@ -13,6 +13,7 @@ export function SessionTabs({ worktree, sessions }: Props) {
   const state = useAppState()
   const connection = useConnection()
   const dispatch = useDispatch()
+  const host = usePluginHost()
   const [pending, setPending] = useState<NewSessionRequest | null>(null)
 
   const pick = (request: NewSessionRequest) => {
@@ -29,7 +30,10 @@ export function SessionTabs({ worktree, sessions }: Props) {
             role="tab"
             aria-selected={session.id === state.selectedSessionId}
             className={`tab${session.id === state.selectedSessionId ? ' active' : ''}`}
-            onClick={() => dispatch({ type: 'selectSession', id: session.id })}
+            onClick={() => {
+              dispatch({ type: 'selectSession', id: session.id })
+              host.closeView()
+            }}
             title={`${session.title} (${session.status})${index < 9 ? ` - Cmd+${index + 1}` : ''}`}
           >
             <StatusDot status={displayStatus(session.status)} />
