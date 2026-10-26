@@ -63,7 +63,7 @@ describe('SC-7: a worktree selector resolves by each form', () => {
 
   test('a bare name falls through to a branch when no worktree has that name', async () => {
     const { t, repo } = await apiRepo()
-    t.git!.worktreesByRepo.get('/fake/api')!.push({ path: '/fake/api-odd', branch: 'feat/odd', head: 'c'.repeat(40), isMain: false })
+    t.git!.worktreesByRepo.get('/fake/api')!.push({ path: '/fake/api-odd', branch: 'feat/odd', head: 'c'.repeat(40), isMain: false, locked: null })
     const odd = ((await call(t.client, 'quirky.worktree/list', { repo: repo.id })) as Worktree[]).find((w) => w.path === '/fake/api-odd')!
     expect(odd.name).toBe('feat/odd')
     expect(((await call(t.client, 'quirky.worktree/resolve', { selector: 'feat/odd' })) as Worktree).id).toBe(odd.id)

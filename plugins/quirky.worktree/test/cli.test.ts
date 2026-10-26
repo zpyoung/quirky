@@ -34,7 +34,7 @@ describe('SC-20: quirky worktree commands keep v1 output', () => {
     expect(empty.lines).toEqual(['no worktrees'])
 
     t.git!.addRepo('/fake/alpha')
-    t.git!.worktreesByRepo.get('/fake/alpha')!.push({ path: '/fake/alpha-det', branch: null, head: 'd'.repeat(40), isMain: false })
+    t.git!.worktreesByRepo.get('/fake/alpha')!.push({ path: '/fake/alpha-det', branch: null, head: 'd'.repeat(40), isMain: false, locked: null })
     await call(t.client, 'quirky.repo/add', { path: '/fake/alpha' })
     const filled = testCliContext(t.client)
     await commands.list!({ positionals: [], flags: {} }, filled.ctx)

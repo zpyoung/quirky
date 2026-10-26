@@ -192,7 +192,7 @@ describe('remove closes the repo sessions', () => {
   test('a session in an externally created worktree closes with its repo after the directory is gone', async () => {
     const { t, client } = await start()
     const alpha = (await call(client, 'quirky.repo/add', { path: '/fake/alpha' })) as Repo
-    t.git!.worktreesByRepo.get('/fake/alpha')!.push({ path: '/fake/elsewhere/hand-made', branch: 'hand-made', head: 'c'.repeat(40), isMain: false })
+    t.git!.worktreesByRepo.get('/fake/alpha')!.push({ path: '/fake/elsewhere/hand-made', branch: 'hand-made', head: 'c'.repeat(40), isMain: false, locked: null })
     const listed = (await call(client, 'quirky.worktree/list', { repo: alpha.id })) as { id: string; name: string }[]
     const external = listed.find((w) => w.name === 'hand-made')!
     const session = (await call(client, 'quirky.session/create', { worktree: external.id, agent: 'shell' })) as { id: string }
