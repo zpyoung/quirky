@@ -356,5 +356,45 @@
 - **Confidence:** high
 - **Source:** locked by docs/loop/LOOP.md
 
+## D36: Tech-spec mechanisms: built-ins as workspace packages, UI modules built by the UI build, a headless window for tests
+- **Question:** writing-specs tech-spec rubric: the build-only questions the logic spec deferred
+- **Options:** for plugin UI: bundle on request in the daemon, or a build step; for module resolution: plugins outside the workspace, or `plugins/*` as workspace packages; for window tests: scripted fake windows only, or the real `App` under happy-dom
+- **Chose:** `plugins/*` become workspace packages (Bun's isolated installs give a file outside a package no `@quirky/protocol`); `packages/ui/build.ts` bundles each built-in's `src/ui.tsx` to `dist/ui.js` with the app's React externals; tests render the real `App` under happy-dom and map module URLs to the TSX sources. Request records, confirmations and the distro are new kernel tables; the layout is a `ui_state` row; routed commands go out as a targeted `ui.command.request` event and come back through `ui.command.reply`. The hook endpoint answers 200 for any session once the token checks, because the daemon no longer knows sessions.
+- **Why:** a daemon bundler would cost the memory budget and still need resolution in a packaged app. The real `App` is the only way an exit-test report proves what the window shows.
+- **Evidence:** packages/daemon/node_modules (isolated installs); packages/ui/build.ts:12-33; packages/daemon/src/plugin-files.ts
+- **Reversibility:** medium
+- **Confidence:** medium
+- **Source:** assumed — autonomous
+
+## D37: One spec review pass over both specs, with the tech-spec reviewer folded into it
+- **Question:** LOOP.md step 4 replaces the user's spec review with one adversarial pass over both specs; the tech-spec rubric also asks for its reviewer
+- **Options:** run both; one Codex adversarial pass whose criteria include the rubric's checks (anchors, fidelity, contracts, buildability)
+- **Chose:** one pass, depth deep, spec-design profile, Codex reviewer through pi-watch, with the rubric's checks in the criteria
+- **Why:** the user trimmed the review rounds in commit 9a0ae1e, and the criteria cover what the rubric's reviewer checks
+- **Evidence:** docs/loop/LOOP.md step 4; git show 9a0ae1e
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** locked by docs/loop/LOOP.md
+
+## D38: Build with Claude subagents implementing and Codex reviewing
+- **Question:** subagent-driven-development preflight: backend pairing, dirty tree, test runner
+- **Options:** the reachable pairs `claude-task + codex`, `claude-task + gemini`, `pi-codex + gemini`
+- **Chose:** `claude-task + codex` (IMPLEMENTER claude-task, AUTHOR_FAMILY anthropic, REVIEWER_ALIAS codex). The tree holds only this item's own decision-log edits, committed before RUN_BASE. FULL_SUITE_CMD is `bun run test && bun run typecheck`; the baseline ran 1362 tests green in 72 s.
+- **Why:** LOOP.md names this pairing, and `pi-watch --check codex` passed
+- **Evidence:** docs/loop/LOOP.md step 5
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** locked by docs/loop/LOOP.md
+
+## D39: Build in five waves: a scaffold, kernel modules, plugins beside v1, the switch-over with the UI port, then scenario tests
+- **Question:** writing-plans decomposition and wave shape
+- **Options:** remove v1 first and port everything at once; build the plugins beside v1's kernel code, then switch over in one wave
+- **Chose:** W1 a scaffold (every new type, schema, stub module and wiring, so later tasks own disjoint files); W2 kernel modules (socket transport, dispatch pipeline, context growth, install/distro/safe mode, layout, manifest kinds and CLI catalog, CLI core); W3 the eight plugins, running beside v1's kernel methods under their new names; W4 the switch-over (remove v1 from the kernel and CLI, protocol 2, the shell rendering the daemon's layout, the plugins' UI modules, the desktop shell); W5 the sample distro, the exit test and a sweep that gives every scenario a named test. Checkpoint reviews after W2, W3 and W4.
+- **Why:** the gate stays green at every wave, because v1 keeps working until W4 swaps it out, and the scaffold gives the many tasks that would touch `methods.ts`, `daemon.ts` and `store.ts` one owner
+- **Evidence:** packages/daemon/src/methods.ts:25 (Handlers is exhaustive over Methods); docs/loop/decisions/m0-scripting.md D32
+- **Reversibility:** easy
+- **Confidence:** medium
+- **Source:** assumed — autonomous
+
 ## Progress
-Step 4: brainstorming done (D1-D35). Next: write docs/quirk/specs/2026-10-26-m0-core/logic.md and tech.md, run one adversarial review over both, commit.
+Step 4: specs written and committed; one Codex review over both running (scratchpad sr1). Next: apply its findings, commit, then build per D39 starting at W1 (scaffold).
