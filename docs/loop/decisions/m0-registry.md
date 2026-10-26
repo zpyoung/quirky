@@ -319,5 +319,15 @@
 - **Revisit if:** the final review finds defects that trace to the spec fixes
 - **Source:** assumed — autonomous
 
+## D31: Build in three waves of five tasks, and skip wave 1's checkpoint review
+- **Question:** subagent-driven-development Steps 3-4 decomposition, and Step 7's optional checkpoint skip
+- **Options:** one task per file (more waves and checkpoints); five vertical tasks in three waves; one task
+- **Chose:** wave 1: protocol types, and the store table with the desktop path and docs. Wave 2: manifest, discovery and registry, and the CLI group. Wave 3: the host, daemon wiring and the API tests. Wave 1's checkpoint is skipped because it is declarative types, one table and docs, with a green gate (377 tests). Wave 1 also put placeholder `plugin.*` handlers in methods.ts so the repo typechecks between waves; wave 3 replaces them.
+- **Why:** each split lands tasks in different components, which buys parallelism; the host and its API tests are one sequential run, so they stay one task (writing-plans granularity economics)
+- **Evidence:** quirk:writing-plans "Task-Boundary Granularity Economics"; scratchpad run journal
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** assumed — autonomous
+
 ## Progress
-Specs reviewed and fixed. Next: quirk:subagent-driven-development Step 3 onward (decompose, waves, build), against tech.md.
+Building on build/m0-registry. Wave 1 merged (protocol types; store table, desktop path, docs). Wave 2 (manifest/discover/registry; CLI) dispatched in worktrees under the session scratchpad. If this iteration stops early: check whether sdd/w2-kernel and sdd/w2-cli branches exist with uncommitted work; otherwise re-run wave 2 from the tasks in tech.md (Testing strategy and Architecture), then wave 3 (host + daemon wiring + API tests), then the final 3-lens deep review.
