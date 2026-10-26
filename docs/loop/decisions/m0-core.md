@@ -427,6 +427,16 @@
 - **Confidence:** high
 - **Source:** assumed — autonomous
 
+## D43: W3 checkpoint: accept all eight findings, which collapse to five defects
+- **Question:** subagent-driven-development Step 9, adjudicating the W3 checkpoint review (three Codex lenses, standard depth)
+- **Options:** accept; reject with a reason
+- **Chose:** accepted all. C1, S1 and X1 (HIGH): structured permission prompts read `id` from `quirky.ask/create`, which returns `{askId}`, so they could never be answered; the sibling fake returned the whole Ask and hid it. C2 and X2: disabling quirky.ask during a pending wait left a timer that threw against the closed store. X3: disabling quirky.structured left its runners running. X4: a non-forced worktree removal whose session close then failed left processes in a deleted directory. S2: terminal tests loaded the real session plugin instead of a fake. Fixed in four disjoint plugin components before W4 starts, because W4 rewrites those plugins' manifests and sources.
+- **Why:** each came with a reproduction or a file-line quote that shows the defect
+- **Evidence:** scratchpad cp-w3/{C,S,X}/gate.json
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** assumed — autonomous
+
 ## Progress
 
 Step 5, build. W1, W2 and its fix batch, and W3 (P1-P6, eight built-in plugins) merged; W3 at 932d679, gate 1976 pass, typecheck clean. W4 dependency setup committed. W3 checkpoint review running. Next: adjudicate the W3 findings (D43), fix batch, then dispatch W4 (U0a, U0b, U1, U2a-d, U3; briefs in the run journal's scratch) per D39, then W5, Final Round 1, verify and merge.
