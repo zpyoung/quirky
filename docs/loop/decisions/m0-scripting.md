@@ -168,7 +168,7 @@
 ## D17: `quirky api --json` returns one versioned catalog of methods, events, UI commands and CLI commands
 - **Question:** response-format and versioning of the discovery output
 - **Options:** Orca's `agent-context` shape (commands only); an OpenRPC document (methods only); one Quirky catalog with all four, carrying `schemaVersion`
-- **Chose:** `{ schemaVersion: 1, daemonVersion, protocolVersion, methods, events, uiCommands, commands }`, each list sorted by name. Methods and events carry their schema, their source (`kernel` or the plugin ID) and description; commands carry their words, summary, usage, positionals, flags (name, type, description, enum, repeatable, required) and `methods`, every method they may call (one for a generated command, none for `open`), plus `shadowedBy` when shadowed. Only in-effect contributions appear; an overridden method shows the overriding declaration. Text mode prints commands grouped by group with their summaries. `schemaVersion` rises only on a breaking change to this shape.
+- **Chose:** `{ schemaVersion: 1, daemonVersion, protocolVersion, methods, events, uiCommands, commands }`, each list sorted by name. Methods and events carry their schema, their `plugin` (`null` for the kernel, since `kernel` is a valid plugin ID) and description; commands carry their words, summary, usage, positionals, flags (name, type, description, enum, repeatable, required) and `methods`, every method they may call (one for a generated command, none for `open`), plus `shadowedBy` when shadowed. Only in-effect contributions appear; an overridden method shows the overriding declaration. Text mode prints commands grouped by group with their summaries. `schemaVersion` rises only on a breaking change to this shape.
 - **Why:** an agent needs both the methods (for the API) and the commands (for the CLI) from one call; Orca's commands-only listing leaves the RPC surface undiscoverable. A `schemaVersion` matches Orca's and lets agents detect a change.
 - **Evidence:** research/orca-features/cli.md "Agent discovery" and "Command table and validation"; https://spec.open-rpc.org/
 - **Reversibility:** medium
@@ -298,5 +298,15 @@
 - **Confidence:** medium
 - **Source:** assumed — autonomous
 
+## D30: Tech-spec review: fix seven model findings, reject the pre-pass findings
+- **Question:** adjudicating the Codex adversarial review of tech.md (spec-design profile, standard depth, reviewer gpt-6.1-sol, independence full)
+- **Options:** for each finding, amend the tech spec (and the logic spec where a locked shape changes) or reject it
+- **Chose:** fixed all seven standing findings. F1: generated commands skip the parse-time required check so `--params` can supply a required property. F2: a schema failure on a flag-supplied property is reported with the flag name (`--priority must be at most 5`), as SC-11 prints. F3: `api call` gets an explicit raw-arguments boundary (`rawArgs`). F5: `kernel` is a valid plugin ID, so catalog entries carry `plugin` with `null` for the kernel instead of `source: "kernel"`; the logic spec is amended. F6: suggestions also offer commands in the typed group, which SC-15 needs. F11: the `--json` pre-scan honors `--json=false` and last-wins. F9: generated commands' `methods` hold the RPC wire name. F4, F7, F8 and F10 were refuted by the reviewer. Rejected the pre-pass findings: unresolvable references to files and symbols the spec says to create, and the heading check, as in D26.
+- **Why:** each fixed finding named a contract that would have produced output different from the logic spec's tables
+- **Evidence:** scratchpad tr1/gate.json and merged.json
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** assumed — autonomous
+
 ## Progress
-Logic spec written, reviewed and amended (D26). Next: write tech.md beside it and review it with Codex.
+Specs written, reviewed and committed (D26, D30). Next: subagent-driven-development preflight and build.

@@ -5,6 +5,7 @@
 **Status:** Approved (headless build loop; decisions in [m0-scripting.md](../../../loop/decisions/m0-scripting.md)). Tech spec: requested.
 
 **Amendments:**
+- 2026-10-26, tech-spec review: catalog entries name their `plugin`, `null` for the kernel, instead of a `source` string, because `kernel` is a valid plugin ID (SC-1, SC-6, SC-8, SC-20); suggestions also offer commands in the typed group (SC-15).
 - 2026-10-26, tech-spec authoring: root help and help for kernel groups stay offline, as an existing test requires, and point to `quirky api` for plugin commands (SC-16, decision D28).
 - 2026-10-26, before approval: Codex adversarial review. The CLI checks a generated command's whole params object against the schema, `--params` included (SC-11, SC-19); a kernel command shadows generated commands that extend its words (SC-13); a valued flag followed by `--...` is missing its value (SC-11, SC-18); catalog commands list every method they may call (SC-20); enums need a type (SC-2); SC-23 enables a plugin instead of installing one, since discovery runs at startup.
 
@@ -126,7 +127,7 @@ Most scenarios use the installed plugin `acme.notes`, with lazy activation and t
 1. **SC-1: a plugin method's schema is in the catalog, and listing it loads nothing** (CLI, API)
    - **Given** `acme.notes` is installed and inactive
    - **When** the agent runs `quirky api --json`
-   - **Then** the catalog lists method `acme.notes/add` with its description, its `params` and `result` schemas and source `acme.notes`; event `acme.notes/added` with its `data` schema; UI command `command:acme.notes/open` with its `args` schema; and the command `acme.notes add` calling `acme.notes/add`. `acme.notes` is still inactive.
+   - **Then** the catalog lists method `acme.notes/add` with its description, its `params` and `result` schemas and plugin `acme.notes`; event `acme.notes/added` with its `data` schema; UI command `command:acme.notes/open` with its `args` schema; and the command `acme.notes add` calling `acme.notes/add`. `acme.notes` is still inactive.
    - **Data before:** **acme.notes**: inactive
    - **Walkthrough:**
      1. The agent runs `quirky api --json`
@@ -181,7 +182,7 @@ Most scenarios use the installed plugin `acme.notes`, with lazy activation and t
 6. **SC-6: kernel methods have schemas, and the daemon checks them** (API, CLI)
    - **Given** the daemon is running
    - **When** the agent runs `quirky api --json`, and a client calls `repo.add` with `{"path": 5}`
-   - **Then** every kernel method, `api.describe` included, is in the catalog with source `kernel` and a `params` schema; the call fails with InvalidParams `params.path must be a string`
+   - **Then** every kernel method, `api.describe` included, is in the catalog with `plugin` null, meaning the kernel, and a `params` schema; the call fails with InvalidParams `params.path must be a string`
    - Calls the existing desktop window, CLI and tests make keep working: a kernel schema accepts everything its handler accepts.
 
 7. **SC-7: results and event data are not checked** (API)
@@ -192,7 +193,7 @@ Most scenarios use the installed plugin `acme.notes`, with lazy activation and t
 8. **SC-8: an override brings its own schema** (API, CLI)
    - **Given** installed `acme.better` overrides `method:acme.notes/add` with params that also allow `color: "green"`
    - **When** the agent runs `quirky api --json` and a client calls `acme.notes/add` with `{"title": "a", "color": "green"}`
-   - **Then** the catalog shows the override's schema, with source `acme.better`, and the call reaches `acme.better`'s handler
+   - **Then** the catalog shows the override's schema, with plugin `acme.better`, and the call reaches `acme.better`'s handler
 
 ### Generated commands
 
@@ -271,7 +272,7 @@ Most scenarios use the installed plugin `acme.notes`, with lazy activation and t
 15. **SC-15: a plugin method can be disabled and enabled without touching the CLI** (CLI)
     - **Given** `acme.notes` is installed
     - **When** the agent runs `quirky plugin disable method:acme.notes/add`, then `quirky acme.notes add --title a`, then `quirky plugin enable method:acme.notes/add` and the same command again
-    - **Then** while disabled, the command is unknown (exit 2, with `acme.notes list` among the suggestions) and is missing from `quirky api --json`; after enabling, it runs and is listed again. Orca's CLI rejected commands its own app served when the CLI bundle was older than the app ([cli.md](../../../../research/orca-features/cli.md#verified-in-the-app)); Quirky's can't fall behind.
+    - **Then** while disabled, the command is unknown (exit 2, with `acme.notes list` among the suggestions, since it shares the group) and is missing from `quirky api --json`; after enabling, it runs and is listed again. Orca's CLI rejected commands its own app served when the CLI bundle was older than the app ([cli.md](../../../../research/orca-features/cli.md#verified-in-the-app)); Quirky's can't fall behind.
 
 ### Help and errors
 
@@ -342,19 +343,19 @@ Most scenarios use the installed plugin `acme.notes`, with lazy activation and t
         "daemonVersion": "0.1.0*",
         "protocolVersion": 1,
         "methods": [
-          { "name": "acme.notes/add", "source": "acme.notes", "description": "Add a note.",
+          { "name": "acme.notes/add", "plugin": "acme.notes", "description": "Add a note.",
             "params": { "type": "object", "properties": { "title": { "type": "string" } }, "required": ["title"] },
             "result": { "type": "object" } },
-          { "name": "repo.add", "source": "kernel", "params": { "...": "..." }, "result": { "...": "..." } }
+          { "name": "repo.add", "plugin": null, "params": { "...": "..." }, "result": { "...": "..." } }
         ],
-        "events": [ { "name": "acme.notes/added", "source": "acme.notes", "data": { "type": "object" } } ],
-        "uiCommands": [ { "id": "command:acme.notes/open", "source": "acme.notes", "args": { "type": "object" } } ],
+        "events": [ { "name": "acme.notes/added", "plugin": "acme.notes", "data": { "type": "object" } } ],
+        "uiCommands": [ { "id": "command:acme.notes/open", "plugin": "acme.notes", "args": { "type": "object" } } ],
         "commands": [
-          { "command": "acme.notes add", "source": "acme.notes", "methods": ["acme.notes/add"],
+          { "command": "acme.notes add", "plugin": "acme.notes", "methods": ["acme.notes/add"],
             "summary": "Add a note.", "usage": "acme.notes add --title <string> ...",
             "positionals": [],
             "flags": [ { "name": "title", "type": "string", "required": true, "repeatable": false, "description": "The note's title" } ] },
-          { "command": "repo add", "source": "kernel", "methods": ["repo.add"],
+          { "command": "repo add", "plugin": null, "methods": ["repo.add"],
             "positionals": [ { "name": "path", "required": true } ], "flags": [] }
         ]
       }

@@ -41,7 +41,7 @@ Modify:
 - `packages/daemon/src/plugins/dispatch.ts`: `CONNECTION_METHODS` (6) imported from protocol instead of defined here; `dispatch` (34-53) validates params for kernel calls before `runKernel` and for plugin calls between finding `effective` (42) and `resolveImplementation` (44).
 - `packages/daemon/src/methods.ts`: `createHandlers` (78) gains `'api.describe'` beside `plugin.activate` (~212); it reads `plugins.contributions({ kind })` and `core.status().daemonVersion`.
 - `packages/cli/src/args.ts`: `FlagKind` (9) becomes the `FlagSpec` type set; `parseArgs` (22-63) takes the command name for its unknown-flag message, supports repeatable flags, `number` and `json` kinds, and refuses a following `--` token as a value.
-- `packages/cli/src/commands/types.ts`: `Command` (19-26) loses `usage` and `flags: FlagDefs`, gains `positionals`, `flags: Record<string, FlagSpec>`, `methods`, `source`.
+- `packages/cli/src/commands/types.ts`: `Command` (19-26) loses `usage` and `flags: FlagDefs`, gains `positionals`, `flags: Record<string, FlagSpec>`, `methods`, `plugin`, and an optional `rawArgs`.
 - Every file in `packages/cli/src/commands/` that defines a `Command`: declarations only; run code unchanged except where named below.
 - `packages/cli/src/commands/index.ts`: `COMMANDS` (28-60) adds the new commands; `route` (74-96) takes a command list; `helpText` (103-116) is rebuilt on `commandHelp`/`usageOf`.
 - `packages/cli/src/main.ts`: `run` (21-71) adds the catalog fallback, the `--json` pre-scan and JSON errors.
@@ -123,12 +123,12 @@ ApiDescription = {
   schemaVersion: 1, daemonVersion: string, protocolVersion: number,
   methods: ApiMethodEntry[], events: ApiEventEntry[], uiCommands: ApiUiCommandEntry[]
 }
-ApiMethodEntry = { name: string, source: 'kernel' | string, description?: string,
+ApiMethodEntry = { name: string, plugin: string | null, description?: string,
                    params: Schema, result: Schema, connection?: true }
-ApiEventEntry = { name: string, source: 'kernel' | string, description?: string, data: Schema | null }
-ApiUiCommandEntry = { id: string, source: string, title: string, description?: string, args: Schema }
+ApiEventEntry = { name: string, plugin: string | null, description?: string, data: Schema | null }
+ApiUiCommandEntry = { id: string, plugin: string, title: string, description?: string, args: Schema }
 ```
-- Kernel methods: every key of `KERNEL_METHOD_SCHEMAS`, `connection: true` for `CONNECTION_METHODS`. Plugin methods: every effective `method` contribution; `name` is the contribution ID minus `method:`; `source` is the declaring plugin of the effective declaration (the overrider when overridden, SC-8); `params` defaults to `{ "type": "object" }`, `result` to `{}`.
+- Kernel methods: every key of `KERNEL_METHOD_SCHEMAS`, `connection: true` for `CONNECTION_METHODS`. Plugin methods: every effective `method` contribution; `name` is the contribution ID minus `method:`; `plugin` is the declaring plugin of the effective declaration; kernel entries have `plugin: null`, because `kernel` is itself a valid plugin ID (the overrider when overridden, SC-8); `params` defaults to `{ "type": "object" }`, `result` to `{}`.
 - Kernel events by type; plugin events named `<pluginId>/<name>` with `data` or `null` when omitted. UI commands: effective `command` contributions with `title` defaulting to the name (as `ui-model.ts:206-215` does) and `args` defaulting to `{ "type": "object" }`.
 - Each list sorted by `name` (or `id`), with plain string comparison.
 - Activates no plugin.
@@ -142,14 +142,14 @@ type FlagSpec = { type: 'string' | 'integer' | 'number' | 'boolean' | 'json'; de
 type PositionalSpec = { name: string; description: string; required: boolean }
 type Command = { name: string; summary: string; positionals: PositionalSpec[];
                  flags: Record<string, FlagSpec>; methods: readonly string[];
-                 source: 'kernel' | string; shadowedBy?: string; run(args: ParsedArgs, ctx: Context): Promise<void> }
+                 plugin: string | null; rawArgs?: true; shadowedBy?: string; run(args: ParsedArgs, ctx: Context): Promise<void> }
 usageOf(command): string          // e.g. 'wt create <repoId> <name> [--base <string>]'
 commandHelp(command): string      // SC-16's block: usage, summary, options lines, global line
 ```
 - `usageOf` renders required positionals as `<name>`, optional as `[<name>]`, then required flags as `--name <type>`, optional as `[--name <type>]`, booleans as `[--name]`, enums as `red|blue`, repeatable with a trailing `...`. Global flags are not in the usage line.
 - `commandHelp` options lines: `--<name> <type>`, `required` column, description; then the global line `global: --json prints machine-readable JSON`. The first line still starts with `usage: quirky ` (tests at `cli.e2e.test.ts:301-308` rely on it).
 - Kernel commands' `methods` follow the survey of `ctx.rpc.call` in each command: for example `session new` → `['worktree.list', 'session.create', 'session.createStructured']`, `open` and `help` → `[]`, `ask` → `['ask.create', 'ask.wait', 'ask.cancel']`. A test asserts each listed method exists in `KERNEL_METHOD_SCHEMAS`.
-- Parse-time `required: true` gives `missing required flag --<name>`; run code may keep its own checks.
+- For kernel commands, parse-time `required: true` gives `missing required flag --<name>`; run code may keep its own checks. A command with `rawArgs: true` gets its tokens after the command words unparsed in `args.positionals` (global `--json`, `--help` and `-h` still removed and honored) and parses them itself.
 
 ### Argument parsing ([Global flags](logic.md#help-and-errors), SC-10, SC-11, SC-18, logic D12, D13, D16)
 
@@ -164,21 +164,21 @@ commandHelp(command): string      // SC-16's block: usage, summary, options line
 
 `CONTRACT:`
 - `groupOf(pluginId)`: the ID minus a leading `quirky.` (`BUILTIN_PLUGIN_PREFIX`, `packages/protocol/src/plugins.ts`).
-- `generatedCommands(description: ApiDescription): Command[]`: one per plugin `ApiMethodEntry` (source not `kernel`); `name` = `<group> <method name after '/'>`; `summary` = first line of the description or `''`; `positionals: []`; `methods: [name]`; flags: each top-level property whose `flagNameOf` isn't reserved, typed by its schema (`string`, `integer`, `number`, `boolean`; `enum` from the schema; `array` of a scalar type → that type with `repeatable`; anything else → `json`), `required` from the schema's `required`; plus `params: { type: 'json', description: 'all params as one JSON object' }`.
-- `paramsFromArgs(command, args, schema)`: starts from `--params` (must be a JSON object, else `--params must be a JSON object`), adds each flag under its property name; a property given both ways throws `UsageError('<prop> is given by both --params and --<flag>')`; then `validateValue(schema, params)` and a message throws `UsageError(message)`. Missing required properties that have flags are reported first as `missing required flag --a, --b` (all of them).
+- `generatedCommands(description: ApiDescription): Command[]`: one per `ApiMethodEntry` with a non-null `plugin`; the command's `name` = `<group> <method name after '/'>` (CLI words); `summary` = first line of the description or `''`; `positionals: []`; `methods: [entry.name]` (the RPC wire name, never the command words); flags: each top-level property whose `flagNameOf` isn't reserved, typed by its schema (`string`, `integer`, `number`, `boolean`; `enum` from the schema; `array` of a scalar type → that type with `repeatable`; anything else → `json`), `required` from the schema's `required` (documentation and help only: a generated command never runs the parse-time required check, because `--params` may supply the property); plus `params: { type: 'json', description: 'all params as one JSON object' }`.
+- `paramsFromArgs(command, args, schema)`: starts from `--params` (must be a JSON object, else `--params must be a JSON object`), adds each flag under its property name; a property given both ways throws `UsageError('<prop> is given by both --params and --<flag>')`; then `validateValue(schema, params)` and a message throws `UsageError(message)`. Before `validateValue`, required properties missing from the merged object that have flags are reported as `missing required flag --a, --b` (all of them). When `validateValue`'s failing path starts at a top-level property that came from a flag, the message's `params.<prop>` prefix is replaced with `--<flag>` (`--priority must be at most 5`); a property from `--params` keeps the `params.` path (`params.title must be a string`). A positional token on a generated command is `unexpected argument "<t>"`.
 - `run`: `paramsFromArgs`, then `ctx.rpc.callAny(method, params)`, then `ctx.out.result(result, () => formatGeneric(result))`.
 
 `CONTRACT:` `resolveCommands(kernel: Command[], generated: Command[]): { active: Command[]; shadowed: Command[] }`
-- Generated commands sorted built-ins (`source` starts with `quirky.`) before installed, then by name.
-- A generated command is shadowed by a kernel command whose name equals it or is a word-prefix of it (`status` shadows `status list`), or by an earlier generated command with the same name. `shadowedBy` is set to the winning command's source plus name (for example `kernel status`).
+- Generated commands sorted built-ins (`plugin` starts with `quirky.`) before installed, then by name.
+- A generated command is shadowed by a kernel command whose name equals it or is a word-prefix of it (`status` shadows `status list`), or by an earlier generated command with the same name. `shadowedBy` is set to `kernel <name>` or `<plugin> <name>` of the winner (for example `kernel status`).
 
 `CONTRACT:` `formatGeneric(result: unknown): string` — SC-14's table is the authority. A table's columns are the union of keys whose values are scalars (string, number, boolean, null) in first-seen order, headed with the key upper-cased; non-scalar cells print as compact JSON; `null` cells as `-`.
 
 ### Routing and errors in `run` ([Running a CLI command](logic.md#data-flow), SC-13, SC-15 to SC-19, logic D15, D16, D20)
 
-- `--json` mode is decided by a pre-scan of argv for `--json` (or `--json=true`) before `--`, so errors thrown during routing and parsing are reported in JSON.
+- `--json` mode is decided by a pre-scan of argv before `--`: the last occurrence of `--json`, `--json=true` or `--json=false` wins, as in parsing, and that one value drives both result and error output. Errors thrown during routing and parsing are therefore reported in JSON.
 - Order: `route(argv, COMMANDS)`. Kernel `command` → run as today. Help (`--help`, `-h`, `help` command, no args) for the top level, a kernel command or a group that has kernel commands → offline help as today (`helpText`), with the top-level help ending in `run 'quirky api' to list every command, including plugins'`. Otherwise (`unknown`, `group` without help, or help for a non-kernel group) → `api.describe`, `generatedCommands`, `resolveCommands`, then `route(argv, [...COMMANDS, ...active])`. Still unknown → `UsageError('unknown command "<words>"')` with `suggestions = suggestCommands(words, names of active commands)`.
-- `suggestCommands(words, candidates)`: candidates within Levenshtein distance 2 of the typed words joined by spaces, or that start with them; at most 3, by distance then name. Text mode adds a line `did you mean: quirky <c1>, quirky <c2>`. The typed words are the leading non-flag tokens up to two.
+- `suggestCommands(words, candidates)`: candidates within Levenshtein distance 2 of the typed words joined by spaces, or that start with them, or whose first word equals the typed first word when that word is a known group (SC-15's `acme.notes list`); at most 3, by distance then name. Text mode adds a line `did you mean: quirky <c1>, quirky <c2>`. The typed words are the leading non-flag tokens up to two.
 - Error document under `--json`: `{"error": {"code", "message", "suggestions"?}}` written with `ctx.out.jsonLine` to stdout; nothing on stderr. Codes: `UsageError` → `usage`; `DaemonUnavailableError` → `daemon-unavailable`; `RpcError` by `code`: -32602 `invalid-params`, -32004 `not-found`, -32009 `conflict`, -32601 `method-not-found`, -32001 `unauthorized`, anything else `internal`; any other error → `internal`.
 - A command that has already printed its result and then fails (only `job run`, `packages/cli/src/commands/job.ts:60-75`) throws `CommandFailed`: exit 1, text mode prints `quirky: <message>` to stderr, JSON mode prints nothing more, so stdout stays one JSON document (`job.test.ts` relies on it).
 - Exit codes: 0 ok, 2 `UsageError`, 1 everything else.
@@ -188,13 +188,13 @@ commandHelp(command): string      // SC-16's block: usage, summary, options line
 `SCHEMA:`
 ```
 ApiCatalog = ApiDescription & { commands: ApiCommandEntry[] }
-ApiCommandEntry = { command: string, source: 'kernel' | string, methods: string[], summary: string,
+ApiCommandEntry = { command: string, plugin: string | null, methods: string[], summary: string,
                     usage: string, positionals: { name, description, required }[],
                     flags: { name, type, description, required, repeatable, enum? }[], shadowedBy?: string }
 ```
-- `buildCatalog(description, kernel, resolved)`: every kernel command, every active generated command and every shadowed one (with `shadowedBy`), sorted by `command` then `source`.
+- `buildCatalog(description, kernel, resolved)`: every kernel command, every active generated command and every shadowed one (with `shadowedBy`), sorted by `command`, then kernel first, then `plugin`.
 - `quirky api`: text lists commands grouped by first word, `  <usage>  <summary>`, ends with `<n> methods, <m> events`; `--json` prints the catalog.
-- `quirky api call <method> [--params <json>] [flags]`: a kernel command with a positional `method`; its flags can't be declared statically, so its run code finds the method in `api.describe`, builds a `Command` for it as `generatedCommands` would (kernel methods too) and parses the remaining argv with it. Refuses `connection` methods with `UsageError('<m> needs a live connection and can\'t be called from the CLI')` and missing ones with `UsageError('unknown method <m>')`. `route` hands it the raw rest of argv, so unknown flags are the target method's to judge.
+- `quirky api call <method> [--params <json>] [flags]`: a kernel command with `rawArgs: true` and a declared positional `method` (for help and the catalog); its flags can't be declared statically, so its run code takes the first raw token as the method, finds the method in `api.describe`, builds a `Command` for it as `generatedCommands` would (kernel methods too) and parses the remaining argv with it. Refuses `connection` methods with `UsageError('<m> needs a live connection and can\'t be called from the CLI')` and missing ones with `UsageError('unknown method <m>')`. Unknown flags are the target method's to judge.
 - `renderSkill(catalog)`: frontmatter `name: quirky` and `description:` one line; sections in this order: discovering commands, conventions (`--json`, error document, exit codes), commands by group with one line `quirky <usage>  <summary>` each (active commands only). Deterministic: no timestamps, sorted input, `\n` line ends, trailing newline.
 - `skill install --dir <dir>`: target `<dir>/quirky/SKILL.md`; same bytes → prints `up-to-date` and does not write; otherwise creates the folder, writes a temp file in it and renames, prints `installed`. `skill status --dir <dir>`: `missing`, `stale` or `up-to-date`, exit 0. `--json` prints `{"status": "<s>", "path": "<p>"}` for both. `--dir` is resolved against the cwd and is required.
 
