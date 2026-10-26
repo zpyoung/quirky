@@ -58,21 +58,21 @@ describe('api.describe', () => {
     expect(description.methods.map((m) => m.name)).toEqual(Object.keys(KERNEL_METHOD_SCHEMAS).sort())
     expect(description.methods.every((m) => m.plugin === null)).toBe(true)
     expect(description.methods.filter((m) => m.connection).map((m) => m.name)).toEqual([...CONNECTION_METHODS].sort())
-    expect(description.methods.find((m) => m.name === 'repo.add')).toEqual({
-      name: 'repo.add',
+    expect(description.methods.find((m) => m.name === 'plugin.enable')).toEqual({
+      name: 'plugin.enable',
       plugin: null,
-      description: KERNEL_METHOD_SCHEMAS['repo.add'].description,
-      params: KERNEL_METHOD_SCHEMAS['repo.add'].params,
-      result: KERNEL_METHOD_SCHEMAS['repo.add'].result
+      description: KERNEL_METHOD_SCHEMAS['plugin.enable'].description,
+      params: KERNEL_METHOD_SCHEMAS['plugin.enable'].params,
+      result: KERNEL_METHOD_SCHEMAS['plugin.enable'].result
     })
     expect(description.methods.some((m) => m.name === 'api.describe')).toBe(true)
     expect(description.events.map((e) => e.name)).toEqual(Object.keys(KERNEL_EVENT_SCHEMAS).sort())
     expect(description.events.every((e) => e.plugin === null)).toBe(true)
-    expect(description.events.find((e) => e.name === 'repo.changed')).toEqual({
-      name: 'repo.changed',
+    expect(description.events.find((e) => e.name === 'plugin.changed')).toEqual({
+      name: 'plugin.changed',
       plugin: null,
-      description: KERNEL_EVENT_SCHEMAS['repo.changed'].description,
-      data: KERNEL_EVENT_SCHEMAS['repo.changed'].data
+      description: KERNEL_EVENT_SCHEMAS['plugin.changed'].description,
+      data: KERNEL_EVENT_SCHEMAS['plugin.changed'].data
     })
     expect(description.uiCommands).toEqual([])
   })

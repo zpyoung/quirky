@@ -119,3 +119,27 @@ export function readMarker(marker: string): string[] {
     return []
   }
 }
+
+/**
+ * A plugin that launches a PTY session the way a session plugin does: launch hooks, then the
+ * kernel's environment and argv, then `context.pty.spawn`.
+ */
+export const launcher: { manifest: { id: string } & Record<string, unknown>; behavior: ModuleBehavior } = {
+  manifest: { id: 'acme.launcher', contributes: { method: [{ id: 'launch', params: { type: 'object', additionalProperties: true } }] } },
+  behavior: {
+    activate: `context.provide('method:acme.launcher/launch', async (p) => {
+      const sessionId = 's_' + Math.random().toString(36).slice(2, 8)
+      const additions = await context.launch.hooks({ sessionId, worktreeId: 'wt_1', repoId: 'repo_1', cwd: '/tmp', agent: p.agent, prompt: p.prompt })
+      const extra = additions.args.map((arg) => " '" + arg + "'").join('')
+      const command = 'claude' + extra + (p.prompt ? " '" + p.prompt + "'" : '')
+      await context.pty.spawn(sessionId, {
+        argv: p.agent === 'shell' ? context.launch.shellArgv() : context.launch.commandArgv(command),
+        cwd: '/tmp',
+        env: context.launch.env({ sessionId, worktreeId: 'wt_1', agent: p.agent, envPatch: additions.env }),
+        cols: 80,
+        rows: 24
+      })
+      return { id: sessionId }
+    })`
+  }
+}

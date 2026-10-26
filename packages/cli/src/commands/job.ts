@@ -1,7 +1,6 @@
 import { formatDuration, type JobRun } from '@quirky/protocol'
-import { CommandFailed } from '../args'
+import { CommandFailed, takePositionals } from '../args'
 import { formatTable } from '../output'
-import { takePositionals } from './support'
 import type { Command } from './types'
 
 const pad = (value: number, width = 2) => String(Math.abs(value)).padStart(width, '0')

@@ -43,11 +43,11 @@ function setup() {
       kernelCalls.push({ method: 'status.get', params, conn })
       return { fromKernel: true }
     },
-    'repo.list': () => undefined,
+    'job.list': () => undefined,
     'client.hello': () => ({ ok: true }),
     'events.subscribe': () => ({ ok: true }),
-    'terminal.attach': () => ({ ok: true }),
-    'terminal.detach': () => ({ ok: true })
+    'ui.report': () => ({ ok: true }),
+    'ui.window.focused': () => ({ ok: true })
   } as unknown as Handlers
   const dispatcher = new Dispatcher(handlers, host, (message) => logs.push(message))
   const conn = (overrides: Partial<ClientConn> = {}): ClientConn => ({
@@ -56,7 +56,9 @@ function setup() {
     name: 'tester',
     subscribed: true,
     closed: false,
+    transport: 'websocket',
     streams: new Map(),
+    streamClosers: new Map(),
     nextStreamId: 1,
     sendText() {},
     sendBinary() {},
@@ -100,14 +102,14 @@ describe('Dispatcher', () => {
   test('a kernel handler that returns undefined yields null', async () => {
     const t = setup()
     t.host.load()
-    expect(await t.dispatcher.dispatch('repo.list', {}, { conn: t.conn() })).toBeNull()
+    expect(await t.dispatcher.dispatch('job.list', {}, { conn: t.conn() })).toBeNull()
   })
 
   const connectionCalls: [string, Record<string, unknown>][] = [
     ['client.hello', { role: 'cli', protocolVersion: 1 }],
     ['events.subscribe', {}],
-    ['terminal.attach', { sessionId: 's1', cols: 80, rows: 24 }],
-    ['terminal.detach', { streamId: 1 }]
+    ['ui.report', { slot: 'view:acme.tools/main', state: null }],
+    ['ui.window.focused', { focused: true }]
   ]
   test.each(connectionCalls)(
     '%s is refused from a plugin',

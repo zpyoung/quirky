@@ -1,0 +1,173 @@
+{
+  "id": "quirky.ask",
+  "name": "Questions",
+  "version": "0.1.0",
+  "description": "Questions an agent or the kernel puts to the person at the window, with answers returned to whoever is waiting.",
+  "main": "main.ts",
+  "cli": "cli.ts",
+  "ui": "dist/ui.js",
+  "activation": "lazy",
+  "contributes": {
+    "method": [
+      {
+        "id": "create",
+        "description": "Registers a question for the user and returns its ID. Session and worktree default to the caller's.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "spec": { "type": "object", "additionalProperties": true, "description": "The ask: an optional title and its questions." },
+            "session": { "type": "string" },
+            "worktree": { "type": "string", "description": "A worktree ID." }
+          },
+          "required": ["spec"]
+        },
+        "result": {
+          "type": "object",
+          "properties": { "askId": { "type": "string" } },
+          "required": ["askId"]
+        }
+      },
+      {
+        "id": "wait",
+        "description": "Long-polls up to `timeoutMs` (max 60000); returns status `pending` if still unanswered. `timeoutMs: 0` returns the current envelope at once.",
+        "readOnly": true,
+        "params": {
+          "type": "object",
+          "properties": { "askId": { "type": "string" }, "timeoutMs": { "type": "integer", "minimum": 0 } },
+          "required": ["askId"]
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "status": { "type": "string", "enum": ["pending", "answered", "partial", "declined", "timed_out"] },
+            "askId": { "type": "string" },
+            "answers": { "type": "object", "additionalProperties": true, "description": "Answers by question ID." },
+            "skipped": { "type": "array", "items": { "type": "string" } }
+          },
+          "required": ["status", "askId", "answers", "skipped"]
+        }
+      },
+      {
+        "id": "answer",
+        "description": "Answers an ask.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "askId": { "type": "string" },
+            "answers": { "type": "object", "additionalProperties": true, "description": "Answers by question ID." },
+            "skipped": { "type": "array", "items": { "type": "string" } }
+          },
+          "required": ["askId", "answers"]
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "status": { "type": "string", "enum": ["pending", "answered", "partial", "declined", "timed_out"] },
+            "askId": { "type": "string" },
+            "answers": { "type": "object", "additionalProperties": true },
+            "skipped": { "type": "array", "items": { "type": "string" } }
+          },
+          "required": ["status", "askId", "answers", "skipped"]
+        }
+      },
+      {
+        "id": "cancel",
+        "description": "Declines an ask.",
+        "params": {
+          "type": "object",
+          "properties": { "askId": { "type": "string" } },
+          "required": ["askId"]
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "status": { "type": "string", "enum": ["pending", "answered", "partial", "declined", "timed_out"] },
+            "askId": { "type": "string" },
+            "answers": { "type": "object", "additionalProperties": true },
+            "skipped": { "type": "array", "items": { "type": "string" } }
+          },
+          "required": ["status", "askId", "answers", "skipped"]
+        }
+      },
+      {
+        "id": "list",
+        "description": "Asks, optionally only the pending ones.",
+        "readOnly": true,
+        "params": {
+          "type": "object",
+          "properties": { "pendingOnly": { "type": "boolean" } }
+        },
+        "result": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": { "type": "string" },
+              "spec": { "type": "object", "additionalProperties": true },
+              "sessionId": { "description": "The asking session, or null." },
+              "worktreeId": { "description": "The asking worktree, or null." },
+              "createdAt": { "type": "number" },
+              "envelope": { "type": "object", "additionalProperties": true }
+            },
+            "required": ["id", "spec", "sessionId", "worktreeId", "createdAt", "envelope"]
+          }
+        }
+      }
+    ],
+    "event": [
+      {
+        "id": "created",
+        "description": "A new ask is waiting for the user.",
+        "data": {
+          "type": "object",
+          "properties": { "ask": { "type": "object", "additionalProperties": true } },
+          "required": ["ask"]
+        }
+      },
+      {
+        "id": "resolved",
+        "description": "An ask was answered, declined or timed out.",
+        "data": {
+          "type": "object",
+          "properties": {
+            "askId": { "type": "string" },
+            "envelope": { "type": "object", "additionalProperties": true }
+          },
+          "required": ["askId", "envelope"]
+        }
+      }
+    ],
+    "panel": [{ "id": "questions", "title": "Questions" }],
+    "cli-command": [
+      {
+        "id": "ask",
+        "words": "",
+        "summary": "ask the user questions and wait for the answers (same output shape as `orca ask`); on --timeout-ms the ask is cancelled and printed as timed_out",
+        "flags": {
+          "spec": { "type": "string", "description": "ask spec as JSON, or @path to a file", "required": true },
+          "timeout-ms": { "type": "integer", "description": "give up after this many milliseconds" }
+        },
+        "methods": ["quirky.ask/create", "quirky.ask/wait", "quirky.ask/cancel"]
+      },
+      {
+        "id": "wait",
+        "words": "wait",
+        "summary": "resume waiting for an ask; on --timeout-ms the ask is cancelled and printed as timed_out",
+        "flags": {
+          "id": { "type": "string", "description": "the ask to resume", "required": true },
+          "timeout-ms": { "type": "integer", "description": "give up after this many milliseconds" }
+        },
+        "methods": ["quirky.ask/wait", "quirky.ask/cancel"]
+      },
+      {
+        "id": "cancel",
+        "words": "cancel",
+        "summary": "cancel a pending ask and print its envelope",
+        "flags": {
+          "id": { "type": "string", "description": "the ask to cancel", "required": true }
+        },
+        "methods": ["quirky.ask/cancel"]
+      }
+    ]
+  }
+}

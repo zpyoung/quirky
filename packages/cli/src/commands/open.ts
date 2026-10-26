@@ -1,4 +1,4 @@
-import { takePositionals } from './support'
+import { takePositionals } from '../args'
 import type { Command } from './types'
 
 export const open: Command = {

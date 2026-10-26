@@ -5,7 +5,7 @@ import { ensureDaemon, quirkyHome, rpcUrl, type RuntimeInfo } from '@quirky/prot
 import { BrowserWindow, Tray, Utils, app } from 'electrobun/main'
 import { maintainConnection } from './connection'
 import { setDockBadge } from './dock'
-import { badgeLabel, createBadgeUpdater, notificationFor, shouldRefreshBadge } from './events'
+import { badgeLabel, createBadgeUpdater, loadBadgeInputs, notificationFor, shouldRefreshBadge } from './events'
 import { daemonUrl, errorPageHtml } from './page'
 import { resolveRuntimeEnv } from './paths'
 
@@ -91,12 +91,9 @@ tray.on('tray-clicked', (event) => {
 let client: QuirkyClient | null = null
 const badge = createBadgeUpdater({
   load: async () => {
-    if (!client) throw new Error('not connected')
-    const [sessions, asks] = await Promise.all([
-      client.call('session.list', {}),
-      client.call('ask.list', { pendingOnly: true })
-    ])
-    return { sessions, asks }
+    const connected = client
+    if (!connected) throw new Error('not connected')
+    return loadBadgeInputs((method, params) => connected.callAny(method, params))
   },
   apply: (count) => setDockBadge(badgeLabel(count))
 })

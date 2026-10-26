@@ -1,0 +1,13 @@
+{
+  "id": "sample.sidebar",
+  "name": "Flat worktree sidebar",
+  "version": "1.0.0",
+  "description": "Replaces the worktree sidebar section with one flat list of every worktree.",
+  "ui": "ui.js",
+  "overrides": [
+    {
+      "id": "sidebar-section:quirky.worktree/worktrees",
+      "title": "Worktrees (flat)"
+    }
+  ]
+}

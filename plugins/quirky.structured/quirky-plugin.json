@@ -1,0 +1,115 @@
+{
+  "id": "quirky.structured",
+  "name": "Structured sessions",
+  "version": "0.1.0",
+  "description": "Background Claude sessions without a terminal: journaled messages and permission prompts as asks.",
+  "main": "main.ts",
+  "activation": "lazy",
+  "dependencies": ["quirky.session", "quirky.ask"],
+  "contributes": {
+    "method": [
+      {
+        "id": "create",
+        "description": "Starts a structured (no PTY) background agent session; only `claude` is supported.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "worktree": { "type": "string", "description": "A worktree selector; defaults to the caller's worktree." },
+            "agent": {
+              "type": "string",
+              "enum": ["shell", "claude", "codex", "opencode", "gemini"],
+              "description": "The agent to run."
+            },
+            "prompt": { "type": "string" }
+          },
+          "required": ["agent", "prompt"]
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "id": { "type": "string" },
+            "kind": { "type": "string", "enum": ["terminal", "structured"] },
+            "agent": { "type": "string", "enum": ["shell", "claude", "codex", "opencode", "gemini"], "description": "The agent to run." },
+            "worktreeId": { "type": "string" },
+            "cwd": { "type": "string" },
+            "title": { "type": "string" },
+            "status": { "type": "string", "enum": ["starting", "running", "working", "waiting", "done", "exited"] },
+            "createdAt": { "type": "number" },
+            "lastActivityAt": { "type": "number" },
+            "exitCode": { "description": "The exit code, or null while the process is alive." }
+          },
+          "required": ["id", "kind", "agent", "worktreeId", "cwd", "title", "status", "createdAt", "lastActivityAt", "exitCode"]
+        }
+      },
+      {
+        "id": "messages",
+        "description": "The messages of a structured session, optionally only those after `afterSeq`.",
+        "readOnly": true,
+        "params": {
+          "type": "object",
+          "properties": {
+            "session": { "type": "string" },
+            "afterSeq": { "type": "integer", "minimum": 0 }
+          },
+          "required": ["session"]
+        },
+        "result": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "sessionId": { "type": "string" },
+              "seq": { "type": "integer" },
+              "role": { "type": "string", "enum": ["user", "assistant", "tool", "system", "result"] },
+              "text": { "type": "string" },
+              "data": { "description": "The agent's raw event." },
+              "at": { "type": "number" }
+            },
+            "required": ["sessionId", "seq", "role", "text", "at"]
+          }
+        }
+      },
+      {
+        "id": "send",
+        "description": "Sends a message to a structured session.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "session": { "type": "string" },
+            "text": { "type": "string" }
+          },
+          "required": ["session", "text"]
+        },
+        "result": {
+          "type": "object",
+          "properties": { "ok": { "type": "boolean" } },
+          "required": ["ok"]
+        }
+      }
+    ],
+    "event": [
+      {
+        "id": "message",
+        "description": "A message was added to a structured session.",
+        "data": {
+          "type": "object",
+          "properties": {
+            "message": {
+              "type": "object",
+              "properties": {
+                "sessionId": { "type": "string" },
+                "seq": { "type": "integer" },
+                "role": { "type": "string", "enum": ["user", "assistant", "tool", "system", "result"] },
+                "text": { "type": "string" },
+                "data": { "description": "The agent's raw event." },
+                "at": { "type": "number" }
+              },
+              "required": ["sessionId", "seq", "role", "text", "at"]
+            }
+          },
+          "required": ["message"]
+        }
+      }
+    ]
+  }
+}

@@ -1,20 +1,36 @@
 import { parseArgs, type ParsedArgs } from '../args'
 import { commandHelp, usageOf } from '../command-spec'
 import { api, apiCall } from './api'
-import { ask, askCancel, askWait } from './ask'
 import { jobList, jobRun } from './job'
+import { daemonRestart } from './daemon'
+import { distroInspect, distroInstall, distroList, distroRemove } from './distro'
 import { open } from './open'
-import { pluginActivate, pluginContributions, pluginDisable, pluginEnable, pluginList } from './plugin'
-import { repoAdd, repoList, repoRm } from './repo'
-import { sessionClose, sessionList, sessionNew } from './session'
+import {
+  pluginActivate,
+  pluginContributions,
+  pluginDisable,
+  pluginEnable,
+  pluginInspect,
+  pluginInstall,
+  pluginList,
+  pluginUninstall
+} from './plugin'
 import { settingGet, settingList, settingReset, settingSet } from './setting'
 import { skillInstall, skillShow, skillStatus } from './skill'
 import { status } from './status'
-import { termRead, termSend } from './term'
 import { themeList, themeSet } from './theme'
-import { uiContributions } from './ui'
+import {
+  uiClosePanel,
+  uiCloseView,
+  uiContributions,
+  uiFocus,
+  uiOpenPanel,
+  uiOpenView,
+  uiRun,
+  uiSidebar,
+  uiState
+} from './ui'
 import type { Command, Context } from './types'
-import { wtCreate, wtList, wtRm } from './worktree'
 
 export const USAGE_LINE = 'usage: quirky [--json] <command> [options]'
 
@@ -32,34 +48,36 @@ const help: Command = {
 
 export const COMMANDS: Command[] = [
   status,
-  repoAdd,
-  repoList,
-  repoRm,
-  wtList,
-  wtCreate,
-  wtRm,
-  sessionList,
-  sessionNew,
-  sessionClose,
-  termRead,
-  termSend,
   pluginList,
   pluginContributions,
   pluginEnable,
   pluginDisable,
   pluginActivate,
+  pluginInspect,
+  pluginInstall,
+  pluginUninstall,
+  distroInspect,
+  distroInstall,
+  distroList,
+  distroRemove,
+  daemonRestart,
   jobList,
   jobRun,
   uiContributions,
+  uiState,
+  uiOpenView,
+  uiCloseView,
+  uiOpenPanel,
+  uiClosePanel,
+  uiSidebar,
+  uiFocus,
+  uiRun,
   settingList,
   settingGet,
   settingSet,
   settingReset,
   themeList,
   themeSet,
-  ask,
-  askWait,
-  askCancel,
   open,
   api,
   apiCall,
@@ -69,9 +87,9 @@ export const COMMANDS: Command[] = [
   help
 ]
 
-const GLOBAL_TOKENS = new Set(['--json', '--json=true', '--json=false', '--help', '-h'])
+const GLOBAL_TOKENS = new Set(['--json', '--json=true', '--json=false', '--help', '-h', '--yes', '--version', '-v'])
 
-/** True for the switches every command accepts: `--json` (with or without a value), `--help` and `-h`. */
+/** True for the switches every command accepts: `--json` (with or without a value), `--help`, `-h`, `--yes`, `--version` and `-v`. */
 export function isGlobalToken(token: string): boolean {
   return GLOBAL_TOKENS.has(token)
 }
@@ -123,11 +141,12 @@ export function helpText(topic: readonly string[] = [], commands: readonly Comma
   const exact = commands.find((command) => command.name === name)
   if (exact) return commandHelp(exact)
   const group = name ? commands.filter((command) => command.name.startsWith(`${name} `)) : []
-  const listed = group.length ? group : commands
+  const listed = group.length ? group : commands.filter((command) => command.aliasOf === undefined)
   const usages = listed.map(usageOf)
   const width = Math.max(...usages.map((usage) => usage.length))
   const lines = listed.map((command, i) => `  ${usages[i].padEnd(width)}  ${command.summary}`)
-  const footer = 'global: --json prints machine-readable JSON; <command> --help shows one command'
+  const footer =
+    'global: --json prints machine-readable JSON; --yes skips confirmations; --retry-request <id> reissues a call; --version prints the version; <command> --help shows one command'
   if (group.length) return [`usage: quirky ${name} <command>`, '', 'commands:', ...lines, '', footer].join('\n')
   return [USAGE_LINE, '', 'commands:', ...lines, '', footer, "run 'quirky api' to list every command, including plugins'"].join('\n')
 }

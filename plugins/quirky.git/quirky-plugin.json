@@ -1,0 +1,225 @@
+{
+  "id": "quirky.git",
+  "name": "Source control",
+  "version": "0.1.0",
+  "description": "Branch status, diffs, staging and commits for a worktree.",
+  "main": "main.ts",
+  "ui": "dist/ui.js",
+  "activation": "lazy",
+  "dependencies": [
+    "quirky.worktree"
+  ],
+  "contributes": {
+    "method": [
+      {
+        "id": "status",
+        "description": "A worktree's branch, upstream and changed files.",
+        "readOnly": true,
+        "params": {
+          "type": "object",
+          "properties": {
+            "worktree": {
+              "type": "string",
+              "description": "Worktree selector (id, name, branch, path: or current); defaults to the caller's worktree."
+            }
+          }
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "branch": {},
+            "upstream": {},
+            "ahead": {
+              "type": "integer"
+            },
+            "behind": {
+              "type": "integer"
+            },
+            "files": {
+              "type": "array",
+              "items": {
+                "type": "object"
+              }
+            }
+          },
+          "required": [
+            "branch",
+            "upstream",
+            "ahead",
+            "behind",
+            "files"
+          ]
+        }
+      },
+      {
+        "id": "diff",
+        "description": "Both sides of a file diff; with `staged`, HEAD against the index, else the index against the working tree.",
+        "readOnly": true,
+        "params": {
+          "type": "object",
+          "properties": {
+            "worktree": {
+              "type": "string",
+              "description": "Worktree selector (id, name, branch, path: or current); defaults to the caller's worktree."
+            },
+            "path": {
+              "type": "string"
+            },
+            "staged": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "path"
+          ]
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "path": {
+              "type": "string"
+            },
+            "staged": {
+              "type": "boolean"
+            },
+            "original": {
+              "type": "string"
+            },
+            "modified": {
+              "type": "string"
+            },
+            "binary": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "path",
+            "staged",
+            "original",
+            "modified",
+            "binary"
+          ]
+        }
+      },
+      {
+        "id": "stage",
+        "description": "Stages files.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "worktree": {
+              "type": "string",
+              "description": "Worktree selector (id, name, branch, path: or current); defaults to the caller's worktree."
+            },
+            "paths": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          "required": [
+            "paths"
+          ]
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "ok": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "ok"
+          ]
+        }
+      },
+      {
+        "id": "unstage",
+        "description": "Unstages files.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "worktree": {
+              "type": "string",
+              "description": "Worktree selector (id, name, branch, path: or current); defaults to the caller's worktree."
+            },
+            "paths": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          "required": [
+            "paths"
+          ]
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "ok": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "ok"
+          ]
+        }
+      },
+      {
+        "id": "commit",
+        "description": "Commits the staged changes.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "worktree": {
+              "type": "string",
+              "description": "Worktree selector (id, name, branch, path: or current); defaults to the caller's worktree."
+            },
+            "message": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "message"
+          ]
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "sha": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "sha"
+          ]
+        }
+      }
+    ],
+    "event": [
+      {
+        "id": "changed",
+        "description": "A worktree's git state changed.",
+        "data": {
+          "type": "object",
+          "properties": {
+            "worktreeId": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "worktreeId"
+          ]
+        }
+      }
+    ],
+    "panel": [
+      {
+        "id": "source-control",
+        "title": "Source control"
+      }
+    ]
+  }
+}

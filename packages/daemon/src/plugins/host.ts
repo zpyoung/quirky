@@ -1,3 +1,4 @@
+import { mkdirSync, rmSync, symlinkSync } from 'node:fs'
 import { join } from 'node:path'
 import {
   formatContributionId,
@@ -12,8 +13,14 @@ import {
 } from '@quirky/protocol'
 import { conflict, invalidParams, notFound } from '../errors'
 import type { Store } from '../store'
+import { resolveCliAliases, type CliAliasResolution } from './cli-catalog'
 import { discoverPlugins, type DiscoveredPlugin } from './discover'
 import { computeRegistry, type Registry, type RegistryPlugin } from './registry'
+
+type ExtensionMembers = Pick<
+  PluginContext,
+  'dataDir' | 'emit' | 'subscribe' | 'call' | 'openStore' | 'getSetting' | 'error' | 'home' | 'pty' | 'notify' | 'launch'
+>
 
 /** The daemon-side half of a plugin's context, created and torn down per activation attempt. */
 export type ContextExtension = {
@@ -24,7 +31,7 @@ export type ContextExtension = {
   create(
     plugin: { id: string; dir: string },
     isRevoked: () => boolean
-  ): Pick<PluginContext, 'dataDir' | 'emit' | 'subscribe' | 'call' | 'openStore' | 'getSetting' | 'error'>
+  ): ExtensionMembers
   /** Runs once per attempt that called `create`, after the module's `deactivate` settles. */
   revoke(pluginId: string): void
 }
@@ -39,6 +46,10 @@ export type PluginHostOptions = {
   log(message: string): void
   /** Bounds each activation and each deactivate; defaults to 10 seconds. */
   activationTimeoutMs?: number
+  /** True in safe mode: only built-ins load and nothing stored disables or layers anything. */
+  safeMode?: boolean
+  /** IDs the installed distro turns off. */
+  distroDisabled?: () => string[]
   /** Supplies the context members the host cannot; without it they throw or return defaults. */
   extension?: ContextExtension
   /**
@@ -76,6 +87,8 @@ type Runtime = {
 
 class TimedOut extends Error {}
 
+let hostSerial = 0
+
 function compare(a: string, b: string): number {
   return a < b ? -1 : a > b ? 1 : 0
 }
@@ -103,7 +116,19 @@ export class PluginHost {
   private registry: Registry = computeRegistry([], new Set())
   private readonly runtimes = new Map<string, Runtime>()
   private derivedDiagnostics = new Map<string, PluginDiagnostic[]>()
+  private cliAliases: CliAliasResolution = { accepted: new Map(), dropped: new Map() }
   private activationOrder: string[] = []
+  /** Why each disabled plugin is off, as of the last recompute. */
+  private disabledSets = { user: new Set<string>(), distro: new Set<string>(), safeMode: new Set<string>() }
+  /** Plugins whose directory is being swapped; they can't activate until the rescan that follows. */
+  private readonly replacing = new Set<string>()
+  /**
+   * Bumped when a plugin is released. Bun caches a module by its path, helpers included, so an
+   * installed plugin's later generations import through a fresh symlink to its directory instead.
+   */
+  private readonly generations = new Map<string, number>()
+  private readonly generationLinks = new Map<string, string>()
+  private readonly serial = ++hostSerial
   private queue: Promise<unknown> = Promise.resolve()
   private stopped = false
   private readonly timeoutMs: number
@@ -123,9 +148,52 @@ export class PluginHost {
     await Promise.allSettled(this.startupCandidates().map((id) => this.activateQuietly(id)))
   }
 
+  /**
+   * Re-runs discovery and recomputes the registry, deactivates plugins that vanished, changed
+   * version or are no longer enabled (and the plugins that depend on them), starts new `startup`
+   * plugins and broadcasts `plugin.changed`. Calls run one at a time with `setEnabled`.
+   */
+  rescan(): Promise<void> {
+    return this.enqueue(() => this.applyRescan())
+  }
+
+  /**
+   * Deactivates `pluginId`, runs `change` (which replaces or deletes its directory), then rescans.
+   * The plugin can't activate in between, so a same-version reinstall never runs half-swapped code,
+   * and its next activation loads the code `change` left behind.
+   */
+  replacePlugin(pluginId: string, change: () => void | Promise<void>): Promise<void> {
+    return this.replacePlugins([pluginId], change)
+  }
+
+  /** Like `replacePlugin` for several plugins swapped by one `change`, whatever their versions. */
+  replacePlugins(pluginIds: string[], change: () => void | Promise<void>): Promise<void> {
+    return this.enqueue(async () => {
+      for (const id of pluginIds) this.replacing.add(id)
+      try {
+        await this.release(new Set(pluginIds))
+        await change()
+      } finally {
+        for (const id of pluginIds) this.replacing.delete(id)
+        await this.applyRescan()
+      }
+    })
+  }
+
   /** Every discovered entry sorted by ID, built-in first; a duplicate ID appears once per source. */
   list(): PluginInfo[] {
     return this.registry.entries.map((entry) => this.infoOf(entry))
+  }
+
+  /** The `cli` module path and declared `cliAliases` of a plugin's manifest; empty for an unknown or unparsable plugin. */
+  cliOf(pluginId: string): { cli?: string; cliAliases: string[] } {
+    const manifest = this.registry.plugins.get(pluginId)?.discovered.manifest
+    return { ...(manifest?.cli === undefined ? {} : { cli: manifest.cli }), cliAliases: manifest?.cliAliases ?? [] }
+  }
+
+  /** The declared aliases of a plugin that lost a collision check, each with the reason. */
+  droppedCliAliases(pluginId: string): { alias: string; reason: string }[] {
+    return this.cliAliases.dropped.get(pluginId) ?? []
   }
 
   /** The contributions in effect, or every declaration with `all`, optionally narrowed by kind or declaring plugin. */
@@ -187,9 +255,7 @@ export class PluginHost {
    * enabling activates newly enabled startup plugins. Idempotent.
    */
   setEnabled(id: string, enabled: boolean): Promise<void> {
-    const run = this.queue.then(() => this.applyEnabled(id, enabled))
-    this.queue = run.catch(() => undefined)
-    return run
+    return this.enqueue(() => this.applyEnabled(id, enabled))
   }
 
   /** Appends a warning to a plugin's diagnostics until it next activates. Ignored for an unknown plugin. */
@@ -205,10 +271,25 @@ export class PluginHost {
     await this.queue
     await Promise.allSettled([...this.runtimes.values()].map((runtime) => runtime.inflight))
     for (const id of [...this.activationOrder].reverse()) await this.deactivate(id)
+    for (const id of [...this.generationLinks.keys()]) this.removeLink(id)
+  }
+
+  private enqueue(work: () => Promise<void>): Promise<void> {
+    const run = this.queue.then(work)
+    this.queue = run.catch(() => undefined)
+    return run
   }
 
   private recompute(): void {
-    this.registry = computeRegistry(this.discovered, new Set(this.options.store.listDisabledIds()))
+    const safeMode = this.options.safeMode === true
+    const user = new Set(safeMode ? [] : this.options.store.listDisabledIds())
+    const distro = new Set(safeMode ? [] : (this.options.distroDisabled?.() ?? []))
+    const inSafeMode = new Set(
+      safeMode ? this.discovered.filter((plugin) => plugin.source === 'installed' && plugin.errors.length === 0).map((plugin) => plugin.id) : []
+    )
+    this.disabledSets = { user, distro, safeMode: inSafeMode }
+    this.registry = computeRegistry(this.discovered, new Set([...user, ...inSafeMode]), [...distro])
+    this.cliAliases = this.resolveAliases()
     this.derivedDiagnostics = new Map()
     const derive = this.options.deriveDiagnostics
     if (!derive) return
@@ -217,6 +298,21 @@ export class PluginHost {
     } catch (error) {
       this.options.log(`deriving plugin diagnostics failed: ${messageOf(error)}`)
     }
+  }
+
+  /** Alias collisions among the plugins whose CLI group exists: those with a command or method in effect. */
+  private resolveAliases(): CliAliasResolution {
+    const owners = new Set(
+      [...this.registry.effective.values()]
+        .filter((item) => item.kind === 'cli-command' || item.kind === 'method')
+        .map((item) => item.plugin)
+    )
+    const claimants = [...owners].flatMap((id) => {
+      const entry = this.registry.plugins.get(id)
+      if (!entry || entry.status === 'invalid') return []
+      return [{ id, source: entry.discovered.source, aliases: entry.discovered.manifest?.cliAliases ?? [] }]
+    })
+    return resolveCliAliases(claimants)
   }
 
   private runtimeOf(id: string): Runtime {
@@ -247,12 +343,14 @@ export class PluginHost {
     const primary = this.registry.plugins.get(discovered.id) === entry
     const runtime = primary ? this.runtimes.get(discovered.id) : undefined
     const state = status === 'enabled' ? (runtime?.state ?? 'inactive') : status
-    const diagnostics = [...entry.diagnostics]
+    const reason = status === 'disabled' && primary ? this.disabledReasonOf(discovered.id) : undefined
+    const diagnostics = entry.diagnostics.map((item) => this.explainDisable(item, reason))
     if (primary) diagnostics.push(...(this.derivedDiagnostics.get(discovered.id) ?? []))
     if (status === 'enabled' && runtime?.state === 'failed' && runtime.error) {
       diagnostics.push({ level: 'error', message: runtime.error })
     }
     diagnostics.push(...(runtime?.warnings ?? []))
+    const aliases = primary ? (this.cliAliases.accepted.get(discovered.id) ?? []) : []
     return {
       id: discovered.id,
       name: manifest?.name ?? discovered.id,
@@ -264,8 +362,25 @@ export class PluginHost {
       dependencies: manifest?.dependencies ?? [],
       ...(manifest?.ui === undefined ? {} : { ui: manifest.ui }),
       state,
+      ...(aliases.length === 0 ? {} : { cliAliases: aliases }),
+      ...(reason === undefined ? {} : { disabledReason: reason }),
       diagnostics
     }
+  }
+
+  private disabledReasonOf(id: string): NonNullable<PluginInfo['disabledReason']> {
+    if (this.disabledSets.safeMode.has(id)) return 'safe-mode'
+    if (this.disabledSets.user.has(id)) return 'user'
+    if (this.disabledSets.distro.has(id)) return 'distro'
+    return 'dependency'
+  }
+
+  /** The registry words every direct disable as the user's; say whose it actually is. */
+  private explainDisable(item: PluginDiagnostic, reason: PluginInfo['disabledReason']): PluginDiagnostic {
+    if (item.message !== 'disabled by the user') return item
+    if (reason === 'safe-mode') return { ...item, message: 'disabled by safe mode' }
+    if (reason === 'distro') return { ...item, message: 'disabled by the distro' }
+    return item
   }
 
   private startupCandidates(): string[] {
@@ -293,6 +408,7 @@ export class PluginHost {
     if (runtime.state === 'active') return
     if (runtime.state === 'activating') return runtime.inflight
     if (this.stopped) throw conflict('the plugin host is stopped')
+    if (this.replacing.has(id)) throw conflict(`${id} is being replaced`)
     runtime.error = undefined
     runtime.warnings = []
     this.setState(runtime, 'activating')
@@ -355,7 +471,7 @@ export class PluginHost {
     const manifest = discovered.manifest!
     if (manifest.main === undefined) return
     const context = this.contextFor(entry, attempt)
-    const mainPath = join(discovered.dir, manifest.main)
+    const mainPath = join(this.importRootOf(entry), manifest.main)
     await withTimeout(
       async () => {
         const loaded = (await import(mainPath)) as Partial<PluginModule>
@@ -367,6 +483,29 @@ export class PluginHost {
       this.timeoutMs,
       `activation timed out after ${this.timeoutMs} ms`
     )
+  }
+
+  /** The directory to import a plugin's code from: its own for generation 0 and built-ins, else a link made for this generation. */
+  private importRootOf({ discovered }: RegistryPlugin): string {
+    const generation = this.generations.get(discovered.id) ?? 0
+    if (generation === 0 || discovered.source !== 'installed') return discovered.dir
+    const existing = this.generationLinks.get(discovered.id)
+    if (existing !== undefined && existing.endsWith(`-${generation}`)) return existing
+    const linkDir = join(this.options.installedDir, '.run')
+    const link = join(linkDir, `${discovered.id}-${process.pid}-${this.serial}-${generation}`)
+    mkdirSync(linkDir, { recursive: true })
+    rmSync(link, { recursive: true, force: true })
+    symlinkSync(discovered.dir, link, 'dir')
+    this.removeLink(discovered.id)
+    this.generationLinks.set(discovered.id, link)
+    return link
+  }
+
+  private removeLink(id: string): void {
+    const link = this.generationLinks.get(id)
+    if (link === undefined) return
+    this.generationLinks.delete(id)
+    rmSync(link, { force: true })
   }
 
   private contextFor(entry: RegistryPlugin, attempt: Attempt): PluginContext {
@@ -381,8 +520,21 @@ export class PluginHost {
     // marked live before create runs: a create that throws after partial setup still needs its revoke
     if (this.options.extension) attempt.extensionLive = true
     const created = this.options.extension?.create({ id, dir: discovered.dir }, () => attempt.revoked)
-    const defaults: Pick<PluginContext, 'dataDir' | 'emit' | 'subscribe' | 'call' | 'openStore' | 'getSetting' | 'error'> = {
+    const unavailable = (member: string) => () => {
+      throw new Error(`${id}: context.${member} is not available`)
+    }
+    const unavailableObject = <T extends object>(member: string): T =>
+      new Proxy({} as T, {
+        get() {
+          throw new Error(`${id}: context.${member} is not available`)
+        }
+      })
+    const defaults: ExtensionMembers = {
       dataDir: '',
+      home: '',
+      pty: unavailableObject<PluginContext['pty']>('pty'),
+      launch: unavailableObject<PluginContext['launch']>('launch'),
+      notify: unavailable('notify'),
       emit: () => {
         throw new Error(`${id}: context.emit is not available`)
       },
@@ -448,6 +600,53 @@ export class PluginHost {
     }
     if (enabled) await Promise.allSettled(this.startupCandidates().map((pluginId) => this.activateQuietly(pluginId)))
     this.changed()
+  }
+
+  private async applyRescan(): Promise<void> {
+    const previous = new Map(this.registry.plugins)
+    this.load()
+    const stale = new Set<string>()
+    for (const id of this.runtimes.keys()) {
+      const before = previous.get(id)?.discovered
+      const entry = this.registry.plugins.get(id)
+      const now = entry?.discovered
+      if (
+        !entry ||
+        entry.status !== 'enabled' ||
+        before?.manifest?.version !== now?.manifest?.version ||
+        before?.source !== now?.source
+      ) {
+        stale.add(id)
+      }
+    }
+    await this.release(stale)
+    if (!this.stopped) await Promise.allSettled(this.startupCandidates().map((id) => this.activateQuietly(id)))
+    this.changed()
+  }
+
+  /** Deactivates these plugins and every running plugin that depends on them, then forgets their runtime state. */
+  private async release(ids: Set<string>): Promise<void> {
+    const released = new Set(ids)
+    for (let grew = true; grew; ) {
+      grew = false
+      for (const [id, runtime] of this.runtimes) {
+        if (released.has(id) || runtime.state === 'inactive') continue
+        const dependencies = this.registry.plugins.get(id)?.discovered.manifest?.dependencies ?? []
+        if (dependencies.some((dependency) => released.has(dependency))) {
+          released.add(id)
+          grew = true
+        }
+      }
+    }
+    await Promise.allSettled([...released].map((id) => this.runtimes.get(id)?.inflight))
+    for (const id of [...this.activationOrder].reverse()) {
+      if (released.has(id)) await this.deactivate(id)
+    }
+    for (const id of released) {
+      this.runtimes.delete(id)
+      this.generations.set(id, (this.generations.get(id) ?? 0) + 1)
+      this.removeLink(id)
+    }
   }
 
   private async deactivate(id: string): Promise<void> {

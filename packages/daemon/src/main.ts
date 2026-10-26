@@ -15,7 +15,14 @@ if (!lock) {
   process.exit(0)
 }
 
-const daemon = await startDaemon({ home }).catch((error) => {
+const safeMode = process.argv.includes('--disable-plugins') || process.env.QUIRKY_DISABLE_PLUGINS === '1'
+if (safeMode) console.error('[quirkyd] safe mode: installed plugins and disables are off for this run')
+
+const daemon = await startDaemon({
+  home,
+  safeMode,
+  onStopRequested: () => shutdown()
+}).catch((error) => {
   lock.release()
   throw error
 })

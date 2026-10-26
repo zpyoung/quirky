@@ -4,65 +4,40 @@ import { join } from 'node:path'
 import { QuirkyClient } from '@quirky/protocol'
 import { isDaemonAlive, readRuntime, rpcUrl } from '@quirky/protocol/node'
 import { startDaemon } from '../src/daemon'
-import { createFakeGit } from './fixtures/fake-git'
 import { startFakePtyHost } from './fixtures/fake-pty-host'
-import { makeTempHome, startHarness, waitFor, type Harness } from './helpers'
+import { makeTempHome, waitFor } from './helpers'
+import { makeTempDir, removeTempDirs, writeModulePlugin } from './plugins/fixtures'
 
 const MAIN = join(import.meta.dir, '..', 'src', 'main.ts')
 const FAKE_HOST_MAIN = join(import.meta.dir, 'fixtures', 'fake-pty-host.ts')
 
-let h: Harness | null = null
 const cleanups: (() => Promise<void> | void)[] = []
 afterEach(async () => {
-  await h?.cleanup()
-  h = null
   for (const cleanup of cleanups.splice(0).reverse()) await cleanup()
-})
-
-describe('reconciliation', () => {
-  test('marks sessions missing from the pty host or dead there as exited', async () => {
-    const home = makeTempHome()
-    const git = createFakeGit()
-    git.addRepo('/fake/alpha')
-    const pty = startFakePtyHost(home)
-    cleanups.push(() => pty.stop())
-
-    const first = await startDaemon({ home, port: 0, git, shell: '/bin/zsh', notifier: () => {}, uiDir: '/none' })
-    const client = await QuirkyClient.connect(rpcUrl(first.runtime), { role: 'cli' })
-    const repo = await client.call('repo.add', { path: '/fake/alpha' })
-    const [worktree] = await client.call('worktree.list', { repoId: repo.id })
-    const alive = await client.call('session.create', { worktreeId: worktree.id, agent: 'shell' })
-    const gone = await client.call('session.create', { worktreeId: worktree.id, agent: 'shell' })
-    const dead = await client.call('session.create', { worktreeId: worktree.id, agent: 'shell' })
-    client.close()
-    await first.stop()
-
-    pty.sessions.delete(gone.id)
-    const deadInfo = pty.sessions.get(dead.id)!
-    deadInfo.info.alive = false
-    deadInfo.info.exitCode = 9
-
-    const second = await startDaemon({ home, port: 0, git, shell: '/bin/zsh', notifier: () => {}, uiDir: '/none' })
-    cleanups.push(() => second.stop())
-    const next = await QuirkyClient.connect(rpcUrl(second.runtime), { role: 'cli' })
-    const sessions = await next.call('session.list', {})
-    const byId = Object.fromEntries(sessions.map((s) => [s.id, s]))
-    expect(byId[alive.id].status).toBe('running')
-    expect(byId[gone.id]).toMatchObject({ status: 'exited', exitCode: null })
-    expect(byId[dead.id]).toMatchObject({ status: 'exited', exitCode: 9 })
-    next.close()
-  })
+  removeTempDirs()
 })
 
 describe('pty host startup', () => {
   test('spawns the host when nothing answers and works through it', async () => {
     const home = makeTempHome()
-    const git = createFakeGit()
-    git.addRepo('/fake/alpha')
+    writeModulePlugin(
+      join(home, 'plugins'),
+      join(makeTempDir(), 'marker.log'),
+      {
+        id: 'acme.pty',
+        contributes: { method: [{ id: 'spawnAndList', params: { type: 'object' } }] }
+      },
+      {
+        activate: `context.provide('method:acme.pty/spawnAndList', async () => {
+          await context.pty.spawn('s_probe', { argv: ['sh'], cwd: '/tmp', env: {}, cols: 80, rows: 24 })
+          return context.pty.list()
+        })`
+      }
+    )
     const daemon = await startDaemon({
       home,
       port: 0,
-      git,
+      builtinPluginsDir: null,
       shell: '/bin/zsh',
       notifier: () => {},
       uiDir: '/none',
@@ -85,10 +60,8 @@ describe('pty host startup', () => {
     expect(existsSync(join(home, 'logs', 'pty-host.log'))).toBe(true)
     expect(statSync(join(home, 'logs', 'pty-host.log')).mode & 0o777).toBe(0o600)
 
-    const repo = await client.call('repo.add', { path: '/fake/alpha' })
-    const [worktree] = await client.call('worktree.list', { repoId: repo.id })
-    const session = await client.call('session.create', { worktreeId: worktree.id, agent: 'shell' })
-    expect(session.status).toBe('running')
+    const listed = (await client.callAny('acme.pty/spawnAndList', {})) as { sessionId: string; alive: boolean }[]
+    expect(listed).toEqual([expect.objectContaining({ sessionId: 's_probe', alive: true })])
     client.close()
   })
 
@@ -97,7 +70,7 @@ describe('pty host startup', () => {
     const daemon = await startDaemon({
       home,
       port: 0,
-      git: createFakeGit(),
+      builtinPluginsDir: null,
       notifier: () => {},
       uiDir: '/none',
       ptyHostEntry: join(home, 'missing.ts'),

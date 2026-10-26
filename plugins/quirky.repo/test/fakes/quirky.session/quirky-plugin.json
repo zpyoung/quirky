@@ -1,0 +1,27 @@
+{
+  "id": "quirky.session",
+  "name": "Fake session",
+  "version": "0.0.0",
+  "main": "main.ts",
+  "contributes": {
+    "method": [
+      {
+        "id": "list",
+        "readOnly": true,
+        "params": { "type": "object", "properties": { "worktree": { "type": "string" } } }
+      },
+      {
+        "id": "create",
+        "params": {
+          "type": "object",
+          "properties": { "worktree": { "type": "string" }, "agent": { "type": "string" } },
+          "required": ["worktree", "agent"]
+        }
+      },
+      {
+        "id": "close",
+        "params": { "type": "object", "properties": { "session": { "type": "string" } }, "required": ["session"] }
+      }
+    ]
+  }
+}

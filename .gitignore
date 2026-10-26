@@ -8,3 +8,4 @@ artifacts/
 *.db
 *.db-*
 /research/
+plugins/*/dist/

@@ -2,15 +2,6 @@ import { chmodSync, mkdirSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { basename, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import type { AgentKind } from '@quirky/protocol'
-
-export const AGENT_TITLES: Record<AgentKind, string> = {
-  shell: 'Shell',
-  claude: 'Claude',
-  codex: 'Codex',
-  opencode: 'OpenCode',
-  gemini: 'Gemini'
-}
 
 export function defaultCliEntry(): string {
   return process.env.QUIRKY_CLI_ENTRY ?? fileURLToPath(new URL('../../cli/src/main.ts', import.meta.url))
@@ -43,49 +34,18 @@ export function bashRcfilePath(home: string): string {
   return join(home, 'shell', 'bash', 'rcfile')
 }
 
+/** The argv of an interactive shell session; a bash shell starts through the rcfile that puts the bin dir first. */
+export function shellArgv(home: string, shell: string): string[] {
+  return shellKind(shell) === 'bash' ? [shell, '--rcfile', bashRcfilePath(home), '-i'] : [shell, '-l']
+}
+
 /**
- * The argv for a session. Agents run under the user's login shell so CLIs installed through
- * Homebrew, nvm and similar resolve as they do in Terminal; the bin dir is exported inside the
- * command string because the login shell's startup files may have reset PATH. A shell session
- * starts through a wrapper (see `installShellWrappers`) so the same holds for interactive shells.
+ * The argv that runs `command` (a shell command string) under the user's login shell, so CLIs
+ * installed through Homebrew, nvm and similar resolve as they do in Terminal. The bin dir is
+ * exported inside the command string because the login shell's startup files may have reset PATH.
  */
-export function buildArgv(options: {
-  agent: AgentKind
-  prompt?: string
-  home: string
-  shell: string
-  /** Appended after the kernel's own agent arguments and before the prompt; ignored for `shell`. */
-  extraArgs?: string[]
-}): string[] {
-  const { agent, home, shell } = options
-  const kind = shellKind(shell)
-  if (agent === 'shell') {
-    return kind === 'bash' ? [shell, '--rcfile', bashRcfilePath(home), '-i'] : [shell, '-l']
-  }
-  const prompt = options.prompt?.trim()
-  const extra = (options.extraArgs ?? []).map((arg) => ` ${shellQuote(arg)}`).join('')
-  let command: string
-  switch (agent) {
-    case 'claude':
-      command = `claude --settings ${shellQuote(claudeSettingsPath(home))}${extra}`
-      if (prompt) command += ` ${shellQuote(prompt)}`
-      break
-    case 'codex': {
-      const notify = `notify=${JSON.stringify([join(home, 'bin', 'quirky-hook'), 'codex'])}`
-      command = `codex -c ${shellQuote(notify)}${extra}`
-      if (prompt) command += ` ${shellQuote(prompt)}`
-      break
-    }
-    case 'opencode':
-      command = `opencode${extra}`
-      if (prompt) command += ` --prompt ${shellQuote(prompt)}`
-      break
-    case 'gemini':
-      command = `gemini${extra}`
-      if (prompt) command += ` --prompt-interactive ${shellQuote(prompt)}`
-      break
-  }
-  const exportPath = kind === 'other' ? '' : `export PATH=${doubleQuote(join(home, 'bin'), true)}; `
+export function commandArgv(home: string, shell: string, command: string): string[] {
+  const exportPath = shellKind(shell) === 'other' ? '' : `export PATH=${doubleQuote(join(home, 'bin'), true)}; `
   return [shell, '-l', '-c', `${exportPath}exec ${command}`]
 }
 
@@ -98,7 +58,7 @@ export function buildSessionEnv(options: {
   hookToken: string
   /** With `agent`, selects the shell startup wrapper; omitted means no wrapper. */
   shell?: string
-  agent?: AgentKind
+  agent?: string
   base?: Record<string, string | undefined>
   /** Applied over the base environment and `TERM`; a string sets, `null` deletes. Kernel variables and `PATH` still win, and reserved names are the caller's to filter. */
   envPatch?: Record<string, string | null>
@@ -132,10 +92,6 @@ export function buildSessionEnv(options: {
   }
 }
 
-export function claudeSettingsPath(home: string): string {
-  return join(home, 'hooks', 'claude-settings.json')
-}
-
 /**
  * The hook shim agents call. It posts to the daemon's current port from `$QUIRKY_HOME/runtime.json`
  * so sessions that outlive a restart still reach it, falling back to the URL in their environment.
@@ -165,22 +121,6 @@ exit 0
 
 export function quirkyShimScript(cliEntry: string): string {
   return `#!/bin/sh\nexec ${doubleQuote(process.execPath)} ${doubleQuote(cliEntry)} "$@"\n`
-}
-
-export function claudeSettings(home: string): unknown {
-  const command = `${shellQuote(join(home, 'bin', 'quirky-hook'))} claude`
-  const entry = (matcher?: string) => ({
-    ...(matcher ? { matcher } : {}),
-    hooks: [{ type: 'command', command }]
-  })
-  return {
-    hooks: {
-      UserPromptSubmit: [entry()],
-      PreToolUse: [entry('*')],
-      Notification: [entry()],
-      Stop: [entry()]
-    }
-  }
 }
 
 const ZSH_PRELUDE = `: \${_quirky_wrapper_dir:=$ZDOTDIR}
@@ -260,11 +200,9 @@ export function installShellWrappers(home: string): void {
   writeFileSync(bashRcfilePath(home), bashRcfile(binDir))
 }
 
-/** Writes the Claude settings file, the `quirky-hook` and `quirky` shims and the shell wrappers under `home`. */
+/** Writes the `quirky-hook` and `quirky` shims and the shell wrappers under `home`. */
 export function installIntegrationFiles(home: string, cliEntry: string): void {
-  mkdirSync(join(home, 'hooks'), { recursive: true })
   mkdirSync(join(home, 'bin'), { recursive: true })
-  writeFileSync(claudeSettingsPath(home), JSON.stringify(claudeSettings(home), null, 2))
   const hookPath = join(home, 'bin', 'quirky-hook')
   const shimPath = join(home, 'bin', 'quirky')
   writeFileSync(hookPath, QUIRKY_HOOK_SCRIPT)

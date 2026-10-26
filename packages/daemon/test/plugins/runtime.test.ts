@@ -4,7 +4,7 @@ import { QuirkyClient, RpcErrorCode, type QuirkyEvent } from '@quirky/protocol'
 import { rpcUrl } from '@quirky/protocol/node'
 import { startDaemon } from '../../src/daemon'
 import { makeTempHome, startHarness, waitFor, type Harness } from '../helpers'
-import { makeTempDir, readMarker, removeTempDirs, writeModulePlugin, type ModuleBehavior } from './fixtures'
+import { launcher, makeTempDir, readMarker, removeTempDirs, writeModulePlugin, type ModuleBehavior } from './fixtures'
 
 let h: Harness | null = null
 const cleanups: (() => Promise<void> | void)[] = []
@@ -96,19 +96,16 @@ describe('plugin methods over RPC', () => {
   test('context.call reaches kernel methods and rejects params that are not an object', async () => {
     const s = await boot([
       {
-        manifest: { id: 'acme.x', contributes: methods('repos', 'badparams', 'hello') },
+        manifest: { id: 'acme.x', contributes: methods('jobs', 'badparams', 'hello') },
         behavior: {
           activate: `
-            context.provide('method:acme.x/repos', () => context.call('repo.list', {}))
-            context.provide('method:acme.x/badparams', () => context.call('repo.list', 5))
+            context.provide('method:acme.x/jobs', () => context.call('job.list', {}))
+            context.provide('method:acme.x/badparams', () => context.call('job.list', 5))
             context.provide('method:acme.x/hello', () => context.call('client.hello', {}))`
         }
       }
     ])
-    s.harness.git.addRepo('/fake/alpha')
-    await s.client.call('repo.add', { path: '/fake/alpha' })
-    const repos = (await call(s.client, 'acme.x/repos')) as { path: string }[]
-    expect(repos.map((repo) => repo.path)).toEqual(['/fake/alpha'])
+    expect(await call(s.client, 'acme.x/jobs')).toEqual([])
     expect(await rejection(call(s.client, 'acme.x/badparams'))).toMatchObject({
       code: RpcErrorCode.InvalidParams,
       message: 'params must be an object'
@@ -134,21 +131,20 @@ describe('plugin events', () => {
     expect(event).toEqual({ type: 'acme.x/ping', data: { n: 1 } })
   })
 
-  test('a startup plugin listener sees repo.changed after repo.add replies', async () => {
+  test('a startup plugin listener sees ui.state.changed after ui.sidebar.set replies', async () => {
     const s = await boot((marker) => [
       {
         manifest: { id: 'acme.watch', activation: 'startup' },
         behavior: {
           activate: `
             context.subscribe((event) => {
-              if (event.type === 'repo.changed') appendFileSync(${JSON.stringify(marker)}, 'saw repo.changed\\n')
+              if (event.type === 'ui.state.changed') appendFileSync(${JSON.stringify(marker)}, 'saw ui.state.changed\\n')
             })`
         }
       }
     ])
-    s.harness.git.addRepo('/fake/alpha')
-    await s.client.call('repo.add', { path: '/fake/alpha' })
-    await waitFor(() => s.lines().includes('saw repo.changed'))
+    await s.client.call('ui.sidebar.set', { visible: false })
+    await waitFor(() => s.lines().includes('saw ui.state.changed'))
   })
 })
 
@@ -180,7 +176,6 @@ describe('plugin store', () => {
     const second = await startDaemon({
       home: s.home,
       port: 0,
-      git: s.harness.git,
       shell: '/bin/zsh',
       notifier: () => {},
       uiDir: '/none',
@@ -255,6 +250,7 @@ describe('jobs', () => {
 describe('launch hooks', () => {
   test('a hook env and args reach the PTY create request for a claude session', async () => {
     const s = await boot([
+      launcher,
       {
         manifest: { id: 'acme.x', contributes: { 'launch-hook': [{ id: 'extra', agents: ['claude'] }] } },
         behavior: {
@@ -265,17 +261,14 @@ describe('launch hooks', () => {
         }
       }
     ])
-    s.harness.git.addRepo('/fake/alpha')
-    const repo = await s.client.call('repo.add', { path: '/fake/alpha' })
-    const [worktree] = await s.client.call('worktree.list', { repoId: repo.id })
-    const session = await s.client.call('session.create', { worktreeId: worktree!.id, agent: 'claude', prompt: 'go' })
+    const session = (await call(s.client, 'acme.launcher/launch', { agent: 'claude', prompt: 'go' })) as { id: string }
     const request = s.harness.pty.requests.find((r) => r.type === 'create' && r.sessionId === session.id)
     if (!request || request.type !== 'create') throw new Error('no create request')
     expect(request.env.ACME_FLAG).toBe('1')
     expect(request.env.ACME_SESSION).toBe(session.id)
     expect(request.argv[3]).toContain(`'--acme' 'x y' 'go'`)
 
-    const shell = await s.client.call('session.create', { worktreeId: worktree!.id, agent: 'shell' })
+    const shell = (await call(s.client, 'acme.launcher/launch', { agent: 'shell' })) as { id: string }
     const shellRequest = s.harness.pty.requests.find((r) => r.type === 'create' && r.sessionId === shell.id)
     if (!shellRequest || shellRequest.type !== 'create') throw new Error('no create request')
     expect(shellRequest.env.ACME_FLAG).toBeUndefined()

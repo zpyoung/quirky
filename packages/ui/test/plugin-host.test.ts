@@ -115,6 +115,9 @@ async function boot(write: Writer, options: BootOptions = {}) {
       imports.push({ url, mod })
       return mod
     },
+    onStream: (streamId, listener) => client.onTerminalOutput(streamId, listener),
+    onConnection: () => () => {},
+    confirm: async () => true,
     toast: (title, body) => toasts.push([title, body]),
     log: (message) => logs.push(message),
     activationTimeoutMs: options.activationTimeoutMs
@@ -333,7 +336,7 @@ describe('window plugin host against a real daemon', () => {
     expect(t.lines()).toContain('cleanup list')
   })
 
-  test('SC-8: contributions that aren\'t shown never load their plugin', async () => {
+  test('S1: an enabled plugin loads and activates without any of its contributions being shown', async () => {
     const t = await boot((installed, marker) =>
       installUi(installed, marker, 'acme.outline', {
         panel: [{ id: 'outline', title: 'Outline' }],
@@ -345,9 +348,11 @@ describe('window plugin host against a real daemon', () => {
     expect(t.state().model!.panels).toMatchObject([{ id: 'panel:acme.outline/outline', title: 'Outline' }])
     expect(t.state().openPanel).toBeNull()
     expect(t.state().openView).toBeNull()
-    expect(t.lines()).toEqual([])
-    expect(t.urls).toEqual([])
-    expect(t.state().plugins['acme.outline']).toBeUndefined()
+    await t.waitForLine('ui-activate acme.outline')
+    expect(t.lines()).toEqual(['ui-import acme.outline', 'ui-activate acme.outline'])
+    expect(t.urls).toEqual(['/plugins/acme.outline/ui.js'])
+    expect(t.state().plugins['acme.outline']).toEqual({ state: 'active' })
+    expect(t.state().slots).toEqual({})
   })
 
   test('SC-9: a panel toggles open and closed, one at a time', async () => {
@@ -376,7 +381,7 @@ describe('window plugin host against a real daemon', () => {
     expect(t.slot(outline)).toBeUndefined()
 
     t.host.togglePanel(side)
-    expect(t.state().openPanel).toBeNull()
+    await waitFor(() => t.state().openPanel === null)
     expect(panelLines()).toEqual(['mount outline', 'cleanup outline', 'mount side', 'cleanup side'])
     expect(t.state().slots).toEqual({})
     shell.stop()
@@ -429,7 +434,7 @@ describe('window plugin host against a real daemon', () => {
     expect(shell.seen[1]!.element.text).toBe('{}')
 
     await t.host.runCommand(close)
-    expect(t.state().openView).toBeNull()
+    await waitFor(() => t.state().openView === null)
     expect(t.lines()).toContain('cleanup other')
     expect(t.state().slots).toEqual({})
     shell.stop()
@@ -443,9 +448,12 @@ describe('window plugin host against a real daemon', () => {
         {
           id: 'acme.notes',
           ui: 'ui.js',
-          contributes: { ...listSection, method: [{ id: 'count' }] }
+          contributes: { ...listSection, method: [{ id: 'count' }, { id: 'bump' }], event: [{ id: 'changed' }] }
         },
-        { activate: "context.provide('method:acme.notes/count', () => 3)" }
+        {
+          activate: `context.provide('method:acme.notes/count', () => 3)
+            context.provide('method:acme.notes/bump', () => context.emit('changed', null))`
+        }
       )
       writeFileSync(
         join(dir, 'ui.js'),
@@ -453,38 +461,36 @@ describe('window plugin host against a real daemon', () => {
           activate: `context.subscribe((event) => record('event ' + event.type))
             ${provideMount(
               NOTES_SECTION,
-              `Promise.all([context.call('repo.list', {}), context.call('acme.notes/count', {})])
-                 .then(([repos, count]) => { element.repos = repos; element.count = count })`
+              `Promise.all([context.call('plugin.list', {}), context.call('acme.notes/count', {})])
+                 .then(([plugins, count]) => { element.plugins = plugins.map((plugin) => plugin.id); element.count = count })`
             )}`
         })
       )
     }
     const t = await boot(mountPlugin)
-    t.harness.git.addRepo('/fake/alpha')
-    t.harness.git.addRepo('/fake/beta')
 
     const { element } = t.show(NOTES_SECTION)
     await t.mounted(NOTES_SECTION)
     await waitFor(() => element.count !== undefined)
-    expect(element.repos).toEqual([])
+    expect(element.plugins).toContain('acme.notes')
     expect(element.count).toBe(3)
 
-    await t.agent.call('repo.add', { path: '/fake/alpha' })
-    await t.waitForLine('event repo.changed')
+    await t.agent.callAny('acme.notes/bump', {})
+    await t.waitForLine('event acme.notes/changed')
 
     await t.agent.call('plugin.disable', { id: NOTES_SECTION })
     await t.waitForGone(NOTES_SECTION)
     await t.waitForRevoked('acme.notes')
-    const before = t.events.filter((event) => event.type === 'repo.changed').length
+    const before = t.events.filter((event) => event.type === 'acme.notes/changed').length
     const heard = t.lines().length
-    await t.agent.call('repo.add', { path: '/fake/beta' })
-    await waitFor(() => t.events.filter((event) => event.type === 'repo.changed').length > before)
+    await t.agent.callAny('acme.notes/bump', {})
+    await waitFor(() => t.events.filter((event) => event.type === 'acme.notes/changed').length > before)
     await Bun.sleep(50)
 
     expect(t.lines().filter((line) => line.startsWith('event ')).length).toBe(
       t.lines().slice(0, heard).filter((line) => line.startsWith('event ')).length
     )
-    expect(() => t.ctx('acme.notes').call('repo.list', {})).toThrow('acme.notes is not active')
+    expect(() => t.ctx('acme.notes').call('plugin.list', {})).toThrow('acme.notes is not active')
     expect(() => t.ctx('acme.notes').subscribe(() => undefined)).toThrow('acme.notes is not active')
   })
 
@@ -614,6 +620,7 @@ describe('window plugin host against a real daemon', () => {
       await t.mounted(throws)
       expect(retried.element.text).toBe('second try')
 
+      await waitFor(() => t.state().plugins['acme.broken']?.state === 'failed')
       t.show(broken)
       expect(await t.errored(broken)).toMatch(/^acme\.broken failed to load: /)
       writeFileSync(
@@ -625,11 +632,12 @@ describe('window plugin host against a real daemon', () => {
       expect(later.element.text).toBe('loaded')
       expect(t.urls.filter((url) => url.includes('acme.broken'))).toEqual([
         '/plugins/acme.broken/ui.js',
-        '/plugins/acme.broken/ui.js?attempt=1'
+        '/plugins/acme.broken/ui.js?attempt=1',
+        '/plugins/acme.broken/ui.js?attempt=2'
       ])
 
-      t.show(failing)
-      expect(await t.errored(failing)).toBe('acme.x failed to activate: bad')
+      await waitFor(() => t.state().plugins['acme.x']?.state === 'failed')
+      expect(t.state().plugins['acme.x']).toEqual({ state: 'failed', error: 'acme.x failed to activate: bad' })
       const reactivated = t.show(failing)
       await t.mounted(failing)
       expect(reactivated.element.text).toBe('activated again')
@@ -724,23 +732,22 @@ describe('window plugin host against a real daemon', () => {
     expect(t.lines().filter((line) => line === 'ran keys')).toHaveLength(1)
   })
 
-  test('G1: a plugin keybinding on mod+t is reported shadowed by the kernel, and Cmd+T runs nothing', async () => {
+  test('G1: a plugin keybinding on mod+shift+p is reported shadowed by the kernel, and Cmd+Shift+P runs nothing', async () => {
     const t = await boot((installed, marker) =>
       installUi(installed, marker, 'acme.tabs', {
         command: [{ id: 'new', title: 'New' }],
-        keybinding: [{ id: 'k', key: 'mod+t', command: 'new' }]
+        keybinding: [{ id: 'k', key: 'mod+shift+p', command: 'new' }]
       }, {
         activate: provideCommand('command:acme.tabs/new', "record('ran tabs')")
       })
     )
     expect(t.state().model!.keybindings).toMatchObject([
-      { id: 'keybinding:acme.tabs/k', key: 'mod+t', status: 'shadowed', shadowedBy: 'kernel' }
+      { id: 'keybinding:acme.tabs/k', key: 'mod+shift+p', status: 'shadowed', shadowedBy: 'kernel' }
     ])
 
-    expect(t.host.handleKey(press('T'))).toBe(false)
+    expect(t.host.handleKey(press('P', { shiftKey: true }))).toBe(false)
     await Bun.sleep(50)
     expect(t.lines()).not.toContain('ran tabs')
-    expect(t.urls).toEqual([])
   })
 
   test('SC-18: a keybinding whose command isn\'t in effect is unbound', async () => {
@@ -758,7 +765,7 @@ describe('window plugin host against a real daemon', () => {
     expect(t.state().model!.keybindings).toMatchObject([{ id: 'keybinding:acme.notes/new-key', status: 'unbound' }])
     expect(t.host.handleKey(press('N', { shiftKey: true }))).toBe(false)
     await Bun.sleep(50)
-    expect(t.lines()).toEqual([])
+    expect(t.lines()).not.toContain('ran new')
     expect(t.toasts).toEqual([])
   })
 

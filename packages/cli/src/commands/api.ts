@@ -1,10 +1,10 @@
 import { CONNECTION_METHODS, type ApiCatalog } from '@quirky/protocol'
-import { UsageError, parseArgs } from '../args'
+import { UsageError, parseArgs, takePositionals } from '../args'
 import { buildCatalog, resolveCommands } from '../catalog'
 import { commandHelp } from '../command-spec'
 import { formatGeneric } from '../format'
 import { commandForMethod, generatedCommands, paramsFromArgs } from '../generated'
-import { takePositionals } from './support'
+import { declaredCommands } from '../plugin-commands'
 import type { Command, Context } from './types'
 
 /**
@@ -14,7 +14,11 @@ import type { Command, Context } from './types'
 export async function loadCatalog(ctx: Context): Promise<ApiCatalog> {
   const { COMMANDS } = await import('./index')
   const description = await ctx.rpc.call('api.describe', {})
-  return buildCatalog(description, COMMANDS, resolveCommands(COMMANDS, generatedCommands(description)))
+  return buildCatalog(
+    description,
+    COMMANDS,
+    resolveCommands(COMMANDS, declaredCommands(description), generatedCommands(description))
+  )
 }
 
 function catalogText(catalog: ApiCatalog): string {

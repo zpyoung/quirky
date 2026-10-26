@@ -8,15 +8,18 @@ import {
   closeSync,
   existsSync,
   fchmodSync,
+  lstatSync,
   mkdirSync,
   openSync,
   readFileSync,
+  realpathSync,
   renameSync,
   statSync,
   writeFileSync
 } from 'node:fs'
+import { createHash } from 'node:crypto'
 import { homedir } from 'node:os'
-import { dirname, join } from 'node:path'
+import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { QuirkyClient } from '../client'
 import { RPC_PATH, type ClientRole } from '../rpc'
@@ -32,6 +35,8 @@ export type RuntimeInfo = {
   daemonVersion: string
   protocolVersion: number
   startedAt: number
+  /** The unix socket the CLI connects to. Optional so a `runtime.json` from an older daemon still parses. */
+  socket?: string
 }
 
 export const HEALTH_PATH = '/health'
@@ -65,6 +70,41 @@ export function openPrivateLog(path: string): number {
   const fd = openSync(path, 'a', 0o600)
   fchmodSync(fd, 0o600)
   return fd
+}
+
+/** Longest unix socket path that is used as is; the platform limit is near 104 bytes. */
+const MAX_SOCKET_PATH_BYTES = 100
+
+/**
+ * Where the unix socket `name` for `home` lives: beside the home's other files when that path
+ * fits, else in `/tmp/quirky-<uid>/` under a name derived from the home's real path so two homes
+ * never share a socket. The short-path directory is created 0700; one that exists with another
+ * owner or mode is refused.
+ */
+export function socketPath(home: string, name: string): string {
+  const direct = join(home, name)
+  if (Buffer.byteLength(direct) <= MAX_SOCKET_PATH_BYTES) return direct
+
+  let real: string
+  try {
+    real = realpathSync(home)
+  } catch {
+    real = resolve(home)
+  }
+  const digest = createHash('sha256').update(real).digest('hex').slice(0, 16)
+  const dir = `/tmp/quirky-${process.getuid?.() ?? 0}`
+  try {
+    mkdirSync(dir, { mode: 0o700 })
+    chmodSync(dir, 0o700)
+  } catch (error) {
+    if ((error as { code?: string }).code !== 'EEXIST') throw error
+  }
+  const stats = lstatSync(dir)
+  const ownedByUser = !process.getuid || stats.uid === process.getuid()
+  if (!stats.isDirectory() || !ownedByUser || (stats.mode & 0o777) !== 0o700) {
+    throw new Error(`${dir} must be a directory owned by the current user with mode 0700`)
+  }
+  return join(dir, `${digest}-${name}`)
 }
 
 export function runtimeFilePath(home = quirkyHome()): string {
@@ -119,7 +159,7 @@ export function defaultDaemonEntry(): string {
  * The daemon outlives its starter. Its output goes to `<home>/logs/daemon.log`.
  */
 export async function ensureDaemon(
-  options: { home?: string; daemonEntry?: string; bunPath?: string; timeoutMs?: number } = {}
+  options: { home?: string; daemonEntry?: string; bunPath?: string; timeoutMs?: number; args?: string[] } = {}
 ): Promise<RuntimeInfo> {
   const home = ensureHome(options.home ?? quirkyHome())
   const existing = readRuntime(home)
@@ -128,7 +168,7 @@ export async function ensureDaemon(
   const entry = options.daemonEntry ?? defaultDaemonEntry()
   if (!existsSync(entry)) throw new Error(`quirkyd entry not found: ${entry}`)
   const log = openPrivateLog(join(home, 'logs', 'daemon.log'))
-  const child = spawn(options.bunPath ?? process.execPath, [entry], {
+  const child = spawn(options.bunPath ?? process.execPath, [entry, ...(options.args ?? [])], {
     detached: true,
     stdio: ['ignore', log, log],
     env: { ...process.env, QUIRKY_HOME: home }
@@ -146,7 +186,17 @@ export async function ensureDaemon(
 }
 
 export async function connectDaemon(
-  options: { role: ClientRole; name?: string; subscribe?: boolean; home?: string; autostart?: boolean }
+  options: {
+    role: ClientRole
+    name?: string
+    subscribe?: boolean
+    home?: string
+    autostart?: boolean
+    /** `socket` uses the unix socket named in `runtime.json`; the default is the WebSocket. */
+    transport?: 'socket' | 'websocket'
+    /** Forwarded in `client.hello`. */
+    identity?: { cwd?: string; sessionId?: string; worktreeId?: string }
+  }
 ): Promise<QuirkyClient> {
   const home = options.home ?? quirkyHome()
   let info = readRuntime(home)
@@ -154,5 +204,13 @@ export async function connectDaemon(
     if (options.autostart === false) throw new Error('quirkyd is not running')
     info = await ensureDaemon({ home })
   }
-  return QuirkyClient.connect(rpcUrl(info as RuntimeInfo), options)
+  const runtime = info as RuntimeInfo
+  if (options.transport === 'socket') {
+    return QuirkyClient.connectSocket(runtime.socket ?? socketPath(home, 'quirkyd.sock'), {
+      ...options,
+      token: runtime.token,
+      ...options.identity
+    })
+  }
+  return QuirkyClient.connect(rpcUrl(runtime), { ...options, ...options.identity })
 }

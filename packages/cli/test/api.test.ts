@@ -19,17 +19,17 @@ beforeEach(() => {
   daemon = new FakeDaemon().start()
   daemon.addMethod('acme.notes/add', { description: 'Add a note.', params: NOTE_PARAMS }, { result: { id: 7 } })
   daemon.addMethod('acme.notes/count', { description: 'Count notes.' }, { result: 3 })
-  daemon.addMethod('quirky.repo/list', { description: 'List repos.' })
-  daemon.addMethod('quirky.repo/rename', {
-    description: 'Rename a repo.',
-    params: { type: 'object', properties: { repoId: { type: 'string' }, name: { type: 'string' } }, required: ['repoId', 'name'] }
+  daemon.addMethod('quirky.theme/list', { description: 'List themes.' })
+  daemon.addMethod('quirky.theme/rename', {
+    description: 'Rename a theme.',
+    params: { type: 'object', properties: { themeId: { type: 'string' }, name: { type: 'string' } }, required: ['themeId', 'name'] }
   })
-  daemon.addMethod('git.status', {
+  daemon.addMethod('plugin.inspect', {
     plugin: null,
-    params: { type: 'object', properties: { worktreeId: { type: 'string' } }, required: ['worktreeId'] }
-  }, { result: { branch: 'main', dirty: false } })
-  daemon.addMethod('repo.add', { plugin: null, params: { type: 'object', properties: { path: { type: 'string' } }, required: ['path'] } })
-  daemon.addMethod('terminal.attach', { plugin: null, connection: true })
+    params: { type: 'object', properties: { path: { type: 'string' } }, required: ['path'] }
+  }, { result: { id: 'acme.tools', dirty: false } })
+  daemon.addMethod('distro.inspect', { plugin: null, params: { type: 'object', properties: { path: { type: 'string' } }, required: ['path'] } })
+  daemon.addMethod('ui.report', { plugin: null, connection: true })
   daemon.addMethod('acme.notes/fail', {}, { error: { code: RpcErrorCode.InvalidParams, message: 'path must be a non-empty string' } })
 })
 afterEach(() => daemon.stop())
@@ -43,7 +43,7 @@ describe('SC-20: quirky api lists everything; --json is the catalog', () => {
     expect(result.code).toBe(0)
     expect(result.stdout.trim().split('\n')).toHaveLength(1)
     const doc = JSON.parse(result.stdout) as ApiCatalog
-    expect(doc.schemaVersion).toBe(1)
+    expect(doc.schemaVersion).toBe(2)
     expect(doc.methods.map((m) => m.name)).toContain('acme.notes/add')
     expect(doc.events).toEqual([])
     expect(doc.uiCommands).toEqual([])
@@ -58,11 +58,11 @@ describe('SC-20: quirky api lists everything; --json is the catalog', () => {
     })
     expect(add.flags.find((f) => f.name === 'tags')).toMatchObject({ repeatable: true })
     expect(add.shadowedBy).toBeUndefined()
-    const repoAdd = doc.commands.find((c) => c.command === 'repo add')!
-    expect(repoAdd).toMatchObject({
+    const enable = doc.commands.find((c) => c.command === 'plugin enable')!
+    expect(enable).toMatchObject({
       plugin: null,
-      methods: ['repo.add'],
-      positionals: [{ name: 'path', description: 'path to the git repository', required: true }],
+      methods: ['plugin.enable'],
+      positionals: [{ name: 'id', description: 'plugin or contribution ID', required: true }],
       flags: []
     })
     expect(doc.commands.some((c) => c.command === 'api call' && c.positionals[0]?.name === 'method')).toBe(true)
@@ -70,13 +70,13 @@ describe('SC-20: quirky api lists everything; --json is the catalog', () => {
 
   test('a built-in plugin method shadowed by a kernel command is listed with shadowedBy', async () => {
     const doc = await catalog()
-    const entries = doc.commands.filter((c) => c.command === 'repo list')
+    const entries = doc.commands.filter((c) => c.command === 'theme list')
     expect(entries.map((c) => [c.plugin, c.shadowedBy])).toEqual([
       [null, undefined],
-      ['quirky.repo', 'kernel repo list']
+      ['quirky.theme', 'kernel theme list']
     ])
-    const rename = doc.commands.find((c) => c.command === 'repo rename')!
-    expect(rename).toMatchObject({ plugin: 'quirky.repo', methods: ['quirky.repo/rename'] })
+    const rename = doc.commands.find((c) => c.command === 'theme rename')!
+    expect(rename).toMatchObject({ plugin: 'quirky.theme', methods: ['quirky.theme/rename'] })
     expect(rename.shadowedBy).toBeUndefined()
   })
 
@@ -94,9 +94,8 @@ describe('SC-20: quirky api lists everything; --json is the catalog', () => {
     expect(lines.at(-1)).toBe(`${(await catalog()).methods.length} methods, 0 events`)
     expect(lines).toContain('acme.notes')
     expect(lines.some((l) => /^ {2}acme\.notes add --title <string>.*  Add a note\.$/.test(l))).toBe(true)
-    const repoStart = lines.indexOf('repo')
-    expect(repoStart).toBeGreaterThan(-1)
-    expect(lines.some((l) => l.includes('List repos.') && l.endsWith('(shadowed by kernel repo list)'))).toBe(true)
+    expect(lines.indexOf('theme')).toBeGreaterThan(-1)
+    expect(lines.some((l) => l.includes('List themes.') && l.endsWith('(shadowed by kernel theme list)'))).toBe(true)
   })
 
   test('an argument is refused', async () => {
@@ -108,10 +107,10 @@ describe('SC-20: quirky api lists everything; --json is the catalog', () => {
 
 describe('SC-21: quirky api call reaches any method', () => {
   test('a kernel-style method takes flags from its schema', async () => {
-    const result = await run(['api', 'call', 'git.status', '--worktree-id', 'w1', '--json'])
+    const result = await run(['api', 'call', 'plugin.inspect', '--path', '/tmp/p', '--json'])
     expect(result.code).toBe(0)
-    expect(JSON.parse(result.stdout)).toEqual({ branch: 'main', dirty: false })
-    expect(daemon.methodCalls('git.status')).toEqual([{ worktreeId: 'w1' }])
+    expect(JSON.parse(result.stdout)).toEqual({ id: 'acme.tools', dirty: false })
+    expect(daemon.methodCalls('plugin.inspect')).toEqual([{ path: '/tmp/p' }])
   })
 
   test('a plugin method prints its result as text', async () => {
@@ -137,9 +136,9 @@ describe('SC-21: quirky api call reaches any method', () => {
   })
 
   test('a connection method is refused', async () => {
-    const result = await run(['api', 'call', 'terminal.attach'])
+    const result = await run(['api', 'call', 'ui.report'])
     expect(result.code).toBe(2)
-    expect(result.stderr).toContain("terminal.attach needs a live connection and can't be called from the CLI")
+    expect(result.stderr).toContain("ui.report needs a live connection and can't be called from the CLI")
   })
 
   test('an unknown method is refused', async () => {
@@ -158,45 +157,45 @@ describe('SC-21: quirky api call reaches any method', () => {
     const result = await run(['api', 'call', 'acme.notes/fail', '--json'])
     expect(result.code).toBe(1)
     expect(JSON.parse(result.stdout)).toEqual({ error: { code: 'invalid-params', message: 'path must be a non-empty string' } })
-    const empty = await run(['api', 'call', 'repo.add', '--path', ''])
+    const empty = await run(['api', 'call', 'distro.inspect', '--path', ''])
     expect(empty.code).toBe(0)
-    expect(daemon.methodCalls('repo.add')).toEqual([{ path: '' }])
+    expect(daemon.methodCalls('distro.inspect')).toEqual([{ path: '' }])
   })
 
   test('a valued flag followed by a global switch is missing its value, not given the next word', async () => {
     const message = '--path requires a value; write --path=<value> for a value starting with --'
-    const result = await run(['api', 'call', 'repo.add', '--path', '--json', '/tmp/repo'])
+    const result = await run(['api', 'call', 'distro.inspect', '--path', '--json', '/tmp/repo'])
     expect(result.code).toBe(2)
     expect(JSON.parse(result.stdout)).toEqual({ error: { code: 'usage', message } })
-    const before = await run(['api', 'call', '--json', 'repo.add', '--path', '/tmp/repo', '--path', '--json'])
+    const before = await run(['api', 'call', '--json', 'distro.inspect', '--path', '/tmp/repo', '--path', '--json'])
     expect(before.code).toBe(2)
-    expect(daemon.methodCalls('repo.add')).toEqual([])
-    const help = await run(['api', 'call', 'repo.add', '--path', '--help'])
+    expect(daemon.methodCalls('distro.inspect')).toEqual([])
+    const help = await run(['api', 'call', 'distro.inspect', '--path', '--help'])
     expect(help.code).toBe(2)
     expect(help.stderr).toContain(message)
-    expect(daemon.methodCalls('repo.add')).toEqual([])
+    expect(daemon.methodCalls('distro.inspect')).toEqual([])
   })
 
   test('--json before or after the method name still gives JSON output', async () => {
     for (const args of [
-      ['api', 'call', '--json', 'git.status', '--worktree-id', 'w1'],
-      ['api', 'call', 'git.status', '--json', '--worktree-id', 'w1'],
-      ['api', 'call', 'git.status', '--worktree-id', 'w1', '--json']
+      ['api', 'call', '--json', 'plugin.inspect', '--path', '/tmp/p'],
+      ['api', 'call', 'plugin.inspect', '--json', '--path', '/tmp/p'],
+      ['api', 'call', 'plugin.inspect', '--path', '/tmp/p', '--json']
     ]) {
       const result = await run(args)
       expect(result.code).toBe(0)
-      expect(JSON.parse(result.stdout)).toEqual({ branch: 'main', dirty: false })
+      expect(JSON.parse(result.stdout)).toEqual({ id: 'acme.tools', dirty: false })
     }
   })
 
   test('help after the method prints that method\'s help and calls nothing', async () => {
     for (const flag of ['--help', '-h']) {
-      const result = await run(['api', 'call', 'git.status', flag])
+      const result = await run(['api', 'call', 'plugin.inspect', flag])
       expect(result.code).toBe(0)
-      expect(result.stdout).toContain('usage: quirky git.status --worktree-id <string>')
-      expect(result.stdout).toContain('--worktree-id')
+      expect(result.stdout).toContain('usage: quirky plugin.inspect --path <string>')
+      expect(result.stdout).toContain('--path')
     }
-    expect(daemon.methodCalls('git.status')).toEqual([])
+    expect(daemon.methodCalls('plugin.inspect')).toEqual([])
   })
 
   test('help for api call lists the method argument without contacting the daemon', async () => {

@@ -163,10 +163,8 @@ describe('chordFromKeyEvent', () => {
 })
 
 describe('RESERVED_CHORDS', () => {
-  test('holds new tab, close tab, tab selection and the palette', () => {
-    expect([...RESERVED_CHORDS].sort()).toEqual(
-      ['mod+t', 'mod+w', 'mod+shift+p', ...Array.from({ length: 9 }, (_, i) => `mod+${i + 1}`)].sort()
-    )
+  test('holds only the command palette', () => {
+    expect([...RESERVED_CHORDS]).toEqual(['mod+shift+p'])
   })
 
   test('every entry is already canonical', () => {

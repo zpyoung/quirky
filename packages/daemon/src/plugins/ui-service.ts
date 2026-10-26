@@ -1,6 +1,7 @@
 import {
   checkSettingValue,
   parseContributionId,
+  type DistroManifest,
   type QuirkyEvent,
   type SettingInfo,
   type ThemeList,
@@ -16,9 +17,38 @@ export type UiServiceOptions = {
   plugins: PluginHost
   store: Store
   broadcast: (event: QuirkyEvent) => void
+  /** The distro layer in effect, or null. */
+  distro?: () => DistroManifest | null
+  /** True in safe mode: the distro layer is skipped. */
+  safeMode?: boolean
 }
 
 const DEFAULT_THEME_ID = 'default'
+
+/**
+ * A setting's effective value across the layers: a valid stored value, else the distro's value
+ * when it fits the declaration, else the default. `stored` carries an unusable stored value.
+ */
+export function resolveSetting(
+  entry: UiSettingEntry,
+  stored: { value: unknown } | null,
+  distro: DistroManifest | null
+): SettingInfo {
+  const valid = stored !== null && checkSettingValue(entry.id, entry, stored.value) === null
+  const storedPart = stored ? { stored: { value: stored.value, valid } } : {}
+  if (stored && valid) return { ...entry, value: stored.value as SettingInfo['value'], source: 'user', ...storedPart }
+  const layered = distro?.settings?.[entry.id]
+  if (layered !== undefined && checkSettingValue(entry.id, entry, layered) === null) {
+    return { ...entry, value: layered, source: 'distro', ...storedPart }
+  }
+  return { ...entry, value: entry.default, source: 'default', ...storedPart }
+}
+
+/** The theme ID in force before fallback: the user's stored choice, else the distro's, else `default`. */
+export function chosenThemeOf(stored: unknown, distro: DistroManifest | null): string {
+  if (typeof stored === 'string') return stored
+  return distro?.theme ?? DEFAULT_THEME_ID
+}
 
 /**
  * Serves the UI model, plugin settings and themes to the daemon's methods and to plugin contexts.
@@ -58,7 +88,7 @@ export class UiService {
     return this.changed(entry)
   }
 
-  /** Deletes the stored value so the default applies again, and broadcasts `setting.changed`. NotFound for an unknown ID. */
+  /** Deletes only the user's stored value so the distro's or the default applies again, and broadcasts `setting.changed`. NotFound for an unknown ID. */
   resetSetting(id: string): SettingInfo {
     const entry = this.entryOf(id)
     this.options.store.deleteSettingValue(id)
@@ -91,13 +121,19 @@ export class UiService {
     return list
   }
 
+  private layer(): DistroManifest | null {
+    return this.options.safeMode ? null : (this.options.distro?.() ?? null)
+  }
+
   private build() {
     const { plugins, store } = this.options
-    const stored = store.getUiState('theme')
+    const distro = this.layer()
     return buildUiModel({
       declarations: plugins.contributions({ all: true }),
       plugins: plugins.list(),
-      chosenTheme: typeof stored === 'string' ? stored : DEFAULT_THEME_ID
+      chosenTheme: chosenThemeOf(store.getUiState('theme'), distro),
+      distroKeybindings: Object.entries(distro?.keybindings ?? {}).map(([key, command]) => ({ key, command })),
+      distroId: distro?.id ?? null
     })
   }
 
@@ -108,14 +144,7 @@ export class UiService {
   }
 
   private infoOf(entry: UiSettingEntry): SettingInfo {
-    const stored = this.options.store.getSettingValue(entry.id)
-    if (!stored) return { ...entry, value: entry.default }
-    const valid = checkSettingValue(entry.id, entry, stored.value) === null
-    return {
-      ...entry,
-      value: valid ? (stored.value as SettingInfo['value']) : entry.default,
-      stored: { value: stored.value, valid }
-    }
+    return resolveSetting(entry, this.options.store.getSettingValue(entry.id), this.layer())
   }
 
   private changed(entry: UiSettingEntry): SettingInfo {

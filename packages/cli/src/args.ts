@@ -1,4 +1,5 @@
 import type { FlagSpec } from './command-spec'
+import { MAX_REQUEST_BASE } from './link'
 
 /** Raised for bad invocations; `main` maps it to exit code 2. `suggestions` are commands the user may have meant. */
 export class UsageError extends Error {
@@ -19,6 +20,14 @@ export class CommandFailed extends Error {
   }
 }
 
+/** Raised by a command that fails with a message for stderr; `main` prints it even under `--json`. */
+export class StderrFailure extends CommandFailed {
+  constructor(message: string) {
+    super(message)
+    this.name = 'StderrFailure'
+  }
+}
+
 /** Flag values by name: strings, numbers, booleans, arrays for repeatable flags, or parsed JSON. */
 export type ParsedArgs = {
   positionals: string[]
@@ -27,7 +36,44 @@ export type ParsedArgs = {
 
 export const GLOBAL_FLAGS: Record<string, FlagSpec> = {
   json: { type: 'boolean', description: 'print machine-readable JSON' },
-  help: { type: 'boolean', description: 'show help' }
+  help: { type: 'boolean', description: 'show help' },
+  yes: { type: 'boolean', description: 'confirm destructive actions without asking in Quirky' },
+  'retry-request': { type: 'string', description: 'send calls under this request ID so a repeat returns the first outcome' }
+}
+
+/** The switches every command takes that change how calls are sent, not what the command does. */
+export type GlobalOptions = { yes: boolean; retryRequest?: string }
+
+/**
+ * Takes `--yes` and `--retry-request <id>` out of `argv` (wherever they stand before `--`), so
+ * routing and command parsing never see them. A bad `--retry-request` is a usage error.
+ */
+export function extractGlobals(argv: readonly string[]): { argv: string[]; options: GlobalOptions } {
+  const rest: string[] = []
+  const options: GlobalOptions = { yes: false }
+  for (let i = 0; i < argv.length; i++) {
+    const token = argv[i]
+    if (token === '--') {
+      rest.push(...argv.slice(i))
+      break
+    }
+    if (token === '--yes' || token === '--yes=true') options.yes = true
+    else if (token === '--yes=false') options.yes = false
+    else if (token === '--retry-request' || token.startsWith('--retry-request=')) {
+      let value: string | undefined = token.includes('=') ? token.slice(token.indexOf('=') + 1) : undefined
+      if (value === undefined) {
+        value = argv[i + 1]
+        if (value === undefined || value.startsWith('--')) throw new UsageError('--retry-request requires a value')
+        i++
+      }
+      if (value === '') throw new UsageError('--retry-request requires a value')
+      if (value.length > MAX_REQUEST_BASE) {
+        throw new UsageError(`--retry-request must be at most ${MAX_REQUEST_BASE} characters`)
+      }
+      options.retryRequest = value
+    } else rest.push(token)
+  }
+  return { argv: rest, options }
 }
 
 function parseValue(name: string, spec: FlagSpec, raw: string): unknown {
@@ -161,4 +207,23 @@ export function flagInt(args: ParsedArgs, name: string): number | undefined {
 
 export function flagBoolean(args: ParsedArgs, name: string): boolean {
   return args.flags[name] === true
+}
+
+/** Rejects missing or surplus positionals; `names` labels the required ones for the error message. */
+export function takePositionals(args: ParsedArgs, names: string[], optional = 0): string[] {
+  const { positionals } = args
+  if (positionals.length < names.length) {
+    throw new UsageError(`missing <${names[positionals.length]}>`)
+  }
+  if (positionals.length > names.length + optional) {
+    throw new UsageError(`unexpected argument "${positionals[names.length + optional]}"`)
+  }
+  return positionals
+}
+
+/** The value of a required string flag; an absent or empty value is a usage error. */
+export function requireFlag(args: ParsedArgs, name: string): string {
+  const value = flagString(args, name)
+  if (value === undefined || value === '') throw new UsageError(`--${name} is required`)
+  return value
 }

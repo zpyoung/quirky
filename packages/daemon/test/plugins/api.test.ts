@@ -273,7 +273,6 @@ describe('disabling', () => {
     const second = await startDaemon({
       home: s.home,
       port: 0,
-      git: s.harness.git,
       shell: '/bin/zsh',
       notifier: () => {},
       uiDir: '/none',

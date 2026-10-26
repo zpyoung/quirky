@@ -1,0 +1,50 @@
+{
+  "id": "quirky.agent-status",
+  "name": "Agent status",
+  "version": "0.1.0",
+  "description": "Turns agent hooks into session status and finish notifications.",
+  "main": "main.ts",
+  "activation": "startup",
+  "dependencies": ["quirky.session"],
+  "contributes": {
+    "method": [
+      {
+        "id": "list",
+        "description": "Sessions that received an agent hook, with their status and the time of the last hook.",
+        "readOnly": true,
+        "params": {
+          "type": "object",
+          "properties": { "worktree": { "type": "string", "description": "Only sessions of this worktree." } }
+        },
+        "result": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "sessionId": { "type": "string" },
+              "agent": { "type": "string" },
+              "status": { "type": "string" },
+              "lastHookAt": { "type": "number" }
+            },
+            "required": ["sessionId", "agent", "status", "lastHookAt"]
+          }
+        }
+      }
+    ],
+    "launch-hook": [
+      {
+        "id": "agent-hooks",
+        "description": "Points Claude at the hook settings file and Codex at the notify script.",
+        "agents": ["claude", "codex"]
+      }
+    ],
+    "setting": [
+      {
+        "id": "notifications",
+        "type": "boolean",
+        "title": "Notify when agents finish",
+        "default": true
+      }
+    ]
+  }
+}

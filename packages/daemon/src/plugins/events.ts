@@ -53,11 +53,17 @@ export class PluginEvents {
     this.remove((candidate) => candidate.pluginId === pluginId)
   }
 
+  /** Delivers every daemon event to plugin listeners; `Core.broadcast` calls it after the clients are served. */
+  deliver(event: QuirkyEvent): void {
+    this.deliverToPlugins(event)
+  }
+
   /**
    * Hands `event` to every current listener in registration order, each on its own `setImmediate`
-   * so no listener runs before the reply of the call that caused the event. Failures are logged.
+   * so no listener runs before the reply of the call that caused the event. Nothing is sent to
+   * clients, which is how `hook.received` reaches plugins. Failures are logged.
    */
-  deliver(event: QuirkyEvent): void {
+  deliverToPlugins(event: QuirkyEvent): void {
     for (const registration of [...this.registrations]) {
       setImmediate(() => {
         if (registration.active) void this.invoke(registration, event)

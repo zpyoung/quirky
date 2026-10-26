@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 import { chmodSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { buildArgv, buildSessionEnv, installIntegrationFiles } from '../src/launch'
+import { buildSessionEnv, commandArgv, installIntegrationFiles, shellArgv } from '../src/launch'
 import { makeTempHome } from './helpers'
 
 let root: string
@@ -46,37 +46,37 @@ async function run(argv: string[], env: Record<string, string>) {
 
 const shimPath = () => join(quirkyHome, 'bin', 'quirky')
 
-describe('agent sessions', () => {
+describe('command sessions', () => {
   test('the shim stays on PATH when ~/.zshenv resets it', async () => {
     write(join(userHome, '.zshenv'), RESET_PATH)
     const fakeBin = join(root, 'fakebin')
     write(join(fakeBin, 'claude'), '#!/bin/sh\ncommand -v quirky\n')
     chmodSync(join(fakeBin, 'claude'), 0o755)
     write(join(userHome, '.zprofile'), `${RESET_PATH}:${fakeBin}`)
-    const argv = buildArgv({ agent: 'claude', home: quirkyHome, shell: '/bin/zsh' })
+    const argv = commandArgv(quirkyHome, '/bin/zsh', 'claude')
     const result = await run(argv, sessionEnv('/bin/zsh', 'claude'))
     expect(result.stdout).toBe(shimPath())
   })
 })
 
 describe('zsh shell sessions', () => {
-  const shellArgv = () => [...buildArgv({ agent: 'shell', home: quirkyHome, shell: '/bin/zsh' }), '-i', '-c']
+  const interactiveArgv = () => [...shellArgv(quirkyHome, '/bin/zsh'), '-i', '-c']
 
   test('the shim is found when ~/.zshenv, .zprofile, .zshrc and .zlogin reset PATH', async () => {
     for (const file of ['.zshenv', '.zprofile', '.zshrc', '.zlogin']) write(join(userHome, file), RESET_PATH)
-    const result = await run([...shellArgv(), 'command -v quirky'], sessionEnv('/bin/zsh'))
+    const result = await run([...interactiveArgv(), 'command -v quirky'], sessionEnv('/bin/zsh'))
     expect(result.stdout).toBe(shimPath())
   })
 
   test('the shim is found when only ~/.zshenv resets PATH', async () => {
     write(join(userHome, '.zshenv'), RESET_PATH)
-    const result = await run([...shellArgv(), 'command -v quirky'], sessionEnv('/bin/zsh'))
+    const result = await run([...interactiveArgv(), 'command -v quirky'], sessionEnv('/bin/zsh'))
     expect(result.stdout).toBe(shimPath())
   })
 
   test('the bin dir comes first even when a user file already listed it later', async () => {
     write(join(userHome, '.zshrc'), `export PATH=/usr/bin:${join(quirkyHome, 'bin')}:/bin`)
-    const result = await run([...shellArgv(), 'print -r -- ${path[1]}'], sessionEnv('/bin/zsh'))
+    const result = await run([...interactiveArgv(), 'print -r -- ${path[1]}'], sessionEnv('/bin/zsh'))
     expect(result.stdout).toBe(join(quirkyHome, 'bin'))
   })
 
@@ -85,7 +85,7 @@ describe('zsh shell sessions', () => {
     for (const file of ['.zshenv', '.zprofile', '.zshrc', '.zlogin']) {
       write(join(userHome, file), `print -r -- "${file} ZDOTDIR=\${ZDOTDIR-unset}" >> ${log}`)
     }
-    const result = await run([...shellArgv(), 'print -r -- "final ${ZDOTDIR-unset}"'], sessionEnv('/bin/zsh'))
+    const result = await run([...interactiveArgv(), 'print -r -- "final ${ZDOTDIR-unset}"'], sessionEnv('/bin/zsh'))
     const lines = readFileSync(log, 'utf8').trim().split('\n')
     expect(lines).toEqual([
       `.zshenv ZDOTDIR=${userHome}`,
@@ -101,25 +101,25 @@ describe('zsh shell sessions', () => {
     write(join(zdot, '.zshenv'), RESET_PATH)
     const env = sessionEnv('/bin/zsh', 'shell', { ZDOTDIR: zdot })
     expect(env.QUIRKY_ORIG_ZDOTDIR).toBe(zdot)
-    const result = await run([...shellArgv(), 'print -r -- "$HISTFILE|$(command -v quirky)"'], env)
+    const result = await run([...interactiveArgv(), 'print -r -- "$HISTFILE|$(command -v quirky)"'], env)
     const [histfile, shim] = result.stdout.split('|')
     expect(shim).toBe(shimPath())
     expect(histfile?.startsWith(join(quirkyHome, 'shell'))).toBe(false)
   })
 
   test('a missing set of user files is fine', async () => {
-    const result = await run([...shellArgv(), 'command -v quirky'], sessionEnv('/bin/zsh'))
+    const result = await run([...interactiveArgv(), 'command -v quirky'], sessionEnv('/bin/zsh'))
     expect(result.stdout).toBe(shimPath())
   })
 })
 
 describe('bash shell sessions', () => {
-  const shellArgv = () => [...buildArgv({ agent: 'shell', home: quirkyHome, shell: '/bin/bash' }), '-c']
+  const interactiveArgv = () => [...shellArgv(quirkyHome, '/bin/bash'), '-c']
 
   test('the shim is found when .bash_profile and .bashrc reset PATH', async () => {
     write(join(userHome, '.bash_profile'), RESET_PATH)
     write(join(userHome, '.bashrc'), RESET_PATH)
-    const result = await run([...shellArgv(), 'command -v quirky'], sessionEnv('/bin/bash'))
+    const result = await run([...interactiveArgv(), 'command -v quirky'], sessionEnv('/bin/bash'))
     expect(result.stdout).toBe(shimPath())
   })
 
@@ -127,7 +127,7 @@ describe('bash shell sessions', () => {
     const log = join(root, 'log')
     write(join(userHome, '.profile'), `[ -f ~/.bashrc ] && . ~/.bashrc`)
     write(join(userHome, '.bashrc'), `echo rc >> ${log}\n${RESET_PATH}`)
-    const result = await run([...shellArgv(), 'command -v quirky'], sessionEnv('/bin/bash'))
+    const result = await run([...interactiveArgv(), 'command -v quirky'], sessionEnv('/bin/bash'))
     expect(result.stdout).toBe(shimPath())
     expect(readFileSync(log, 'utf8').trim().split('\n')).toEqual(['rc'])
   })

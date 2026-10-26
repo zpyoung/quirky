@@ -1,0 +1,68 @@
+{
+  "id": "quirky.session",
+  "name": "Session (test fake)",
+  "version": "0.0.0",
+  "main": "main.ts",
+  "activation": "startup",
+  "contributes": {
+    "method": [
+      {
+        "id": "get",
+        "readOnly": true,
+        "params": {
+          "type": "object",
+          "properties": { "session": { "type": "string" } },
+          "required": ["session"]
+        }
+      },
+      {
+        "id": "list",
+        "readOnly": true,
+        "params": { "type": "object" }
+      },
+      {
+        "id": "create",
+        "params": {
+          "type": "object",
+          "properties": {
+            "worktree": { "type": "string" },
+            "agent": { "type": "string", "enum": ["shell", "claude", "codex", "opencode", "gemini"] }
+          },
+          "required": ["agent"]
+        }
+      },
+      {
+        "id": "register",
+        "params": {
+          "type": "object",
+          "properties": {
+            "worktree": { "type": "string" },
+            "agent": { "type": "string" },
+            "kind": { "type": "string", "enum": ["structured"] },
+            "title": { "type": "string" }
+          },
+          "required": ["agent", "kind", "title"]
+        }
+      },
+      {
+        "id": "close",
+        "params": {
+          "type": "object",
+          "properties": { "session": { "type": "string" } },
+          "required": ["session"]
+        }
+      }
+    ],
+    "event": [
+      {
+        "id": "removed",
+        "description": "A session was closed.",
+        "data": {
+          "type": "object",
+          "properties": { "sessionId": { "type": "string" } },
+          "required": ["sessionId"]
+        }
+      }
+    ]
+  }
+}

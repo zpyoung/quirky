@@ -116,6 +116,8 @@ export type UiSettingEntry = { id: string; plugin: string } & SettingDeclaration
 /** A setting with its current value; `stored` is absent when nothing is stored. */
 export type SettingInfo = UiSettingEntry & {
   value: boolean | number | string
+  /** Which layer `value` comes from: the user's stored value, the installed distro's, or the declared default; the daemon always sets it. */
+  source?: 'user' | 'distro' | 'default'
   /** `valid` is false when the stored value fails the current declaration. */
   stored?: { value: unknown; valid: boolean }
 }
@@ -142,8 +144,35 @@ export type UiModel = {
   modules: Record<string, { url: string; provides: string[] }>
 }
 
-/** Renders a slot into `element`; the returned function cleans up. */
-export type MountFunction = (element: HTMLElement, props: { input?: unknown }) => (() => void) | void
+/** Which view and panel are open, whether the sidebar shows, and where focus is; owned by the daemon. */
+export type UiLayout = {
+  view: { id: string; input?: unknown } | null
+  panel: string | null
+  sidebar: boolean
+  focus: 'sidebar' | 'view' | 'panel' | null
+}
+
+/** A connected window (a client with role `ui`). */
+export type UiWindowInfo = { connId: number; name?: string; focused: boolean }
+
+/** One slot in the UI model, with the latest report from its mounted window. */
+export type UiSlotState = {
+  id: string
+  kind: 'sidebar-section' | 'panel' | 'view'
+  plugin: string
+  title: string
+  shown: boolean
+  report?: unknown
+}
+
+/** What `ui.state` returns. */
+export type UiState = { windows: UiWindowInfo[]; layout: UiLayout; slots: UiSlotState[] }
+
+/** Renders a slot into `element`; the returned function cleans up. `report` sends a JSON summary of what the slot shows. */
+export type MountFunction = (
+  element: HTMLElement,
+  props: { input?: unknown; report?(state: unknown): void }
+) => (() => void) | void
 
 /** Runs a command, with the arguments it was invoked with. */
 export type CommandHandler = (args?: unknown) => unknown
@@ -165,6 +194,18 @@ export type UiPluginContext = {
   openView(id: string, input?: unknown): void
   closeView(): void
   togglePanel(id: string, open?: boolean): void
+  getLayout(): UiLayout
+  /** Listens to layout changes; the returned function unsubscribes. */
+  onLayout(listener: (layout: UiLayout) => void): () => void
+  /** Listens to binary stream frames tagged `streamId`; the returned function unsubscribes. */
+  onStream(streamId: number, listener: (bytes: Uint8Array) => void): () => void
+  /** Listens to connection status changes; the returned function unsubscribes. */
+  onConnection(listener: (status: 'connected' | 'reconnecting') => void): () => void
+  /** Shows a confirm dialog; resolves true when the person confirms. */
+  confirm(options: { title: string; body?: string; confirmLabel?: string }): Promise<boolean>
+  toast(title: string, body: string): void
+  /** Shows a count on the panel's toggle; null clears it. */
+  setPanelBadge(panelId: string, count: number | null): void
 }
 
 /** The shape a plugin's UI module must export. */
@@ -176,21 +217,8 @@ export type UiPluginModule = {
 /** Platform whose chord conventions apply: on `darwin`, `cmd` means `mod` and `metaKey` is `mod`. */
 export const CHORD_PLATFORM: string = 'darwin'
 
-/** Chords the window keeps for itself: new tab, close tab, tabs 1 to 9 and the command palette. */
-export const RESERVED_CHORDS: readonly string[] = [
-  'mod+t',
-  'mod+w',
-  'mod+1',
-  'mod+2',
-  'mod+3',
-  'mod+4',
-  'mod+5',
-  'mod+6',
-  'mod+7',
-  'mod+8',
-  'mod+9',
-  'mod+shift+p'
-]
+/** Chords the window keeps for itself: the command palette. */
+export const RESERVED_CHORDS: readonly string[] = ['mod+shift+p']
 
 const MODIFIER_ORDER = ['mod', 'ctrl', 'alt', 'shift'] as const
 type Modifier = (typeof MODIFIER_ORDER)[number]

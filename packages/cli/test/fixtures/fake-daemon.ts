@@ -1,71 +1,73 @@
-import { mkdtempSync, mkdirSync, realpathSync, rmSync } from 'node:fs'
-import { tmpdir } from 'node:os'
+import { mkdtempSync, realpathSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import {
   DEFAULT_THEME,
   CATALOG_SCHEMA_VERSION,
   PROTOCOL_VERSION,
   RpcErrorCode,
-  type AskEnvelope,
   type ApiMethodEntry,
-  type AskSpec,
+  type ApiCliCommandEntry,
+  type ApiDescription,
   type ContributionInfo,
   type JobInfo,
   type JobRun,
   type PluginInfo,
-  type Repo,
-  type Session,
   type SettingInfo,
   type ThemeInfo,
   type UiCommandEntry,
   type UiKeybinding,
   type UiModel,
-  type UiSlotEntry,
-  type Worktree
+  type UiSlotEntry
 } from '@quirky/protocol'
 import { writePrivateJson, runtimeFilePath, type RuntimeInfo } from '@quirky/protocol/node'
 
-export type FakeCall = { method: string; params: any }
-
-export type FakeDaemonOptions = {
-  /** Delay before a pending ask is answered; `null` leaves asks pending until cancelled. */
-  answerAfterMs?: number | null
-  /** Close the socket on the first `ask.wait`, to exercise client reconnects. */
-  dropFirstWait?: boolean
-  /** Make `ask.cancel` fail with an internal error. */
-  failCancel?: boolean
-}
+export type FakeCall = { method: string; params: any; requestId?: string; transport?: 'socket' | 'websocket' }
 
 class FakeRpcError extends Error {
   constructor(
     readonly code: number,
-    message: string
+    message: string,
+    readonly data?: unknown
   ) {
     super(message)
   }
 }
 
+/** One client connection, whichever transport carried it. */
+type Conn = { transport: 'socket' | 'websocket'; send(value: unknown): void; close(): void }
+
+type Outcome = { ok: true; value: unknown } | { ok: false; error: FakeRpcError }
+
+/** A method that answers ConfirmationRequired until called with `yes` or its `confirmation`. */
+export type ConfirmationGate = {
+  askId: string
+  action: string
+  /** How the ask ends once `quirky.ask/wait` stops answering `pending`. */
+  answer: 'answered' | 'declined'
+  /** How many `quirky.ask/wait` calls answer `pending` before the final status. */
+  pendingWaits: number
+  waits: number
+}
+
+const READ_ONLY_NAME = /(^|[./])(list|get|describe|state|read|wait|inspect)$/
+
 /** What a seeded plugin method does when called: return `result`, or fail with `error`. */
 export type MethodBehavior = { result?: unknown; error?: { code: number; message: string } }
-
-type AskState = { envelope: AskEnvelope; spec: AskSpec; waiters: Set<() => void> }
 
 /**
  * A stand-in for quirkyd: serves `/health` and the `/rpc` WebSocket on a free loopback port, and
  * writes `runtime.json` into a private temp `QUIRKY_HOME`. Records every call for assertions.
  */
 export class FakeDaemon {
-  readonly home = realpathSync(mkdtempSync(join(tmpdir(), 'quirky-cli-')))
+  readonly home = realpathSync(mkdtempSync('/tmp/qcli-'))
   readonly token = 'fake-token'
   readonly calls: FakeCall[] = []
-  readonly repos: Repo[] = []
-  readonly worktrees: Worktree[] = []
-  readonly sessions: Session[] = []
+  /** Methods that ran, as opposed to being answered from a recorded request ID. */
+  readonly executions: string[] = []
   readonly plugins: PluginInfo[] = []
   readonly contributions: ContributionInfo[] = []
   readonly jobs: JobInfo[] = []
   readonly jobRuns = new Map<string, JobRun>()
-  readonly asks = new Map<string, AskState>()
   readonly ui: UiModel = {
     sidebarSections: [],
     panels: [],
@@ -82,16 +84,26 @@ export class FakeDaemon {
   readonly settingErrors = new Map<string, { code: number; message: string }>()
   /** Plugin methods served through `api.describe` and answerable by name. */
   readonly methods = new Map<string, { entry: ApiMethodEntry; behavior: MethodBehavior }>()
+  /** Served as `api.describe`'s `cli` part. */
+  readonly cli: ApiDescription['cli'] = { groups: [], commands: [] }
+  /** Fixed results for methods the fake has no behavior for, such as `ui.state` or `plugin.inspect`. */
+  readonly results = new Map<string, unknown>()
+  /** Errors a method answers with, whatever its params. */
+  readonly errors = new Map<string, { code: number; message: string }>()
+  readonly confirmations = new Map<string, ConfirmationGate>()
   connections = 0
+  socketConnections = 0
   private server!: ReturnType<typeof Bun.serve>
-  private waitCalls = 0
-  private nextAsk = 1
-  private nextSession = 1
-
-  constructor(private readonly options: FakeDaemonOptions = {}) {}
+  private listener!: ReturnType<typeof Bun.listen>
+  private readonly outcomes = new Map<string, Outcome>()
+  private readonly drops = new Map<string, number>()
 
   get port(): number {
     return this.server.port as number
+  }
+
+  get socketPath(): string {
+    return join(this.home, 'quirkyd.sock')
   }
 
   start(): this {
@@ -114,19 +126,48 @@ export class FakeDaemon {
         open() {
           daemon.connections++
         },
-        async message(ws, raw) {
-          const request = JSON.parse(String(raw)) as { id: number; method: string; params: any }
-          try {
-            const result = await daemon.handle(request.method, request.params ?? {}, ws)
-            if (result === DROP) return
-            ws.send(JSON.stringify({ jsonrpc: '2.0', id: request.id, result }))
-          } catch (error) {
-            const code = error instanceof FakeRpcError ? error.code : RpcErrorCode.Internal
-            ws.send(
-              JSON.stringify({ jsonrpc: '2.0', id: request.id, error: { code, message: (error as Error).message } })
-            )
-          }
+        message(ws, raw) {
+          const conn: Conn = { transport: 'websocket', send: (value) => ws.send(JSON.stringify(value)), close: () => ws.close() }
+          void daemon.onRequest(conn, JSON.parse(String(raw)))
         }
+      }
+    })
+    this.listener = Bun.listen<{ buffer: string; authed: boolean }>({
+      unix: this.socketPath,
+      socket: {
+        open(socket) {
+          socket.data = { buffer: '', authed: false }
+          daemon.connections++
+          daemon.socketConnections++
+        },
+        data(socket, chunk) {
+          socket.data.buffer += chunk.toString()
+          for (let end = socket.data.buffer.indexOf('\n'); end !== -1; end = socket.data.buffer.indexOf('\n')) {
+            const line = socket.data.buffer.slice(0, end)
+            socket.data.buffer = socket.data.buffer.slice(end + 1)
+            const conn: Conn = {
+              transport: 'socket',
+              send: (value) => void socket.write(`${JSON.stringify(value)}\n`),
+              close: () => void socket.end()
+            }
+            const request = JSON.parse(line)
+            if (!socket.data.authed) {
+              if (request.method !== 'client.hello' || request.params?.token !== daemon.token) {
+                daemon.calls.push({ method: request.method, params: request.params ?? {}, transport: 'socket' })
+                conn.send({
+                  jsonrpc: '2.0',
+                  id: request.id,
+                  error: { code: RpcErrorCode.Unauthorized, message: 'the first message must be client.hello with the token' }
+                })
+                conn.close()
+                return
+              }
+              socket.data.authed = true
+            }
+            void daemon.onRequest(conn, request)
+          }
+        },
+        close() {}
       }
     })
     const info: RuntimeInfo = {
@@ -136,7 +177,8 @@ export class FakeDaemon {
       hookToken: 'fake-hook-token',
       daemonVersion: '0.0.0-fake',
       protocolVersion: PROTOCOL_VERSION,
-      startedAt: Date.now()
+      startedAt: Date.now(),
+      socket: this.socketPath
     }
     writePrivateJson(runtimeFilePath(this.home), info)
     return this
@@ -144,34 +186,45 @@ export class FakeDaemon {
 
   stop(): void {
     this.server.stop(true)
+    this.listener.stop(true)
     rmSync(this.home, { recursive: true, force: true })
+  }
+
+  /** Makes the next `times` calls to `method` run and then lose the connection before the reply. */
+  dropAfter(method: string, times = 1): void {
+    this.drops.set(method, times)
+  }
+
+  /**
+   * Makes `method` answer ConfirmationRequired until it is called with `yes`, or with `confirmation`
+   * naming this gate's ask; `quirky.ask/wait` on that ask ends as `answer`.
+   */
+  requireConfirmation(
+    method: string,
+    gate: Partial<Omit<ConfirmationGate, 'waits'>> & { action: string }
+  ): ConfirmationGate {
+    const full: ConfirmationGate = { askId: 'ask_c1', answer: 'answered', pendingWaits: 0, ...gate, waits: 0 }
+    this.confirmations.set(method, full)
+    return full
+  }
+
+  addCliCommand(entry: Partial<ApiCliCommandEntry> & Pick<ApiCliCommandEntry, 'id' | 'plugin' | 'words'>): ApiCliCommandEntry {
+    const full: ApiCliCommandEntry = {
+      aliasWords: [],
+      summary: '',
+      positionals: [],
+      flags: [],
+      method: null,
+      methods: entry.method ? [entry.method] : [],
+      module: null,
+      ...entry
+    }
+    this.cli.commands.push(full)
+    return full
   }
 
   methodCalls(method: string): any[] {
     return this.calls.filter((call) => call.method === method).map((call) => call.params)
-  }
-
-  addRepo(name: string): Repo {
-    const path = join(this.home, 'repos', name)
-    mkdirSync(path, { recursive: true })
-    const repo: Repo = { id: `repo_${name}`, name, path, addedAt: 1 }
-    this.repos.push(repo)
-    return repo
-  }
-
-  addWorktree(repo: Repo, name: string, path = join(this.home, 'worktrees', repo.name, name)): Worktree {
-    mkdirSync(path, { recursive: true })
-    const worktree: Worktree = {
-      id: `wt_${repo.name}_${name}`,
-      repoId: repo.id,
-      path,
-      branch: name,
-      head: 'abc1234',
-      isMain: false,
-      name
-    }
-    this.worktrees.push(worktree)
-    return worktree
   }
 
   addPlugin(id: string, overrides: Partial<PluginInfo> = {}): PluginInfo {
@@ -289,7 +342,8 @@ export class FakeDaemon {
       protocolVersion: PROTOCOL_VERSION,
       methods: [...this.methods.values()].map(({ entry }) => entry).sort((a, b) => (a.name < b.name ? -1 : 1)),
       events: [],
-      uiCommands: []
+      uiCommands: [],
+      cli: this.cli
     }
   }
 
@@ -322,8 +376,64 @@ export class FakeDaemon {
     return setting
   }
 
-  private async handle(method: string, params: any, ws: { close(): void }): Promise<unknown> {
-    this.calls.push({ method, params })
+  private async onRequest(
+    conn: Conn,
+    request: { id: number; method: string; params?: any; requestId?: string }
+  ): Promise<void> {
+    try {
+      const result = await this.handle(request.method, request.params ?? {}, conn, request.requestId)
+      if (result === DROP) return
+      conn.send({ jsonrpc: '2.0', id: request.id, result })
+    } catch (error) {
+      const code = error instanceof FakeRpcError ? error.code : RpcErrorCode.Internal
+      const data = error instanceof FakeRpcError ? error.data : undefined
+      conn.send({
+        jsonrpc: '2.0',
+        id: request.id,
+        error: { code, message: (error as Error).message, ...(data !== undefined ? { data } : {}) }
+      })
+    }
+  }
+
+  /** Runs a call the way the real dispatcher records it: a repeated request ID returns the first outcome. */
+  private async handle(method: string, params: any, conn: Conn, requestId?: string): Promise<unknown> {
+    this.calls.push({ method, params, ...(requestId ? { requestId } : {}), transport: conn.transport })
+    const recordable = requestId !== undefined && method !== 'client.hello' && !READ_ONLY_NAME.test(method)
+    let outcome = recordable ? this.outcomes.get(requestId) : undefined
+    if (!outcome) {
+      outcome = await this.settle(method, params, conn)
+      if (recordable) this.outcomes.set(requestId, outcome)
+    }
+    const remaining = this.drops.get(method) ?? 0
+    if (remaining > 0) {
+      this.drops.set(method, remaining - 1)
+      conn.close()
+      return DROP
+    }
+    if (!outcome.ok) throw outcome.error
+    return outcome.value
+  }
+
+  private async settle(method: string, params: any, conn: Conn): Promise<Outcome> {
+    this.executions.push(method)
+    try {
+      return { ok: true, value: await this.dispatch(method, params, conn) }
+    } catch (error) {
+      if (error instanceof FakeRpcError) return { ok: false, error }
+      throw error
+    }
+  }
+
+  private async dispatch(method: string, params: any, conn: Conn): Promise<unknown> {
+    const failure = this.errors.get(method)
+    if (failure) throw new FakeRpcError(failure.code, failure.message)
+    const gate = this.confirmations.get(method)
+    if (gate && params.yes !== true && params.confirmation !== gate.askId) {
+      throw new FakeRpcError(RpcErrorCode.ConfirmationRequired, 'confirmation required', {
+        askId: gate.askId,
+        action: gate.action
+      })
+    }
     switch (method) {
       case 'client.hello':
         return { protocolVersion: PROTOCOL_VERSION, daemonVersion: '0.0.0-fake' }
@@ -334,95 +444,10 @@ export class FakeDaemon {
           startedAt: 1_700_000_000_000,
           home: this.home,
           ptyHost: { pid: 4242, alive: true },
-          clients: [{ role: 'cli', name: 'quirky' }]
+          clients: [{ role: 'cli', name: 'quirky' }],
+          safeMode: false,
+          socket: null
         }
-      case 'repo.list':
-        return this.repos
-      case 'repo.add': {
-        const repo: Repo = { id: `repo_${this.repos.length + 1}`, name: 'added', path: params.path, addedAt: 2 }
-        this.repos.push(repo)
-        return repo
-      }
-      case 'repo.remove': {
-        const index = this.repos.findIndex((repo) => repo.id === params.repoId)
-        if (index === -1) throw new FakeRpcError(RpcErrorCode.NotFound, `repo not found: ${params.repoId}`)
-        this.repos.splice(index, 1)
-        return { ok: true }
-      }
-      case 'worktree.list':
-        return this.worktrees.filter((wt) => !params.repoId || wt.repoId === params.repoId)
-      case 'worktree.create': {
-        const repo = this.repos.find((candidate) => candidate.id === params.repoId)
-        if (!repo) throw new FakeRpcError(RpcErrorCode.NotFound, `repo not found: ${params.repoId}`)
-        return this.addWorktree(repo, params.name)
-      }
-      case 'worktree.remove':
-        return { ok: true }
-      case 'session.list':
-        return this.sessions.filter((session) => !params.worktreeId || session.worktreeId === params.worktreeId)
-      case 'session.create':
-      case 'session.createStructured': {
-        const session: Session = {
-          id: `sess_${this.nextSession++}`,
-          kind: method === 'session.create' ? 'terminal' : 'structured',
-          agent: params.agent,
-          worktreeId: params.worktreeId,
-          cwd: '/tmp',
-          title: params.agent,
-          status: 'running',
-          createdAt: 1,
-          lastActivityAt: 1,
-          exitCode: null
-        }
-        this.sessions.push(session)
-        return session
-      }
-      case 'session.close':
-        return { ok: true }
-      case 'terminal.read':
-        return { lines: ['first line', 'second line'], cols: 80, rows: 24, alt: false }
-      case 'terminal.send':
-        return { ok: true }
-      case 'ask.create': {
-        const askId = `ask_${this.nextAsk++}`
-        const state: AskState = {
-          envelope: { status: 'pending', askId, answers: {}, skipped: [] },
-          spec: params.spec,
-          waiters: new Set()
-        }
-        this.asks.set(askId, state)
-        if (typeof this.options.answerAfterMs === 'number') {
-          setTimeout(() => this.resolve(askId, 'answered'), this.options.answerAfterMs)
-        } else if (this.options.answerAfterMs === undefined) {
-          setTimeout(() => this.resolve(askId, 'answered'), 300)
-        }
-        return { askId }
-      }
-      case 'ask.wait': {
-        this.waitCalls++
-        if (this.options.dropFirstWait && this.waitCalls === 1) {
-          ws.close()
-          return DROP
-        }
-        const state = this.requireAsk(params.askId)
-        if (state.envelope.status !== 'pending') return state.envelope
-        await new Promise<void>((resolve) => {
-          const done = () => {
-            clearTimeout(timer)
-            state.waiters.delete(done)
-            resolve()
-          }
-          const timer = setTimeout(done, params.timeoutMs ?? 60000)
-          state.waiters.add(done)
-        })
-        return state.envelope
-      }
-      case 'ask.cancel': {
-        if (this.options.failCancel) throw new FakeRpcError(RpcErrorCode.Internal, 'cancel failed')
-        const state = this.requireAsk(params.askId)
-        if (state.envelope.status === 'pending') this.resolve(params.askId, 'declined')
-        return state.envelope
-      }
       case 'plugin.list':
         return this.plugins
       case 'plugin.contributions':
@@ -482,32 +507,27 @@ export class FakeDaemon {
         return this.themeList()
       case 'api.describe':
         return this.describe()
+      case 'quirky.ask/wait': {
+        const gate = [...this.confirmations.values()].find((candidate) => candidate.askId === params.askId)
+        if (!gate) throw new FakeRpcError(RpcErrorCode.NotFound, `ask not found: ${params.askId}`)
+        gate.waits++
+        const status = gate.waits <= gate.pendingWaits ? 'pending' : gate.answer
+        return { status, askId: gate.askId, answers: {}, skipped: [] }
+      }
+      case 'daemon.stop':
+        setTimeout(() => {
+          this.server.stop(true)
+          this.listener.stop(true)
+        }, 30)
+        return { ok: true }
       default: {
+        if (this.results.has(method)) return this.results.get(method)
         const seeded = this.methods.get(method)
         if (seeded?.behavior.error) throw new FakeRpcError(seeded.behavior.error.code, seeded.behavior.error.message)
         if (seeded) return seeded.behavior.result === undefined ? { ok: true } : seeded.behavior.result
         throw new FakeRpcError(RpcErrorCode.MethodNotFound, `method not found: ${method}`)
       }
     }
-  }
-
-  private requireAsk(askId: string): AskState {
-    const state = this.asks.get(askId)
-    if (!state) throw new FakeRpcError(RpcErrorCode.NotFound, `ask not found: ${askId}`)
-    return state
-  }
-
-  private resolve(askId: string, status: 'answered' | 'declined'): void {
-    const state = this.asks.get(askId)
-    if (!state || state.envelope.status !== 'pending') return
-    const first = state.spec.questions[0]
-    state.envelope = {
-      status,
-      askId,
-      answers: status === 'answered' && first ? { [first.id]: { value: 'yes', source: 'input' } } : {},
-      skipped: []
-    }
-    for (const wake of [...state.waiters]) wake()
   }
 }
 

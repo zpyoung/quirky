@@ -63,7 +63,7 @@ describe('rpc auth', () => {
     const reply = new Promise<any>((resolve) =>
       socket.addEventListener('message', (e) => resolve(JSON.parse(e.data as string)), { once: true })
     )
-    socket.send(JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'repo.list', params: {} }))
+    socket.send(JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'status.get', params: {} }))
     const message = await reply
     expect(message.id).toBe(1)
     expect(message.error.code).toBe(RpcErrorCode.Unauthorized)
@@ -98,11 +98,10 @@ describe('rpc auth', () => {
       }
     }
     expect(await code('nope.nothing', {})).toBe(RpcErrorCode.MethodNotFound)
-    expect(await code('repo.add', {})).toBe(RpcErrorCode.InvalidParams)
-    expect(await code('repo.add', { path: 5 })).toBe(RpcErrorCode.InvalidParams)
-    expect(await code('session.close', { sessionId: 's_missing' })).toBe(RpcErrorCode.NotFound)
-    expect(await code('worktree.remove', { worktreeId: 'wt_missing' })).toBe(RpcErrorCode.NotFound)
-    expect(await code('ask.wait', { askId: 'ask_missing' })).toBe(RpcErrorCode.NotFound)
+    expect(await code('plugin.enable', {})).toBe(RpcErrorCode.InvalidParams)
+    expect(await code('plugin.enable', { id: 5 })).toBe(RpcErrorCode.InvalidParams)
+    expect(await code('plugin.activate', { pluginId: 'acme.missing' })).toBe(RpcErrorCode.NotFound)
+    expect(await code('setting.get', { id: 'setting:acme.none/x' })).toBe(RpcErrorCode.NotFound)
   })
 })
 
@@ -123,7 +122,7 @@ describe('hook endpoint auth', () => {
       body: '{}',
       headers: { [HOOK_TOKEN_HEADER]: harness.runtime.hookToken }
     })
-    expect(right.status).toBe(404)
+    expect(right.status).toBe(200)
   })
 })
 

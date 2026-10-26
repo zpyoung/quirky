@@ -1,16 +1,7 @@
-import { timingSafeEqual } from 'node:crypto'
-import {
-  HOOK_PATH_PREFIX,
-  HOOK_TOKEN_HEADER,
-  RPC_PATH,
-  RpcErrorCode,
-  type RpcFailure,
-  type RpcSuccess
-} from '@quirky/protocol'
+import { HOOK_PATH_PREFIX, HOOK_TOKEN_HEADER, RPC_PATH } from '@quirky/protocol'
 import { HEALTH_PATH } from '@quirky/protocol/node'
-import { DaemonError } from './errors'
 import { servePluginFile } from './plugin-files'
-import type { Dispatcher } from './plugins/dispatch'
+import { nextConnId, type RpcHandler, tokensMatch } from './rpc-handler'
 import type { Core } from './service'
 import { serveStatic } from './static'
 import type { ClientConn } from './types'
@@ -19,8 +10,10 @@ type SocketData = { conn: ClientConn }
 
 export type ServerOptions = {
   core: Core
-  dispatcher: Dispatcher
+  /** Handles one JSON-RPC message from a WebSocket connection. */
+  handle: RpcHandler
   port: number
+  /** Authenticates the `/rpc` upgrade (`?token=`). */
   rpcToken: string
   daemonVersion: string
   uiDir: string
@@ -29,21 +22,13 @@ export type ServerOptions = {
   log: (message: string) => void
 }
 
-function tokensMatch(expected: string, actual: string | null): boolean {
-  if (actual === null) return false
-  const a = Buffer.from(expected)
-  const b = Buffer.from(actual)
-  return a.length === b.length && timingSafeEqual(a, b)
-}
-
 function json(body: unknown, status = 200): Response {
   return Response.json(body, { status })
 }
 
 /** The single loopback HTTP server: health, the RPC WebSocket, agent hooks and the static UI. */
 export function startServer(options: ServerOptions) {
-  const { core, dispatcher } = options
-  let nextConnId = 1
+  const { core, handle } = options
 
   async function handleHook(request: Request, url: URL): Promise<Response> {
     if (!tokensMatch(core.hookToken, request.headers.get(HOOK_TOKEN_HEADER))) {
@@ -61,8 +46,12 @@ export function startServer(options: ServerOptions) {
         return json({ error: 'body must be JSON' }, 400)
       }
     }
-    const known = await core.handleHook(agent, sessionId, payload)
-    return known ? json({ ok: true }) : json({ error: 'unknown session' }, 404)
+    try {
+      core.deliverToPlugins({ type: 'hook.received', agent, sessionId, payload })
+    } catch (error) {
+      options.log(`hook.received delivery failed: ${(error as Error)?.stack ?? error}`)
+    }
+    return json({ ok: true })
   }
 
   const server = Bun.serve<SocketData>({
@@ -79,11 +68,13 @@ export function startServer(options: ServerOptions) {
           return json({ error: 'unauthorized' }, 401)
         }
         const conn: ClientConn = {
-          id: nextConnId++,
+          id: nextConnId(),
           role: null,
           subscribed: false,
           closed: false,
+          transport: 'websocket',
           streams: new Map(),
+          streamClosers: new Map(),
           nextStreamId: 1,
           sendText: () => {},
           sendBinary: () => {}
@@ -112,55 +103,13 @@ export function startServer(options: ServerOptions) {
       },
       message(ws, message) {
         if (typeof message !== 'string') return
-        void handleMessage(ws.data.conn, message)
+        void handle(ws.data.conn, message)
       },
       close(ws) {
         core.removeClient(ws.data.conn)
       }
     }
   })
-
-  async function handleMessage(conn: ClientConn, text: string): Promise<void> {
-    const reply = (message: RpcSuccess | RpcFailure) => {
-      if (!conn.closed) conn.sendText(JSON.stringify(message))
-    }
-    const fail = (id: number | null, code: number, message: string) =>
-      reply({ jsonrpc: '2.0', id, error: { code, message } })
-
-    let request: any
-    try {
-      request = JSON.parse(text)
-    } catch {
-      return fail(null, RpcErrorCode.ParseError, 'invalid JSON')
-    }
-    if (
-      !request ||
-      request.jsonrpc !== '2.0' ||
-      typeof request.method !== 'string' ||
-      typeof request.id !== 'number'
-    ) {
-      return fail(
-        typeof request?.id === 'number' ? request.id : null,
-        RpcErrorCode.InvalidRequest,
-        'expected a JSON-RPC 2.0 request with a numeric id'
-      )
-    }
-    const { id, method } = request
-    if (conn.role === null && method !== 'client.hello') {
-      return fail(id, RpcErrorCode.Unauthorized, 'client.hello must be the first call')
-    }
-    const params = request.params ?? {}
-    if (typeof params !== 'object' || Array.isArray(params)) {
-      return fail(id, RpcErrorCode.InvalidParams, 'params must be an object')
-    }
-    try {
-      reply({ jsonrpc: '2.0', id, result: await dispatcher.dispatch(method, params, { conn }) })
-    } catch (error) {
-      if (error instanceof DaemonError) return fail(id, error.code, error.message)
-      options.log(`rpc ${method} failed: ${(error as Error)?.stack ?? error}`)
-      fail(id, RpcErrorCode.Internal, (error as Error)?.message ?? 'internal error')
-    }
-  }
 
   return server
 }

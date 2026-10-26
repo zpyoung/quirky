@@ -1,7 +1,5 @@
 import { expect, test } from 'bun:test'
 import type { SettingInfo } from '@quirky/protocol'
-import { sessionForDigit } from '../src/lib/shortcuts'
-import { terminalColors } from '../src/lib/terminalTheme'
 import { isPaletteChord, paletteKey } from '../src/plugins/palette'
 import { changedSettings, draftOf } from '../src/plugins/settingsDraft'
 
@@ -78,22 +76,4 @@ test('draftOf shows the edit, else the current value as text for numbers', () =>
   expect(draftOf(settings[0]!, {}, settings[0]!.id)).toBe('12')
   expect(draftOf(settings[0]!, { [settings[0]!.id]: '1' }, settings[0]!.id)).toBe('1')
   expect(draftOf(settings[2]!, {}, settings[2]!.id)).toBe(false)
-})
-
-test('terminalColors reads the three tokens and falls back per color', () => {
-  expect(terminalColors({})).toEqual({ background: '#16181d', foreground: '#d7dae0', cursor: '#d7dae0' })
-  expect(terminalColors({ '--terminal-background': '#fff', '--terminal-cursor': '#000' })).toEqual({
-    background: '#fff',
-    foreground: '#d7dae0',
-    cursor: '#000'
-  })
-})
-
-test('Cmd+digit picks the session at that position and nothing else', () => {
-  const sessions = ['a', 'b', 'c']
-  expect(sessionForDigit(sessions, '1')).toBe('a')
-  expect(sessionForDigit(sessions, '3')).toBe('c')
-  expect(sessionForDigit(sessions, '4')).toBeUndefined()
-  expect(sessionForDigit(sessions, '0')).toBeUndefined()
-  expect(sessionForDigit(sessions, 'a')).toBeUndefined()
 })

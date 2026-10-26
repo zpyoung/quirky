@@ -1,7 +1,6 @@
 import type { SettingInfo } from '@quirky/protocol'
-import { flagString } from '../args'
+import { flagString, takePositionals } from '../args'
 import { formatTable } from '../output'
-import { takePositionals } from './support'
 import type { Command } from './types'
 
 /** The value cell: the current value as JSON, with the stored value called out when it no longer fits. */

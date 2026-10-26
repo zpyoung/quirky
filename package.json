@@ -2,12 +2,16 @@
   "name": "quirky",
   "private": true,
   "type": "module",
-  "workspaces": ["packages/*", "apps/*"],
+  "workspaces": [
+    "packages/*",
+    "apps/*",
+    "plugins/*"
+  ],
   "scripts": {
     "build": "bun run --filter './packages/ui' build && bun run --filter './apps/desktop' build",
     "dev": "bun run --filter './packages/ui' build && bun run --filter './apps/desktop' dev",
     "daemon": "bun packages/daemon/src/main.ts",
-    "test": "bun test packages apps",
+    "test": "bun test packages apps plugins",
     "typecheck": "bunx tsc --noEmit -p tsconfig.json"
   },
   "devDependencies": {

@@ -1,13 +1,26 @@
 import { mkdirSync } from 'node:fs'
-import type { LaunchHookInput, PluginStore, StoreMigration } from '@quirky/protocol'
+import { join } from 'node:path'
+import {
+  isReservedLaunchEnv,
+  KERNEL_METHOD_SCHEMAS,
+  type LaunchHookInput,
+  type PluginStore,
+  type StoreMigration
+} from '@quirky/protocol'
 import { conflict, invalidParams, notFound } from '../errors'
+import { buildSessionEnv, commandArgv, shellArgv } from '../launch'
 import { createHandlers } from '../methods'
 import type { Core } from '../service'
 import type { Store } from '../store'
+import { fillConfirm } from './confirm'
+import { DistroService, renderDistroInspection } from './distros'
 import { Dispatcher } from './dispatch'
 import { PluginEvents } from './events'
 import type { ContextExtension, PluginHost } from './host'
 import { runLaunchHooks, type LaunchAdditions } from './launch-hooks'
+import { inspectPlugin, renderInspection, type PluginInstallDeps } from './install'
+import { LayoutService } from './layout'
+import { createPtyApi } from './pty-api'
 import { Scheduler } from './scheduler'
 import { openPluginStore, pluginDataDir } from './stores'
 import { UiService } from './ui-service'
@@ -22,6 +35,12 @@ export type PluginRuntimeOptions = {
   launchHookTimeoutMs: number
   /** Longest a job timer sleeps before re-checking the clock. */
   schedulerRecheckMs?: number
+  /** Login shell that agents run under; reported by `context.launch.shell`. */
+  shell: string
+  /** True in safe mode: the stored distro is ignored. */
+  safeMode?: boolean
+  /** Stops the daemon process; `daemon.stop` calls it after replying. */
+  stopDaemon: () => void
 }
 
 type LaunchInput = Omit<LaunchHookInput, 'env' | 'args'>
@@ -31,6 +50,8 @@ export type PluginRuntime = {
   dispatcher: Dispatcher
   events: PluginEvents
   scheduler: Scheduler
+  layout: LayoutService
+  distros: DistroService
   /** Runs the launch hooks for a session about to start. Never rejects; failures yield no additions. */
   prepareLaunch(input: LaunchInput): Promise<LaunchAdditions>
 }
@@ -49,9 +70,54 @@ export function createPluginRuntime(options: PluginRuntimeOptions): PluginRuntim
 
   const events = new PluginEvents(plugins, (event) => core.broadcast(event), log)
   const scheduler = new Scheduler({ plugins, store, log, recheckMs: options.schedulerRecheckMs })
-  const ui = new UiService({ plugins, store, broadcast: (event) => core.broadcast(event) })
-  const dispatcher = new Dispatcher(createHandlers(core, plugins, scheduler, ui), plugins, log)
+  const distros = new DistroService({
+    home,
+    store,
+    plugins,
+    log,
+    safeMode: options.safeMode ?? false,
+    broadcast: (event) => core.broadcast(event)
+  })
+  const installDeps: PluginInstallDeps = {
+    home,
+    plugins,
+    log,
+    distroOf: (id) => distros.list().find((distro) => distro.plugins.includes(id))?.id ?? null
+  }
+  const ui = new UiService({
+    plugins,
+    store,
+    broadcast: (event) => core.broadcast(event),
+    distro: () => distros.active(),
+    safeMode: options.safeMode
+  })
+  const layout = new LayoutService({
+    plugins,
+    store,
+    ui,
+    clients: () => core.clients(),
+    broadcast: (event) => core.broadcast(event),
+    sendTo: (conn, event) => core.sendTo(conn, event)
+  })
+  const handlers = createHandlers(core, plugins, scheduler, ui, {
+    layout,
+    distros,
+    install: installDeps,
+    stopDaemon: options.stopDaemon
+  })
+  const confirmText = (method: 'plugin.install' | 'distro.install', params: Record<string, unknown>) =>
+    fillConfirm(KERNEL_METHOD_SCHEMAS[method].destructive.confirm, params)
+  const dispatcher = new Dispatcher(handlers, plugins, log, {
+    store,
+    kernelDescribers: {
+      'plugin.install': async (params) =>
+        `${confirmText('plugin.install', params)}\n\n${renderInspection(inspectPlugin(installDeps, String(params.path)))}`,
+      'distro.install': async (params) =>
+        `${confirmText('distro.install', params)}\n\n${renderDistroInspection(await distros.inspect(String(params.path)))}`
+    }
+  })
   const openedStores = new Map<string, OpenedStore>()
+  const ptyApis = new Map<string, { revoke(): void }>()
 
   const extension: ContextExtension = {
     create({ id }, isRevoked) {
@@ -61,9 +127,50 @@ export function createPluginRuntime(options: PluginRuntimeOptions): PluginRuntim
       const dataDir = pluginDataDir(home, id)
       mkdirSync(dataDir, { recursive: true, mode: 0o700 })
       let opened: OpenedStore | undefined
+      const ptyApi = createPtyApi(core.pty, id, log)
+      ptyApis.set(id, ptyApi)
 
       return {
         dataDir,
+        home,
+        pty: ptyApi.api,
+        notify(notification) {
+          guard()
+          core.notify(notification)
+        },
+        launch: {
+          shell: options.shell,
+          binDir: join(home, 'bin'),
+          env(input) {
+            guard()
+            const envPatch: Record<string, string | null> = {}
+            for (const [name, value] of Object.entries(input.envPatch ?? {})) {
+              if (!isReservedLaunchEnv(name)) envPatch[name] = value
+            }
+            return buildSessionEnv({
+              home,
+              sessionId: input.sessionId,
+              worktreeId: input.worktreeId,
+              hookUrl: core.hookUrl,
+              hookToken: core.hookToken,
+              shell: options.shell,
+              agent: input.agent,
+              envPatch
+            })
+          },
+          shellArgv() {
+            guard()
+            return shellArgv(home, options.shell)
+          },
+          commandArgv(command) {
+            guard()
+            return commandArgv(home, options.shell, command)
+          },
+          hooks(input) {
+            guard()
+            return prepareLaunch(input)
+          }
+        },
         emit(event, data) {
           guard()
           return events.emit(id, event, data)
@@ -108,6 +215,8 @@ export function createPluginRuntime(options: PluginRuntimeOptions): PluginRuntim
     revoke(pluginId) {
       events.removeAll(pluginId)
       scheduler.revokePlugin(pluginId)
+      ptyApis.get(pluginId)?.revoke()
+      ptyApis.delete(pluginId)
       const opened = openedStores.get(pluginId)
       openedStores.delete(pluginId)
       opened?.close()
@@ -128,5 +237,5 @@ export function createPluginRuntime(options: PluginRuntimeOptions): PluginRuntim
     }
   }
 
-  return { extension, dispatcher, events, scheduler, prepareLaunch }
+  return { extension, dispatcher, events, scheduler, layout, distros, prepareLaunch }
 }

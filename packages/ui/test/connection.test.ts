@@ -1,4 +1,5 @@
 import { afterEach, expect, test } from 'bun:test'
+import { encodeTerminalOutput } from '@quirky/protocol'
 import { Connection } from '../src/connection'
 import { Store } from '../src/store'
 import { startMockDaemon } from './mock-daemon'
@@ -36,7 +37,7 @@ test('reports an unreachable daemon after repeated failures and reconnects when 
   const second = startMockDaemon(Number(parsed.port))
   stops.push(second.stop)
   await until(() => store.getState().connection === 'connected')
-  expect(store.getState().worktrees.length).toBeGreaterThan(0)
+  expect(store.getState().epoch).toBe(2)
 })
 
 test('keeps retrying without the unreachable banner while /health answers', async () => {
@@ -51,20 +52,60 @@ test('callAny reaches the daemon and rejects when not connected', async () => {
   const daemon = startMockDaemon()
   stops.push(daemon.stop)
   const { store, connection } = connect(daemon.url)
-  await expect(connection.callAny('repo.list', {})).rejects.toThrow('Not connected')
+  await expect(connection.callAny('ui.state', {})).rejects.toThrow('Not connected')
   await until(() => store.getState().connection === 'connected')
-  const repos = (await connection.callAny('repo.list', {})) as { id: string }[]
-  expect(repos.map((r) => r.id)).toEqual(['r1'])
+  const state = (await connection.callAny('ui.state', {})) as { layout: { sidebar: boolean } }
+  expect(state.layout.sidebar).toBe(true)
 })
 
-test('onConnected runs after each connect once the snapshot is in the store', async () => {
+test('onConnected runs after each connect, with the store already saying connected', async () => {
   const daemon = startMockDaemon()
   stops.push(daemon.stop)
   const { store, connection } = connect(daemon.url)
-  const seen: boolean[] = []
-  connection.onConnected(() => seen.push(store.getState().loaded))
+  const seen: string[] = []
+  connection.onConnected(() => seen.push(store.getState().connection))
   await until(() => seen.length === 1)
-  expect(seen).toEqual([true])
+  expect(seen).toEqual(['connected'])
+})
+
+test('onStatus reports each change between connected and not, once per change', async () => {
+  const first = startMockDaemon()
+  const { connection, store, parsed } = connect(first.url)
+  const seen: string[] = []
+  connection.onStatus((status) => seen.push(status))
+  await until(() => store.getState().connection === 'connected')
+  expect(seen).toEqual(['connected'])
+
+  first.stop()
+  await until(() => store.getState().connection === 'unreachable')
+  expect(seen).toEqual(['connected', 'reconnecting'])
+
+  const second = startMockDaemon(Number(parsed.port))
+  stops.push(second.stop)
+  await until(() => seen.length === 3)
+  expect(seen).toEqual(['connected', 'reconnecting', 'connected'])
+})
+
+test('onStream receives the binary frames of its stream until it unsubscribes, and needs a connection', async () => {
+  const daemon = startMockDaemon()
+  stops.push(daemon.stop)
+  const { store, connection } = connect(daemon.url)
+  expect(() => connection.onStream(5, () => {})).toThrow('Not connected')
+  await until(() => store.getState().connection === 'connected')
+
+  const frames: number[][] = []
+  const stop = connection.onStream(5, (bytes) => frames.push([...bytes]))
+  const deliver = (streamId: number, bytes: number[]) =>
+    (connection.client as unknown as { handleMessage(data: unknown): void }).handleMessage(
+      encodeTerminalOutput(streamId, new Uint8Array(bytes))
+    )
+  deliver(5, [104, 105])
+  deliver(6, [1])
+  expect(frames).toEqual([[104, 105]])
+
+  stop()
+  deliver(5, [33])
+  expect(frames).toEqual([[104, 105]])
 })
 
 test('onEvent receives every event as well as the store, and a throwing listener harms neither', () => {
@@ -77,10 +118,11 @@ test('onEvent receives every event as well as the store, and a throwing listener
   const stop = connection.onEvent((event) => received.push(event.type))
   const emit = (event: unknown) => (connection as unknown as { handleEvent(e: unknown): void }).handleEvent(event)
 
-  emit({ type: 'notify', title: 'hi', body: 'there' })
+  emit({ type: 'notify', title: 'hi', body: 'there', open: { view: 'view:acme.x/page' } })
   emit({ type: 'plugin.changed' })
   expect(received).toEqual(['notify', 'plugin.changed'])
   expect(store.getState().toasts.map((t) => t.title)).toEqual(['hi'])
+  expect(store.getState().toasts[0]!.open).toEqual({ view: 'view:acme.x/page' })
 
   stop()
   emit({ type: 'plugin.changed' })

@@ -7,31 +7,29 @@ import {
   ensureHome,
   readRuntime,
   runtimeFilePath,
+  socketPath,
   writePrivateJson,
   type RuntimeInfo
 } from '@quirky/protocol/node'
 import pkg from '../package.json'
-import * as realGit from './git'
-import type { GitApi } from './git-api'
 import { defaultCliEntry, installIntegrationFiles } from './launch'
 import { osascriptNotifier, type Notifier } from './notify'
 import { PluginHost } from './plugins/host'
 import { createPluginRuntime, type PluginRuntime } from './plugins/runtime'
 import { buildUiModel } from './plugins/ui-model'
 import { PtyClient } from './pty-client'
+import { createRpcHandler } from './rpc-handler'
 import { startServer } from './server'
+import { startSocketServer } from './socket-server'
 import { Core } from './service'
 import { Store } from './store'
-import { createClaudeRunner } from './structured/claude-runner'
-import type { StructuredRunnerFactory } from './structured/runner'
+import { migrateV1Settings } from './v1-settings'
 
 export type DaemonOptions = {
   home: string
   /** Listen port; 0 tries the previous port from `daemon-identity.json`, then any free one. */
   port?: number
-  git?: GitApi
   notifier?: Notifier
-  runnerFactory?: StructuredRunnerFactory
   uiDir?: string
   /** Directory of built-in plugins; null for none. Defaults to `$QUIRKY_BUILTIN_PLUGINS_DIR` or the repo's `plugins/`. */
   builtinPluginsDir?: string | null
@@ -45,11 +43,14 @@ export type DaemonOptions = {
   cliEntry?: string
   /** Login shell that agents run under; defaults to `$SHELL`. */
   shell?: string
-  /** Pause between a bracketed paste and its Enter in `terminal.send`. */
-  enterDelayMs?: number
-  resolveClaudePath?: () => Promise<string>
   ptyConnectTimeoutMs?: number
   log?: (message: string) => void
+  /** Run only plugins that ship with Quirky and ignore stored disables and the distro layer. */
+  safeMode?: boolean
+  /** Unix socket the CLI connects to; defaults to `<home>/quirkyd.sock`. */
+  socketPath?: string
+  /** Called when `daemon.stop` asks the daemon to stop; defaults to stopping this daemon handle. */
+  onStopRequested?: () => void
 }
 
 export type DaemonHandle = {
@@ -96,18 +97,6 @@ function defaultBuiltinPluginsDir(): string {
   return process.env.QUIRKY_BUILTIN_PLUGINS_DIR ?? fileURLToPath(new URL('../../../plugins', import.meta.url))
 }
 
-async function resolveClaudeThroughLoginShell(shell: string): Promise<string> {
-  const proc = Bun.spawn([shell, '-l', '-c', 'command -v claude'], {
-    stdin: 'ignore',
-    stdout: 'pipe',
-    stderr: 'ignore'
-  })
-  const output = (await new Response(proc.stdout).text()).trim().split('\n').pop() ?? ''
-  await proc.exited
-  if (!output) throw new Error('could not find the claude executable on the login shell PATH')
-  return output
-}
-
 /**
  * Starts quirkyd in this process: opens the stores, connects to the PTY host, listens on
  * loopback and publishes `runtime.json`. Callers decide whether a daemon already owns the home.
@@ -124,8 +113,10 @@ export async function startDaemon(options: DaemonOptions): Promise<DaemonHandle>
   const identity = readIdentity(home)
   const rpcToken = identity.token ?? randomBytes(24).toString('hex')
   const hookToken = identity.hookToken ?? randomBytes(24).toString('hex')
+  const listenSocketPath = options.socketPath ?? socketPath(home, 'quirkyd.sock')
 
   const store = new Store(join(home, 'quirky.db'))
+  migrateV1Settings(store, log)
   const pty = new PtyClient({
     home,
     hostEntry: options.ptyHostEntry,
@@ -137,21 +128,16 @@ export async function startDaemon(options: DaemonOptions): Promise<DaemonHandle>
   let lateRuntime: PluginRuntime | undefined
   const core = new Core({
     home,
-    store,
-    git: options.git ?? realGit,
     pty,
     notifier: options.notifier ?? osascriptNotifier,
-    runnerFactory: options.runnerFactory ?? createClaudeRunner,
-    resolveClaudePath: options.resolveClaudePath ?? (() => resolveClaudeThroughLoginShell(shell)),
-    shell,
-    cliEntry,
-    enterDelayMs: options.enterDelayMs ?? 300,
     daemonVersion,
     startedAt,
     hookToken,
     hookUrl: () => `http://127.0.0.1:${port}/hook`,
-    onEvent: (event) => lateRuntime?.events.deliver(event),
-    prepareLaunch: async (input) => (await lateRuntime?.prepareLaunch(input)) ?? { env: {}, args: [] }
+    safeMode: options.safeMode ?? false,
+    socketPath: listenSocketPath,
+    onRemoveClient: (conn) => lateRuntime?.layout.dropConnection(conn),
+    onEvent: (event) => lateRuntime?.events.deliver(event)
   })
 
   const plugins = new PluginHost({
@@ -164,6 +150,8 @@ export async function startDaemon(options: DaemonOptions): Promise<DaemonHandle>
     },
     log,
     activationTimeoutMs: options.pluginActivationTimeoutMs,
+    safeMode: options.safeMode ?? false,
+    distroDisabled: () => lateRuntime?.distros.active()?.disable ?? [],
     deriveDiagnostics: (view) => buildUiModel({ ...view, chosenTheme: 'default' }).warnings,
     extension: {
       create: (plugin, isRevoked) => lateRuntime!.extension.create(plugin, isRevoked),
@@ -177,15 +165,18 @@ export async function startDaemon(options: DaemonOptions): Promise<DaemonHandle>
     store,
     log,
     launchHookTimeoutMs: options.launchHookTimeoutMs ?? 5000,
-    schedulerRecheckMs: options.schedulerRecheckMs ?? 60_000
+    schedulerRecheckMs: options.schedulerRecheckMs ?? 60_000,
+    shell,
+    safeMode: options.safeMode ?? false,
+    stopDaemon: () => (options.onStopRequested ?? (() => void handle?.stop()))()
   })
   lateRuntime = pluginRuntime
+  let handle: DaemonHandle | undefined
 
   installIntegrationFiles(home, cliEntry)
 
   try {
     await pty.connect()
-    await core.reconcile({ startup: true })
   } catch (error) {
     log(`pty host unavailable at startup: ${(error as Error).message}`)
   }
@@ -194,11 +185,12 @@ export async function startDaemon(options: DaemonOptions): Promise<DaemonHandle>
   await plugins.activateStartup()
   pluginRuntime.scheduler.start()
 
+  const rpcHandler = createRpcHandler({ dispatcher: pluginRuntime.dispatcher, rpcToken, log })
   const requestedPort = options.port ?? Number(process.env.QUIRKY_PORT ?? 0)
   const listen = (listenPort: number) =>
     startServer({
       core,
-      dispatcher: pluginRuntime.dispatcher,
+      handle: rpcHandler,
       pluginFile: (id) => plugins.pluginFiles(id),
       port: listenPort,
       rpcToken,
@@ -221,6 +213,13 @@ export async function startDaemon(options: DaemonOptions): Promise<DaemonHandle>
   port = server.port as number
   writePrivateJson(identityFilePath(home), { port, token: rpcToken, hookToken } satisfies DaemonIdentity)
 
+  const socketServer = startSocketServer({
+    path: listenSocketPath,
+    core,
+    handle: rpcHandler,
+    log
+  })
+
   const runtime: RuntimeInfo = {
     pid: process.pid,
     port,
@@ -228,12 +227,13 @@ export async function startDaemon(options: DaemonOptions): Promise<DaemonHandle>
     hookToken,
     daemonVersion,
     protocolVersion: PROTOCOL_VERSION,
-    startedAt
+    startedAt,
+    socket: socketServer.path
   }
   writePrivateJson(runtimeFilePath(home), runtime)
 
   let stopped = false
-  return {
+  handle = {
     port,
     runtime,
     plugins,
@@ -241,6 +241,7 @@ export async function startDaemon(options: DaemonOptions): Promise<DaemonHandle>
       if (stopped) return
       stopped = true
       if (readRuntime(home)?.pid === process.pid) rmSync(runtimeFilePath(home), { force: true })
+      await socketServer.stop()
       await server.stop(true)
       pluginRuntime.scheduler.stop()
       await plugins.stop()
@@ -248,4 +249,5 @@ export async function startDaemon(options: DaemonOptions): Promise<DaemonHandle>
       store.close()
     }
   }
+  return handle
 }

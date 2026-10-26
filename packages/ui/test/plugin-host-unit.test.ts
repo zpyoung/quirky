@@ -6,6 +6,7 @@ import {
   type ThemeInfo,
   type UiCommandEntry,
   type UiKeybinding,
+  type UiLayout,
   type UiModel,
   type UiPluginContext,
   type UiPluginModule,
@@ -79,14 +80,40 @@ function setting(id: string, value: SettingInfo['value'], plugin = 'acme.notes')
   return { id, plugin, type: 'number', title: id, default: 13, value }
 }
 
-function setup(initial: UiModel, options: { settings?: SettingInfo[]; activationTimeoutMs?: number } = {}) {
+type WindowFocus = NonNullable<ConstructorParameters<typeof WindowPluginHost>[0]['windowFocus']>
+
+function setup(
+  initial: UiModel,
+  options: { settings?: SettingInfo[]; activationTimeoutMs?: number; windowFocus?: WindowFocus } = {}
+) {
   let model = initial
   let settings = options.settings ?? []
+  let layout: UiLayout = { view: null, panel: null, sidebar: true, focus: null }
   const listeners = new Set<(event: QuirkyEvent) => void>()
+  const emitEvent = (event: QuirkyEvent) => listeners.forEach((listener) => listener(event))
+  /** What the daemon would answer: a view or panel the model no longer has is dropped. */
+  const effective = (): UiLayout => ({
+    ...layout,
+    view: layout.view && model.views.some((v) => v.id === layout.view!.id) ? layout.view : null,
+    panel: layout.panel && model.panels.some((p) => p.id === layout.panel) ? layout.panel : null
+  })
+  let held: QuirkyEvent[] | null = null
+  const changeLayout = (update: Partial<UiLayout>) => {
+    layout = { ...effective(), ...update }
+    const event: QuirkyEvent = { type: 'ui.state.changed', layout: effective() }
+    if (held) held.push(event)
+    else emitEvent(event)
+    return effective()
+  }
+  const streams = new Map<number, Set<(bytes: Uint8Array) => void>>()
+  const connectionListeners = new Set<(status: 'connected' | 'reconnecting') => void>()
+  const confirms: { title: string; body?: string; confirmLabel?: string }[] = []
+  let confirmAnswer = true
   const calls: { method: string; params: Record<string, unknown> }[] = []
   const imports: string[] = []
   const modules = new Map<string, ModuleFactory>()
   const toasts: [string, string][] = []
+  const toastKinds: string[] = []
   const logs: string[] = []
   const refused = new Map<string, string>()
   const holds = new Map<string, Promise<void>>()
@@ -97,6 +124,26 @@ function setup(initial: UiModel, options: { settings?: SettingInfo[]; activation
       switch (method) {
         case 'ui.contributions':
           return model
+        case 'ui.state':
+          return { windows: [], layout: effective(), slots: [] }
+        case 'ui.view.open':
+          if (!model.views.some((v) => v.id === params.id)) throw new Error(`no view ${params.id}`)
+          return changeLayout({ view: { id: params.id as string, ...(params.input !== undefined ? { input: params.input } : {}) } })
+        case 'ui.view.close':
+          return changeLayout({ view: null })
+        case 'ui.panel.open':
+          if (!model.panels.some((p) => p.id === params.id)) throw new Error(`no panel ${params.id}`)
+          return changeLayout({ panel: params.id as string })
+        case 'ui.panel.close':
+          return changeLayout({ panel: null })
+        case 'ui.focus':
+          return changeLayout({ focus: params.target as UiLayout['focus'] })
+        case 'ui.report':
+          if (refused.has('ui.report')) throw new Error(refused.get('ui.report'))
+          return { ok: true }
+        case 'ui.window.focused':
+        case 'ui.command.reply':
+          return { ok: true }
         case 'setting.list': {
           const snapshot = settings
           await holds.get(method)
@@ -124,14 +171,49 @@ function setup(initial: UiModel, options: { settings?: SettingInfo[]; activation
       if (!factory) throw new Error(`no module ${url}`)
       return factory()
     },
-    toast: (title, body) => toasts.push([title, body]),
+    onStream: (streamId, listener) => {
+      const set = streams.get(streamId) ?? new Set()
+      set.add(listener)
+      streams.set(streamId, set)
+      return () => set.delete(listener)
+    },
+    onConnection: (listener) => {
+      connectionListeners.add(listener)
+      return () => connectionListeners.delete(listener)
+    },
+    confirm: async (confirmOptions) => {
+      confirms.push(confirmOptions)
+      return confirmAnswer
+    },
+    toast: (title, body, kind) => {
+      toasts.push([title, body])
+      toastKinds.push(kind)
+    },
     log: (message) => logs.push(message),
-    activationTimeoutMs: options.activationTimeoutMs
+    activationTimeoutMs: options.activationTimeoutMs,
+    windowFocus: options.windowFocus
   })
 
   return {
     host,
     calls,
+    confirms,
+    answerConfirm: (answer: boolean) => (confirmAnswer = answer),
+    pushStream: (streamId: number, bytes: Uint8Array) => streams.get(streamId)?.forEach((listener) => listener(bytes)),
+    setConnection: (status: 'connected' | 'reconnecting') => connectionListeners.forEach((listener) => listener(status)),
+    streamListeners: (streamId: number) => streams.get(streamId)?.size ?? 0,
+    connectionListenerCount: () => connectionListeners.size,
+    /** The layout the daemon holds; the host only learns of a change through the broadcast. */
+    daemonLayout: () => effective(),
+    changeLayout,
+    /** Keeps the daemon's `ui.state.changed` broadcasts back until `releaseBroadcasts`. */
+    holdBroadcasts: () => (held = []),
+    releaseBroadcasts: () => {
+      const events = held ?? []
+      held = null
+      events.forEach(emitEvent)
+    },
+    toastKinds,
     imports,
     modules,
     toasts,
@@ -141,7 +223,7 @@ function setup(initial: UiModel, options: { settings?: SettingInfo[]; activation
     listenerCount: () => listeners.size,
     setModel: (next: UiModel) => (model = next),
     setSettings: (next: SettingInfo[]) => (settings = next),
-    emit: (event: QuirkyEvent) => listeners.forEach((listener) => listener(event)),
+    emit: emitEvent,
     methodCalls: (method: string) => calls.filter((call) => call.method === method),
     useModule: (plugin: string, module: UiPluginModule | ModuleFactory) =>
       modules.set(urlOf(plugin), typeof module === 'function' ? module : () => module)
@@ -182,7 +264,9 @@ const key = (code: string, mods: Partial<Record<'metaKey' | 'ctrlKey' | 'altKey'
   ...mods
 })
 
-test('SC-7: mounting a section loads its module once and mounts with only the element and props', async () => {
+const loaded = (t: Harness, plugin: string) => until(() => state(t).plugins[plugin]?.state === 'active')
+
+test('SC-7: mounting a section reuses the module the window already loaded and mounts with only the element and props', async () => {
   const t = setup(makeModel({ sidebarSections: [section(NOTES, 'list')] }))
   const calls: unknown[][] = []
   let cleanups = 0
@@ -193,7 +277,8 @@ test('SC-7: mounting a section loads its module once and mounts with only the el
   })
   t.useModule(NOTES, module)
   await t.host.refresh()
-  expect(t.imports).toEqual([])
+  await loaded(t, NOTES)
+  expect(t.imports).toEqual([urlOf(NOTES)])
 
   const el = element()
   t.host.mount(LIST, el)
@@ -206,7 +291,7 @@ test('SC-7: mounting a section loads its module once and mounts with only the el
   expect(calls).toHaveLength(1)
   expect(calls[0]).toHaveLength(2)
   expect(calls[0][0]).toBe(el)
-  expect(calls[0][1]).toEqual({})
+  expect(calls[0][1]).toEqual({ report: expect.any(Function) })
   expect((el as Fake).text).toBe('3 notes')
   expect(state(t).plugins[NOTES]).toEqual({ state: 'active' })
   expect(cleanups).toBe(0)
@@ -236,13 +321,92 @@ test('SC-7: concurrent mounts and commands share one import and one activation',
   expect(record.activations).toBe(1)
 })
 
-test('SC-8: refreshing and rendering toggles, with nothing shown or run, imports no module', async () => {
+test('S1: refreshing loads and activates every enabled plugin with nothing shown or run', async () => {
   const t = setup(makeModel({ panels: [panel('acme.outline', 'outline')], views: [view('acme.outline', 'page')] }))
+  const { module, record } = recording([])
+  t.useModule('acme.outline', module)
   await t.host.refresh()
   t.host.togglePanel('panel:acme.outline/outline', false)
-  expect(t.imports).toEqual([])
-  expect(state(t).plugins).toEqual({})
+  await loaded(t, 'acme.outline')
+  expect(t.imports).toEqual([urlOf('acme.outline')])
+  expect(record.activations).toBe(1)
   expect(state(t).model?.panels.map((p) => p.title)).toEqual(['outline'])
+})
+
+test('S1: an ask created while another panel is open sets the Questions badge without its panel ever mounting', async () => {
+  const ASK_PANEL = 'panel:quirky.ask/questions'
+  const OTHER_PANEL = 'panel:acme.notes/side'
+  const t = setup(makeModel({ panels: [panel('quirky.ask', 'questions'), panel(NOTES, 'side')] }))
+  t.useModule('quirky.ask', {
+    activate(context) {
+      context.subscribe((event) => {
+        if (event.type === 'quirky.ask/created') context.setPanelBadge(ASK_PANEL, 1)
+      })
+    }
+  })
+  t.useModule(NOTES, recording([OTHER_PANEL]).module)
+  await t.host.refresh()
+  t.host.togglePanel(OTHER_PANEL, true)
+  t.host.mount(OTHER_PANEL, element())
+  await loaded(t, 'quirky.ask')
+
+  t.emit({ type: 'quirky.ask/created', data: { ask: { id: 'a1' } } })
+  await until(() => state(t).badges[ASK_PANEL] === 1)
+
+  expect(state(t).openPanel).toBe(OTHER_PANEL)
+  expect(state(t).slots[ASK_PANEL]).toBeUndefined()
+})
+
+test('S1: a plugin enabled later loads on plugin.changed and stays active when its slots unmount', async () => {
+  const t = setup(makeModel())
+  const { module, record } = recording([LIST])
+  t.useModule(NOTES, module)
+  await t.host.refresh()
+  expect(t.imports).toEqual([])
+
+  t.setModel(makeModel({ sidebarSections: [section(NOTES, 'list')] }))
+  t.emit({ type: 'plugin.changed' } as unknown as QuirkyEvent)
+  await loaded(t, NOTES)
+  const unmount = t.host.mount(LIST, element())
+  await settled(t, LIST)
+  unmount()
+  await tick()
+
+  expect(record.activations).toBe(1)
+  expect(record.deactivations).toBe(0)
+  expect(state(t).plugins[NOTES]).toEqual({ state: 'active' })
+})
+
+test('S1: a disabled plugin is deactivated on plugin.changed even with no slot mounted', async () => {
+  const t = setup(makeModel({ panels: [panel(NOTES, 'side')] }))
+  const { module, record } = recording([])
+  t.useModule(NOTES, module)
+  await t.host.refresh()
+  await loaded(t, NOTES)
+
+  t.setModel(makeModel())
+  t.emit({ type: 'plugin.changed' } as unknown as QuirkyEvent)
+  await until(() => state(t).plugins[NOTES]?.state === 'idle')
+
+  expect(record.deactivations).toBe(1)
+  expect(() => record.contexts[0].call('repo.list')).toThrow('acme.notes is not active')
+})
+
+test('S1: a plugin whose eager load fails is not retried by later refreshes, only by a mount', async () => {
+  const t = setup(makeModel({ sidebarSections: [section(NOTES, 'list')] }))
+  let attempts = 0
+  t.useModule(NOTES, () => {
+    attempts++
+    throw new Error('boom')
+  })
+  await t.host.refresh()
+  await until(() => state(t).plugins[NOTES]?.state === 'failed')
+  await t.host.refresh()
+  await tick()
+  expect(attempts).toBe(1)
+
+  t.host.mount(LIST, element())
+  await until(() => attempts === 2)
 })
 
 test('SC-9: opening a panel closes the other one, and toggling closes it', async () => {
@@ -266,7 +430,7 @@ test('SC-9: opening a panel closes the other one, and toggling closes it', async
   expect(state(t).openPanel).toBeNull()
 })
 
-test('SC-9: a panel mounts with empty props and its cleanup runs when it is disposed', async () => {
+test('SC-9: a panel mounts with only a report function and its cleanup runs when it is disposed', async () => {
   const t = setup(makeModel({ panels: [panel(NOTES, 'side')] }))
   const side = 'panel:acme.notes/side'
   let received: unknown
@@ -279,7 +443,7 @@ test('SC-9: a panel mounts with empty props and its cleanup runs when it is disp
 
   const dispose = t.host.mount(side, element(), { input: 'ignored' })
   await settled(t, side)
-  expect(received).toEqual({})
+  expect(received).toEqual({ report: expect.any(Function) })
   dispose()
   dispose()
   expect(cleanups).toBe(1)
@@ -310,7 +474,7 @@ test('SC-10: a command opens a view with an input and a second view replaces it'
 
   t.host.mount(PAGE, element(), { input: state(t).openView?.input })
   await settled(t, PAGE)
-  expect(props).toEqual([{ input: { noteId: 'n1' } }])
+  expect(props).toEqual([{ input: { noteId: 'n1' }, report: expect.any(Function) }])
 
   t.host.openView(other)
   expect(state(t).openView?.id).toBe(other)
@@ -338,10 +502,10 @@ test('SC-11: a plugin calls the daemon through its context and receives events o
   expect(repos).toEqual([{ id: 'r1' }])
   expect(t.methodCalls('repo.list')[0].params).toEqual({})
 
-  t.emit({ type: 'repo.changed' })
+  t.emit({ type: 'acme.notes/changed', data: null })
   expect(received).toEqual([])
   await tick()
-  expect(received).toEqual([{ type: 'repo.changed' }])
+  expect(received).toEqual([{ type: 'acme.notes/changed', data: null }])
 })
 
 test('SC-11: a listener that throws or rejects is logged with its plugin ID and does not stop the others', async () => {
@@ -365,10 +529,10 @@ test('SC-11: a listener that throws or rejects is logged with its plugin ID and 
   t.host.mount(LIST, element())
   await settled(t, LIST)
 
-  t.emit({ type: 'repo.changed' })
+  t.emit({ type: 'acme.notes/changed', data: null })
   await tick()
   await tick()
-  expect(received).toEqual(['repo.changed'])
+  expect(received).toEqual(['acme.notes/changed'])
   expect(t.logs).toContain('acme.notes: event listener failed: sync boom')
   expect(t.logs).toContain('acme.notes: event listener failed: async boom')
 })
@@ -393,17 +557,17 @@ test('SC-11: an unsubscribed listener gets nothing, and after deactivation the c
   await t.host.refresh()
   t.host.mount(LIST, element())
   await settled(t, LIST)
-  t.emit({ type: 'repo.changed' })
+  t.emit({ type: 'acme.notes/changed', data: null })
   await tick()
-  expect(received).toEqual(['repo.changed'])
+  expect(received).toEqual(['acme.notes/changed'])
 
   t.setModel(makeModel({ modules: {} }))
   await t.host.refresh()
   const context = record.contexts[0]
   expect(record.deactivations).toBe(1)
-  t.emit({ type: 'repo.changed' })
+  t.emit({ type: 'acme.notes/changed', data: null })
   await tick()
-  expect(received).toEqual(['repo.changed'])
+  expect(received).toEqual(['acme.notes/changed'])
   const revoked = 'acme.notes is not active'
   expect(() => context.call('repo.list')).toThrow(revoked)
   expect(() => context.provide(LIST, () => {})).toThrow(revoked)
@@ -646,7 +810,7 @@ test('SC-13: a failed attempt revokes its context at once and never calls deacti
   t.host.mount(LIST, element())
   await settled(t, LIST)
 
-  t.emit({ type: 'repo.changed' })
+  t.emit({ type: 'acme.notes/changed', data: null })
   await tick()
   expect(received).toEqual([])
   expect(() => context.call('repo.list')).toThrow('acme.notes is not active')
@@ -1026,7 +1190,7 @@ test('SC-4: a cleanup or deactivate that throws is logged and teardown continues
   expect(() => context.call('repo.list')).toThrow('acme.notes is not active')
 })
 
-test('SC-4: an open view or panel that leaves the model is closed', async () => {
+test('SC-4: an open view or panel that leaves the model is gone from the layout after the refresh', async () => {
   const t = setup(makeModel({ panels: [panel(NOTES, 'side')], views: [view(NOTES, 'page')] }))
   await t.host.refresh()
   t.host.togglePanel('panel:acme.notes/side')
@@ -1043,21 +1207,23 @@ test('SC-4: an open view or panel that leaves the model is closed', async () => 
   expect(state(t).openPanel).toBeNull()
 })
 
-test('SC-9: opening a view or panel that is not in the model does nothing', async () => {
+test('SC-9: opening a view or panel the daemon refuses changes nothing and is logged', async () => {
   const t = setup(makeModel())
   await t.host.refresh()
   t.host.openView(PAGE)
   t.host.togglePanel('panel:acme.notes/side')
+  await tick()
   expect(state(t).openView).toBeNull()
   expect(state(t).openPanel).toBeNull()
+  expect(t.logs).toEqual([`ui.view.open failed: no view ${PAGE}`, 'ui.panel.open failed: no panel panel:acme.notes/side'])
 })
 
-test('SC-14: running a command loads its plugin lazily and passes the arguments', async () => {
+test('SC-14: running a command passes the arguments to the module the window already loaded', async () => {
   const t = setup(makeModel({ commands: [command(NOTES, 'open')] }))
   const args: unknown[] = []
   t.useModule(NOTES, recording([OPEN], () => (a: unknown) => args.push(a)).module)
   await t.host.refresh()
-  expect(t.imports).toEqual([])
+  await loaded(t, NOTES)
 
   await t.host.runCommand(OPEN, { id: 1 })
   await t.host.runCommand(OPEN)
@@ -1115,11 +1281,13 @@ test('SC-15: Cmd+Shift+N runs the bound command and is consumed, every time', as
 
 test('SC-15: Cmd+N without Shift runs nothing and is not consumed', async () => {
   const t = setup(makeModel({ commands: [command(NOTES, 'new')], keybindings: [NEW_KEY] }))
+  let runs = 0
+  t.useModule(NOTES, recording([NEW], () => () => runs++).module)
   await t.host.refresh()
   expect(t.host.handleKey(key('KeyN', { metaKey: true }))).toBe(false)
   expect(t.host.handleKey(key('KeyN', { shiftKey: true }))).toBe(false)
   await tick()
-  expect(t.imports).toEqual([])
+  expect(runs).toBe(0)
 })
 
 test('SC-15: handleKey does not wait for the command', async () => {
@@ -1172,27 +1340,29 @@ test('SC-16: only the active keybinding on a chord fires, and shadowed ones are 
   expect(ran).toEqual(['keys', 'sample'])
 })
 
-test('SC-17: a reserved chord is never handled, even for an active keybinding', async () => {
-  const keys = [binding(NOTES, 't', 'mod+t', NEW), binding(NOTES, 'p', 'mod+shift+p', NEW), binding(NOTES, 'one', 'mod+1', NEW)]
+test('SC-17: the palette chord is never handled, even for an active keybinding', async () => {
+  const keys = [binding(NOTES, 'p', 'mod+shift+p', NEW)]
   const t = setup(makeModel({ commands: [command(NOTES, 'new')], keybindings: keys }))
+  let runs = 0
+  t.useModule(NOTES, recording([NEW], () => () => runs++).module)
   await t.host.refresh()
-  expect(t.host.handleKey(key('KeyT', { metaKey: true }))).toBe(false)
   expect(t.host.handleKey(key('KeyP', { metaKey: true, shiftKey: true }))).toBe(false)
-  expect(t.host.handleKey(key('Digit1', { metaKey: true }))).toBe(false)
   await tick()
-  expect(t.imports).toEqual([])
+  expect(runs).toBe(0)
 })
 
-test('G1: a plugin keybinding on mod+t is reported shadowed by the kernel, and Cmd+T runs nothing', async () => {
-  const shadowed: UiKeybinding = { ...binding(NOTES, 't', 'mod+t', NEW, 'shadowed'), shadowedBy: 'kernel' }
+test('G1: a plugin keybinding on the palette chord is reported shadowed by the kernel, and the chord runs nothing', async () => {
+  const shadowed: UiKeybinding = { ...binding(NOTES, 'p', 'mod+shift+p', NEW, 'shadowed'), shadowedBy: 'kernel' }
   const t = setup(makeModel({ commands: [command(NOTES, 'new')], keybindings: [shadowed] }))
+  let runs = 0
+  t.useModule(NOTES, recording([NEW], () => () => runs++).module)
   await t.host.refresh()
   expect(state(t).model!.keybindings).toEqual([shadowed])
 
-  expect(t.host.handleKey(key('KeyT', { metaKey: true }))).toBe(false)
-  expect(t.host.handleKey(key('KeyT', { ctrlKey: true }))).toBe(false)
+  expect(t.host.handleKey(key('KeyP', { metaKey: true, shiftKey: true }))).toBe(false)
+  expect(t.host.handleKey(key('KeyP', { ctrlKey: true, shiftKey: true }))).toBe(false)
   await tick()
-  expect(t.imports).toEqual([])
+  expect(runs).toBe(0)
   expect(t.toasts).toEqual([])
 })
 
@@ -1504,7 +1674,7 @@ test('C4: a subscriber registered during activate receives events before activat
     async activate(context) {
       await new Promise<void>((resolve) => {
         context.subscribe((event) => {
-          if (event.type === 'repo.changed') resolve()
+          if (event.type === 'acme.notes/changed') resolve()
         })
         subscribed = true
       })
@@ -1515,7 +1685,7 @@ test('C4: a subscriber registered during activate receives events before activat
   t.host.mount(LIST, element())
   await until(() => subscribed)
 
-  t.emit({ type: 'repo.changed' })
+  t.emit({ type: 'acme.notes/changed', data: null })
   await until(() => state(t).slots[LIST]?.status === 'mounted')
 })
 
@@ -1571,4 +1741,325 @@ test('S3: a failing command is logged with its owner and command ID as well as t
   await t.host.runCommand('command:acme.cmd/go')
   expect(t.logs).toContain('acme.cmd: command:acme.cmd/go failed: nope')
   expect(t.toasts).toEqual([['command:acme.cmd/go failed: nope', 'nope']])
+})
+
+const SIDE = 'panel:acme.notes/side'
+const OUTLINE = 'panel:acme.outline/outline'
+const OTHER = 'view:acme.notes/other'
+
+/** A booted harness with a notes plugin that owns two views, a panel, a section and a command; acme.outline owns a second panel. */
+async function booted(options: Parameters<typeof setup>[1] = {}) {
+  const t = setup(
+    makeModel({
+      views: [view(NOTES, 'page'), view(NOTES, 'other')],
+      panels: [panel(NOTES, 'side'), panel('acme.outline', 'outline')],
+      sidebarSections: [section(NOTES, 'list')],
+      commands: [command(NOTES, 'open')]
+    }),
+    options
+  )
+  const { module, record } = recording([PAGE, OTHER, SIDE, LIST, OPEN], () => () => {})
+  t.useModule(NOTES, module)
+  await t.host.refresh()
+  await t.host.runCommand(OPEN)
+  return { t, record, context: () => record.contexts[0]! }
+}
+
+test('D21: refresh loads the daemon layout, and the host never changes it before the broadcast', async () => {
+  const { t } = await booted()
+  t.changeLayout({ view: { id: PAGE, input: { a: 1 } }, panel: SIDE, focus: 'view' })
+  await t.host.refresh()
+  expect(state(t).layout).toEqual({ view: { id: PAGE, input: { a: 1 } }, panel: SIDE, sidebar: true, focus: 'view' })
+  expect(state(t).openView).toEqual({ id: PAGE, input: { a: 1 } })
+  expect(state(t).openPanel).toBe(SIDE)
+
+  t.holdBroadcasts()
+  t.host.openView(OTHER, { b: 2 })
+  t.host.togglePanel(SIDE)
+  await tick()
+  expect(t.methodCalls('ui.view.open')).toEqual([{ method: 'ui.view.open', params: { id: OTHER, input: { b: 2 } } }])
+  expect(t.methodCalls('ui.panel.close')).toHaveLength(1)
+  expect(state(t).openView?.id).toBe(PAGE)
+  expect(state(t).openPanel).toBe(SIDE)
+
+  t.releaseBroadcasts()
+  expect(state(t).openView).toEqual({ id: OTHER, input: { b: 2 } })
+  expect(state(t).openPanel).toBeNull()
+})
+
+test('D21: view, panel and focus calls name the daemon methods and skip what is already so', async () => {
+  const { t } = await booted()
+  t.host.openView(PAGE)
+  await tick()
+  expect(t.methodCalls('ui.view.open')[0]!.params).toEqual({ id: PAGE })
+
+  t.host.togglePanel(SIDE, true)
+  t.host.togglePanel(OUTLINE, false)
+  t.host.closeView()
+  t.host.focus('panel')
+  await tick()
+  expect(t.methodCalls('ui.panel.open')).toHaveLength(1)
+  expect(t.methodCalls('ui.panel.close')).toHaveLength(0)
+  expect(t.methodCalls('ui.view.close')).toHaveLength(1)
+  expect(t.methodCalls('ui.focus')).toEqual([{ method: 'ui.focus', params: { target: 'panel' } }])
+
+  t.host.closeView()
+  t.host.focus('panel')
+  await tick()
+  expect(t.methodCalls('ui.view.close')).toHaveLength(1)
+  expect(t.methodCalls('ui.focus')).toHaveLength(1)
+})
+
+test('D21: a broadcast layout equal to the current one changes nothing, and an equal view keeps its identity', async () => {
+  const { t } = await booted()
+  t.changeLayout({ view: { id: PAGE, input: { a: 1 } } })
+  const before = state(t)
+  const view = state(t).openView
+  let notified = 0
+  t.host.subscribe(() => notified++)
+
+  t.emit({ type: 'ui.state.changed', layout: { ...t.daemonLayout(), view: { id: PAGE, input: { a: 1 } } } })
+  expect(state(t)).toBe(before)
+  expect(notified).toBe(0)
+
+  t.emit({ type: 'ui.state.changed', layout: { ...t.daemonLayout(), view: { id: PAGE, input: { a: 1 } }, focus: 'panel' } })
+  expect(state(t).layout.focus).toBe('panel')
+  expect(state(t).openView).toBe(view)
+})
+
+test('D21: an event that arrives while the layout is being fetched is not overwritten by the older snapshot', async () => {
+  const t = setup(makeModel({ views: [view(NOTES, 'page'), view(NOTES, 'other')] }))
+  await t.host.refresh()
+  const refreshing = t.host.refresh()
+  t.changeLayout({ view: { id: OTHER } })
+  await refreshing
+  expect(state(t).openView?.id).toBe(OTHER)
+})
+
+test('D21: context.getLayout and onLayout follow the daemon, and the listener ends with the plugin', async () => {
+  const { t, context } = await booted()
+  const seen: (string | null)[] = []
+  const stop = context().onLayout((layout) => seen.push(layout.view?.id ?? null))
+  expect(context().getLayout()).toEqual({ view: null, panel: null, sidebar: true, focus: null })
+
+  t.changeLayout({ view: { id: PAGE } })
+  t.changeLayout({ view: { id: PAGE } })
+  t.changeLayout({ view: { id: OTHER } })
+  expect(seen).toEqual([PAGE, OTHER])
+  expect(context().getLayout().view?.id).toBe(OTHER)
+
+  stop()
+  t.changeLayout({ view: null })
+  expect(seen).toEqual([PAGE, OTHER])
+  context().onLayout(() => seen.push('again'))
+  t.setModel(makeModel())
+  await t.host.refresh()
+  t.changeLayout({ focus: 'view' })
+  expect(seen).toEqual([PAGE, OTHER])
+})
+
+test('D21: a layout listener that throws is logged and does not stop the others', async () => {
+  const { t, context } = await booted()
+  const seen: string[] = []
+  context().onLayout(() => {
+    throw new Error('listener bug')
+  })
+  context().onLayout(() => seen.push('ok'))
+  t.changeLayout({ focus: 'view' })
+  expect(seen).toEqual(['ok'])
+  expect(t.logs).toContain('layout listener failed: listener bug')
+})
+
+test('D21: onStream hands a plugin its stream frames until it unsubscribes or the plugin is gone', async () => {
+  const { t, context } = await booted()
+  const received: number[][] = []
+  const stop = context().onStream(7, (bytes) => received.push([...bytes]))
+  context().onStream(8, () => {})
+  t.pushStream(7, new Uint8Array([1, 2]))
+  expect(received).toEqual([[1, 2]])
+
+  stop()
+  t.pushStream(7, new Uint8Array([3]))
+  expect(received).toEqual([[1, 2]])
+  expect(t.streamListeners(7)).toBe(0)
+  expect(t.streamListeners(8)).toBe(1)
+
+  t.setModel(makeModel())
+  await t.host.refresh()
+  expect(t.streamListeners(8)).toBe(0)
+})
+
+test('D21: onConnection reports connected and reconnecting, and is removed with the plugin', async () => {
+  const { t, context } = await booted()
+  const seen: string[] = []
+  context().onConnection((status) => seen.push(status))
+  t.setConnection('reconnecting')
+  t.setConnection('connected')
+  expect(seen).toEqual(['reconnecting', 'connected'])
+
+  t.setModel(makeModel())
+  await t.host.refresh()
+  expect(t.connectionListenerCount()).toBe(0)
+})
+
+test('D21: context.confirm goes to the shell dialog and returns its answer', async () => {
+  const { t, context } = await booted()
+  expect(await context().confirm({ title: 'Remove', body: 'Sure?', confirmLabel: 'Remove' })).toBe(true)
+  t.answerConfirm(false)
+  expect(await context().confirm({ title: 'Again' })).toBe(false)
+  expect(t.confirms).toEqual([{ title: 'Remove', body: 'Sure?', confirmLabel: 'Remove' }, { title: 'Again' }])
+})
+
+test('D21: context.toast shows an info toast', async () => {
+  const { t, context } = await booted()
+  context().toast('Saved', 'notes saved')
+  expect(t.toasts).toEqual([['Saved', 'notes saved']])
+  expect(t.toastKinds).toEqual(['info'])
+})
+
+test("D21: setPanelBadge shows a count on the plugin's own panel, and null or deactivation clears it", async () => {
+  const { t, context } = await booted()
+  context().setPanelBadge(SIDE, 3)
+  expect(state(t).badges).toEqual({ [SIDE]: 3 })
+  context().setPanelBadge(SIDE, 4)
+  expect(state(t).badges).toEqual({ [SIDE]: 4 })
+  context().setPanelBadge(SIDE, null)
+  expect(state(t).badges).toEqual({})
+
+  expect(() => context().setPanelBadge(OUTLINE, 1)).toThrow(`${OUTLINE} is not a panel of ${NOTES}`)
+  expect(() => context().setPanelBadge('panel:acme.notes/missing', 1)).toThrow('is not a panel of')
+
+  context().setPanelBadge(SIDE, 2)
+  t.setModel(makeModel())
+  await t.host.refresh()
+  expect(state(t).badges).toEqual({})
+})
+
+test("D22: a mounted slot's report goes to the daemon, and unmounting clears it", async () => {
+  const t = setup(makeModel({ panels: [panel(NOTES, 'side')] }))
+  const reports: ((state: unknown) => void)[] = []
+  t.useModule(NOTES, recording([SIDE], () => (_el: unknown, props: { report(state: unknown): void }) => reports.push(props.report)).module)
+  await t.host.refresh()
+
+  const dispose = t.host.mount(SIDE, element())
+  await settled(t, SIDE)
+  reports[0]!({ count: 2 })
+  reports[0]!({ count: 3 })
+  expect(t.methodCalls('ui.report').map((call) => call.params)).toEqual([
+    { slot: SIDE, state: { count: 2 } },
+    { slot: SIDE, state: { count: 3 } }
+  ])
+
+  dispose()
+  expect(t.methodCalls('ui.report').at(-1)!.params).toEqual({ slot: SIDE, state: null })
+  reports[0]!({ late: true })
+  expect(t.methodCalls('ui.report')).toHaveLength(3)
+})
+
+test('D22: a refused report is logged with the plugin and does not throw into the slot', async () => {
+  const t = setup(makeModel({ panels: [panel(NOTES, 'side')] }))
+  let report!: (state: unknown) => void
+  t.useModule(NOTES, recording([SIDE], () => (_el: unknown, props: { report(state: unknown): void }) => (report = props.report)).module)
+  await t.host.refresh()
+  t.host.mount(SIDE, element())
+  await settled(t, SIDE)
+
+  t.refused.set('ui.report', 'report is over 64 KiB')
+  expect(() => report('big')).not.toThrow()
+  await tick()
+  expect(t.logs).toEqual([`${NOTES}: report for ${SIDE} failed: report is over 64 KiB`])
+})
+
+test('D22: a slot that never reported sends nothing when it unmounts', async () => {
+  const t = setup(makeModel({ panels: [panel(NOTES, 'side')] }))
+  t.useModule(NOTES, recording([SIDE]).module)
+  await t.host.refresh()
+  t.host.mount(SIDE, element())()
+  await tick()
+  expect(t.methodCalls('ui.report')).toEqual([])
+})
+
+test('D22: after a reconnect the host sends the window focus and each mounted slot\'s last report again', async () => {
+  const focus: WindowFocus = { hasFocus: () => true, subscribe: () => () => {} }
+  const t = setup(makeModel({ panels: [panel(NOTES, 'side')] }), { windowFocus: focus })
+  let report!: (state: unknown) => void
+  t.useModule(NOTES, recording([SIDE], () => (_el: unknown, props: { report(state: unknown): void }) => (report = props.report)).module)
+  await t.host.refresh()
+  t.host.mount(SIDE, element())
+  await settled(t, SIDE)
+  report({ n: 1 })
+  report({ n: 2 })
+  const before = t.methodCalls('ui.report').length
+
+  await t.host.connected()
+  expect(t.methodCalls('ui.window.focused')).toEqual([{ method: 'ui.window.focused', params: { focused: true } }])
+  expect(t.methodCalls('ui.report').slice(before)).toEqual([{ method: 'ui.report', params: { slot: SIDE, state: { n: 2 } } }])
+})
+
+test('D23: the host reports window focus gained and lost, and nothing on connect when it has no focus', async () => {
+  const listeners = new Set<(focused: boolean) => void>()
+  const t = setup(makeModel(), {
+    windowFocus: { hasFocus: () => false, subscribe: (l) => (listeners.add(l), () => listeners.delete(l)) }
+  })
+  await t.host.connected()
+  expect(t.methodCalls('ui.window.focused')).toEqual([])
+
+  listeners.forEach((l) => l(true))
+  listeners.forEach((l) => l(false))
+  expect(t.methodCalls('ui.window.focused').map((call) => call.params)).toEqual([{ focused: true }, { focused: false }])
+
+  t.host.stop()
+  expect(listeners.size).toBe(0)
+})
+
+test('D23: a routed command runs in the window and the host replies with its value', async () => {
+  const t = setup(makeModel({ commands: [command(NOTES, 'open')] }))
+  t.useModule(NOTES, recording([OPEN], () => (args: unknown) => `opened ${JSON.stringify(args)}`).module)
+  await t.host.refresh()
+
+  t.emit({ type: 'ui.command.request', requestId: 'r1', id: OPEN, args: { n: 1 } })
+  await until(() => t.methodCalls('ui.command.reply').length === 1)
+  expect(t.methodCalls('ui.command.reply')[0]!.params).toEqual({ requestId: 'r1', result: 'opened {"n":1}' })
+  expect(t.toasts).toEqual([])
+})
+
+test('D23: a routed command that throws, is unknown or returns something unserializable replies with an error', async () => {
+  const t = setup(makeModel({ commands: [command(NOTES, 'open'), command(NOTES, 'loop')] }))
+  const loop: Record<string, unknown> = {}
+  loop.self = loop
+  t.useModule(
+    NOTES,
+    recording([OPEN, 'command:acme.notes/loop'], (id) => () => {
+      if (id === OPEN) throw new Error('kaboom')
+      return loop
+    }).module
+  )
+  await t.host.refresh()
+
+  t.emit({ type: 'ui.command.request', requestId: 'r1', id: OPEN, args: {} })
+  t.emit({ type: 'ui.command.request', requestId: 'r2', id: 'command:acme.notes/missing', args: {} })
+  t.emit({ type: 'ui.command.request', requestId: 'r3', id: 'command:acme.notes/loop', args: {} })
+  await until(() => t.methodCalls('ui.command.reply').length === 3)
+  const replies = Object.fromEntries(t.methodCalls('ui.command.reply').map((call) => [call.params.requestId, call.params]))
+  expect(replies.r1).toEqual({ requestId: 'r1', error: { message: 'kaboom' } })
+  expect(replies.r2).toEqual({ requestId: 'r2', error: { message: 'no command command:acme.notes/missing' } })
+  expect((replies.r3 as { error: { message: string } }).error.message).toContain('cyclic')
+  expect(t.toasts).toEqual([])
+})
+
+test('D23: runCommandForResult returns the value, rejects with the error and never toasts', async () => {
+  const t = setup(makeModel({ commands: [command(NOTES, 'open')] }))
+  let fail = false
+  t.useModule(
+    NOTES,
+    recording([OPEN], () => () => {
+      if (fail) throw new Error('nope')
+      return { ok: true }
+    }).module
+  )
+  await t.host.refresh()
+  expect(await t.host.runCommandForResult(OPEN)).toEqual({ ok: true })
+  fail = true
+  await expect(t.host.runCommandForResult(OPEN)).rejects.toThrow('nope')
+  expect(t.toasts).toEqual([])
 })

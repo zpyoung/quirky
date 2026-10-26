@@ -141,7 +141,7 @@ describe('plugin events', () => {
             // plugin.changed is activation noise from the other startup plugins; heard is this listener's own ping
             context.subscribe((event) => {
               if (event.type !== 'plugin.changed' && event.type !== 'acme.watch/heard') seen.push(event.type)
-              if (event.type === 'repo.changed') context.emit('heard', null)
+              if (event.type === 'ui.state.changed') context.emit('heard', null)
             })
             context.provide('method:acme.watch/seen', () => seen)`
         }
@@ -156,9 +156,8 @@ describe('plugin events', () => {
     observer.onEvent((event) => {
       if (event.type === 'acme.watch/heard') order.push('listener ran')
     })
-    s.harness.git.addRepo('/fake/alpha')
 
-    await observer.call('repo.add', { path: '/fake/alpha' })
+    await observer.call('ui.sidebar.set', { visible: false })
     order.push('reply')
     await call(s.client, 'acme.tools/fire')
 
@@ -167,9 +166,9 @@ describe('plugin events', () => {
       const value = (await call(s.client, 'acme.watch/seen')) as string[]
       return value.includes('acme.tools/refreshed') ? value : undefined
     })
-    expect(seen).toEqual(['repo.changed', 'acme.tools/refreshed'])
+    expect(seen).toEqual(['ui.state.changed', 'acme.tools/refreshed'])
     expect(order).toEqual(['reply', 'listener ran'])
-    expect(events.some((event) => event.type === 'repo.changed')).toBe(true)
+    expect(events.some((event) => event.type === 'ui.state.changed')).toBe(true)
     await waitFor(() => s.logs.some((line) => line.includes('acme.flaky: listener failed: flaky listener')))
     expect(s.logs.some((line) => line.includes('acme.watch: listener failed'))).toBe(false)
   })

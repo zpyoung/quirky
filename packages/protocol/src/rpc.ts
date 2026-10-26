@@ -1,27 +1,17 @@
-import type {
-  AgentKind,
-  Ask,
-  AskAnswer,
-  AskEnvelope,
-  AskSpec,
-  GitDiff,
-  GitStatus,
-  Repo,
-  Session,
-  Settings,
-  StructuredMessage,
-  Worktree
-} from './model'
 import type { ApiDescription } from './catalog'
+import type { DistroInfo, DistroInspection, PluginInspection } from './distro'
 import type { ContributionInfo, JobInfo, JobRun, PluginEvent, PluginInfo } from './plugins'
-import type { SettingInfo, ThemeList, UiModel } from './ui'
+import type { SettingInfo, ThemeList, UiLayout, UiModel, UiState } from './ui'
 
 /** Bumped on any breaking change to `Methods`, `QuirkyEvent` or the frame layout. */
-export const PROTOCOL_VERSION = 1
+export const PROTOCOL_VERSION = 2
 
 export type ClientRole = 'desktop' | 'ui' | 'cli' | 'mobile'
 
 type Ok = { ok: true }
+
+/** Params a destructive method also accepts: `yes` skips the confirmation, `confirmation` names an answered ask. */
+export type Confirmable = { yes?: boolean; confirmation?: string }
 
 /**
  * Every daemon method: params in, result out. The desktop UI, the CLI and mobile all use these;
@@ -29,7 +19,15 @@ type Ok = { ok: true }
  */
 export type Methods = {
   'client.hello': {
-    params: { role: ClientRole; name?: string; protocolVersion: number }
+    params: {
+      role: ClientRole
+      name?: string
+      protocolVersion: number
+      token?: string
+      cwd?: string
+      sessionId?: string
+      worktreeId?: string
+    }
     result: { protocolVersion: number; daemonVersion: string }
   }
   'events.subscribe': { params: Record<string, never>; result: Ok }
@@ -43,84 +41,12 @@ export type Methods = {
       home: string
       ptyHost: { pid: number | null; alive: boolean }
       clients: { role: ClientRole; name?: string }[]
+      safeMode: boolean
+      socket: string | null
     }
   }
-
-  'settings.get': { params: Record<string, never>; result: Settings }
-  'settings.set': { params: Partial<Settings>; result: Settings }
-
-  'repo.list': { params: Record<string, never>; result: Repo[] }
-  /** Resolves `path` to its repository toplevel; adding the same repo twice returns the existing one. */
-  'repo.add': { params: { path: string }; result: Repo }
-  'repo.remove': { params: { repoId: string }; result: Ok }
-
-  'worktree.list': { params: { repoId?: string }; result: Worktree[] }
-  /** Creates branch `name` from `baseRef` (default: the repo's current HEAD) at `<worktreesRoot>/<repo>/<name>`. */
-  'worktree.create': {
-    params: { repoId: string; name: string; baseRef?: string }
-    result: Worktree
-  }
-  'worktree.remove': { params: { worktreeId: string; force?: boolean }; result: Ok }
-
-  'session.list': { params: { worktreeId?: string }; result: Session[] }
-  /** Starts a terminal session; `prompt` is passed to agents that accept an initial prompt. */
-  'session.create': {
-    params: { worktreeId: string; agent: AgentKind; prompt?: string; cols?: number; rows?: number }
-    result: Session
-  }
-  /** Starts a structured (no PTY) background agent session; only `claude` is supported in v1. */
-  'session.createStructured': {
-    params: { worktreeId: string; agent: AgentKind; prompt: string }
-    result: Session
-  }
-  /** Kills the process if alive and forgets the session. */
-  'session.close': { params: { sessionId: string }; result: Ok }
-
-  /**
-   * Starts streaming a terminal session to this client. `replay` is base64 of recent output (up to
-   * 1 MiB, starting on a line boundary) to write into a fresh terminal; live output follows as
-   * binary frames tagged with `streamId`, starting exactly at byte `offset`.
-   */
-  'terminal.attach': {
-    params: { sessionId: string; cols: number; rows: number }
-    result: { streamId: number; replay: string; offset: number }
-  }
-  'terminal.detach': { params: { streamId: number }; result: Ok }
-  /** Raw input, as typed. */
-  'terminal.write': { params: { sessionId: string; data: string }; result: Ok }
-  'terminal.resize': { params: { sessionId: string; cols: number; rows: number }; result: Ok }
-  /** Sends a prompt as a bracketed paste, then Enter as a separate write when `enter` is set. */
-  'terminal.send': { params: { sessionId: string; text: string; enter?: boolean }; result: Ok }
-  /** The visible screen plus up to `lines` (default 50) of recent scrollback, as plain text. */
-  'terminal.read': {
-    params: { sessionId: string; lines?: number }
-    result: { lines: string[]; cols: number; rows: number; alt: boolean }
-  }
-
-  'git.status': { params: { worktreeId: string }; result: GitStatus }
-  'git.diff': { params: { worktreeId: string; path: string; staged: boolean }; result: GitDiff }
-  'git.stage': { params: { worktreeId: string; paths: string[] }; result: Ok }
-  'git.unstage': { params: { worktreeId: string; paths: string[] }; result: Ok }
-  'git.commit': { params: { worktreeId: string; message: string }; result: { sha: string } }
-
-  'ask.create': {
-    params: { spec: AskSpec; sessionId?: string; worktreeId?: string }
-    result: { askId: string }
-  }
-  /** Long-polls up to `timeoutMs` (max 60000); returns status `pending` if still unanswered. */
-  'ask.wait': { params: { askId: string; timeoutMs?: number }; result: AskEnvelope }
-  'ask.answer': {
-    params: { askId: string; answers: Record<string, AskAnswer>; skipped?: string[] }
-    result: AskEnvelope
-  }
-  'ask.cancel': { params: { askId: string }; result: AskEnvelope }
-  'ask.list': { params: { pendingOnly?: boolean }; result: Ask[] }
-
-  'structured.messages': {
-    params: { sessionId: string; afterSeq?: number }
-    result: StructuredMessage[]
-  }
-  'structured.send': { params: { sessionId: string; text: string }; result: Ok }
+  /** Replies, then stops the daemon (not the PTY host). */
+  'daemon.stop': { params: Record<string, never>; result: Ok }
 
   /** Every discovered plugin, including invalid ones, with its state and diagnostics. */
   'plugin.list': { params: Record<string, never>; result: PluginInfo[] }
@@ -133,6 +59,12 @@ export type Methods = {
   'plugin.enable': { params: { id: string }; result: Ok }
   /** Disables plugin `id` and every plugin that depends on it. */
   'plugin.disable': { params: { id: string }; result: Ok }
+  /** Reads a plugin directory's manifest and lists its contributions; runs no plugin code. */
+  'plugin.inspect': { params: { path: string }; result: PluginInspection }
+  /** Copies the plugin at `path` into the home and takes it into effect; destructive. */
+  'plugin.install': { params: { path: string } & Confirmable; result: PluginInfo }
+  /** Deletes an installed plugin and its data; destructive. */
+  'plugin.uninstall': { params: { id: string } & Confirmable; result: Ok }
   /** Activates the plugin now instead of waiting for first use. */
   'plugin.activate': { params: { pluginId: string }; result: PluginInfo }
   /** Every method, event and UI command in effect with its schemas; activates no plugin. */
@@ -142,6 +74,34 @@ export type Methods = {
   'job.list': { params: Record<string, never>; result: JobInfo[] }
   /** Runs job `id` now and resolves with the finished run. */
   'job.run': { params: { id: string }; result: JobRun }
+
+  /** Reads a distro directory and lists everything installing it would change; installs nothing. */
+  'distro.inspect': { params: { path: string }; result: DistroInspection }
+  /** Installs the distro at `path` as a layer under the user's own choices; destructive. */
+  'distro.install': { params: { path: string } & Confirmable; result: DistroInfo }
+  'distro.list': { params: Record<string, never>; result: DistroInfo[] }
+  /** Removes the distro layer and its plugins; destructive. */
+  'distro.remove': { params: { id: string } & Confirmable; result: Ok }
+
+  /** The layout, the connected windows and what each slot reports. */
+  'ui.state': { params: Record<string, never>; result: UiState }
+  'ui.view.open': { params: { id: string; input?: unknown }; result: UiLayout }
+  'ui.view.close': { params: Record<string, never>; result: UiLayout }
+  'ui.panel.open': { params: { id: string }; result: UiLayout }
+  'ui.panel.close': { params: Record<string, never>; result: UiLayout }
+  'ui.sidebar.set': { params: { visible: boolean }; result: UiLayout }
+  'ui.focus': { params: { target: 'sidebar' | 'view' | 'panel' }; result: UiLayout }
+  /** Runs a plugin UI command in one open window and returns its result. */
+  'ui.command.run': { params: { id: string; args?: unknown }; result: { result: unknown } }
+  /** A window reports what a mounted slot shows (`null` clears it); role `ui` only. */
+  'ui.report': { params: { slot: string; state: unknown | null }; result: Ok }
+  /** A window tells the daemon whether it has focus; role `ui` only. */
+  'ui.window.focused': { params: { focused: boolean }; result: Ok }
+  /** A window answers a `ui.command.request`; role `ui` only. */
+  'ui.command.reply': {
+    params: { requestId: string; result?: unknown; error?: { message: string } }
+    result: Ok
+  }
 
   /** The window's view of plugin UI: slots, commands, keybindings, settings, themes and module URLs. */
   'ui.contributions': { params: Record<string, never>; result: UiModel }
@@ -165,21 +125,25 @@ export type ResultOf<M extends MethodName> = Methods[M]['result']
 
 /** Pushed to clients that called `events.subscribe`, as JSON-RPC notifications named `event`. */
 export type QuirkyEvent =
-  | { type: 'repo.changed' }
-  | { type: 'worktree.changed'; repoId: string }
-  | { type: 'session.changed'; session: Session }
-  | { type: 'session.removed'; sessionId: string }
-  | { type: 'git.changed'; worktreeId: string }
-  | { type: 'ask.created'; ask: Ask }
-  | { type: 'ask.resolved'; askId: string; envelope: AskEnvelope }
-  | { type: 'notify'; title: string; body: string; sessionId?: string; worktreeId?: string }
-  | { type: 'structured.message'; message: StructuredMessage }
+  | {
+      type: 'notify'
+      title: string
+      body: string
+      sessionId?: string
+      worktreeId?: string
+      open?: { view: string; input?: unknown }
+      desktop: boolean
+    }
   | { type: 'plugin.changed' }
   | { type: 'setting.changed'; id: string; value: boolean | number | string }
   | { type: 'theme.changed'; chosen: string; active: string }
+  | { type: 'ui.state.changed'; layout: UiLayout }
+  | { type: 'ui.command.request'; requestId: string; id: string; args: unknown }
+  /** Delivered to plugin listeners only, never to clients. */
+  | { type: 'hook.received'; agent: string; sessionId: string; payload: unknown }
   | PluginEvent
 
-export type RpcRequest = { jsonrpc: '2.0'; id: number; method: string; params?: unknown }
+export type RpcRequest = { jsonrpc: '2.0'; id: number; method: string; params?: unknown; requestId?: string }
 export type RpcSuccess = { jsonrpc: '2.0'; id: number; result: unknown }
 export type RpcFailure = {
   jsonrpc: '2.0'
@@ -196,7 +160,8 @@ export const RpcErrorCode = {
   Internal: -32603,
   Unauthorized: -32001,
   NotFound: -32004,
-  Conflict: -32009
+  Conflict: -32009,
+  ConfirmationRequired: -32010
 } as const
 
 /** WebSocket path on the daemon's loopback port; auth is `?token=<runtime token>`. */

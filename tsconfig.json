@@ -23,6 +23,9 @@
   "include": [
     "packages/*/src",
     "packages/*/test",
+    "plugins/*/*.ts",
+    "plugins/*/src",
+    "plugins/*/test",
     "scripts"
   ]
 }

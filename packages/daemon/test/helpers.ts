@@ -1,10 +1,9 @@
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { join, resolve } from 'node:path'
 import { QuirkyClient, type ClientRole, type QuirkyEvent } from '@quirky/protocol'
 import { rpcUrl, type RuntimeInfo } from '@quirky/protocol/node'
 import { startDaemon, type DaemonHandle, type DaemonOptions } from '../src/daemon'
-import { createFakeGit, type FakeGit } from './fixtures/fake-git'
 import { startFakePtyHost, type FakePtyHost } from './fixtures/fake-pty-host'
 
 export type Harness = {
@@ -12,13 +11,17 @@ export type Harness = {
   daemon: DaemonHandle
   runtime: RuntimeInfo
   pty: FakePtyHost
-  git: FakeGit
   notifications: { title: string; body: string }[]
   clients: QuirkyClient[]
   connect(role?: ClientRole, name?: string): Promise<QuirkyClient>
   /** A client that records every event it receives. */
   connectWithEvents(role?: ClientRole): Promise<{ client: QuirkyClient; events: QuirkyEvent[] }>
   cleanup(): Promise<void>
+}
+
+/** The repo's `plugins/` directory, for tests that want the real built-in plugins. */
+export function builtinsDir(): string {
+  return resolve(import.meta.dir, '../../../plugins')
 }
 
 export function makeTempHome(prefix = 'qd-'): string {
@@ -28,17 +31,15 @@ export function makeTempHome(prefix = 'qd-'): string {
 export async function startHarness(options: Partial<DaemonOptions> = {}): Promise<Harness> {
   const home = options.home ?? makeTempHome()
   const pty = startFakePtyHost(home)
-  const git = createFakeGit()
   const notifications: { title: string; body: string }[] = []
   const daemon = await startDaemon({
     home,
     port: 0,
-    git,
     shell: '/bin/zsh',
-    enterDelayMs: 20,
     notifier: (title, body) => notifications.push({ title, body }),
     cliEntry: '/opt/quirky/cli/main.ts',
     uiDir: join(home, 'no-ui'),
+    builtinPluginsDir: null,
     ...options
   })
   const clients: QuirkyClient[] = []
@@ -47,7 +48,6 @@ export async function startHarness(options: Partial<DaemonOptions> = {}): Promis
     daemon,
     runtime: daemon.runtime,
     pty,
-    git,
     notifications,
     clients,
     async connect(role = 'cli', name) {

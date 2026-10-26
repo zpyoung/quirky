@@ -31,6 +31,10 @@ function setup(options: { withExtension?: boolean; throwOnRevoke?: boolean; thro
       if (options.throwOnCreate) throw new Error('create blew up')
       return {
         dataDir: `/data/${plugin.id}`,
+        home: '/home',
+        pty: {} as never,
+        notify: () => undefined,
+        launch: {} as never,
         emit: () => true,
         subscribe: () => () => undefined,
         call: async () => null,
