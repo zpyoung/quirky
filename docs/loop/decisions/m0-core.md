@@ -469,4 +469,4 @@
 
 ## Progress
 
-Step 6, final review. W1 to W5 merged with checkpoint fix batches after W2, W3 and W4; HEAD 7ea2baa, gate 1976 pass, typecheck clean, every SC has a named test. Final Round 1 running over 0c6a3c0..7ea2baa in two partitions (kernel and CLI; window, desktop, plugins and distros) because the branch diff is too large for one prompt. Next: adjudicate (D46), one fix batch, leftovers to BLOCKERS.md, verify, merge into build/roadmap.
+Done. W1 to W5 built with checkpoint fix batches after W2, W3 and W4; Final Round 1 (D46) and its fix batch merged. Verify: `bun run test` 1989 pass, `bun run typecheck` clean, `bun test scripts` fails only the D31 queue-state test, every SC-1..SC-60 has a named test, the Orca defects (SC-6, SC-29) have tests, and the SC-24 fence test holds plugins to the public API. One partly closed finding is in `docs/loop/BLOCKERS.md` under `m0-core: open review findings`.
