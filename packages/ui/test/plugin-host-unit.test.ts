@@ -264,7 +264,9 @@ const key = (code: string, mods: Partial<Record<'metaKey' | 'ctrlKey' | 'altKey'
   ...mods
 })
 
-test('SC-7: mounting a section loads its module once and mounts with only the element and props', async () => {
+const loaded = (t: Harness, plugin: string) => until(() => state(t).plugins[plugin]?.state === 'active')
+
+test('SC-7: mounting a section reuses the module the window already loaded and mounts with only the element and props', async () => {
   const t = setup(makeModel({ sidebarSections: [section(NOTES, 'list')] }))
   const calls: unknown[][] = []
   let cleanups = 0
@@ -275,7 +277,8 @@ test('SC-7: mounting a section loads its module once and mounts with only the el
   })
   t.useModule(NOTES, module)
   await t.host.refresh()
-  expect(t.imports).toEqual([])
+  await loaded(t, NOTES)
+  expect(t.imports).toEqual([urlOf(NOTES)])
 
   const el = element()
   t.host.mount(LIST, el)
@@ -318,13 +321,92 @@ test('SC-7: concurrent mounts and commands share one import and one activation',
   expect(record.activations).toBe(1)
 })
 
-test('SC-8: refreshing and rendering toggles, with nothing shown or run, imports no module', async () => {
+test('S1: refreshing loads and activates every enabled plugin with nothing shown or run', async () => {
   const t = setup(makeModel({ panels: [panel('acme.outline', 'outline')], views: [view('acme.outline', 'page')] }))
+  const { module, record } = recording([])
+  t.useModule('acme.outline', module)
   await t.host.refresh()
   t.host.togglePanel('panel:acme.outline/outline', false)
-  expect(t.imports).toEqual([])
-  expect(state(t).plugins).toEqual({})
+  await loaded(t, 'acme.outline')
+  expect(t.imports).toEqual([urlOf('acme.outline')])
+  expect(record.activations).toBe(1)
   expect(state(t).model?.panels.map((p) => p.title)).toEqual(['outline'])
+})
+
+test('S1: an ask created while another panel is open sets the Questions badge without its panel ever mounting', async () => {
+  const ASK_PANEL = 'panel:quirky.ask/questions'
+  const OTHER_PANEL = 'panel:acme.notes/side'
+  const t = setup(makeModel({ panels: [panel('quirky.ask', 'questions'), panel(NOTES, 'side')] }))
+  t.useModule('quirky.ask', {
+    activate(context) {
+      context.subscribe((event) => {
+        if (event.type === 'quirky.ask/created') context.setPanelBadge(ASK_PANEL, 1)
+      })
+    }
+  })
+  t.useModule(NOTES, recording([OTHER_PANEL]).module)
+  await t.host.refresh()
+  t.host.togglePanel(OTHER_PANEL, true)
+  t.host.mount(OTHER_PANEL, element())
+  await loaded(t, 'quirky.ask')
+
+  t.emit({ type: 'quirky.ask/created', data: { ask: { id: 'a1' } } })
+  await until(() => state(t).badges[ASK_PANEL] === 1)
+
+  expect(state(t).openPanel).toBe(OTHER_PANEL)
+  expect(state(t).slots[ASK_PANEL]).toBeUndefined()
+})
+
+test('S1: a plugin enabled later loads on plugin.changed and stays active when its slots unmount', async () => {
+  const t = setup(makeModel())
+  const { module, record } = recording([LIST])
+  t.useModule(NOTES, module)
+  await t.host.refresh()
+  expect(t.imports).toEqual([])
+
+  t.setModel(makeModel({ sidebarSections: [section(NOTES, 'list')] }))
+  t.emit({ type: 'plugin.changed' } as unknown as QuirkyEvent)
+  await loaded(t, NOTES)
+  const unmount = t.host.mount(LIST, element())
+  await settled(t, LIST)
+  unmount()
+  await tick()
+
+  expect(record.activations).toBe(1)
+  expect(record.deactivations).toBe(0)
+  expect(state(t).plugins[NOTES]).toEqual({ state: 'active' })
+})
+
+test('S1: a disabled plugin is deactivated on plugin.changed even with no slot mounted', async () => {
+  const t = setup(makeModel({ panels: [panel(NOTES, 'side')] }))
+  const { module, record } = recording([])
+  t.useModule(NOTES, module)
+  await t.host.refresh()
+  await loaded(t, NOTES)
+
+  t.setModel(makeModel())
+  t.emit({ type: 'plugin.changed' } as unknown as QuirkyEvent)
+  await until(() => state(t).plugins[NOTES]?.state === 'idle')
+
+  expect(record.deactivations).toBe(1)
+  expect(() => record.contexts[0].call('repo.list')).toThrow('acme.notes is not active')
+})
+
+test('S1: a plugin whose eager load fails is not retried by later refreshes, only by a mount', async () => {
+  const t = setup(makeModel({ sidebarSections: [section(NOTES, 'list')] }))
+  let attempts = 0
+  t.useModule(NOTES, () => {
+    attempts++
+    throw new Error('boom')
+  })
+  await t.host.refresh()
+  await until(() => state(t).plugins[NOTES]?.state === 'failed')
+  await t.host.refresh()
+  await tick()
+  expect(attempts).toBe(1)
+
+  t.host.mount(LIST, element())
+  await until(() => attempts === 2)
 })
 
 test('SC-9: opening a panel closes the other one, and toggling closes it', async () => {
@@ -1136,12 +1218,12 @@ test('SC-9: opening a view or panel the daemon refuses changes nothing and is lo
   expect(t.logs).toEqual([`ui.view.open failed: no view ${PAGE}`, 'ui.panel.open failed: no panel panel:acme.notes/side'])
 })
 
-test('SC-14: running a command loads its plugin lazily and passes the arguments', async () => {
+test('SC-14: running a command passes the arguments to the module the window already loaded', async () => {
   const t = setup(makeModel({ commands: [command(NOTES, 'open')] }))
   const args: unknown[] = []
   t.useModule(NOTES, recording([OPEN], () => (a: unknown) => args.push(a)).module)
   await t.host.refresh()
-  expect(t.imports).toEqual([])
+  await loaded(t, NOTES)
 
   await t.host.runCommand(OPEN, { id: 1 })
   await t.host.runCommand(OPEN)
@@ -1199,11 +1281,13 @@ test('SC-15: Cmd+Shift+N runs the bound command and is consumed, every time', as
 
 test('SC-15: Cmd+N without Shift runs nothing and is not consumed', async () => {
   const t = setup(makeModel({ commands: [command(NOTES, 'new')], keybindings: [NEW_KEY] }))
+  let runs = 0
+  t.useModule(NOTES, recording([NEW], () => () => runs++).module)
   await t.host.refresh()
   expect(t.host.handleKey(key('KeyN', { metaKey: true }))).toBe(false)
   expect(t.host.handleKey(key('KeyN', { shiftKey: true }))).toBe(false)
   await tick()
-  expect(t.imports).toEqual([])
+  expect(runs).toBe(0)
 })
 
 test('SC-15: handleKey does not wait for the command', async () => {
@@ -1259,22 +1343,26 @@ test('SC-16: only the active keybinding on a chord fires, and shadowed ones are 
 test('SC-17: the palette chord is never handled, even for an active keybinding', async () => {
   const keys = [binding(NOTES, 'p', 'mod+shift+p', NEW)]
   const t = setup(makeModel({ commands: [command(NOTES, 'new')], keybindings: keys }))
+  let runs = 0
+  t.useModule(NOTES, recording([NEW], () => () => runs++).module)
   await t.host.refresh()
   expect(t.host.handleKey(key('KeyP', { metaKey: true, shiftKey: true }))).toBe(false)
   await tick()
-  expect(t.imports).toEqual([])
+  expect(runs).toBe(0)
 })
 
 test('G1: a plugin keybinding on the palette chord is reported shadowed by the kernel, and the chord runs nothing', async () => {
   const shadowed: UiKeybinding = { ...binding(NOTES, 'p', 'mod+shift+p', NEW, 'shadowed'), shadowedBy: 'kernel' }
   const t = setup(makeModel({ commands: [command(NOTES, 'new')], keybindings: [shadowed] }))
+  let runs = 0
+  t.useModule(NOTES, recording([NEW], () => () => runs++).module)
   await t.host.refresh()
   expect(state(t).model!.keybindings).toEqual([shadowed])
 
   expect(t.host.handleKey(key('KeyP', { metaKey: true, shiftKey: true }))).toBe(false)
   expect(t.host.handleKey(key('KeyP', { ctrlKey: true, shiftKey: true }))).toBe(false)
   await tick()
-  expect(t.imports).toEqual([])
+  expect(runs).toBe(0)
   expect(t.toasts).toEqual([])
 })
 

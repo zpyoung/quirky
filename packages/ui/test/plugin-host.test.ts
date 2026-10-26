@@ -336,7 +336,7 @@ describe('window plugin host against a real daemon', () => {
     expect(t.lines()).toContain('cleanup list')
   })
 
-  test('SC-8: contributions that aren\'t shown never load their plugin', async () => {
+  test('S1: an enabled plugin loads and activates without any of its contributions being shown', async () => {
     const t = await boot((installed, marker) =>
       installUi(installed, marker, 'acme.outline', {
         panel: [{ id: 'outline', title: 'Outline' }],
@@ -348,9 +348,11 @@ describe('window plugin host against a real daemon', () => {
     expect(t.state().model!.panels).toMatchObject([{ id: 'panel:acme.outline/outline', title: 'Outline' }])
     expect(t.state().openPanel).toBeNull()
     expect(t.state().openView).toBeNull()
-    expect(t.lines()).toEqual([])
-    expect(t.urls).toEqual([])
-    expect(t.state().plugins['acme.outline']).toBeUndefined()
+    await t.waitForLine('ui-activate acme.outline')
+    expect(t.lines()).toEqual(['ui-import acme.outline', 'ui-activate acme.outline'])
+    expect(t.urls).toEqual(['/plugins/acme.outline/ui.js'])
+    expect(t.state().plugins['acme.outline']).toEqual({ state: 'active' })
+    expect(t.state().slots).toEqual({})
   })
 
   test('SC-9: a panel toggles open and closed, one at a time', async () => {
@@ -618,6 +620,7 @@ describe('window plugin host against a real daemon', () => {
       await t.mounted(throws)
       expect(retried.element.text).toBe('second try')
 
+      await waitFor(() => t.state().plugins['acme.broken']?.state === 'failed')
       t.show(broken)
       expect(await t.errored(broken)).toMatch(/^acme\.broken failed to load: /)
       writeFileSync(
@@ -629,11 +632,12 @@ describe('window plugin host against a real daemon', () => {
       expect(later.element.text).toBe('loaded')
       expect(t.urls.filter((url) => url.includes('acme.broken'))).toEqual([
         '/plugins/acme.broken/ui.js',
-        '/plugins/acme.broken/ui.js?attempt=1'
+        '/plugins/acme.broken/ui.js?attempt=1',
+        '/plugins/acme.broken/ui.js?attempt=2'
       ])
 
-      t.show(failing)
-      expect(await t.errored(failing)).toBe('acme.x failed to activate: bad')
+      await waitFor(() => t.state().plugins['acme.x']?.state === 'failed')
+      expect(t.state().plugins['acme.x']).toEqual({ state: 'failed', error: 'acme.x failed to activate: bad' })
       const reactivated = t.show(failing)
       await t.mounted(failing)
       expect(reactivated.element.text).toBe('activated again')
@@ -744,7 +748,6 @@ describe('window plugin host against a real daemon', () => {
     expect(t.host.handleKey(press('P', { shiftKey: true }))).toBe(false)
     await Bun.sleep(50)
     expect(t.lines()).not.toContain('ran tabs')
-    expect(t.urls).toEqual([])
   })
 
   test('SC-18: a keybinding whose command isn\'t in effect is unbound', async () => {
@@ -762,7 +765,7 @@ describe('window plugin host against a real daemon', () => {
     expect(t.state().model!.keybindings).toMatchObject([{ id: 'keybinding:acme.notes/new-key', status: 'unbound' }])
     expect(t.host.handleKey(press('N', { shiftKey: true }))).toBe(false)
     await Bun.sleep(50)
-    expect(t.lines()).toEqual([])
+    expect(t.lines()).not.toContain('ran new')
     expect(t.toasts).toEqual([])
   })
 
