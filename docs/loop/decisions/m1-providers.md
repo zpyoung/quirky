@@ -481,5 +481,35 @@
 - **Revisit if:** another in-process test path writes under a user home
 - **Source:** assumed — autonomous
 
+## D48: Review rounds: what was accepted, rejected and fixed
+- **Question:** subagent-driven development's checkpoint reviews (after waves 1 and 2) and Final Round 1, all with Codex reviewers
+- **Options:** —
+- **Chose:** wave 1 checkpoint: accepted a Codex TOML multiline-value corruption, a subscribe-failure race that erased another hold, and a login-PATH read that hung past its timeout; rejected the claim that env-only agents (goose) with custom arguments must count as custom, because Orca treats only goose's environment as its permission state. Wave 2 checkpoint: accepted eight findings (delivery waiting forever on a stalled subscribe, its deadline not armed until subscribe returned, a paste attempt after a pre-spawn exit, a provider session overwritten by the launch's own write, two default-agent edge cases). Final Round 1 (deep, non-test source because the full 740 KB diff exceeds a lens's budget): accepted `opencode run` overrides getting `--prompt` instead of a message, a stalled liveness check leaving delivery pending, Codex trust writing invalid TOML into inline-table configs (now refused, file untouched), and the open new-session menu not following catalog changes; plus one found by the e2e suite, hook arguments landing after a user `--`. Every accepted finding was fixed with a regression test that failed before the fix; none is left open, so nothing goes to BLOCKERS.md.
+- **Why:** LOOP.md runs one final round and one fix batch
+- **Evidence:** run journal (checkpoint and final digests); fix commits e97f807, the G1/G2 merges, the H1-H4 merges
+- **Reversibility:** easy
+- **Confidence:** medium
+- **Source:** assumed — autonomous
+
+## D49: The UI scenarios passed in the web window; one visual defect was fixed
+- **Question:** LOOP.md step 6's UI check with quirk:using-apps-like-a-user (`--surface web --owner yours --unattended`)
+- **Options:** —
+- **Chose:** ran it against a built daemon on a temporary home with fake claude, codex and goose. All six goals passed: SC-39 (sections and counts), SC-43 (menu, Manage agents, palette commands), SC-9 (Cmd+Option+T opened a Claude tab), SC-40 (Manual, custom arguments, Replace with Yolo; Goose's Environment confirmed in the accessibility tree just below the fold), SC-41 (disable Codex), SC-42 (Refresh picked up a newly installed gemini; the brief "Refreshing…" label and the empty state are covered by unit tests). The run found that the selected Manual/Auto/Yolo segment wasn't visually highlighted (an inline style hid the `active` class); fixed with a test. Report: `.quirk/using-apps-like-a-user/runs/20261026T234451-c11b/report.md` (local, ignored). The daemon was stopped and its temporary home removed.
+- **Why:** the logic spec's window scenarios must pass when used like a user
+- **Evidence:** the run report; plugins/quirky.agents/src/window/controls.tsx
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** assumed — autonomous
+
+## D50: No native-only scenarios
+- **Question:** LOOP.md step 6: scenarios only the real window can show go to docs/loop/native/<id>.json
+- **Options:** —
+- **Chose:** none. Every window scenario of this item lives in the webview (the Agents view, the menu, palette commands and their chord), which the web pass covers; no tray, menu bar, OS dialog or notification is involved.
+- **Why:** the native file is for what the web surface can't show
+- **Evidence:** logic.md "The window"
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** assumed — autonomous
+
 ## Progress
-Waves 1 and 2 merged with the wave 1 checkpoint fixes; gate 2500 pass, scripts 30 pass, typecheck clean. Wave 3 in progress (Agents view, session menu, e2e scenario suites); wave 2 checkpoint review running. Next: wave 3 merge, wave 2 checkpoint fixes, catch-up merge of build/roadmap, Final Round 1, UI pass with quirk:using-apps-like-a-user, land.
+Done. Waves 1-3 built with checkpoint fix batches after waves 1 and 2; Final Round 1 and its fix batch merged; the web UI pass passed all six goals (D49). Verify: `bun run test` 2670 pass, `bun test scripts` 30 pass, `bun run typecheck` clean; every SC-1..SC-43 has a named test; the Orca defects (SC-23, SC-35) have tests; `quirky.agents` uses only the public plugin API and ships its methods and `quirky agents` CLI group. Nothing left open in BLOCKERS.md.
