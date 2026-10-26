@@ -450,5 +450,15 @@
 - **Confidence:** high
 - **Source:** assumed — autonomous
 
+## D45: Build with Claude subagents implementing and Codex reviewing
+- **Question:** subagent-driven development's preflight backend pairing
+- **Options:** claude-task + codex; claude-task + gemini; pi-codex + opus
+- **Chose:** claude-task + codex (Sonnet implementers and fixers, Codex reviewers through quirk:adversarial-review). `pi-watch --check codex` and `--check gemini` both passed; gemini is the tiebreak family.
+- **Why:** LOOP.md names this pairing
+- **Evidence:** docs/loop/LOOP.md step 5
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** locked by docs/loop/LOOP.md
+
 ## Progress
 Logic spec (amended at tech-spec authoring and after the Codex spec review) and tech spec written and reviewed. Next: the Codex adversarial review of both specs, fixes, commit, then subagent-driven development.
