@@ -1,4 +1,5 @@
 import { formatDuration, type JobRun } from '@quirky/protocol'
+import { CommandFailed } from '../args'
 import { formatTable } from '../output'
 import { takePositionals } from './support'
 import type { Command } from './types'
@@ -73,6 +74,6 @@ export const jobRun: Command = {
       const elapsed = (result.finishedAt ?? result.startedAt) - result.startedAt
       return `${id} ${result.status} in ${elapsed} ms${result.error ? `: ${singleLine(result.error)}` : ''}`
     })
-    if (result.status !== 'ok') throw new Error(`job ${id} ${result.status}`)
+    if (result.status !== 'ok') throw new CommandFailed(`job ${id} ${result.status}`)
   }
 }

@@ -3,9 +3,11 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import {
   DEFAULT_THEME,
+  CATALOG_SCHEMA_VERSION,
   PROTOCOL_VERSION,
   RpcErrorCode,
   type AskEnvelope,
+  type ApiMethodEntry,
   type AskSpec,
   type ContributionInfo,
   type JobInfo,
@@ -43,6 +45,9 @@ class FakeRpcError extends Error {
   }
 }
 
+/** What a seeded plugin method does when called: return `result`, or fail with `error`. */
+export type MethodBehavior = { result?: unknown; error?: { code: number; message: string } }
+
 type AskState = { envelope: AskEnvelope; spec: AskSpec; waiters: Set<() => void> }
 
 /**
@@ -75,6 +80,8 @@ export class FakeDaemon {
   readonly settings: SettingInfo[] = []
   /** Errors `setting.set` throws for a setting ID, to exercise error exit codes. */
   readonly settingErrors = new Map<string, { code: number; message: string }>()
+  /** Plugin methods served through `api.describe` and answerable by name. */
+  readonly methods = new Map<string, { entry: ApiMethodEntry; behavior: MethodBehavior }>()
   connections = 0
   private server!: ReturnType<typeof Bun.serve>
   private waitCalls = 0
@@ -260,6 +267,30 @@ export class FakeDaemon {
     this.settings.push(setting)
     this.ui.settings.push({ id: setting.id, plugin, type: setting.type, title: setting.title, default: setting.default })
     return setting
+  }
+
+  /** Seeds a plugin method into the catalog; calling it records the params and answers per `behavior`. */
+  addMethod(name: string, entry: Partial<ApiMethodEntry> = {}, behavior: MethodBehavior = {}): ApiMethodEntry {
+    const full: ApiMethodEntry = {
+      name,
+      plugin: name.slice(0, name.indexOf('/')),
+      params: { type: 'object' },
+      result: {},
+      ...entry
+    }
+    this.methods.set(name, { entry: full, behavior })
+    return full
+  }
+
+  private describe() {
+    return {
+      schemaVersion: CATALOG_SCHEMA_VERSION,
+      daemonVersion: '0.0.0-fake',
+      protocolVersion: PROTOCOL_VERSION,
+      methods: [...this.methods.values()].map(({ entry }) => entry).sort((a, b) => (a.name < b.name ? -1 : 1)),
+      events: [],
+      uiCommands: []
+    }
   }
 
   addTheme(plugin: string, name: string, overrides: Partial<ThemeInfo> = {}): ThemeInfo {
@@ -449,8 +480,14 @@ export class FakeDaemon {
         }
         this.chooseTheme(params.id)
         return this.themeList()
-      default:
+      case 'api.describe':
+        return this.describe()
+      default: {
+        const seeded = this.methods.get(method)
+        if (seeded?.behavior.error) throw new FakeRpcError(seeded.behavior.error.code, seeded.behavior.error.message)
+        if (seeded) return seeded.behavior.result === undefined ? { ok: true } : seeded.behavior.result
         throw new FakeRpcError(RpcErrorCode.MethodNotFound, `method not found: ${method}`)
+      }
     }
   }
 

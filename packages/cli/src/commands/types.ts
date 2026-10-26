@@ -29,6 +29,8 @@ export type Command = {
   plugin: string | null
   /** Receives the tokens after the command words unparsed in `args.positionals`. */
   rawArgs?: true
+  /** Required flags are documentation only; the run code checks them after merging `--params`. */
+  deferRequired?: true
   /** The `kernel <name>` or `<plugin> <name>` command that wins over this generated one. */
   shadowedBy?: string
   run(args: ParsedArgs, ctx: Context): Promise<void>
