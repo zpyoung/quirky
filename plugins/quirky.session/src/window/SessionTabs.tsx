@@ -1,14 +1,14 @@
 import { useState } from 'react'
-import type { Session } from '@quirky/protocol'
+import type { Session, UiPluginContext } from '@quirky/protocol'
 import type { WorktreeSessions } from './model'
 import { NewSessionMenu } from './NewSessionMenu'
 import { PromptDialog, type NewSessionRequest } from './PromptDialog'
 import { displayStatus } from './status'
 import { StatusDot } from './StatusDot'
 
-type Props = { store: WorktreeSessions; sessions: Session[]; active: Session | null }
+type Props = { context: UiPluginContext; store: WorktreeSessions; sessions: Session[]; active: Session | null }
 
-export function SessionTabs({ store, sessions, active }: Props) {
+export function SessionTabs({ context, store, sessions, active }: Props) {
   const [pending, setPending] = useState<NewSessionRequest | null>(null)
 
   const pick = (request: NewSessionRequest) => {
@@ -43,7 +43,7 @@ export function SessionTabs({ store, sessions, active }: Props) {
           </div>
         ))}
       </div>
-      <NewSessionMenu onPick={pick} />
+      <NewSessionMenu context={context} onPick={pick} />
       {pending && (
         <PromptDialog
           request={pending}

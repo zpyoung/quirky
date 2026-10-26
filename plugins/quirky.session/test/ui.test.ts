@@ -4,7 +4,7 @@ import { GlobalRegistrator } from '@happy-dom/global-registrator'
 import { bytesToBase64, RpcError, RpcErrorCode } from '@quirky/protocol'
 import { resetSessionMemory } from '../src/window/model'
 import manifest from '../quirky-plugin.json'
-import { fakeContext, mountView, session, sessionHandlers, settle, WORKTREE, type FakeContext } from './ui-fake'
+import { agentInfo, agentListing, fakeContext, mountView, session, sessionHandlers, settle, WORKTREE, type FakeContext } from './ui-fake'
 
 const VIEW = 'view:quirky.session/worktree'
 const shell1 = session({ id: 's1', title: 'Shell 1', createdAt: 1 })
@@ -243,8 +243,15 @@ describe('keeping tabs current', () => {
 })
 
 describe('new sessions', () => {
+  const openMenu = async (view: Awaited<ReturnType<typeof mountView>>) => {
+    await view.click(view.element.querySelector('[aria-label="New session"]')!)
+    await settle()
+    return () => [...view.element.querySelectorAll('[role="menuitem"]')].map((entry) => entry.textContent)
+  }
+
   const pickFromMenu = async (view: Awaited<ReturnType<typeof mountView>>, label: string) => {
     await view.click(view.element.querySelector('[aria-label="New session"]')!)
+    await settle()
     const item = [...view.element.querySelectorAll('[role="menuitem"]')].find((entry) => entry.textContent === label)!
     await view.click(item)
   }
@@ -285,6 +292,89 @@ describe('new sessions', () => {
     await view.click(start_)
     expect(fake.callsTo('quirky.structured/create')[0]!.params).toEqual({ worktree: WORKTREE.id, agent: 'claude', prompt: 'go' })
     expect(fake.opened.at(-1)).toEqual({ id: VIEW, input: { worktree: WORKTREE.id, session: 'bg' } })
+  })
+
+  test('SC-43: the menu lists Shell, the installed enabled agents, Claude (background) and Manage agents', async () => {
+    start([shell1])
+    const view = await open({ worktree: WORKTREE.id })
+    const labels = await openMenu(view)
+    expect(labels()).toEqual(['Shell', 'Claude', 'Codex', 'Goose', 'Claude (background)', 'Manage agents'])
+    expect(fake.callsTo('quirky.agents/list')).toHaveLength(1)
+  })
+
+  test('the default agent comes first, the rest keep listing order', async () => {
+    const listing = agentListing([agentInfo('claude', 'Claude'), agentInfo('codex', 'Codex'), agentInfo('goose', 'Goose')], 'goose')
+    start([shell1], { 'quirky.agents/list': () => listing })
+    const labels = await openMenu(await open({ worktree: WORKTREE.id }))
+    expect(labels()).toEqual(['Shell', 'Goose', 'Claude', 'Codex', 'Claude (background)', 'Manage agents'])
+  })
+
+  test('SC-41: disabled and undetected agents are not offered', async () => {
+    const listing = agentListing([
+      agentInfo('claude', 'Claude'),
+      agentInfo('codex', 'Codex', { enabled: false }),
+      agentInfo('goose', 'Goose', { installed: false }),
+      agentInfo('aider', 'Aider')
+    ])
+    start([shell1], { 'quirky.agents/list': () => listing })
+    const labels = await openMenu(await open({ worktree: WORKTREE.id }))
+    expect(labels()).toEqual(['Shell', 'Claude', 'Aider', 'Claude (background)', 'Manage agents'])
+  })
+
+  test('Claude (background) is hidden when Claude is disabled or missing', async () => {
+    for (const claudeOver of [{ enabled: false }, { installed: false }]) {
+      start([shell1], { 'quirky.agents/list': () => agentListing([agentInfo('claude', 'Claude', claudeOver), agentInfo('codex', 'Codex')]) })
+      const view = await open({ worktree: WORKTREE.id })
+      expect((await openMenu(view))()).toEqual(['Shell', 'Codex', 'Manage agents'])
+      await mounted?.unmount()
+      mounted = null
+      document.body.innerHTML = ''
+    }
+  })
+
+  test('the menu uses the catalog label for the prompt dialog title', async () => {
+    start([shell1], { 'quirky.session/create': () => session({ id: 'new' }) })
+    const view = await open({ worktree: WORKTREE.id })
+    await pickFromMenu(view, 'Goose')
+    expect(document.body.textContent).toContain('New Goose session')
+    await view.click([...document.querySelectorAll('button')].find((button) => button.textContent === 'Start')!)
+    expect(fake.callsTo('quirky.session/create')[0]!.params).toEqual({ worktree: WORKTREE.id, agent: 'goose' })
+  })
+
+  test('Manage agents opens the Agents view', async () => {
+    start([shell1])
+    const view = await open({ worktree: WORKTREE.id })
+    await pickFromMenu(view, 'Manage agents')
+    expect(fake.opened.at(-1)).toEqual({ id: 'view:quirky.agents/settings', input: undefined })
+    expect(view.element.querySelector('[role="menu"]')).toBeNull()
+  })
+
+  test('while the list loads the menu shows Shell and Manage agents only', async () => {
+    let release: (value: unknown) => void = () => {}
+    const pending = new Promise((resolve) => (release = resolve))
+    start([shell1], { 'quirky.agents/list': () => pending })
+    const view = await open({ worktree: WORKTREE.id })
+    const labels = await openMenu(view)
+    expect(labels()).toEqual(['Shell', 'Manage agents'])
+    release(agentListing([agentInfo('codex', 'Codex')]))
+    await settle()
+    expect(labels()).toEqual(['Shell', 'Codex', 'Manage agents'])
+  })
+
+  test('a failed list call leaves Shell and Manage agents', async () => {
+    start([shell1], { 'quirky.agents/list': () => Promise.reject(new Error('down')) })
+    const labels = await openMenu(await open({ worktree: WORKTREE.id }))
+    expect(labels()).toEqual(['Shell', 'Manage agents'])
+  })
+
+  test('the list is read again each time the menu opens', async () => {
+    let listing = agentListing([agentInfo('codex', 'Codex')])
+    start([shell1], { 'quirky.agents/list': () => listing })
+    const view = await open({ worktree: WORKTREE.id })
+    expect((await openMenu(view))()).toEqual(['Shell', 'Codex', 'Manage agents'])
+    await view.click(view.element.querySelector('[aria-label="New session"]')!)
+    listing = agentListing([agentInfo('goose', 'Goose')])
+    expect((await openMenu(view))()).toEqual(['Shell', 'Goose', 'Manage agents'])
   })
 
   test('a failed start is shown as a toast', async () => {
