@@ -9,9 +9,9 @@ import {
   makeBuiltinDir,
   restartDaemon,
   seedPtySession,
+  seedSessions,
   startPluginHarness,
-  TERMINAL_PLUGINS,
-  writeV1Sessions
+  TERMINAL_PLUGINS
 } from './support'
 
 let h: Harness | undefined
@@ -31,12 +31,12 @@ function writeV1Setting(home: string, key: string, value: unknown): void {
   }
 }
 
-/** A v1 home: a PTY host holding `s_v1` and the v1 tables carrying its record and `scrollback`. */
+/** A v1 home: a PTY host holding `s_v1`, a session record for it and the v1 `scrollback` setting. */
 async function v1Home(scrollback?: unknown): Promise<Harness> {
-  const harness = await startPluginHarness({ real: [], fakes: ['quirky.worktree'] }, { home: makeTempHome() })
+  const harness = await startPluginHarness({ real: [], fakes: [] }, { home: makeTempHome() })
   await harness.daemon.stop()
   seedPtySession(harness, 's_v1', 'v1 output')
-  writeV1Sessions(harness.home, [{ id: 's_v1' }])
+  seedSessions(harness.home, ['s_v1'])
   if (scrollback !== undefined) writeV1Setting(harness.home, 'terminalScrollback', scrollback)
   return harness
 }
