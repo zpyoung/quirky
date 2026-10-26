@@ -348,5 +348,25 @@
 - **Confidence:** high
 - **Source:** assumed — autonomous
 
+## D35: Implementers' judgment calls kept: group suggestions only as a fallback, `skill show --json` wraps the text, `quirky help <words>` acts like `--help`
+- **Question:** choices the implementers made where the tech spec was silent or self-contradictory
+- **Options:** keep each; revert to the literal tech-spec wording
+- **Chose:** keep them. `suggestCommands` offers commands from the typed group only when nothing is within edit distance 2 or a prefix match, because the literal union made `wt lst` suggest `wt rm` and `wt create` too, contradicting SC-17 and SC-19, while SC-15 still gets `acme.notes list`. `skill show --json` prints `{"skill": "<text>"}` so `--json` still yields one JSON document. `quirky help <words>` behaves like `<words> --help`, so `quirky help nope` is now an unknown-command error (exit 2) rather than root help. The skill omits the daemon version, so it changes only when commands do.
+- **Why:** each keeps the logic spec's scenarios true where the tech spec's wording would have broken one
+- **Evidence:** packages/cli/src/suggest.ts; packages/cli/src/commands/skill.ts; packages/cli/test/generated.test.ts
+- **Reversibility:** easy
+- **Confidence:** medium
+- **Source:** assumed — autonomous
+
+## D36: Wave 3 checkpoint: fix both findings
+- **Question:** adjudicating the three-lens Codex checkpoint over wave 3 (standard depth)
+- **Options:** accept and fix, or reject with a reason
+- **Chose:** accepted both. C1: `api call` received its tokens with the global switches removed, so `--path --json /tmp/repo` turned `/tmp/repo` into the value of `--path` and called the method; raw tokens now keep their boundaries. X1: `skill install` wrote its temp file at a predictable name that would follow a planted symlink; it now creates a randomly named file exclusively and cleans it up on failure. The spec lens passed.
+- **Why:** both reproduced with a command the reviewer ran or a clear file-level path
+- **Evidence:** scratchpad cp-w3/*/gate.json
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** assumed — autonomous
+
 ## Progress
-Building (D31-D33). Waves 1 and 2 merged (9e819b6); checkpoint fixes in flight (D34). If this iteration stops early, re-apply D34's fixes, then W3 (T6b api/api call/skill/buildCatalog/renderSkill) and W4 (scenario tests).
+Building (D31-D33). Waves 1-3 merged (4063f9f) with the wave-2 fixes; wave-3 fixes in flight (D36). Next: W4 scenario tests through the real CLI and daemon, then the final review loop.
