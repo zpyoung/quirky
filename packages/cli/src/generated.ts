@@ -42,7 +42,7 @@ function flagFor(property: Schema, required: boolean): FlagSpec {
 }
 
 function flagsFor(schema: Schema): Record<string, FlagSpec> {
-  const flags: Record<string, FlagSpec> = {}
+  const flags: Record<string, FlagSpec> = Object.create(null)
   const required = schema.required ?? []
   for (const [property, propertySchema] of Object.entries(schema.properties ?? {})) {
     const flag = flagNameOf(property)
@@ -58,22 +58,25 @@ function flagsFor(schema: Schema): Record<string, FlagSpec> {
  * the flag (`--priority must be at most 5`), `--params` ones with the path (`params.title ...`).
  */
 export function paramsFromArgs(command: Command, args: ParsedArgs, schema: Schema): Record<string, unknown> {
-  const raw = args.flags.params
+  const raw = Object.hasOwn(args.flags, 'params') ? args.flags.params : undefined
   if (raw !== undefined && (typeof raw !== 'object' || raw === null || Array.isArray(raw))) {
     throw new UsageError('--params must be a JSON object')
   }
-  const params: Record<string, unknown> = raw === undefined ? {} : { ...(raw as Record<string, unknown>) }
+  const params: Record<string, unknown> = Object.assign(Object.create(null), raw)
   if (args.positionals.length) throw new UsageError(`unexpected argument "${args.positionals[0]}"`)
   const fromFlag = new Map<string, string>()
   for (const property of Object.keys(schema.properties ?? {})) {
     const flag = flagNameOf(property)
-    if (!Object.hasOwn(command.flags, flag) || isReserved(flag) || args.flags[flag] === undefined) continue
+    if (!Object.hasOwn(command.flags, flag) || isReserved(flag) || !Object.hasOwn(args.flags, flag)) continue
     if (Object.hasOwn(params, property)) throw new UsageError(`${property} is given by both --params and --${flag}`)
     params[property] = args.flags[flag]
     fromFlag.set(property, flag)
   }
   const missing = (schema.required ?? []).filter(
-    (property) => !Object.hasOwn(params, property) && Object.hasOwn(command.flags, flagNameOf(property))
+    (property) =>
+      !Object.hasOwn(params, property) &&
+      !isReserved(flagNameOf(property)) &&
+      Object.hasOwn(command.flags, flagNameOf(property))
   )
   if (missing.length) throw new UsageError(`missing required flag ${missing.map((p) => `--${flagNameOf(p)}`).join(', ')}`)
   const failure = validateValue(schema, params)

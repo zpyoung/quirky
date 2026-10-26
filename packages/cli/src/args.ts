@@ -72,7 +72,7 @@ export function parseArgs(
 ): ParsedArgs {
   const all: Record<string, FlagSpec> = { ...GLOBAL_FLAGS, ...defs }
   const positionals: string[] = []
-  const flags: Record<string, unknown> = {}
+  const flags: Record<string, unknown> = Object.create(null)
   for (let i = 0; i < argv.length; i++) {
     const token = argv[i]
     if (token === '--') {

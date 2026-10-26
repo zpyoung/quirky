@@ -86,12 +86,18 @@ async function dispatch(runtime: Runtime, out: Printer, argv: readonly string[])
     const words = target.rest.filter((token) => !isGlobalToken(token))
     if (words.length && !words.some((word) => word.startsWith('-'))) return dispatch(runtime, out, [...words, '--help'])
   }
+  const groupWithoutHelp = target.kind === 'group' && !startsWithWord(target.rest) && !hasHelpFlag(target.rest)
   const needsCatalog =
     (target.kind === 'unknown' && !target.word.startsWith('-')) || (target.kind === 'group' && startsWithWord(target.rest))
-  if (needsCatalog) {
-    const description = (await ctx.rpc.callAny('api.describe', {})) as ApiDescription
-    commands = [...COMMANDS, ...resolveCommands(COMMANDS, generatedCommands(description)).active]
-    target = route(argv, commands)
+  if (needsCatalog || groupWithoutHelp) {
+    try {
+      const description = (await ctx.rpc.callAny('api.describe', {})) as ApiDescription
+      commands = [...COMMANDS, ...resolveCommands(COMMANDS, generatedCommands(description)).active]
+      target = route(argv, commands)
+    } catch (error) {
+      // a bare group is a usage error whether or not the daemon can list its plugin commands
+      if (!groupWithoutHelp) throw error
+    }
   }
   if (target.kind === 'unknown') {
     throw target.word.startsWith('-') ? new UsageError(`unknown flag ${target.word}`) : unknownCommand(argv, commands)
