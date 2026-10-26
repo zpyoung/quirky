@@ -84,7 +84,7 @@ ThemeList = { chosen: string; active: string; themes: ThemeInfo[] }
 ```
 
 - `plugin` on every entry is the plugin whose declaration is in effect, which for an override is the overriding plugin (`ContributionInfo.plugin` of the effective entry).
-- `module` is `modules[plugin].url`, or null when that plugin has no `ui` field. `url` is `/plugins/<pluginId>/<ui>`, with `<ui>` normalised to forward slashes and no leading `./`.
+- `module` is `modules[plugin].url`, or null when that plugin has no `ui` field. `url` is `/plugins/<pluginId>/<ui>`, with `<ui>` normalised to forward slashes and no leading `./`, and each path segment percent-encoded with `encodeURIComponent`, so a file name containing `#`, `?` or `%` still names that file.
 - `provides` lists every contribution ID of a code-backed kind (`view`, `panel`, `sidebar-section`, `command`) that the plugin declares or overrides, whether or not that declaration is in effect. It is what the window lets the module `provide`.
 - `title` defaults to the contribution name for `view` and `command`; `order` defaults to 100.
 - `keybinding.key` is the canonical chord (below); `command` is always a full command ID.
@@ -160,11 +160,11 @@ Any other fixture the new validation rejects is fixed the same way, by adding va
 
 CONTRACT: `packages/daemon/src/plugins/host.ts`
 ```
-PluginHostOptions.deriveDiagnostics?: (view: { effective: ContributionInfo[]; plugins: PluginInfo[] }) => Map<string, PluginDiagnostic[]>
+PluginHostOptions.deriveDiagnostics?: (view: { declarations: ContributionInfo[]; plugins: PluginInfo[] }) => Map<string, PluginDiagnostic[]>
 PluginHost.pluginFiles(pluginId: string): { dir: string; ui: string } | null
 ```
 
-- `recompute()` calls `deriveDiagnostics` once after the registry is computed, with the effective contributions and the plugin list as it would be listed without derived diagnostics. The result is cached until the next `recompute()`. `infoOf` appends the cached warnings after the registry diagnostics and before runtime warnings. Calling it must not emit `plugin.changed` (unlike `addWarning`, which does), so a model rebuild can't loop.
+- `recompute()` calls `deriveDiagnostics` once after the registry is computed, with every declaration and the plugin list as it would be listed without derived diagnostics. The result is cached until the next `recompute()`. `infoOf` appends the cached warnings after the registry diagnostics and before runtime warnings. Calling it must not emit `plugin.changed` (unlike `addWarning`, which does), so a model rebuild can't loop.
 - `PluginInfo.ui` is the manifest's `ui` value when present.
 - `pluginFiles` returns the directory and `ui` path of the plugin with that ID that is not `invalid` and declares `ui`. When two entries share an ID (an installed duplicate of a built-in), the valid one is returned. Null otherwise.
 
@@ -172,12 +172,13 @@ PluginHost.pluginFiles(pluginId: string): { dir: string; ui: string } | null
 
 CONTRACT: `packages/daemon/src/plugins/ui-model.ts`
 ```
-buildUiModel(input: { effective: ContributionInfo[]; plugins: PluginInfo[]; chosenTheme: string }): { model: UiModel; warnings: Map<string, PluginDiagnostic[]> }
+buildUiModel(input: { declarations: ContributionInfo[]; plugins: PluginInfo[]; chosenTheme: string }): { model: UiModel; warnings: Map<string, PluginDiagnostic[]> }
 ```
 
-Pure, no I/O. It is used twice: by `deriveDiagnostics` (warnings only) and by `UiService` (model).
+Pure, no I/O. It is used twice: by `deriveDiagnostics` (warnings only) and by `UiService` (model). `declarations` is every declaration, as `plugins.contributions({ all: true })` returns them, with their status.
 
-- Only effective contributions of the seven kinds are read; other kinds are ignored.
+- The slots, keybindings, settings and themes read only declarations whose status is `effective`; other kinds are ignored.
+- `modules[p].provides` is built from every declaration of a code-backed kind whose `plugin` is `p`, whatever its status, so disabling or overriding one of a plugin's contributions never stops it providing the rest.
 - Keybindings:
   1. A keybinding whose command ID isn't an effective `command` is `unbound`.
   2. The remaining keybindings are grouped by canonical chord. A chord in `RESERVED_CHORDS` makes every keybinding on it `shadowed` with `shadowedBy: 'kernel'`.
@@ -206,7 +207,7 @@ class UiService {
 }
 ```
 
-- The model is rebuilt from `plugins.contributions({})` and `plugins.list()` on each call; no cache to invalidate.
+- The model is rebuilt from `plugins.contributions({ all: true })` and `plugins.list()` on each call; no cache to invalidate.
 - `value` is the stored value when valid, else the default. A stored value is never deleted except by `resetSetting`, so a disabled plugin's settings and an invalid stored value survive (SC-21, SC-22).
 - `setSetting` and `resetSetting` broadcast `{ type: 'setting.changed', id, value }` with the new effective value. `setTheme` broadcasts `{ type: 'theme.changed', chosen, active }`.
 - `valueFor` resolves a short name to `setting:<pluginId>/<name>`; a full ID reads any effective setting. Unknown or not effective throws `Error('no setting <id>')`.
@@ -277,7 +278,7 @@ servePluginFile(lookup: (pluginId: string) => { dir: string } | null, pathname: 
 
 | Command | Calls | Human output |
 |---|---|---|
-| `quirky ui contributions` | `ui.contributions` | One section per slot (`SIDEBAR`, `PANELS`, `VIEWS`, `COMMANDS`, `KEYBINDINGS`, `SETTINGS`, `THEMES`), each a table: ID, PLUGIN, TITLE, ORDER for slots; ID, KEY, COMMAND, STATUS for keybindings (STATUS shows `shadowed by <x>`); empty sections omitted |
+| `quirky ui contributions` | `ui.contributions` | One section per slot (`SIDEBAR`, `PANELS`, `VIEWS`, `COMMANDS`, `KEYBINDINGS`, `SETTINGS`, `THEMES`), each a table: ID, PLUGIN, TITLE, ORDER, MODULE for slots; ID, PLUGIN, TITLE, MODULE for commands (MODULE `-` when null); ID, KEY, COMMAND, STATUS for keybindings (STATUS shows `shadowed by <x>`); empty sections omitted |
 | `quirky setting list [--plugin <id>]` | `setting.list` | Table ID, TYPE, VALUE, DEFAULT; an invalid stored value adds `(stored <v> is invalid)` |
 | `quirky setting get <id>` | `setting.get` | The value as JSON |
 | `quirky setting set <id> <value>` | `setting.set` | The new value as JSON. `<value>` is parsed as JSON when it parses, otherwise used as a string, so `16` is a number and `grid` a string |
@@ -321,9 +322,12 @@ class WindowPluginHost {
   openView(id: string, input?: unknown): void
   closeView(): void
   togglePanel(id: string, open?: boolean): void
+  saveSettings(changes: { settings: Record<string, unknown>; theme?: string }): Promise<{ errors: Record<string, string> }>
   stop(): void
 }
 ```
+
+`saveSettings` calls `setting.set` for each entry and `theme.set` when `theme` is given, all of them even when one fails, and returns each refused setting's error message keyed by ID (`theme` for the theme). The Settings dialog saves only through it.
 
 CONTRACT: what a UI module exports and receives (exported as types from `packages/protocol/src/ui.ts` so plugin authors can import them)
 ```
@@ -347,9 +351,10 @@ CommandHandler = (args?: unknown) => unknown
 The host's rules, each tied to scenarios:
 
 - **Lazy load (SC-7, SC-8).** `mount` and `runCommand` load the owner's module on first use; nothing else does. Load means `importModule(url)`, then `activate(context)`, both within `activationTimeoutMs` (else failed with `activation timed out`). One load per plugin is in flight at a time; concurrent callers share it. While loading, the slot is `loading`.
-- **Provide (SC-12).** `provide` accepts only IDs in `model.modules[pluginId].provides`, and only during or after `activate`; any other ID makes the load fail with `<pluginId> does not declare <id>`. An implementation of a slot kind must be a function (the mount function); a command's must be a function.
+- **Provide (SC-12).** `provide` accepts only IDs in `model.modules[pluginId].provides` as captured when the load started (a model refresh during the load doesn't change it), and only during or after `activate`; any other ID makes the load fail with `<pluginId> does not declare <id>`. An implementation of a slot kind must be a function (the mount function); a command's must be a function.
 - **Mount (SC-7, SC-9, SC-10).** `mount(id, element, props)` calls the implementation with exactly `element` and `{ input }` (for views; `{}` otherwise). The returned function, when called, runs the plugin's cleanup once. If the plugin activated without providing `id`, the slot is `error` with `<pluginId> did not provide <id>`.
 - **Errors (SC-13).** Messages, exactly: `<pluginId> failed to load: <message>` (import), `<pluginId> failed to activate: <message>`, `<pluginId>: <message>` (mount throws), toast title `<command id> failed: <message>` (command throws or rejects; body the message). A plugin with no `ui` fails with `<pluginId> has no ui module` (SC-6). After a failure, the next `mount` or `runCommand` for that plugin loads again; a retried import appends `?attempt=<n>` to the URL so the browser doesn't reuse a failed fetch, and a module that imported but failed to activate is activated again without re-importing.
+- **Failed attempts (SC-13).** When an import, `activate` or the timeout fails a load, the attempt's context is revoked at once (its subscribers removed, its provided implementations dropped) and `deactivate` is not called, matching the daemon (m0-daemon-api D38). An `activate` that settles after its timeout is ignored. A retry gets a fresh context.
 - **Teardown (SC-4, SC-13).** A cleanup or `deactivate` that throws is logged as `<pluginId>: cleanup failed: <message>` or `<pluginId>: deactivate failed: <message>`, and teardown continues. Deactivation revokes the context: its `call`, `provide`, `executeCommand` and slot actions throw `<pluginId> is not active`, and its subscribers receive nothing more.
 - **Reconcile (SC-4).** `refresh()` runs on start, on every `plugin.changed` and after a reconnect. Mounted contributions no longer in the model, or now owned by another plugin, are cleaned up and their slots dropped; React re-renders and mounts what is new. An open view or panel no longer in the model is closed. A plugin that owns no code-backed entry in the new model is deactivated if active. A plugin that was loading when this happened finishes its load, mounts nothing that left, and is deactivated straight away if it owns nothing.
 - **Views and panels (SC-9, SC-10, logic D10).** `openView` replaces any open view; `togglePanel` closes any other open panel. The host doesn't know about source control: `App` keeps v1's `scmOpen` and the host's `openPanel` mutually exclusive (opening one closes the other).
@@ -366,7 +371,7 @@ The host's rules, each tied to scenarios:
 - `MainArea`'s header (`MainArea.tsx:18-37`) gets one toggle button per panel after "Source control". `App` renders the open panel in the right column (`App.tsx:33-37`, reusing the `.scm-panel` column styling). `MainArea`'s body renders the open view in place of `SessionView`; selecting a session closes the view.
 - `CommandPalette` opens on `mod+shift+p` (handled in `useShortcuts`, a reserved chord), filters with `host.paletteCommands`, runs on Enter, closes on Escape.
 - `useShortcuts` keeps v1's handlers first (`useShortcuts.ts:15-34`); after them, in the same capture-phase listener, it calls `host.handleKey(event)` and on true calls `preventDefault()` and `stopPropagation()`.
-- `SettingsDialog` keeps v1's form at the top, then renders `settingsGroups(host settings)` (groups by plugin ID, sorted by plugin ID, settings sorted by ID; checkbox for `boolean`, number input with min and max for `number`, text input for `string`, select for `enum`), then a theme picker over `model.themes`. Saving calls `setting.set` for each changed plugin setting and `theme.set` if the theme changed; a refused value shows under its field and keeps the dialog open.
+- `SettingsDialog` keeps v1's form at the top, then renders `settingsGroups(host settings)` (groups by plugin ID, sorted by plugin ID, settings sorted by ID; checkbox for `boolean`, number input with min and max for `number`, text input for `string`, select for `enum`), then a theme picker over `model.themes`. Saving calls `host.saveSettings` with the changed plugin settings and the theme if it changed; a refused value shows under its field and keeps the dialog open.
 - `ThemeVariables` (an effect in `App`) writes `host.getState().themeVariables` onto `document.documentElement.style`. `styles.css` keeps its `:root` defaults, so the page looks the same with no theme chosen. `TerminalPane` reads the three terminal tokens for `theme` at construction and assigns `term.options.theme` when they change.
 
 ### Sharing React ([SC-29](logic.md#serving-and-sharing), logic D7)
@@ -418,7 +423,7 @@ Scenario tests are named `SC-<n>: <title>` and assert the logic spec's Then clau
 | `packages/daemon/test/server.test.ts` | `/plugins/` routing order and SC-28's table, including a symlink escape | Real daemon |
 | `packages/cli/test/ui.test.ts`, `setting.test.ts`, `theme.test.ts` | Human output, `--json`, value parsing, exit codes | `FakeDaemon` cases |
 | `packages/ui/test/plugin-host.test.ts` | SC-4, SC-6 to SC-16, SC-18, SC-23, SC-25, SC-26 (window halves) | `WindowPluginHost` connected to a real daemon: `startHarness` imported from `packages/daemon/test/helpers.ts`, a `QuirkyClient` providing `call` and `onEvent`, and an `importModule` that `fetch`es the served URL, writes it under a per-test temp dir, and `import()`s that file. Elements are plain objects standing in for `HTMLElement` (the mount functions write to a field). Fixture UI modules are plain JavaScript with no imports |
-| `packages/ui/test/settingsGroups.test.ts` | SC-24 | Unit over `SettingInfo[]` and `ThemeInfo[]`, plus a host test that the save path calls `setting.set` and `theme.set` on a real daemon |
+| `packages/ui/test/settingsGroups.test.ts` | SC-24 | Unit over `SettingInfo[]` and `ThemeInfo[]`, plus a host test that `saveSettings` changes the values and theme on a real daemon and returns the refused setting's message |
 | `packages/ui/test/build.test.ts` | SC-29 | Runs `build.ts` with `QUIRKY_UI_OUT` set to a temp dir; asserts the import map precedes the module script and maps the three specifiers to files that exist; asserts `main.js` imports `react` and `react/jsx-runtime` as bare specifiers and contains no copy of React (no `react.transitional.element` symbol string); imports `vendor/react.js` and asserts its exports include every key of `require('react')` |
 
 Acceptance bar: `bun run test`, `bun test scripts` (except the queue-state test recorded in m0-daemon-api D31) and `bun run typecheck` all pass, and every scenario SC-1 to SC-29 has a named test.

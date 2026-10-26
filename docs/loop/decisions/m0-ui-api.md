@@ -369,3 +369,13 @@
 - **Revisit if:** Bun's bundler can't re-export React's CommonJS API from the vendor entries
 - **Source:** assumed — autonomous
 
+## D37: Tech-spec review: fix six model findings, refute one, reject the pre-pass findings
+- **Question:** adjudicating the Codex adversarial review of tech.md (spec-design profile, standard depth, reviewer gpt-6.1-sol, independence full)
+- **Options:** for each finding, amend the tech spec or reject it with a reason
+- **Chose:** fixed F1 (the model builder now takes every declaration, so `provides` includes disabled and overridden IDs), F2 (a load keeps the `provides` list it started with), F4 (module URL segments are percent-encoded), F5 (a failed or timed-out activation revokes its context without calling `deactivate`, as m0-daemon-api D38 does), F6 (`quirky ui contributions` prints a MODULE column, which SC-1 asks for) and F7 (the host gains `saveSettings`, so SC-24's save path is testable without a DOM). F3 (keybinding precedence can cycle) was refuted by the reviewer: the registry's algorithm removes dominated candidates before the ID tie-break, and the spec points the implementer at it. Rejected the 97 pre-pass findings: unresolvable references to files and symbols the spec says to create, and the Purpose/Overview heading check, as in D34.
+- **Why:** each fixed finding named a contract two implementers would build differently
+- **Evidence:** scratchpad tr1/gate.json and merged.json
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** assumed — autonomous
+
