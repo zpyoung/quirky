@@ -1,11 +1,5 @@
 import { useState, type FormEvent } from 'react'
-import { useAppState, useConnection, useDispatch, usePluginHost, usePluginState } from '../context'
-import {
-  SCROLLBACK_MAX,
-  SCROLLBACK_MIN,
-  toSettingsPatch,
-  type SettingsDraft
-} from '../lib/settingsForm'
+import { usePluginHost, usePluginState } from '../context'
 import { settingsGroups, themePicker, type SettingField } from '../plugins/settingsGroups'
 import { changedSettings, draftOf, type DraftValue } from '../plugins/settingsDraft'
 import { Dialog } from './Dialog'
@@ -70,9 +64,6 @@ function PluginField({
 }
 
 export function SettingsDialog({ onClose }: { onClose: () => void }) {
-  const { settings } = useAppState()
-  const connection = useConnection()
-  const dispatch = useDispatch()
   const host = usePluginHost()
   const plugin = usePluginState()
   const groups = settingsGroups(plugin.settings)
@@ -80,28 +71,10 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
   const [edits, setEdits] = useState<Record<string, DraftValue>>({})
   const [themeEdit, setThemeEdit] = useState<string | null>(null)
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
-  const [draft, setDraft] = useState<SettingsDraft>({
-    worktreesRoot: settings?.worktreesRoot ?? '',
-    terminalScrollback: String(settings?.terminalScrollback ?? 2000),
-    notifications: settings?.notifications ?? true
-  })
-  const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
 
   const submit = async (event: FormEvent) => {
     event.preventDefault()
-    const result = toSettingsPatch(draft)
-    if (!result.ok) {
-      setError(result.error)
-      return
-    }
-    setError(null)
-    setBusy(true)
-    const saved = await connection.attempt('settings.set', result.patch, 'Could not save settings')
-    setBusy(false)
-    if (!saved) return
-    dispatch({ type: 'settings', settings: saved })
-
     const changes = changedSettings(plugin.settings, edits)
     const theme = themeEdit !== null && themeEdit !== themes.selected ? themeEdit : undefined
     if (Object.keys(changes).length === 0 && theme === undefined) {
@@ -118,37 +91,7 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
   return (
     <Dialog title="Settings" onClose={onClose}>
       <form className="form" onSubmit={submit}>
-        <label>
-          Worktrees folder
-          <input
-            autoFocus
-            value={draft.worktreesRoot}
-            onChange={(event) => setDraft({ ...draft, worktreesRoot: event.target.value })}
-          />
-        </label>
-        <label>
-          Terminal scrollback (lines)
-          <input
-            type="number"
-            min={SCROLLBACK_MIN}
-            max={SCROLLBACK_MAX}
-            value={draft.terminalScrollback}
-            onChange={(event) => setDraft({ ...draft, terminalScrollback: event.target.value })}
-          />
-        </label>
-        <label className="check-row">
-          <input
-            type="checkbox"
-            checked={draft.notifications}
-            onChange={(event) => setDraft({ ...draft, notifications: event.target.checked })}
-          />
-          Notifications
-        </label>
-        {error && (
-          <p className="form-error" role="alert">
-            {error}
-          </p>
-        )}
+        {groups.length === 0 && themes.options.length <= 1 && <p className="muted pad">No settings to change.</p>}
         {groups.map((group) => (
           <fieldset key={group.plugin} className="settings-group">
             <legend>{group.plugin}</legend>

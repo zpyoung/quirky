@@ -6,10 +6,12 @@ import {
   type QuirkyEvent,
   type SettingInfo,
   type UiCommandEntry,
+  type UiLayout,
   type UiModel,
   type UiPluginContext,
   type UiPluginModule,
-  type UiSlotEntry
+  type UiSlotEntry,
+  type UiState
 } from '@quirky/protocol'
 
 /** What the host needs from its surroundings; the React shell wires these to `Connection` and the browser. */
@@ -17,8 +19,16 @@ export type HostDeps = {
   call(method: string, params: Record<string, unknown>): Promise<unknown>
   onEvent(listener: (event: QuirkyEvent) => void): () => void
   importModule(url: string): Promise<unknown>
-  toast(title: string, body: string): void
+  /** Binary terminal frames for stream `streamId`; the returned function unsubscribes. */
+  onStream(streamId: number, listener: (bytes: Uint8Array) => void): () => void
+  /** Connection status changes as plugins see them; the returned function unsubscribes. */
+  onConnection(listener: (status: 'connected' | 'reconnecting') => void): () => void
+  /** The shell's confirm dialog; resolves true when the person confirms. */
+  confirm(options: { title: string; body?: string; confirmLabel?: string }): Promise<boolean>
+  toast(title: string, body: string, kind: 'info' | 'error'): void
   log(message: string): void
+  /** Window focus, reported to the daemon so it can pick the window a routed command runs in. */
+  windowFocus?: { hasFocus(): boolean; subscribe(listener: (focused: boolean) => void): () => void }
   /** Covers a plugin's import plus `activate`; defaults to 10000. */
   activationTimeoutMs?: number
 }
@@ -34,8 +44,13 @@ export type HostState = {
   plugins: Record<string, PluginStatus>
   /** Keyed by contribution ID. */
   slots: Record<string, SlotStatus>
+  /** The daemon's layout; the host never changes it locally. */
+  layout: UiLayout
+  /** `layout.view`, kept as the same object while its ID and input are unchanged. */
   openView: { id: string; input?: unknown } | null
   openPanel: string | null
+  /** Panel ID to the count its plugin shows on the panel's toggle. */
+  badges: Record<string, number>
   /** `--<token>` to color for every theme token of the active theme. */
   themeVariables: Record<string, string>
 }
@@ -47,6 +62,8 @@ type Session = {
   readonly allowed: ReadonlySet<string>
   readonly provided: Map<string, unknown>
   readonly listeners: Set<(event: QuirkyEvent) => void | Promise<void>>
+  /** Undo for everything the session registered outside itself (stream, layout and connection listeners, badges). */
+  readonly cleanups: Set<() => void>
   activating: boolean
   violation: string | null
   revoked: boolean
@@ -68,6 +85,8 @@ type MountHandle = {
   readonly plugin: string
   cleanup?: () => void
   released: boolean
+  /** The last state the slot reported, sent again after a reconnect. */
+  report?: { state: unknown }
 }
 
 class LoadFailure extends Error {}
@@ -103,12 +122,21 @@ function revoke(session: Session): void {
   session.revoked = true
   session.listeners.clear()
   session.provided.clear()
+  for (const cleanup of [...session.cleanups]) cleanup()
+  session.cleanups.clear()
+}
+
+const DEFAULT_LAYOUT: UiLayout = { view: null, panel: null, sidebar: true, focus: null }
+
+function sameJson(a: unknown, b: unknown): boolean {
+  return JSON.stringify(a) === JSON.stringify(b)
 }
 
 /**
  * Loads plugin UI modules on demand and mounts their contributions into elements the shell owns.
  * It holds no React and touches no DOM global: an element is a value passed through to the
- * plugin's mount function, never inspected. All state the shell renders is in `getState()`.
+ * plugin's mount function, never inspected. All state the shell renders is in `getState()`; the
+ * layout in it is the daemon's, changed only by the daemon's `ui.state.changed` broadcasts.
  */
 export class WindowPluginHost {
   private state: HostState = {
@@ -116,14 +144,18 @@ export class WindowPluginHost {
     settings: [],
     plugins: {},
     slots: {},
+    layout: DEFAULT_LAYOUT,
     openView: null,
     openPanel: null,
+    badges: {},
     themeVariables: {}
   }
   private readonly listeners = new Set<() => void>()
+  private readonly layoutListeners = new Set<(layout: UiLayout) => void>()
   private readonly runtimes = new Map<string, Runtime>()
   private readonly mounts = new Set<MountHandle>()
   private readonly unsubscribeEvents: () => void
+  private readonly unsubscribeFocus: (() => void) | undefined
   private refreshChain: Promise<unknown> = Promise.resolve()
   /** `setting.changed` values seen while a refresh fetches; they are newer than that refresh's snapshot. */
   private settingsSeenDuringFetch: Map<string, boolean | number | string> | null = null
@@ -131,6 +163,7 @@ export class WindowPluginHost {
 
   constructor(private readonly deps: HostDeps) {
     this.unsubscribeEvents = deps.onEvent((event) => this.handleEvent(event))
+    this.unsubscribeFocus = deps.windowFocus?.subscribe((focused) => this.reportFocus(focused))
   }
 
   getState = (): HostState => this.state
@@ -141,9 +174,21 @@ export class WindowPluginHost {
   }
 
   /**
-   * Fetches the UI model and settings, then reconciles: mounted contributions that left or changed
-   * owner are cleaned up, an open view or panel that left is closed, and plugins owning nothing are
-   * deactivated. Refreshes run one after another; the last one's data wins.
+   * Runs after each (re)connect: tells the daemon whether this window has focus, sends the
+   * mounted slots' reports again (the daemon drops them with the old connection), then refreshes.
+   */
+  async connected(): Promise<void> {
+    if (this.deps.windowFocus?.hasFocus()) this.reportFocus(true)
+    for (const handle of this.mounts) {
+      if (handle.report && !handle.released) this.sendReport(handle, handle.report.state)
+    }
+    await this.refresh()
+  }
+
+  /**
+   * Fetches the UI model, settings and layout, then reconciles: mounted contributions that left or
+   * changed owner are cleaned up and plugins owning nothing are deactivated. Refreshes run one
+   * after another; the last one's data wins.
    */
   refresh(): Promise<void> {
     const run = this.refreshChain.then(() => this.fetchAndReconcile())
@@ -180,8 +225,16 @@ export class WindowPluginHost {
     } catch (error) {
       if (error instanceof NoCommand) throw error
       this.deps.log(`${entry.plugin}: ${id} failed: ${messageOf(error)}`)
-      this.deps.toast(`${id} failed: ${messageOf(error)}`, messageOf(error))
+      this.deps.toast(`${id} failed: ${messageOf(error)}`, messageOf(error), 'error')
     }
+  }
+
+  /**
+   * Runs command `id` like `runCommand` and returns what its handler returned. Rejects with the
+   * load failure, the handler's error, or `no command <id>`; it never toasts.
+   */
+  async runCommandForResult(id: string, args?: unknown): Promise<unknown> {
+    return this.invokeCommand(this.requireCommand(id), args)
   }
 
   /**
@@ -203,28 +256,25 @@ export class WindowPluginHost {
     return (this.state.model?.commands ?? []).filter((command) => command.title.toLowerCase().includes(needle))
   }
 
-  /** Shows view `id` in place of any open view; the mount itself is the shell's `PluginSlot`. */
+  /** Asks the daemon to show view `id`; the layout changes when its broadcast arrives. */
   openView(id: string, input?: unknown): void {
-    if (!this.state.model?.views.some((view) => view.id === id)) {
-      this.deps.log(`no view ${id}`)
-      return
-    }
-    this.commit({ openView: { id, input } })
+    this.layoutCall('ui.view.open', { id, ...(input !== undefined ? { input } : {}) })
   }
 
   closeView(): void {
-    if (this.state.openView) this.commit({ openView: null })
+    if (this.state.layout.view) this.layoutCall('ui.view.close', {})
   }
 
-  /** Opens panel `id` and closes any other open panel; with no `open`, toggles it. */
+  /** Asks the daemon to open panel `id` (closing any other); with no `open`, to toggle it. */
   togglePanel(id: string, open?: boolean): void {
-    if (!this.state.model?.panels.some((panel) => panel.id === id)) {
-      this.deps.log(`no panel ${id}`)
-      return
-    }
-    const wanted = open ?? this.state.openPanel !== id
-    if (wanted) this.commit({ openPanel: id })
-    else if (this.state.openPanel === id) this.commit({ openPanel: null })
+    const wanted = open ?? this.state.layout.panel !== id
+    if (wanted) this.layoutCall('ui.panel.open', { id })
+    else if (this.state.layout.panel === id) this.layoutCall('ui.panel.close', {})
+  }
+
+  /** Tells the daemon that the person put focus in `target`, unless it is already there. */
+  focus(target: 'sidebar' | 'view' | 'panel'): void {
+    if (this.state.layout.focus !== target) this.layoutCall('ui.focus', { target })
   }
 
   /**
@@ -257,9 +307,11 @@ export class WindowPluginHost {
   stop(): void {
     this.stopped = true
     this.unsubscribeEvents()
+    this.unsubscribeFocus?.()
     for (const handle of [...this.mounts]) this.release(handle)
     for (const pluginId of this.runtimes.keys()) void this.deactivate(pluginId)
     this.listeners.clear()
+    this.layoutListeners.clear()
   }
 
   private async fetchAndReconcile(): Promise<void> {
@@ -268,10 +320,17 @@ export class WindowPluginHost {
     let model: UiModel
     let snapshot: SettingInfo[]
     try {
-      ;[model, snapshot] = await Promise.all([
+      // applied as soon as it arrives, so a `ui.state.changed` that follows it on the wire is newer
+      const layout = (this.deps.call('ui.state', {}) as Promise<UiState>).then((state) => {
+        if (!this.stopped) this.setLayout(state.layout)
+      })
+      const [fetchedModel, fetchedSettings] = await Promise.all([
         this.deps.call('ui.contributions', {}) as Promise<UiModel>,
-        this.deps.call('setting.list', {}) as Promise<SettingInfo[]>
+        this.deps.call('setting.list', {}) as Promise<SettingInfo[]>,
+        layout
       ])
+      model = fetchedModel
+      snapshot = fetchedSettings
     } finally {
       this.settingsSeenDuringFetch = null
     }
@@ -282,9 +341,8 @@ export class WindowPluginHost {
   }
 
   private async reconcile(model: UiModel): Promise<void> {
-    const { openView, openPanel } = this.state
-    if (openView && !model.views.some((view) => view.id === openView.id)) this.commit({ openView: null })
-    if (openPanel && !model.panels.some((panel) => panel.id === openPanel)) this.commit({ openPanel: null })
+    const badges = Object.entries(this.state.badges).filter(([id]) => model.panels.some((panel) => panel.id === id))
+    if (badges.length !== Object.keys(this.state.badges).length) this.commit({ badges: Object.fromEntries(badges) })
     for (const handle of [...this.mounts]) {
       const entry = findSlot(model, handle.id)
       if (!entry || entry.plugin !== handle.plugin) this.release(handle)
@@ -320,8 +378,13 @@ export class WindowPluginHost {
       return
     }
     let cleanup: unknown
+    const report = (state: unknown) => {
+      if (handle.released) return
+      handle.report = { state }
+      this.sendReport(handle, state)
+    }
     try {
-      cleanup = implementation(element, entry.kind === 'view' ? { input: props?.input } : {})
+      cleanup = implementation(element, entry.kind === 'view' ? { input: props?.input, report } : { report })
     } catch (error) {
       if (!handle.released) this.failSlot(handle, `${entry.plugin}: ${messageOf(error)}`)
       return
@@ -361,7 +424,10 @@ export class WindowPluginHost {
         this.deps.log(`${handle.plugin}: cleanup failed: ${messageOf(error)}`)
       }
     }
-    if (![...this.mounts].some((other) => other.id === handle.id)) this.setSlot(handle.id, null)
+    if (![...this.mounts].some((other) => other.id === handle.id)) {
+      this.setSlot(handle.id, null)
+      if (handle.report) this.callQuietly('ui.report', { slot: handle.id, state: null })
+    }
   }
 
   private requireCommand(id: string): UiCommandEntry {
@@ -370,7 +436,7 @@ export class WindowPluginHost {
     return entry
   }
 
-  private async invokeCommand(entry: UiCommandEntry, args: unknown): Promise<void> {
+  private async invokeCommand(entry: UiCommandEntry, args: unknown): Promise<unknown> {
     await this.ensureLoaded(entry.plugin)
     const session = this.runtimes.get(entry.plugin)?.session
     if (!session || this.state.model?.commands.find((c) => c.id === entry.id)?.plugin !== entry.plugin) {
@@ -378,7 +444,7 @@ export class WindowPluginHost {
     }
     const handler = session.provided.get(entry.id)
     if (typeof handler !== 'function') throw new Error(`${entry.plugin} did not provide ${entry.id}`)
-    await handler(args)
+    return handler(args)
   }
 
   private runtime(pluginId: string): Runtime {
@@ -427,6 +493,7 @@ export class WindowPluginHost {
       allowed: new Set(declared.provides),
       provided: new Map(),
       listeners: new Set(),
+      cleanups: new Set(),
       activating: false,
       violation: null,
       revoked: false
@@ -541,6 +608,7 @@ export class WindowPluginHost {
         this.deps.log(`${handle.plugin}: cleanup failed: ${messageOf(error)}`)
       }
       this.setSlot(handle.id, { status: 'error', message })
+      if (handle.report) this.callQuietly('ui.report', { slot: handle.id, state: null })
     }
     revoke(session)
     this.fail(session.pluginId, message)
@@ -554,8 +622,13 @@ export class WindowPluginHost {
         return fn(...args)
       }
     }
-    const notImplemented = (member: string) => () => {
-      throw new Error(`not implemented: ${member}`)
+    const badged = new Set<string>()
+    const track = (cleanup: () => void): (() => void) => {
+      const once = () => {
+        if (session.cleanups.delete(once)) cleanup()
+      }
+      session.cleanups.add(once)
+      return once
     }
     return {
       pluginId,
@@ -583,13 +656,29 @@ export class WindowPluginHost {
       openView: live((id: string, input?: unknown) => this.openView(id, input)),
       closeView: live(() => this.closeView()),
       togglePanel: live((id: string, open?: boolean) => this.togglePanel(id, open)),
-      getLayout: notImplemented('getLayout'),
-      onLayout: notImplemented('onLayout'),
-      onStream: notImplemented('onStream'),
-      onConnection: notImplemented('onConnection'),
-      confirm: notImplemented('confirm'),
-      toast: notImplemented('toast'),
-      setPanelBadge: notImplemented('setPanelBadge')
+      getLayout: live(() => this.state.layout),
+      onLayout: live((listener: (layout: UiLayout) => void) => {
+        this.layoutListeners.add(listener)
+        return track(() => this.layoutListeners.delete(listener))
+      }),
+      onStream: live((streamId: number, listener: (bytes: Uint8Array) => void) =>
+        track(this.deps.onStream(streamId, listener))
+      ),
+      onConnection: live((listener: (status: 'connected' | 'reconnecting') => void) =>
+        track(this.deps.onConnection(listener))
+      ),
+      confirm: live((options: { title: string; body?: string; confirmLabel?: string }) => this.deps.confirm(options)),
+      toast: live((title: string, body: string) => this.deps.toast(title, body, 'info')),
+      setPanelBadge: live((panelId: string, count: number | null) => {
+        if (this.state.model?.panels.find((panel) => panel.id === panelId)?.plugin !== pluginId) {
+          throw new Error(`${panelId} is not a panel of ${pluginId}`)
+        }
+        this.setBadge(panelId, count)
+        if (count !== null && !badged.has(panelId)) {
+          badged.add(panelId)
+          track(() => this.setBadge(panelId, null))
+        }
+      })
     }
   }
 
@@ -617,11 +706,73 @@ export class WindowPluginHost {
   }
 
   private handleEvent(event: QuirkyEvent): void {
+    if (event.type === 'ui.state.changed') this.setLayout(event.layout)
+    if (event.type === 'ui.command.request') void this.answerCommand(event.requestId, event.id, event.args)
     if (event.type === 'setting.changed') this.applySetting(event.id, event.value)
     if (event.type === 'plugin.changed' || event.type === 'theme.changed') {
       this.refresh().catch((error) => this.deps.log(`refresh failed: ${messageOf(error)}`))
     }
     setTimeout(() => this.deliver(event), 0)
+  }
+
+  private layoutCall(method: string, params: Record<string, unknown>): void {
+    this.deps.call(method, params).catch((error) => this.deps.log(`${method} failed: ${messageOf(error)}`))
+  }
+
+  /** Takes the daemon's layout; a layout equal to the current one changes nothing and tells nobody. */
+  private setLayout(layout: UiLayout): void {
+    const current = this.state.layout
+    if (sameJson(current, layout)) return
+    // a view with the same ID and input stays the same object, so a mounted view is not remounted
+    const view = sameJson(current.view, layout.view) ? current.view : layout.view
+    const next = { ...layout, view }
+    this.commit({ layout: next, openView: view, openPanel: layout.panel })
+    for (const listener of [...this.layoutListeners]) {
+      try {
+        listener(next)
+      } catch (error) {
+        this.deps.log(`layout listener failed: ${messageOf(error)}`)
+      }
+    }
+  }
+
+  private setBadge(panelId: string, count: number | null): void {
+    const { [panelId]: previous, ...rest } = this.state.badges
+    const badges = count === null ? rest : { ...rest, [panelId]: count }
+    if (previous === (count ?? undefined)) return
+    this.commit({ badges })
+  }
+
+  private reportFocus(focused: boolean): void {
+    // the daemon forgets focus with the connection, so a blur that fails to send costs nothing
+    this.deps.call('ui.window.focused', { focused }).catch(() => undefined)
+  }
+
+  private sendReport(handle: MountHandle, state: unknown): void {
+    this.deps.call('ui.report', { slot: handle.id, state: state ?? null }).catch((error) => {
+      this.deps.log(`${handle.plugin}: report for ${handle.id} failed: ${messageOf(error)}`)
+    })
+  }
+
+  private callQuietly(method: string, params: Record<string, unknown>): void {
+    this.deps.call(method, params).catch(() => undefined)
+  }
+
+  /** Runs a command the daemon routed to this window and sends back what it returned or threw. */
+  private async answerCommand(requestId: string, id: string, args: unknown): Promise<void> {
+    let reply: Record<string, unknown>
+    try {
+      const result = await this.runCommandForResult(id, args)
+      JSON.stringify(result)
+      reply = { requestId, ...(result !== undefined ? { result } : {}) }
+    } catch (error) {
+      reply = { requestId, error: { message: messageOf(error) } }
+    }
+    try {
+      await this.deps.call('ui.command.reply', reply)
+    } catch (error) {
+      this.deps.log(`reply to ${id} failed: ${messageOf(error)}`)
+    }
   }
 
   private applySetting(id: string, value: boolean | number | string): void {

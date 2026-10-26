@@ -115,6 +115,9 @@ async function boot(write: Writer, options: BootOptions = {}) {
       imports.push({ url, mod })
       return mod
     },
+    onStream: (streamId, listener) => client.onTerminalOutput(streamId, listener),
+    onConnection: () => () => {},
+    confirm: async () => true,
     toast: (title, body) => toasts.push([title, body]),
     log: (message) => logs.push(message),
     activationTimeoutMs: options.activationTimeoutMs
@@ -376,7 +379,7 @@ describe('window plugin host against a real daemon', () => {
     expect(t.slot(outline)).toBeUndefined()
 
     t.host.togglePanel(side)
-    expect(t.state().openPanel).toBeNull()
+    await waitFor(() => t.state().openPanel === null)
     expect(panelLines()).toEqual(['mount outline', 'cleanup outline', 'mount side', 'cleanup side'])
     expect(t.state().slots).toEqual({})
     shell.stop()
@@ -429,7 +432,7 @@ describe('window plugin host against a real daemon', () => {
     expect(shell.seen[1]!.element.text).toBe('{}')
 
     await t.host.runCommand(close)
-    expect(t.state().openView).toBeNull()
+    await waitFor(() => t.state().openView === null)
     expect(t.lines()).toContain('cleanup other')
     expect(t.state().slots).toEqual({})
     shell.stop()

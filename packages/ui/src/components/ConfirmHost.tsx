@@ -12,7 +12,10 @@ type Request = ConfirmOptions & { resolve: (ok: boolean) => void }
 
 let present: ((request: Request) => void) | null = null
 
-/** Asks the user to confirm; resolves false on cancel. Falls back to `window.confirm` before the host mounts. */
+/**
+ * Asks the person to confirm; resolves false on cancel. Requests made while a dialog is open wait
+ * their turn. Falls back to `window.confirm` before the host mounts.
+ */
 export function confirmAction(options: ConfirmOptions): Promise<boolean> {
   return new Promise((resolve) => {
     if (present) present({ ...options, resolve })
@@ -20,20 +23,30 @@ export function confirmAction(options: ConfirmOptions): Promise<boolean> {
   })
 }
 
+/** The shell's side of `UiPluginContext.confirm`. */
+export function confirmForPlugin(options: { title: string; body?: string; confirmLabel?: string }): Promise<boolean> {
+  return confirmAction({
+    title: options.title,
+    message: options.body ?? '',
+    confirmLabel: options.confirmLabel ?? 'Confirm'
+  })
+}
+
 export function ConfirmHost() {
-  const [request, setRequest] = useState<Request | null>(null)
+  const [queue, setQueue] = useState<Request[]>([])
 
   useEffect(() => {
-    present = setRequest
+    present = (request) => setQueue((current) => [...current, request])
     return () => {
       present = null
     }
   }, [])
 
+  const request = queue[0]
   if (!request) return null
   const finish = (ok: boolean) => {
     request.resolve(ok)
-    setRequest(null)
+    setQueue((current) => current.slice(1))
   }
 
   return (

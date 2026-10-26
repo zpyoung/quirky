@@ -1,17 +1,35 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
-import { mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 
 const uiDir = join(import.meta.dir, '..')
 let out = ''
+let plugins = ''
+
+/** Source of a plugin UI module that imports React bare and a sibling file, as the built-ins do. */
+const FIXTURE_UI = [
+  "import { useState } from 'react'",
+  "import { jsx } from 'react/jsx-runtime'",
+  "import { greeting } from './greeting'",
+  'export function activate(context: { provide(id: string, impl: unknown): void }) {',
+  "  context.provide('view:acme.fixture/page', () => jsx('p', { children: [greeting, typeof useState] }))",
+  '}',
+  ''
+].join('\n')
 
 beforeAll(async () => {
   out = mkdtempSync(join(tmpdir(), 'quirky-ui-build-'))
+  plugins = mkdtempSync(join(tmpdir(), 'quirky-ui-plugins-'))
+  mkdirSync(join(plugins, 'acme.fixture', 'src'), { recursive: true })
+  writeFileSync(join(plugins, 'acme.fixture', 'src', 'ui.tsx'), FIXTURE_UI)
+  writeFileSync(join(plugins, 'acme.fixture', 'src', 'greeting.ts'), "export const greeting = 'hello from the bundle'\n")
+  mkdirSync(join(plugins, 'acme.headless'), { recursive: true })
+  writeFileSync(join(plugins, 'acme.headless', 'main.ts'), 'export function activate() {}\n')
   const proc = Bun.spawn(['bun', join(uiDir, 'build.ts')], {
     cwd: uiDir,
-    env: { ...process.env, QUIRKY_UI_OUT: out },
+    env: { ...process.env, QUIRKY_UI_OUT: out, QUIRKY_PLUGINS_DIR: plugins },
     stdout: 'pipe',
     stderr: 'pipe'
   })
@@ -21,6 +39,7 @@ beforeAll(async () => {
 
 afterAll(() => {
   if (out) rmSync(out, { recursive: true, force: true })
+  if (plugins) rmSync(plugins, { recursive: true, force: true })
 })
 
 const read = (rel: string) => readFileSync(join(out, rel), 'utf8')
@@ -86,5 +105,29 @@ describe("SC-29: plugin UI modules share the window's React", () => {
     for (const entry of ['react.js', 'react-dom-client.js', 'jsx-runtime.js']) {
       expect(read(join('vendor', entry))).toMatch(/from\s*"\.\/chunk-/)
     }
+  })
+})
+
+describe('plugin UI modules are bundled beside their plugins', () => {
+  const bundle = () => join(plugins, 'acme.fixture', 'dist', 'ui.js')
+
+  test('each plugins/*/src/ui.tsx becomes plugins/*/dist/ui.js, and a plugin without one gets nothing', () => {
+    expect(existsSync(bundle())).toBe(true)
+    expect(existsSync(join(plugins, 'acme.headless', 'dist'))).toBe(false)
+  })
+
+  test('the bundle keeps React bare, inlines local imports and is minified', () => {
+    const text = readFileSync(bundle(), 'utf8')
+    expect(text).toMatch(/from\s*"react"/)
+    expect(text).toMatch(/from\s*"react\/jsx-runtime"/)
+    expect(text).not.toContain('react.transitional.element')
+    expect(text).toContain('hello from the bundle')
+    expect(text).not.toContain("import './greeting'")
+    expect(text.split('\n').length).toBeLessThan(10)
+  })
+
+  test('the app build leaves no plugin output in the app directory', () => {
+    expect(existsSync(join(out, 'ui.js'))).toBe(false)
+    expect(existsSync(join(out, 'acme.fixture'))).toBe(false)
   })
 })

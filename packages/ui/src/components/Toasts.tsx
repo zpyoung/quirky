@@ -1,12 +1,12 @@
 import { useEffect } from 'react'
-import { useAppState, useDispatch } from '../context'
+import { useAppState, useDispatch, usePluginHost } from '../context'
 import type { Toast } from '../lib/state'
 
 const TOAST_MS = 6000
 
 function ToastItem({ toast }: { toast: Toast }) {
-  const state = useAppState()
   const dispatch = useDispatch()
+  const host = usePluginHost()
 
   useEffect(() => {
     const timer = setTimeout(() => dispatch({ type: 'dismissToast', id: toast.id }), TOAST_MS)
@@ -14,11 +14,7 @@ function ToastItem({ toast }: { toast: Toast }) {
   }, [dispatch, toast.id])
 
   const open = () => {
-    if (toast.sessionId && state.sessions.some((s) => s.id === toast.sessionId)) {
-      dispatch({ type: 'selectSession', id: toast.sessionId })
-    } else if (toast.worktreeId) {
-      dispatch({ type: 'selectWorktree', id: toast.worktreeId })
-    }
+    if (toast.open) host.openView(toast.open.view, toast.open.input)
     dispatch({ type: 'dismissToast', id: toast.id })
   }
 
