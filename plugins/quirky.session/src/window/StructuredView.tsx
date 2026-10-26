@@ -1,33 +1,42 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
-import type { Session, StructuredMessage } from '@quirky/protocol'
-import { useAppState, useConnection, useDispatch } from '../context'
-import { visibleMessages } from '../lib/transcript'
+import { RpcErrorCode, type Session, type StructuredMessage, type UiPluginContext } from '@quirky/protocol'
 import { MessageRow } from './MessageRow'
+import { mergeMessages, visibleMessages } from './transcript'
 
 const NO_MESSAGES: StructuredMessage[] = []
 
+const messageOf = (error: unknown) => (error instanceof Error ? error.message : String(error))
+
 /** Transcript of a structured (no PTY) session with an input box for follow-up turns. */
-export function StructuredView({ session }: { session: Session }) {
-  const state = useAppState()
-  const connection = useConnection()
-  const dispatch = useDispatch()
+export function StructuredView({ context, session }: { context: UiPluginContext; session: Session }) {
+  const [stored, setStored] = useState<StructuredMessage[]>(NO_MESSAGES)
+  const [off, setOff] = useState(false)
   const [text, setText] = useState('')
   const [showAll, setShowAll] = useState(false)
   const scroller = useRef<HTMLDivElement>(null)
-  const messages = visibleMessages(state.structured[session.id] ?? NO_MESSAGES, showAll)
+  const messages = visibleMessages(stored, showAll)
 
   useEffect(() => {
     let cancelled = false
-    connection
-      .call('structured.messages', { sessionId: session.id })
+    const add = (incoming: StructuredMessage[]) => setStored((current) => mergeMessages(current, incoming))
+    const unsubscribe = context.subscribe((event) => {
+      if (event.type !== 'quirky.structured/message') return
+      const message = (event.data as { message?: StructuredMessage } | undefined)?.message
+      if (message && message.sessionId === session.id && !cancelled) add([message])
+    })
+    context
+      .call('quirky.structured/messages', { session: session.id })
       .then((loaded) => {
-        if (!cancelled) dispatch({ type: 'structured', sessionId: session.id, messages: loaded })
+        if (!cancelled) add(loaded as StructuredMessage[])
       })
-      .catch(() => {})
+      .catch((error: { code?: unknown }) => {
+        if (!cancelled && error?.code === RpcErrorCode.MethodNotFound) setOff(true)
+      })
     return () => {
       cancelled = true
+      unsubscribe()
     }
-  }, [connection, dispatch, session.id, state.epoch])
+  }, [context, session.id])
 
   useEffect(() => {
     const element = scroller.current
@@ -38,9 +47,15 @@ export function StructuredView({ session }: { session: Session }) {
     const value = text.trim()
     if (!value) return
     setText('')
-    const result = await connection.attempt('structured.send', { sessionId: session.id, text: value }, 'Could not send')
-    if (!result) setText(value)
+    try {
+      await context.call('quirky.structured/send', { session: session.id, text: value })
+    } catch (error) {
+      context.toast('Could not send', messageOf(error))
+      setText(value)
+    }
   }
+
+  if (off) return <p className="muted pad">Structured sessions are off</p>
 
   const exited = session.status === 'exited'
 
