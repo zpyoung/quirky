@@ -329,6 +329,38 @@ describe('codex', () => {
     expect(existsSync(join(area, 'elsewhere'))).toBe(false)
   })
 
+  test.each([
+    ['an inline table', (path: string) => `model = "gpt"\nprojects = { "${path}" = { trust_level = "untrusted" } }\n`],
+    ['a dotted key', (path: string) => `model = "gpt"\nprojects."${path}".trust_level = "untrusted"\n`],
+    ['a dotted key for another project', () => `projects."/elsewhere".trust_level = "untrusted"\n`],
+    ['a nested table with an inline value', (path: string) => `[projects]\n"${path}" = { trust_level = "untrusted" }\n`],
+    ['a nested table with a dotted key', (path: string) => `[projects]\n"${path}".trust_level = "untrusted"\n`],
+    ['an array of tables', () => `[[projects]]\nname = "x"\n`]
+  ])('leaves the file unchanged and throws when projects is %s', (_name, build) => {
+    const before = build(real())
+    expect(Bun.TOML.parse(before)).toBeTruthy()
+    put(file(), before)
+    expect(() => writeTrust('codex', folder, home)).toThrow()
+    expect(readFileSync(file(), 'utf8')).toBe(before)
+    expect(leftovers(dirname(file()))).toEqual([])
+  })
+
+  test('appends a valid table when other keys named projects live inside other tables or values', () => {
+    put(file(), `note = """\nprojects = 1\n"""\n[mcp_servers.x]\nprojects = 2\n`)
+    writeTrust('codex', folder, home)
+    const parsed = Bun.TOML.parse(readFileSync(file(), 'utf8')) as any
+    expect(parsed.projects[real()]).toEqual({ trust_level: 'trusted' })
+    expect(parsed.mcp_servers.x.projects).toBe(2)
+  })
+
+  test('keeps the result valid TOML next to other project tables and empty [projects]', () => {
+    put(file(), `[projects]\n\n[projects."/other"]\ntrust_level = "untrusted"\n`)
+    writeTrust('codex', folder, home)
+    const parsed = Bun.TOML.parse(readFileSync(file(), 'utf8')) as any
+    expect(parsed.projects[real()]).toEqual({ trust_level: 'trusted' })
+    expect(parsed.projects['/other']).toEqual({ trust_level: 'untrusted' })
+  })
+
   test('SC-36: throws when the config cannot be written', () => {
     put(file(), '')
     chmodSync(dirname(file()), 0o500)
