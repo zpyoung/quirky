@@ -10,6 +10,7 @@ import type { ContextExtension, PluginHost } from './host'
 import { runLaunchHooks, type LaunchAdditions } from './launch-hooks'
 import { Scheduler } from './scheduler'
 import { openPluginStore, pluginDataDir } from './stores'
+import { UiService } from './ui-service'
 
 export type PluginRuntimeOptions = {
   home: string
@@ -48,7 +49,8 @@ export function createPluginRuntime(options: PluginRuntimeOptions): PluginRuntim
 
   const events = new PluginEvents(plugins, (event) => core.broadcast(event), log)
   const scheduler = new Scheduler({ plugins, store, log, recheckMs: options.schedulerRecheckMs })
-  const dispatcher = new Dispatcher(createHandlers(core, plugins, scheduler), plugins, log)
+  const ui = new UiService({ plugins, store, broadcast: (event) => core.broadcast(event) })
+  const dispatcher = new Dispatcher(createHandlers(core, plugins, scheduler, ui), plugins, log)
   const openedStores = new Map<string, OpenedStore>()
 
   const extension: ContextExtension = {
@@ -89,6 +91,10 @@ export function createPluginRuntime(options: PluginRuntimeOptions): PluginRuntim
           opened = { ...created, migrations: migrations.length }
           openedStores.set(id, opened)
           return opened.store
+        },
+        getSetting(name) {
+          guard()
+          return ui.valueFor(id, name)
         },
         error(kind, message) {
           guard()

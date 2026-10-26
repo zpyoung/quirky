@@ -80,8 +80,8 @@ const toolsManifest = {
   contributes: { command: [{ id: 'refresh', title: 'Refresh' }], view: [{ id: 'panel' }] }
 }
 
-const sampleSidebar = { id: 'quirky.sample', version: '0.1.0', contributes: { view: [{ id: 'sidebar', title: 'Repos' }] } }
-const override = (id: string, title = id) => ({ id, overrides: [{ id: SIDEBAR, title }] })
+const sampleSidebar = { id: 'quirky.sample', version: '0.1.0', ui: 'ui.js', contributes: { view: [{ id: 'sidebar', title: 'Repos' }] } }
+const override = (id: string, title = id) => ({ id, ui: 'ui.js', overrides: [{ id: SIDEBAR, title }] })
 
 async function until(check: () => boolean, timeoutMs = 2000): Promise<void> {
   await waitFor(() => check() || undefined, timeoutMs)
@@ -240,7 +240,7 @@ describe('overrides', () => {
     const missing = 'view:quirky.missing/sidebar'
     const s = await boot((kit) => {
       kit.builtin({ id: 'quirky.missing' })
-      kit.installed({ id: 'acme.sidebar', overrides: [{ id: missing }] })
+      kit.installed({ id: 'acme.sidebar', ui: 'ui.js', overrides: [{ id: missing }] })
     })
     expect(await s.client.call('plugin.contributions', {})).toMatchObject([{ id: missing, plugin: 'acme.sidebar' }])
     expect((await s.info('acme.sidebar')).diagnostics).toContainEqual({

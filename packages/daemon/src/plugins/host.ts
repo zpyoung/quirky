@@ -24,7 +24,7 @@ export type ContextExtension = {
   create(
     plugin: { id: string; dir: string },
     isRevoked: () => boolean
-  ): Pick<PluginContext, 'dataDir' | 'emit' | 'subscribe' | 'call' | 'openStore' | 'error'>
+  ): Pick<PluginContext, 'dataDir' | 'emit' | 'subscribe' | 'call' | 'openStore' | 'getSetting' | 'error'>
   /** Runs once per attempt that called `create`, after the module's `deactivate` settles. */
   revoke(pluginId: string): void
 }
@@ -41,6 +41,14 @@ export type PluginHostOptions = {
   activationTimeoutMs?: number
   /** Supplies the context members the host cannot; without it they throw or return defaults. */
   extension?: ContextExtension
+  /**
+   * Derives extra diagnostics, keyed by plugin ID, from every declaration and the plugin list as it
+   * would be listed without them. Runs once per registry computation and never emits `plugin.changed`.
+   */
+  deriveDiagnostics?: (view: {
+    declarations: ContributionInfo[]
+    plugins: PluginInfo[]
+  }) => Map<string, PluginDiagnostic[]>
 }
 
 const FUNCTION_KINDS = new Set(['method', 'job', 'launch-hook'])
@@ -94,6 +102,7 @@ export class PluginHost {
   private discovered: DiscoveredPlugin[] = []
   private registry: Registry = computeRegistry([], new Set())
   private readonly runtimes = new Map<string, Runtime>()
+  private derivedDiagnostics = new Map<string, PluginDiagnostic[]>()
   private activationOrder: string[] = []
   private queue: Promise<unknown> = Promise.resolve()
   private stopped = false
@@ -126,6 +135,17 @@ export class PluginHost {
       .filter((item) => filter.kind === undefined || item.kind === filter.kind)
       .filter((item) => filter.pluginId === undefined || item.plugin === filter.pluginId)
       .sort((a, b) => compare(a.id, b.id) || compare(a.plugin, b.plugin))
+  }
+
+  /**
+   * The directory and `ui` path of the usable plugin with this ID, or null when there is none, it
+   * is invalid or it declares no `ui`. An invalid duplicate never hides a valid one.
+   */
+  pluginFiles(pluginId: string): { dir: string; ui: string } | null {
+    const entry = this.registry.plugins.get(pluginId)
+    const ui = entry?.discovered.manifest?.ui
+    if (!entry || entry.status === 'invalid' || ui === undefined) return null
+    return { dir: entry.discovered.dir, ui }
   }
 
   /**
@@ -189,6 +209,14 @@ export class PluginHost {
 
   private recompute(): void {
     this.registry = computeRegistry(this.discovered, new Set(this.options.store.listDisabledIds()))
+    this.derivedDiagnostics = new Map()
+    const derive = this.options.deriveDiagnostics
+    if (!derive) return
+    try {
+      this.derivedDiagnostics = derive({ declarations: this.contributions({ all: true }), plugins: this.list() })
+    } catch (error) {
+      this.options.log(`deriving plugin diagnostics failed: ${messageOf(error)}`)
+    }
   }
 
   private runtimeOf(id: string): Runtime {
@@ -220,6 +248,7 @@ export class PluginHost {
     const runtime = primary ? this.runtimes.get(discovered.id) : undefined
     const state = status === 'enabled' ? (runtime?.state ?? 'inactive') : status
     const diagnostics = [...entry.diagnostics]
+    if (primary) diagnostics.push(...(this.derivedDiagnostics.get(discovered.id) ?? []))
     if (status === 'enabled' && runtime?.state === 'failed' && runtime.error) {
       diagnostics.push({ level: 'error', message: runtime.error })
     }
@@ -233,6 +262,7 @@ export class PluginHost {
       dir: discovered.dir,
       activation: manifest?.activation ?? 'lazy',
       dependencies: manifest?.dependencies ?? [],
+      ...(manifest?.ui === undefined ? {} : { ui: manifest.ui }),
       state,
       diagnostics
     }
