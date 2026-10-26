@@ -315,5 +315,15 @@
 - **Revisit if:** a user's own `DEBUG` trap or prompt framework breaks the bash integration
 - **Source:** assumed — autonomous
 
+## D32: One adversarial-review pass over both specs as one artifact, deep depth, Codex reviewing, tech-spec reviewer folded in
+- **Question:** how to run LOOP.md's single spec review, and the tech-spec rubric's separate reviewer step
+- **Options:** review each spec separately; review both as one artifact; also run the tech-spec reviewer prompt
+- **Chose:** one `quirk:adversarial-review` run over a diff holding only the two spec files (`resolve` takes one file or a git range, so the range's diff was restricted to the spec directory with the `--diff-file` input), profile spec-design, depth deep (its suggestion: contract surface), reviewer Codex `gpt-6.1-sol` (select-model: family openai, independence full). The per-file pre-passes ran as ground truth because the range pre-pass has no checks for prose. The decision log is not staged: it is the author's reasoning, which the skill withholds. The tech-spec reviewer step is folded into this pass, as m0-core D37 did.
+- **Why:** LOOP.md asks for one pass over both specs together with Codex; the skill's invariant forbids staging rationale
+- **Evidence:** docs/loop/LOOP.md step 4; adversarial-review SKILL.md "The load-bearing invariant"; docs/loop/decisions/m0-core.md D37
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** locked by docs/loop/LOOP.md
+
 ## Progress
-Step 3 (brainstorm) in progress on `build/m1-term-daemon`.
+Step 4: specs written and committed; adversarial review running. Next: fix confirmed findings, commit, then step 5 (subagent-driven-development).
