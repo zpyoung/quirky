@@ -1,0 +1,22 @@
+import type { PluginContext } from '@quirky/protocol'
+import { SessionRecords, sessionMigrations } from './src/records'
+import { SessionService } from './src/sessions'
+
+export async function activate(context: PluginContext): Promise<void> {
+  const records = new SessionRecords(context.openStore(sessionMigrations(context.home)))
+  const sessions = new SessionService(context, records)
+
+  const methods = {
+    list: sessions.list,
+    get: sessions.get,
+    create: sessions.create,
+    register: sessions.register,
+    close: sessions.close,
+    setStatus: sessions.setStatus
+  }
+  for (const [name, handler] of Object.entries(methods)) context.provide(`method:${context.pluginId}/${name}`, handler)
+
+  context.pty.onExit((sessionId, exitCode) => void sessions.finish(sessionId, exitCode))
+  context.pty.onReconnect(() => void sessions.reconcile({ startup: false }))
+  await sessions.reconcile({ startup: true })
+}

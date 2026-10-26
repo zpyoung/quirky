@@ -1,0 +1,296 @@
+{
+  "id": "quirky.terminal",
+  "name": "Terminal",
+  "version": "0.1.0",
+  "description": "Terminal input and output for sessions that run in a PTY.",
+  "main": "main.ts",
+  "cli": "cli.ts",
+  "cliAliases": [
+    "term"
+  ],
+  "activation": "lazy",
+  "dependencies": [
+    "quirky.session"
+  ],
+  "contributes": {
+    "method": [
+      {
+        "id": "attach",
+        "description": "Starts streaming a terminal session to this client: base64 replay of recent output, then live binary frames tagged with `streamId`.",
+        "connection": true,
+        "params": {
+          "type": "object",
+          "properties": {
+            "session": {
+              "type": "string",
+              "description": "The session ID."
+            },
+            "cols": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "rows": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          "required": [
+            "session",
+            "cols",
+            "rows"
+          ]
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "streamId": {
+              "type": "integer"
+            },
+            "replay": {
+              "type": "string",
+              "description": "Base64 of recent output."
+            },
+            "offset": {
+              "type": "integer"
+            }
+          },
+          "required": [
+            "streamId",
+            "replay",
+            "offset"
+          ]
+        }
+      },
+      {
+        "id": "detach",
+        "description": "Stops a terminal stream.",
+        "connection": true,
+        "params": {
+          "type": "object",
+          "properties": {
+            "streamId": {
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          "required": [
+            "streamId"
+          ]
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "ok": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "ok"
+          ]
+        }
+      },
+      {
+        "id": "write",
+        "description": "Writes raw input to a terminal, as typed.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "session": {
+              "type": "string",
+              "description": "The session ID."
+            },
+            "data": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "session",
+            "data"
+          ]
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "ok": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "ok"
+          ]
+        }
+      },
+      {
+        "id": "resize",
+        "description": "Resizes a terminal.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "session": {
+              "type": "string",
+              "description": "The session ID."
+            },
+            "cols": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "rows": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          "required": [
+            "session",
+            "cols",
+            "rows"
+          ]
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "ok": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "ok"
+          ]
+        }
+      },
+      {
+        "id": "send",
+        "description": "Sends a prompt as a bracketed paste, then Enter as a separate write when `enter` is set.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "session": {
+              "type": "string",
+              "description": "The session ID; default: the caller's session."
+            },
+            "text": {
+              "type": "string"
+            },
+            "enter": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "text"
+          ]
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "ok": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "ok"
+          ]
+        }
+      },
+      {
+        "id": "read",
+        "description": "The visible screen plus up to `lines` (default 50) of recent scrollback, as plain text.",
+        "readOnly": true,
+        "params": {
+          "type": "object",
+          "properties": {
+            "session": {
+              "type": "string",
+              "description": "The session ID; default: the caller's session."
+            },
+            "lines": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "lines": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "cols": {
+              "type": "integer"
+            },
+            "rows": {
+              "type": "integer"
+            },
+            "alt": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "lines",
+            "cols",
+            "rows",
+            "alt"
+          ]
+        }
+      }
+    ],
+    "setting": [
+      {
+        "id": "scrollback",
+        "type": "number",
+        "title": "Terminal scrollback",
+        "description": "Lines of scrollback each terminal keeps in the window.",
+        "default": 2000,
+        "minimum": 500,
+        "maximum": 10000
+      }
+    ],
+    "cli-command": [
+      {
+        "id": "read",
+        "words": "read",
+        "summary": "print the terminal screen and recent scrollback (session defaults to $QUIRKY_SESSION_ID)",
+        "positionals": [
+          {
+            "name": "session",
+            "description": "the session (default: QUIRKY_SESSION_ID)"
+          }
+        ],
+        "flags": {
+          "lines": {
+            "type": "integer",
+            "description": "number of lines to print"
+          }
+        },
+        "methods": [
+          "quirky.terminal/read"
+        ]
+      },
+      {
+        "id": "send",
+        "words": "send",
+        "summary": "type text into a terminal; with $QUIRKY_SESSION_ID set, <session> may be omitted",
+        "positionals": [
+          {
+            "name": "session",
+            "description": "the session (default: QUIRKY_SESSION_ID)"
+          },
+          {
+            "name": "text",
+            "description": "text to type"
+          }
+        ],
+        "flags": {
+          "enter": {
+            "type": "boolean",
+            "description": "press Enter after the text"
+          }
+        },
+        "methods": [
+          "quirky.terminal/send"
+        ]
+      }
+    ]
+  }
+}
