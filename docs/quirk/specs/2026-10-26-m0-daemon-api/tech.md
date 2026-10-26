@@ -221,8 +221,9 @@ class PluginEvents {
   broadcast `{ type: <id without "event:">, data: data ?? null }` and return true. A
   non-serializable `data` throws from `broadcast` to the emitter.
 - `deliver` schedules each listener with `setImmediate`, in registration order, so a listener
-  never runs before the RPC reply of the call that caused the event (the server sends that reply in
-  a microtask continuation, which runs first). A throw or a
+  never runs inside `emit` or `broadcast`. A call that emits as its last step replies first (the
+  server sends that reply in a microtask continuation, which runs before `setImmediate`); a method
+  that emits and then awaits more work may have its listeners run before it replies. A throw or a
   rejection is logged as `<pluginId>: listener failed: <message>`.
 
 ### Stores ([Opening a store](logic.md#data-flow), SC-11 to SC-15)

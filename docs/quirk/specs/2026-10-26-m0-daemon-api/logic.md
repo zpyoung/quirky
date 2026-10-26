@@ -6,6 +6,7 @@
 
 **Amendments:**
 - 2026-10-26, before approval: Codex adversarial review. Defined how a plugin emits an event it overrides (full ID), made the no-overlap rule hold for runs that ignore their stop signal, spelled out the store interface, stated test isolation, and added `ZDOTDIR` to the reserved variables.
+- 2026-10-26, during build: final review. Listener timing now promises a later event-loop turn rather than "after any reply": a method that emits and then keeps awaiting may see its listeners run before it replies (decision D42).
 
 ## Conceptual model
 
@@ -62,7 +63,7 @@ name like `refreshed` always means an event in the plugin's own namespace,
 `event:acme.tools/refreshed` from `acme.better`. If the event is in effect and owned by this plugin, the daemon sends
 `{ type: "acme.tools/refreshed", data }` to every subscribed client and every plugin listener.
 Plugin listeners registered with `context.subscribe` receive every event the daemon sends,
-kernel and plugin alike. They are called on a later turn of the event loop, after the emitting code has moved on and any reply it was producing has been sent, so a slow or
+kernel and plugin alike. They are called on a later turn of the event loop, never inside the call that emitted, and a method that emits as its last step sends its reply first, so a slow or
 failing listener never affects the emitter or other listeners.
 
 **Opening a store.** A plugin calls `context.openStore(migrations)` during or after activation. The

@@ -429,5 +429,16 @@
 - **Revisit if:** the user wants job inspection to be replaceable by a distro
 - **Source:** locked by docs/roadmap.md
 
+## D42: Final round 1: fix four defects, and narrow the spec's promise about listener timing
+- **Question:** adjudicating final review round 1 over the whole branch (three Codex lenses, depth deep, 11 findings that collapse to five defects) (subagent-driven-development Step 9)
+- **Options:** for each defect, fix the code, fix the spec, or reject
+- **Chose:** fixed four. HIGH: a saved store was already unusable inside `deactivate`, breaking the contract that it stays usable until revoke closes it (C2, S1, X2). MEDIUM: a lazy job whose plugin failed to activate reported "was revoked" and left its run row `running` (C1, S2, X1); a launch hook whose resolution outlasted the timeout was still called later (C4, X3). LOW: `quirky job list` printed UTC where the tech spec says local ISO times (S3). For C3 (a plugin method that emits an event and then keeps awaiting lets listeners run before its reply), amended the logic and tech specs instead of the code: listeners run on a later turn of the event loop, never inside `emit`, and a call that emits as its last step replies first.
+- **Why:** listener delivery exists so a slow or failing listener can't affect the emitter, which async delivery already guarantees. Holding listeners until a long-running method replies would need request-scoped tracking (AsyncLocalStorage across the server and dispatcher) for an ordering no scenario or consumer depends on.
+- **Evidence:** scratchpad r1/{C,S,X}/gate.json; docs/quirk/specs/2026-10-26-m0-daemon-api/logic.md "Data flow" (events) and tech.md "Events"
+- **Reversibility:** easy
+- **Confidence:** medium
+- **Revisit if:** a plugin needs its listeners to observe a method's reply before reacting to that method's events
+- **Source:** assumed — autonomous
+
 ## Progress
-All four waves merged (6aa2257): `bun run test` 763 pass, typecheck clean, `bun test scripts` only the D31 failure. Next: the final review loop (round 1 over 3ce0c32..HEAD, three Codex lenses, depth deep), fixes, closure rounds, then LOOP.md step 7 (merge). Review driver: iteration-3 scratchpad `/private/tmp/claude-502/-Users-zpyoung-orca-workspaces-quirky-build-roadmap/20ad4b75-27c9-48ea-8053-2da47b7b6d4e/scratchpad/round.py`.
+All four waves merged (6aa2257): `bun run test` 763 pass, typecheck clean, `bun test scripts` only the D31 failure. Final round 1 fixed (D42). Next: closure round 2 over the round-1 fix delta, then more rounds until one finds nothing above LOW (cap 5), then LOOP.md step 7 (merge). Review driver: iteration-3 scratchpad `/private/tmp/claude-502/-Users-zpyoung-orca-workspaces-quirky-build-roadmap/20ad4b75-27c9-48ea-8053-2da47b7b6d4e/scratchpad/round.py`.
