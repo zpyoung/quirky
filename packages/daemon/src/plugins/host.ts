@@ -15,6 +15,20 @@ import type { Store } from '../store'
 import { discoverPlugins, type DiscoveredPlugin } from './discover'
 import { computeRegistry, type Registry, type RegistryPlugin } from './registry'
 
+/** The daemon-side half of a plugin's context, created and torn down per activation attempt. */
+export type ContextExtension = {
+  /**
+   * Runs once per activation attempt, before the module's `activate`. `isRevoked` turns true when
+   * the attempt ends, so handles it returns can refuse use after that.
+   */
+  create(
+    plugin: { id: string; dir: string },
+    isRevoked: () => boolean
+  ): Pick<PluginContext, 'dataDir' | 'emit' | 'subscribe' | 'call' | 'openStore' | 'error'>
+  /** Runs once per attempt that called `create`, after the module's `deactivate` settles. */
+  revoke(pluginId: string): void
+}
+
 export type PluginHostOptions = {
   /** Directory of plugins shipped with Quirky, or null for none. */
   builtinDir: string | null
@@ -25,7 +39,11 @@ export type PluginHostOptions = {
   log(message: string): void
   /** Bounds each activation and each deactivate; defaults to 10 seconds. */
   activationTimeoutMs?: number
+  /** Supplies the context members the host cannot; without it they throw or return defaults. */
+  extension?: ContextExtension
 }
+
+const FUNCTION_KINDS = new Set(['method', 'job', 'launch-hook'])
 
 const DEFAULT_TIMEOUT_MS = 10_000
 
@@ -34,6 +52,8 @@ type RuntimeState = 'inactive' | 'activating' | 'active' | 'failed'
 /** One activation's context and the implementations it provided; revoked when it ends. */
 type Attempt = {
   revoked: boolean
+  /** True once `extension.create` ran for this attempt and `extension.revoke` has not. */
+  extensionLive: boolean
   implementations: Map<string, unknown>
 }
 
@@ -152,6 +172,13 @@ export class PluginHost {
     return run
   }
 
+  /** Appends a warning to a plugin's diagnostics until it next activates. Ignored for an unknown plugin. */
+  addWarning(pluginId: string, message: string): void {
+    if (!this.registry.plugins.has(pluginId)) return
+    this.runtimeOf(pluginId).warnings.push({ level: 'warning', message })
+    this.changed()
+  }
+
   /** Waits for in-flight activations, then deactivates every active plugin in reverse activation order. */
   async stop(): Promise<void> {
     this.stopped = true
@@ -244,7 +271,7 @@ export class PluginHost {
   }
 
   private async run(id: string, entry: RegistryPlugin, runtime: Runtime): Promise<void> {
-    const attempt: Attempt = { revoked: false, implementations: new Map() }
+    const attempt: Attempt = { revoked: false, extensionLive: false, implementations: new Map() }
     runtime.attempt = attempt
     const imported: { module?: PluginModule } = {}
     let disabledMidway = false
@@ -270,9 +297,11 @@ export class PluginHost {
       runtime.module = undefined
       if (disabledMidway) {
         if (imported.module) await this.callDeactivate(id, imported.module, runtime)
+        this.revokeExtension(id, attempt)
         this.setState(runtime, 'inactive')
         throw conflict(`${id} was disabled during activation`)
       }
+      this.revokeExtension(id, attempt)
       runtime.error = messageOf(error)
       this.options.log(`plugin ${id} failed to activate: ${runtime.error}`)
       this.setState(runtime, 'failed')
@@ -319,18 +348,10 @@ export class PluginHost {
       for (const item of items) allowed.add(formatContributionId(kind, id, item.id))
     }
     for (const override of manifest.overrides ?? []) allowed.add(override.id)
-    return {
-      pluginId: id,
-      dir: discovered.dir,
+    const created = this.options.extension?.create({ id, dir: discovered.dir }, () => attempt.revoked)
+    if (this.options.extension) attempt.extensionLive = true
+    const defaults: Pick<PluginContext, 'dataDir' | 'emit' | 'subscribe' | 'call' | 'openStore' | 'error'> = {
       dataDir: '',
-      log: (message) => {
-        for (const line of String(message).split(/\r\n|\r|\n/)) this.options.log(`${id}: ${line}`)
-      },
-      provide: (contributionId, implementation) => {
-        if (attempt.revoked) throw new Error(`${id} is no longer active`)
-        if (!allowed.has(contributionId)) throw new Error(`${id} does not declare ${contributionId}`)
-        attempt.implementations.set(contributionId, implementation)
-      },
       emit: () => {
         throw new Error(`${id}: context.emit is not available`)
       },
@@ -344,6 +365,24 @@ export class PluginHost {
         throw new Error(`${id}: context.openStore is not available`)
       },
       error: (_kind, message) => new Error(message)
+    }
+    return {
+      pluginId: id,
+      dir: discovered.dir,
+      ...defaults,
+      ...created,
+      log: (message) => {
+        for (const line of String(message).split(/\r\n|\r|\n/)) this.options.log(`${id}: ${line}`)
+      },
+      provide: (contributionId, implementation) => {
+        if (attempt.revoked) throw new Error(`${id} is no longer active`)
+        if (!allowed.has(contributionId)) throw new Error(`${id} does not declare ${contributionId}`)
+        const kind = parseContributionId(contributionId)?.kind
+        if (kind !== undefined && FUNCTION_KINDS.has(kind) && typeof implementation !== 'function') {
+          throw new Error(`${contributionId} must be provided as a function`)
+        }
+        attempt.implementations.set(contributionId, implementation)
+      }
     }
   }
 
@@ -389,6 +428,17 @@ export class PluginHost {
     runtime.module = undefined
     runtime.state = 'inactive'
     if (module) await this.callDeactivate(id, module, runtime)
+    if (attempt) this.revokeExtension(id, attempt)
+  }
+
+  private revokeExtension(id: string, attempt: Attempt): void {
+    if (!attempt.extensionLive) return
+    attempt.extensionLive = false
+    try {
+      this.options.extension?.revoke(id)
+    } catch (error) {
+      this.options.log(`plugin ${id}: revoke failed: ${messageOf(error)}`)
+    }
   }
 
   private async callDeactivate(id: string, module: PluginModule, runtime: Runtime): Promise<void> {
