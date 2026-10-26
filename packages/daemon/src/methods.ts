@@ -6,7 +6,7 @@ import {
   type MethodName,
   type ResultOf
 } from '@quirky/protocol'
-import { conflict, invalidParams } from './errors'
+import { conflict, internal, invalidParams } from './errors'
 import type { PluginHost } from './plugins/host'
 import type { Scheduler } from './plugins/scheduler'
 import type { Core } from './service'
@@ -211,6 +211,28 @@ export function createHandlers(core: Core, plugins: PluginHost, scheduler: Sched
     'plugin.activate': (params) => plugins.activate(str(params, 'pluginId')),
 
     'job.list': () => scheduler.list(),
-    'job.run': (params) => scheduler.run(str(params, 'id'))
+    'job.run': (params) => scheduler.run(str(params, 'id')),
+
+    'ui.contributions': () => {
+      throw internal('ui.contributions is not implemented yet')
+    },
+    'setting.list': () => {
+      throw internal('setting.list is not implemented yet')
+    },
+    'setting.get': () => {
+      throw internal('setting.get is not implemented yet')
+    },
+    'setting.set': () => {
+      throw internal('setting.set is not implemented yet')
+    },
+    'setting.reset': () => {
+      throw internal('setting.reset is not implemented yet')
+    },
+    'theme.list': () => {
+      throw internal('theme.list is not implemented yet')
+    },
+    'theme.set': () => {
+      throw internal('theme.set is not implemented yet')
+    }
   }
 }
