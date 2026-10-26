@@ -55,6 +55,8 @@ type Session = {
 type Runtime = {
   module?: UiPluginModule
   session?: Session
+  /** The session whose `activate` is running; it receives events before it becomes `session`. */
+  pending?: Session
   loading?: Promise<void>
   importAttempts: number
 }
@@ -121,6 +123,8 @@ export class WindowPluginHost {
   private readonly mounts = new Set<MountHandle>()
   private readonly unsubscribeEvents: () => void
   private refreshChain: Promise<unknown> = Promise.resolve()
+  /** `setting.changed` values seen while a refresh fetches; they are newer than that refresh's snapshot. */
+  private settingsSeenDuringFetch: Map<string, boolean | number | string> | null = null
   private stopped = false
 
   constructor(private readonly deps: HostDeps) {
@@ -173,6 +177,7 @@ export class WindowPluginHost {
       await this.invokeCommand(entry, args)
     } catch (error) {
       if (error instanceof NoCommand) throw error
+      this.deps.log(`${entry.plugin}: ${id} failed: ${messageOf(error)}`)
       this.deps.toast(`${id} failed: ${messageOf(error)}`, messageOf(error))
     }
   }
@@ -256,11 +261,20 @@ export class WindowPluginHost {
   }
 
   private async fetchAndReconcile(): Promise<void> {
-    const [model, settings] = await Promise.all([
-      this.deps.call('ui.contributions', {}) as Promise<UiModel>,
-      this.deps.call('setting.list', {}) as Promise<SettingInfo[]>
-    ])
+    const newer = new Map<string, boolean | number | string>()
+    this.settingsSeenDuringFetch = newer
+    let model: UiModel
+    let snapshot: SettingInfo[]
+    try {
+      ;[model, snapshot] = await Promise.all([
+        this.deps.call('ui.contributions', {}) as Promise<UiModel>,
+        this.deps.call('setting.list', {}) as Promise<SettingInfo[]>
+      ])
+    } finally {
+      this.settingsSeenDuringFetch = null
+    }
     if (this.stopped) return
+    const settings = snapshot.map((s) => (newer.has(s.id) ? { ...s, value: newer.get(s.id)! } : s))
     this.commit({ model, settings, themeVariables: themeVariablesOf(model) })
     await this.reconcile(model)
   }
@@ -380,12 +394,20 @@ export class WindowPluginHost {
       violation: null,
       revoked: false
     }
+    runtime.pending = session
     try {
       await this.withTimeout(pluginId, this.importAndActivate(pluginId, runtime, declared.url, session))
     } catch (error) {
       revoke(session)
       this.fail(pluginId, messageOf(error))
       throw error
+    } finally {
+      runtime.pending = undefined
+    }
+    if (this.stopped) {
+      this.setPlugin(pluginId, { state: 'idle' })
+      await this.retire(runtime, session)
+      return
     }
     runtime.session = session
     this.setPlugin(pluginId, { state: 'active' })
@@ -419,12 +441,17 @@ export class WindowPluginHost {
   }
 
   private withTimeout(pluginId: string, work: Promise<void>): Promise<void> {
+    return this.within(work, () => new LoadFailure(`${pluginId} failed to activate: activation timed out`))
+  }
+
+  /** Settles with `work`, or rejects with `onTimeout()` once `activationTimeoutMs` passes. */
+  private within(work: Promise<unknown>, onTimeout: () => Error): Promise<void> {
     const ms = this.deps.activationTimeoutMs ?? DEFAULT_ACTIVATION_TIMEOUT_MS
     let timer: ReturnType<typeof setTimeout>
     const timeout = new Promise<never>((_, reject) => {
-      timer = setTimeout(() => reject(new LoadFailure(`${pluginId} failed to activate: activation timed out`)), ms)
+      timer = setTimeout(() => reject(onTimeout()), ms)
     })
-    return Promise.race([work, timeout]).finally(() => clearTimeout(timer))
+    return Promise.race([work, timeout]).then(() => undefined).finally(() => clearTimeout(timer))
   }
 
   private fail(pluginId: string, message: string): void {
@@ -437,13 +464,43 @@ export class WindowPluginHost {
     if (!runtime || !session) return
     runtime.session = undefined
     this.setPlugin(pluginId, { state: 'idle' })
+    await this.retire(runtime, session)
+  }
+
+  /** Runs `deactivate` for at most `activationTimeoutMs`, then revokes the context whatever happened. */
+  private async retire(runtime: Runtime, session: Session): Promise<void> {
     try {
-      await runtime.module?.deactivate?.()
+      await this.within(
+        new Promise((resolve) => resolve(runtime.module?.deactivate?.())),
+        () => new Error('deactivate timed out')
+      )
     } catch (error) {
-      this.deps.log(`${pluginId}: deactivate failed: ${messageOf(error)}`)
+      this.deps.log(`${session.pluginId}: deactivate failed: ${messageOf(error)}`)
     } finally {
       revoke(session)
     }
+  }
+
+  /** An active plugin broke the provide contract: fail it, show the error in its slots, and drop its context. */
+  private breach(session: Session, message: string): void {
+    const runtime = this.runtimes.get(session.pluginId)
+    if (!runtime || runtime.session !== session) return
+    runtime.session = undefined
+    for (const handle of [...this.mounts]) {
+      if (handle.plugin !== session.pluginId) continue
+      this.mounts.delete(handle)
+      handle.released = true
+      const cleanup = handle.cleanup
+      handle.cleanup = undefined
+      try {
+        cleanup?.()
+      } catch (error) {
+        this.deps.log(`${handle.plugin}: cleanup failed: ${messageOf(error)}`)
+      }
+      this.setSlot(handle.id, { status: 'error', message })
+    }
+    revoke(session)
+    this.fail(session.pluginId, message)
   }
 
   private contextFor(session: Session): UiPluginContext {
@@ -460,7 +517,8 @@ export class WindowPluginHost {
       provide: live((contributionId: string, implementation: unknown) => {
         const problem = this.provideProblem(session, contributionId, implementation)
         if (problem) {
-          if (session.activating && !session.violation) session.violation = problem.violation
+          if (!session.activating) this.breach(session, problem.violation)
+          else if (!session.violation) session.violation = problem.violation
           throw new Error(problem.error)
         }
         session.provided.set(contributionId, implementation)
@@ -514,13 +572,14 @@ export class WindowPluginHost {
   }
 
   private applySetting(id: string, value: boolean | number | string): void {
+    this.settingsSeenDuringFetch?.set(id, value)
     if (!this.state.settings.some((setting) => setting.id === id)) return
     this.commit({ settings: this.state.settings.map((s) => (s.id === id ? { ...s, value } : s)) })
   }
 
   private deliver(event: QuirkyEvent): void {
     for (const runtime of this.runtimes.values()) {
-      const session = runtime.session
+      const session = runtime.session ?? runtime.pending
       if (!session) continue
       for (const listener of [...session.listeners]) void this.notify(session, listener, event)
     }

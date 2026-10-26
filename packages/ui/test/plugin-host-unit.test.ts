@@ -89,6 +89,7 @@ function setup(initial: UiModel, options: { settings?: SettingInfo[]; activation
   const toasts: [string, string][] = []
   const logs: string[] = []
   const refused = new Map<string, string>()
+  const holds = new Map<string, Promise<void>>()
 
   const host = new WindowPluginHost({
     call: async (method, params) => {
@@ -96,8 +97,11 @@ function setup(initial: UiModel, options: { settings?: SettingInfo[]; activation
       switch (method) {
         case 'ui.contributions':
           return model
-        case 'setting.list':
-          return settings
+        case 'setting.list': {
+          const snapshot = settings
+          await holds.get(method)
+          return snapshot
+        }
         case 'setting.set':
         case 'theme.set': {
           const key = method === 'theme.set' ? 'theme' : (params.id as string)
@@ -133,6 +137,7 @@ function setup(initial: UiModel, options: { settings?: SettingInfo[]; activation
     toasts,
     logs,
     refused,
+    holds,
     listenerCount: () => listeners.size,
     setModel: (next: UiModel) => (model = next),
     setSettings: (next: SettingInfo[]) => (settings = next),
@@ -1222,4 +1227,171 @@ test('stop cleans up mounts, deactivates plugins and stops listening to events',
   expect(cleanups).toBe(1)
   expect(record.deactivations).toBe(1)
   expect(t.listenerCount()).toBe(0)
+})
+
+test('C1: stop while a module is loading deactivates the plugin when the load completes and mounts nothing', async () => {
+  const t = setup(makeModel({ sidebarSections: [section(NOTES, 'list')] }))
+  const release = gate()
+  let mounted = 0
+  const { module, record } = recording([LIST], () => () => {
+    mounted++
+  })
+  t.useModule(NOTES, async () => {
+    await release.opened
+    return module
+  })
+  await t.host.refresh()
+  t.host.mount(LIST, element())
+  await tick()
+
+  t.host.stop()
+  release.open()
+  await until(() => record.deactivations === 1)
+
+  expect(mounted).toBe(0)
+  expect(state(t).plugins[NOTES].state).not.toBe('active')
+  expect(() => record.contexts[0].call('repo.list')).toThrow('acme.notes is not active')
+})
+
+test('C2: a deactivate that never settles is cut off at the timeout, logged, and the context is revoked', async () => {
+  const t = setup(makeModel({ sidebarSections: [section(NOTES, 'list')] }), { activationTimeoutMs: 40 })
+  const contexts: UiPluginContext[] = []
+  let usableDuring = false
+  t.useModule(NOTES, {
+    activate(context) {
+      contexts.push(context)
+      context.provide(LIST, () => {})
+    },
+    deactivate() {
+      usableDuring = typeof contexts[0].getSetting === 'function' && !!contexts[0].call('repo.list')
+      return hang()
+    }
+  })
+  await t.host.refresh()
+  t.host.mount(LIST, element())
+  await settled(t, LIST)
+
+  t.setModel(makeModel())
+  const started = Date.now()
+  await t.host.refresh()
+
+  expect(Date.now() - started).toBeLessThan(1000)
+  expect(usableDuring).toBe(true)
+  expect(t.logs).toContain('acme.notes: deactivate failed: deactivate timed out')
+  expect(() => contexts[0].call('repo.list')).toThrow('acme.notes is not active')
+  expect(state(t).plugins[NOTES]).toEqual({ state: 'idle' })
+})
+
+test('C2: a deactivate that throws still revokes the context', async () => {
+  const t = setup(makeModel({ sidebarSections: [section(NOTES, 'list')] }))
+  const contexts: UiPluginContext[] = []
+  t.useModule(NOTES, {
+    activate(context) {
+      contexts.push(context)
+      context.provide(LIST, () => {})
+    },
+    deactivate() {
+      throw new Error('bad')
+    }
+  })
+  await t.host.refresh()
+  t.host.mount(LIST, element())
+  await settled(t, LIST)
+  t.setModel(makeModel())
+  await t.host.refresh()
+
+  expect(t.logs).toContain('acme.notes: deactivate failed: bad')
+  expect(() => contexts[0].call('repo.list')).toThrow('acme.notes is not active')
+})
+
+test('C3: a setting.changed that arrives during a refresh wins over that refresh\'s older snapshot', async () => {
+  const size = 'setting:acme.notes/fontSize'
+  const t = setup(makeModel(), { settings: [setting(size, 13)] })
+  await t.host.refresh()
+
+  const release = gate()
+  t.holds.set('setting.list', release.opened)
+  const refreshing = t.host.refresh()
+  await tick()
+  t.emit({ type: 'setting.changed', id: size, value: 20 })
+  release.open()
+  await refreshing
+
+  expect(state(t).settings[0].value).toBe(20)
+})
+
+test('C4: a subscriber registered during activate receives events before activation finishes', async () => {
+  const t = setup(makeModel({ sidebarSections: [section(NOTES, 'list')] }), { activationTimeoutMs: 1000 })
+  let subscribed = false
+  t.useModule(NOTES, {
+    async activate(context) {
+      await new Promise<void>((resolve) => {
+        context.subscribe((event) => {
+          if (event.type === 'repo.changed') resolve()
+        })
+        subscribed = true
+      })
+      context.provide(LIST, () => {})
+    }
+  })
+  await t.host.refresh()
+  t.host.mount(LIST, element())
+  await until(() => subscribed)
+
+  t.emit({ type: 'repo.changed' })
+  await until(() => state(t).slots[LIST]?.status === 'mounted')
+})
+
+test('S1: an undeclared provide after activate fails the plugin, cleans up its mounts and retries on the next mount', async () => {
+  const t = setup(makeModel({ sidebarSections: [section(NOTES, 'list')] }))
+  let cleanups = 0
+  const { module, record } = recording([LIST], () => () => () => cleanups++)
+  t.useModule(NOTES, module)
+  await t.host.refresh()
+  t.host.mount(LIST, element())
+  await settled(t, LIST)
+  expect(state(t).plugins[NOTES]).toEqual({ state: 'active' })
+
+  const message = 'acme.notes does not declare view:acme.notes/other'
+  expect(() => record.contexts[0].provide('view:acme.notes/other', () => {})).toThrow(message)
+
+  expect(state(t).plugins[NOTES]).toEqual({ state: 'failed', error: message })
+  expect(state(t).slots[LIST]).toEqual({ status: 'error', message })
+  expect(cleanups).toBe(1)
+  expect(record.deactivations).toBe(0)
+  expect(() => record.contexts[0].call('repo.list')).toThrow('acme.notes is not active')
+
+  t.host.mount(LIST, element())
+  await until(() => state(t).slots[LIST]?.status === 'mounted')
+  expect(record.activations).toBe(2)
+  expect(state(t).plugins[NOTES]).toEqual({ state: 'active' })
+})
+
+test('S1: a non-function provide after activate fails the plugin', async () => {
+  const t = setup(makeModel({ sidebarSections: [section(NOTES, 'list')] }))
+  const { module, record } = recording([LIST])
+  t.useModule(NOTES, module)
+  await t.host.refresh()
+  t.host.mount(LIST, element())
+  await settled(t, LIST)
+
+  const message = `acme.notes must provide a function for ${LIST}`
+  expect(() => record.contexts[0].provide(LIST, 'nope')).toThrow(message)
+  expect(state(t).plugins[NOTES]).toEqual({ state: 'failed', error: message })
+  expect(record.deactivations).toBe(0)
+})
+
+test('S3: a failing command is logged with its owner and command ID as well as toasted', async () => {
+  const t = setup(makeModel({ commands: [command('acme.cmd', 'go')] }))
+  t.useModule(
+    'acme.cmd',
+    recording(['command:acme.cmd/go'], () => () => {
+      throw new Error('nope')
+    }).module
+  )
+  await t.host.refresh()
+
+  await t.host.runCommand('command:acme.cmd/go')
+  expect(t.logs).toContain('acme.cmd: command:acme.cmd/go failed: nope')
+  expect(t.toasts).toEqual([['command:acme.cmd/go failed: nope', 'nope']])
 })
