@@ -2,7 +2,7 @@
 
 ## Status & amendments
 
-**Status:** Approved (headless build loop; decisions in [m1-worktrees.md](../../../loop/decisions/m1-worktrees.md)). Tech spec: requested (crosses three plugins, the git package and the window).
+**Status:** Approved (headless build loop; decisions in [m1-worktrees.md](../../../loop/decisions/m1-worktrees.md)). Tech spec: requested; authored as [tech.md](tech.md) (gate: requested, crosses subsystems).
 
 **Amendments:** none yet.
 
@@ -328,7 +328,7 @@ repository `/tmp/w/origin.git` with `main`; the worktrees folder `/tmp/w/ws`; an
 30. **SC-30: "ask" with no setup choice creates nothing and says how to answer** (CLI; Orca defect)
     - **Given** project **api** with policy ask and a local setup script
     - **When** the agent runs `quirky wt create api asked --json`, then `quirky wt create api asked --setup skip --json`
-    - **Then** the first fails with a setup-decision error code (not a generic one) whose message says "Setup decision required for this repository; pass --setup run or --setup skip", and no branch or folder exists; the second creates the worktree, runs nothing, and warns "setup hook skipped for /tmp/w/ws/api/asked; pass --setup run to run it."
+    - **Then** the first fails with a Conflict whose reason is `setup-decision-required` (the JSON error carries it, not a generic code) and whose message says "Setup decision required for this repository; pass --setup run or --setup skip", and no branch or folder exists; the second creates the worktree, runs nothing, and warns "setup hook skipped for /tmp/w/ws/api/asked; pass --setup run to run it."
 
 31. **SC-31: the window asks for the setup choice before it will create** (UI)
     - **Given** project **api** with policy ask and a local setup script
