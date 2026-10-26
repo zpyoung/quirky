@@ -67,6 +67,8 @@ function sgr(style: StyleSource): string {
   return `\x1b[${params.join(';')}m`
 }
 
+const RESET_SGR = '\x1b[0m'
+
 const encoder = new TextEncoder()
 
 /**
@@ -131,8 +133,13 @@ export class Screen {
     let ansi = this.addon.serialize({ scrollback: options?.scrollback })
 
     const { savedX = 0, savedY = 0, savedCurAttrData } = core?.buffer ?? {}
-    if (savedX !== 0 || savedY !== 0) {
-      ansi += `\x1b[${savedY + 1};${savedX + 1}H${savedCurAttrData ? sgr(savedCurAttrData) : ''}\x1b7`
+    const savedStyle = savedCurAttrData ? sgr(savedCurAttrData) : ''
+    // the emulator does not record whether a save happened, and a save at the origin in the default
+    // style restores the same state as no save, so only that combination is skipped
+    if (savedX !== 0 || savedY !== 0 || (savedStyle !== '' && savedStyle !== RESET_SGR)) {
+      // savedY is a buffer row; CUP wants a viewport row, clamped when the row has scrolled out of it
+      const savedRow = Math.max(0, savedY - this.term.buffer.active.baseY)
+      ansi += `\x1b[${savedRow + 1};${savedX + 1}H${savedStyle}\x1b7`
     }
 
     // the addon's relative cursor move is one column off after a full last row (xterm.js #6165),

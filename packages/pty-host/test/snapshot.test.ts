@@ -92,6 +92,33 @@ describe('Screen snapshot', () => {
     expect({ x: copy.buffer.active.cursorX, y: copy.buffer.active.cursorY }).toEqual({ x: 6, y: 2 })
   })
 
+  test('saved attributes survive when the saved cursor is at the origin', async () => {
+    const screen = new Screen({ cols: 10, rows: 3 })
+    screen.write(`${ESC}[31m${ESC}7${ESC}[0mhello`)
+    await screen.settled()
+    const copy = await roundTrip(screen, 10, 3)
+    for (const term of [screenTerminal(screen), copy]) {
+      await feed(term, `${ESC}8X`)
+      const cell = term.buffer.active.getLine(0)!.getCell(0)!
+      expect({ text: cell.getChars(), fg: cell.getFgColor(), fgMode: cell.getFgColorMode() }).toEqual({
+        text: 'X',
+        fg: 1,
+        fgMode: 0x1000000
+      })
+    }
+  })
+
+  test('the saved cursor row is viewport-relative after the screen has scrolled', async () => {
+    const screen = new Screen({ cols: 10, rows: 3, scrollback: 100 })
+    screen.write(`1\r\n2\r\n3\r\n4\r\n5\r\n${ESC}[1;3H${ESC}7${ESC}[3;1H`)
+    await screen.settled()
+    const copy = await roundTrip(screen, 10, 3)
+    for (const term of [screenTerminal(screen), copy]) {
+      await feed(term, `${ESC}8`)
+      expect({ x: term.buffer.active.cursorX, y: term.buffer.active.cursorY }).toEqual({ x: 2, y: 0 })
+    }
+  })
+
   test('output inside a scroll region round-trips', async () => {
     const screen = new Screen({ cols: 10, rows: 8 })
     screen.write('top\r\n')
