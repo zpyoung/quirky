@@ -104,7 +104,9 @@ describe('SC-11 usage errors', () => {
     [['--title', '--pinned'], '--title requires a value; write --title=<value> for a value starting with --'],
     [['--params', '{"title":1}'], 'params.title must be a string'],
     [[], 'missing required flag --title'],
-    [['--title', 'a', 'extra'], 'unexpected argument "extra"']
+    [['--title', 'a', 'extra'], 'unexpected argument "extra"'],
+    [['--', '--help'], 'unexpected argument "--help"'],
+    [['--title', '--help'], '--title requires a value; write --title=<value> for a value starting with --']
   ])('%j -> %s', async (args, message) => {
     const result = await run(['acme.notes', 'add', ...args])
     expect(result.code).toBe(2)
@@ -316,6 +318,26 @@ describe('formatGeneric', () => {
       ['1', '-', '-'],
       ['2', '-', 'e']
     ])
+  })
+
+  test('keys named like inherited properties are cells, and absent ones are -', () => {
+    const text = formatGeneric([{ constructor: 'A' }, { id: 2 }])
+    expect(text.split('\n').map((line) => line.split(/\s+/))).toEqual([
+      ['CONSTRUCTOR', 'ID'],
+      ['A', '-'],
+      ['-', '2']
+    ])
+    const proto = formatGeneric(JSON.parse('[{"__proto__": "p"}, {"toString": "t"}, {"id": 3}]'))
+    expect(proto.split('\n').map((line) => line.split(/\s+/))).toEqual([
+      ['__PROTO__', 'TOSTRING', 'ID'],
+      ['p', '-', '-'],
+      ['-', 't', '-'],
+      ['-', '-', '3']
+    ])
+  })
+
+  test('a record key named like an inherited property prints its own value', () => {
+    expect(formatGeneric(JSON.parse('{"constructor": "c", "__proto__": 1}'))).toBe('constructor: c\n__proto__: 1')
   })
 
   test('null values print as - in a record', () => {

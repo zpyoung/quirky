@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import { UsageError, flagBoolean, flagInt, flagString, parseArgs } from '../src/args'
+import { UsageError, flagBoolean, flagInt, flagString, parseArgs, wantsHelp } from '../src/args'
 import type { FlagSpec } from '../src/command-spec'
 
 const defs: Record<string, FlagSpec> = {
@@ -124,5 +124,20 @@ describe('parseArgs', () => {
     expect(parseArgs(['--must=x', '--other=y'], strict, 'demo').flags.must).toBe('x')
     expect(parseArgs(['--help'], strict, 'demo').flags.help).toBe(true)
     expect(parseArgs(['-h'], strict, 'demo').flags.help).toBe(true)
+  })
+})
+
+describe('wantsHelp', () => {
+  test('sees --help and -h only where the parser would read the switch', () => {
+    expect(wantsHelp(['--help'], defs)).toBe(true)
+    expect(wantsHelp(['--name', 'x', '-h'], defs)).toBe(true)
+    expect(wantsHelp(['--force', '--help'], defs)).toBe(true)
+    expect(wantsHelp(['--bogus', '--help'], defs)).toBe(true)
+    expect(wantsHelp(['--', '--help'], defs)).toBe(false)
+    expect(wantsHelp(['x', '--', '-h'], defs)).toBe(false)
+    expect(wantsHelp(['--name', '-h'], defs)).toBe(false)
+    expect(wantsHelp(['--name=--help'], defs)).toBe(false)
+    expect(wantsHelp(['--name', '--help'], defs)).toBe(false)
+    expect(wantsHelp(['--name'], defs)).toBe(false)
   })
 })

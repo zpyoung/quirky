@@ -311,6 +311,21 @@ describe('usage', () => {
     await run(['help'])
     expect(daemon.calls).toEqual([])
   })
+
+  test('a --help after -- is a positional, not a help request', async () => {
+    const result = await run(['wt', 'list', '--', '--help'])
+    expect(result.code).toBe(2)
+    expect(result.stderr).toContain('unexpected argument "--help"')
+    expect(result.stdout).toBe('')
+  })
+
+  test('a --help in the value slot of a valued flag is the missing-value error', async () => {
+    const result = await run(['session', 'new', '--prompt', '--help'])
+    expect(result.code).toBe(2)
+    expect(result.stderr).toContain('--prompt requires a value; write --prompt=<value> for a value starting with --')
+    expect(result.stdout).toBe('')
+    expect((await run(['session', 'new', '--prompt=--help', '--help'])).code).toBe(0)
+  })
 })
 
 describe('flag parsing', () => {

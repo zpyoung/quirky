@@ -8,6 +8,8 @@ const isScalar = (value: unknown): value is Scalar =>
 const isPlainObject = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value)
 
+const own = (row: Record<string, unknown>, key: string): unknown => (Object.hasOwn(row, key) ? row[key] : undefined)
+
 const singleLine = (text: string) => text.replace(/\r\n|\r|\n/g, '\\n')
 
 function cell(value: unknown): string {
@@ -27,22 +29,22 @@ export function formatGeneric(result: unknown): string {
   const keys = Object.keys(result)
   if (keys.length === 1 && keys[0] === 'ok' && result.ok === true) return 'ok'
   if (keys.length === 0) return '{}'
-  return keys.map((key) => `${key}: ${cell(result[key])}`).join('\n')
+  return keys.map((key) => `${key}: ${cell(own(result, key))}`).join('\n')
 }
 
 function formatList(list: unknown[]): string {
   if (list.length === 0) return 'none'
   if (list.every(isPlainObject)) {
-    const columns: string[] = []
+    const columns = new Set<string>()
     for (const row of list) {
       for (const [key, value] of Object.entries(row)) {
-        if (isScalar(value) && !columns.includes(key)) columns.push(key)
+        if (isScalar(value)) columns.add(key)
       }
     }
-    if (columns.length) {
+    if (columns.size) {
       return formatTable(
-        columns.map((column) => column.toUpperCase()),
-        list.map((row) => columns.map((column) => cell(row[column])))
+        [...columns].map((column) => column.toUpperCase()),
+        list.map((row) => [...columns].map((column) => cell(own(row, column))))
       )
     }
   }
