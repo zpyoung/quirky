@@ -48,7 +48,11 @@ export class SessionService {
     const worktree = await this.resolveWorktree(params.worktree, caller)
     const agent = params.agent as AgentKind
     const prompt = params.prompt as string | undefined
-    const session = this.newRecord(worktree, 'terminal', agent, AGENT_TITLES[agent])
+    const command = params.command as string | undefined
+    if (command !== undefined && agent !== 'shell') {
+      throw this.context.error('invalid-params', 'command is only allowed with agent shell')
+    }
+    const session = this.newRecord(worktree, 'terminal', agent, (params.title as string | undefined) ?? AGENT_TITLES[agent])
     this.records.insert(session, worktree.repoId)
     const closedWhileStarting = () =>
       this.context.error('conflict', `session ${session.id} was closed before its terminal started`)
@@ -65,7 +69,9 @@ export class SessionService {
       await this.context.pty.spawn(session.id, {
         argv:
           agent === 'shell'
-            ? this.context.launch.shellArgv()
+            ? command === undefined
+              ? this.context.launch.shellArgv()
+              : this.context.launch.commandArgv(command)
             : this.context.launch.commandArgv(agentCommand(agent, prompt, additions.args)),
         cwd: worktree.path,
         // a null in the patch removes the name; launch.env applies it though its type says string
