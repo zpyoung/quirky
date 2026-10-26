@@ -1,9 +1,14 @@
 import { GitError } from './index'
 
-export type GitResult = { stdout: Uint8Array; stderr: string; exitCode: number }
+export type GitResult = { stdout: Uint8Array; stderr: string; exitCode: number; timedOut?: boolean }
 
-/** Runs `git` with an args array in `cwd`; never throws on a non-zero exit. */
-export async function runGit(cwd: string, args: string[]): Promise<GitResult> {
+export type RunGitOptions = { timeoutMs?: number }
+
+/**
+ * Runs `git` with an args array in `cwd`; never throws on a non-zero exit. With `timeoutMs` the
+ * process is killed once it elapses and the result has `timedOut: true`.
+ */
+export async function runGit(cwd: string, args: string[], options: RunGitOptions = {}): Promise<GitResult> {
   let proc: ReturnType<typeof Bun.spawn>
   try {
     proc = Bun.spawn(['git', ...args], {
@@ -16,12 +21,24 @@ export async function runGit(cwd: string, args: string[]): Promise<GitResult> {
   } catch (err) {
     throw new GitError(`failed to run git: ${(err as Error).message}`, '', -1)
   }
-  const [stdout, stderr, exitCode] = await Promise.all([
-    new Response(proc.stdout as ReadableStream).arrayBuffer(),
-    new Response(proc.stderr as ReadableStream).text(),
-    proc.exited
-  ])
-  return { stdout: new Uint8Array(stdout), stderr, exitCode }
+  let timedOut = false
+  const timer =
+    options.timeoutMs === undefined
+      ? undefined
+      : setTimeout(() => {
+          timedOut = true
+          proc.kill()
+        }, options.timeoutMs)
+  try {
+    const [stdout, stderr, exitCode] = await Promise.all([
+      new Response(proc.stdout as ReadableStream).arrayBuffer(),
+      new Response(proc.stderr as ReadableStream).text(),
+      proc.exited
+    ])
+    return { stdout: new Uint8Array(stdout), stderr, exitCode, ...(timedOut ? { timedOut } : {}) }
+  } finally {
+    if (timer) clearTimeout(timer)
+  }
 }
 
 /** Like `runGit` but throws `GitError` on a non-zero exit; returns stdout as text. */
