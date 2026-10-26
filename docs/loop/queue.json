@@ -26,7 +26,7 @@
       "deps": [
         "m0-registry"
       ],
-      "status": "todo"
+      "status": "in-progress"
     },
     {
       "id": "m0-scripting",
