@@ -18,10 +18,17 @@ function gitMessage(error: unknown): string {
 export function activate(context: PluginContext): void {
   async function resolve(params: WorktreeParams, caller: PluginCaller): Promise<Worktree> {
     const identity = caller.role === 'plugin' ? {} : { cwd: caller.cwd, worktreeId: caller.worktreeId }
-    return (await context.call('quirky.worktree/resolve', {
+    const worktree = (await context.call('quirky.worktree/resolve', {
       selector: params.worktree ?? 'current',
       ...identity
     })) as Worktree
+    if (worktree.kind === 'folder') {
+      throw Object.assign(
+        context.error('invalid-params', 'Opened as folder. Git features are unavailable for this workspace.'),
+        { data: { reason: 'folder-workspace' } }
+      )
+    }
+    return worktree
   }
 
   async function inWorktree<T>(

@@ -48,6 +48,8 @@ export type GitHarness = {
   main: Worktree
   /** Worktree "fix-login", with a `src` directory to run the CLI in. */
   fixLogin: Worktree
+  /** Folder workspace "notes" (kind folder), which has no git. */
+  notes: Worktree
   events: QuirkyEvent[]
   cleanup(): Promise<void>
 }
@@ -69,7 +71,9 @@ export async function startGitHarness(
 
   const main = worktree('wt_main', join(root, 'api'), 'main', true)
   const fixLogin = worktree('wt_fix', join(root, 'api-worktrees', 'fix-login'), 'fix-login', false)
+  const notes: Worktree = { ...worktree('wt_notes', join(root, 'notes'), 'notes', true), kind: 'folder', branch: null, head: '' }
   mkdirSync(main.path)
+  mkdirSync(notes.path)
   mkdirSync(join(fixLogin.path, 'src'), { recursive: true })
 
   const git = (options.git as FakeGit | undefined) ?? createFakeGit()
@@ -78,7 +82,7 @@ export async function startGitHarness(
     restoreEnv = initRepo(main.path)
     useTestGit(null)
   } else useTestGit(git)
-  globalThis.__QUIRKY_TEST_WORKTREES__ = [main, fixLogin]
+  globalThis.__QUIRKY_TEST_WORKTREES__ = [main, fixLogin, notes]
   const h = await startHarness({ home: join(root, 'home'), builtinPluginsDir: builtin })
   const { client, events } = await h.connectWithEvents('cli')
   return {
@@ -88,6 +92,7 @@ export async function startGitHarness(
     call: (method, params) => client.callAny(method, params),
     main,
     fixLogin,
+    notes,
     events,
     async cleanup() {
       await h.cleanup()
