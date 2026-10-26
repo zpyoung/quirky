@@ -93,7 +93,7 @@ export class ShellReadyBarrier {
       this.setState(next)
       this.drain(held, next)
     } finally {
-      if (this.current === next) this.releasing = false
+      if (this.state === next) this.releasing = false
     }
   }
 
