@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
-import { RpcErrorCode, type ApiDescription, type ApiMethodEntry, type Schema } from '@quirky/protocol'
+import { RpcError, RpcErrorCode, type ApiDescription, type ApiMethodEntry, type Schema } from '@quirky/protocol'
 import { resolveCommands } from '../src/catalog'
 import { COMMANDS } from '../src/commands'
 import type { Command } from '../src/commands/types'
@@ -154,6 +154,67 @@ describe('SC-12 --params', () => {
   })
 })
 
+describe('schema property names that collide with object internals or reserved flags', () => {
+  const addPair = () =>
+    daemon.addMethod('acme.notes/odd', {
+      params: {
+        type: 'object',
+        properties: { constructor: { type: 'string' }, ['__proto__']: { type: 'string' }, toString: { type: 'string' } }
+      } as Schema
+    })
+
+  test('omitted, they are not treated as supplied', async () => {
+    addPair()
+    const result = await run(['acme.notes', 'odd'])
+    expect(result.code).toBe(0)
+    expect(daemon.methodCalls('acme.notes/odd')).toEqual([{}])
+  })
+
+  test('a required constructor property is reported missing only when it is', async () => {
+    daemon.addMethod('acme.notes/needs', {
+      params: { type: 'object', properties: { constructor: { type: 'string' } }, required: ['constructor'] } as Schema
+    })
+    const missing = await run(['acme.notes', 'needs'])
+    expect(missing.code).toBe(2)
+    expect(missing.stderr).toContain('quirky: missing required flag --constructor')
+    expect((await run(['acme.notes', 'needs', '--constructor', 'x'])).code).toBe(0)
+    expect(daemon.methodCalls('acme.notes/needs')).toEqual([{ constructor: 'x' }])
+  })
+
+  test('given, they are sent', async () => {
+    addPair()
+    const result = await run(['acme.notes', 'odd', '--constructor', 'c', '--__proto__', 'p', '--to-string', 't'])
+    expect(result.code).toBe(0)
+    const [sent] = daemon.methodCalls('acme.notes/odd')
+    expect(Object.keys(sent).sort()).toEqual(['__proto__', 'constructor', 'toString'])
+    expect(Object.getOwnPropertyDescriptor(sent, '__proto__')?.value).toBe('p')
+    expect(sent.constructor).toBe('c')
+    expect(sent.toString).toBe('t')
+  })
+
+  test('a __proto__ property given as JSON is sent, not swallowed as a prototype', async () => {
+    daemon.addMethod('acme.notes/proto', {
+      params: { type: 'object', properties: { ['__proto__']: { type: 'object', additionalProperties: true } } }
+    })
+    expect((await run(['acme.notes', 'proto', '--__proto__', '{"a":1}'])).code).toBe(0)
+    const [sent] = daemon.methodCalls('acme.notes/proto')
+    expect(Object.getOwnPropertyDescriptor(sent, '__proto__')?.value).toEqual({ a: 1 })
+  })
+
+  test('a required property named like a reserved flag is reported by path, not as a missing flag', async () => {
+    for (const name of ['params', 'json', 'help']) {
+      daemon.addMethod(`acme.notes/${name}`, {
+        params: { type: 'object', properties: { [name]: { type: 'string' } }, required: [name] }
+      })
+      const result = await run(['acme.notes', name])
+      expect(result.code).toBe(2)
+      expect(result.stderr).toContain(`quirky: params.${name} is required`)
+      expect(result.stderr).not.toContain('missing required flag')
+    }
+    expect(methodCalls()).toEqual([])
+  })
+})
+
 describe('SC-13 groups and shadowing', () => {
   beforeEach(() => {
     daemon.addMethod('quirky.repo/list', { plugin: 'quirky.repo' })
@@ -173,6 +234,42 @@ describe('SC-13 groups and shadowing', () => {
     const result = await run(['repo', 'rename', '--repo-id', 'r1', '--name', 'x'])
     expect(result.code).toBe(0)
     expect(daemon.methodCalls('quirky.repo/rename')).toEqual([{ repoId: 'r1', name: 'x' }])
+  })
+
+  test('a bare kernel group lists its generated commands too', async () => {
+    const result = await run(['repo'])
+    expect(result.code).toBe(2)
+    expect(result.stderr).toContain('incomplete command "repo"')
+    expect(result.stderr).toMatch(/repo rename /)
+    expect(result.stderr).toMatch(/repo list /)
+  })
+
+  describe.each([
+    ['the daemon is unavailable', () => new Error('could not connect to quirkyd')],
+    ['api.describe fails', () => new RpcError(RpcErrorCode.Internal, 'describe failed')]
+  ])('when %s', (_, failure) => {
+    test('a bare kernel group falls back to the kernel listing', async () => {
+      const err: string[] = []
+      const code = await runMain({
+        argv: ['repo'],
+        env: {},
+        cwd: '/',
+        writer: { stdout: () => {}, stderr: (text) => err.push(text) },
+        link: createDaemonLink(() => Promise.reject(failure())),
+        openDesktopApp: async () => ({ ok: true })
+      })
+      expect(code).toBe(2)
+      expect(err.join('')).toContain('incomplete command "repo"')
+      expect(err.join('')).toMatch(/repo list /)
+      expect(err.join('')).not.toMatch(/repo rename /)
+    })
+  })
+
+  test('kernel group help never contacts the daemon', async () => {
+    for (const args of [['repo', '--help'], ['repo', '-h'], ['help', 'repo']]) {
+      expect((await run(args)).code).toBe(0)
+    }
+    expect(daemon.calls).toEqual([])
   })
 
   test('kernel commands win on shared words', async () => {
