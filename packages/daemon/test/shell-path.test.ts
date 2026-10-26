@@ -1,12 +1,15 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 import { chmodSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { spawnPty } from '../../pty-host/src/pty-process'
 import { buildSessionEnv, commandArgv, installIntegrationFiles, shellArgv } from '../src/launch'
-import { makeTempHome } from './helpers'
+import { makeTempHome, waitFor } from './helpers'
 
 let root: string
 let userHome: string
 let quirkyHome: string
+
+const started: { kill(): void }[] = []
 
 beforeEach(() => {
   root = makeTempHome('qd-shell-')
@@ -15,7 +18,10 @@ beforeEach(() => {
   mkdirSync(userHome, { recursive: true })
   installIntegrationFiles(quirkyHome, '/opt/quirky/cli/main.ts')
 })
-afterEach(() => rmSync(root, { recursive: true, force: true }))
+afterEach(() => {
+  for (const proc of started.splice(0)) proc.kill()
+  rmSync(root, { recursive: true, force: true })
+})
 
 const RESET_PATH = 'export PATH=/usr/bin:/bin:/usr/sbin:/sbin'
 
@@ -146,4 +152,75 @@ describe('integration files', () => {
     expect(env.PATH).toBe(`${join(quirkyHome, 'bin')}:/usr/bin:/bin`)
     expect(env.ZDOTDIR).toBeUndefined()
   })
+})
+
+describe.each([
+  ['zsh', '/bin/zsh', '.zshrc'],
+  ['bash', '/bin/bash', '.bashrc']
+] as const)('%s shell integration', (_name, shell, rcFile) => {
+  const ESC = '\x1b'
+  const BEL = '\x07'
+
+  /** Starts the shell exactly as a session would, on a real PTY, and returns what it has printed so far. */
+  function startInteractive() {
+    write(join(userHome, rcFile), `PS1='$ '\nexport QK_MARK=user-rc-ran\n`)
+    mkdirSync(join(root, 'sub'), { recursive: true })
+    let out = ''
+    const decoder = new TextDecoder()
+    const proc = spawnPty(shellArgv(quirkyHome, shell), {
+      env: sessionEnv(shell),
+      cwd: root,
+      cols: 100,
+      rows: 30,
+      onData: (data) => {
+        out += decoder.decode(data, { stream: true })
+      },
+      onClose: () => {}
+    })
+    started.push(proc)
+    const count = (marker: string) => out.split(marker).length - 1
+    const prompts = () => count(`${ESC}]133;A${BEL}`)
+    return {
+      proc,
+      output: () => out,
+      /** Types one line and waits for the next prompt to be drawn. */
+      async run(line: string) {
+        const before = prompts()
+        proc.terminal.write(`${line}\r`)
+        await waitFor(() => prompts() > before, 10000)
+      },
+      awaitFirstPrompt: () => waitFor(() => prompts() >= 1, 10000),
+      finishedCodes: () => [...out.matchAll(new RegExp(`${ESC}\\]133;D;(\\d+)${BEL}`, 'g'))].map((m) => Number(m[1]))
+    }
+  }
+
+  test('reports readiness once, each command exit code, the cwd, and keeps the exit status', async () => {
+    const session = startInteractive()
+    await session.awaitFirstPrompt()
+    await session.run('true')
+    await session.run('false')
+    await session.run('')
+    await session.run("sh -c 'exit 7'")
+    await session.run('cd sub && echo "rc=$QK_MARK"')
+    session.proc.terminal.write('exit 3\r')
+    expect(await session.proc.exited).toBe(3)
+
+    const output = session.output()
+    expect(output.split(`${ESC}]777;quirky-shell-ready${BEL}`).length - 1).toBe(1)
+    // the final 0 is the `cd` line; the empty line reported nothing
+    expect(session.finishedCodes()).toEqual([0, 1, 7, 0])
+    expect(output).toMatch(new RegExp(`${ESC}\\]7;file://[^${BEL}]*/sub${BEL}`))
+    expect(output).toContain('rc=user-rc-ran')
+  }, 30000)
+
+  test('sourcing the wrapper again does not repeat the reports', async () => {
+    const session = startInteractive()
+    await session.awaitFirstPrompt()
+    const wrapper = shell.endsWith('zsh') ? join(quirkyHome, 'shell', 'zsh', '.zshrc') : join(quirkyHome, 'shell', 'bash', 'rcfile')
+    await session.run(`. ${wrapper}`)
+    await session.run('true')
+    expect(session.finishedCodes()).toEqual([0, 0])
+    session.proc.terminal.write('exit\r')
+    await session.proc.exited
+  }, 30000)
 })

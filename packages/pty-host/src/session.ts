@@ -90,7 +90,8 @@ export class SessionManager {
       log.close()
       finish()
       if (this.sessions.get(sessionId) === session) {
-        for (const listener of this.exitListeners) listener({ type: 'exit', sessionId, exitCode: session.exitCode })
+        const event: PtyEvent = { type: 'exit', sessionId, exitCode: session.exitCode, exitSignal: null, exitCause: 'exited' }
+        for (const listener of this.exitListeners) listener(event)
       }
     }
 
@@ -154,7 +155,7 @@ export class SessionManager {
       if (ptyClosed) finalize()
       else setTimeout(finalize, PTY_CLOSE_GRACE_MS)
     })
-    return { pid: proc.pid }
+    return { pid: proc.pid, restored: false, cwd, cols, rows }
   }
 
   /** Sends client input to the session's PTY. Ignored for unknown or exited sessions. */
@@ -192,13 +193,18 @@ export class SessionManager {
   list(): PtySessionInfo[] {
     return [...this.sessions.values()].map((s) => ({
       sessionId: s.sessionId,
+      state: s.alive ? ('running' as const) : ('exited' as const),
       pid: s.proc.pid,
       alive: s.alive,
       exitCode: s.exitCode,
+      exitSignal: null,
+      exitCause: s.alive ? null : ('exited' as const),
       cols: s.cols,
       rows: s.rows,
       argv: s.argv,
       cwd: s.cwd,
+      title: null,
+      shellState: 'unsupported' as const,
       createdAt: s.createdAt,
       offset: s.tail.total
     }))
@@ -211,7 +217,15 @@ export class SessionManager {
   subscribe(sessionId: string, sink: DataSink): PtyResults['subscribe'] {
     const session = this.require(sessionId)
     session.subscribers.add(sink)
-    return { replay: bytesToBase64(session.tail.replay()), offset: session.tail.total }
+    return {
+      replay: bytesToBase64(session.tail.replay()),
+      offset: session.tail.total,
+      historyCursor: null,
+      cols: session.cols,
+      rows: session.rows,
+      shellState: 'unsupported',
+      live: session.alive
+    }
   }
 
   unsubscribe(sessionId: string, sink: DataSink): void {
