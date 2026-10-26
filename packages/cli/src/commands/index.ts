@@ -1,4 +1,6 @@
-import { GLOBAL_FLAGS, parseArgs, type FlagDefs, type ParsedArgs } from '../args'
+import { parseArgs, type ParsedArgs } from '../args'
+import { commandHelp, usageOf } from '../command-spec'
+import { api, apiCall } from './api'
 import { ask, askCancel, askWait } from './ask'
 import { jobList, jobRun } from './job'
 import { open } from './open'
@@ -6,6 +8,7 @@ import { pluginActivate, pluginContributions, pluginDisable, pluginEnable, plugi
 import { repoAdd, repoList, repoRm } from './repo'
 import { sessionClose, sessionList, sessionNew } from './session'
 import { settingGet, settingList, settingReset, settingSet } from './setting'
+import { skillInstall, skillShow, skillStatus } from './skill'
 import { status } from './status'
 import { termRead, termSend } from './term'
 import { themeList, themeSet } from './theme'
@@ -17,9 +20,11 @@ export const USAGE_LINE = 'usage: quirky [--json] <command> [options]'
 
 const help: Command = {
   name: 'help',
-  usage: 'help [<command>]',
   summary: 'show help for quirky or one command',
+  positionals: [{ name: 'command', description: 'the command to show help for', required: false }],
   flags: {},
+  methods: [],
+  plugin: null,
   async run(args, ctx) {
     ctx.out.line(helpText(args.positionals))
   }
@@ -56,10 +61,20 @@ export const COMMANDS: Command[] = [
   askWait,
   askCancel,
   open,
+  api,
+  apiCall,
+  skillShow,
+  skillInstall,
+  skillStatus,
   help
 ]
 
-const GLOBAL_TOKENS = new Set(['--json', '--help', '-h'])
+const GLOBAL_TOKENS = new Set(['--json', '--json=true', '--json=false', '--help', '-h'])
+
+/** True for the switches every command accepts: `--json` (with or without a value), `--help` and `-h`. */
+export function isGlobalToken(token: string): boolean {
+  return GLOBAL_TOKENS.has(token)
+}
 
 export type Route =
   | { kind: 'command'; command: Command; rest: string[] }
@@ -96,21 +111,23 @@ export function route(argv: readonly string[], commands: readonly Command[] = CO
 }
 
 export function parseFor(command: Command, rest: string[]): ParsedArgs {
-  const defs: FlagDefs = { ...GLOBAL_FLAGS, ...command.flags }
-  return parseArgs(rest, defs)
+  return parseArgs(rest, command.flags, command.name, { checkRequired: !command.deferRequired })
 }
 
-export function helpText(topic: readonly string[] = []): string {
+/**
+ * Help for the whole CLI, a group of commands, or one command, from the declarations in `commands`
+ * (the kernel's by default, which never contacts the daemon).
+ */
+export function helpText(topic: readonly string[] = [], commands: readonly Command[] = COMMANDS): string {
   const name = topic.join(' ')
-  const exact = COMMANDS.find((command) => command.name === name)
-  if (exact) {
-    const flags = Object.keys(exact.flags)
-    return [`usage: quirky ${exact.usage}`, '', exact.summary, ...(flags.length ? ['', `options: ${flags.map((f) => `--${f}`).join(' ')}`] : []), '', 'global: --json prints machine-readable JSON'].join('\n')
-  }
-  const group = name ? COMMANDS.filter((command) => command.name.startsWith(`${name} `)) : []
-  const listed = group.length ? group : COMMANDS
-  const width = Math.max(...listed.map((command) => command.usage.length))
-  const lines = listed.map((command) => `  ${command.usage.padEnd(width)}  ${command.summary}`)
-  const header = group.length ? `usage: quirky ${name} <command>` : USAGE_LINE
-  return [header, '', 'commands:', ...lines, '', 'global: --json prints machine-readable JSON; <command> --help shows one command'].join('\n')
+  const exact = commands.find((command) => command.name === name)
+  if (exact) return commandHelp(exact)
+  const group = name ? commands.filter((command) => command.name.startsWith(`${name} `)) : []
+  const listed = group.length ? group : commands
+  const usages = listed.map(usageOf)
+  const width = Math.max(...usages.map((usage) => usage.length))
+  const lines = listed.map((command, i) => `  ${usages[i].padEnd(width)}  ${command.summary}`)
+  const footer = 'global: --json prints machine-readable JSON; <command> --help shows one command'
+  if (group.length) return [`usage: quirky ${name} <command>`, '', 'commands:', ...lines, '', footer].join('\n')
+  return [USAGE_LINE, '', 'commands:', ...lines, '', footer, "run 'quirky api' to list every command, including plugins'"].join('\n')
 }

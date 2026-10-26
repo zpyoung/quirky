@@ -44,7 +44,9 @@ async function rejection(promise: Promise<unknown>): Promise<{ code: number; mes
   throw new Error('expected the call to reject')
 }
 
-const methods = (...names: string[]) => ({ method: names.map((id) => ({ id })) })
+const methods = (...names: string[]) => ({
+  method: names.map((id) => ({ id, params: { type: 'object', additionalProperties: true } }))
+})
 
 const refreshImpl = (marker: string) =>
   `context.provide('method:acme.tools/refresh', (params, caller) => {
@@ -88,7 +90,7 @@ describe('calling plugin methods', () => {
     const s = await boot((marker) => [
       { manifest: { id: 'acme.tools', contributes: methods('refresh') }, behavior: { activate: refreshImpl(marker) } },
       {
-        manifest: { id: 'acme.better', overrides: [{ id: 'method:acme.tools/refresh' }] },
+        manifest: { id: 'acme.better', overrides: [{ id: 'method:acme.tools/refresh', params: { type: 'object', additionalProperties: true } }] },
         behavior: {
           activate: "context.provide('method:acme.tools/refresh', (params) => ({ refreshed: params.count, by: 'acme.better' }))"
         }
@@ -206,7 +208,7 @@ describe('calling plugin methods', () => {
       {
         manifest: {
           id: 'acme.tools',
-          contributes: { method: [{ id: 'refresh' }] }
+          contributes: methods('refresh')
         },
         behavior: { activate: "context.provide('method:acme.tools/refresh', 'nope')" }
       },

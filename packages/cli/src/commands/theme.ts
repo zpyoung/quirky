@@ -9,9 +9,11 @@ function singleLine(text: string): string {
 
 export const themeList: Command = {
   name: 'theme list',
-  usage: 'theme list',
   summary: 'list themes; * marks the active one, (chosen) a chosen theme that is not active',
+  positionals: [],
   flags: {},
+  methods: ['theme.list'],
+  plugin: null,
   async run(args, ctx) {
     takePositionals(args, [])
     const list = await ctx.rpc.call('theme.list', {})
@@ -29,9 +31,11 @@ export const themeList: Command = {
 
 export const themeSet: Command = {
   name: 'theme set',
-  usage: 'theme set <id>',
   summary: 'choose a theme by ID, or default for the built-in one',
+  positionals: [{ name: 'id', description: 'theme ID, or default', required: true }],
   flags: {},
+  methods: ['theme.set'],
+  plugin: null,
   async run(args, ctx) {
     const [id] = takePositionals(args, ['id'])
     const list = await ctx.rpc.call('theme.set', { id })

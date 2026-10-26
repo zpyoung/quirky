@@ -1,4 +1,5 @@
 import { formatDuration, type JobRun } from '@quirky/protocol'
+import { CommandFailed } from '../args'
 import { formatTable } from '../output'
 import { takePositionals } from './support'
 import type { Command } from './types'
@@ -36,9 +37,11 @@ function singleLine(text: string): string {
 
 export const jobList: Command = {
   name: 'job list',
-  usage: 'job list',
   summary: 'list scheduled plugin jobs with their next and last run',
+  positionals: [],
   flags: {},
+  methods: ['job.list'],
+  plugin: null,
   async run(args, ctx) {
     takePositionals(args, [])
     const jobs = await ctx.rpc.call('job.list', {})
@@ -59,9 +62,11 @@ export const jobList: Command = {
 
 export const jobRun: Command = {
   name: 'job run',
-  usage: 'job run <id>',
   summary: 'run a job now and wait for it; exits 1 unless it succeeds',
+  positionals: [{ name: 'id', description: 'the job ID', required: true }],
   flags: {},
+  methods: ['job.run'],
+  plugin: null,
   async run(args, ctx) {
     const [id] = takePositionals(args, ['id'])
     const result = await ctx.rpc.call('job.run', { id })
@@ -69,6 +74,6 @@ export const jobRun: Command = {
       const elapsed = (result.finishedAt ?? result.startedAt) - result.startedAt
       return `${id} ${result.status} in ${elapsed} ms${result.error ? `: ${singleLine(result.error)}` : ''}`
     })
-    if (result.status !== 'ok') throw new Error(`job ${id} ${result.status}`)
+    if (result.status !== 'ok') throw new CommandFailed(`job ${id} ${result.status}`)
   }
 }

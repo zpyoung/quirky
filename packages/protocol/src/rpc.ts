@@ -12,6 +12,7 @@ import type {
   StructuredMessage,
   Worktree
 } from './model'
+import type { ApiDescription } from './catalog'
 import type { ContributionInfo, JobInfo, JobRun, PluginEvent, PluginInfo } from './plugins'
 import type { SettingInfo, ThemeList, UiModel } from './ui'
 
@@ -134,6 +135,8 @@ export type Methods = {
   'plugin.disable': { params: { id: string }; result: Ok }
   /** Activates the plugin now instead of waiting for first use. */
   'plugin.activate': { params: { pluginId: string }; result: PluginInfo }
+  /** Every method, event and UI command in effect with its schemas; activates no plugin. */
+  'api.describe': { params: Record<string, never>; result: ApiDescription }
 
   /** Every scheduled job with its schedule and last run. */
   'job.list': { params: Record<string, never>; result: JobInfo[] }

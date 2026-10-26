@@ -1,0 +1,413 @@
+# m0-scripting decisions
+
+## D1: Classify the item as a CLI and API design, and run both research phases
+- **Question:** which domain the gray-area catalog draws from, and whether the research swarms run (quirk:brainstorming, checklist steps 2 and 7)
+- **Options:** CLI only; API only; CLI plus API; skip research as covered by earlier items
+- **Chose:** CLI plus API. Phase A ran two web-research agents (schema-driven CLI patterns, generated-CLI pitfalls); Phase B ran three, one per approach (a CLI built at run time from the daemon's catalog, schemas registered in code at activation, CLI source generated at build time).
+- **Why:** the consumers are agents and people at a shell (the CLI) and plugin authors declaring methods (the API). Earlier items researched registries, daemon APIs and UI slots, not CLI generation. LOOP.md pre-authorizes the swarms.
+- **Evidence:** docs/loop/LOOP.md "Answering a skill's questions"; docs/roadmap.md M0 "Scripting surface"
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** assumed — autonomous
+
+## D2: Skip the visual companion and the adhd offer, use the standard gray-area set
+- **Question:** brainstorming's visual companion offer and its Step 0 adhd offer
+- **Options:** run them; skip them
+- **Chose:** skip both
+- **Why:** LOOP.md says to skip the parts that assume a person is there
+- **Evidence:** docs/loop/LOOP.md "Skip the parts that assume a person is there"
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** locked by docs/loop/LOOP.md
+
+## D3: Select every gray area that matters for the scripting surface
+- **Question:** which gray areas to drill into (brainstorming Gray Areas Step 1)
+- **Options:** CLI: output-format, flag-design, progress-reporting, error-recovery, exit-codes; API: response-format, error-responses, authentication, versioning, rate-limiting, pagination; Organization: naming-convention, duplicate-handling
+- **Chose:** flag-design (how a schema becomes flags), output-format (generated commands' text and JSON), error-recovery (unknown commands and flags), exit-codes, error-responses (errors under `--json`), response-format (the `quirky api --json` catalog), versioning (the catalog's version and schema changes), naming-convention (command group names) and duplicate-handling (two sources for the same command words)
+- **Why:** LOOP.md asks for every area that matters. Progress reporting is dropped because no command here runs long; pagination and rate limiting because the catalog is bounded by installed plugins and is read once per invocation; authentication because the CLI keeps the daemon token m0-daemon-api D24 settled.
+- **Evidence:** docs/loop/LOOP.md "Gray areas"
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** assumed — autonomous
+
+## D4: Schemas are a flat subset of JSON Schema
+- **Question:** flag-design and response-format: what language a contribution's schema is written in
+- **Options:** full JSON Schema; a flat JSON Schema subset; TypeScript types extracted at build time; a Quirky-specific mini-language
+- **Chose:** a JSON Schema subset with the keywords `type` (`string`, `integer`, `number`, `boolean`, `array`, `object`, `null`), `description`, `enum`, `items`, `properties`, `required`, `additionalProperties` (boolean only), `minimum`, `maximum` and `default` (documentation only). `{}` means any value. An `enum` needs a `type` of `string`, `integer` or `number`, and its values must all have that type. No `$ref`, `allOf`, `anyOf`, `oneOf` or `pattern`. A schema using anything else makes the contribution invalid, with a diagnostic naming the keyword.
+- **Why:** every schema stays valid JSON Schema, so agents and tools that read MCP `inputSchema` or OpenRPC read Quirky's as is. A flat subset maps cleanly to flags; Jargon's generator flattens `allOf` and silently loses constraints when properties repeat. Plugin manifests are JSON, so TypeScript types aren't available to the daemon.
+- **Evidence:** https://github.com/trans/jargon ; https://modelcontextprotocol.io/specification/2025-06-18/server/tools ; https://spec.open-rpc.org/
+- **Reversibility:** hard
+- **Confidence:** high
+- **Revisit if:** a later feature's method needs a union type that `{}` with a description can't document well enough
+- **Source:** assumed — autonomous
+
+## D5: Methods declare `params` and `result`, events declare `data`, UI commands declare `args`
+- **Question:** which contributions carry schemas, since the roadmap says every method, command and event declares one
+- **Options:** require every schema field; make them optional with a defined meaning when omitted; also add schemas to jobs, launch hooks and slots
+- **Chose:** `method` gains `params` and `result`, `event` gains `data`, and UI `command` gains `args`. `params` must be `type: object`. Omitting `params` declares a method that takes no parameters, omitting `args` a command that takes none, omitting `data` an event that carries none, and omitting `result` a result of any shape. Jobs, launch hooks, views, panels, sidebar sections, keybindings and themes take no caller input, and settings are already typed, so they get no new field.
+- **Why:** an omitted field still states a contract, which keeps the many existing fixtures valid (as m0-ui-api D35 did for titles) while every method still has a schema the CLI and catalog can use
+- **Evidence:** packages/daemon/src/plugins/kinds.ts:6-11; packages/daemon/src/plugins/ui-kinds.ts:14-22; docs/roadmap.md M0 "Scripting surface"
+- **Reversibility:** medium
+- **Confidence:** high
+- **Source:** assumed — autonomous
+
+## D6: The daemon validates every call's params against the method's schema, and leaves results and event data unchecked
+- **Question:** error-responses: what the schema enforces at run time
+- **Options:** documentation only; validate params only; validate params, results and emitted event data
+- **Chose:** every method call, kernel or plugin, from a client or a plugin, is checked against its `params` schema before any plugin code is activated or run. A mismatch is an InvalidParams error whose message names the first failing path, for example `params.limit must be an integer`. Nothing is coerced: `"5"` is not an integer. Properties a schema doesn't declare are rejected unless it sets `additionalProperties: true`. Results and event data are not checked.
+- **Why:** a plugin then never sees input its schema rules out, and the catalog can't promise what the daemon doesn't enforce. Strict requests with tolerant responses is the default Speakeasy uses, so a plugin's sloppy result degrades documentation rather than breaking callers.
+- **Evidence:** https://www.speakeasy.com/mcp/tool-design/generate-mcp-tools-from-openapi ; https://rest.sh/blog/turn-an-openapi-spec-into-a-cli-without-generating-code/
+- **Reversibility:** medium
+- **Confidence:** medium
+- **Revisit if:** plugins' results drift from their schemas often enough that agents are misled
+- **Source:** assumed — autonomous
+
+## D7: Kernel methods and events get schemas too, in one table checked against the protocol types
+- **Question:** response-format: whether `quirky api --json` covers the kernel's own 47 methods and its events
+- **Options:** list plugin contributions only; give every kernel method and event a schema in a table the type checker keeps complete
+- **Chose:** every kernel method and kernel event has a schema in `@quirky/protocol`, in a table keyed by method name and event type so a new method without a schema fails `bun run typecheck`. The daemon validates kernel calls against it as D6 says, ahead of the handlers' own checks, which stay.
+- **Why:** the roadmap says `quirky api --json` lists every method, and an agent needs the kernel's methods most. Enforcing the table makes a wrong schema fail the existing tests rather than mislead agents.
+- **Evidence:** packages/protocol/src/rpc.ts:27-151; docs/roadmap.md M0 "Scripting surface"
+- **Reversibility:** medium
+- **Confidence:** high
+- **Revisit if:** a kernel schema turns out stricter than a real client's calls, which the existing suite would show
+- **Source:** assumed — autonomous
+
+## D8: UI commands' `args` are declared and listed here; running them from the CLI waits for m0-ui-bridge
+- **Question:** scope: whether this item makes UI commands callable from the CLI
+- **Options:** route UI commands to the window now; declare and list their `args` and leave routing to m0-ui-bridge
+- **Chose:** declare `args`, validate the schema in the manifest, and list UI commands with their `args` in `quirky api --json`. Routing a UI command to the window and checking its arguments there belongs to m0-ui-bridge.
+- **Why:** the queue gives "UI commands as API commands routed to the window" to m0-ui-bridge, which depends on this item
+- **Evidence:** docs/loop/queue.json m0-ui-bridge
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** locked by docs/loop/queue.json
+
+## D9: One command table drives parsing, validation, help, suggestions and the catalog
+- **Question:** flag-design: how the kernel's hand-written commands relate to the generated ones
+- **Options:** keep hand-written usage strings beside a separate catalog; give each kernel command a declarative spec (positionals, typed flags with descriptions, summary, the methods it calls) from which usage, help, parsing and the catalog all derive
+- **Chose:** the declarative spec. Hand-written commands keep their own run code and output formatting, but their usage line, help and catalog entry are generated from the spec, the same way generated commands' are.
+- **Why:** this is the design cli.md credits for Orca's surface never drifting between help, validation and `agent-context`
+- **Evidence:** research/orca-features/cli.md intro and "Command table and validation"
+- **Reversibility:** medium
+- **Confidence:** high
+- **Source:** locked by research/orca-features/cli.md
+
+## D10: A plugin's methods become `quirky <group> <method>`, where the group is the plugin ID without the `quirky.` prefix
+- **Question:** naming-convention: which words select a generated command
+- **Options:** the full plugin ID as the group; the plugin ID with the built-in prefix dropped; a group name the manifest declares; one flat `quirky call <method>` only
+- **Chose:** each in-effect plugin `method` contribution `<pluginId>/<name>` becomes `quirky <group> <name>`, where `<group>` is the plugin ID, minus the reserved `quirky.` prefix for built-ins. So `acme.notes/add` is `quirky acme.notes add` and a future built-in `quirky.repo/list` is `quirky repo list`.
+- **Why:** it needs no new manifest field and keeps every installed plugin's group unique, since plugin IDs are. Dropping the prefix lets m0-port-v1 move a v1 group into a built-in plugin without renaming the commands people and agents already type.
+- **Evidence:** docs/loop/decisions/m0-registry.md D5; docs/roadmap.md M0 "v1 as built-ins"
+- **Reversibility:** hard
+- **Confidence:** medium
+- **Revisit if:** m0-port-v1 needs a built-in group whose name can't be a plugin ID
+- **Source:** assumed — autonomous
+
+## D11: When two sources give the same command words, kernel beats built-in beats installed, and the loser is reported
+- **Question:** duplicate-handling: a kernel command, a built-in's generated command and an installed plugin's generated command can share words (`quirky repo list`, or an installed plugin with ID `plugin`)
+- **Options:** refuse the later plugin; merge silently; a fixed precedence with the shadowed command reported
+- **Chose:** precedence by exact command words: kernel, then built-in, then installed. Commands with different words in the same group coexist. A kernel command also owns its words as a prefix, so a generated `status list` is shadowed by the kernel `status`. A shadowed command stays in `quirky api --json` marked with what shadows it, and its method stays callable through `quirky api call`.
+- **Why:** silent overwrite is the reported failure (two plugins' `analyze` commands, last install wins), and refusing would block m0-port-v1's move of kernel groups into built-ins, where the kernel command is deleted in the same change
+- **Evidence:** https://github.com/microsoft/apm/issues/1120 ; docs/loop/decisions/m0-registry.md D8
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** assumed — autonomous
+
+## D12: Each param is a kebab-case flag, objects take JSON, and `--params` passes the whole object
+- **Question:** flag-design: how a `params` schema becomes flags on a generated command
+- **Options:** flags named exactly as the properties; kebab-case flags; dot notation for nested objects; JSON text for nested values; positionals for required params
+- **Chose:** each top-level property `fooBar` is the flag `--foo-bar`. Strings, numbers, integers and enums take one value, booleans are switches (`--x`, `--x=false`), arrays of scalars repeat the flag, and objects, arrays of objects and `{}` values take JSON text. `--params '<json>'` gives the whole params object; naming the same property both ways is a usage error. No positionals. Properties named `help`, `json` or `params` are reachable only through `--params`. Two properties that map to the same flag make the method's contribution invalid.
+- **Why:** kebab-case matches the existing flags (`--timeout-ms`). Dot notation strains on arrays of objects, which the research found no good answer for, while JSON text always works. Flags-only keeps generated commands predictable for agents; `--params` covers anything the flag form can't express.
+- **Evidence:** packages/cli/src/commands/ask.ts:56; https://github.com/trans/jargon
+- **Reversibility:** hard
+- **Confidence:** medium
+- **Revisit if:** people find flag-only commands for single-ID methods tedious enough to want positionals
+- **Source:** assumed — autonomous
+
+## D13: The CLI parses flag values strictly and checks the schema before calling
+- **Question:** error-recovery and exit-codes: what happens to a value that doesn't fit
+- **Options:** coerce leniently and let the daemon decide; parse strictly by declared type, check required params and the schema in the CLI, then let the daemon check again
+- **Chose:** strict. An integer flag takes only integer text, a number only a finite number, a boolean only no value, `true` or `false`, an enum only a listed value, and JSON flags only valid JSON. A string param stays a string even if it looks like a number. Missing required params are a usage error naming every missing flag, and the assembled params object, `--params` included, is checked against the whole schema with the daemon's messages (`params.title must be a string`). These exit 2 without calling the method; the daemon's own check (D6) still applies and its InvalidParams exits 1.
+- **Why:** no coercion is the lesson from Restish; catching the error in the CLI gives a usage message with the flag name instead of a property path
+- **Evidence:** https://rest.sh/blog/turn-an-openapi-spec-into-a-cli-without-generating-code/ ; packages/cli/src/main.ts:20
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** assumed — autonomous
+
+## D14: Generated commands print a generic text form, and `--json` prints the raw result
+- **Question:** output-format for commands no one wrote a formatter for
+- **Options:** always JSON; a generic text form; plugin-declared templates
+- **Chose:** with `--json`, the method's result as one JSON document, as every command does today. Without it: a string or number as is; `null` or `{ "ok": true }` as `ok`; an object as `key: value` lines with nested values as compact JSON; an array of objects as a table whose columns are the scalar keys; any other array as one compact JSON value per line.
+- **Why:** this mirrors Orca's fallback (`key: value` lines for commands without a formatter) and the CLI's existing tables, with no new manifest field
+- **Evidence:** research/orca-features/cli.md "Output modes"; packages/cli/src/output.ts
+- **Reversibility:** easy
+- **Confidence:** medium
+- **Source:** assumed — autonomous
+
+## D15: Under `--json`, errors are a JSON document on stdout, and the exit codes stay 0, 1 and 2
+- **Question:** error-responses and exit-codes for scripted callers
+- **Options:** keep errors as text on stderr in every mode; print a JSON error on stdout under `--json`; adopt Orca's full envelope (`id`, `ok`, `result`, `_meta`) for results too
+- **Chose:** under `--json` an error prints `{"error": {"code", "message", "suggestions"?}}` on stdout and nothing on stderr. `code` is `usage`, `daemon-unavailable`, or the RPC error's name (`invalid-params`, `not-found`, `conflict`, `method-not-found`, `unauthorized`, `internal`). Exit codes stay 0 (ok), 1 (runtime error) and 2 (usage error). Results are not wrapped.
+- **Why:** an agent reading stdout gets a parseable failure, as Orca's `--json` gives. Wrapping successes would break every existing `--json` consumer and test for no gain.
+- **Evidence:** research/orca-features/cli.md "Output modes" step 2; packages/cli/src/main.ts:20
+- **Reversibility:** medium
+- **Confidence:** high
+- **Source:** assumed — autonomous
+
+## D16: Unknown commands and flags get suggestions, drawn from generated commands too
+- **Question:** error-recovery
+- **Options:** a bare error; Orca's "Did you mean" for commands and a list of valid flags for flags
+- **Chose:** an unknown command word prints `unknown command "<words>"` and up to three closest command paths (edit distance up to 2, or a matching prefix), from kernel and generated commands. An unknown flag names the command's valid flags. A flag that needs a value and gets none stays an error, and so does one followed by a token starting with `--`, which says to write `--flag=<value>` for such a value. All exit 2.
+- **Why:** these are the recoveries cli.md verified in Orca, and the valued-flag rule exists because a shell-eaten value once sent a prompt twice
+- **Evidence:** research/orca-features/cli.md "Run a command" step 3 and "Global flags"
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** locked by research/orca-features/cli.md
+
+## D17: `quirky api --json` returns one versioned catalog of methods, events, UI commands and CLI commands
+- **Question:** response-format and versioning of the discovery output
+- **Options:** Orca's `agent-context` shape (commands only); an OpenRPC document (methods only); one Quirky catalog with all four, carrying `schemaVersion`
+- **Chose:** `{ schemaVersion: 1, daemonVersion, protocolVersion, methods, events, uiCommands, commands }`, each list sorted by name. Methods and events carry their schema, their `plugin` (`null` for the kernel, since `kernel` is a valid plugin ID) and description; commands carry their words, summary, usage, positionals, flags (name, type, description, enum, repeatable, required) and `methods`, every method they may call (one for a generated command, none for `open`), plus `shadowedBy` when shadowed. Only in-effect contributions appear; an overridden method shows the overriding declaration. Text mode prints commands grouped by group with their summaries. `schemaVersion` rises only on a breaking change to this shape.
+- **Why:** an agent needs both the methods (for the API) and the commands (for the CLI) from one call; Orca's commands-only listing leaves the RPC surface undiscoverable. A `schemaVersion` matches Orca's and lets agents detect a change.
+- **Evidence:** research/orca-features/cli.md "Agent discovery" and "Command table and validation"; https://spec.open-rpc.org/
+- **Reversibility:** medium
+- **Confidence:** high
+- **Source:** assumed — autonomous
+
+## D18: `quirky api call <method>` calls any method, with the same flag mapping
+- **Question:** scope: kernel methods with no CLI command (`git.diff`, `terminal.resize`, `structured.messages`) and shadowed plugin methods are otherwise unreachable from the CLI
+- **Options:** no generic caller; generate commands for kernel methods too; one generic `api call`
+- **Chose:** `quirky api call <method> [--params <json>] [--<param> ...]` calls any listed method, mapping flags from its schema as D12 does, and prints the result as D14 does. The four connection-bound methods (`client.hello`, `events.subscribe`, `terminal.attach`, `terminal.detach`) are refused with a usage error.
+- **Why:** the roadmap says an agent can drive anything a person can through the CLI. Generating kernel commands would collide with the hand-written ones until m0-port-v1 retires them.
+- **Evidence:** docs/roadmap.md "Everything is scriptable"; packages/daemon/src/plugins/dispatch.ts:6
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** assumed — autonomous
+
+## D19: The agent skill is generated from the live catalog and shown or installed through `quirky skill`
+- **Question:** what "ships an agent skill generated from the same list" means, and how an agent gets it
+- **Options:** a static SKILL.md committed in the repo; generated at run time from the live catalog; installed automatically into agent skill folders
+- **Chose:** `quirky skill show` prints a Claude-style `SKILL.md` (frontmatter `name: quirky` and a description, then how to discover commands, the `--json`, error and exit-code conventions, and one line per command grouped by group). `quirky skill install --dir <dir>` writes `<dir>/quirky/SKILL.md` and reports `installed` or `up-to-date`; `quirky skill status --dir <dir>` reports `up-to-date`, `stale` or `missing` without writing. `--dir` is required. The text is deterministic for a given catalog, with no timestamps, and holds no per-flag detail, which `--help` and `quirky api --json` give.
+- **Why:** generating from the live catalog includes installed plugins and can't go stale. One line per command keeps the skill's context cost down, which the MCP research names as the main risk of large tool lists. A required `--dir` keeps tests and the CLI from writing into `~/.claude` (v1.md "Running it").
+- **Evidence:** research/orca-features/cli.md "Where to find it" (Agent skills, `orca skills get`); https://www.speakeasy.com/mcp/tool-design/generate-mcp-tools-from-openapi ; docs/v1.md
+- **Reversibility:** easy
+- **Confidence:** medium
+- **Revisit if:** agents need per-flag detail in the skill to use a command without running `--help`
+- **Source:** assumed — autonomous
+
+## D20: The CLI reads the catalog from the daemon on each invocation that needs it, with no cache
+- **Question:** versioning: how the CLI learns plugin commands, and how it avoids Orca's stale-bundle drift
+- **Options:** cache the catalog on disk with a sync command (Restish); fetch per invocation when needed; generate CLI code at build time
+- **Chose:** fetch per invocation through a new `api.describe` method, only when the command words aren't a kernel command, or for `api`, `skill`, help and suggestions. Kernel commands never fetch it.
+- **Why:** Orca's `ledger list` and `host list` read as unknown commands, and its automation flags were rejected, because the CLI bundle predated the app. Restish's cache lags until `api sync`. The daemon is local, so one more call costs little.
+- **Evidence:** research/orca-features/cli.md lines on `ledger list`, `host list` and automation flags ("stale bundle"); https://rest.sh/blog/turn-an-openapi-spec-into-a-cli-without-generating-code/
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** assumed — autonomous
+
+## D21: The scripting surface is kernel, not a built-in plugin
+- **Question:** LOOP.md step 6 requires the feature to ship as a built-in plugin on the public API; how that applies to the CLI generator, catalog and schema validation
+- **Options:** wrap `api.describe` and the skill in a built-in plugin; treat them as kernel, like m0-registry D18, m0-daemon-api D41 and m0-ui-api D25
+- **Chose:** kernel. Param validation sits in the dispatch path every plugin method goes through, and the CLI generator is the CLI.
+- **Why:** docs/roadmap.md lists the API and CLI as part of the core; a plugin can't host the schema checks of the system that dispatches to it
+- **Evidence:** docs/loop/decisions/m0-registry.md D18; docs/loop/decisions/m0-daemon-api.md D41; docs/loop/decisions/m0-ui-api.md D25
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** locked by docs/roadmap.md
+
+## D22: The only Orca CLI defect belongs to m0-cli-core; this item tests the stale-surface hazard instead
+- **Question:** LOOP.md step 4 asks for a test per Orca defect in the item's feature docs
+- **Options:** n/a
+- **Chose:** the feature-doc index lists one CLI defect, `orca --version` failing in a from-source build, and `--version` is m0-cli-core's. This item adds two tests anyway: a plugin method enabled or disabled at run time appears in or leaves `quirky api --json` and the CLI with no rebuild (Orca's stale-bundle hazard), and a valued flag given no value is refused.
+- **Why:** the queue gives `--version` to m0-cli-core; the stale-bundle case is a hazard cli.md records even though the index doesn't list it as a defect
+- **Evidence:** research/orca-features/README.md "Orca defects found along the way"; docs/loop/queue.json m0-cli-core; research/orca-features/cli.md "Global flags", "Verified in the app"
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** locked by docs/loop/queue.json
+
+## D23: cli.md's other flows are out of scope here
+- **Question:** scope: which of cli.md's flows this item covers
+- **Options:** n/a (a scope boundary)
+- **Chose:** in scope: help at root, group and command level; unknown command and flag errors; the global `--json` and `--help`; the syntax rules (`--flag value`, `--flag=value`, switches, repeated flags, missing values); text and JSON output and JSON errors; agent discovery (`quirky api --json`); the bundled skill guide. Out of scope: finding and authenticating to the daemon, selectors, `--version` and idempotent request IDs (m0-cli-core); `status` and `open` (already exist, m0-cli-core); remote runtimes, environments and pairing; registering the shell command and the Settings card with its skill row; each feature's own command group (its milestone); caller identity variables; passthrough and streaming commands.
+- **Why:** LOOP.md says a slice's other flows go in the non-goals, and the queue splits cli.md between this item and m0-cli-core
+- **Evidence:** docs/loop/LOOP.md step 3; docs/loop/queue.json m0-scripting and m0-cli-core
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** locked by docs/loop/queue.json
+
+## D24: Choose schemas declared in the manifest, a daemon catalog, and a CLI that builds plugin commands from it at run time
+- **Question:** brainstorming's approach proposal
+- **Options:** (1) schemas in the manifest, validated by the daemon and served as a catalog the CLI reads each time it needs plugin commands; (2) schemas registered in code when a plugin activates (zod or TypeBox objects passed to `provide`); (3) CLI source generated from the schemas at build time (Azure's aaz, Speakeasy)
+- **Chose:** (1), the recommended option
+- **Why:** it is the only one that lists and validates a plugin's methods without running its code, which m0-registry D23 locked; oclif and VS Code both moved to static declarations for that reason (oclif's manifest took `--version` from 0.65 s to 0.05 s by not importing 3,105 modules). Code-registered schemas would force activation just to print help. Build-time generation can't see plugins installed after the build, and version skew between a generated CLI and its server is exactly Orca's stale-bundle failure. Runtime catalogs elsewhere (Restish, Google's Workspace CLI) add a disk cache because their server is remote; Quirky's daemon is local, so D20 drops the cache.
+- **Evidence:** https://github.com/vercel/workflow/pull/4376 ; https://code.visualstudio.com/api/references/activation-events ; https://azure.github.io/aaz-dev-tools/pages/faq/ ; https://rest.sh/blog/turn-an-openapi-spec-into-a-cli-without-generating-code/ ; https://github.com/googleworkspace/cli ; docs/loop/decisions/m0-registry.md D23
+- **Reversibility:** hard
+- **Confidence:** high
+- **Revisit if:** fetching the catalog makes plugin commands noticeably slower than kernel ones
+- **Source:** assumed — autonomous
+
+## D25: Fast-track the remaining defaults
+- **Question:** brainstorming's essential-coverage gate and fast-track
+- **Options:** keep asking; fast-track once the six essentials are covered
+- **Chose:** fast-track. Purpose, consumers, success criteria, hard constraints, scope boundary and primary behavior are settled by roadmap.md, cli.md, LOOP.md and D4 to D24. Every remaining default-able choice takes its recommended default and is tagged in the spec's Decisions Locked.
+- **Why:** LOOP.md treats the user as having elected to accept stated defaults
+- **Evidence:** docs/loop/LOOP.md "Answering a skill's questions"
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** locked by docs/loop/LOOP.md
+
+## D26: Logic-spec review: fix six model findings, reject the pre-pass findings
+- **Question:** adjudicating the Codex adversarial review of logic.md (spec-design profile, standard depth, reviewer gpt-6.1-sol, independence full)
+- **Options:** for each finding, amend the spec or reject it with a reason
+- **Chose:** amended for six. F1: SC-19 had `--params '{"title":1}'` reaching the daemon although D13 checks the schema in the CLI; the CLI now checks the whole params object, `--params` included, and exits 2, while a daemon InvalidParams example uses a check the schema can't express (an empty `repo.add` path). F2 (refuted by the reviewer, kept anyway): routing for a generated command that extends a kernel command's words was undefined, so a kernel command now shadows those (SC-13). F3: discovery runs only at daemon start, so SC-23 enables a disabled plugin instead of installing one. F4: `--prompt --json` used to take `--json` as the prompt; a valued flag followed by `--...` is now missing its value (SC-11, SC-18). F5: an untyped or mixed enum had two flag readings, so an enum needs a type (SC-2). F6: `open` calls no method and `session new` two, so catalog commands carry a `methods` list (SC-20). Rejected F7 (the pre-pass wants a Purpose or Overview heading the rubric doesn't require) and the 42 unresolvable-reference findings, which are fixture names, commands and files the spec defines.
+- **Why:** each amended finding named a contract two implementers would build differently
+- **Evidence:** scratchpad lr1/gate.json and merged.json; docs/loop/decisions/m0-ui-api.md D34 (same pre-pass rejections)
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** assumed — autonomous
+
+## D27: No closure review round on the logic spec
+- **Question:** whether to re-run the review after the fixes
+- **Options:** a closure round; none, as m0-registry D30 and m0-daemon-api D30 chose
+- **Chose:** none. The fixes are local to the scenarios named, and the tech spec gets its own review.
+- **Why:** consistent with earlier items; the final code review checks behavior against the amended scenarios
+- **Evidence:** docs/loop/decisions/m0-registry.md D30
+- **Reversibility:** easy
+- **Confidence:** medium
+- **Source:** assumed — autonomous
+
+## D28: Root help and kernel help stay offline and point to `quirky api` for plugin commands
+- **Question:** tech-spec feasibility: SC-16 had root help list plugin groups, which needs the daemon, and `packages/cli/test/cli.e2e.test.ts:310` pins that help never contacts the daemon
+- **Options:** fetch the catalog for root help and change the test; keep kernel help offline and add a pointer to `quirky api`
+- **Chose:** keep it offline. Root help and help for a group with kernel commands print kernel commands and end with `run 'quirky api' to list every command, including plugins'`. Help for a plugin-only group or command reads the catalog. The logic spec's SC-16 is amended.
+- **Why:** help that works with no daemon, and fast, is behavior v1 tests lock and Orca's CLI also keeps (`--help` and flag errors never load the runtime client). Agents discover through `quirky api` anyway.
+- **Evidence:** packages/cli/test/cli.e2e.test.ts:310; research/orca-features/cli.md "Processes and files"
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** people miss plugin groups in `quirky --help`
+- **Source:** assumed — autonomous
+
+## D29: Tech-spec mechanisms: one shared validator in protocol, validation in the dispatcher, declarative command specs, a JSON-mode pre-scan
+- **Question:** the `[tech-spec]` Deferred Ideas from the logic spec
+- **Options:** validator in the daemon only or in protocol shared with the CLI; validation at the WebSocket layer or in `Dispatcher.dispatch`; command specs beside `FlagDefs` or replacing them; JSON error mode from parsed flags or from a pre-scan
+- **Chose:** `validateValue` and `checkSchemaDeclaration` in `packages/protocol/src/schema.ts`, so the CLI and daemon print the same messages; validation in `Dispatcher.dispatch`, which also covers plugins' `context.call`; `Command` gains positionals, typed flags, methods and source, and usage lines are derived; `--json` is found by a pre-scan so parse errors can be JSON; `job run` gets a `CommandFailed` error so its stdout stays one JSON document; suggestions by Levenshtein distance up to 2 or a prefix, from the commands known after the catalog fetch.
+- **Why:** each is the smallest change that keeps an existing contract: plugins' calls go through the dispatcher (`packages/daemon/src/plugins/runtime.ts:75-80`), and `job.test.ts` parses stdout of a failed run
+- **Evidence:** packages/daemon/src/plugins/dispatch.ts:34-53; packages/cli/src/main.ts:47-50; packages/cli/test/job.test.ts
+- **Reversibility:** medium
+- **Confidence:** medium
+- **Source:** assumed — autonomous
+
+## D30: Tech-spec review: fix seven model findings, reject the pre-pass findings
+- **Question:** adjudicating the Codex adversarial review of tech.md (spec-design profile, standard depth, reviewer gpt-6.1-sol, independence full)
+- **Options:** for each finding, amend the tech spec (and the logic spec where a locked shape changes) or reject it
+- **Chose:** fixed all seven standing findings. F1: generated commands skip the parse-time required check so `--params` can supply a required property. F2: a schema failure on a flag-supplied property is reported with the flag name (`--priority must be at most 5`), as SC-11 prints. F3: `api call` gets an explicit raw-arguments boundary (`rawArgs`). F5: `kernel` is a valid plugin ID, so catalog entries carry `plugin` with `null` for the kernel instead of `source: "kernel"`; the logic spec is amended. F6: suggestions also offer commands in the typed group, which SC-15 needs. F11: the `--json` pre-scan honors `--json=false` and last-wins. F9: generated commands' `methods` hold the RPC wire name. F4, F7, F8 and F10 were refuted by the reviewer. Rejected the pre-pass findings: unresolvable references to files and symbols the spec says to create, and the heading check, as in D26.
+- **Why:** each fixed finding named a contract that would have produced output different from the logic spec's tables
+- **Evidence:** scratchpad tr1/gate.json and merged.json
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** assumed — autonomous
+
+## D31: Build with Claude subagents implementing and Codex reviewing
+- **Question:** subagent-driven-development's preflight backend pairing
+- **Options:** claude-task + codex (recommended); claude-task + gemini; pi-codex + opus; same-family pairs
+- **Chose:** claude-task + codex. `pi-watch --check codex` and `--check gemini` passed. The tree was clean on `build/m0-scripting` with both specs committed (RUN_BASE 126c402). Baseline: 1085 tests pass, typecheck clean, `bun test scripts` 13 of 14 (the D31 queue-state test of m0-daemon-api).
+- **Why:** LOOP.md step 5 names this pairing
+- **Evidence:** docs/loop/LOOP.md step 5; scratchpad journal.md
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** locked by docs/loop/LOOP.md
+
+## D32: Build in four waves after a type scaffold: protocol and CLI specs, then validation and generated commands, then discovery and the skill, then scenario tests
+- **Question:** subagent-driven-development Step 3 decomposition
+- **Options:** one task per package; foundations first with scenario tests last, as m0-daemon-api D34 and m0-ui-api D39 did
+- **Chose:** the orchestrator commits a scaffold (schema types and stubs, catalog types, an empty kernel table, index exports) so wave 1 runs three disjoint tasks: T1 the schema validator, T2 the kernel schema tables and `api.describe`, T5 the CLI's declarative command specs and parser rules. W2: T3 manifest fields and dispatcher validation (with fixture updates), T6a generated commands, routing, JSON errors and suggestions. W3: T6b `quirky api`, `api call`, `skill` and the catalog. W4: scenario tests against a real daemon, split into daemon-side and CLI-side files, each allowed to fix only its own area (as m0-daemon-api D40).
+- **Why:** every later task needs the schema type and the command spec type; the scaffold lets the three foundations run in parallel without sharing `index.ts`
+- **Evidence:** docs/quirk/specs/2026-10-26-m0-scripting/tech.md "Code references"
+- **Reversibility:** easy
+- **Confidence:** medium
+- **Source:** assumed — autonomous
+
+## D33: Skip wave 1's checkpoint review
+- **Question:** subagent-driven-development Step 7: a checkpoint review after every wave that has a successor
+- **Options:** run a three-lens checkpoint on wave 1; skip it with a reason
+- **Chose:** skip. Wave 1 is three foundation modules (the schema validator, the kernel tables with `api.describe`, the CLI's declarative specs), each with its own unit and API tests, and the full gate passed (1150 tests, typecheck clean). Wave 2 builds directly on them, and its checkpoint reviews the combination.
+- **Why:** the skill allows skipping a genuinely low-risk non-final wave with a recorded reason, as m0-registry D31 and m0-ui-api D40 did
+- **Evidence:** scratchpad gate-w1.log
+- **Reversibility:** easy
+- **Confidence:** medium
+- **Source:** assumed — autonomous
+
+## D34: Wave 2 checkpoint: accept all six findings, which collapse to four defects
+- **Question:** adjudicating the three-lens Codex checkpoint over waves 1 and 2 (`RUN_BASE..HEAD`, standard depth, since wave 1's checkpoint was skipped)
+- **Options:** for each finding, accept and fix or reject with a reason
+- **Chose:** accepted all. C1 and X2: generated commands read flags through the prototype chain, so a schema property named `constructor` counted as given; flag lookups become own-property only and schema-keyed maps prototype-free. C2 and S1: a required property named `params` (no flag of its own) was reported as a missing `--params`; reserved names are excluded from the missing-flag check. S2: a bare kernel group with no `--help` listed only kernel commands; it now reads the catalog to list the group's generated commands too, falling back to the kernel listing if the catalog can't be read, while help stays offline (D28). X1: an unbounded schema nesting crashed manifest parsing with a stack overflow; nesting is capped at 32 levels with a diagnostic.
+- **Why:** each is a reproducible defect with a command the reviewer ran
+- **Evidence:** scratchpad cp-w2/*/gate.json
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** assumed — autonomous
+
+## D35: Implementers' judgment calls kept: group suggestions only as a fallback, `skill show --json` wraps the text, `quirky help <words>` acts like `--help`
+- **Question:** choices the implementers made where the tech spec was silent or self-contradictory
+- **Options:** keep each; revert to the literal tech-spec wording
+- **Chose:** keep them. `suggestCommands` offers commands from the typed group only when nothing is within edit distance 2 or a prefix match, because the literal union made `wt lst` suggest `wt rm` and `wt create` too, contradicting SC-17 and SC-19, while SC-15 still gets `acme.notes list`. `skill show --json` prints `{"skill": "<text>"}` so `--json` still yields one JSON document. `quirky help <words>` behaves like `<words> --help`, so `quirky help nope` is now an unknown-command error (exit 2) rather than root help. The skill omits the daemon version, so it changes only when commands do.
+- **Why:** each keeps the logic spec's scenarios true where the tech spec's wording would have broken one
+- **Evidence:** packages/cli/src/suggest.ts; packages/cli/src/commands/skill.ts; packages/cli/test/generated.test.ts
+- **Reversibility:** easy
+- **Confidence:** medium
+- **Source:** assumed — autonomous
+
+## D36: Wave 3 checkpoint: fix both findings
+- **Question:** adjudicating the three-lens Codex checkpoint over wave 3 (standard depth)
+- **Options:** accept and fix, or reject with a reason
+- **Chose:** accepted both. C1: `api call` received its tokens with the global switches removed, so `--path --json /tmp/repo` turned `/tmp/repo` into the value of `--path` and called the method; raw tokens now keep their boundaries. X1: `skill install` wrote its temp file at a predictable name that would follow a planted symlink; it now creates a randomly named file exclusively and cleans it up on failure. The spec lens passed.
+- **Why:** both reproduced with a command the reviewer ran or a clear file-level path
+- **Evidence:** scratchpad cp-w3/*/gate.json
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** assumed — autonomous
+
+## D37: The root help footer keeps the spec's wording
+- **Question:** the CLI printed `... including plugins` while SC-16 says `... including plugins'`
+- **Options:** amend the logic spec; change the CLI string
+- **Chose:** change the CLI string and its two tests to the spec's wording (`every command, including plugins'`, meaning plugins' commands)
+- **Why:** the approved spec is the contract; a wording slip in code is cheaper to fix than an amendment
+- **Evidence:** packages/cli/src/commands/index.ts; docs/quirk/specs/2026-10-26-m0-scripting/logic.md SC-16
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** assumed — autonomous
+
+## D38: Final round 1: fix three findings, two of which share a cause
+- **Question:** adjudicating final review round 1 (three Codex lenses, deep, over the whole branch)
+- **Options:** accept and fix, or reject with a reason
+- **Chose:** accepted all. C1 and S1: help was detected anywhere in the arguments, so `acme.notes add -- --help` and `acme.notes add --title --help` printed help instead of the parser's errors; help now follows the parser's boundaries for every command. C2: the generic table formatter read cells through the prototype chain and crashed on a column named `constructor` missing from a row; cells are read as own properties. The security lens passed.
+- **Why:** each reproduced with a command the reviewer ran
+- **Evidence:** scratchpad r1/*/gate.json
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** assumed — autonomous
+
+## D39: The final review loop ends after the closure round passes on all three lenses
+- **Question:** subagent-driven-development Step 10's exit condition
+- **Options:** another full round; exit on a clean closure round
+- **Chose:** exit. Round 1 (deep, whole branch) had three accepted findings, fixed in one batch that stayed inside its declared CLI scope (D38). Closure round 2 over the fix delta passed on correctness, spec and security, each with full independence (gpt-6.1-sol) and nothing suppressed. The gate is green.
+- **Why:** the skill's exit rule is a completed round with no accepted finding above LOW and a green build
+- **Evidence:** scratchpad r1/*/gate.json, r2/*/gate.json and manifest.json
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** locked by docs/loop/LOOP.md
+
+## D40: Every scenario has a named test through the CLI or the daemon API, and the item's one CLI defect belongs to m0-cli-core
+- **Question:** LOOP.md step 6's verification checklist
+- **Options:** n/a (a check, recorded for review)
+- **Chose:** SC-2 is in packages/daemon/test/plugins/schema-kinds.test.ts (through the manifest parser the daemon uses). SC-3 to SC-8 are in schema-dispatch.test.ts against a real `quirkyd` through the API. SC-9 to SC-12, SC-14 and SC-16 to SC-19 are in scripting-cli.test.ts, and SC-1, SC-13, SC-15 and SC-20 to SC-23 in scripting-api.test.ts, all driving the real `quirky` CLI (`runCli`) against a real daemon; SC-19's daemon-unreachable row is tested in-process in packages/cli/test/generated.test.ts. The stale-surface hazard and the missing-value rule (D22) are SC-15 and SC-18. The feature is kernel rather than a built-in plugin (D21). On the branch tip `bun run test` passes 1362 tests and `bun run typecheck` is clean; `bun test scripts` passes 13 of 14, the failure being the queue-state test recorded in m0-daemon-api D31.
+- **Why:** LOOP.md step 6 lists these as the conditions for done
+- **Evidence:** test names `SC-<n>:` in the files above; scratchpad gate-r1.log
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** m0-cli-core changes how the CLI reaches the daemon and the daemon-unreachable row needs a real-process test
+- **Source:** locked by docs/loop/LOOP.md
+
+## Progress
+Building (D31-D33). Done. Merged into build/roadmap.

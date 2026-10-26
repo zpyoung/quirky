@@ -43,7 +43,9 @@ async function rejection(promise: Promise<unknown>): Promise<{ code: number; mes
   throw new Error('expected the call to reject')
 }
 
-const methods = (...names: string[]) => ({ method: names.map((id) => ({ id })) })
+const methods = (...names: string[]) => ({
+  method: names.map((id) => ({ id, params: { type: 'object', additionalProperties: true } }))
+})
 
 describe('plugin methods over RPC', () => {
   test('a plugin method answers and its lazy plugin activates on first use', async () => {

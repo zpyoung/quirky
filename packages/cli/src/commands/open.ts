@@ -3,9 +3,11 @@ import type { Command } from './types'
 
 export const open: Command = {
   name: 'open',
-  usage: 'open',
   summary: 'launch the Quirky desktop app',
+  positionals: [],
   flags: {},
+  methods: [],
+  plugin: null,
   async run(args, ctx) {
     takePositionals(args, [])
     const result = await ctx.openDesktopApp()

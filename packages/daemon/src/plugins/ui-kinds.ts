@@ -1,4 +1,5 @@
 import {
+  checkSchemaDeclaration,
   checkSettingValue,
   isContributionName,
   parseChord,
@@ -15,7 +16,7 @@ const ALLOWED_FIELDS: Record<string, readonly string[]> = {
   'sidebar-section': ['title', 'description', 'order'],
   panel: ['title', 'description', 'order'],
   view: ['title', 'description'],
-  command: ['title', 'description'],
+  command: ['title', 'description', 'args'],
   keybinding: ['key', 'command', 'description'],
   setting: ['type', 'default', 'title', 'description', 'minimum', 'maximum', 'values'],
   theme: ['title', 'appearance', 'colors', 'description'],
@@ -156,6 +157,9 @@ export function checkUiKindEntry(kind: string, label: string, entry: Entry, erro
   }
   if (allowed.includes('order') && entry.order !== undefined && !isFiniteNumber(entry.order)) {
     errors.push(`${label}: order must be a number`)
+  }
+  if (kind === 'command' && entry.args !== undefined) {
+    for (const problem of checkSchemaDeclaration(entry.args, 'args', { object: true })) errors.push(`${label}: ${problem}`)
   }
   if (kind === 'keybinding') checkKeybinding(label, entry, errors)
   if (kind === 'setting') checkSetting(label, entry, errors)

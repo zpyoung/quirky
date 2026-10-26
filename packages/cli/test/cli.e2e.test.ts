@@ -311,4 +311,57 @@ describe('usage', () => {
     await run(['help'])
     expect(daemon.calls).toEqual([])
   })
+
+  test('a --help after -- is a positional, not a help request', async () => {
+    const result = await run(['wt', 'list', '--', '--help'])
+    expect(result.code).toBe(2)
+    expect(result.stderr).toContain('unexpected argument "--help"')
+    expect(result.stdout).toBe('')
+  })
+
+  test('a --help in the value slot of a valued flag is the missing-value error', async () => {
+    const result = await run(['session', 'new', '--prompt', '--help'])
+    expect(result.code).toBe(2)
+    expect(result.stderr).toContain('--prompt requires a value; write --prompt=<value> for a value starting with --')
+    expect(result.stdout).toBe('')
+    expect((await run(['session', 'new', '--prompt=--help', '--help'])).code).toBe(0)
+  })
+})
+
+describe('flag parsing', () => {
+  test('an unknown flag names the command and the valid flags', async () => {
+    const result = await run(['wt', 'list', '--bogus'])
+    expect(result.code).toBe(2)
+    expect(result.stderr).toContain('quirky: unknown flag --bogus for wt list\nvalid flags: --repo, --json, --help\n')
+    expect(result.stderr).toContain("run 'quirky help' for usage")
+    expect(daemon.calls).toEqual([])
+  })
+
+  test('a valued flag without a value exits 2 and starts no session', async () => {
+    const env = { QUIRKY_WORKTREE_ID: 'w1' }
+    const atEnd = await run(['session', 'new', '--agent', 'claude', '--worktree', 'w1', '--prompt'], { env })
+    expect(atEnd.code).toBe(2)
+    expect(atEnd.stderr).toContain('--prompt requires a value')
+    const dashed = await run(['session', 'new', '--agent', 'claude', '--worktree', 'w1', '--prompt', '--json'], { env })
+    expect(dashed.code).toBe(2)
+    expect(JSON.parse(dashed.stdout).error.message).toBe(
+      '--prompt requires a value; write --prompt=<value> for a value starting with --'
+    )
+    expect(dashed.stderr).toBe('')
+    expect(daemon.methodCalls('session.create')).toEqual([])
+    expect(daemon.methodCalls('session.createStructured')).toEqual([])
+  })
+
+  test('a value starting with -- is passed with =', async () => {
+    const result = await run(['session', 'new', '--agent', 'claude', '--worktree', 'w1', '--prompt=--x'])
+    expect(result.code).toBe(0)
+    expect(daemon.methodCalls('session.create')).toEqual([{ worktreeId: 'w1', agent: 'claude', prompt: '--x' }])
+  })
+
+  test('a missing required flag is reported by name before any call', async () => {
+    const result = await run(['ask', 'wait'])
+    expect(result.code).toBe(2)
+    expect(result.stderr).toContain('missing required flag --id')
+    expect(daemon.calls).toEqual([])
+  })
 })

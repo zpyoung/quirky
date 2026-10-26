@@ -13,6 +13,7 @@ afterEach(removeTempDirs)
 
 const ERRORS_MODULE = join(import.meta.dir, '../../src/errors.ts')
 const REFRESH = 'method:acme.tools/refresh'
+const LOOSE = { type: 'object', additionalProperties: true }
 
 function setup() {
   const root = makeTempDir()
@@ -42,7 +43,7 @@ function setup() {
       kernelCalls.push({ method: 'status.get', params, conn })
       return { fromKernel: true }
     },
-    'void.thing': () => undefined,
+    'repo.list': () => undefined,
     'client.hello': () => ({ ok: true }),
     'events.subscribe': () => ({ ok: true }),
     'terminal.attach': () => ({ ok: true }),
@@ -62,7 +63,7 @@ function setup() {
     ...overrides
   })
   const refresh = (body: string, extra: Record<string, unknown> = {}) =>
-    plugin({ id: 'acme.tools', contributes: { method: [{ id: 'refresh' }] }, ...extra }, {
+    plugin({ id: 'acme.tools', contributes: { method: [{ id: 'refresh', params: LOOSE }] }, ...extra }, {
       activate: `context.provide('${REFRESH}', ${body})`
     })
   const reject = async (promise: Promise<unknown>): Promise<DaemonError> => {
@@ -81,8 +82,8 @@ describe('Dispatcher', () => {
     const t = setup()
     t.host.load()
     const conn = t.conn()
-    expect(await t.dispatcher.dispatch('status.get', { a: 1 }, { conn })).toEqual({ fromKernel: true })
-    expect(t.kernelCalls[0]?.params).toEqual({ a: 1 })
+    expect(await t.dispatcher.dispatch('status.get', {}, { conn })).toEqual({ fromKernel: true })
+    expect(t.kernelCalls[0]?.params).toEqual({})
     expect(t.kernelCalls[0]?.conn).toBe(conn)
   })
 
@@ -99,18 +100,24 @@ describe('Dispatcher', () => {
   test('a kernel handler that returns undefined yields null', async () => {
     const t = setup()
     t.host.load()
-    expect(await t.dispatcher.dispatch('void.thing', {}, { conn: t.conn() })).toBeNull()
+    expect(await t.dispatcher.dispatch('repo.list', {}, { conn: t.conn() })).toBeNull()
   })
 
-  test.each(['client.hello', 'events.subscribe', 'terminal.attach', 'terminal.detach'])(
+  const connectionCalls: [string, Record<string, unknown>][] = [
+    ['client.hello', { role: 'cli', protocolVersion: 1 }],
+    ['events.subscribe', {}],
+    ['terminal.attach', { sessionId: 's1', cols: 80, rows: 24 }],
+    ['terminal.detach', { streamId: 1 }]
+  ]
+  test.each(connectionCalls)(
     '%s is refused from a plugin',
-    async (method) => {
+    async (method, params) => {
       const t = setup()
       t.host.load()
-      const error = await t.reject(t.dispatcher.dispatch(method, {}, { pluginId: 'acme.tools' }))
+      const error = await t.reject(t.dispatcher.dispatch(method, params, { pluginId: 'acme.tools' }))
       expect(error.code).toBe(RpcErrorCode.InvalidParams)
       expect(error.message).toBe(`${method} needs a client connection`)
-      expect(await t.dispatcher.dispatch(method, {}, { conn: t.conn() })).toEqual({ ok: true })
+      expect(await t.dispatcher.dispatch(method, params, { conn: t.conn() })).toEqual({ ok: true })
     }
   )
 

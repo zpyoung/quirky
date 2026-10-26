@@ -1,10 +1,17 @@
 import {
   AGENT_KINDS,
+  CATALOG_SCHEMA_VERSION,
+  CONNECTION_METHODS,
+  KERNEL_EVENT_SCHEMAS,
+  KERNEL_METHOD_SCHEMAS,
   PROTOCOL_VERSION,
   type AgentKind,
+  type ApiDescription,
   type ClientRole,
+  type ContributionInfo,
   type MethodName,
-  type ResultOf
+  type ResultOf,
+  type Schema
 } from '@quirky/protocol'
 import { conflict, invalidParams } from './errors'
 import type { PluginHost } from './plugins/host'
@@ -72,6 +79,74 @@ function agent(params: Params): AgentKind {
     throw invalidParams(`agent must be one of ${AGENT_KINDS.join(', ')}`)
   }
   return value as AgentKind
+}
+
+function byName<T>(key: (entry: T) => string): (a: T, b: T) => number {
+  return (a, b) => (key(a) < key(b) ? -1 : key(a) > key(b) ? 1 : 0)
+}
+
+function descriptionOf(data: Record<string, unknown>): { description?: string } {
+  return typeof data.description === 'string' ? { description: data.description } : {}
+}
+
+function schemaField(data: Record<string, unknown>, key: string, fallback: Schema | null): Schema | null {
+  const value = data[key]
+  return typeof value === 'object' && value !== null ? (value as Schema) : fallback
+}
+
+/** The kernel's schemas plus every effective method, event and UI command contribution; activates nothing. */
+function describeApi(core: Core, plugins: PluginHost): ApiDescription {
+  const effective = (kind: string): ContributionInfo[] => plugins.contributions({ kind })
+  const shortId = (contribution: ContributionInfo) => contribution.id.slice(contribution.kind.length + 1)
+  const connection: readonly string[] = CONNECTION_METHODS
+
+  const methods: ApiDescription['methods'] = [
+    ...Object.entries(KERNEL_METHOD_SCHEMAS).map(([name, entry]) => ({
+      name,
+      plugin: null,
+      description: entry.description,
+      params: entry.params,
+      result: entry.result,
+      ...(connection.includes(name) ? { connection: true as const } : {})
+    })),
+    ...effective('method').map((contribution) => ({
+      name: shortId(contribution),
+      plugin: contribution.plugin,
+      ...descriptionOf(contribution.data),
+      params: schemaField(contribution.data, 'params', { type: 'object' })!,
+      result: schemaField(contribution.data, 'result', {})!
+    }))
+  ]
+  const events: ApiDescription['events'] = [
+    ...Object.entries(KERNEL_EVENT_SCHEMAS).map(([name, entry]) => ({
+      name,
+      plugin: null,
+      description: entry.description,
+      data: entry.data as Schema | null
+    })),
+    ...effective('event').map((contribution) => ({
+      name: shortId(contribution),
+      plugin: contribution.plugin,
+      ...descriptionOf(contribution.data),
+      data: schemaField(contribution.data, 'data', null)
+    }))
+  ]
+  const uiCommands: ApiDescription['uiCommands'] = effective('command').map((contribution) => ({
+    id: contribution.id,
+    plugin: contribution.plugin,
+    title: typeof contribution.data.title === 'string' ? contribution.data.title : contribution.name,
+    ...descriptionOf(contribution.data),
+    args: schemaField(contribution.data, 'args', { type: 'object' })!
+  }))
+
+  return {
+    schemaVersion: CATALOG_SCHEMA_VERSION,
+    daemonVersion: core.status().daemonVersion,
+    protocolVersion: PROTOCOL_VERSION,
+    methods: methods.sort(byName((entry) => entry.name)),
+    events: events.sort(byName((entry) => entry.name)),
+    uiCommands: uiCommands.sort(byName((entry) => entry.id))
+  }
 }
 
 /** Maps every RPC method to the core or the plugin host, validating params so bad input becomes InvalidParams. */
@@ -210,6 +285,7 @@ export function createHandlers(core: Core, plugins: PluginHost, scheduler: Sched
       return OK
     },
     'plugin.activate': (params) => plugins.activate(str(params, 'pluginId')),
+    'api.describe': () => describeApi(core, plugins),
 
     'job.list': () => scheduler.list(),
     'job.run': (params) => scheduler.run(str(params, 'id')),

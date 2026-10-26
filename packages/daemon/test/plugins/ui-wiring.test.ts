@@ -99,7 +99,7 @@ describe('UI plugin API wiring', () => {
     })
     expect(await failure(client.callAny('setting.set', { id: SETTING }))).toMatchObject({
       code: RpcErrorCode.InvalidParams,
-      message: 'value is required'
+      message: 'params.value is required'
     })
     expect(await failure(client.call('theme.set', { id: 'theme:acme.ui/missing' }))).toMatchObject({
       code: RpcErrorCode.NotFound,
