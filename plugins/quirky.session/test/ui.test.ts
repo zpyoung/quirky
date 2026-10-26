@@ -1,7 +1,7 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, mock, test } from 'bun:test'
 import { act } from 'react'
 import { GlobalRegistrator } from '@happy-dom/global-registrator'
-import { bytesToBase64, RpcError, RpcErrorCode } from '@quirky/protocol'
+import { bytesToBase64, RpcError, RpcErrorCode, type QuirkyEvent } from '@quirky/protocol'
 import { resetSessionMemory } from '../src/window/model'
 import manifest from '../quirky-plugin.json'
 import { agentInfo, agentListing, fakeContext, mountView, session, sessionHandlers, settle, WORKTREE, type FakeContext } from './ui-fake'
@@ -243,6 +243,9 @@ describe('keeping tabs current', () => {
 })
 
 describe('new sessions', () => {
+  const menuLabels = (view: Awaited<ReturnType<typeof mountView>>) =>
+    [...view.element.querySelectorAll('[role="menuitem"]')].map((entry) => entry.textContent)
+
   const openMenu = async (view: Awaited<ReturnType<typeof mountView>>) => {
     await view.click(view.element.querySelector('[aria-label="New session"]')!)
     await settle()
@@ -375,6 +378,32 @@ describe('new sessions', () => {
     await view.click(view.element.querySelector('[aria-label="New session"]')!)
     listing = agentListing([agentInfo('goose', 'Goose')])
     expect((await openMenu(view))()).toEqual(['Shell', 'Goose', 'Manage agents'])
+  })
+
+  test('an open menu reads the catalog again on quirky.agents/changed and setting.changed', async () => {
+    let listing = agentListing([agentInfo('codex', 'Codex'), agentInfo('goose', 'Goose')])
+    start([shell1], { 'quirky.agents/list': () => listing })
+    const view = await open({ worktree: WORKTREE.id })
+    expect((await openMenu(view))()).toEqual(['Shell', 'Codex', 'Goose', 'Manage agents'])
+    listing = agentListing([agentInfo('codex', 'Codex')])
+    await fake.emit({ type: 'quirky.agents/changed', data: {} } as QuirkyEvent)
+    await settle()
+    expect(menuLabels(view)).toEqual(['Shell', 'Codex', 'Manage agents'])
+    listing = agentListing([])
+    await fake.emit({ type: 'setting.changed', id: 'setting:quirky.agents/anything', value: true })
+    await settle()
+    expect(menuLabels(view)).toEqual(['Shell', 'Manage agents'])
+  })
+
+  test('a closed menu does not listen for catalog changes', async () => {
+    start([shell1])
+    const view = await open({ worktree: WORKTREE.id })
+    await openMenu(view)
+    await view.click(view.element.querySelector('[aria-label="New session"]')!)
+    const before = fake.callsTo('quirky.agents/list').length
+    await fake.emit({ type: 'quirky.agents/changed', data: {} } as QuirkyEvent)
+    await settle()
+    expect(fake.callsTo('quirky.agents/list')).toHaveLength(before)
   })
 
   test('a failed start is shown as a toast', async () => {

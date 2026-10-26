@@ -23,12 +23,21 @@ export function NewSessionMenu({ context, onPick }: Props) {
   useEffect(() => {
     if (!open) return
     let current = true
+    let latest = 0
+    const load = () => {
+      const request = ++latest
+      void loadMenuEntries(context).then((loaded) => {
+        if (current && request === latest) setEntries(loaded)
+      })
+    }
     setEntries(SHELL_ONLY_MENU)
-    void loadMenuEntries(context).then((loaded) => {
-      if (current) setEntries(loaded)
+    load()
+    const unsubscribe = context.subscribe((event) => {
+      if (event.type === 'quirky.agents/changed' || event.type === 'setting.changed') load()
     })
     return () => {
       current = false
+      unsubscribe()
     }
   }, [open, context])
 
