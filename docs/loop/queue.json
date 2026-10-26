@@ -16,7 +16,7 @@
       "deps": [
         "m0-registry"
       ],
-      "status": "in-progress"
+      "status": "done"
     },
     {
       "id": "m0-ui-api",

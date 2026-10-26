@@ -6,23 +6,67 @@ files, not this one.
 
 | Reversibility | Confidence | Entry | Decision | Source |
 | --- | --- | --- | --- | --- |
+| hard | medium | [m0-daemon-api D4](decisions/m0-daemon-api.md) | Plugin method wire names are `<pluginId>/<name>` | assumed — autonomous |
+| hard | medium | [m0-daemon-api D9](decisions/m0-daemon-api.md) | Each plugin gets one SQLite file and a data directory of its own | assumed — autonomous |
 | hard | medium | [m0-registry D4](decisions/m0-registry.md) | Contribution IDs are `<kind>:<pluginId>/<name>` | assumed — autonomous |
+| hard | high | [m0-daemon-api D7](decisions/m0-daemon-api.md) | The four kinds are `method`, `event`, `job` and `launch-hook` | assumed — autonomous |
+| hard | high | [m0-daemon-api D13](decisions/m0-daemon-api.md) | Choose declared contributions with provided implementations | supersedes nothing; extends m0-registry D23 |
 | hard | high | [m0-registry D12](decisions/m0-registry.md) | Every contribution is declared in the manifest, and code can only provide declared ones | assumed — autonomous |
 | hard | high | [m0-registry D23](decisions/m0-registry.md) | Choose declarative contributions with lazily loaded code | assumed — autonomous |
+| medium | medium | [m0-daemon-api D6](decisions/m0-daemon-api.md) | Plugin events arrive as `{ type: "<pluginId>/<name>", data }` | assumed — autonomous |
+| medium | medium | [m0-daemon-api D15](decisions/m0-daemon-api.md) | Jobs run on a fixed delay, at least one second apart, never overlapping | assumed — autonomous |
+| medium | medium | [m0-daemon-api D19](decisions/m0-daemon-api.md) | Launch hooks are a sequential pipeline in contribution-ID order | assumed — autonomous |
+| medium | medium | [m0-daemon-api D20](decisions/m0-daemon-api.md) | Launch hooks change only environment variables and agent arguments | assumed — autonomous |
 | medium | medium | [m0-registry D7](decisions/m0-registry.md) | An override replaces the whole contribution, not a merge | assumed — autonomous |
 | medium | medium | [m0-registry D8](decisions/m0-registry.md) | Override precedence is installed over built-in, then dependent over dependency, then a reported conflict | assumed — autonomous |
 | medium | medium | [m0-registry D10](decisions/m0-registry.md) | Enable and disable apply live, without a restart | assumed — autonomous |
 | medium | medium | [m0-registry D16](decisions/m0-registry.md) | The manifest is `quirky-plugin.json` in the plugin's directory | assumed — autonomous |
+| medium | high | [m0-daemon-api D8](decisions/m0-daemon-api.md) | Method results and errors | assumed — autonomous |
+| medium | high | [m0-daemon-api D10](decisions/m0-daemon-api.md) | Stores migrate forward only, by an ordered list, and refuse a downgrade | assumed — autonomous |
+| medium | high | [m0-daemon-api D24](decisions/m0-daemon-api.md) | Plugin methods use the daemon's token, and any client may call any method | locked by docs/roadmap.md |
 | medium | high | [m0-registry D5](decisions/m0-registry.md) | The `quirky.` plugin ID prefix is reserved for built-ins | assumed — autonomous |
 | medium | high | [m0-registry D6](decisions/m0-registry.md) | A plugin's own contributions use short names, overrides use full IDs | assumed — autonomous |
 | medium | high | [m0-registry D9](decisions/m0-registry.md) | Disable works by plugin ID or contribution ID, before any code loads, and persists | locked by docs/roadmap.md (disable by ID); assumed — autonomous (cascade and persistence) |
 | medium | high | [m0-registry D11](decisions/m0-registry.md) | Plugins activate lazily on first use by default, or at startup when the manifest says so | locked by docs/roadmap.md (lazy); assumed — autonomous (trigger set) |
+| easy | medium | [m0-daemon-api D22](decisions/m0-daemon-api.md) | A launch hook that fails or times out is skipped | assumed — autonomous |
+| easy | medium | [m0-daemon-api D23](decisions/m0-daemon-api.md) | Launch hooks apply to terminal sessions only | assumed — autonomous |
+| easy | medium | [m0-daemon-api D25](decisions/m0-daemon-api.md) | No rate limits on plugin events or method calls, and no event filters yet | assumed — autonomous |
+| easy | medium | [m0-daemon-api D30](decisions/m0-daemon-api.md) | No closure review round on the specs | assumed — autonomous |
+| easy | medium | [m0-daemon-api D34](decisions/m0-daemon-api.md) | Build in four waves, modules before wiring before API scenarios | assumed — autonomous |
+| easy | medium | [m0-daemon-api D38](decisions/m0-daemon-api.md) | Wave 2 checkpoint review: fix three defects, reject calling deactivate after a failed activate | assumed — autonomous |
+| easy | medium | [m0-daemon-api D40](decisions/m0-daemon-api.md) | The scenario tests are split by area, and each task may fix only its area's modules | assumed — autonomous |
+| easy | medium | [m0-daemon-api D42](decisions/m0-daemon-api.md) | Final round 1: fix four defects, and narrow the spec's promise about listener timing | assumed — autonomous |
 | easy | medium | [m0-registry D14](decisions/m0-registry.md) | Unknown top-level manifest fields are rejected | assumed — autonomous |
 | easy | medium | [m0-registry D19](decisions/m0-registry.md) | Startup plugins settle before the daemon publishes runtime.json | assumed — autonomous |
 | easy | medium | [m0-registry D22](decisions/m0-registry.md) | Resolve-time behavior is tested through the kernel's host interface | assumed — autonomous |
 | easy | medium | [m0-registry D24](decisions/m0-registry.md) | Built-in plugins live in a top-level `plugins/` directory, and packaging them waits for m0-port-v1 | assumed — autonomous |
 | easy | medium | [m0-registry D25](decisions/m0-registry.md) | Activation failures surface as Conflict errors, unknown IDs as NotFound | assumed — autonomous |
 | easy | medium | [m0-registry D30](decisions/m0-registry.md) | No closure review round on the specs | assumed — autonomous |
+| easy | high | [m0-daemon-api D1](decisions/m0-daemon-api.md) | Classify the item as an API design, and run both research phases | assumed — autonomous |
+| easy | high | [m0-daemon-api D2](decisions/m0-daemon-api.md) | Skip the visual companion and the adhd offer, use the standard gray-area set | locked by docs/loop/LOOP.md |
+| easy | high | [m0-daemon-api D3](decisions/m0-daemon-api.md) | Select every gray area that matters for the daemon plugin API | assumed — autonomous |
+| easy | high | [m0-daemon-api D5](decisions/m0-daemon-api.md) | v1's methods stay kernel methods in this item | assumed — autonomous |
+| easy | high | [m0-daemon-api D11](decisions/m0-daemon-api.md) | Plugin listeners get every event, asynchronously, and are removed on deactivate | assumed — autonomous |
+| easy | high | [m0-daemon-api D12](decisions/m0-daemon-api.md) | Plugins call methods through `context.call`, except connection-bound ones | assumed — autonomous |
+| easy | high | [m0-daemon-api D14](decisions/m0-daemon-api.md) | The four kinds' manifest fields are validated, and unknown fields rejected | assumed — autonomous |
+| easy | high | [m0-daemon-api D16](decisions/m0-daemon-api.md) | The kernel records each job's last run, and an overdue job runs once after a restart | assumed — autonomous |
+| easy | high | [m0-daemon-api D17](decisions/m0-daemon-api.md) | A job run gets a stop signal and a timeout, and failures are recorded, not retried early | assumed — autonomous |
+| easy | high | [m0-daemon-api D18](decisions/m0-daemon-api.md) | Jobs are inspected and run through `job.list` and `job.run`, with a `quirky job` CLI group | assumed — autonomous |
+| easy | high | [m0-daemon-api D21](decisions/m0-daemon-api.md) | `PATH`, `ZDOTDIR` and `QUIRKY_*` are reserved from launch hooks | assumed — autonomous |
+| easy | high | [m0-daemon-api D26](decisions/m0-daemon-api.md) | This item has no Orca defects to test | locked by docs/loop/queue.json |
+| easy | high | [m0-daemon-api D27](decisions/m0-daemon-api.md) | Fast-track the remaining defaults | locked by docs/loop/LOOP.md |
+| easy | high | [m0-daemon-api D28](decisions/m0-daemon-api.md) | Logic-spec review: fix the three model findings, reject the pre-pass findings | assumed — autonomous |
+| easy | high | [m0-daemon-api D29](decisions/m0-daemon-api.md) | Tech-spec review: fix all four model findings, reject the pre-pass findings | assumed — autonomous |
+| easy | high | [m0-daemon-api D31](decisions/m0-daemon-api.md) | The `bun test scripts` failure "starts at the plugin kernel" is loop state, not a defect of this item | assumed — autonomous |
+| easy | high | [m0-daemon-api D32](decisions/m0-daemon-api.md) | Build with Claude subagents implementing and Codex reviewing | locked by docs/loop/LOOP.md |
+| easy | high | [m0-daemon-api D33](decisions/m0-daemon-api.md) | The build starts on a clean `build/m0-daemon-api` with the specs committed | locked by docs/loop/LOOP.md |
+| easy | high | [m0-daemon-api D35](decisions/m0-daemon-api.md) | Resume wave 2 by finishing the interrupted drafts rather than discarding them | assumed — autonomous |
+| easy | high | [m0-daemon-api D36](decisions/m0-daemon-api.md) | A flaky scheduler test was a test race, fixed in the test | assumed — autonomous |
+| easy | high | [m0-daemon-api D37](decisions/m0-daemon-api.md) | Wave 2's own fixtures broke under its kind validation, and a scoped fixer made them valid | assumed — autonomous |
+| easy | high | [m0-daemon-api D39](decisions/m0-daemon-api.md) | Wave 3 checkpoint review: fix the launch and close race | assumed — autonomous |
+| easy | high | [m0-daemon-api D41](decisions/m0-daemon-api.md) | The daemon plugin API is kernel, not a built-in plugin | locked by docs/roadmap.md |
+| easy | high | [m0-daemon-api D43](decisions/m0-daemon-api.md) | The final review loop ends after the closure round passes on all three lenses | assumed — autonomous |
+| easy | high | [m0-daemon-api D44](decisions/m0-daemon-api.md) | Every scenario has an API test, and there are no Orca defects to test | locked by docs/loop/LOOP.md |
 | easy | high | [m0-registry D1](decisions/m0-registry.md) | Classify the item as an API and Organization design, and research it | assumed — autonomous |
 | easy | high | [m0-registry D2](decisions/m0-registry.md) | Skip the visual companion and the adhd offer, use the standard gray-area set | locked by docs/loop/LOOP.md |
 | easy | high | [m0-registry D3](decisions/m0-registry.md) | Select every gray area that matters for the registry | assumed — autonomous |
