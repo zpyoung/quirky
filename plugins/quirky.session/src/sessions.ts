@@ -349,9 +349,19 @@ export class SessionService {
       if (isRpcError(error)) throw error
       throw new Error(`could not start ${session.agent}: ${messageOf(error)}`)
     }
-    const stored = { launch: spec.launch, promptDelivery: spec.promptDelivery, providerSession: spec.providerSession }
-    const launched = this.records.get(session.id) as Session
-    if (launched.status !== 'starting') return { session: this.records.update(session.id, stored) as Session, paste: spec.paste }
+    const current = this.records.get(session.id) as Session
+    // a provider session saved during spawn is newer than the one the launch started with
+    const keepsSaved = current.providerSession !== null || spec.providerSession === null
+    const stored = {
+      launch: spec.launch,
+      promptDelivery: spec.promptDelivery,
+      ...(keepsSaved ? {} : { providerSession: spec.providerSession })
+    }
+    if (current.status === 'exited') {
+      const promptDelivery = spec.promptDelivery === 'pending' ? 'not-delivered' : spec.promptDelivery
+      return { session: this.records.update(session.id, { ...stored, promptDelivery }) as Session, paste: null }
+    }
+    if (current.status !== 'starting') return { session: this.records.update(session.id, stored) as Session, paste: spec.paste }
     const running = this.records.update(session.id, { ...stored, status: 'running' }) as Session
     return { session: this.publish(running), paste: spec.paste }
   }

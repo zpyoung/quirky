@@ -17,7 +17,8 @@ const plan = {
 }
 
 /** A context whose `spawn` runs `onSpawn` with the service and session ID, as a process that exits early would. */
-function launchContext(onSpawn: (service: SessionService, sessionId: string) => void) {
+function launchContext(onSpawn: (service: SessionService, sessionId: string) => void, launchPlan: object = plan) {
+  const calls: { method: string; params: unknown }[] = []
   const emitted: { event: string; status?: string; exitCode?: number | null }[] = []
   let service!: SessionService
   let sessionId = ''
@@ -28,9 +29,11 @@ function launchContext(onSpawn: (service: SessionService, sessionId: string) => 
       return true
     },
     error: (kind: string, message: string) => new Error(`${kind}: ${message}`),
-    call: async (method: string) => {
+    call: async (method: string, params: unknown) => {
+      calls.push({ method, params })
       if (method === 'quirky.agents/get') return { id: 'claude', label: 'Claude' }
-      if (method === 'quirky.agents/prepareLaunch') return plan
+      if (method === 'quirky.agents/prepareLaunch') return launchPlan
+      if (method === 'quirky.agents/deliver') return { delivery: 'delivered' }
       return worktree
     },
     launch: {
@@ -49,7 +52,7 @@ function launchContext(onSpawn: (service: SessionService, sessionId: string) => 
   } as unknown as PluginContext
   const records = new SessionRecords(memoryStore())
   service = new SessionService(context, records)
-  return { service, records, emitted }
+  return { service, records, emitted, calls }
 }
 
 describe('SessionService.create', () => {
@@ -87,5 +90,37 @@ describe('SessionService.create', () => {
 
     expect(result).toMatchObject({ status: 'running', launch: { command: 'claude', args: '--model x', env: {} } })
     expect(emitted.filter((e) => e.event === 'changed').map((e) => e.status)).toEqual(['running'])
+  })
+
+  test('an agent that exits before the spawn call returns gets no paste and no pending delivery', async () => {
+    const pasted = { ...plan, promptDelivery: 'pending', paste: { text: 'hi', submit: true } }
+    const { service, records, calls } = launchContext((svc, id) => void svc.finish(id, 1), pasted)
+
+    const result = await service.create({ agent: 'claude', prompt: 'hi', waitForPrompt: true }, caller)
+
+    expect(calls.map((c) => c.method)).not.toContain('quirky.agents/deliver')
+    expect(result).toMatchObject({ status: 'exited', promptDelivery: 'not-delivered' })
+    expect(records.get(result.id)).toMatchObject({ promptDelivery: 'not-delivered' })
+  })
+
+  test('an agent still alive after spawn gets its paste delivered', async () => {
+    const pasted = { ...plan, promptDelivery: 'pending', paste: { text: 'hi', submit: true } }
+    const { service, calls } = launchContext(() => {}, pasted)
+
+    const result = await service.create({ agent: 'claude', prompt: 'hi', waitForPrompt: true }, caller)
+
+    expect(calls.map((c) => c.method)).toContain('quirky.agents/deliver')
+    expect(result).toMatchObject({ status: 'running', promptDelivery: 'delivered' })
+  })
+
+  test('a provider session saved while spawn is in flight survives the launch', async () => {
+    const { service, records } = launchContext((svc, id) => {
+      svc.setProviderSession({ session: id, id: 'provider-123' })
+    })
+
+    const result = await service.create({ agent: 'claude' }, caller)
+
+    expect(result.providerSession).toEqual({ id: 'provider-123', transcriptPath: null })
+    expect(records.get(result.id)?.providerSession).toEqual({ id: 'provider-123', transcriptPath: null })
   })
 })
