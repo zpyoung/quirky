@@ -379,3 +379,23 @@
 - **Confidence:** high
 - **Source:** assumed — autonomous
 
+## D38: Build with Claude subagents implementing and Codex reviewing
+- **Question:** subagent-driven-development's preflight backend pairing
+- **Options:** claude-task + codex (recommended); claude-task + gemini; pi-codex + opus; same-family pairs
+- **Chose:** claude-task + codex. `pi-watch --check codex` and `--check gemini` both passed (gemini is the tiebreak family). The tree was clean on `build/m0-ui-api` with both specs committed. Baseline: 769 tests pass, typecheck clean, `bun test scripts` 13 of 14 (the D31 queue-state test).
+- **Why:** LOOP.md step 5 names this pairing
+- **Evidence:** docs/loop/LOOP.md step 5; scratchpad journal.md
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** locked by docs/loop/LOOP.md
+
+## D39: Build in four waves: protocol, then modules, then wiring and the React shell, then scenario tests
+- **Question:** subagent-driven-development Step 3 decomposition
+- **Options:** one task per package; modules first with scenario tests last, as m0-daemon-api D34 did
+- **Chose:** W1: T1 protocol types and helpers, plus compile stubs in host.ts and methods.ts. W2 (six parallel components): T2 UI kind validation, T3a the UI model builder, T3bc store tables and the plugin file server, T4 the CLI groups, T5 the window plugin host, T6 the React-sharing build. W3: T3d daemon wiring (host hook, UiService, methods, context, routes), T7 the React shell. W4: T8 daemon scenario tests, T9 window scenario tests, each allowed to fix only its own area's modules (as m0-daemon-api D40).
+- **Why:** every later task needs the protocol types, and the scenario tests need the wiring. Splitting W2 by file keeps the six components disjoint.
+- **Evidence:** docs/quirk/specs/2026-10-26-m0-ui-api/tech.md "Code references"
+- **Reversibility:** easy
+- **Confidence:** medium
+- **Source:** assumed — autonomous
+
