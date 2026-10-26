@@ -151,7 +151,7 @@ describe('helpText', () => {
   test('the top level lists every command and points to quirky api', () => {
     const lines = helpText().split('\n')
     expect(lines[0]).toBe('usage: quirky [--json] <command> [options]')
-    expect(lines.at(-1)).toBe("run 'quirky api' to list every command, including plugins")
+    expect(lines.at(-1)).toBe("run 'quirky api' to list every command, including plugins'")
     expect(lines.some((line) => line.includes('session new --agent <string>'))).toBe(true)
   })
 

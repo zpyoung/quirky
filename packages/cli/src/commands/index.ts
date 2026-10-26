@@ -129,5 +129,5 @@ export function helpText(topic: readonly string[] = [], commands: readonly Comma
   const lines = listed.map((command, i) => `  ${usages[i].padEnd(width)}  ${command.summary}`)
   const footer = 'global: --json prints machine-readable JSON; <command> --help shows one command'
   if (group.length) return [`usage: quirky ${name} <command>`, '', 'commands:', ...lines, '', footer].join('\n')
-  return [USAGE_LINE, '', 'commands:', ...lines, '', footer, "run 'quirky api' to list every command, including plugins"].join('\n')
+  return [USAGE_LINE, '', 'commands:', ...lines, '', footer, "run 'quirky api' to list every command, including plugins'"].join('\n')
 }

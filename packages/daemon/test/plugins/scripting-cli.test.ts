@@ -276,7 +276,7 @@ describe('SC-16: help covers kernel and plugin commands from their declarations'
     expect(result.code).toBe(0)
     expect(result.stdout).toContain('wt list')
     expect(result.stdout).toContain('session new')
-    expect(result.stdout.trimEnd().split('\n').at(-1)).toBe("run 'quirky api' to list every command, including plugins")
+    expect(result.stdout.trimEnd().split('\n').at(-1)).toBe("run 'quirky api' to list every command, including plugins'")
     expect(s.activated()).toBe(false)
   })
 
