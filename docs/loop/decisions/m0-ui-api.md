@@ -399,3 +399,24 @@
 - **Confidence:** medium
 - **Source:** assumed — autonomous
 
+## D40: Skip wave 1's checkpoint review
+- **Question:** subagent-driven-development Step 7 runs a checkpoint review after every wave with a successor
+- **Options:** review the protocol wave; skip it with a reason
+- **Chose:** skip. Wave 1 added types, pure chord and setting helpers with 27 unit tests, and throwing stubs; every later wave builds against those types, and the final loop reviews them with everything else.
+- **Why:** the skill allows skipping a genuinely trivial non-final wave with a recorded reason
+- **Evidence:** commit 9efa279 (merged as 8917b45)
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** assumed — autonomous
+
+## D41: Wave 2's work was restored from the object store after a failed commit step, and committed on the feature branch directly
+- **Question:** the wave-end commit loop used a bash-only expansion under zsh, so no component commit was made, and the worktree cleanup that followed removed the uncommitted trees
+- **Options:** re-dispatch all six tasks; restore the files from the blobs `git add -A` had already written
+- **Chose:** restore. `git fsck --unreachable` found exactly 32 blobs written in the last half hour, one per changed file the audit had listed. Each was mapped back by content, and every modified file's blob diffed against HEAD by a size consistent with its task. The six tasks were then committed one per task straight onto `build/m0-ui-api` instead of through component merges. The full gate on the result passed: 1006 tests, typecheck clean.
+- **Why:** the audited, accepted content was intact in the object store, so re-running six implementers would only have produced different, unreviewed code
+- **Evidence:** commits fbf02b8 to 4c0c8a2; scratchpad acc-*.log (per-task acceptance before the loss) and gate-w2.log
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** a review finds a file that doesn't match its task's report
+- **Source:** assumed — autonomous
+
