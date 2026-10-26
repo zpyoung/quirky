@@ -41,6 +41,14 @@ describe('theme list', () => {
     expect(lines[2].split(/\s{2,}/)).toEqual([SOLAR, 'Solar', 'light', '(chosen)'])
   })
 
+  test('keeps a chosen theme that is no longer listed as a chosen line', async () => {
+    daemon.ui.theme = { chosen: SOLAR, active: 'default' }
+    const lines = (await run(['theme', 'list'])).stdout.trimEnd().split('\n')
+    expect(lines).toHaveLength(3)
+    expect(lines[1].split(/\s{2,}/)).toEqual(['default', 'Quirky Dark', 'dark', '*'])
+    expect(lines[2]).toBe(`chosen: ${SOLAR} (not in effect)`)
+  })
+
   test('--json prints the theme list', async () => {
     daemon.addTheme('acme.solar', 'solar')
     const result = await run(['theme', 'list', '--json'])
