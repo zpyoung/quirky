@@ -41,48 +41,16 @@
       "status": "done"
     },
     {
-      "id": "m0-cli-core",
+      "id": "m0-core",
       "milestone": "M0",
-      "title": "CLI core: unix socket, selectors, --version, idempotent request ids",
+      "title": "Rest of M0 as one item: CLI core (unix socket, selectors, --version, idempotent request ids); UI bridge (UI commands as API commands routed to the window, layout and focus in the daemon, quirky ui state); move v1's repos, worktrees, terminals, sessions, agent status, source control, asks and structured sessions into built-in plugins, each with its methods and CLI group; distros and safety (distro manifest, install consent, no silent auto-update, --disable-plugins, irreversible-action confirmations, sample distro and the M0 exit test)",
       "docs": [
-        "cli.md"
-      ],
-      "deps": [
-        "m0-scripting"
-      ],
-      "status": "todo"
-    },
-    {
-      "id": "m0-ui-bridge",
-      "milestone": "M0",
-      "title": "UI bridge: UI commands as API commands routed to the window, layout and focus in the daemon, quirky ui state",
-      "docs": [],
-      "deps": [
-        "m0-ui-api",
-        "m0-scripting"
-      ],
-      "status": "todo"
-    },
-    {
-      "id": "m0-port-v1",
-      "milestone": "M0",
-      "title": "Move v1's repos, worktrees, terminals, sessions, agent status, source control, asks and structured sessions into built-in plugins, each with its methods and CLI group",
-      "docs": [],
-      "deps": [
-        "m0-cli-core",
-        "m0-ui-bridge"
-      ],
-      "status": "todo"
-    },
-    {
-      "id": "m0-distros",
-      "milestone": "M0",
-      "title": "Distros and safety: distro manifest, install consent, no silent auto-update, --disable-plugins, irreversible-action confirmations, sample distro and the M0 exit test",
-      "docs": [
+        "cli.md",
         "ask.md"
       ],
       "deps": [
-        "m0-port-v1"
+        "m0-scripting",
+        "m0-ui-api"
       ],
       "status": "todo"
     },
@@ -93,7 +61,7 @@
       "title": "Review stop after M0",
       "docs": [],
       "deps": [
-        "m0-distros"
+        "m0-core"
       ],
       "status": "todo"
     },
@@ -171,26 +139,14 @@
       "status": "todo"
     },
     {
-      "id": "m1-term-ui-core",
+      "id": "m1-term-ui",
       "milestone": "M1",
-      "title": "Terminal panes: splits, tab groups, layout persistence",
+      "title": "Terminal panes: splits, tab groups, layout persistence, search, floating terminal, quick commands, links, keybindings and every other term-ui flow",
       "docs": [
         "term-ui.md"
       ],
       "deps": [
         "m1-term-daemon"
-      ],
-      "status": "todo"
-    },
-    {
-      "id": "m1-term-ui-extras",
-      "milestone": "M1",
-      "title": "Terminal panes: search, floating terminal, quick commands, links, keybindings and the remaining term-ui flows",
-      "docs": [
-        "term-ui.md"
-      ],
-      "deps": [
-        "m1-term-ui-core"
       ],
       "status": "todo"
     },
@@ -221,38 +177,14 @@
       "status": "todo"
     },
     {
-      "id": "m2-editor-core",
+      "id": "m2-editor",
       "milestone": "M2",
-      "title": "Editor: explorer, tabs, CodeMirror editing with the disk precondition, file watching, quick open and search",
+      "title": "Editor: explorer, tabs, CodeMirror editing with the disk precondition, file watching, quick open and search, rich Markdown, notebooks and the CSV, image, PDF and media viewers",
       "docs": [
         "editor.md"
       ],
       "deps": [
         "m1-worktrees"
-      ],
-      "status": "todo"
-    },
-    {
-      "id": "m2-editor-markdown",
-      "milestone": "M2",
-      "title": "Editor: rich Markdown",
-      "docs": [
-        "editor.md"
-      ],
-      "deps": [
-        "m2-editor-core"
-      ],
-      "status": "todo"
-    },
-    {
-      "id": "m2-editor-viewers",
-      "milestone": "M2",
-      "title": "Editor: notebooks and the CSV, image, PDF and media viewers",
-      "docs": [
-        "editor.md"
-      ],
-      "deps": [
-        "m2-editor-core"
       ],
       "status": "todo"
     },
@@ -302,7 +234,7 @@
         "terminal-dock.md"
       ],
       "deps": [
-        "m1-term-ui-core",
+        "m1-term-ui",
         "m1-agent-status",
         "m1-providers"
       ],
@@ -323,51 +255,27 @@
       "status": "todo"
     },
     {
-      "id": "m3-accounts-usage",
+      "id": "m3-accounts",
       "milestone": "M3",
-      "title": "Accounts: read-only usage meters and rate limits",
+      "title": "Accounts: read-only usage meters and rate limits, Claude and Codex account switching",
       "docs": [
         "accounts.md"
       ],
       "deps": [
-        "m1-providers"
-      ],
-      "status": "todo"
-    },
-    {
-      "id": "m3-accounts-switching",
-      "milestone": "M3",
-      "title": "Accounts: Claude and Codex account switching",
-      "docs": [
-        "accounts.md"
-      ],
-      "deps": [
-        "m3-accounts-usage",
+        "m1-providers",
         "m1-agent-status"
       ],
       "status": "todo"
     },
     {
-      "id": "m3-vault-browse",
+      "id": "m3-vault",
       "milestone": "M3",
-      "title": "AI vault: browse and resume sessions across agents",
+      "title": "AI vault: browse and resume sessions across agents, opt-in full-text search",
       "docs": [
         "ai-vault.md"
       ],
       "deps": [
         "m1-providers"
-      ],
-      "status": "todo"
-    },
-    {
-      "id": "m3-vault-search",
-      "milestone": "M3",
-      "title": "AI vault: opt-in full-text search",
-      "docs": [
-        "ai-vault.md"
-      ],
-      "deps": [
-        "m3-vault-browse"
       ],
       "status": "todo"
     },
@@ -397,26 +305,14 @@
       "status": "todo"
     },
     {
-      "id": "m4-hosting-ui-pr",
+      "id": "m4-hosting-ui",
       "milestone": "M4",
-      "title": "Checks panel, PR page, Create PR",
+      "title": "Hosting UI: checks panel, PR page, Create PR, tasks list, issue page, Projects",
       "docs": [
         "hosting-ui.md"
       ],
       "deps": [
         "m4-hosting-api-github"
-      ],
-      "status": "todo"
-    },
-    {
-      "id": "m4-hosting-ui-tasks",
-      "milestone": "M4",
-      "title": "Tasks list, issue page, Projects",
-      "docs": [
-        "hosting-ui.md"
-      ],
-      "deps": [
-        "m4-hosting-ui-pr"
       ],
       "status": "todo"
     },
@@ -448,7 +344,7 @@
     {
       "id": "sa-browser-agent",
       "milestone": "Side A",
-      "title": "Browser: agent automation over an on-demand Chrome and CDP",
+      "title": "Browser: agent automation over an on-demand Chrome and CDP, cookie import",
       "docs": [
         "browser.md"
       ],
@@ -458,33 +354,9 @@
       "status": "todo"
     },
     {
-      "id": "sa-browser-pane",
+      "id": "sa-browser-ui",
       "milestone": "Side A",
-      "title": "Browser: visible pane and screencast",
-      "docs": [
-        "browser.md"
-      ],
-      "deps": [
-        "sa-browser-agent"
-      ],
-      "status": "todo"
-    },
-    {
-      "id": "sa-browser-design",
-      "milestone": "Side A",
-      "title": "Browser: design mode",
-      "docs": [
-        "browser.md"
-      ],
-      "deps": [
-        "sa-browser-pane"
-      ],
-      "status": "todo"
-    },
-    {
-      "id": "sa-browser-cookies",
-      "milestone": "Side A",
-      "title": "Browser: cookie import",
+      "title": "Browser: visible pane and screencast, design mode",
       "docs": [
         "browser.md"
       ],
@@ -598,27 +470,15 @@
       "status": "todo"
     },
     {
-      "id": "sb-mobile-daemon",
+      "id": "sb-mobile",
       "milestone": "Side B",
-      "title": "Mobile groundwork in the daemon: non-loopback listener, pairing, end-to-end encryption, method allowlist",
+      "title": "Mobile: daemon groundwork (non-loopback listener, pairing, end-to-end encryption, method allowlist) and the app, a fork of Orca's Expo app onto Quirky's API",
       "docs": [
         "mobile.md"
       ],
       "deps": [
         "m1-term-daemon",
         "m1-agent-status"
-      ],
-      "status": "todo"
-    },
-    {
-      "id": "sb-mobile-app",
-      "milestone": "Side B",
-      "title": "Mobile app: fork of Orca's Expo app onto Quirky's API",
-      "docs": [
-        "mobile.md"
-      ],
-      "deps": [
-        "sb-mobile-daemon"
       ],
       "status": "todo"
     },

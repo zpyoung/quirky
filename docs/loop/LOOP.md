@@ -78,14 +78,20 @@ and either work within it or block the item. Never silently diverge.
    - **Acceptance criteria:** the logic spec lists each in-scope flow from the feature docs.
    - **Defects:** it also lists each Orca defect those docs record, as a test showing Quirky doesn't
      have it.
-   - **Review:** replace the user's spec review with `quirk:adversarial-review` on each spec, using
-     Codex as the reviewer. Fix every confirmed finding, or record why you didn't as a decision.
+   - **Review:** replace the user's spec review with one `quirk:adversarial-review` pass over both
+     specs together, using Codex as the reviewer. Fix every confirmed finding, or record why you
+     didn't as a decision.
    - **Commit** both specs before building.
 5. **Build.** Run `quirk:subagent-driven-development` against the specs.
    - **Model pairing:** at its preflight, choose `claude-task + codex`, with Claude subagents
      implementing and Codex reviewing. If Codex isn't reachable, take the skill's next
      cross-family pair and record that as a decision.
    - **Its questions** are answered the same way as brainstorming's.
+   - **One final review round.** Run Final Round 1 and one fix batch for its accepted findings,
+     then re-run the build and tests instead of Final Rounds 2–5. Append every finding the fix
+     batch didn't close, or that you couldn't confirm closed, to `docs/loop/BLOCKERS.md` under
+     `## <id>: open review findings`, each with its severity and file:line, and finish the item.
+     Checkpoint reviews run as the skill says.
 6. **Verify.** The item is done only when every one of these holds:
    - Each acceptance criterion has a test, and each flow's test drives Quirky through the `quirky`
      CLI or the daemon API, as the roadmap requires.
