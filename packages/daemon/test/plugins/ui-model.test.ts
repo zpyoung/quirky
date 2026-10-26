@@ -337,7 +337,7 @@ describe('keybindings', () => {
 
   test('reserved chords are shadowed by the kernel, each with a warning', () => {
     const { model, warnings } = build(
-      [decl('command', 'a.p', 'go'), decl('command', 'b.q', 'go'), key('a.p', 'k', 'mod+t'), key('b.q', 'k', 'Cmd+T')],
+      [decl('command', 'a.p', 'go'), decl('command', 'b.q', 'go'), key('a.p', 'k', 'mod+shift+p'), key('b.q', 'k', 'Cmd+Shift+P')],
       [withUi('a.p'), withUi('b.q')]
     )
     expect(model.keybindings.map((k) => [k.status, k.shadowedBy])).toEqual([
@@ -345,9 +345,9 @@ describe('keybindings', () => {
       ['shadowed', 'kernel'],
     ])
     expect(warnings.get('a.p')).toEqual([
-      { level: 'warning', message: "keybinding:a.p/k is shadowed by the window's own shortcut mod+t" },
+      { level: 'warning', message: "keybinding:a.p/k is shadowed by the window's own shortcut mod+shift+p" },
     ])
-    expect(warnings.get('b.q')?.[0].message).toBe("keybinding:b.q/k is shadowed by the window's own shortcut mod+t")
+    expect(warnings.get('b.q')?.[0].message).toBe("keybinding:b.q/k is shadowed by the window's own shortcut mod+shift+p")
   })
 
   test('installed beats builtin and the loser carries the warning (SC-16)', () => {
@@ -580,10 +580,10 @@ describe('distro keybindings', () => {
 
   test('on a reserved chord it is shadowed by the kernel like any other binding', () => {
     const { model } = withDistro([decl('command', 'a.p', 'go')], [withUi('a.p')], [
-      { key: 'mod+t', command: 'command:a.p/go' },
+      { key: 'mod+shift+p', command: 'command:a.p/go' },
     ])
     expect(model.keybindings).toEqual([
-      { id: 'keybinding:night/k1', plugin: 'night', key: 'mod+t', command: 'command:a.p/go', status: 'shadowed', shadowedBy: 'kernel' },
+      { id: 'keybinding:night/k1', plugin: 'night', key: 'mod+shift+p', command: 'command:a.p/go', status: 'shadowed', shadowedBy: 'kernel' },
     ])
   })
 

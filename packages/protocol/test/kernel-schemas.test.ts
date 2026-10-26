@@ -1,17 +1,9 @@
 import { describe, expect, test } from 'bun:test'
-import { AGENT_KINDS, CONNECTION_METHODS, KERNEL_EVENT_SCHEMAS, KERNEL_METHOD_SCHEMAS, type KernelMethodSchema, type Schema } from '../src'
+import { CONNECTION_METHODS, KERNEL_EVENT_SCHEMAS, KERNEL_METHOD_SCHEMAS, type KernelMethodSchema, type Schema } from '../src'
 
-const METHOD_COUNT = 67
+const METHOD_COUNT = 37
 const EVENT_TYPES = [
-  'repo.changed',
-  'worktree.changed',
-  'session.changed',
-  'session.removed',
-  'git.changed',
-  'ask.created',
-  'ask.resolved',
   'notify',
-  'structured.message',
   'plugin.changed',
   'setting.changed',
   'theme.changed',
@@ -36,7 +28,7 @@ function walk(schema: Schema): Schema[] {
 describe('kernel method schemas', () => {
   test('cover every method, including api.describe', () => {
     expect(methodNames).toHaveLength(METHOD_COUNT)
-    for (const name of ['api.describe', 'repo.add', 'client.hello', 'theme.set', 'plugin.activate']) {
+    for (const name of ['api.describe', 'client.hello', 'theme.set', 'plugin.activate', 'ui.state']) {
       expect(methodNames).toContain(name)
     }
   })
@@ -48,8 +40,7 @@ describe('kernel method schemas', () => {
       [
         'status.get', 'plugin.list', 'plugin.contributions', 'plugin.inspect', 'api.describe', 'job.list',
         'ui.contributions', 'ui.state', 'setting.list', 'setting.get', 'theme.list', 'distro.list',
-        'distro.inspect', 'repo.list', 'worktree.list', 'session.list', 'terminal.read', 'git.status',
-        'git.diff', 'ask.wait', 'ask.list', 'structured.messages'
+        'distro.inspect'
       ].sort()
     )
     const destructive = Object.keys(entries).filter((name) => entries[name]!.destructive)
@@ -64,6 +55,21 @@ describe('kernel method schemas', () => {
     for (const name of ['ui.report', 'ui.window.focused', 'ui.command.reply']) {
       expect(CONNECTION_METHODS).toContain(name as (typeof CONNECTION_METHODS)[number])
     }
+  })
+
+  test('only the hello, subscribe and ui window methods are connection methods', () => {
+    expect([...CONNECTION_METHODS].sort()).toEqual([
+      'client.hello',
+      'events.subscribe',
+      'ui.command.reply',
+      'ui.report',
+      'ui.window.focused'
+    ])
+  })
+
+  test('no v1 feature method keeps a schema', () => {
+    const v1 = /^(settings|repo|worktree|session|terminal|git|ask|structured)\./
+    expect(methodNames.filter((name) => v1.test(name))).toEqual([])
   })
 
   test('every connection method has a schema', () => {
@@ -94,26 +100,10 @@ describe('kernel method schemas', () => {
 
   test('params never reject what the handlers accept', () => {
     const p = (name: string) => methodSchemas[name]!
-    expect(p('git.diff').required).not.toContain('staged')
-    expect(p('git.diff').properties!.staged!.type).toBe('boolean')
-    expect(p('settings.set').required ?? []).toEqual([])
-    expect(Object.keys(p('settings.set').properties!).sort()).toEqual(['notifications', 'terminalScrollback', 'worktreesRoot'])
-    expect(p('settings.set').properties!.terminalScrollback).toMatchObject({ type: 'integer', minimum: 0 })
     expect(p('setting.set').required).toEqual(['id', 'value'])
     expect(p('setting.set').properties!.value!.type).toBeUndefined()
-    expect(p('ask.create').properties!.spec).toMatchObject({ type: 'object', additionalProperties: true })
-    expect(p('ask.answer').properties!.answers).toMatchObject({ type: 'object', additionalProperties: true })
-    expect(p('ask.answer').properties!.skipped).toMatchObject({ type: 'array', items: { type: 'string' } })
-    expect(p('ask.wait').properties!.timeoutMs).toMatchObject({ type: 'integer', minimum: 0 })
-    expect(p('ask.wait').properties!.timeoutMs!.maximum).toBeUndefined()
     expect(p('client.hello').properties!.protocolVersion).toMatchObject({ type: 'integer', minimum: 0 })
     expect(p('client.hello').properties!.role!.enum).toEqual(['desktop', 'ui', 'cli', 'mobile'])
-    expect(p('terminal.detach').properties!.streamId).toMatchObject({ type: 'integer', minimum: 0 })
-    expect(p('terminal.read').properties!.lines).toMatchObject({ type: 'integer', minimum: 1 })
-    expect(p('structured.messages').properties!.afterSeq).toMatchObject({ type: 'integer', minimum: 0 })
-    expect(p('session.create').required).toEqual(['worktreeId', 'agent'])
-    expect(p('session.create').properties!.agent!.enum).toEqual([...AGENT_KINDS])
-    expect(p('git.stage').properties!.paths).toMatchObject({ type: 'array', items: { type: 'string' } })
     expect(p('status.get')).toEqual({ type: 'object' })
   })
 })
@@ -121,6 +111,10 @@ describe('kernel method schemas', () => {
 describe('kernel event schemas', () => {
   test('cover every event type', () => {
     expect(Object.keys(KERNEL_EVENT_SCHEMAS).sort()).toEqual([...EVENT_TYPES].sort())
+  })
+
+  test('notify requires desktop', () => {
+    expect(KERNEL_EVENT_SCHEMAS.notify.data.required).toEqual(['title', 'body', 'desktop'])
   })
 
   test('every entry describes an object without a type property', () => {

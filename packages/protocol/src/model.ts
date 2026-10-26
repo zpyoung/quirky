@@ -120,10 +120,3 @@ export type StructuredMessage = {
   data?: unknown
   at: number
 }
-
-export type Settings = {
-  /** Root under which new worktrees are created as `<root>/<repo name>/<worktree name>`. */
-  worktreesRoot: string
-  terminalScrollback: number
-  notifications: boolean
-}

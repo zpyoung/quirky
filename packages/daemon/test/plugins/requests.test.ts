@@ -53,7 +53,7 @@ function conn(id: number, overrides: Partial<ClientConn> = {}): ClientConn {
 function setup() {
   const dir = makeTempDir()
   const dbPath = join(dir, 'q.db')
-  const runs = { create: 0, list: 0, repoAdd: 0, repoList: 0 }
+  const runs = { create: 0, list: 0, enable: 0, jobList: 0 }
   const gate: { release: () => void } = { release: () => {} }
   const clock = { now: 1_000_000 }
   const host = stubHost({
@@ -87,8 +87,8 @@ function setup() {
     }
   })
   const handlers = {
-    'repo.add': (params: { path: string }) => ({ id: 'r1', path: params.path, n: ++runs.repoAdd }),
-    'repo.list': () => ({ n: ++runs.repoList }),
+    'plugin.enable': (params: { id: string }) => ({ id: 'r1', target: params.id, n: ++runs.enable }),
+    'job.list': () => ({ n: ++runs.jobList }),
     'events.subscribe': () => ({ ok: true })
   } as unknown as Handlers
   const open = () => {
@@ -187,10 +187,10 @@ describe('request IDs', () => {
     const t = setup()
     await t.dispatcher.dispatch('acme.tools/list', {}, { conn: conn(1) }, { requestId: 'r-2' })
     await t.dispatcher.dispatch('acme.tools/list', {}, { conn: conn(1) }, { requestId: 'r-2' })
-    await t.dispatcher.dispatch('repo.list', {}, { conn: conn(1) }, { requestId: 'r-2k' })
-    await t.dispatcher.dispatch('repo.list', {}, { conn: conn(1) }, { requestId: 'r-2k' })
+    await t.dispatcher.dispatch('job.list', {}, { conn: conn(1) }, { requestId: 'r-2k' })
+    await t.dispatcher.dispatch('job.list', {}, { conn: conn(1) }, { requestId: 'r-2k' })
     expect(t.runs.list).toBe(2)
-    expect(t.runs.repoList).toBe(2)
+    expect(t.runs.jobList).toBe(2)
     expect(t.store.getRequest('r-2')).toBeNull()
   })
 
@@ -202,15 +202,15 @@ describe('request IDs', () => {
 
   test('SC-14: records survive a restart and expire after 24 hours', async () => {
     const t = setup()
-    const first = await t.dispatcher.dispatch('repo.add', { path: '/tmp/web' }, { conn: conn(1) }, { requestId: 'r-3' })
+    const first = await t.dispatcher.dispatch('plugin.enable', { id: 'acme.web' }, { conn: conn(1) }, { requestId: 'r-3' })
     t.store.close()
     const restarted = t.open()
-    expect(await restarted.dispatcher.dispatch('repo.add', { path: '/tmp/web' }, { conn: conn(1) }, { requestId: 'r-3' })).toEqual(first)
-    expect(t.runs.repoAdd).toBe(1)
+    expect(await restarted.dispatcher.dispatch('plugin.enable', { id: 'acme.web' }, { conn: conn(1) }, { requestId: 'r-3' })).toEqual(first)
+    expect(t.runs.enable).toBe(1)
 
     t.clock.now += DAY + 1
-    const again = await restarted.dispatcher.dispatch('repo.add', { path: '/tmp/web' }, { conn: conn(1) }, { requestId: 'r-3' })
-    expect(again).toEqual({ id: 'r1', path: '/tmp/web', n: 2 })
+    const again = await restarted.dispatcher.dispatch('plugin.enable', { id: 'acme.web' }, { conn: conn(1) }, { requestId: 'r-3' })
+    expect(again).toEqual({ id: 'r1', target: 'acme.web', n: 2 })
   })
 
   test('calls without a request ID, or from a plugin, are not recorded', async () => {

@@ -64,9 +64,9 @@ describe('disabled ids', () => {
 
   test('settings are untouched', () => {
     const store = new Store(dbPath())
-    const before = store.getSettings()
+    const before = store.legacySettings()
     store.setDisabledId('a.plugin', true)
-    expect(store.getSettings()).toEqual(before)
+    expect(store.legacySettings()).toEqual(before)
     store.close()
   })
 })

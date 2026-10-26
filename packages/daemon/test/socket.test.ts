@@ -7,6 +7,7 @@ import { DaemonError } from '../src/errors'
 import { createRpcHandler } from '../src/rpc-handler'
 import type { ClientConn } from '../src/types'
 import { makeTempHome, startHarness, waitFor, type Harness } from './helpers'
+import { makeTempDir, removeTempDirs, writeModulePlugin } from './plugins/fixtures'
 
 let h: Harness | null = null
 const extra: QuirkyClient[] = []
@@ -14,6 +15,7 @@ afterEach(async () => {
   for (const client of extra.splice(0)) client.close()
   await h?.cleanup()
   h = null
+  removeTempDirs()
 })
 
 const uid = process.getuid!()
@@ -70,18 +72,17 @@ describe('unix socket transport', () => {
     const status = await client.call('status.get', {})
     expect(status.clients).toContainEqual({ role: 'cli', name: 'quirky' })
     expect(status.socket).toBe(h.runtime.socket!)
-    expect(await client.call('repo.list', {})).toEqual([])
+    expect(await client.call('job.list', {})).toEqual([])
   })
 
   test('socket clients get subscribed events', async () => {
     h = await startHarness()
-    h.git.addRepo('/fake/alpha')
     const client = await viaSocket(h, { subscribe: true })
     const events: QuirkyEvent[] = []
     client.onEvent((event) => events.push(event))
     const other = await h.connect()
-    await other.call('repo.add', { path: '/fake/alpha' })
-    await waitFor(() => events.find((event) => event.type === 'repo.changed'))
+    await other.call('ui.sidebar.set', { visible: false })
+    await waitFor(() => events.find((event) => event.type === 'ui.state.changed'))
   })
 
   test('the connection is removed from status when the socket closes', async () => {
@@ -248,12 +249,17 @@ describe('unix socket transport', () => {
     expect((await client.call('status.get', {})).socket).toBe(path)
   })
 
-  test('SC-5: terminal.attach over the socket is refused', async () => {
-    h = await startHarness()
+  test('SC-5: a plugin stream method over the socket is refused', async () => {
+    const home = makeTempHome()
+    writeModulePlugin(
+      join(home, 'plugins'),
+      join(makeTempDir(), 'marker.log'),
+      { id: 'acme.stream', contributes: { method: [{ id: 'open', connection: true, params: { type: 'object' } }] } },
+      { activate: "context.provide('method:acme.stream/open', async (_params, caller) => { caller.connection.openStream(); return {} })" }
+    )
+    h = await startHarness({ home })
     const client = await viaSocket(h)
-    const error = (await client
-      .call('terminal.attach', { sessionId: 's_any', cols: 80, rows: 24 })
-      .catch((e) => e)) as RpcError
+    const error = (await client.callAny('acme.stream/open', {}).catch((e) => e)) as RpcError
     expect(error).toBeInstanceOf(RpcError)
     expect(error.code).toBe(RpcErrorCode.InvalidParams)
     expect(error.message).toBe('this method needs the WebSocket transport')

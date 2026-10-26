@@ -69,6 +69,6 @@ describe('QuirkyEvent', () => {
     const pluginEvent: QuirkyEvent = { type: 'acme.tools/refreshed', data: 1 }
     const title = (event: QuirkyEvent): string | null => (event.type === 'notify' ? event.title : null)
     expect(title(pluginEvent)).toBeNull()
-    expect(title({ type: 'notify', title: 't', body: 'b' })).toBe('t')
+    expect(title({ type: 'notify', title: 't', body: 'b', desktop: true })).toBe('t')
   })
 })

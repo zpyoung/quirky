@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from 'bun:test'
 import { join } from 'node:path'
 import type { QuirkyClient } from '@quirky/protocol'
 import { makeTempHome, startHarness, type Harness } from '../helpers'
-import { makeTempDir, readMarker, removeTempDirs, writeModulePlugin, type ModuleBehavior } from './fixtures'
+import { launcher, makeTempDir, readMarker, removeTempDirs, writeModulePlugin, type ModuleBehavior } from './fixtures'
 
 let h: Harness | null = null
 afterEach(async () => {
@@ -13,25 +13,24 @@ afterEach(async () => {
 
 type Plugin = { manifest: { id: string } & Record<string, unknown>; behavior?: ModuleBehavior }
 
-/** Starts a daemon with only the given installed plugins, a repo with one worktree, and a CLI client. */
+/** Starts a daemon with only the given installed plugins plus a launcher, and a CLI client. */
 async function boot(plugins: Plugin[], options: { launchHookTimeoutMs?: number } = {}) {
   const home = makeTempHome()
   const marker = join(makeTempDir(), 'marker.log')
-  for (const { manifest, behavior } of plugins) writeModulePlugin(join(home, 'plugins'), marker, manifest, behavior)
+  for (const { manifest, behavior } of [launcher, ...plugins]) {
+    writeModulePlugin(join(home, 'plugins'), marker, manifest, behavior)
+  }
   const harness = await startHarness({ home, builtinPluginsDir: null, ...options })
   h = harness
   const client: QuirkyClient = await harness.connect()
-  harness.git.addRepo('/fake/alpha')
-  const repo = await client.call('repo.add', { path: '/fake/alpha' })
-  const [worktree] = await client.call('worktree.list', { repoId: repo.id })
 
   async function createSession(agent: 'claude' | 'shell', prompt?: string) {
-    const session = await client.call('session.create', { worktreeId: worktree!.id, agent, ...(prompt ? { prompt } : {}) })
+    const session = (await client.callAny('acme.launcher/launch', { agent, ...(prompt ? { prompt } : {}) })) as { id: string }
     const request = harness.pty.requests.find((r) => r.type === 'create' && r.sessionId === session.id)
     if (!request || request.type !== 'create') throw new Error('no create request')
     return { session, request }
   }
-  return { harness, client, home, lines: () => readMarker(marker), createSession }
+  return { harness, client, home, lines: () => readMarker(marker).filter((line) => !line.includes('acme.launcher')), createSession }
 }
 
 const hookPlugin = (id: string, hook: string, source: string, agents?: string[]): Plugin => ({
@@ -47,10 +46,7 @@ describe('launch hooks', () => {
     const { request } = await s.createSession('claude', 'hi')
     expect(request.env.ACME_TOKEN).toBe('abc')
     expect(request.argv[0]).toBe('/bin/zsh')
-    expect(request.argv[3]).toBe(
-      `export PATH="${s.home}/bin:$PATH"; exec claude --settings '${s.home}/hooks/claude-settings.json' '--model' 'opus' 'hi'`
-    )
-    expect(request.argv[3]).toMatch(/exec claude --settings '[^']+' '--model' 'opus' 'hi'$/)
+    expect(request.argv[3]).toBe(`export PATH="${s.home}/bin:$PATH"; exec claude '--model' 'opus' 'hi'`)
   })
 
   test("SC-23: a hook for other agents doesn't run, or load", async () => {

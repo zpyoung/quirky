@@ -43,7 +43,7 @@ export function activate(context: any) {
     }
     return {
       emit: await message(() => savedContext.emit('ping', {})),
-      call: await message(() => savedContext.call('repo.list', {})),
+      call: await message(() => savedContext.call('job.list', {})),
       openStore: await message(() => savedContext.openStore(['CREATE TABLE t (n INTEGER)'])),
       store: await message(() => savedStore.version),
     }
@@ -77,9 +77,8 @@ describe('plugin lifecycle', () => {
     expect((await info()).state).toBe('active')
 
     // the listener is live while the plugin is active
-    h.git.addRepo('/fake/alpha')
-    await client.call('repo.add', { path: '/fake/alpha' })
-    await waitFor(() => lines().includes('event repo.changed'))
+    await client.call('ui.sidebar.set', { visible: false })
+    await waitFor(() => lines().includes('event ui.state.changed'))
 
     const running = client.call('job.run', { id: JOB })
     await waitFor(() => lines().includes('job started'))
@@ -95,8 +94,7 @@ describe('plugin lifecycle', () => {
 
     // events after the disable never reach the listener
     const seen = lines().filter((line) => line.startsWith('event ')).length
-    h.git.addRepo('/fake/beta')
-    await client.call('repo.add', { path: '/fake/beta' })
+    await client.call('ui.sidebar.set', { visible: true })
     await Bun.sleep(100)
     expect(lines().filter((line) => line.startsWith('event ')).length).toBe(seen)
 

@@ -274,8 +274,8 @@ describe('SC-16: help covers kernel and plugin commands from their declarations'
     const s = await boot()
     const result = await s.cli('--help')
     expect(result.code).toBe(0)
-    expect(result.stdout).toContain('wt list')
-    expect(result.stdout).toContain('session new')
+    expect(result.stdout).toContain('job list')
+    expect(result.stdout).toContain('plugin enable')
     expect(result.stdout.trimEnd().split('\n').at(-1)).toBe("run 'quirky api' to list every command, including plugins'")
     expect(s.activated()).toBe(false)
   })
@@ -359,21 +359,21 @@ describe('SC-17: an unknown command gets suggestions', () => {
 describe('SC-18: an unknown flag names the valid ones, and a valued flag needs its value', () => {
   test('an unknown flag lists the valid flags', async () => {
     const s = await boot()
-    const result = await s.cli('wt', 'list', '--bogus')
+    const result = await s.cli('theme', 'list', '--bogus')
     expect(result.code).toBe(2)
-    expect(result.stderr).toContain('unknown flag --bogus for wt list')
-    expect(result.stderr).toContain('valid flags: --repo, --json, --help')
+    expect(result.stderr).toContain('unknown flag --bogus for theme list')
+    expect(result.stderr).toContain('valid flags: --json, --help')
   })
 
   test.each([
-    [['--prompt'], '--prompt requires a value'],
-    [['--prompt', '--json'], '--prompt requires a value; write --prompt=<value> for a value starting with --']
-  ])('session new ... %j -> %s, and no session starts', async (tail, message) => {
+    [['--body'], '--body requires a value'],
+    [['--body', '--json'], '--body requires a value; write --body=<value> for a value starting with --']
+  ])('acme.notes add ... %j -> %s, and nothing is added', async (tail, message) => {
     const s = await boot()
-    const result = await s.cli('session', 'new', '--agent', 'claude', '--worktree', 'w1', ...tail)
+    const result = await s.cli('acme.notes', 'add', '--title', 'x', ...tail)
     expect(result.code).toBe(2)
     expect(result.stderr + result.stdout).toContain(message)
-    expect(await s.client.call('session.list', {})).toEqual([])
+    expect(s.calls()).toEqual([])
   })
 })
 
@@ -387,9 +387,9 @@ describe('SC-19: under --json, an error is JSON on stdout', () => {
 
   test('an unknown command carries suggestions', async () => {
     const s = await boot()
-    expect(await failure(s, 'wt', 'lst')).toEqual({
+    expect(await failure(s, 'job', 'lst')).toEqual({
       code: 2,
-      body: { error: { code: 'usage', message: 'unknown command "wt lst"', suggestions: ['wt list'] } }
+      body: { error: { code: 'usage', message: 'unknown command "job lst"', suggestions: ['job list'] } }
     })
   })
 
@@ -419,9 +419,9 @@ describe('SC-19: under --json, an error is JSON on stdout', () => {
 
   test('a daemon invalid-params error exits 1', async () => {
     const s = await boot()
-    expect(await failure(s, 'api', 'call', 'repo.add', '--path', '')).toEqual({
+    expect(await failure(s, 'api', 'call', 'plugin.enable', '--id', '')).toEqual({
       code: 1,
-      body: { error: { code: 'invalid-params', message: 'path must be a non-empty string' } }
+      body: { error: { code: 'invalid-params', message: 'id must be a non-empty string' } }
     })
   })
 })

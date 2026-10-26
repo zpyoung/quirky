@@ -54,6 +54,7 @@ const NAMED = { type: 'object', properties: { target: { type: 'string' }, name: 
 function setup(options: { asks?: boolean; kernelDescribers?: Record<string, KernelDescriber> } = {}) {
   const asks = new Map<string, AskRecord>()
   const ran: { method: string; params: Record<string, unknown> }[] = []
+  const gone = new Set<string>()
   const methods: Record<string, StubMethod> = {
     'acme.tools/wipe': {
       data: { params: NAMED, destructive: true, confirm: 'Wipe {target}?' },
@@ -72,6 +73,7 @@ function setup(options: { asks?: boolean; kernelDescribers?: Record<string, Kern
     'acme.tools/describeRm': {
       data: { params: NAMED, readOnly: true },
       run: (params, caller) => {
+        if (gone.has(params.name as string)) throw new DaemonError(RpcErrorCode.NotFound, `no such target: ${params.name}`)
         const where = 'worktreeId' in caller ? caller.worktreeId : undefined
         return params.name === 'current' ? `Remove worktree ${where ?? 'none'}?` : `Remove worktree ${params.name}?`
       }
@@ -120,7 +122,7 @@ function setup(options: { asks?: boolean; kernelDescribers?: Record<string, Kern
   const decline = (askId: string) => {
     asks.get(askId)!.status = 'declined'
   }
-  return { dispatcher, asks, ran, answer, decline, store }
+  return { dispatcher, asks, ran, gone, answer, decline, store }
 }
 
 async function failure(promise: Promise<unknown>): Promise<DaemonError> {
@@ -188,6 +190,18 @@ describe('destructive methods', () => {
     expect(error.code).toBe(RpcErrorCode.Conflict)
     expect(error.message).toBe('confirmation already used')
     expect(t.ran).toHaveLength(1)
+  })
+
+  test('SC-45: replaying a used confirmation after its target is gone says it was used, not that the target is missing', async () => {
+    const t = setup()
+    const from = conn(1)
+    const { askId } = await askFor(t, 'acme.tools/rm', { name: 'feature-x' }, from)
+    t.answer(askId, true)
+    await t.dispatcher.dispatch('acme.tools/rm', { name: 'feature-x', confirmation: askId }, { conn: from })
+    t.gone.add('feature-x')
+    const error = await failure(t.dispatcher.dispatch('acme.tools/rm', { name: 'feature-x', confirmation: askId }, { conn: from }))
+    expect(error.code).toBe(RpcErrorCode.Conflict)
+    expect(error.message).toBe('confirmation already used')
   })
 
   test('SC-45: a confirmation cannot move to other params and stays usable for its own', async () => {

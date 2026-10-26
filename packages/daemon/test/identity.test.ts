@@ -4,7 +4,6 @@ import { join } from 'node:path'
 import { QuirkyClient } from '@quirky/protocol'
 import { rpcUrl } from '@quirky/protocol/node'
 import { startDaemon } from '../src/daemon'
-import { createFakeGit } from './fixtures/fake-git'
 import { startFakePtyHost } from './fixtures/fake-pty-host'
 import { makeTempHome } from './helpers'
 
@@ -21,7 +20,6 @@ function setup() {
     const daemon = await startDaemon({
       home,
       port,
-      git: createFakeGit(),
       shell: '/bin/zsh',
       notifier: () => {},
       uiDir: '/none',

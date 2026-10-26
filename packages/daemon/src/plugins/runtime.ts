@@ -143,7 +143,7 @@ export function createPluginRuntime(options: PluginRuntimeOptions): PluginRuntim
           binDir: join(home, 'bin'),
           env(input) {
             guard()
-            const envPatch: Record<string, string> = {}
+            const envPatch: Record<string, string | null> = {}
             for (const [name, value] of Object.entries(input.envPatch ?? {})) {
               if (!isReservedLaunchEnv(name)) envPatch[name] = value
             }

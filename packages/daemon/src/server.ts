@@ -1,9 +1,4 @@
-import {
-  HOOK_PATH_PREFIX,
-  HOOK_TOKEN_HEADER,
-  RPC_PATH,
-  type QuirkyEvent
-} from '@quirky/protocol'
+import { HOOK_PATH_PREFIX, HOOK_TOKEN_HEADER, RPC_PATH } from '@quirky/protocol'
 import { HEALTH_PATH } from '@quirky/protocol/node'
 import { servePluginFile } from './plugin-files'
 import { nextConnId, type RpcHandler, tokensMatch } from './rpc-handler'
@@ -25,8 +20,6 @@ export type ServerOptions = {
   /** Maps a plugin ID to the directory its `/plugins/<id>/` files come from, or null for none. */
   pluginFile: (pluginId: string) => { dir: string } | null
   log: (message: string) => void
-  /** Receives each authenticated hook as a `hook.received` event; delivered to plugins, never to clients. */
-  deliverHook?: (event: QuirkyEvent) => void
 }
 
 function json(body: unknown, status = 200): Response {
@@ -54,11 +47,10 @@ export function startServer(options: ServerOptions) {
       }
     }
     try {
-      options.deliverHook?.({ type: 'hook.received', agent, sessionId, payload })
+      core.deliverToPlugins({ type: 'hook.received', agent, sessionId, payload })
     } catch (error) {
       options.log(`hook.received delivery failed: ${(error as Error)?.stack ?? error}`)
     }
-    await core.handleHook(agent, sessionId, payload)
     return json({ ok: true })
   }
 
