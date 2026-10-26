@@ -22,6 +22,7 @@
   },
   "include": [
     "packages/*/src",
-    "packages/*/test"
+    "packages/*/test",
+    "scripts"
   ]
 }
