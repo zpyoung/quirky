@@ -6,7 +6,7 @@ import {
   type MethodName,
   type ResultOf
 } from '@quirky/protocol'
-import { conflict, invalidParams } from './errors'
+import { conflict, internal, invalidParams } from './errors'
 import type { Core } from './service'
 import type { ClientConn } from './types'
 
@@ -72,6 +72,10 @@ function agent(params: Params): AgentKind {
 }
 
 /** Maps every RPC method to the core, validating params so bad input becomes InvalidParams. */
+function notWired(): never {
+  throw internal('plugin host is not wired yet')
+}
+
 export function createHandlers(core: Core): Handlers {
   return {
     'client.hello': (params, conn) => {
@@ -189,6 +193,12 @@ export function createHandlers(core: Core): Handlers {
     'structured.send': async (params) => {
       await core.sendStructured(str(params, 'sessionId'), str(params, 'text'))
       return OK
-    }
+    },
+
+    'plugin.list': notWired,
+    'plugin.contributions': notWired,
+    'plugin.enable': notWired,
+    'plugin.disable': notWired,
+    'plugin.activate': notWired
   }
 }

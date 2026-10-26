@@ -12,6 +12,7 @@ import type {
   StructuredMessage,
   Worktree
 } from './model'
+import type { ContributionInfo, PluginInfo } from './plugins'
 
 /** Bumped on any breaking change to `Methods`, `QuirkyEvent` or the frame layout. */
 export const PROTOCOL_VERSION = 1
@@ -118,6 +119,20 @@ export type Methods = {
     result: StructuredMessage[]
   }
   'structured.send': { params: { sessionId: string; text: string }; result: Ok }
+
+  /** Every discovered plugin, including invalid ones, with its state and diagnostics. */
+  'plugin.list': { params: Record<string, never>; result: PluginInfo[] }
+  /** Only `effective` contributions unless `all` is set, which returns every declaration. */
+  'plugin.contributions': {
+    params: { kind?: string; pluginId?: string; all?: boolean }
+    result: ContributionInfo[]
+  }
+  /** Clears the user's disable of plugin `id`. */
+  'plugin.enable': { params: { id: string }; result: Ok }
+  /** Disables plugin `id` and every plugin that depends on it. */
+  'plugin.disable': { params: { id: string }; result: Ok }
+  /** Activates the plugin now instead of waiting for first use. */
+  'plugin.activate': { params: { pluginId: string }; result: PluginInfo }
 }
 
 export type MethodName = keyof Methods
@@ -135,6 +150,7 @@ export type QuirkyEvent =
   | { type: 'ask.resolved'; askId: string; envelope: AskEnvelope }
   | { type: 'notify'; title: string; body: string; sessionId?: string; worktreeId?: string }
   | { type: 'structured.message'; message: StructuredMessage }
+  | { type: 'plugin.changed' }
 
 export type RpcRequest = { jsonrpc: '2.0'; id: number; method: string; params?: unknown }
 export type RpcSuccess = { jsonrpc: '2.0'; id: number; result: unknown }
