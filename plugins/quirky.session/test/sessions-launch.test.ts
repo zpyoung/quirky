@@ -46,6 +46,7 @@ describe('SessionService.create', () => {
           return { env: {}, args: [] }
         },
         shellArgv: () => ['/bin/sh'],
+        shellReady: () => false,
         commandArgv: () => ['/bin/sh'],
         env: () => ({})
       },
