@@ -388,5 +388,26 @@
 - **Confidence:** high
 - **Source:** assumed — autonomous
 
+## D39: The final review loop ends after the closure round passes on all three lenses
+- **Question:** subagent-driven-development Step 10's exit condition
+- **Options:** another full round; exit on a clean closure round
+- **Chose:** exit. Round 1 (deep, whole branch) had three accepted findings, fixed in one batch that stayed inside its declared CLI scope (D38). Closure round 2 over the fix delta passed on correctness, spec and security, each with full independence (gpt-6.1-sol) and nothing suppressed. The gate is green.
+- **Why:** the skill's exit rule is a completed round with no accepted finding above LOW and a green build
+- **Evidence:** scratchpad r1/*/gate.json, r2/*/gate.json and manifest.json
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** locked by docs/loop/LOOP.md
+
+## D40: Every scenario has a named test through the CLI or the daemon API, and the item's one CLI defect belongs to m0-cli-core
+- **Question:** LOOP.md step 6's verification checklist
+- **Options:** n/a (a check, recorded for review)
+- **Chose:** SC-2 is in packages/daemon/test/plugins/schema-kinds.test.ts (through the manifest parser the daemon uses). SC-3 to SC-8 are in schema-dispatch.test.ts against a real `quirkyd` through the API. SC-9 to SC-12, SC-14 and SC-16 to SC-19 are in scripting-cli.test.ts, and SC-1, SC-13, SC-15 and SC-20 to SC-23 in scripting-api.test.ts, all driving the real `quirky` CLI (`runCli`) against a real daemon; SC-19's daemon-unreachable row is tested in-process in packages/cli/test/generated.test.ts. The stale-surface hazard and the missing-value rule (D22) are SC-15 and SC-18. The feature is kernel rather than a built-in plugin (D21). On the branch tip `bun run test` passes 1362 tests and `bun run typecheck` is clean; `bun test scripts` passes 13 of 14, the failure being the queue-state test recorded in m0-daemon-api D31.
+- **Why:** LOOP.md step 6 lists these as the conditions for done
+- **Evidence:** test names `SC-<n>:` in the files above; scratchpad gate-r1.log
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** m0-cli-core changes how the CLI reaches the daemon and the daemon-unreachable row needs a real-process test
+- **Source:** locked by docs/loop/LOOP.md
+
 ## Progress
-Building (D31-D33). All four waves merged (5a60f30); final round 1 fixes in flight (D38). Next: closure round 2 over the fix delta, then merge per LOOP.md step 7.
+Building (D31-D33). Done. Merged into build/roadmap.
