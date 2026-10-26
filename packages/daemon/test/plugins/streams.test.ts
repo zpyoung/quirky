@@ -90,6 +90,21 @@ describe('openStream', () => {
     expect(ran).toBe(1)
   })
 
+  test('a stream opened on an already closed connection starts closed and registers no closer', () => {
+    const conn = fakeConn()
+    conn.closed = true
+    const stream = openStream(conn)
+    let ran = 0
+    stream.onClose(() => ran++)
+    expect(ran).toBe(1)
+    expect(conn.streamClosers.size).toBe(0)
+
+    stream.send(new Uint8Array([1]))
+    stream.close()
+    expect(ran).toBe(1)
+    expect(conn.binary).toEqual([])
+  })
+
   test('a throwing onClose callback does not stop the others', () => {
     const stream = openStream(fakeConn())
     const calls: string[] = []
