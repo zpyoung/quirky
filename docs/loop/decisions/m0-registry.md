@@ -329,5 +329,15 @@
 - **Confidence:** high
 - **Source:** assumed — autonomous
 
+## D32: Wave 2 checkpoint findings: fix all four defects
+- **Question:** adjudicating the wave 2 checkpoint review (subagent-driven-development Step 9, Tier 3)
+- **Options:** fix each; dismiss with a reason
+- **Chose:** fixed all seven findings, which were four defects: dependency IDs weren't validated (C1, S1, X2), `plugin list` crashed on a line break inside a cell (C2, X1), a contribution of a disabled plugin was attributed to the user instead of its disabled owner (S2), and a FIFO named `quirky-plugin.json` could block discovery (X3). tech.md now states owner-first attribution, dependency ID validation and the regular-file check.
+- **Why:** each reproduced with a one-line command in the review; owner-first attribution names the more fundamental cause, and the spec's rule 4 was ambiguous about order
+- **Evidence:** run journal checkpoint-w2; commit "fix(plugins): validate dependency IDs..."
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** assumed — autonomous
+
 ## Progress
-Building on build/m0-registry. Wave 1 merged (protocol types; store table, desktop path, docs). Wave 2 (manifest/discover/registry; CLI) dispatched in worktrees under the session scratchpad. If this iteration stops early: check whether sdd/w2-kernel and sdd/w2-cli branches exist with uncommitted work; otherwise re-run wave 2 from the tasks in tech.md (Testing strategy and Architecture), then wave 3 (host + daemon wiring + API tests), then the final 3-lens deep review.
+Waves 1 and 2 merged with checkpoint fixes; gate green (469 tests). Wave 3 (PluginHost, daemon wiring, plugin.* handlers, host and API tests) dispatched on branch sdd/w3-host in a scratch worktree. If this iteration stops early: if sdd/w3-host has no usable work, re-dispatch wave 3 from tech.md (PluginHost, Daemon API, Daemon wiring, Testing strategy). Then run the final deep 3-lens review, fix, verify, and merge per LOOP.md step 7.
