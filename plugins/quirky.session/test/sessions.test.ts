@@ -11,6 +11,7 @@ import {
   waitForFile,
   writeModulePlugin
 } from '../../../packages/daemon/test/plugins/fixtures'
+import { fakeAgents, resetFakeAgents } from './fakes/quirky.agents/main'
 import { call, code, createSession, restartDaemon, SESSION_PLUGINS, startPluginHarness } from './support'
 
 let h: Harness
@@ -18,11 +19,13 @@ let client: QuirkyClient
 let events: QuirkyEvent[]
 
 beforeEach(async () => {
+  resetFakeAgents()
   h = await startPluginHarness(SESSION_PLUGINS)
   ;({ client, events } = await h.connectWithEvents('cli'))
 })
 afterEach(async () => {
   delete process.env.QUIRKY_TEST_VANISHED_WORKTREES
+  fakeAgents().gate = null
   await h.cleanup()
   removeTempDirs()
 })
@@ -74,7 +77,7 @@ describe('quirky.session/create', () => {
     expect(spawned(session.id)).toMatchObject({ cols: 80, rows: 24 })
   })
 
-  test('claude, codex and gemini run under the login shell with their prompt and launch-hook args', async () => {
+  test('agents run under the login shell with the command quirky.agents prepared and the launch-hook args', async () => {
     const claude = await createSession(client, { worktree: 'id:wt_main', agent: 'claude', prompt: 'do the thing' })
     expect(claude.title).toBe('Claude')
     expect(spawned(claude.id).argv).toEqual([
@@ -88,9 +91,69 @@ describe('quirky.session/create', () => {
       `${exportPath()}exec codex '-c' 'notify=["${h.home}/bin/quirky-hook","codex"]'`
     )
     const gemini = await createSession(client, { worktree: 'id:wt_main', agent: 'gemini', prompt: 'x' })
-    expect(spawned(gemini.id).argv[3]).toBe(`${exportPath()}exec gemini --prompt-interactive 'x'`)
+    expect(spawned(gemini.id).argv[3]).toBe(`${exportPath()}exec gemini 'x'`)
     const opencode = await createSession(client, { worktree: 'id:wt_main', agent: 'opencode', prompt: 'x' })
-    expect(spawned(opencode.id).argv[3]).toBe(`${exportPath()}exec opencode --prompt 'x'`)
+    expect(spawned(opencode.id).argv[3]).toBe(`${exportPath()}exec opencode 'x'`)
+    expect([claude.title, codex.title, gemini.title, opencode.title]).toEqual(['Claude', 'Codex', 'Gemini', 'OpenCode'])
+  })
+
+  test('SC-8: a launch without an agent starts what quirky.agents picks', async () => {
+    fakeAgents().pick = 'codex'
+    const codex = await createSession(client, { worktree: 'id:wt_main' })
+    expect(codex).toMatchObject({ agent: 'codex', title: 'Codex' })
+    expect(spawned(codex.id).argv[3]).toStartWith(`${exportPath()}exec codex`)
+    expect(fakeAgents().calls.find((c) => c.method === 'pick')?.params).toEqual({})
+
+    fakeAgents().pick = 'shell'
+    const shell = await createSession(client, { worktree: 'id:wt_main' })
+    expect(shell).toMatchObject({ agent: 'shell', title: 'Shell', launch: null, promptDelivery: null })
+    expect(spawned(shell.id).argv).toEqual(['/bin/zsh', '-l'])
+    expect(fakeAgents().calls.filter((c) => c.method === 'prepareLaunch')).toHaveLength(1)
+  })
+
+  test('an agent named in the call skips pick, and a shell never reaches prepareLaunch', async () => {
+    await createSession(client, { worktree: 'id:wt_main', agent: 'claude' })
+    await createSession(client, { worktree: 'id:wt_main', agent: 'shell' })
+    const methods = fakeAgents().calls.map((c) => c.method)
+    expect(methods).toEqual(['get', 'prepareLaunch'])
+  })
+
+  test('the session records what it launched with and starts with no provider session', async () => {
+    fakeAgents().args = '--model haiku'
+    const claude = await createSession(client, { worktree: 'id:wt_main', agent: 'claude', prompt: 'hi' })
+    const expected = {
+      launch: { command: 'claude', args: '--model haiku', env: {} },
+      providerSession: null,
+      promptDelivery: 'command-line',
+      resumedFrom: null
+    }
+    expect(claude).toMatchObject(expected)
+    expect(await call(client, 'quirky.session/get', { session: claude.id })).toMatchObject(expected)
+    const shell = await createSession(client, { worktree: 'id:wt_main', agent: 'shell' })
+    expect(shell).toMatchObject({ launch: null, providerSession: null, promptDelivery: null, resumedFrom: null })
+    const bare = await createSession(client, { worktree: 'id:wt_main', agent: 'codex' })
+    expect(bare.promptDelivery).toBeNull()
+  })
+
+  test('SC-10: a disabled agent can not be launched by name and leaves no session', async () => {
+    fakeAgents().disabled.add('claude')
+    const error = await createSession(client, { worktree: 'id:wt_main', agent: 'claude' }).catch((e: RpcError) => e)
+    expect((error as RpcError).message).toBe('agent claude is disabled')
+    expect(h.pty.requests.some((r) => r.type === 'create')).toBe(false)
+    expect(await call(client, 'quirky.session/list')).toEqual([])
+  })
+
+  test('hook arguments and environment reach prepareLaunch, and its environment reaches the process', async () => {
+    await createSession(client, { worktree: 'id:wt_main', agent: 'claude', prompt: 'hi' })
+    const params = fakeAgents().calls.find((c) => c.method === 'prepareLaunch')!.params
+    expect(params).toMatchObject({
+      agent: 'claude',
+      cwd: '/fake/alpha',
+      prompt: 'hi',
+      submitPrompt: true,
+      hookArgs: ['--settings', `${h.home}/hooks/claude-settings.json`],
+      hookEnv: {}
+    })
   })
 
   test('numbers titles per worktree when one is taken', async () => {
@@ -118,7 +181,8 @@ describe('quirky.session/create', () => {
 
   test('rejects unknown worktrees and agents', async () => {
     expect(await code(createSession(client, { worktree: 'id:wt_nope', agent: 'shell' }))).toBe(RpcErrorCode.NotFound)
-    expect(await code(createSession(client, { worktree: 'id:wt_main', agent: 'vim' }))).toBe(RpcErrorCode.InvalidParams)
+    const unknown = await createSession(client, { worktree: 'id:wt_main', agent: 'vim' }).catch((e: RpcError) => e)
+    expect(unknown).toMatchObject({ code: RpcErrorCode.NotFound, message: 'unknown agent: vim' })
     expect(await call(client, 'quirky.session/list')).toEqual([])
   })
 
@@ -228,6 +292,123 @@ describe('quirky.session/create', () => {
     } finally {
       writeFileSync(release, '')
     }
+  })
+})
+
+/** Holds `deliver` until the returned function is called. */
+function holdDelivery(): () => void {
+  let release!: () => void
+  fakeAgents().gate = new Promise<void>((resolve) => (release = resolve))
+  return release
+}
+
+const deliveries = () => fakeAgents().calls.filter((c) => c.method === 'deliver').map((c) => c.params)
+const changedWith = (sessionId: string, promptDelivery: string) => () =>
+  events.find(
+    (e) =>
+      e.type === 'quirky.session/changed' &&
+      (e.data as { session: Session }).session.id === sessionId &&
+      (e.data as { session: Session }).session.promptDelivery === promptDelivery
+  )
+
+describe('SC-28: create returns at spawn unless asked to wait', () => {
+  test('SC-28: a pasted prompt is pending when create returns, and changed carries the outcome later', async () => {
+    const release = holdDelivery()
+    const session = await createSession(client, { worktree: 'id:wt_main', agent: 'goose', prompt: 'review it' })
+    expect(session).toMatchObject({ agent: 'goose', status: 'running', promptDelivery: 'pending' })
+    expect(spawned(session.id).argv[3]).not.toContain('review it')
+    await waitFor(() => deliveries()[0])
+    expect(deliveries()).toEqual([{ sessionId: session.id, agent: 'goose', text: 'review it', submit: true }])
+    expect(await call(client, 'quirky.session/get', { session: session.id })).toMatchObject({ promptDelivery: 'pending' })
+
+    release()
+    const event = await waitFor(changedWith(session.id, 'pasted'))
+    expect(event).toBeDefined()
+    expect(await call(client, 'quirky.session/get', { session: session.id })).toMatchObject({ promptDelivery: 'pasted', status: 'running' })
+  })
+
+  test('a draft is delivered without Enter, for any agent', async () => {
+    const session = await createSession(client, { worktree: 'id:wt_main', agent: 'claude', prompt: 'half', submitPrompt: false })
+    expect(session.promptDelivery).toBe('pending')
+    await waitFor(changedWith(session.id, 'pasted'))
+    expect(deliveries()).toEqual([{ sessionId: session.id, agent: 'claude', text: 'half', submit: false }])
+  })
+
+  test('the outcomes unconfirmed and not-delivered are recorded as quirky.agents reports them', async () => {
+    fakeAgents().outcome = 'unconfirmed'
+    const first = await createSession(client, { worktree: 'id:wt_main', agent: 'goose', prompt: 'a' })
+    await waitFor(changedWith(first.id, 'unconfirmed'))
+    fakeAgents().outcome = 'not-delivered'
+    const second = await createSession(client, { worktree: 'id:wt_main', agent: 'goose', prompt: 'b' })
+    await waitFor(changedWith(second.id, 'not-delivered'))
+    expect((await call<Session[]>(client, 'quirky.session/list')).map((s) => s.promptDelivery)).toEqual(['unconfirmed', 'not-delivered'])
+  })
+
+  test('a deliver call that fails records not-delivered', async () => {
+    fakeAgents().outcome = 'reject'
+    const session = await createSession(client, { worktree: 'id:wt_main', agent: 'goose', prompt: 'a' })
+    expect(session.promptDelivery).toBe('pending')
+    await waitFor(changedWith(session.id, 'not-delivered'))
+  })
+
+  test('waitForPrompt returns only after the delivery settled', async () => {
+    const release = holdDelivery()
+    let returned = false
+    const creating = createSession(client, { worktree: 'id:wt_main', agent: 'goose', prompt: 'a', waitForPrompt: true }).then((s) => {
+      returned = true
+      return s
+    })
+    await waitFor(() => deliveries()[0])
+    await Bun.sleep(30)
+    expect(returned).toBe(false)
+    release()
+    const session = await creating
+    expect(session).toMatchObject({ promptDelivery: 'pasted', status: 'running' })
+  })
+
+  test('waitForPrompt returns the not-delivered outcome too', async () => {
+    fakeAgents().outcome = 'not-delivered'
+    const session = await createSession(client, { worktree: 'id:wt_main', agent: 'goose', prompt: 'a', waitForPrompt: true })
+    expect(session.promptDelivery).toBe('not-delivered')
+  })
+
+  test('a prompt that takes the command line is never delivered by paste', async () => {
+    const session = await createSession(client, { worktree: 'id:wt_main', agent: 'claude', prompt: 'x', waitForPrompt: true })
+    expect(session.promptDelivery).toBe('command-line')
+    expect(deliveries()).toEqual([])
+  })
+
+  test('a prompt containing NUL is refused before anything starts', async () => {
+    const eventsBefore = eventsOf('quirky.session/changed').length
+    expect(await code(createSession(client, { worktree: 'id:wt_main', agent: 'goose', prompt: 'a\u0000b' }))).toBe(RpcErrorCode.InvalidParams)
+    expect(h.pty.requests.some((r) => r.type === 'create')).toBe(false)
+    expect(await call(client, 'quirky.session/list')).toEqual([])
+    expect(eventsOf('quirky.session/changed')).toHaveLength(eventsBefore)
+  })
+
+  test('a delivery still pending when the daemon restarts becomes not-delivered at startup', async () => {
+    holdDelivery()
+    const pending = await createSession(client, { worktree: 'id:wt_main', agent: 'goose', prompt: 'a' })
+    const done = await createSession(client, { worktree: 'id:wt_main', agent: 'claude', prompt: 'b' })
+    expect(pending.promptDelivery).toBe('pending')
+
+    const again = await restartDaemon(h)
+    try {
+      const sessions = await call<Session[]>(again.client, 'quirky.session/list')
+      expect(sessions.find((s) => s.id === pending.id)).toMatchObject({ promptDelivery: 'not-delivered', status: 'running' })
+      expect(sessions.find((s) => s.id === done.id)).toMatchObject({ promptDelivery: 'command-line' })
+    } finally {
+      await again.stop()
+    }
+  })
+
+  test('a session closed before its delivery settles is not brought back', async () => {
+    const release = holdDelivery()
+    const session = await createSession(client, { worktree: 'id:wt_main', agent: 'goose', prompt: 'a' })
+    await call(client, 'quirky.session/close', { session: session.id })
+    release()
+    await Bun.sleep(40)
+    expect(await call(client, 'quirky.session/list')).toEqual([])
   })
 })
 
