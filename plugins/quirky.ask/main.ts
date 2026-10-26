@@ -31,6 +31,8 @@ function announce(context: PluginContext, ask: Ask): void {
   })
 }
 
+let service: AskService | undefined
+
 /** Provides the ask methods; the CLI commands and the panel's window module live elsewhere. */
 export function activate(context: PluginContext): void {
   const store = context.openStore([v1AsksMigration(context.home)])
@@ -46,6 +48,8 @@ export function activate(context: PluginContext): void {
       resolved: (askId, envelope) => void context.emit('resolved', { askId, envelope })
     }
   )
+
+  service = asks
 
   context.provide('method:quirky.ask/create', async (params: Record<string, unknown>, caller: PluginCaller) => {
     const client = caller.role === 'plugin' ? undefined : caller
@@ -65,4 +69,10 @@ export function activate(context: PluginContext): void {
   )
   context.provide('method:quirky.ask/cancel', (params: Record<string, unknown>) => asks.cancel(str(params, 'askId')!))
   context.provide('method:quirky.ask/list', (params: Record<string, unknown>) => asks.list(params.pendingOnly === true))
+}
+
+/** Rejects pending waits and clears their timers so nothing touches the store once the host closes it. */
+export function deactivate(): void {
+  service?.shutdown()
+  service = undefined
 }

@@ -80,9 +80,12 @@ export type AskServiceHooks = {
   resolved(askId: string, envelope: AskEnvelope): void
 }
 
+type Waiter = { resolve(envelope: AskEnvelope): void; reject(error: Error): void; timer: ReturnType<typeof setTimeout> }
+
 /** Asks persisted in the plugin's store, with long-poll waiters held in memory. */
 export class AskService {
-  private readonly waiters = new Map<string, Set<(envelope: AskEnvelope) => void>>()
+  private readonly waiters = new Map<string, Set<Waiter>>()
+  private stopped = false
 
   constructor(
     private readonly store: PluginStore,
@@ -131,22 +134,45 @@ export class AskService {
     return rows.map(toAsk)
   }
 
-  /** Resolves as soon as the ask leaves `pending`, or returns it still pending after `timeoutMs`. */
+  /**
+   * Resolves as soon as the ask leaves `pending`, or returns it still pending after `timeoutMs`.
+   * If the service is shut down while the wait is pending, the promise rejects with a "shut down"
+   * error instead of reading the store, which the host closes right after deactivation.
+   */
   async wait(askId: string, timeoutMs = MAX_WAIT_MS): Promise<AskEnvelope> {
+    if (this.stopped) throw new Error('quirky.ask has shut down')
     const ask = this.get(askId)
     const limit = Math.max(0, Math.min(timeoutMs, MAX_WAIT_MS))
     if (ask.envelope.status !== 'pending' || limit === 0) return ask.envelope
-    return new Promise((resolve) => {
-      const timer = setTimeout(() => {
-        this.removeWaiter(askId, onResolved)
-        resolve(this.get(askId).envelope)
-      }, limit)
-      const onResolved = (envelope: AskEnvelope) => {
-        clearTimeout(timer)
-        resolve(envelope)
+    return new Promise((resolve, reject) => {
+      const waiter: Waiter = {
+        resolve: (envelope) => {
+          clearTimeout(waiter.timer)
+          resolve(envelope)
+        },
+        reject: (error) => {
+          clearTimeout(waiter.timer)
+          reject(error)
+        },
+        timer: setTimeout(() => {
+          this.removeWaiter(askId, waiter)
+          try {
+            resolve(this.get(askId).envelope)
+          } catch (error) {
+            reject(error as Error)
+          }
+        }, limit)
       }
-      this.addWaiter(askId, onResolved)
+      this.addWaiter(askId, waiter)
     })
+  }
+
+  /** Clears every wait timer and rejects each pending waiter; call before the store closes. */
+  shutdown(): void {
+    this.stopped = true
+    const pending = [...this.waiters.values()].flatMap((set) => [...set])
+    this.waiters.clear()
+    for (const waiter of pending) waiter.reject(new Error('quirky.ask shut down while the wait was pending'))
   }
 
   answer(askId: string, answersInput: unknown, skippedInput: unknown): AskEnvelope {
@@ -187,17 +213,17 @@ export class AskService {
     this.hooks.resolved(ask.id, envelope)
     const waiting = this.waiters.get(ask.id)
     this.waiters.delete(ask.id)
-    for (const resolve of waiting ?? []) resolve(envelope)
+    for (const waiter of waiting ?? []) waiter.resolve(envelope)
     return envelope
   }
 
-  private addWaiter(askId: string, waiter: (envelope: AskEnvelope) => void): void {
+  private addWaiter(askId: string, waiter: Waiter): void {
     const set = this.waiters.get(askId) ?? new Set()
     set.add(waiter)
     this.waiters.set(askId, set)
   }
 
-  private removeWaiter(askId: string, waiter: (envelope: AskEnvelope) => void): void {
+  private removeWaiter(askId: string, waiter: Waiter): void {
     const set = this.waiters.get(askId)
     set?.delete(waiter)
     if (set?.size === 0) this.waiters.delete(askId)

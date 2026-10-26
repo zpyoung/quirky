@@ -3,6 +3,7 @@ import { RpcErrorCode, type QuirkyClient, type QuirkyEvent } from '@quirky/proto
 import { waitFor, type Harness } from '../../../packages/daemon/test/helpers'
 import { cleanupAll, connectAs, errorOf, spec, startAsk, stopKeepingHome, testCli } from './support'
 import { commands } from '../cli'
+import { AskService } from '../asks'
 
 let h: Harness
 let client: QuirkyClient
@@ -100,6 +101,53 @@ describe('asks', () => {
     const immediate = Date.now()
     expect(await call('wait', { askId, timeoutMs: 0 })).toMatchObject({ status: 'pending', askId })
     expect(Date.now() - immediate).toBeLessThan(60)
+  })
+
+  test('disabling the plugin during a wait settles the waiter and leaves no timer touching the closed store', async () => {
+    const { askId } = await call('create', { spec })
+    const waiting = errorOf(call('wait', { askId, timeoutMs: 150 }))
+    await Bun.sleep(30)
+    await client.call('plugin.disable', { id: 'quirky.ask' })
+    expect(await waiting).not.toBeNull()
+    // outlast the original timeout: a surviving timer would throw "store is closed" uncaught
+    await Bun.sleep(250)
+  })
+
+  test('shutdown rejects pending waiters and stops their timers', async () => {
+    let closed = false
+    const rows = new Map<string, unknown>()
+    const store = {
+      run: (_sql: string, ...params: unknown[]) => {
+        rows.set(params[0] as string, {
+          id: params[0],
+          spec: params[1],
+          session_id: null,
+          worktree_id: null,
+          created_at: 0,
+          status: 'pending',
+          answers: '{}',
+          skipped: '[]'
+        })
+      },
+      get: (_sql: string, id: string) => {
+        if (closed) throw new Error('store is closed')
+        return rows.get(id)
+      },
+      all: () => []
+    }
+    const errors = {
+      invalidParams: (m: string) => new Error(m),
+      notFound: (m: string) => new Error(m),
+      conflict: (m: string) => new Error(m)
+    }
+    const service = new AskService(store as never, errors, { created: () => {}, resolved: () => {} })
+    const ask = service.create(spec, null, null)
+    const waiting = errorOf(service.wait(ask.id, 50))
+    service.shutdown()
+    closed = true
+    expect(await waiting).toMatchObject({ message: expect.stringContaining('shut down') })
+    await Bun.sleep(100)
+    expect(await errorOf(service.wait(ask.id, 50))).not.toBeNull()
   })
 
   test('validates input and unknown ids', async () => {
