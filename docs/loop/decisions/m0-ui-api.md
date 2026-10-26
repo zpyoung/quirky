@@ -430,3 +430,13 @@
 - **Confidence:** high
 - **Source:** assumed — autonomous
 
+## D43: Wave 3 checkpoint: fix both shell defects
+- **Question:** adjudicating the wave 3 checkpoint review (three Codex lenses, standard depth, range 1bb2375..022d1d9)
+- **Options:** fix or reject each
+- **Chose:** fixed both. C1 and S1: a shown slot whose owner changes (an override enabled or disabled) stayed empty, because `PluginSlot` didn't remount on an owner change; it now does. C2: Cmd+1 to Cmd+9 on the already-selected session didn't close an open view; it now closes it whenever it selects a session. The security lens passed.
+- **Why:** both break a stated rule: SC-3's override takes over a slot live, and selecting a session closes the view (tech.md "React shell")
+- **Evidence:** scratchpad cp-w3/{C,S,X}/gate.json
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** assumed — autonomous
+
