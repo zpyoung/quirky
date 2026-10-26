@@ -18,8 +18,8 @@ let skills: string
 beforeEach(() => {
   daemon = new FakeDaemon().start()
   daemon.addMethod('acme.notes/add', { description: 'Add a note.', params: NOTE_PARAMS })
-  daemon.addMethod('quirky.repo/list', { description: 'List repos.' })
-  daemon.addMethod('quirky.repo/rename', { description: 'Rename a repo.' })
+  daemon.addMethod('quirky.job/list', { description: 'List jobs.' })
+  daemon.addMethod('quirky.job/rename', { description: 'Rename a job.' })
   skills = realpathSync(mkdtempSync(join(tmpdir(), 'qsk-')))
 })
 afterEach(() => {
@@ -47,15 +47,15 @@ describe('SC-22: the skill is generated from the catalog', () => {
     expect(text).toContain('Exit codes: 0 ok, 1 runtime error, 2 usage error')
     expect(text).toContain('{"error":{"code","message"}}')
     expect(text).toContain('quirky acme.notes add --title <string> [--body <string>] [--params <json>]  Add a note.')
-    expect(text).toContain('quirky repo rename ')
+    expect(text).toContain('quirky job rename ')
   })
 
   test('a shadowed command has no line', async () => {
     const { stdout } = await run(['skill', 'show'])
-    expect(stdout.split('\n').filter((line) => line.startsWith('quirky repo list '))).toEqual([
-      'quirky repo list  list repositories'
+    expect(stdout.split('\n').filter((line) => line.startsWith('quirky job list '))).toEqual([
+      'quirky job list  list scheduled plugin jobs with their next and last run'
     ])
-    expect(stdout).not.toContain('List repos.')
+    expect(stdout).not.toContain('List jobs.')
   })
 
   test('renderSkill depends only on the catalog and orders groups', async () => {

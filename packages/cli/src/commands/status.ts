@@ -1,5 +1,5 @@
+import { takePositionals } from '../args'
 import { formatRecord } from '../output'
-import { takePositionals } from './support'
 import type { Command } from './types'
 
 export const status: Command = {

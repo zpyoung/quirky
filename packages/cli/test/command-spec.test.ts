@@ -19,14 +19,14 @@ const shape = (parts: Partial<Command>): Command => ({
 describe('usageOf', () => {
   test('renders positionals, then flags in declared order', () => {
     const command = shape({
-      name: 'wt create',
+      name: 'acme create',
       positionals: [
-        { name: 'repoId', description: '', required: true },
+        { name: 'target', description: '', required: true },
         { name: 'name', description: '', required: true }
       ],
       flags: { base: { type: 'string', description: '' } }
     })
-    expect(usageOf(command)).toBe('wt create <repoId> <name> [--base <string>]')
+    expect(usageOf(command)).toBe('acme create <target> <name> [--base <string>]')
   })
 
   test('optional positionals, required flags, switches, enums and repeatable flags', () => {
@@ -104,7 +104,7 @@ describe('kernel command declarations', () => {
     if (!sources.has(file)) sources.set(file, readFileSync(join(import.meta.dir, '../src/commands', `${file}.ts`), 'utf8'))
     return sources.get(file) as string
   }
-  const sourceFiles = ['api', 'ask', 'daemon', 'distro', 'job', 'open', 'plugin', 'repo', 'session', 'setting', 'status', 'term', 'theme', 'ui', 'worktree', 'support']
+  const sourceFiles = ['api', 'daemon', 'distro', 'job', 'open', 'plugin', 'setting', 'skill', 'status', 'theme', 'ui']
 
   test('every kernel command is declared as a kernel command with a summary', () => {
     for (const command of COMMANDS) {
@@ -123,8 +123,8 @@ describe('kernel command declarations', () => {
 
   test('methods follow what the run code calls', () => {
     const methods = (name: string) => COMMANDS.find((command) => command.name === name)?.methods
-    expect(methods('session new')).toEqual(['worktree.list', 'session.create', 'session.createStructured'])
-    expect(methods('ask')).toEqual(['ask.create', 'ask.wait', 'ask.cancel'])
+    expect(methods('plugin install')).toEqual(['plugin.inspect', 'plugin.install'])
+    expect(methods('daemon restart')).toEqual(['daemon.stop'])
     expect(methods('open')).toEqual([])
     expect(methods('help')).toEqual([])
   })
@@ -134,17 +134,16 @@ describe('kernel command declarations', () => {
       Object.entries(COMMANDS.find((command) => command.name === name)?.flags ?? {})
         .filter(([, spec]) => spec.required)
         .map(([flag]) => flag)
-    expect(required('ask')).toEqual(['spec'])
-    expect(required('ask wait')).toEqual(['id'])
-    expect(required('ask cancel')).toEqual(['id'])
-    expect(required('session new')).toEqual(['agent'])
+    expect(required('skill install')).toEqual(['dir'])
+    expect(required('skill status')).toEqual(['dir'])
+    expect(required('plugin list')).toEqual([])
   })
 })
 
 describe('helpText', () => {
   test('an exact command gets its full help', () => {
-    const text = helpText(['wt', 'create'])
-    expect(text).toContain('usage: quirky wt create <repoId> <name> [--base <string>]')
+    const text = helpText(['setting', 'list'])
+    expect(text).toContain('usage: quirky setting list [--plugin <string>]')
     expect(text).toContain('options:')
   })
 
@@ -152,7 +151,7 @@ describe('helpText', () => {
     const lines = helpText().split('\n')
     expect(lines[0]).toBe('usage: quirky [--json] <command> [options]')
     expect(lines.at(-1)).toBe("run 'quirky api' to list every command, including plugins'")
-    expect(lines.some((line) => line.includes('session new --agent <string>'))).toBe(true)
+    expect(lines.some((line) => line.includes('skill install --dir <string>'))).toBe(true)
   })
 
   test('a group lists its commands without the api pointer', () => {
@@ -160,5 +159,15 @@ describe('helpText', () => {
     expect(text).toContain('usage: quirky setting <command>')
     expect(text).toContain('setting set <id> <value>')
     expect(text).not.toContain('quirky api')
+  })
+})
+
+describe('the v1 words', () => {
+  test('are not kernel commands; their plugins declare them', () => {
+    const kernelWords = new Set(COMMANDS.map((command) => command.name.split(' ')[0]))
+    for (const word of ['repo', 'wt', 'worktree', 'session', 'term', 'terminal', 'ask']) {
+      expect(kernelWords.has(word)).toBe(false)
+    }
+    expect(helpText()).not.toMatch(/^ {2}(repo|wt|worktree|session|term|terminal|ask)\b/m)
   })
 })

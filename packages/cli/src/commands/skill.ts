@@ -1,10 +1,9 @@
 import { randomBytes } from 'node:crypto'
 import { mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs'
 import { basename, dirname, join, resolve } from 'node:path'
-import type { ParsedArgs } from '../args'
+import { requireFlag, takePositionals, type ParsedArgs } from '../args'
 import { renderSkill } from '../skill'
 import { loadCatalog } from './api'
-import { requireFlag, takePositionals } from './support'
 import type { Command, Context } from './types'
 
 type SkillStatus = 'missing' | 'stale' | 'up-to-date'

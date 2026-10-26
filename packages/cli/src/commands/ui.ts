@@ -1,8 +1,7 @@
 import type { UiCommandEntry, UiKeybinding, UiLayout, UiModel, UiSlotEntry } from '@quirky/protocol'
-import { UsageError } from '../args'
+import { UsageError, takePositionals } from '../args'
 import { formatGeneric } from '../format'
 import { formatTable } from '../output'
-import { takePositionals } from './support'
 import type { Command } from './types'
 
 /** Keeps a cell on one line so an embedded line break can't split a table row. */

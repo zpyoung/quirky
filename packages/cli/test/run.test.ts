@@ -27,11 +27,11 @@ function harness(open: OpenResult) {
 
 describe('route', () => {
   test('selects the longest matching command name and leaves the rest', () => {
-    const target = route(['--json', 'wt', 'create', 'repo_1', 'name'])
+    const target = route(['--json', 'plugin', 'enable', 'acme.tools', 'extra'])
     expect(target.kind).toBe('command')
     if (target.kind === 'command') {
-      expect(target.command.name).toBe('wt create')
-      expect(target.rest).toEqual(['--json', 'repo_1', 'name'])
+      expect(target.command.name).toBe('plugin enable')
+      expect(target.rest).toEqual(['--json', 'acme.tools', 'extra'])
     }
   })
 
@@ -41,8 +41,11 @@ describe('route', () => {
   })
 
   test('reports groups, unknown words and the empty invocation', () => {
-    expect(route(['repo']).kind).toBe('group')
+    expect(route(['plugin']).kind).toBe('group')
     expect(route(['nope'])).toEqual({ kind: 'unknown', word: 'nope' })
+    for (const word of ['repo', 'wt', 'worktree', 'session', 'term', 'terminal', 'ask']) {
+      expect(route([word])).toEqual({ kind: 'unknown', word })
+    }
     expect(route(['--json']).kind).toBe('top')
     expect(route([]).kind).toBe('top')
   })

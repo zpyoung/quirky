@@ -53,9 +53,9 @@ describe('SC-1: the CLI reaches the daemon over the unix socket', () => {
   })
 
   test.skipIf(!socketClientPresent)('every call goes over the socket named in runtime.json', async () => {
-    const result = await runCli(['repo', 'list'], { home: daemon.home })
+    const result = await runCli(['plugin', 'list'], { home: daemon.home })
     expect(result.code).toBe(0)
-    expect(daemon.calls.map((call) => call.method)).toEqual(['client.hello', 'repo.list'])
+    expect(daemon.calls.map((call) => call.method)).toEqual(['client.hello', 'plugin.list'])
     expect(new Set(daemon.calls.map((call) => call.transport))).toEqual(new Set(['socket']))
     expect(daemon.socketConnections).toBe(1)
   })
