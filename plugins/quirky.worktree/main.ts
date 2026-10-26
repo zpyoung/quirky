@@ -64,6 +64,10 @@ function isMethodNotFound(error: unknown): boolean {
   return (error as { code?: unknown } | null)?.code === RpcErrorCode.MethodNotFound
 }
 
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error)
+}
+
 /** git's own explanation for a failure: its stderr when it has one, else the error message. */
 function gitMessage(error: unknown): string {
   const stderr = (error as { stderr?: unknown } | null)?.stderr
@@ -146,17 +150,25 @@ export async function activate(context: PluginContext): Promise<void> {
     return { repo: repos.find((repo) => repo.id === worktree.repoId)!, worktree }
   }
 
-  async function closeSessions(worktreeId: string): Promise<void> {
+  /** Closes every session of the worktree, attempting all of them; returns one message per failure. */
+  async function closeSessions(worktreeId: string): Promise<string[]> {
     let sessions: { id: string; worktreeId: string }[]
     try {
       sessions = (await context.call('quirky.session/list')) as typeof sessions
     } catch (error) {
-      if (isMethodNotFound(error)) return
-      throw error
+      if (isMethodNotFound(error)) return []
+      return [`could not list sessions: ${errorMessage(error)}`]
     }
+    const errors: string[] = []
     for (const session of sessions) {
-      if (session.worktreeId === worktreeId) await context.call('quirky.session/close', { session: session.id })
+      if (session.worktreeId !== worktreeId) continue
+      try {
+        await context.call('quirky.session/close', { session: session.id })
+      } catch (error) {
+        errors.push(`could not close session ${session.id}: ${errorMessage(error)}`)
+      }
     }
+    return errors
   }
 
   async function create(params: Record<string, any>): Promise<Worktree> {
@@ -190,13 +202,18 @@ export async function activate(context: PluginContext): Promise<void> {
   /**
    * Removes a worktree. Without `force`, git decides first and a refusal (dirty or untracked
    * files) is a Conflict that leaves the worktree's sessions running; with `force` the sessions
-   * are closed before the forced removal.
+   * are closed before the forced removal. Once git has removed the worktree, closing its sessions
+   * is best effort: failures are reported as `sessionErrors` instead of failing a removal that
+   * already happened.
    */
-  async function remove(params: Record<string, any>, caller: PluginCaller): Promise<{ ok: true }> {
+  async function remove(params: Record<string, any>, caller: PluginCaller): Promise<{ ok: true; sessionErrors?: string[] }> {
     const { repo, worktree } = await findWorktree(String(params.worktree), identityOf(caller))
     const force = params.force === true
     if (worktree.isMain) throw fail('conflict', 'the main worktree cannot be removed')
-    if (force) await closeSessions(worktree.id)
+    if (force) {
+      const errors = await closeSessions(worktree.id)
+      if (errors.length > 0) throw new Error(errors.join('; '))
+    }
     try {
       await gitApi().removeWorktree(repo.path, worktree.path, force)
     } catch (error) {
@@ -205,9 +222,9 @@ export async function activate(context: PluginContext): Promise<void> {
       }
       throw new Error(gitMessage(error))
     }
-    if (!force) await closeSessions(worktree.id)
+    const sessionErrors = force ? [] : await closeSessions(worktree.id)
     context.emit('changed', { repoId: repo.id })
-    return { ok: true }
+    return sessionErrors.length > 0 ? { ok: true, sessionErrors } : { ok: true }
   }
 
   async function describeRemove(params: Record<string, any>, caller: PluginCaller): Promise<string> {
