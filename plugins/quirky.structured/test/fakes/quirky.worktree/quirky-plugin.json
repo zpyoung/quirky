@@ -1,0 +1,9 @@
+{
+  "id": "quirky.worktree",
+  "name": "Worktree (fake)",
+  "version": "0.0.0",
+  "main": "main.ts",
+  "contributes": {
+    "method": [{ "id": "resolve", "readOnly": true, "params": { "type": "object", "additionalProperties": true } }]
+  }
+}
