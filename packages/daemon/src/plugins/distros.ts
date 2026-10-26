@@ -16,7 +16,7 @@ import {
 import { conflict, internal, invalidParams, notFound } from '../errors'
 import type { Store } from '../store'
 import type { PluginHost } from './host'
-import { inspectPlugin } from './install'
+import { inspectPlugin, renderInspection } from './install'
 import { pluginDataDir } from './stores'
 import { buildUiModel } from './ui-model'
 import { chosenThemeOf, resolveSetting } from './ui-service'
@@ -30,8 +30,6 @@ export type DistroServiceOptions = {
   safeMode: boolean
   /** Delivers `setting.changed` and `theme.changed` to clients; without it the layer changes silently. */
   broadcast?: (event: QuirkyEvent) => void
-  /** Reads a bundled plugin's manifest; replaceable so the distro layer can be exercised on its own. */
-  inspectPlugin?: typeof inspectPlugin
 }
 
 type Prepared = {
@@ -45,21 +43,6 @@ type Prepared = {
 
 const pad = (word: string) => word.padEnd(10)
 
-function pluginLines(inspection: PluginInspection): string[] {
-  const { installed } = inspection
-  const label = installed ? `${inspection.id} ${installed.version} → ${inspection.version}` : `${inspection.id} ${inspection.version}`
-  const lines = [`${label} (${inspection.name})`]
-  for (const contribution of inspection.contributions) {
-    const key = contribution.kind === 'keybinding' && typeof contribution.data.key === 'string' ? `  ${contribution.data.key}` : ''
-    lines.push(`${pad(contribution.kind)} ${contribution.id}${key}`)
-  }
-  for (const override of inspection.overrides) lines.push(`${pad('override')} ${override.id} (replaces ${override.replaces}'s)`)
-  for (const id of inspection.disables) lines.push(`${pad('disables')} ${id}`)
-  for (const id of installed?.added ?? []) lines.push(`+ ${id}`)
-  for (const id of installed?.removed ?? []) lines.push(`- ${id}`)
-  return lines
-}
-
 /**
  * The text a person sees before a distro installs: each bundled plugin with its contributions, the
  * IDs it turns off, each setting with its current and new value, the theme, the keybindings, and
@@ -68,7 +51,7 @@ function pluginLines(inspection: PluginInspection): string[] {
 export function renderDistroInspection(inspection: DistroInspection): string {
   const { manifest } = inspection
   const lines = [`distro ${manifest.id} ${manifest.version} (${manifest.name})`]
-  for (const plugin of inspection.plugins) lines.push('', ...pluginLines(plugin))
+  for (const plugin of inspection.plugins) lines.push('', renderInspection(plugin))
   const layer: string[] = []
   for (const id of manifest.disable ?? []) layer.push(`${pad('disable')} ${id}`)
   for (const { id, current, next } of inspection.settings) {
@@ -213,7 +196,6 @@ export class DistroService {
 
   private prepare(path: string): Prepared {
     const { home, plugins, store } = this.options
-    const inspectOne = this.options.inspectPlugin ?? inspectPlugin
     const root = resolve(path)
     const file = join(root, DISTRO_MANIFEST_FILE)
     let text: string
@@ -248,7 +230,7 @@ export class DistroService {
           problems.push(`plugin ${source}: ${escaping[0]} links outside the plugin`)
           continue
         }
-        found.push({ source, dir, inspection: inspectOne({ home, plugins, log: this.options.log }, dir) })
+        found.push({ source, dir, inspection: inspectPlugin({ home, plugins, log: this.options.log }, dir) })
       } catch (error) {
         problems.push(`plugin ${source}: ${messageOf(error)}`)
       }

@@ -1,18 +1,15 @@
 import { afterEach, describe, expect, test } from 'bun:test'
 import { existsSync, mkdirSync, readdirSync, readFileSync, symlinkSync, writeFileSync } from 'node:fs'
-import { basename, join } from 'node:path'
+import { join } from 'node:path'
 import {
-  formatContributionId,
   RpcErrorCode,
   type DistroManifest,
-  type PluginInspection,
   type QuirkyEvent
 } from '@quirky/protocol'
-import { invalidParams } from '../../src/errors'
 import { discoverPlugins } from '../../src/plugins/discover'
 import { DistroService, renderDistroInspection } from '../../src/plugins/distros'
 import { PluginHost } from '../../src/plugins/host'
-import { MANIFEST_FILE, parseManifest } from '../../src/plugins/manifest'
+import { MANIFEST_FILE } from '../../src/plugins/manifest'
 import { computeRegistry } from '../../src/plugins/registry'
 import { UiService } from '../../src/plugins/ui-service'
 import { Store } from '../../src/store'
@@ -27,27 +24,6 @@ async function failure(call: Promise<unknown>): Promise<{ code: number; message:
     return error as { code: number; message: string }
   }
   throw new Error('expected the call to reject')
-}
-
-/** Reads a plugin directory the way `inspectPlugin` does: the manifest alone, no plugin code. */
-function inspectFixture(_deps: unknown, dir: string): PluginInspection {
-  const parsed = parseManifest(readFileSync(join(dir, MANIFEST_FILE), 'utf8'), {
-    dirName: basename(dir),
-    dir,
-    source: 'installed'
-  })
-  if (!parsed.ok) throw invalidParams(parsed.errors.join('; '))
-  const { manifest } = parsed
-  return {
-    id: manifest.id,
-    name: manifest.name,
-    version: manifest.version,
-    contributions: Object.entries(manifest.contributes ?? {}).flatMap(([kind, entries]) =>
-      entries.map(({ id, ...data }) => ({ kind, id: formatContributionId(kind, manifest.id, id), data }))
-    ),
-    overrides: [],
-    disables: manifest.disables ?? []
-  }
 }
 
 const NIGHT: DistroManifest = {
@@ -109,6 +85,7 @@ function makeLayer(options: { safeMode?: boolean } = {}) {
   const store = new Store(join(home, 'quirky.db'))
   const events: QuirkyEvent[] = []
   const log = () => {}
+  let distroDisables = (): string[] => []
   const host: PluginHost = new PluginHost({
     builtinDir: builtin,
     installedDir: join(home, 'plugins'),
@@ -116,18 +93,18 @@ function makeLayer(options: { safeMode?: boolean } = {}) {
     emit: (event) => events.push(event),
     log,
     safeMode: options.safeMode,
-    distroDisabled: () => distros.active()?.disable ?? []
+    distroDisabled: () => distroDisables()
   })
-  host.load()
   const distros = new DistroService({
     home,
     store,
     plugins: host,
     log,
     safeMode: options.safeMode ?? false,
-    broadcast: (event) => events.push(event),
-    inspectPlugin: inspectFixture
+    broadcast: (event) => events.push(event)
   })
+  distroDisables = () => distros.active()?.disable ?? []
+  host.load()
   const ui = new UiService({
     plugins: host,
     store,
@@ -183,6 +160,13 @@ describe('SC-54: installing a distro applies its layer', () => {
       chosen: 'theme:night.extras/dusk',
       active: 'theme:night.extras/dusk'
     })
+  })
+
+  test('SC-54: a setting written as <pluginId>/<name> layers like its full ID', async () => {
+    const layer = makeLayer()
+    await layer.distros.install(writeDistro(makeTempDir('qd-n-'), { ...NIGHT, settings: { 'quirky.terminal/scrollback': 6000 } }))
+    expect(scrollback(layer)).toMatchObject({ value: 6000, source: 'distro' })
+    expect(layer.events).toContainEqual({ type: 'setting.changed', id: SCROLLBACK, value: 6000 })
   })
 
   test('SC-54: a user-chosen theme beats the distro theme', async () => {

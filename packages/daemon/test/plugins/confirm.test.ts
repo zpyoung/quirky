@@ -3,6 +3,7 @@ import { join } from 'node:path'
 import { RpcErrorCode, type MethodHandler, type PluginCaller } from '@quirky/protocol'
 import { DaemonError } from '../../src/errors'
 import type { Handlers } from '../../src/methods'
+import type { KernelDescriber } from '../../src/plugins/confirm'
 import { Dispatcher, type DispatchHost } from '../../src/plugins/dispatch'
 import { Store } from '../../src/store'
 import type { ClientConn } from '../../src/types'
@@ -50,7 +51,7 @@ function conn(id: number, overrides: Partial<ClientConn> = {}): ClientConn {
 const NAMED = { type: 'object', properties: { target: { type: 'string' }, name: { type: 'string' } } }
 
 /** A fake `quirky.ask` plus a fixture plugin with destructive methods, one of them with a `describe` method. */
-function setup(options: { asks?: boolean } = {}) {
+function setup(options: { asks?: boolean; kernelDescribers?: Record<string, KernelDescriber> } = {}) {
   const asks = new Map<string, AskRecord>()
   const ran: { method: string; params: Record<string, unknown> }[] = []
   const methods: Record<string, StubMethod> = {
@@ -110,7 +111,7 @@ function setup(options: { asks?: boolean } = {}) {
     }
   } as unknown as Handlers
   const store = new Store(join(makeTempDir(), 'q.db'))
-  const dispatcher = new Dispatcher(handlers, stubHost(methods), () => {}, { store })
+  const dispatcher = new Dispatcher(handlers, stubHost(methods), () => {}, { store, kernelDescribers: options.kernelDescribers })
   const answer = (askId: string, value: boolean) => {
     const ask = asks.get(askId)!
     ask.status = 'answered'
@@ -285,6 +286,25 @@ describe('destructive methods', () => {
     t.answer(askId, true)
     expect(await t.dispatcher.dispatch('plugin.uninstall', { id: 'acme.tools', confirmation: askId }, { conn: from })).toEqual({ ok: true })
     expect(t.ran).toEqual([{ method: 'plugin.uninstall', params: { id: 'acme.tools' } }])
+  })
+
+  test('a kernel describer supplies the action text and the confirmation is bound to it', async () => {
+    let listing = 'acme.tools 1.0.0 (Acme)'
+    const t = setup({
+      kernelDescribers: { 'plugin.uninstall': async (params) => `Uninstall plugin ${params.id}?\n\n${listing}` }
+    })
+    const from = conn(1)
+    const { askId, action } = await askFor(t, 'plugin.uninstall', { id: 'acme.tools' }, from)
+    expect(action).toBe('Uninstall plugin acme.tools?\n\nacme.tools 1.0.0 (Acme)')
+    expect(t.asks.get(askId)!.spec.questions[0].question).toBe(action)
+    t.answer(askId, true)
+
+    listing = 'acme.tools 1.1.0 (Acme)'
+    const changed = await failure(t.dispatcher.dispatch('plugin.uninstall', { id: 'acme.tools', confirmation: askId }, { conn: from }))
+    expect(changed.message).toBe('confirmation is for another call')
+
+    listing = 'acme.tools 1.0.0 (Acme)'
+    expect(await t.dispatcher.dispatch('plugin.uninstall', { id: 'acme.tools', confirmation: askId }, { conn: from })).toEqual({ ok: true })
   })
 
   test('kernel-internal calls are never confirmed', async () => {

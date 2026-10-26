@@ -97,7 +97,7 @@ export function worktreeIdForPath(path: string): string {
 export class Core {
   readonly asks: AskService
   private readonly runner: StructuredRunner
-  private readonly clients = new Set<ClientConn>()
+  private readonly connected = new Set<ClientConn>()
   private readonly streamsBySession = new Map<string, Set<Stream>>()
   private readonly attachesInFlight = new Map<string, number>()
   private readonly receivedOffsets = new Map<string, number>()
@@ -141,15 +141,20 @@ export class Core {
   }
 
   addClient(conn: ClientConn): void {
-    this.clients.add(conn)
+    this.connected.add(conn)
   }
 
   removeClient(conn: ClientConn): void {
     conn.closed = true
-    this.clients.delete(conn)
+    this.connected.delete(conn)
     for (const streamId of [...conn.streams.keys()]) this.removeStream(conn, streamId)
     for (const close of [...conn.streamClosers.values()]) close()
     this.options.onRemoveClient?.(conn)
+  }
+
+  /** The currently connected clients, in connection order. */
+  clients(): ClientConn[] {
+    return [...this.connected]
   }
 
   /** Sends one event to one connection, whether or not it subscribed. */
@@ -161,7 +166,7 @@ export class Core {
   broadcast(event: QuirkyEvent): void {
     if (event.type !== 'hook.received') {
       const text = JSON.stringify({ jsonrpc: '2.0', method: 'event', params: event })
-      for (const conn of this.clients) {
+      for (const conn of this.connected) {
         if (conn.subscribed) conn.sendText(text)
       }
     }
@@ -180,7 +185,7 @@ export class Core {
       startedAt: this.options.startedAt,
       home: this.options.home,
       ptyHost: { pid: this.options.pty.hostPid, alive: this.options.pty.connected },
-      clients: [...this.clients]
+      clients: [...this.connected]
         .filter((conn) => conn.role !== null)
         .map((conn) => ({ role: conn.role!, ...(conn.name ? { name: conn.name } : {}) })),
       safeMode: this.options.safeMode ?? false,
@@ -640,7 +645,7 @@ export class Core {
     sendNotification(
       {
         broadcast: (event) => this.broadcast(event),
-        hasDesktopClient: () => [...this.clients].some((conn) => conn.role === 'desktop'),
+        hasDesktopClient: () => [...this.connected].some((conn) => conn.role === 'desktop'),
         notifier: this.options.notifier
       },
       n
@@ -652,7 +657,7 @@ export class Core {
     const desktop = this.getSettings().notifications
     // v1 tests match this event exactly, so `desktop` appears only when it is false
     this.broadcast({ type: 'notify', title, body, ...ids, ...(desktop ? {} : { desktop: false }) })
-    const hasDesktop = [...this.clients].some((conn) => conn.role === 'desktop')
+    const hasDesktop = [...this.connected].some((conn) => conn.role === 'desktop')
     if (!hasDesktop && desktop) {
       try {
         this.options.notifier(title, body)

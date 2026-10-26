@@ -78,8 +78,9 @@ describe('parseDistroManifest', () => {
   })
 
   test('settings are keyed by setting IDs and hold booleans, numbers or strings', () => {
-    expect(errorsOf({ ...base, settings: { 'quirky.terminal/scrollback': 1 } })).toEqual([
-      "settings: 'quirky.terminal/scrollback' is not a setting contribution ID",
+    expect(errorsOf({ ...base, settings: { scrollback: 1 } })).toEqual(["settings: 'scrollback' is not a setting contribution ID"])
+    expect(errorsOf({ ...base, settings: { 'Bad Plugin/scrollback': 1 } })).toEqual([
+      "settings: 'Bad Plugin/scrollback' is not a setting contribution ID",
     ])
     expect(errorsOf({ ...base, settings: { 'command:a/b': 1 } })).toEqual(["settings: 'command:a/b' is not a setting contribution ID"])
     expect(errorsOf({ ...base, settings: { 'setting:a/b': null, 'setting:a/c': [1], 'setting:a/d': {} } })).toEqual([
@@ -88,6 +89,17 @@ describe('parseDistroManifest', () => {
       "settings: value of 'setting:a/d' must be a boolean, number or string",
     ])
     expect(errorsOf({ ...base, settings: [] })).toEqual(["field 'settings' must be an object"])
+  })
+
+  test('a setting key written as <pluginId>/<name> is normalized to the full setting ID', () => {
+    const result = parse({ ...base, settings: { 'quirky.terminal/scrollback': 6000, 'setting:a.b/c': true } })
+    expect(result).toEqual({
+      ok: true,
+      manifest: { ...base, settings: { 'setting:quirky.terminal/scrollback': 6000, 'setting:a.b/c': true } },
+    })
+    expect(errorsOf({ ...base, settings: { 'a.b/c': 1, 'setting:a.b/c': 2 } })).toEqual([
+      "settings: 'setting:a.b/c' repeats the setting setting:a.b/c",
+    ])
   })
 
   test('theme must be a theme contribution ID', () => {

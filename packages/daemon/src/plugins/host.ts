@@ -12,6 +12,7 @@ import {
 } from '@quirky/protocol'
 import { conflict, invalidParams, notFound } from '../errors'
 import type { Store } from '../store'
+import { resolveCliAliases, type CliAliasResolution } from './cli-catalog'
 import { discoverPlugins, type DiscoveredPlugin } from './discover'
 import { computeRegistry, type Registry, type RegistryPlugin } from './registry'
 
@@ -61,13 +62,6 @@ export type PluginHostOptions = {
 }
 
 const FUNCTION_KINDS = new Set(['method', 'job', 'launch-hook'])
-
-type ComputeRegistry = (
-  discovered: DiscoveredPlugin[],
-  disabled: ReadonlySet<string>,
-  distroDisabled?: ReadonlySet<string>
-) => Registry
-const compute: ComputeRegistry = computeRegistry
 
 const DEFAULT_TIMEOUT_MS = 10_000
 
@@ -119,6 +113,7 @@ export class PluginHost {
   private registry: Registry = computeRegistry([], new Set())
   private readonly runtimes = new Map<string, Runtime>()
   private derivedDiagnostics = new Map<string, PluginDiagnostic[]>()
+  private cliAliases: CliAliasResolution = { accepted: new Map(), dropped: new Map() }
   private activationOrder: string[] = []
   /** Why each disabled plugin is off, as of the last recompute. */
   private disabledSets = { user: new Set<string>(), distro: new Set<string>(), safeMode: new Set<string>() }
@@ -172,6 +167,17 @@ export class PluginHost {
   /** Every discovered entry sorted by ID, built-in first; a duplicate ID appears once per source. */
   list(): PluginInfo[] {
     return this.registry.entries.map((entry) => this.infoOf(entry))
+  }
+
+  /** The `cli` module path and declared `cliAliases` of a plugin's manifest; empty for an unknown or unparsable plugin. */
+  cliOf(pluginId: string): { cli?: string; cliAliases: string[] } {
+    const manifest = this.registry.plugins.get(pluginId)?.discovered.manifest
+    return { ...(manifest?.cli === undefined ? {} : { cli: manifest.cli }), cliAliases: manifest?.cliAliases ?? [] }
+  }
+
+  /** The declared aliases of a plugin that lost a collision check, each with the reason. */
+  droppedCliAliases(pluginId: string): { alias: string; reason: string }[] {
+    return this.cliAliases.dropped.get(pluginId) ?? []
   }
 
   /** The contributions in effect, or every declaration with `all`, optionally narrowed by kind or declaring plugin. */
@@ -265,7 +271,8 @@ export class PluginHost {
       safeMode ? this.discovered.filter((plugin) => plugin.source === 'installed' && plugin.errors.length === 0).map((plugin) => plugin.id) : []
     )
     this.disabledSets = { user, distro, safeMode: inSafeMode }
-    this.registry = compute(this.discovered, new Set([...user, ...distro, ...inSafeMode]), distro)
+    this.registry = computeRegistry(this.discovered, new Set([...user, ...distro, ...inSafeMode]), [...distro])
+    this.cliAliases = this.resolveAliases()
     this.derivedDiagnostics = new Map()
     const derive = this.options.deriveDiagnostics
     if (!derive) return
@@ -274,6 +281,21 @@ export class PluginHost {
     } catch (error) {
       this.options.log(`deriving plugin diagnostics failed: ${messageOf(error)}`)
     }
+  }
+
+  /** Alias collisions among the plugins whose CLI group exists: those with a command or method in effect. */
+  private resolveAliases(): CliAliasResolution {
+    const owners = new Set(
+      [...this.registry.effective.values()]
+        .filter((item) => item.kind === 'cli-command' || item.kind === 'method')
+        .map((item) => item.plugin)
+    )
+    const claimants = [...owners].flatMap((id) => {
+      const entry = this.registry.plugins.get(id)
+      if (!entry || entry.status === 'invalid') return []
+      return [{ id, source: entry.discovered.source, aliases: entry.discovered.manifest?.cliAliases ?? [] }]
+    })
+    return resolveCliAliases(claimants)
   }
 
   private runtimeOf(id: string): Runtime {
@@ -311,6 +333,7 @@ export class PluginHost {
       diagnostics.push({ level: 'error', message: runtime.error })
     }
     diagnostics.push(...(runtime?.warnings ?? []))
+    const aliases = primary ? (this.cliAliases.accepted.get(discovered.id) ?? []) : []
     return {
       id: discovered.id,
       name: manifest?.name ?? discovered.id,
@@ -322,6 +345,7 @@ export class PluginHost {
       dependencies: manifest?.dependencies ?? [],
       ...(manifest?.ui === undefined ? {} : { ui: manifest.ui }),
       state,
+      ...(aliases.length === 0 ? {} : { cliAliases: aliases }),
       ...(reason === undefined ? {} : { disabledReason: reason }),
       diagnostics
     }

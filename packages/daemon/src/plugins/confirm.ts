@@ -14,8 +14,21 @@ export type ConfirmStore = Pick<Store, 'getConfirmation' | 'putConfirmation' | '
 /** Calls a method through the dispatcher; how confirmations reach `quirky.ask` and `describe` methods. */
 export type CallMethod = (method: string, params: Record<string, unknown>, from: DispatchSource) => Promise<unknown>
 
-/** What a destructive method declares: its `confirm` text and the full name of its `describe` method. */
-export type ConfirmTarget = { method: string; confirm: string; describe?: string }
+/** Produces a destructive kernel method's whole action text; see `DispatcherOptions.kernelDescribers`. */
+export type KernelDescriber = (params: Record<string, unknown>, from: DispatchSource) => Promise<string>
+
+/**
+ * What a destructive method declares: its `confirm` text and the full name of its `describe`
+ * method, or for a kernel method a `describeWith` function that replaces both.
+ */
+export type ConfirmTarget = { method: string; confirm: string; describe?: string; describeWith?: KernelDescriber }
+
+/** `confirm` with each `{name}` replaced by `String(params[name])`; a name with no value stays as written. */
+export function fillConfirm(confirm: string, params: Record<string, unknown>): string {
+  return confirm.replace(/\{(\w+)\}/g, (placeholder, name: string) =>
+    Object.hasOwn(params, name) && params[name] !== undefined ? String(params[name]) : placeholder
+  )
+}
 
 /** The question a person is asked and the digest the answer is bound to. */
 export type PreparedConfirmation = { action: string; digest: string }
@@ -112,13 +125,12 @@ export class Confirmations {
   }
 
   private async actionText(target: ConfirmTarget, params: Record<string, unknown>, from: DispatchSource): Promise<string> {
+    if (target.describeWith) return await target.describeWith(params, from)
     if (target.describe) {
       const text = await this.call(target.describe, params, from)
       if (typeof text !== 'string') throw internal(`${target.describe} must return a string`)
       return text
     }
-    return target.confirm.replace(/\{(\w+)\}/g, (placeholder, name: string) =>
-      Object.hasOwn(params, name) && params[name] !== undefined ? String(params[name]) : placeholder
-    )
+    return fillConfirm(target.confirm, params)
   }
 }

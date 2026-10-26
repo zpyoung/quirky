@@ -14,7 +14,7 @@ import { DaemonError, internal, invalidParams } from '../errors'
 import type { Handlers } from '../methods'
 import { Store } from '../store'
 import type { ClientConn } from '../types'
-import { Confirmations, type ConfirmStore, type ConfirmTarget } from './confirm'
+import { Confirmations, type ConfirmStore, type ConfirmTarget, type KernelDescriber } from './confirm'
 import type { PluginHost } from './host'
 import { RequestLog, requestDigest, type RequestStore } from './requests'
 import { openStream } from './streams'
@@ -36,6 +36,11 @@ export type DispatchOptions = {
 export type DispatcherOptions = {
   /** Where request IDs and confirmations are recorded; defaults to a private in-memory store. */
   store?: RequestStore & ConfirmStore
+  /**
+   * Action text for destructive kernel methods whose confirmation lists more than the `confirm`
+   * text, keyed by method name. The describer returns the whole text.
+   */
+  kernelDescribers?: Record<string, KernelDescriber>
   now?: () => number
 }
 
@@ -77,6 +82,7 @@ function detachedConn(): ClientConn {
 export class Dispatcher {
   private readonly requests: RequestLog
   private readonly confirmations: Confirmations
+  private readonly kernelDescribers: Record<string, KernelDescriber>
 
   constructor(
     private readonly handlers: Handlers,
@@ -85,6 +91,7 @@ export class Dispatcher {
     options: DispatcherOptions = {}
   ) {
     const store = options.store ?? new Store(':memory:')
+    this.kernelDescribers = options.kernelDescribers ?? {}
     this.requests = new RequestLog(store, { now: options.now, log })
     this.confirmations = new Confirmations(store, (method, params, from) => this.dispatch(method, params, from), {
       now: options.now,
@@ -137,7 +144,15 @@ export class Dispatcher {
         params: entry.params,
         readOnly: entry.readOnly === true,
         connection: (CONNECTION_METHODS as readonly string[]).includes(method),
-        ...(entry.destructive ? { destructive: { method, confirm: entry.destructive.confirm } } : {})
+        ...(entry.destructive
+          ? {
+              destructive: {
+                method,
+                confirm: entry.destructive.confirm,
+                ...(Object.hasOwn(this.kernelDescribers, method) ? { describeWith: this.kernelDescribers[method] } : {})
+              }
+            }
+          : {})
       }
     }
     if (!method.includes('/')) throw unknownMethod(method)
