@@ -4,7 +4,8 @@
 
 **Status:** Approved (headless build loop; decisions in [m0-scripting.md](../../../loop/decisions/m0-scripting.md)). Tech spec: requested.
 
-**Amendments:** none yet.
+**Amendments:**
+- 2026-10-26, before approval: Codex adversarial review. The CLI checks a generated command's whole params object against the schema, `--params` included (SC-11, SC-19); a kernel command shadows generated commands that extend its words (SC-13); a valued flag followed by `--...` is missing its value (SC-11, SC-18); catalog commands list every method they may call (SC-20); enums need a type (SC-2); SC-23 enables a plugin instead of installing one, since discovery runs at startup.
 
 ## Conceptual model
 
@@ -18,7 +19,8 @@ and builds three things from those schemas: the CLI's commands, a catalog agents
 
 **Schemas.** A schema is a flat subset of JSON Schema: `type`, `description`, `enum`, `items`,
 `properties`, `required`, a boolean `additionalProperties`, `minimum`, `maximum` and a
-documentation-only `default`, with `{}` meaning any value ([D4](../../../loop/decisions/m0-scripting.md)).
+documentation-only `default`, with `{}` meaning any value. An `enum` needs a `type` of `string`,
+`integer` or `number`, and every listed value must have that type ([D4](../../../loop/decisions/m0-scripting.md)).
 Contributions declare them in the manifest, beside the fields they already have ([D5](../../../loop/decisions/m0-scripting.md)):
 
 | Kind | New fields | Omitted means |
@@ -72,14 +74,16 @@ Kernel methods go through the same check before their own handler runs.
 
 **Running a CLI command.** The CLI splits the leading words of the command line.
 1. If they name a kernel command, the CLI parses its flags from the command's declaration and runs
-   it. The catalog isn't fetched.
+   it. The catalog isn't fetched. A kernel command owns its words as a prefix: a generated command
+   whose words start with a kernel command's full words (`status list` when `status` is a kernel
+   command) is shadowed by it.
 2. Otherwise the CLI calls `api.describe`, builds the generated commands from it and looks again.
-   A generated command's flags are parsed strictly against the method's schema; then the CLI calls
-   the method and prints the result.
+   A generated command's flags are parsed strictly against the method's schema, and the assembled
+   params are checked against the whole schema; then the CLI calls the method and prints the result.
 3. If nothing matches, the CLI prints suggestions drawn from both kinds of command and exits 2.
 
 **Discovery.** `quirky api --json` prints the catalog: `api.describe`'s methods, events and UI
-commands, plus every CLI command, kernel and generated, with its flags and the method it calls.
+commands, plus every CLI command, kernel and generated, with its flags and the methods it may call.
 `quirky skill show` renders the same catalog as a skill file.
 
 ## Key decisions
@@ -94,7 +98,8 @@ commands, plus every CLI command, kernel and generated, with its flags and the m
   rather than breaking its callers.
 - **Precedence on shared words** ([D11](../../../loop/decisions/m0-scripting.md)). Kernel commands win
   over built-in plugins' generated commands, which win over installed plugins'. The loser is
-  reported, never silently dropped, and stays callable through `quirky api call`.
+  reported, never silently dropped, and stays callable through `quirky api call`. A kernel command
+  also shadows any generated command whose words extend its own.
 - **JSON errors for scripts** ([D15](../../../loop/decisions/m0-scripting.md)). Under `--json` an error is
   a JSON document on stdout. Exit codes stay 0 (ok), 1 (runtime error) and 2 (usage error).
 - **A generic caller** ([D18](../../../loop/decisions/m0-scripting.md)). `quirky api call <method>`
@@ -140,6 +145,8 @@ Most scenarios use the installed plugin `acme.notes`, with lazy activation and t
      | method `m` with a property of `type: "date"` | `method m: params.properties.when: unknown type date` |
      | method `m` with `required: ["x"]` and no property `x` | `method m: params: required names undeclared property x` |
      | method `m` with `enum: []` | `method m: params.properties.color: enum must be a non-empty list` |
+     | method `m` with `enum: ["1", 1]` and no `type` | `method m: params.properties.choice: enum needs type string, integer or number` |
+     | method `m` with `type: "string"` and `enum: ["a", 2]` | `method m: params.properties.choice: enum values must be strings` |
      | method `m` with properties `fooBar` and `foo-bar` | `method m: params fooBar and foo-bar both map to --foo-bar` |
      | event `e` with `data: "object"` | `event e: data must be a schema object` |
      | UI command `c` with `args: { "type": "array" }` | `command c: args must be an object schema` |
@@ -229,19 +236,21 @@ Most scenarios use the installed plugin `acme.notes`, with lazy activation and t
       | `quirky acme.notes add --title a --meta '{oops'` | `--meta must be JSON: ...` |
       | `quirky acme.notes add --title a --priority 9` | `--priority must be at most 5` |
       | `quirky acme.notes add --title` | `--title requires a value` |
+      | `quirky acme.notes add --title --pinned` | `--title requires a value; write --title=<value> for a value starting with --` |
+      | `quirky acme.notes add --params '{"title":1}'` | `params.title must be a string` |
       | `quirky acme.notes add` | `missing required flag --title` |
       | `quirky acme.notes add --title a extra` | `unexpected argument "extra"` |
 
 12. **SC-12: `--params` gives the whole params object** (CLI)
     - **Given** `acme.notes add`, and method `acme.notes/raw` with a param named `json`
     - **When** the agent runs (a) `quirky acme.notes add --params '{"title":"a","tags":["x"]}'`, (b) `quirky acme.notes add --params '{"title":"a"}' --title b`, (c) `quirky acme.notes raw --params '{"json":true}'`
-    - **Then** (a) calls the method with `{"title": "a", "tags": ["x"]}`; (b) exits 2 with `title is given by both --params and --title`; (c) calls `acme.notes/raw` with `{"json": true}`, since `--json` stays the global switch
+    - **Then** (a) calls the method with `{"title": "a", "tags": ["x"]}`, after checking the object against the schema as SC-11 does; (b) exits 2 with `title is given by both --params and --title`; (c) calls `acme.notes/raw` with `{"json": true}`, since `--json` stays the global switch
 
 13. **SC-13: a built-in's group drops `quirky.`, and kernel commands win on shared words** (CLI)
-    - **Given** built-in `quirky.repo` declares methods `list` and `rename`, and installed plugin `job` declares method `list`
-    - **When** the agent runs `quirky repo rename --repo-id r1 --name x`, `quirky repo list`, `quirky job list` and `quirky api --json`
-    - **Then** `repo rename` calls `quirky.repo/rename`; `repo list` and `job list` run the kernel commands; the catalog lists command `repo list` from `quirky.repo` and command `job list` from `job`, each marked as shadowed by the kernel command, and `quirky api call quirky.repo/list` still calls the built-in's method
-    - **Data after:** **Commands**: ✓ `repo rename` → `quirky.repo/rename`; ✓ `repo list` → kernel; `repo list` (quirky.repo) shadowed by kernel; `job list` (job) shadowed by kernel
+    - **Given** built-in `quirky.repo` declares methods `list` and `rename`, installed plugin `job` declares method `list`, and installed plugin `status` declares method `list`
+    - **When** the agent runs `quirky repo rename --repo-id r1 --name x`, `quirky repo list`, `quirky job list`, `quirky status list` and `quirky api --json`
+    - **Then** `repo rename` calls `quirky.repo/rename`; `repo list` and `job list` run the kernel commands; `status list` runs the kernel `status` command, which refuses the extra word (`unexpected argument "list"`, exit 2); the catalog lists command `repo list` from `quirky.repo`, `job list` from `job` and `status list` from `status`, each marked as shadowed by the kernel command, and `quirky api call quirky.repo/list` still calls the built-in's method
+    - **Data after:** **Commands**: ✓ `repo rename` → `quirky.repo/rename`; ✓ `repo list` → kernel; `repo list` (quirky.repo) shadowed by kernel; `job list` (job) shadowed by kernel; `status list` (status) shadowed by kernel `status`
 
 14. **SC-14: a generated command prints a readable text form** (CLI)
     - **Given** methods returning each result below
@@ -297,8 +306,8 @@ Most scenarios use the installed plugin `acme.notes`, with lazy activation and t
 
 18. **SC-18: an unknown flag names the valid ones, and a valued flag needs its value** (CLI)
     - **Given** the daemon is running
-    - **When** the agent runs `quirky wt list --bogus` and `quirky session new --agent claude --worktree w1 --prompt` with nothing after `--prompt`
-    - **Then** the first exits 2 with `unknown flag --bogus for wt list` and `valid flags: --repo, --json, --help`; the second exits 2 with `--prompt requires a value` and starts no session. Orca made a missing value an error because a shell-eaten value once sent a prompt twice ([cli.md](../../../../research/orca-features/cli.md#global-flags-every-command-srcsharedcli-argument-boundaryts1-2)).
+    - **When** the agent runs `quirky wt list --bogus`, `quirky session new --agent claude --worktree w1 --prompt` with nothing after `--prompt`, and the same with `--prompt --json`
+    - **Then** the first exits 2 with `unknown flag --bogus for wt list` and `valid flags: --repo, --json, --help`; the second and third exit 2 with `--prompt requires a value` (the third adds `write --prompt=<value> for a value starting with --`) and start no session. A value that starts with `--` is passed as `--prompt=--x`. Orca made a missing value an error because a shell-eaten value once sent a prompt twice ([cli.md](../../../../research/orca-features/cli.md#global-flags-every-command-srcsharedcli-argument-boundaryts1-2)).
 
 19. **SC-19: under `--json`, an error is JSON on stdout** (CLI)
     - **Given** the daemon is running, and separately one that isn't reachable
@@ -311,9 +320,11 @@ Most scenarios use the installed plugin `acme.notes`, with lazy activation and t
       | `quirky wt lst --json` | `{"error":{"code":"usage","message":"unknown command \"wt lst\"","suggestions":["wt list"]}}` | 2 |
       | `quirky acme.notes add --json` | `{"error":{"code":"usage","message":"missing required flag --title"}}` | 2 |
       | `quirky plugin enable nope --json` | `{"error":{"code":"not-found","message":"..."}}` | 1 |
-      | `quirky api call acme.notes/add --params '{"title":1}' --json` | `{"error":{"code":"invalid-params","message":"params.title must be a string"}}` | 1 |
+      | `quirky acme.notes add --params '{"title":1}' --json` | `{"error":{"code":"usage","message":"params.title must be a string"}}` | 2 |
+      | `quirky api call repo.add --path '' --json` | `{"error":{"code":"invalid-params","message":"path must be a non-empty string"}}` | 1 |
       | any command, daemon unreachable | `{"error":{"code":"daemon-unavailable","message":"..."}}` | 1 |
 
+    - The CLI catches what the schema rules out before calling (exit 2); a daemon InvalidParams, from a check the schema can't express, exits 1.
     - Without `--json`, errors stay as today: `quirky: <message>` on stderr, plus `run 'quirky help' for usage` for usage errors.
 
 ### Discovery and the skill
@@ -338,15 +349,17 @@ Most scenarios use the installed plugin `acme.notes`, with lazy activation and t
         "events": [ { "name": "acme.notes/added", "source": "acme.notes", "data": { "type": "object" } } ],
         "uiCommands": [ { "id": "command:acme.notes/open", "source": "acme.notes", "args": { "type": "object" } } ],
         "commands": [
-          { "command": "acme.notes add", "source": "acme.notes", "method": "acme.notes/add",
+          { "command": "acme.notes add", "source": "acme.notes", "methods": ["acme.notes/add"],
             "summary": "Add a note.", "usage": "acme.notes add --title <string> ...",
             "positionals": [],
             "flags": [ { "name": "title", "type": "string", "required": true, "repeatable": false, "description": "The note's title" } ] },
-          { "command": "repo add", "source": "kernel", "method": "repo.add",
+          { "command": "repo add", "source": "kernel", "methods": ["repo.add"],
             "positionals": [ { "name": "path", "required": true } ], "flags": [] }
         ]
       }
       ```
+
+    - `methods` lists every method a command may call: one for a generated command, two for `session new` (`session.create`, or `session.createStructured` with `--background`), and none for commands that call no method, such as `open` and `help`.
 
 21. **SC-21: `quirky api call` reaches any method** (CLI)
     - **Given** a repo has been added
@@ -359,15 +372,15 @@ Most scenarios use the installed plugin `acme.notes`, with lazy activation and t
     - **Then** it prints a skill file: frontmatter with `name: quirky` and a one-line description, how to discover commands (`quirky api --json`, `--help`), the `--json`, error and exit-code conventions, and one line per command grouped by group, including `quirky acme.notes add --title <string> ...  Add a note.`. Running it twice prints the same bytes.
 
 23. **SC-23: the skill installs into a folder and reports when it is stale** (CLI)
-    - **Given** an empty folder `skills/`
-    - **When** the agent runs `quirky skill status --dir skills`, `quirky skill install --dir skills`, `status` again, then installs plugin `acme.extra` and runs `status` and `install` once more
-    - **Then** status reads `missing`, install writes `skills/quirky/SKILL.md` and prints `installed`, status reads `up-to-date`; after `acme.extra` arrives, status reads `stale` and install prints `installed` again, after which status is `up-to-date`. A second install with nothing changed prints `up-to-date` and leaves the file untouched.
+    - **Given** an empty folder `skills/`, and installed plugin `acme.extra`, which declares methods and is disabled
+    - **When** the agent runs `quirky skill status --dir skills`, `quirky skill install --dir skills`, `status` again, then `quirky plugin enable acme.extra` and runs `status` and `install` once more
+    - **Then** status reads `missing`, install writes `skills/quirky/SKILL.md` and prints `installed`, status reads `up-to-date`; after `acme.extra` is enabled, status reads `stale` and install prints `installed` again, after which status is `up-to-date`. A second install with nothing changed prints `up-to-date` and leaves the file untouched.
     - **Data before:** **skills/**: empty
     - **Walkthrough:**
       1. `skill status` → `missing`
       2. `skill install` → `installed`
       3. `skill status` → `up-to-date`
-      4. `acme.extra` is installed
+      4. The agent enables `acme.extra`
       5. `skill status` → `stale`
       6. `skill install` → `installed`
     - **Data after:** **skills/quirky/SKILL.md**: ✓ lists `acme.extra`'s commands

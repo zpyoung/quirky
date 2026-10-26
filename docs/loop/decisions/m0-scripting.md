@@ -33,7 +33,7 @@
 ## D4: Schemas are a flat subset of JSON Schema
 - **Question:** flag-design and response-format: what language a contribution's schema is written in
 - **Options:** full JSON Schema; a flat JSON Schema subset; TypeScript types extracted at build time; a Quirky-specific mini-language
-- **Chose:** a JSON Schema subset with the keywords `type` (`string`, `integer`, `number`, `boolean`, `array`, `object`, `null`), `description`, `enum`, `items`, `properties`, `required`, `additionalProperties` (boolean only), `minimum`, `maximum` and `default` (documentation only). `{}` means any value. No `$ref`, `allOf`, `anyOf`, `oneOf` or `pattern`. A schema using anything else makes the contribution invalid, with a diagnostic naming the keyword.
+- **Chose:** a JSON Schema subset with the keywords `type` (`string`, `integer`, `number`, `boolean`, `array`, `object`, `null`), `description`, `enum`, `items`, `properties`, `required`, `additionalProperties` (boolean only), `minimum`, `maximum` and `default` (documentation only). `{}` means any value. An `enum` needs a `type` of `string`, `integer` or `number`, and its values must all have that type. No `$ref`, `allOf`, `anyOf`, `oneOf` or `pattern`. A schema using anything else makes the contribution invalid, with a diagnostic naming the keyword.
 - **Why:** every schema stays valid JSON Schema, so agents and tools that read MCP `inputSchema` or OpenRPC read Quirky's as is. A flat subset maps cleanly to flags; Jargon's generator flattens `allOf` and silently loses constraints when properties repeat. Plugin manifests are JSON, so TypeScript types aren't available to the daemon.
 - **Evidence:** https://github.com/trans/jargon ; https://modelcontextprotocol.io/specification/2025-06-18/server/tools ; https://spec.open-rpc.org/
 - **Reversibility:** hard
@@ -107,7 +107,7 @@
 ## D11: When two sources give the same command words, kernel beats built-in beats installed, and the loser is reported
 - **Question:** duplicate-handling: a kernel command, a built-in's generated command and an installed plugin's generated command can share words (`quirky repo list`, or an installed plugin with ID `plugin`)
 - **Options:** refuse the later plugin; merge silently; a fixed precedence with the shadowed command reported
-- **Chose:** precedence by exact command words: kernel, then built-in, then installed. Commands with different words in the same group coexist. A shadowed command stays in `quirky api --json` marked with what shadows it, and its method stays callable through `quirky api call`.
+- **Chose:** precedence by exact command words: kernel, then built-in, then installed. Commands with different words in the same group coexist. A kernel command also owns its words as a prefix, so a generated `status list` is shadowed by the kernel `status`. A shadowed command stays in `quirky api --json` marked with what shadows it, and its method stays callable through `quirky api call`.
 - **Why:** silent overwrite is the reported failure (two plugins' `analyze` commands, last install wins), and refusing would block m0-port-v1's move of kernel groups into built-ins, where the kernel command is deleted in the same change
 - **Evidence:** https://github.com/microsoft/apm/issues/1120 ; docs/loop/decisions/m0-registry.md D8
 - **Reversibility:** easy
@@ -128,7 +128,7 @@
 ## D13: The CLI parses flag values strictly and checks the schema before calling
 - **Question:** error-recovery and exit-codes: what happens to a value that doesn't fit
 - **Options:** coerce leniently and let the daemon decide; parse strictly by declared type, check required params and the schema in the CLI, then let the daemon check again
-- **Chose:** strict. An integer flag takes only integer text, a number only a finite number, a boolean only no value, `true` or `false`, an enum only a listed value, and JSON flags only valid JSON. A string param stays a string even if it looks like a number. Missing required params are a usage error naming every missing flag. These exit 2 without calling the method; the daemon's own check (D6) still applies and its InvalidParams exits 1.
+- **Chose:** strict. An integer flag takes only integer text, a number only a finite number, a boolean only no value, `true` or `false`, an enum only a listed value, and JSON flags only valid JSON. A string param stays a string even if it looks like a number. Missing required params are a usage error naming every missing flag, and the assembled params object, `--params` included, is checked against the whole schema with the daemon's messages (`params.title must be a string`). These exit 2 without calling the method; the daemon's own check (D6) still applies and its InvalidParams exits 1.
 - **Why:** no coercion is the lesson from Restish; catching the error in the CLI gives a usage message with the flag name instead of a property path
 - **Evidence:** https://rest.sh/blog/turn-an-openapi-spec-into-a-cli-without-generating-code/ ; packages/cli/src/main.ts:20
 - **Reversibility:** easy
@@ -158,7 +158,7 @@
 ## D16: Unknown commands and flags get suggestions, drawn from generated commands too
 - **Question:** error-recovery
 - **Options:** a bare error; Orca's "Did you mean" for commands and a list of valid flags for flags
-- **Chose:** an unknown command word prints `unknown command "<words>"` and up to three closest command paths (edit distance up to 2, or a matching prefix), from kernel and generated commands. An unknown flag names the command's valid flags. A flag that needs a value and gets none stays an error. All exit 2.
+- **Chose:** an unknown command word prints `unknown command "<words>"` and up to three closest command paths (edit distance up to 2, or a matching prefix), from kernel and generated commands. An unknown flag names the command's valid flags. A flag that needs a value and gets none stays an error, and so does one followed by a token starting with `--`, which says to write `--flag=<value>` for such a value. All exit 2.
 - **Why:** these are the recoveries cli.md verified in Orca, and the valued-flag rule exists because a shell-eaten value once sent a prompt twice
 - **Evidence:** research/orca-features/cli.md "Run a command" step 3 and "Global flags"
 - **Reversibility:** easy
@@ -168,7 +168,7 @@
 ## D17: `quirky api --json` returns one versioned catalog of methods, events, UI commands and CLI commands
 - **Question:** response-format and versioning of the discovery output
 - **Options:** Orca's `agent-context` shape (commands only); an OpenRPC document (methods only); one Quirky catalog with all four, carrying `schemaVersion`
-- **Chose:** `{ schemaVersion: 1, daemonVersion, protocolVersion, methods, events, uiCommands, commands }`, each list sorted by name. Methods and events carry their schema, their source (`kernel` or the plugin ID) and description; commands carry their words, summary, usage, positionals, flags (name, type, description, enum, repeatable, required) and the method they call, plus `shadowedBy` when shadowed. Only in-effect contributions appear; an overridden method shows the overriding declaration. Text mode prints commands grouped by group with their summaries. `schemaVersion` rises only on a breaking change to this shape.
+- **Chose:** `{ schemaVersion: 1, daemonVersion, protocolVersion, methods, events, uiCommands, commands }`, each list sorted by name. Methods and events carry their schema, their source (`kernel` or the plugin ID) and description; commands carry their words, summary, usage, positionals, flags (name, type, description, enum, repeatable, required) and `methods`, every method they may call (one for a generated command, none for `open`), plus `shadowedBy` when shadowed. Only in-effect contributions appear; an overridden method shows the overriding declaration. Text mode prints commands grouped by group with their summaries. `schemaVersion` rises only on a breaking change to this shape.
 - **Why:** an agent needs both the methods (for the API) and the commands (for the CLI) from one call; Orca's commands-only listing leaves the RPC surface undiscoverable. A `schemaVersion` matches Orca's and lets agents detect a change.
 - **Evidence:** research/orca-features/cli.md "Agent discovery" and "Command table and validation"; https://spec.open-rpc.org/
 - **Reversibility:** medium
@@ -257,5 +257,25 @@
 - **Confidence:** high
 - **Source:** locked by docs/loop/LOOP.md
 
+## D26: Logic-spec review: fix six model findings, reject the pre-pass findings
+- **Question:** adjudicating the Codex adversarial review of logic.md (spec-design profile, standard depth, reviewer gpt-6.1-sol, independence full)
+- **Options:** for each finding, amend the spec or reject it with a reason
+- **Chose:** amended for six. F1: SC-19 had `--params '{"title":1}'` reaching the daemon although D13 checks the schema in the CLI; the CLI now checks the whole params object, `--params` included, and exits 2, while a daemon InvalidParams example uses a check the schema can't express (an empty `repo.add` path). F2 (refuted by the reviewer, kept anyway): routing for a generated command that extends a kernel command's words was undefined, so a kernel command now shadows those (SC-13). F3: discovery runs only at daemon start, so SC-23 enables a disabled plugin instead of installing one. F4: `--prompt --json` used to take `--json` as the prompt; a valued flag followed by `--...` is now missing its value (SC-11, SC-18). F5: an untyped or mixed enum had two flag readings, so an enum needs a type (SC-2). F6: `open` calls no method and `session new` two, so catalog commands carry a `methods` list (SC-20). Rejected F7 (the pre-pass wants a Purpose or Overview heading the rubric doesn't require) and the 42 unresolvable-reference findings, which are fixture names, commands and files the spec defines.
+- **Why:** each amended finding named a contract two implementers would build differently
+- **Evidence:** scratchpad lr1/gate.json and merged.json; docs/loop/decisions/m0-ui-api.md D34 (same pre-pass rejections)
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** assumed — autonomous
+
+## D27: No closure review round on the logic spec
+- **Question:** whether to re-run the review after the fixes
+- **Options:** a closure round; none, as m0-registry D30 and m0-daemon-api D30 chose
+- **Chose:** none. The fixes are local to the scenarios named, and the tech spec gets its own review.
+- **Why:** consistent with earlier items; the final code review checks behavior against the amended scenarios
+- **Evidence:** docs/loop/decisions/m0-registry.md D30
+- **Reversibility:** easy
+- **Confidence:** medium
+- **Source:** assumed — autonomous
+
 ## Progress
-Brainstorming done (D1-D25). Next: write docs/quirk/specs/2026-10-26-m0-scripting/logic.md, review it with Codex.
+Logic spec written, reviewed and amended (D26). Next: write tech.md beside it and review it with Codex.
