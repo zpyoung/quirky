@@ -166,15 +166,17 @@ export function newestOffset(dir: string): number {
 
 /**
  * A session's append-only output history: framed records in `output.log`, moved over
- * `output.1.log` once the segment passes `maxSegmentBytes` of output, so the newest 16 to 32 MiB
- * stay on disk. Output positions are absolute for the session's whole life. A write error disables
+ * `output.1.log` once the segment file passes `maxSegmentBytes` (header and every record kind
+ * counted), so a segment never exceeds that size by more than one record and the newest 16 to
+ * 32 MiB stay on disk. Output positions count output payload bytes only and are absolute for the
+ * session's whole life. A write error disables
  * the log (reported once) and later appends are no-ops; callers are never thrown at.
  */
 export class HistoryLog {
   private fd: number | null = null
   private failed = false
   private position = 0
-  private segmentStart = 0
+  private segmentBytes = 0
   private cols: number
   private rows: number
   private readonly path: string
@@ -221,14 +223,19 @@ export class HistoryLog {
         log.fd = fd
         ftruncateSync(fd, scan.validBytes)
         log.position = scan.endOffset
-        log.segmentStart = scan.startOffset
+        log.segmentBytes = scan.validBytes
         for (const record of scan.records) {
           if (record.kind === 'resize') {
             log.cols = record.cols!
             log.rows = record.rows!
           }
         }
-        if (scan.records.length === 0) writeAll(fd, encodeResize(log.cols, log.rows))
+        if (scan.records.length === 0) {
+          const resize = encodeResize(log.cols, log.rows)
+          writeAll(fd, resize)
+          log.segmentBytes += resize.length
+        }
+        log.rotateIfFull()
         return
       }
       const previous = scanFile(log.rotatedPath)
@@ -250,18 +257,19 @@ export class HistoryLog {
   appendOutput(bytes: Uint8Array): void {
     if (!this.write(encodeRecord(KIND_OUTPUT, bytes))) return
     this.position += bytes.length
-    if (this.position - this.segmentStart > this.maxSegmentBytes) this.guard(() => this.rotate())
+    this.rotateIfFull()
   }
 
   appendResize(cols: number, rows: number): void {
     if (!this.write(encodeResize(cols, rows))) return
     this.cols = cols
     this.rows = rows
+    this.rotateIfFull()
   }
 
   /** Marks where a restored incarnation begins. */
   appendRestore(): void {
-    this.write(encodeRecord(KIND_RESTORE, new Uint8Array(0)))
+    if (this.write(encodeRecord(KIND_RESTORE, new Uint8Array(0)))) this.rotateIfFull()
   }
 
   close(): void {
@@ -283,9 +291,14 @@ export class HistoryLog {
   private startSegment(startOffset: number): void {
     this.close()
     this.fd = openPrivate(this.path, 'w')
-    this.segmentStart = startOffset
     this.position = startOffset
-    writeAll(this.fd, Buffer.concat([encodeHeader(startOffset), encodeResize(this.cols, this.rows)]))
+    const opening = Buffer.concat([encodeHeader(startOffset), encodeResize(this.cols, this.rows)])
+    writeAll(this.fd, opening)
+    this.segmentBytes = opening.length
+  }
+
+  private rotateIfFull(): void {
+    if (this.segmentBytes > this.maxSegmentBytes) this.guard(() => this.rotate())
   }
 
   private rotate(): void {
@@ -297,7 +310,9 @@ export class HistoryLog {
   private write(record: Uint8Array): boolean {
     const fd = this.fd
     if (this.failed || fd === null) return false
-    return this.guard(() => writeAll(fd, record))
+    if (!this.guard(() => writeAll(fd, record))) return false
+    this.segmentBytes += record.length
+    return true
   }
 
   /** Runs one I/O step; the first failure disables the log and is reported once. */

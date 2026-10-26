@@ -7,6 +7,9 @@ import { HistoryLog, newestOffset, oldestOffset, readSegments } from '../src/his
 const enc = (s: string) => new TextEncoder().encode(s)
 const dec = (b: Uint8Array | undefined) => new TextDecoder().decode(b)
 
+/** Segment header (16) plus the resize record every segment opens with (9). */
+const OPENING_BYTES = 25
+
 const roots: string[] = []
 function freshDir(): string {
   const root = mkdtempSync(join(tmpdir(), 'qlog-'))
@@ -97,7 +100,7 @@ describe('HistoryLog format', () => {
 
   test('create discards segments left by an earlier run', () => {
     const dir = freshDir()
-    const first = HistoryLog.create(dir, { cols: 80, rows: 24, maxSegmentBytes: 10 })
+    const first = HistoryLog.create(dir, { cols: 80, rows: 24, maxSegmentBytes: OPENING_BYTES + 10 })
     first.appendOutput(enc('0123456789AB'))
     first.close()
     const second = HistoryLog.create(dir, { cols: 80, rows: 24 })
@@ -109,7 +112,7 @@ describe('HistoryLog format', () => {
 
   test('files are 0600 and the directory 0700', () => {
     const dir = freshDir()
-    const log = HistoryLog.create(dir, { cols: 80, rows: 24, maxSegmentBytes: 10 })
+    const log = HistoryLog.create(dir, { cols: 80, rows: 24, maxSegmentBytes: OPENING_BYTES + 10 })
     log.appendOutput(enc('0123456789AB'))
     log.close()
     expect(statSync(dir).mode & 0o777).toBe(0o700)
@@ -121,7 +124,7 @@ describe('HistoryLog format', () => {
 describe('HistoryLog rotation', () => {
   test('offsets continue across a rotation and each segment starts with a resize', () => {
     const dir = freshDir()
-    const log = HistoryLog.create(dir, { cols: 80, rows: 24, maxSegmentBytes: 10 })
+    const log = HistoryLog.create(dir, { cols: 80, rows: 24, maxSegmentBytes: OPENING_BYTES + 25 })
     log.appendOutput(enc('aaaaaa'))
     log.appendResize(70, 20)
     log.appendOutput(enc('bbbbbb'))
@@ -137,6 +140,43 @@ describe('HistoryLog rotation', () => {
     expect(segments[1]!.records[0]).toMatchObject({ cols: 70, rows: 20, offset: 12 })
     expect(segments[1]!.records[1]).toMatchObject({ kind: 'output', offset: 12 })
     expect(outputText(dir)).toBe('aaaaaabbbbbbcc')
+  })
+
+  test('resize and restore records count toward the segment size', () => {
+    const maxSegmentBytes = 200
+    const dir = freshDir()
+    const log = HistoryLog.create(dir, { cols: 80, rows: 24, maxSegmentBytes })
+    for (let i = 0; i < 500; i++) {
+      log.appendResize(80 + (i % 2), 24)
+      log.appendRestore()
+    }
+    log.appendOutput(enc('end'))
+    log.close()
+
+    expect(log.offset).toBe(3)
+    const resizeRecord = 9
+    for (const name of ['output.log', 'output.1.log']) {
+      expect(statSync(join(dir, name)).size).toBeLessThanOrEqual(maxSegmentBytes + resizeRecord)
+    }
+    const { segments, unreadable } = readSegments(dir)
+    expect(unreadable).toEqual([])
+    expect(segments).toHaveLength(2)
+    for (const s of segments) expect(s.startOffset).toBe(0)
+    expect(newestOffset(dir)).toBe(3)
+  })
+
+  test('a rotation caused by a resize opens the next segment at the new size', () => {
+    const dir = freshDir()
+    const log = HistoryLog.create(dir, { cols: 80, rows: 24, maxSegmentBytes: OPENING_BYTES + 10 })
+    log.appendOutput(enc('ab'))
+    log.appendResize(120, 40)
+    log.appendOutput(enc('c'))
+    log.close()
+
+    const { segments } = readSegments(dir)
+    expect(segments.at(-1)!.records[0]).toMatchObject({ kind: 'resize', cols: 120, rows: 40 })
+    expect(outputText(dir)).toBe('abc')
+    expect(log.offset).toBe(3)
   })
 
   test('keeps only the newest two segments of a long run', () => {
@@ -180,7 +220,7 @@ describe('readSegments damage handling', () => {
 
   test('a segment with bad magic is unreadable and omitted', () => {
     const dir = freshDir()
-    const log = HistoryLog.create(dir, { cols: 80, rows: 24, maxSegmentBytes: 10 })
+    const log = HistoryLog.create(dir, { cols: 80, rows: 24, maxSegmentBytes: OPENING_BYTES + 10 })
     log.appendOutput(enc('0123456789AB'))
     log.appendOutput(enc('tail'))
     log.close()
@@ -226,12 +266,12 @@ describe('readSegments damage handling', () => {
 describe('HistoryLog.openForAppend', () => {
   test('continues from the absolute offset it ends at', () => {
     const dir = freshDir()
-    const first = HistoryLog.create(dir, { cols: 80, rows: 24, maxSegmentBytes: 10 })
+    const first = HistoryLog.create(dir, { cols: 80, rows: 24, maxSegmentBytes: OPENING_BYTES + 10 })
     first.appendOutput(enc('0123456789AB'))
     first.appendOutput(enc('xyz'))
     first.close()
 
-    const log = HistoryLog.openForAppend(dir, { cols: 80, rows: 24, maxSegmentBytes: 10 })
+    const log = HistoryLog.openForAppend(dir, { cols: 80, rows: 24, maxSegmentBytes: OPENING_BYTES + 20 })
     expect(log.offset).toBe(15)
     log.appendRestore()
     log.appendOutput(enc('!'))
@@ -271,13 +311,13 @@ describe('HistoryLog.openForAppend', () => {
 
   test('rewrites a bad header with the last known offset', () => {
     const dir = freshDir()
-    const first = HistoryLog.create(dir, { cols: 80, rows: 24, maxSegmentBytes: 10 })
+    const first = HistoryLog.create(dir, { cols: 80, rows: 24, maxSegmentBytes: OPENING_BYTES + 10 })
     first.appendOutput(enc('0123456789AB'))
     first.appendOutput(enc('tail'))
     first.close()
     writeFileSync(join(dir, 'output.log'), 'garbage')
 
-    const log = HistoryLog.openForAppend(dir, { cols: 80, rows: 24, maxSegmentBytes: 10 })
+    const log = HistoryLog.openForAppend(dir, { cols: 80, rows: 24, maxSegmentBytes: OPENING_BYTES + 10 })
     expect(log.offset).toBe(12)
     log.appendOutput(enc('new'))
     log.close()
