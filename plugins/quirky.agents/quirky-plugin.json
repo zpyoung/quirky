@@ -4,6 +4,7 @@
   "version": "0.1.0",
   "description": "The catalog of agent CLIs Quirky can launch, with their detection, launch and resume data.",
   "main": "main.ts",
+  "ui": "dist/ui.js",
   "cli": "cli.ts",
   "activation": "startup",
   "dependencies": [],
@@ -2014,6 +2015,209 @@
         "title": "Trust the folder when Quirky starts an agent",
         "description": "Pre-write the trust record an agent would otherwise ask about on first launch in a folder.",
         "default": true
+      }
+    ],
+    "view": [
+      {
+        "id": "settings",
+        "title": "Agents"
+      }
+    ],
+    "command": [
+      {
+        "id": "open-settings",
+        "title": "Open agent settings"
+      },
+      {
+        "id": "new-agent-tab",
+        "title": "New agent tab (default agent)"
+      },
+      {
+        "id": "new-claude-tab",
+        "title": "New Claude tab"
+      },
+      {
+        "id": "new-claude-agent-teams-tab",
+        "title": "New Claude Agent Teams tab"
+      },
+      {
+        "id": "new-openclaude-tab",
+        "title": "New OpenClaude tab"
+      },
+      {
+        "id": "new-codex-tab",
+        "title": "New Codex tab"
+      },
+      {
+        "id": "new-grok-tab",
+        "title": "New Grok tab"
+      },
+      {
+        "id": "new-copilot-tab",
+        "title": "New GitHub Copilot tab"
+      },
+      {
+        "id": "new-opencode2-tab",
+        "title": "New OpenCode 2 tab"
+      },
+      {
+        "id": "new-opencode-tab",
+        "title": "New OpenCode tab"
+      },
+      {
+        "id": "new-mimo-code-tab",
+        "title": "New MiMo Code tab"
+      },
+      {
+        "id": "new-ante-tab",
+        "title": "New Ante tab"
+      },
+      {
+        "id": "new-trae-tab",
+        "title": "New Trae tab"
+      },
+      {
+        "id": "new-muse-tab",
+        "title": "New Muse tab"
+      },
+      {
+        "id": "new-dsh-tab",
+        "title": "New DeepSeek Harness tab"
+      },
+      {
+        "id": "new-qoder-tab",
+        "title": "New Qoder CLI tab"
+      },
+      {
+        "id": "new-qoder-cn-tab",
+        "title": "New Qoder CLI China tab"
+      },
+      {
+        "id": "new-zcode-tab",
+        "title": "New ZCode tab"
+      },
+      {
+        "id": "new-pi-tab",
+        "title": "New Pi tab"
+      },
+      {
+        "id": "new-omp-tab",
+        "title": "New OMP tab"
+      },
+      {
+        "id": "new-prime-agent-tab",
+        "title": "New Prime Agent tab"
+      },
+      {
+        "id": "new-gemini-tab",
+        "title": "New Gemini tab"
+      },
+      {
+        "id": "new-antigravity-tab",
+        "title": "New Antigravity tab"
+      },
+      {
+        "id": "new-aider-tab",
+        "title": "New Aider tab"
+      },
+      {
+        "id": "new-goose-tab",
+        "title": "New Goose tab"
+      },
+      {
+        "id": "new-amp-tab",
+        "title": "New Amp tab"
+      },
+      {
+        "id": "new-kilo-tab",
+        "title": "New Kilocode tab"
+      },
+      {
+        "id": "new-kiro-tab",
+        "title": "New Kiro tab"
+      },
+      {
+        "id": "new-crush-tab",
+        "title": "New Charm tab"
+      },
+      {
+        "id": "new-aug-tab",
+        "title": "New Auggie tab"
+      },
+      {
+        "id": "new-autohand-tab",
+        "title": "New Autohand Code tab"
+      },
+      {
+        "id": "new-cline-tab",
+        "title": "New Cline tab"
+      },
+      {
+        "id": "new-codebuff-tab",
+        "title": "New Codebuff tab"
+      },
+      {
+        "id": "new-freebuff-tab",
+        "title": "New Freebuff tab"
+      },
+      {
+        "id": "new-command-code-tab",
+        "title": "New Command Code tab"
+      },
+      {
+        "id": "new-continue-tab",
+        "title": "New Continue tab"
+      },
+      {
+        "id": "new-cursor-tab",
+        "title": "New Cursor tab"
+      },
+      {
+        "id": "new-droid-tab",
+        "title": "New Droid tab"
+      },
+      {
+        "id": "new-kimi-tab",
+        "title": "New Kimi tab"
+      },
+      {
+        "id": "new-mistral-vibe-tab",
+        "title": "New Mistral Vibe tab"
+      },
+      {
+        "id": "new-qwen-code-tab",
+        "title": "New Qwen Code tab"
+      },
+      {
+        "id": "new-rovo-tab",
+        "title": "New Rovo Dev tab"
+      },
+      {
+        "id": "new-hermes-tab",
+        "title": "New Hermes tab"
+      },
+      {
+        "id": "new-devin-tab",
+        "title": "New Devin tab"
+      },
+      {
+        "id": "new-openclaw-tab",
+        "title": "New OpenClaw tab"
+      },
+      {
+        "id": "new-codebuddy-tab",
+        "title": "New CodeBuddy tab"
+      },
+      {
+        "id": "new-jcode-tab",
+        "title": "New Jcode tab"
+      }
+    ],
+    "keybinding": [
+      {
+        "id": "new-agent-tab",
+        "key": "mod+alt+t",
+        "command": "new-agent-tab"
       }
     ],
     "cli-command": [
