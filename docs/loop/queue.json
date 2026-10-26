@@ -52,7 +52,7 @@
         "m0-scripting",
         "m0-ui-api"
       ],
-      "status": "todo"
+      "status": "in-progress"
     },
     {
       "id": "gate-m0",
