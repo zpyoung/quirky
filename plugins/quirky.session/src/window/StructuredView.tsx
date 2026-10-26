@@ -18,23 +18,39 @@ export function StructuredView({ context, session }: { context: UiPluginContext;
 
   useEffect(() => {
     let cancelled = false
+    let latest = 0
     const add = (incoming: StructuredMessage[]) => setStored((current) => mergeMessages(current, incoming))
+    // the daemon answers MethodNotFound while quirky.structured is off, so each load re-derives `off`
+    const load = () => {
+      const attempt = ++latest
+      context
+        .call('quirky.structured/messages', { session: session.id })
+        .then((loaded) => {
+          if (cancelled || attempt !== latest) return
+          setOff(false)
+          add(loaded as StructuredMessage[])
+        })
+        .catch((error: { code?: unknown }) => {
+          if (!cancelled && attempt === latest && error?.code === RpcErrorCode.MethodNotFound) setOff(true)
+        })
+    }
     const unsubscribe = context.subscribe((event) => {
+      if (event.type === 'plugin.changed') {
+        load()
+        return
+      }
       if (event.type !== 'quirky.structured/message') return
       const message = (event.data as { message?: StructuredMessage } | undefined)?.message
       if (message && message.sessionId === session.id && !cancelled) add([message])
     })
-    context
-      .call('quirky.structured/messages', { session: session.id })
-      .then((loaded) => {
-        if (!cancelled) add(loaded as StructuredMessage[])
-      })
-      .catch((error: { code?: unknown }) => {
-        if (!cancelled && error?.code === RpcErrorCode.MethodNotFound) setOff(true)
-      })
+    const unsubscribeConnection = context.onConnection((status) => {
+      if (status === 'connected') load()
+    })
+    load()
     return () => {
       cancelled = true
       unsubscribe()
+      unsubscribeConnection()
     }
   }, [context, session.id])
 

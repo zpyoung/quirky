@@ -419,6 +419,17 @@ describe('terminal pane', () => {
     expect(terminals[1]!.options.scrollback).toBe(2000)
   })
 
+  test('applies a changed scrollback setting to the open terminal without remounting it', async () => {
+    start([shell1], {}, { 'setting:quirky.terminal/scrollback': 4000 })
+    await open({ worktree: WORKTREE.id })
+    await fake.emit({ type: 'setting.changed', id: 'setting:quirky.terminal/scrollback', value: 9000 })
+    expect(terminals).toHaveLength(1)
+    expect(terminals[0]!.options.scrollback).toBe(9000)
+    expect(fake.callsTo('quirky.terminal/attach')).toHaveLength(1)
+    await fake.emit({ type: 'setting.changed', id: 'setting:other.plugin/x', value: 1 })
+    expect(terminals[0]!.options.scrollback).toBe(9000)
+  })
+
   test('takes its colors from the custom properties on the mount element and follows theme changes', async () => {
     start([shell1])
     mounted = await mountView(fake, { worktree: WORKTREE.id }, { '--terminal-background': '#101010', '--terminal-cursor': '#ff0000' })
@@ -496,5 +507,53 @@ describe('structured sessions', () => {
     const view = await open({ worktree: WORKTREE.id })
     expect(view.element.textContent).toContain('Structured sessions are off')
     expect(view.element.querySelector('textarea')).toBeNull()
+  })
+
+  describe('when quirky.structured changes while the transcript is open', () => {
+    let on: boolean
+
+    const start2 = (initial: boolean) => {
+      on = initial
+      start([bg], {
+        'quirky.structured/messages': () => {
+          if (!on) throw new RpcError(RpcErrorCode.MethodNotFound, 'unknown method: quirky.structured/messages')
+          return [message(1, 'user', 'hi')]
+        }
+      })
+    }
+
+    test('disabling it shows the off state and removes the input', async () => {
+      start2(true)
+      const view = await open({ worktree: WORKTREE.id })
+      expect(view.element.querySelector('textarea')).not.toBeNull()
+      on = false
+      await fake.emit({ type: 'plugin.changed' })
+      await settle()
+      expect(view.element.textContent).toContain('Structured sessions are off')
+      expect(view.element.querySelector('textarea')).toBeNull()
+    })
+
+    test('enabling it reloads the transcript and enables the input', async () => {
+      start2(false)
+      const view = await open({ worktree: WORKTREE.id })
+      expect(view.element.textContent).toContain('Structured sessions are off')
+      on = true
+      await fake.emit({ type: 'plugin.changed' })
+      await settle()
+      expect(fake.callsTo('quirky.structured/messages')).toHaveLength(2)
+      expect([...view.element.querySelectorAll('.msg')].map((row) => row.textContent)).toEqual(['userhi'])
+      expect(view.element.querySelector('textarea')).not.toBeNull()
+      expect(view.element.textContent).not.toContain('Structured sessions are off')
+    })
+
+    test('a reconnect re-checks too', async () => {
+      start2(true)
+      const view = await open({ worktree: WORKTREE.id })
+      await fake.setConnection('reconnecting')
+      on = false
+      await fake.setConnection('connected')
+      await settle()
+      expect(view.element.textContent).toContain('Structured sessions are off')
+    })
   })
 })
