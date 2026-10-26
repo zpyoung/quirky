@@ -6,7 +6,7 @@
       "title": "Plugin kernel: manifests, loading, lazy activation, and the contribution registry with stable IDs, override and disable",
       "docs": [],
       "deps": [],
-      "status": "in-progress"
+      "status": "done"
     },
     {
       "id": "m0-daemon-api",

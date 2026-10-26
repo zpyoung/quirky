@@ -361,4 +361,4 @@
 - **Source:** assumed — autonomous
 
 ## Progress
-Built, reviewed (final loop closed at round 3) and verified on build/m0-registry. Next: merge into build/roadmap per LOOP.md step 7.
+Done. Merged into build/roadmap; `bun run test` (535 pass), `bun test scripts` (14 pass) and `bun run typecheck` all pass on the merge result.

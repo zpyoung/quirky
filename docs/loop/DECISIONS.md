@@ -6,3 +6,37 @@ files, not this one.
 
 | Reversibility | Confidence | Entry | Decision | Source |
 | --- | --- | --- | --- | --- |
+| hard | medium | [m0-registry D4](decisions/m0-registry.md) | Contribution IDs are `<kind>:<pluginId>/<name>` | assumed — autonomous |
+| hard | high | [m0-registry D12](decisions/m0-registry.md) | Every contribution is declared in the manifest, and code can only provide declared ones | assumed — autonomous |
+| hard | high | [m0-registry D23](decisions/m0-registry.md) | Choose declarative contributions with lazily loaded code | assumed — autonomous |
+| medium | medium | [m0-registry D7](decisions/m0-registry.md) | An override replaces the whole contribution, not a merge | assumed — autonomous |
+| medium | medium | [m0-registry D8](decisions/m0-registry.md) | Override precedence is installed over built-in, then dependent over dependency, then a reported conflict | assumed — autonomous |
+| medium | medium | [m0-registry D10](decisions/m0-registry.md) | Enable and disable apply live, without a restart | assumed — autonomous |
+| medium | medium | [m0-registry D16](decisions/m0-registry.md) | The manifest is `quirky-plugin.json` in the plugin's directory | assumed — autonomous |
+| medium | high | [m0-registry D5](decisions/m0-registry.md) | The `quirky.` plugin ID prefix is reserved for built-ins | assumed — autonomous |
+| medium | high | [m0-registry D6](decisions/m0-registry.md) | A plugin's own contributions use short names, overrides use full IDs | assumed — autonomous |
+| medium | high | [m0-registry D9](decisions/m0-registry.md) | Disable works by plugin ID or contribution ID, before any code loads, and persists | locked by docs/roadmap.md (disable by ID); assumed — autonomous (cascade and persistence) |
+| medium | high | [m0-registry D11](decisions/m0-registry.md) | Plugins activate lazily on first use by default, or at startup when the manifest says so | locked by docs/roadmap.md (lazy); assumed — autonomous (trigger set) |
+| easy | medium | [m0-registry D14](decisions/m0-registry.md) | Unknown top-level manifest fields are rejected | assumed — autonomous |
+| easy | medium | [m0-registry D19](decisions/m0-registry.md) | Startup plugins settle before the daemon publishes runtime.json | assumed — autonomous |
+| easy | medium | [m0-registry D22](decisions/m0-registry.md) | Resolve-time behavior is tested through the kernel's host interface | assumed — autonomous |
+| easy | medium | [m0-registry D24](decisions/m0-registry.md) | Built-in plugins live in a top-level `plugins/` directory, and packaging them waits for m0-port-v1 | assumed — autonomous |
+| easy | medium | [m0-registry D25](decisions/m0-registry.md) | Activation failures surface as Conflict errors, unknown IDs as NotFound | assumed — autonomous |
+| easy | medium | [m0-registry D30](decisions/m0-registry.md) | No closure review round on the specs | assumed — autonomous |
+| easy | high | [m0-registry D1](decisions/m0-registry.md) | Classify the item as an API and Organization design, and research it | assumed — autonomous |
+| easy | high | [m0-registry D2](decisions/m0-registry.md) | Skip the visual companion and the adhd offer, use the standard gray-area set | locked by docs/loop/LOOP.md |
+| easy | high | [m0-registry D3](decisions/m0-registry.md) | Select every gray area that matters for the registry | assumed — autonomous |
+| easy | high | [m0-registry D13](decisions/m0-registry.md) | A bad plugin never stops the daemon or other plugins | assumed — autonomous |
+| easy | high | [m0-registry D15](decisions/m0-registry.md) | Manifests don't declare an API version yet | locked by docs/roadmap.md |
+| easy | high | [m0-registry D17](decisions/m0-registry.md) | The registry is inspected and changed through `plugin.*` methods and a `quirky plugin` CLI group | assumed — autonomous |
+| easy | high | [m0-registry D18](decisions/m0-registry.md) | The kernel is not itself a built-in plugin | locked by docs/roadmap.md |
+| easy | high | [m0-registry D20](decisions/m0-registry.md) | Disabled IDs live in their own store table, not in Settings | assumed — autonomous |
+| easy | high | [m0-registry D21](decisions/m0-registry.md) | This item has no Orca defects to test | locked by docs/loop/queue.json |
+| easy | high | [m0-registry D26](decisions/m0-registry.md) | Build with Claude subagents implementing and Codex reviewing | locked by docs/loop/LOOP.md |
+| easy | high | [m0-registry D27](decisions/m0-registry.md) | The build starts on a clean `build/m0-registry` with the specs committed | assumed — autonomous |
+| easy | high | [m0-registry D28](decisions/m0-registry.md) | Test commands are the repo's three LOOP.md commands | locked by docs/loop/LOOP.md |
+| easy | high | [m0-registry D29](decisions/m0-registry.md) | Spec review findings: fix the seven model findings, reject the pre-pass reference and heading findings | assumed — autonomous |
+| easy | high | [m0-registry D31](decisions/m0-registry.md) | Build in three waves of five tasks, and skip wave 1's checkpoint review | assumed — autonomous |
+| easy | high | [m0-registry D32](decisions/m0-registry.md) | Wave 2 checkpoint findings: fix all four defects | assumed — autonomous |
+| easy | high | [m0-registry D33](decisions/m0-registry.md) | A long QUIRKY_HOME breaks the PTY host's socket; logged, not fixed here | deferred: platform |
+| easy | high | [m0-registry D34](decisions/m0-registry.md) | The final review loop closed after three rounds with no open finding | assumed — autonomous |
