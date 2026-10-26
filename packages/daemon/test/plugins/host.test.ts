@@ -45,6 +45,25 @@ function setup(options: { disabled?: string[]; timeoutMs?: number } = {}) {
   return { root, host, events, logs, disabled, marker, gate, installed, builtin, lines, stateOf, release, installedDir }
 }
 
+/** A plugin whose module blocks at top level until the gate file exists, then records `import` and exports `activate`. */
+function writeSlowImportPlugin(t: ReturnType<typeof setup>, id: string): void {
+  writePlugin(
+    t.installedDir,
+    { id, name: id, version: '1.0.0', main: 'main.ts' },
+    {
+      'main.ts': [
+        "import { appendFileSync, existsSync } from 'node:fs'",
+        `while (!existsSync(${JSON.stringify(t.gate)})) await Bun.sleep(5)`,
+        `appendFileSync(${JSON.stringify(t.marker)}, 'import ${id}\\n')`,
+        'export async function activate() {',
+        `  appendFileSync(${JSON.stringify(t.marker)}, 'activate ${id}\\n')`,
+        '}',
+        ''
+      ].join('\n')
+    }
+  )
+}
+
 async function settled(promise: Promise<unknown>): Promise<boolean> {
   let done = false
   promise.then(
@@ -506,6 +525,39 @@ describe('SC-25: disabling while a plugin activates', () => {
     await disabling
     expect(t.lines()).toEqual(['import acme.hang', 'activate acme.hang', 'deactivate acme.hang'])
     expect(t.stateOf('acme.hang')).toBe('disabled')
+  })
+
+  test('an import that outlives the activation timeout never calls activate', async () => {
+    const t = setup({ timeoutMs: 100 })
+    writeSlowImportPlugin(t, 'acme.slowimport')
+    t.host.load()
+    await expect(t.host.activate('acme.slowimport')).rejects.toThrow('activation timed out after 100 ms')
+    expect(t.stateOf('acme.slowimport')).toBe('failed')
+
+    t.release()
+    await until(() => t.lines().includes('import acme.slowimport'))
+    await Bun.sleep(40)
+    expect(t.lines()).toEqual(['import acme.slowimport'])
+    expect(t.stateOf('acme.slowimport')).toBe('failed')
+  })
+
+  test('an import that finishes after a disable and a timeout never calls activate, and the plugin ends disabled', async () => {
+    const t = setup({ timeoutMs: 100 })
+    writeSlowImportPlugin(t, 'acme.slowimport')
+    t.host.load()
+    const outcome = t.host.activate('acme.slowimport').then(() => null, (error: unknown) => error)
+    await Bun.sleep(40)
+    const disabling = t.host.setEnabled('acme.slowimport', false)
+
+    expect(await outcome).toMatchObject({ code: RpcErrorCode.Conflict, message: 'acme.slowimport was disabled during activation' })
+    await disabling
+    expect(t.stateOf('acme.slowimport')).toBe('disabled')
+
+    t.release()
+    await until(() => t.lines().includes('import acme.slowimport'))
+    await Bun.sleep(40)
+    expect(t.lines()).toEqual(['import acme.slowimport'])
+    expect(t.stateOf('acme.slowimport')).toBe('disabled')
   })
 
   test('resolve is not found when the contribution is disabled while its owner activates', async () => {

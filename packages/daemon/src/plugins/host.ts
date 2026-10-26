@@ -287,7 +287,10 @@ export class PluginHost {
     if (!this.isEnabled(id)) throw new Error(`${id} was disabled during activation`)
   }
 
-  /** Records the module in `imported` as soon as it imports, so a failed or timed-out activate can still be deactivated. */
+  /**
+   * Records the module in `imported` as soon as it imports, so a failed or timed-out activate can
+   * still be deactivated. An import that resolves after the attempt was revoked never activates.
+   */
   private async loadAndActivate(entry: RegistryPlugin, attempt: Attempt, imported: { module?: PluginModule }): Promise<void> {
     const { discovered } = entry
     const manifest = discovered.manifest!
@@ -297,6 +300,7 @@ export class PluginHost {
     await withTimeout(
       async () => {
         const loaded = (await import(mainPath)) as Partial<PluginModule>
+        if (attempt.revoked) return
         if (typeof loaded.activate !== 'function') throw new Error('main module has no activate export')
         imported.module = loaded as PluginModule
         await loaded.activate(context)
