@@ -6,6 +6,7 @@ import {
   encodeTerminalOutput,
   type AgentKind,
   type LaunchHookInput,
+  type PluginNotification,
   type QuirkyEvent,
   type Repo,
   type Session,
@@ -24,7 +25,7 @@ import {
   buildSessionEnv,
   installIntegrationFiles
 } from './launch'
-import type { Notifier } from './notify'
+import { sendNotification, type Notifier } from './notify'
 import type { PtyClient } from './pty-client'
 import { expandHome, type Store } from './store'
 import type {
@@ -105,7 +106,7 @@ export class Core {
     const { store, pty } = options
     this.asks = new AskService(store, {
       emit: (event) => this.broadcast(event),
-      notify: (title, body, ids) => this.notify(title, body, ids),
+      notify: (title, body, ids) => this.notifyUser(title, body, ids),
       worktreeIdForSession: (sessionId) => store.getSession(sessionId)?.worktreeId ?? null
     })
     const context: StructuredContext = {
@@ -130,6 +131,11 @@ export class Core {
     return this.options.hookToken
   }
 
+  /** The loopback URL agents post hooks to, as the daemon is listening now. */
+  get hookUrl(): string {
+    return this.options.hookUrl()
+  }
+
   get pty(): PtyClient {
     return this.options.pty
   }
@@ -142,6 +148,7 @@ export class Core {
     conn.closed = true
     this.clients.delete(conn)
     for (const streamId of [...conn.streams.keys()]) this.removeStream(conn, streamId)
+    for (const close of [...conn.streamClosers.values()]) close()
     this.options.onRemoveClient?.(conn)
   }
 
@@ -152,10 +159,17 @@ export class Core {
   }
 
   broadcast(event: QuirkyEvent): void {
-    const text = JSON.stringify({ jsonrpc: '2.0', method: 'event', params: event })
-    for (const conn of this.clients) {
-      if (conn.subscribed) conn.sendText(text)
+    if (event.type !== 'hook.received') {
+      const text = JSON.stringify({ jsonrpc: '2.0', method: 'event', params: event })
+      for (const conn of this.clients) {
+        if (conn.subscribed) conn.sendText(text)
+      }
     }
+    this.options.onEvent?.(event)
+  }
+
+  /** Hands `event` to plugin listeners without sending it to any client. */
+  deliverToPlugins(event: QuirkyEvent): void {
     this.options.onEvent?.(event)
   }
 
@@ -604,7 +618,7 @@ export class Core {
     const worktree = await this.findWorktree(updated.worktreeId)
     const title = worktree?.worktree.name ?? updated.title
     const body = status === 'done' ? `${updated.title} finished` : `${updated.title} needs input`
-    this.notify(title, body, { sessionId, worktreeId: updated.worktreeId })
+    this.notifyUser(title, body, { sessionId, worktreeId: updated.worktreeId })
   }
 
   private finishSession(sessionId: string, exitCode: number | null): void {
@@ -618,10 +632,28 @@ export class Core {
     this.broadcast({ type: 'session.changed', session: updated })
   }
 
-  private notify(title: string, body: string, ids: { sessionId?: string; worktreeId?: string }): void {
-    this.broadcast({ type: 'notify', title, body, ...ids })
+  /**
+   * Broadcasts a `notify` event and, when `n.desktop` is not false and no desktop client is
+   * connected, shows an OS notification through the daemon's notifier.
+   */
+  notify(n: PluginNotification): void {
+    sendNotification(
+      {
+        broadcast: (event) => this.broadcast(event),
+        hasDesktopClient: () => [...this.clients].some((conn) => conn.role === 'desktop'),
+        notifier: this.options.notifier
+      },
+      n
+    )
+  }
+
+  /** The notification path of the v1 features, gated by the `notifications` setting. */
+  private notifyUser(title: string, body: string, ids: { sessionId?: string; worktreeId?: string }): void {
+    const desktop = this.getSettings().notifications
+    // v1 tests match this event exactly, so `desktop` appears only when it is false
+    this.broadcast({ type: 'notify', title, body, ...ids, ...(desktop ? {} : { desktop: false }) })
     const hasDesktop = [...this.clients].some((conn) => conn.role === 'desktop')
-    if (!hasDesktop && this.getSettings().notifications) {
+    if (!hasDesktop && desktop) {
       try {
         this.options.notifier(title, body)
       } catch {

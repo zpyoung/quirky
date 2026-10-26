@@ -43,12 +43,22 @@ export function bashRcfilePath(home: string): string {
   return join(home, 'shell', 'bash', 'rcfile')
 }
 
+/** The argv of an interactive shell session; a bash shell starts through the rcfile that puts the bin dir first. */
+export function shellArgv(home: string, shell: string): string[] {
+  return shellKind(shell) === 'bash' ? [shell, '--rcfile', bashRcfilePath(home), '-i'] : [shell, '-l']
+}
+
 /**
- * The argv for a session. Agents run under the user's login shell so CLIs installed through
- * Homebrew, nvm and similar resolve as they do in Terminal; the bin dir is exported inside the
- * command string because the login shell's startup files may have reset PATH. A shell session
- * starts through a wrapper (see `installShellWrappers`) so the same holds for interactive shells.
+ * The argv that runs `command` (a shell command string) under the user's login shell, so CLIs
+ * installed through Homebrew, nvm and similar resolve as they do in Terminal. The bin dir is
+ * exported inside the command string because the login shell's startup files may have reset PATH.
  */
+export function commandArgv(home: string, shell: string, command: string): string[] {
+  const exportPath = shellKind(shell) === 'other' ? '' : `export PATH=${doubleQuote(join(home, 'bin'), true)}; `
+  return [shell, '-l', '-c', `${exportPath}exec ${command}`]
+}
+
+/** The argv for a v1 session: an interactive shell, or an agent command run through `commandArgv`. */
 export function buildArgv(options: {
   agent: AgentKind
   prompt?: string
@@ -58,10 +68,7 @@ export function buildArgv(options: {
   extraArgs?: string[]
 }): string[] {
   const { agent, home, shell } = options
-  const kind = shellKind(shell)
-  if (agent === 'shell') {
-    return kind === 'bash' ? [shell, '--rcfile', bashRcfilePath(home), '-i'] : [shell, '-l']
-  }
+  if (agent === 'shell') return shellArgv(home, shell)
   const prompt = options.prompt?.trim()
   const extra = (options.extraArgs ?? []).map((arg) => ` ${shellQuote(arg)}`).join('')
   let command: string
@@ -85,8 +92,7 @@ export function buildArgv(options: {
       if (prompt) command += ` --prompt-interactive ${shellQuote(prompt)}`
       break
   }
-  const exportPath = kind === 'other' ? '' : `export PATH=${doubleQuote(join(home, 'bin'), true)}; `
-  return [shell, '-l', '-c', `${exportPath}exec ${command}`]
+  return commandArgv(home, shell, command)
 }
 
 /** The environment given to a session's process; the daemon's own QUIRKY_* variables are not passed on. */
@@ -98,7 +104,7 @@ export function buildSessionEnv(options: {
   hookToken: string
   /** With `agent`, selects the shell startup wrapper; omitted means no wrapper. */
   shell?: string
-  agent?: AgentKind
+  agent?: string
   base?: Record<string, string | undefined>
   /** Applied over the base environment and `TERM`; a string sets, `null` deletes. Kernel variables and `PATH` still win, and reserved names are the caller's to filter. */
   envPatch?: Record<string, string | null>
