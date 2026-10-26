@@ -1,0 +1,40 @@
+import { createHash } from 'node:crypto'
+import { realpathSync } from 'node:fs'
+import { homedir } from 'node:os'
+import { basename, dirname, join, sep } from 'node:path'
+
+/** `path` with a leading `~` replaced by the home directory. */
+export function expandHome(path: string): string {
+  if (path === '~') return homedir()
+  if (path.startsWith('~/')) return join(homedir(), path.slice(2))
+  return path
+}
+
+/**
+ * `path` with symlinks resolved. The deepest existing ancestor is resolved and the rest appended,
+ * so a path that doesn't exist yet gets the same prefix git will report once it does.
+ */
+export function resolveRealPath(path: string): string {
+  try {
+    return realpathSync(path)
+  } catch {
+    const parent = dirname(path)
+    return parent === path ? path : join(resolveRealPath(parent), basename(path))
+  }
+}
+
+/** The stable worktree ID for a path: `wt_` plus the first 12 hex characters of sha1 of its real path. */
+export function worktreeIdForPath(path: string): string {
+  return `wt_${createHash('sha1').update(resolveRealPath(path)).digest('hex').slice(0, 12)}`
+}
+
+/** True when `child` is `parent` or lies inside it. */
+export function contains(parent: string, child: string): boolean {
+  return child === parent || child.startsWith(parent.endsWith(sep) ? parent : parent + sep)
+}
+
+/** The literal path and, when different, its resolved form, so either spelling can match. */
+export function pathForms(path: string): string[] {
+  const real = resolveRealPath(path)
+  return real === path ? [path] : [path, real]
+}

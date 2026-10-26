@@ -1,0 +1,12 @@
+{
+  "id": "quirky.ask",
+  "name": "Fake ask",
+  "version": "0.0.0",
+  "main": "main.ts",
+  "contributes": {
+    "method": [
+      { "id": "create", "params": { "type": "object", "additionalProperties": true } },
+      { "id": "wait", "readOnly": true, "params": { "type": "object", "additionalProperties": true } }
+    ]
+  }
+}
