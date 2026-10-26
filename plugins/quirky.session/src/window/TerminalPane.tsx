@@ -4,7 +4,7 @@ import { FitAddon } from '@xterm/addon-fit'
 import { WebglAddon } from '@xterm/addon-webgl'
 import { base64ToBytes, type UiPluginContext } from '@quirky/protocol'
 import { createInputGate, writeReplay } from './replayGate'
-import { readTerminalColors } from './terminalTheme'
+import { readTerminalColors, type TerminalColors } from './terminalTheme'
 
 type Props = {
   context: UiPluginContext
@@ -38,13 +38,14 @@ export function TerminalPane({ context, themeSource, sessionId, scrollback, inte
     const element = host.current
     if (!element) return
 
+    const initialColors = readTerminalColors(themeSource)
     const term = new Terminal({
       scrollback: scrollbackRef.current,
       fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
       fontSize: 13,
       cursorBlink: true,
       allowProposedApi: true,
-      theme: { ...readTerminalColors(themeSource) }
+      theme: { ...initialColors }
     })
     termRef.current = term
     const fit = new FitAddon()
@@ -89,14 +90,20 @@ export function TerminalPane({ context, themeSource, sessionId, scrollback, inte
         if (!disposed) term.write(`\r\n\x1b[31mCould not attach: ${error.message}\x1b[0m\r\n`)
       })
 
-    // the host may apply the new theme variables after this listener runs
-    let themeTimer: ReturnType<typeof setTimeout> | undefined
+    let applied: TerminalColors = initialColors
+    const applyTheme = () => {
+      if (disposed) return
+      const next = readTerminalColors(themeSource)
+      if (next.background === applied.background && next.foreground === applied.foreground && next.cursor === applied.cursor) return
+      applied = next
+      term.options.theme = { ...next }
+    }
+    // the shell writes the new theme's variables after its own async refresh, later than theme.changed arrives
+    const themeObserver = new MutationObserver(applyTheme)
+    themeObserver.observe(element.ownerDocument.documentElement, { attributes: true })
+    themeObserver.observe(themeSource, { attributes: true })
     const unsubscribeEvents = context.subscribe((event) => {
-      if (event.type !== 'theme.changed') return
-      clearTimeout(themeTimer)
-      themeTimer = setTimeout(() => {
-        if (!disposed) term.options.theme = { ...readTerminalColors(themeSource) }
-      }, 0)
+      if (event.type === 'theme.changed') applyTheme()
     })
 
     let resizeTimer: ReturnType<typeof setTimeout> | undefined
@@ -112,7 +119,7 @@ export function TerminalPane({ context, themeSource, sessionId, scrollback, inte
     return () => {
       disposed = true
       clearTimeout(resizeTimer)
-      clearTimeout(themeTimer)
+      themeObserver.disconnect()
       observer.disconnect()
       unsubscribeEvents()
       unsubscribe?.()

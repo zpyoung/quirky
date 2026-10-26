@@ -41,7 +41,8 @@ export class SessionService {
 
   /**
    * Starts a terminal session. The record exists (as `starting`) while launch hooks run, so a
-   * close during that window wins: the terminal is never spawned and the call fails.
+   * close during that window wins: the terminal is never spawned and the call fails. A process
+   * that exits before the spawn call returns leaves the session exited, not running.
    */
   create = async (params: Record<string, unknown>, caller: PluginCaller): Promise<Session> => {
     const worktree = await this.resolveWorktree(params.worktree, caller)
@@ -86,6 +87,8 @@ export class SessionService {
       if (isRpcError(error)) throw error
       throw new Error(`could not start ${agent}: ${messageOf(error)}`)
     }
+    const launched = this.records.get(session.id) as Session
+    if (launched.status !== 'starting') return launched
     return this.publish(this.records.update(session.id, { status: 'running' }) as Session)
   }
 

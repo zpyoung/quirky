@@ -217,25 +217,34 @@ export class WorktreeSessions {
   }
 
   private commit(next: Partial<ViewSnapshot>): void {
+    const previousActive = this.snapshot.active?.id
     const merged = { ...this.snapshot, ...next }
     const sessions = [...merged.sessions].sort((a, b) => a.createdAt - b.createdAt)
     const worktreeId = merged.worktree?.id
     const active = pickActive(sessions, this.requested, worktreeId === undefined ? undefined : lastActiveByWorktree.get(worktreeId))
     if (worktreeId !== undefined && active) lastActiveByWorktree.set(worktreeId, active.id)
     this.snapshot = { ...merged, sessions, active }
-    this.syncRequested()
+    this.syncDaemonLayout(previousActive)
     for (const listener of [...this.listeners]) listener()
   }
 
-  /** Points the daemon's layout at the replacement when the session the view was opened on is gone. */
-  private syncRequested(): void {
+  /**
+   * Keeps the daemon's view input, which every window shows, naming the active session: when the
+   * session the view showed is gone, the replacement is published there.
+   */
+  private syncDaemonLayout(previousActive: string | undefined): void {
     const { status, sessions, active } = this.snapshot
-    if (status !== 'ready' || this.requested === undefined) return
-    if (sessions.some((session) => session.id === this.requested)) {
-      this.requestedSeen = true
+    if (status !== 'ready') return
+    if (this.requested !== undefined) {
+      if (sessions.some((session) => session.id === this.requested)) {
+        this.requestedSeen = true
+        return
+      }
+      this.requested = undefined
+      if (this.requestedSeen) this.open(active?.id)
       return
     }
-    this.requested = undefined
-    if (this.requestedSeen) this.open(active?.id)
+    const lostActive = previousActive !== undefined && !sessions.some((session) => session.id === previousActive)
+    if (lostActive && active?.id !== previousActive) this.open(active?.id)
   }
 }

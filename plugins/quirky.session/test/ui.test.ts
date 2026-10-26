@@ -121,6 +121,31 @@ describe('the worktree view', () => {
     expect((mounted.lastReport() as { active: string }).active).toBe('s2')
   })
 
+  test('D21: a fresh window mounted with the daemon\'s view input shows the tab selected earlier', async () => {
+    start()
+    const first = await open({ worktree: WORKTREE.id })
+    await first.click(first.tabs()[1]!)
+    await first.unmount()
+    mounted = null
+
+    resetSessionMemory()
+    const input = fake.layout.view!.input
+    mounted = await mountView(fake, input)
+    expect((mounted.lastReport() as { active: string }).active).toBe('s2')
+  })
+
+  test('closing the active tab shown through the window memory publishes the replacement to the daemon layout', async () => {
+    start()
+    const first = await open({ worktree: WORKTREE.id, session: 's2' })
+    await first.unmount()
+    mounted = null
+    mounted = await mountView(fake, { worktree: WORKTREE.id })
+    expect((mounted.lastReport() as { active: string }).active).toBe('s2')
+    expect(fake.opened).toEqual([])
+    await fake.emit({ type: 'quirky.session/removed', data: { sessionId: 's2' } })
+    expect(fake.opened).toEqual([{ id: VIEW, input: { worktree: WORKTREE.id, session: 's1' } }])
+  })
+
   test('SC-37: clicking a tab opens the view on that session', async () => {
     start()
     const view = await open({ worktree: WORKTREE.id, session: 's1' })
@@ -438,6 +463,21 @@ describe('terminal pane', () => {
     await fake.emit({ type: 'theme.changed', chosen: 'x', active: 'x' })
     await settle()
     expect(terminals[0]!.options.theme).toEqual({ background: '#101010', foreground: '#00ff00', cursor: '#ff0000' })
+  })
+
+  test('re-reads its colors when the shell applies the theme after theme.changed was delivered', async () => {
+    start([shell1])
+    mounted = await mountView(fake, { worktree: WORKTREE.id }, { '--terminal-background': '#101010' })
+    await fake.emit({ type: 'theme.changed', chosen: 'x', active: 'x' })
+    await settle()
+    expect(terminals[0]!.options.theme).toEqual({ background: '#101010', foreground: '#d7dae0', cursor: '#d7dae0' })
+
+    await act(async () => {
+      mounted!.element.style.setProperty('--terminal-background', '#fafafa')
+      mounted!.element.style.setProperty('--terminal-foreground', '#111111')
+    })
+    await settle()
+    expect(terminals[0]!.options.theme).toEqual({ background: '#fafafa', foreground: '#111111', cursor: '#d7dae0' })
   })
 
   test('detaches when the view unmounts', async () => {
