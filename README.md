@@ -39,8 +39,10 @@ Inside any Quirky terminal, the `quirky` command is on PATH: try `quirky status`
 - [docs/v1.md](docs/v1.md): what v1 does and leaves out, and how the parts fit together.
 - [docs/architecture.md](docs/architecture.md): the full design, its memory budget, and the
   decisions made so far.
-- [docs/stack-proposal.md](docs/stack-proposal.md): how the stack choice gets settled, including
-  the native Swift option, with the measurements so far.
+- [docs/roadmap.md](docs/roadmap.md): the build order for every kept Orca feature and the plugin
+  kernel, with each milestone's exit test.
+- [docs/stack-proposal.md](docs/stack-proposal.md): how the stack choice was settled, including the
+  native Swift option, with the measurements.
 - [research/orca-features/](research/orca-features/README.md): how each Orca feature Quirky keeps
   works, verified in the running app, with screenshots.
 - `research/` is its own local git repo with no remote, ignored here, so the research and the

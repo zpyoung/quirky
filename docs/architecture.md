@@ -8,9 +8,9 @@ sessions, two terminals on screen, the editor open), against Orca's 2,461 MB.
 
 This document is for whoever builds Quirky next. It fixes the process boundaries, the API shape,
 where terminal history lives, how structured agent sessions run, the browser approach and a memory
-budget. It doesn't choose the daemon's language (Go or Bun) or the shell (Tauri, Electrobun, or a
-native Swift app); [stack-proposal.md](stack-proposal.md) says how that gets settled. Scope decisions made so far
-are in [Decisions](#decisions).
+budget. The stack is Bun and Electrobun, settled on 2026-10-26; [stack-proposal.md](stack-proposal.md)
+records how the options were measured. Scope decisions made so far are in [Decisions](#decisions),
+and the build order is in [roadmap.md](roadmap.md).
 
 Orca file references are relative to the Orca repo (`~/PycharmProjects/orca`).
 
@@ -55,7 +55,8 @@ terminal daemon, several renderers, one Chromium process per browser tab, and fo
 plugins, vault scanning, file watching and computer use
 (`src/main/daemon/daemon-launched-child-spawn.ts`, `src/main/plugins/plugin-host-process.ts`,
 `src/main/ai-vault/session-scanner-service-spawn.ts`). Quirky runs vault scanning and file watching
-inside `quirkyd` on a worker or goroutine, and drops plugins and computer use.
+inside `quirkyd` on a worker, and drops computer use. Plugins run in process, inside `quirkyd` and
+the webview, so they need no helper process ([Decisions](#decisions)).
 
 ## One API for every client
 
@@ -303,3 +304,21 @@ Decided with the user on 2026-10-23:
 - **Browser:** the system webview for people and an on-demand Chrome for agents, as in
   [Browser](#browser).
 - **Editor:** CodeMirror 6 instead of Monaco.
+
+Decided with the user on 2026-10-26:
+
+- **Stack:** a Bun daemon and the Electrobun shell with the React webview. The native Swift option
+  is not pursued, although its prototype met the memory rule.
+- **Plugins:** Quirky has a plugin system, reversing the brief's drop of Orca's plugins. The 28
+  kept features ship as built-in plugins on the same API third parties use. Plugins run in process
+  with full trust and can replace or disable any built-in by its stable ID. A distro is a plugin
+  pack installed into stock Quirky. [roadmap.md](roadmap.md) builds this kernel first, as M0.
+- **Scriptable by agents:**
+  - Everything a person can do in Quirky, an agent can do through the local API or the `quirky`
+    CLI.
+  - Each plugin, built-in or not, exposes its own namespaced methods and CLI commands, declared with
+    schemas that the CLI is generated from.
+  - UI commands are API commands routed to the window. Layout and focus live in the daemon and are
+    readable as JSON.
+  - Agents in sessions have the user's full access. Irreversible actions confirm through
+    `quirky ask` unless the call passes `--yes`.
