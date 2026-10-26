@@ -76,9 +76,7 @@ export async function restartDaemon(
   const daemon = await startDaemon({
     home: h.home,
     port: 0,
-    git: h.git,
     shell: '/bin/zsh',
-    enterDelayMs: 20,
     notifier: () => {},
     cliEntry: '/opt/quirky/cli/main.ts',
     uiDir: join(h.home, 'no-ui'),

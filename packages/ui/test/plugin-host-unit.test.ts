@@ -420,10 +420,10 @@ test('SC-11: a plugin calls the daemon through its context and receives events o
   expect(repos).toEqual([{ id: 'r1' }])
   expect(t.methodCalls('repo.list')[0].params).toEqual({})
 
-  t.emit({ type: 'repo.changed' })
+  t.emit({ type: 'acme.notes/changed', data: null })
   expect(received).toEqual([])
   await tick()
-  expect(received).toEqual([{ type: 'repo.changed' }])
+  expect(received).toEqual([{ type: 'acme.notes/changed', data: null }])
 })
 
 test('SC-11: a listener that throws or rejects is logged with its plugin ID and does not stop the others', async () => {
@@ -447,10 +447,10 @@ test('SC-11: a listener that throws or rejects is logged with its plugin ID and 
   t.host.mount(LIST, element())
   await settled(t, LIST)
 
-  t.emit({ type: 'repo.changed' })
+  t.emit({ type: 'acme.notes/changed', data: null })
   await tick()
   await tick()
-  expect(received).toEqual(['repo.changed'])
+  expect(received).toEqual(['acme.notes/changed'])
   expect(t.logs).toContain('acme.notes: event listener failed: sync boom')
   expect(t.logs).toContain('acme.notes: event listener failed: async boom')
 })
@@ -475,17 +475,17 @@ test('SC-11: an unsubscribed listener gets nothing, and after deactivation the c
   await t.host.refresh()
   t.host.mount(LIST, element())
   await settled(t, LIST)
-  t.emit({ type: 'repo.changed' })
+  t.emit({ type: 'acme.notes/changed', data: null })
   await tick()
-  expect(received).toEqual(['repo.changed'])
+  expect(received).toEqual(['acme.notes/changed'])
 
   t.setModel(makeModel({ modules: {} }))
   await t.host.refresh()
   const context = record.contexts[0]
   expect(record.deactivations).toBe(1)
-  t.emit({ type: 'repo.changed' })
+  t.emit({ type: 'acme.notes/changed', data: null })
   await tick()
-  expect(received).toEqual(['repo.changed'])
+  expect(received).toEqual(['acme.notes/changed'])
   const revoked = 'acme.notes is not active'
   expect(() => context.call('repo.list')).toThrow(revoked)
   expect(() => context.provide(LIST, () => {})).toThrow(revoked)
@@ -728,7 +728,7 @@ test('SC-13: a failed attempt revokes its context at once and never calls deacti
   t.host.mount(LIST, element())
   await settled(t, LIST)
 
-  t.emit({ type: 'repo.changed' })
+  t.emit({ type: 'acme.notes/changed', data: null })
   await tick()
   expect(received).toEqual([])
   expect(() => context.call('repo.list')).toThrow('acme.notes is not active')
@@ -1586,7 +1586,7 @@ test('C4: a subscriber registered during activate receives events before activat
     async activate(context) {
       await new Promise<void>((resolve) => {
         context.subscribe((event) => {
-          if (event.type === 'repo.changed') resolve()
+          if (event.type === 'acme.notes/changed') resolve()
         })
         subscribed = true
       })
@@ -1597,7 +1597,7 @@ test('C4: a subscriber registered during activate receives events before activat
   t.host.mount(LIST, element())
   await until(() => subscribed)
 
-  t.emit({ type: 'repo.changed' })
+  t.emit({ type: 'acme.notes/changed', data: null })
   await until(() => state(t).slots[LIST]?.status === 'mounted')
 })
 

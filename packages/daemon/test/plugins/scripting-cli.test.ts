@@ -319,12 +319,12 @@ describe('SC-16: help covers kernel and plugin commands from their declarations'
 
   test('a kernel command has the same shape, from its declaration', async () => {
     const s = await boot()
-    const result = await s.cli('wt', 'create', '--help')
+    const result = await s.cli('plugin', 'contributions', '--help')
     expect(result.code).toBe(0)
     const lines = result.stdout.trimEnd().split('\n')
-    expect(lines[0]).toStartWith('usage: quirky wt create ')
+    expect(lines[0]).toStartWith('usage: quirky plugin contributions ')
     expect(lines).toContain('options:')
-    expect(lines.some((line) => /^ {2}--base <string> +ref to branch from$/.test(line))).toBe(true)
+    expect(lines.some((line) => /^ {2}--kind <string> +only this contribution kind$/.test(line))).toBe(true)
     expect(lines.at(-1)).toBe('global: --json prints machine-readable JSON')
   })
 })
@@ -332,11 +332,11 @@ describe('SC-16: help covers kernel and plugin commands from their declarations'
 describe('SC-17: an unknown command gets suggestions', () => {
   test('a typo in a kernel command suggests the real one', async () => {
     const s = await boot()
-    const result = await s.cli('wt', 'lst')
+    const result = await s.cli('plugin', 'lst')
     expect(result.code).toBe(2)
     expect(result.stdout).toBe('')
-    expect(result.stderr).toContain('quirky: unknown command "wt lst"')
-    expect(result.stderr).toContain('did you mean: quirky wt list')
+    expect(result.stderr).toContain('quirky: unknown command "plugin lst"')
+    expect(result.stderr).toContain('did you mean: quirky plugin list')
   })
 
   test('a typo in a plugin group suggests the real command', async () => {

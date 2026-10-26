@@ -202,7 +202,7 @@ describe('SC-20: quirky api lists everything, and --json is the catalog', () => 
     const lines = result.stdout.trimEnd().split('\n')
     expect(lines.at(-1)).toBe(`${catalog.methods.length} methods, ${catalog.events.length} events`)
     expect(lines).toContain('acme.notes')
-    expect(lines).toContain('repo')
+    expect(lines).toContain('plugin')
     expect(lines.find((line) => line.includes('acme.notes add --title'))).toContain('Add a note.')
   })
 
