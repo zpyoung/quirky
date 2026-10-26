@@ -1,0 +1,72 @@
+{
+  "id": "quirky.agents",
+  "name": "Agents (test fake)",
+  "version": "0.0.0",
+  "main": "main.ts",
+  "activation": "startup",
+  "contributes": {
+    "method": [
+      {
+        "id": "pick",
+        "readOnly": true,
+        "params": {
+          "type": "object",
+          "properties": { "preferred": { "type": "string" }, "forAgentTab": { "type": "boolean" } }
+        }
+      },
+      {
+        "id": "get",
+        "readOnly": true,
+        "params": { "type": "object", "properties": { "agent": { "type": "string" } }, "required": ["agent"] }
+      },
+      {
+        "id": "prepareLaunch",
+        "params": {
+          "type": "object",
+          "properties": {
+            "agent": { "type": "string" },
+            "cwd": { "type": "string" },
+            "prompt": { "type": "string" },
+            "submitPrompt": { "type": "boolean" },
+            "hookArgs": { "type": "array", "items": { "type": "string" } },
+            "hookEnv": { "type": "object", "additionalProperties": true }
+          },
+          "required": ["agent", "cwd", "hookArgs", "hookEnv"]
+        }
+      },
+      {
+        "id": "prepareResume",
+        "params": {
+          "type": "object",
+          "properties": {
+            "agent": { "type": "string" },
+            "cwd": { "type": "string" },
+            "record": {},
+            "providerSession": {
+              "type": "object",
+              "properties": { "id": { "type": "string" }, "transcriptPath": {} },
+              "required": ["id"]
+            },
+            "fork": { "type": "boolean" },
+            "hookArgs": { "type": "array", "items": { "type": "string" } },
+            "hookEnv": { "type": "object", "additionalProperties": true }
+          },
+          "required": ["agent", "cwd", "providerSession", "fork", "hookArgs", "hookEnv"]
+        }
+      },
+      {
+        "id": "deliver",
+        "params": {
+          "type": "object",
+          "properties": {
+            "sessionId": { "type": "string" },
+            "agent": { "type": "string" },
+            "text": { "type": "string" },
+            "submit": { "type": "boolean" }
+          },
+          "required": ["sessionId", "agent", "text", "submit"]
+        }
+      }
+    ]
+  }
+}

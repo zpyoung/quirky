@@ -15,11 +15,7 @@
           "type": "object",
           "properties": {
             "worktree": { "type": "string", "description": "A worktree selector; defaults to the caller's worktree." },
-            "agent": {
-              "type": "string",
-              "enum": ["shell", "claude", "codex", "opencode", "gemini"],
-              "description": "The agent to run."
-            },
+            "agent": { "type": "string", "description": "The agent to run." },
             "prompt": { "type": "string" }
           },
           "required": ["agent", "prompt"]
@@ -29,7 +25,7 @@
           "properties": {
             "id": { "type": "string" },
             "kind": { "type": "string", "enum": ["terminal", "structured"] },
-            "agent": { "type": "string", "enum": ["shell", "claude", "codex", "opencode", "gemini"], "description": "The agent to run." },
+            "agent": { "type": "string", "description": "The agent to run." },
             "worktreeId": { "type": "string" },
             "cwd": { "type": "string" },
             "title": { "type": "string" },
