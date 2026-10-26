@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react'
 import type { Session, UiPluginContext } from '@quirky/protocol'
 import { ExitedBar } from './ExitedBar'
 import { StructuredView } from './StructuredView'
@@ -16,6 +17,20 @@ function scrollbackOf(context: UiPluginContext): number {
   }
 }
 
+/** The scrollback setting's current value, following `setting.changed` while mounted. */
+function useScrollback(context: UiPluginContext): number {
+  const [scrollback, setScrollback] = useState(() => scrollbackOf(context))
+  useEffect(
+    () =>
+      context.subscribe((event) => {
+        if (event.type !== 'setting.changed' || event.id !== SCROLLBACK_SETTING) return
+        setScrollback(typeof event.value === 'number' ? event.value : DEFAULT_SCROLLBACK)
+      }),
+    [context]
+  )
+  return scrollback
+}
+
 type Props = {
   context: UiPluginContext
   themeSource: Element
@@ -25,6 +40,7 @@ type Props = {
 }
 
 export function SessionView({ context, themeSource, session, connected, onClose }: Props) {
+  const scrollback = useScrollback(context)
   if (session.kind === 'structured') return <StructuredView context={context} session={session} />
 
   return (
@@ -35,7 +51,7 @@ export function SessionView({ context, themeSource, session, connected, onClose 
           context={context}
           themeSource={themeSource}
           sessionId={session.id}
-          scrollback={scrollbackOf(context)}
+          scrollback={scrollback}
           interactive={session.status !== 'exited'}
         />
       )}

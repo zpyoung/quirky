@@ -26,19 +26,27 @@ export function TerminalPane({ context, themeSource, sessionId, scrollback, inte
   const host = useRef<HTMLDivElement>(null)
   const interactiveRef = useRef(interactive)
   interactiveRef.current = interactive
+  const scrollbackRef = useRef(scrollback)
+  scrollbackRef.current = scrollback
+  const termRef = useRef<Terminal | null>(null)
+
+  useEffect(() => {
+    if (termRef.current) termRef.current.options.scrollback = scrollback
+  }, [scrollback])
 
   useEffect(() => {
     const element = host.current
     if (!element) return
 
     const term = new Terminal({
-      scrollback,
+      scrollback: scrollbackRef.current,
       fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
       fontSize: 13,
       cursorBlink: true,
       allowProposedApi: true,
       theme: { ...readTerminalColors(themeSource) }
     })
+    termRef.current = term
     const fit = new FitAddon()
     term.loadAddon(fit)
     term.open(element)
@@ -109,9 +117,10 @@ export function TerminalPane({ context, themeSource, sessionId, scrollback, inte
       unsubscribeEvents()
       unsubscribe?.()
       if (streamId !== null) detach(streamId)
+      termRef.current = null
       term.dispose()
     }
-  }, [context, themeSource, sessionId, scrollback])
+  }, [context, themeSource, sessionId])
 
   return <div className="terminal-host" ref={host} />
 }
