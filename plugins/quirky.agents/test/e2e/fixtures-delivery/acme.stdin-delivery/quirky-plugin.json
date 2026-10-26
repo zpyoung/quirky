@@ -1,0 +1,29 @@
+{
+  "id": "acme.stdin-delivery",
+  "name": "Acme stdin delivery",
+  "version": "1.0.0",
+  "description": "Test plugin: moves antigravity and omp to paste delivery so their Enter timing can be observed.",
+  "overrides": [
+    {
+      "id": "agent:quirky.agents/antigravity",
+      "label": "Antigravity",
+      "detect": "agy",
+      "prompt": "stdin-after-start",
+      "yolo": "--dangerously-skip-permissions",
+      "resume": ["--conversation", "{id}"],
+      "lineSettleMs": 45,
+      "trust": "antigravity",
+      "homepage": "https://antigravity.google/docs/cli-overview"
+    },
+    {
+      "id": "agent:quirky.agents/omp",
+      "label": "OMP",
+      "detect": "omp",
+      "prompt": "stdin-after-start",
+      "resume": ["--resume", "{transcriptOrId}"],
+      "enterWithPaste": true,
+      "homepage": "https://omp.sh",
+      "windows": { "shiftEnterEncoding": "csi-u" }
+    }
+  ]
+}
