@@ -583,5 +583,27 @@
 - **Revisit if:** never
 - **Source:** locked by docs/loop/LOOP.md
 
+## D54: Add project takes a typed path; the macOS Open panel waits
+- **Question:** layout-style: Browse folder opens the native folder picker in Orca
+- **Options:** add a desktop-shell file dialog API now; keep v1's path field
+- **Chose:** keep the path field in the Add project dialog, with the Open as Folder and import dialogs after it
+- **Why:** the UI plugin API has no file dialog, and adding one means a shell-to-window bridge outside this item's plugins; the flows behind the picker (folder, import, group) are all reachable with a typed path
+- **Evidence:** packages/protocol/src/ui.ts:181-209 (UiPluginContext has no file dialog); worktrees.md flow 1
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** the desktop shell gains a dialog API
+- **Source:** assumed — autonomous
+
+## D55: Write a tech spec
+- **Question:** the tech-spec rubric's complexity gate
+- **Options:** skip; write one
+- **Chose:** write `tech.md`
+- **Why:** LOOP.md always asks for one, and the work crosses `quirky.repo`, `quirky.worktree`, `quirky.session`, `quirky.git`, `@quirky/git` and the window
+- **Evidence:** docs/loop/LOOP.md step 4
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** never
+- **Source:** locked by docs/loop/LOOP.md
+
 ## Progress
-Step 3 (brainstorming) done: decisions D1-D53. Next: write docs/quirk/specs/2026-10-26-m1-worktrees/logic.md, then tech.md, then the Codex adversarial review.
+Step 4: logic.md written and committed. Next: tech.md (deep-dive first), then the Codex adversarial review of both specs.
