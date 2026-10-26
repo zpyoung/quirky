@@ -67,3 +67,59 @@ describe('SessionService.create', () => {
     expect(emitted.filter((e) => e.event === 'changed').map((e) => e.status)).toEqual(['exited'])
   })
 })
+
+describe('SessionService.restore', () => {
+  test('a shell that exits before the spawn call returns leaves the session exited with that exit', async () => {
+    const emitted: { event: string; status?: string }[] = []
+    let service!: SessionService
+    let sessionId = ''
+    const context = {
+      log() {},
+      emit: (event: string, data?: { session?: Session }) => {
+        emitted.push({ event, status: data?.session?.status })
+        return true
+      },
+      error: (kind: string, message: string) => new Error(`${kind}: ${message}`),
+      call: async () => worktree,
+      launch: {
+        hooks: async () => ({ env: {}, args: [] }),
+        shellArgv: () => ['/bin/sh'],
+        shellReady: () => false,
+        commandArgv: () => ['/bin/sh'],
+        env: () => ({})
+      },
+      pty: {
+        spawn: async () => {
+          expect(service.finish(sessionId, { exitCode: 3, exitSignal: 'SIGTERM', exitCause: 'exited' })).toBeNull()
+        },
+        forget: async () => {}
+      }
+    } as unknown as PluginContext
+    const records = new SessionRecords(memoryStore())
+    service = new SessionService(context, records)
+    const session = {
+      id: 's_early',
+      kind: 'terminal',
+      agent: 'claude',
+      worktreeId: 'wt',
+      cwd: '/work',
+      title: 'Claude',
+      status: 'exited',
+      createdAt: 1,
+      lastActivityAt: 1,
+      exitCode: null,
+      exitSignal: null,
+      exitCause: 'host-restart',
+      restorable: true
+    } as const
+    sessionId = session.id
+    records.insert({ ...session }, 'repo')
+
+    const result = await service.restore({ session: session.id })
+
+    const expected = { status: 'exited', agent: 'shell', exitCode: 3, exitSignal: 'SIGTERM', exitCause: 'exited', restorable: false }
+    expect(result).toMatchObject(expected)
+    expect(records.get(session.id)).toMatchObject(expected)
+    expect(emitted.filter((e) => e.event === 'changed').map((e) => e.status)).toEqual(['exited'])
+  })
+})
