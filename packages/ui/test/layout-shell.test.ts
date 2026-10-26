@@ -204,7 +204,7 @@ test('a toast from a notify event opens its view through the daemon', async () =
   const { win } = await boot()
   win.store.dispatch({
     type: 'event',
-    event: { type: 'notify', title: 'Done', body: 'main finished', open: { view: OTHER, input: { from: 'toast' } } }
+    event: { type: 'notify', title: 'Done', body: 'main finished', desktop: false, open: { view: OTHER, input: { from: 'toast' } } }
   })
   await win.waitFor(() => win.document.querySelector('.toast'))
   await win.click('.toast')

@@ -16,7 +16,7 @@ test('unreachable is a connection status that leaves the epoch alone', () => {
 })
 
 test('a notify event adds a toast, and dismiss removes it', () => {
-  let state = reduce(initialState(), { type: 'event', event: { type: 'notify', title: 'wt', body: 'Claude finished' } })
+  let state = reduce(initialState(), { type: 'event', event: { type: 'notify', title: 'wt', body: 'Claude finished', desktop: false } })
   expect(state.toasts).toHaveLength(1)
   expect(state.toasts[0]).toMatchObject({ title: 'wt', body: 'Claude finished', kind: 'info' })
   expect(state.toasts[0]).not.toHaveProperty('open')
@@ -27,7 +27,7 @@ test('a notify event adds a toast, and dismiss removes it', () => {
 test('a notify event keeps the view its toast opens', () => {
   const state = reduce(initialState(), {
     type: 'event',
-    event: { type: 'notify', title: 'wt', body: 'done', open: { view: 'view:quirky.session/worktree', input: { worktree: 'w1' } } }
+    event: { type: 'notify', title: 'wt', body: 'done', desktop: false, open: { view: 'view:quirky.session/worktree', input: { worktree: 'w1' } } }
   })
   expect(state.toasts[0]!.open).toEqual({ view: 'view:quirky.session/worktree', input: { worktree: 'w1' } })
 })

@@ -446,9 +446,12 @@ describe('window plugin host against a real daemon', () => {
         {
           id: 'acme.notes',
           ui: 'ui.js',
-          contributes: { ...listSection, method: [{ id: 'count' }] }
+          contributes: { ...listSection, method: [{ id: 'count' }, { id: 'bump' }], event: [{ id: 'changed' }] }
         },
-        { activate: "context.provide('method:acme.notes/count', () => 3)" }
+        {
+          activate: `context.provide('method:acme.notes/count', () => 3)
+            context.provide('method:acme.notes/bump', () => context.emit('changed', null))`
+        }
       )
       writeFileSync(
         join(dir, 'ui.js'),
@@ -456,38 +459,36 @@ describe('window plugin host against a real daemon', () => {
           activate: `context.subscribe((event) => record('event ' + event.type))
             ${provideMount(
               NOTES_SECTION,
-              `Promise.all([context.call('repo.list', {}), context.call('acme.notes/count', {})])
-                 .then(([repos, count]) => { element.repos = repos; element.count = count })`
+              `Promise.all([context.call('plugin.list', {}), context.call('acme.notes/count', {})])
+                 .then(([plugins, count]) => { element.plugins = plugins.map((plugin) => plugin.id); element.count = count })`
             )}`
         })
       )
     }
     const t = await boot(mountPlugin)
-    t.harness.git.addRepo('/fake/alpha')
-    t.harness.git.addRepo('/fake/beta')
 
     const { element } = t.show(NOTES_SECTION)
     await t.mounted(NOTES_SECTION)
     await waitFor(() => element.count !== undefined)
-    expect(element.repos).toEqual([])
+    expect(element.plugins).toContain('acme.notes')
     expect(element.count).toBe(3)
 
-    await t.agent.call('repo.add', { path: '/fake/alpha' })
-    await t.waitForLine('event repo.changed')
+    await t.agent.callAny('acme.notes/bump', {})
+    await t.waitForLine('event acme.notes/changed')
 
     await t.agent.call('plugin.disable', { id: NOTES_SECTION })
     await t.waitForGone(NOTES_SECTION)
     await t.waitForRevoked('acme.notes')
-    const before = t.events.filter((event) => event.type === 'repo.changed').length
+    const before = t.events.filter((event) => event.type === 'acme.notes/changed').length
     const heard = t.lines().length
-    await t.agent.call('repo.add', { path: '/fake/beta' })
-    await waitFor(() => t.events.filter((event) => event.type === 'repo.changed').length > before)
+    await t.agent.callAny('acme.notes/bump', {})
+    await waitFor(() => t.events.filter((event) => event.type === 'acme.notes/changed').length > before)
     await Bun.sleep(50)
 
     expect(t.lines().filter((line) => line.startsWith('event ')).length).toBe(
       t.lines().slice(0, heard).filter((line) => line.startsWith('event ')).length
     )
-    expect(() => t.ctx('acme.notes').call('repo.list', {})).toThrow('acme.notes is not active')
+    expect(() => t.ctx('acme.notes').call('plugin.list', {})).toThrow('acme.notes is not active')
     expect(() => t.ctx('acme.notes').subscribe(() => undefined)).toThrow('acme.notes is not active')
   })
 
@@ -727,20 +728,20 @@ describe('window plugin host against a real daemon', () => {
     expect(t.lines().filter((line) => line === 'ran keys')).toHaveLength(1)
   })
 
-  test('G1: a plugin keybinding on mod+t is reported shadowed by the kernel, and Cmd+T runs nothing', async () => {
+  test('G1: a plugin keybinding on mod+shift+p is reported shadowed by the kernel, and Cmd+Shift+P runs nothing', async () => {
     const t = await boot((installed, marker) =>
       installUi(installed, marker, 'acme.tabs', {
         command: [{ id: 'new', title: 'New' }],
-        keybinding: [{ id: 'k', key: 'mod+t', command: 'new' }]
+        keybinding: [{ id: 'k', key: 'mod+shift+p', command: 'new' }]
       }, {
         activate: provideCommand('command:acme.tabs/new', "record('ran tabs')")
       })
     )
     expect(t.state().model!.keybindings).toMatchObject([
-      { id: 'keybinding:acme.tabs/k', key: 'mod+t', status: 'shadowed', shadowedBy: 'kernel' }
+      { id: 'keybinding:acme.tabs/k', key: 'mod+shift+p', status: 'shadowed', shadowedBy: 'kernel' }
     ])
 
-    expect(t.host.handleKey(press('T'))).toBe(false)
+    expect(t.host.handleKey(press('P', { shiftKey: true }))).toBe(false)
     await Bun.sleep(50)
     expect(t.lines()).not.toContain('ran tabs')
     expect(t.urls).toEqual([])
