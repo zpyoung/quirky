@@ -15,7 +15,7 @@ cp -R apps/desktop/build/Quirky.app ~/Applications/
 open ~/Applications/Quirky.app
 ```
 
-`bun run build` builds the UI, bundles the daemon, PTY host, CLI and UI into the app, and fails
+`bun run build` builds the UI, bundles the daemon, PTY host, CLI, UI and built-in plugins into the app, and fails
 if any of them is missing. The result is `apps/desktop/build/Quirky.app`.
 
 Reinstalling over a running copy: quit Quirky first (window close or tray Quit), then repeat the

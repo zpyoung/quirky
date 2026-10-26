@@ -1,6 +1,13 @@
 import { describe, expect, test } from 'bun:test'
-import type { Ask, QuirkyEvent, Session } from '@quirky/protocol'
-import { badgeCount, badgeLabel, createBadgeUpdater, notificationFor, shouldRefreshBadge } from '../src/bun/events'
+import { RpcError, RpcErrorCode, type Ask, type QuirkyEvent, type Session } from '@quirky/protocol'
+import {
+  badgeCount,
+  badgeLabel,
+  createBadgeUpdater,
+  loadBadgeInputs,
+  notificationFor,
+  shouldRefreshBadge
+} from '../src/bun/events'
 
 const session = (id: string, status: Session['status']): Session => ({
   id,
@@ -25,14 +32,19 @@ const ask = (id: string): Ask => ({
 })
 
 describe('notificationFor', () => {
-  test('maps a notify event to a notification', () => {
-    const event: QuirkyEvent = { type: 'notify', title: 'Claude', body: 'needs input', sessionId: 's1' }
+  test('SC-23: maps a notify event for the desktop to a notification', () => {
+    const event: QuirkyEvent = { type: 'notify', title: 'Claude', body: 'needs input', sessionId: 's1', desktop: true }
     expect(notificationFor(event)).toEqual({ title: 'Claude', body: 'needs input' })
   })
 
   test('falls back to the app name for a blank title', () => {
-    const event: QuirkyEvent = { type: 'notify', title: '  ', body: 'hello' }
+    const event: QuirkyEvent = { type: 'notify', title: '  ', body: 'hello', desktop: true }
     expect(notificationFor(event)).toEqual({ title: 'Quirky', body: 'hello' })
+  })
+
+  test('SC-23: a notify event without desktop: true shows no native notification', () => {
+    expect(notificationFor({ type: 'notify', title: 'Claude', body: 'quiet', desktop: false })).toBeNull()
+    expect(notificationFor({ type: 'notify', title: 'Claude', body: 'unspecified' })).toBeNull()
   })
 
   test('ignores other events', () => {
@@ -52,13 +64,52 @@ describe('badge', () => {
     expect(badgeLabel(250)).toBe('99+')
   })
 
-  test('only session and ask events trigger a refresh', () => {
-    expect(shouldRefreshBadge({ type: 'session.changed', session: session('a', 'waiting') })).toBe(true)
-    expect(shouldRefreshBadge({ type: 'session.removed', sessionId: 'a' })).toBe(true)
-    expect(shouldRefreshBadge({ type: 'ask.created', ask: ask('x') })).toBe(true)
-    expect(shouldRefreshBadge({ type: 'ask.resolved', askId: 'x', envelope: ask('x').envelope })).toBe(true)
-    expect(shouldRefreshBadge({ type: 'git.changed', worktreeId: 'w' })).toBe(false)
+  test('SC-60: only session, ask and plugin-set events trigger a refresh', () => {
+    const waiting = session('a', 'waiting')
+    expect(shouldRefreshBadge({ type: 'quirky.session/changed', data: { session: waiting } })).toBe(true)
+    expect(shouldRefreshBadge({ type: 'quirky.session/removed', data: { sessionId: 'a' } })).toBe(true)
+    expect(shouldRefreshBadge({ type: 'quirky.ask/created', data: { ask: ask('x') } })).toBe(true)
+    expect(shouldRefreshBadge({ type: 'quirky.ask/resolved', data: { askId: 'x' } })).toBe(true)
+    expect(shouldRefreshBadge({ type: 'plugin.changed' })).toBe(true)
+    expect(shouldRefreshBadge({ type: 'quirky.git/changed', data: {} })).toBe(false)
     expect(shouldRefreshBadge({ type: 'notify', title: 't', body: 'b' })).toBe(false)
+    expect(shouldRefreshBadge({ type: 'repo.changed' })).toBe(false)
+  })
+})
+
+describe('loadBadgeInputs', () => {
+  const methodNotFound = (method: string) => new RpcError(RpcErrorCode.MethodNotFound, `unknown method ${method}`)
+
+  test('reads sessions and pending asks through the plugin methods', async () => {
+    const calls: Array<[string, Record<string, unknown>]> = []
+    const inputs = await loadBadgeInputs(async (method, params) => {
+      calls.push([method, params])
+      return method === 'quirky.session/list' ? [session('a', 'waiting')] : [ask('x')]
+    })
+    expect(inputs).toEqual({ sessions: [session('a', 'waiting')], asks: [ask('x')] })
+    expect(calls).toContainEqual(['quirky.session/list', {}])
+    expect(calls).toContainEqual(['quirky.ask/list', { pendingOnly: true }])
+  })
+
+  test('SC-60: a method missing because its plugin is off counts as zero', async () => {
+    const inputs = await loadBadgeInputs(async (method) => {
+      if (method === 'quirky.session/list') throw methodNotFound(method)
+      return [ask('x'), ask('y')]
+    })
+    expect(inputs.sessions).toEqual([])
+    expect(badgeCount(inputs.sessions, inputs.asks)).toBe(2)
+
+    const none = await loadBadgeInputs(async (method) => {
+      throw methodNotFound(method)
+    })
+    expect(badgeCount(none.sessions, none.asks)).toBe(0)
+  })
+
+  test('any other failure propagates so the badge stays as it was', async () => {
+    const failing = loadBadgeInputs(async () => {
+      throw new RpcError(RpcErrorCode.Internal, 'boom')
+    })
+    await expect(failing).rejects.toThrow('boom')
   })
 })
 
