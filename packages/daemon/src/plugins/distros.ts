@@ -101,7 +101,16 @@ function messageOf(error: unknown): string {
 
 /** Installs, lists and removes the distro layer and serves it to the host, settings and UI model. */
 export class DistroService {
+  /** Tail of the install/remove queue: the one-distro check and the write must not interleave. */
+  private changes: Promise<unknown> = Promise.resolve()
+
   constructor(private readonly options: DistroServiceOptions) {}
+
+  private serialized<T>(change: () => Promise<T>): Promise<T> {
+    const run = this.changes.then(change, change)
+    this.changes = run.catch(() => {})
+    return run
+  }
 
   /** Reads a distro directory and everything installing it would change; installs nothing. */
   async inspect(path: string): Promise<DistroInspection> {
@@ -115,7 +124,11 @@ export class DistroService {
    * first, so a refusal (InvalidParams for a distro that cannot be applied, Conflict for a clash
    * with another distro or an installed plugin) changes nothing.
    */
-  async install(path: string): Promise<DistroInfo> {
+  install(path: string): Promise<DistroInfo> {
+    return this.serialized(() => this.installNow(path))
+  }
+
+  private async installNow(path: string): Promise<DistroInfo> {
     const { store, plugins, home, log } = this.options
     const prepared = this.prepare(path)
     if (prepared.problems.length > 0) throw invalidParams(prepared.problems.join('; '))
@@ -168,7 +181,11 @@ export class DistroService {
   }
 
   /** Removes the distro, its plugins and their data; NotFound for an ID that is not installed. */
-  async remove(id: string): Promise<void> {
+  remove(id: string): Promise<void> {
+    return this.serialized(() => this.removeNow(id))
+  }
+
+  private async removeNow(id: string): Promise<void> {
     const { store, plugins, log } = this.options
     const row = store.getDistro()
     if (!row || row.id !== id) throw notFound(`no distro ${id}`)
