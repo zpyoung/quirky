@@ -1,0 +1,357 @@
+{
+  "id": "quirky.worktree",
+  "name": "Worktrees",
+  "version": "0.1.0",
+  "description": "Git worktrees of the added repositories, and the selectors that name them.",
+  "main": "main.ts",
+  "cli": "cli.ts",
+  "cliAliases": [
+    "wt"
+  ],
+  "dependencies": [
+    "quirky.repo"
+  ],
+  "contributes": {
+    "method": [
+      {
+        "id": "list",
+        "description": "Worktrees, optionally only those of one repository.",
+        "readOnly": true,
+        "params": {
+          "type": "object",
+          "properties": {
+            "repo": {
+              "type": "string",
+              "description": "A repo selector: id:, name: or path:, or a bare ID or name."
+            }
+          }
+        },
+        "result": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "repoId": {
+                "type": "string"
+              },
+              "path": {
+                "type": "string"
+              },
+              "branch": {
+                "description": "Short branch name, or null when HEAD is detached."
+              },
+              "head": {
+                "type": "string"
+              },
+              "isMain": {
+                "type": "boolean"
+              },
+              "name": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "repoId",
+              "path",
+              "branch",
+              "head",
+              "isMain",
+              "name"
+            ]
+          }
+        }
+      },
+      {
+        "id": "create",
+        "description": "Creates branch `name` from `baseRef` (default: the repo's current HEAD) at `<worktreesRoot>/<repo>/<name>`.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "repo": {
+              "type": "string",
+              "description": "A repo selector: id:, name: or path:, or a bare ID or name."
+            },
+            "name": {
+              "type": "string"
+            },
+            "baseRef": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "repo",
+            "name"
+          ]
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "repoId": {
+              "type": "string"
+            },
+            "path": {
+              "type": "string"
+            },
+            "branch": {
+              "description": "Short branch name, or null when HEAD is detached."
+            },
+            "head": {
+              "type": "string"
+            },
+            "isMain": {
+              "type": "boolean"
+            },
+            "name": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "id",
+            "repoId",
+            "path",
+            "branch",
+            "head",
+            "isMain",
+            "name"
+          ]
+        }
+      },
+      {
+        "id": "remove",
+        "description": "Removes a worktree and closes its sessions.",
+        "destructive": true,
+        "confirm": "Remove worktree {worktree}?",
+        "describe": "describeRemove",
+        "params": {
+          "type": "object",
+          "properties": {
+            "worktree": {
+              "type": "string",
+              "description": "A worktree selector: id:, name:, branch:, path:, current or active, or a bare ID, name or branch."
+            },
+            "force": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "worktree"
+          ]
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "ok": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "ok"
+          ]
+        }
+      },
+      {
+        "id": "describeRemove",
+        "description": "The question asked before a worktree is removed.",
+        "readOnly": true,
+        "params": {
+          "type": "object",
+          "properties": {
+            "worktree": {
+              "type": "string",
+              "description": "A worktree selector: id:, name:, branch:, path:, current or active, or a bare ID, name or branch."
+            },
+            "force": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "worktree"
+          ]
+        },
+        "result": {
+          "type": "string"
+        }
+      },
+      {
+        "id": "resolve",
+        "description": "The worktree a selector names; `current` reads the caller's session worktree, else its working directory.",
+        "readOnly": true,
+        "params": {
+          "type": "object",
+          "properties": {
+            "selector": {
+              "type": "string"
+            },
+            "cwd": {
+              "type": "string"
+            },
+            "worktreeId": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "selector"
+          ]
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "repoId": {
+              "type": "string"
+            },
+            "path": {
+              "type": "string"
+            },
+            "branch": {
+              "description": "Short branch name, or null when HEAD is detached."
+            },
+            "head": {
+              "type": "string"
+            },
+            "isMain": {
+              "type": "boolean"
+            },
+            "name": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "id",
+            "repoId",
+            "path",
+            "branch",
+            "head",
+            "isMain",
+            "name"
+          ]
+        }
+      },
+      {
+        "id": "ownedIds",
+        "description": "IDs of every worktree recorded for a repository, so removing the repository can find their sessions.",
+        "readOnly": true,
+        "params": {
+          "type": "object",
+          "properties": {
+            "repo": {
+              "type": "string",
+              "description": "A repo selector: id:, name: or path:, or a bare ID or name."
+            }
+          },
+          "required": [
+            "repo"
+          ]
+        },
+        "result": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    ],
+    "event": [
+      {
+        "id": "changed",
+        "description": "A worktree of a repository was created or removed.",
+        "data": {
+          "type": "object",
+          "properties": {
+            "repoId": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "repoId"
+          ]
+        }
+      }
+    ],
+    "setting": [
+      {
+        "id": "worktreesRoot",
+        "type": "string",
+        "title": "Worktrees folder",
+        "description": "Folder under which new worktrees are created.",
+        "default": "~/quirky/workspaces"
+      }
+    ],
+    "sidebar-section": [
+      {
+        "id": "worktrees",
+        "title": "Worktrees",
+        "order": 0
+      }
+    ],
+    "cli-command": [
+      {
+        "id": "list",
+        "summary": "list worktrees",
+        "flags": {
+          "repo": {
+            "type": "string",
+            "description": "only worktrees of this repository"
+          }
+        },
+        "methods": [
+          "quirky.worktree/list"
+        ]
+      },
+      {
+        "id": "create",
+        "summary": "create a worktree and branch",
+        "positionals": [
+          {
+            "name": "repo",
+            "description": "the repository",
+            "required": true
+          },
+          {
+            "name": "name",
+            "description": "name for the worktree and branch",
+            "required": true
+          }
+        ],
+        "flags": {
+          "base": {
+            "type": "string",
+            "description": "ref to branch from"
+          }
+        },
+        "methods": [
+          "quirky.worktree/create"
+        ]
+      },
+      {
+        "id": "rm",
+        "summary": "remove a worktree",
+        "positionals": [
+          {
+            "name": "worktree",
+            "description": "the worktree to remove",
+            "required": true
+          }
+        ],
+        "flags": {
+          "force": {
+            "type": "boolean",
+            "description": "remove even with uncommitted changes"
+          }
+        },
+        "methods": [
+          "quirky.worktree/remove"
+        ]
+      }
+    ]
+  }
+}

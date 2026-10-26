@@ -1,0 +1,110 @@
+{
+  "id": "quirky.repo",
+  "name": "Repositories",
+  "version": "0.1.0",
+  "description": "Git repositories Quirky knows about, and the selectors that name them.",
+  "main": "main.ts",
+  "cli": "cli.ts",
+  "contributes": {
+    "method": [
+      {
+        "id": "list",
+        "description": "Every added repository.",
+        "readOnly": true,
+        "params": { "type": "object" },
+        "result": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": { "type": "string" },
+              "name": { "type": "string" },
+              "path": { "type": "string", "description": "Absolute path of the repository's main working tree." },
+              "addedAt": { "type": "number" }
+            },
+            "required": ["id", "name", "path", "addedAt"]
+          }
+        }
+      },
+      {
+        "id": "add",
+        "description": "Resolves `path` to its repository toplevel; adding the same repo twice returns the existing one.",
+        "params": {
+          "type": "object",
+          "properties": { "path": { "type": "string" } },
+          "required": ["path"]
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "id": { "type": "string" },
+            "name": { "type": "string" },
+            "path": { "type": "string", "description": "Absolute path of the repository's main working tree." },
+            "addedAt": { "type": "number" }
+          },
+          "required": ["id", "name", "path", "addedAt"]
+        }
+      },
+      {
+        "id": "remove",
+        "description": "Closes the repository's sessions, then forgets the repository.",
+        "params": {
+          "type": "object",
+          "properties": { "repo": { "type": "string", "description": "A repo selector: id:, name: or path:, or a bare ID or name." } },
+          "required": ["repo"]
+        },
+        "result": {
+          "type": "object",
+          "properties": { "ok": { "type": "boolean" } },
+          "required": ["ok"]
+        }
+      },
+      {
+        "id": "resolve",
+        "description": "The repository a selector names: id:, name: or path:, or a bare ID or name.",
+        "readOnly": true,
+        "params": {
+          "type": "object",
+          "properties": { "selector": { "type": "string" } },
+          "required": ["selector"]
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "id": { "type": "string" },
+            "name": { "type": "string" },
+            "path": { "type": "string", "description": "Absolute path of the repository's main working tree." },
+            "addedAt": { "type": "number" }
+          },
+          "required": ["id", "name", "path", "addedAt"]
+        }
+      }
+    ],
+    "event": [
+      {
+        "id": "changed",
+        "description": "A repository was added or removed.",
+        "data": { "type": "object" }
+      }
+    ],
+    "cli-command": [
+      {
+        "id": "add",
+        "summary": "add a git repository",
+        "positionals": [{ "name": "path", "description": "path to the git repository", "required": true }],
+        "methods": ["quirky.repo/add"]
+      },
+      {
+        "id": "list",
+        "summary": "list repositories",
+        "methods": ["quirky.repo/list"]
+      },
+      {
+        "id": "rm",
+        "summary": "remove a repository from Quirky",
+        "positionals": [{ "name": "repo", "description": "the repository to remove", "required": true }],
+        "methods": ["quirky.repo/remove"]
+      }
+    ]
+  }
+}
