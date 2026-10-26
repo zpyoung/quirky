@@ -429,4 +429,4 @@
 
 ## Progress
 
-Step 5, build. W1 and W2 merged (W2 at 247471b, gate 1705 pass). W2 checkpoint review running; W3 (eight built-in plugins, six tasks P1-P6) dispatched from the setup commit after it. Next: adjudicate W2 findings, fix in packages/**, then the W3 barrier and checkpoint, then W4 per D39.
+Step 5, build. W1, W2 and its fix batch, and W3 (P1-P6, eight built-in plugins) merged; W3 at 932d679, gate 1976 pass, typecheck clean. W4 dependency setup committed. W3 checkpoint review running. Next: adjudicate the W3 findings (D43), fix batch, then dispatch W4 (U0a, U0b, U1, U2a-d, U3; briefs in the run journal's scratch) per D39, then W5, Final Round 1, verify and merge.
