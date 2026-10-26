@@ -1,7 +1,8 @@
 import { afterEach, describe, expect, test } from 'bun:test'
-import { existsSync, readFileSync, rmSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import type { ExitCause, PtyFact } from '@quirky/protocol'
+import { PtyFrameDecoder, encodePtyJson, type ExitCause, type PtyFact, type PtyRequest } from '@quirky/protocol'
+import { socketPath } from '@quirky/protocol/node'
 import { createPtyApi } from '../src/plugins/pty-api'
 import { PtyClient } from '../src/pty-client'
 import { startFakePtyHost, type FakePtyHost } from './fixtures/fake-pty-host'
@@ -21,7 +22,7 @@ function startStoppableHost(home: string, version?: number): FakePtyHost {
   return host
 }
 
-function newClient(home: string, extra: { connectTimeoutMs?: number } = {}): PtyClient {
+function newClient(home: string, extra: { connectTimeoutMs?: number; shutdownWaitMs?: number } = {}): PtyClient {
   const client = new PtyClient({ home, hostEntry: FAKE_HOST_MAIN, log: () => {}, ...extra })
   cleanups.push(() => {
     client.close()
@@ -40,6 +41,43 @@ function home(): string {
   const dir = makeTempHome('qp-')
   cleanups.push(() => rmSync(dir, { recursive: true, force: true }))
   return dir
+}
+
+/** A host that answers hello at `version`, then accepts shutdown without ever replying or closing. */
+function startSilentHost(dir: string, version: number): { shutdowns: () => number } {
+  mkdirSync(dir, { recursive: true })
+  const path = socketPath(dir, 'pty.sock')
+  rmSync(path, { force: true })
+  writeFileSync(join(dir, 'pty.token'), 'tok', { mode: 0o600 })
+  let shutdowns = 0
+  const decoders = new WeakMap<object, PtyFrameDecoder>()
+  const listener = Bun.listen<undefined>({
+    unix: path,
+    socket: {
+      data(socket, chunk) {
+        const decoder = decoders.get(socket) ?? new PtyFrameDecoder()
+        decoders.set(socket, decoder)
+        for (const frame of decoder.push(new Uint8Array(chunk))) {
+          if (frame.kind !== 'json') continue
+          const request = frame.message as PtyRequest
+          if (request.type === 'hello') {
+            const body =
+              request.version === version
+                ? { id: request.id, ok: true, result: { version, pid: process.pid } }
+                : { id: request.id, ok: false, error: `unsupported protocol version ${request.version}, host speaks ${version}` }
+            socket.write(encodePtyJson(body))
+          } else if (request.type === 'shutdown') {
+            shutdowns++
+          }
+        }
+      }
+    }
+  })
+  cleanups.push(() => {
+    listener.stop(true)
+    rmSync(path, { force: true })
+  })
+  return { shutdowns: () => shutdowns }
 }
 
 describe('protocol version handling', () => {
@@ -91,6 +129,35 @@ describe('restartHost', () => {
     expect(client.connected).toBe(true)
     await Bun.sleep(300)
     expect(reconnects).toBe(1)
+  })
+})
+
+describe('a host that accepts shutdown but never replies or closes', () => {
+  test('restartHost gives up within the wait and drops the connection', async () => {
+    const dir = home()
+    const silent = startSilentHost(dir, 2)
+    const client = newClient(dir, { shutdownWaitMs: 100 })
+    await client.connect()
+
+    const started = Date.now()
+    await expect(client.restartHost()).rejects.toThrow('quirky-pty did not stop after shutdown')
+    expect(Date.now() - started).toBeLessThan(2000)
+    expect(silent.shutdowns()).toBe(1)
+    expect(client.connected).toBe(false)
+  })
+
+  test('retiring an older host gives up within the wait so a current host can take over', async () => {
+    const dir = home()
+    const silent = startSilentHost(dir, 1)
+    const client = newClient(dir, { shutdownWaitMs: 100 })
+
+    const started = Date.now()
+    await client.connect()
+
+    expect(Date.now() - started).toBeLessThan(5000)
+    expect(silent.shutdowns()).toBe(1)
+    expect(client.connected).toBe(true)
+    expect(client.hostPid).not.toBe(process.pid)
   })
 })
 

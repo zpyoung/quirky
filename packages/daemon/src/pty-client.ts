@@ -30,6 +30,8 @@ export type PtyClientOptions = {
   /** Script that starts quirky-pty when it does not answer. */
   hostEntry?: string
   connectTimeoutMs?: number
+  /** Overrides how long retiring or restarting a host waits for it to stop. */
+  shutdownWaitMs?: number
   log?: (message: string) => void
 }
 
@@ -152,7 +154,9 @@ export class PtyClient {
     await this.connect()
     this.keepDown = true
     try {
-      if (!(await this.shutdownAndWait(RESTART_WAIT_MS))) throw new Error('quirky-pty did not stop after shutdown')
+      if (!(await this.shutdownAndWait(this.options.shutdownWaitMs ?? RESTART_WAIT_MS))) {
+        throw new Error('quirky-pty did not stop after shutdown')
+      }
     } finally {
       this.keepDown = false
     }
@@ -161,9 +165,13 @@ export class PtyClient {
     return { pid: this.hostPid as number }
   }
 
-  /** Sends `shutdown` on the current socket and waits for it to close; false when it stays open past the wait. */
+  /**
+   * Sends `shutdown` on the current socket and waits for it to close, all within `waitMs`. When the host
+   * neither replies nor closes in time the connection is destroyed and this returns false.
+   */
   private async shutdownAndWait(waitMs: number): Promise<boolean> {
-    if (!this.socket) return true
+    const socket = this.socket
+    if (!socket) return true
     let release!: () => void
     const closed = new Promise<boolean>((resolve) => {
       release = () => resolve(true)
@@ -173,14 +181,15 @@ export class PtyClient {
     const timeout = new Promise<boolean>((resolve) => {
       timer = setTimeout(() => resolve(false), waitMs)
     })
-    try {
-      await this.rawRequest('shutdown', {})
-    } catch {
-      // the host may drop the connection before it replies
-    }
+    // the host may drop the connection before it replies, so a failed request is not an error
+    this.rawRequest('shutdown', {}).catch(() => {})
     const result = await Promise.race([closed, timeout])
     clearTimeout(timer)
     this.closeWaiters.delete(release)
+    if (!result) {
+      socket.terminate()
+      this.handleClose(socket)
+    }
     return result
   }
 
@@ -281,15 +290,16 @@ export class PtyClient {
 
   /** Shuts down a host that speaks the older protocol `version`, so `establish` can start a current one. */
   private async retireHost(version: number, token: string): Promise<void> {
+    const waitMs = this.options.shutdownWaitMs ?? RETIRE_WAIT_MS
     try {
       const socket = await this.openSocket()
       try {
         await this.rawRequest('hello', { token, version })
-        const stopped = await this.shutdownAndWait(RETIRE_WAIT_MS)
+        const stopped = await this.shutdownAndWait(waitMs)
         this.options.log?.(
           stopped
             ? `retired quirky-pty speaking protocol ${version}`
-            : `quirky-pty speaking protocol ${version} did not stop within ${RETIRE_WAIT_MS}ms`
+            : `quirky-pty speaking protocol ${version} did not stop within ${waitMs}ms`
         )
       } finally {
         if (this.socket === socket) this.socket = null
