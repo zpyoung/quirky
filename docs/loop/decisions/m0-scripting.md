@@ -328,5 +328,15 @@
 - **Confidence:** medium
 - **Source:** assumed — autonomous
 
+## D33: Skip wave 1's checkpoint review
+- **Question:** subagent-driven-development Step 7: a checkpoint review after every wave that has a successor
+- **Options:** run a three-lens checkpoint on wave 1; skip it with a reason
+- **Chose:** skip. Wave 1 is three foundation modules (the schema validator, the kernel tables with `api.describe`, the CLI's declarative specs), each with its own unit and API tests, and the full gate passed (1150 tests, typecheck clean). Wave 2 builds directly on them, and its checkpoint reviews the combination.
+- **Why:** the skill allows skipping a genuinely low-risk non-final wave with a recorded reason, as m0-registry D31 and m0-ui-api D40 did
+- **Evidence:** scratchpad gate-w1.log
+- **Reversibility:** easy
+- **Confidence:** medium
+- **Source:** assumed — autonomous
+
 ## Progress
-Building (D31, D32). Wave 1 dispatched from scaffold e036826 on build/m0-scripting. If this iteration stops early: check scratchpad journal; otherwise re-dispatch W1 tasks (T1 schema.ts, T2 kernel-schemas/api.describe, T5 CLI specs) from the tech spec.
+Building (D31-D33). Wave 1 merged (ccde010). Wave 2 (T3 daemon validation, T6a CLI generated commands) dispatched. If this iteration stops early, re-dispatch W2 from the tech spec, then W3 (T6b api/api call/skill/buildCatalog/renderSkill) and W4 (scenario tests).
