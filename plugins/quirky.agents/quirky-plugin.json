@@ -1,0 +1,589 @@
+{
+  "id": "quirky.agents",
+  "name": "Agents",
+  "version": "0.1.0",
+  "description": "The catalog of agent CLIs Quirky can launch, with their detection, launch and resume data.",
+  "main": "main.ts",
+  "activation": "startup",
+  "dependencies": [],
+  "contributes": {
+    "agent": [
+      {
+        "id": "claude",
+        "label": "Claude",
+        "detect": "claude",
+        "prompt": "argv",
+        "draftFlag": "--prefill",
+        "yolo": "--dangerously-skip-permissions",
+        "auto": "--permission-mode auto",
+        "resume": [
+          "--resume",
+          "{id}"
+        ],
+        "fork": [
+          "--resume",
+          "{id}",
+          "--fork-session"
+        ],
+        "resumeStyle": "claude-splice",
+        "trust": "claude",
+        "homepage": "https://code.claude.com/docs"
+      },
+      {
+        "id": "claude-agent-teams",
+        "label": "Claude Agent Teams",
+        "detect": "claude",
+        "launch": "claude --teammate-mode in-process",
+        "process": "claude",
+        "env": {
+          "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1"
+        },
+        "prompt": "stdin-after-start",
+        "yolo": "--dangerously-skip-permissions",
+        "auto": "--permission-mode auto",
+        "trust": "claude",
+        "homepage": "https://code.claude.com/docs/en/agent-teams"
+      },
+      {
+        "id": "openclaude",
+        "label": "OpenClaude",
+        "detect": "openclaude",
+        "prompt": "argv",
+        "draftFlag": "--prefill",
+        "yolo": "--dangerously-skip-permissions",
+        "homepage": "https://openclaude.gitlawb.com/"
+      },
+      {
+        "id": "codex",
+        "label": "Codex",
+        "detect": "codex",
+        "prompt": "argv",
+        "yolo": "--dangerously-bypass-approvals-and-sandbox",
+        "auto": "--approve-for-me",
+        "resume": [
+          "resume",
+          "{id}"
+        ],
+        "fork": [
+          "fork",
+          "{id}"
+        ],
+        "readySignal": "codex-composer-prompt",
+        "readyTimeoutMs": 20000,
+        "blindPaste": false,
+        "submitRetryMs": 1200,
+        "trust": "codex",
+        "homepage": "https://github.com/openai/codex",
+        "windows": {
+          "inputRecordPasteNewline": "alt-enter"
+        }
+      },
+      {
+        "id": "grok",
+        "label": "Grok",
+        "detect": "grok",
+        "prompt": "argv",
+        "promptSeparator": "--",
+        "yolo": "--permission-mode bypassPermissions",
+        "resume": [
+          "--resume",
+          "{id}"
+        ],
+        "fork": [
+          "--resume",
+          "{id}",
+          "--fork-session"
+        ],
+        "readySignal": "grok-composer-prompt",
+        "homepage": "https://x.ai/cli",
+        "windows": {
+          "ctrlEnterEncoding": "csi-u"
+        }
+      },
+      {
+        "id": "copilot",
+        "label": "GitHub Copilot",
+        "detect": "copilot",
+        "prompt": "flag-interactive",
+        "yolo": "--yolo",
+        "resume": [
+          "--resume={id}"
+        ],
+        "trust": "copilot",
+        "homepage": "https://docs.github.com/en/copilot/how-tos/set-up/install-copilot-cli"
+      },
+      {
+        "id": "opencode2",
+        "label": "OpenCode 2",
+        "detect": "opencode2",
+        "launch": "opencode2 --standalone",
+        "prompt": "flag-prompt",
+        "resume": [
+          "--session",
+          "{id}"
+        ],
+        "readySignal": "render-cursor-after-bracketed-paste",
+        "submitSignal": "opencode-agent-row",
+        "readyTimeoutMs": 20000,
+        "homepage": "https://opencode.ai/v2/docs/"
+      },
+      {
+        "id": "opencode",
+        "label": "OpenCode",
+        "detect": "opencode",
+        "prompt": "flag-prompt",
+        "stripArgs": [
+          "--dangerously-skip-permissions"
+        ],
+        "resume": [
+          "--session",
+          "{id}"
+        ],
+        "readySignal": "render-cursor-after-bracketed-paste",
+        "submitSignal": "opencode-agent-row",
+        "readyTimeoutMs": 20000,
+        "homepage": "https://opencode.ai/docs/cli/"
+      },
+      {
+        "id": "mimo-code",
+        "label": "MiMo Code",
+        "detect": "mimo",
+        "prompt": "flag-prompt",
+        "resume": [
+          "--session",
+          "{id}"
+        ],
+        "readySignal": "render-cursor-after-bracketed-paste",
+        "homepage": "https://mimo.xiaomi.com/coder"
+      },
+      {
+        "id": "ante",
+        "label": "Ante",
+        "detect": "ante",
+        "prompt": "stdin-after-start",
+        "yolo": "--yolo",
+        "homepage": "https://github.com/AntigmaLabs/ante-preview"
+      },
+      {
+        "id": "trae",
+        "label": "Trae",
+        "detect": "traecli",
+        "prompt": "argv",
+        "promptSeparator": "--",
+        "yolo": "--yolo",
+        "homepage": "https://docs.trae.cn/cli_get-started-with-trae-cli"
+      },
+      {
+        "id": "muse",
+        "label": "Muse",
+        "detect": "muse",
+        "launch": "muse --trust-workspace",
+        "prompt": "stdin-after-start",
+        "yolo": "--yolo",
+        "resume": [
+          "resume",
+          "{id}"
+        ],
+        "homepage": "https://dev.meta.ai/docs/muse-code"
+      },
+      {
+        "id": "dsh",
+        "label": "DeepSeek Harness",
+        "detect": "dsh-tui",
+        "detectAliases": [
+          "dst"
+        ],
+        "detectRequires": [
+          "dsh"
+        ],
+        "launch": "dsh-tui .",
+        "process": "dsh",
+        "prompt": "stdin-after-start",
+        "resume": [
+          "--resume",
+          "{id}"
+        ],
+        "readySignal": "dsh-composer-prompt",
+        "homepage": "https://deepseek-harness.github.io/deepseek-harness/"
+      },
+      {
+        "id": "qoder",
+        "label": "Qoder CLI",
+        "detect": "qodercli",
+        "detectAliases": [
+          "qoder"
+        ],
+        "prompt": "flag-prompt-interactive",
+        "yolo": "--dangerously-skip-permissions",
+        "resume": [
+          "--resume",
+          "{id}"
+        ],
+        "trust": "qoder",
+        "homepage": "https://docs.qoder.com/cli/overview"
+      },
+      {
+        "id": "qoder-cn",
+        "label": "Qoder CLI China",
+        "detect": "qoderclicn",
+        "detectAliases": [
+          "qodercn"
+        ],
+        "prompt": "flag-prompt-interactive",
+        "yolo": "--dangerously-skip-permissions",
+        "resume": [
+          "--resume",
+          "{id}"
+        ],
+        "trust": "qoder-cn",
+        "homepage": "https://docs.qoder.cn/cli/overview"
+      },
+      {
+        "id": "zcode",
+        "label": "ZCode",
+        "detect": "zcode",
+        "process": "zcode-cli",
+        "prompt": "stdin-after-start",
+        "yolo": "--mode yolo",
+        "resume": [
+          "--resume",
+          "{id}"
+        ],
+        "readySignal": "zcode-composer-prompt",
+        "homepage": "https://zcode.z.ai/en/docs"
+      },
+      {
+        "id": "pi",
+        "label": "Pi",
+        "detect": "pi",
+        "prompt": "argv",
+        "resume": [
+          "--session",
+          "{transcript}"
+        ],
+        "fork": [
+          "--fork",
+          "{transcript}"
+        ],
+        "homepage": "https://pi.dev",
+        "windows": {
+          "shiftEnterEncoding": "csi-u"
+        }
+      },
+      {
+        "id": "omp",
+        "label": "OMP",
+        "detect": "omp",
+        "prompt": "argv",
+        "resume": [
+          "--resume",
+          "{transcriptOrId}"
+        ],
+        "enterWithPaste": true,
+        "homepage": "https://omp.sh",
+        "windows": {
+          "shiftEnterEncoding": "csi-u"
+        }
+      },
+      {
+        "id": "prime-agent",
+        "label": "Prime Agent",
+        "detect": "prime-agent",
+        "prompt": "argv",
+        "promptSeparator": "--",
+        "resume": [
+          "--resume",
+          "{transcript}"
+        ],
+        "homepage": "https://github.com/PrimeIntellect-ai/prime-agent",
+        "windows": {
+          "shiftEnterEncoding": "csi-u"
+        }
+      },
+      {
+        "id": "gemini",
+        "label": "Gemini",
+        "detect": "gemini",
+        "prompt": "flag-prompt-interactive",
+        "yolo": "--yolo",
+        "resume": [
+          "--resume",
+          "{id}"
+        ],
+        "homepage": "https://github.com/google-gemini/gemini-cli"
+      },
+      {
+        "id": "antigravity",
+        "label": "Antigravity",
+        "detect": "agy",
+        "prompt": "flag-prompt-interactive",
+        "yolo": "--dangerously-skip-permissions",
+        "resume": [
+          "--conversation",
+          "{id}"
+        ],
+        "lineSettleMs": 45,
+        "trust": "antigravity",
+        "homepage": "https://antigravity.google/docs/cli-overview"
+      },
+      {
+        "id": "aider",
+        "label": "Aider",
+        "detect": "aider",
+        "prompt": "stdin-after-start",
+        "yolo": "--yes-always",
+        "homepage": "https://aider.chat/docs/"
+      },
+      {
+        "id": "goose",
+        "label": "Goose",
+        "detect": "goose",
+        "prompt": "stdin-after-start",
+        "yoloEnv": {
+          "GOOSE_MODE": "auto"
+        },
+        "homepage": "https://block.github.io/goose/docs/quickstart/"
+      },
+      {
+        "id": "amp",
+        "label": "Amp",
+        "detect": "amp",
+        "prompt": "stdin-after-start",
+        "yolo": "--dangerously-allow-all",
+        "homepage": "https://ampcode.com/manual#install"
+      },
+      {
+        "id": "kilo",
+        "label": "Kilocode",
+        "detect": "kilo",
+        "prompt": "stdin-after-start",
+        "stripArgs": [
+          "--dangerously-skip-permissions"
+        ],
+        "homepage": "https://kilo.ai/docs/cli"
+      },
+      {
+        "id": "kiro",
+        "label": "Kiro",
+        "detect": "kiro-cli",
+        "launch": "kiro-cli chat --tui",
+        "prompt": "stdin-after-start",
+        "yolo": "--trust-all-tools",
+        "resume": [
+          "--resume-id",
+          "{id}"
+        ],
+        "homepage": "https://kiro.dev/docs/cli/"
+      },
+      {
+        "id": "crush",
+        "label": "Charm",
+        "detect": "crush",
+        "prompt": "stdin-after-start",
+        "yolo": "--yolo",
+        "homepage": "https://github.com/charmbracelet/crush"
+      },
+      {
+        "id": "aug",
+        "label": "Auggie",
+        "detect": "auggie",
+        "prompt": "stdin-after-start",
+        "homepage": "https://docs.augmentcode.com/cli/overview"
+      },
+      {
+        "id": "autohand",
+        "label": "Autohand Code",
+        "detect": "autohand",
+        "prompt": "stdin-after-start",
+        "yolo": "--unrestricted",
+        "homepage": "https://github.com/autohandai/code-cli"
+      },
+      {
+        "id": "cline",
+        "label": "Cline",
+        "detect": "cline",
+        "prompt": "stdin-after-start",
+        "yolo": "--auto-approve true",
+        "homepage": "https://docs.cline.bot/cline-cli/overview"
+      },
+      {
+        "id": "codebuff",
+        "label": "Codebuff",
+        "detect": "codebuff",
+        "prompt": "stdin-after-start",
+        "homepage": "https://www.codebuff.com/docs/help/quick-start"
+      },
+      {
+        "id": "freebuff",
+        "label": "Freebuff",
+        "detect": "freebuff",
+        "prompt": "stdin-after-start",
+        "homepage": "https://freebuff.com/cli"
+      },
+      {
+        "id": "command-code",
+        "label": "Command Code",
+        "detect": "command-code",
+        "launch": "command-code --trust",
+        "prompt": "argv",
+        "yolo": "--yolo",
+        "homepage": "https://commandcode.ai/docs/quickstart"
+      },
+      {
+        "id": "continue",
+        "label": "Continue",
+        "detect": "cn",
+        "prompt": "stdin-after-start",
+        "yolo": "--allow \"*\"",
+        "homepage": "https://docs.continue.dev/guides/cli"
+      },
+      {
+        "id": "cursor",
+        "label": "Cursor",
+        "detect": "cursor-agent",
+        "prompt": "argv",
+        "yolo": "--yolo",
+        "resume": [
+          "--resume",
+          "{id}"
+        ],
+        "trust": "cursor",
+        "homepage": "https://cursor.com/cli"
+      },
+      {
+        "id": "droid",
+        "label": "Droid",
+        "detect": "droid",
+        "prompt": "argv",
+        "yolo": "--auto high",
+        "resume": [
+          "--resume",
+          "{id}"
+        ],
+        "homepage": "https://docs.factory.ai/cli/getting-started/quickstart",
+        "windows": {
+          "shiftEnterEncoding": "csi-u",
+          "ctrlEnterEncoding": "csi-u"
+        }
+      },
+      {
+        "id": "kimi",
+        "label": "Kimi",
+        "detect": "kimi",
+        "detectAliases": [
+          "kimi-code"
+        ],
+        "prompt": "stdin-after-start",
+        "yolo": "--yolo",
+        "resume": [
+          "--session",
+          "{id}"
+        ],
+        "homepage": "https://www.kimi.com/code/docs/en/kimi-code-cli/getting-started.html"
+      },
+      {
+        "id": "mistral-vibe",
+        "label": "Mistral Vibe",
+        "detect": "vibe",
+        "detectAliases": [
+          "mistral-vibe"
+        ],
+        "prompt": "stdin-after-start",
+        "yolo": "--agent auto-approve",
+        "homepage": "https://github.com/mistralai/mistral-vibe"
+      },
+      {
+        "id": "qwen-code",
+        "label": "Qwen Code",
+        "detect": "qwen",
+        "prompt": "stdin-after-start",
+        "yolo": "--approval-mode yolo",
+        "resume": [
+          "--resume",
+          "{id}"
+        ],
+        "submitRetryMs": 1200,
+        "homepage": "https://github.com/QwenLM/qwen-code"
+      },
+      {
+        "id": "rovo",
+        "label": "Rovo Dev",
+        "detect": "acli",
+        "launch": "acli rovodev run",
+        "prompt": "stdin-after-start",
+        "yolo": "--yolo",
+        "homepage": "https://support.atlassian.com/rovo/docs/install-and-run-rovo-dev-cli-on-your-device/"
+      },
+      {
+        "id": "hermes",
+        "label": "Hermes",
+        "detect": "hermes",
+        "launch": "hermes --tui",
+        "prompt": "hermes-query",
+        "yolo": "--yolo",
+        "homepage": "https://hermes-agent.nousresearch.com/docs/"
+      },
+      {
+        "id": "devin",
+        "label": "Devin",
+        "detect": "devin",
+        "prompt": "stdin-after-start",
+        "yolo": "--permission-mode bypass --respect-workspace-trust false",
+        "resume": [
+          "--resume",
+          "{id}"
+        ],
+        "homepage": "https://devin.ai/cli"
+      },
+      {
+        "id": "openclaw",
+        "label": "OpenClaw",
+        "detect": "openclaw",
+        "prompt": "stdin-after-start",
+        "homepage": "https://github.com/openclaw/openclaw"
+      },
+      {
+        "id": "codebuddy",
+        "label": "CodeBuddy",
+        "detect": "codebuddy",
+        "detectAliases": [
+          "cbc"
+        ],
+        "prompt": "argv",
+        "yolo": "--dangerously-skip-permissions",
+        "resume": [
+          "--resume",
+          "{id}"
+        ],
+        "homepage": "https://www.codebuddy.ai/cli"
+      },
+      {
+        "id": "jcode",
+        "label": "Jcode",
+        "detect": "jcode",
+        "prompt": "stdin-after-start",
+        "resume": [
+          "--resume",
+          "{id}"
+        ],
+        "homepage": "https://github.com/1jehuang/jcode"
+      }
+    ],
+    "setting": [
+      {
+        "id": "default-agent",
+        "type": "string",
+        "title": "Default agent",
+        "description": "The agent a new session starts when none is named: \"auto\" picks the first installed agent, \"shell\" opens a plain shell, or give an agent ID.",
+        "default": "auto"
+      },
+      {
+        "id": "workspace-trust",
+        "type": "boolean",
+        "title": "Trust the folder when Quirky starts an agent",
+        "description": "Pre-write the trust record an agent would otherwise ask about on first launch in a folder.",
+        "default": true
+      }
+    ]
+  }
+}
