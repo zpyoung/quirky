@@ -51,7 +51,7 @@ beforeEach(() => {
   daemon.addMethod('acme.notes/get', { params: { type: 'object', properties: { id: { type: 'integer' } }, required: ['id'] } }, { result: { id: 3 } })
   daemon.addMethod('acme.notes/count', { description: 'Count notes.' }, { result: 3 })
   daemon.addCliCommand({
-    id: 'add',
+    id: 'cli-command:acme.notes/add',
     plugin: 'acme.notes',
     words: 'acme.notes add',
     aliasWords: ['notes add'],
@@ -65,7 +65,7 @@ beforeEach(() => {
     ]
   })
   daemon.addCliCommand({
-    id: 'get',
+    id: 'cli-command:acme.notes/get',
     plugin: 'acme.notes',
     words: 'acme.notes get',
     summary: 'Get a note.',
@@ -73,7 +73,7 @@ beforeEach(() => {
     positionals: [{ name: 'id', description: 'The note ID', required: true, param: 'id' }]
   })
   daemon.addCliCommand({
-    id: 'greet',
+    id: 'cli-command:acme.notes/greet',
     plugin: 'acme.notes',
     words: 'acme.notes greet',
     aliasWords: ['notes greet'],
@@ -84,7 +84,7 @@ beforeEach(() => {
     module: modulePath
   })
   for (const id of ['boom', 'misuse']) {
-    daemon.addCliCommand({ id, plugin: 'acme.notes', words: `acme.notes ${id}`, summary: id, module: modulePath })
+    daemon.addCliCommand({ id: `cli-command:acme.notes/${id}`, plugin: 'acme.notes', words: `acme.notes ${id}`, summary: id, module: modulePath })
   }
 })
 afterEach(() => {
@@ -195,7 +195,7 @@ describe('alias words', () => {
   })
 
   test('an alias word a kernel command already owns loses to the kernel', async () => {
-    daemon.addCliCommand({ id: 'st', plugin: 'acme.status', words: 'acme.status st', aliasWords: ['status'], summary: 'x', method: 'acme.notes/count' })
+    daemon.addCliCommand({ id: 'cli-command:acme.status/st', plugin: 'acme.status', words: 'acme.status st', aliasWords: ['status'], summary: 'x', method: 'acme.notes/count' })
     const result = await run(['status'])
     expect(result.code).toBe(0)
     expect(result.stdout).toContain('daemon: 0.0.0-fake')
@@ -239,7 +239,7 @@ describe('declared commands beat generated ones, and help lists them', () => {
   })
 
   test('a bare group command runs when the group word is typed alone', async () => {
-    daemon.addCliCommand({ id: 'main', plugin: 'acme.solo', words: 'acme.solo', summary: 'Solo.', method: 'acme.notes/count' })
+    daemon.addCliCommand({ id: 'cli-command:acme.solo/main', plugin: 'acme.solo', words: 'acme.solo', summary: 'Solo.', method: 'acme.notes/count' })
     const result = await run(['acme.solo'])
     expect(result.code).toBe(0)
     expect(result.stdout).toBe('3\n')
