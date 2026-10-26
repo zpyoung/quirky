@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { block, claim, land, locate, withLock, type Repo } from './lanes'
+import { add, block, claim, land, locate, merge, withLock, type Repo } from './lanes'
 import { load, save, type Item } from './queue'
 
 const item = (id: string, deps: string[] = []): Item => ({ id, milestone: 'M1', title: id, docs: [], deps, status: 'todo' })
@@ -114,6 +114,33 @@ test('block records the entry and keeps the decision log from blocked/<id>', asy
   expect(readFileSync(join(repo.integration, 'docs/loop/BLOCKERS.md'), 'utf8')).toContain('## a\nStopped at the build.')
   expect(queue().find((entry) => entry.id === 'a')?.status).toBe('blocked')
   expect(readFileSync(join(repo.integration, 'docs/loop/DECISIONS.md'), 'utf8')).toContain('[a D1]')
+})
+
+test('merge lands a branch that is not a queue item', async () => {
+  git(dir, 'checkout', '-q', '-b', 'native/n1', 'build/roadmap')
+  writeFileSync(join(dir, 'n.txt'), 'n\n')
+  git(dir, 'add', 'n.txt')
+  git(dir, 'commit', '-q', '-m', 'n')
+  git(dir, 'checkout', '-q', '--detach')
+  await merge(repo, 'native/n1', [['true']])
+  expect(readFileSync(join(repo.integration, 'n.txt'), 'utf8')).toBe('n\n')
+  expect(git(dir, 'branch', '--list', 'native/n1')).toBe('')
+})
+
+describe('add', () => {
+  test('inserts new todo items ahead of the first * item', async () => {
+    const items = queue()
+    save([...items, item('sweep', ['*'])], join(repo.integration, 'docs/loop/queue.json'))
+    git(repo.integration, 'commit', '-qam', 'sweep')
+    await add(repo, [{ ...item('fix', ['a']), status: 'done' }])
+    expect(queue().map((entry) => entry.id)).toEqual(['a', 'b', 'c', 'fix', 'sweep'])
+    expect(queue().find((entry) => entry.id === 'fix')?.status).toBe('todo')
+  })
+
+  test('rejects a duplicate id or an unknown dependency', async () => {
+    await expect(add(repo, [item('a')])).rejects.toThrow('already in the queue')
+    await expect(add(repo, [item('z', ['nope'])])).rejects.toThrow('unknown "nope"')
+  })
 })
 
 describe('withLock', () => {

@@ -105,36 +105,69 @@ function run(cmd: string[], cwd: string): boolean {
   return Bun.spawnSync(cmd, { cwd, stdout: 'inherit', stderr: 'inherit' }).exitCode === 0
 }
 
-/**
- * Merges `build/<id>` into `build/roadmap`, runs `verify` on the result, and marks the item done.
- * A conflict or a failing check leaves `build/roadmap` exactly as it was.
- */
+/** Merges `branch` into `build/roadmap` and runs `verify`; a conflict or failure leaves it as it was. */
+function mergeVerified(repo: Repo, branch: string, verify: string[][]): void {
+  const before = git(repo.integration, 'rev-parse', 'HEAD')
+  try {
+    git(repo.integration, 'merge', '--no-ff', '-q', '-m', `Merge branch '${branch}' into build/roadmap`, branch)
+  } catch (error) {
+    if (existsSync(join(git(repo.integration, 'rev-parse', '--absolute-git-dir'), 'MERGE_HEAD'))) git(repo.integration, 'merge', '--abort')
+    throw new Error(`${branch} conflicts with build/roadmap: merge build/roadmap into it, resolve, and try again\n${(error as Error).message}`)
+  }
+  const failed = verify.find((cmd) => !run(cmd, repo.integration))
+  if (failed) {
+    git(repo.integration, 'reset', '-q', '--hard', before)
+    throw new Error(`\`${failed.join(' ')}\` failed on the merge result: merge build/roadmap into ${branch}, fix it there, and try again`)
+  }
+}
+
+function deleteBranch(repo: Repo, branch: string): void {
+  try {
+    git(repo.integration, 'branch', '-q', '-d', branch)
+  } catch {
+    console.error(`merged, but ${branch} is still checked out somewhere, so it wasn't deleted`)
+  }
+}
+
+/** Lands `build/<id>` through {@link mergeVerified} and marks the item done. */
 export function land(repo: Repo, id: string, verify = VERIFY): Promise<void> {
   return withLock(repo.lock, () => {
     requireClean(repo)
     const items = load(queuePath(repo))
     const item = items.find((entry) => entry.id === id)
     if (item?.status !== 'in-progress') throw new Error(`${id} is ${item?.status ?? 'not in the queue'}, not in-progress`)
-    const before = git(repo.integration, 'rev-parse', 'HEAD')
-    try {
-      git(repo.integration, 'merge', '--no-ff', '-q', '-m', `Merge branch 'build/${id}' into build/roadmap`, `build/${id}`)
-    } catch (error) {
-      if (existsSync(join(git(repo.integration, 'rev-parse', '--absolute-git-dir'), 'MERGE_HEAD'))) git(repo.integration, 'merge', '--abort')
-      throw new Error(`build/${id} conflicts with build/roadmap: merge build/roadmap into it, resolve, and land again\n${(error as Error).message}`)
-    }
-    const failed = verify.find((cmd) => !run(cmd, repo.integration))
-    if (failed) {
-      git(repo.integration, 'reset', '-q', '--hard', before)
-      throw new Error(`\`${failed.join(' ')}\` failed on the merge result: merge build/roadmap into build/${id}, fix it there, and land again`)
-    }
+    mergeVerified(repo, `build/${id}`, verify)
     save(setStatus(items, id, 'done'), queuePath(repo))
     rebuild(join(repo.integration, 'docs/loop'))
     commit(repo, `chore(build): finish ${id}`)
-    try {
-      git(repo.integration, 'branch', '-q', '-d', `build/${id}`)
-    } catch {
-      console.error(`landed, but build/${id} is still checked out somewhere, so it wasn't deleted`)
+    deleteBranch(repo, `build/${id}`)
+  })
+}
+
+/** Lands a branch that isn't a queue item, such as a nightly native run's results. */
+export function merge(repo: Repo, branch: string, verify = VERIFY): Promise<void> {
+  return withLock(repo.lock, () => {
+    requireClean(repo)
+    mergeVerified(repo, branch, verify)
+    deleteBranch(repo, branch)
+  })
+}
+
+/** Adds todo items ahead of the first `*` item, so the parity sweep still waits for them. */
+export function add(repo: Repo, added: Item[]): Promise<void> {
+  return withLock(repo.lock, () => {
+    requireClean(repo)
+    const items = load(queuePath(repo))
+    const ids = new Set(items.map((item) => item.id))
+    for (const item of added) {
+      if (ids.has(item.id)) throw new Error(`"${item.id}" is already in the queue`)
+      for (const dep of item.deps) if (!ids.has(dep)) throw new Error(`"${item.id}" depends on unknown "${dep}"`)
+      ids.add(item.id)
     }
+    const at = items.findIndex((item) => item.deps.includes('*'))
+    const fresh = added.map((item) => ({ ...item, status: 'todo' as const }))
+    save(at === -1 ? [...items, ...fresh] : [...items.slice(0, at), ...fresh, ...items.slice(at)], queuePath(repo))
+    commit(repo, `chore(build): add ${added.map((item) => item.id).join(', ')}`)
   })
 }
 
@@ -184,6 +217,12 @@ export async function main(argv: string[]): Promise<number> {
       case 'land':
         await land(repo, rest[0])
         return 0
+      case 'merge':
+        await merge(repo, rest[0])
+        return 0
+      case 'add':
+        await add(repo, JSON.parse(readFileSync(rest[0], 'utf8')))
+        return 0
       case 'block':
         await block(repo, rest[0], readFileSync(rest[1], 'utf8'))
         return 0
@@ -209,7 +248,7 @@ export async function main(argv: string[]): Promise<number> {
         return VERIFY.every((cmd) => run(cmd, repo.integration)) ? 0 : 1
       }
       default:
-        console.error('usage: queue.ts claim|wait --lane <n> | land <id> | block <id> <file> | set <id> <status> | status | check')
+        console.error('usage: queue.ts claim|wait --lane <n> | land <id> | merge <branch> | add <items.json> | block <id> <file> | set <id> <status> | status | check')
         return 2
     }
   } catch (error) {
