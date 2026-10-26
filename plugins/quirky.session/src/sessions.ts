@@ -1,6 +1,7 @@
 import {
   RpcErrorCode,
   type AgentKind,
+  type ExitCause,
   type PluginCaller,
   type PluginContext,
   type PtySessionInfo,
@@ -15,6 +16,14 @@ const isNotFound = (error: unknown) => (error as { code?: unknown } | null)?.cod
 const isRpcError = (error: unknown) => typeof (error as { code?: unknown } | null)?.code === 'number'
 const isUnknownSession = (error: unknown) => error instanceof Error && /^unknown session\b/.test(error.message)
 const messageOf = (error: unknown) => (error instanceof Error ? error.message : String(error))
+
+/** How a session ended; `finish` fills in what is left out (no signal, cause `exited`, not restorable). */
+export type SessionExit = {
+  exitCode: number | null
+  exitSignal?: string | null
+  exitCause?: ExitCause | null
+  restorable?: boolean
+}
 
 /** The caller's cwd and worktree, which selectors such as `current` resolve against. */
 function identityOf(caller: PluginCaller): { cwd?: string; worktreeId?: string } {
@@ -31,6 +40,8 @@ export class SessionService {
     private readonly context: PluginContext,
     private readonly records: SessionRecords
   ) {}
+
+  private readonly restoring = new Map<string, Promise<Session>>()
 
   list = async (params: Record<string, unknown>, caller: PluginCaller): Promise<Session[]> => {
     if (params.worktree === undefined) return this.records.list()
@@ -76,7 +87,8 @@ export class SessionService {
           envPatch: additions.env as Record<string, string>
         }),
         cols: (params.cols as number | undefined) ?? 80,
-        rows: (params.rows as number | undefined) ?? 24
+        rows: (params.rows as number | undefined) ?? 24,
+        shellReady: agent === 'shell' && this.context.launch.shellReady()
       })
       if (!this.records.get(session.id)) {
         await this.context.pty.forget(session.id).catch(() => {})
@@ -122,7 +134,7 @@ export class SessionService {
   setStatus = (params: Record<string, unknown>): Session => {
     const before = this.require(params.session as string)
     const status = params.status as SessionStatus
-    if (status === 'exited') return this.finish(before.id, (params.exitCode as number | undefined) ?? null) ?? before
+    if (status === 'exited') return this.finish(before.id, { exitCode: (params.exitCode as number | undefined) ?? null }) ?? before
     const updated = this.records.update(before.id, {
       status,
       lastActivityAt: Date.now(),
@@ -133,19 +145,30 @@ export class SessionService {
   }
 
   /** Marks a live session exited; null for one that is unknown or already exited. */
-  finish(sessionId: string, exitCode: number | null): Session | null {
+  finish(sessionId: string, exit: SessionExit | number | null): Session | null {
     const session = this.records.get(sessionId)
     if (!session || session.status === 'exited') return null
-    return this.publish(this.records.update(sessionId, { status: 'exited', exitCode, lastActivityAt: Date.now() }) as Session)
+    const details = typeof exit === 'object' && exit !== null ? exit : { exitCode: exit }
+    return this.publish(
+      this.records.update(sessionId, {
+        status: 'exited',
+        exitCode: details.exitCode,
+        exitSignal: details.exitSignal ?? null,
+        exitCause: details.exitCause ?? 'exited',
+        restorable: details.restorable ?? false,
+        lastActivityAt: Date.now()
+      }) as Session
+    )
   }
 
   /**
-   * Marks records the PTY host no longer has (or reports dead) as exited. At startup a structured
-   * session has no runner left, so it is finished too.
+   * Brings the records in line with the PTY host's listing. A session the host lost or stored is
+   * exited, and restorable when the host still holds its history. At startup a structured session
+   * has no runner left, so it is finished too.
    */
   async reconcile(options: { startup: boolean }): Promise<void> {
     if (options.startup) {
-      for (const session of this.records.list()) if (session.kind === 'structured') this.finish(session.id, null)
+      for (const session of this.records.list()) if (session.kind === 'structured') this.finish(session.id, { exitCode: null })
     }
     let live: Map<string, PtySessionInfo>
     try {
@@ -155,11 +178,79 @@ export class SessionService {
       return
     }
     for (const session of this.records.list()) {
-      if (session.kind !== 'terminal' || session.status === 'exited') continue
+      if (session.kind !== 'terminal') continue
       const info = live.get(session.id)
-      if (!info) this.finish(session.id, null)
-      else if (!info.alive) this.finish(session.id, info.exitCode)
+      if (session.status === 'exited') {
+        // the exit event was lost while the host restarted
+        if (info?.state === 'restorable' && info.exitCause === 'host-restart' && !session.restorable) {
+          this.publish(this.records.update(session.id, { exitCause: 'host-restart', restorable: true }) as Session)
+        }
+        continue
+      }
+      if (!info) this.finish(session.id, { exitCode: null, exitCause: 'host-lost' })
+      else if (info.state === 'exited') {
+        this.finish(session.id, { exitCode: info.exitCode, exitSignal: info.exitSignal, exitCause: info.exitCause })
+      } else if (info.state === 'restorable') {
+        this.finish(session.id, { exitCode: null, exitCause: info.exitCause, restorable: true })
+      }
     }
+  }
+
+  /**
+   * Starts a shell in a session that ended with the PTY host and still has its history stored. The
+   * session keeps its ID and becomes a `shell`. A running session is returned as it is; one that
+   * ended on its own or was killed is a conflict. Concurrent calls for one session share one spawn.
+   */
+  restore = async (params: Record<string, unknown>): Promise<Session> => {
+    const session = this.require(params.session as string)
+    if (session.status !== 'exited') return session
+    if (!session.restorable) {
+      const why = session.exitCause === 'killed' ? 'was killed' : 'ended normally'
+      throw this.context.error('conflict', `session ${session.id} ${why} and can't be restored`)
+    }
+    const pending = this.restoring.get(session.id)
+    if (pending) return pending
+    const restoring = this.startRestore(session).finally(() => this.restoring.delete(session.id))
+    this.restoring.set(session.id, restoring)
+    return restoring
+  }
+
+  private async startRestore(session: Session): Promise<Session> {
+    const additions = await this.context.launch.hooks({
+      sessionId: session.id,
+      worktreeId: session.worktreeId,
+      repoId: this.records.repoIdOf(session.id) ?? '',
+      cwd: session.cwd,
+      agent: 'shell'
+    })
+    await this.context.pty.spawn(session.id, {
+      argv: this.context.launch.shellArgv(),
+      cwd: session.cwd,
+      env: this.context.launch.env({
+        sessionId: session.id,
+        worktreeId: session.worktreeId,
+        agent: 'shell',
+        envPatch: additions.env as Record<string, string>
+      }),
+      cols: 80,
+      rows: 24,
+      shellReady: this.context.launch.shellReady(),
+      restore: true
+    })
+    const restored = this.records.update(session.id, {
+      status: 'running',
+      agent: 'shell',
+      exitCode: null,
+      exitSignal: null,
+      exitCause: null,
+      restorable: false,
+      lastActivityAt: Date.now()
+    })
+    if (!restored) {
+      await this.context.pty.forget(session.id).catch(() => {})
+      throw this.context.error('conflict', `session ${session.id} was closed while it was restoring`)
+    }
+    return this.publish(restored)
   }
 
   private require(sessionId: string): Session {
@@ -185,7 +276,10 @@ export class SessionService {
       status: 'starting',
       createdAt: now,
       lastActivityAt: now,
-      exitCode: null
+      exitCode: null,
+      exitSignal: null,
+      exitCause: null,
+      restorable: false
     }
   }
 

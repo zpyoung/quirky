@@ -42,6 +42,14 @@ const named: CliModule['commands'] = {
     if (session === undefined) throw ctx.usage('missing <session>')
     const result = await ctx.call('quirky.session/close', { session })
     ctx.out.result(result, () => `closed ${session}`)
+  },
+
+  async restore(args, ctx) {
+    const session = args.positionals[0]
+    if (session === undefined) throw ctx.usage('missing <session>')
+    const before = (await ctx.call('quirky.session/get', { session })) as Session
+    const result = (await ctx.call('quirky.session/restore', { session })) as Session
+    ctx.out.result(result, () => (before.status === 'exited' ? `restored ${session}` : `${session} is already running`))
   }
 }
 

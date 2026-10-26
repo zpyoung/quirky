@@ -44,7 +44,10 @@ export class FakeWorld {
         status: 'starting',
         createdAt: now,
         lastActivityAt: now,
-        exitCode: null
+        exitCode: null,
+        exitSignal: null,
+        exitCause: null,
+        restorable: false
       }
       this.sessions.set(session.id, session)
       return session
@@ -122,7 +125,10 @@ export class FakeWorld {
       status: 'running',
       createdAt: 1,
       lastActivityAt: 1,
-      exitCode: null
+      exitCode: null,
+      exitSignal: null,
+      exitCause: null,
+      restorable: false
     }
     this.sessions.set(session.id, session)
     return session

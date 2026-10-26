@@ -40,7 +40,10 @@ export function activate(context: PluginContext): void {
       status: 'running',
       createdAt: now,
       lastActivityAt: now,
-      exitCode: null
+      exitCode: null,
+      exitSignal: null,
+      exitCause: null,
+      restorable: false
     }
   }
 
