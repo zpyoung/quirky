@@ -784,6 +784,170 @@ test('SC-4: a contribution that leaves while its module loads is never mounted a
   expect(() => record.contexts[0].call('repo.list')).toThrow('acme.notes is not active')
 })
 
+test('C1: re-enabling a contribution while the orphaned load awaits deactivate reactivates the plugin', async () => {
+  const t = setup(makeModel({ sidebarSections: [section(NOTES, 'list')] }), { activationTimeoutMs: 5000 })
+  const importGate = gate()
+  const deactivateGate = gate()
+  const record = { activations: 0, deactivations: 0 }
+  const module: UiPluginModule = {
+    activate(context) {
+      record.activations++
+      context.provide(LIST, (el: unknown) => {
+        ;(el as Fake).text = `mounted ${record.activations}`
+      })
+    },
+    async deactivate() {
+      record.deactivations++
+      await deactivateGate.opened
+    }
+  }
+  t.useModule(NOTES, async () => {
+    await importGate.opened
+    return module
+  })
+  await t.host.refresh()
+  t.host.mount(LIST, element())
+  await tick()
+
+  t.setModel(makeModel())
+  await t.host.refresh()
+  importGate.open()
+  await until(() => record.deactivations === 1)
+
+  t.setModel(makeModel({ sidebarSections: [section(NOTES, 'list')] }))
+  await t.host.refresh()
+  const el = element()
+  t.host.mount(LIST, el)
+  await tick()
+  expect(state(t).slots[LIST]).toEqual({ status: 'loading' })
+  expect(record.activations).toBe(1)
+
+  deactivateGate.open()
+  await settled(t, LIST)
+
+  expect(state(t).slots[LIST]).toEqual({ status: 'mounted' })
+  expect((el as Fake).text).toBe('mounted 2')
+  expect(record.activations).toBe(2)
+  expect(record.deactivations).toBe(1)
+  expect(state(t).plugins[NOTES]).toEqual({ state: 'active' })
+  expect(t.imports).toEqual([urlOf(NOTES)])
+})
+
+test('C1: a command arriving during the orphaned deactivate waits for it and then runs', async () => {
+  const t = setup(makeModel({ commands: [command(NOTES, 'open')] }), { activationTimeoutMs: 5000 })
+  const importGate = gate()
+  const deactivateGate = gate()
+  const ran: unknown[] = []
+  let deactivations = 0
+  t.useModule(NOTES, async () => {
+    await importGate.opened
+    return {
+      activate(context: UiPluginContext) {
+        context.provide(OPEN, (args: unknown) => ran.push(args))
+      },
+      async deactivate() {
+        deactivations++
+        await deactivateGate.opened
+      }
+    }
+  })
+  await t.host.refresh()
+  const first = t.host.runCommand(OPEN, 'first')
+  await tick()
+  t.setModel(makeModel())
+  await t.host.refresh()
+  t.setModel(makeModel({ commands: [command(NOTES, 'open')] }))
+  importGate.open()
+  await until(() => deactivations === 1)
+  await t.host.refresh()
+
+  const second = t.host.runCommand(OPEN, 'second')
+  await tick()
+  deactivateGate.open()
+  await Promise.all([first, second])
+  expect(ran).toContain('second')
+  expect(t.toasts).toEqual([])
+})
+
+test('C2: a provide breach inside a mount function keeps its error and runs the returned cleanup', async () => {
+  const t = setup(makeModel({ sidebarSections: [section(NOTES, 'list')] }))
+  let cleanups = 0
+  t.useModule(NOTES, {
+    activate(context) {
+      context.provide(LIST, () => {
+        try {
+          context.provide('command:acme.notes/undeclared', () => {})
+        } catch {}
+        return () => cleanups++
+      })
+    }
+  })
+  await t.host.refresh()
+  t.host.mount(LIST, element())
+  await settled(t, LIST)
+  await tick()
+
+  const message = 'acme.notes does not declare command:acme.notes/undeclared'
+  expect(state(t).slots[LIST]).toEqual({ status: 'error', message })
+  expect(state(t).plugins[NOTES]).toEqual({ state: 'failed', error: message })
+  expect(cleanups).toBe(1)
+})
+
+test('C2: a cleanup that throws after a breach inside a mount function is logged', async () => {
+  const t = setup(makeModel({ sidebarSections: [section(NOTES, 'list')] }))
+  t.useModule(NOTES, {
+    activate(context) {
+      context.provide(LIST, () => {
+        try {
+          context.provide('command:acme.notes/undeclared', () => {})
+        } catch {}
+        return () => {
+          throw new Error('boom')
+        }
+      })
+    }
+  })
+  await t.host.refresh()
+  t.host.mount(LIST, element())
+  await settled(t, LIST)
+  await tick()
+
+  expect(state(t).slots[LIST]?.status).toBe('error')
+  expect(t.logs).toContain('acme.notes: cleanup failed: boom')
+})
+
+test('S3: slot import, activation, did-not-provide and mount failures are logged with the plugin ID once', async () => {
+  const t = setup(
+    makeModel({
+      sidebarSections: [section('acme.imp', 'list'), section('acme.act', 'list'), section('acme.none', 'list'), section('acme.mnt', 'list')]
+    })
+  )
+  t.useModule('acme.act', {
+    activate() {
+      throw new Error('bad activate')
+    }
+  })
+  t.useModule('acme.none', { activate() {} })
+  t.useModule('acme.mnt', {
+    activate(context) {
+      context.provide('sidebar-section:acme.mnt/list', () => {
+        throw new Error('bad mount')
+      })
+    }
+  })
+  await t.host.refresh()
+  const ids = ['acme.imp', 'acme.act', 'acme.none', 'acme.mnt'].map((plugin) => `sidebar-section:${plugin}/list`)
+  for (const id of ids) t.host.mount(id, element())
+  for (const id of ids) await settled(t, id)
+
+  expect([...t.logs].sort()).toEqual([
+    'acme.imp failed to load: no module /plugins/acme.imp/ui.js',
+    'acme.act failed to activate: bad activate',
+    'acme.none did not provide sidebar-section:acme.none/list',
+    'acme.mnt: bad mount'
+  ].sort())
+})
+
 test('SC-4: a mount disposed while its module loads is never mounted', async () => {
   const t = setup(makeModel({ sidebarSections: [section(NOTES, 'list')] }))
   const release = gate()
@@ -1017,6 +1181,19 @@ test('SC-17: a reserved chord is never handled, even for an active keybinding', 
   expect(t.host.handleKey(key('Digit1', { metaKey: true }))).toBe(false)
   await tick()
   expect(t.imports).toEqual([])
+})
+
+test('G1: a plugin keybinding on mod+t is reported shadowed by the kernel, and Cmd+T runs nothing', async () => {
+  const shadowed: UiKeybinding = { ...binding(NOTES, 't', 'mod+t', NEW, 'shadowed'), shadowedBy: 'kernel' }
+  const t = setup(makeModel({ commands: [command(NOTES, 'new')], keybindings: [shadowed] }))
+  await t.host.refresh()
+  expect(state(t).model!.keybindings).toEqual([shadowed])
+
+  expect(t.host.handleKey(key('KeyT', { metaKey: true }))).toBe(false)
+  expect(t.host.handleKey(key('KeyT', { ctrlKey: true }))).toBe(false)
+  await tick()
+  expect(t.imports).toEqual([])
+  expect(t.toasts).toEqual([])
 })
 
 test('SC-18: an unbound keybinding runs nothing and is not consumed, while a lower one that is active runs', async () => {

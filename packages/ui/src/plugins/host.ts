@@ -58,6 +58,8 @@ type Runtime = {
   /** The session whose `activate` is running; it receives events before it becomes `session`. */
   pending?: Session
   loading?: Promise<void>
+  /** The `deactivate` call of a session being torn down; a new load for the plugin waits for it. */
+  tearingDown?: Promise<void>
   importAttempts: number
 }
 
@@ -307,23 +309,44 @@ export class WindowPluginHost {
     try {
       await this.ensureLoaded(entry.plugin)
     } catch (error) {
-      if (!handle.released) this.setSlot(handle.id, { status: 'error', message: messageOf(error) })
+      if (!handle.released) this.failSlot(handle, messageOf(error))
       return
     }
     if (handle.released) return
-    const implementation = this.runtimes.get(entry.plugin)?.session?.provided.get(handle.id)
+    const session = this.runtimes.get(entry.plugin)?.session
+    const implementation = session?.provided.get(handle.id)
     if (typeof implementation !== 'function') {
-      this.setSlot(handle.id, { status: 'error', message: `${entry.plugin} did not provide ${handle.id}` })
+      this.failSlot(handle, `${entry.plugin} did not provide ${handle.id}`)
       return
     }
+    let cleanup: unknown
     try {
-      const cleanup = implementation(element, entry.kind === 'view' ? { input: props?.input } : {})
-      if (typeof cleanup === 'function') handle.cleanup = cleanup as () => void
+      cleanup = implementation(element, entry.kind === 'view' ? { input: props?.input } : {})
     } catch (error) {
-      this.setSlot(handle.id, { status: 'error', message: `${entry.plugin}: ${messageOf(error)}` })
+      if (!handle.released) this.failSlot(handle, `${entry.plugin}: ${messageOf(error)}`)
       return
     }
+    const cleanupFn = typeof cleanup === 'function' ? (cleanup as () => void) : undefined
+    // a breach inside the mount function already released the handle and wrote the slot's error
+    if (handle.released || this.runtimes.get(entry.plugin)?.session !== session) {
+      this.runCleanup(handle.plugin, cleanupFn)
+      return
+    }
+    handle.cleanup = cleanupFn
     this.setSlot(handle.id, { status: 'mounted' })
+  }
+
+  private failSlot(handle: MountHandle, message: string): void {
+    this.setSlot(handle.id, { status: 'error', message })
+    this.deps.log(message.startsWith(handle.plugin) ? message : `${handle.plugin}: ${message}`)
+  }
+
+  private runCleanup(pluginId: string, cleanup: (() => void) | undefined): void {
+    try {
+      cleanup?.()
+    } catch (error) {
+      this.deps.log(`${pluginId}: cleanup failed: ${messageOf(error)}`)
+    }
   }
 
   private release(handle: MountHandle): void {
@@ -367,15 +390,29 @@ export class WindowPluginHost {
     return runtime
   }
 
-  private ensureLoaded(pluginId: string): Promise<void> {
+  /**
+   * Resolves once the plugin has an active session, or its load failed (rejects). A session torn
+   * down by a deactivation the caller raced with is replaced by a fresh load while the plugin is
+   * still owned.
+   */
+  private async ensureLoaded(pluginId: string): Promise<void> {
     const runtime = this.runtime(pluginId)
-    if (runtime.session) return Promise.resolve()
-    if (runtime.loading) return runtime.loading
-    const loading = this.load(pluginId, runtime).finally(() => {
-      runtime.loading = undefined
-    })
-    runtime.loading = loading
-    return loading
+    for (;;) {
+      if (runtime.tearingDown) {
+        await runtime.tearingDown
+        continue
+      }
+      if (runtime.session) return
+      if (this.stopped) return
+      if (!runtime.loading) {
+        const loading = this.load(pluginId, runtime).finally(() => {
+          runtime.loading = undefined
+        })
+        runtime.loading = loading
+      }
+      await runtime.loading
+      if (runtime.session || this.stopped || !this.owns(pluginId)) return
+    }
   }
 
   private async load(pluginId: string, runtime: Runtime): Promise<void> {
@@ -464,7 +501,13 @@ export class WindowPluginHost {
     if (!runtime || !session) return
     runtime.session = undefined
     this.setPlugin(pluginId, { state: 'idle' })
-    await this.retire(runtime, session)
+    const teardown = this.retire(runtime, session)
+    runtime.tearingDown = teardown
+    try {
+      await teardown
+    } finally {
+      if (runtime.tearingDown === teardown) runtime.tearingDown = undefined
+    }
   }
 
   /** Runs `deactivate` for at most `activationTimeoutMs`, then revokes the context whatever happened. */

@@ -724,6 +724,25 @@ describe('window plugin host against a real daemon', () => {
     expect(t.lines().filter((line) => line === 'ran keys')).toHaveLength(1)
   })
 
+  test('G1: a plugin keybinding on mod+t is reported shadowed by the kernel, and Cmd+T runs nothing', async () => {
+    const t = await boot((installed, marker) =>
+      installUi(installed, marker, 'acme.tabs', {
+        command: [{ id: 'new', title: 'New' }],
+        keybinding: [{ id: 'k', key: 'mod+t', command: 'new' }]
+      }, {
+        activate: provideCommand('command:acme.tabs/new', "record('ran tabs')")
+      })
+    )
+    expect(t.state().model!.keybindings).toMatchObject([
+      { id: 'keybinding:acme.tabs/k', key: 'mod+t', status: 'shadowed', shadowedBy: 'kernel' }
+    ])
+
+    expect(t.host.handleKey(press('T'))).toBe(false)
+    await Bun.sleep(50)
+    expect(t.lines()).not.toContain('ran tabs')
+    expect(t.urls).toEqual([])
+  })
+
   test('SC-18: a keybinding whose command isn\'t in effect is unbound', async () => {
     const t = await boot((installed, marker) =>
       installUi(installed, marker, 'acme.notes', {
