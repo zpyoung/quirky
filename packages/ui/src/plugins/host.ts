@@ -133,7 +133,8 @@ function sameJson(a: unknown, b: unknown): boolean {
 }
 
 /**
- * Loads plugin UI modules on demand and mounts their contributions into elements the shell owns.
+ * Loads every enabled plugin's UI module once the window has the UI model, keeps it active while
+ * the plugin stays enabled, and mounts its contributions into elements the shell owns.
  * It holds no React and touches no DOM global: an element is a value passed through to the
  * plugin's mount function, never inspected. All state the shell renders is in `getState()`; the
  * layout in it is the daemon's, changed only by the daemon's `ui.state.changed` broadcasts.
@@ -187,8 +188,9 @@ export class WindowPluginHost {
 
   /**
    * Fetches the UI model, settings and layout, then reconciles: mounted contributions that left or
-   * changed owner are cleaned up and plugins owning nothing are deactivated. Refreshes run one
-   * after another; the last one's data wins.
+   * changed owner are cleaned up, plugins that are no longer enabled are deactivated and newly
+   * enabled ones start loading in the background. Refreshes run one after another; the last one's
+   * data wins.
    */
   refresh(): Promise<void> {
     const run = this.refreshChain.then(() => this.fetchAndReconcile())
@@ -347,15 +349,30 @@ export class WindowPluginHost {
       const entry = findSlot(model, handle.id)
       if (!entry || entry.plugin !== handle.plugin) this.release(handle)
     }
-    const orphaned = [...this.runtimes.keys()].filter((id) => !this.owns(id))
-    await Promise.all(orphaned.map((id) => this.deactivate(id)))
+    const departed = [...this.runtimes.keys()].filter((id) => !this.enabled(id))
+    for (const id of departed) {
+      // a plugin that failed and was then disabled gets a clean start when it comes back
+      if (this.state.plugins[id]?.state === 'failed') this.setPlugin(id, { state: 'idle' })
+    }
+    await Promise.all(departed.map((id) => this.deactivate(id)))
+    this.startEnabled(model)
   }
 
-  private owns(pluginId: string): boolean {
-    const model = this.state.model
-    if (!model) return false
-    const entries = [...model.sidebarSections, ...model.panels, ...model.views, ...model.commands]
-    return entries.some((entry) => entry.plugin === pluginId)
+  /** Whether the daemon's model lists a UI module for the plugin, i.e. it is enabled and has code-backed UI. */
+  private enabled(pluginId: string): boolean {
+    return this.state.model?.modules[pluginId] !== undefined
+  }
+
+  /**
+   * Starts loading each enabled plugin that has no session yet, without waiting for them. A plugin
+   * whose last load failed is not retried here, only by a mount or command that needs it.
+   */
+  private startEnabled(model: UiModel): void {
+    for (const pluginId of Object.keys(model.modules)) {
+      const runtime = this.runtimes.get(pluginId)
+      if (runtime?.session || this.state.plugins[pluginId]?.state === 'failed') continue
+      this.ensureLoaded(pluginId).catch(() => undefined)
+    }
   }
 
   private async runMount(
@@ -367,7 +384,7 @@ export class WindowPluginHost {
     try {
       await this.ensureLoaded(entry.plugin)
     } catch (error) {
-      if (!handle.released) this.failSlot(handle, messageOf(error))
+      if (!handle.released) this.setSlot(handle.id, { status: 'error', message: messageOf(error) })
       return
     }
     if (handle.released) return
@@ -459,7 +476,7 @@ export class WindowPluginHost {
   /**
    * Resolves once the plugin has an active session, or its load failed (rejects). A session torn
    * down by a deactivation the caller raced with is replaced by a fresh load while the plugin is
-   * still owned.
+   * still enabled.
    */
   private async ensureLoaded(pluginId: string): Promise<void> {
     const runtime = this.runtime(pluginId)
@@ -477,7 +494,7 @@ export class WindowPluginHost {
         runtime.loading = loading
       }
       await runtime.loading
-      if (runtime.session || this.stopped || !this.owns(pluginId)) return
+      if (runtime.session || this.stopped || !this.enabled(pluginId)) return
     }
   }
 
@@ -485,6 +502,7 @@ export class WindowPluginHost {
     const declared = this.state.model?.modules[pluginId]
     if (!declared) {
       this.fail(pluginId, `${pluginId} has no ui module`)
+      this.deps.log(`${pluginId} has no ui module`)
       throw new LoadFailure(`${pluginId} has no ui module`)
     }
     this.setPlugin(pluginId, { state: 'loading' })
@@ -504,6 +522,7 @@ export class WindowPluginHost {
     } catch (error) {
       revoke(session)
       this.fail(pluginId, messageOf(error))
+      this.deps.log(messageOf(error))
       throw error
     } finally {
       runtime.pending = undefined
@@ -515,7 +534,7 @@ export class WindowPluginHost {
     }
     runtime.session = session
     this.setPlugin(pluginId, { state: 'active' })
-    if (!this.owns(pluginId)) await this.deactivate(pluginId)
+    if (!this.enabled(pluginId)) await this.deactivate(pluginId)
   }
 
   private async importAndActivate(pluginId: string, runtime: Runtime, url: string, session: Session): Promise<void> {
