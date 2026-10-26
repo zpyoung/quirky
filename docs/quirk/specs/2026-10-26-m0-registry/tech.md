@@ -129,7 +129,11 @@ discoverPlugins(dirs: { builtin: string | null; installed: string }): Discovered
 - A subdirectory without `quirky-plugin.json` is a `DiscoveredPlugin` with the error "no
   quirky-plugin.json".
 - Built-ins come first, each list sorted by directory name. An installed plugin whose `id` equals
-  a built-in's gets "duplicates the built-in plugin <id>". The built-in keeps working.
+  a built-in's gets "duplicates the built-in plugin <id>". The built-in keeps working. This
+  includes an unusable installed manifest whose fallback ID (its directory name) equals a
+  built-in's ID.
+- Plugin entries are identified by `(source, id)`, never by `id` alone: a duplicate is a second
+  entry, listed separately.
 
 ### Registry ([Overrides](logic.md#overrides), [Disabling](logic.md#disabling))
 
@@ -139,7 +143,8 @@ CONTRACT:
 ```ts
 computeRegistry(plugins: DiscoveredPlugin[], disabled: ReadonlySet<string>): Registry
 type Registry = {
-  plugins: Map<string, RegistryPlugin>     // by plugin id
+  entries: RegistryPlugin[]                // every discovered entry, sorted by id, built-in before installed
+  plugins: Map<string, RegistryPlugin>     // by plugin id: the usable entry only (never an invalid duplicate)
   declarations: ContributionInfo[]         // every declaration from non-invalid plugins, sorted by id then plugin
   effective: Map<string, ContributionInfo> // contribution id -> the declaration in effect
 }
@@ -152,10 +157,12 @@ type RegistryPlugin = {
 
 Rules, applied in this order:
 
-1. **Invalid:** plugins with `errors`. Then, repeatedly until stable: a plugin depending on an ID
-   not in the discovered set is invalid ("dependency <id> is not installed"); one depending on an
-   invalid plugin is invalid ("dependency <id> is invalid"). Then every plugin on a dependency
-   cycle among the rest is invalid with "dependency cycle: <ids sorted, comma-separated>".
+1. **Invalid:** plugins with `errors` (including invalid duplicates, which are excluded from
+   everything below). Then repeat until nothing changes: (a) a plugin depending on an ID not in
+   the discovered set is invalid ("dependency <id> is not installed"); (b) one depending on an
+   invalid plugin is invalid ("dependency <id> is invalid"); (c) every plugin on a dependency cycle
+   among the still-valid ones is invalid with "dependency cycle: <ids sorted, comma-separated>".
+   So a plugin depending on a cycle member becomes invalid through (b) on the next pass.
 2. **Disabled:** a plugin whose ID is in `disabled` ("disabled by the user"). Then, repeatedly: a
    plugin depending on a disabled plugin is disabled ("dependency <id> is disabled").
 3. **Declarations:** each non-invalid plugin's `contributes` entries become declarations under
@@ -244,7 +251,7 @@ class PluginHost {
   })
   load(): void                           // discover + compute; no plugin code runs
   activateStartup(): Promise<void>       // activates every enabled 'startup' plugin; never rejects
-  list(): PluginInfo[]                   // sorted by id
+  list(): PluginInfo[]                   // every entry, sorted by id, built-in first; a duplicate ID appears once per source
   contributions(filter?: { kind?: string; pluginId?: string; all?: boolean }): ContributionInfo[]
   activate(pluginId: string): Promise<PluginInfo>
   resolve(id: string): Promise<{ contribution: ContributionInfo; implementation: unknown }>
@@ -272,11 +279,23 @@ class PluginHost {
 - **`setEnabled`:** InvalidParams when `id` is neither a plugin ID nor a contribution ID by regex.
   NotFound when it is not a discovered plugin ID, nor a contribution ID declared by any
   non-invalid plugin, and (for enable) not in the stored list. Otherwise writes the store,
-  recomputes the registry, deactivates every plugin that was `active` and is now `disabled` (in
-  reverse activation order), activates newly enabled `startup` plugins, and emits
-  `plugin.changed` once. Idempotent.
+  recomputes the registry, waits for any in-flight activation of a plugin that is now `disabled`
+  to settle, deactivates every plugin that is `active` and now `disabled` (in reverse activation
+  order), activates newly enabled `startup` plugins (awaited; a failure is recorded, not thrown),
+  and emits `plugin.changed` once. Idempotent.
+- **Deactivation, live or at stop:** each `deactivate` is bounded by the timeout. A throw or a
+  timeout doesn't stop the operation: the plugin's runtime state is reset, its context revoked and
+  its implementations dropped regardless, and it gets the warning "deactivate failed: <message>"
+  or "deactivate timed out after <n> ms". `setEnabled` still returns `{ ok: true }` and emits its
+  event.
+- **Serialization:** `setEnabled` calls run one at a time through a host-wide queue, and an
+  activation checks the registry status of its plugin when it starts, after its dependencies
+  settle, and after its module's `activate` settles. If the plugin is no longer enabled at any of
+  those points, the activation stops with Conflict "<id> was disabled during activation", its
+  context is revoked, and when its `activate` had already run, its `deactivate` runs. So a plugin
+  disabled mid-activation never ends `active`.
 - **`stop`:** deactivates `active` plugins in reverse activation order, each bounded by the
-  timeout; a throw is logged and the next one still runs.
+  timeout as above; it first waits for in-flight activations to settle.
 - Runtime state (`inactive` | `activating` | `active` | `failed`) is kept per plugin and reported
   only for registry status `enabled`; `disabled` and `invalid` come from the registry.
 
@@ -349,8 +368,10 @@ CONFIG: installed plugins dir `<home>/plugins`, created with mode 0700 if missin
   `activateStartup()`. Prefix every log line from plugin code with the plugin ID.
 - **Ask (headless: decide and log a decision):** any change to a rule in the Registry section;
   any new top-level manifest field.
-- **Never:** import a plugin module during `load()`, listing, or enable/disable of a plugin that
-  isn't active. Never let one plugin's failure reject daemon startup. Never touch the real
+- **Never:** import a plugin module except to activate it, and activate only for the four reasons
+  in [Conceptual model](logic.md#conceptual-model): resolve, `plugin.activate`, as a dependency of
+  an activating plugin, or `startup` (at daemon start or when enabled). Listing, `load()`, and
+  enabling a lazy plugin import nothing. Never let one plugin's failure reject daemon startup. Never touch the real
   `~/.quirky` in tests.
 
 ## Cross-cutting
@@ -364,23 +385,30 @@ CONFIG: installed plugins dir `<home>/plugins`, created with mode 0700 if missin
 
 ## Testing strategy
 
-Acceptance bar: every scenario SC-1 to SC-24 has at least one named test, plus the three repo
+Acceptance bar: every scenario SC-1 to SC-26 has at least one named test, plus the three repo
 commands (`bun run test`, `bun test scripts`, `bun run typecheck`) pass.
 
 - `packages/protocol/test/plugins.test.ts`: ID regexes and parse/format round trips, including
   the 64/128 length limits and invalid shapes.
 - `packages/daemon/test/plugins/manifest.test.ts`: each manifest error in the list above.
+Every scenario reachable through the API has an API test; the unit and host tests are extra
+coverage for the rules, not a substitute.
+
 - `packages/daemon/test/plugins/registry.test.ts`: pure tests of rules 1-6, including SC-12's
   order independence (compute with the input reversed and shuffled and compare), SC-13, SC-14,
-  SC-15, SC-19, SC-20, and the cycle message.
+  SC-15, SC-19, SC-20, the cycle message, a plugin depending on a cycle member, and the
+  duplicate built-in entry.
 - `packages/daemon/test/plugins/host.test.ts`: `PluginHost` against fixture directories in a temp
   dir with fixture `.ts` modules (written by a helper) that record imports, activations and
-  deactivations in a marker file: SC-4, SC-5, SC-8, SC-9 (both directions), SC-11, SC-17, SC-23
-  (with a short timeout), SC-24.
-- `packages/daemon/test/plugins/api.test.ts`: through `startHarness` and a real client: SC-1,
-  SC-2, SC-3, SC-6, SC-7, SC-10, SC-16 (including a stop and a second `startDaemon` on the same
-  home, and the `plugin.changed` events), SC-18, SC-21, SC-22, and that `status.get` still answers
-  while a plugin is failing (SC-23).
+  deactivations in a marker file. The resolve scenarios live only here: SC-5, SC-11, SC-17, and
+  the "did not provide" half of SC-9. Also the serialization rules (SC-25 interleavings: disable
+  while a dependency is activating, and while the module's `activate` is pending) and deactivate
+  throwing or timing out.
+- `packages/daemon/test/plugins/api.test.ts`: through `startHarness` and a real client: SC-1 to
+  SC-4, SC-6 to SC-10, SC-12 to SC-16 (SC-16 including a stop and a second `startDaemon` on the
+  same home, and the `plugin.changed` events), SC-18 to SC-26, and that `status.get` still
+  answers while a plugin is failing (SC-23). SC-8 issues two concurrent `plugin.activate` calls.
+  SC-24 stops the daemon through its handle and reads the marker file.
 - `packages/cli/test/plugin.test.ts` (or new cases in `cli.e2e.test.ts`): each `quirky plugin`
   command against `FakeDaemon`: the params it sends, table and `--json` output, and the non-zero
   exit for an RPC error (SC-21).

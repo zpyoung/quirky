@@ -4,7 +4,8 @@
 
 **Status:** Approved (headless build loop; decisions in [m0-registry.md](../../../loop/decisions/m0-registry.md)). Tech spec: requested.
 
-**Amendments:** none yet.
+**Amendments:**
+- 2026-10-26, before approval: Codex adversarial review. Clarified the four reasons a plugin's code loads; added the one-at-a-time rule for enable, disable and activation (SC-25), startup activation on enable (SC-26), deactivate failures during a live disable (SC-18), invalidity reaching dependents of a cycle, and duplicate built-in IDs listed as their own entry (SC-22).
 
 ## Conceptual model
 
@@ -32,7 +33,10 @@ contributions, overriding them and disabling them never runs plugin code.
 **Activation** imports a plugin's module and calls it, so the plugin can provide implementations
 for the contributions it declared. A lazy plugin activates the first time one of its in-effect
 contributions is resolved, or when asked to through the API. Its dependencies activate first. A
-plugin whose contributions are all overridden or disabled is never loaded.
+plugin's code is loaded for exactly four reasons: one of its in-effect contributions is resolved,
+the API asks for it, a plugin depending on it activates, or it is a `startup` plugin (at daemon
+start, or when it is enabled). So a lazy plugin whose contributions are all overridden or disabled
+is never loaded unless one of the other three reasons applies.
 
 ## Data flow
 
@@ -48,7 +52,10 @@ the plugin provided.
 
 When the user or an agent enables or disables an ID through `quirky plugin` or the `plugin.*`
 methods, the kernel saves the disabled list, recomputes the registry, deactivates any active
-plugin that just became disabled, and sends a `plugin.changed` event. No restart is involved.
+plugin that just became disabled, activates any `startup` plugin that just became enabled, and
+sends a `plugin.changed` event. No restart is involved. Enable and disable changes and the start of
+each activation happen one at a time, so a plugin being disabled while it is still activating ends
+up deactivated and disabled, never active.
 
 When the daemon stops, it deactivates active plugins in the reverse of the order they activated.
 
@@ -83,7 +90,7 @@ Each is logged in full, with options and evidence, in the item's decision log
 
 The fixtures are illustrative. "Built-in" means found in the built-in plugins directory, and
 "installed" means found under `<QUIRKY_HOME>/plugins/`. Every scenario is driven through the
-`plugin.*` daemon methods or the `quirky plugin` CLI, except SC-5 and SC-17, which are kernel
+`plugin.*` daemon methods or the `quirky plugin` CLI, except SC-5, SC-11 and SC-17, which are kernel
 paths that later items reach through their own methods ([D22](../../../loop/decisions/m0-registry.md)).
 
 ### Discovery and IDs
@@ -212,7 +219,7 @@ paths that later items reach through their own methods ([D22](../../../loop/deci
 18. **SC-18: disabling a plugin removes its contributions and disables its dependents**
     - **Given** `acme.tools` depends on `acme.base`, and `acme.base` is active
     - **When** the agent runs `quirky plugin disable acme.base`
-    - **Then** `acme.base` is deactivated and disabled, `acme.tools` is disabled with a diagnostic naming `acme.base`, and neither plugin's contributions are in effect. Enabling `acme.base` again makes both inactive and their contributions in effect.
+    - **Then** `acme.base` is deactivated and disabled, `acme.tools` is disabled with a diagnostic naming `acme.base`, and neither plugin's contributions are in effect. Enabling `acme.base` again makes both inactive and their contributions in effect. When a deactivate throws or doesn't settle within the activation timeout, the disable still completes: the plugin is disabled, its implementations are dropped, and it carries a warning saying its deactivate failed or timed out.
     - **Walkthrough:**
       1. The agent disables `acme.base`
       2. The kernel calls `acme.base`'s deactivate
@@ -233,6 +240,16 @@ paths that later items reach through their own methods ([D22](../../../loop/deci
     - **When** the agent runs `quirky plugin disable acme.nope`, or `quirky plugin enable` of an ID that isn't disabled and doesn't exist
     - **Then** the command fails with a not-found error and a non-zero exit, and the disabled list is unchanged
 
+25. **SC-25: disabling a plugin while it activates**
+    - **Given** `acme.slowstart`'s activate takes a moment to finish
+    - **When** the agent runs `quirky plugin activate acme.slowstart` and, before it returns, `quirky plugin disable acme.slowstart`
+    - **Then** the disable waits for the activation to settle, then deactivates the plugin; it ends `disabled`, the activate call reports that the plugin was disabled, and resolving its contributions fails as not found
+
+26. **SC-26: enabling a startup plugin activates it**
+    - **Given** `acme.watch` declares startup activation and is disabled
+    - **When** the agent runs `quirky plugin enable acme.watch`
+    - **Then** `acme.watch` is active when the command returns
+
 ### Bad plugins
 
 22. **SC-22: an invalid plugin is reported and skipped**
@@ -250,6 +267,9 @@ paths that later items reach through their own methods ([D22](../../../loop/deci
       | Installed `quirky.sample` again | duplicates the built-in plugin |
       | Depends on `acme.ghost` | dependency `acme.ghost` is not installed |
       | `acme.a` and `acme.b` depend on each other | dependency cycle: acme.a, acme.b |
+      | `acme.c` depends on `acme.a`, which is on that cycle | dependency acme.a is invalid |
+
+      The installed duplicate of `quirky.sample` is listed as its own invalid entry beside the working built-in, so the list shows two entries with that ID, one per source.
 
 23. **SC-23: a failing activation is contained**
     - **Given** `acme.broken`'s activate throws, `acme.slow`'s never settles, and `acme.after` depends on `acme.broken`

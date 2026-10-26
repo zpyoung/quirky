@@ -267,5 +267,57 @@
 - **Confidence:** medium
 - **Source:** assumed — autonomous
 
+## D26: Build with Claude subagents implementing and Codex reviewing
+- **Question:** subagent-driven-development preflight `backend_pairing`
+- **Options:** claude-task + codex (recommended); claude-task + gemini; pi-codex + opus; same-family pairs
+- **Chose:** claude-task + codex. Both `pi-watch --check codex` and `--check gemini` passed in a scratch directory. AUTHOR_FAMILY is anthropic.
+- **Why:** LOOP.md step 5 names this pairing, and Codex was reachable
+- **Evidence:** docs/loop/LOOP.md step 5
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** locked by docs/loop/LOOP.md
+
+## D27: The build starts on a clean `build/m0-registry` with the specs committed
+- **Question:** preflight `dirty_tree_action` and the start-on-main check
+- **Options:** stash; commit; abort
+- **Chose:** none needed. The tree was clean on `build/m0-registry`, not main.
+- **Why:** git status was empty after the spec commit
+- **Evidence:** `git status --porcelain` empty
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** assumed — autonomous
+
+## D28: Test commands are the repo's three LOOP.md commands
+- **Question:** preflight `FULL_SUITE_CMD` and build command
+- **Options:** `bun run test` plus `bun test scripts` plus `bun run typecheck`; per-package runs
+- **Chose:** FULL_SUITE_CMD is `bun run test && bun test scripts && bun run typecheck`. The baseline was green before any change: 360 tests passed, scripts 14 passed, typecheck clean.
+- **Why:** LOOP.md step 6 names these three, and there is no separate build step for the daemon
+- **Evidence:** package.json scripts; baseline run on 2026-10-26
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** locked by docs/loop/LOOP.md
+
+## D29: Spec review findings: fix the seven model findings, reject the pre-pass reference and heading findings
+- **Question:** how to adjudicate the Codex adversarial review of logic.md and tech.md (LOOP.md step 4)
+- **Options:** fix each confirmed finding; record a reason for each one not fixed
+- **Chose:** fixed every model finding that stood after refutation: the "never loaded" contradiction with startup and dependency activation (logic F1), cycle-dependent invalidity (logic F3, tech F2), duplicate IDs being unrepresentable (tech F1), disable racing activation (tech F3, and logic F2, which the evidence gate dropped but tech F3 repeats), startup activation on enable contradicting the import fence (tech F4), and deactivate failures during a live disable (tech F5). Also took the contested tech F6 and gave every API-reachable scenario an API test. Rejected 55 pre-pass `unresolvable-reference` findings and both `failing-check` heading findings.
+- **Why:** the reference findings name contribution IDs used as examples (`command:acme.tools/refresh`), plugin states, and files this item creates, none of which exist before the build. The heading check wants "Purpose" or "Overview", which the repo's writing rules forbid as headings, and "Decisions Locked", which belongs in logic.md (it is there), not tech.md. Verdicts were NEEDS_FIXES for both, reviewer gpt-6.1-sol (openai), independence full, depth standard, profile spec-design.
+- **Evidence:** scratchpad gate.json for each spec; CLAUDE.md "Headings should tell the story on their own, so never Overview"
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** the build's final review finds a spec gap these fixes missed
+- **Source:** assumed — autonomous
+
+## D30: No closure review round on the specs
+- **Question:** whether to run adversarial-review's optional closure pass over the spec fixes
+- **Options:** run one closure round per spec; rely on the build's final review loop
+- **Chose:** rely on the build's final review loop, whose spec-compliance lens reads the amended specs against the code
+- **Why:** LOOP.md requires fixing confirmed findings, which is done; a closure pass costs two more Codex dispatches per spec, and the final deep review covers the same contracts with the code in hand
+- **Evidence:** docs/loop/LOOP.md step 4; quirk:subagent-driven-development Step 8
+- **Reversibility:** easy
+- **Confidence:** medium
+- **Revisit if:** the final review finds defects that trace to the spec fixes
+- **Source:** assumed — autonomous
+
 ## Progress
-Specs written (docs/quirk/specs/2026-10-26-m0-registry/logic.md and tech.md). Adversarial review with Codex running on both. Next: apply confirmed findings, commit specs, then run quirk:subagent-driven-development against tech.md.
+Specs reviewed and fixed. Next: quirk:subagent-driven-development Step 3 onward (decompose, waves, build), against tech.md.
