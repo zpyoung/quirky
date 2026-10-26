@@ -440,3 +440,5 @@
 - **Confidence:** high
 - **Source:** assumed — autonomous
 
+## Progress
+Building. Waves 1-3 merged with checkpoints closed (D40-D43); wave 4 (T8 daemon scenario suite, T9 window scenario suite) dispatched from b6bb471. Next: audit and merge wave 4, full gate, final review loop over b7613ba..HEAD (deep, three Codex lenses), then LOOP.md step 6-7. If this session stops early, check for leftover worktrees under the session scratchpad wt/ and branches build/m0-ui-api-w4-*.
