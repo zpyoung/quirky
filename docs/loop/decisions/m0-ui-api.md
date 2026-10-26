@@ -348,3 +348,24 @@
 - **Confidence:** high
 - **Source:** assumed — autonomous
 
+## D35: `title` is optional for views and commands and required for panels and sidebar sections
+- **Question:** tech spec, existing fixtures: about thirty daemon test fixtures declare `view` and `command` contributions with only an `id`, and two declare a `panel` with no title
+- **Options:** require `title` on every code-backed kind and rewrite the fixtures; make it optional where a name is a usable fallback
+- **Chose:** optional for `view` and `command`, defaulting to the contribution name; required for `panel` and `sidebar-section`, whose title is the only label a person sees on the toggle or section header. The two panel fixtures and the `kinds.test.ts` test that pins "arbitrary fields are left alone" for `command` are updated.
+- **Why:** a command name such as `refresh` reads fine in the palette, while an untitled panel toggle or section header would be blank. Keeping most fixtures valid keeps m0-registry's tests meaningful without churn.
+- **Evidence:** packages/daemon/test/plugins/host.test.ts:120-216, api.test.ts:80-446, kinds.test.ts:117-119, manifest.test.ts:113, registry.test.ts:74
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** assumed — autonomous
+
+## D36: Tech-spec mechanisms: two new store tables, derived warnings through a host hook, React shared by marking it external
+- **Question:** the `[tech-spec]` Deferred Ideas from the logic spec
+- **Options:** for values, the v1 `settings` table or new tables; for warnings, `addWarning` or a derived-diagnostics hook; for React, a shared chunk or bare imports resolved by an import map in both the window and plugins; for tests, a DOM library or a framework-free host
+- **Chose:** `setting_values` and `ui_state` tables (v1's `getSettings` spreads every `settings` row into its result); a `deriveDiagnostics` option that `recompute` calls, because `addWarning` emits `plugin.changed` and would loop; `main.js` built with React external so the window and plugins resolve the same import-map URLs; a `WindowPluginHost` with injected `call`, `onEvent` and `importModule`, tested against a real daemon with a fetch-to-temp-file importer, since Bun can't import over HTTP
+- **Why:** each is the smallest change that keeps an existing contract (v1 settings, no event loops, one React by construction, no new test dependency)
+- **Evidence:** packages/daemon/src/store.ts:304-310; packages/daemon/src/plugins/host.ts:176-209; packages/ui/build.ts:10-17
+- **Reversibility:** medium
+- **Confidence:** medium
+- **Revisit if:** Bun's bundler can't re-export React's CommonJS API from the vendor entries
+- **Source:** assumed — autonomous
+
