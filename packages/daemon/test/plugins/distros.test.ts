@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from 'bun:test'
-import { existsSync, mkdirSync, readdirSync, readFileSync, symlinkSync, writeFileSync } from 'node:fs'
+import { chmodSync, existsSync, mkdirSync, readdirSync, readFileSync, symlinkSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import {
   RpcErrorCode,
@@ -187,6 +187,92 @@ describe('SC-54: installing a distro applies its layer', () => {
     expect(layer.installedIds()).toEqual(['night.more'])
     expect(layer.distros.list()).toHaveLength(1)
     expect(scrollback(layer)).toMatchObject({ value: 2000, source: 'default' })
+  })
+})
+
+describe('reinstalling a distro whose plugin code changed', () => {
+  const MODULE = (n: number) =>
+    [
+      'export function activate(context: any) {',
+      `  context.provide('method:night.code/get', () => ${n})`,
+      '}',
+      ''
+    ].join('\n')
+  const codePlugin = { id: 'night.code', name: 'Code', version: '1.0.0', main: 'main.ts', contributes: { method: [{ id: 'get' }] } }
+  const writeCodeDistro = (n: number) => {
+    const root = makeTempDir('qd-c-')
+    mkdirSync(root, { recursive: true })
+    writeFileSync(join(root, 'quirky-distro.json'), JSON.stringify({ id: 'code', name: 'Code', version: '1.0.0', plugins: ['plugins/night.code'] }))
+    writePlugin(join(root, 'plugins'), codePlugin, { 'main.ts': MODULE(n) })
+    return root
+  }
+
+  test('the plugin reloads on the new code although its version is unchanged', async () => {
+    const layer = makeLayer()
+    const get = async () => ((await layer.host.resolveImplementation('method:night.code/get')) as () => number)()
+    await layer.distros.install(writeCodeDistro(1))
+    expect(await get()).toBe(1)
+
+    await layer.distros.install(writeCodeDistro(2))
+
+    expect(await get()).toBe(2)
+    await layer.host.stop()
+  })
+
+  test('removing the distro deactivates its running plugins', async () => {
+    const layer = makeLayer()
+    await layer.distros.install(writeCodeDistro(1))
+    await layer.host.activate('night.code')
+
+    await layer.distros.remove('code')
+
+    expect(layer.host.list().find((plugin) => plugin.id === 'night.code')).toBeUndefined()
+    await layer.host.stop()
+  })
+})
+
+describe('a failed swap leaves the previous install intact', () => {
+  test('when a later plugin cannot be swapped, the earlier ones are put back and the distro row is unchanged', async () => {
+    const layer = makeLayer()
+    const bundle = (version: string) =>
+      writeDistro(makeTempDir('qd-n-'), { ...NIGHT, version, plugins: ['plugins/night.extras', 'plugins/night.two'] }, [
+        nightExtras({ version }),
+        { id: 'night.two', name: 'Two', version }
+      ])
+    await layer.distros.install(bundle('1.0.0'))
+    const pluginsDir = join(layer.home, 'plugins')
+    const manifestOf = (id: string) => readFileSync(join(pluginsDir, id, MANIFEST_FILE), 'utf8')
+    const before = { extras: manifestOf('night.extras'), two: manifestOf('night.two') }
+    // an undeletable leftover at the second plugin's backup path makes its swap fail after the first succeeded
+    const blocker = join(pluginsDir, '.old-night.two', 'sub')
+    mkdirSync(blocker, { recursive: true })
+    writeFileSync(join(blocker, 'file'), '')
+    chmodSync(blocker, 0o555)
+
+    let error: { code: number } | undefined
+    try {
+      await layer.distros.install(bundle('2.0.0')).catch((caught) => {
+        error = caught
+      })
+    } finally {
+      chmodSync(blocker, 0o755)
+    }
+
+    expect(error?.code).toBe(RpcErrorCode.Internal)
+    expect(manifestOf('night.extras')).toBe(before.extras)
+    expect(manifestOf('night.two')).toBe(before.two)
+    expect(layer.distros.list()[0]?.version).toBe('1.0.0')
+    expect(readdirSync(pluginsDir).filter((name) => name.startsWith('.tmp-') || name === '.old-night.extras')).toEqual([])
+    expect(layer.host.list().filter((plugin) => plugin.source === 'installed').map((plugin) => plugin.version)).toEqual(['1.0.0', '1.0.0'])
+  })
+
+  test('a successful reinstall leaves no scratch directory either', async () => {
+    const layer = makeLayer()
+    await layer.distros.install(writeDistro(makeTempDir('qd-n-')))
+    await layer.distros.install(writeDistro(makeTempDir('qd-n-'), { ...NIGHT, version: '1.1.0' }, [nightExtras({ version: '2.0.0' })]))
+
+    expect(readdirSync(join(layer.home, 'plugins'))).toEqual(['night.extras'])
+    expect(layer.host.list().find((plugin) => plugin.id === 'night.extras')?.version).toBe('2.0.0')
   })
 })
 

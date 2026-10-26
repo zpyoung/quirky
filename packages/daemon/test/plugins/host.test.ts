@@ -10,7 +10,7 @@ afterEach(removeTempDirs)
 const COMMAND = 'command:acme.tools/refresh'
 const SIDEBAR = 'view:quirky.sample/sidebar'
 
-function setup(options: { disabled?: string[]; timeoutMs?: number } = {}) {
+function setup(options: { disabled?: string[]; distroDisabled?: string[]; timeoutMs?: number } = {}) {
   const root = makeTempDir()
   const builtinDir = join(root, 'builtin')
   const installedDir = join(root, 'installed')
@@ -33,7 +33,8 @@ function setup(options: { disabled?: string[]; timeoutMs?: number } = {}) {
     },
     emit: (event) => events.push(event),
     log: (message) => logs.push(message),
-    activationTimeoutMs: options.timeoutMs
+    activationTimeoutMs: options.timeoutMs,
+    distroDisabled: () => options.distroDisabled ?? []
   })
   const installed = (manifest: { id: string } & Record<string, unknown>, behavior?: ModuleBehavior) =>
     writeModulePlugin(installedDir, marker, manifest, behavior)
@@ -627,6 +628,28 @@ describe('deactivation failures', () => {
     await expect(t.host.resolve(COMMAND)).rejects.toMatchObject({ code: RpcErrorCode.NotFound })
     await t.host.setEnabled('acme.tools', true)
     expect(await t.host.resolveImplementation(COMMAND)).toEqual({ run: expect.any(Function) })
+  })
+})
+
+describe('who disabled a contribution', () => {
+  const declares = { contributes: { command: [{ id: 'a' }, { id: 'b' }] } }
+
+  test('a contribution only the distro disables reports the distro; one the user also disables reports the user', () => {
+    const t = setup({ disabled: ['command:acme.tools/b'], distroDisabled: ['command:acme.tools/a', 'command:acme.tools/b'] })
+    t.installed({ id: 'acme.tools', ...declares })
+    t.host.load()
+
+    const disabledBy = (id: string) => t.host.contributions({ all: true }).find((item) => item.id === id)?.disabledBy
+    expect(disabledBy('command:acme.tools/a')).toBe('distro')
+    expect(disabledBy('command:acme.tools/b')).toBe('user')
+  })
+
+  test('a plugin only the distro disables reports the distro', () => {
+    const t = setup({ distroDisabled: ['acme.tools'] })
+    t.installed({ id: 'acme.tools', ...declares })
+    t.host.load()
+
+    expect(t.host.list().find((plugin) => plugin.id === 'acme.tools')).toMatchObject({ state: 'disabled', disabledReason: 'distro' })
   })
 })
 

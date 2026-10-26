@@ -1,3 +1,4 @@
+import { mkdirSync, rmSync, symlinkSync } from 'node:fs'
 import { join } from 'node:path'
 import {
   formatContributionId,
@@ -86,6 +87,8 @@ type Runtime = {
 
 class TimedOut extends Error {}
 
+let hostSerial = 0
+
 function compare(a: string, b: string): number {
   return a < b ? -1 : a > b ? 1 : 0
 }
@@ -119,6 +122,13 @@ export class PluginHost {
   private disabledSets = { user: new Set<string>(), distro: new Set<string>(), safeMode: new Set<string>() }
   /** Plugins whose directory is being swapped; they can't activate until the rescan that follows. */
   private readonly replacing = new Set<string>()
+  /**
+   * Bumped when a plugin is released. Bun caches a module by its path, helpers included, so an
+   * installed plugin's later generations import through a fresh symlink to its directory instead.
+   */
+  private readonly generations = new Map<string, number>()
+  private readonly generationLinks = new Map<string, string>()
+  private readonly serial = ++hostSerial
   private queue: Promise<unknown> = Promise.resolve()
   private stopped = false
   private readonly timeoutMs: number
@@ -149,16 +159,22 @@ export class PluginHost {
 
   /**
    * Deactivates `pluginId`, runs `change` (which replaces or deletes its directory), then rescans.
-   * The plugin can't activate in between, so a same-version reinstall never runs half-swapped code.
+   * The plugin can't activate in between, so a same-version reinstall never runs half-swapped code,
+   * and its next activation loads the code `change` left behind.
    */
   replacePlugin(pluginId: string, change: () => void | Promise<void>): Promise<void> {
+    return this.replacePlugins([pluginId], change)
+  }
+
+  /** Like `replacePlugin` for several plugins swapped by one `change`, whatever their versions. */
+  replacePlugins(pluginIds: string[], change: () => void | Promise<void>): Promise<void> {
     return this.enqueue(async () => {
-      this.replacing.add(pluginId)
+      for (const id of pluginIds) this.replacing.add(id)
       try {
-        await this.release(new Set([pluginId]))
+        await this.release(new Set(pluginIds))
         await change()
       } finally {
-        this.replacing.delete(pluginId)
+        for (const id of pluginIds) this.replacing.delete(id)
         await this.applyRescan()
       }
     })
@@ -255,6 +271,7 @@ export class PluginHost {
     await this.queue
     await Promise.allSettled([...this.runtimes.values()].map((runtime) => runtime.inflight))
     for (const id of [...this.activationOrder].reverse()) await this.deactivate(id)
+    for (const id of [...this.generationLinks.keys()]) this.removeLink(id)
   }
 
   private enqueue(work: () => Promise<void>): Promise<void> {
@@ -271,7 +288,7 @@ export class PluginHost {
       safeMode ? this.discovered.filter((plugin) => plugin.source === 'installed' && plugin.errors.length === 0).map((plugin) => plugin.id) : []
     )
     this.disabledSets = { user, distro, safeMode: inSafeMode }
-    this.registry = computeRegistry(this.discovered, new Set([...user, ...distro, ...inSafeMode]), [...distro])
+    this.registry = computeRegistry(this.discovered, new Set([...user, ...inSafeMode]), [...distro])
     this.cliAliases = this.resolveAliases()
     this.derivedDiagnostics = new Map()
     const derive = this.options.deriveDiagnostics
@@ -454,7 +471,7 @@ export class PluginHost {
     const manifest = discovered.manifest!
     if (manifest.main === undefined) return
     const context = this.contextFor(entry, attempt)
-    const mainPath = join(discovered.dir, manifest.main)
+    const mainPath = join(this.importRootOf(entry), manifest.main)
     await withTimeout(
       async () => {
         const loaded = (await import(mainPath)) as Partial<PluginModule>
@@ -466,6 +483,29 @@ export class PluginHost {
       this.timeoutMs,
       `activation timed out after ${this.timeoutMs} ms`
     )
+  }
+
+  /** The directory to import a plugin's code from: its own for generation 0 and built-ins, else a link made for this generation. */
+  private importRootOf({ discovered }: RegistryPlugin): string {
+    const generation = this.generations.get(discovered.id) ?? 0
+    if (generation === 0 || discovered.source !== 'installed') return discovered.dir
+    const existing = this.generationLinks.get(discovered.id)
+    if (existing !== undefined && existing.endsWith(`-${generation}`)) return existing
+    const linkDir = join(this.options.installedDir, '.run')
+    const link = join(linkDir, `${discovered.id}-${process.pid}-${this.serial}-${generation}`)
+    mkdirSync(linkDir, { recursive: true })
+    rmSync(link, { recursive: true, force: true })
+    symlinkSync(discovered.dir, link, 'dir')
+    this.removeLink(discovered.id)
+    this.generationLinks.set(discovered.id, link)
+    return link
+  }
+
+  private removeLink(id: string): void {
+    const link = this.generationLinks.get(id)
+    if (link === undefined) return
+    this.generationLinks.delete(id)
+    rmSync(link, { force: true })
   }
 
   private contextFor(entry: RegistryPlugin, attempt: Attempt): PluginContext {
@@ -602,7 +642,11 @@ export class PluginHost {
     for (const id of [...this.activationOrder].reverse()) {
       if (released.has(id)) await this.deactivate(id)
     }
-    for (const id of released) this.runtimes.delete(id)
+    for (const id of released) {
+      this.runtimes.delete(id)
+      this.generations.set(id, (this.generations.get(id) ?? 0) + 1)
+      this.removeLink(id)
+    }
   }
 
   private async deactivate(id: string): Promise<void> {
