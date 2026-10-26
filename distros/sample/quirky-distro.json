@@ -1,0 +1,8 @@
+{
+  "id": "sample",
+  "name": "Sample",
+  "version": "1.0.0",
+  "description": "Shows every worktree in one flat sidebar list and turns source control off.",
+  "plugins": ["sample.sidebar"],
+  "disable": ["quirky.git"]
+}
