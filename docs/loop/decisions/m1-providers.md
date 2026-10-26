@@ -259,7 +259,7 @@
 ## D26: This item stores the provider session; capturing it from hooks is m1-agent-status
 - **Question:** where resume's provider session ID comes from
 - **Options:** capture it from Claude and Codex hooks now; add a method that stores it and leave capture to m1-agent-status
-- **Chose:** `quirky.session/set-provider-session {session, id, transcriptPath?}` stores it, with the ID rules of D25. m1-agent-status calls it from hooks. Until then, a person or script can call it or pass `--provider-session` to resume.
+- **Chose:** `quirky.session/setProviderSession {session, id, transcriptPath?}` (CLI `quirky session set-provider-session`) stores it, with the ID rules of D25. m1-agent-status calls it from hooks. Until then, a person or script can call it or pass `--provider-session` to resume.
 - **Why:** the roadmap lists "capture of each session's provider id and transcript path" under agent status, which depends on this item
 - **Evidence:** docs/roadmap.md M1 "Agent status"; docs/loop/queue.json m1-agent-status deps
 - **Reversibility:** easy
@@ -430,5 +430,25 @@
 - **Confidence:** high
 - **Source:** locked by docs/loop/LOOP.md
 
+## D43: An agent found only in an install directory launches by its absolute path
+- **Question:** Codex spec review F1: detection searches install directories that the launch shell's PATH may not include, so an auto-picked agent could fail with "command not found"
+- **Options:** add the install directories to PATH at launch (PATH is reserved and rewritten by the kernel); drop the install directories from detection; resolve the executable to its absolute path when it was found only there
+- **Chose:** resolve. The plan replaces the leading executable token with its absolute path when detection found it only in an install directory; the launch record keeps the bare name so a resume resolves again.
+- **Why:** "installed" must mean "the launch will find it" (D18), and changing the kernel's PATH handling is fenced (D11)
+- **Evidence:** packages/daemon/src/launch.ts:50-53; Codex spec review round 1 F1
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** assumed — autonomous
+
+## D44: Spec review findings dismissed
+- **Question:** which Codex spec-review findings are not fixed
+- **Options:** —
+- **Chose:** dismissed F9 (the pre-pass wants a "Purpose" or "Overview" heading; the logic spec's "Conceptual model" holds that content and the user's writing rules forbid "Overview" headings) and F10–F53 (the pre-pass flags method names, contribution IDs, command examples and file names the specs plan to create, and the link to `research/orca-features/providers.md`, which lives in the local-only research repo, not this worktree, as every earlier spec's links do). Accepted and fixed: F1 (D43), F2, F3, F4, F5, F7, with an amendment in logic.md.
+- **Why:** none of the dismissed ones names a defect in the design
+- **Evidence:** /Users/zpyoung/CLAUDE.md "Writing"; docs/roadmap.md links to ../research/orca-features/
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** assumed — autonomous
+
 ## Progress
-Logic spec (amended at tech-spec authoring) and tech spec written. Next: the Codex adversarial review of both specs, fixes, commit, then subagent-driven development.
+Logic spec (amended at tech-spec authoring and after the Codex spec review) and tech spec written and reviewed. Next: the Codex adversarial review of both specs, fixes, commit, then subagent-driven development.

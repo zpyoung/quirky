@@ -6,6 +6,7 @@
 
 **Amendments:**
 - 2026-10-26, tech-spec authoring: Claude Agent Teams launches `claude --teammate-mode in-process` with the Agent Teams environment directly, with no `quirky agents claude-teams` command, because plugin CLI commands can't pass arbitrary arguments through (SC-6, SC-37, [D29](../../../loop/decisions/m1-providers.md)). The "New <Agent> tab" commands are declared for the 45 built-in agents only, because UI commands must be declared in a manifest (SC-43, [D33](../../../loop/decisions/m1-providers.md)). `quirky agents list` returns an object holding the agent array, the default agent and the permission summary (SC-1). Resume has no `--wait`, since it carries no prompt (SC-31). A delivery still `pending` when the daemon restarts becomes `not-delivered` (SC-28).
+- 2026-10-26, Codex spec review: an agent found only in an install directory launches by its absolute path ([D43](../../../loop/decisions/m1-providers.md)); the provider-session method is `quirky.session/setProviderSession` (CLI `set-provider-session`); counts and pickers include Claude Agent Teams whenever Claude is installed (SC-1, SC-39, SC-41, SC-43); a resumed session records the launch it used (SC-31).
 
 ## Conceptual model
 
@@ -108,7 +109,7 @@ returns after step 6.
 folder, asks `quirky.agents` for a resume plan (the recorded command and arguments, fresh hook
 additions, then the agent's resume or fork arguments), and spawns a new session in the old one's
 folder ([D24](../../../loop/decisions/m1-providers.md), [D25](../../../loop/decisions/m1-providers.md)).
-The provider session reaches the record through `quirky.session/set-provider-session`, which
+The provider session reaches the record through `quirky.session/setProviderSession`, which
 m1-agent-status will call from agent hooks ([D26](../../../loop/decisions/m1-providers.md)).
 
 **Configuring.** Methods on `quirky.agents` change its store (enabled, command, arguments,
@@ -165,8 +166,8 @@ Fake agents used below:
    - **Then** the result holds the default agent (`auto`), the permission summary (`yolo`) and an
      agent list with 45 entries in auto-pick order, each with its ID, label, plugin
      `quirky.agents`, installed, enabled, whether it is the default, its permission mode (or none),
-     its prompt mode, whether it can resume, and its homepage and install links. `claude` and
-     `codex` are installed; the other 43 are not. All are enabled. None is the default, because the
+     its prompt mode, whether it can resume, and its homepage and install links. `claude`,
+     `claude-agent-teams` (it runs `claude`) and `codex` are installed; the other 42 are not. All are enabled. None is the default, because the
      default is `auto`.
    - **Data before:** **Default agent**: auto; **PATH**: `claude`, `codex`
    - **Walkthrough:**
@@ -458,7 +459,10 @@ Fake agents used below:
     - **When** the agent runs `quirky session resume <session>` from another folder
     - **Then** a new session starts in the old session's folder, running
       `claude --model haiku <hook args> --resume abc`; it has no `--dangerously-skip-permissions`.
-      The old record is unchanged.
+      The new session records the launch it used (`claude`, `--model haiku`), so resuming it later
+      replays the same. The old record is unchanged. A session from before this item (no launch
+      record) resumes with the catalog command and no arguments, and its resumed session records
+      that.
     - **Data before:** **Session 1**: claude, folder `wt-a`*, arguments `--model haiku`, provider session `abc`; **claude arguments now**: Yolo
     - **Walkthrough:**
       1. The agent resumes Session 1 from folder `elsewhere`*
@@ -532,18 +536,19 @@ These run in the web UI against a daemon with fakes `claude`, `codex` and `goose
 
 39. **SC-39: the Agents view shows Orca's sections and counts** (UI)
     - **When** the person runs "Open agent settings" from the command palette
-    - **Then** the Agents view shows: Default Agent with Auto, Claude, Codex, Goose and Blank
-      Terminal; Agent Permissions with Yolo selected; "Installed" with a "3 detected" badge;
-      "Available to install" with a "42 agents" badge, each row with an Install link; and a
+    - **Then** the Agents view shows: Default Agent with Auto, Claude, Claude Agent Teams, Codex,
+      Goose and Blank Terminal; Agent Permissions with Yolo selected; "Installed" with a
+      "4 detected" badge; "Available to install" with a "41 agents" badge, each row with an
+      Install link; and a
       "This Mac" heading with the workspace-trust switch on
     - **Screen states:**
 
       | Area | Shows |
       |---|---|
-      | Default Agent | Auto (selected), Claude, Codex, Goose, Blank Terminal |
+      | Default Agent | Auto (selected), Claude, Claude Agent Teams, Codex, Goose, Blank Terminal |
       | Agent Permissions | Manual / Auto / Yolo, Yolo selected |
-      | Installed | 3 detected, Refresh |
-      | Available to install | 42 agents |
+      | Installed | 4 detected, Refresh |
+      | Available to install | 41 agents |
 
 40. **SC-40: expanding a row edits that agent** (UI)
     - **When** the person expands Claude, clicks Manual, then types `--model haiku` into Arguments
@@ -567,7 +572,8 @@ These run in the web UI against a daemon with fakes `claude`, `codex` and `goose
 
 43. **SC-43: the new-session menu and agent commands** (UI)
     - **When** the person opens the `+` menu, then the command palette
-    - **Then** the menu lists Shell, Claude, Codex, Goose, "Claude (background)" and "Manage agents"
+    - **Then** the menu lists Shell, Claude, Claude Agent Teams, Codex, Goose, "Claude (background)"
+      and "Manage agents"
       (which opens the Agents view); the palette has "New agent tab (default agent)" with
       Cmd+Option+T and "New Claude tab", "New Aider tab" and the rest for every catalog agent.
       Pressing Cmd+Option+T opens a Claude tab (first in auto-pick order).

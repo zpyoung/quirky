@@ -155,7 +155,7 @@ pick({ preferred?: string, forAgentTab?: boolean }) -> { agent: string }        
 prepareLaunch({ agent, cwd, prompt?, submitPrompt?, hookArgs: string[], hookEnv: Record<string,string|null> }) -> LaunchPlan
             writes trust when the setting is on; refuses disabled ("agent <id> is disabled") and unknown agents
 prepareResume({ agent, cwd, record: LaunchRecord|null, providerSession: ProviderSession, fork: boolean,
-                hookArgs, hookEnv }) -> { command: string, env: Record<string,string|null> }
+                hookArgs, hookEnv }) -> { command: string, env: Record<string,string|null>, record: LaunchRecord }
 deliver({ sessionId, agent, text, submit: boolean }) -> { delivery: "pasted"|"unconfirmed"|"not-delivered" }
             resolves when settled (up to readyTimeoutMs + Enter delays)
 event changed {}          after any catalog, detection, config or setting change that alters `list`
@@ -190,6 +190,8 @@ create({ worktree?, agent?, prompt?, submitPrompt?: boolean = true, waitForPromp
 resume({ session: string, providerSession?: string, transcriptPath?: string, fork?: boolean }) -> Session
 setProviderSession({ session: string, id: string, transcriptPath?: string }) -> Session
 ```
+Method names are exactly `quirky.session/resume` and `quirky.session/setProviderSession`; the CLI
+words are `resume` and `set-provider-session`.
 
 `create` sequence (replaces `sessions.ts:47-93`; keep its closed-while-starting checks):
 1. `agent` omitted → `quirky.agents/pick({})`. `agent === "shell"` keeps today's shell path (no
@@ -198,7 +200,9 @@ setProviderSession({ session: string, id: string, transcriptPath?: string }) -> 
 3. Insert `starting`; run `context.launch.hooks` as today.
 4. `quirky.agents/prepareLaunch` with the hooks' `args`/`env` → `LaunchPlan`.
 5. `pty.spawn` with `argv: context.launch.commandArgv(plan.command)`, `env: context.launch.env({..., envPatch: plan.env})`.
-6. Store `launch: plan.record`, `promptDelivery: plan.promptDelivery`; set `running`.
+6. Store `launch: plan.record`, `promptDelivery: plan.promptDelivery`; set `running` only if the
+   record is still `starting` (an exit that arrived before the spawn response leaves it `exited`,
+   as `sessions.ts:90-92` does today).
 7. If `plan.paste`: call `quirky.agents/deliver` without awaiting unless `waitForPrompt`; on settle,
    update `promptDelivery` and emit `changed`. A rejected `deliver` call records `not-delivered`.
 8. `reconcile({startup:true})` also sets every `pending` delivery to `not-delivered`.
@@ -206,20 +210,23 @@ setProviderSession({ session: string, id: string, transcriptPath?: string }) -> 
 `resume`: refusal order and strings are SC-35's, then SC-25's ID rules (also for
 `setProviderSession`): length 1–512, no leading `-`, no C0/C1 control characters. The new session
 copies `worktreeId` and `cwd` from the old one (`existsSync(cwd)` else the folder error), runs
-launch hooks for the new session ID, calls `prepareResume`, spawns, sets `resumedFrom`, and copies
-`launch` from the old record. `providerSession` from params overrides the record's. Fork refusals:
+launch hooks for the new session ID, calls `prepareResume`, spawns, sets `resumedFrom`, and stores
+the `record` `prepareResume` returns as the new session's `launch` (for an old session with no
+record, that is the catalog command, `''` arguments and `{}` environment). `providerSession` from params overrides the record's. Fork refusals:
 "<agent> can't fork from Quirky yet" when the entry has no `fork`.
 
 ### PTY subscriptions (kernel)
 
 Serves SC-20 to SC-28 (delivery reads output while `quirky.terminal` may also be attached).
 
-CONTRACT: in `createPtyApi`, `subscribe(sessionId)` records `(pluginId, sessionId)` and always calls
-the host (a repeat subscribe only refreshes the replay, `packages/pty-host/src/session.ts:205-215`).
-`unsubscribe(sessionId)` removes this plugin's mark and calls the host only when no plugin holds the
-session. A plugin subscribing twice and unsubscribing once still holds it (count per plugin).
-`revoke()` drops the plugin's marks with the same rule. `onReconnect` listeners stay responsible for
-re-subscribing.
+CONTRACT: in `createPtyApi`, each plugin either holds a session or doesn't. `subscribe(sessionId)`
+marks this plugin as holding it and always calls the host (a repeat subscribe only refreshes the
+replay, `packages/pty-host/src/session.ts:205-215`); repeat subscribes by one plugin don't stack.
+`unsubscribe(sessionId)` clears this plugin's hold and calls the host only when no plugin holds the
+session any more. `revoke()` clears the plugin's holds by the same rule. This keeps
+`quirky.terminal`'s pattern (subscribe per attach and on reconnect, one unsubscribe after the last
+stream, `plugins/quirky.terminal/src/terminal.ts:150-280`) correct. `onReconnect` listeners stay
+responsible for re-subscribing.
 
 ### Delivery
 
@@ -253,6 +260,12 @@ Serves SC-5 to SC-7.
 - A command is found when some directory has a regular file of that name with an execute bit.
   `existsSync`/`statSync` only; never execute anything.
 - Installed = (`detect` or any `detectAliases` found) and every `detectRequires` found.
+- Detection remembers, per command name, the directory it was found in and whether that directory
+  is on the login PATH. `prepareLaunch` and `prepareResume` replace the command string's leading
+  executable token with its absolute path (re-quoted) when that executable was found only in an
+  install directory, not on the login PATH or in `$QUIRKY_HOME/bin`, because the launch shell only
+  adds `$QUIRKY_HOME/bin` (`packages/daemon/src/launch.ts:50-53`). `record.command` keeps the
+  unresolved text so a resume resolves again. An executable token containing `/` is left alone.
 
 ### Trust
 
