@@ -22,6 +22,7 @@ export class ShellReadyBarrier {
   private timer: ReturnType<typeof setTimeout> | undefined
   private warned = false
   private disposed = false
+  private releasing = false
 
   constructor(private readonly options: ShellReadyBarrierOptions) {
     this.current = options.enabled ? 'pending' : 'unsupported'
@@ -35,7 +36,7 @@ export class ShellReadyBarrier {
   /** Delivers `bytes` now, or holds a copy until the shell is ready. */
   input(bytes: Uint8Array): void {
     if (this.disposed) return
-    if (this.current !== 'pending') {
+    if (this.current !== 'pending' && !this.releasing) {
       this.options.deliver(bytes)
       return
     }
@@ -60,6 +61,7 @@ export class ShellReadyBarrier {
     this.clear()
     this.queue = []
     this.queued = 0
+    this.releasing = false
     this.setState('pending')
     this.arm()
   }
@@ -86,8 +88,27 @@ export class ShellReadyBarrier {
     const held = this.queue
     this.queue = []
     this.queued = 0
-    this.setState(next)
-    for (const chunk of held) this.options.deliver(chunk)
+    this.releasing = true
+    try {
+      this.setState(next)
+      this.drain(held, next)
+    } finally {
+      if (this.current === next) this.releasing = false
+    }
+  }
+
+  /** Delivers `held`, then any input submitted meanwhile, so older bytes always go first. */
+  private drain(held: Uint8Array[], next: ShellState): void {
+    let batch = held
+    while (batch.length > 0) {
+      for (const chunk of batch) {
+        if (this.disposed || this.current !== next) return
+        this.options.deliver(chunk)
+      }
+      batch = this.queue
+      this.queue = []
+      this.queued = 0
+    }
   }
 
   private setState(next: ShellState): void {
