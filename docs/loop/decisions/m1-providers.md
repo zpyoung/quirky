@@ -482,4 +482,4 @@
 - **Source:** assumed — autonomous
 
 ## Progress
-Wave 1 merged (pure modules, catalog data, detection, trust, kernel PTY holds, e2e harness); gate 2352 pass. Wave 2 in progress: delivery runner, agents service and CLI, session changes. Next: wave 3 (UI, e2e scenario tests), then Final Round 1.
+Waves 1 and 2 merged with the wave 1 checkpoint fixes; gate 2500 pass, scripts 30 pass, typecheck clean. Wave 3 in progress (Agents view, session menu, e2e scenario suites); wave 2 checkpoint review running. Next: wave 3 merge, wave 2 checkpoint fixes, catch-up merge of build/roadmap, Final Round 1, UI pass with quirk:using-apps-like-a-user, land.
