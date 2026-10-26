@@ -682,5 +682,16 @@
 - **Revisit if:** never
 - **Source:** assumed — autonomous
 
+## D63: Add a fixture task to the W3 chain for the fake git's `listRegistrations`
+- **Question:** T7a returned BLOCKED: the new list reads `listRegistrations`, which the in-memory fake git lacks, so five `quirky.repo` tests and four CLI e2e tests outside T7a's scope fail
+- **Options:** widen T7a's scope silently; add a task to the chain owning the fake and those two test files; weaken the tests
+- **Chose:** a new task T7a2 in the same tree, owning `packages/git/src/testing.ts`, `plugins/quirky.repo/test/repo.test.ts` and `packages/cli/test/v1-words.e2e.test.ts`; the fake gains `listRegistrations` and folder creation, and the tests use real temp folders. W3 has one component, so no concurrent tree shares those files. The W3 tree was fast-forwarded to `12b47d9` (the W2 checkpoint fixes), which touches none of T7a's files.
+- **Why:** the skill forbids widening scope silently; a recorded re-plan with no concurrent owner keeps the partition legal
+- **Evidence:** T7a report; scratchpad journal.md
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** never
+- **Source:** assumed — autonomous
+
 ## Progress
-Step 5 in progress: W1 dispatched (see D59). If stopped early: check `git log` for merged waves, then continue with the next wave per D59 against tech.md.
+Step 5, W3 in progress in the scratch worktree `sdd/m1wt/w3-t7` (T7a and T7a2 accepted, uncommitted; T7b dispatched; T7c next). W1, W2 and the W2 checkpoint fixes are merged on `build/m1-worktrees`. If stopped early: if that worktree is gone, rerun W3 from D59 against tech.md; then W3 checkpoint, W4 (window), Final Round 1.
