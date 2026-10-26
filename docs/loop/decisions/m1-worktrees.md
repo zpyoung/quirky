@@ -660,5 +660,16 @@
 - **Revisit if:** the final round finds defects in W1's code
 - **Source:** assumed — autonomous
 
+## D61: W3 starts while W2's checkpoint review runs
+- **Question:** whether the worktree daemon chain waits for the W2 checkpoint's fix batch
+- **Options:** wait; start W3 on W2's merged tip and merge the checkpoint fixes in afterwards
+- **Chose:** start W3 at once on `0d5c9dd`; the checkpoint's fixes land on `build/m1-worktrees` and W3's tree merges them before its wave-end gate
+- **Why:** W3 edits only `plugins/quirky.worktree`, while W2's diff is mostly `plugins/quirky.repo`, so fixes rarely touch W3's files; m0-core D41 did the same
+- **Evidence:** docs/loop/decisions/m0-core.md D41; W2 diff scope
+- **Reversibility:** easy
+- **Confidence:** medium
+- **Revisit if:** a W2 fix changes a `quirky.repo` contract W3 builds on
+- **Source:** assumed — autonomous
+
 ## Progress
 Step 5 in progress: W1 dispatched (see D59). If stopped early: check `git log` for merged waves, then continue with the next wave per D59 against tech.md.
