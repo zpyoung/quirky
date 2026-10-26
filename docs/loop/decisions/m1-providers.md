@@ -470,5 +470,16 @@
 - **Confidence:** medium
 - **Source:** assumed — autonomous
 
+## D47: Trust writes skip the real home in test runs, after one test run wrote to it
+- **Question:** a wave 2 test set `process.env.HOME` to a temp dir and expected trust writes to land there, but Bun's `os.homedir()` ignores `$HOME`, so one run wrote trust entries for `/tmp/qag-*` folders into the real `~/.codex/config.toml` and `~/.claude.json`
+- **Options:** fix the one test; read `$HOME` first and also refuse the real home during `bun test`; set a temp `HOME` for every test through a Bun preload
+- **Chose:** the service reads `$HOME` before `os.homedir()`, and skips the trust write (with a log line) when `NODE_ENV` is `test` and the home is the real one; e2e daemons run as subprocesses with a temporary `HOME`. The stray entries (one Codex section, six `~/.claude.json` project keys, all `qag-` temp paths) were removed by hand, and nothing else in those files was changed. `packages/cli/test/v1-words.e2e.test.ts` no longer launches an agent with the real built-ins.
+- **Why:** LOOP.md forbids touching real agent state; a preload changing `HOME` for every test would also change git identity for the protected loop scripts' tests
+- **Evidence:** wave 2 B1a report; `bun test` sets `NODE_ENV=test` (checked); plugins/quirky.agents/src/service.ts trustFolder
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** another in-process test path writes under a user home
+- **Source:** assumed — autonomous
+
 ## Progress
 Wave 1 merged (pure modules, catalog data, detection, trust, kernel PTY holds, e2e harness); gate 2352 pass. Wave 2 in progress: delivery runner, agents service and CLI, session changes. Next: wave 3 (UI, e2e scenario tests), then Final Round 1.
