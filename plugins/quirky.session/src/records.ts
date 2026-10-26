@@ -170,6 +170,10 @@ export class SessionRecords {
     )
   }
 
+  /**
+   * Changes only the fields given (an `undefined` field is left alone), so a write never reverts a
+   * column another call changed since the caller read the record. Returns the stored record.
+   */
   update(
     id: string,
     fields: {
@@ -181,20 +185,21 @@ export class SessionRecords {
       promptDelivery?: PromptDeliveryState | null
     }
   ): Session | null {
-    const current = this.get(id)
-    if (!current) return null
-    const next = { ...current, ...fields }
-    this.store.run(
-      'UPDATE sessions SET status = ?, last_activity_at = ?, exit_code = ?, launch = ?, provider_session = ?, prompt_delivery = ? WHERE id = ?',
-      next.status,
-      next.lastActivityAt,
-      next.exitCode,
-      jsonOrNull(next.launch),
-      jsonOrNull(next.providerSession),
-      next.promptDelivery ?? null,
-      id
-    )
-    return next
+    const columns: [string, string | number | null][] = []
+    if (fields.status !== undefined) columns.push(['status', fields.status])
+    if (fields.lastActivityAt !== undefined) columns.push(['last_activity_at', fields.lastActivityAt])
+    if (fields.exitCode !== undefined) columns.push(['exit_code', fields.exitCode])
+    if (fields.launch !== undefined) columns.push(['launch', jsonOrNull(fields.launch)])
+    if (fields.providerSession !== undefined) columns.push(['provider_session', jsonOrNull(fields.providerSession)])
+    if (fields.promptDelivery !== undefined) columns.push(['prompt_delivery', fields.promptDelivery])
+    if (columns.length > 0) {
+      this.store.run(
+        `UPDATE sessions SET ${columns.map(([name]) => `${name} = ?`).join(', ')} WHERE id = ?`,
+        ...columns.map(([, value]) => value),
+        id
+      )
+    }
+    return this.get(id)
   }
 
   /** Marks every delivery still pending as not-delivered; returns the IDs changed. */

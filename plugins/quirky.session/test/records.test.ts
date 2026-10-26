@@ -83,3 +83,14 @@ describe('session store migration 2', () => {
     expect(records.sweepPendingDeliveries()).toEqual([])
   })
 })
+
+describe('SessionRecords.update', () => {
+  test('writes only the fields it is given', () => {
+    const records = new SessionRecords(memoryStore())
+    records.insert({ ...session, id: 's_cols', providerSession: { id: 'p1', transcriptPath: null } }, 'repo')
+
+    records.update('s_cols', { status: 'running', providerSession: undefined, launch: undefined })
+
+    expect(records.get('s_cols')).toMatchObject({ status: 'running', providerSession: { id: 'p1', transcriptPath: null } })
+  })
+})
