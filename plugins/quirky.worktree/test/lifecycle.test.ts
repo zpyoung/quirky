@@ -158,7 +158,7 @@ describe('quirky.repo/add validation', () => {
     mkdirSync(plain)
     expect(await errorOf(call('quirky.repo/add', { path: plain }))).toEqual({
       code: RpcErrorCode.InvalidParams,
-      message: `not a git repository: ${plain}`
+      message: `not a git repository: ${plain}; pass --folder to add it as a folder project`
     })
   })
 
