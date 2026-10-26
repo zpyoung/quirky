@@ -397,5 +397,37 @@
 - **Revisit if:** a plugin needs cleanup for resources it allocated itself before a failed activate; that is a registry change
 - **Source:** assumed — autonomous
 
+## D39: Wave 3 checkpoint review: fix the launch and close race
+- **Question:** adjudicating the wave 3 (wiring) checkpoint review (three Codex lenses, depth standard) (subagent-driven-development Step 9)
+- **Options:** accept and fix X1; reject it
+- **Chose:** accepted X1 (MEDIUM): a session closed while its launch hooks were still running could still get a terminal after its row was deleted. `createSession` now fails with Conflict if the row is gone after the hooks or after the PTY create, and forgets the terminal in the second case. The correctness and spec lenses passed with no findings.
+- **Why:** awaiting plugin hooks opened a window that v1's synchronous path didn't have, and a terminal with no session row is an orphan nobody can close
+- **Evidence:** scratchpad cp-w3/X/gate.json; packages/daemon/src/service.ts `createSession`; test in packages/daemon/test/sessions.test.ts
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** assumed — autonomous
+
+## D40: The scenario tests are split by area, and each task may fix only its area's modules
+- **Question:** wave 4's decomposition: who owns which files when a scenario exposes a defect (Step 3)
+- **Options:** one task for all 28 scenarios; four area tasks with disjoint module scopes
+- **Chose:** four tasks: T10 methods and events (SC-1 to SC-10; may fix dispatch.ts, events.ts), T11 stores and lifecycle (SC-11 to SC-15, SC-27; stores.ts, runtime.ts, host.ts), T12 jobs (SC-16 to SC-21; scheduler.ts, methods.ts, the job CLI), T13 launch hooks and manifests (SC-22 to SC-26, SC-28; launch-hooks.ts, kinds.ts, manifest.ts, service.ts, launch.ts). Scenario tests drive the daemon API with a real client; where a scenario names `quirky job list` or `quirky job run`, the test calls `job.list` or `job.run`, which is all those commands do, and packages/cli/test/job.test.ts covers the CLI's own output and exit codes. The unit test file T6 wrote took the name `stores.test.ts`, so the store scenarios live in `stores-api.test.ts`.
+- **Why:** disjoint scopes let the four run in parallel; LOOP.md step 6 accepts a flow test that drives the daemon API
+- **Evidence:** docs/loop/LOOP.md step 6; docs/quirk/specs/2026-10-26-m0-daemon-api/tech.md "Testing strategy"
+- **Reversibility:** easy
+- **Confidence:** medium
+- **Revisit if:** the user wants the job scenarios driven through the `quirky` binary against a live daemon
+- **Source:** assumed — autonomous
+
+## D41: The daemon plugin API is kernel, not a built-in plugin
+- **Question:** LOOP.md step 6 requires the feature to ship as a built-in plugin that uses only the public plugin API; how that applies to the API plugins are built on
+- **Options:** wrap the job methods and CLI group in a built-in plugin; treat the plugin API, including `job.list`, `job.run` and `quirky job`, as kernel
+- **Chose:** kernel, as m0-registry D18 decided for the plugin host. The `job.*` methods inspect the kernel's own scheduler, so a plugin couldn't implement them through the public API.
+- **Why:** docs/roadmap.md lists the plugin host as part of the core; a plugin can't host the system that loads it
+- **Evidence:** docs/loop/decisions/m0-registry.md D18; docs/roadmap.md "What the order rests on"
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** the user wants job inspection to be replaceable by a distro
+- **Source:** locked by docs/roadmap.md
+
 ## Progress
-Wave 1 (T1, T2) and wave 2 (T3 to T8) merged, wave 2 checkpoint review fixed (870e312), `bun run test` 724 pass. Next: wave 3 (T9, wiring), then wave 4 (T10 to T13, the SC-1 to SC-28 scenario tests), then the final review loop. Run journal, task files and prompts: iteration-2 scratchpad `/private/tmp/claude-502/-Users-zpyoung-orca-workspaces-quirky-build-roadmap/4046a813-d881-42f9-afa2-3f0d85441e3d/scratchpad/sdd/` (journal.md, tasks/T9.*) and iteration-3 scratchpad `/private/tmp/claude-502/-Users-zpyoung-orca-workspaces-quirky-build-roadmap/20ad4b75-27c9-48ea-8053-2da47b7b6d4e/scratchpad/` (w4/T10 to T13 task files, round.py review driver). If those are gone, re-derive tasks from D34 and tech.md.
+All four waves merged (6aa2257): `bun run test` 763 pass, typecheck clean, `bun test scripts` only the D31 failure. Next: the final review loop (round 1 over 3ce0c32..HEAD, three Codex lenses, depth deep), fixes, closure rounds, then LOOP.md step 7 (merge). Review driver: iteration-3 scratchpad `/private/tmp/claude-502/-Users-zpyoung-orca-workspaces-quirky-build-roadmap/20ad4b75-27c9-48ea-8053-2da47b7b6d4e/scratchpad/round.py`.
