@@ -8,9 +8,9 @@ beforeEach(() => {
 })
 afterEach(() => daemon.stop())
 
-const run = (args: string[]) => runCli(args, { home: daemon.home })
+const run = (args: string[], env: Record<string, string> = {}) => runCli(args, { home: daemon.home, env })
 
-const iso = (ms: number) => new Date(ms).toISOString()
+const LOS_ANGELES = { TZ: 'America/Los_Angeles' }
 
 describe('job list', () => {
   test('renders ID PLUGIN INTERVAL STATE NEXT LAST', async () => {
@@ -25,13 +25,13 @@ describe('job list', () => {
       nextRunAt: 1_700_000_100_000,
       lastRun: { startedAt: 1_699_000_000_000, finishedAt: 1_699_000_001_000, status: 'ok' }
     })
-    const result = await run(['job', 'list'])
+    const result = await run(['job', 'list'], LOS_ANGELES)
     expect(result.code).toBe(0)
     expect(daemon.methodCalls('job.list')).toEqual([{}])
     const lines = result.stdout.trimEnd().split('\n')
     expect(lines).toHaveLength(4)
     expect(lines[0].split(/\s+/)).toEqual(['ID', 'PLUGIN', 'INTERVAL', 'STATE', 'NEXT', 'LAST'])
-    expect(lines[1].split(/\s+/)).toEqual(['job:acme.poll/tick', 'acme.poll', '5m', 'idle', iso(1_700_000_000_000), '-'])
+    expect(lines[1].split(/\s+/)).toEqual(['job:acme.poll/tick', 'acme.poll', '5m', 'idle', '2023-11-14T14:13:20-08:00', '-'])
     expect(lines[2].split(/\s+/)).toEqual([
       'job:acme.poll/sweep',
       'acme.poll',
@@ -39,7 +39,7 @@ describe('job list', () => {
       'running',
       '-',
       'failed',
-      iso(1_699_000_005_000) + ':',
+      '2023-11-03T01:26:45-07:00' + ':',
       'boom'
     ])
     expect(lines[3].split(/\s+/)).toEqual([
@@ -47,10 +47,23 @@ describe('job list', () => {
       'acme.poll',
       '1h',
       'idle',
-      iso(1_700_000_100_000),
+      '2023-11-14T14:15:00-08:00',
       'ok',
-      iso(1_699_000_001_000)
+      '2023-11-03T01:26:41-07:00'
     ])
+  })
+
+  test.each([
+    ['America/Los_Angeles', '2023-11-14T14:13:20-08:00', '2023-11-03T01:26:45-07:00'],
+    ['Asia/Kolkata', '2023-11-15T03:43:20+05:30', '2023-11-03T13:56:45+05:30'],
+    ['UTC', '2023-11-14T22:13:20+00:00', '2023-11-03T08:26:45+00:00']
+  ])('prints local ISO times with the UTC offset in %s', async (tz, next, last) => {
+    daemon.addJob('job:acme.poll/tick', {
+      nextRunAt: 1_700_000_000_000,
+      lastRun: { startedAt: 1_699_000_000_000, finishedAt: 1_699_000_005_000, status: 'ok' }
+    })
+    const row = (await run(['job', 'list'], { TZ: tz })).stdout.trimEnd().split('\n')[1].split(/\s+/)
+    expect(row.slice(4)).toEqual([next, 'ok', last])
   })
 
   test('says so when there are no jobs', async () => {
