@@ -37,6 +37,13 @@
         "@quirky/protocol": "workspace:*",
       },
     },
+    "packages/git": {
+      "name": "@quirky/git",
+      "version": "0.1.0",
+      "dependencies": {
+        "@quirky/protocol": "workspace:*",
+      },
+    },
     "packages/protocol": {
       "name": "@quirky/protocol",
       "version": "0.1.0",
@@ -157,6 +164,8 @@
     "@quirky/daemon": ["@quirky/daemon@workspace:packages/daemon"],
 
     "@quirky/desktop": ["@quirky/desktop@workspace:apps/desktop"],
+
+    "@quirky/git": ["@quirky/git@workspace:packages/git"],
 
     "@quirky/protocol": ["@quirky/protocol@workspace:packages/protocol"],
 
