@@ -99,6 +99,21 @@ and either work within it or block the item. Never silently diverge.
    - The feature ships as a built-in plugin that uses only the public plugin API. Its plugin
      exposes the feature's API methods and CLI command group.
    - `bun run test`, `bun test scripts` and `bun run typecheck` all pass.
+   - **The UI scenarios pass when used like a user.** If the logic spec has scenarios a person sees
+     in the UI, run `bun run build`, start `quirkyd` on a fresh temporary `QUIRKY_HOME`, and run
+     `quirk:using-apps-like-a-user` with `--surface web --owner yours --unattended` against the
+     daemon's UI URL (`daemonUrl` in `apps/desktop/src/bun/page.ts`), with those scenarios as its
+     goals. Never use `--surface native`, `--surface electron` or `--allow-foreground`. Every
+     goal must pass: a fail is a bug to fix on `build/<id>`, then rerun. A `blocked` or `partial`
+     result caused by the tool rather than the app is recorded as a decision with the report path.
+     Put the report's summary in the item's decision log, and stop the daemon and delete the
+     temporary home afterwards. Items with no UI scenarios skip this.
+   - **Native-only scenarios are handed off.** A scenario that only the real window can show (the
+     window frame, the macOS menu bar, the tray, system notification banners, OS dialogs, focus)
+     goes in `docs/loop/native/<id>.json` with status `pending`, in the format
+     `docs/loop/NATIVE.md` describes once it lands, or else `{item, spec, scenarios: [{id, title,
+     status, lastRun, report, summary}]}` with nulls for the last three. The nightly native run
+     checks them; the item finishes without them.
 7. **Merge.**
    1. Run `git switch build/roadmap` and `git merge --no-ff build/<id>`.
    2. Run the three commands from step 6 again on the merge result.
