@@ -396,5 +396,15 @@
 - **Confidence:** medium
 - **Source:** assumed — autonomous
 
+## D40: Spec review: fix five model findings, reject the pre-pass findings
+- **Question:** the adversarial review over both specs (D37) returned 97 blocking findings
+- **Options:** fix each; reject with a reason
+- **Chose:** fixed the five model findings. F1 (CRITICAL): a confirmation bound selector text, so approving `wt rm current` in one worktree authorized it from another; the confirmation now binds method, params, the caller's identity and the action text, which a `describe` method resolves (`quirky.worktree/describeRemove`). F3: the notifications setting now reaches the desktop shell through `notify.desktop`. F10: request IDs hash the method name so they fit 128 characters. F11: SC-54's example chord was kernel-reserved; it uses `mod+shift+d`, and a distro binding on a reserved chord is shadowed with a warning. F12: a v1 scrollback outside the new range is clamped on import. Rejected 91 pre-pass `unresolvable-reference` findings (contribution IDs, commands and fixtures the specs plan to create, and quoted CLI lines) and F13, the pre-pass's Purpose/Overview heading check, since the rubric sets the headings.
+- **Why:** each model finding was a real gap with a cheap fix. The pre-pass findings name things this item creates, as in earlier items' reviews.
+- **Evidence:** scratchpad sr1/gate.json; docs/loop/decisions/m0-scripting.md D26
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** assumed — autonomous
+
 ## Progress
-Step 4: specs written and committed; one Codex review over both running (scratchpad sr1). Next: apply its findings, commit, then build per D39 starting at W1 (scaffold).
+Step 5: specs reviewed and committed. Next: build per D39, W1 scaffold first. Run journal: scratchpad journal.md of the current session.

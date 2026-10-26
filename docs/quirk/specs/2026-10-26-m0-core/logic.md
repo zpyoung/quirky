@@ -6,6 +6,7 @@
 
 **Amendments:**
 - 2026-10-26, tech-spec authoring: SC-23 keeps v1's rule that the setting gates only the OS notification; packaging the built-ins into the desktop bundle is in scope, since the packaged app has no features without them.
+- 2026-10-26, before build: Codex adversarial review. A confirmation binds the resolved target and the caller, not the selector text, and its question names the resolved target (SC-43, SC-45, SC-48); the notifications setting reaches the desktop shell too (SC-23); the distro keybinding example uses a free chord (SC-54); v1 scrollback values outside the new range are clamped on import (SC-26).
 
 ## Conceptual model
 
@@ -94,11 +95,12 @@ plugin method's handler sees its caller: role, client name, cwd, session and wor
 repo or worktree plugin's matcher, using the caller's cwd and identity for `current`.
 
 **Confirmation.** The kernel creates a one-question confirm ask through `quirky.ask/create`, whose
-text is the method's `confirm` text with the params filled in, and fails the call with
+text names the resolved target (the method's plugin describes the action, so `current` reads as the
+worktree it means), and fails the call with
 ConfirmationRequired naming the ask. The window shows the card. The CLI prints the action and the
 ask ID to stderr, waits for the answer, and repeats the call with `confirmation` set to the ask ID.
-The kernel runs it only if that ask was answered Yes, for the same method and params, and wasn't
-used before.
+The kernel runs it only if that ask was answered Yes, for the same method, params, caller and
+resolved target, and wasn't used before.
 
 **Layout.** The window reads the layout at connect and on each `ui.state.changed` event, and
 renders the open view, panel and sidebar from it. Clicking a worktree in the sidebar calls
@@ -309,7 +311,7 @@ Most scenarios use repo **api** at `/tmp/w/api` with worktrees **main** (branch 
 23. **SC-23: agent hooks drive status and notifications** (API)
     - **Given** a Claude session in **main**, and no desktop client connected
     - **When** the hook script POSTs `UserPromptSubmit`, then `Notification`, then `Stop`
-    - **Then** the session goes working, waiting, done; `quirky.session/changed` is emitted each time; waiting and done each emit `notify` titled with the worktree name ("Claude needs input", "Claude finished") and show an osascript notification. With `setting:quirky.agent-status/notifications` false, the `notify` event still reaches the window as a toast, but no OS notification is shown, as in v1. A POST with a wrong hook token is refused with 401 and changes nothing.
+    - **Then** the session goes working, waiting, done; `quirky.session/changed` is emitted each time; waiting and done each emit `notify` titled with the worktree name ("Claude needs input", "Claude finished") and show an osascript notification. With `setting:quirky.agent-status/notifications` false, the `notify` event still reaches the window as a toast, but no OS notification is shown, either by the daemon or by the desktop shell. A POST with a wrong hook token is refused with 401 and changes nothing.
 
 24. **SC-24: plugin code uses only the public API** (API)
     - **Given** the built-in plugins' source
@@ -324,7 +326,7 @@ Most scenarios use repo **api** at `/tmp/w/api` with worktrees **main** (branch 
 26. **SC-26: a v1 home's data carries over** (API)
     - **Given** a home written by v1: repo **api**, a running shell session in **main**, one pending ask, `terminalScrollback` 4000
     - **When** this build's daemon starts on it
-    - **Then** `quirky.repo/list` has **api**, `quirky.session/list` has the session (still attachable, since the PTY host kept it), `quirky.ask/list` has the pending ask, and `quirky.terminal/scrollback` reads 4000. A second start copies nothing again.
+    - **Then** `quirky.repo/list` has **api**, `quirky.session/list` has the session (still attachable, since the PTY host kept it), `quirky.ask/list` has the pending ask, and `quirky.terminal/scrollback` reads 4000 (a v1 value outside 500 to 10000 is clamped into that range). A second start copies nothing again.
 
 27. **SC-27: disabling a built-in takes its dependents and their surfaces with it** (CLI)
     - **Given** a fresh home with a session running
@@ -442,7 +444,7 @@ Most scenarios use repo **api** at `/tmp/w/api` with worktrees **main** (branch 
 45. **SC-45: a confirmation can't be reused or moved to other params** (API)
     - **Given** a confirm ask answered Yes for removing **feature-x**
     - **When** a client calls `quirky.worktree/remove` for **fix-login** with that confirmation, and then for **feature-x** twice
-    - **Then** the fix-login call fails with Conflict naming the mismatch; the first feature-x call runs; the second fails with Conflict "confirmation already used"
+    - **Then** the fix-login call fails with Conflict naming the mismatch; the first feature-x call runs; the second fails with Conflict "confirmation already used". A confirmation for `quirky wt rm current` answered from inside **fix-login** doesn't authorize the same call from inside **main**.
 
 46. **SC-46: with asks switched off, a destructive call says to pass yes** (CLI)
     - **Given** `quirky.ask` disabled
@@ -455,7 +457,7 @@ Most scenarios use repo **api** at `/tmp/w/api` with worktrees **main** (branch 
     - **Then** the window calls `quirky.worktree/remove` with `yes`, and no ask card appears
 
 48. **SC-48: plugins declare destructive methods** (API)
-    - **Given** an installed plugin whose method `wipe` declares `destructive: true` and `confirm: "Wipe {target}?"`
+    - **Given** an installed plugin whose method `wipe` declares `destructive: true` and `confirm: "Wipe {target}?"`, and no describe method
     - **When** a client calls it with `{ target: "cache" }` and no `yes`
     - **Then** the confirm ask's question reads "Wipe cache?", and the call fails with ConfirmationRequired. `quirky api --json` shows the method as destructive, and its generated CLI command accepts `--yes`.
 
@@ -496,9 +498,9 @@ Most scenarios use repo **api** at `/tmp/w/api` with worktrees **main** (branch 
     - **Then** the plugin directory and its data are gone, its contributions leave the registry live, and uninstalling a built-in fails with InvalidParams saying built-ins can be disabled but not removed
 
 54. **SC-54: installing a distro applies its layer** (CLI)
-    - **Given** a distro **night** with plugin `night.extras` (a theme `dusk` and a panel), `disable: ["quirky.git"]`, `settings: {"quirky.terminal/scrollback": 6000}`, `theme: "theme:night.extras/dusk"` and `keybindings: {"mod+shift+p": "command:night.extras/palette"}`
+    - **Given** a distro **night** with plugin `night.extras` (a theme `dusk` and a panel), `disable: ["quirky.git"]`, `settings: {"quirky.terminal/scrollback": 6000}`, `theme: "theme:night.extras/dusk"` and `keybindings: {"mod+shift+d": "command:night.extras/palette"}`
     - **When** the agent runs `quirky distro install ./night --yes`
-    - **Then** `night.extras` is installed, `quirky.git` is disabled (by the distro), scrollback reads 6000, the active theme is dusk, mod+shift+p runs the distro's command over any built-in binding, and `quirky distro list` shows **night**
+    - **Then** `night.extras` is installed, `quirky.git` is disabled (by the distro), scrollback reads 6000, the active theme is dusk, mod+shift+d runs the distro's command over any built-in or plugin binding on that chord, and `quirky distro list` shows **night**
     - **Data before:** **Settings**: scrollback 2000 (default); **Theme**: default; **quirky.git**: on
     - **Walkthrough:**
       1. The agent installs **night** with `--yes`

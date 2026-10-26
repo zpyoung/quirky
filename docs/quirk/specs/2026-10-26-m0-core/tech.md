@@ -74,7 +74,7 @@ Root `package.json`: `workspaces` gains `"plugins/*"`; `test` becomes `bun test 
 | `plugins/registry.ts` | `computeRegistry(discovered, disabled, distroDisabled?)` marks distro-disabled entries with `disabledBy: 'distro'` and plugins with reason `distro`. |
 | `plugins/manifest.ts` | `FIELDS` (:15) gains `cli`, `cliAliases`; `cli` checked like `main` (`checkPluginPath`); `cliAliases` is a list of distinct words matching `^[a-z][a-z0-9-]*$`. |
 | `plugins/kinds.ts` | `ALLOWED_FIELDS.method` (:7) gains `readOnly`, `destructive`, `confirm`, `connection`; new kind `cli-command` ([Manifest additions](#manifest-additions)). |
-| `plugins/ui-model.ts` | `buildUiModel` input gains `distroKeybindings: { key: string; command: string }[]` and `distroId: string \| null`; those bindings get IDs `keybinding:<distroId>/k<n>` and beat every non-kernel binding on their chord. |
+| `plugins/ui-model.ts` | `buildUiModel` input gains `distroKeybindings: { key: string; command: string }[]` and `distroId: string \| null`; those bindings get IDs `keybinding:<distroId>/k<n>` and beat every non-kernel binding on their chord; a distro binding on a reserved chord is `shadowed` by the kernel, and `distro.inspect`/`install` warn about it. |
 | `plugins/ui-service.ts` | Setting value precedence user, distro, default, with `SettingInfo.source`; theme chosen user, distro, default; both skip the distro in safe mode. |
 | `plugins/layout.ts` (new) | `LayoutService` ([Layout and windows](#layout-and-windows)). |
 | `plugins/install.ts` (new) | `inspectPlugin`, `installPlugin`, `uninstallPlugin`. |
@@ -116,7 +116,7 @@ built-ins and its declared packages.
 | `packages/ui/src/components/SettingsDialog.tsx` | Only plugin settings and themes (no `settings.set`). |
 | `packages/ui/src/components/Toasts.tsx` | Click opens the notify event's `open` target through `ui.view.open`. |
 | `packages/ui/build.ts` | Also bundles each `plugins/*/src/ui.tsx` to `plugins/*/dist/ui.js` (same externals as the app, `target: browser`). |
-| `apps/desktop/src/bun/events.ts`, `index.ts` | Badge from `quirky.session/list` and `quirky.ask/list` (a MethodNotFound counts 0); refresh on `quirky.session/changed`, `quirky.session/removed`, `quirky.ask/created`, `quirky.ask/resolved`. |
+| `apps/desktop/src/bun/events.ts`, `index.ts` | Native notification only for `notify` events with `desktop: true`. Badge from `quirky.session/list` and `quirky.ask/list` (a MethodNotFound counts 0); refresh on `quirky.session/changed`, `quirky.session/removed`, `quirky.ask/created`, `quirky.ask/resolved`. |
 | `apps/desktop/scripts/bundle.ts` | Copies `plugins/` into `resources/plugins`, bundling each built-in's `main.ts` and `cli.ts` with its dependencies into `.js` beside it and rewriting the copied manifest's `main`/`cli` to the `.js` names; copies `dist/ui.js`. |
 | `distros/sample/` (new) | `quirky-distro.json` and plugin `sample.sidebar` ([Sample distro](#sample-distro)). |
 
@@ -174,7 +174,7 @@ reinstall, `id old → new` and `+`/`-` lines per added or removed contribution)
 {type: 'ui.state.changed', layout: UiLayout}                       // broadcast on every layout change
 {type: 'ui.command.request', requestId, id, args}                  // sent only to the target window
 {type: 'hook.received', agent, sessionId, payload}                 // delivered to plugin listeners only, never to clients
-{type: 'notify', title, body, sessionId?, worktreeId?, open?: {view, input?}}   // `open` is new
+{type: 'notify', title, body, sessionId?, worktreeId?, open?: {view, input?}, desktop: boolean}   // `open` and `desktop` are new; the desktop shell shows a native notification only when `desktop` is true
 ```
 `plugin.changed`, `setting.changed`, `theme.changed` and plugin events are unchanged.
 
@@ -197,14 +197,20 @@ Back-links: SC-11..SC-14, SC-43..SC-48, D19, D20.
    `Confirmations.consume(askId, method, digest)` succeeds (ask answered `confirm: true`, same
    method and digest, unused), else Conflict naming the reason (`confirmation is for another
    call`, `confirmation already used`, `declined`, `confirmation not answered yet`). Neither:
-   `Confirmations.request(method, params, confirmText)` calls `quirky.ask/create` with source
+   `Confirmations.request(method, params, action)` calls `quirky.ask/create` with source
    `{ kernel: true }` and throws ConfirmationRequired with data `{ askId, action }`; if
    `quirky.ask/create` is MethodNotFound, throw Conflict `this action needs confirmation and asks
    are off; pass --yes`.
 6. Run the handler. Plugin handlers get `callerOf(from)`.
 
-Digests: sha256 of `method + "\n" + canonical JSON of params` (keys sorted), computed after step 2.
-The confirm text fills `{name}` placeholders with `String(params[name])`.
+Request-log digest: sha256 of `method + "\n" + canonical JSON of params` (keys sorted), computed
+after step 2. **Action text:** when the method declares `describe`, the kernel calls that method
+with the same params and caller (it must return a string), else it fills the `confirm` text's
+`{name}` placeholders with `String(params[name])`. **Confirmation digest:** sha256 of method,
+canonical params, the caller's `cwd`, `sessionId` and `worktreeId`, and the action text, so a
+confirmation never carries to another caller or to a selector that resolves elsewhere.
+`quirky.worktree/remove` declares `describe: "describeRemove"` (returns `Remove worktree <name>
+(<path>)?`, and `--force` adds `, discarding uncommitted changes`).
 
 ### Plugin context
 
@@ -230,7 +236,7 @@ PluginContext += {
     onReconnect(listener()): () => void
   }
   notify(n: {title, body, sessionId?, worktreeId?, open?: {view, input?}, desktop?: boolean}): void
-     // broadcasts `notify`; with no desktop client connected and desktop !== false, runs the kernel notifier
+     // broadcasts `notify` with desktop = (n.desktop !== false); with no desktop client connected and desktop true, runs the kernel notifier
   readonly launch: {
     readonly shell: string
     readonly binDir: string
@@ -255,7 +261,8 @@ Back-links: D8, D9, D20, SC-17, SC-48.
 
 `SCHEMA:`
 ```
-method entry  += readOnly?: boolean, destructive?: boolean, confirm?: string (required when destructive), connection?: boolean
+method entry  += readOnly?: boolean, destructive?: boolean, confirm?: string (required when destructive),
+                 describe?: string (a readOnly method of the same plugin; destructive only), connection?: boolean
 cli-command entry = {
   id: string,                       // contribution name
   words?: string,                   // relative to the group; default = id; "" is the bare group command
@@ -321,7 +328,7 @@ and defaults to the caller's.
 | Plugin | Methods | Events | Other contributions |
 |---|---|---|---|
 | `quirky.repo` | `list` RO; `add {path}`; `remove {repo}`; `resolve {selector}` RO | `changed {}` | cli: `add <path>`, `list`, `rm <repo>` |
-| `quirky.worktree` | `list {repo?}` RO; `create {repo, name, baseRef?}`; `remove {worktree, force?}` D "Remove worktree {worktree}?"; `resolve` RO | `changed {repoId}` | sidebar-section `worktrees` (title "Worktrees", order 0); setting `worktreesRoot` string default `~/quirky/workspaces`; cli: `list [--repo]`, `create <repo> <name> [--base]`, `rm <worktree> [--force]`; `cliAliases: ["wt"]` |
+| `quirky.worktree` | `list {repo?}` RO; `create {repo, name, baseRef?}`; `remove {worktree, force?}` D "Remove worktree {worktree}?" with `describe: describeRemove`; `describeRemove {worktree, force?}` RO; `resolve` RO | `changed {repoId}` | sidebar-section `worktrees` (title "Worktrees", order 0); setting `worktreesRoot` string default `~/quirky/workspaces`; cli: `list [--repo]`, `create <repo> <name> [--base]`, `rm <worktree> [--force]`; `cliAliases: ["wt"]` |
 | `quirky.session` | `list {worktree?}` RO (omitted = all); `get {session}` RO; `create {worktree (cur), agent, prompt?, cols?, rows?}`; `register {worktree (cur), agent, kind: "structured", title}`; `close {session}`; `setStatus {session, status, exitCode?}` | `changed {session}`, `removed {sessionId}` | view `worktree` (title "Sessions"); commands `new-shell`, `close-session`, `select-tab` (args `{index: integer}`); keybindings `mod+t`, `mod+w`, `mod+1`..`mod+9`; cli: `list [--worktree]`, `new --agent [--worktree] [--prompt] [--background]`, `close <session>` |
 | `quirky.terminal` | `attach {session, cols, rows}` C; `detach {streamId}` C; `write {session, data}`; `resize {session, cols, rows}`; `send {session (cur), text, enter?}`; `read {session (cur), lines?}` RO | none | setting `scrollback` number 500..10000 default 2000; cli: `read [<session>] [--lines]`, `send [<session>] <text> [--enter]`; `cliAliases: ["term"]` |
 | `quirky.agent-status` | `list {worktree?}` RO -> `[{sessionId, agent, status, lastHookAt}]` | none | setting `notifications` boolean default true; launch-hook `agent-hooks` (agents `claude`, `codex`) |
@@ -361,7 +368,8 @@ Back-links: D14, SC-26. Each owning plugin's first store migration is a function
 settings `worktreesRoot` -> `setting:quirky.worktree/worktreesRoot`, `terminalScrollback` ->
 `setting:quirky.terminal/scrollback`, `notifications` -> `setting:quirky.agent-status/notifications`
 (written through `context.call('setting.set', ...)` on first activation when no value is stored and
-the v1 row exists). The kernel never drops the v1 tables.
+the v1 row exists; a scrollback outside 500..10000 is clamped into it first, and a value that is the
+wrong type is skipped with a log line). The kernel never drops the v1 tables.
 
 ### Layout and windows
 
@@ -434,8 +442,9 @@ Back-links: SC-1, SC-6, SC-15, SC-16, SC-43, SC-44, D18, D19, D34.
 
 - `--version`/`-v` (optionally with `--json`) as the only other token: print and exit 0 before any
   routing or connection.
-- Request IDs: base = `--retry-request` value or a fresh UUID; each call's ID is
-  `<base>:<method>#<k>`, `k` counting calls to that method in this invocation.
+- Request IDs: base = `--retry-request` value (at most 64 characters) or a fresh UUID; each call's
+  ID is `<base>:<first 12 hex of sha256(method)>#<k>`, `k` counting calls to that method in this
+  invocation, so every ID fits the 128-character limit.
 - Lost reply (`ConnectionLost`): reconnect and resend with the same ID, at most two more times;
   then exit 1 with `connection lost; rerun with --retry-request <base>`.
 - `--yes`: the link adds `yes: true` to calls of destructive methods (kernel ones from
