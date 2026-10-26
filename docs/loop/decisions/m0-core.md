@@ -447,6 +447,16 @@
 - **Confidence:** medium
 - **Source:** assumed — autonomous
 
+## D45: W4 checkpoint: accept all six findings, which collapse to four defects
+- **Question:** subagent-driven-development Step 9, adjudicating the W4 checkpoint review (three Codex lenses, standard depth). The full 856 KB diff failed all three lenses, so the rerun reviewed the non-test source with deleted files left out and moves as renames, with the tests readable through the reviewers' tools.
+- **Options:** accept; reject with a reason
+- **Chose:** accepted all. S1 (HIGH): the window loaded a plugin's UI module only to mount a slot, so the Questions badge (SC-31) never appeared until the panel opened; the window now keeps every enabled plugin's UI module active. C2, S2 and X2: the session view checked whether structured sessions were available only on mount, in both directions. C3: a scrollback change didn't reach a mounted terminal. X1: removing an ask locally could discard an in-flight refresh carrying a new ask. Fixed in three disjoint components (window host, session UI module, ask UI module).
+- **Why:** each came with a reproduction against the code
+- **Evidence:** scratchpad cp-w4/{C,S,X}/gate.json
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** assumed — autonomous
+
 ## Progress
 
 Step 5, build. W1 to W4 merged with their checkpoint fix batches for W2 and W3; W4 plus integration plus W5's V2 (SC-24 import fence, SC-26 v1 import) at 6b4d904, gate 1963 pass, typecheck clean. Running: W4 checkpoint review (a066ea4..6b4d904) and W5-V1 (sample distro, SC-59 exit test). Next: adjudicate W4 findings (D45) and fix, merge V1, then Final Round 1 over 0c6a3c0..HEAD, one fix batch, verify and merge into build/roadmap.
