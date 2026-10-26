@@ -457,6 +457,16 @@
 - **Confidence:** high
 - **Source:** assumed — autonomous
 
+## D46: Final Round 1: accept all thirteen findings, which collapse to seven defects
+- **Question:** subagent-driven-development final loop, adjudicating Final Round 1 (three Codex lenses, deep, over 0c6a3c0..7ea2baa). The round ran as two partitions of the non-test source (kernel, CLI and git; window, desktop, plugins and distros) because the branch diff is too large for one prompt.
+- **Options:** accept; reject with a reason
+- **Chose:** accepted all. Kernel side: concurrent installs of two distros both succeeded (HIGH, three lenses); a lost reply followed by a failed reconnect dropped the request ID the user needs to retry; `quirky distro inspect` left out the reserved-chord warning the confirmation shows. Plugin side: the session view kept the active tab in window memory instead of the daemon's layout (HIGH, D21); a terminal that exited before its spawn resolved went back to running; a mounted terminal could keep the old theme's colors; disabling `quirky.terminal` during an attach left the new stream open. Fixed in one batch of four disjoint components.
+- **Why:** each came with a reproduction against the code
+- **Evidence:** scratchpad fr1-K/{C,S,X}/gate.json and fr1-P/{C,S,X}/gate.json
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** assumed — autonomous
+
 ## Progress
 
 Step 6, final review. W1 to W5 merged with checkpoint fix batches after W2, W3 and W4; HEAD 7ea2baa, gate 1976 pass, typecheck clean, every SC has a named test. Final Round 1 running over 0c6a3c0..7ea2baa in two partitions (kernel and CLI; window, desktop, plugins and distros) because the branch diff is too large for one prompt. Next: adjudicate (D46), one fix batch, leftovers to BLOCKERS.md, verify, merge into build/roadmap.
