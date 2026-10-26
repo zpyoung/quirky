@@ -335,5 +335,25 @@
 - **Confidence:** high
 - **Source:** assumed — autonomous
 
+## D34: Build with Claude subagents implementing and Codex reviewing
+- **Question:** subagent-driven-development's preflight card (backend pairing, dirty tree, environment)
+- **Options:** the verified pairs: claude-task + codex, claude-task + gemini, claude-task + terra, pi-codex + gemini; opus and sonnet failed `pi-watch --check`
+- **Chose:** claude-task + codex (`IMPLEMENTER` claude-task, `AUTHOR_FAMILY` anthropic, `REVIEWER_ALIAS` codex). The tree was clean, so no dirty-tree action. Full suite: `bun run test && bun test scripts && bun run typecheck`, green at the run base (1990 + 30 tests, 91 s + 12 s).
+- **Why:** LOOP.md step 5 names this pairing; codex resolved
+- **Evidence:** docs/loop/LOOP.md step 5; pi-watch --check results (codex, gemini, terra, flash ok; opus, sonnet failed)
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** locked by docs/loop/LOOP.md
+
+## D35: Build in four waves: contracts and host units, history and session records, host integration and the terminal plugin, then the window and the end-to-end scenarios
+- **Question:** the decomposition (writing-plans rubric, run in context)
+- **Options:** one task per tech-spec row; vertical slices; layer waves
+- **Chose:** W1: protocol contracts then the kernel side (one chain, since the plugin API change and its only implementation must land together for typecheck), the scanner, the barrier, the history log/checkpoint/meta files, and the screen, each its own component. W2: the history reader, the restore algorithm, and the session plugin's records, reconcile and restore. W3: the host's session manager, server and stored sessions with the host tests, and the terminal plugin's methods, events and CLI. W4: the panel and pane UI, and the end-to-end scenario tests. Host units in W1 declare their own small types (structurally the protocol's), because they run beside the protocol change in other trees. Checkpoint reviews after W1 to W3; W4 goes to the final round.
+- **Why:** no two concurrent tasks share a file, every wave ends with a green typecheck, and each later wave builds on contracts that exist
+- **Evidence:** docs/quirk/specs/2026-10-26-m1-term-daemon/tech.md "Code references"
+- **Reversibility:** easy
+- **Confidence:** medium
+- **Source:** assumed — autonomous
+
 ## Progress
-Step 4 done: specs reviewed, fixed and committed. Next: step 5, run quirk:subagent-driven-development against the specs.
+Step 5: building. W1 dispatched (see D35). RUN_BASE is the commit that recorded D34/D35. If this iteration stops, the next one should read the run journal notes in this Progress section, merge any committed wave work, and continue with the next wave.
