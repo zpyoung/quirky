@@ -167,6 +167,43 @@ describe('unix socket transport', () => {
     expect(remaining).toBeGreaterThan(0)
   })
 
+  test('a complete line over 16 MiB is rejected even when its newline arrives in the crossing chunk', async () => {
+    h = await startHarness()
+    const prefix = '{"jsonrpc":"2.0","id":9,"method":"status.get","params":{"pad":"'
+    const suffix = '"}}'
+    const limit = 16 * 1024 * 1024
+    const payload = Buffer.concat([
+      Buffer.from(prefix),
+      Buffer.alloc(limit + 1 - prefix.length - suffix.length, 'a'),
+      Buffer.from(`${suffix}\n`)
+    ])
+    let offset = 0
+    let closed = false
+    let received = ''
+    const pump = (socket: Bun.Socket) => {
+      while (offset < payload.length) {
+        const written = socket.write(payload.subarray(offset))
+        if (written <= 0) return
+        offset += written
+      }
+    }
+    await Bun.connect({
+      unix: h.runtime.socket!,
+      socket: {
+        open: pump,
+        drain: pump,
+        data(_s, chunk) {
+          received += Buffer.from(chunk).toString('utf8')
+        },
+        close() {
+          closed = true
+        }
+      }
+    })
+    await waitFor(() => closed, 10_000)
+    expect(received).toBe('')
+  })
+
   test('SC-3: a long home puts both sockets in a short private directory, and two homes differ', async () => {
     const short = makeTempHome()
     const first = join(short, 'a'.repeat(90))

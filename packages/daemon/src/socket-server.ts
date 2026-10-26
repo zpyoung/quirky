@@ -30,7 +30,7 @@ type SocketState = {
 
 /**
  * Serves newline-delimited JSON-RPC on a unix socket (mode 0600) for the CLI. A stale file at
- * `path` is removed first. A connection whose unfinished line passes 16 MiB is closed.
+ * `path` is removed first. A connection that sends a line over 16 MiB, complete or not, is closed and the line is never dispatched.
  */
 export function startSocketServer(options: SocketServerOptions): SocketServer {
   const { core, handle, log } = options
@@ -109,21 +109,23 @@ export function startSocketServer(options: SocketServerOptions): SocketServer {
       data(socket, chunk) {
         const state = socket.data
         if (state.ending) return
-        state.pending += state.decoder.decode(chunk, { stream: true })
-        let newline = state.pending.indexOf('\n')
-        while (newline !== -1) {
-          const line = state.pending.slice(0, newline)
-          state.pending = state.pending.slice(newline + 1)
-          if (line.trim() !== '') dispatchLine(socket, line)
-          newline = state.pending.indexOf('\n')
-        }
-        if (Buffer.byteLength(state.pending) > MAX_LINE_BYTES) {
+        const rejectOversized = () => {
           log(`socket connection ${state.conn.id} sent a line over ${MAX_LINE_BYTES} bytes; closing`)
           state.pending = ''
           state.ending = true
           state.outbound = null
           socket.end()
         }
+        state.pending += state.decoder.decode(chunk, { stream: true })
+        let newline = state.pending.indexOf('\n')
+        while (newline !== -1) {
+          const line = state.pending.slice(0, newline)
+          if (Buffer.byteLength(line) > MAX_LINE_BYTES) return rejectOversized()
+          state.pending = state.pending.slice(newline + 1)
+          if (line.trim() !== '') dispatchLine(socket, line)
+          newline = state.pending.indexOf('\n')
+        }
+        if (Buffer.byteLength(state.pending) > MAX_LINE_BYTES) rejectOversized()
       },
       drain: flush,
       close(socket) {
