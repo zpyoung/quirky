@@ -8,15 +8,23 @@ files, not this one.
 | --- | --- | --- | --- | --- |
 | hard | medium | [m0-daemon-api D4](decisions/m0-daemon-api.md) | Plugin method wire names are `<pluginId>/<name>` | assumed — autonomous |
 | hard | medium | [m0-daemon-api D9](decisions/m0-daemon-api.md) | Each plugin gets one SQLite file and a data directory of its own | assumed — autonomous |
+| hard | medium | [m0-ui-api D6](decisions/m0-ui-api.md) | A slot gives the plugin one container element to mount into, and nothing else of the page | assumed — autonomous |
 | hard | medium | [m0-registry D4](decisions/m0-registry.md) | Contribution IDs are `<kind>:<pluginId>/<name>` | assumed — autonomous |
 | hard | high | [m0-daemon-api D7](decisions/m0-daemon-api.md) | The four kinds are `method`, `event`, `job` and `launch-hook` | assumed — autonomous |
 | hard | high | [m0-daemon-api D13](decisions/m0-daemon-api.md) | Choose declared contributions with provided implementations | supersedes nothing; extends m0-registry D23 |
+| hard | high | [m0-ui-api D4](decisions/m0-ui-api.md) | The seven UI kinds are `view`, `panel`, `sidebar-section`, `command`, `keybinding`, `setting` and `theme` | assumed — autonomous |
+| hard | high | [m0-ui-api D29](decisions/m0-ui-api.md) | Choose declared slots with lazily imported modules that mount into host elements | assumed — autonomous |
 | hard | high | [m0-registry D12](decisions/m0-registry.md) | Every contribution is declared in the manifest, and code can only provide declared ones | assumed — autonomous |
 | hard | high | [m0-registry D23](decisions/m0-registry.md) | Choose declarative contributions with lazily loaded code | assumed — autonomous |
 | medium | medium | [m0-daemon-api D6](decisions/m0-daemon-api.md) | Plugin events arrive as `{ type: "<pluginId>/<name>", data }` | assumed — autonomous |
 | medium | medium | [m0-daemon-api D15](decisions/m0-daemon-api.md) | Jobs run on a fixed delay, at least one second apart, never overlapping | assumed — autonomous |
 | medium | medium | [m0-daemon-api D19](decisions/m0-daemon-api.md) | Launch hooks are a sequential pipeline in contribution-ID order | assumed — autonomous |
 | medium | medium | [m0-daemon-api D20](decisions/m0-daemon-api.md) | Launch hooks change only environment variables and agent arguments | assumed — autonomous |
+| medium | medium | [m0-ui-api D7](decisions/m0-ui-api.md) | The window shares its React with plugin UI modules through bare imports | assumed — autonomous |
+| medium | medium | [m0-ui-api D10](decisions/m0-ui-api.md) | Slot locations: sidebar sections under the repo list, panels in the right column, views in the main area | assumed — autonomous |
+| medium | medium | [m0-ui-api D17](decisions/m0-ui-api.md) | Settings have one scope, the user's | assumed — autonomous |
+| medium | medium | [m0-ui-api D32](decisions/m0-ui-api.md) | The window-side plugin context mirrors the daemon's, plus slot actions | assumed — autonomous |
+| medium | medium | [m0-ui-api D36](decisions/m0-ui-api.md) | Tech-spec mechanisms: two new store tables, derived warnings through a host hook, React shared by marking it external | assumed — autonomous |
 | medium | medium | [m0-registry D7](decisions/m0-registry.md) | An override replaces the whole contribution, not a merge | assumed — autonomous |
 | medium | medium | [m0-registry D8](decisions/m0-registry.md) | Override precedence is installed over built-in, then dependent over dependency, then a reported conflict | assumed — autonomous |
 | medium | medium | [m0-registry D10](decisions/m0-registry.md) | Enable and disable apply live, without a restart | assumed — autonomous |
@@ -24,6 +32,11 @@ files, not this one.
 | medium | high | [m0-daemon-api D8](decisions/m0-daemon-api.md) | Method results and errors | assumed — autonomous |
 | medium | high | [m0-daemon-api D10](decisions/m0-daemon-api.md) | Stores migrate forward only, by an ordered list, and refuse a downgrade | assumed — autonomous |
 | medium | high | [m0-daemon-api D24](decisions/m0-daemon-api.md) | Plugin methods use the daemon's token, and any client may call any method | locked by docs/roadmap.md |
+| medium | high | [m0-ui-api D5](decisions/m0-ui-api.md) | Plugin UI code is one ES module named by a manifest `ui` field, loaded in the window only when needed | assumed — autonomous |
+| medium | high | [m0-ui-api D8](decisions/m0-ui-api.md) | The daemon resolves UI contributions into one model the window and agents read | assumed — autonomous |
+| medium | high | [m0-ui-api D12](decisions/m0-ui-api.md) | Keybindings are `mod+shift+k` chords that must include a modifier, or a function key | deferred: platform |
+| medium | high | [m0-ui-api D15](decisions/m0-ui-api.md) | Settings are declared with a type and default, stored by the daemon, and set through `setting.*` methods | assumed — autonomous |
+| medium | high | [m0-ui-api D19](decisions/m0-ui-api.md) | Themes declare colors for a fixed token set, and missing tokens fall back to the default theme | assumed — autonomous |
 | medium | high | [m0-registry D5](decisions/m0-registry.md) | The `quirky.` plugin ID prefix is reserved for built-ins | assumed — autonomous |
 | medium | high | [m0-registry D6](decisions/m0-registry.md) | A plugin's own contributions use short names, overrides use full IDs | assumed — autonomous |
 | medium | high | [m0-registry D9](decisions/m0-registry.md) | Disable works by plugin ID or contribution ID, before any code loads, and persists | locked by docs/roadmap.md (disable by ID); assumed — autonomous (cascade and persistence) |
@@ -36,6 +49,13 @@ files, not this one.
 | easy | medium | [m0-daemon-api D38](decisions/m0-daemon-api.md) | Wave 2 checkpoint review: fix three defects, reject calling deactivate after a failed activate | assumed — autonomous |
 | easy | medium | [m0-daemon-api D40](decisions/m0-daemon-api.md) | The scenario tests are split by area, and each task may fix only its area's modules | assumed — autonomous |
 | easy | medium | [m0-daemon-api D42](decisions/m0-daemon-api.md) | Final round 1: fix four defects, and narrow the spec's promise about listener timing | assumed — autonomous |
+| easy | medium | [m0-ui-api D11](decisions/m0-ui-api.md) | Commands run in the window, from a command palette or a keybinding | assumed — autonomous |
+| easy | medium | [m0-ui-api D14](decisions/m0-ui-api.md) | No `when` clauses yet | assumed — autonomous |
+| easy | medium | [m0-ui-api D20](decisions/m0-ui-api.md) | The active theme is chosen through `theme.list` and `theme.set`, and applies live | assumed — autonomous |
+| easy | medium | [m0-ui-api D24](decisions/m0-ui-api.md) | The daemon serves plugin UI files from the plugin's own directory, without a token | assumed — autonomous |
+| easy | medium | [m0-ui-api D28](decisions/m0-ui-api.md) | Window-only behavior is tested through the window's plugin host against a real daemon | assumed — autonomous |
+| easy | medium | [m0-ui-api D31](decisions/m0-ui-api.md) | UI kinds' fields are validated, and a plugin with UI contributions but no `ui` module gets a warning | assumed — autonomous |
+| easy | medium | [m0-ui-api D39](decisions/m0-ui-api.md) | Build in four waves: protocol, then modules, then wiring and the React shell, then scenario tests | assumed — autonomous |
 | easy | medium | [m0-registry D14](decisions/m0-registry.md) | Unknown top-level manifest fields are rejected | assumed — autonomous |
 | easy | medium | [m0-registry D19](decisions/m0-registry.md) | Startup plugins settle before the daemon publishes runtime.json | assumed — autonomous |
 | easy | medium | [m0-registry D22](decisions/m0-registry.md) | Resolve-time behavior is tested through the kernel's host interface | assumed — autonomous |
@@ -67,6 +87,31 @@ files, not this one.
 | easy | high | [m0-daemon-api D41](decisions/m0-daemon-api.md) | The daemon plugin API is kernel, not a built-in plugin | locked by docs/roadmap.md |
 | easy | high | [m0-daemon-api D43](decisions/m0-daemon-api.md) | The final review loop ends after the closure round passes on all three lenses | assumed — autonomous |
 | easy | high | [m0-daemon-api D44](decisions/m0-daemon-api.md) | Every scenario has an API test, and there are no Orca defects to test | locked by docs/loop/LOOP.md |
+| easy | high | [m0-ui-api D1](decisions/m0-ui-api.md) | Classify the item as an API and Visual design, and run both research phases | assumed — autonomous |
+| easy | high | [m0-ui-api D2](decisions/m0-ui-api.md) | Skip the visual companion and the adhd offer, use the standard gray-area set | locked by docs/loop/LOOP.md |
+| easy | high | [m0-ui-api D3](decisions/m0-ui-api.md) | Select every gray area that matters for the UI plugin API | assumed — autonomous |
+| easy | high | [m0-ui-api D9](decisions/m0-ui-api.md) | Sidebar sections and panels are ordered by a declared `order`, then by ID | assumed — autonomous |
+| easy | high | [m0-ui-api D13](decisions/m0-ui-api.md) | Two keybindings on one chord: one wins by registry precedence, and the other is reported as shadowed | assumed — autonomous |
+| easy | high | [m0-ui-api D16](decisions/m0-ui-api.md) | A stored value that no longer fits its declaration reads as the default, and is kept | assumed — autonomous |
+| easy | high | [m0-ui-api D18](decisions/m0-ui-api.md) | v1's own settings and `settings.*` methods stay as they are until m0-port-v1 | assumed — autonomous |
+| easy | high | [m0-ui-api D21](decisions/m0-ui-api.md) | A failing plugin UI is contained to its slot or its command | assumed — autonomous |
+| easy | high | [m0-ui-api D22](decisions/m0-ui-api.md) | Empty slots show nothing, and a loading slot shows a placeholder | assumed — autonomous |
+| easy | high | [m0-ui-api D23](decisions/m0-ui-api.md) | Enabling or disabling a UI contribution applies to the open window live | assumed — autonomous |
+| easy | high | [m0-ui-api D25](decisions/m0-ui-api.md) | The UI plugin API is kernel, not a built-in plugin | locked by docs/roadmap.md |
+| easy | high | [m0-ui-api D26](decisions/m0-ui-api.md) | v1's sidebar, session view and source control stay hard-wired until m0-port-v1 | assumed — autonomous |
+| easy | high | [m0-ui-api D27](decisions/m0-ui-api.md) | This item has no Orca defects to test | locked by docs/loop/queue.json |
+| easy | high | [m0-ui-api D30](decisions/m0-ui-api.md) | The window's own shortcuts are reserved, and a plugin keybinding on one is shadowed by the kernel | assumed — autonomous |
+| easy | high | [m0-ui-api D33](decisions/m0-ui-api.md) | Fast-track the remaining defaults | locked by docs/loop/LOOP.md |
+| easy | high | [m0-ui-api D34](decisions/m0-ui-api.md) | Logic-spec review: fix four model findings, keep D28 against the fifth, reject the pre-pass findings | assumed — autonomous |
+| easy | high | [m0-ui-api D35](decisions/m0-ui-api.md) | `title` is optional for views and commands and required for panels and sidebar sections | assumed — autonomous |
+| easy | high | [m0-ui-api D37](decisions/m0-ui-api.md) | Tech-spec review: fix six model findings, refute one, reject the pre-pass findings | assumed — autonomous |
+| easy | high | [m0-ui-api D38](decisions/m0-ui-api.md) | Build with Claude subagents implementing and Codex reviewing | locked by docs/loop/LOOP.md |
+| easy | high | [m0-ui-api D40](decisions/m0-ui-api.md) | Skip wave 1's checkpoint review | assumed — autonomous |
+| easy | high | [m0-ui-api D41](decisions/m0-ui-api.md) | Wave 2's work was restored from the object store after a failed commit step, and committed on the feature branch directly | assumed — autonomous |
+| easy | high | [m0-ui-api D42](decisions/m0-ui-api.md) | Wave 2 checkpoint: accept all nine findings, which collapse to six host defects | assumed — autonomous |
+| easy | high | [m0-ui-api D43](decisions/m0-ui-api.md) | Wave 3 checkpoint: fix both shell defects | assumed — autonomous |
+| easy | high | [m0-ui-api D45](decisions/m0-ui-api.md) | The final review loop ends after the closure round passes on all three lenses | assumed — autonomous |
+| easy | high | [m0-ui-api D46](decisions/m0-ui-api.md) | Every scenario has a named test through the API, the CLI or the window host on a real daemon, and there are no Orca defects to test | locked by docs/loop/LOOP.md |
 | easy | high | [m0-registry D1](decisions/m0-registry.md) | Classify the item as an API and Organization design, and research it | assumed — autonomous |
 | easy | high | [m0-registry D2](decisions/m0-registry.md) | Skip the visual companion and the adhd offer, use the standard gray-area set | locked by docs/loop/LOOP.md |
 | easy | high | [m0-registry D3](decisions/m0-registry.md) | Select every gray area that matters for the registry | assumed — autonomous |
