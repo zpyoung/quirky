@@ -178,6 +178,7 @@ describe('context.pty', () => {
     await s.call('acme.a/listen')
     await s.call('acme.b/listen')
     await s.call('acme.a/subscribe', spawnArgs('p1'))
+    await s.call('acme.b/subscribe', spawnArgs('p1'))
 
     pty.emit('p1', 'one')
     await waitFor(() => seen()['acme.a']?.data.length === 1 && seen()['acme.b']?.data.length === 1)
