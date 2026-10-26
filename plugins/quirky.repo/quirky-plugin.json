@@ -2,108 +2,1773 @@
   "id": "quirky.repo",
   "name": "Repositories",
   "version": "0.1.0",
-  "description": "Git repositories Quirky knows about, and the selectors that name them.",
+  "description": "Projects Quirky knows about: git repositories and plain folders, their groups, settings and hooks, and the selectors that name them.",
   "main": "main.ts",
   "cli": "cli.ts",
   "contributes": {
     "method": [
       {
         "id": "list",
-        "description": "Every added repository.",
+        "description": "Every added project, ordered by when it was added.",
         "readOnly": true,
-        "params": { "type": "object" },
+        "params": {
+          "type": "object"
+        },
         "result": {
           "type": "array",
           "items": {
             "type": "object",
             "properties": {
-              "id": { "type": "string" },
-              "name": { "type": "string" },
-              "path": { "type": "string", "description": "Absolute path of the repository's main working tree." },
-              "addedAt": { "type": "number" }
+              "id": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string",
+                "description": "The folder's basename."
+              },
+              "path": {
+                "type": "string",
+                "description": "Absolute path of the project's main working tree, or its folder."
+              },
+              "addedAt": {
+                "type": "number"
+              },
+              "kind": {
+                "type": "string",
+                "description": "git or folder.",
+                "enum": [
+                  "git",
+                  "folder"
+                ]
+              },
+              "displayName": {
+                "description": "User-chosen label shown in place of name; null when unset."
+              },
+              "groupId": {
+                "description": "The group holding the project; null when ungrouped."
+              }
             },
-            "required": ["id", "name", "path", "addedAt"]
+            "required": [
+              "id",
+              "name",
+              "path",
+              "addedAt",
+              "kind"
+            ]
           }
         }
       },
       {
         "id": "add",
-        "description": "Resolves `path` to its repository toplevel; adding the same repo twice returns the existing one.",
+        "description": "Adds the repository containing `path`, or with `folder` a plain directory as a folder project. Adding the same real path twice returns the existing project.",
         "params": {
           "type": "object",
-          "properties": { "path": { "type": "string" } },
-          "required": ["path"]
+          "properties": {
+            "path": {
+              "type": "string"
+            },
+            "folder": {
+              "type": "boolean",
+              "description": "Add a directory that is not a git repository as a folder project."
+            }
+          },
+          "required": [
+            "path"
+          ]
         },
         "result": {
           "type": "object",
           "properties": {
-            "id": { "type": "string" },
-            "name": { "type": "string" },
-            "path": { "type": "string", "description": "Absolute path of the repository's main working tree." },
-            "addedAt": { "type": "number" }
+            "id": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string",
+              "description": "The folder's basename."
+            },
+            "path": {
+              "type": "string",
+              "description": "Absolute path of the project's main working tree, or its folder."
+            },
+            "addedAt": {
+              "type": "number"
+            },
+            "kind": {
+              "type": "string",
+              "description": "git or folder.",
+              "enum": [
+                "git",
+                "folder"
+              ]
+            },
+            "displayName": {
+              "description": "User-chosen label shown in place of name; null when unset."
+            },
+            "groupId": {
+              "description": "The group holding the project; null when ungrouped."
+            }
           },
-          "required": ["id", "name", "path", "addedAt"]
+          "required": [
+            "id",
+            "name",
+            "path",
+            "addedAt",
+            "kind"
+          ]
+        }
+      },
+      {
+        "id": "clone",
+        "description": "Clones `url` into `<location or the worktrees folder>/<name or the repository's name>` and adds it. Fails when the destination exists.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "url": {
+              "type": "string",
+              "description": "Anything `git clone` accepts."
+            },
+            "location": {
+              "type": "string",
+              "description": "Folder to clone into; defaults to the worktrees folder."
+            },
+            "name": {
+              "type": "string",
+              "description": "Folder name; defaults to the URL's last segment without .git."
+            }
+          },
+          "required": [
+            "url"
+          ]
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string",
+              "description": "The folder's basename."
+            },
+            "path": {
+              "type": "string",
+              "description": "Absolute path of the project's main working tree, or its folder."
+            },
+            "addedAt": {
+              "type": "number"
+            },
+            "kind": {
+              "type": "string",
+              "description": "git or folder.",
+              "enum": [
+                "git",
+                "folder"
+              ]
+            },
+            "displayName": {
+              "description": "User-chosen label shown in place of name; null when unset."
+            },
+            "groupId": {
+              "description": "The group holding the project; null when ungrouped."
+            }
+          },
+          "required": [
+            "id",
+            "name",
+            "path",
+            "addedAt",
+            "kind"
+          ]
+        }
+      },
+      {
+        "id": "create",
+        "description": "Creates `<location or the worktrees folder>/<name>`, runs `git init` in it and adds it.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "location": {
+              "type": "string",
+              "description": "Folder to create it in; defaults to the worktrees folder."
+            }
+          },
+          "required": [
+            "name"
+          ]
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string",
+              "description": "The folder's basename."
+            },
+            "path": {
+              "type": "string",
+              "description": "Absolute path of the project's main working tree, or its folder."
+            },
+            "addedAt": {
+              "type": "number"
+            },
+            "kind": {
+              "type": "string",
+              "description": "git or folder.",
+              "enum": [
+                "git",
+                "folder"
+              ]
+            },
+            "displayName": {
+              "description": "User-chosen label shown in place of name; null when unset."
+            },
+            "groupId": {
+              "description": "The group holding the project; null when ungrouped."
+            }
+          },
+          "required": [
+            "id",
+            "name",
+            "path",
+            "addedAt",
+            "kind"
+          ]
+        }
+      },
+      {
+        "id": "scan",
+        "description": "Finds the git repositories under `path`; hidden and dependency folders are skipped and a found repository is not searched.",
+        "readOnly": true,
+        "params": {
+          "type": "object",
+          "properties": {
+            "path": {
+              "type": "string"
+            },
+            "maxDepth": {
+              "type": "integer",
+              "description": "How many folders deep to look (default 3).",
+              "minimum": 1,
+              "maximum": 8
+            },
+            "maxRepos": {
+              "type": "integer",
+              "description": "Stop after this many repositories (default 100).",
+              "minimum": 1,
+              "maximum": 500
+            }
+          },
+          "required": [
+            "path"
+          ]
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "repos": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "path": {
+                    "type": "string"
+                  },
+                  "name": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "path",
+                  "name"
+                ]
+              }
+            },
+            "truncated": {
+              "type": "boolean",
+              "description": "True when more repositories were left."
+            }
+          },
+          "required": [
+            "repos",
+            "truncated"
+          ]
+        }
+      },
+      {
+        "id": "import",
+        "description": "Adds every repository found under `path` that is not known yet and, with `group`, puts them all in that group (created with `path` as its parent folder when new).",
+        "params": {
+          "type": "object",
+          "properties": {
+            "path": {
+              "type": "string"
+            },
+            "group": {
+              "type": "string",
+              "description": "Group name to hold the repositories."
+            },
+            "maxDepth": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 8
+            },
+            "maxRepos": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 500
+            }
+          },
+          "required": [
+            "path"
+          ]
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "results": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "path": {
+                    "type": "string"
+                  },
+                  "status": {
+                    "type": "string",
+                    "enum": [
+                      "imported",
+                      "already-known",
+                      "failed"
+                    ]
+                  },
+                  "repoId": {
+                    "type": "string"
+                  },
+                  "error": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "path",
+                  "status"
+                ]
+              }
+            },
+            "imported": {
+              "type": "integer"
+            },
+            "alreadyKnown": {
+              "type": "integer"
+            },
+            "failed": {
+              "type": "integer"
+            },
+            "groupId": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "results",
+            "imported",
+            "alreadyKnown",
+            "failed"
+          ]
         }
       },
       {
         "id": "remove",
-        "description": "Closes the repository's sessions, then forgets the repository.",
+        "description": "Closes the project's sessions, then forgets the project, its settings and its group membership. Nothing on disk is deleted.",
         "params": {
           "type": "object",
-          "properties": { "repo": { "type": "string", "description": "A repo selector: id:, name: or path:, or a bare ID or name." } },
-          "required": ["repo"]
-        },
-        "result": {
-          "type": "object",
-          "properties": { "ok": { "type": "boolean" } },
-          "required": ["ok"]
-        }
-      },
-      {
-        "id": "resolve",
-        "description": "The repository a selector names: id:, name: or path:, or a bare ID or name.",
-        "readOnly": true,
-        "params": {
-          "type": "object",
-          "properties": { "selector": { "type": "string" } },
-          "required": ["selector"]
+          "properties": {
+            "repo": {
+              "type": "string",
+              "description": "A repo selector: id:, name: or path:, or a bare ID or name."
+            }
+          },
+          "required": [
+            "repo"
+          ]
         },
         "result": {
           "type": "object",
           "properties": {
-            "id": { "type": "string" },
-            "name": { "type": "string" },
-            "path": { "type": "string", "description": "Absolute path of the repository's main working tree." },
-            "addedAt": { "type": "number" }
+            "ok": {
+              "type": "boolean"
+            }
           },
-          "required": ["id", "name", "path", "addedAt"]
+          "required": [
+            "ok"
+          ]
+        }
+      },
+      {
+        "id": "resolve",
+        "description": "The project a selector names: id:, name: or path:, or a bare ID or name. name: also matches the display name.",
+        "readOnly": true,
+        "params": {
+          "type": "object",
+          "properties": {
+            "selector": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "selector"
+          ]
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string",
+              "description": "The folder's basename."
+            },
+            "path": {
+              "type": "string",
+              "description": "Absolute path of the project's main working tree, or its folder."
+            },
+            "addedAt": {
+              "type": "number"
+            },
+            "kind": {
+              "type": "string",
+              "description": "git or folder.",
+              "enum": [
+                "git",
+                "folder"
+              ]
+            },
+            "displayName": {
+              "description": "User-chosen label shown in place of name; null when unset."
+            },
+            "groupId": {
+              "description": "The group holding the project; null when ungrouped."
+            }
+          },
+          "required": [
+            "id",
+            "name",
+            "path",
+            "addedAt",
+            "kind"
+          ]
+        }
+      },
+      {
+        "id": "show",
+        "description": "A project with its settings and effective hooks (the shared file at HEAD merged with the local scripts).",
+        "readOnly": true,
+        "params": {
+          "type": "object",
+          "properties": {
+            "repo": {
+              "type": "string",
+              "description": "A repo selector: id:, name: or path:, or a bare ID or name."
+            }
+          },
+          "required": [
+            "repo"
+          ]
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "repo": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string",
+                  "description": "The folder's basename."
+                },
+                "path": {
+                  "type": "string",
+                  "description": "Absolute path of the project's main working tree, or its folder."
+                },
+                "addedAt": {
+                  "type": "number"
+                },
+                "kind": {
+                  "type": "string",
+                  "description": "git or folder.",
+                  "enum": [
+                    "git",
+                    "folder"
+                  ]
+                },
+                "displayName": {
+                  "description": "User-chosen label shown in place of name; null when unset."
+                },
+                "groupId": {
+                  "description": "The group holding the project; null when ungrouped."
+                }
+              },
+              "required": [
+                "id",
+                "name",
+                "path",
+                "addedAt",
+                "kind"
+              ]
+            },
+            "settings": {
+              "type": "object",
+              "properties": {
+                "defaultBase": {
+                  "description": "Ref new branches are cut from; null when unset."
+                },
+                "worktreeLocation": {
+                  "description": "Folder new worktrees go in; null for the global default."
+                },
+                "setupPolicy": {
+                  "type": "string",
+                  "enum": [
+                    "ask",
+                    "run-by-default",
+                    "skip-by-default"
+                  ]
+                },
+                "agentStartup": {
+                  "description": "start-immediately or wait-for-setup; null when unset."
+                },
+                "commandSource": {
+                  "description": "shared-only, local-only or run-both; null when unset."
+                },
+                "setupScript": {
+                  "type": "string",
+                  "description": "The local setup script."
+                },
+                "archiveScript": {
+                  "type": "string",
+                  "description": "The local archive script."
+                }
+              },
+              "required": [
+                "setupPolicy",
+                "setupScript",
+                "archiveScript"
+              ]
+            },
+            "hooks": {
+              "type": "object",
+              "properties": {
+                "file": {
+                  "description": "quirky.yaml or orca.yaml; null when neither exists at the ref."
+                },
+                "setup": {
+                  "description": "The effective setup script as { text, source, badge, shared }, or null."
+                },
+                "archive": {
+                  "description": "The effective archive script as { text, source, badge, shared }, or null."
+                },
+                "agentStartup": {
+                  "type": "string",
+                  "enum": [
+                    "start-immediately",
+                    "wait-for-setup"
+                  ]
+                },
+                "sharedDirectories": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "warnings": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              },
+              "required": [
+                "agentStartup",
+                "sharedDirectories",
+                "warnings"
+              ]
+            }
+          },
+          "required": [
+            "repo",
+            "settings",
+            "hooks"
+          ]
+        }
+      },
+      {
+        "id": "set",
+        "description": "Changes project settings; only the given fields change and an empty string clears a string field.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "repo": {
+              "type": "string",
+              "description": "A repo selector: id:, name: or path:, or a bare ID or name."
+            },
+            "displayName": {
+              "type": "string",
+              "description": "Label shown in place of the name."
+            },
+            "defaultBase": {
+              "type": "string",
+              "description": "Ref new branches are cut from."
+            },
+            "worktreeLocation": {
+              "type": "string",
+              "description": "Folder new worktrees go in."
+            },
+            "setupPolicy": {
+              "type": "string",
+              "enum": [
+                "ask",
+                "run-by-default",
+                "skip-by-default"
+              ]
+            },
+            "agentStartup": {
+              "type": "string",
+              "enum": [
+                "start-immediately",
+                "wait-for-setup"
+              ]
+            },
+            "commandSource": {
+              "type": "string",
+              "enum": [
+                "shared-only",
+                "local-only",
+                "run-both"
+              ]
+            },
+            "setupScript": {
+              "type": "string",
+              "description": "Local setup script."
+            },
+            "archiveScript": {
+              "type": "string",
+              "description": "Local archive script."
+            }
+          },
+          "required": [
+            "repo"
+          ]
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "repo": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string",
+                  "description": "The folder's basename."
+                },
+                "path": {
+                  "type": "string",
+                  "description": "Absolute path of the project's main working tree, or its folder."
+                },
+                "addedAt": {
+                  "type": "number"
+                },
+                "kind": {
+                  "type": "string",
+                  "description": "git or folder.",
+                  "enum": [
+                    "git",
+                    "folder"
+                  ]
+                },
+                "displayName": {
+                  "description": "User-chosen label shown in place of name; null when unset."
+                },
+                "groupId": {
+                  "description": "The group holding the project; null when ungrouped."
+                }
+              },
+              "required": [
+                "id",
+                "name",
+                "path",
+                "addedAt",
+                "kind"
+              ]
+            },
+            "settings": {
+              "type": "object",
+              "properties": {
+                "defaultBase": {
+                  "description": "Ref new branches are cut from; null when unset."
+                },
+                "worktreeLocation": {
+                  "description": "Folder new worktrees go in; null for the global default."
+                },
+                "setupPolicy": {
+                  "type": "string",
+                  "enum": [
+                    "ask",
+                    "run-by-default",
+                    "skip-by-default"
+                  ]
+                },
+                "agentStartup": {
+                  "description": "start-immediately or wait-for-setup; null when unset."
+                },
+                "commandSource": {
+                  "description": "shared-only, local-only or run-both; null when unset."
+                },
+                "setupScript": {
+                  "type": "string",
+                  "description": "The local setup script."
+                },
+                "archiveScript": {
+                  "type": "string",
+                  "description": "The local archive script."
+                }
+              },
+              "required": [
+                "setupPolicy",
+                "setupScript",
+                "archiveScript"
+              ]
+            },
+            "hooks": {
+              "type": "object",
+              "properties": {
+                "file": {
+                  "description": "quirky.yaml or orca.yaml; null when neither exists at the ref."
+                },
+                "setup": {
+                  "description": "The effective setup script as { text, source, badge, shared }, or null."
+                },
+                "archive": {
+                  "description": "The effective archive script as { text, source, badge, shared }, or null."
+                },
+                "agentStartup": {
+                  "type": "string",
+                  "enum": [
+                    "start-immediately",
+                    "wait-for-setup"
+                  ]
+                },
+                "sharedDirectories": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "warnings": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              },
+              "required": [
+                "agentStartup",
+                "sharedDirectories",
+                "warnings"
+              ]
+            }
+          },
+          "required": [
+            "repo",
+            "settings",
+            "hooks"
+          ]
+        }
+      },
+      {
+        "id": "hooks",
+        "description": "The setup and archive hooks of a project: the hooks file read at `ref` merged with the local scripts by the command-source policy, with trust per shared script.",
+        "readOnly": true,
+        "params": {
+          "type": "object",
+          "properties": {
+            "repo": {
+              "type": "string",
+              "description": "A repo selector: id:, name: or path:, or a bare ID or name."
+            },
+            "ref": {
+              "type": "string",
+              "description": "Ref to read the hooks file at (default HEAD)."
+            }
+          },
+          "required": [
+            "repo"
+          ]
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "file": {
+              "description": "quirky.yaml or orca.yaml; null when neither exists at the ref."
+            },
+            "setup": {
+              "description": "The effective setup script as { text, source, badge, shared }, or null."
+            },
+            "archive": {
+              "description": "The effective archive script as { text, source, badge, shared }, or null."
+            },
+            "agentStartup": {
+              "type": "string",
+              "enum": [
+                "start-immediately",
+                "wait-for-setup"
+              ]
+            },
+            "sharedDirectories": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "warnings": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          "required": [
+            "agentStartup",
+            "sharedDirectories",
+            "warnings"
+          ]
+        }
+      },
+      {
+        "id": "trustHooks",
+        "description": "Approves the shared setup and archive scripts now at HEAD, so they may run.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "repo": {
+              "type": "string",
+              "description": "A repo selector: id:, name: or path:, or a bare ID or name."
+            },
+            "kind": {
+              "type": "string",
+              "description": "Which scripts to approve (default all).",
+              "enum": [
+                "setup",
+                "archive",
+                "all"
+              ]
+            }
+          },
+          "required": [
+            "repo"
+          ]
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "repo": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string",
+                  "description": "The folder's basename."
+                },
+                "path": {
+                  "type": "string",
+                  "description": "Absolute path of the project's main working tree, or its folder."
+                },
+                "addedAt": {
+                  "type": "number"
+                },
+                "kind": {
+                  "type": "string",
+                  "description": "git or folder.",
+                  "enum": [
+                    "git",
+                    "folder"
+                  ]
+                },
+                "displayName": {
+                  "description": "User-chosen label shown in place of name; null when unset."
+                },
+                "groupId": {
+                  "description": "The group holding the project; null when ungrouped."
+                }
+              },
+              "required": [
+                "id",
+                "name",
+                "path",
+                "addedAt",
+                "kind"
+              ]
+            },
+            "settings": {
+              "type": "object",
+              "properties": {
+                "defaultBase": {
+                  "description": "Ref new branches are cut from; null when unset."
+                },
+                "worktreeLocation": {
+                  "description": "Folder new worktrees go in; null for the global default."
+                },
+                "setupPolicy": {
+                  "type": "string",
+                  "enum": [
+                    "ask",
+                    "run-by-default",
+                    "skip-by-default"
+                  ]
+                },
+                "agentStartup": {
+                  "description": "start-immediately or wait-for-setup; null when unset."
+                },
+                "commandSource": {
+                  "description": "shared-only, local-only or run-both; null when unset."
+                },
+                "setupScript": {
+                  "type": "string",
+                  "description": "The local setup script."
+                },
+                "archiveScript": {
+                  "type": "string",
+                  "description": "The local archive script."
+                }
+              },
+              "required": [
+                "setupPolicy",
+                "setupScript",
+                "archiveScript"
+              ]
+            },
+            "hooks": {
+              "type": "object",
+              "properties": {
+                "file": {
+                  "description": "quirky.yaml or orca.yaml; null when neither exists at the ref."
+                },
+                "setup": {
+                  "description": "The effective setup script as { text, source, badge, shared }, or null."
+                },
+                "archive": {
+                  "description": "The effective archive script as { text, source, badge, shared }, or null."
+                },
+                "agentStartup": {
+                  "type": "string",
+                  "enum": [
+                    "start-immediately",
+                    "wait-for-setup"
+                  ]
+                },
+                "sharedDirectories": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "warnings": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              },
+              "required": [
+                "agentStartup",
+                "sharedDirectories",
+                "warnings"
+              ]
+            }
+          },
+          "required": [
+            "repo",
+            "settings",
+            "hooks"
+          ]
+        }
+      },
+      {
+        "id": "groupList",
+        "description": "Every project group in order.",
+        "readOnly": true,
+        "params": {
+          "type": "object"
+        },
+        "result": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "parentPath": {
+                "description": "Folder the group was scanned from; null for a hand-made group."
+              },
+              "collapsed": {
+                "type": "boolean"
+              },
+              "order": {
+                "type": "number"
+              },
+              "createdFrom": {
+                "type": "string",
+                "enum": [
+                  "manual",
+                  "folder-scan"
+                ]
+              },
+              "repoIds": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "required": [
+              "id",
+              "name",
+              "collapsed",
+              "order",
+              "createdFrom",
+              "repoIds"
+            ]
+          }
+        }
+      },
+      {
+        "id": "groupCreate",
+        "description": "Creates an empty group.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "parentPath": {
+              "type": "string",
+              "description": "Folder the group stands for."
+            }
+          },
+          "required": [
+            "name"
+          ]
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            },
+            "parentPath": {
+              "description": "Folder the group was scanned from; null for a hand-made group."
+            },
+            "collapsed": {
+              "type": "boolean"
+            },
+            "order": {
+              "type": "number"
+            },
+            "createdFrom": {
+              "type": "string",
+              "enum": [
+                "manual",
+                "folder-scan"
+              ]
+            },
+            "repoIds": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          "required": [
+            "id",
+            "name",
+            "collapsed",
+            "order",
+            "createdFrom",
+            "repoIds"
+          ]
+        }
+      },
+      {
+        "id": "groupRename",
+        "description": "Renames a group.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "group": {
+              "type": "string",
+              "description": "A group ID or exact name."
+            },
+            "name": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "group",
+            "name"
+          ]
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            },
+            "parentPath": {
+              "description": "Folder the group was scanned from; null for a hand-made group."
+            },
+            "collapsed": {
+              "type": "boolean"
+            },
+            "order": {
+              "type": "number"
+            },
+            "createdFrom": {
+              "type": "string",
+              "enum": [
+                "manual",
+                "folder-scan"
+              ]
+            },
+            "repoIds": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          "required": [
+            "id",
+            "name",
+            "collapsed",
+            "order",
+            "createdFrom",
+            "repoIds"
+          ]
+        }
+      },
+      {
+        "id": "groupDelete",
+        "description": "Deletes a group; its projects stay, ungrouped.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "group": {
+              "type": "string",
+              "description": "A group ID or exact name."
+            }
+          },
+          "required": [
+            "group"
+          ]
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "ok": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "ok"
+          ]
+        }
+      },
+      {
+        "id": "groupAdd",
+        "description": "Puts a project in a group, taking it out of any other.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "group": {
+              "type": "string",
+              "description": "A group ID or exact name."
+            },
+            "repo": {
+              "type": "string",
+              "description": "A repo selector: id:, name: or path:, or a bare ID or name."
+            }
+          },
+          "required": [
+            "group",
+            "repo"
+          ]
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            },
+            "parentPath": {
+              "description": "Folder the group was scanned from; null for a hand-made group."
+            },
+            "collapsed": {
+              "type": "boolean"
+            },
+            "order": {
+              "type": "number"
+            },
+            "createdFrom": {
+              "type": "string",
+              "enum": [
+                "manual",
+                "folder-scan"
+              ]
+            },
+            "repoIds": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          "required": [
+            "id",
+            "name",
+            "collapsed",
+            "order",
+            "createdFrom",
+            "repoIds"
+          ]
+        }
+      },
+      {
+        "id": "groupRemove",
+        "description": "Takes a project out of a group.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "group": {
+              "type": "string",
+              "description": "A group ID or exact name."
+            },
+            "repo": {
+              "type": "string",
+              "description": "A repo selector: id:, name: or path:, or a bare ID or name."
+            }
+          },
+          "required": [
+            "group",
+            "repo"
+          ]
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            },
+            "parentPath": {
+              "description": "Folder the group was scanned from; null for a hand-made group."
+            },
+            "collapsed": {
+              "type": "boolean"
+            },
+            "order": {
+              "type": "number"
+            },
+            "createdFrom": {
+              "type": "string",
+              "enum": [
+                "manual",
+                "folder-scan"
+              ]
+            },
+            "repoIds": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          "required": [
+            "id",
+            "name",
+            "collapsed",
+            "order",
+            "createdFrom",
+            "repoIds"
+          ]
+        }
+      },
+      {
+        "id": "groupCollapse",
+        "description": "Collapses a group in the sidebar, or expands it with `collapsed: false`.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "group": {
+              "type": "string",
+              "description": "A group ID or exact name."
+            },
+            "collapsed": {
+              "type": "boolean",
+              "description": "Default true."
+            }
+          },
+          "required": [
+            "group"
+          ]
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            },
+            "parentPath": {
+              "description": "Folder the group was scanned from; null for a hand-made group."
+            },
+            "collapsed": {
+              "type": "boolean"
+            },
+            "order": {
+              "type": "number"
+            },
+            "createdFrom": {
+              "type": "string",
+              "enum": [
+                "manual",
+                "folder-scan"
+              ]
+            },
+            "repoIds": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          "required": [
+            "id",
+            "name",
+            "collapsed",
+            "order",
+            "createdFrom",
+            "repoIds"
+          ]
         }
       }
     ],
     "event": [
       {
         "id": "changed",
-        "description": "A repository was added or removed.",
-        "data": { "type": "object" }
+        "description": "A project or group was added, changed or removed.",
+        "data": {
+          "type": "object",
+          "properties": {
+            "repoId": {
+              "type": "string",
+              "description": "The project that changed."
+            },
+            "groupId": {
+              "type": "string",
+              "description": "The group that changed."
+            }
+          }
+        }
       }
     ],
     "cli-command": [
       {
         "id": "add",
-        "summary": "add a git repository",
-        "positionals": [{ "name": "path", "description": "path to the git repository", "required": true }],
-        "methods": ["quirky.repo/add"]
+        "summary": "add a git repository, or a plain folder with --folder",
+        "positionals": [
+          {
+            "name": "path",
+            "description": "path to the git repository or folder",
+            "required": true
+          }
+        ],
+        "flags": {
+          "folder": {
+            "type": "boolean",
+            "description": "add a directory that is not a git repository as a folder project"
+          }
+        },
+        "methods": [
+          "quirky.repo/add"
+        ]
       },
       {
         "id": "list",
         "summary": "list repositories",
-        "methods": ["quirky.repo/list"]
+        "methods": [
+          "quirky.repo/list"
+        ]
       },
       {
         "id": "rm",
         "summary": "remove a repository from Quirky",
-        "positionals": [{ "name": "repo", "description": "the repository to remove", "required": true }],
-        "methods": ["quirky.repo/remove"]
+        "positionals": [
+          {
+            "name": "repo",
+            "description": "the repository to remove",
+            "required": true
+          }
+        ],
+        "methods": [
+          "quirky.repo/remove"
+        ]
+      },
+      {
+        "id": "clone",
+        "summary": "clone a repository and add it",
+        "positionals": [
+          {
+            "name": "url",
+            "description": "what to clone",
+            "required": true
+          }
+        ],
+        "flags": {
+          "location": {
+            "type": "string",
+            "description": "folder to clone into (default: the worktrees folder)"
+          },
+          "name": {
+            "type": "string",
+            "description": "folder name (default: the repository's name)"
+          }
+        },
+        "methods": [
+          "quirky.repo/clone"
+        ]
+      },
+      {
+        "id": "create",
+        "summary": "create a new repository and add it",
+        "positionals": [
+          {
+            "name": "name",
+            "description": "name of the new repository",
+            "required": true
+          }
+        ],
+        "flags": {
+          "location": {
+            "type": "string",
+            "description": "folder to create it in (default: the worktrees folder)"
+          }
+        },
+        "methods": [
+          "quirky.repo/create"
+        ]
+      },
+      {
+        "id": "scan",
+        "summary": "list the git repositories under a folder",
+        "positionals": [
+          {
+            "name": "path",
+            "description": "folder to search",
+            "required": true
+          }
+        ],
+        "flags": {
+          "max-depth": {
+            "type": "integer",
+            "description": "how many folders deep to look (1-8, default 3)"
+          },
+          "max-repos": {
+            "type": "integer",
+            "description": "stop after this many repositories (1-500, default 100)"
+          }
+        },
+        "methods": [
+          "quirky.repo/scan"
+        ]
+      },
+      {
+        "id": "import",
+        "summary": "add every repository under a folder, optionally as a group",
+        "positionals": [
+          {
+            "name": "path",
+            "description": "folder to search",
+            "required": true
+          }
+        ],
+        "flags": {
+          "group": {
+            "type": "string",
+            "description": "put the repositories in a group of this name"
+          },
+          "max-depth": {
+            "type": "integer",
+            "description": "how many folders deep to look (1-8, default 3)"
+          },
+          "max-repos": {
+            "type": "integer",
+            "description": "stop after this many repositories (1-500, default 100)"
+          }
+        },
+        "methods": [
+          "quirky.repo/import"
+        ]
+      },
+      {
+        "id": "show",
+        "summary": "show a repository's settings and hooks",
+        "positionals": [
+          {
+            "name": "repo",
+            "description": "the repository",
+            "required": true
+          }
+        ],
+        "methods": [
+          "quirky.repo/show"
+        ]
+      },
+      {
+        "id": "set",
+        "summary": "change a repository's settings",
+        "positionals": [
+          {
+            "name": "repo",
+            "description": "the repository",
+            "required": true
+          }
+        ],
+        "flags": {
+          "display-name": {
+            "type": "string",
+            "description": "label shown in place of the name (empty clears)"
+          },
+          "default-base": {
+            "type": "string",
+            "description": "ref new branches are cut from (empty clears)"
+          },
+          "worktree-location": {
+            "type": "string",
+            "description": "folder new worktrees go in (empty clears)"
+          },
+          "setup-policy": {
+            "type": "string",
+            "description": "whether a create runs setup",
+            "enum": [
+              "ask",
+              "run-by-default",
+              "skip-by-default"
+            ]
+          },
+          "agent-startup": {
+            "type": "string",
+            "description": "start the agent at once or after setup",
+            "enum": [
+              "start-immediately",
+              "wait-for-setup"
+            ]
+          },
+          "command-source": {
+            "type": "string",
+            "description": "which setup and archive scripts run",
+            "enum": [
+              "shared-only",
+              "local-only",
+              "run-both"
+            ]
+          },
+          "setup-script": {
+            "type": "string",
+            "description": "local setup script (empty clears)"
+          },
+          "archive-script": {
+            "type": "string",
+            "description": "local archive script (empty clears)"
+          }
+        },
+        "methods": [
+          "quirky.repo/set"
+        ]
+      },
+      {
+        "id": "trust-hooks",
+        "summary": "trust the shared scripts now at HEAD",
+        "positionals": [
+          {
+            "name": "repo",
+            "description": "the repository",
+            "required": true
+          }
+        ],
+        "flags": {
+          "kind": {
+            "type": "string",
+            "description": "which scripts to trust (default all)",
+            "enum": [
+              "setup",
+              "archive",
+              "all"
+            ]
+          }
+        },
+        "methods": [
+          "quirky.repo/trustHooks"
+        ]
+      },
+      {
+        "id": "group-list",
+        "words": "group list",
+        "summary": "list project groups",
+        "methods": [
+          "quirky.repo/groupList"
+        ]
+      },
+      {
+        "id": "group-create",
+        "words": "group create",
+        "summary": "create a project group",
+        "positionals": [
+          {
+            "name": "name",
+            "description": "name of the group",
+            "required": true
+          }
+        ],
+        "flags": {
+          "parent-path": {
+            "type": "string",
+            "description": "folder the group stands for"
+          }
+        },
+        "methods": [
+          "quirky.repo/groupCreate"
+        ]
+      },
+      {
+        "id": "group-rename",
+        "words": "group rename",
+        "summary": "rename a project group",
+        "positionals": [
+          {
+            "name": "group",
+            "description": "the group (ID or name)",
+            "required": true
+          },
+          {
+            "name": "name",
+            "description": "the new name",
+            "required": true
+          }
+        ],
+        "methods": [
+          "quirky.repo/groupRename"
+        ]
+      },
+      {
+        "id": "group-delete",
+        "words": "group delete",
+        "summary": "delete a project group, keeping its repositories",
+        "positionals": [
+          {
+            "name": "group",
+            "description": "the group (ID or name)",
+            "required": true
+          }
+        ],
+        "methods": [
+          "quirky.repo/groupDelete"
+        ]
+      },
+      {
+        "id": "group-add",
+        "words": "group add",
+        "summary": "put a repository in a group",
+        "positionals": [
+          {
+            "name": "group",
+            "description": "the group (ID or name)",
+            "required": true
+          },
+          {
+            "name": "repo",
+            "description": "the repository",
+            "required": true
+          }
+        ],
+        "methods": [
+          "quirky.repo/groupAdd"
+        ]
+      },
+      {
+        "id": "group-remove",
+        "words": "group remove",
+        "summary": "take a repository out of a group",
+        "positionals": [
+          {
+            "name": "group",
+            "description": "the group (ID or name)",
+            "required": true
+          },
+          {
+            "name": "repo",
+            "description": "the repository",
+            "required": true
+          }
+        ],
+        "methods": [
+          "quirky.repo/groupRemove"
+        ]
+      },
+      {
+        "id": "group-collapse",
+        "words": "group collapse",
+        "summary": "collapse a group in the sidebar",
+        "positionals": [
+          {
+            "name": "group",
+            "description": "the group (ID or name)",
+            "required": true
+          }
+        ],
+        "flags": {
+          "expand": {
+            "type": "boolean",
+            "description": "expand the group instead"
+          }
+        },
+        "methods": [
+          "quirky.repo/groupCollapse"
+        ]
       }
     ]
   }

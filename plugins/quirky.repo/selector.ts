@@ -19,8 +19,11 @@ function innermost(repos: Repo[], path: string): Repo[] {
   return best ? [best.repo] : []
 }
 
+/** Whether `name` is the repo's folder name or its display name. */
+const namedBy = (repo: Repo, name: string): boolean => repo.name === name || repo.displayName === name
+
 /**
- * The repos a selector names: `id:<id>`, `name:<name>`, `path:<path>` (the repo containing the
+ * The repos a selector names: `id:<id>`, `name:<name>` (folder or display name), `path:<path>` (the repo containing the
  * path), or a bare value matched as an exact ID first and a name second. Throws
  * SelectorSyntaxError for an empty selector or value, or a relative `path:`.
  */
@@ -30,12 +33,12 @@ export function matchRepos(repos: Repo[], selector: string): Repo[] {
   const prefixed = /^(id|name|path):(.*)$/s.exec(text)
   if (!prefixed) {
     const byId = repos.filter((repo) => repo.id === text)
-    return byId.length > 0 ? byId : repos.filter((repo) => repo.name === text)
+    return byId.length > 0 ? byId : repos.filter((repo) => namedBy(repo, text))
   }
   const [, form, value] = prefixed
   if (value === '') throw new SelectorSyntaxError(`${form}: needs a value`)
   if (form === 'id') return repos.filter((repo) => repo.id === value)
-  if (form === 'name') return repos.filter((repo) => repo.name === value)
+  if (form === 'name') return repos.filter((repo) => namedBy(repo, value!))
   if (!isAbsolute(value!)) throw new SelectorSyntaxError('path: needs an absolute path')
   return innermost(repos, value!)
 }
