@@ -43,4 +43,7 @@ Inside any Quirky terminal, the `quirky` command is on PATH: try `quirky status`
   the native Swift option, with the measurements so far.
 - [research/orca-features/](research/orca-features/README.md): how each Orca feature Quirky keeps
   works, verified in the running app, with screenshots.
+- `research/` is its own local git repo with no remote, ignored here, so the research and the
+  screenshots never reach this repo's remote. Paths into it from these docs resolve only on the
+  machine that has it.
 - [BRIEF.md](BRIEF.md): the project's starting brief.
