@@ -43,6 +43,10 @@ type Active = {
   detached: boolean
   settled: boolean
   resolved: boolean
+  /** True until the job's implementation has resolved or rejected; no handler code runs before that. */
+  resolving: boolean
+  /** The owner was revoked while its implementation was still resolving. */
+  revokedWhileResolving: boolean
   resolve(run: JobRun): void
 }
 
@@ -133,19 +137,32 @@ export class Scheduler {
     return this.launch(entry)
   }
 
-  /** Aborts and forgets the plugin's runs; their jobs are due again one interval from now. */
+  /**
+   * Aborts and forgets the plugin's runs whose handler is running; their jobs are due again one
+   * interval from now. A run still resolving its implementation is left to settle, because the host
+   * revokes the plugin before a failed activation rejects and that rejection is the run's outcome.
+   */
   revokePlugin(pluginId: string): void {
     for (const entry of this.jobs.values()) {
       const active = entry.running
       if (!active || entry.owner !== pluginId) continue
-      this.detach(active, true, `${pluginId} was revoked`)
-      entry.running = null
-      this.schedule(entry, this.now() + entry.intervalMs)
+      if (active.resolving) active.revokedWhileResolving = true
+      else this.revokeRun(active)
     }
-    for (const [id, active] of [...this.lingering]) {
+    for (const active of [...this.lingering.values()]) {
       if (active.entry.owner !== pluginId) continue
-      this.detach(active, true, `${pluginId} was revoked`)
-      this.lingering.delete(id)
+      if (active.resolving) active.revokedWhileResolving = true
+      else this.revokeRun(active)
+    }
+  }
+
+  private revokeRun(active: Active): void {
+    const { entry } = active
+    this.detach(active, true, `${entry.owner} was revoked`)
+    if (this.lingering.get(entry.id) === active) this.lingering.delete(entry.id)
+    if (entry.running === active) {
+      entry.running = null
+      if (this.jobs.get(entry.id) === entry) this.schedule(entry, this.now() + entry.intervalMs)
     }
   }
 
@@ -246,6 +263,8 @@ export class Scheduler {
       detached: false,
       settled: false,
       resolved: false,
+      resolving: true,
+      revokedWhileResolving: false,
       resolve: (run) => {
         if (active.resolved) return
         active.resolved = true
@@ -263,7 +282,16 @@ export class Scheduler {
   private async execute(active: Active): Promise<string | null> {
     const { id } = active.entry
     try {
-      const handler = await this.options.plugins.resolveImplementation(id)
+      let handler: unknown
+      try {
+        handler = await this.options.plugins.resolveImplementation(id)
+      } finally {
+        active.resolving = false
+      }
+      if (active.revokedWhileResolving) {
+        this.revokeRun(active)
+        return null
+      }
       if (active.controller.signal.aborted) return null
       if (typeof handler !== 'function') throw new Error(`${id} is not a function`)
       await (handler as JobHandler)({ jobId: id, signal: active.controller.signal })
