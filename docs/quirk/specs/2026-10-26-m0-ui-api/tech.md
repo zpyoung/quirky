@@ -182,7 +182,7 @@ Pure, no I/O. It is used twice: by `deriveDiagnostics` (warnings only) and by `U
 - Keybindings:
   1. A keybinding whose command ID isn't an effective `command` is `unbound`.
   2. The remaining keybindings are grouped by canonical chord. A chord in `RESERVED_CHORDS` makes every keybinding on it `shadowed` with `shadowedBy: 'kernel'`.
-  3. Otherwise one per chord is `active`. The winner: the keybinding whose owner plugin is `installed` beats one from a `builtin`; with equal sources, an owner that depends on the other's owner (transitively, through `PluginInfo.dependencies`) wins; otherwise the owner ID that sorts first wins; within one plugin, the contribution ID that sorts first wins. This is the precedence of m0-registry D8 (`registry.ts:256-266`), reimplemented over `PluginInfo` because the registry's helper is private. The rest are `shadowed` by the winner.
+  3. Otherwise one per chord is `active`. A keybinding is beaten by another when the other's owner is `installed` and its own is `builtin`, or, with equal sources, when the other's owner depends on its owner (transitively, through `PluginInfo.dependencies`). Keybindings beaten by any other drop out; among those left, the owner ID that sorts first wins, and within one plugin the contribution ID that sorts first. This is the precedence of m0-registry D8 (`registry.ts:256-266`), reimplemented over `PluginInfo` because the registry's helper is private. The rest are `shadowed` by the winner.
 - Warnings, keyed by the plugin that owns the losing or offending entry:
   - `<loser id> is shadowed by <winner id> on <chord>`
   - `<id> is shadowed by the window's own shortcut <chord>`
