@@ -375,5 +375,16 @@
 - **Confidence:** high
 - **Source:** assumed — autonomous
 
+## D38: W2 checkpoint: accept all eight findings, which collapse to five defects; accept one fixer's out-of-scope test file
+- **Question:** adjudicating the W2 checkpoint review (three lenses, standard, codex, independence full, 1 suppressed), and a fixer that added its regression test to `plugins/quirky.session/test/sessions-launch.test.ts` instead of its declared `sessions.test.ts`
+- **Options:** accept or reject each finding; for the scope miss, block and re-plan, or widen retroactively
+- **Chose:** accept all: restore applied a resize before earlier output parsed (C1/S1, HIGH); the reader loaded whole segments before its 8 MiB cap (C3/S3); scratch scrollback was sized by newlines only (S2); the cwd candidate cap could forget the last existing directory (S4); a restored shell exiting during spawn was recorded running (C2/X1). Three fixers closed them with regression tests. The scope miss is accepted as a widening because no other task in that batch or the next wave owns that file, so the collision the rule guards against can't happen; the test lives beside create's matching early-exit test, which already has the fakes it needs.
+- **Why:** each finding reproduced; the scope rule's reason is concurrent editing, absent here
+- **Evidence:** review bundle rev-w2 in the session scratchpad; fix commits on build/m1-term-daemon
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** the bytes-based scratch scrollback (an 8 MiB newline-free window allocates about 68 MB while it renders) shows up in the memory probe; a cap with a documented trim would trade exactness for memory
+- **Source:** assumed — autonomous
+
 ## Progress
-Step 5: W1 merged, checkpoint-reviewed and fixed (D36, D37). Next: W2 (history reader, restore library, session plugin records/restore), then W3 and W4 as D35 says.
+Step 5: W1 and W2 merged, checkpoint-reviewed and fixed (D36-D38). Next: W3 (host session manager + server, terminal plugin daemon side), then W4 (panel and pane UI, end-to-end scenarios), then the final review round.
