@@ -408,6 +408,6 @@
 - **Source:** locked by docs/loop/LOOP.md step 7 conflict recovery
 
 ## Progress
-Step 7 retry ready: the controller's concrete failures are repaired without another catch-up or protected-loop changes. Current-checkout frozen dependency bootstrap and its real workspace test pass; the syntax-aware fence, deterministic worktree/structured fixtures, host ordering regression, scoped combined-diff controls and AI defaults file pass. Latest scripts and typecheck pass. Original core/API/real-kernel/browser proof and the queued completion boundary remain unchanged. Next: commit/detach and retry queue land, which alone decides whether the full merge result is accepted.
+Step 7 conflict-repair ready: the reported moving-tip conflicts are resolved and committed as 5a24554; all six new/updated incoming logs were read, with account/session/accessory/hosting contracts preserved. Frozen install succeeds for the merged graph. Typecheck is the final branch confirmation before commit/detach and another queue land request. Earlier core/API/real-kernel/browser proof, all repaired first-land failures, full scripts pass and the dependent completion item remain unchanged. Do not modify protected/foreign controller state or claim success before the controller accepts the full merge result.
 
 Last SC-9 point: Finder drops import copies under D19, including in-worktree sources. Native SC-9 stays pending for the nightly run. Open-in-place is owned by the operator's `m4-editor-drop-open-in-place`, not an m2-editor blocker.
