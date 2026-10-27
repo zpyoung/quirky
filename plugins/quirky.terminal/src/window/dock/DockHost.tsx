@@ -33,6 +33,8 @@ export function DockHost(props: Props) {
   const [resize, setResize] = useState<ResizeDrag | null>(null)
   const [geometryMounted, setGeometryMounted] = useState(false)
   const [viewMounted, setViewMounted] = useState(false)
+  const [viewMountSequence, setViewMountSequence] = useState(0)
+  const viewReadyRef = useRef(false)
   const [composerFocused, setComposerFocused] = useState(false)
   const [hostFocused, setHostFocused] = useState(false)
   const [transport, setTransport] = useState<DockTransport>('connecting')
@@ -160,27 +162,47 @@ export function DockHost(props: Props) {
     }
   }, [onComposerFocus, renderComposer])
   useEffect(() => {
+    viewReadyRef.current = false
+    setViewMounted(false)
+    setViewMountSequence((sequence) => sequence + 1)
     const element = composerHost.current
     if (!renderComposer || !element) {
-      if (!renderComposer) {
-        setViewMounted(false)
-        setMountError(null)
-      }
+      if (!renderComposer) setMountError(null)
       return
     }
+
+    let active = true
+    const observer = new MutationObserver(() => {
+      if (!active || element.childNodes.length === 0) return
+      active = false
+      observer.disconnect()
+      viewReadyRef.current = true
+      setViewMounted(true)
+      setViewMountSequence((sequence) => sequence + 1)
+    })
+    observer.observe(element, { childList: true })
     try {
       const unmount = context.mountView(COMPOSER_VIEW_ID, element, { pane: paneId, session: sessionId })
-      setViewMounted(true)
       setMountError(null)
       // The contributed view has its own React root; release it after this root finishes committing.
-      return () => queueMicrotask(unmount)
+      return () => {
+        active = false
+        observer.disconnect()
+        viewReadyRef.current = false
+        setViewMounted(false)
+        setViewMountSequence((sequence) => sequence + 1)
+        queueMicrotask(unmount)
+      }
     } catch (error) {
+      active = false
+      observer.disconnect()
+      viewReadyRef.current = false
       setViewMounted(false)
       setMountError(messageOf(error))
     }
   }, [context, paneId, renderComposer, sessionId])
 
-  const mounted = renderComposer && viewMounted
+  const mounted = renderComposer && viewMounted && viewReadyRef.current
   const focused = hostFocused
   const composerHasFocus = mounted && composerFocused
   useEffect(() => {
@@ -188,23 +210,25 @@ export function DockHost(props: Props) {
       controller.clearDockState(paneId)
       return
     }
+    const viewIsMounted = mounted && viewReadyRef.current
     controller.setDockState(paneId, {
       ...dock,
-      mounted,
-      passthrough: mounted && dock.passthrough
+      mounted: viewIsMounted,
+      passthrough: viewIsMounted && dock.passthrough
     })
-  }, [controller, dock, mounted, paneId])
+  }, [controller, dock, mounted, paneId, viewMountSequence])
 
   useEffect(() => {
-    controller.setDockHostState(paneId, mounted, focused, composerHasFocus)
-  }, [composerHasFocus, controller, focused, mounted, paneId])
+    const viewIsMounted = mounted && viewReadyRef.current
+    controller.setDockHostState(paneId, viewIsMounted, focused, viewIsMounted && composerFocused)
+  }, [composerFocused, controller, focused, mounted, paneId, viewMountSequence])
 
   useEffect(() => {
     if (!dock?.enabled) {
       reportSignature.current = null
       return
     }
-    const report: DockHostReport = { mounted, focused, transport }
+    const report: DockHostReport = { mounted: mounted && viewReadyRef.current, focused, transport }
     const signature = JSON.stringify(report)
     if (reportSignature.current === signature) return
     reportSignature.current = signature
@@ -220,7 +244,7 @@ export function DockHost(props: Props) {
     return () => {
       cancelled = true
     }
-  }, [acceptDock, context, dock?.enabled, focused, mounted, paneId, transport])
+  }, [acceptDock, context, dock?.enabled, focused, mounted, paneId, transport, viewMountSequence])
 
   const requestComposerFocus = useCallback(() => {
     if (!controller.canFocusDock(paneId) || focusRequestPending.current) return
@@ -246,10 +270,10 @@ export function DockHost(props: Props) {
     if (!requested || dock?.passthrough) {
       if (active && (closedDock || composerFocused || focusWanted.current || enteringPassthrough || (becameActive && dock?.passthrough))) terminalHandle.current?.focus()
       focusWanted.current = false
-    } else if (!mounted) {
+    } else if (!mounted || !viewReadyRef.current) {
       if (composerFocused && active) terminalHandle.current?.focus()
     } else {
-      if (active && focusWanted.current && controller.canFocusDock(paneId)) {
+      if (active && focusWanted.current && viewReadyRef.current && controller.canFocusDock(paneId)) {
         focusWanted.current = false
         requestComposerFocus()
       }
@@ -258,7 +282,7 @@ export function DockHost(props: Props) {
     wasRequested.current = requested
     wasActive.current = active
     wasPassthrough.current = Boolean(dock?.passthrough)
-  }, [active, composerFocused, controller, dock, hostFocused, mounted, paneId, requestComposerFocus, requested])
+  }, [active, composerFocused, controller, dock, hostFocused, mounted, paneId, requestComposerFocus, requested, viewMountSequence])
 
   const persistRows = useCallback(
     async (nextRows: number) => {

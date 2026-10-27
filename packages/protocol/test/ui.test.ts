@@ -252,11 +252,11 @@ describe('theme tokens and the default theme', () => {
 })
 
 describe('UI kinds', () => {
-  test('lists the eight kinds, five of them code-backed', () => {
+  test('lists the nine kinds, six of them code-backed', () => {
     expect([...UI_KINDS].sort()).toEqual<string[]>(
-      ['command', 'keybinding', 'overlay', 'panel', 'setting', 'sidebar-section', 'theme', 'view'].sort()
+      ['command', 'keybinding', 'overlay', 'panel', 'setting', 'sidebar-section', 'status-bar', 'theme', 'view'].sort()
     )
-    expect([...CODE_BACKED_KINDS].sort()).toEqual(['command', 'overlay', 'panel', 'sidebar-section', 'view'])
+    expect([...CODE_BACKED_KINDS].sort()).toEqual(['command', 'overlay', 'panel', 'sidebar-section', 'status-bar', 'view'])
     for (const kind of CODE_BACKED_KINDS) expect(UI_KINDS.includes(kind)).toBe(true)
   })
 })

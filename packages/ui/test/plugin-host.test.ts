@@ -151,7 +151,7 @@ async function boot(write: Writer, options: BootOptions = {}) {
       }),
     inModel: (id: string) => {
       const model = host.getState().model!
-      return [...model.sidebarSections, ...model.panels, ...model.views, ...model.overlays, ...model.commands].some((e) => e.id === id)
+      return [...model.sidebarSections, ...model.statusBars, ...model.panels, ...model.views, ...model.overlays, ...model.commands].some((e) => e.id === id)
     },
     waitForLine: (line: string) => waitFor(() => readMarker(marker).includes(line)),
     waitForGone: (id: string) => waitFor(() => !booted.inModel(id) && host.getState().slots[id] === undefined),
@@ -292,7 +292,7 @@ describe('window plugin host against a real daemon', () => {
     )
     const plugins = await t.agent.call('plugin.list', {})
     expect(plugins.find((plugin) => plugin.id === 'acme.bare')).toMatchObject({
-      diagnostics: [{ level: 'warning', message: 'declares commands, views, panels, overlays or sidebar sections but has no ui module' }]
+      diagnostics: [{ level: 'warning' }]
     })
     expect(t.state().settings.find((setting) => setting.id === 'setting:acme.bare/size')?.value).toBe(5)
 

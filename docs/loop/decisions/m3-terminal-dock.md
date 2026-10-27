@@ -451,5 +451,27 @@
 - **Revisit if:** the guarded driver gains reliable goal-observation reporting or an actual app regression appears
 - **Source:** assumed — autonomous (runtime proof); locked by LOOP tool-limitation reporting
 
+## D42: Repair only the concurrent-feature conflict reported by land
+- **Question:** first queue land returned a merge conflict after concurrent accounts/hosting work advanced integration
+- **Options:** bypass the queue; discard either report contract; perform the mandated failed-land merge repair
+- **Chose:** follow LOOP step7 failure recovery, not another discretionary catch-up. Combine dock focused/focusSequence/dock-aware panes with the new mountedAccessories report field. Retain meaningful workspace-report assertions without restoring the obsolete exact field-list pin.
+- **Why:** both report intents apply; blindly choosing a side would break either dock targeting or generic account accessories. Read all imported fix-flaky-quirky-worktree-window-projects, m3-accounts and m4-hosting-api-github logs. Preserve asynchronous report readiness, real window-focus refresh, public account preparation, old running-provider identity until preserving restart, and API-only hosting scope.
+- **Evidence:** first land exit1/conflict output; two explicit conflict blocks in controller.ts/workspace-report.test.ts; conflict resolver retained both implementations; post-resolution typecheck exit0; workspace-report file passed. No queue/index/protected source was manually edited.
+- **Reversibility:** medium
+- **Confidence:** high for resolved fields and imported constraints
+- **Revisit if:** authoritative landing reports another concrete concurrent conflict
+- **Source:** locked by LOOP.md step7 failed-land recovery; imported decisions
+
+## D43: Wait for the embedded React root to exist before consuming dock focus
+- **Question:** post-merge real dock E2E exposed a persistent initial focus failure plus an asynchronous public-context assertion
+- **Options:** add sleeps or force editor focus in the test; treat mountView return as render completion; observe actual contributed-root readiness
+- **Chose:** use a one-shot MutationObserver on the owned composer container. Only publish mounted/request focus after its React child commits and actions have registered; disconnect on readiness/cleanup. A synchronous readiness ref and mount sequence prevent stale/batched state consuming pending focus. Preserve canFocusDock ownership guards. Tests wait for actual focused-view readiness and public context transitions, retaining focus/background assertions.
+- **Why:** mountView is synchronous but nested root rendering is not. The old early command could encounter no registered handle, return an ignored failure and lose focusWanted. Fixture-only waits did not fix it: the failing file failed again both initially and alone. Event-driven render readiness fixes the real protocol without polling, arbitrary delays, a new kernel API or private plugin imports.
+- **Evidence:** failed seam run and failed fixture-only retry; DockHost.tsx readiness effect; final dock E2E file passed on replacement host with suite-result ok:true/flaky:[], followed by full typecheck and packaged build (10 UI modules/14 plugins,50.82seconds). Final focused browser smoke is running before retry submission.
+- **Reversibility:** easy
+- **Confidence:** high for exercised daemon/UI ownership and readiness
+- **Revisit if:** a contributed view reports mounted before its interactive root or steals background focus
+- **Source:** assumed — autonomous (concrete failed-land core blocker)
+
 ## Progress
-Approved core and concrete gate repairs are verified; final review, registered dependent follow-up and the single final catch-up are complete. Scripts49pass/223assertions, full typecheck, packaged build and all five repaired-path files passed. Built-web screenshots show real PTY columns62→72, preserved other-pane draft and PONG; formal tool partial status is retained in D41. The caught-up packaged build passed in15.23seconds and the final private scene home was removed. Commit/detach and queue.ts land next for authoritative merge-result full-suite/scripts/types validation. Original full acceptance and a complete post-fix208-file preflight are not claimed; noncore gaps/C1 remain open.
+Core proofs, registered dependent follow-up and one final review remain complete; original noncore gaps/C1 stay open. First land stopped at a concurrent merge conflict, not a full-suite verdict. Required repair preserved dock focus fields and new accessories; imported logs were read. Initial-focus readiness was fixed at the actual React mount boundary, and dock E2E, full typecheck and14-plugin packaged build pass. One focused visible hide/show/focus/PONG smoke is finishing; then stop its private scene, commit the resolved merge, detach and retry queue.ts land. Do not claim authoritative integration validation until that command succeeds.

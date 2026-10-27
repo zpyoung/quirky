@@ -57,6 +57,10 @@ test(
     // Agent fixtures use a plain sh wrapper, whose shell-ready state is unsupported.
     const initialWorkspace = await ui.waitLayout('its initial terminal pane', (workspace) => tabsOf(workspace).length > 0)
     const shell = { pane: leavesOf(tabsOf(initialWorkspace)[0]!.root)[0]! }
+    await ui.waitView('the focused initial terminal pane', (view) => {
+      const report = view as unknown as FocusedViewReport
+      return report.focused === true && report.focusedPane === shell.pane.id
+    })
     const shellBeforeEnable = await dockFor(ui, shell.pane.id)
     expect(shellBeforeEnable.enabled).toBe(false)
 
@@ -67,7 +71,10 @@ test(
     await ui.run('close-menu')
 
     const agent = await openTab(ui.h, ['--agent', 'claude'], { ready: false })
-    await ui.waitView('the recognized Claude pane', (view) => view.tabs.some((tab) => tab.session === agent.session && tab.agent === 'claude'))
+    await ui.waitView('the recognized, focused Claude pane', (view) => {
+      const report = view as unknown as FocusedViewReport
+      return report.focused === true && report.focusedPane === agent.pane.id && view.tabs.some((tab) => tab.session === agent.session && tab.agent === 'claude')
+    })
     const requested = await waitForDock(ui, agent.pane.id, agent.session, (state) => state.enabled && state.supported && state.docked, 'to auto-open')
     expect(requested.gutterRows).toBe(5)
 
@@ -133,6 +140,7 @@ test(
     await ui.run('command:quirky.terminal-dock/passthrough', { pane: agent.pane.id })
     await ui.waitView('passthrough on the dock report', (view) => paneReport(view, agent.pane.id)?.dock?.passthrough === true)
     await waitFor('passthrough terminal focus', () => ui.win.document.activeElement === terminalTextarea ? true : undefined)
+    await waitFor('passthrough dock context cleared', () => windowContext(ui).get('terminalDockFocus') === false ? true : undefined)
     expect((await ui.el<HTMLElement>('.qtd-composer')).classList.contains('qtd-passthrough')).toBe(true)
     expect(ui.win.document.activeElement).toBe(terminalTextarea)
     expect(windowContext(ui).get('terminalDockMounted')).toBe(true)
@@ -143,6 +151,7 @@ test(
     await ui.waitView('passthrough cleared', (view) => paneReport(view, agent.pane.id)?.dock?.passthrough === false)
     await waitFor('composer focus restored after passthrough', () => ui.win.document.activeElement === activeEditor ? true : undefined)
     expect(ui.win.document.activeElement).toBe(activeEditor)
+    await waitFor('composer dock context restored after passthrough', () => windowContext(ui).get('terminalDockFocus') === true ? true : undefined)
     expect(windowContext(ui).get('terminalDockFocus')).toBe(true)
 
     const paneArea = ui.q(`[data-panes="${agent.tab.id}"]`)!
