@@ -753,6 +753,21 @@ describe('cold restore', () => {
     expect(otherScreen).not.toContain('before-crash')
   }, 30000)
 
+  test('SC-16, SC-28: a screen that had scrolled keeps its old lines above the new prompt after a restore', async () => {
+    const { manager: first, home } = newManager({ checkpointIntervalMs: 100 })
+    await first.create(params('scrolled', sh(`seq -f 'scrolled-%g' 1 60; sleep 30`)))
+    await readUntil(first, 'scrolled', 24, (lines) => lines.includes('scrolled-60'))
+    await checkpointCaughtUp(first, home, 'scrolled')
+    const crashed = crashImage(home)
+
+    const { manager: second } = newManager({}, crashed)
+    const env = { ...ENV, HOME: tempDir(), PS1: 'prompt> ' }
+    await second.create(params('scrolled', ['/bin/zsh', '-f'], { env, restore: true }))
+    const screen = await readUntil(second, 'scrolled', 24, (lines) => lines.some((line) => line.startsWith('prompt>')))
+    const kept = Array.from({ length: 10 }, (_, i) => `scrolled-${51 + i}`)
+    expect(screen.lines.filter((line) => kept.includes(line))).toEqual(kept)
+  }, 30000)
+
   test('the log continues across the restore boundary with one restore record', async () => {
     const { manager: first, home } = newManager({ checkpointIntervalMs: 100 })
     await first.create(params('s', sh('echo first-life; sleep 30')))

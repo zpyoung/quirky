@@ -264,8 +264,10 @@ Back-links: [SC-17](logic.md#checkpoints-and-cold-restore), [SC-20](logic.md#che
    `ansi` at its size, then replay the log records after its `offset` (outputs and resizes in
    order); if not, replay every readable segment from the start; if no log either, write
    `[history could not be read]\r\n`.
-2. Append the **ground**: leave the alternate screen, turn off mouse reporting, bracketed paste and
-   application cursor keys, show the cursor, reset SGR, then `\r\n`. Append a `restore` record and
+2. Append the **ground**: save the cursor (`ESC 7`) then leave the alternate screen (`?1049l`), so the
+   cursor stays put on the normal screen (`?1049l` alone restores a saved cursor, home when none was
+   saved, which would let the new prompt's clear erase the rebuilt output); turn off mouse reporting,
+   bracketed paste and application cursor keys, show the cursor, reset SGR, then `\r\n`. Append a `restore` record and
    the ground as an output record to the log, so history and replays see the same bytes.
 3. `seeding = false`; spawn the shell at the recovered size in the recovered cwd; the output
    position continues from the log's last position plus the ground.
