@@ -1,6 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { GitDiff } from '@quirky/protocol'
 import { reuseGitDiff } from '../diffRefresh'
+import { useNotesBinding } from '../notes/binding'
+import { NotesPillContent } from '../notes/NotesPill'
+import { SendMenu } from '../notes/SendMenu'
+import { useNotes } from '../notes/useNotes'
 import { fetchDiff, isEditable, messageOf, POLL_MS, useRefreshTriggers } from './data'
 import { DiffPane, type PaneHandle, type PaneState } from './DiffPane'
 import { ErrorNotice } from './Fallbacks'
@@ -25,6 +29,9 @@ export function FileDiff({ context, input, settings, setSetting, report, bind, c
   const [pane, setPane] = useState<PaneState>(IDLE)
   const [menuOpen, setMenuOpen] = useState(false)
   const paneRef = useRef<PaneHandle | null>(null)
+  const allNotes = useNotes(context, input.worktree)
+  const binding = useNotesBinding(context, input.worktree, allNotes, input.noteId)
+  const fileNotes = allNotes.filter((note) => note.path === path)
   const paneState = useRef<PaneState>(IDLE)
   const loadedRef = useRef<Loaded | null>(null)
   const inFlight = useRef(false)
@@ -124,6 +131,20 @@ export function FileDiff({ context, input, settings, setSetting, report, bind, c
         </span>
         {chip && <span className="qgv-chip">{chip}</span>}
         <span className="qgv-spacer" />
+        {fileNotes.length > 0 && (
+          <SendMenu
+            context={context}
+            worktree={input.worktree}
+            className="qgv-note-pill"
+            ariaLabel="Send AI notes to an agent"
+            scopes={[
+              { id: 'file', label: 'This file', notes: fileNotes, params: { scope: 'file', path } },
+              { id: 'all', label: 'All unsent notes', notes: allNotes, params: { scope: 'all' } }
+            ]}
+          >
+            <NotesPillContent count={fileNotes.length} />
+          </SendMenu>
+        )}
         <button
           type="button"
           aria-label="Previous change"
@@ -202,6 +223,7 @@ export function FileDiff({ context, input, settings, setSetting, report, bind, c
             key={loaded.revision}
             context={context}
             worktree={input.worktree}
+            path={path}
             diff={loaded.diff}
             editable={editable}
             settings={settings}
@@ -210,6 +232,7 @@ export function FileDiff({ context, input, settings, setSetting, report, bind, c
             bind={onPaneHandle}
             onSaved={onSaved}
             onReload={onReload}
+            notes={binding}
           />
         )}
       </div>

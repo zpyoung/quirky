@@ -1,6 +1,10 @@
 import type { UiPluginContext } from '@quirky/protocol'
+import { AI_SETTINGS_VIEW_ID } from '../ai/types'
+import { addReviewNote } from '../notes/composers'
 import { activePanel } from '../panel/registry'
 import { worktreeOf } from '../scm'
+import { isHeld, postSendRequest } from '../notes/SendMenu'
+import type { Note } from '../notes/useNotes'
 import { DIFF_VIEW_ID, PANEL_ID, type DiffViewInput } from '../shared/view-input'
 import { activeView, openDiffView } from './registry'
 
@@ -55,6 +59,14 @@ export function commandHandlers(context: UiPluginContext): Record<string, (args?
       open({ worktree: worktreeFor(context, given), mode: 'combined', commit })
     },
     'review-conflicts': (args) => open({ worktree: worktreeFor(context, argsOf(args)), mode: 'conflicts' }),
+    'send-review-notes': async () => {
+      const { notes } = (await context.call('quirky.git/notes', { worktree: worktreeFor(context, {}) })) as { notes: Note[] }
+      if (!notes.some((note) => !isHeld(note.id))) return
+      context.togglePanel(PANEL_ID, true)
+      postSendRequest({ nonce: Date.now(), issuedAt: Date.now() })
+    },
+    'add-review-note': () => void addReviewNote(),
+    'ai-settings': () => context.openView(AI_SETTINGS_VIEW_ID, { worktree: worktreeFor(context, {}) }),
     'next-change': () => activeView().nextChange(),
     'previous-change': () => activeView().previousChange(),
     'next-conflict': () => activeView().nextConflict(),

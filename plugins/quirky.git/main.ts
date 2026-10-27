@@ -1,6 +1,7 @@
 import { formatContributionId, type PluginContext } from '@quirky/protocol'
 import { createEnv } from './src/daemon/env'
 import { methodTable } from './src/daemon/methods'
+import { migrations } from './src/daemon/store'
 
 /**
  * Source control for a worktree. The `worktree` param is a selector that `quirky.worktree/resolve`
@@ -8,7 +9,8 @@ import { methodTable } from './src/daemon/methods'
  * `src/daemon/`.
  */
 export function activate(context: PluginContext): void {
-  for (const [name, handler] of Object.entries(methodTable(createEnv(context)))) {
+  const env = createEnv(context, context.openStore(migrations))
+  for (const [name, handler] of Object.entries(methodTable(env))) {
     context.provide(formatContributionId('method', context.pluginId, name), handler)
   }
 }

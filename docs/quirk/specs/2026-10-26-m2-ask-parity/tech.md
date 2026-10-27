@@ -169,10 +169,18 @@ formatSpecErrors(errors): string   // "<path>: <message>" joined with "; "
 - Post: on success, `spec` is canonical: known fields only, in ORCA's normalized form, plus a string
   `title` when given. On failure, every error is reported, in spec order (ORCA collects, never stops
   at the first).
-- Rules and messages are ORCA's (`ask-question-schema.ts:126-207`, `ask-question-field-validation.ts`),
-  including the credential normalization and triggers (`:20-59`), regex safety (`:76-188`,
-  `MAX_PATTERN_LENGTH` 200, `MAX_PATTERN_QUANTIFIERS` 10) and `isValidIsoDate`. Root messages use
-  ORCA's paths (`questions`, `questions[i].field`). Quirky adds `title`: `title must be a string`.
+- Rules and messages follow ORCA (`ask-question-schema.ts:126-207`,
+  `ask-question-field-validation.ts`), including credential normalization and `isValidIsoDate`.
+  Quirky's final-review amendment caps patterns and tested text at 200 characters, permits at most
+  three variable quantifiers (backreferences count), and rejects nested repetition and repeated
+  alternation ([D32](../../../loop/decisions/m2-ask-parity.md#d32-patterns-are-screened-more-strictly-than-orca-does)).
+  Root messages use ORCA's paths (`questions`, `questions[i].field`); Quirky adds
+  `title`: `title must be a string`.
+  Defaults, daemon answers and UI submissions share `src/core/pattern.ts`: a conservative
+  required-literal prefilter rejects a flat pattern's absent mandatory literal before native
+  matching. Unknown syntax and flagged regexes use the original JavaScript matcher unchanged.
+  This avoids the reported unanchored `a*a*a*b` nonmatch backtracking without changing accepted
+  patterns or match results; it is not a general regex timeout.
 - `checkCredentialText: false` skips the three credential-shaped text checks only; the
   `masked`/`sensitive` refusal always runs (D7).
 

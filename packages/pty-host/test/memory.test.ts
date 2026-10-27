@@ -1,13 +1,13 @@
 import { afterEach, expect, test } from 'bun:test'
-import { ready, runCleanups, startProcess, tempHome, waitFor } from './helpers'
+import { createScopedSession, ready, runCleanups, scopeForHome, startProcess, tempHome, waitFor } from './helpers'
 
 afterEach(runCleanups)
 
 const SESSIONS = 40
 const LAST_LINE = 650000
 
-async function residentMiB(pid: number): Promise<number> {
-  const proc = Bun.spawn(['ps', '-o', 'rss=', '-p', String(pid)], { stdout: 'pipe' })
+async function residentMiB(pid: number, home: string): Promise<number> {
+  const proc = scopeForHome(home).spawn(['ps', '-o', 'rss=', '-p', String(pid)], { stdout: 'pipe' })
   const kib = Number((await new Response(proc.stdout).text()).trim())
   await proc.exited
   return kib / 1024
@@ -20,9 +20,9 @@ test(
     const host = startProcess(home)
     const { client } = await ready(home)
 
-    const before = await residentMiB(host.pid)
+    const before = await residentMiB(host.pid, home)
     for (let i = 0; i < SESSIONS; i++) {
-      await client.request('create', {
+      await createScopedSession(client, home, {
         sessionId: `m${i}`,
         cwd: '/tmp',
         argv: ['/bin/sh', '-c', `seq 1 ${LAST_LINE}`],
@@ -41,7 +41,7 @@ test(
     let growth = Infinity
     const settled = Date.now() + 15000
     while (growth >= bound && Date.now() < settled) {
-      growth = (await residentMiB(host.pid)) - before
+      growth = (await residentMiB(host.pid, home)) - before
       if (growth >= bound) await Bun.sleep(250)
     }
     expect(growth).toBeLessThan(bound)

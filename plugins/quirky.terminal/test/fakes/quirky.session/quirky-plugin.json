@@ -31,7 +31,8 @@
             "worktree": { "type": "string" },
             "agent": { "type": "string" },
             "cwd": { "type": "string" },
-            "prompt": { "type": "string" }
+            "prompt": { "type": "string" },
+            "extraArgs": { "type": "string" }
           }
         }
       },

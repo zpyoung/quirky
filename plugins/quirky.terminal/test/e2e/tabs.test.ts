@@ -179,7 +179,6 @@ test(
     expect(workspace.closed).toEqual([])
     const session = leavesOf(reopened.root)[0]!.session
     expect(session).not.toBe(build.session)
-    h.noteProcesses()
     await waitFor('the reopened shell', async () => (await h.hostRow(session))?.shellState === 'ready')
     expect(await pwdOf(h, session)).toBe(web)
     expect((await h.screen(session)).some((line) => line.includes('reopen-me'))).toBe(false)

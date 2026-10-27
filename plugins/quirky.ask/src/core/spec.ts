@@ -1,5 +1,6 @@
 import type { AskOption, AskPreview, AskQuestion, AskSpec } from '@quirky/protocol'
 import { FORMAT_PATTERNS, isPlainObject, isValidIsoDate } from './values'
+import { matchesPattern } from './pattern'
 
 export const MAX_ASK_QUESTIONS = 10
 export const MAX_ASK_OPTIONS = 12
@@ -369,7 +370,7 @@ function validateTextQuestion(
             path: `${path}.default`,
             message: `default must be at most ${MAX_PATTERN_TEST_LENGTH} characters when pattern is set`
           })
-        } else if (!patternRegex.test(defaultValue)) {
+        } else if (!matchesPattern(patternRegex, defaultValue)) {
           errors.push({ path: `${path}.default`, message: 'default does not match pattern' })
         }
       }

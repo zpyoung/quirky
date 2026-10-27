@@ -16,7 +16,6 @@ test(
     await ui.stop()
     const answered = await split
     expect(answered.code, answered.stderr).toBe(0)
-    h.noteProcesses()
     await ui.restartDaemon('SIGKILL')
 
     const ws = await waitForLayout(h, 'both panes', (candidate) => panesOf(candidate).length === 2)
