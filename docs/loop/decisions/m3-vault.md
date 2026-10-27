@@ -253,5 +253,104 @@
 - **Revisit if:** The assembled tree reveals a contract conflict requiring re-plan rather than an implementation fix.
 - **Source:** assumed — autonomous
 
+## D24: Keep the locked flat schema dialect and document nullable response fields honestly
+- **Question:** Can concrete vault schemas use references, unions, boolean enums or typed-map additionalProperties?
+- **Options:** Silently extend the dialect; retain opaque models; describe concrete fields within the existing subset.
+- **Chose:** Populate concrete model properties and flat kind discriminants, add required yes parameters, and use the established description form only where nullable/owner-defined values exceed the dialect. No union/reference/type-map extension in this item.
+- **Why:** m0-scripting D4 deliberately fixes the supported keywords, and D6 leaves response validation unchecked. The vault can document its nullable fields and extensible owner results without changing that locked public language.
+- **Evidence:** docs/loop/decisions/m0-scripting.md D4-D6; schema-completion task inspected the shared validator and CLI consumers. Nullable values and per-kind required-field limitations are explicit rather than fabricated supported keywords.
+- **Reversibility:** medium
+- **Confidence:** high
+- **Revisit if:** A future approved feature requires a union that descriptions cannot document adequately.
+- **Source:** locked by docs/loop/decisions/m0-scripting.md
+
+## D25: Add four history resume capabilities in the existing provider owner
+- **Question:** How should history sources resume when the launch catalog has no template?
+- **Options:** Skip those sources; construct a second vault launcher; extend the canonical agent entries from the vault's source forms.
+- **Chose:** After strict real-client reproduction, add only the missing Hermes --resume, Rovo --restore, OpenClaw --resume and Cline --id templates in quirky.agents. Existing templates, launch behavior, planner quoting and recorded-launch replay remain unchanged. Do not weaken the 25-source test.
+- **Why:** m1-providers D9 ported launch-catalog values, but the vault source separately defines these additional history resume forms. M3 now needs those capabilities; central owner data keeps one planner rather than hiding a separate vault command builder.
+- **Evidence:** ai-vault.md:232-234; strict public prepare/copy-execution regression artifact133 reports all four nonresumable entries and failures. This is a bounded catalog completion, not a change to stack/trust or an existing successful template.
+- **Reversibility:** medium
+- **Confidence:** high
+- **Revisit if:** Supported installed CLI versions require a different evidenced history resume form.
+- **Source:** supersedes m1-providers D9
+
+## D26: Recover Gemini roots only from genuine project metadata
+- **Question:** How can Gemini history obtain an original cwd without inventing it from a hash or the current process?
+- **Options:** Guess current cwd; declare all Gemini history unresumable; join genuine project markers/registry and retain unknown when absent.
+- **Chose:** Read project-directory .project_root and Gemini's nested projects.json projects map, associate them with tmp/project/chats sources and freshness, and preserve unknown cwd when no valid mapping exists. Shared registry/marker files are metadata dependencies, never deletion targets.
+- **Why:** Official Gemini source writes the root marker and registry. A project hash is not invertible. Original Orca and the initial port omit this join; strict source-resume acceptance exposes the gap.
+- **Evidence:** https://github.com/google-gemini/gemini-cli/blob/main/packages/core/src/config/projectRegistry.ts ; https://github.com/google-gemini/gemini-cli/blob/main/packages/core/src/config/storage.ts ; chatRecordingTypes.ts and chatRecordingService.ts in that repository. Failing-before daemon metadata tests are artifact132; the strict 25-source failure is artifact133.
+- **Reversibility:** medium
+- **Confidence:** high
+- **Revisit if:** Gemini changes its documented project metadata format.
+- **Source:** assumed — autonomous
+
+## D27: Avoid Bun's observed asymmetric-matcher mutation when reusing API payloads
+- **Question:** Why did a negative Gemini action test send a non-string ID immediately after asserting it was a string?
+- **Options:** Change the API to accept objects; suppress validation; fix the test's received-object mutation.
+- **Chose:** Use scalar assertions and fresh primitive projections for reusable RPC records; remove incidental exact error wording. Preserve the actual missing-cwd refusal and positive metadata regressions.
+- **Why:** A standalone Bun1.4 probe showed toMatchObject with expect.any(String) replaces the received string with a matcher object. The production API correctly rejects that object. Changing app validation would hide a test-framework corruption.
+- **Evidence:** observed probe output idType=object and row.id={}; the Gemini helper was migrated before rerunning the genuine red phase. This does not weaken metadata expectations.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** Bun fixes asymmetric received-object mutation and project test conventions change.
+- **Source:** assumed — autonomous
+
+## D28: Stop and serially integrate the overlapping discovery correction before commit
+- **Question:** How should an out-of-scope discovery edit from the SQLite fix be combined with the Gemini discovery owner?
+- **Options:** Commit both and trust an automatic merge; discard the needed correction; transfer it to the single file owner before checkpointing.
+- **Chose:** Halted the overlapping commit, copied the two typed-SQLite discovery hunks into the Gemini-owned file with anchored edits, and restored the SQLite tree's discovery file exactly to baseline (snapshot E764). Other scopes stay disjoint. All eight HEADs remain4736bdc at the repair barrier; generated tool configs are removed.
+- **Why:** Correctness does not excuse two independently edited versions of a shared file. One serial integration owner produces the combined version that the assembled gates will test.
+- **Evidence:** actual changed-path audit showed discovery.ts in both trees; the isolated diff had two hunks. Anchored integration transferred them and restored the baseline hash before any component commit.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** Another changed path crosses a declared ownership boundary.
+- **Source:** assumed — autonomous
+
+## D29: Keep logical SQLite identity separate from its physical public source path
+- **Question:** Why do present OpenCode-family sessions fail resume and raw-source actions?
+- **Options:** Treat synthetic strings as files; bypass all source checks; materialize the physical backing path while preserving logical IDs and index keys.
+- **Chose:** Match original Orca: candidate/index identity stays dbPath#sessionId, public session.filePath is the physical backing DB, and fresh scanner validation checks that DB/current row/root/kind. Normalize cache hits and rebuild disposable stale search schema. Classify SQLite candidates by metadata, never an arbitrary # in a normal filename.
+- **Why:** The strict consumer test proved three valid source families were rejected by a format-blind lstat. A physical path invariant fixes the producer contract instead of suppressing the action error or inventing a second launcher.
+- **Evidence:** artifact133; original session-scanner-opencode-sqlite.ts:265-273; Quirky scanner get/validateCurrentFile; actual source action research in VaultSyntheticSemantics.
+- **Reversibility:** medium
+- **Confidence:** high
+- **Revisit if:** A provider uses a source that cannot be represented by a physical backing resource and logical identity.
+- **Source:** assumed — autonomous
+
+## D30: Test genuine macOS Trash only on an owned disposable volume
+- **Question:** How can an actual OS-trash test avoid changing or littering the user's real Trash?
+- **Options:** Fake acknowledgement; move a generic fixture into user Trash without cleanup; use an owned temporary APFS image and validate its Trash destination.
+- **Chose:** Disposable APFS sparse-image fixture, noninteractive/nobrowse mount, source and Quirky home on that volume, Foundation destination safety check, finite owned commands and guaranteed rig/unmount/image cleanup. Non-macOS reports a real skip, not a passing no-op.
+- **Why:** The feature needs actual filesystem effect, but tests must never modify unrelated real state. This also provides a safe failing-before case for currently rejected directory-backed session targets.
+- **Evidence:** test/support/trash-volume.ts and actions.test.ts prepared in the isolated scanner tree. Actual macOS execution remains pending; no pass is claimed from tool availability alone.
+- **Reversibility:** easy
+- **Confidence:** medium
+- **Revisit if:** This host cannot safely create or detach the disposable volume.
+- **Source:** locked by docs/loop/LOOP.md
+
+## D31: Verify every copied resume command through an owned executable
+- **Question:** How can 25 history sources be verified without starting installed agents or using their credentials?
+- **Options:** Mock planner returns; run real credentialed CLIs; configure an owned collector and execute actual public API-prepared commands.
+- **Chose:** Real scanner and daemon APIs, optional fixture cwdRoot under an owned home, restricted PATH/HOME/QUIRKY_HOME, finite collector processes recording actual argv/cwd/env, original-source/trust snapshots and an injection sentinel. Source paths also contain spaces, #, apostrophes and dollar text.
+- **Why:** This exercises the consumer's copied command and provider identity rather than a forwarding echo. It found the missing templates, Gemini root gap and synthetic source error before any feature acceptance claim.
+- **Evidence:** test/resume.test.ts; actual red output artifact133, after correcting the fixture's missing Cursor transcript binding. Existing owner tests plus a later real PTY smoke cover session launch separately.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** A provider's copied command has a documented execution contract the collector cannot represent.
+- **Source:** locked by docs/quirk/specs/2026-10-27-m3-vault/logic.md
+
+## D32: Bound new indexing starts without starving an in-flight one-shot read
+- **Question:** How can a valid source that parses for longer than the pass budget ever become searchable?
+- **Options:** Restart and abort forever; add resumable state to every parser; finish the current bounded-memory read and apply the budget before starting another.
+- **Chose:** The last option. Keep the 20-second cadence, owed-work bookkeeping, bounded buffers/transactions, explicit shutdown/cancellation abort and independent five-second fresh-search deadline. One already-started read may overrun the pass target; no new reader-state framework is introduced.
+- **Why:** A real SQLite/timer probe with a valid abort-aware six-second reader observed four starts, zero completions and four budget aborts, leaving the file due and unsearchable. The current one-shot boundary cannot preserve partial parser state, so killing it at every target deadline is a liveness defect, not a useful bound.
+- **Evidence:** VaultIndexProgressProbe output and search/index.ts pass/controller/publication paths. The probe models a slow valid reader; it is not a huge-file memory benchmark. The sibling tech spec now states the start-budget policy; a controlled gate regression also verifies freshness and explicit cancellation.
+- **Reversibility:** medium
+- **Confidence:** high
+- **Revisit if:** An approved strict read-time share requires checkpointable parser state rather than a start budget.
+- **Source:** assumed — autonomous
+
 ## Progress
-Step 5: all workers have returned. Scanner/search accepted by targeted checks; service/window remain unverified integration checkpoints. Authoritative barrier audit verified unchanged HEADs and disjoint declared source scopes. Next assemble on build/m3-vault, install workspace dependencies, run targeted real API/CLI/window and owner tests, repair confirmed defects, then complete all24 acceptance scenarios, packaged/UI smoke, catchup decisions and final review before landing.
+Step 5/6: repair barrier reached; all workers returned. Core consent and all25 browse pass, but full feature acceptance is still pending. Eight HEADs match4736bdc; source scopes are disjoint after D28 serial integration. Prepared fixes cover generic bindings, canonical schemas, real CLI/harness calls, scope availability, four provider templates, Gemini metadata and SQLite backing paths, plus expanded real-client acceptance. Next checkpoint/assemble repairs, run typecheck and targeted API/CLI/UI/owner tests, safely observe the directory Trash and inherited-unlimited regressions, fix confirmed failures, then complete packaged/UI smoke, integration catchup and final review before landing.

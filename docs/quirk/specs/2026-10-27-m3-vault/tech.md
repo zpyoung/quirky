@@ -72,7 +72,7 @@ Port query planner semantics and FTS escape rules, including tokenizer `unicode6
 
 `CONTRACT:` Evidence uses raw `[[` and `]]` only for FTS-verified highlight delimiters. Encode source literal U+E002 as U+E002 followed by `2`, source-authored `[[` as U+E002 followed by `0`, and source-authored `]]` as U+E002 followed by `1`. Escape U+E002 first. The renderer parses raw marks, then decodes each text run once (2 to U+E002, 0 to literal opening brackets, 1 to literal closing brackets), never rescanning decoded text for marks. This keeps arbitrary source text injective and text-only.
 
-Reconcile cadence 20 seconds with bounded passes; full sweep at least every 15 cycles and when work remains owed. Detect append/rewrite/shrink/inode change/sidecars, retention, failed-file holdout and missing/unverifiable roots. Fresh requests wait up to 5 seconds, then mark freshness truncated. A whole reread is permitted where required for correctness, but unchanged source signatures must skip parsing and large files must remain bounded-memory.
+Reconcile cadence is 20 seconds; the five-second target bounds starting additional candidates, not completion of an already-started bounded-memory one-shot parse. Let that parse finish and commit so a slower valid source cannot be aborted and restarted forever. Explicit policy shutdown/cancellation still aborts it. Keep remaining work owed and run full sweeps at least every 15 cycles or when owed. Detect append/rewrite/shrink/inode change/sidecars, retention, failure holdout and missing/unverifiable roots. The independent fresh-search caller deadline remains five seconds with freshness truncation; unchanged signatures skip parsing.
 
 ### Worker boundary
 
