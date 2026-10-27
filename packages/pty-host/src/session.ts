@@ -72,6 +72,8 @@ type Session = {
   barrier: ShellReadyBarrier
   checkpointer: CheckpointScheduler
   subscribers: Set<DataSink>
+  /** Screen subscriptions still settling; removing the sink cancels them so they never register it. */
+  pendingSubs: Set<PendingSub>
   alive: boolean
   exitCode: number | null
   exitSignal: string | null
@@ -88,6 +90,8 @@ type Session = {
   finished: Promise<void>
   markFinished: () => void
 }
+
+type PendingSub = { sink: DataSink; cancelled: boolean }
 
 /** The emulator is built before its session exists, so its replies find the session through this. */
 type ReplyRoute = { session?: Session }
@@ -116,6 +120,7 @@ type Located = { live: Session; stored?: undefined } | { live?: undefined; store
 const SESSION_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/
 const PTY_CLOSE_GRACE_MS = 500
 const META_WRITE_DELAY_MS = 250
+const SHUTTING_DOWN = 'Terminal host is shutting down'
 
 /**
  * Owns every PTY session: the process, its on-disk history, the hot tail and the screen emulator,
@@ -165,6 +170,7 @@ export class SessionManager {
     if (typeof sessionId !== 'string' || !SESSION_ID.test(sessionId)) throw new Error(`invalid session id: ${sessionId}`)
     if (!Array.isArray(argv) || argv.length === 0 || argv.some((a) => typeof a !== 'string')) throw new Error('argv must be a non-empty string array')
     assertSize(cols, rows)
+    if (this.stopping) throw new Error(SHUTTING_DOWN)
     if (params.restore) return this.restore(params)
     if (this.sessions.has(sessionId) || this.starting.has(sessionId)) throw new Error(`session already exists: ${sessionId}`)
     return this.createFresh(params)
@@ -212,6 +218,7 @@ export class SessionManager {
       return
     }
     live.forgotten = true
+    for (const pending of live.pendingSubs) pending.cancelled = true
     if (live.alive) signalGroup(live.proc, 'SIGKILL')
     this.sessions.delete(sessionId)
     this.teardown(live)
@@ -237,12 +244,18 @@ export class SessionManager {
   }
 
   unsubscribe(sessionId: string, sink: DataSink): void {
-    this.locate(sessionId).live?.subscribers.delete(sink)
+    const live = this.locate(sessionId).live
+    if (!live) return
+    live.subscribers.delete(sink)
+    cancelPending(live, sink)
   }
 
   /** Removes `sink` from every session; called when its connection goes away. */
   dropSink(sink: DataSink): void {
-    for (const session of this.sessions.values()) session.subscribers.delete(sink)
+    for (const session of this.sessions.values()) {
+      session.subscribers.delete(sink)
+      cancelPending(session, sink)
+    }
   }
 
   /**
@@ -262,7 +275,7 @@ export class SessionManager {
     }
     return this.withRebuilt(stored, async (screen, rebuilt) => {
       const visible = screen.lines()
-      return readResult(await textLinesAbove(stored.dir, lines, visible.length), visible, rebuilt.cols, rebuilt.rows, false)
+      return readResult(await textLinesAbove(stored.dir, lines, visible.length), visible, rebuilt.cols, rebuilt.rows, screen.isAlternate)
     })
   }
 
@@ -280,7 +293,7 @@ export class SessionManager {
     }
     return this.withRebuilt(stored, (screen, rebuilt) => ({
       ...screen.snapshot(),
-      cwd: stored.meta.cwd,
+      cwd: rebuilt.cwd,
       title: rebuilt.title,
       shellState: 'unsupported' as const,
       offset: rebuilt.offset
@@ -383,6 +396,7 @@ export class SessionManager {
     let log: HistoryLog | undefined
     try {
       const rebuilt = await rebuildScreen(stored.dir, screen, { cols: params.cols, rows: params.rows, cwd: params.cwd })
+      if (this.stopping) throw new Error(SHUTTING_DOWN)
       if (this.stored.get(sessionId) !== stored) throw new Error(`session ${sessionId} is not restorable`)
       const cwd = isDirectory(rebuilt.cwd) ? rebuilt.cwd : params.cwd
       log = HistoryLog.openForAppend(stored.dir, { cols: rebuilt.cols, rows: rebuilt.rows, maxSegmentBytes: this.maxSegmentBytes })
@@ -493,6 +507,7 @@ export class SessionManager {
         }
       }),
       subscribers: new Set(),
+      pendingSubs: new Set(),
       alive: true,
       exitCode: null,
       exitSignal: null,
@@ -611,13 +626,16 @@ export class SessionManager {
 
   private async subscribeScreen(session: Session, sink: DataSink, historyLines: number): Promise<PtyResults['subscribe']> {
     const wasSubscribed = session.subscribers.has(sink)
+    const pending: PendingSub = { sink, cancelled: false }
+    session.pendingSubs.add(pending)
     const taken = await this.atRest(session, () => {
+      if (pending.cancelled) throw new Error(`subscription cancelled: ${session.sessionId}`)
       const offset = session.tail.total
       session.subscribers.add(sink)
       const live = session.screen.snapshot()
       // composeReplay reads the log window before it first awaits, so the window ends at `offset`
       return { offset, live, composed: composeReplay(session.dir, { historyLines, live }) }
-    })
+    }).finally(() => session.pendingSubs.delete(pending))
     try {
       const { replay, historyCursor } = await taken.composed
       return {
@@ -850,4 +868,8 @@ function signalGroup(proc: PtyProcess, signal: string): void {
 async function settle(sessions: Session[], timeoutMs: number): Promise<void> {
   if (sessions.length === 0) return
   await Promise.race([Promise.all(sessions.map((s) => s.finished)), Bun.sleep(timeoutMs)])
+}
+
+function cancelPending(session: Session, sink: DataSink): void {
+  for (const pending of session.pendingSubs) if (pending.sink === sink) pending.cancelled = true
 }
