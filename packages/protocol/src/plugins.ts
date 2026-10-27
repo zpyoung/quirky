@@ -1,4 +1,4 @@
-import type { ExitCause, PtyFact, PtyHistoryPage, PtySessionInfo, PtySnapshot, PtySubscription } from './pty'
+import type { ExitCause, PtyFact, PtyHistoryPage, PtySessionInfo, PtySnapshot, PtySubscription, PtyWriteErrorCode } from './pty'
 import type { ClientRole, QuirkyEvent } from './rpc'
 
 /** Where a plugin was found: shipped with Quirky, or installed by the user. */
@@ -79,6 +79,12 @@ export type PluginContext = {
   readonly launch: PluginLaunch
 }
 
+/** The certainty metadata attached to a rejected `PluginPty.writeAccepted` call. */
+export type PluginPtyWriteError = Error & {
+  code: PtyWriteErrorCode
+  acceptedBytes: number | null
+}
+
 /** The PTY host operations a plugin may use. */
 export type PluginPty = {
   readonly connected: boolean
@@ -96,6 +102,8 @@ export type PluginPty = {
     }
   ): Promise<{ pid: number; restored: boolean; cwd: string; cols: number; rows: number }>
   write(sessionId: string, data: string | Uint8Array): void
+  /** Resolves after every byte is accepted by the live child PTY; rejects with `PluginPtyWriteError` otherwise. */
+  writeAccepted(sessionId: string, data: string | Uint8Array): Promise<void>
   resize(sessionId: string, cols: number, rows: number): Promise<void>
   read(sessionId: string, lines: number): Promise<{ lines: string[]; cols: number; rows: number; alt: boolean }>
   /** A `reason` records the exit as requested (cause `killed`) and defaults the signal to SIGKILL. */
