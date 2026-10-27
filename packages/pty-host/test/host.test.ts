@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, test } from 'bun:test'
+import { afterEach, describe, expect, setDefaultTimeout, test } from 'bun:test'
 import { existsSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import { base64ToBytes, PTY_PROTOCOL_VERSION, type PtyEvent } from '@quirky/protocol'
@@ -6,7 +6,9 @@ import { PtyClient } from '../src/client'
 import { readSegments } from '../src/history/log'
 import { concat, runCleanups, startHost, text, waitFor, type TestHost } from './helpers'
 
-afterEach(runCleanups)
+// Process-scope startup and cleanup can each outlast Bun's 5 s default under suite load.
+setDefaultTimeout(60_000)
+afterEach(runCleanups, 60_000)
 
 const ENV = { PATH: '/usr/bin:/bin', TERM: 'xterm-256color' }
 
