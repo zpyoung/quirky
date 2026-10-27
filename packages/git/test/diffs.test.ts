@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test'
 import { chmodSync, lstatSync, mkdirSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { git, isolateGitConfig, makeRepo } from '../../../plugins/quirky.repo/test/git-fixtures'
+import { NotAllowedError } from '../src/conflicts'
 import { GitError } from '../src/index'
 import {
   ChangedOnDiskError,
@@ -9,7 +10,6 @@ import {
   MAX_BLOB_BYTES,
   MAX_RENDER_CHARACTERS,
   MAX_RENDER_LINES_PER_SIDE,
-  NotAllowedError,
   contentHash,
   diffSource,
   saveWorkingFile

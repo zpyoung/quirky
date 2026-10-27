@@ -4,6 +4,7 @@ import { createReadStream } from 'node:fs'
 import { chmod, lstat, readFile, readlink, rename, unlink, writeFile } from 'node:fs/promises'
 import { basename, dirname, extname, join } from 'node:path'
 import type { GitDiff, GitDiffSource } from '@quirky/protocol'
+import { NotAllowedError } from './conflicts'
 import { GitError } from './index'
 import { gitEnv, runGit } from './run'
 
@@ -32,13 +33,6 @@ export class ChangedOnDiskError extends Error {
   }
 }
 
-/** The target may not be written, for example because the leaf is a symlink. */
-export class NotAllowedError extends Error {
-  constructor(message = 'Not allowed.') {
-    super(message)
-    this.name = 'NotAllowedError'
-  }
-}
 
 /** sha-256 of `bytes` as lowercase hex; the editor's `expected` precondition for a save. */
 export function contentHash(bytes: Uint8Array): string {
