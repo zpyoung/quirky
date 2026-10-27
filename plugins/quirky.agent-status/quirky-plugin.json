@@ -108,6 +108,521 @@
         }
       },
       {
+        "id": "explain",
+        "description": "Why a session has its script state: the status row and the evidence behind it, the screen rule that matched, and which of them decided.",
+        "readOnly": true,
+        "params": {
+          "type": "object",
+          "properties": {
+            "session": {
+              "type": "string",
+              "description": "The session ID or name."
+            },
+            "at": {
+              "type": "number",
+              "description": "Judge the row's freshness at this time, in ms since the epoch; defaults to now."
+            }
+          },
+          "required": [
+            "session"
+          ]
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "session": {
+              "type": "string"
+            },
+            "name": {
+              "description": "Null when absent."
+            },
+            "agent": {
+              "description": "Null when absent."
+            },
+            "state": {
+              "type": "string",
+              "enum": [
+                "working",
+                "blocked",
+                "idle",
+                "unknown",
+                "exited"
+              ],
+              "description": "The script state."
+            },
+            "kind": {
+              "type": "string",
+              "enum": [
+                "approval",
+                "question"
+              ],
+              "description": "Present when the state is blocked."
+            },
+            "decidedBy": {
+              "type": "string",
+              "enum": [
+                "session",
+                "rule",
+                "row",
+                "none"
+              ]
+            },
+            "row": {
+              "description": "The session's status row as it reads now; null when it has none.",
+              "properties": {
+                "state": {
+                  "type": "string",
+                  "enum": [
+                    "working",
+                    "waiting",
+                    "blocked",
+                    "done"
+                  ]
+                },
+                "display": {
+                  "type": "string"
+                },
+                "label": {
+                  "type": "string"
+                },
+                "detail": {
+                  "type": "string"
+                },
+                "source": {
+                  "type": "string",
+                  "enum": [
+                    "hook",
+                    "replay",
+                    "title",
+                    "program-status",
+                    "inference"
+                  ]
+                },
+                "fresh": {
+                  "type": "boolean",
+                  "description": "Evidence under 30 minutes old and not restored unconfirmed."
+                },
+                "ageMs": {
+                  "type": "number"
+                },
+                "because": {
+                  "description": "The evidence that last changed the row; null for a row stored before explain existed.",
+                  "properties": {
+                    "source": {
+                      "type": "string",
+                      "enum": [
+                        "hook",
+                        "replay",
+                        "title",
+                        "program-status",
+                        "inference"
+                      ]
+                    },
+                    "rule": {
+                      "type": "string"
+                    },
+                    "event": {
+                      "type": "string"
+                    },
+                    "at": {
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "source",
+                    "rule",
+                    "at"
+                  ]
+                },
+                "lead": {
+                  "type": "object",
+                  "properties": {
+                    "state": {
+                      "type": "string",
+                      "enum": [
+                        "working",
+                        "waiting",
+                        "blocked",
+                        "done"
+                      ]
+                    },
+                    "since": {
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "state",
+                    "since"
+                  ]
+                },
+                "children": {
+                  "type": "object",
+                  "properties": {
+                    "agent": {
+                      "type": "number"
+                    },
+                    "shell": {
+                      "type": "number"
+                    },
+                    "cron": {
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "agent",
+                    "shell",
+                    "cron"
+                  ]
+                }
+              },
+              "required": [
+                "state",
+                "display",
+                "label",
+                "detail",
+                "source",
+                "fresh",
+                "ageMs",
+                "because",
+                "lead",
+                "children"
+              ]
+            },
+            "screen": {
+              "type": "object",
+              "properties": {
+                "origin": {
+                  "description": "Where a rule set comes from; null when absent.",
+                  "properties": {
+                    "kind": {
+                      "type": "string",
+                      "enum": [
+                        "user",
+                        "plugin",
+                        "built-in"
+                      ]
+                    },
+                    "path": {
+                      "type": "string",
+                      "description": "The file, for a user or built-in set."
+                    },
+                    "plugin": {
+                      "type": "string"
+                    },
+                    "contribution": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "kind"
+                  ]
+                },
+                "verdict": {
+                  "description": "The rule that decided, or null.",
+                  "properties": {
+                    "rule": {
+                      "type": "string"
+                    },
+                    "state": {
+                      "type": "string",
+                      "enum": [
+                        "working",
+                        "blocked",
+                        "idle"
+                      ]
+                    },
+                    "kind": {
+                      "type": "string",
+                      "enum": [
+                        "approval",
+                        "question"
+                      ]
+                    },
+                    "origin": {
+                      "type": "object",
+                      "description": "Where a rule set comes from.",
+                      "properties": {
+                        "kind": {
+                          "type": "string",
+                          "enum": [
+                            "user",
+                            "plugin",
+                            "built-in"
+                          ]
+                        },
+                        "path": {
+                          "type": "string",
+                          "description": "The file, for a user or built-in set."
+                        },
+                        "plugin": {
+                          "type": "string"
+                        },
+                        "contribution": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "kind"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "rule",
+                    "state",
+                    "origin"
+                  ]
+                },
+                "pendingQuiet": {
+                  "type": "string",
+                  "description": "A rule that matches except that the screen has not been quiet long enough."
+                },
+                "ignored": {
+                  "type": "array",
+                  "description": "Sources skipped because they are invalid, with the reason.",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "origin": {
+                        "type": "object",
+                        "description": "Where a rule set comes from.",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "user",
+                              "plugin",
+                              "built-in"
+                            ]
+                          },
+                          "path": {
+                            "type": "string",
+                            "description": "The file, for a user or built-in set."
+                          },
+                          "plugin": {
+                            "type": "string"
+                          },
+                          "contribution": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "kind"
+                        ]
+                      },
+                      "reason": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "origin",
+                      "reason"
+                    ]
+                  }
+                },
+                "unavailable": {
+                  "type": "string",
+                  "description": "Why the rules could not be run."
+                }
+              },
+              "required": [
+                "origin",
+                "verdict",
+                "ignored"
+              ]
+            },
+            "exit": {
+              "type": "object",
+              "properties": {
+                "code": {
+                  "description": "Null when absent."
+                },
+                "signal": {
+                  "description": "Null when absent."
+                }
+              },
+              "required": [
+                "code",
+                "signal"
+              ]
+            },
+            "summary": {
+              "type": "string",
+              "description": "One sentence naming the state and why."
+            }
+          },
+          "required": [
+            "session",
+            "name",
+            "agent",
+            "state",
+            "decidedBy",
+            "row",
+            "screen",
+            "summary"
+          ]
+        }
+      },
+      {
+        "id": "rules",
+        "description": "The effective detection rules of every agent that has any, where each comes from, and the sources skipped as invalid.",
+        "readOnly": true,
+        "params": {
+          "type": "object",
+          "properties": {}
+        },
+        "result": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "agent": {
+                "type": "string"
+              },
+              "origin": {
+                "description": "Where a rule set comes from; null when absent.",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "user",
+                      "plugin",
+                      "built-in"
+                    ]
+                  },
+                  "path": {
+                    "type": "string",
+                    "description": "The file, for a user or built-in set."
+                  },
+                  "plugin": {
+                    "type": "string"
+                  },
+                  "contribution": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind"
+                ]
+              },
+              "rules": {
+                "type": "number",
+                "description": "How many rules the effective set holds."
+              },
+              "ignored": {
+                "type": "array",
+                "description": "Sources skipped because they are invalid, with the reason.",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "origin": {
+                      "type": "object",
+                      "description": "Where a rule set comes from.",
+                      "properties": {
+                        "kind": {
+                          "type": "string",
+                          "enum": [
+                            "user",
+                            "plugin",
+                            "built-in"
+                          ]
+                        },
+                        "path": {
+                          "type": "string",
+                          "description": "The file, for a user or built-in set."
+                        },
+                        "plugin": {
+                          "type": "string"
+                        },
+                        "contribution": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "kind"
+                      ]
+                    },
+                    "reason": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "origin",
+                    "reason"
+                  ]
+                }
+              }
+            },
+            "required": [
+              "agent",
+              "origin",
+              "rules",
+              "ignored"
+            ]
+          }
+        }
+      },
+      {
+        "id": "ruleSet",
+        "description": "The detection rules that apply to one agent and where they come from, or null when none does.",
+        "readOnly": true,
+        "params": {
+          "type": "object",
+          "properties": {
+            "agent": {
+              "type": "string",
+              "description": "The agent ID."
+            }
+          },
+          "required": [
+            "agent"
+          ]
+        },
+        "result": {
+          "properties": {
+            "agent": {
+              "type": "string"
+            },
+            "origin": {
+              "type": "object",
+              "description": "Where a rule set comes from.",
+              "properties": {
+                "kind": {
+                  "type": "string",
+                  "enum": [
+                    "user",
+                    "plugin",
+                    "built-in"
+                  ]
+                },
+                "path": {
+                  "type": "string",
+                  "description": "The file, for a user or built-in set."
+                },
+                "plugin": {
+                  "type": "string"
+                },
+                "contribution": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "kind"
+              ]
+            },
+            "set": {
+              "type": "object",
+              "description": "The rule file: agent, optional description and the ordered rules."
+            }
+          },
+          "required": [
+            "agent",
+            "origin",
+            "set"
+          ],
+          "description": "Null when absent."
+        }
+      },
+      {
         "id": "hooksStatus",
         "description": "Whether Quirky's hooks are installed for each agent that takes them from a config file.",
         "readOnly": true,
@@ -319,6 +834,50 @@
         },
         "methods": [
           "quirky.agent-status/get"
+        ]
+      },
+      {
+        "id": "explain",
+        "words": "explain",
+        "summary": "explain why a session is working, blocked, idle or unknown",
+        "positionals": [
+          {
+            "name": "session",
+            "description": "the session ID or name",
+            "required": true
+          }
+        ],
+        "flags": {
+          "at": {
+            "type": "number",
+            "description": "judge the row's freshness at this time, in ms since the epoch (default: now)"
+          }
+        },
+        "methods": [
+          "quirky.agent-status/explain"
+        ]
+      },
+      {
+        "id": "rules-list",
+        "words": "rules list",
+        "summary": "list the detection rules in effect for each agent and where they come from",
+        "methods": [
+          "quirky.agent-status/rules"
+        ]
+      },
+      {
+        "id": "rules-show",
+        "words": "rules show",
+        "summary": "show the detection rules that apply to one agent",
+        "positionals": [
+          {
+            "name": "agent",
+            "description": "the agent ID",
+            "required": true
+          }
+        ],
+        "methods": [
+          "quirky.agent-status/ruleSet"
         ]
       },
       {

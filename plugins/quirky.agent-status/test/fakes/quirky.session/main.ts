@@ -17,9 +17,13 @@ export function activate(context: PluginContext): void {
   const statusCalls: StatusCall[] = []
   const providerCalls: { session: string; id: string; transcriptPath?: string }[] = []
 
+  const byName = (name: string): Session | undefined => {
+    const holders = [...sessions.values()].filter((s) => s.name === name.toLowerCase())
+    return holders.find((s) => s.status !== 'exited') ?? holders[0]
+  }
   const save = () => writeFileSync(file, JSON.stringify([...sessions.values()]))
   const require = (id: unknown): Session => {
-    const session = sessions.get(String(id))
+    const session = sessions.get(String(id)) ?? byName(String(id))
     if (!session) throw context.error('not-found', `no session ${id}`)
     return session
   }

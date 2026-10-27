@@ -1,9 +1,10 @@
 import { Database } from 'bun:sqlite'
-import { chmodSync, symlinkSync, writeFileSync } from 'node:fs'
+import { chmodSync, mkdirSync, readdirSync, symlinkSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { HOOK_TOKEN_HEADER, type PtyFact, type QuirkyClient, type QuirkyEvent, type Session } from '@quirky/protocol'
 import { makeTempHome, startHarness, waitFor, waitForAsync, type Harness } from '../../../packages/daemon/test/helpers'
 import { makeTempDir } from '../../../packages/daemon/test/plugins/fixtures'
+import type { Explanation } from '../src/explain'
 import type { AgentRow } from '../src/types'
 
 const PLUGIN_DIR = join(import.meta.dir, '..')
@@ -28,10 +29,21 @@ export const claudeSession: Session = {
 export type StoredView = AgentRow & { display: string; label: string }
 export type HookOptions = { session?: string; pid?: number; pstart?: string; event?: string }
 
-/** A directory of built-ins holding the real plugin and fakes of everything it talks to. */
-export function builtinDir(): string {
+/**
+ * A directory of built-ins holding the real plugin and fakes of everything it talks to. With
+ * `rules`, the plugin is a stand-in directory linking the real one's files but holding these rule
+ * files (agent to file body) as its built-in `rules/`.
+ */
+export function builtinDir(rules?: Record<string, unknown>): string {
   const dir = makeTempDir('qas-')
-  symlinkSync(PLUGIN_DIR, join(dir, 'quirky.agent-status'))
+  if (rules === undefined) {
+    symlinkSync(PLUGIN_DIR, join(dir, 'quirky.agent-status'))
+  } else {
+    const plugin = join(dir, 'quirky.agent-status')
+    mkdirSync(join(plugin, 'rules'), { recursive: true })
+    for (const entry of readdirSync(PLUGIN_DIR)) if (entry !== 'rules') symlinkSync(join(PLUGIN_DIR, entry), join(plugin, entry))
+    for (const [agent, body] of Object.entries(rules)) writeFileSync(join(plugin, 'rules', `${agent}.json`), JSON.stringify(body))
+  }
   for (const fake of ['quirky.session', 'quirky.worktree', 'quirky.agents']) symlinkSync(join(FAKES_DIR, fake), join(dir, fake))
   return dir
 }
@@ -51,8 +63,8 @@ export class Rig {
     public client: QuirkyClient
   ) {}
 
-  static async start(options: { home?: string; sessions?: Partial<Session>[] } = {}): Promise<Rig> {
-    const h = await startHarness({ home: options.home ?? makeTempHome('qas-h-'), builtinPluginsDir: builtinDir() })
+  static async start(options: { home?: string; sessions?: Partial<Session>[]; builtinRules?: Record<string, unknown> } = {}): Promise<Rig> {
+    const h = await startHarness({ home: options.home ?? makeTempHome('qas-h-'), builtinPluginsDir: builtinDir(options.builtinRules) })
     const { client, events } = await h.connectWithEvents('cli')
     const rig = new Rig(h, client)
     rig.events = events
@@ -125,6 +137,56 @@ export class Rig {
     this.h.pty.fact(session, fact)
     await Bun.sleep(40)
   }
+
+  private ptySession(id: string): void {
+    if (this.h.pty.sessions.has(id)) return
+    this.h.pty.sessions.set(id, {
+      info: {
+        sessionId: id,
+        state: 'running',
+        pid: 4000,
+        alive: true,
+        exitCode: null,
+        exitSignal: null,
+        exitCause: null,
+        cols: 80,
+        rows: 24,
+        argv: [],
+        cwd: '/fake/alpha',
+        title: null,
+        shellState: 'unsupported',
+        createdAt: Date.now(),
+        offset: 0
+      },
+      env: {},
+      buffer: [],
+      subscribers: new Set()
+    })
+  }
+
+  /** Makes `lines` the screen the PTY host serves; the fake serves one screen to every session. */
+  show(lines: string[], session = 's1'): void {
+    this.ptySession(session)
+    this.h.pty.setReadResult({ lines, cols: 80, rows: 24, alt: false })
+  }
+
+  /** Produces output for a session, which moves its offset. */
+  output(text: string, session = 's1'): void {
+    this.ptySession(session)
+    this.h.pty.emit(session, text)
+  }
+
+  /** Writes `$QUIRKY_HOME/agent-rules/<agent>.json`; a string body is written as is. */
+  writeUserRules(agent: string, body: unknown): string {
+    const dir = join(this.h.home, 'agent-rules')
+    mkdirSync(dir, { recursive: true })
+    const path = join(dir, `${agent}.json`)
+    writeFileSync(path, typeof body === 'string' ? body : JSON.stringify(body))
+    return path
+  }
+
+  explain = async (session = 's1', at?: number) =>
+    (await this.client.callAny('quirky.agent-status/explain', { session, ...(at !== undefined ? { at } : {}) })) as Explanation
 
   /** Reports one OSC 7501 body for a session. */
   osc = (body: string, session = 's1') => this.fact({ kind: 'program-status', body }, session)

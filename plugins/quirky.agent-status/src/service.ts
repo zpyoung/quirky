@@ -1,5 +1,7 @@
-import type { AgentStatusSummary, PluginContext, PtyFact, QuirkyEvent, Session } from '@quirky/protocol'
+import { join } from 'node:path'
+import { RpcErrorCode, type AgentStatusSummary, type ContributionInfo, type PluginContext, type PtyFact, type QuirkyEvent, type Session } from '@quirky/protocol'
 import { applyEvent } from './apply'
+import { explanationOf, type Explanation } from './explain'
 import { facetOf, HOOK_SILENCE_MS, parseRecords, programEvidence, serializeRecords, titleEvidence } from './fallbacks'
 import { decideIdentity, processAlive, type IsAlive } from './identity'
 import {
@@ -19,6 +21,11 @@ import {
 import { coarseStatus, displayOf, readableDetail, summaryOf } from './model'
 import { normalize } from './normalize'
 import { parseProgramStatusBody, ProgramStatusRecords, type ProgramStatusReport } from './program-status'
+import { Matcher } from './rules/matcher'
+import { RuleSources, type EffectiveRules } from './rules/sources'
+import type { RuleListing } from './rules/types'
+import { readScreen, ScreenSampler, type ScreenDeps, type ScreenReading } from './screen'
+import { scriptState, type ScriptStateResult } from './script-state'
 import { classifyTitle, type TitleStatus } from './title'
 import type { RowStore } from './store'
 import type { AgentRow, NormalizerCache, Normalized } from './types'
@@ -43,14 +50,19 @@ export type HookInput = {
 
 export type ListedRow = AgentStatusSummary & { sessionId: string; agent: string }
 
+/** A session read for a script: its row, what the screen rules said, and the script state they gave. */
+export type Inspection = { session: Session; row: AgentRow | null; reading: ScreenReading; result: ScriptStateResult; now: number }
+
+const rejectsNotFound = (error: unknown) => (error as { code?: unknown } | null)?.code === RpcErrorCode.NotFound
+
 /** The waits that tests shrink with `QUIRKY_TEST_AGENT_STATUS_TIME_SCALE`. */
-export type Timing = { settleMs: number; hookSilenceMs: number }
+export type Timing = { settleMs: number; hookSilenceMs: number; scale: number }
 
 /** The timing for an environment: the real waits times a positive `QUIRKY_TEST_AGENT_STATUS_TIME_SCALE`, else the real waits. */
 export function timingFrom(env: Record<string, string | undefined>): Timing {
   const scale = Number(env.QUIRKY_TEST_AGENT_STATUS_TIME_SCALE)
   const factor = Number.isFinite(scale) && scale > 0 ? scale : 1
-  return { settleMs: SETTLE_MS * factor, hookSilenceMs: HOOK_SILENCE_MS * factor }
+  return { settleMs: SETTLE_MS * factor, hookSilenceMs: HOOK_SILENCE_MS * factor, scale: factor }
 }
 
 const validProviderId = (id: string) => id.length >= 1 && id.length <= MAX_PROVIDER_ID && !id.startsWith('-') && !CONTROL_CHARACTERS.test(id)
@@ -69,6 +81,12 @@ export class AgentStatusService {
   private readonly timers = new Set<ReturnType<typeof setTimeout>>()
   private readonly programRetries = new Map<string, ReturnType<typeof setTimeout>>()
   private readonly escapes = new Map<string, { turn: string; count: number }>()
+  private readonly titles = new Map<string, string>()
+  private readonly commitListeners = new Map<string, Set<() => void>>()
+  private readonly sources: RuleSources
+  private readonly matcher = new Matcher()
+  private readonly sampler: ScreenSampler
+  private readonly screen: ScreenDeps
 
   constructor(
     private readonly context: PluginContext,
@@ -76,13 +94,23 @@ export class AgentStatusService {
     private readonly isAlive: IsAlive = processAlive,
     private readonly now: () => number = Date.now,
     private readonly timing: Timing = timingFrom(process.env)
-  ) {}
+  ) {
+    this.sources = new RuleSources({
+      userDir: join(context.home, 'agent-rules'),
+      builtinDir: join(context.dir, 'rules'),
+      contributions: async () => (await context.call('plugin.contributions', { kind: 'agent-rules' })) as ContributionInfo[],
+      log: (message) => context.log(message)
+    })
+    this.sampler = new ScreenSampler(context.pty, (sessionId) => this.titles.get(sessionId), now, timing.scale)
+    this.screen = { sources: this.sources, matcher: this.matcher, sampler: this.sampler, timeScale: timing.scale }
+  }
 
-  /** Cancels the waits still pending; the service takes no more work afterwards. */
+  /** Cancels the waits still pending and stops the matcher; the service takes no more work afterwards. */
   shutdown(): void {
     for (const timer of this.timers) clearTimeout(timer)
     this.timers.clear()
     this.programRetries.clear()
+    this.matcher.dispose()
   }
 
   /** Handles a hook after every earlier event for its session; failures are logged, never thrown. */
@@ -98,6 +126,8 @@ export class AgentStatusService {
       this.caches.delete(sessionId)
       this.records.delete(sessionId)
       this.escapes.delete(sessionId)
+      this.titles.delete(sessionId)
+      this.sampler.forget(sessionId)
       this.cancelProgramRetry(sessionId)
     })
   }
@@ -105,6 +135,7 @@ export class AgentStatusService {
   /** Reads a title, an OSC 7501 report or a shell prompt mark off the terminal. */
   onFact(sessionId: string, fact: PtyFact): void {
     if (fact.kind === 'title') {
+      this.titles.set(sessionId, fact.title)
       const status = classifyTitle(fact.title)
       if (status) void this.enqueue(sessionId, () => this.handleTitle(sessionId, status, fact.title))
     } else if (fact.kind === 'program-status') {
@@ -142,6 +173,8 @@ export class AgentStatusService {
         ...(event.agentPid !== undefined ? { agentPid: event.agentPid } : {}),
         ...(event.agentStart !== undefined ? { agentStart: event.agentStart } : {})
       })
+    } else if (event.type === 'plugin.changed') {
+      this.sources.invalidateContributions()
     } else if (event.type === 'quirky.session/changed') {
       const session = (event.data as { session?: Session }).session
       if (session?.status === 'exited') void this.drop(session.id)
@@ -196,6 +229,78 @@ export class AgentStatusService {
     const session = await this.findSession(sessionId)
     const { display, label, detail } = displayOf(row, at ?? this.now(), session !== null && session.status !== 'exited')
     return { ...row, detail, display, label }
+  }
+
+  /**
+   * Looks a session up by ID or name and reads its row and screen rules into a script state.
+   * `at` (default now) is the time the row's freshness is judged at; the screen is always read live.
+   * Rejects `not-found` for an unknown session and `invalid-params` for one without a terminal.
+   */
+  async inspect(ref: string, at?: number): Promise<Inspection> {
+    const session = await this.requireSession(ref)
+    const now = at ?? this.now()
+    const row = this.rows.get(session.id) ?? null
+    const agent = row?.agent ?? session.agent
+    const reading = session.status === 'exited' ? await this.unreadScreen(agent) : await readScreen(this.screen, session.id, agent)
+    return { session, row, reading, result: scriptState({ session, row, verdict: reading.verdict, now }), now }
+  }
+
+  /** Why a session's script state is what it is. */
+  async explain(ref: string, at?: number): Promise<Explanation> {
+    return explanationOf(await this.inspect(ref, at))
+  }
+
+  /** The effective rules of every agent that has a rule source, with the sources skipped. */
+  rulesListing(): Promise<RuleListing[]> {
+    return this.sources.list()
+  }
+
+  /** The rule set that applies to `agent` and where it came from; null when none does. */
+  async ruleSet(agent: string): Promise<(EffectiveRules & { agent: string }) | null> {
+    const effective = await this.sources.effective(agent)
+    return effective ? { agent, ...effective } : null
+  }
+
+  /** Calls `listener` after each commit of the session's row; the returned function stops it. */
+  onCommit(sessionId: string, listener: () => void): () => void {
+    const listeners = this.commitListeners.get(sessionId) ?? new Set()
+    listeners.add(listener)
+    this.commitListeners.set(sessionId, listeners)
+    return () => {
+      listeners.delete(listener)
+      if (listeners.size === 0 && this.commitListeners.get(sessionId) === listeners) this.commitListeners.delete(sessionId)
+    }
+  }
+
+  /** Resolves true at the session's next commit, false after `timeoutMs`. */
+  nextCommit(sessionId: string, timeoutMs: number): Promise<boolean> {
+    return new Promise((resolve) => {
+      const stop = this.onCommit(sessionId, () => done(true))
+      const timer = setTimeout(() => done(false), timeoutMs)
+      const done = (committed: boolean) => {
+        clearTimeout(timer)
+        stop()
+        resolve(committed)
+      }
+    })
+  }
+
+  private async requireSession(ref: string): Promise<Session> {
+    let session: Session
+    try {
+      session = (await this.context.call('quirky.session/get', { session: ref })) as Session
+    } catch (error) {
+      if (rejectsNotFound(error)) throw this.context.error('not-found', `no such session: ${ref}`)
+      throw error
+    }
+    if (session.kind !== 'terminal') throw this.context.error('invalid-params', `session ${session.id} is not a terminal`)
+    return session
+  }
+
+  private async unreadScreen(agent: string): Promise<ScreenReading> {
+    const listing = await this.sources.listing(agent)
+    const effective = await this.sources.effective(agent)
+    return { origin: effective?.origin ?? null, verdict: null, ignored: listing?.ignored ?? [], sample: null }
   }
 
   private enqueue(sessionId: string, work: () => Promise<void>): Promise<void> {
@@ -279,6 +384,7 @@ export class AgentStatusService {
     else this.rows.delete(session.id)
     await this.publish(session, row)
     this.context.emit('changed', { sessionId: session.id, row })
+    for (const listener of [...(this.commitListeners.get(session.id) ?? [])]) listener()
   }
 
   private async liveSession(sessionId: string): Promise<Session | null> {
