@@ -593,7 +593,7 @@ export class SessionService {
    * Inserts `session` as `starting`, runs the launch hooks, builds the launch with `build`, spawns
    * it and records what it launched with. Any failure removes the record again. A name the session
    * carries is taken from exited holders in the insert's own transaction, and given back to them when
-   * the launch fails.
+   * the launch fails, unless they were renamed or the name was taken meanwhile.
    */
   private async start(
     session: Session,
@@ -645,7 +645,13 @@ export class SessionService {
     } catch (error) {
       const restored = this.records.transaction(() => {
         this.records.delete(session.id)
-        return released.flatMap((holder) => this.records.update(holder.id, { name }) ?? [])
+        const taken = name !== null && this.records.byName(name).length > 0
+        return released.flatMap((holder) => {
+          const now = this.records.get(holder.id)
+          // a holder renamed, or a name taken by someone else, since the release keeps what it has
+          if (!now || now.name !== null || taken) return []
+          return this.records.update(holder.id, { name }) ?? []
+        })
       })
       restored.forEach((holder) => this.publish(holder))
       if (isRpcError(error)) throw error
