@@ -130,7 +130,7 @@ describe('SC-47: group dividers clamp', () => {
     const view = await mount()
     await fire(view.q('[data-group-divider="split-1"]'), mouse('mousedown', { button: 0 }))
     await move(50, 100)
-    expect(view.q<HTMLElement>('[data-split="split-1"] > .qt-split-side')!.style.flex).toBe('0.15 1 0%')
+    expect(view.q('[data-group="grp-1"]')!.parentElement!.style.width).toBe('150px')
     await up(50, 100)
     expect(callsTo(view.fake, 'resizeSplit')).toEqual([{ split: 'split-1', ratio: 0.15, revision: 5 }])
   })
@@ -338,5 +338,29 @@ describe('panes keep their terminal across a reshape', () => {
     await view.fake.setConnection('connected')
     await settle()
     expect(view.fake.callsTo('quirky.terminal/attach').length).toBe(attaches + 4)
+  })
+})
+
+describe('activating a structured pane', () => {
+  const structured = () => ({
+    extra: { 'quirky.session/list': () => ['s-1', 's-2', 's-3', 's-4', 's-5'].map((id) => session(id, { kind: 'structured' })) }
+  })
+
+  test('pressing the mouse on it focuses its pane and group', async () => {
+    const view = await mount(fakeDaemon(conceptualWorkspace()), structured())
+    expect(view.last().focusedPane).toBe('pane-3')
+    await fire(view.q('[data-pane="pane-5"] .qt-structured-body'), mouse('mousedown', { button: 0 }))
+    expect(callsTo(view.fake, 'focusPane')).toEqual([{ pane: 'pane-5' }])
+    expect(view.last().focusedPane).toBe('pane-5')
+  })
+
+  test('focus entering the embedded view focuses its pane', async () => {
+    const view = await mount(fakeDaemon(conceptualWorkspace()), structured())
+    const input = document.createElement('input')
+    view.q('[data-pane="pane-5"] .qt-structured-body')!.append(input)
+    await act(async () => input.focus())
+    await settle()
+    expect(callsTo(view.fake, 'focusPane')).toEqual([{ pane: 'pane-5' }])
+    expect(view.last().focusedPane).toBe('pane-5')
   })
 })

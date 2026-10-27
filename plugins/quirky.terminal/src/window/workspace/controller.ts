@@ -238,7 +238,7 @@ export class WorkspaceController {
 
   private async loadOnce(ensure: boolean): Promise<void> {
     let workspace: Workspace
-    let sessions: Session[]
+    let sessions: Session[] | null
     try {
       const [loaded, listed] = await Promise.all([
         this.context.call(`${TERMINAL_PREFIX}workspace`, { workspace: this.workspaceId, ...(ensure ? { ensure: true } : {}) }),
@@ -258,15 +258,16 @@ export class WorkspaceController {
     if (this.stopped) return
     const held = this.state.workspace
     const next = held && workspace.revision < held.revision ? held : workspace
-    this.set({ status: 'ready', workspace: next, sessions: Object.fromEntries(sessions.map((session) => [session.id, session])) })
+    this.set({ status: 'ready', workspace: next, ...(sessions ? { sessions: Object.fromEntries(sessions.map((session) => [session.id, session])) } : {}) })
     this.afterWorkspace(next)
   }
 
-  private async listSessions(): Promise<Session[]> {
+  /** The worktree's sessions, or null when the lookup failed so the caller keeps what it already knows. */
+  private async listSessions(): Promise<Session[] | null> {
     try {
       return (await this.context.call('quirky.session/list', { worktree: this.workspaceId })) as Session[]
     } catch {
-      return []
+      return null
     }
   }
 
@@ -292,7 +293,7 @@ export class WorkspaceController {
     this.loadingSessions = true
     try {
       const sessions = await this.listSessions()
-      if (!this.stopped) this.set({ sessions: Object.fromEntries(sessions.map((session) => [session.id, session])) })
+      if (!this.stopped && sessions) this.set({ sessions: Object.fromEntries(sessions.map((session) => [session.id, session])) })
     } finally {
       this.loadingSessions = false
     }
@@ -311,7 +312,10 @@ export class WorkspaceController {
       }
       case 'quirky.session/changed': {
         const session = data?.session as Session | undefined
-        if (session && session.worktreeId === this.workspaceId) this.set({ sessions: { ...this.state.sessions, [session.id]: session } })
+        if (session && session.worktreeId === this.workspaceId) {
+          this.set({ sessions: { ...this.state.sessions, [session.id]: session } })
+          void this.load(false)
+        }
         return
       }
       case 'quirky.session/removed': {
@@ -319,6 +323,7 @@ export class WorkspaceController {
         if (id !== undefined && id in this.state.sessions) {
           const { [id]: _removed, ...rest } = this.state.sessions
           this.set({ sessions: rest })
+          void this.load(false)
         }
         return
       }
@@ -330,6 +335,7 @@ export class WorkspaceController {
         const name = terminalSettingName(event.id)
         if (name !== null) this.settingOverrides[name] = event.value
         this.set({ settings: readWorkspaceSettings(this.context, this.settingOverrides) })
+        if (name !== null) void this.load(false)
         return
       }
     }

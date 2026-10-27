@@ -1,7 +1,8 @@
 import type { Session, SessionStatus, UiPluginContext } from '@quirky/protocol'
 import { displayTitle, recentOrder } from '../../layout/titles'
 import { findGroup, groupsInOrder, paneLeaves } from '../../layout/tree'
-import type { Group, PaneLeaf, Tab, Workspace } from '../../layout/types'
+import type { Rect } from '../../layout/tree'
+import type { Group, GroupNode, GroupSplit, PaneLeaf, Tab, Workspace } from '../../layout/types'
 import { DEFAULT_PANE_SETTINGS, readPaneSettings, type PaneSettings } from '../pane/settings'
 import type { PaneReport } from '../pane/TerminalPaneView'
 
@@ -192,4 +193,38 @@ export const px = (n: number) => Math.round(n)
 /** Whether an RPC error carries `code`. */
 export function hasCode(error: unknown, code: number): boolean {
   return (error as { code?: number } | null)?.code === code
+}
+
+export type GroupRect = Rect & { group: Group }
+export type GroupDividerRect = Rect & { split: GroupSplit; area: Rect }
+
+/**
+ * Lays the group tree out in a `width` x `height` area: one rectangle per group and one per
+ * divider, with each divider `dividerPx` thick between its two sides. `area` of a divider is the
+ * whole rectangle its split divides, for turning a pointer position into a ratio.
+ */
+export function groupRects(root: GroupNode, width: number, height: number, dividerPx: number): { groups: GroupRect[]; dividers: GroupDividerRect[] } {
+  const groups: GroupRect[] = []
+  const dividers: GroupDividerRect[] = []
+
+  const walk = (node: GroupNode, area: Rect) => {
+    if (node.kind === 'group') {
+      groups.push({ group: node, ...area })
+      return
+    }
+    if (node.direction === 'right') {
+      const first = Math.max(0, area.width - dividerPx) * node.ratio
+      dividers.push({ split: node, x: area.x + first, y: area.y, width: dividerPx, height: area.height, area })
+      walk(node.first, { ...area, width: first })
+      walk(node.second, { ...area, x: area.x + first + dividerPx, width: Math.max(0, area.width - first - dividerPx) })
+    } else {
+      const first = Math.max(0, area.height - dividerPx) * node.ratio
+      dividers.push({ split: node, x: area.x, y: area.y + first, width: area.width, height: dividerPx, area })
+      walk(node.first, { ...area, height: first })
+      walk(node.second, { ...area, y: area.y + first + dividerPx, height: Math.max(0, area.height - first - dividerPx) })
+    }
+  }
+
+  walk(root, { x: 0, y: 0, width, height })
+  return { groups, dividers }
 }

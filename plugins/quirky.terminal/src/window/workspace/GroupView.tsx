@@ -3,11 +3,13 @@ import { displayTitle } from '../../layout/titles'
 import { dropZone, paneLeaves, roundRatio } from '../../layout/tree'
 import type { DropZone } from '../../layout/tree'
 import { GROUP_RATIO_MAX, GROUP_RATIO_MIN, TAB_COLOR_HEX } from '../../layout/types'
-import type { Group, GroupNode, GroupSplit, Tab } from '../../layout/types'
+import type { Group, GroupNode, Tab } from '../../layout/types'
 import { CollapseIcon, CloseIcon, PinIcon } from './icons'
 import type { ControllerState, WorkspaceController } from './controller'
-import { activeTabOf, displayStatus } from './model'
+import { activeTabOf, byPaneId, displayStatus, groupRects, px } from './model'
+import type { GroupDividerRect } from './model'
 import { InlineField, PaneLayer } from './PaneLayer'
+import { useBoxSize } from './useBoxSize'
 
 type Common = { controller: WorkspaceController; state: ControllerState }
 
@@ -222,55 +224,65 @@ function GroupView({ controller, state, group }: Common & { group: Group }) {
   )
 }
 
-function SplitView({ controller, state, node }: Common & { node: GroupSplit }) {
-  const element = useRef<HTMLDivElement>(null)
-  const horizontal = node.direction === 'right'
+/**
+ * The workspace's groups. Every group is a direct child of one flat container, keyed by its ID and
+ * absolutely positioned from rectangles computed off the group tree, so a split or a close changes
+ * rectangles and never re-parents the terminals of a group that stays.
+ */
+export function GroupTree({ controller, state, node }: Common & { node: GroupNode }) {
+  const container = useRef<HTMLDivElement>(null)
+  const size = useBoxSize(container)
   const thickness = state.settings['divider-thickness']
+  const laidOut = size.width > 0 && size.height > 0
+  const { groups, dividers } = laidOut ? groupRects(node, size.width, size.height, thickness) : { groups: [], dividers: [] }
 
-  const start = (event: ReactMouseEvent) => {
+  const startDivider = (divider: GroupDividerRect, event: ReactMouseEvent) => {
     if (event.button !== 0) return
     event.preventDefault()
-    const container = element.current
-    if (!container) return
+    const element = container.current
+    if (!element) return
+    const split = divider.split
+    const horizontal = split.direction === 'right'
     let latest: { kind: 'group'; split: string; ratio: number } | null = null
     const onMove = (move: MouseEvent) => {
-      const rect = container.getBoundingClientRect()
-      const raw = horizontal ? (move.clientX - rect.left) / rect.width : (move.clientY - rect.top) / rect.height
+      const rect = element.getBoundingClientRect()
+      const raw = horizontal ? (move.clientX - rect.left - divider.area.x) / divider.area.width : (move.clientY - rect.top - divider.area.y) / divider.area.height
       const ratio = Math.min(GROUP_RATIO_MAX, Math.max(GROUP_RATIO_MIN, raw))
-      latest = { kind: 'group', split: node.id, ratio: roundRatio(ratio) }
+      latest = { kind: 'group', split: split.id, ratio: roundRatio(ratio) }
       controller.previewDivider(latest)
     }
     const onUp = () => {
       window.removeEventListener('mousemove', onMove)
       window.removeEventListener('mouseup', onUp)
-      void controller.endDividerDrag(latest, latest !== null && latest.ratio !== node.ratio)
+      void controller.endDividerDrag(latest, latest !== null && latest.ratio !== split.ratio)
     }
     window.addEventListener('mousemove', onMove)
     window.addEventListener('mouseup', onUp)
   }
 
   return (
-    <div ref={element} className={`qt-split qt-split-${node.direction}`} data-split={node.id}>
-      <div className="qt-split-side" style={{ flex: `${node.ratio} 1 0%` }}>
-        <GroupTree controller={controller} state={state} node={node.first} />
-      </div>
-      <div
-        className={`qt-group-divider qt-group-divider-${node.direction}`}
-        role="separator"
-        aria-orientation={horizontal ? 'vertical' : 'horizontal'}
-        data-group-divider={node.id}
-        style={horizontal ? { width: thickness } : { height: thickness }}
-        onMouseDown={start}
-        onDoubleClick={() => void controller.resetDivider(node.id)}
-      />
-      <div className="qt-split-side" style={{ flex: `${1 - node.ratio} 1 0%` }}>
-        <GroupTree controller={controller} state={state} node={node.second} />
-      </div>
+    <div ref={container} className="qt-groups">
+      {byPaneId(groups.map((rect) => ({ id: rect.group.id, rect }))).map(({ rect }) => {
+        const left = px(rect.x)
+        const top = px(rect.y)
+        return (
+          <div key={rect.group.id} className="qt-group-slot" style={{ left, top, width: px(rect.x + rect.width) - left, height: px(rect.y + rect.height) - top }}>
+            <GroupView controller={controller} state={state} group={rect.group} />
+          </div>
+        )
+      })}
+      {dividers.map((divider) => (
+        <div
+          key={divider.split.id}
+          className={`qt-group-divider qt-group-divider-${divider.split.direction}`}
+          role="separator"
+          aria-orientation={divider.split.direction === 'right' ? 'vertical' : 'horizontal'}
+          data-group-divider={divider.split.id}
+          style={{ left: px(divider.x), top: px(divider.y), width: divider.split.direction === 'right' ? thickness : divider.width, height: divider.split.direction === 'right' ? divider.height : thickness }}
+          onMouseDown={(event) => startDivider(divider, event)}
+          onDoubleClick={() => void controller.resetDivider(divider.split.id)}
+        />
+      ))}
     </div>
   )
-}
-
-/** The workspace's groups: splits with draggable dividers, and a tab strip over a pane layer in each group. */
-export function GroupTree({ controller, state, node }: Common & { node: GroupNode }) {
-  return node.kind === 'group' ? <GroupView controller={controller} state={state} group={node} /> : <SplitView controller={controller} state={state} node={node} />
 }

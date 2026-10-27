@@ -5,6 +5,11 @@ import {
   click,
   conceptualWorkspace,
   fakeDaemon,
+  group,
+  makeWorkspace,
+  pane,
+  paneSplit,
+  tab,
   loadWorkspace,
   mountFixture,
   session,
@@ -98,7 +103,9 @@ describe('SC-3: the view reports what the window shows', () => {
     await view.fake.emit({ type: 'setting.changed', id: 'setting:quirky.terminal/divider-thickness', value: 3 })
     await settle()
     expect(view.reports.length).toBe(count)
-    await view.fake.emit({ type: 'quirky.session/changed', data: { session: session('s-3', { status: 'exited' }) } })
+    const exited = session('s-3', { status: 'exited' })
+    view.daemon.sessions.splice(view.daemon.sessions.findIndex((entry) => entry.id === 's-3'), 1, exited)
+    await view.fake.emit({ type: 'quirky.session/changed', data: { session: exited } })
     await settle()
     expect(view.last().tabs.find((entry: any) => entry.session === 's-3').status).toBe('exited')
     expect(view.reports.length).toBe(count + 1)
@@ -152,10 +159,61 @@ describe('refreshing from the daemon', () => {
     expect(view.last().tabs.find((entry: any) => entry.session === 's-3').status).toBe('running')
   })
 
-  test('applies a changed setting without a reload', async () => {
+  test('applies a changed setting and re-fetches the workspace', async () => {
     const view = await mount()
+    const before = view.fake.callsTo('quirky.terminal/workspace').length
     await view.fake.emit({ type: 'setting.changed', id: 'setting:quirky.terminal/font-size', value: 18 })
     await settle()
     expect(view.last().panes[0].fontSize).toBe(18)
+    expect(view.fake.callsTo('quirky.terminal/workspace').length).toBe(before + 1)
+  })
+
+  test('another plugin setting does not re-fetch the workspace', async () => {
+    const view = await mount()
+    const before = view.fake.callsTo('quirky.terminal/workspace').length
+    await view.fake.emit({ type: 'setting.changed', id: 'setting:quirky.other/font-size', value: 18 })
+    await settle()
+    expect(view.fake.callsTo('quirky.terminal/workspace').length).toBe(before)
+  })
+
+  test('a changed session of the workspace re-fetches the workspace', async () => {
+    const view = await mount()
+    const before = view.fake.callsTo('quirky.terminal/workspace').length
+    await view.fake.emit({ type: 'quirky.session/changed', data: { session: session('s-3', { status: 'working' }) } })
+    await settle()
+    expect(view.fake.callsTo('quirky.terminal/workspace').length).toBe(before + 1)
+    await view.fake.emit({ type: 'quirky.session/changed', data: { session: session('s-9', { worktreeId: 'wt-other' }) } })
+    await settle()
+    expect(view.fake.callsTo('quirky.terminal/workspace').length).toBe(before + 1)
+  })
+
+  test('a removed session of the workspace re-fetches the workspace', async () => {
+    const view = await mount()
+    const before = view.fake.callsTo('quirky.terminal/workspace').length
+    await view.fake.emit({ type: 'quirky.session/removed', data: { sessionId: 's-3' } })
+    await settle()
+    expect(view.fake.callsTo('quirky.terminal/workspace').length).toBe(before + 1)
+  })
+
+  test('a failed session lookup keeps the session metadata it already has', async () => {
+    const ws = makeWorkspace(group('grp-1', [tab('tab-1', paneSplit('split-1', 'right', pane('pane-1', 's-1'), pane('pane-2', 's-2')))]))
+    const daemon = fakeDaemon(ws, { sessions: [session('s-1'), session('s-2', { kind: 'structured', agent: 'claude' })] })
+    let failing = false
+    const view = await mount(daemon, {
+      extra: {
+        'quirky.session/list': () => {
+          if (failing) throw new Error('daemon busy')
+          return daemon.sessions
+        }
+      }
+    })
+    expect(view.fake.mountedViews).toHaveLength(1)
+    failing = true
+    await act(async () => view.controller().refresh())
+    await settle()
+    expect(view.fake.mountedViews).toHaveLength(1)
+    expect(view.fake.mountedViews[0]!.unmounted).toBe(false)
+    expect(view.q('[data-pane="pane-2"]')!.querySelector('.xterm')).toBeNull()
+    expect(view.controller().getSnapshot().sessions['s-2']!.kind).toBe('structured')
   })
 })
