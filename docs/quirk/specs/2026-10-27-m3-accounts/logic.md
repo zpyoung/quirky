@@ -6,6 +6,8 @@ Status: Design accepted by unattended defaults under LOOP.md; tech spec required
 
 **Amendments:** 2026-10-27 — clarified custom-home precedence, queued-restart supersession, credential configuration, shared session-info statusline ownership and reset-credit authorization scope after spec review. Implementation coverage review made Gemini OAuth opt-in and retained Codex settings/config warnings explicit (AC18), and required actual prior conversation data—not merely a repeated provider ID—for cross-account resume. No feature-flow scope removed.
 
+**Operator landing scope:** 2026-10-27 — the operator authorized landing proven core account/usage flows within one hour, fixing blocking findings only. Extended UI/native acceptance is explicitly carried by dependent queue item `m3-accounts-remaining-flows` and `docs/loop/BLOCKERS.md`; these observations are not claimed complete. Core built-UI Hide/restore, Claude add/select/restart and Usage popover/refresh passed, and real daemon/PTY Claude/Codex A→B resumes verified prior transcript contents. The broad affected-package run timed out; typecheck and 48 core tests passed. The landing command owns whole-suite integration verification.
+
 ## Conceptual model
 
 Quirky observes subscription allowances without sending prompts or changing provider logins. The Usage status bar and popover show each configured provider's last authoritative quota snapshot, its reset times and any refresh failure. A missing reading is never zero usage.

@@ -286,5 +286,38 @@
 - **Revisit if:** final gate or real UI shows a concrete integration incompatibility
 - **Source:** locked by docs/loop/LOOP.md
 
+## D27: Apply the operator's core-flow landing deadline
+- **Question:** Should the lane finish every extended UI scenario before landing after the operator's deadline ruling?
+- **Options:** continue the original full-flow verification schedule; land proven core flows and explicitly queue the remainder
+- **Chose:** the operator's one-hour landing deadline; fix blocking findings only; record uncompleted verification and nonblocking findings in BLOCKERS.md; add a dependent completion item
+- **Why:** the operator explicitly authorized this scope reduction and replaced the pre-land whole suite with scripts, typecheck and affected-package checks; the landing command still runs the whole suite.
+- **Evidence:** operator decision in this conversation, 2026-10-27 at approximately 14:35 -0500; queue.ts add exited 0 for m3-accounts-remaining-flows, depending on m3-accounts
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** a confirmed blocking core defect remains or landing verification fails
+- **Source:** locked by operator decision
+
+## D28: Accept real core UI and transcript-content proof, not metadata echoes
+- **Question:** Which exercised flows are sufficient for the operator-approved core landing?
+- **Options:** infer success from component tests; retain actual built-daemon and browser evidence
+- **Chose:** preserve each report separately: empty Hide/restore passed; Claude add/select/Ask/restart passed; rebuilt Usage popover and refresh visibly passed; real CLI/daemon/PTY Claude and Codex resumes read prior content in B
+- **Why:** recorded transcript digests match A, both resumed agents append continuation markers, and IDs/cwd are preserved. The first empty run used the wrong Quick Commands panel; that operator-navigation error is not an application defect. The actual clipped-popover defect was the generic footer's overflow and missing flex growth, repaired in 291f2f8 and visibly retested.
+- **Evidence:** web runs 20261027T192013-82c7, 20261027T193712-824c and 20261027T194043-4c6e; scratch/smoke/observations-6e5f9892-6b75-44a8-8cb7-01d3a0039342.json; source 291f2f8; latest core regressions 48 pass/295 assertions
+- **Reversibility:** easy
+- **Confidence:** high for named exercised paths; extended paths remain explicitly unverified
+- **Revisit if:** the retained reports or native-only run contradict the core behavior
+- **Source:** assumed — autonomous
+
+## D29: Preserve failed and timed-out verification honestly
+- **Question:** Can the broad affected-package attempt or stale scripts result be reported as green?
+- **Options:** infer a pass from narrow tests; retain exact results and use final integration verification
+- **Chose:** record the ten-directory suite attempt as a 1,800-second timeout with no test verdict; retain passing typecheck (13.58 seconds) and the separate 48-test core run; rerun scripts after the final catch-up brings the repaired queue order
+- **Why:** the captured package record contains only passing typecheck. The scripts failure was the old queue's forward dependency; an actual current build/roadmap object has none. No protected queue/test file was edited and no whole-suite pass is claimed.
+- **Evidence:** scratch/affected-all-checks.json, tree bb9d214a5a12b74780f965c3bdee4e3da2a474da; bg68 timeout; core output artifact 321; actual integration object 0152c82cf691a1067fab693222033429de17eb55; scripts output artifact 282
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** final scripts or landing verification still fail
+- **Source:** locked by operator decision
+
 ## Progress
-Step 5 catch-up complete (8bfd81f), with all eight incoming decision logs read. Account/history integration and compiler repairs are committed. Latest targeted evidence: typecheck passes after catch-up; shell 20/47, session launch 44/108, accounts API 15/90, profiles 7/50, restarts 3/21, daemon acceptance 7/199. No green whole gate yet: the first remote run failed seven files, repaired as D25. The initial owned web run failed geometry; D23 repairs require fresh empty and seeded browser verification. Next: commit this log, build and run the exact full gate, execute strengthened real-daemon/PTY data smoke and all UI goals, then one actual cross-family Gemini Final Round 1 and one fix batch, rebuild/retest, native-only pending handoff, documentation and queue land. Scratch /tmp/quirky-m3-accounts-lane10.BBUvf8 retains source-bound audit/gate evidence and the smoke harness. Never claim completion from IDs/environment alone or reuse stale gate/tree hashes.
+Operator-approved core landing (D27). Production source 291f2f8 is built and core runtime/UI proof passed (D28), with 48 core tests/295 assertions and typecheck green. Extended UI/native verification and broad-suite timeout are explicitly deferred in BLOCKERS.md to registered dependent item m3-accounts-remaining-flows. The frozen feature-only Gemini Final Round 1 is being executed; transport initially found a broken Homebrew Node runtime, not a product finding. Next: record actual review output without claiming unreceived clearance, fix blocking findings only, commit evidence/native handoff, perform the operator's single final roadmap catch-up, rerun scripts against repaired queue ordering, detach and queue.ts land. The land command owns whole-suite verification. No standalone pre-land whole-suite pass or unexercised flow is claimed.
