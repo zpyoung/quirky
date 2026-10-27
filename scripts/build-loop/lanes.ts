@@ -10,6 +10,7 @@ import { load, next, QUEUE_FILE, save, setStatus, STATUSES, type Item, type Next
 
 export type Repo = { integration: string; lock: string }
 
+/** Run on every merge result that changes more than `docs/`; `bun run test` reruns a failing file alone once. */
 export const VERIFY = [
   ['bun', 'run', 'test'],
   ['bun', 'test', 'scripts'],
@@ -105,7 +106,10 @@ function run(cmd: string[], cwd: string): boolean {
   return Bun.spawnSync(cmd, { cwd, stdout: 'inherit', stderr: 'inherit' }).exitCode === 0
 }
 
-/** Merges `branch` into `build/roadmap` and runs `verify`; a conflict or failure leaves it as it was. */
+/**
+ * Merges `branch` into `build/roadmap` and runs `verify`, unless the merge changed only `docs/`;
+ * a conflict or failure leaves it as it was.
+ */
 function mergeVerified(repo: Repo, branch: string, verify: string[][]): void {
   const before = git(repo.integration, 'rev-parse', 'HEAD')
   try {
@@ -114,6 +118,8 @@ function mergeVerified(repo: Repo, branch: string, verify: string[][]): void {
     if (existsSync(join(git(repo.integration, 'rev-parse', '--absolute-git-dir'), 'MERGE_HEAD'))) git(repo.integration, 'merge', '--abort')
     throw new Error(`${branch} conflicts with build/roadmap: merge build/roadmap into it, resolve, and try again\n${(error as Error).message}`)
   }
+  const changed = git(repo.integration, 'diff', '--name-only', before, 'HEAD').split('\n')
+  if (changed.every((path) => path.startsWith('docs/'))) return
   const failed = verify.find((cmd) => !run(cmd, repo.integration))
   if (failed) {
     git(repo.integration, 'reset', '-q', '--hard', before)

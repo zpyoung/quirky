@@ -86,6 +86,8 @@ export type E2eOptions = {
   shell?: string
   /** Contents of `$HOME/.zshrc`, which the zsh wrapper sources before its own integration. */
   zshrc?: string
+  /** Contents of `$HOME/.bashrc`, which the bash wrapper sources before its own integration. */
+  bashrc?: string
 }
 
 export type Attached = {
@@ -172,6 +174,7 @@ export class E2eHarness {
     installExitHooks()
     try {
       if (options.zshrc !== undefined) writeFileSync(join(home, '.zshrc'), options.zshrc)
+      if (options.bashrc !== undefined) writeFileSync(join(home, '.bashrc'), options.bashrc)
       harness.initRepo()
       await harness.startDaemon()
       await harness.ok(['repo', 'add', repo])
