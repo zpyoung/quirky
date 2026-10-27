@@ -185,6 +185,36 @@ describe('report changes', () => {
     expect(t.reportChanged()).toHaveLength(2)
   })
 
+  test('dropping a window emits ui.report.changed for each report it removes, and only those', () => {
+    const t = makeLayout()
+    const gone = t.open()
+    const stays = t.open()
+    t.layout.report(gone, SLOT, 1)
+    t.layout.report(gone, OTHER_SLOT, 2)
+    t.layout.report(stays, SLOT, 3)
+    t.broadcasts.length = 0
+
+    gone.closed = true
+    t.layout.dropConnection(gone)
+    expect(t.reportChanged()).toEqual([
+      { type: 'ui.report.changed', slot: SLOT, connId: gone.id },
+      { type: 'ui.report.changed', slot: OTHER_SLOT, connId: gone.id }
+    ])
+
+    t.broadcasts.length = 0
+    stays.closed = true
+    t.layout.dropConnection(stays)
+    expect(t.reportChanged()).toEqual([{ type: 'ui.report.changed', slot: SLOT, connId: stays.id }])
+  })
+
+  test('dropping a window with no reports emits no ui.report.changed', () => {
+    const t = makeLayout()
+    const conn = t.open()
+    conn.closed = true
+    t.layout.dropConnection(conn)
+    expect(t.reportChanged()).toEqual([])
+  })
+
   test('reports are tracked per window and per slot', () => {
     const t = makeLayout()
     const a = t.open()
