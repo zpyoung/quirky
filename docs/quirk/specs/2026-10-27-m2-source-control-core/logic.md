@@ -6,6 +6,7 @@
 
 **Amendments:**
 - 2026-10-27, before build: Codex adversarial review ([D42](../../../loop/decisions/m2-source-control-core.md)). Staging an unresolved conflict is allowed once its markers are gone, and that is what clears git's unmerged record (SC-13, SC-41); the daemon unstages a rename's old path itself (SC-12); a worktree's own base wins over "Branch upstream" (SC-49); actionable messages are panel notices (SC-24, SC-59); editable diffs have Revert Block (SC-61) and a saveable fallback once a draft crosses the limits (SC-63); view controls have commands (SC-64); symlinks never lead outside the worktree (SC-67).
+- 2026-10-27, during build ([D50](../../../loop/decisions/m2-source-control-core.md)): a `lint-staged` pre-push failure is reason `lint`, as Orca classifies it (SC-38); SC-35(b)'s walkthrough counts the newer main commit as ahead.
 
 ## Conceptual model
 
@@ -366,7 +367,7 @@ a scenario says otherwise, so `--worktree` defaults to it.
     - **Then** (a) fetches, pulls (merging), and pushes, leaving 0 ahead and 0 behind; (b) fetches, sees every behind commit is patch-equivalent, and force-pushes with a lease on the upstream commit it just read, leaving `origin/zoe/feat` equal to **feat**
     - **Data before:** (b) **feat**: commits A′ B′ on new main; **origin/zoe/feat**: A B on old main
     - **Walkthrough:**
-      1. fetch → ahead 2, behind 2
+      1. fetch → ahead 3 (A′, B′ and the newer main commit), behind 2
       2. cherry-mark: A ≡ A′, B ≡ B′ → patch-equivalent
       3. push with lease on the sha of B
     - **Data after:** (b) **origin/zoe/feat**: ✓ A′ B′
@@ -384,7 +385,7 @@ a scenario says otherwise, so `--worktree` defaults to it.
 38. **SC-38: a failing pre-push hook blocks the push** (CLI, UI)
     - **Given** a `pre-push` hook printing `lint-staged failed` and exiting 1
     - **When** the agent runs `quirky git push --json`, then the person clicks Push
-    - **Then** the error has reason `hook`, summary "Lint failed during push." and the output; the panel shows the "Push blocked" card with its pill and a Details dialog titled "Push Failed", and no inline remote error under the button
+    - **Then** the error has reason `lint`, summary "Lint failed during push." and the output; the panel shows the "Push blocked" card with its pill and a Details dialog titled "Push Failed", and no inline remote error under the button
 
 39. **SC-39: rebase from base** (CLI)
     - **Given** **peer** pushed a commit to `origin/main` touching a file **feat** doesn't, and **feat** has 2 commits

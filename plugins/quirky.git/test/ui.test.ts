@@ -22,12 +22,17 @@ describe('quirky.git source-control panel', () => {
     expect(manifest.contributes.panel.map((p: { id: string }) => `panel:${manifest.id}/${p.id}`)).toEqual([PANEL])
   })
 
-  test('SC-36: activate provides the declared panel', () => {
+  test('SC-36: activate provides exactly the panel, view and commands the manifest declares', async () => {
+    const manifest = await Bun.file(new URL('../quirky-plugin.json', import.meta.url)).json()
+    const declared = (['panel', 'view', 'command'] as const).flatMap((kind) =>
+      (manifest.contributes[kind] as { id: string }[]).map((c) => `${kind}:${manifest.id}/${c.id}`)
+    )
     const fake = fakeContext(layoutFor(null))
     const provided: string[] = []
     fake.context.provide = (id) => void provided.push(id)
     void activate(fake.context)
-    expect(provided).toEqual([PANEL])
+    expect(provided).toContain(PANEL)
+    expect([...provided].sort()).toEqual([...declared].sort())
   })
 
   test('SC-36: with no worktree open it asks for one and reports nothing selected', async () => {

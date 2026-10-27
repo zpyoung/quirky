@@ -1106,9 +1106,8 @@
             },
             "limit": {
               "type": "integer",
-              "description": "Commits to return (default 50).",
-              "minimum": 1,
-              "maximum": 200
+              "description": "Commits to return (default 50); values above 200 are treated as 200.",
+              "minimum": 1
             }
           }
         },
