@@ -1,9 +1,12 @@
+import { useEffect, useState } from 'react'
 import { createRoot } from 'react-dom/client'
-import type { MountFunction, UiPluginContext } from '@quirky/protocol'
+import { RpcErrorCode, type MountFunction, type QuirkyEvent, type Session, type UiPluginContext } from '@quirky/protocol'
 import { WORKTREE_VIEW_ID, WorktreeSessions } from './window/model'
+import { StructuredView } from './window/StructuredView'
 import { WorktreeView } from './window/WorktreeView'
 
 const PLUGIN_ID = 'quirky.session'
+const STRUCTURED_VIEW_ID = `view:${PLUGIN_ID}/structured`
 const TAB_SHORTCUTS = [1, 2, 3, 4, 5, 6, 7, 8, 9]
 
 /** The worktree the layout's open session view names, if any. */
@@ -21,9 +24,63 @@ function parseInput(input: unknown): { worktree: string | null; session: string 
   }
 }
 
+/** The session a structured view input names, or null. */
+function structuredSessionId(input: unknown): string | null {
+  const { session } = (input ?? {}) as { session?: unknown }
+  return typeof session === 'string' && session !== '' ? session : null
+}
+
+/** Whether `event` says the session `id` changed or was closed. */
+function touches(event: QuirkyEvent, id: string): boolean {
+  const data = (event as { data?: unknown }).data as { session?: { id?: unknown }; sessionId?: unknown } | undefined
+  if (event.type === 'quirky.session/changed') return data?.session?.id === id
+  return event.type === 'quirky.session/removed' && data?.sessionId === id
+}
+
+type Loaded = { status: 'loading' } | { status: 'missing' } | { status: 'ready'; session: Session }
+
+/** One structured session's transcript and input, re-read whenever the session changes or goes away. */
+function StructuredSession({ context, id }: { context: UiPluginContext; id: string | null }) {
+  const [loaded, setLoaded] = useState<Loaded>(id === null ? { status: 'missing' } : { status: 'loading' })
+
+  useEffect(() => {
+    if (id === null) return
+    let cancelled = false
+    let latest = 0
+    const load = () => {
+      const attempt = ++latest
+      context
+        .call('quirky.session/get', { session: id })
+        .then((session) => {
+          if (!cancelled && attempt === latest) setLoaded({ status: 'ready', session: session as Session })
+        })
+        .catch((error: { code?: unknown }) => {
+          if (!cancelled && attempt === latest && error?.code === RpcErrorCode.NotFound) setLoaded({ status: 'missing' })
+        })
+    }
+    const unsubscribe = context.subscribe((event) => {
+      if (touches(event, id)) load()
+    })
+    const unsubscribeConnection = context.onConnection((status) => {
+      if (status === 'connected') load()
+    })
+    load()
+    return () => {
+      cancelled = true
+      unsubscribe()
+      unsubscribeConnection()
+    }
+  }, [context, id])
+
+  if (loaded.status === 'missing') return <p className="muted pad">Session not found</p>
+  if (loaded.status === 'loading') return null
+  return <StructuredView context={context} session={loaded.session} />
+}
+
 /**
  * Activates the session plugin's window code: the worktree view with its tabs, terminal and
- * transcript, and the commands that act on the open view.
+ * transcript, the structured session view other views can embed, and the commands that act on
+ * the open view.
  */
 export function activate(context: UiPluginContext): void {
   let current: WorktreeSessions | null = null
@@ -52,12 +109,20 @@ export function activate(context: UiPluginContext): void {
     }
   }
 
+  const mountStructured: MountFunction = (element, { input }) => {
+    Object.assign(element.style, { display: 'flex', flexDirection: 'column', flex: '1', minHeight: '0' })
+    const root = createRoot(element)
+    root.render(<StructuredSession context={context} id={structuredSessionId(input)} />)
+    return () => root.unmount()
+  }
+
   const selectTab = (index: number) => {
     const target = current?.tab(index)
     if (target) current?.open(target.id)
   }
 
   context.provide(WORKTREE_VIEW_ID, mountView)
+  context.provide(STRUCTURED_VIEW_ID, mountStructured)
   context.provide(`command:${PLUGIN_ID}/new-shell`, () => {
     if (current) return current.create('shell', '', false)
     const worktree = layoutWorktree(context)
