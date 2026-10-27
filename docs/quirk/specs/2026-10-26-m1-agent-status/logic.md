@@ -4,7 +4,10 @@
 
 **Status:** Approved (headless build loop; decisions in [m1-agent-status.md](../../../loop/decisions/m1-agent-status.md)). Tech spec: requested.
 
-**Amendments:** none yet.
+**Amendments:**
+- 2026-10-26, tech-spec authoring: the hooks switch is the Settings dialog's checkbox, whose
+  description is hover text (SC-37); an OpenCode-family interrupt needs a second Esc in the same
+  turn, not within 500 ms (SC-20).
 
 ## Conceptual model
 
@@ -350,7 +353,7 @@ are relative to the first event.
       | codex | Ctrl+C | no |
       | droid | Ctrl+C | no |
       | opencode | Esc once | no |
-      | opencode | Esc twice within 500 ms | yes |
+      | opencode | a second Esc in the same turn | yes |
       | any | Ctrl+C, then a hook that changes the row within 500 ms | no |
       | any | Ctrl+C on a row that is waiting, done, or restored unconfirmed | no |
       | claude | Ctrl+C while only a child is working | no |
@@ -524,9 +527,11 @@ These run in the web UI against a daemon on a temporary home, with hooks posted 
 
 37. **SC-37: the hooks switch in Settings** (UI)
     - **When** the person opens Settings
-    - **Then** an "Agent status hooks" switch shows, on, with "Shows working, waiting, and done states
-      in Quirky. Turn off to remove Quirky-managed hooks and stop reinstalling them."; turning it off
-      makes `quirky agent-status hooks status` report `hooks_disabled`
+    - **Then** an "Agent status hooks" checkbox shows, checked, and hovering it reads "Shows working,
+      waiting, and done states in Quirky. Turn off to remove Quirky-managed hooks and stop
+      reinstalling them." (Quirky's Settings dialog shows a setting's description as its hover
+      text); unchecking it and saving makes `quirky agent-status hooks status` report
+      `hooks_disabled`
 
 ## Scope and non-goals
 

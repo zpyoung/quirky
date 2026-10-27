@@ -342,5 +342,98 @@
 - **Confidence:** medium
 - **Source:** assumed — autonomous
 
+## D34: OSC 7501 and prompt marks ride the existing PTY protocol without a version bump
+- **Question:** whether adding fact kinds bumps `PTY_PROTOCOL_VERSION` (tech spec)
+- **Options:** bump to 3; add the kinds and make consumers ignore unknown ones
+- **Chose:** no bump; `quirky.terminal`'s `factEvent` returns null for kinds it doesn't report.
+- **Why:** a bump makes an upgraded daemon retire the running host, ending every session; the daemon and host ship together, and an old host simply never emits the new kinds
+- **Evidence:** packages/daemon/src/pty-client.ts:273-294 (retireHost); packages/protocol/src/pty.ts:10
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** assumed — autonomous
+
+## D35: The PTY host answers the OSC 7501 probe for every live session, through the input barrier
+- **Question:** who replies to `OSC 7501 ; ?` (tech spec)
+- **Options:** a plugin replies via `pty.write`; the host replies only when no pane is attached; the host always replies
+- **Chose:** the host always replies, through `barrier.input`, never during restore replays.
+- **Why:** the window's xterm.js ignores unknown OSCs, so no pane ever answers it; the host sees the probe first, and the barrier keeps the reply ordered behind queued input
+- **Evidence:** packages/pty-host/src/session.ts:542-551 (emulator replies), history/restore.ts:59 (seeding)
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** assumed — autonomous
+
+## D36: The session store persists the summary (migration 5)
+- **Question:** whether `Session.agentStatus` is stored or held in memory
+- **Options:** in-memory overlay; a column
+- **Chose:** a JSON column added by session migration 5.
+- **Why:** `list` and `get` read rows straight from the store, and the summary's times must survive a daemon restart with the status they belong to
+- **Evidence:** plugins/quirky.session/src/records.ts:103-143, 202-238
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** another lane adds a session migration 5 first; renumber at the catch-up merge
+- **Source:** assumed — autonomous
+
+## D37: Tests drive timing with `get {at}` and a time-scale variable
+- **Question:** how tests reach 30-minute, 2-minute and 500 ms behaviour (deferred `[tech-spec]` item)
+- **Options:** inject a clock into the plugin; scale constants by env like `QUIRKY_TEST_AGENT_TIME_SCALE`; read-time parameter
+- **Chose:** `quirky.agent-status/get` takes an optional `at` time for freshness; `QUIRKY_TEST_AGENT_STATUS_TIME_SCALE` scales the 500 ms settle and the 2-minute hook silence; ages for hydration are tested with a seeded store.
+- **Why:** follows quirky.agents' existing test knob; `at` is also useful to scripts
+- **Evidence:** plugins/quirky.agents/src/service.ts:62-64
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** assumed — autonomous
+
+## D38: mimo-code's plugin goes in its config dir's `plugins/`, not Orca's per-launch overlay
+- **Question:** where mimo-code and the OpenCode family get their plugin file (tech spec; Orca uses overlays)
+- **Options:** Orca's per-launch overlay mirrored into Quirky's data dir; the agent's own config `plugins/` dir
+- **Chose:** the config dir (`$OPENCODE_CONFIG_DIR` or `$XDG_CONFIG_HOME/opencode/plugins/`; `$MIMOCODE_HOME/config/plugins/` or `~/.config/mimocode/plugins/`).
+- **Why:** D6 installs globally so hand-started agents report; the doc says OpenCode's default is its config dir; overlays need launch-time env that only Quirky-launched sessions get
+- **Evidence:** agent-status.md "How each agent reports" (opencode, mimo-code rows); ORCA src/main/mimo/hook-service.ts
+- **Reversibility:** easy
+- **Confidence:** low
+- **Revisit if:** mimo-code doesn't load plugins from that dir
+- **Source:** assumed — autonomous
+
+## D39: Codex's auto-review rule reads the hook payload only
+- **Question:** Orca reads `approvals_reviewer` from the Codex rollout; D15 leaves rollouts out
+- **Options:** read the rollout for this one flag; use the payload field when present
+- **Chose:** the payload field; without it a PermissionRequest is waiting.
+- **Why:** keeps D15; the cost is a brief waiting flash under "Approve for me"
+- **Evidence:** ORCA src/shared/codex-subagent-reviewer.ts:46
+- **Reversibility:** easy
+- **Confidence:** medium
+- **Revisit if:** auto-reviewed Codex turns flap visibly in daily use
+- **Source:** assumed — autonomous
+
+## D40: Installed commands carry the event name for Cursor, Antigravity and Copilot
+- **Question:** those agents' payloads don't name the event, and Cursor and Antigravity need a per-event answer
+- **Options:** one command per agent; one command per event with `QUIRKY_HOOK_EVENT` set
+- **Chose:** per-event commands setting `QUIRKY_HOOK_EVENT`; the shim answers from it and posts it as `event`.
+- **Why:** mirrors Orca's `ORCA_CURSOR_HOOK_RESPONSE`, `ORCA_ANTIGRAVITY_EVENT` and `ORCA_COPILOT_HOOK_EVENT`
+- **Evidence:** ORCA src/main/cursor/hook-events.ts:15-24; src/main/antigravity/hook-script.ts:19-31; src/main/copilot/copilot-managed-hook-definitions.ts
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** locked by research/orca-features/agent-status.md
+
+## D41: Hook timeouts follow Orca's per-format values
+- **Question:** how long an agent waits on a Quirky hook
+- **Options:** 5 s everywhere; Orca's values (10 s, Gemini 10000 ms, Copilot 5 s)
+- **Chose:** Orca's. The shim itself returns within about 1.5 s (curl bounds), so the timeout only matters if the shim hangs.
+- **Why:** parity, and the research's 600 s stall came from no timeout at all
+- **Evidence:** ORCA src/main/agent-hooks/installer-utils.ts:49-50; research: vibe-island #265
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** locked by research/orca-features/agent-status.md
+
+## D42: The tech spec was written as LOOP.md requires; its reviewer step is folded into the adversarial review
+- **Question:** the tech-spec rubric's reviewer dispatch and its complexity gate
+- **Options:** run the rubric's reviewer and the adversarial review; fold one into the other
+- **Chose:** fold the reviewer into the one adversarial-review pass over both specs (as m1-term-daemon D32 and m0-core D37 did). The gate fired: crosses subsystems, many files, Tech spec requested.
+- **Why:** LOOP.md asks for one review of both specs with Codex
+- **Evidence:** docs/loop/LOOP.md step 4; docs/loop/decisions/m1-term-daemon.md D32
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** locked by docs/loop/LOOP.md
+
 ## Progress
-Step 4: logic spec written (docs/quirk/specs/2026-10-26-m1-agent-status/logic.md). Next: commit it, write tech.md, then one adversarial review of both with Codex.
+Step 4: logic and tech specs written. Next: commit, run one adversarial review of both with Codex, fix findings, commit, then step 5 (SDD).
