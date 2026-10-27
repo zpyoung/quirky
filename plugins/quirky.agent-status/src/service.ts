@@ -1,5 +1,6 @@
 import type { AgentStatusSummary, PluginContext, PtyFact, QuirkyEvent, Session } from '@quirky/protocol'
 import { applyEvent } from './apply'
+import { foldLead } from './fold'
 import { facetOf, HOOK_SILENCE_MS, parseRecords, programEvidence, serializeRecords, titleEvidence } from './fallbacks'
 import { decideIdentity, processAlive, type IsAlive } from './identity'
 import {
@@ -470,8 +471,14 @@ export class AgentStatusService {
     await this.context.call('quirky.session/setStatus', { session: session.id, status, agentStatus: summary })
   }
 
+  /**
+   * Announces a fallback row (title or OSC 7501) the way the hook path does: only a change into
+   * done, waiting or blocked, never a session boundary, and never while children are still working.
+   */
   private emitIfSettled(session: Session, prev: AgentRow | null, row: AgentRow): void {
-    if (prev?.state !== row.state && row.state !== 'working') this.emitSettled(session, row, row.state)
+    if (row.sessionBoundary) return
+    const { state } = foldLead(row.lead.state, row.children, false)
+    if (prev?.state !== state && state !== 'working') this.emitSettled(session, row, state)
   }
 
   /** Announces that a row settled into done, waiting or blocked, with what a banner would say about it. */

@@ -183,10 +183,41 @@ describe('SC-23: hooks outrank OSC 7501 until they fall silent', () => {
     await waitForAsync(async () => (await rig.state()) === 'done', 2000)
     expect(await rig.row()).toMatchObject({ state: 'done', source: 'program-status', display: 'done' })
     expect(rig.notifies()).toEqual([])
-    expect(rig.settles()).toMatchObject([{ state: 'done', agent: 'claude' }])
+    expect(rig.settles()).toEqual([])
 
     await prompt()
     expect(await rig.row()).toMatchObject({ state: 'working', source: 'hook' })
+  })
+
+  test('a done report that takes over a row with a working child settles nothing', async () => {
+    rig = await Rig.start()
+    await prompt()
+    await rig.hook('claude', { hook_event_name: 'SubagentStart', agent_id: 'a1' })
+    await rig.hook('claude', { hook_event_name: 'Stop' })
+    expect(await rig.row()).toMatchObject({ state: 'working', lead: { state: 'done' }, children: [{ state: 'working' }] })
+
+    await rig.osc('state=done')
+    await waitForAsync(async () => (await rig.row())?.source === 'program-status', 2000)
+    await rig.settle()
+    expect(rig.settles()).toEqual([])
+  })
+
+  test('an idle report is a session boundary, so the row it moves into done settles nothing', async () => {
+    rig = await Rig.start()
+    await rig.osc('state=working')
+    await rig.osc('state=idle')
+    expect(await rig.row()).toMatchObject({ state: 'done', sessionBoundary: true })
+    expect(rig.settles()).toEqual([])
+  })
+
+  test('a done report that follows a hook row into done settles it once', async () => {
+    rig = await Rig.start()
+    await prompt()
+    await rig.osc('state=idle')
+    await rig.osc('state=done')
+    await waitForAsync(async () => (await rig.row())?.source === 'program-status', 2000)
+    await rig.settle()
+    expect(rig.settles()).toMatchObject([{ state: 'done', agent: 'claude' }])
   })
 
   test('a report that agrees with the hook row changes nothing, even after the silence', async () => {
