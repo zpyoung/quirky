@@ -22,7 +22,11 @@ export function createVaultHostForwarder(remoteUrl: string): { root: string; dir
     activation: 'lazy',
     contributes: {
       'vault-host': [{ id: 'remote', label: 'Remote fixture', methodPrefix: PLUGIN_ID }],
-      method: METHODS.map((id) => ({ id, params: { type: 'object' }, result: { type: 'object' } }))
+      method: METHODS.map((id) => ({
+        id,
+        params: { type: 'object', additionalProperties: true },
+        result: { type: 'object', additionalProperties: true }
+      }))
     }
   }, null, 2))
 
