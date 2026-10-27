@@ -627,5 +627,106 @@
 - **Confidence:** high
 - **Source:** assumed — autonomous
 
+
+## D63: Complete the UI pass with a guarded continuation for draft scenarios
+- **Question:** how to close LOOP.md step 6 after the first run exhausted SC-58's goal budget before SC-58/59 were complete
+- **Options:** leave the draft scenarios incomplete; close the first run and continue the remaining goals in a fresh guarded run while retaining evidence and limitation-based partials
+- **Chose:** close the first run and continue SC-58/59 in a fresh unattended web run. SC-58 and SC-59 pass in the continuation; earlier pass/partial outcomes remain in the first report, and its SC-58/59 partials are superseded by the continuation evidence without altering that report.
+- **Why:** LOOP.md step 6 permits only tool-caused partials; it does not permit waiving app failures. SC-40 remains partial because the guarded driver offers no hover action to verify its tooltip. SC-50 remains partial because the supplied fake Codex fixture left its update screen before the slow headless action could dismiss it and did not expose the readiness signal; the UI showed “Brief delivery and the automatic retry failed,” so this is not an app-failure exemption.
+- **Evidence:** first run reports: `.quirk/using-apps-like-a-user/runs/20261027T162430-b06b/report.md` and `.quirk/using-apps-like-a-user/runs/20261027T162430-b06b/report.json`; continuation reports: `.quirk/using-apps-like-a-user/runs/20261027T170628-054d/report.md` and `.quirk/using-apps-like-a-user/runs/20261027T170628-054d/report.json`. SC-58 restoration/isolation: continuation obs-15, obs-24 and obs-29; SC-59 focused Escape and restoration: obs-9–12. SC-40 tooltip limitation: first-run finding F3/obs-57. SC-50 fixture limitation and failed retry: first-run obs-69, obs-74–78.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** a driver with a guarded hover action or a Codex fixture that keeps its update menu open and exposes readiness becomes available
+- **Source:** locked by docs/loop/LOOP.md
+
+Cleanup: `m3-handoff-ui-daemon` stopped; `ps -p 10340,10398` returned no processes. Removed only the owned temporary fixture `/tmp/m3-handoff-ui.hzKLDo` and home `/var/folders/x5/07kj5yld16l9wd5p_v01h20c0000gp/T/quirky-test-home-WfNYyn`; absence checks succeeded. No product files changed.
+
+## D64: Reconcile the resumed item with the latest integration decisions
+- **Question:** whether decisions landed during this item's UI verification change handoff's contract
+- **Options:** leave the earlier catch-up as sufficient; merge current `build/roadmap` and read every newly arrived decision log
+- **Chose:** merged current `build/roadmap` cleanly and reviewed `m5-structured-runner.md`, `fix-ask-regex-budget-20261027.md`, and `sa-browser-agent.md`. No handoff contract changes are required. The structured runner's no-retry policy applies to native structured turns, and the browser plugin's no-implicit-retry policy applies to mutating browser operations; neither supersedes D36's single retry after positively identified non-delivery of a terminal handoff.
+- **Why:** LOOP.md step 5 binds later decisions. Shared session launch now also carries structured-resume state, but handoff still creates a new terminal session through the public agent/session APIs. The regex fix preserves matching semantics and changes no handoff method.
+- **Evidence:** the three named decision logs; clean `git merge build/roadmap`; post-merge `bun run build` exit 0
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** structured-session handoff is added to this item's scope
+- **Source:** locked by docs/loop/LOOP.md
+
+## D65: Do not classify a modal-blocked tab click as a broken lineage tab
+- **Question:** whether continuation report F1's Codex-tab `NO_EFFECT` is an app defect
+- **Options:** call the tab broken; inspect the screenshot's foreground modal before classifying it
+- **Chose:** expected modal shielding, not a broken tab. The continuation's obs-4 shows the duplicate-turn confirmation open over the Codex pane and its background dimmed. The lineage jumps themselves passed SC-54 in the first run.
+- **Why:** a background tab must not bypass an active confirmation; a driver's no-effect result alone does not establish a defect.
+- **Evidence:** `.quirk/using-apps-like-a-user/runs/20261027T170628-054d/obs-4.png`; first-run SC-54 obs-82–83
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** assumed — autonomous
+
+## D66: Correct the fake Codex fixture and prove SC-50 instead of waiving it
+- **Question:** whether D63's fixture-caused SC-50 partial is an immutable tool limitation or repairable setup
+- **Options:** retain the partial; construct a faithful fake composer that keeps its update screen open until a UI keypress and emits the normal readiness and working signals
+- **Chose:** repair setup and rerun SC-50 in a fresh isolated owned daemon. SC-50 passes: the first attempt reports unconfirmed delivery; a UI Enter dismisses the update screen; Resend opens the duplicate-turn confirmation; Cancel preserves the toast; Send again delivers 865 characters and replaces it with “The handoff brief was sent.”
+- **Why:** an incorrect fixture is actionable and cannot stand in for verification. This evidence supersedes D63's SC-50 partial. SC-40 alone retains its tooltip-only partial because the guarded driver has no hover action; marker/count/cost updates are visibly verified.
+- **Evidence:** `.quirk/using-apps-like-a-user/runs/20261027T173817-02ae/report.md` and `report.json`, obs-8, obs-10–12, obs-14. Two superseded setup reports (`20261027T172345-3f31`, `20261027T172811-c428`) remain partial rather than being rewritten.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** the real Codex composer readiness contract changes
+- **Source:** supersedes m3-handoff D63
+
+Cleanup: the corrected run ended with no kept-open windows or cleanup errors. Its owned fixture, repository and home were removed; wrapper, daemon and PTY-host absence was checked. No product files changed.
+
+## D67: Wait for the required remote suite without an arbitrary outer deadline
+- **Question:** how to handle a post-catch-up suite invocation terminated by its external 3,600-second command deadline before the remote result
+- **Options:** call the timeout a test failure or waive the suite; rerun the required command without an outer deadline and investigate the shared host
+- **Chose:** rerun `bun run test` with no external command deadline. A read-only remote snapshot showed load averages 23.70 / 25.02 / 24.09, seven concurrent suite workers and an active land-priority marker. The retry was actively starting files. This proves contention, not a particular hung test or lane-owned orphan; no remote process was killed.
+- **Why:** LOOP.md requires the remote suite result, not a deadline-based substitute. The timed-out invocation only reported the two macOS-only files passing, so it provides no remote pass/fail evidence.
+- **Evidence:** timeout output from the first post-catch-up run; `scripts/suite.ts:174-195,223-245`; read-only remote snapshot identified the active retry as worker 1230277 under `runs/1793125040845-92034`
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** the suite reports a concrete failure or a safely attributable owned orphan is established
+- **Source:** assumed — autonomous
+
+## D68: Use the operator's night-mode verification gate before landing
+- **Question:** how to proceed after the operator stopped the overloaded shared-host whole-suite run after more than two hours
+- **Options:** start another whole-suite run; follow the operator's affected-package gate and let `queue.ts land` run the whole suite
+- **Chose:** affected packages only: `bun scripts/suite.ts packages/cli packages/daemon packages/protocol packages/ui plugins/quirky.handoff plugins/quirky.notifications plugins/quirky.session plugins/quirky.terminal`, plus `bun test scripts` and `bun run typecheck`. These are handoff's implementation and consumer-test packages. No more pre-land whole-suite invocations.
+- **Why:** the operator explicitly superseded the earlier full-suite gate for night mode and said the stopped run's failure is not a test result. Its shutdown output includes remote-directory removal and forced termination, so it is inconclusive and is not counted as a feature failure or pass.
+- **Evidence:** operator message in this iteration; stopped command exit 137 after 8,243 seconds; affected-package inventory from this item's changes
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** the operator changes the night-mode gate
+- **Source:** supersedes m3-handoff D67
+
+## D69: Rerun the unchanged affected-package gate on the replacement test host
+- **Question:** how to handle the operator stopping the affected-package run on the old host at load 35
+- **Options:** use the stopped run's output; rerun the identical command on the operator-provided replacement host
+- **Chose:** rerun the exact D68 affected-package command, unchanged. The operator said routing now targets an idle 16-core host.
+- **Why:** the operator explicitly said the old-host result was not meaningful and instructed this rerun. No product change or test exclusion is involved.
+- **Evidence:** operator message in this iteration; identical affected-package command invocation
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** assumed — autonomous
+
+## D70: Investigate the provider-startup timeout without inventing a fix
+- **Question:** whether the first replacement-host run's structured-resume timeout justifies changing provider startup or the test deadline
+- **Options:** increase the deadline or change provider code speculatively; investigate the actual failing boundary and retain the existing behavior unless a cause is demonstrated
+- **Chose:** investigate. The timeout was the initial provider-ID wait at `plugins/quirky.session/test/resume.test.ts:460`, before the test reaches its daemon-restart assertions. The unchanged file passed locally (23 tests), on the actual replacement host when run alone, and in the subsequent affected-package run. Failure-only diagnostics were temporarily added, produced no payload on the passing isolated remote run, and were removed. No production or permanent test change was made.
+- **Why:** both providers' startup also passed standalone Linux arm64/amd64 daemon smokes with the existing fixture. Inspection found the generated Codex fixture is CommonJS and compatible with the host's Node 18 syntax; no Node-module-format defect was established. The initial timeout's cause remains undetermined, so neither a fix claim nor a speculative timeout increase is warranted.
+- **Evidence:** initial replacement-host suite's first and isolated failure; local `bun test plugins/quirky.session/test/resume.test.ts` 23/23; replacement-host single-file suite `ok:true`; final affected-package suite `ok:true`
+- **Reversibility:** easy
+- **Confidence:** high for observed outcomes; low for an unestablished cause
+- **Revisit if:** this exact initial provider-ID timeout recurs with diagnostic evidence
+- **Source:** assumed — autonomous
+
+## D71: The operator's night-mode gate passes with one explicitly reported suite flake
+- **Question:** whether the item meets the operator's pre-land verification gate after completing UI verification
+- **Options:** claim every first attempt passed; report the runner's actual result and leave the integration-wide gate to land
+- **Chose:** the affected-package suite exits 0 for 242 remote files plus 2 macOS-only files. Its first pass had one terminal divider-sizing failure in `workspace-panes.test.ts`; the runner's isolated rerun passed all 11 tests and reported it in `flaky`. Scripts pass 49 tests, typecheck exits 0, and the post-catch-up UI/desktop build exits 0. Eleven selected UI scenarios pass; SC-40 has only the guarded hover-tool limitation documented in D63/D66.
+- **Why:** this preserves the observed evidence rather than concealing a rerun. The operator explicitly assigned the whole-suite integration gate to `queue.ts land`.
+- **Evidence:** affected-package `suite-result {"ok":true,"flaky":["plugins/quirky.terminal/test/e2e-ui/workspace-panes.test.ts"]}`; `bun test scripts && bun run typecheck` exit 0; `bun run build` exit 0; UI reports linked by D63 and D66
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** locked by docs/loop/LOOP.md
+
 ## Progress
-Built, checkpoints and Final Round 1 fixed (D56, D58, D61), caught up with build/roadmap e7155ed (D60). Post-fix gate at 23b147a is green: `bun run test` ok (456 files; window-projects SC-10 flaky, passed alone), `bun test scripts`, `bun run typecheck`, `bun run build` all exit 0. Next: the step 6 UI pass: `bun run build`, start quirkyd on a temp QUIRKY_HOME/HOME (use scripts/owned-run.ts per fix-test-process-leaks D5), run quirk:using-apps-like-a-user `--surface web --owner yours --unattended` against the daemon UI URL with goals SC-1, 3, 21, 24, 33, 36, 40, 50, 53, 54, 58, 59 (fake agent TUIs on PATH in the temp home; agent-status hooks through the shim), record results as a decision, write docs/loop/native/m3-handoff.json only if needed (D50 says none), then land with `queue.ts land m3-handoff` (copy plugins/quirky.handoff/node_modules links into the integration tree first if land fails on module resolution, as m1-notifications D62).
+Implementation, checkpoint reviews and Final Round 1 are complete. Latest integration decisions are reconciled (D64). Guarded UI scenarios SC-1, 3, 21, 24, 33, 36, 50, 53, 54, 58 and 59 pass; SC-40 has only the permitted hover-tool limitation, with marker/count/cost verified. Every UI run, smoke container and owned daemon/temporary home is closed. The operator's night-mode affected-package gate passes (242 remote files plus 2 macOS-only files, one reported terminal divider-sizing flake passed alone), scripts pass 49 tests, typecheck/build pass (D71). Diagnostic-only edits were removed; no product changes were needed this iteration. Next: commit this verification log, detach and `queue.ts land m3-handoff`; land retains its whole-suite integration gate. Do not start another item.
