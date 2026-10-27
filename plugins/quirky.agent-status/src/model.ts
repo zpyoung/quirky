@@ -66,6 +66,14 @@ const isJsonObjectText = (text: string): boolean => {
   return trimmed.startsWith('{') && trimmed.endsWith('}')
 }
 
+/** `capLine` that refuses JSON object text, checked on the whole source because truncation drops the closing brace. */
+const readableLine = (text: unknown, max: number): string =>
+  typeof text === 'string' && isJsonObjectText(text) ? '' : capLine(text, max)
+
+/** A stored detail that must not be shown: object text, or object text a cap cut short. */
+const isJsonishDetail = (detail: string): boolean =>
+  isJsonObjectText(detail) || (detail.trimStart().startsWith('{') && detail.length >= CAPS.detail)
+
 // the field that names what a tool is doing, most telling first
 const TOOL_INPUT_KEYS = ['command', 'file_path', 'path', 'pattern', 'url', 'query', 'description', 'prompt']
 
@@ -80,27 +88,27 @@ function parseJson(text: string): unknown {
 /** One readable line for a tool's input, which may arrive as JSON object text; '' when none can be read. */
 function summarizeToolInput(input: string | undefined): string {
   if (!input) return ''
-  if (!input.trimStart().startsWith('{')) return capLine(input, CAPS.toolInput)
+  if (!input.trimStart().startsWith('{')) return readableLine(input, CAPS.toolInput)
   const parsed = parseJson(input)
   if (typeof parsed !== 'object' || parsed === null) return ''
   const fields = parsed as Record<string, unknown>
   const key = TOOL_INPUT_KEYS.find((name) => typeof fields[name] === 'string' && fields[name]) ?? Object.keys(fields).find((name) => typeof fields[name] === 'string' && fields[name])
-  return key ? capLine(fields[key], CAPS.toolInput) : ''
+  return key ? readableLine(fields[key], CAPS.toolInput) : ''
 }
 
 /** The question an agent asked, from the JSON of its ask input or from plain text. */
 function questionText(question: string | undefined): string {
   if (!question) return ''
   const trimmed = question.trim()
-  if (!trimmed.startsWith('{') && !trimmed.startsWith('[')) return capLine(trimmed, CAPS.detail)
+  if (!trimmed.startsWith('{') && !trimmed.startsWith('[')) return readableLine(trimmed, CAPS.detail)
   const parsed = parseJson(trimmed)
   const asked = Array.isArray(parsed) ? parsed : (parsed as { questions?: unknown } | undefined)?.questions
   const first = Array.isArray(asked) ? asked[0] : parsed
-  if (typeof first === 'string') return capLine(first, CAPS.detail)
+  if (typeof first === 'string') return readableLine(first, CAPS.detail)
   if (typeof first === 'object' && first !== null) {
     const fields = first as Record<string, unknown>
     for (const key of ['question', 'header', 'prompt', 'text', 'message']) {
-      if (typeof fields[key] === 'string' && fields[key]) return capLine(fields[key], CAPS.detail)
+      if (typeof fields[key] === 'string' && fields[key]) return readableLine(fields[key], CAPS.detail)
     }
   }
   return ''
@@ -122,10 +130,10 @@ export function readableDetail(row: AgentRow): string {
   const asking = row.state === 'waiting' || row.state === 'blocked'
   const candidates =
     row.state === 'done'
-      ? [capLine(row.lastAssistantMessage, CAPS.detail), capLine(row.programStatus?.msg, CAPS.detail)]
-      : [asking ? questionText(row.question) : '', toolText(row), capLine(row.programStatus?.msg, CAPS.detail)]
-  candidates.push(capLine(row.prompt, CAPS.detail))
-  return candidates.find((text) => text !== '' && !isJsonObjectText(text)) ?? ''
+      ? [readableLine(row.lastAssistantMessage, CAPS.detail), readableLine(row.programStatus?.msg, CAPS.detail)]
+      : [asking ? questionText(row.question) : '', toolText(row), readableLine(row.programStatus?.msg, CAPS.detail)]
+  candidates.push(readableLine(row.prompt, CAPS.detail))
+  return candidates.find((text) => text !== '') ?? ''
 }
 
 export type DisplayResult = { display: AgentDisplayState; label: string; detail: string }
@@ -145,7 +153,7 @@ export function displayOf(row: AgentRow, now: number, sessionRunning: boolean): 
   if (live && now - row.evidenceAt > STALE_AFTER_MS) {
     return result(sessionRunning ? 'unverifiable' : 'idle', `No update in ${minutesSince(row.evidenceAt, now)}m`)
   }
-  const detail = row.detail && !isJsonObjectText(row.detail) ? row.detail : readableDetail(row)
+  const detail = row.detail && !isJsonishDetail(row.detail) ? row.detail : readableDetail(row)
   switch (row.state) {
     case 'working':
       return result(row.workingMode === 'monitoring' ? 'monitoring' : 'working', detail)
