@@ -207,5 +207,15 @@ Implementation wave: T1 structured/session/catalog, T2 checks plugin, T3 ask own
 - **Confidence:** high
 - **Source:** locked by docs/loop/LOOP.md
 
+## D21: Keep one-shot generation separate and pin the latest pre-review integration baseline
+- **Question:** another catch-up landed source-control AI generation and the repaired SC-31 item before final discovery
+- **Options:** migrate generation into checks; preserve the distinct contracts and rerun all gates on the merge
+- **Chose:** preserve m2-source-control-notes-ai D15–D17,D23–D24,D32,D34,D36–D39,D43–D44 and fix-sc31-first-shell-race D1–D10. One-shot generation belongs to quirky.agents/generate, not shell checks or native structured conversations. Codex model/effort structured mappings survived the automatic manifest merge and unset choices remain unset. Pin final campaign baseline e7155edf410a6dfb14af32f6933d1988b8cf5187, replacing D18's earlier pre-discovery baseline.
+- **Why:** the complete incoming logs were read in the CatchupDecisions survey; no conflicting decision was found. The final model discovery has not started. Run typecheck and script checks before the same complete remote suite to fail fast without reducing coverage.
+- **Evidence:** CatchupDecisions report; plugins/quirky.agents/quirky-plugin.json Codex launchOptions and oneShot; core/resolve.ts structured resolution; merge result104files
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** supersedes m5-structured-runner D18 (review baseline only)
+
 ## Progress
-Three components merged and actual CLI/native protocol smokes passed. First full gate found one owned kernel-confirmation regression; repaired classification and test typing, targeted checks/typecheck pass. No final model review has started because the full gate must be green first. Next: commit repairs, catch up any new integration decisions, rerun exact full prepass, then three Gemini final lenses, one accepted fix batch, required checks/build and queue land. No UI/native scenarios or running smoke services.
+Implemented components and actual CLI/native protocol smokes pass. Kernel-confirmation regression and fixture types repaired; typecheck and targeted checks pass. Latest integration e7155edf caught up and all new decisions read. Next: full prepass (typecheck, scripts, remote suite), then three Gemini final lenses, one accepted fix batch, required checks/build and queue land. No final model review yet; no UI/native scenarios or running smoke services.
