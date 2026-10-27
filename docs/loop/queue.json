@@ -422,8 +422,7 @@
         "m1-worktrees",
         "m2-source-control-core"
       ],
-      "status": "in-progress",
-      "lane": 2
+      "status": "done"
     },
     {
       "id": "m3-accounts",
