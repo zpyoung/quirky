@@ -7,6 +7,14 @@ import { Database } from 'bun:sqlite'
 import { HISTORY_AGENTS } from '../agents'
 import type { Discovery, ScanIssue, SourceCandidate, SourceRoot } from '../types'
 import { numberOrDate, readJsonObject, readJsonl, string } from './parsers/shared'
+import {
+  geminiChatProject,
+  readGeminiProjectRegistry,
+  readGeminiProjectRoot,
+  readGeminiTranscriptMetadata,
+  resolveGeminiCwd,
+  type GeminiRegistryProject
+} from './gemini-metadata'
 
 const OMP_ARTIFACT_DIR = /^\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}-\d{3}Z_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 const OPENCODE_DB_NAME = /^opencode(?:-[A-Za-z0-9_.-]+)?\.db$/i
@@ -16,6 +24,13 @@ type Layout = 'tree' | 'cline' | 'kiro' | 'kimi' | 'antigravity' | 'openclaw' | 
 type RootSpec = { agent: string; path: string; layout: Layout; label?: string }
 
 type DiscoveryOptions = { sourceHome: string; env: Record<string, string | undefined> }
+type GeminiMetadataContext = {
+  sourceRoot: string
+  registryPath: string
+  registry: GeminiRegistryProject[]
+  registryObservation: string
+  markers: Map<string, Promise<{ cwd: string | null; observation: string }>>
+}
 
 function within(root: string, path: string): boolean {
   const rel = relative(resolve(root), resolve(path))
@@ -134,6 +149,50 @@ async function observe(path: string): Promise<{ signature: string; mtimeMs: numb
   }
 }
 
+async function metadataObservation(path: string): Promise<string> {
+  try {
+    const observed = await observe(path)
+    return `${path}=${observed.regular ? observed.signature : 'not-file'}`
+  } catch (error) {
+    const code = error && typeof error === 'object' && 'code' in error ? String((error as { code?: unknown }).code) : ''
+    return `${path}=${code || 'unknown'}`
+  }
+}
+
+async function createGeminiMetadataContext(sourceRoot: string): Promise<GeminiMetadataContext> {
+  const registryPath = join(dirname(sourceRoot), 'projects.json')
+  const [registry, registryObservation] = await Promise.all([
+    readGeminiProjectRegistry(registryPath),
+    metadataObservation(registryPath)
+  ])
+  return { sourceRoot, registryPath, registry, registryObservation, markers: new Map() }
+}
+
+async function geminiCandidateMetadata(
+  context: GeminiMetadataContext,
+  path: string,
+  signal?: AbortSignal
+): Promise<{ cwd: string | null; observations: string[] } | null> {
+  const project = geminiChatProject(context.sourceRoot, path)
+  if (!project) return null
+  let marker = context.markers.get(project.slug)
+  if (!marker) {
+    marker = Promise.all([
+      readGeminiProjectRoot(project.markerPath),
+      metadataObservation(project.markerPath)
+    ]).then(([cwd, observation]) => ({ cwd, observation }))
+    context.markers.set(project.slug, marker)
+  }
+  const [transcript, markerMetadata] = await Promise.all([
+    readGeminiTranscriptMetadata(path, signal),
+    marker
+  ])
+  return {
+    cwd: resolveGeminiCwd(transcript.cwd, markerMetadata.cwd, project.slug, transcript.projectHash, context.registry),
+    observations: [markerMetadata.observation, `${context.registryPath}=${context.registryObservation}`]
+  }
+}
+
 async function cursorMetaIndex(chatsRoot: string): Promise<Map<string, string>> {
   const index = new Map<string, string>()
   let rootReal: string
@@ -215,7 +274,7 @@ function sidecarsFor(agent: string, path: string, root: RootSpec, extra: Record<
   }
 }
 
-async function candidateForFile(spec: RootSpec, path: string, rootReal: string, cursorIndex: Map<string, string>, codexIndexes: Map<string, Promise<Map<string, string>>>, issues: ScanIssue[], rootForAgent: readonly RootSpec[], signal?: AbortSignal): Promise<SourceCandidate | null> {
+async function candidateForFile(spec: RootSpec, path: string, rootReal: string, cursorIndex: Map<string, string>, codexIndexes: Map<string, Promise<Map<string, string>>>, issues: ScanIssue[], rootForAgent: readonly RootSpec[], geminiMetadata: GeminiMetadataContext | null, signal?: AbortSignal): Promise<SourceCandidate | null> {
   let observed: Awaited<ReturnType<typeof observe>>
   try {
     observed = await observe(path)
@@ -227,6 +286,14 @@ async function candidateForFile(spec: RootSpec, path: string, rootReal: string, 
   const real = await realpath(path).catch(() => '')
   if (!real || !insideRealRoot(rootReal, real)) return null
   const extra: Record<string, unknown> = {}
+  const metadataObservations: string[] = []
+  if (spec.agent === 'gemini' && geminiMetadata) {
+    const geminiMetadataForFile = await geminiCandidateMetadata(geminiMetadata, path, signal)
+    if (geminiMetadataForFile) {
+      if (geminiMetadataForFile.cwd) extra.cwd = geminiMetadataForFile.cwd
+      metadataObservations.push(...geminiMetadataForFile.observations)
+    }
+  }
   let codexHome: string | null = null
   let sessionId = basename(path).replace(extname(path), '')
   if (spec.agent === 'codex') {
@@ -263,8 +330,6 @@ async function candidateForFile(spec: RootSpec, path: string, rootReal: string, 
     sessionId = basename(dirname(path))
   } else if (spec.agent === 'muse') {
     sessionId = basename(dirname(path))
-  } else if (spec.agent === 'opencode' && path.includes('#')) {
-    sessionId = path.slice(path.lastIndexOf('#') + 1)
   }
   const sidecars = sidecarsFor(spec.agent, path, spec, extra, codexHome)
   const sidecarSignatures: string[] = []
@@ -280,7 +345,9 @@ async function candidateForFile(spec: RootSpec, path: string, rootReal: string, 
       }
     }
   }
-  const signature = `${observed.signature}|${sidecarSignatures.join('|')}`
+  const signature = metadataObservations.length
+    ? `${observed.signature}|${sidecarSignatures.join('|')}|${metadataObservations.join('|')}`
+    : `${observed.signature}|${sidecarSignatures.join('|')}`
   return {
     agent: spec.agent,
     filePath: path,
@@ -347,7 +414,7 @@ function descend(spec: RootSpec, directory: string, depth: number): boolean {
   return true
 }
 
-async function scanFilesystemRoot(spec: RootSpec, options: DiscoveryOptions, allSpecs: readonly RootSpec[], cursorIndex: Map<string, string>, codexIndexes: Map<string, Promise<Map<string, string>>>, issues: ScanIssue[], signal?: AbortSignal): Promise<{ root: SourceRoot; candidates: SourceCandidate[] }> {
+async function scanFilesystemRoot(spec: RootSpec, options: DiscoveryOptions, allSpecs: readonly RootSpec[], cursorIndex: Map<string, string>, codexIndexes: Map<string, Promise<Map<string, string>>>, issues: ScanIssue[], geminiMetadata: GeminiMetadataContext | null, signal?: AbortSignal): Promise<{ root: SourceRoot; candidates: SourceCandidate[] }> {
   let rootInfo
   try {
     rootInfo = await lstat(spec.path)
@@ -404,7 +471,7 @@ async function scanFilesystemRoot(spec: RootSpec, options: DiscoveryOptions, all
       if (entry.isDirectory()) {
         if (descend(spec, path, depth)) queue.push({ dir: path, depth: depth + 1 })
       } else if (entry.isFile() && supportedFile(spec, path, depth)) {
-        const candidate = await candidateForFile(spec, path, rootReal, cursorIndex, codexIndexes, issues, allSpecs, signal)
+        const candidate = await candidateForFile(spec, path, rootReal, cursorIndex, codexIndexes, issues, allSpecs, geminiMetadata, signal)
         if (candidate) candidates.push(candidate)
       }
     }
@@ -509,8 +576,8 @@ function sortCandidates(candidates: SourceCandidate[]): SourceCandidate[] {
   for (const candidate of candidates) {
     const key = `${candidate.agent}\0${candidate.sessionId ?? ''}`
     const previous = chosen.get(key)
-    const candidateIsSqlite = candidate.filePath.includes('#')
-    const previousIsSqlite = previous?.filePath.includes('#') ?? false
+    const candidateIsSqlite = candidate.metadata?.sqliteTable === 'session' || candidate.metadata?.sqliteTable === 'session_v2'
+    const previousIsSqlite = previous?.metadata?.sqliteTable === 'session' || previous?.metadata?.sqliteTable === 'session_v2'
     const candidateIsFullAntigravity = candidate.agent === 'antigravity' && candidate.filePath.endsWith('transcript_full.jsonl')
     const previousIsFullAntigravity = previous?.agent === 'antigravity' && previous.filePath.endsWith('transcript_full.jsonl')
     if (!previous || (candidate.agent === 'opencode' && candidateIsSqlite && !previousIsSqlite) || (candidate.agent === 'antigravity' && candidateIsFullAntigravity && !previousIsFullAntigravity) || (candidateIsSqlite === previousIsSqlite && candidateIsFullAntigravity === previousIsFullAntigravity && candidate.mtimeMs > previous.mtimeMs)) {
@@ -522,6 +589,8 @@ function sortCandidates(candidates: SourceCandidate[]): SourceCandidate[] {
 
 export async function discoverSources(options: DiscoveryOptions, signal?: AbortSignal): Promise<Discovery> {
   const rootSpecs = rootsFor(options)
+  const geminiRoot = rootSpecs.find((spec) => spec.agent === 'gemini' && spec.layout === 'tree')?.path
+  const geminiMetadata = geminiRoot ? await createGeminiMetadataContext(geminiRoot) : null
   const issues: ScanIssue[] = []
   const cursorRoot = rootSpecs.find((spec) => spec.agent === 'cursor' && spec.layout === 'metadata-only')?.path
   const cursorIndex = cursorRoot ? await cursorMetaIndex(cursorRoot) : new Map<string, string>()
@@ -530,7 +599,7 @@ export async function discoverSources(options: DiscoveryOptions, signal?: AbortS
   const candidates: SourceCandidate[] = []
   for (const spec of rootSpecs) {
     if (signal?.aborted) throw signal.reason ?? new Error('Scan cancelled')
-    const result = await scanFilesystemRoot(spec, options, rootSpecs, cursorIndex, codexIndexes, issues, signal)
+    const result = await scanFilesystemRoot(spec, options, rootSpecs, cursorIndex, codexIndexes, issues, geminiMetadata, signal)
     roots.push(result.root)
     candidates.push(...result.candidates)
   }

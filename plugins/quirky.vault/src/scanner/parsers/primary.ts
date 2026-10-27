@@ -17,6 +17,7 @@ import {
   type ParserContext,
   type SessionBuilder
 } from './shared'
+import { absoluteGeminiCwd } from '../gemini-metadata'
 
 type Builder = SessionBuilder
 
@@ -692,8 +693,14 @@ function consumeGeminiMessage(builder: Builder, record: Record<string, unknown>)
 
 async function parseGeminiJsonl(context: ParserContext): Promise<VaultSession> {
   const builder = newBuilder(context)
+  let explicitCwdFound = false
   for await (const record of readJsonl(context.candidate.filePath, context.signal)) {
     const set = isRecord(record.$set) ? record.$set : null
+    const explicitCwd = absoluteGeminiCwd(record.cwd) ?? absoluteGeminiCwd(set?.cwd)
+    if (!explicitCwdFound && explicitCwd) {
+      builder.patch({ cwd: explicitCwd })
+      explicitCwdFound = true
+    }
     if (set) {
       noteTime(builder, set.lastUpdated)
       continue
@@ -933,6 +940,8 @@ async function parseGeminiDocument(context: ParserContext, builder: Builder): Pr
     let sessionId: string | null = null
     let startTime: unknown = null
     let lastUpdated: unknown = null
+    let explicitCwd: string | null = null
+    let messageCwd: string | null = null
     let messagesArray = false
     let next = await reader.next()
     if (next?.kind === 'punctuation' && next.value === '}') return false
@@ -947,13 +956,18 @@ async function parseGeminiDocument(context: ParserContext, builder: Builder): Pr
         if (!(item?.kind === 'punctuation' && item.value === ']')) {
           for (;;) {
             const message = await readJsonValue(reader, item)
-            if (isRecord(message)) consumeGeminiMessage(builder, message)
+            if (isRecord(message)) {
+              messageCwd ??= absoluteGeminiCwd(message.cwd)
+              consumeGeminiMessage(builder, message)
+            }
             item = await reader.next()
             if (item?.kind === 'punctuation' && item.value === ']') break
             expectPunctuation(item, ',')
             item = await reader.next()
           }
         }
+      } else if (key === 'cwd') {
+        explicitCwd = absoluteGeminiCwd(await readJsonValue(reader, value))
       } else if (key === 'sessionId' || key === 'startTime' || key === 'lastUpdated') {
         const field = await readJsonValue(reader, value)
         if (key === 'sessionId') sessionId = string(field)
@@ -971,6 +985,8 @@ async function parseGeminiDocument(context: ParserContext, builder: Builder): Pr
     if (sessionId) setSessionId(builder, sessionId)
     noteTime(builder, startTime)
     noteTime(builder, lastUpdated)
+    const cwd = explicitCwd ?? messageCwd
+    if (cwd) builder.patch({ cwd })
     return messagesArray
   } catch (error) {
     throwIfAborted(context.signal)
