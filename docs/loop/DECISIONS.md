@@ -29,6 +29,8 @@ files, not this one.
 | hard | high | [m0-core D31](decisions/m0-core.md) | Port v1 for real, growing the public plugin API, rather than facades or raw RPC primitives | locked by docs/roadmap.md (built-ins use only the public API); assumed — autonomous (the approach) |
 | hard | high | [m1-worktrees D5](decisions/m1-worktrees.md) | Extend `quirky.repo` and `quirky.worktree` in place, with one create path and one remove path | assumed — autonomous |
 | hard | high | [m1-worktrees D7](decisions/m1-worktrees.md) | Worktree IDs stay v1's path hash; extra folder workspaces get random IDs | assumed — autonomous |
+| hard | high | [m1-agent-status D2](decisions/m1-agent-status.md) | The status row is keyed by Quirky session, and the session ID from the hook's environment is the pane identity | assumed — autonomous |
+| hard | high | [m1-agent-status D4](decisions/m1-agent-status.md) | Orca's four states, its derived display states and its labels are kept as they are | locked by docs/roadmap.md |
 | hard | high | [m0-daemon-api D7](decisions/m0-daemon-api.md) | The four kinds are `method`, `event`, `job` and `launch-hook` | assumed — autonomous |
 | hard | high | [m0-daemon-api D13](decisions/m0-daemon-api.md) | Choose declared contributions with provided implementations | supersedes nothing; extends m0-registry D23 |
 | hard | high | [m0-ui-api D4](decisions/m0-ui-api.md) | The seven UI kinds are `view`, `panel`, `sidebar-section`, `command`, `keybinding`, `setting` and `theme` | assumed — autonomous |
@@ -50,6 +52,11 @@ files, not this one.
 | medium | medium | [m1-worktrees D32](decisions/m1-worktrees.md) | Metadata is edited with `quirky.worktree/set` and `wt set`, using Orca's flag names | assumed — autonomous |
 | medium | medium | [m1-worktrees D46](decisions/m1-worktrees.md) | Project groups live in `quirky.repo`, with `repo group` commands | assumed — autonomous |
 | medium | medium | [m1-worktrees D47](decisions/m1-worktrees.md) | A scanned group can hold folder workspaces on its parent folder | locked by research/orca-features/worktrees.md; assumed — autonomous (the synthetic repo ID) |
+| medium | medium | [m1-agent-status D3](decisions/m1-agent-status.md) | `quirky.agent-status` owns the status row; `quirky.session` keeps a coarse status plus a summary for the UI | assumed — autonomous |
+| medium | medium | [m1-agent-status D6](decisions/m1-agent-status.md) | Hooks are installed into each agent's own config, automatically while the switch is on, except Claude | locked by research/orca-features/agent-status.md |
+| medium | medium | [m1-agent-status D11](decisions/m1-agent-status.md) | A different provider session in a live row is a nested agent and is ignored, which fixes Orca's helper-overwrite defect | assumed — autonomous |
+| medium | medium | [m1-agent-status D22](decisions/m1-agent-status.md) | OSC 7501 is parsed in the PTY host, answered there, and yields to hooks for 2 minutes | locked by docs/roadmap.md |
+| medium | medium | [m1-agent-status D33](decisions/m1-agent-status.md) | Approach A (global installers) over per-launch overlays or a manual-only command | assumed — autonomous |
 | medium | medium | [m0-daemon-api D6](decisions/m0-daemon-api.md) | Plugin events arrive as `{ type: "<pluginId>/<name>", data }` | assumed — autonomous |
 | medium | medium | [m0-daemon-api D15](decisions/m0-daemon-api.md) | Jobs run on a fixed delay, at least one second apart, never overlapping | assumed — autonomous |
 | medium | medium | [m0-daemon-api D19](decisions/m0-daemon-api.md) | Launch hooks are a sequential pipeline in contribution-ID order | assumed — autonomous |
@@ -94,6 +101,7 @@ files, not this one.
 | medium | high | [m1-worktrees D14](decisions/m1-worktrees.md) | The base is the requested one, else the project's saved base, else the detected default | locked by research/orca-features/worktrees.md |
 | medium | high | [m1-worktrees D49](decisions/m1-worktrees.md) | Project settings are a `quirky.repo` record, set with `repo set` and shown with `repo show` | supersedes nothing; works within m0-ui-api D17 |
 | medium | high | [m1-worktrees D52](decisions/m1-worktrees.md) | Platform-specific parts are logged and built for macOS only | deferred: platform |
+| medium | high | [m1-agent-status D14](decisions/m1-agent-status.md) | The fold keeps a finished lead `working` while children or background work live | locked by research/orca-features/agent-status.md |
 | medium | high | [m0-daemon-api D8](decisions/m0-daemon-api.md) | Method results and errors | assumed — autonomous |
 | medium | high | [m0-daemon-api D10](decisions/m0-daemon-api.md) | Stores migrate forward only, by an ordered list, and refuse a downgrade | assumed — autonomous |
 | medium | high | [m0-daemon-api D24](decisions/m0-daemon-api.md) | Plugin methods use the daemon's token, and any client may call any method | locked by docs/roadmap.md |
@@ -127,6 +135,7 @@ files, not this one.
 | medium | high | [m1-term-daemon D24](decisions/m1-term-daemon.md) | History is rendered on read by replaying a bounded window of the log, not stored as rows | locked by docs/architecture.md |
 | medium | high | [m1-term-daemon D41](decisions/m1-term-daemon.md) | Catching up with build/roadmap (m1-providers) keeps both sides; the exit columns become migration 3 | assumed — autonomous |
 | medium | high | [m1-term-daemon D42](decisions/m1-term-daemon.md) | A second catch-up merged m1-launch-settings; the exit columns become migration 4 | assumed — autonomous |
+| easy | low | [m1-agent-status D38](decisions/m1-agent-status.md) | mimo-code's plugin goes in its config dir's `plugins/`, not Orca's per-launch overlay | assumed — autonomous |
 | easy | medium | [m0-scripting D14](decisions/m0-scripting.md) | Generated commands print a generic text form, and `--json` prints the raw result | assumed — autonomous |
 | easy | medium | [m0-scripting D19](decisions/m0-scripting.md) | The agent skill is generated from the live catalog and shown or installed through `quirky skill` | assumed — autonomous |
 | easy | medium | [m0-scripting D27](decisions/m0-scripting.md) | No closure review round on the logic spec | assumed — autonomous |
@@ -153,6 +162,23 @@ files, not this one.
 | easy | medium | [m1-worktrees D61](decisions/m1-worktrees.md) | W3 starts while W2's checkpoint review runs | assumed — autonomous |
 | easy | medium | [m1-worktrees D65](decisions/m1-worktrees.md) | W4 starts while W3's checkpoint review runs, and owns only the manifest's UI keys | assumed — autonomous |
 | easy | medium | [m1-worktrees D71](decisions/m1-worktrees.md) | SC-27 is run with base `origin/main` on both sides, because a create with no base never falls back | assumed — autonomous |
+| easy | medium | [m1-agent-status D1](decisions/m1-agent-status.md) | This item covers the dot, the hooks, provider capture and the fallbacks; the Activity view and the Agent Dashboard are out | assumed — autonomous |
+| easy | medium | [m1-agent-status D7](decisions/m1-agent-status.md) | Codex hooks go into `~/.codex/hooks.json` and the user approves them once in Codex | assumed — autonomous |
+| easy | medium | [m1-agent-status D13](decisions/m1-agent-status.md) | Cold-restore resume stays out | supersedes m1-providers D27 |
+| easy | medium | [m1-agent-status D15](decisions/m1-agent-status.md) | Codex rollout polling, the Muse session log and prompt text read from transcripts are left out | assumed — autonomous |
+| easy | medium | [m1-agent-status D18](decisions/m1-agent-status.md) | Esc and Ctrl+C are read from session input to infer an interrupt, with Orca's guards | locked by research/orca-features/agent-status.md |
+| easy | medium | [m1-agent-status D19](decisions/m1-agent-status.md) | A Claude question answered in the terminal clears waiting | locked by research/orca-features/agent-status.md |
+| easy | medium | [m1-agent-status D20](decisions/m1-agent-status.md) | Process presence comes from the hook's parent process, probed while a row is live | assumed — autonomous |
+| easy | medium | [m1-agent-status D21](decisions/m1-agent-status.md) | Terminal titles fill in only for sessions with no fresh hook row | locked by research/orca-features/agent-status.md |
+| easy | medium | [m1-agent-status D23](decisions/m1-agent-status.md) | OSC 9999 and the agent-state-rules engine are not built | assumed — autonomous |
+| easy | medium | [m1-agent-status D24](decisions/m1-agent-status.md) | Plugin-type integrations are written as files for Amp, Hermes, the OpenCode family and the Pi family | locked by research/orca-features/agent-status.md |
+| easy | medium | [m1-agent-status D30](decisions/m1-agent-status.md) | The plugin exposes `list`, `get`, `hooks status`, `hooks setup` and `hooks remove` | assumed — autonomous |
+| easy | medium | [m1-agent-status D31](decisions/m1-agent-status.md) | The dashboard's "0 total" defect gets no test in this item | assumed — autonomous |
+| easy | medium | [m1-agent-status D39](decisions/m1-agent-status.md) | Codex's auto-review rule reads the hook payload only | assumed — autonomous |
+| easy | medium | [m1-agent-status D45](decisions/m1-agent-status.md) | Build in four waves, with the shared types written before W1 | assumed — autonomous |
+| easy | medium | [m1-agent-status D49](decisions/m1-agent-status.md) | The PTY host memory test is a load flake, not a regression | assumed — autonomous |
+| easy | medium | [m1-agent-status D51](decisions/m1-agent-status.md) | W3 starts while the W2 checkpoint review runs | assumed — autonomous |
+| easy | medium | [m1-agent-status D62](decisions/m1-agent-status.md) | The post-fix gate's one failure is a terminal timing flake under load | assumed — autonomous |
 | easy | medium | [m0-daemon-api D22](decisions/m0-daemon-api.md) | A launch hook that fails or times out is skipped | assumed — autonomous |
 | easy | medium | [m0-daemon-api D23](decisions/m0-daemon-api.md) | Launch hooks apply to terminal sessions only | assumed — autonomous |
 | easy | medium | [m0-daemon-api D25](decisions/m0-daemon-api.md) | No rate limits on plugin events or method calls, and no event filters yet | assumed — autonomous |
@@ -296,6 +322,42 @@ files, not this one.
 | easy | high | [m1-worktrees D69](decisions/m1-worktrees.md) | Final Round 1: accept all eight findings, which collapse to seven defects, and fix them in one batch | assumed — autonomous |
 | easy | high | [m1-worktrees D70](decisions/m1-worktrees.md) | The UI scenarios run as three web batches, each on its own daemon, temp HOME and fixture world | assumed — autonomous |
 | easy | high | [m1-worktrees D72](decisions/m1-worktrees.md) | The UI scenarios pass as a user, with SC-59's tooltip checked by its test because the tool can't hover | assumed — autonomous |
+| easy | high | [m1-agent-status D5](decisions/m1-agent-status.md) | Every hook source in the doc gets a normalizer with Orca's event mapping | locked by research/orca-features/agent-status.md |
+| easy | high | [m1-agent-status D8](decisions/m1-agent-status.md) | Installers merge only their own entries, keep the file byte-identical on a rerun, and never write a file they can't parse | locked by research/orca-features/agent-status.md |
+| easy | high | [m1-agent-status D9](decisions/m1-agent-status.md) | Claude's settings file lists only the events the installed Claude knows | locked by research/orca-features/agent-status.md |
+| easy | high | [m1-agent-status D10](decisions/m1-agent-status.md) | The hook shim answers each agent the way that agent needs, spools when the daemon is down, and never blocks | locked by research/orca-features/agent-status.md |
+| easy | high | [m1-agent-status D12](decisions/m1-agent-status.md) | The provider session ID and transcript path are captured from hooks into `quirky.session/setProviderSession` | locked by docs/loop/decisions/m1-providers.md |
+| easy | high | [m1-agent-status D16](decisions/m1-agent-status.md) | Freshness follows Orca: a silent live row decays on the reader's clock, never to done | locked by research/orca-features/agent-status.md |
+| easy | high | [m1-agent-status D17](decisions/m1-agent-status.md) | Rows survive a daemon restart and come back unconfirmed | locked by research/orca-features/agent-status.md |
+| easy | high | [m1-agent-status D25](decisions/m1-agent-status.md) | Hook installation reports Orca's skip reasons | locked by research/orca-features/agent-status.md |
+| easy | high | [m1-agent-status D26](decisions/m1-agent-status.md) | The "Agent status hooks" switch keeps Orca's copy, with Quirky's name | locked by research/orca-features/agent-status.md |
+| easy | high | [m1-agent-status D27](decisions/m1-agent-status.md) | Notifications ignore session boundaries and replays | locked by research/orca-features/agent-status.md |
+| easy | high | [m1-agent-status D28](decisions/m1-agent-status.md) | The waiting detail is readable text, never a raw payload | locked by docs/roadmap.md |
+| easy | high | [m1-agent-status D29](decisions/m1-agent-status.md) | Remote hosts, Windows hook launchers and Claude's statusLine are out | deferred: platform |
+| easy | high | [m1-agent-status D32](decisions/m1-agent-status.md) | Installed hook commands check the shim exists first | assumed — autonomous |
+| easy | high | [m1-agent-status D34](decisions/m1-agent-status.md) | OSC 7501 and prompt marks ride the existing PTY protocol without a version bump | assumed — autonomous |
+| easy | high | [m1-agent-status D35](decisions/m1-agent-status.md) | The PTY host answers the OSC 7501 probe for every live session, through the input barrier | assumed — autonomous |
+| easy | high | [m1-agent-status D36](decisions/m1-agent-status.md) | The session store persists the summary (migration 5) | assumed — autonomous |
+| easy | high | [m1-agent-status D37](decisions/m1-agent-status.md) | Tests drive timing with `get {at}` and a time-scale variable | assumed — autonomous |
+| easy | high | [m1-agent-status D40](decisions/m1-agent-status.md) | Installed commands carry the event name for Cursor, Antigravity and Copilot | locked by research/orca-features/agent-status.md |
+| easy | high | [m1-agent-status D41](decisions/m1-agent-status.md) | Hook timeouts follow Orca's per-format values | locked by research/orca-features/agent-status.md |
+| easy | high | [m1-agent-status D42](decisions/m1-agent-status.md) | The tech spec was written as LOOP.md requires; its reviewer step is folded into the adversarial review | locked by docs/loop/LOOP.md |
+| easy | high | [m1-agent-status D43](decisions/m1-agent-status.md) | Spec review: fix all five Codex findings; reject the pre-pass's reference and heading findings | locked by docs/loop/LOOP.md |
+| easy | high | [m1-agent-status D44](decisions/m1-agent-status.md) | Build with Claude subagents implementing and Codex reviewing | locked by docs/loop/LOOP.md |
+| easy | high | [m1-agent-status D46](decisions/m1-agent-status.md) | W1 landed as seven components, all in scope and green | assumed — autonomous |
+| easy | high | [m1-agent-status D47](decisions/m1-agent-status.md) | W1 checkpoint: accept all eight findings, which collapse to six defects | assumed — autonomous |
+| easy | high | [m1-agent-status D48](decisions/m1-agent-status.md) | W2 landed as three components plus two follow-ups; the summary's progress is a percentage | assumed — autonomous |
+| easy | high | [m1-agent-status D50](decisions/m1-agent-status.md) | The W2 checkpoint reuses the green W2 gate as its pre-pass | assumed — autonomous |
+| easy | high | [m1-agent-status D52](decisions/m1-agent-status.md) | W2 checkpoint: accept all eleven findings, which collapse to six defects | assumed — autonomous |
+| easy | high | [m1-agent-status D53](decisions/m1-agent-status.md) | Setup while the switch is off is refused with the `conflict` error kind | assumed — autonomous |
+| easy | high | [m1-agent-status D54](decisions/m1-agent-status.md) | W3 landed; hooks setup's remaining choices | assumed — autonomous |
+| easy | high | [m1-agent-status D55](decisions/m1-agent-status.md) | W3 checkpoint: accept all three findings, which collapse to two defects | assumed — autonomous |
+| easy | high | [m1-agent-status D56](decisions/m1-agent-status.md) | Catching up with m1-worktrees puts the agent glyph on the new tree's workspace card | assumed — autonomous |
+| easy | high | [m1-agent-status D57](decisions/m1-agent-status.md) | W4's end-to-end scenarios run on a daemon subprocess, and `get` takes a positional session | assumed — autonomous |
+| easy | high | [m1-agent-status D58](decisions/m1-agent-status.md) | A W4 run wrote Quirky hooks into the real home; they were removed and every later gate checks for them | locked by docs/loop/LOOP.md |
+| easy | high | [m1-agent-status D59](decisions/m1-agent-status.md) | Final Round 1: accept all six findings, which collapse to four defects; none stays open | assumed — autonomous |
+| easy | high | [m1-agent-status D60](decisions/m1-agent-status.md) | The UI pass: SC-34 to SC-37 all pass | assumed — autonomous |
+| easy | high | [m1-agent-status D61](decisions/m1-agent-status.md) | No native-only scenarios | assumed — autonomous |
 | easy | high | [m0-daemon-api D1](decisions/m0-daemon-api.md) | Classify the item as an API design, and run both research phases | assumed — autonomous |
 | easy | high | [m0-daemon-api D2](decisions/m0-daemon-api.md) | Skip the visual companion and the adhd offer, use the standard gray-area set | locked by docs/loop/LOOP.md |
 | easy | high | [m0-daemon-api D3](decisions/m0-daemon-api.md) | Select every gray area that matters for the daemon plugin API | assumed — autonomous |
