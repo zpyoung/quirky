@@ -85,6 +85,8 @@ function descendantsIn(table: ProcessRow[], pid: number): ProcessRow[] {
 export type E2eOptions = {
   /** The login shell the daemon hands to sessions; default `/bin/zsh`. */
   shell?: string
+  /** Skips user startup files through a private adapter for zsh or bash. */
+  cleanShell?: boolean
   /** Contents of `$HOME/.zshrc`, which the zsh wrapper sources before its own integration. */
   zshrc?: string
   /** Contents of `$HOME/.bashrc`, which the bash wrapper sources before its own integration. */
@@ -135,7 +137,8 @@ export class E2eHarness {
     readonly repo: string,
     readonly shell: string,
     private readonly scratch: string,
-    private readonly scope: ProcessScope
+    private readonly scope: ProcessScope,
+    readonly cleanShell: boolean
   ) {}
 
   /** Creates the temp home and repo, starts the daemon and registers the repo. */
@@ -148,7 +151,20 @@ export class E2eHarness {
       const home = scope.home
       const repo = join(realpathSync(scratch), 'api')
       mkdirSync(repo)
-      harness = new E2eHarness(home, repo, options.shell ?? '/bin/zsh', scratch, scope)
+      const shell = options.shell ?? '/bin/zsh'
+      let sessionShell = shell
+      if (options.cleanShell) {
+        const command = shell.endsWith('/bash')
+          ? '/bin/bash --noprofile --norc'
+          : shell.endsWith('/zsh')
+            ? '/bin/zsh -f'
+            : undefined
+        if (!command) throw new Error(`cleanShell supports only bash and zsh, not ${shell}`)
+        sessionShell = join(home, 'sh')
+        writeFileSync(sessionShell, `#!/bin/sh\n[ "$1" = "-l" ] && shift\nexec ${command} "$@"\n`)
+        chmodSync(sessionShell, 0o755)
+      }
+      harness = new E2eHarness(home, repo, sessionShell, scratch, scope, options.cleanShell ?? false)
       live.add(harness)
       if (options.zshrc !== undefined) writeFileSync(join(home, '.zshrc'), options.zshrc)
       if (options.bashrc !== undefined) writeFileSync(join(home, '.bashrc'), options.bashrc)
