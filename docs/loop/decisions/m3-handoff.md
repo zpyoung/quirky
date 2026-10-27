@@ -567,5 +567,15 @@
 - **Confidence:** high
 - **Source:** assumed — autonomous
 
+## D57: Wave 2 choices the specs left open
+- **Question:** calls the daemon-service implementers made
+- **Options:** as listed
+- **Chose:** `prepare` takes one capture and later `preview` calls reuse it until `recapture` (the CLI always recaptures); `invalid-target` only for an explicit non-candidate worktree, a blank create name or a create on a non-git source, so an archived source with no worktree can preview; an archived source with no known worktree lists every workspace and can't create one; `quirky.editor/state` is read as `{documents: (string|{path})[]}` until m2-editor lands (D19); the secrets banner keeps Orca's "{count} potential secrets found." for every count; error kinds: `no-context` conflict, `no-brief` and `no-lineage` not-found, `invalid-target` invalid-params, every error with `data.reason`; delivery toasts carry the sentence as title and the second line as detail, kinds delivered success, resent warning, retry-failed error, unobservable warning; jump checks the worktree before the pane, so a gone child in a removed worktree reports "worktree removed"; pruning keeps the newest 500 valid records; SC-9 is amended because `quirky.worktree/create` suffixes a taken name instead of failing.
+- **Why:** each keeps the logic spec's observable behavior; SC-9's example contradicted the worktree plugin
+- **Evidence:** plugins/quirky.handoff/src/daemon; plugins/quirky.worktree/src/daemon/create.ts
+- **Reversibility:** easy
+- **Confidence:** medium
+- **Source:** assumed — autonomous
+
 ## Progress
-Wave 1 (K toasts, M menu-item, B badges, T newTab, C core, P probe) merged; gate green apart from the remote pty-host flake (D55). Next: wave 1 checkpoint review (3 lenses, standard), fixes, then wave 2 (H1 then H2 chain, task briefs in the session scratchpad are re-derivable from tech.md H1/H2), wave 3 (W window + manifest UI contributions), catch-up merge with build/roadmap, Final Round 1, UI pass, land.
+Waves 1 and 2 merged (kernel growth, core, probe, daemon service with start/delivery/lineage/CLI); wave 1 checkpoint fixed (D56). Next: wave 2 gate and checkpoint, wave 3 W (window: overlay dialog, settings view, commands, menu-item; brief re-derivable from tech.md W1), catch-up merge with build/roadmap, Final Round 1, UI pass, land.

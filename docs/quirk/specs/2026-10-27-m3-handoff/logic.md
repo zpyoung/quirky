@@ -9,6 +9,8 @@
   text (SC-40); a start that fails after creating its worktree leaves that worktree selected and
   create mode off (SC-9); cancelling the resend confirmation keeps the toast (SC-50); a session in
   several handoffs shows one badge per handoff, each jumping to its own other end (SC-53, SC-54).
+- 2026-10-27, wave 2: SC-9's failure example is a refused base branch, since a taken worktree name
+  gets a suffix rather than failing.
 
 ## Conceptual model
 
@@ -187,8 +189,10 @@ source's worktree in repo R.
    - **Then** there is no "Create a new worktree" control, and the worktree list holds F only
 
 9. **SC-9: a worktree creation failure keeps everything** (API)
-   - **Given** a worktree named `taken` already exists in R
-   - **When** a handoff starts with a new worktree named `taken`, note "keep me"
+   - **Given** creating the new worktree fails (git refuses, for example a base branch that doesn't
+     exist); a name that is already taken is not a failure, because Quirky's worktree create adds a
+     suffix (`taken-2`)
+   - **When** a handoff starts with a new worktree, base `no-such-branch`, note "keep me"
    - **Then** Start fails with the creation error in the strip; ✗ no session is launched; the note,
      toggles and agent are unchanged; and when creation succeeds but a later step fails (the agent
      was disabled meanwhile), the new worktree stays, is selected as the target, and "Create a new
