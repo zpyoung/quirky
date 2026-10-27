@@ -242,5 +242,22 @@ Implementation wave: T1 structured/session/catalog, T2 checks plugin, T3 ask own
 - Actual runtime: real daemon/CLI + scripted native Codex create, approval, stop/resume and immediate send; native ID/model/effort preserved; shared check succeeded. Installed Codex initialize/thread/start succeeded in isolated HOME with no model turn.
 - C1 fix verification: native runner tests11pass and typecheck clean; owned runtime reproduction changed from watchdog-required hang to bounded close. Final required suite and packaged build still need rerunning on the fixed source.
 
+## D24: Land only through the queue after the complete final gate
+- **Question:** finishing-a-development-branch integration choice in the unattended lane
+- **Options:** queue-controlled local integration; manual integration, push or PR
+- **Chose:** commit the verified item, detach, then queue.ts land m5-structured-runner. Never check out main/build-roadmap or push. No human decision needed.
+- **Why:** LOOP.md explicitly selects this integration path and independently rechecks the merge. Final required gate exits0 on fixed source: clean typecheck, scripts48pass, packaged macOS build, full suite passing after the runner's two successful isolated reruns.
+- **Evidence:** final-verification/check.json command `bun run typecheck && bun test scripts && bun run build && bun run test`, exit0, duration1590659ms; source tree153adf1ce6cd8a9e3a2b1e9d49c2dab61ae2fa95
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** locked by docs/loop/LOOP.md
+
+## Final verification
+- `bun run typecheck`: exit0, no diagnostics.
+- `bun test scripts`:48pass,0fail,217assertions across6files. Fixture suites intentionally print their own failing examples; the outer scripts suite passes.
+- `bun run build`: exit0; UI, daemon, PTY host, CLI and11plugins bundled; packaged apps/desktop/build/Quirky.app. Warnings: optional macOS icon source missing, release.baseUrl unset so delta patch skipped.
+- `bun run test`: exit0;425remote files plus2macOS-only files. Initial remote result423pass/2fail; isolated reruns passed pty-client.test.ts (9tests) and window-projects.test.ts (18tests). Final suite-result ok:true with these two flaky paths. No exclusions or test weakening.
+- Targeted/native proof and Final Round1 outcomes are recorded above. No UI/native scenarios added, and no open accepted review findings.
+
 ## Progress
-Final Round1 completed across all three Gemini lenses; accepted C1 is implemented and confirmed closed by regression/runtime evidence. S1 refuted; X has no findings, no remaining accepted review findings. One fix batch merged. Next: commit this evidence/docs, run typecheck/scripts/build/full remote suite on final source, then queue land. No UI/native scenarios or running smoke services.
+Verified and ready to land. Final code, specs, public method schemas, generated CLI surface, consumer tests and user docs are complete. All agents/check jobs returned and smoke processes/homes were cleaned. Commit this final evidence, detach and run queue.ts land m5-structured-runner; its integration gate must pass before the queue marks the item done. Then end this iteration without claiming another item.
