@@ -1,9 +1,10 @@
 import { afterEach, describe, expect, test } from 'bun:test'
-import { existsSync, mkdirSync, readdirSync, utimesSync, writeFileSync } from 'node:fs'
+import { appendFileSync, existsSync, mkdirSync, readdirSync, utimesSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import type { Session } from '@quirky/protocol'
 import { removeTempDirs } from '../../../packages/daemon/test/plugins/fixtures'
-import { parseSpoolLine } from '../src/spool'
+import type { HookInput } from '../src/service'
+import { drainSpool, parseSpoolLine } from '../src/spool'
 import { claudeSession, makeTempHome, Rig, startOf } from './support'
 
 let rig: Rig
@@ -98,6 +99,33 @@ describe('SC-18: a hook while the daemon is down is replayed at start', () => {
   test('a start without a spool directory is fine', async () => {
     rig = await Rig.start()
     expect(await rig.row()).toBeNull()
+  })
+})
+
+describe('drainSpool', () => {
+  test('a line the shim appends while an earlier one is being ingested is replayed, not lost', async () => {
+    const { home, spool } = homeWith([], { 's1.jsonl': [line('claude', claude('UserPromptSubmit'))] })
+    const seen: string[] = []
+    await drainSpool(home, async (input: HookInput) => {
+      const event = (input.payload as { hook_event_name: string }).hook_event_name
+      seen.push(event)
+      if (event === 'UserPromptSubmit') appendFileSync(join(spool, 's1.jsonl'), `${line('claude', claude('Stop'))}\n`)
+      await Promise.resolve()
+    })
+    expect(seen).toEqual(['UserPromptSubmit', 'Stop'])
+    expect(readdirSync(spool)).toEqual([])
+  })
+
+  test('a drain interrupted mid-file leaves its claimed lines for the next start, ahead of newer ones', async () => {
+    const { home, spool } = homeWith([], { 's1.jsonl': [line('claude', claude('UserPromptSubmit'))] })
+    await drainSpool(home, async () => {
+      appendFileSync(join(spool, 's1.jsonl'), `${line('claude', claude('Stop'))}\n`)
+      throw new Error('daemon stopped')
+    })
+    const seen: string[] = []
+    await drainSpool(home, async (input) => void seen.push((input.payload as { hook_event_name: string }).hook_event_name))
+    expect(seen).toEqual(['UserPromptSubmit', 'Stop'])
+    expect(readdirSync(spool)).toEqual([])
   })
 })
 
