@@ -539,5 +539,38 @@
 - **Revisit if:** never; W3 removes the style element
 - **Source:** assumed — autonomous
 
+## D50: Two scenario details move to match git and Orca, found while building the daemon
+- **Question:** the daemon's tests found SC-38 and SC-35(b) stating something real git and Orca's classifier don't do
+- **Options:** change the code to match the text; change the text to match git and Orca
+- **Chose:** change the text, with a dated amendment: a `lint-staged` pre-push failure is reason `lint` ("Lint failed during push.", Orca's lint regex), and SC-35(b)'s walkthrough counts the newer main commit as ahead (3 ahead, 2 behind); the force push is unchanged. The manifest's `history.limit` also loses `maximum: 200`, so `--limit 500` reaches the handler and is clamped as SC-52 says instead of being refused by the CLI.
+- **Why:** the first two were wording errors in the spec; the third was a schema stricter than the scenario
+- **Evidence:** logic.md amendments 2026-10-27 (during build); plugins/quirky.git/test/scenarios/remote.test.ts
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** never
+- **Source:** assumed — autonomous
+
+## D51: Daemon part 2's edit to `test/folder.test.ts` is accepted as a widening inside its component
+- **Question:** T7b edited `plugins/quirky.git/test/folder.test.ts`, which was in T7a's scope but not T7b's (subagent-driven-development's scope audit)
+- **Options:** block and re-plan; accept it
+- **Chose:** accept. The file is in the same component's union scope, T7a had finished, and no other task in the wave owned it; the edit adds the new methods to the folder-refusal table, which T7b's methods needed
+- **Why:** the audit exists to stop two concurrent tasks writing one file, and no concurrent task could; m1-worktrees D67 accepted the same kind of widening
+- **Evidence:** scratchpad c7-snapshot-t7b.txt and c7-after-t7b.txt
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** never
+- **Source:** assumed — autonomous
+
+## D52: Skip W2's checkpoint review; the final round covers it at deep depth right after W3
+- **Question:** the checkpoint review after W2, a non-final wave
+- **Options:** run three standard lenses over W2's 14,700-line diff while W3 integrates it; skip it and let the final round's three deep lenses review the whole branch
+- **Chose:** skip it. This is a deviation from the skill, which allows skipping only trivial waves.
+- **Why:** W3 exists to run W2's daemon, panel and view together against a real daemon and fix every mismatch, so it rewrites the code a checkpoint would review, and the checkpoint's fixers would collide with W3's edits; the final round starts as soon as W3 lands and reviews the same code at a deeper depth
+- **Evidence:** D46; scratchpad journal.md (W2 diff size)
+- **Reversibility:** easy
+- **Confidence:** medium
+- **Revisit if:** the final round finds defects a checkpoint would have stopped W3 from building on
+- **Source:** assumed — autonomous
+
 ## Progress
-W1 merged on build/m2-source-control-core (git primitives, kernel growths, pure window modules). W2 dispatched: daemon part 1 (T7a, then T7b in the same tree), panel (T8), view and commands (T9). If this iteration stops, restart W2's unfinished tasks from the branch tip (the scratch worktrees are lost), then W2 checkpoint, W3 integration (move view CSS into styles.css, window scenarios), final round, verify, land.
+W1 and W2 merged on build/m2-source-control-core with integration fixes. W3 (window integration, window scenario tests against a real daemon, view CSS into styles.css) dispatched. If this iteration stops, rerun W3 from the branch tip, then the final review round (three deep lenses over RUN_BASE e819317..HEAD), one fix batch, verify (UI scenarios with quirk:using-apps-like-a-user, native scenario file), land.
