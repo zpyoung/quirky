@@ -145,6 +145,13 @@
         "@types/react-dom": "^19.3.0",
       },
     },
+    "plugins/quirky.hosting": {
+      "name": "@quirky/plugin-hosting",
+      "version": "0.1.0",
+      "dependencies": {
+        "@quirky/protocol": "workspace:*",
+      },
+    },
     "plugins/quirky.notifications": {
       "name": "@quirky/plugin-notifications",
       "version": "0.1.0",
@@ -324,6 +331,8 @@
     "@quirky/plugin-ask": ["@quirky/plugin-ask@workspace:plugins/quirky.ask"],
 
     "@quirky/plugin-git": ["@quirky/plugin-git@workspace:plugins/quirky.git"],
+
+    "@quirky/plugin-hosting": ["@quirky/plugin-hosting@workspace:plugins/quirky.hosting"],
 
     "@quirky/plugin-notifications": ["@quirky/plugin-notifications@workspace:plugins/quirky.notifications"],
 
