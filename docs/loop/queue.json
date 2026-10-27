@@ -842,6 +842,18 @@
       "status": "todo"
     },
     {
+      "id": "m3-accounts-remaining-flows",
+      "milestone": "M3",
+      "title": "Finish operator-deferred Accounts flows: durable Compact/Detailed and Used/Remaining/provider-visibility preferences across restart; complete provider drill-ins and inactive-account refresh; UI native-login link/cancel, reauthentication and Needs sign-in selection refusal; Claude Ask/Keep/Always/Never and busy-idle/superseding-switch restart choices; Codex Keep-old/Restart pane flow and focus plus native A→B→remove-A→C continuation; destructive removal Cancel/confirm/System-default fallback; masked MiniMax/OpenCode Go/ZCode configure/clear; scoped/idempotent Codex reset-credit confirmation and stale-offer refusal; retained Codex settings warning UI; native-only clipboard/browser, Keychain denial and window/pane-focus scenarios. These flows have implementation/API coverage but their complete user-surface acceptance was not finished under the operator's one-hour landing deadline; use the m3-accounts BLOCKERS entry and reports to distinguish completed core proof from remaining verification, fix confirmed defects, and finish each named flow.",
+      "docs": [
+        "accounts.md"
+      ],
+      "deps": [
+        "m3-accounts"
+      ],
+      "status": "todo"
+    },
+    {
       "id": "m7-parity-sweep",
       "milestone": "M7",
       "title": "Parity sweep: every remaining flow in the 28 feature docs",
