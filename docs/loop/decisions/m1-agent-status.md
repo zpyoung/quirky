@@ -506,6 +506,27 @@
 - **Revisit if:** it fails on an idle machine
 - **Source:** assumed — autonomous
 
+## D50: The W2 checkpoint reuses the green W2 gate as its pre-pass
+- **Question:** subagent-driven-development's checkpoint review needs a full-suite pre-pass for target 6c67ce0..c99d239
+- **Options:** rerun the full suite (about six minutes); reuse the gate already run at c99d239
+- **Chose:** reuse it, keyed to HEAD's tree (1341faf), whose only change after c99d239 is this decision log
+- **Why:** a docs-only commit can't change a test result, and the adversarial-review pre-pass accepts a verified check record
+- **Evidence:** `git diff --stat c99d239..1341faf` (one file, docs/loop/decisions/m1-agent-status.md); gate log 4419 pass, scripts 30, typecheck clean
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** assumed — autonomous
+
+## D51: W3 starts while the W2 checkpoint review runs
+- **Question:** the order of the W2 checkpoint and W3 (subagent-driven-development runs a checkpoint before the next wave)
+- **Options:** wait for the review and its fixes, then dispatch W3; dispatch W3 in its own worktree at once and merge it after the fix batch
+- **Chose:** dispatch W3 at once. Its files (`src/install/registry.ts`, `cli.ts`, the manifest's hooks entries, the setting wiring) barely overlap the reviewed code, so a fix batch merges into it with at most small conflicts in main.ts or service.ts
+- **Why:** the review takes about thirty minutes of reviewer time that would otherwise idle the build, and the iteration has a fixed budget
+- **Evidence:** the W3 task contract in the Progress section of this log (iteration 2)
+- **Reversibility:** easy
+- **Confidence:** medium
+- **Revisit if:** a W2 fix changes an interface W3 builds on
+- **Source:** assumed — autonomous
+
 ## Progress
 Step 5 (build), between waves. RUN_BASE 13deb24 (specs fixed). W1 and its checkpoint fixes (D46, D47) and W2 (D48) are merged; HEAD c99d239, full gate green (4419 pass, scripts 30, typecheck clean). Backend: claude-task implementers (Agent, sonnet, effort high) + codex reviewer (D44).
 
