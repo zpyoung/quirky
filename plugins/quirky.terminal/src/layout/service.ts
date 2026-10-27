@@ -34,6 +34,7 @@ export type NewTabSpec = {
   cwd?: string
   agent?: string
   prompt?: string
+  extraArgs?: string
   title?: string
   quickCommand?: string
   revision?: number
@@ -332,13 +333,14 @@ export class LayoutService {
   /** Starts a session in a workspace's worktree (or the floating one) through the session plugin. */
   private async startSession(
     workspaceId: string,
-    spec: { agent: string; prompt?: string; cwd?: StartCwd }
+    spec: { agent: string; prompt?: string; extraArgs?: string; cwd?: StartCwd }
   ): Promise<Session> {
     const create = (cwd: string | undefined) =>
       this.context.call('quirky.session/create', {
         worktree: workspaceId === FLOATING_WORKSPACE ? FLOATING_WORKSPACE : `id:${workspaceId}`,
         agent: spec.agent,
         ...(spec.prompt === undefined ? {} : { prompt: spec.prompt }),
+        ...(spec.extraArgs === undefined || spec.extraArgs.trim() === '' ? {} : { extraArgs: spec.extraArgs }),
         ...(cwd === undefined ? {} : { cwd })
       }) as Promise<Session>
     const cwd = spec.cwd ?? (workspaceId === FLOATING_WORKSPACE ? { path: this.floatingCwd() ?? '', soft: true } : undefined)
@@ -413,6 +415,7 @@ export class LayoutService {
       ...(params.cwd === undefined ? {} : { cwd: params.cwd as string }),
       ...(params.agent === undefined ? {} : { agent: params.agent as string }),
       ...(params.prompt === undefined ? {} : { prompt: params.prompt as string }),
+      ...(params.extraArgs === undefined ? {} : { extraArgs: params.extraArgs as string }),
       ...(params.title === undefined ? {} : { title: params.title as string }),
       ...(params.quickCommand === undefined ? {} : { quickCommand: params.quickCommand as string }),
       ...(params.revision === undefined ? {} : { revision: params.revision as number })
@@ -433,6 +436,7 @@ export class LayoutService {
     const session = await this.startSession(workspaceId, {
       agent,
       ...(spec.prompt === undefined ? {} : { prompt: spec.prompt }),
+      ...(spec.extraArgs === undefined ? {} : { extraArgs: spec.extraArgs }),
       ...(spec.cwd === undefined ? {} : { cwd: { path: spec.cwd, soft: false } })
     })
     try {

@@ -18,8 +18,8 @@ export function parseInput(input: unknown): DiffViewInput | null {
   const value = input as Partial<DiffViewInput>
   if (typeof value.worktree !== 'string' || value.worktree === '') return null
   const mode = MODES.includes(value.mode as DiffViewInput['mode']) ? (value.mode as DiffViewInput['mode']) : 'file'
-  const { review, ...rest } = value
-  return { ...rest, worktree: value.worktree, mode, ...(isReview(review) ? { review } : {}) }
+  const { review, noteId, ...rest } = value
+  return { ...rest, worktree: value.worktree, mode, ...(isReview(review) ? { review } : {}), ...(typeof noteId === 'string' && noteId !== '' ? { noteId } : {}) }
 }
 
 function isReview(value: unknown): value is ReviewSnapshot {

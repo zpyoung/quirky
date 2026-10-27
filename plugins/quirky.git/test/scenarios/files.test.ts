@@ -57,10 +57,12 @@ describe('concurrent saves', () => {
       s.api('save', { path: 'math.ts', content: 'first\n', expected }),
       s.api('save', { path: 'math.ts', content: 'second\n', expected })
     ])
-    expect(results.map((r) => r.status)).toEqual(['fulfilled', 'rejected'])
-    const rejected = results[1] as PromiseRejectedResult
+    // the daemon may serve either save first; exactly one must win and the file must hold its content
+    expect(results.map((r) => r.status).sort()).toEqual(['fulfilled', 'rejected'])
+    const winner = results.findIndex((r) => r.status === 'fulfilled')
+    const rejected = results[1 - winner] as PromiseRejectedResult
     expect(rejected.reason).toMatchObject({ code: RpcErrorCode.Conflict, data: { reason: 'changed-on-disk' } })
-    expect(read('math.ts')).toBe('first\n')
+    expect(read('math.ts')).toBe(winner === 0 ? 'first\n' : 'second\n')
   })
 })
 

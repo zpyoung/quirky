@@ -16,11 +16,13 @@ type Props = {
   remoteError: string | null
   onPrimary(): void
   onMenu(id: MenuItemId): void
+  /** The AI sparkle shown over the message box, when Source Control AI actions are on. */
+  sparkle?: ReactNode
   children?: ReactNode
 }
 
 /** The commit message box, the primary split button with its chevron menu, and the cards and error beneath. */
-export function CommitArea({ message, onMessage, locked, primary, menu, spinner, remoteError, onPrimary, onMenu, children }: Props) {
+export function CommitArea({ message, onMessage, locked, primary, menu, spinner, remoteError, onPrimary, onMenu, sparkle, children }: Props) {
   const chevron = useRef<HTMLButtonElement>(null)
   const [menuAt, setMenuAt] = useState<{ x: number; y: number } | null>(null)
 
@@ -39,6 +41,7 @@ export function CommitArea({ message, onMessage, locked, primary, menu, spinner,
   return (
     <div className="commit-box">
       <textarea
+        className={sparkle ? 'scm-ai-message' : undefined}
         rows={messageRows(message)}
         value={message}
         placeholder="Message"
@@ -46,6 +49,7 @@ export function CommitArea({ message, onMessage, locked, primary, menu, spinner,
         disabled={locked}
         onChange={(event) => onMessage(event.target.value)}
       />
+      {sparkle}
       <div className="scm-split">
         <button type="button" className="primary scm-primary" disabled={!primary.enabled} title={primary.title} onClick={onPrimary}>
           {spinner === 'primary' && <span className="scm-spinner" aria-hidden="true" />}
