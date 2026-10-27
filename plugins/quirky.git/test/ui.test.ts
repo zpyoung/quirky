@@ -1,173 +1,19 @@
 import { afterAll, beforeEach, describe, expect, test } from 'bun:test'
 import { GlobalRegistrator } from '@happy-dom/global-registrator'
-import type { GitDiffPair as GitDiff, GitStatusSummary as GitStatus, QuirkyEvent, UiLayout, UiPluginContext } from '@quirky/protocol'
 
 GlobalRegistrator.register()
 ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
-const { act } = await import('react')
+const s = await import('./ui/panel-support')
+const { act, byLabel, buttonText, click, DIFF_VIEW, entry, failure, fakeContext, layoutFor, mountPanel, PANEL, q, rowOf, settle, statusOf, type } = s
 const { activate } = await import('../src/ui')
 
 afterAll(() => GlobalRegistrator.unregister())
-
-const PANEL = 'panel:quirky.git/source-control'
-
-const layoutFor = (worktree: string | null): UiLayout => ({
-  view: worktree === null ? null : { id: 'view:quirky.session/worktree', input: { worktree } },
-  panel: PANEL,
-  sidebar: true,
-  focus: 'panel'
-})
-
-const status = (overrides: Partial<GitStatus> = {}): GitStatus => ({
-  branch: 'main',
-  upstream: null,
-  ahead: 0,
-  behind: 0,
-  files: [
-    { path: 'staged.ts', index: 'M', worktree: ' ', untracked: false },
-    { path: 'edited.ts', index: ' ', worktree: 'M', untracked: false },
-    { path: 'new.txt', index: '?', worktree: '?', untracked: true }
-  ],
-  ...overrides
-})
-
-const diffOf = (path: string, staged: boolean): GitDiff => ({
-  path,
-  staged,
-  original: 'one\n',
-  modified: 'two\n',
-  binary: false
-})
-
-type Call = { method: string; params: Record<string, unknown> }
-
-type Fake = {
-  context: UiPluginContext
-  calls: Call[]
-  reports: unknown[]
-  toasts: Array<[string, string]>
-  setLayout(layout: UiLayout): void
-  emit(event: QuirkyEvent): void
-  listeners(): { events: number; layout: number }
-  statuses: Record<string, GitStatus>
-  failing: Set<string>
-}
-
-function fakeContext(initial: UiLayout): Fake {
-  let layout = initial
-  const eventListeners = new Set<(event: QuirkyEvent) => void>()
-  const layoutListeners = new Set<(layout: UiLayout) => void>()
-  const calls: Call[] = []
-  const toasts: Array<[string, string]> = []
-  const fake: Fake = {
-    calls,
-    reports: [],
-    toasts,
-    statuses: {},
-    failing: new Set(),
-    setLayout(next) {
-      layout = next
-      for (const listener of [...layoutListeners]) listener(next)
-    },
-    emit(event) {
-      for (const listener of [...eventListeners]) void listener(event)
-    },
-    listeners: () => ({ events: eventListeners.size, layout: layoutListeners.size }),
-    context: {
-      pluginId: 'quirky.git',
-      log() {},
-      provide() {},
-      async call(method, params = {}) {
-        calls.push({ method, params })
-        if (fake.failing.has(method)) throw new Error(`${method} refused`)
-        switch (method) {
-          case 'quirky.git/status':
-            return fake.statuses[params.worktree as string] ?? status()
-          case 'quirky.git/diff':
-            return diffOf(params.path as string, params.staged as boolean)
-          case 'quirky.git/stage':
-          case 'quirky.git/unstage':
-            return { ok: true }
-          case 'quirky.git/commit':
-            return { sha: 'c'.repeat(40) }
-        }
-        throw new Error(`unexpected call ${method}`)
-      },
-      subscribe(listener) {
-        eventListeners.add(listener)
-        return () => eventListeners.delete(listener)
-      },
-      getSetting: () => undefined,
-      executeCommand: async () => {},
-      openView() {},
-      closeView() {},
-      togglePanel() {},
-      getLayout: () => layout,
-      onLayout(listener) {
-        layoutListeners.add(listener)
-        return () => layoutListeners.delete(listener)
-      },
-      onStream: () => () => {},
-      onConnection: () => () => {},
-      confirm: async () => true,
-      toast: (title, body) => toasts.push([title, body]),
-      setPanelBadge() {}
-    }
-  }
-  return fake
-}
-
-type Mount = (
-  element: HTMLElement,
-  props: { input?: unknown; report?(state: unknown): void }
-) => (() => void) | void
-
-function mountPanel(fake: Fake): { element: HTMLElement; unmount: () => void } {
-  let mount: Mount | undefined
-  const provide = fake.context.provide
-  fake.context.provide = (id, implementation) => {
-    provide(id, implementation)
-    if (id === PANEL) mount = implementation as Mount
-  }
-  void activate(fake.context)
-  if (!mount) throw new Error(`activate did not provide ${PANEL}`)
-  const element = document.createElement('div')
-  document.body.appendChild(element)
-  let cleanup: (() => void) | void
-  act(() => {
-    cleanup = mount!(element, { report: (state) => fake.reports.push(state) })
-  })
-  return {
-    element,
-    unmount: () => {
-      act(() => {
-        cleanup?.()
-      })
-      element.remove()
-    }
-  }
-}
-
-async function settle(): Promise<void> {
-  for (let i = 0; i < 4; i++) await act(async () => {})
-}
-
-const click = async (target: Element | null | undefined) => {
-  if (!target) throw new Error('nothing to click')
-  await act(async () => {
-    target.dispatchEvent(new MouseEvent('click', { bubbles: true }))
-  })
-  await settle()
-}
-
-const button = (root: HTMLElement, predicate: (el: HTMLButtonElement) => boolean) =>
-  [...root.querySelectorAll('button')].find(predicate)
-
-const methods = (fake: Fake) => fake.calls.map((c) => c.method)
-
 beforeEach(() => {
   document.body.innerHTML = ''
 })
+
+const fixture = () =>
+  statusOf([entry('staged.ts', 'staged'), entry('edited.ts', 'unstaged'), entry('new.txt', 'untracked')])
 
 describe('quirky.git source-control panel', () => {
   test('SC-36: the manifest points at the built module and declares the panel activate provides', async () => {
@@ -188,62 +34,72 @@ describe('quirky.git source-control panel', () => {
     const fake = fakeContext(layoutFor(null))
     const { element, unmount } = mountPanel(fake)
     await settle()
-    expect(element.textContent).toContain('Pick a worktree to see its changes')
+    expect(element.textContent).toContain('Select a workspace to view changes')
     expect(fake.calls).toEqual([])
-    expect(fake.reports.at(-1)).toEqual({ worktree: null, branch: null, staged: 0, unstaged: 0 })
+    expect(fake.reports.at(-1)).toMatchObject({ worktree: null, branch: null, sections: [], primary: null })
     unmount()
   })
 
   test('SC-36: it shows the changes of the worktree in the open view and reports them', async () => {
     const fake = fakeContext(layoutFor('fix-login'))
+    fake.status = fixture()
     const { element, unmount } = mountPanel(fake)
     await settle()
     expect(fake.calls[0]).toEqual({ method: 'quirky.git/status', params: { worktree: 'fix-login' } })
-    expect(element.textContent).toContain('Staged (1)')
-    expect(element.textContent).toContain('Changes (2)')
+    expect(element.textContent).toContain('Staged Changes')
     expect(element.textContent).toContain('staged.ts')
-    expect(element.textContent).toContain('main')
-    expect(fake.reports.at(-1)).toEqual({ worktree: 'fix-login', branch: 'main', staged: 1, unstaged: 2 })
+    expect(element.textContent).toContain('zoe/feat')
+    expect(fake.reports.at(-1)).toMatchObject({
+      worktree: 'fix-login',
+      branch: 'zoe/feat',
+      sections: [
+        { id: 'unstaged', count: 1 },
+        { id: 'staged', count: 1 },
+        { id: 'untracked', count: 1 }
+      ]
+    })
     unmount()
   })
 
   test('SC-36: opening another worktree swaps the panel to it', async () => {
     const fake = fakeContext(layoutFor('one'))
-    fake.statuses.two = status({ branch: 'feature', files: [] })
+    fake.status = fixture()
+    fake.statuses.two = statusOf([], { branch: 'feature' })
     const { element, unmount } = mountPanel(fake)
     await settle()
     await act(async () => fake.setLayout(layoutFor('two')))
     await settle()
-    expect(fake.calls.at(-1)).toEqual({ method: 'quirky.git/status', params: { worktree: 'two' } })
-    expect(element.textContent).toContain('No changes.')
-    expect(fake.reports.at(-1)).toEqual({ worktree: 'two', branch: 'feature', staged: 0, unstaged: 0 })
+    expect(fake.called('quirky.git/status').at(-1)?.params).toEqual({ worktree: 'two' })
+    expect(element.textContent).toContain('No changes on this branch')
+    expect(fake.reports.at(-1)).toMatchObject({ worktree: 'two', branch: 'feature', sections: [] })
     await act(async () => fake.setLayout(layoutFor(null)))
     await settle()
-    expect(element.textContent).toContain('Pick a worktree to see its changes')
+    expect(element.textContent).toContain('Select a workspace to view changes')
+    expect(fake.badges.at(-1)?.[1]).toBeNull()
     unmount()
   })
 
-  test('refreshes on quirky.git/changed and ignores other events', async () => {
+  test('refreshes on quirky.git/changed for this worktree and ignores other events', async () => {
     const fake = fakeContext(layoutFor('w1'))
     const { unmount } = mountPanel(fake)
     await settle()
     const before = fake.calls.length
     await act(async () => fake.emit({ type: 'quirky.session/changed', data: {} }))
+    await act(async () => fake.emit({ type: 'quirky.git/changed', data: { worktreeId: 'someone-else' } }))
     await settle()
     expect(fake.calls.length).toBe(before)
-    fake.statuses.w1 = status({ files: [] })
+    fake.status = statusOf([])
     await act(async () => fake.emit({ type: 'quirky.git/changed', data: { worktreeId: 'w1' } }))
     await settle()
-    expect(methods(fake).slice(before)).toEqual(['quirky.git/status'])
-    expect(fake.reports.at(-1)).toEqual({ worktree: 'w1', branch: 'main', staged: 0, unstaged: 0 })
+    expect(fake.calls.slice(before).map((c) => c.method)).toEqual(['quirky.git/status'])
     unmount()
   })
 
-  test('keeps polling status every 3 seconds', async () => {
+  test('keeps polling status every 3 seconds and compare every 30', async () => {
     const intervals: number[] = []
     const realSetInterval = globalThis.setInterval
     globalThis.setInterval = ((handler: () => void, ms?: number, ...rest: unknown[]) => {
-      if (ms === 3000) intervals.push(ms)
+      if (ms === 3000 || ms === 30_000) intervals.push(ms)
       return (realSetInterval as (...args: unknown[]) => unknown)(handler, ms, ...rest)
     }) as typeof setInterval
     try {
@@ -253,94 +109,102 @@ describe('quirky.git source-control panel', () => {
     } finally {
       globalThis.setInterval = realSetInterval
     }
-    expect(intervals).toEqual([3000])
+    expect(intervals).toEqual([3000, 30_000])
   })
 
   test('stages a file, then refetches status', async () => {
     const fake = fakeContext(layoutFor('w1'))
+    fake.status = fixture()
     const { element, unmount } = mountPanel(fake)
     await settle()
     const before = fake.calls.length
-    await click(button(element, (b) => b.getAttribute('aria-label') === 'Stage edited.ts'))
+    await click(byLabel(element, 'Stage edited.ts'))
     expect(fake.calls.slice(before)).toEqual([
       { method: 'quirky.git/stage', params: { worktree: 'w1', paths: ['edited.ts'] } },
-      { method: 'quirky.git/status', params: { worktree: 'w1' } }
+      { method: 'quirky.git/status', params: { worktree: 'w1' } },
+      { method: 'quirky.git/compare', params: { worktree: 'w1' } }
     ])
     unmount()
   })
 
   test('unstages all staged files', async () => {
     const fake = fakeContext(layoutFor('w1'))
+    fake.status = fixture()
     const { element, unmount } = mountPanel(fake)
     await settle()
-    await click(button(element, (b) => b.textContent === 'Unstage all'))
-    expect(fake.calls.find((c) => c.method === 'quirky.git/unstage')?.params).toEqual({
-      worktree: 'w1',
-      paths: ['staged.ts']
-    })
+    await click(byLabel(element, 'Unstage all'))
+    expect(fake.called('quirky.git/unstage').at(-1)?.params).toEqual({ worktree: 'w1', paths: ['staged.ts'] })
     unmount()
   })
 
-  test('a failed stage toasts the error and the panel stays up', async () => {
+  test('a failed stage shows a notice and the panel stays up', async () => {
     const fake = fakeContext(layoutFor('w1'))
-    fake.failing.add('quirky.git/stage')
+    fake.status = fixture()
+    fake.on('quirky.git/stage', () => {
+      throw new Error('quirky.git/stage refused')
+    })
     const { element, unmount } = mountPanel(fake)
     await settle()
-    await click(button(element, (b) => b.getAttribute('aria-label') === 'Stage edited.ts'))
-    expect(fake.toasts).toEqual([['Git failed', 'quirky.git/stage refused']])
+    await click(byLabel(element, 'Stage edited.ts'))
+    expect(q(element, '.notice')?.textContent).toContain('quirky.git/stage refused')
     expect(element.textContent).toContain('edited.ts')
     unmount()
   })
 
   test('commits the staged changes with the typed message', async () => {
     const fake = fakeContext(layoutFor('w1'))
+    fake.status = fixture()
     const { element, unmount } = mountPanel(fake)
     await settle()
-    const box = element.querySelector('textarea') as HTMLTextAreaElement
-    const commitButton = () => button(element, (b) => b.textContent === 'Commit')
+    const box = byLabel(element, 'Commit message') as HTMLTextAreaElement
+    const commitButton = () => buttonText(element, 'Commit')
     expect(commitButton()?.disabled).toBe(true)
-    await act(async () => {
-      const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!
-      setter.call(box, '  fix the login  ')
-      box.dispatchEvent(new Event('input', { bubbles: true }))
-    })
+    await type(box, '  fix the login  ')
     await click(commitButton())
-    expect(fake.calls.find((c) => c.method === 'quirky.git/commit')?.params).toEqual({
-      worktree: 'w1',
-      message: 'fix the login'
-    })
+    expect(fake.called('quirky.git/commit').at(-1)?.params).toEqual({ worktree: 'w1', message: 'fix the login' })
     expect(box.value).toBe('')
     unmount()
   })
 
-  test('selecting a file shows its diff', async () => {
+  test('clicking a row opens the diff view with this input', async () => {
     const fake = fakeContext(layoutFor('w1'))
+    fake.status = fixture()
     const { element, unmount } = mountPanel(fake)
     await settle()
-    await click(element.querySelector('.file-main[title="edited.ts"]'))
-    expect(fake.calls.find((c) => c.method === 'quirky.git/diff')?.params).toEqual({
-      worktree: 'w1',
-      path: 'edited.ts',
-      staged: false
-    })
-    expect(element.querySelector('.diff-host')).not.toBeNull()
+    await click(rowOf(element, 'edited.ts'))
+    expect(fake.views).toEqual([{ id: DIFF_VIEW, input: { worktree: 'w1', mode: 'file', source: 'unstaged', path: 'edited.ts' } }])
+    expect(fake.calls.some((c) => c.method === 'quirky.git/diff')).toBe(false)
+    expect(q(element, '.diff-host')).toBeNull()
     unmount()
   })
 
-  test('SC-13: a folder workspace shows the unavailable sentence as a notice, with no changes or commit box', async () => {
+  test('SC-13: a folder workspace shows the unavailable sentence, with no changes or commit box', async () => {
     const fake = fakeContext(layoutFor('wt_notes'))
     const sentence = 'Opened as folder. Git features are unavailable for this workspace.'
-    const call = fake.context.call
-    fake.context.call = async (method, params) => {
-      if (method === 'quirky.git/status') throw Object.assign(new Error(sentence), { data: { reason: 'folder-workspace' } })
-      return call(method, params)
-    }
+    fake.on('quirky.git/status', () => {
+      throw failure(sentence, { reason: 'folder-workspace' })
+    })
     const { element, unmount } = mountPanel(fake)
     await settle()
-    expect(element.querySelector('.scm-unavailable')?.textContent).toBe(sentence)
-    expect(element.querySelector('.scm-error')).toBeNull()
-    expect(element.querySelector('textarea')).toBeNull()
+    expect(q(element, '.scm-unavailable')?.textContent).toBe(sentence)
+    expect(q(element, '.scm-error')).toBeNull()
+    expect(q(element, 'textarea')).toBeNull()
     expect(element.textContent).not.toContain('Staged')
+    unmount()
+  })
+
+  test('a failing status read shows the error and keeps the last good rows', async () => {
+    const fake = fakeContext(layoutFor('w1'))
+    fake.status = fixture()
+    const { element, unmount } = mountPanel(fake)
+    await settle()
+    fake.on('quirky.git/status', () => {
+      throw new Error('git is gone')
+    })
+    await act(async () => fake.emit({ type: 'quirky.git/changed', data: { worktreeId: 'w1' } }))
+    await settle()
+    expect(q(element, '.scm-error')?.textContent).toBe('git is gone')
+    expect(rowOf(element, 'edited.ts')).not.toBeNull()
     unmount()
   })
 
