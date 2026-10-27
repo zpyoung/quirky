@@ -15,11 +15,12 @@ Implements [data flow](logic.md#data-flow). Existing anchors are absolute under 
 - `packages/daemon/src/plugins/dispatch.ts:111-135,181-212`: schemas, destructive confirmation and plugin invocation. No bypass for plugin callers.
 - `plugins/quirky.git/src/daemon/env.ts:38-50`: resolve registered Git worktrees via quirky.worktree/resolve and forward only authenticated caller cwd/worktreeId.
 - `plugins/quirky.git/main.ts:10-14`: table registration with formatContributionId.
-- `plugins/quirky.git/quirky-plugin.json:12-27`: static method parameter conventions; its cli-command section supplies generated commands.
+- `plugins/quirky.git/quirky-plugin.json:12-27`: static method parameter convention. Hosting adds explicit cli-command contributions as supported by `packages/daemon/src/plugins/cli-catalog.ts:171-227`; the current Git manifest does not supply that section.
 - `packages/daemon/src/plugins/discover.ts`: directory-driven built-in discovery; no hardcoded hosting registration needed.
 - `packages/cli/src/plugin-commands.ts`: generated CLI route; do not add hosting to the kernel CLI switch.
 - `plugins/quirky.worktree/src/daemon/set.ts` and `plugins/quirky.repo/src/settings.ts`: existing baseRef/defaultBase owners, unchanged.
 - `docs/loop/decisions/m2-source-control-core.md:D20`: baseRef > project defaultBase > detected default drives PR base; no duplicate stored PR-base preference.
+- `packages/protocol/src/plugins.ts:184-189`, `packages/daemon/src/plugins/dispatch.ts:216-229`, and `packages/daemon/src/plugins/streams.ts:11-43`: add public `CallerConnection.onClose(callback): () => void`, usable over both socket and WebSocket, without opening a binary stream. Existing openStream rejects Unix sockets, so it cannot implement CLI visibility cleanup. Reuse the kernel's per-connection closer registry with a removable callback; invoke once on disconnect or immediately if already closed. No confirmation changes.
 
 ## Contracts & interfaces
 
@@ -27,23 +28,24 @@ Implements [locked decisions](logic.md#decisions-locked).
 
 `CONTRACT:`
 ```ts
-type Handler = (params: Record<string, any>, caller: PluginCaller) => unknown;
+type Handler = (params: Record<string, unknown>, caller: PluginCaller) => unknown;
 type Identity = { host: string; owner: string; repo: string };
 type Scope = { worktree: Worktree; origin: Identity; repository: Identity; binding?: { host: string; user: string } };
 type RunOptions = { idempotent?: boolean; timeoutMs?: number; maxBytes?: number; input?: string; ambient?: boolean; signal?: AbortSignal };
 type HostingEnv = {
   context: PluginContext;
-  resolve(params: Record<string, any>, caller: PluginCaller): Promise<Scope>;
+  resolve(params: Record<string, unknown>, caller: PluginCaller): Promise<Scope>;
   run(scope: Scope, args: string[], options?: RunOptions): Promise<string>;
-  json<T = any>(scope: Scope, args: string[], options?: RunOptions): Promise<T>;
-  rest<T = any>(scope: Scope, path: string, method?: string, fields?: Record<string, unknown>, options?: RunOptions): Promise<T>;
-  graphql<T = any>(scope: Scope, query: string, variables?: Record<string, unknown>, options?: RunOptions): Promise<T>;
+  json(scope: Scope, args: string[], options?: RunOptions): Promise<unknown>;
+  rest(scope: Scope, path: string, method?: string, fields?: Record<string, unknown>, options?: RunOptions): Promise<unknown>;
+  graphql(scope: Scope, query: string, variables?: Record<string, unknown>, options?: RunOptions): Promise<unknown>;
   git(scope: Scope, args: string[]): Promise<string>;
   changed(scope: Scope, data?: Record<string, unknown>): void;
   invalid(reason: string, message: string): Error;
   cache<T>(key: string, ttlMs: number, load: () => Promise<T>): Promise<T>;
 };
 ```
+All external JSON/RPC/configuration enters as unknown and is validated with existing JSON-schema support or narrow runtime record/field guards before use. No bare any or unchecked external-input assertions. Shared data guards may live in src/data.ts owned by the runtime component.
 
 Tables are `runtimeMethods(env)`, `prMethods(env)`, `detailMethods(env)`, `workItemMethods(env)`, `refreshMethods(env, prHandlers)`, returning Record<string, Handler>. Factories `createEnv(context): HostingEnv` and optional `dispose()` lifecycle cleanup. Runtime setup may add a dispose member without changing consumer signatures. All REST paths are relative to the resolved repository's host, never full arbitrary URLs; helper `repos/<owner>/<repo>/...` is built from validated identity. GraphQL variables are arguments, not string interpolation of input. `rest` serializes fields to JSON on stdin and explicitly supplies method, including GET; graphql reads query or mutation to choose retryability. Normalized errors have fixed safe message and `data.reason`, optionally retryDisabledUntil and nextAutoRetryAt. Avoid logs of token-bearing argv/stdout/env.
 
@@ -59,6 +61,22 @@ Every method taking repository context accepts optional worktree selector and ho
 PR `merge` requires positive number, expectedHead (40/64 hex), method squash/merge/rebase and action direct/queue; no actor-dependent behavior. Declare destructive in manifest. The handler refreshes GitHub state, rejects a mismatched head before mutation, validates review/merge/rules/stack metadata, and executes a single protected provider action. Queue/stack async polls at 1 s, up to 180 attempts, with bounded whole-operation deadline. Outcome is `{state:'merged'|'enqueued'|'pending', number, head, operationId?}`. Unknown completion reports pending with operationId only if GitHub returned it; otherwise safe unknown-completion error. Auto-merge is a separate action, not an alternate sitter merge implementation.
 
 `updateReview` action enum edit/close/reopen/ready with optional title/body. `reviewers` action add/remove with nonempty logins. `reviewComment` action inline/reply with current head, file/line/range or reply id. Thread/reaction/file IDs are validated against the selected PR before mutation, preventing arbitrary cross-repo GraphQL IDs. `projectItemMutation` action enum editIssue/editReview/addComment/updateComment/deleteComment/updateIssueType; no arbitrary GraphQL or arbitrary HTTP escape hatch is exposed.
+
+### Refresh ownership and partial mutations
+
+Implements [refresh ownership](logic.md#transport-rate-limits-and-refresh) and [partial mutations](logic.md#api-and-cli). The four refresh methods declare `connection: true`; CLI commands invoke them through their real socket connection, and connected API clients use their actual connection. `forBranch` remains available to plugins, including the later sitter, without connection context. The public connection close hook above registers cleanup on either transport without binary streaming.
+
+`SCHEMA:`
+```ts
+type RefreshCandidate = { worktree: string; branch?: string; number?: number; headOid?: string; active?: boolean };
+type VisibilityReport = { generation: number; candidates: RefreshCandidate[] };
+type RefreshRequest = { candidate: RefreshCandidate; reason: 'visible'|'active'|'post-push'|'manual'|'swr'; priority?: number };
+type RefreshReportResult = { accepted: boolean; generation: number; candidates: number };
+```
+
+Validate nonnegative safe-integer generations and max 1000 candidates; resolve every candidate through the registered worktree API and reject mismatched identities. Ownership key is caller.connection.id; never accept an identity field from params. Store last generation and one candidate set per connection. A generation <= last accepted generation leaves state unchanged with accepted:false. Deduplicate normalized candidate keys and aggregate their owner sets; disconnect removes only that owner's visibility and its per-connection/per-host/account active burst history. An entry survives while another owner still reports it. Reconnection has a new connection ID and starts generation history empty. Register one onClose callback per owner, remove it and timers on plugin deactivate. Background budget is global per host/account; active budget is per connection plus host/account; cooldown and failure backoff are per normalized review key. Manual refresh still respects Retry-After.
+
+`changed(scope, data)` synchronously advances the affected cache generation before emitting. Every confirmed upstream write calls it, including steps inside aggregate operations. Aggregate failure after at least one confirmed step emits data `{partial:true, completedSteps:string[]}` and returns an error containing those completed steps; creation followed by stack-registration failure additionally carries the created review number/URL. A timeout with unknown upstream completion conservatively invalidates cached reads but emits no fabricated confirmed mutation. GH11/GH12/GH16/GH18 tests exercise these transitions.
 
 ## Data models / schemas
 

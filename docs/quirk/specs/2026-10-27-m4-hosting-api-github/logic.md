@@ -34,12 +34,13 @@ All GitHub portions of flows 1–7 in hosting-api.md are in scope, including acc
 ### API and CLI
 - Plugin ID quirky.hosting; methods quirky.hosting/<name>; CLI group hosting with schema-derived kebab-case commands/flags, JSON support and existing exit codes.
 - Existing result/error conventions remain: context errors plus safe classified `data.reason`. Lookup outcomes distinguish found, no-review and unavailable. Missing CLI, auth, permission, unavailable repo, network/server, rate limit and validation errors remain distinct; secrets and raw stderr never escape.
-- Mutating methods emit changed only after success; merge declares destructive and requires yes or the kernel's answered confirmation. A plugin caller, including sitter, receives the same confirmation rule.
+- Every confirmed upstream mutation step invalidates affected caches and emits changed, even when a later step makes the aggregate operation fail. A partial-change event marks `partial: true` and names the completed steps; no successful completion is invented. Merge declares destructive and requires yes or the kernel's answered confirmation. A plugin caller, including sitter, receives the same confirmation rule.
 
 ### Transport, rate limits and refresh
 - All GitHub traffic uses one bounded runner: four active processes maximum, bounded output, noninteractive env, default 30 s timeout, 60 s creation, descendant termination on deadline. Retry only idempotent transient reads, never replay create/merge/comments or GraphQL mutations.
 - Rate gates are host/account-scoped so one bound account cannot poison another. Preserve Retry-After, budget snapshots, local circuit breaking, bounded caches and in-flight coalescing. Cache invalidation generations prevent old results repopulating mutation-invalidated state.
 - Selected/open refreshes have the documented 60/120 s freshness; absence 15 minutes unless selected, merged settled no background refresh; background max 20 starts/5 min and 10 s spacing; active burst max 3/30 s; cooldown 10 s; post-push/manual-unknown follow-up 2.5 s. Back off repeated failures 60–900 s; manual cannot bypass Retry-After.
+- Refresh visibility belongs to the authenticated client connection, not a caller-supplied window ID. Reports replace only that connection's candidate set; the queue uses the union across connections. Generations increase independently per connection and stale reports are ignored. Disconnect removes only that connection's candidates and budget. Reconnection starts a fresh owner/generation; one window cannot erase another's work.
 
 ### Creation, merge and partial data
 - Recheck creation preflight at mutation time: detached, existing review, unsupported provider, default branch, dirty, no upstream, behind, auth, ahead, missing remote base. A failed lookup blocks creation.
@@ -64,13 +65,13 @@ Every numbered scenario is exercised against the daemon API or real quirky CLI w
 | GH09 | Branch in fork origin plus upstream PR | Match correct owner and head repo; linked number wins; tracked upstream supported; number detail carries checks/review/merge state |
 | GH10 | Empty branch, no PR, merged reused branch, default branch | No-review only for definitive absence; implicit stale merged/default-branch PR hidden; explicit link remains available |
 | GH11 | Concurrent cached lookup then mutation | Old in-flight response cannot repopulate cache; next lookup observes mutation; changed event emitted |
-| GH12 | Visible/active/manual/post-push refresh requests | Priority, pacing, cooldown, generations, failure backoff and paused/outcome events follow locked rules |
+| GH12 | Two concurrent windows report visible/active candidates, stale generations, disconnect and reconnect; manual/post-push requests also run | Per-connection sets aggregate without overwriting; stale reports ignored; only departing owner's work removed; fresh reconnect generation accepted; priority/pacing/cooldown/backoff/events follow locked rules |
 | GH13 | Each creation blocker in order, including failed lookup | Exact blocked reason/next action; create revalidates and cannot bypass it |
 | GH14 | Pushed clean branch, title/body/template/draft | Exactly one create; returns number/URL and new lookup visible immediately |
 | GH15 | Create duplicate, timeout or unparseable output | Exactly one matching open head/base PR accepted as existing; ambiguous matches return unknown completion |
-| GH16 | GitHub.com parent/top-of-stack and new child | Create/register new or append existing stack; incompatible parent/host/unsupported API yields explicit error; partial registration not reported complete |
+| GH16 | GitHub.com parent/top-of-stack and new child, then failed registration | Create/register new or append existing stack; incompatible parent/host/unsupported API yields explicit error; successful create invalidates/publishes partial change even if registration fails; partial registration not reported complete |
 | GH17 | PR checks include check runs, statuses, approval suite | Correct rollup; unknown/empty not failure; details include annotations/jobs/bounded failed log tails |
-| GH18 | Rerun failed/all checks including status-only | Deduplicate workflow/check-run targets; correct rerun action; status-only is actionable error; partial-start count preserved |
+| GH18 | Rerun failed/all checks including status-only and partial batch failure | Deduplicate workflow/check-run targets; correct rerun action; status-only is actionable error; successful earlier reruns invalidate/publish partial change and error preserves partial-start count |
 | GH19 | Conversation, reviews, threads including partial source failure | Sorted typed comments; thread resolved/outdated coordinates and reactions; partial failure explicitly reported |
 | GH20 | Inline comment/range/reply, reaction, resolve/unresolve, viewed/unviewed | Mutations target explicit PR/head/file/thread IDs and return confirmed identity; invalidate read cache |
 | GH21 | Up to/beyond 300 changed files; raw text/binary/large files | Structured files/viewed state and patch coordinates; explicit unavailable/truncated; raw contents at base/head SHA; binary/tooLarge distinguished |
@@ -104,6 +105,6 @@ GHES: GitHub Enterprise Server. Head SHA: the exact reviewed commit whose merge 
 
 ## Status & amendments
 
-Status: Design self-reviewed; Codex adversarial review required before implementation. Tech spec required by LOOP.md and subsystem/file-count gate.
+Status: Required joint Codex review completed; F1 HIGH and F2 MEDIUM accepted and resolved in the specifications before implementation. Tech spec required by LOOP.md and subsystem/file-count gate.
 
-**Amendments:** None.
+**Amendments:** 2026-10-27 — specify per-authenticated-connection refresh ownership/generations/disconnect cleanup (F1), and invalidation plus partial-change notification for confirmed upstream steps even when aggregate mutations fail (F2).
