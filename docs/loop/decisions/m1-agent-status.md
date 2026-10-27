@@ -475,5 +475,15 @@
 - **Confidence:** high
 - **Source:** assumed — autonomous
 
+## D47: W1 checkpoint: accept all eight findings, which collapse to six defects
+- **Question:** adjudicating the W1 checkpoint review (three lenses C/S/X, standard depth, codex gpt-6.1-sol, independence full, 0 suppressed; target 736ce9d..5e2579d, full-suite pre-pass reused from the green W1 gate)
+- **Options:** accept or reject each
+- **Chose:** accept all: the shim read Codex lifecycle hooks from argv only, dropping every installed Codex hook (C1/S1, HIGH); readableDetail leaked JSON cut short by the cap (C2/S3); Codex resume/clear SessionStart didn't move the lead (S2, HIGH); provider capture crashed on prototype-named sources (X1); the shim's quiet exit drained stdin with no bound (X2); Muse removal deleted allowlist names the user already had (X3). Five parallel fixers closed them with regression tests (the shim fixer showed both new tests failing on the old code); fix batch merged at 6c67ce0.
+- **Why:** each reproduced with the reviewer's command
+- **Evidence:** review bundle in the session scratchpad (rev-w1/*-gate.json); fix merges up to 6c67ce0
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** assumed — autonomous
+
 ## Progress
-Step 5 (build): W1 merged at 15b64bf. Next: W1 gate, W1 checkpoint review (3 lenses, standard, codex), fixes, then W2 (agent-status core chain T7a→T7b, installers T5b, session summary and dots T8), W3 (registry, hooks CLI, setting), W4 (end-to-end).
+Step 5 (build): W1 and its checkpoint fixes merged at 6c67ce0. W2 batch 1 dispatched (T7a agent-status core, T5b remaining installers, T8 session summary and dots); T7b (fallbacks, inference, presence, spool) follows T7a in the same tree. Then W2 checkpoint, W3 (registry, hooks CLI, setting), W4 (end-to-end).
