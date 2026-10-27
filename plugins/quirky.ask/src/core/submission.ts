@@ -1,5 +1,6 @@
 import type { AskAnswer, AskPartial, AskPartialQuestionDraft, AskQuestion, AskSpec } from '@quirky/protocol'
 import { FORMAT_PATTERNS, isValidIsoDate, nonBlank } from './values'
+import { matchesPattern } from './pattern'
 
 // mirrors the daemon's bound in answers.ts, which refuses longer text when a pattern applies
 const MAX_PATTERN_TEST_LENGTH = 200
@@ -95,7 +96,7 @@ function resolveText(question: AskQuestion & { type: 'text' }, draft: QuestionDr
     if (value.length > MAX_PATTERN_TEST_LENGTH) return error("Doesn't match the expected format.")
     let matches = true
     try {
-      matches = new RegExp(question.pattern).test(value)
+      matches = matchesPattern(new RegExp(question.pattern), value)
     } catch {
       // an unparseable pattern is rejected when the ask is created, so it must not block a submit here
     }

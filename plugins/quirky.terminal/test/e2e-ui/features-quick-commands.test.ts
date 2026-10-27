@@ -140,7 +140,6 @@ test(
     const tab = tabsOf(ws).find((candidate) => !before.has(candidate.id))!
     expect(tab.defaultTitle).toBe('Hello')
     const session = leavesOf(tab.root)[0]!.session
-    h.noteProcesses()
     const rows = await h.waitForLine(session, 'hello')
     expect(rows.filter((line) => line === 'hello')).toHaveLength(1)
     expect(rows.filter((line) => /[%#] echo hello$/.test(line))).toHaveLength(1)
@@ -169,7 +168,6 @@ test(
       const next = tabsOf(await layoutOf(h, f.worktree)).find((candidate) => candidate.defaultTitle === 'Two lines')
       return next ? leavesOf(next.root)[0]!.session : undefined
     })
-    h.noteProcesses()
     const multiRows = await h.waitForLine(multi, join(h.repo, 'web'))
     expect(multiRows.some((line) => line.endsWith('cd web; pwd'))).toBe(true)
     await waitFor('the button to read the last command', () => (document.querySelector('.qc-strip [data-qc-run]')?.textContent === 'Two lines' ? true : undefined))
@@ -177,7 +175,6 @@ test(
 
     // the CLI reaches the same outcome
     const viaCli = await h.json<{ session: string }>(['terminal', 'quick-command', 'run', 'hello'])
-    h.noteProcesses()
     const cliRows = await h.waitForLine(viaCli.session, 'hello')
     expect(cliRows.filter((line) => line === 'hello')).toHaveLength(1)
   },
