@@ -6,14 +6,15 @@ import { GROUP_RATIO_MAX, GROUP_RATIO_MIN, TAB_COLOR_HEX } from '../../layout/ty
 import type { Group, GroupNode, Tab } from '../../layout/types'
 import { CollapseIcon, CloseIcon, PinIcon } from './icons'
 import type { ControllerState, WorkspaceController } from './controller'
-import { activeTabOf, byPaneId, displayStatus, groupRects, px } from './model'
+import { activeTabOf, byPaneId, groupRects, px } from './model'
 import type { GroupDividerRect } from './model'
 import { InlineField, PaneLayer } from './PaneLayer'
+import { StatusGlyph, useNow } from './StatusGlyph'
 import { useBoxSize } from './useBoxSize'
 
 type Common = { controller: WorkspaceController; state: ControllerState }
 
-function TabItem({ controller, state, group, tab, index, others }: Common & { group: Group; tab: Tab; index: number; others: Tab[] }) {
+function TabItem({ controller, state, group, tab, index, others, now }: Common & { group: Group; tab: Tab; index: number; others: Tab[]; now: number }) {
   const ws = state.workspace!
   const selected = group.activeTab === tab.id
   const leaves = paneLeaves(tab.root)
@@ -74,7 +75,7 @@ function TabItem({ controller, state, group, tab, index, others }: Common & { gr
         void controller.dropTab({ kind: 'strip', group: group.id, index: indexFor(event) })
       }}
     >
-      <span className={`qt-dot qt-dot-${session ? displayStatus(session.status) : 'running'}`} role="img" aria-label={session ? displayStatus(session.status) : 'running'} />
+      <StatusGlyph session={session} now={now} />
       {renaming ? (
         <InlineField label="Tab title" initial={displayTitle(tab)} className="qt-rename" onCommit={(value) => void controller.commitRename(value)} onCancel={() => controller.cancelRename()} />
       ) : (
@@ -162,6 +163,7 @@ function GroupView({ controller, state, group }: Common & { group: Group }) {
   const zone = drag?.over?.kind === 'zone' && drag.over.group === group.id ? drag.over.zone : null
   const stripEnd = drag?.over?.kind === 'strip' && drag.over.group === group.id && drag.over.index >= others.length
   const split = ws.root.kind === 'split'
+  const now = useNow()
 
   const zoneAt = (event: DragEvent): DropZone => {
     const rect = body.current!.getBoundingClientRect()
@@ -191,7 +193,7 @@ function GroupView({ controller, state, group }: Common & { group: Group }) {
       >
         <div className="qt-tabs" role="tablist">
           {group.tabs.map((entry, index) => (
-            <TabItem key={entry.id} controller={controller} state={state} group={group} tab={entry} index={index} others={others} />
+            <TabItem key={entry.id} controller={controller} state={state} group={group} tab={entry} index={index} others={others} now={now} />
           ))}
         </div>
         <button type="button" className="qt-icon qt-plus" data-plus={group.id} aria-label="New tab" title="New tab" aria-haspopup="menu" aria-expanded={menu?.kind === 'plus' && menu.target === group.id} onMouseDown={(event) => event.stopPropagation()} onClick={(event) => toggle('plus', event)}>

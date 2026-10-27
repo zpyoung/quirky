@@ -4,7 +4,7 @@ type Props = {
   query: string
   caseSensitive: boolean
   regex: boolean
-  /** The match counter text: `0/0`, `No results`, `n/total` or `total+`. */
+  /** The match counter text: `0/0`, `No results`, `Regex too complex`, `n/total` or `total+`. */
   status: string
   inputRef: RefObject<HTMLInputElement | null>
   onQueryChange(query: string): void

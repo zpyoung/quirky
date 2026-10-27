@@ -1,4 +1,4 @@
-import type { Session, SessionStatus, UiPluginContext } from '@quirky/protocol'
+import type { AgentDisplayState, AgentStatusSummary, Session, SessionStatus, UiPluginContext } from '@quirky/protocol'
 import { displayTitle, recentOrder } from '../../layout/titles'
 import { findGroup, groupsInOrder, paneLeaves } from '../../layout/tree'
 import type { Rect } from '../../layout/tree'
@@ -54,6 +54,32 @@ export type DisplayStatus = Exclude<SessionStatus, 'starting'>
 /** A starting session shows as running; every other status shows as itself. */
 export function displayStatus(status: SessionStatus): DisplayStatus {
   return status === 'starting' ? 'running' : status
+}
+
+/** How long an unfinished state may go without evidence before the window stops vouching for it. */
+export const STALE_AFTER_MS = 30 * 60 * 1000
+
+export type WindowDisplay = { display: AgentDisplayState; label: string }
+
+/**
+ * What a tab draws for an agent-status summary at `now`: the summary's own display and label,
+ * unless the state is unfinished and has had no evidence for 30 minutes. A restored-unconfirmed
+ * summary never decays: only fresh evidence confirms it. Window code can't import plugin code, so
+ * this is a copy of `quirky.session/src/window/status.ts`; keep the two in step.
+ */
+export function windowDisplay(summary: AgentStatusSummary, now: number, sessionRunning: boolean): WindowDisplay {
+  if (summary.state !== 'done' && !summary.restoredUnconfirmed && now - summary.evidenceAt > STALE_AFTER_MS) {
+    return sessionRunning ? { display: 'unverifiable', label: 'No recent update' } : { display: 'idle', label: 'Idle' }
+  }
+  return { display: summary.display, label: summary.label }
+}
+
+const RING_STATES: AgentDisplayState[] = ['working', 'waiting', 'permission']
+
+/** The whole-number percent (progress is already 0-100) a ring shows, or null when the state keeps its own glyph. */
+export function ringPercent(summary: AgentStatusSummary, display: AgentDisplayState): number | null {
+  if (summary.progress === null || !Number.isFinite(summary.progress) || !RING_STATES.includes(display)) return null
+  return Math.round(Math.min(100, Math.max(0, summary.progress)))
 }
 
 export type TabLocation = { group: Group; tab: Tab }
@@ -119,10 +145,20 @@ export function mountedPanes(ws: Workspace): PaneLocation[] {
   return mounted
 }
 
-/** What a `ui.state` report lists for each pane of every tab, in visual order. */
-export type TabReport = { session: string; title: string; agent: string; status: DisplayStatus; tab: string; group: string; pane: string }
+/** What a `ui.state` report lists for each pane of every tab, in visual order. `display` and `label` are present for a pane whose session has an agent-status summary. */
+export type TabReport = {
+  session: string
+  title: string
+  agent: string
+  status: DisplayStatus
+  tab: string
+  group: string
+  pane: string
+  display?: AgentDisplayState
+  label?: string
+}
 
-export function tabsReport(ws: Workspace, sessions: Readonly<Record<string, Session>>): TabReport[] {
+export function tabsReport(ws: Workspace, sessions: Readonly<Record<string, Session>>, now: number = Date.now()): TabReport[] {
   const rows: TabReport[] = []
   for (const group of groupsInOrder(ws.root)) {
     for (const tab of group.tabs) {
@@ -135,7 +171,8 @@ export function tabsReport(ws: Workspace, sessions: Readonly<Record<string, Sess
           status: session ? displayStatus(session.status) : 'running',
           tab: tab.id,
           group: group.id,
-          pane: leaf.id
+          pane: leaf.id,
+          ...(session?.agentStatus ? windowDisplay(session.agentStatus, now, session.status !== 'exited') : {})
         })
       }
     }
