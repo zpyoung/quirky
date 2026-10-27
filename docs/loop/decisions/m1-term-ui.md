@@ -541,5 +541,15 @@
 - **Confidence:** high
 - **Source:** assumed — autonomous
 
+## D54: The window's import map serves `react-dom`
+- **Question:** the first like-a-user pass found the terminal workspace never loaded in the web window: "quirky.terminal failed to load: Failed to resolve module specifier \"react-dom\""
+- **Options:** stop the plugin using portals; let plugin windows import `react-dom` the way they import `react-dom/client`
+- **Chose:** add `packages/ui/src/vendor/react-dom.ts` (createPortal, flushSync) to the shared vendor build and a `react-dom` entry to the import map; the build test's fixture plugin now imports `createPortal` and checks it resolves.
+- **Why:** `packages/ui/build.ts` already marks `react-dom` external for every plugin bundle, so any plugin importing it built fine and failed at load; headless tests load `src/ui.tsx` straight from source, which is why no test saw it. Portals are part of React that third-party plugin windows will need too.
+- **Evidence:** .quirk/using-apps-like-a-user/runs/20261027T095001-9228/report.md, runs/20261027T095000-f720/report.md; packages/ui/build.ts:14
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** assumed — autonomous
+
 ## Progress
-Final Round 1 done and adjudicated (D53); second catch-up merge 70e375f. Final fix batch GW (window), GQ (quick commands), GD (daemon) dispatched from 70e375f on sdd/termui/G*. Next: merge them, gate, the like-a-user web pass (setup script scratchpad uiv/setup.sh), native handoff file, BLOCKERS for anything left open, land.
+Final fix batch merged (67eb574) and the import-map fix (D54) committed; UI pass batches A and B rerunning (scratchpad uiv/). Next: record the UI pass results, fix any app failure, gate, land.
