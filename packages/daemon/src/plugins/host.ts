@@ -560,7 +560,9 @@ export class PluginHost {
         if (attempt.revoked) throw new Error(`${id} is no longer active`)
         const workers = manifest.workers
         const workerPath = workers?.[name]
-        if (workerPath === undefined || !Object.hasOwn(workers, name)) throw new Error(`${id}: undeclared worker '${name}'`)
+        if (workers === undefined || workerPath === undefined || !Object.hasOwn(workers, name)) {
+          throw new Error(`${id}: undeclared worker '${name}'`)
+        }
         return pathToFileURL(join(this.importRootOf(entry), workerPath)).href
       },
     }
