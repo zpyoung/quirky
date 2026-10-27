@@ -1,10 +1,10 @@
 import type { QuirkyEvent } from './rpc'
 
 /** The contribution kinds the UI plugin API adds. */
-export const UI_KINDS = ['sidebar-section', 'panel', 'view', 'overlay', 'command', 'keybinding', 'setting', 'theme'] as const
+export const UI_KINDS = ['sidebar-section', 'panel', 'view', 'overlay', 'command', 'keybinding', 'setting', 'settings-section', 'theme'] as const
 
 /** UI kinds whose implementation is code a plugin's UI module provides. */
-export const CODE_BACKED_KINDS = ['view', 'panel', 'sidebar-section', 'overlay', 'command'] as const
+export const CODE_BACKED_KINDS = ['view', 'panel', 'sidebar-section', 'settings-section', 'overlay', 'command'] as const
 
 /** The color slots a theme fills; window tokens map to CSS custom properties `--<token>`. */
 export const THEME_TOKENS = [
@@ -71,10 +71,12 @@ export type ThemeList = { chosen: string; active: string; themes: ThemeInfo[] }
 /** A sidebar section, panel, view or overlay in the UI model. */
 export type UiSlotEntry = {
   id: string
-  kind: 'sidebar-section' | 'panel' | 'view' | 'overlay'
+  kind: 'sidebar-section' | 'panel' | 'view' | 'overlay' | 'settings-section'
   /** The plugin whose declaration is in effect. */
   plugin: string
   title: string
+  /** Optional descriptive copy for generic settings sections. */
+  description?: string
   order: number
   /** URL of the owning plugin's UI module; null when it has none. */
   module: string | null
@@ -145,6 +147,8 @@ export type UiModel = {
   keybindings: UiKeybinding[]
   /** ID ascending. */
   settings: UiSettingEntry[]
+  /** Rich, code-backed content inside the generic Settings dialog, ordered by contribution order then ID. */
+  settingsSections: UiSlotEntry[]
   /** The default theme first, then by title. */
   themes: ThemeInfo[]
   /** `chosen` and `active` are `default` or a theme ID. */
@@ -178,7 +182,7 @@ export const DESKTOP_AWAY_MS = 180_000
 /** One slot in the UI model, with the latest report from its mounted window. */
 export type UiSlotState = {
   id: string
-  kind: 'sidebar-section' | 'panel' | 'view' | 'overlay'
+  kind: 'sidebar-section' | 'panel' | 'view' | 'overlay' | 'settings-section'
   plugin: string
   title: string
   shown: boolean

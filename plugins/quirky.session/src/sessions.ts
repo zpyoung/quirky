@@ -274,6 +274,81 @@ export class SessionService {
     return this.deliverAfterLaunch(launched, false)
   }
 
+  /**
+   * Starts a new terminal session from an agent-owned transcript. The source cwd remains the
+   * process cwd; `worktree` supplies only Quirky ownership and launch-hook identity.
+   */
+  resumeExternal = async (params: Record<string, unknown>, caller: PluginCaller): Promise<Session> => {
+    if (typeof params.agent !== 'string' || params.agent === '') {
+      throw this.context.error('invalid-params', 'agent is required')
+    }
+    const cwd = this.startCwd(params.cwd)
+    if (cwd === undefined) throw this.context.error('invalid-params', 'cwd is required')
+    if (!isPlainObject(params.providerSession)) {
+      throw this.context.error('invalid-params', 'providerSession must be an object')
+    }
+    const providerId = params.providerSession.id
+    const transcriptPath = params.providerSession.transcriptPath
+    if (typeof providerId !== 'string') throw this.context.error('invalid-params', 'providerSession.id must be a string')
+    if (transcriptPath !== null && typeof transcriptPath !== 'string') {
+      throw this.context.error('invalid-params', 'providerSession.transcriptPath must be a string or null')
+    }
+    const problem = providerSessionIdProblem(providerId)
+    if (problem) throw this.context.error('invalid-params', problem)
+
+    const agent = params.agent
+    const info = await this.agentInfo(agent)
+    if (!info.resumable) throw this.context.error('conflict', `${agent} can't resume sessions`)
+    if (params.fork !== undefined && typeof params.fork !== 'boolean') {
+      throw this.context.error('invalid-params', 'fork must be a boolean')
+    }
+    const fork = params.fork === true
+    if (fork && !info.canFork) throw this.context.error('conflict', `${agent} can't fork from Quirky yet`)
+
+    let record: SessionLaunch | null = null
+    if (params.record !== undefined && params.record !== null) {
+      if (!isPlainObject(params.record)) throw this.context.error('invalid-params', 'record must be an object or null')
+      const supplied = params.record
+      if (typeof supplied.command !== 'string' || typeof supplied.args !== 'string' || !isPlainObject(supplied.env)) {
+        throw this.context.error('invalid-params', 'record must contain command, args and env')
+      }
+      const env: Record<string, string> = {}
+      for (const [name, value] of Object.entries(supplied.env)) {
+        if (typeof value !== 'string') throw this.context.error('invalid-params', `record.env.${name} must be a string`)
+        env[name] = value
+      }
+      record = { command: supplied.command, args: supplied.args, env }
+    }
+
+    if (params.worktree !== undefined && typeof params.worktree !== 'string') {
+      throw this.context.error('invalid-params', 'worktree must be a selector string')
+    }
+    const target = await this.resolveWorktree(params.worktree ?? FLOATING, caller, cwd)
+    const providerSession: SessionProviderSession = { id: providerId, transcriptPath }
+    const session = this.newRecord({ id: target.id, path: cwd }, 'terminal', agent as AgentKind, info.label)
+    const launched = await this.start(session, target.repoId, params, undefined, async (additions) => {
+      const resumed = (await this.context.call('quirky.agents/prepareResume', {
+        agent,
+        cwd,
+        record,
+        providerSession,
+        fork,
+        hookArgs: additions.args,
+        hookEnv: additions.env
+      })) as { command: string; env: Record<string, string | null>; record: SessionLaunch }
+      return {
+        argv: this.context.launch.commandArgv(resumed.command),
+        envPatch: resumed.env,
+        launch: resumed.record,
+        launchSettings: null,
+        promptDelivery: null,
+        paste: null,
+        providerSession: fork ? null : providerSession
+      }
+    })
+    return this.deliverAfterLaunch(launched, false)
+  }
+
   /** Stores the agent CLI's own session ID (and transcript path) so a later resume can pass it back. */
   setProviderSession = (params: Record<string, unknown>): Session => {
     const session = this.require(params.session as string)

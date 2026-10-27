@@ -16,6 +16,7 @@ type Entry = Record<string, unknown>
 const ALLOWED_FIELDS: Record<string, readonly string[]> = {
   'sidebar-section': ['title', 'description', 'order'],
   panel: ['title', 'description', 'order'],
+  'settings-section': ['title', 'description', 'order'],
   view: ['title', 'description'],
   overlay: ['title', 'description', 'order'],
   command: ['title', 'description', 'args'],
@@ -25,7 +26,7 @@ const ALLOWED_FIELDS: Record<string, readonly string[]> = {
 }
 
 const SETTING_TYPES = ['boolean', 'number', 'string', 'enum'] as const
-const TITLE_REQUIRED = new Set(['sidebar-section', 'panel', 'overlay', 'setting', 'theme'])
+const TITLE_REQUIRED = new Set(['sidebar-section', 'panel', 'settings-section', 'overlay', 'setting', 'theme'])
 
 function isNonEmptyString(value: unknown): value is string {
   return typeof value === 'string' && value !== ''
@@ -146,14 +147,15 @@ function checkTheme(label: string, entry: Entry, errors: string[]): void {
   }
 }
 
-/** True for the eight kinds the UI plugin API adds, the ones `checkUiKindEntry` validates. */
+/** True for the nine kinds the UI plugin API adds, the ones `checkUiKindEntry` validates. */
 export function isUiKind(kind: string): boolean {
   return (UI_KINDS as readonly string[]).includes(kind)
 }
 
 /**
- * Checks the fields of a contribution of one of the UI kinds (`sidebar-section`, `panel`, `view`,
- * `overlay`, `command`, `keybinding`, `setting`, `theme`) and appends one message per problem to `errors`.
+ * Checks the fields of a contribution of one of the UI kinds (`sidebar-section`, `panel`,
+ * `settings-section`, `view`, `overlay`, `command`, `keybinding`, `setting`, `theme`) and appends
+ * one message per problem to `errors`.
  * `label` prefixes every message, as for `checkKindEntry`.
  */
 export function checkUiKindEntry(kind: string, label: string, entry: Entry, errors: string[]): void {

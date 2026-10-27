@@ -502,6 +502,112 @@
         }
       },
       {
+        "id": "resumeExternal",
+        "description": "Starts a new terminal session from an agent-owned transcript, preserving its source cwd independently from the optional destination worktree. Launch planning and hooks remain session-owned.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "agent": {
+              "type": "string"
+            },
+            "cwd": {
+              "type": "string",
+              "description": "The existing source working directory; it is not registered as a project."
+            },
+            "providerSession": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "transcriptPath": {
+                  "description": "The source transcript path, or null for providers that resume by ID."
+                }
+              },
+              "required": [
+                "id",
+                "transcriptPath"
+              ]
+            },
+            "worktree": {
+              "type": "string",
+              "description": "Optional destination workspace selector; omitted uses floating ownership."
+            },
+            "record": {
+              "description": "A recorded launch {command,args,env}, or null to use current provider configuration."
+            },
+            "fork": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "agent",
+            "cwd",
+            "providerSession"
+          ]
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "kind": {
+              "type": "string",
+              "enum": [
+                "terminal",
+                "structured"
+              ]
+            },
+            "agent": {
+              "type": "string"
+            },
+            "worktreeId": {
+              "type": "string"
+            },
+            "cwd": {
+              "type": "string"
+            },
+            "title": {
+              "type": "string"
+            },
+            "status": {
+              "type": "string"
+            },
+            "createdAt": {
+              "type": "number"
+            },
+            "lastActivityAt": {
+              "type": "number"
+            },
+            "exitCode": {
+              "description": "The exit code, or null while running."
+            },
+            "launch": {
+              "description": "The actual planner record that was launched."
+            },
+            "providerSession": {
+              "description": "The provider identity passed to the resumed agent, or null for a fork."
+            },
+            "resumedFrom": {
+              "description": "Null because this session came from an agent-owned transcript."
+            }
+          },
+          "required": [
+            "id",
+            "kind",
+            "agent",
+            "worktreeId",
+            "cwd",
+            "title",
+            "status",
+            "createdAt",
+            "lastActivityAt",
+            "exitCode"
+          ]
+        }
+      },
+      {
         "id": "setProviderSession",
         "description": "Stores the agent CLI's own session ID (and transcript path) on a session so it can be resumed.",
         "params": {
