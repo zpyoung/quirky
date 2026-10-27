@@ -3,6 +3,7 @@ import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 import type {
   AgentKind,
+  AgentStatusSummary,
   ExitCause,
   PluginStore,
   PromptDeliveryState,
@@ -33,6 +34,7 @@ type Row = {
   prompt_delivery: PromptDeliveryState | null
   resumed_from: string | null
   launch_settings: string | null
+  agent_status: string | null
 }
 
 function parseJson<T>(text: string | null): T | null {
@@ -62,7 +64,8 @@ const toSession = (row: Row): Session => ({
   providerSession: parseJson<SessionProviderSession>(row.provider_session),
   promptDelivery: row.prompt_delivery,
   launchSettings: parseJson<LaunchSettings>(row.launch_settings),
-  resumedFrom: row.resumed_from
+  resumedFrom: row.resumed_from,
+  agentStatus: parseJson<AgentStatusSummary>(row.agent_status)
 })
 
 const jsonOrNull = (value: unknown) => (value === null || value === undefined ? null : JSON.stringify(value))
@@ -137,6 +140,9 @@ export function sessionMigrations(home: string): StoreMigration[] {
         ALTER TABLE sessions ADD COLUMN exit_cause TEXT;
         ALTER TABLE sessions ADD COLUMN restorable INTEGER NOT NULL DEFAULT 0
       `)
+    },
+    (store) => {
+      store.exec('ALTER TABLE sessions ADD COLUMN agent_status TEXT')
     }
   ]
 }
@@ -171,8 +177,8 @@ export class SessionRecords {
   insert(session: Session, repoId: string | null): void {
     this.store.run(
       `INSERT OR IGNORE INTO sessions (id, kind, agent, worktree_id, cwd, title, status, created_at, last_activity_at, exit_code, repo_id,
-        launch, provider_session, prompt_delivery, resumed_from, launch_settings, exit_signal, exit_cause, restorable)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        launch, provider_session, prompt_delivery, resumed_from, launch_settings, exit_signal, exit_cause, restorable, agent_status)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       session.id,
       session.kind,
       session.agent,
@@ -191,7 +197,8 @@ export class SessionRecords {
       jsonOrNull(session.launchSettings),
       session.exitSignal,
       session.exitCause,
-      session.restorable ? 1 : 0
+      session.restorable ? 1 : 0,
+      jsonOrNull(session.agentStatus)
     )
   }
 
@@ -213,6 +220,7 @@ export class SessionRecords {
       providerSession?: SessionProviderSession | null
       promptDelivery?: PromptDeliveryState | null
       launchSettings?: LaunchSettings | null
+      agentStatus?: AgentStatusSummary | null
     }
   ): Session | null {
     const columns: [string, string | number | null][] = []
@@ -227,6 +235,7 @@ export class SessionRecords {
     if (fields.providerSession !== undefined) columns.push(['provider_session', jsonOrNull(fields.providerSession)])
     if (fields.promptDelivery !== undefined) columns.push(['prompt_delivery', fields.promptDelivery])
     if (fields.launchSettings !== undefined) columns.push(['launch_settings', jsonOrNull(fields.launchSettings)])
+    if (fields.agentStatus !== undefined) columns.push(['agent_status', jsonOrNull(fields.agentStatus)])
     if (columns.length > 0) {
       this.store.run(
         `UPDATE sessions SET ${columns.map(([name]) => `${name} = ?`).join(', ')} WHERE id = ?`,

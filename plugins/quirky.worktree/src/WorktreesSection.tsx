@@ -4,8 +4,8 @@ import { removeWorktree, SESSION_VIEW } from './actions'
 import { AddRepoForm } from './AddRepoForm'
 import { NewWorktreeDialog } from './NewWorktreeDialog'
 import { buildReport, type WorktreesReport } from './report'
-import { StatusDot } from './StatusDot'
-import { worktreeStatus } from './status'
+import { StatusDot, useNow } from './StatusDot'
+import { worktreeGlyph } from './status'
 
 type Props = { context: UiPluginContext; report?(state: unknown): void }
 
@@ -102,12 +102,14 @@ function WorktreeRow({
   context,
   worktree,
   sessions,
-  selected
+  selected,
+  now
 }: {
   context: UiPluginContext
   worktree: Worktree
   sessions: Session[] | null
   selected: boolean
+  now: number
 }) {
   return (
     <li className={`worktree${selected ? ' selected' : ''}`}>
@@ -116,7 +118,7 @@ function WorktreeRow({
         onClick={() => context.openView(SESSION_VIEW, { worktree: worktree.id })}
         title={worktree.path}
       >
-        <StatusDot status={sessions === null ? null : worktreeStatus(sessions, worktree.id)} />
+        <StatusDot glyph={sessions === null ? null : worktreeGlyph(sessions, worktree.id, now)} />
         <span className="worktree-name">{worktree.name}</span>
       </button>
       {!worktree.isMain && (
@@ -138,13 +140,15 @@ function RepoSection({
   repo,
   worktrees,
   sessions,
-  selectedId
+  selectedId,
+  now
 }: {
   context: UiPluginContext
   repo: Repo
   worktrees: Worktree[]
   sessions: Session[] | null
   selectedId: string | null
+  now: number
 }) {
   const [creating, setCreating] = useState(false)
 
@@ -171,6 +175,7 @@ function RepoSection({
             worktree={worktree}
             sessions={sessions}
             selected={worktree.id === selectedId}
+            now={now}
           />
         ))}
       </ul>
@@ -184,6 +189,7 @@ export function WorktreesSection({ context, report }: Props) {
   const { repos, worktrees, sessions, loaded } = useTree(context)
   const [layout, setLayout] = useState(() => context.getLayout())
   const lastReport = useRef('')
+  const now = useNow()
 
   useEffect(() => {
     setLayout(context.getLayout())
@@ -192,8 +198,8 @@ export function WorktreesSection({ context, report }: Props) {
 
   const selectedId = selectedWorktree(layout)
   const state: WorktreesReport = useMemo(
-    () => buildReport(repos, worktrees, sessions, selectedId),
-    [repos, worktrees, sessions, selectedId]
+    () => buildReport(repos, worktrees, sessions, selectedId, now),
+    [repos, worktrees, sessions, selectedId, now]
   )
 
   useEffect(() => {
@@ -216,6 +222,7 @@ export function WorktreesSection({ context, report }: Props) {
             worktrees={worktrees.filter((worktree) => worktree.repoId === repo.id)}
             sessions={sessions}
             selectedId={selectedId}
+            now={now}
           />
         ))}
       </div>
