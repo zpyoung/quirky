@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import type { ClientStream, PluginCaller, PluginContext } from '@quirky/protocol'
+import type { ClientStream, PluginCaller, PluginContext, PluginEvent } from '@quirky/protocol'
 import { TerminalService } from '../src/terminal'
 
 function setup() {
@@ -80,5 +80,50 @@ describe('TerminalService.shutdown', () => {
     t.service.shutdown()
     await expect(t.attach()).rejects.toThrow('shut down')
     expect(t.streams).toHaveLength(0)
+  })
+})
+
+describe('read-only attachments to an ended session', () => {
+  async function attachEnded() {
+    let closed = 0
+    let onClose: () => void = () => {}
+    const unsubscribed: string[] = []
+    const context = {
+      error: (kind: string, message: string) => new Error(`${kind}: ${message}`),
+      log: () => {},
+      call: async () => ({ id: 's1', kind: 'terminal', status: 'exited', restorable: false }),
+      pty: {
+        resize: async () => {},
+        subscribe: async () => ({ replay: '', offset: 0, cols: 80, rows: 24, historyCursor: null, shellState: 'unsupported', live: false }),
+        unsubscribe: async (id: string) => void unsubscribed.push(id)
+      }
+    } as unknown as PluginContext
+    const stream: ClientStream = {
+      streamId: 1,
+      send: () => {},
+      onClose: (callback) => void (onClose = callback),
+      close: () => {
+        closed++
+        if (closed === 1) onClose()
+      }
+    }
+    const caller = { role: 'ui', connection: { id: 1, transport: 'websocket', openStream: () => stream } } as unknown as PluginCaller
+    const service = new TerminalService(context)
+    await service.attach({ session: 's1', cols: 80, rows: 24 }, caller)
+    return { service, closed: () => closed, unsubscribed, caller }
+  }
+
+  test('removing the session closes the stream and frees its handle', async () => {
+    const t = await attachEnded()
+    t.service.onEvent({ type: 'quirky.session/removed', data: { sessionId: 's1' } } as PluginEvent)
+    expect(t.closed()).toBe(1)
+    expect(() => t.service.detach({ streamId: 1 }, t.caller)).toThrow('no such stream')
+  })
+
+  test('shutdown closes the stream and frees its handle', async () => {
+    const t = await attachEnded()
+    t.service.shutdown()
+    expect(t.closed()).toBe(1)
+    expect(() => t.service.detach({ streamId: 1 }, t.caller)).toThrow('no such stream')
   })
 })

@@ -236,7 +236,8 @@
             },
             "lines": {
               "type": "integer",
-              "minimum": 1
+              "minimum": 0,
+              "description": "Lines of scrollback above the screen; 0 reads the visible screen alone."
             }
           }
         },
