@@ -7,6 +7,8 @@ import {
   whenMentions,
   type QuirkyEvent,
   type SettingInfo,
+  type ToastKind,
+  type ToastOptions,
   type UiCommandEntry,
   type UiKeybinding,
   type UiLayout,
@@ -28,7 +30,9 @@ export type HostDeps = {
   onConnection(listener: (status: 'connected' | 'reconnecting') => void): () => void
   /** The shell's confirm dialog; resolves true when the person confirms. */
   confirm(options: { title: string; body?: string; confirmLabel?: string }): Promise<boolean>
-  toast(title: string, body: string, kind: 'info' | 'error'): void
+  toast(title: string, body: string, kind: ToastKind, options?: ToastOptions): void
+  /** Dismisses the toast keyed `key` and runs its `onDismiss`, for the daemon's `ui.toast.dismiss`; nothing happens when none has it. */
+  dismissToast?(key: string): void
   log(message: string): void
   /** Window focus, reported to the daemon so it can pick the window a routed command runs in. */
   windowFocus?: { hasFocus(): boolean; subscribe(listener: (focused: boolean) => void): () => void }
@@ -116,6 +120,9 @@ class NoCommand extends Error {
     super(`no command ${id}`)
   }
 }
+
+/** The routed request id the daemon uses to dismiss a toast; no plugin command can have it. */
+const TOAST_DISMISS = 'ui.toast.dismiss'
 
 const DEFAULT_ACTIVATION_TIMEOUT_MS = 10000
 
@@ -790,7 +797,9 @@ export class WindowPluginHost {
         track(this.deps.onConnection(listener))
       ),
       confirm: live((options: { title: string; body?: string; confirmLabel?: string }) => this.deps.confirm(options)),
-      toast: live((title: string, body: string) => this.deps.toast(title, body, 'info')),
+      toast: live((title: string, body: string, options?: ToastOptions) =>
+        this.deps.toast(title, body, options?.kind ?? 'info', options)
+      ),
       setContext: live((key: string, value: boolean | undefined) => {
         if (value === undefined) {
           this.contextValues.delete(key)
@@ -932,7 +941,7 @@ export class WindowPluginHost {
   private async answerCommand(requestId: string, id: string, args: unknown): Promise<void> {
     let reply: Record<string, unknown>
     try {
-      const result = await this.runCommandForResult(id, args)
+      const result = id === TOAST_DISMISS ? this.dismissToast(args) : await this.runCommandForResult(id, args)
       JSON.stringify(result)
       reply = { requestId, ...(result !== undefined ? { result } : {}) }
     } catch (error) {
@@ -943,6 +952,12 @@ export class WindowPluginHost {
     } catch (error) {
       this.deps.log(`reply to ${id} failed: ${messageOf(error)}`)
     }
+  }
+
+  private dismissToast(args: unknown): null {
+    const key = (args as { key?: unknown } | null)?.key
+    if (typeof key === 'string') this.deps.dismissToast?.(key)
+    return null
   }
 
   private applySetting(id: string, value: boolean | number | string): void {

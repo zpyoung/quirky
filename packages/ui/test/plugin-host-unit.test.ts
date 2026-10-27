@@ -64,6 +64,7 @@ function makeModel(parts: Partial<UiModel> = {}): UiModel {
     commands: [],
     keybindings: [],
     settings: [],
+    menuItems: [],
     themes: [DEFAULT_THEME],
     theme: { chosen: 'default', active: 'default' },
     modules: {},
