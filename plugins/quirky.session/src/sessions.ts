@@ -2,6 +2,7 @@ import { existsSync } from 'node:fs'
 import {
   RpcErrorCode,
   type AgentKind,
+  type LaunchSettings,
   type PluginCaller,
   type PluginContext,
   type PromptDeliveryState,
@@ -31,6 +32,47 @@ export function providerSessionIdProblem(id: string): string | null {
   return null
 }
 
+const isPlainObject = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null && !Array.isArray(value)
+
+/**
+ * Checks a caller-supplied `launchSettings` against the `LaunchSettings` shape and returns a copy
+ * built from the checked fields; the string is the first thing found wrong.
+ */
+export function checkLaunchSettings(value: unknown): { settings: LaunchSettings } | string {
+  if (!isPlainObject(value)) return 'must be an object'
+  const extra = Object.keys(value).find((key) => !['agent', 'options', 'args', 'summary'].includes(key))
+  if (extra !== undefined) return `unknown key "${extra}"`
+  if (typeof value.agent !== 'string' || value.agent === '') return 'agent must be a non-empty string'
+  if (typeof value.summary !== 'string') return 'summary must be a string'
+  if (!isPlainObject(value.options)) return 'options must be an object'
+
+  const options: LaunchSettings['options'] = {}
+  for (const [key, use] of Object.entries(value.options)) {
+    if (!isPlainObject(use)) return `option "${key}" must be an object`
+    if (use.source !== 'explicit' && use.source !== 'extra-args') return `option "${key}" source must be 'explicit' or 'extra-args'`
+    if (use.value !== undefined && typeof use.value !== 'string' && typeof use.value !== 'boolean') {
+      return `option "${key}" value must be a string or boolean`
+    }
+    Object.defineProperty(options, key, {
+      value: { ...(use.value === undefined ? {} : { value: use.value }), source: use.source },
+      enumerable: true,
+      writable: true,
+      configurable: true
+    })
+  }
+
+  const settings: LaunchSettings = { agent: value.agent, options, summary: value.summary }
+  if (value.args !== undefined) {
+    const args = value.args
+    if (!isPlainObject(args)) return 'args must be an object'
+    if (typeof args.value !== 'string') return 'args.value must be a string'
+    if (args.source !== 'explicit' && args.source !== 'inherited') return "args.source must be 'explicit' or 'inherited'"
+    settings.args = { value: args.value, source: args.source }
+  }
+  return { settings }
+}
+
 /** What `quirky.agents/prepareLaunch` returns (see plugins/quirky.agents/src/core/types.ts). */
 type LaunchPlan = {
   command: string
@@ -38,6 +80,7 @@ type LaunchPlan = {
   record: SessionLaunch
   promptDelivery: 'command-line' | 'pending' | null
   paste: { text: string; submit: boolean } | null
+  launchSettings?: LaunchSettings | null
 }
 
 /** What `quirky.agents/get` returns that sessions use. */
@@ -48,9 +91,19 @@ type LaunchSpec = {
   argv: string[]
   envPatch: Record<string, string | null>
   launch: SessionLaunch | null
+  launchSettings: LaunchSettings | null
   promptDelivery: PromptDeliveryState | null
   paste: LaunchPlan['paste']
   providerSession: SessionProviderSession | null
+}
+
+/** The launch-time picks a caller gave, with only the ones present. */
+function picksOf(params: Record<string, unknown>): { model?: string; options?: Record<string, string | boolean>; extraArgs?: string } {
+  return {
+    ...(params.model === undefined ? {} : { model: params.model as string }),
+    ...(params.options === undefined ? {} : { options: params.options as Record<string, string | boolean> }),
+    ...(params.extraArgs === undefined ? {} : { extraArgs: params.extraArgs as string })
+  }
 }
 
 /** The caller's cwd and worktree, which selectors such as `current` resolve against. */
@@ -81,12 +134,17 @@ export class SessionService {
    * close during that window wins: the terminal is never spawned and the call fails. A process
    * that exits before the spawn call returns leaves the session exited, not running. A prompt
    * the agent takes by paste is delivered after the call returns, unless `waitForPrompt` is set.
+   * `model`, `options` and `extraArgs` go to `quirky.agents/prepareLaunch`; a shell takes none of them.
    */
   create = async (params: Record<string, unknown>, caller: PluginCaller): Promise<Session> => {
     const worktree = await this.resolveWorktree(params.worktree, caller)
     const agent = (params.agent as string | undefined) ?? (await this.pickAgent())
     const prompt = params.prompt as string | undefined
     const submitPrompt = (params.submitPrompt as boolean | undefined) ?? true
+    const picks = picksOf(params)
+    if (agent === 'shell' && Object.keys(picks).length > 0) {
+      throw this.context.error('invalid-params', 'Agent shell does not support launch-time model selection.')
+    }
     const title = agent === 'shell' ? 'Shell' : (await this.agentInfo(agent)).label
     const session = this.newRecord(worktree, 'terminal', agent, title)
     const launched = await this.start(session, worktree.repoId, params, prompt, async (additions) => {
@@ -95,6 +153,7 @@ export class SessionService {
           argv: this.context.launch.shellArgv(),
           envPatch: additions.env,
           launch: null,
+          launchSettings: null,
           promptDelivery: null,
           paste: null,
           providerSession: null
@@ -105,6 +164,7 @@ export class SessionService {
         cwd: worktree.path,
         ...(prompt === undefined ? {} : { prompt }),
         submitPrompt,
+        ...picks,
         hookArgs: additions.args,
         hookEnv: additions.env
       })) as LaunchPlan
@@ -112,6 +172,7 @@ export class SessionService {
         argv: this.context.launch.commandArgv(plan.command),
         envPatch: plan.env,
         launch: plan.record,
+        launchSettings: plan.launchSettings ?? null,
         promptDelivery: plan.promptDelivery,
         paste: plan.paste,
         providerSession: null
@@ -122,7 +183,7 @@ export class SessionService {
 
   /**
    * Starts a new terminal session that resumes an agent session in the old session's folder,
-   * replaying the old launch record. The old record is untouched.
+   * replaying the old launch record, whose launch settings carry over. The old record is untouched.
    */
   resume = async (params: Record<string, unknown>): Promise<Session> => {
     const old = this.require(params.session as string)
@@ -146,6 +207,7 @@ export class SessionService {
 
     const session = {
       ...this.newRecord({ id: old.worktreeId, path: old.cwd }, 'terminal', old.agent, info.label),
+      launchSettings: old.launchSettings ?? null,
       resumedFrom: old.id
     }
     const launched = await this.start(session, this.records.repoIdOf(old.id), params, undefined, async (additions) => {
@@ -162,6 +224,7 @@ export class SessionService {
         argv: this.context.launch.commandArgv(resumed.command),
         envPatch: resumed.env,
         launch: resumed.record,
+        launchSettings: old.launchSettings ?? null,
         promptDelivery: null,
         paste: null,
         providerSession: fork ? null : providerSession
@@ -182,10 +245,18 @@ export class SessionService {
     return this.publish(updated)
   }
 
-  /** Records a session that runs without a terminal; its owner reports progress through `setStatus`. */
+  /**
+   * Records a session that runs without a terminal; its owner reports progress through `setStatus`
+   * and may pass the `launchSettings` its launch applied.
+   */
   register = async (params: Record<string, unknown>, caller: PluginCaller): Promise<Session> => {
+    const checked = params.launchSettings === undefined || params.launchSettings === null ? null : checkLaunchSettings(params.launchSettings)
+    if (typeof checked === 'string') throw this.context.error('invalid-params', `launchSettings is malformed: ${checked}`)
     const worktree = await this.resolveWorktree(params.worktree, caller)
-    const session = this.newRecord(worktree, 'structured', params.agent as AgentKind, params.title as string)
+    const session = {
+      ...this.newRecord(worktree, 'structured', params.agent as AgentKind, params.title as string),
+      launchSettings: checked?.settings ?? null
+    }
     this.records.insert(session, worktree.repoId)
     return this.publish(session)
   }
@@ -278,6 +349,7 @@ export class SessionService {
       lastActivityAt: now,
       exitCode: null,
       launch: null,
+      launchSettings: null,
       providerSession: null,
       promptDelivery: null,
       resumedFrom: null
@@ -354,6 +426,7 @@ export class SessionService {
     const keepsSaved = current.providerSession !== null || spec.providerSession === null
     const stored = {
       launch: spec.launch,
+      launchSettings: spec.launchSettings,
       promptDelivery: spec.promptDelivery,
       ...(keepsSaved ? {} : { providerSession: spec.providerSession })
     }

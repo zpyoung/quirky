@@ -816,3 +816,211 @@ describe('delivery', () => {
     })
   })
 })
+
+describe('launch settings', () => {
+  const efforts = (info: any, model: string) =>
+    info.models.find((entry: any) => entry.id === model).options.find((option: any) => option.id === 'effort')?.choices.map((choice: any) => choice.value)
+
+  test('SC-1: options lists Claude\'s four models, each with the efforts it supports', async () => {
+    const t = await start()
+    const info = await t.call(A('options'), { agent: 'claude' })
+    expect(info).toMatchObject({ agent: 'claude', label: 'Claude', supported: true, unlisted: 'accept', structured: true })
+    expect(info.models.map((model: any) => [model.id, model.label, model.description])).toEqual([
+      ['fable', 'Fable', 'Most capable for the hardest, longest-running tasks'],
+      ['opus', 'Opus', 'Best for everyday, complex tasks'],
+      ['sonnet', 'Sonnet', 'Efficient for routine tasks'],
+      ['haiku', 'Haiku', 'Fastest for quick answers']
+    ])
+    expect(efforts(info, 'opus')).toEqual(['low', 'medium', 'high', 'xhigh', 'max'])
+    expect(info.models[1].options[0]).toMatchObject({ id: 'effort', label: 'Effort', type: 'select' })
+    expect(info.models[1].options[0].choices.map((choice: any) => choice.label)).toEqual(['Low', 'Medium', 'High', 'Extra high', 'Max'])
+    expect(info.models[3].options).toEqual([])
+    expect(info.unlistedOptions.map((option: any) => option.id)).toEqual(['effort'])
+    expect(info.unlistedOptions[0].choices.map((choice: any) => choice.value)).toEqual(['low', 'medium', 'high', 'xhigh', 'max'])
+  })
+
+  test('SC-2: Codex\'s effort list stops at each model\'s ceiling', async () => {
+    const t = await start()
+    const info = await t.call(A('options'), { agent: 'codex' })
+    expect(info.models.map((model: any) => model.label)).toEqual(['GPT-5.6 Sol', 'GPT-5.6 Terra', 'GPT-5.6 Luna', 'GPT-5.5', 'GPT-5.2 Codex'])
+    expect(info.models[0].options[0].label).toBe('Reasoning effort')
+    const all = ['minimal', 'low', 'medium', 'high', 'xhigh', 'max', 'ultra']
+    expect(efforts(info, 'gpt-5.6-sol')).toEqual(all)
+    expect(efforts(info, 'gpt-5.6-terra')).toEqual(all)
+    expect(efforts(info, 'gpt-5.6-luna')).toEqual(all.slice(0, 6))
+    expect(efforts(info, 'gpt-5.5')).toEqual(all.slice(0, 5))
+    expect(efforts(info, 'gpt-5.2-codex')).toEqual(all.slice(0, 5))
+  })
+
+  test('SC-3: only the ten catalog agents are supported, and a boolean option has no choices', async () => {
+    const t = await start()
+    const listing = await t.call(A('list'))
+    const supported: string[] = []
+    for (const agent of listing.agents) {
+      const info = await t.call(A('options'), { agent: agent.id })
+      if (info.supported) supported.push(agent.id)
+      else expect(info).toMatchObject({ models: [], unlisted: 'refuse', unlistedOptions: [], structured: false })
+    }
+    expect(supported.sort()).toEqual(['antigravity', 'claude', 'codebuddy', 'codex', 'cursor', 'gemini', 'grok', 'muse', 'omp', 'opencode'])
+    const cursor = await t.call(A('options'), { agent: 'cursor' })
+    const fast = cursor.models.find((model: any) => model.id === 'gpt-5.3-codex').options.find((option: any) => option.id === 'fastMode')
+    expect(fast).toMatchObject({ type: 'boolean', choices: null })
+    expect(await failure(t.call(A('options'), { agent: 'nope' }))).toMatchObject({ code: RpcErrorCode.NotFound, message: 'unknown agent: nope' })
+  })
+
+  test('SC-4: options says which extra arguments each agent accepts', async () => {
+    const t = await start()
+    expect((await t.call(A('options'), { agent: 'claude' })).extraArgs).toEqual({
+      supported: true,
+      allowed: '--model, --effort, --add-dir',
+      placeholder: '--model opus --effort high --add-dir docs',
+      message: null
+    })
+    expect((await t.call(A('options'), { agent: 'codex' })).extraArgs).toEqual({
+      supported: true,
+      allowed: '--model, -c model_reasoning_effort=…',
+      placeholder: '-m model-id -c model_reasoning_effort=high',
+      message: null
+    })
+    expect((await t.call(A('options'), { agent: 'aider' })).extraArgs).toEqual({
+      supported: false,
+      allowed: null,
+      placeholder: null,
+      message: "Extra arguments aren't supported for this agent yet."
+    })
+  })
+
+  test('SC-12: resolveLaunch uses the saved arguments and replaces the configured model flag', async () => {
+    const t = await start()
+    await t.call(A('configure'), { agent: 'codex', args: '--model gpt-5.4 --search' })
+    const result = await t.call(A('resolveLaunch'), { agent: 'codex', model: 'gpt-5.5' })
+    expect(result.args).toBe('--search -m gpt-5.5')
+    expect(result.added).toEqual(['-m', 'gpt-5.5'])
+    expect(result.shadowed).toEqual([])
+    expect(result.launchSettings).toMatchObject({ agent: 'codex', options: { model: { value: 'gpt-5.5', source: 'explicit' } }, summary: 'Codex · GPT-5.5' })
+  })
+
+  test('SC-6: resolveLaunch yields the flags, the structured options and the snapshot', async () => {
+    const t = await start()
+    const result = await t.call(A('resolveLaunch'), { agent: 'claude', model: 'opus', options: { effort: 'high' } })
+    expect(result).toEqual({
+      added: ['--model', 'opus', '--effort', 'high'],
+      args: '--dangerously-skip-permissions --model opus --effort high',
+      structured: { model: 'opus', effort: 'high' },
+      shadowed: [],
+      launchSettings: {
+        agent: 'claude',
+        options: { model: { value: 'opus', source: 'explicit' }, effort: { value: 'high', source: 'explicit' } },
+        args: { value: '--dangerously-skip-permissions', source: 'inherited' },
+        summary: 'Claude · Opus · Effort: high'
+      }
+    })
+  })
+
+  test('SC-8: no pick adds nothing, and a structured resolution has no arguments', async () => {
+    const t = await start()
+    await t.call(A('configure'), { agent: 'claude', args: '' })
+    expect(await t.call(A('resolveLaunch'), { agent: 'claude' })).toEqual({ added: [], args: '', structured: {}, shadowed: [], launchSettings: null })
+    await t.call(A('configure'), { agent: 'claude', reset: ['args'] })
+    expect((await t.call(A('resolveLaunch'), { agent: 'claude' })).launchSettings).toEqual({
+      agent: 'claude',
+      options: {},
+      args: { value: '--dangerously-skip-permissions', source: 'inherited' },
+      summary: 'Claude'
+    })
+    const structured = await t.call(A('resolveLaunch'), { agent: 'claude', model: 'opus', structured: true })
+    expect(structured).toMatchObject({ added: [], args: '', structured: { model: 'opus' } })
+  })
+
+  test('SC-13: extra arguments beat a pick and the result says so', async () => {
+    const t = await start()
+    const result = await t.call(A('resolveLaunch'), { agent: 'claude', model: 'opus', options: { effort: 'low' }, extraArgs: '--effort high --add-dir docs' })
+    expect(result.args).toBe('--dangerously-skip-permissions --effort high --add-dir docs --model opus')
+    expect(result.shadowed).toEqual(['effort'])
+    expect(result.structured).toEqual({ model: 'opus' })
+  })
+
+  test('SC-16: a command override that sets the model fails the launch', async () => {
+    const t = await start()
+    await t.call(A('configure'), { agent: 'claude', command: 'claude --model sonnet' })
+    const message =
+      'Agent command override conflicts with the requested launch preferences. Remove model or effort flags from the command override.'
+    expect(await failure(t.call(A('resolveLaunch'), { agent: 'claude', model: 'opus' }))).toMatchObject({ code: RpcErrorCode.InvalidParams, message })
+    expect(await failure(t.call(A('resolveLaunch'), { agent: 'claude', extraArgs: '--model opus' }))).toMatchObject({ code: RpcErrorCode.InvalidParams, message })
+    expect((await t.call(A('resolveLaunch'), { agent: 'claude' })).added).toEqual([])
+  })
+
+  test('SC-9: refusals are invalid-params with the message unchanged', async () => {
+    const t = await start()
+    const refused = async (params: Record<string, unknown>, message: string) =>
+      expect(await failure(t.call(A('resolveLaunch'), params))).toMatchObject({ code: RpcErrorCode.InvalidParams, message })
+    await refused({ agent: 'claude', options: { effort: 'low' } }, 'effort requires a model')
+    await refused({ agent: 'claude', model: 'haiku', options: { effort: 'low' } }, 'Agent claude model haiku does not support effort low.')
+    await refused({ agent: 'codex', model: 'gpt-5.5', options: { effort: 'ultra' } }, 'Agent codex model gpt-5.5 does not support effort ultra.')
+    await refused({ agent: 'aider', model: 'gpt-4o' }, 'Agent aider does not support launch-time model selection.')
+    await refused({ agent: 'gemini', model: 'gemini-9' }, 'Agent gemini does not support model gemini-9.')
+    await refused({ agent: 'claude', model: 'opus', options: { speed: 'fast' } }, 'Agent claude model opus does not support speed fast.')
+    await refused({ agent: 'cursor', model: 'claude-opus-4-8', options: { thinking: 'maybe' } }, 'Agent cursor model claude-opus-4-8 does not support thinking maybe.')
+    await refused({ agent: 'claude', extraArgs: '--verbose' }, '"--verbose" isn\'t allowed in extra arguments for Claude. Allowed: --model, --effort, --add-dir.')
+    await refused({ agent: 'aider', extraArgs: '--model x' }, "Extra arguments aren't supported for this agent yet.")
+    await refused({ agent: 'claude', model: 'opus', extraArgs: '--add-dir x', structured: true }, "Extra arguments can't be applied to a structured session.")
+    expect(await failure(t.call(A('resolveLaunch'), { agent: 'nope' }))).toMatchObject({ code: RpcErrorCode.NotFound })
+  })
+
+  test('resolveLaunch previews a disabled agent, writes no trust record and emits no change', async () => {
+    const t = await start({ trust: true })
+    await t.call(A('setEnabled'), { agent: 'claude', enabled: false })
+    await settle()
+    const before = t.changes()
+    const result = await t.call(A('resolveLaunch'), { agent: 'claude', model: 'opus' })
+    expect(result.args).toBe('--dangerously-skip-permissions --model opus')
+    await settle()
+    expect(t.changes()).toBe(before)
+    expect(existsSync(join(t.userHome, '.claude.json'))).toBe(false)
+    expect(await failure(t.call(A('prepareLaunch'), { agent: 'claude', cwd: t.userHome, model: 'opus', hookArgs: [], hookEnv: {} }))).toMatchObject({
+      code: RpcErrorCode.InvalidParams,
+      message: 'agent claude is disabled'
+    })
+  })
+
+  test('prepareLaunch and plan carry a pick into the command, the record and launchSettings', async () => {
+    const t = await start()
+    const launch = await t.call(A('prepareLaunch'), {
+      agent: 'claude',
+      cwd: t.userHome,
+      prompt: 'go',
+      model: 'opus',
+      options: { effort: 'high' },
+      hookArgs: ['--settings', '/tmp/s.json'],
+      hookEnv: {}
+    })
+    expect(launch.command).toBe("claude --dangerously-skip-permissions --model opus --effort high --settings /tmp/s.json 'go'")
+    expect(launch.record.args).toBe('--dangerously-skip-permissions --model opus --effort high')
+    expect(launch.launchSettings.summary).toBe('Claude · Opus · Effort: high')
+
+    const plan = await t.call(A('plan'), { agent: 'codex', model: 'gpt-5.5', options: { effort: 'low' }, extraArgs: '--model gpt-5.4' })
+    expect(plan.command).toContain('--model gpt-5.4')
+    expect(plan.command).not.toContain('-m gpt-5.5')
+    expect(plan.launchSettings.options.model).toEqual({ source: 'extra-args' })
+  })
+
+  test('prepareLaunch refuses a bad pick as invalid-params and writes no trust record', async () => {
+    const t = await start({ trust: true })
+    expect(
+      await failure(t.call(A('prepareLaunch'), { agent: 'claude', cwd: t.userHome, model: 'haiku', options: { effort: 'low' }, hookArgs: [], hookEnv: {} }))
+    ).toMatchObject({ code: RpcErrorCode.InvalidParams, message: 'Agent claude model haiku does not support effort low.' })
+    expect(await failure(t.call(A('plan'), { agent: 'claude', extraArgs: '--add-dir $(pwd)' }))).toMatchObject({
+      code: RpcErrorCode.InvalidParams,
+      message: '$(pwd) uses shell syntax that extra arguments don\'t allow.'
+    })
+    expect(existsSync(join(t.userHome, '.claude.json'))).toBe(false)
+  })
+
+  test('prepareLaunch refuses a model with a control character as invalid-params and writes no trust record', async () => {
+    const t = await start({ trust: true })
+    expect(
+      await failure(t.call(A('prepareLaunch'), { agent: 'claude', cwd: t.userHome, model: 'opus\u0000x', hookArgs: [], hookEnv: {} }))
+    ).toMatchObject({ code: RpcErrorCode.InvalidParams, message: "invalid launch selection: the model can't contain control characters" })
+    expect(existsSync(join(t.userHome, '.claude.json'))).toBe(false)
+  })
+})

@@ -15,7 +15,7 @@ import {
 import { startHarness, waitFor, waitForAsync, type Harness } from '../../../packages/daemon/test/helpers'
 import { makeTempDir, removeTempDirs } from '../../../packages/daemon/test/plugins/fixtures'
 import { createClaudeRunner, type ClaudeQueryParams } from '../claude-runner'
-import type { StructuredContext, StructuredRunner, StructuredRunnerFactory } from '../runner'
+import type { StructuredContext, StructuredLaunchOptions, StructuredRunner, StructuredRunnerFactory } from '../runner'
 import { FakeQuery } from './fakes/fake-query'
 import { FakeWorld } from './fakes/world'
 
@@ -24,15 +24,15 @@ const FAKES_DIR = join(PLUGIN_DIR, 'test', 'fakes')
 const globals = globalThis as any
 
 class FakeRunner implements StructuredRunner {
-  started: { session: Session; prompt: string }[] = []
+  started: { session: Session; prompt: string; options?: unknown }[] = []
   sent: { sessionId: string; text: string }[] = []
   stopped: string[] = []
   startError: Error | null = null
   sendError: Error | null = null
   constructor(readonly context: StructuredContext) {}
-  async start(session: Session, prompt: string) {
+  async start(session: Session, prompt: string, options?: StructuredLaunchOptions) {
     if (this.startError) throw this.startError
-    this.started.push({ session, prompt })
+    this.started.push({ session, prompt, options })
     this.context.appendMessage({ sessionId: session.id, role: 'user', text: prompt })
     this.context.setStatus(session.id, 'working')
   }
@@ -58,7 +58,7 @@ const shortHome = () => mkdtempSync('/tmp/qs-')
 function builtinDir(): string {
   const dir = makeTempDir('qs-builtin-')
   symlinkSync(PLUGIN_DIR, join(dir, 'quirky.structured'))
-  for (const id of ['quirky.session', 'quirky.worktree', 'quirky.ask']) symlinkSync(join(FAKES_DIR, id), join(dir, id))
+  for (const id of ['quirky.session', 'quirky.worktree', 'quirky.ask', 'quirky.agents']) symlinkSync(join(FAKES_DIR, id), join(dir, id))
   return dir
 }
 
@@ -193,6 +193,74 @@ describe('structured sessions with a runner', () => {
     await waitForAsync(async () => ((await call('quirky.ask/list', { pendingOnly: true })) as any[])[0])
     await call('quirky.session/close', { session: session.id })
     expect((await pending).status).toBe('declined')
+  })
+
+  test('SC-23: a model and effort pick is resolved, recorded on the session and given to the runner', async () => {
+    const snapshot = {
+      agent: 'claude',
+      options: { model: { value: 'opus', source: 'explicit' }, effort: { value: 'high', source: 'explicit' } },
+      summary: 'Claude · Opus · Effort: high'
+    }
+    world.resolveLaunchOverride = () => ({
+      added: [],
+      args: '',
+      structured: { model: 'opus', effort: 'high' },
+      shadowed: [],
+      launchSettings: snapshot
+    })
+    await call('quirky.structured/create', {
+      worktree: 'main',
+      agent: 'claude',
+      prompt: 'hi',
+      model: 'opus',
+      options: { effort: 'high' }
+    })
+    expect(world.resolveLaunchCalls).toEqual([
+      { agent: 'claude', model: 'opus', options: { effort: 'high' }, structured: true }
+    ])
+    expect(world.registerCalls[0].launchSettings).toEqual(snapshot)
+    await waitFor(() => runner.started.length === 1)
+    expect(runner.started[0].options).toEqual({ model: 'opus', effort: 'high' })
+  })
+
+  test('SC-23: with no pick nothing is resolved and the runner gets no options', async () => {
+    await create()
+    await waitFor(() => runner.started.length === 1)
+    expect(world.resolveLaunchCalls).toEqual([])
+    expect(world.registerCalls[0]).not.toHaveProperty('launchSettings')
+    expect(runner.started[0].options).toEqual({})
+  })
+
+  test('SC-23: a pick that resolves to no snapshot registers without launchSettings', async () => {
+    await call('quirky.structured/create', { worktree: 'main', agent: 'claude', prompt: 'hi', model: 'opus' })
+    expect(world.registerCalls[0]).not.toHaveProperty('launchSettings')
+    await waitFor(() => runner.started.length === 1)
+    expect(runner.started[0].options).toEqual({ model: 'opus' })
+  })
+
+  test('SC-24: extra arguments are refused and nothing is registered', async () => {
+    expect(
+      await failure(call('quirky.structured/create', { worktree: 'main', agent: 'claude', prompt: 'x', extraArgs: '--verbose' }))
+    ).toMatchObject({
+      code: RpcErrorCode.InvalidParams,
+      message: "Extra arguments can't be applied to a structured session."
+    })
+    expect(world.registerCalls).toEqual([])
+    expect(world.resolveLaunchCalls).toEqual([])
+  })
+
+  test('SC-24: a refused pick propagates and nothing is registered', async () => {
+    world.resolveLaunchOverride = (_params, context) => {
+      throw context.error('invalid-params', 'Agent claude does not support launch-time model selection.')
+    }
+    expect(
+      await failure(call('quirky.structured/create', { worktree: 'main', agent: 'claude', prompt: 'x', model: 'opus' }))
+    ).toMatchObject({
+      code: RpcErrorCode.InvalidParams,
+      message: 'Agent claude does not support launch-time model selection.'
+    })
+    expect(world.registerCalls).toEqual([])
+    expect(runner.started).toEqual([])
   })
 
   test('validates agent, worktree and session kind', async () => {
