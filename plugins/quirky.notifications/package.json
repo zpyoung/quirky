@@ -1,0 +1,12 @@
+{
+  "name": "@quirky/plugin-notifications",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@quirky/protocol": "workspace:*"
+  },
+  "devDependencies": {
+    "@quirky/git": "workspace:*"
+  }
+}

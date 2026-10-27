@@ -1,0 +1,338 @@
+{
+  "id": "quirky.notifications",
+  "name": "Notifications",
+  "version": "0.1.0",
+  "description": "Decides when an agent, a bell, a terminal program or an ask deserves attention: unread markers, banners, sounds and the badge count.",
+  "main": "main.ts",
+  "cli": "cli.ts",
+  "activation": "startup",
+  "dependencies": [
+    "quirky.session",
+    "quirky.worktree"
+  ],
+  "contributes": {
+    "setting": [
+      {
+        "id": "enabled",
+        "type": "boolean",
+        "title": "Enable Notifications",
+        "description": "Native system notifications for background events.",
+        "default": true
+      },
+      {
+        "id": "agentTaskComplete",
+        "type": "boolean",
+        "title": "Agent Task Complete",
+        "description": "A coding agent finishes or needs input.",
+        "default": true
+      },
+      {
+        "id": "terminalBell",
+        "type": "boolean",
+        "title": "Terminal Bell",
+        "description": "A background terminal emits a bell character.",
+        "default": false
+      },
+      {
+        "id": "terminalNotifications",
+        "type": "boolean",
+        "title": "Terminal Notifications",
+        "description": "A terminal program sends a notification (OSC 9, 99 or 777).",
+        "default": true
+      },
+      {
+        "id": "sound",
+        "type": "enum",
+        "values": [
+          "system",
+          "two-tone",
+          "bong",
+          "thump",
+          "blip",
+          "sonar",
+          "blop",
+          "ding",
+          "clack",
+          "beep",
+          "custom"
+        ],
+        "title": "Notification Sound",
+        "description": "Choose the alert Quirky plays when a desktop notification is delivered.",
+        "default": "system"
+      },
+      {
+        "id": "customSoundPath",
+        "type": "string",
+        "title": "Custom Sound File",
+        "description": "Absolute path of the audio file played when Notification Sound is Custom; empty means none.",
+        "default": ""
+      },
+      {
+        "id": "volume",
+        "type": "number",
+        "title": "Notification Sound Volume",
+        "description": "How loud the notification sound plays, from 0 to 100.",
+        "default": 100,
+        "minimum": 0,
+        "maximum": 100
+      },
+      {
+        "id": "suppressWhenFocused",
+        "type": "boolean",
+        "title": "Suppress While Focused",
+        "description": "Skip notifications when the triggering worktree is already visible.",
+        "default": true
+      },
+      {
+        "id": "showMenuBarIcon",
+        "type": "boolean",
+        "title": "Show Menu Bar Icon",
+        "description": "Keep a Quirky shortcut and activity indicator in the macOS menu bar.",
+        "default": true
+      }
+    ],
+    "method": [
+      {
+        "id": "status",
+        "description": "The badge count, the unread worktrees and sessions, the pending asks and whether the notification sound is usable.",
+        "readOnly": true,
+        "params": {
+          "type": "object",
+          "properties": {}
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "badge": {
+              "type": "integer",
+              "description": "Unread worktrees plus pending asks."
+            },
+            "label": {
+              "type": "string",
+              "description": "The dock badge text: empty at 0, the number up to 99, 99+ above."
+            },
+            "unreadWorktrees": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": { "type": "string" },
+                  "name": { "type": "string" }
+                },
+                "required": ["id", "name"]
+              }
+            },
+            "unreadSessions": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": { "type": "string" },
+                  "worktreeId": { "type": "string" },
+                  "reason": { "type": "string", "enum": ["agent", "bell", "notification"] }
+                },
+                "required": ["id", "worktreeId", "reason"]
+              }
+            },
+            "pendingAsks": { "type": "integer" },
+            "sound": {
+              "type": "object",
+              "properties": {
+                "ok": { "type": "boolean" },
+                "reason": { "type": "string", "description": "Why the chosen sound cannot play; present when ok is false." }
+              },
+              "required": ["ok"]
+            }
+          },
+          "required": ["badge", "label", "unreadWorktrees", "unreadSessions", "pendingAsks", "sound"]
+        }
+      },
+      {
+        "id": "send",
+        "description": "Sends a program notification through the same markers and gates as a terminal program's.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "body": { "type": "string", "description": "The banner text." },
+            "title": { "type": "string" },
+            "session": { "type": "string", "description": "The session the notification is about." },
+            "worktree": { "type": "string", "description": "The worktree it is about, when no session is named." }
+          },
+          "required": ["body"]
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "delivered": { "type": "boolean" },
+            "reason": {
+              "type": "string",
+              "enum": ["delivered", "disabled", "source-disabled", "suppressed-focus", "cooldown"]
+            }
+          },
+          "required": ["delivered", "reason"]
+        }
+      },
+      {
+        "id": "test",
+        "description": "Sends the test notification, which skips the focus check and the cooldown.",
+        "params": {
+          "type": "object",
+          "properties": {}
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "delivered": { "type": "boolean" },
+            "reason": {
+              "type": "string",
+              "enum": ["delivered", "disabled", "source-disabled", "suppressed-focus", "cooldown"]
+            }
+          },
+          "required": ["delivered", "reason"]
+        }
+      },
+      {
+        "id": "preview",
+        "description": "Plays a notification sound now, without a banner or a marker.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "sound": {
+              "type": "string",
+              "enum": ["system", "two-tone", "bong", "thump", "blip", "sonar", "blop", "ding", "clack", "beep", "custom"],
+              "description": "The sound to play; the chosen Notification Sound when omitted."
+            },
+            "path": { "type": "string", "description": "An absolute audio file path; implies the custom sound." },
+            "volume": { "type": "number", "minimum": 0, "maximum": 100, "description": "The chosen volume when omitted." }
+          }
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "played": { "type": "boolean" },
+            "reason": { "type": "string", "description": "Why nothing played." }
+          },
+          "required": ["played"]
+        }
+      }
+    ],
+    "event": [
+      {
+        "id": "changed",
+        "description": "The status result changed; carries the new badge count.",
+        "data": {
+          "type": "object",
+          "properties": {
+            "badge": { "type": "integer" }
+          },
+          "required": ["badge"]
+        }
+      },
+      {
+        "id": "attention",
+        "description": "An agent, bell or program event wants attention, whatever the notification switches say; the desktop shell lights its tray dot.",
+        "data": {
+          "type": "object",
+          "properties": {
+            "source": { "type": "string", "enum": ["agent", "bell", "program"] },
+            "sessionId": { "description": "The session, or null." },
+            "worktreeId": { "description": "The worktree, or null." }
+          },
+          "required": ["source"]
+        }
+      },
+      {
+        "id": "decided",
+        "description": "What became of an event: the gate that stopped its banner, delivered, or why it was set aside.",
+        "data": {
+          "type": "object",
+          "properties": {
+            "source": { "type": "string", "enum": ["agent", "bell", "program", "ask", "test"] },
+            "sessionId": { "description": "The session, or null." },
+            "worktreeId": { "description": "The worktree, or null." },
+            "result": {
+              "type": "string",
+              "enum": ["delivered", "disabled", "source-disabled", "suppressed-focus", "cooldown", "superseded", "dropped"]
+            }
+          },
+          "required": ["source", "result"]
+        }
+      },
+      {
+        "id": "sound",
+        "description": "A sound preview was requested; the desktop shell plays the file.",
+        "data": {
+          "type": "object",
+          "properties": {
+            "file": { "type": "string" },
+            "volume": { "type": "number" }
+          },
+          "required": ["file", "volume"]
+        }
+      }
+    ],
+    "cli-command": [
+      {
+        "id": "status",
+        "summary": "show the badge count, unread worktrees and sessions, pending asks and the sound check",
+        "methods": [
+          "quirky.notifications/status"
+        ]
+      },
+      {
+        "id": "send",
+        "summary": "send a program notification about a session or a worktree",
+        "flags": {
+          "body": {
+            "type": "string",
+            "description": "the banner text"
+          },
+          "title": {
+            "type": "string",
+            "description": "the banner title"
+          },
+          "session": {
+            "type": "string",
+            "description": "the session the notification is about"
+          },
+          "worktree": {
+            "type": "string",
+            "description": "the worktree it is about, when no session is given"
+          }
+        },
+        "methods": [
+          "quirky.notifications/send",
+          "quirky.worktree/resolve"
+        ]
+      },
+      {
+        "id": "test",
+        "summary": "send the test notification",
+        "methods": [
+          "quirky.notifications/test"
+        ]
+      },
+      {
+        "id": "preview",
+        "summary": "play a notification sound now",
+        "flags": {
+          "sound": {
+            "type": "string",
+            "description": "the sound to play (system, two-tone, bong, thump, blip, sonar, blop, ding, clack, beep or custom)"
+          },
+          "path": {
+            "type": "string",
+            "description": "an absolute audio file path to play as the custom sound"
+          },
+          "volume": {
+            "type": "number",
+            "description": "volume from 0 to 100; default: the chosen volume"
+          }
+        },
+        "methods": [
+          "quirky.notifications/preview"
+        ]
+      }
+    ]
+  }
+}

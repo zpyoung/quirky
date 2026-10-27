@@ -65,6 +65,8 @@ export type PluginContext = {
   openStore(migrations: StoreMigration[]): PluginStore
   /** The current value of a setting: a short name in this plugin's own namespace, or a full setting ID. */
   getSetting(name: string): unknown
+  /** The raw stored value of any setting ID, declared or not, or undefined when none is stored. */
+  storedSettingValue(id: string): unknown
   /** Builds an Error that the RPC layer reports with the code for `kind`. */
   error(kind: PluginErrorKind, message: string): Error
   /** The Quirky home directory. */
