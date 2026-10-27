@@ -44,7 +44,8 @@ const KNOWN_FIELDS = new Set([
   'trust',
   'homepage',
   'install',
-  'windows'
+  'windows',
+  'launchOptions'
 ])
 
 class Invalid extends Error {}
