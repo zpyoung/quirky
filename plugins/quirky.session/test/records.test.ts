@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import type { Session } from '@quirky/protocol'
+import type { AgentStatusSummary, Session } from '@quirky/protocol'
 import { SessionRecords } from '../src/records'
 import { memoryStore, migrateStore } from './memory-store'
 
@@ -26,8 +26,52 @@ const session: Session = {
     args: { value: '--verbose', source: 'explicit' },
     summary: 'Claude · Haiku'
   },
-  resumedFrom: 's_old'
+  resumedFrom: 's_old',
+  agentStatus: null
 }
+
+const summary: AgentStatusSummary = {
+  state: 'working',
+  display: 'working',
+  label: 'Working',
+  detail: 'Editing',
+  progress: 60,
+  stateStartedAt: 5,
+  evidenceAt: 6,
+  restoredUnconfirmed: false
+}
+
+describe('session store migration 5', () => {
+  test('a row written before it reads with a null agent status', () => {
+    const store = memoryStore(4)
+    store.run(
+      "INSERT INTO sessions (id, kind, agent, worktree_id, cwd, title, status, created_at, last_activity_at, exit_code, repo_id) VALUES ('s_old', 'terminal', 'claude', 'wt', '/work', 'Claude', 'running', 1, 1, NULL, 'repo')"
+    )
+    migrateStore(store, 4)
+    expect(new SessionRecords(store).get('s_old')?.agentStatus).toBeNull()
+  })
+
+  test('the summary round-trips through insert and update, and null clears it', () => {
+    const records = new SessionRecords(memoryStore())
+    records.insert({ ...session, agentStatus: summary }, 'repo')
+    expect(records.get('s_new')?.agentStatus).toEqual(summary)
+
+    records.update('s_new', { status: 'working' })
+    expect(records.get('s_new')?.agentStatus).toEqual(summary)
+
+    const next = { ...summary, display: 'monitoring' as const, label: 'Monitoring background tasks' }
+    expect(records.update('s_new', { agentStatus: next })?.agentStatus).toEqual(next)
+    expect(records.update('s_new', { agentStatus: null })?.agentStatus).toBeNull()
+  })
+
+  test('a damaged summary reads as null', () => {
+    const store = memoryStore()
+    const records = new SessionRecords(store)
+    records.insert({ ...session, agentStatus: summary }, 'repo')
+    store.run("UPDATE sessions SET agent_status = '{broken' WHERE id = 's_new'")
+    expect(records.get('s_new')?.agentStatus).toBeNull()
+  })
+})
 
 describe('session store migration 4', () => {
   test('a row written before it reads as not restorable, with no signal or cause', () => {
@@ -78,7 +122,8 @@ describe('session store migration 2', () => {
       providerSession: null,
       promptDelivery: null,
       launchSettings: null,
-      resumedFrom: null
+      resumedFrom: null,
+      agentStatus: null
     })
     expect(records.update('s_old', { status: 'exited', exitCode: 0 })).toMatchObject({ status: 'exited', launch: null })
     expect(records.repoIdOf('s_old')).toBe('repo')
@@ -95,7 +140,7 @@ describe('session store migration 2', () => {
 
   test('a session recorded without the new fields stores them as null', () => {
     const records = new SessionRecords(memoryStore())
-    const { launch, providerSession, promptDelivery, launchSettings, resumedFrom, ...bare } = session
+    const { launch, providerSession, promptDelivery, launchSettings, resumedFrom, agentStatus, ...bare } = session
     records.insert(bare, 'repo')
     expect(records.get('s_new')).toMatchObject({
       launch: null,

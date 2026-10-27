@@ -1,8 +1,10 @@
 import { existsSync, statSync } from 'node:fs'
 import { isAbsolute } from 'node:path'
+import { isDeepStrictEqual } from 'node:util'
 import {
   RpcErrorCode,
   type AgentKind,
+  type AgentStatusSummary,
   type ExitCause,
   type LaunchSettings,
   type PluginCaller,
@@ -38,6 +40,7 @@ export type SessionExit = {
 function exitFields(details: SessionExit) {
   return {
     status: 'exited' as const,
+    agentStatus: null,
     exitCode: details.exitCode,
     exitSignal: details.exitSignal ?? null,
     exitCause: details.exitCause ?? 'exited',
@@ -320,13 +323,19 @@ export class SessionService {
   setStatus = (params: Record<string, unknown>): Session => {
     const before = this.require(params.session as string)
     const status = params.status as SessionStatus
+    const agentStatus = params.agentStatus
+    if (agentStatus !== undefined && agentStatus !== null && !isPlainObject(agentStatus)) {
+      throw this.context.error('invalid-params', 'agentStatus must be an object or null')
+    }
     if (status === 'exited') return this.finish(before.id, { exitCode: (params.exitCode as number | undefined) ?? null }) ?? before
     const updated = this.records.update(before.id, {
       status,
       lastActivityAt: Date.now(),
-      ...(params.exitCode === undefined ? {} : { exitCode: params.exitCode as number })
+      ...(params.exitCode === undefined ? {} : { exitCode: params.exitCode as number }),
+      ...(agentStatus === undefined ? {} : { agentStatus: agentStatus as AgentStatusSummary | null })
     }) as Session
-    if (before.status !== status) this.context.emit('changed', { session: updated })
+    const summaryChanged = agentStatus !== undefined && !isDeepStrictEqual(before.agentStatus ?? null, updated.agentStatus ?? null)
+    if (before.status !== status || summaryChanged) this.context.emit('changed', { session: updated })
     return updated
   }
 
@@ -482,7 +491,8 @@ export class SessionService {
       launchSettings: null,
       providerSession: null,
       promptDelivery: null,
-      resumedFrom: null
+      resumedFrom: null,
+      agentStatus: null
     }
   }
 

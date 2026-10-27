@@ -15,12 +15,17 @@ export type ShellState = 'pending' | 'ready' | 'timed_out' | 'unsupported'
 /** Why a session ended: the process left on its own, was killed on request, or the host went away. */
 export type ExitCause = 'exited' | 'killed' | 'host-restart' | 'host-lost'
 
-/** Something the terminal reported out of band: a bell, a finished command, a new title or a new cwd. */
+/**
+ * Something the terminal reported out of band: a bell, a finished command, a new title or cwd, a
+ * prompt mark, or the body of an OSC 7501 program-status report.
+ */
 export type PtyFact =
   | { kind: 'bell' }
   | { kind: 'command-finished'; exitCode: number | null }
   | { kind: 'title'; title: string }
   | { kind: 'cwd'; cwd: string }
+  | { kind: 'prompt' }
+  | { kind: 'program-status'; body: string }
 
 export type PtySessionInfo = {
   sessionId: string

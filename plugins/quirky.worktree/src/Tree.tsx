@@ -4,7 +4,7 @@ import { changeGroup, copyText, SESSION_VIEW, setWorktree } from './actions'
 import { ContextMenu, groupMenu, projectMenu, STATUS_LABELS, workspaceMenu, type MenuItem } from './Menu'
 import { repoLabel, type DialogState, type GroupNode, type ProjectNode, type TreeModel, type TreeRow } from './report'
 import { StatusDot } from './StatusDot'
-import { worktreeStatus } from './status'
+import { worktreeGlyph } from './status'
 
 export type TreeProps = {
   context: UiPluginContext
@@ -12,6 +12,8 @@ export type TreeProps = {
   groups: ProjectGroup[]
   sessions: Session[] | null
   selectedId: string | null
+  /** The clock agent glyphs are judged stale against. */
+  now: number
   openDialog(dialog: DialogState): void
   /** Starts a delete of `worktree`, with the workspaces nested below it when `descendants` is above 0. */
   requestDelete(worktree: Worktree, descendants: number): void
@@ -28,12 +30,13 @@ type CardProps = {
   childCount: number
   collapsed: boolean
   sessions: Session[] | null
+  now: number
   selected: boolean
   onToggle(): void
   onMenu(worktree: Worktree, x: number, y: number): void
 }
 
-function WorktreeCard({ context, worktree, depth, childCount, collapsed, sessions, selected, onToggle, onMenu }: CardProps) {
+function WorktreeCard({ context, worktree, depth, childCount, collapsed, sessions, now, selected, onToggle, onMenu }: CardProps) {
   const open = () => {
     context.openView(SESSION_VIEW, { worktree: worktree.id })
     if (worktree.unread) void setWorktree(context, worktree.id, { unread: false })
@@ -49,7 +52,7 @@ function WorktreeCard({ context, worktree, depth, childCount, collapsed, session
       }}
     >
       <button className="worktree-main" onClick={open} title={worktree.path}>
-        <StatusDot status={sessions === null ? null : worktreeStatus(sessions, worktree.id)} />
+        <StatusDot glyph={sessions === null ? null : worktreeGlyph(sessions, worktree.id, now)} />
         <span className="worktree-name">{worktree.name}</span>
         {worktree.isMain && <span className="tag tag-primary">primary</span>}
         {worktree.status !== 'in-progress' && <span className="tag tag-status">{STATUS_LABELS[worktree.status]}</span>}
@@ -89,7 +92,7 @@ function PendingCard({ name }: { name: string }) {
 }
 
 /** The workspace tree the sidebar section draws: Pinned, then groups, then ungrouped projects. */
-export function Tree({ context, model, groups, sessions, selectedId, openDialog, requestDelete }: TreeProps) {
+export function Tree({ context, model, groups, sessions, selectedId, now, openDialog, requestDelete }: TreeProps) {
   const [folded, setFolded] = useState<ReadonlySet<string>>(new Set())
   const [menu, setMenu] = useState<OpenMenu | null>(null)
   const descendantsOf = new Map<string, number>()
@@ -148,6 +151,7 @@ export function Tree({ context, model, groups, sessions, selectedId, openDialog,
           childCount={row.childCount}
           collapsed={folded.has(row.worktree.id)}
           sessions={sessions}
+          now={now}
           selected={row.worktree.id === selectedId}
           onToggle={() => toggleFold(row.worktree.id)}
           onMenu={openWorkspaceMenu}
@@ -258,6 +262,7 @@ export function Tree({ context, model, groups, sessions, selectedId, openDialog,
                 childCount={0}
                 collapsed={false}
                 sessions={sessions}
+                now={now}
                 selected={worktree.id === selectedId}
                 onToggle={() => {}}
                 onMenu={openWorkspaceMenu}

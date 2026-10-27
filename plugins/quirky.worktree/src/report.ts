@@ -1,5 +1,5 @@
-import type { ProjectGroup, Repo, Session, Worktree, WorktreeStatus } from '@quirky/protocol'
-import { worktreeStatus, type DisplayStatus } from './status'
+import type { AgentDisplayState, ProjectGroup, Repo, Session, Worktree, WorktreeStatus } from '@quirky/protocol'
+import { worktreeGlyph, worktreeStatus, type DisplayStatus } from './status'
 
 /** A create the window has sent and not yet seen finish; shown as a pending row under its project. */
 export type PendingCreate = { repoId: string; name: string }
@@ -132,6 +132,9 @@ export type WorkspaceReport = {
   primary: boolean
   /** The most urgent session status; null with no sessions or while `quirky.session` is off. */
   status: DisplayStatus | null
+  /** Present when an agent's display state, not the coarse `status`, is what the card draws. */
+  display?: AgentDisplayState
+  label?: string
   workspaceStatus: WorktreeStatus
   pinned: boolean
   unread: boolean
@@ -163,28 +166,35 @@ export type ReportInput = {
   pending: PendingCreate[]
   dialog: DialogState | null
   notices?: NoticeReport[]
+  /** The clock the agent glyph's staleness is judged against; defaults to the current time. */
+  now?: number
 }
 
 /** The report for what the section shows, in tree order. */
 export function buildReport(input: ReportInput): WorktreesReport {
   const { sessions, selectedId } = input
+  const now = input.now ?? Date.now()
   const model = buildTreeModel(input.repos, input.groups, input.worktrees, input.pending)
-  const workspace = ({ worktree, depth }: TreeRow): WorkspaceReport => ({
-    id: worktree.id,
-    name: worktree.name,
-    branch: worktree.branch,
-    kind: worktree.kind,
-    primary: worktree.isMain,
-    status: sessions === null ? null : worktreeStatus(sessions, worktree.id),
-    workspaceStatus: worktree.status,
-    pinned: worktree.pinned,
-    unread: worktree.unread,
-    parentId: worktree.parentId,
-    depth,
-    pending: false,
-    removing: worktree.removing,
-    selected: worktree.id === selectedId
-  })
+  const workspace = ({ worktree, depth }: TreeRow): WorkspaceReport => {
+    const glyph = sessions === null ? null : worktreeGlyph(sessions, worktree.id, now)
+    return {
+      id: worktree.id,
+      name: worktree.name,
+      branch: worktree.branch,
+      kind: worktree.kind,
+      primary: worktree.isMain,
+      status: sessions === null ? null : worktreeStatus(sessions, worktree.id),
+      ...(glyph?.kind === 'agent' ? { display: glyph.display, label: glyph.label } : {}),
+      workspaceStatus: worktree.status,
+      pinned: worktree.pinned,
+      unread: worktree.unread,
+      parentId: worktree.parentId,
+      depth,
+      pending: false,
+      removing: worktree.removing,
+      selected: worktree.id === selectedId
+    }
+  }
   const project = ({ repo, rows, pending }: ProjectNode): ProjectReport => ({
     id: repo.id,
     name: repoLabel(repo),

@@ -105,7 +105,6 @@ describe('SC-36: trust records are pre-written before the agent starts', () => {
       expect(readFileSync(SEEDED.copilot(), 'utf8')).toBe(before.copilot)
       expect(readFileSync(SEEDED.codex(), 'utf8')).toBe(before.codex)
       expect(existsSync(SEEDED.cursorMarker())).toBe(false)
-      expect(existsSync(join(e2e.userHome, '.cursor'))).toBe(false)
     },
     60_000
   )

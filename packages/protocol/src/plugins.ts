@@ -123,6 +123,8 @@ export type PluginPty = {
     ) => void
   ): () => void
   onFact(listener: (sessionId: string, fact: PtyFact) => void): () => void
+  /** Hears every write any plugin makes to a session, as text (invalid UTF-8 decodes lossily). */
+  onInput(listener: (sessionId: string, data: string) => void): () => void
   onReconnect(listener: () => void): () => void
 }
 

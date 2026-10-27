@@ -7,6 +7,7 @@ export type ScanFact =
   | { kind: 'ready' }
   | { kind: 'prompt' }
   | { kind: 'command-start' }
+  | { kind: 'program-status'; body: string }
 
 type State = 'ground' | 'esc' | 'esc-inter' | 'csi' | 'osc' | 'osc-esc' | 'string' | 'string-esc'
 
@@ -222,6 +223,8 @@ export class OutputScanner {
       }
     } else if (code === '133') {
       this.reportPromptMark(rest)
+    } else if (code === '7501') {
+      this.facts.push({ kind: 'program-status', body: rest })
     }
   }
 

@@ -1,12 +1,12 @@
-import { RpcErrorCode, type AgentKind, type QuirkyEvent, type Session, type UiPluginContext, type Worktree } from '@quirky/protocol'
-import { displayStatus, type DisplayStatus } from './status'
+import { RpcErrorCode, type AgentDisplayState, type AgentKind, type QuirkyEvent, type Session, type UiPluginContext, type Worktree } from '@quirky/protocol'
+import { displayStatus, windowDisplay, type DisplayStatus } from './status'
 
 export const WORKTREE_VIEW_ID = 'view:quirky.session/worktree'
 
-/** What the view shows to `ui.state`: the worktree's tabs and the active one. */
+/** What the view shows to `ui.state`: the worktree's tabs and the active one. `display` and `label` are present for a tab drawn from an agent-status summary. */
 export type SessionViewReport = {
   worktree: string
-  tabs: { session: string; title: string; agent: AgentKind; status: DisplayStatus }[]
+  tabs: { session: string; title: string; agent: AgentKind; status: DisplayStatus; display?: AgentDisplayState; label?: string }[]
   active: string | null
 }
 
@@ -100,7 +100,8 @@ export class WorktreeSessions {
         session: session.id,
         title: session.title,
         agent: session.agent,
-        status: displayStatus(session.status)
+        status: displayStatus(session.status),
+        ...(session.agentStatus ? windowDisplay(session.agentStatus, Date.now(), session.status !== 'exited') : {})
       })),
       active: active?.id ?? null
     }

@@ -492,7 +492,14 @@ export const KERNEL_EVENT_SCHEMAS = {
   'hook.received': {
     description: 'An agent hook arrived; delivered to plugin listeners only, never to clients.',
     data: object(
-      { agent: string(), sessionId: string(), payload: { description: 'The hook body.' } },
+      {
+        agent: string(),
+        sessionId: string(),
+        payload: { description: 'The hook body.' },
+        agentPid: integer(1, 'The agent process that ran the hook, when the shim reported it.'),
+        agentStart: string('That process start time (ps lstart, UTC).'),
+        event: string('The hook event name when the payload carries none.')
+      },
       ['agent', 'sessionId']
     )
   }

@@ -1,7 +1,7 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, mock, test } from 'bun:test'
 import { act } from 'react'
 import { GlobalRegistrator } from '@happy-dom/global-registrator'
-import { bytesToBase64, RpcError, RpcErrorCode, type QuirkyEvent } from '@quirky/protocol'
+import { bytesToBase64, RpcError, RpcErrorCode, type AgentDisplayState, type AgentStatusSummary, type QuirkyEvent } from '@quirky/protocol'
 import { resetSessionMemory } from '../src/window/model'
 import manifest from '../quirky-plugin.json'
 import {
@@ -806,5 +806,128 @@ describe('structured sessions', () => {
       await settle()
       expect(view.element.textContent).toContain('Structured sessions are off')
     })
+  })
+})
+
+describe('agent status glyphs', () => {
+  const MIN = 60_000
+  const summary = (display: AgentDisplayState, label: string, over: Partial<AgentStatusSummary> = {}): AgentStatusSummary => ({
+    state: display === 'done' || display === 'failed' || display === 'interrupted' ? 'done' : 'working',
+    display,
+    label,
+    detail: '',
+    progress: null,
+    stateStartedAt: Date.now(),
+    evidenceAt: Date.now(),
+    restoredUnconfirmed: false,
+    ...over
+  })
+  const glyphOf = (view: Awaited<ReturnType<typeof open>>, index = 0) =>
+    view.tabs()[index]!.querySelector('.glyph') as HTMLElement | null
+
+  const states: [AgentDisplayState, string][] = [
+    ['working', 'Working'],
+    ['monitoring', 'Monitoring background tasks'],
+    ['waiting', 'Waiting for input'],
+    ['permission', 'Needs attention'],
+    ['blocked', 'Blocked'],
+    ['failed', 'Failed'],
+    ['interrupted', 'Interrupted'],
+    ['done', 'Done'],
+    ['unverifiable', 'No recent update'],
+    ['idle', 'Idle'],
+    ['unconfirmed', "Couldn't confirm"]
+  ]
+
+  for (const [display, label] of states) {
+    test(`SC-34: ${display} draws glyph-${display} with the label "${label}"`, async () => {
+      start([session({ id: 's1', status: 'working', agentStatus: summary(display, label) })])
+      const view = await open({ worktree: WORKTREE.id })
+      const glyph = glyphOf(view)!
+      expect(glyph.className).toBe(`glyph glyph-${display}`)
+      expect(glyph.getAttribute('title')).toBe(label)
+      expect(glyph.getAttribute('aria-label')).toBe(label)
+      expect(view.tabs()[0]!.querySelector('.dot')).toBeNull()
+      expect((view.lastReport() as { tabs: object[] }).tabs[0]).toMatchObject({ status: 'working', display, label })
+    })
+  }
+
+  test('a session with no summary keeps the coarse dot and reports no display', async () => {
+    start([session({ id: 's1', status: 'waiting' })])
+    const view = await open({ worktree: WORKTREE.id })
+    expect(view.tabs()[0]!.querySelector('.dot-waiting')).not.toBeNull()
+    expect(glyphOf(view)).toBeNull()
+    expect((view.lastReport() as { tabs: object[] }).tabs[0]).not.toHaveProperty('display')
+  })
+
+  test('the glyph follows the session events', async () => {
+    const s1 = session({ id: 's1', status: 'working', agentStatus: summary('working', 'Working') })
+    start([s1])
+    const view = await open({ worktree: WORKTREE.id })
+    expect(glyphOf(view)!.className).toContain('glyph-working')
+    await fake.emit({ type: 'quirky.session/changed', data: { session: { ...s1, status: 'waiting', agentStatus: summary('waiting', 'Waiting for input') } } })
+    expect(glyphOf(view)!.className).toContain('glyph-waiting')
+    expect(glyphOf(view)!.getAttribute('aria-label')).toBe('Waiting for input')
+    await fake.emit({ type: 'quirky.session/changed', data: { session: { ...s1, status: 'done', agentStatus: summary('done', 'Done') } } })
+    expect(glyphOf(view)!.className).toContain('glyph-done')
+  })
+
+  test('SC-36: progress replaces the spinner and the question icon with a ring', async () => {
+    start([
+      session({ id: 's1', status: 'working', agentStatus: summary('working', 'Working', { progress: 60 }) }),
+      session({ id: 's2', status: 'waiting', agentStatus: summary('waiting', 'Waiting for input', { progress: 25 }) }),
+      session({ id: 's3', status: 'working', agentStatus: summary('monitoring', 'Monitoring background tasks', { progress: 50 }) }),
+      session({ id: 's4', status: 'done', agentStatus: summary('done', 'Done', { progress: 100 }) })
+    ])
+    const view = await open({ worktree: WORKTREE.id })
+    expect(glyphOf(view, 0)!.className).toBe('glyph glyph-working glyph-ring')
+    expect(glyphOf(view, 0)!.style.getPropertyValue('--progress')).toBe('60%')
+    expect(glyphOf(view, 1)!.className).toBe('glyph glyph-waiting glyph-ring')
+    expect(glyphOf(view, 1)!.style.getPropertyValue('--progress')).toBe('25%')
+    expect(glyphOf(view, 0)!.getAttribute('aria-label')).toBe('Working')
+    expect(glyphOf(view, 2)!.className).toBe('glyph glyph-monitoring')
+    expect(glyphOf(view, 3)!.className).toBe('glyph glyph-done')
+  })
+
+  test('an unfinished state with no evidence for 30 minutes decays, and a done one does not', async () => {
+    const stale = Date.now() - 31 * MIN
+    start([
+      session({ id: 's1', status: 'working', agentStatus: summary('working', 'Working', { evidenceAt: stale }) }),
+      session({ id: 's2', status: 'working', agentStatus: summary('waiting', 'Waiting for input', { evidenceAt: stale, progress: 40 }) }),
+      session({ id: 's3', status: 'done', agentStatus: summary('done', 'Done', { evidenceAt: stale }) }),
+      session({ id: 's4', status: 'exited', agentStatus: summary('working', 'Working', { evidenceAt: stale }) })
+    ])
+    const view = await open({ worktree: WORKTREE.id })
+    expect(glyphOf(view, 0)!.className).toBe('glyph glyph-unverifiable')
+    expect(glyphOf(view, 0)!.getAttribute('title')).toBe('No recent update')
+    expect(glyphOf(view, 1)!.className).toBe('glyph glyph-unverifiable')
+    expect(glyphOf(view, 2)!.className).toBe('glyph glyph-done')
+    expect(glyphOf(view, 3)!.className).toBe('glyph glyph-idle')
+    expect(glyphOf(view, 3)!.getAttribute('aria-label')).toBe('Idle')
+  })
+
+  test('a one-minute tick shows decay with no event', async () => {
+    const realNow = Date.now
+    const realSetInterval = globalThis.setInterval
+    const ticks: (() => void)[] = []
+    globalThis.setInterval = ((callback: () => void, ms?: number) => {
+      if (ms === MIN) {
+        ticks.push(callback)
+        return 0
+      }
+      return realSetInterval(callback, ms)
+    }) as typeof setInterval
+    try {
+      const t0 = realNow()
+      start([session({ id: 's1', status: 'working', agentStatus: summary('working', 'Working', { evidenceAt: t0 - 29 * MIN }) })])
+      const view = await open({ worktree: WORKTREE.id })
+      expect(glyphOf(view)!.className).toBe('glyph glyph-working')
+      Date.now = () => t0 + 2 * MIN
+      await act(async () => ticks.forEach((tick) => tick()))
+      expect(glyphOf(view)!.className).toBe('glyph glyph-unverifiable')
+    } finally {
+      Date.now = realNow
+      globalThis.setInterval = realSetInterval
+    }
   })
 })

@@ -11,6 +11,7 @@ import { ParentDialog } from './ParentDialog'
 import { ProjectSettingsDialog } from './ProjectSettingsDialog'
 import { RemoveProjectDialog } from './RemoveProjectDialog'
 import { buildReport, buildTreeModel, isAddFlow, repoLabel, type DialogState, type PendingCreate, type WorktreesReport } from './report'
+import { useNow } from './StatusDot'
 import { Tree } from './Tree'
 import { TrustDialog } from './TrustDialog'
 import { UpdateDialog } from './UpdateDialog'
@@ -32,6 +33,7 @@ function selectedWorktree(layout: UiLayout): string | null {
 /** The sidebar's workspace tree with its menus, dialogs, add-project form and `ui state` report. */
 export function WorktreesSection({ context, report, requests }: Props) {
   const { repos, groups, worktrees, sessions, loaded } = useTree(context)
+  const now = useNow()
   const [layout, setLayout] = useState(() => context.getLayout())
   const [dialog, setDialog] = useState<DialogState | null>(null)
   const [pending, setPending] = useState<PendingCreate[]>([])
@@ -78,10 +80,11 @@ export function WorktreesSection({ context, report, requests }: Props) {
       sessions,
       selectedId,
       pending,
+      now,
       dialog: front,
       notices: kept.map((k) => ({ kind: 'kept-branch', branch: k.branch, repoId: k.repoId }))
     })
-  }, [repos, groups, shown, sessions, selectedId, pending, dialog, trust, fallbacks, kept])
+  }, [repos, groups, shown, sessions, selectedId, pending, dialog, trust, fallbacks, kept, now])
 
   useEffect(() => {
     if (!loaded) return
@@ -163,6 +166,7 @@ export function WorktreesSection({ context, report, requests }: Props) {
           groups={groups}
           sessions={sessions}
           selectedId={selectedId}
+          now={now}
           openDialog={setDialog}
           requestDelete={requestDelete}
         />

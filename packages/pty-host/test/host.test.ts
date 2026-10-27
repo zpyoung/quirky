@@ -292,6 +292,42 @@ describe('terminal queries', () => {
   })
 })
 
+describe('program status', () => {
+  const askForProgramStatus = (reply: string) =>
+    sh(
+      `sleep 0.3; stty raw -echo; printf '\\033]7501;?\\007'; dd bs=1 count=${reply.length} 2>/dev/null | od -An -c | tr -s ' '; sleep 1`
+    )
+  const REPLY = '\x1b]7501;?:states=idle,working,done,blocked,error:kinds=permission,question,auth\x1b\\'
+
+  test('a ? body gets the capability reply on the program input while nobody is subscribed', async () => {
+    const host = startHost()
+    const client = await host.connect()
+    await client.request('create', createParams('ps', askForProgramStatus(REPLY)))
+    await waitFor(async () => (await logText(host, 'ps')).includes('033 ] 7 5 0 1 ; ? : s t a t'), 5000, 'program saw the reply')
+  })
+
+  test('the reply is written even while a subscriber is attached', async () => {
+    const host = startHost()
+    const client = await host.connect()
+    await client.request('create', createParams('ps2', askForProgramStatus(REPLY)))
+    await client.request('subscribe', { sessionId: 'ps2' })
+    await waitFor(async () => (await logText(host, 'ps2')).includes('033 ] 7 5 0 1 ; ? : s t a t'), 5000, 'program saw the reply')
+  })
+
+  test('reports program-status and prompt facts', async () => {
+    const host = startHost()
+    const client = await host.connect()
+    const seen = events(client)
+    await client.request(
+      'create',
+      createParams('pf', sh(`printf '\\033]133;A\\007\\033]7501;v=1;state=working\\007'; sleep 5`))
+    )
+    await waitFor(() => seen.filter((e) => e.type === 'fact').length >= 2, 5000, 'facts')
+    const facts = seen.flatMap((e) => (e.type === 'fact' ? [e.fact] : []))
+    expect(facts).toEqual([{ kind: 'prompt' }, { kind: 'program-status', body: 'v=1;state=working' }])
+  })
+})
+
 describe('read', () => {
   async function readUntil(
     client: PtyClient,
