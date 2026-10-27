@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
-import { QuirkyClient, type ApiDescription, type CliContext, type Session } from '@quirky/protocol'
+import { QuirkyClient, type ApiDescription, type CliContext, type LaunchSettings, type Session } from '@quirky/protocol'
 import { rpcUrl } from '@quirky/protocol/node'
 import { runCli } from '../../../packages/cli/test/fixtures/fake-daemon'
 import type { Harness } from '../../../packages/daemon/test/helpers'
@@ -251,6 +251,7 @@ describe('the CLI catalog', () => {
     const own = api.cli.commands.filter((c) => c.plugin === 'quirky.session')
     expect(own.map((c) => c.words).sort()).toEqual([
       'session close',
+      'session get',
       'session list',
       'session new',
       'session resume',
@@ -266,10 +267,16 @@ describe('the CLI catalog', () => {
       'agent',
       'background',
       'draft',
+      'effort',
+      'extra-args',
+      'model',
+      'option',
       'prompt',
       'wait',
       'worktree'
     ])
+    expect(own.find((c) => c.words === 'session new')!.flags.find((f) => f.name === 'option')).toMatchObject({ type: 'string', repeatable: true })
+    expect(own.find((c) => c.words === 'session get')).toMatchObject({ methods: ['quirky.session/get'], positionals: [{ name: 'session', required: true }] })
     expect(own.find((c) => c.words === 'session new')!.flags.find((f) => f.name === 'agent')!.required).toBeFalsy()
     expect(api.methods.find((m) => m.name === 'quirky.session/list')).toMatchObject({ readOnly: true })
     expect(api.methods.find((m) => m.name === 'quirky.session/get')).toMatchObject({ readOnly: true })
@@ -298,8 +305,232 @@ describe('the CLI catalog', () => {
 
   test('generated commands reach the session methods through the real CLI', async () => {
     const session = await createSession(client, { worktree: 'id:wt_main', agent: 'shell' })
-    const result = await runCli(['session', 'get', '--session', session.id, '--json'], { home: h.home })
+    const result = await runCli(['session', 'get', session.id, '--json'], { home: h.home })
     expect(result.code).toBe(0)
     expect(JSON.parse(result.stdout)).toEqual(session)
+  })
+
+  test('SC-20: the launch flags run through the real CLI, and a shell with a pick is refused', async () => {
+    const refused = await runCli(['session', 'new', '--agent', 'shell', '--worktree', 'id:wt_main', '--model', 'opus', '--option', 'a=b'], {
+      home: h.home
+    })
+    expect(refused.code).not.toBe(0)
+    expect(refused.stderr).toContain('Agent shell does not support launch-time model selection.')
+    expect(await call(client, 'quirky.session/list')).toEqual([])
+
+    const usage = await runCli(['session', 'new', '--agent', 'claude', '--effort', 'low'], { home: h.home })
+    expect(usage.code).not.toBe(0)
+    expect(usage.stderr).toContain('--effort requires --model')
+  })
+})
+
+const settings: LaunchSettings = {
+  agent: 'claude',
+  options: { model: { value: 'opus', source: 'explicit' }, effort: { value: 'high', source: 'explicit' } },
+  args: { value: '--add-dir docs', source: 'explicit' },
+  summary: 'Claude · Opus · Effort: high'
+}
+
+describe('session get', () => {
+  test('prints the record rows, then the launch summary and arguments when the session has launch settings', async () => {
+    const registered = await call<Session>(client, 'quirky.session/register', {
+      worktree: 'id:wt_main',
+      agent: 'claude',
+      kind: 'structured',
+      title: 'Claude',
+      launchSettings: settings
+    })
+    const { ctx, lines } = testCliContext(client)
+    await run('get', ctx, [registered.id])
+    expect(lines[0]).toBe(
+      [
+        `id: ${registered.id}`,
+        'agent: claude',
+        'kind: structured',
+        'status: starting',
+        'worktree: wt_main',
+        'launch: Claude · Opus · Effort: high',
+        'launch args: --add-dir docs'
+      ].join('\n')
+    )
+  })
+
+  test('SC-22: a session without launch settings prints no launch row', async () => {
+    const session = await createSession(client, { worktree: 'id:wt_main', agent: 'claude' })
+    const { ctx, lines } = testCliContext(client)
+    await run('get', ctx, [session.id])
+    expect(lines[0]).not.toContain('launch')
+  })
+
+  test('launch args is left out when the snapshot has none', async () => {
+    const { args: _args, ...withoutArgs } = settings
+    const registered = await call<Session>(client, 'quirky.session/register', {
+      worktree: 'id:wt_main',
+      agent: 'claude',
+      kind: 'structured',
+      title: 'Claude',
+      launchSettings: withoutArgs
+    })
+    const { ctx, lines } = testCliContext(client)
+    await run('get', ctx, [registered.id])
+    expect(lines[0]!.split('\n').slice(-1)).toEqual(['launch: Claude · Opus · Effort: high'])
+  })
+
+  test('--json prints the Session with its launchSettings', async () => {
+    const registered = await call<Session>(client, 'quirky.session/register', {
+      worktree: 'id:wt_main',
+      agent: 'claude',
+      kind: 'structured',
+      title: 'Claude',
+      launchSettings: settings
+    })
+    const { ctx, lines } = testCliContext(client, { json: true })
+    await run('get', ctx, [registered.id])
+    expect(JSON.parse(lines[0]!)).toEqual(registered)
+    expect(JSON.parse(lines[0]!).launchSettings).toEqual(settings)
+  })
+
+  test('needs a session, and an unknown one is the daemon\'s error', async () => {
+    const { ctx } = testCliContext(client)
+    expect(await failure(run('get', ctx))).toMatchObject({ message: 'missing <session>', kind: 'usage' })
+    expect((await failure(run('get', ctx, ['s_nope']))).message).toBe('no such session: s_nope')
+  })
+})
+
+/** A context whose calls are recorded and answered with `session`, for the CLI's own logic. */
+function stubbed(session: Session) {
+  const calls: { method: string; params: Record<string, unknown> }[] = []
+  const { ctx, lines } = testCliContext(client)
+  return {
+    calls,
+    lines,
+    ctx: {
+      ...ctx,
+      call: async (method: string, params: Record<string, unknown> = {}) => {
+        calls.push({ method, params })
+        return session
+      }
+    } as CliContext
+  }
+}
+
+const sessionWith = (launchSettings: LaunchSettings | null): Session => ({
+  id: 's_x',
+  kind: 'terminal',
+  agent: 'claude',
+  worktreeId: 'wt_main',
+  cwd: '/work',
+  title: 'Claude',
+  status: 'running',
+  createdAt: 1,
+  lastActivityAt: 1,
+  exitCode: null,
+  promptDelivery: null,
+  launchSettings
+})
+
+describe('session new launch flags', () => {
+  test('SC-18: prints the launch summary and arguments before the prompt row', async () => {
+    const { ctx, lines } = stubbed(sessionWith(settings))
+    await run('new', ctx, [], { agent: 'claude', model: 'opus', effort: 'high' })
+    expect(lines[0]).toBe(
+      [
+        'id: s_x',
+        'agent: claude',
+        'kind: terminal',
+        'status: running',
+        'worktree: wt_main',
+        'launch: Claude · Opus · Effort: high',
+        'launch args: --add-dir docs',
+        'prompt: none'
+      ].join('\n')
+    )
+  })
+
+  test('prints no launch row without launch settings', async () => {
+    const { ctx, lines } = stubbed(sessionWith(null))
+    await run('new', ctx, [], { agent: 'claude' })
+    expect(lines[0]).not.toContain('launch')
+  })
+
+  test('maps --model, --effort, --option and --extra-args onto the create params', async () => {
+    const { ctx, calls } = stubbed(sessionWith(null))
+    await run('new', ctx, [], {
+      agent: 'claude',
+      model: 'opus',
+      effort: 'high',
+      option: ['fastMode=true', 'thinking=false', 'speed=a=b', 'tier=fast'],
+      'extra-args': '--add-dir docs'
+    })
+    expect(calls).toEqual([
+      {
+        method: 'quirky.session/create',
+        params: {
+          agent: 'claude',
+          model: 'opus',
+          options: { effort: 'high', fastMode: true, thinking: false, speed: 'a=b', tier: 'fast' },
+          extraArgs: '--add-dir docs'
+        }
+      }
+    ])
+  })
+
+  test('sends no pick params when no launch flag is given', async () => {
+    const { ctx, calls } = stubbed(sessionWith(null))
+    await run('new', ctx, [], { agent: 'claude' })
+    expect(Object.keys(calls[0]!.params)).toEqual(['agent'])
+  })
+
+  test('--background passes the same params to quirky.structured/create', async () => {
+    const { ctx, calls } = stubbed(sessionWith(null))
+    await run('new', ctx, [], { agent: 'claude', prompt: 'go', background: true, model: 'opus', effort: 'high', 'extra-args': '--x' })
+    expect(calls).toEqual([
+      {
+        method: 'quirky.structured/create',
+        params: { agent: 'claude', prompt: 'go', model: 'opus', options: { effort: 'high' }, extraArgs: '--x' }
+      }
+    ])
+  })
+
+  test('an option key that is a prototype name stays an own key', async () => {
+    const { ctx, calls } = stubbed(sessionWith(null))
+    await run('new', ctx, [], { agent: 'claude', model: 'opus', option: ['__proto__=x'] })
+    const options = calls[0]!.params.options as Record<string, unknown>
+    expect(Object.keys(options)).toEqual(['__proto__'])
+    expect(Object.getPrototypeOf(options)).toBeNull()
+  })
+
+  test('SC-9: usage errors are raised before any call, naming the problem', async () => {
+    const cases: [Record<string, unknown>, string][] = [
+      [{ effort: 'low' }, '--effort requires --model'],
+      [{ option: ['fastMode=true'] }, '--option requires --model'],
+      [{ model: 'opus', effort: 'low', option: ['effort=high'] }, 'effort is set by both --effort and --option effort=…'],
+      [{ model: 'opus', option: ['speed=a', 'speed=b'] }, '--option speed given more than once'],
+      [{ model: 'opus', option: ['=fast'] }, '--option needs a key before "=", got "=fast"'],
+      [{ model: 'opus', option: ['speed'] }, '--option expects KEY=VALUE, got "speed"']
+    ]
+    for (const [flags, message] of cases) {
+      const { ctx, calls } = stubbed(sessionWith(null))
+      expect(await failure(run('new', ctx, [], { agent: 'claude', ...flags }))).toMatchObject({ message, kind: 'usage' })
+      expect(calls).toEqual([])
+    }
+  })
+
+  test('--extra-args alone needs no model, and a model alone sends no options', async () => {
+    const { ctx, calls } = stubbed(sessionWith(null))
+    await run('new', ctx, [], { agent: 'claude', 'extra-args': '--add-dir docs' })
+    await run('new', ctx, [], { agent: 'claude', model: 'opus' })
+    expect(calls.map((c) => c.params)).toEqual([
+      { agent: 'claude', extraArgs: '--add-dir docs' },
+      { agent: 'claude', model: 'opus' }
+    ])
+  })
+
+  test('SC-20: a shell with a pick is refused by the daemon and no session appears', async () => {
+    const { ctx } = testCliContext(client)
+    expect((await failure(run('new', ctx, [], { agent: 'shell', model: 'opus', worktree: 'id:wt_main' }))).message).toBe(
+      'Agent shell does not support launch-time model selection.'
+    )
+    expect(await call(client, 'quirky.session/list')).toEqual([])
   })
 })

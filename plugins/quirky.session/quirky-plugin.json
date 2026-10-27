@@ -77,6 +77,9 @@
               "launch": {
                 "description": "What the session launched with ({command, args, env}); null for a shell or a session recorded before launches were kept."
               },
+              "launchSettings": {
+                "description": "What the launch applied ({agent, options, args, summary}); null when it applied nothing."
+              },
               "providerSession": {
                 "description": "The agent CLI's own session ({id, transcriptPath}) that resume passes back; null until one is stored."
               },
@@ -167,6 +170,9 @@
             "launch": {
               "description": "What the session launched with ({command, args, env}); null for a shell or a session recorded before launches were kept."
             },
+            "launchSettings": {
+              "description": "What the launch applied ({agent, options, args, summary}); null when it applied nothing."
+            },
             "providerSession": {
               "description": "The agent CLI's own session ({id, transcriptPath}) that resume passes back; null until one is stored."
             },
@@ -224,6 +230,19 @@
             "rows": {
               "type": "integer",
               "minimum": 1
+            },
+            "model": {
+              "type": "string",
+              "description": "Model to launch the agent with (1 to 128 characters); a shell takes none. Checked against the agent's catalog."
+            },
+            "options": {
+              "type": "object",
+              "additionalProperties": true,
+              "description": "Option picks for the model, such as {effort: \"high\"}: up to 16 entries whose values are strings or booleans. Needs `model`."
+            },
+            "extraArgs": {
+              "type": "string",
+              "description": "Extra agent arguments the agent's allowlist permits, such as \"--add-dir docs\"."
             }
           }
         },
@@ -275,6 +294,9 @@
             },
             "launch": {
               "description": "What the session launched with ({command, args, env}); null for a shell or a session recorded before launches were kept."
+            },
+            "launchSettings": {
+              "description": "What the launch applied ({agent, options, args, summary}); null when it applied nothing."
             },
             "providerSession": {
               "description": "The agent CLI's own session ({id, transcriptPath}) that resume passes back; null until one is stored."
@@ -376,6 +398,9 @@
             "launch": {
               "description": "What the session launched with ({command, args, env}); null for a shell or a session recorded before launches were kept."
             },
+            "launchSettings": {
+              "description": "What the launch applied ({agent, options, args, summary}); null when it applied nothing."
+            },
             "providerSession": {
               "description": "The agent CLI's own session ({id, transcriptPath}) that resume passes back; null until one is stored."
             },
@@ -473,6 +498,9 @@
             "launch": {
               "description": "What the session launched with ({command, args, env}); null for a shell or a session recorded before launches were kept."
             },
+            "launchSettings": {
+              "description": "What the launch applied ({agent, options, args, summary}); null when it applied nothing."
+            },
             "providerSession": {
               "description": "The agent CLI's own session ({id, transcriptPath}) that resume passes back; null until one is stored."
             },
@@ -519,6 +547,11 @@
             },
             "title": {
               "type": "string"
+            },
+            "launchSettings": {
+              "type": "object",
+              "additionalProperties": true,
+              "description": "What the launch applied ({agent, options, args, summary}); stored on the session."
             }
           },
           "required": [
@@ -575,6 +608,9 @@
             },
             "launch": {
               "description": "What the session launched with ({command, args, env}); null for a shell or a session recorded before launches were kept."
+            },
+            "launchSettings": {
+              "description": "What the launch applied ({agent, options, args, summary}); null when it applied nothing."
             },
             "providerSession": {
               "description": "The agent CLI's own session ({id, transcriptPath}) that resume passes back; null until one is stored."
@@ -705,6 +741,9 @@
             },
             "launch": {
               "description": "What the session launched with ({command, args, env}); null for a shell or a session recorded before launches were kept."
+            },
+            "launchSettings": {
+              "description": "What the launch applied ({agent, options, args, summary}); null when it applied nothing."
             },
             "providerSession": {
               "description": "The agent CLI's own session ({id, transcriptPath}) that resume passes back; null until one is stored."
@@ -972,6 +1011,21 @@
         ]
       },
       {
+        "id": "get",
+        "words": "get",
+        "summary": "show one session",
+        "positionals": [
+          {
+            "name": "session",
+            "description": "the session",
+            "required": true
+          }
+        ],
+        "methods": [
+          "quirky.session/get"
+        ]
+      },
+      {
         "id": "new",
         "words": "new",
         "summary": "start a session (any agent from `quirky agents list`, or shell); --background runs a structured session",
@@ -999,6 +1053,23 @@
           "draft": {
             "type": "boolean",
             "description": "leave the prompt in the agent's input without submitting it"
+          },
+          "model": {
+            "type": "string",
+            "description": "model to launch the agent with"
+          },
+          "effort": {
+            "type": "string",
+            "description": "effort level for the model; needs --model"
+          },
+          "option": {
+            "type": "string",
+            "repeatable": true,
+            "description": "another model option as KEY=VALUE; needs --model"
+          },
+          "extra-args": {
+            "type": "string",
+            "description": "extra agent arguments, such as \"--add-dir docs\" (terminal sessions only)"
           }
         },
         "methods": [
