@@ -1054,6 +1054,27 @@
         "order": 0
       }
     ],
+    "command": [
+      {
+        "id": "new-worktree",
+        "title": "New worktree",
+        "args": {
+          "type": "object",
+          "properties": {
+            "repo": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    ],
+    "keybinding": [
+      {
+        "id": "new-worktree",
+        "key": "mod+n",
+        "command": "new-worktree"
+      }
+    ],
     "cli-command": [
       {
         "id": "list",
