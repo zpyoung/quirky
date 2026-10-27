@@ -331,12 +331,15 @@ export function createSearch(options: SearchOptions): VaultSearch {
   }
 
   const sourcePresence = (record: SearchSourceRecord): 'present' | 'missing' | 'unverifiable' => {
-    if (rootStates.get(record.source_root)?.presence === 'unverifiable') return 'unverifiable'
-    if (record.file_path !== record.candidate_path && !knownCandidatePaths.has(record.candidate_path)) return 'missing'
+    const root = rootStates.get(record.source_root)
+    const logicalSourceMissing = record.file_path !== record.candidate_path && !knownCandidatePaths.has(record.candidate_path)
+    if (logicalSourceMissing && root?.presence !== 'missing' && root?.presence !== 'unverifiable') return 'missing'
     try {
       const stat = lstatSync(record.file_path)
       return stat.isSymbolicLink() || !stat.isFile() ? 'unverifiable' : 'present'
     } catch (error) {
+      if (root && root.presence !== 'present') return 'unverifiable'
+      if (logicalSourceMissing) return 'missing'
       const code = (error as NodeJS.ErrnoException).code
       if (code === 'ENOENT') return 'missing'
       return 'unverifiable'
