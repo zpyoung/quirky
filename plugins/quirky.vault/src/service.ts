@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto'
 import { isAbsolute, relative, resolve } from 'node:path'
 import { existsSync } from 'node:fs'
-import { RpcErrorCode, type PluginCaller, type PluginContext, type PluginStore } from '@quirky/protocol'
+import { RpcErrorCode, type PluginCaller, type PluginContext, type PluginStore, type QuirkyEvent } from '@quirky/protocol'
 import { HISTORY_AGENTS } from './agents'
 import { VaultActions } from './actions'
 import { discoverVaultHosts, hostedLocal, localOutcome, methodOf, outcome, qualifyPublicId, redactReason, selectHost } from './hosts'
@@ -50,6 +50,7 @@ type PublicSearchStatus = { status: SearchStatus; hosts: HostOutcome[] }
 type PublicSearchResponse = SearchResponse & { hosts?: HostOutcome[] }
 type SearchHost = { id: string; label: string; local: boolean; contribution?: VaultHost }
 type ScopeResolution = { localPaths?: string[]; remoteWithin?: { worktree?: string; repo?: string }; remoteScopePaths?: string[]; localError?: string }
+type ScopeIdentity = { cwd?: string; worktreeId?: string }
 type AggregateHostState = { cursor: string | null; hasMore: boolean; generation: number }
 type AggregateCursor = {
   requestKey: string
@@ -475,17 +476,18 @@ export class VaultService {
       }
     }
     if (view.scope === 'all') return {}
+    const identity = await this.scopeIdentity(caller)
     if (!resolveLocal) {
-      const remoteWithin = await this.remoteScopeForView(view.scope, caller)
+      const remoteWithin = await this.remoteScopeForView(view.scope, identity)
       return remoteWithin ? { remoteWithin } : { localError: 'requested scope has no caller context' }
     }
     if (view.scope === 'workspace') {
-      const workspace = await this.currentWorktree(caller)
+      const workspace = await this.currentWorktree(identity)
       if (workspace) return { localPaths: [workspace.path], remoteWithin: { worktree: workspace.id } }
-      return { localError: 'requested workspace cannot be resolved', remoteWithin: await this.remoteScopeForView(view.scope, caller) }
+      return { localError: 'requested workspace cannot be resolved', remoteWithin: await this.remoteScopeForView(view.scope, identity) }
     }
-    const repo = await this.currentRepo(caller)
-    if (!repo) return { localError: 'requested project cannot be resolved', remoteWithin: await this.remoteScopeForView(view.scope, caller) }
+    const repo = await this.currentRepo(identity)
+    if (!repo) return { localError: 'requested project cannot be resolved', remoteWithin: await this.remoteScopeForView(view.scope, identity) }
     const paths = await this.repoPaths(repo)
     if (paths.length === 0 || paths.length > MAX_PATHS) {
       return { localError: 'requested project scope is unavailable', remoteWithin: { repo: repo.id } }
@@ -495,32 +497,54 @@ export class VaultService {
 
   private async remoteScopeForView(
     scope: ViewState['scope'],
-    caller: PluginCaller
+    identity: ScopeIdentity
   ): Promise<{ worktree?: string; repo?: string } | undefined> {
-    if (scope === 'all' || caller.role === 'plugin') return undefined
+    if (scope === 'all') return undefined
     if (scope === 'workspace') {
-      if (caller.worktreeId !== undefined) return { worktree: caller.worktreeId }
-      return caller.cwd === undefined ? undefined : { worktree: `path:${caller.cwd}` }
+      if (identity.worktreeId !== undefined) return { worktree: identity.worktreeId }
+      return identity.cwd === undefined ? undefined : { worktree: `path:${identity.cwd}` }
     }
-    if (caller.cwd !== undefined) return { repo: `path:${caller.cwd}` }
-    const worktree = await this.currentWorktree(caller)
-    return worktree ? { repo: worktree.repoId } : undefined
+    if (identity.worktreeId !== undefined) {
+      const worktree = await this.currentWorktree(identity)
+      return worktree ? { repo: worktree.repoId } : { worktree: identity.worktreeId }
+    }
+    if (identity.cwd !== undefined) return { repo: `path:${identity.cwd}` }
+    return undefined
   }
-
   private async defaultScope(caller: PluginCaller): Promise<ViewState['scope']> {
     if (caller.role === 'plugin') return 'all'
-    if (await this.currentWorktree(caller)) return 'workspace'
-    if (await this.currentRepo(caller)) return 'project'
-    return caller.cwd !== undefined || caller.worktreeId !== undefined ? 'workspace' : 'all'
+    const identity = await this.scopeIdentity(caller)
+    if (await this.currentWorktree(identity)) return 'workspace'
+    if (await this.currentRepo(identity)) return 'project'
+    return identity.worktreeId === undefined ? 'all' : 'workspace'
   }
 
-  private async currentWorktree(caller: PluginCaller): Promise<{ id: string; path: string; repoId: string } | null> {
-    if (caller.role === 'plugin') return null
+  private async scopeIdentity(caller: PluginCaller): Promise<ScopeIdentity> {
+    if (caller.role === 'plugin') return {}
+    const identity: ScopeIdentity = {
+      ...(caller.cwd === undefined ? {} : { cwd: caller.cwd }),
+      ...(caller.worktreeId === undefined ? {} : { worktreeId: caller.worktreeId })
+    }
+    if (caller.role !== 'ui') return identity
+    const state = await this.context.call('ui.state', {}) as {
+      layout?: { view?: { input?: unknown } | null }
+    }
+    const input = state.layout?.view?.input
+    const worktreeId = typeof input === 'object' && input !== null && !Array.isArray(input)
+      ? (input as RecordValue).worktree
+      : undefined
+    return typeof worktreeId === 'string' && worktreeId !== ''
+      ? { ...identity, worktreeId }
+      : identity
+  }
+
+  private async currentWorktree(identity: ScopeIdentity): Promise<{ id: string; path: string; repoId: string } | null> {
+    if (identity.cwd === undefined && identity.worktreeId === undefined) return null
     try {
       const value = (await this.context.call('quirky.worktree/resolve', {
         selector: 'current',
-        ...(caller.cwd === undefined ? {} : { cwd: caller.cwd }),
-        ...(caller.worktreeId === undefined ? {} : { worktreeId: caller.worktreeId })
+        ...(identity.cwd === undefined ? {} : { cwd: identity.cwd }),
+        ...(identity.worktreeId === undefined ? {} : { worktreeId: identity.worktreeId })
       })) as { id: string; path: string; repoId: string }
       return typeof value.id === 'string' && typeof value.path === 'string' && typeof value.repoId === 'string' ? value : null
     } catch (error) {
@@ -529,15 +553,20 @@ export class VaultService {
     }
   }
 
-  private async currentRepo(caller: PluginCaller): Promise<{ id: string; path: string; name: string } | null> {
-    if (caller.role === 'plugin' || caller.cwd === undefined) return null
-    const worktree = await this.currentWorktree(caller)
+  private async currentRepo(identity: ScopeIdentity): Promise<{ id: string; path: string; name: string } | null> {
+    if (identity.worktreeId !== undefined) {
+      const worktree = await this.currentWorktree(identity)
+      return worktree ? this.repoBySelector(worktree.repoId) : null
+    }
+    if (identity.cwd === undefined) return null
+    const worktree = await this.currentWorktree(identity)
     if (worktree) return this.repoBySelector(worktree.repoId)
     const repos = await this.repoList()
     return repos
-      .filter((repo) => pathContains(repo.path, caller.cwd!))
+      .filter((repo) => pathContains(repo.path, identity.cwd!))
       .sort((a, b) => b.path.length - a.path.length)[0] ?? null
   }
+
 
   private async resolveWithin(
     within: { worktree?: string; repo?: string },
@@ -563,10 +592,7 @@ export class VaultService {
   }
 
   private async resolveWorktree(selector: string, caller: PluginCaller): Promise<{ id: string; path: string; repoId: string }> {
-    const identity = caller.role === 'plugin' ? {} : {
-      ...(caller.cwd === undefined ? {} : { cwd: caller.cwd }),
-      ...(caller.worktreeId === undefined ? {} : { worktreeId: caller.worktreeId })
-    }
+    const identity = await this.scopeIdentity(caller)
     const worktree = (await this.context.call('quirky.worktree/resolve', { selector, ...identity })) as {
       id: string
       path: string
@@ -731,16 +757,15 @@ export class VaultService {
     return run
   }
 
-  private onEvent(event: { type: string; data: unknown }): void {
-    if (event.type !== 'setting.changed' || typeof event.data !== 'object' || event.data === null || Array.isArray(event.data)) return
-    const data = event.data as RecordValue
-    if (data.id !== SEARCH_SETTING || typeof data.value !== 'boolean') return
+  private onEvent(event: QuirkyEvent): void {
+    if (event.type !== 'setting.changed' || event.id !== SEARCH_SETTING || typeof event.value !== 'boolean') return
+    const enabled = event.value
     void this.enqueuePolicy(async () => {
       const historyDays = this.historyDays()
       try {
-        await this.applySearchPolicy({ enabled: data.value as boolean, historyDays })
+        await this.applySearchPolicy({ enabled, historyDays })
       } catch (error) {
-        if (data.value === true) {
+        if (enabled) {
           await this.context.call('setting.set', { id: SEARCH_SETTING, value: false }).catch(() => undefined)
           await this.applySearchPolicy({ enabled: false, historyDays }).catch(() => undefined)
           this.context.notify({ title: 'Could not enable transcript search', body: messageOf(error), toast: true, desktop: false })
@@ -924,15 +949,6 @@ export class VaultService {
       const right = sort === 'created' ? b.createdAt : b.updatedAt
       return right - left || a.id.localeCompare(b.id)
     })
-  }
-  private async localSearch(request: SearchRequest): Promise<SearchResponse> {
-    if (!this.searchEnabled()) return { kind: 'unavailable', reason: 'disabled' }
-    try {
-      await this.enqueuePolicy(() => this.applyCurrentPolicy())
-      return await this.workerRequest<SearchResponse>('search', { request })
-    } catch {
-      return { kind: 'unavailable', reason: 'no-service' }
-    }
   }
 
   private async searchRemote(host: VaultHost, request: SearchRequest): Promise<{ response: SearchResponse; outcome: HostOutcome }> {

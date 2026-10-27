@@ -1,7 +1,72 @@
-import type { WorkerEvent, WorkerRequest, WorkerResponse } from './types'
+import type { ScanProgress, SearchStatus, WorkerRequest, WorkerResponse } from './types'
 
 const IDLE_WORKER_MS = 5 * 60_000
 const CLOSE_TIMEOUT_MS = 1500
+
+type WorkerEvent =
+  | { event: 'scanProgress'; data: ScanProgress }
+  | { event: 'searchStatus'; data: SearchStatus }
+
+function isFiniteNumber(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value)
+}
+
+function isStringArray(value: unknown): value is string[] {
+  return Array.isArray(value) && value.every((item: unknown) => typeof item === 'string')
+}
+
+function isNumberRecord(value: unknown): value is Record<string, number> {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    !Array.isArray(value) &&
+    Object.values(value).every(isFiniteNumber)
+  )
+}
+
+function isScanProgress(value: unknown): value is ScanProgress {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return false
+  if (!('phase' in value) || (value.phase !== 'discovering' && value.phase !== 'reading' && value.phase !== 'complete')) return false
+  if (!('scannedFiles' in value) || !isFiniteNumber(value.scannedFiles)) return false
+  if (!('parsedFiles' in value) || !isFiniteNumber(value.parsedFiles)) return false
+  return !('current' in value) || value.current === undefined || typeof value.current === 'string'
+}
+
+function isSearchStatus(value: unknown): value is SearchStatus {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return false
+  if (!('enabled' in value) || typeof value.enabled !== 'boolean') return false
+  if (
+    !('phase' in value) ||
+    (value.phase !== 'closed' && value.phase !== 'idle' && value.phase !== 'indexing' &&
+      value.phase !== 'current' && value.phase !== 'degraded')
+  ) return false
+  if (!('filesIndexed' in value) || !isFiniteNumber(value.filesIndexed)) return false
+  if (!('filesDue' in value) || !isFiniteNumber(value.filesDue)) return false
+  if (!('filesFailed' in value) || !isFiniteNumber(value.filesFailed)) return false
+  if (!('messagesIndexed' in value) || !isFiniteNumber(value.messagesIndexed)) return false
+  if (!('degradedRoots' in value) || !Array.isArray(value.degradedRoots)) return false
+  if (!value.degradedRoots.every((root: unknown) =>
+    typeof root === 'object' && root !== null && !Array.isArray(root) &&
+    'reason' in root && typeof root.reason === 'string' &&
+    (!('root' in root) || root.root === undefined || typeof root.root === 'string')
+  )) return false
+  if (!('lastReconcileAt' in value) || (value.lastReconcileAt !== null && !isFiniteNumber(value.lastReconcileAt))) return false
+  if (!('lastSweepCompletedAt' in value) || (value.lastSweepCompletedAt !== null && !isFiniteNumber(value.lastSweepCompletedAt))) return false
+  if (!('generation' in value) || !isFiniteNumber(value.generation)) return false
+  if (!('supportedAgents' in value) || !isStringArray(value.supportedAgents)) return false
+  return 'sessionsByAgent' in value && isNumberRecord(value.sessionsByAgent)
+}
+
+function parseWorkerEvent(value: object): WorkerEvent | null {
+  if (!('event' in value) || !('data' in value)) return null
+  if (value.event === 'scanProgress' && isScanProgress(value.data)) {
+    return { event: 'scanProgress', data: value.data }
+  }
+  if (value.event === 'searchStatus' && isSearchStatus(value.data)) {
+    return { event: 'searchStatus', data: value.data }
+  }
+  return null
+}
 
 type Pending = { resolve(value: unknown): void; reject(error: Error): void }
 
@@ -99,11 +164,13 @@ export class VaultWorkerClient {
   private receive(value: unknown): void {
     if (typeof value !== 'object' || value === null || Array.isArray(value)) return
     if ('event' in value && typeof value.event === 'string') {
-      if (typeof value.data !== 'object' || value.data === null || Array.isArray(value.data)) return
-      try {
-        this.onEvent(value as unknown as WorkerEvent)
-      } catch {
-        // An observer failure must not turn a completed worker request into a failure.
+      const event = parseWorkerEvent(value)
+      if (event) {
+        try {
+          this.onEvent(event)
+        } catch {
+          // An observer failure must not turn a completed worker request into a failure.
+        }
       }
       return
     }
