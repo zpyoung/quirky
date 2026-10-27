@@ -557,6 +557,16 @@
       "status": "todo"
     },
     {
+      "id": "fix-flaky-quirky-worktree-window-projects",
+      "milestone": "M1",
+      "title": "Fix the flaky plugins/quirky.worktree/test/window-projects.test.ts: it failed under load in 3 full-suite runs on the test host and passed each time it was rerun alone (see <git common dir>/build-loop/flakes.log). Find the timing assumption or shared state with quirk:systematic-debugging, reproduce it under CPU load, and fix the test or the code it exposes",
+      "docs": [
+        "worktrees.md"
+      ],
+      "deps": [],
+      "status": "todo"
+    },
+    {
       "id": "m7-parity-sweep",
       "milestone": "M7",
       "title": "Parity sweep: every remaining flow in the 28 feature docs",
