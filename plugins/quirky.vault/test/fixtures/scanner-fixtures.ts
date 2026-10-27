@@ -2,13 +2,14 @@ import { createHash } from 'node:crypto'
 import { mkdir, writeFile } from 'node:fs/promises'
 import { dirname, join, resolve } from 'node:path'
 import { Database } from 'bun:sqlite'
-import type { HistoryAgent } from '../../src/agents'
+import { HISTORY_AGENTS, type HistoryAgent } from '../../src/agents'
 
 type ExpectedSession = { sessionId: string; title: string; cwd: string | null }
 export type EveryAgentFixture = {
   expected: Record<string, ExpectedSession>
   paths: { claude?: string }
 }
+export type EveryAgentFixtureOptions = { cwdRoot?: string }
 type JsonlOptions = { unterminatedTail?: unknown }
 type CursorFixture = {
   transcript: string
@@ -90,7 +91,7 @@ export async function writeJsonlFixture(
 
 export async function writeClaudeFixture(
   home: string,
-  options: { titleRecords?: boolean } = {}
+  options: { titleRecords?: boolean; cwd?: string } = {}
 ): Promise<{ filePath: string }> {
   const sessionId = options.titleRecords ? 'claude-title-session' : 'claude-fixture-session'
   const timestamp = options.titleRecords ? '2026-10-01T00:00:00.000Z' : '2026-05-01T10:00:00.000Z'
@@ -99,7 +100,7 @@ export async function writeClaudeFixture(
       type: 'user',
       message: { role: 'user', content: options.titleRecords ? 'A concrete first request' : `Claude fixture title ${fixtureMarker('claude')}` },
       timestamp,
-      cwd: '/tmp/claude'
+      cwd: options.cwd ?? '/tmp/claude'
     },
     {
       type: 'assistant',
@@ -141,10 +142,10 @@ export async function writeClaudeFixture(
   return { filePath }
 }
 
-export async function writeCursorFixture(home: string): Promise<CursorFixture> {
+export async function writeCursorFixture(home: string, options: { cwd?: string } = {}): Promise<CursorFixture> {
   const sessionId = 'cursor-fixture-session'
   const root = resolve(home)
-  const cwd = '/tmp/cursor-fixture'
+  const cwd = options.cwd ?? '/tmp/cursor-fixture'
   const workspaceHash = createHash('md5').update(cwd).digest('hex')
   const transcript = jsonlPath(root, 'cursor', sessionId)
   const metadata = join(root, '.cursor', 'chats', workspaceHash, sessionId, 'meta.json')
@@ -267,9 +268,17 @@ async function writeOpenCode2Database(path: string, sessionId: string, title: st
   }
 }
 
-export async function writeEveryAgentFixture(home: string): Promise<EveryAgentFixture> {
+export async function writeEveryAgentFixture(
+  home: string,
+  options: EveryAgentFixtureOptions = {}
+): Promise<EveryAgentFixture> {
   home = resolve(home)
-  const { filePath: claudePath } = await writeClaudeFixture(home)
+  const cwdRoot = options.cwdRoot === undefined ? null : resolve(options.cwdRoot)
+  const cwdFor = (agent: HistoryAgent, defaultCwd: string): string => cwdRoot ? join(cwdRoot, agent) : defaultCwd
+  if (cwdRoot) {
+    for (const agent of HISTORY_AGENTS) await mkdir(join(cwdRoot, agent), { recursive: true })
+  }
+  const { filePath: claudePath } = await writeClaudeFixture(home, { cwd: cwdFor('claude', '/tmp/claude') })
   await writeJsonl(join(home, '.codebuddy', 'projects', 'project', 'codebuddy-session.jsonl'), [
     {
       id: 'codebuddy-msg-1',
@@ -278,11 +287,11 @@ export async function writeEveryAgentFixture(home: string): Promise<EveryAgentFi
       role: 'user',
       content: [{ type: 'input_text', text: `CodeBuddy title ${fixtureMarker('codebuddy')}` }],
       sessionId: 'codebuddy-session',
-      cwd: '/tmp/codebuddy'
+      cwd: cwdFor('codebuddy', '/tmp/codebuddy')
     }
   ])
   await writeJsonl(join(home, '.qoder', 'projects', 'project', 'qoder-session.jsonl'), [
-    { type: 'workspace-directories', sessionId: 'qoder-session', directories: ['/tmp/qoder'] },
+    { type: 'workspace-directories', sessionId: 'qoder-session', directories: [cwdFor('qoder', '/tmp/qoder')] },
     {
       type: 'user',
       sessionId: 'qoder-session',
@@ -294,7 +303,7 @@ export async function writeEveryAgentFixture(home: string): Promise<EveryAgentFi
     {
       timestamp: '2026-05-01T10:01:00.000Z',
       type: 'session_meta',
-      payload: { id: 'codex-session', cwd: '/tmp/codex' }
+      payload: { id: 'codex-session', cwd: cwdFor('codex', '/tmp/codex') }
     },
     {
       timestamp: '2026-05-01T10:01:01.000Z',
@@ -312,13 +321,13 @@ export async function writeEveryAgentFixture(home: string): Promise<EveryAgentFi
   await writeJson(join(home, '.hermes', 'sessions', 'session_hermes-session.json'), {
     session_id: 'hermes-session',
     model: 'hermes-1',
-    cwd: '/tmp/hermes',
+    cwd: cwdFor('hermes', '/tmp/hermes'),
     session_start: '2026-05-01T10:05:00.000Z',
     last_updated: '2026-05-01T10:05:01.000Z',
     messages: [{ role: 'user', content: `Hermes title ${fixtureMarker('hermes')}` }]
   })
   await writeJsonl(join(home, '.pi', 'agent', 'sessions', 'pi-session.jsonl'), [
-    { type: 'session', id: 'pi-session', timestamp: '2026-05-01T10:08:00.000Z', cwd: '/tmp/pi' },
+    { type: 'session', id: 'pi-session', timestamp: '2026-05-01T10:08:00.000Z', cwd: cwdFor('pi', '/tmp/pi') },
     {
       type: 'message',
       timestamp: '2026-05-01T10:08:01.000Z',
@@ -332,7 +341,7 @@ export async function writeEveryAgentFixture(home: string): Promise<EveryAgentFi
       id: 'omp-session',
       title: 'OMP session title',
       timestamp: '2026-05-01T10:08:30.000Z',
-      cwd: '/tmp/omp'
+      cwd: cwdFor('omp', '/tmp/omp')
     },
     { type: 'model_change', model: 'gpt-5.4-mini', timestamp: '2026-05-01T10:08:30.500Z' },
     {
@@ -357,7 +366,7 @@ export async function writeEveryAgentFixture(home: string): Promise<EveryAgentFi
       version: 3,
       id: 'prime-agent-session',
       timestamp: '2026-05-01T10:08:40.000Z',
-      cwd: '/tmp/prime-agent'
+      cwd: cwdFor('prime-agent', '/tmp/prime-agent')
     },
     {
       type: 'model_change',
@@ -371,8 +380,8 @@ export async function writeEveryAgentFixture(home: string): Promise<EveryAgentFi
       message: { role: 'user', content: [{ type: 'text', text: `Prime Agent title ${fixtureMarker('prime-agent')}` }] }
     }
   ])
-  const cursor = await writeCursorFixture(home)
-  await writeJson(join(home, '.gemini', 'tmp', 'gemini-session.json'), {
+  const cursor = await writeCursorFixture(home, { cwd: cwdFor('cursor', '/tmp/cursor-fixture') })
+  const geminiSession = {
     sessionId: 'gemini-session',
     startTime: '2026-05-01T10:02:00.000Z',
     lastUpdated: '2026-05-01T10:02:01.000Z',
@@ -380,7 +389,17 @@ export async function writeEveryAgentFixture(home: string): Promise<EveryAgentFi
       { type: 'user', timestamp: '2026-05-01T10:02:00.000Z', content: [{ text: `Gemini title ${fixtureMarker('gemini')}` }] },
       { type: 'gemini', timestamp: '2026-05-01T10:02:01.000Z', model: 'gemini-2.5-pro', tokens: { input: 10, output: 5 } }
     ]
-  })
+  }
+  if (cwdRoot) {
+    const geminiCwd = cwdFor('gemini', '/tmp/gemini')
+    const projectHash = createHash('sha256').update(resolve(geminiCwd)).digest('hex')
+    const projectDir = join(home, '.gemini', 'tmp', projectHash)
+    await mkdir(join(projectDir, 'chats'), { recursive: true })
+    await writeFile(join(projectDir, '.project_root'), geminiCwd)
+    await writeJson(join(projectDir, 'chats', 'gemini-session.json'), geminiSession)
+  } else {
+    await writeJson(join(home, '.gemini', 'tmp', 'gemini-session.json'), geminiSession)
+  }
   await writeJsonl(join(home, '.gemini', 'antigravity-cli', 'brain', ANTIGRAVITY_SESSION_ID, '.system_generated', 'logs', 'transcript.jsonl'), [
     {
       source: 'USER_EXPLICIT',
@@ -395,12 +414,12 @@ export async function writeEveryAgentFixture(home: string): Promise<EveryAgentFi
       conversationId: ANTIGRAVITY_SESSION_ID,
       display: `Antigravity title ${fixtureMarker('antigravity')}`,
       timestamp: Date.parse('2026-05-01T10:02:30.000Z') / 1000,
-      workspace: '/tmp/antigravity'
+      workspace: cwdFor('antigravity', '/tmp/antigravity')
     }
   ])
   await writeJson(join(home, '.rovodev', 'sessions', 'rovo-session', 'metadata.json'), {
     title: 'Rovo title',
-    workspace_path: '/tmp/rovo'
+    workspace_path: cwdFor('rovo', '/tmp/rovo')
   })
   await writeJson(join(home, '.rovodev', 'sessions', 'rovo-session', 'session_context.json'), {
     message_history: [
@@ -419,20 +438,21 @@ export async function writeEveryAgentFixture(home: string): Promise<EveryAgentFi
     },
     {
       type: 'session.info',
-      data: { infoType: 'folder_trust', message: 'Folder /tmp/copilot has been added to trusted folders.' },
+      data: { infoType: 'folder_trust', message: `Folder ${cwdFor('copilot', '/tmp/copilot')} has been added to trusted folders.` },
       timestamp: '2026-05-01T10:03:01.000Z'
     },
     { type: 'user.message', data: { transformedContent: `Copilot title ${fixtureMarker('copilot')}` }, timestamp: '2026-05-01T10:03:02.000Z' }
   ])
 
   const opencodeDir = join(home, '.local', 'share', 'opencode')
-  await writeOpenCodeV1Database(join(opencodeDir, 'opencode.db'), 'opencode-fixture-session', 'OpenCode fixture title', '/tmp/opencode', fixtureMarker('opencode'))
-  await writeOpenCode2Database(join(opencodeDir, 'opencode-next.db'), 'opencode2-fixture-session', 'OpenCode 2 fixture title', '/tmp/opencode2', fixtureMarker('opencode2'))
-  await writeOpenCodeV1Database(join(home, '.zcode', 'cli', 'db', 'db.sqlite'), 'zcode-fixture-session', 'ZCode fixture title', '/tmp/zcode', fixtureMarker('zcode'))
+  await writeOpenCodeV1Database(join(opencodeDir, 'opencode.db'), 'opencode-fixture-session', 'OpenCode fixture title', cwdFor('opencode', '/tmp/opencode'), fixtureMarker('opencode'))
+  await writeOpenCode2Database(join(opencodeDir, 'opencode-next.db'), 'opencode2-fixture-session', 'OpenCode 2 fixture title', cwdFor('opencode2', '/tmp/opencode2'), fixtureMarker('opencode2'))
+  await writeOpenCodeV1Database(join(home, '.zcode', 'cli', 'db', 'db.sqlite'), 'zcode-fixture-session', 'ZCode fixture title', cwdFor('zcode', '/tmp/zcode'), fixtureMarker('zcode'))
 
-  const grokDir = join(home, '.grok', 'sessions', encodeURIComponent('/tmp/grok'), 'grok-session')
+  const grokCwd = cwdFor('grok', '/tmp/grok')
+  const grokDir = join(home, '.grok', 'sessions', encodeURIComponent(grokCwd), 'grok-session')
   await writeJson(join(grokDir, 'summary.json'), {
-    info: { id: 'grok-session', cwd: '/tmp/grok' },
+    info: { id: 'grok-session', cwd: grokCwd },
     session_summary: '',
     created_at: '2026-05-01T10:04:00.000Z',
     updated_at: '2026-05-01T10:04:01.000Z',
@@ -445,7 +465,7 @@ export async function writeEveryAgentFixture(home: string): Promise<EveryAgentFi
     { type: 'assistant', content: 'Done' }
   ])
   await writeJsonl(join(home, '.openclaw', 'agents', 'default', 'sessions', 'openclaw-session.jsonl'), [
-    { type: 'session', id: 'openclaw-session', timestamp: '2026-05-01T10:07:00.000Z', cwd: '/tmp/openclaw' },
+    { type: 'session', id: 'openclaw-session', timestamp: '2026-05-01T10:07:00.000Z', cwd: cwdFor('openclaw', '/tmp/openclaw') },
     {
       type: 'message',
       timestamp: '2026-05-01T10:07:01.000Z',
@@ -454,7 +474,7 @@ export async function writeEveryAgentFixture(home: string): Promise<EveryAgentFi
   ])
   await writeJson(join(home, '.local', 'share', 'devin', 'cli', 'transcripts', 'devin-session.json'), {
     session_id: 'devin-session',
-    working_directory: '/tmp/devin',
+    working_directory: cwdFor('devin', '/tmp/devin'),
     agent: { model_name: 'swe-1-6-fast' },
     steps: [
       {
@@ -473,7 +493,7 @@ export async function writeEveryAgentFixture(home: string): Promise<EveryAgentFi
       session_id: 'droid-session',
       timestamp: '2026-05-01T10:09:00.000Z',
       model: 'droid-model',
-      cwd: '/tmp/droid'
+      cwd: cwdFor('droid', '/tmp/droid')
     },
     {
       type: 'message',
@@ -490,7 +510,7 @@ export async function writeEveryAgentFixture(home: string): Promise<EveryAgentFi
     session_id: 'cline-session',
     started_at: '2026-05-01T10:10:30.000Z',
     model: 'cline-model',
-    cwd: '/tmp/cline'
+    cwd: cwdFor('cline', '/tmp/cline')
   })
   await writeJson(join(clineDir, 'cline-session.messages.json'), {
     updated_at: '2026-05-01T10:10:31.000Z',
@@ -506,7 +526,7 @@ export async function writeEveryAgentFixture(home: string): Promise<EveryAgentFi
     agents: { main: { type: 'main', parentAgentId: null } }
   })
   await writeJsonl(join(home, '.kimi-code', 'sessions', 'session_index.jsonl'), [
-    { sessionId: 'session_kimi-session', sessionDir: kimiDir, workDir: '/tmp/kimi' }
+    { sessionId: 'session_kimi-session', sessionDir: kimiDir, workDir: cwdFor('kimi', '/tmp/kimi') }
   ])
   await writeJsonl(join(kimiDir, 'agents', 'main', 'wire.jsonl'), [
     { type: 'config.update', modelAlias: 'kimi-k2.6', time: 1781853559132 },
@@ -538,7 +558,7 @@ export async function writeEveryAgentFixture(home: string): Promise<EveryAgentFi
       record_type: 'event',
       payload_type: 'runtime.session.metadata',
       recorded_at: 1780000000000000,
-      payload: { kind: 'metadata', record: { workspace_root: '/tmp/muse', provider_id: 'meta' } }
+      payload: { kind: 'metadata', record: { workspace_root: cwdFor('muse', '/tmp/muse'), provider_id: 'meta' } }
     },
     {
       record_type: 'event',
@@ -585,7 +605,7 @@ export async function writeEveryAgentFixture(home: string): Promise<EveryAgentFi
     id: 'session_jcode-session',
     short_name: 'jcode-session',
     model: 'jcode-model',
-    working_dir: '/tmp/jcode',
+    working_dir: cwdFor('jcode', '/tmp/jcode'),
     created_at: '2026-05-01T10:12:00.000Z',
     updated_at: '2026-05-01T10:12:01.000Z',
     messages: [
@@ -601,7 +621,7 @@ export async function writeEveryAgentFixture(home: string): Promise<EveryAgentFi
 
   await writeJson(join(home, '.kiro', 'sessions', 'cli', `${KIRO_SESSION_ID}.json`), {
     session_id: KIRO_SESSION_ID,
-    cwd: '/tmp/kiro',
+    cwd: cwdFor('kiro', '/tmp/kiro'),
     created_at: '2026-05-01T10:13:00.000000000Z',
     updated_at: '2026-05-01T10:13:02.000000000Z',
     title: 'Kiro title',
@@ -622,31 +642,31 @@ export async function writeEveryAgentFixture(home: string): Promise<EveryAgentFi
   ])
 
   const expected: EveryAgentFixture['expected'] & Record<HistoryAgent, ExpectedSession> = {
-    claude: { sessionId: 'claude-fixture-session', title: 'Claude fixture title', cwd: '/tmp/claude' },
-    codebuddy: { sessionId: 'codebuddy-session', title: `CodeBuddy title ${fixtureMarker('codebuddy')}`, cwd: '/tmp/codebuddy' },
-    qoder: { sessionId: 'qoder-session', title: `Qoder title ${fixtureMarker('qoder')}`, cwd: '/tmp/qoder' },
-    codex: { sessionId: 'codex-session', title: 'Codex fixture indexed title', cwd: '/tmp/codex' },
-    hermes: { sessionId: 'hermes-session', title: `Hermes title ${fixtureMarker('hermes')}`, cwd: '/tmp/hermes' },
-    pi: { sessionId: 'pi-session', title: `Pi title ${fixtureMarker('pi')}`, cwd: '/tmp/pi' },
-    omp: { sessionId: 'omp-session', title: 'OMP session title', cwd: '/tmp/omp' },
-    'prime-agent': { sessionId: 'prime-agent-session', title: `Prime Agent title ${fixtureMarker('prime-agent')}`, cwd: '/tmp/prime-agent' },
-    cursor: { sessionId: cursor.sessionId, title: 'Cursor sidecar title', cwd: '/tmp/cursor-fixture' },
-    gemini: { sessionId: 'gemini-session', title: `Gemini title ${fixtureMarker('gemini')}`, cwd: null },
-    antigravity: { sessionId: ANTIGRAVITY_SESSION_ID, title: `Antigravity title ${fixtureMarker('antigravity')}`, cwd: '/tmp/antigravity' },
-    rovo: { sessionId: 'rovo-session', title: 'Rovo title', cwd: '/tmp/rovo' },
-    copilot: { sessionId: 'copilot-session', title: `Copilot title ${fixtureMarker('copilot')}`, cwd: '/tmp/copilot' },
-    opencode: { sessionId: 'opencode-fixture-session', title: 'OpenCode fixture title', cwd: '/tmp/opencode' },
-    opencode2: { sessionId: 'opencode2-fixture-session', title: 'OpenCode 2 fixture title', cwd: '/tmp/opencode2' },
-    zcode: { sessionId: 'zcode-fixture-session', title: 'ZCode fixture title', cwd: '/tmp/zcode' },
-    grok: { sessionId: 'grok-session', title: `Grok title ${fixtureMarker('grok')}`, cwd: '/tmp/grok' },
-    openclaw: { sessionId: 'openclaw-session', title: `OpenClaw title ${fixtureMarker('openclaw')}`, cwd: '/tmp/openclaw' },
-    devin: { sessionId: 'devin-session', title: `Devin vault title ${fixtureMarker('devin')}`, cwd: '/tmp/devin' },
-    droid: { sessionId: 'droid-session', title: `Droid title ${fixtureMarker('droid')}`, cwd: '/tmp/droid' },
-    cline: { sessionId: 'cline-session', title: `Cline vault title ${fixtureMarker('cline')}`, cwd: '/tmp/cline' },
-    kimi: { sessionId: 'session_kimi-session', title: 'Kimi vault title', cwd: '/tmp/kimi' },
-    muse: { sessionId: 'muse-session', title: `Muse vault title ${fixtureMarker('muse')}`, cwd: '/tmp/muse' },
-    jcode: { sessionId: 'session_jcode-session', title: `Jcode title ${fixtureMarker('jcode')}`, cwd: '/tmp/jcode' },
-    kiro: { sessionId: KIRO_SESSION_ID, title: 'Kiro title', cwd: '/tmp/kiro' }
+    claude: { sessionId: 'claude-fixture-session', title: 'Claude fixture title', cwd: cwdFor('claude', '/tmp/claude') },
+    codebuddy: { sessionId: 'codebuddy-session', title: `CodeBuddy title ${fixtureMarker('codebuddy')}`, cwd: cwdFor('codebuddy', '/tmp/codebuddy') },
+    qoder: { sessionId: 'qoder-session', title: `Qoder title ${fixtureMarker('qoder')}`, cwd: cwdFor('qoder', '/tmp/qoder') },
+    codex: { sessionId: 'codex-session', title: 'Codex fixture indexed title', cwd: cwdFor('codex', '/tmp/codex') },
+    hermes: { sessionId: 'hermes-session', title: `Hermes title ${fixtureMarker('hermes')}`, cwd: cwdFor('hermes', '/tmp/hermes') },
+    pi: { sessionId: 'pi-session', title: `Pi title ${fixtureMarker('pi')}`, cwd: cwdFor('pi', '/tmp/pi') },
+    omp: { sessionId: 'omp-session', title: 'OMP session title', cwd: cwdFor('omp', '/tmp/omp') },
+    'prime-agent': { sessionId: 'prime-agent-session', title: `Prime Agent title ${fixtureMarker('prime-agent')}`, cwd: cwdFor('prime-agent', '/tmp/prime-agent') },
+    cursor: { sessionId: cursor.sessionId, title: 'Cursor sidecar title', cwd: cwdFor('cursor', '/tmp/cursor-fixture') },
+    gemini: { sessionId: 'gemini-session', title: `Gemini title ${fixtureMarker('gemini')}`, cwd: cwdRoot ? cwdFor('gemini', '/tmp/gemini') : null },
+    antigravity: { sessionId: ANTIGRAVITY_SESSION_ID, title: `Antigravity title ${fixtureMarker('antigravity')}`, cwd: cwdFor('antigravity', '/tmp/antigravity') },
+    rovo: { sessionId: 'rovo-session', title: 'Rovo title', cwd: cwdFor('rovo', '/tmp/rovo') },
+    copilot: { sessionId: 'copilot-session', title: `Copilot title ${fixtureMarker('copilot')}`, cwd: cwdFor('copilot', '/tmp/copilot') },
+    opencode: { sessionId: 'opencode-fixture-session', title: 'OpenCode fixture title', cwd: cwdFor('opencode', '/tmp/opencode') },
+    opencode2: { sessionId: 'opencode2-fixture-session', title: 'OpenCode 2 fixture title', cwd: cwdFor('opencode2', '/tmp/opencode2') },
+    zcode: { sessionId: 'zcode-fixture-session', title: 'ZCode fixture title', cwd: cwdFor('zcode', '/tmp/zcode') },
+    grok: { sessionId: 'grok-session', title: `Grok title ${fixtureMarker('grok')}`, cwd: cwdFor('grok', '/tmp/grok') },
+    openclaw: { sessionId: 'openclaw-session', title: `OpenClaw title ${fixtureMarker('openclaw')}`, cwd: cwdFor('openclaw', '/tmp/openclaw') },
+    devin: { sessionId: 'devin-session', title: `Devin vault title ${fixtureMarker('devin')}`, cwd: cwdFor('devin', '/tmp/devin') },
+    droid: { sessionId: 'droid-session', title: `Droid title ${fixtureMarker('droid')}`, cwd: cwdFor('droid', '/tmp/droid') },
+    cline: { sessionId: 'cline-session', title: `Cline vault title ${fixtureMarker('cline')}`, cwd: cwdFor('cline', '/tmp/cline') },
+    kimi: { sessionId: 'session_kimi-session', title: 'Kimi vault title', cwd: cwdFor('kimi', '/tmp/kimi') },
+    muse: { sessionId: 'muse-session', title: `Muse vault title ${fixtureMarker('muse')}`, cwd: cwdFor('muse', '/tmp/muse') },
+    jcode: { sessionId: 'session_jcode-session', title: `Jcode title ${fixtureMarker('jcode')}`, cwd: cwdFor('jcode', '/tmp/jcode') },
+    kiro: { sessionId: KIRO_SESSION_ID, title: 'Kiro title', cwd: cwdFor('kiro', '/tmp/kiro') }
   }
   return { expected, paths: { claude: claudePath } }
 }
