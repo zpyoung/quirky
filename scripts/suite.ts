@@ -230,7 +230,10 @@ async function main(argv: string[]): Promise<boolean> {
   const there = files.filter((file) => !macos.has(file))
   console.log(`running ${there.length} test files on ${remote.host} and ${here.length} macOS-only files here`)
   const [away, local] = await Promise.all([runRemote(cwd, remote, there, flags), runFiles(cwd, here, flags, 1)])
-  if (away) return away.ok && local.ok
+  if (away) {
+    if (away.flaky.length > 0) recordFlakes(cwd, away.flaky)
+    return away.ok && local.ok
+  }
   console.error(`\n${remote.host} couldn't run the tests, so they run here instead`)
   return (await runFiles(cwd, there, flags, 1)).ok && local.ok
 }

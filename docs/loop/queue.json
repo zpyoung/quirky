@@ -277,7 +277,8 @@
         "m1-agent-status",
         "m1-providers"
       ],
-      "status": "todo"
+      "status": "in-progress",
+      "lane": 9
     },
     {
       "id": "m3-handoff",
@@ -305,19 +306,8 @@
         "m1-providers",
         "m1-agent-status"
       ],
-      "status": "todo"
-    },
-    {
-      "id": "m3-vault",
-      "milestone": "M3",
-      "title": "AI vault: browse and resume sessions across agents, opt-in full-text search",
-      "docs": [
-        "ai-vault.md"
-      ],
-      "deps": [
-        "m1-providers"
-      ],
-      "status": "todo"
+      "status": "in-progress",
+      "lane": 10
     },
     {
       "id": "m4-hosting-api-github",
@@ -330,7 +320,37 @@
         "m1-worktrees",
         "m2-source-control-core"
       ],
-      "status": "todo"
+      "status": "in-progress",
+      "lane": 11
+    },
+    {
+      "id": "m5-structured-runner",
+      "milestone": "M5",
+      "title": "Shared seams: Codex structured runner over app-server, structured resume, model and effort on structured launches, checks runner",
+      "docs": [
+        "automations.md",
+        "fork-loops.md",
+        "launch-settings.md"
+      ],
+      "deps": [
+        "m1-launch-settings",
+        "m1-agent-status"
+      ],
+      "status": "in-progress",
+      "lane": 12
+    },
+    {
+      "id": "m3-vault",
+      "milestone": "M3",
+      "title": "AI vault: browse and resume sessions across agents, opt-in full-text search",
+      "docs": [
+        "ai-vault.md"
+      ],
+      "deps": [
+        "m1-providers"
+      ],
+      "status": "in-progress",
+      "lane": 8
     },
     {
       "id": "m4-hosting-api-others",
@@ -402,21 +422,6 @@
       ],
       "deps": [
         "sa-browser-agent"
-      ],
-      "status": "todo"
-    },
-    {
-      "id": "m5-structured-runner",
-      "milestone": "M5",
-      "title": "Shared seams: Codex structured runner over app-server, structured resume, model and effort on structured launches, checks runner",
-      "docs": [
-        "automations.md",
-        "fork-loops.md",
-        "launch-settings.md"
-      ],
-      "deps": [
-        "m1-launch-settings",
-        "m1-agent-status"
       ],
       "status": "todo"
     },
