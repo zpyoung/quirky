@@ -118,6 +118,9 @@ export interface WorkerCore extends OrchestrationWorkerCore {
   mutateWorker<T extends object>(method: string, params: MutationRequest & object, caller: RuntimeCallerEvidence, work: () => Promise<T> | T): Promise<MutationResult<T>>
   emitWorkerStatus(dispatchId: DispatchId, subject: string, body: string, high: boolean): void
   closeWorkerQuestions(dispatchId: DispatchId, at: UtcTimestamp): void
+  listDispatches(): DispatchRow[]
+  boundRunId(caller: RuntimeCallerEvidence): RunId | null
+  attentionFor(dispatchId: DispatchId): { guidance: boolean; input: boolean; approval: boolean; rootCompletion: boolean }
 }
 
 /** All repository methods are synchronous and participate in core.store.transaction. */
