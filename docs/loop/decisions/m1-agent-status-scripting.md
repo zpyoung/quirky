@@ -459,5 +459,15 @@
 - **Confidence:** high
 - **Source:** assumed — autonomous
 
+## D46: The resumed lane verifies the existing final fix batch and proceeds to land
+- **Question:** whether to rebuild or repeat review after resuming the completed branch at step 7
+- **Options:** repeat implementation and review; retain the recorded final review and rerun the required gate plus a live CLI smoke
+- **Chose:** retain the completed work and review. `bun install` made no changes. The fresh gate passed: 440 remote test files and two macOS-only files, no flaky files; 49 script tests; typecheck. A throwaway smoke started a daemon and PTY host with fresh temporary homes, created `lane1-smoke`, posted a Claude PermissionRequest, resolved the name with `session get`, explained the hook approval, waited for blocked, and verified send exited 1 with `agent-blocked` without sending any input. The harness stopped its processes and removed its temporary homes.
+- **Why:** Progress already recorded completion of implementation, catch-up, Final Round 1 and its fix batch; the fresh gate and actual CLI flow verify the resumed tree without reopening finished work.
+- **Evidence:** iteration 2 verification command `bun run test && bun test scripts && bun run typecheck` exited 0; smoke printed `SMOKE_OK` and `SMOKE_CLEANUP_OK`, exited 0
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** assumed — autonomous
+
 ## Progress
-Step 7 (land). Build, Final Round 1, its fix batch and the final gate are done (head 2d20a80 plus this note). No UI or native scenarios (D25). If this iteration stopped before landing: run `bun install`, the gate (`bun run test && bun test scripts && bun run typecheck`), commit, `git switch --detach`, check `pgrep -fl "queue.ts land"` is empty, then `bun scripts/build-loop/queue.ts land m1-agent-status-scripting`.
+Step 7 (land). Iteration 2 resumed the completed branch, installed dependencies, reran the full gate successfully and exercised the guarded-send CLI flow on fresh temporary homes (D46). Next: commit this decision, detach, and run `bun scripts/build-loop/queue.ts land m1-agent-status-scripting`. If land fails, follow LOOP.md step 7.3.
