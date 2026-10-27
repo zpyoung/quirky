@@ -205,6 +205,30 @@ describe('commandProbe', () => {
     expect(Date.now() - started).toBeLessThan(2500)
   })
 
+  test('a probe that ignores SIGTERM is killed with its children and the call does not wait for it', async () => {
+    const fake = installFake({})
+    const pidFile = `${fake.launcher}.pid`
+    const childFile = `${fake.launcher}.child`
+    writeFileSync(fake.launcher, `#!/bin/sh\ntrap '' TERM\necho $$ > '${pidFile}'\nsleep 30 &\necho $! > '${childFile}'\nwait\n`)
+    const alive = (pid: number) => {
+      try {
+        process.kill(pid, 0)
+        return true
+      } catch {
+        return false
+      }
+    }
+    const started = Date.now()
+    expect(await commandProbe(fake.context, { timeoutMs: 400 })(fake.launcher, { sessionId: 's1', worktreeId: 'w1' })).toBeNull()
+    expect(Date.now() - started).toBeLessThan(2500)
+    const pids = [pidFile, childFile].map((file) => Number(readFileSync(file, 'utf8').trim()))
+    expect(pids.every((pid) => pid > 0)).toBe(true)
+    const deadline = Date.now() + 2000
+    while (pids.some(alive) && Date.now() < deadline) await Bun.sleep(25)
+    for (const pid of pids) if (alive(pid)) process.kill(pid, 'SIGKILL')
+    expect(pids.map(alive)).toEqual([false, false])
+  })
+
   test('shell syntax in the configured command is never interpreted', async () => {
     const fake = installFake({ version: { stdout: '2.1.0' } })
     const pwned = join(dirname(fake.launcher), 'pwned')

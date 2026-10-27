@@ -54,10 +54,24 @@ function singleQuote(word: string): string {
   return `'${word.replaceAll("'", "'\\''")}'`
 }
 
+/** SIGKILLs the probe's whole process group (it is spawned as a group leader), else the process alone. */
+function killProbe(proc: ReturnType<typeof Bun.spawn>): void {
+  try {
+    process.kill(-proc.pid, 'SIGKILL')
+  } catch {
+    try {
+      proc.kill('SIGKILL')
+    } catch {
+      // already gone
+    }
+  }
+}
+
 /**
  * The default probe: runs the command under the daemon's login shell with the session's launch
- * environment, and kills it after `timeoutMs`. Each word of the configured command is quoted, so
- * shell syntax in it is never interpreted. Never throws; any failure is null.
+ * environment. After `timeoutMs` it SIGKILLs the probe's process group and returns null without
+ * waiting for it or its output. Each word of the configured command is quoted, so shell syntax in
+ * it is never interpreted. Never throws; any failure is null.
  */
 export function commandProbe(context: PluginContext, options: { timeoutMs?: number } = {}): VersionProbe {
   const timeoutMs = options.timeoutMs ?? PROBE_TIMEOUT_MS
@@ -68,26 +82,38 @@ export function commandProbe(context: PluginContext, options: { timeoutMs?: numb
       const words = shellWords(command)
       if (!words || words.length === 0) return null
       const line = [...words, '--version'].map(singleQuote).join(' ')
-      proc = Bun.spawn(context.launch.commandArgv(line), {
+      // detached makes the child a group leader so a timeout can kill its descendants; the
+      // installed bun typings predate the option
+      const options = {
         env: context.launch.env({ ...identity, agent: 'claude' }),
-        stdin: 'ignore',
-        stdout: 'pipe',
-        stderr: 'ignore'
-      })
+        stdio: ['ignore', 'pipe', 'ignore'],
+        detached: true
+      } as const
+      proc = Bun.spawn(context.launch.commandArgv(line), options as unknown as Bun.SpawnOptions.OptionsObject<'ignore', 'pipe', 'ignore'>)
       const running = proc
+      const stdout = running.stdout as ReadableStream<Uint8Array>
+      const reader = stdout.getReader()
       const finished = (async () => {
-        const [stdout, code] = await Promise.all([new Response(running.stdout as ReadableStream).text(), running.exited])
-        return code === 0 ? stdout : null
+        const chunks: Uint8Array[] = []
+        for (;;) {
+          const { done, value } = await reader.read()
+          if (done) break
+          chunks.push(value)
+        }
+        const code = await running.exited
+        return code === 0 ? Buffer.concat(chunks).toString('utf8') : null
       })()
+      finished.catch(() => {})
       const timedOut = new Promise<null>((resolve) => {
         timer = setTimeout(() => {
-          running.kill()
+          killProbe(running)
+          reader.cancel().catch(() => {})
           resolve(null)
         }, timeoutMs)
       })
       return await Promise.race([finished, timedOut])
     } catch {
-      proc?.kill()
+      if (proc) killProbe(proc)
       return null
     } finally {
       clearTimeout(timer)
