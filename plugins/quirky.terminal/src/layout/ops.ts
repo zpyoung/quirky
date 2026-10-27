@@ -139,11 +139,11 @@ function activate(ws: Workspace, groupId: string, tabId: string | null): Workspa
   return { ...next, activeGroup: groupId }
 }
 
-/** Adds `tab` at the end of group `groupId` and makes it the group's active tab. */
-export function appendTab(ws: Workspace, groupId: string, tab: Tab): OpResult {
+/** Adds `tab` at the end of group `groupId`; unless `focus` is false it becomes the group's active tab and the group the active one. */
+export function appendTab(ws: Workspace, groupId: string, tab: Tab, focus = true): OpResult {
   if (!findGroup(ws.root, groupId)) return fail('not-found', `no group ${groupId}`)
   const added = updateGroup(ws, groupId, (group) => ({ ...group, tabs: [...group.tabs, tab] }))
-  return ok(activate(added, groupId, tab.id))
+  return ok(focus ? activate(added, groupId, tab.id) : added)
 }
 
 /** Records which quick command the group's strip button ran last. */
