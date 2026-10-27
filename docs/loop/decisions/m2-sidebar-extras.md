@@ -288,5 +288,16 @@ Reader: autonomous builders and later operator review — Decision: preserve the
 - **Revisit if:** the repaired required full-suite gate fails elsewhere
 - **Source:** assumed — autonomous
 
+## D27: Apply the operator's night-mode verification override
+- **Question:** how to proceed after the operator stopped the overloaded whole-suite run
+- **Options:** treat interruption as a test result; repeat the whole suite; use affected-directory checks as directed
+- **Chose:** the stopped bg_3 prepass is an interruption, not a failing test result; no reviewer dispatched. Use `bun scripts/suite.ts packages/protocol packages/daemon/test/plugins packages/ui packages/cli plugins/quirky.repo plugins/quirky.worktree`, plus `bun test scripts`, `bun run typecheck`, and the UI build. Add the new extras plugin directory to the affected set after W2. The queue landing gate runs the whole suite.
+- **Why:** the operator explicitly superseded unattended whole-suite requirements because the shared test host was overloaded. The chosen directories cover W1's production changes and current renderer/canonical consumers; typecheck covers required-field factory migrations elsewhere.
+- **Evidence:** operator interjection in iteration 4; bg_3 exit after 10619 seconds at the prepass guard, before reviewer selection or dispatch
+- **Reversibility:** easy (verification commands)
+- **Confidence:** high
+- **Revisit if:** the operator changes night mode or affected checks show a real regression
+- **Source:** locked by operator instruction in this conversation
+
 ## Progress
 Blocked at LOOP.md step 5, W1 mandatory suite gate; do not land. Both reviewed specs and W1 canonical/public-UI implementation are preserved. W2 presentation plugin and worktree-renderer integration were not started, so the four-feature item is not complete. All agents and finite/background commands have returned; smoke processes and browsers were stopped and temporary homes removed. Required prerequisite: repair fix-ask-regex-budget-20261027 and lane-7 PTY gate, restore this preserved branch to build/m2-sidebar-extras, merge current integration/read new decisions, install links, run the required gate; only then run the W1 three-lens Gemini checkpoint and proceed with W2. The resumable journal/plan/audits are in /tmp/quirky-sidebar-lane5-*; an exact W2 JSON seam draft is /tmp/quirky-sidebar-lane5-w2-api-contract.md and must be incorporated into tech.md before worker dispatch. Inherited .serena/ remains untouched/uncommitted.
