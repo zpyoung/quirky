@@ -729,22 +729,35 @@ export function Composer({ context, pane, session, registerActions }: Props) {
 
   return (
     <div className={`qtd-composer${state?.passthrough ? ' qtd-passthrough' : ''}`} onDragOver={(event) => { if (event.dataTransfer.types.includes('Files')) event.preventDefault() }} onDrop={onDrop}>
-      {state?.passthrough && <div className="qtd-notice qtd-passthrough-notice" role="status">Passthrough active — terminal has keyboard focus</div>}
-      {disabledReason !== null && state !== null && !shouldStop && <div className="qtd-notice" role="status">{disabledReason}</div>}
-      {state?.notice && <div className="qtd-notice" role="status">{state.notice}</div>}
-      {state?.options.notice && <div className="qtd-notice" role="status">{state.options.notice}</div>}
-      {warning !== null && <div className="qtd-notice qtd-warning" role="alert">{warning}</div>}
-      {error !== null && <div className="qtd-notice qtd-error" role="alert">{error}</div>}
-      {activeQuestion !== null && !activeQuestion.dismissed && (
-        <QuestionCard
-          question={activeQuestion}
-          answers={answers}
-          answering={answering}
-          disabled={state?.enabled !== true}
-          onAnswer={chooseAnswer}
-          onSubmit={() => void answerQuestion()}
-          onInteract={(action) => void interact(activeQuestion, action)}
-        />
+      {(state?.passthrough || disabledReason !== null && state !== null || state?.notice || state?.options.notice || warning !== null || error !== null) && (
+        <div className="qtd-status-row" role="group" aria-label="Composer status">
+          {state?.passthrough && <div className="qtd-notice qtd-passthrough-notice" role="status" title="Passthrough active — terminal has keyboard focus" aria-description="Passthrough active — terminal has keyboard focus">Passthrough active — terminal has keyboard focus</div>}
+          {disabledReason !== null && state !== null && <div id="qtd-disabled-reason" className="qtd-notice" role="status" title={disabledReason} aria-description={disabledReason}>{disabledReason}</div>}
+          {state?.notice && <div className="qtd-notice" role="status" title={state.notice} aria-description={state.notice}>{state.notice}</div>}
+          {state?.options.notice && <div className="qtd-notice" role="status" title={state.options.notice} aria-description={state.options.notice}>{state.options.notice}</div>}
+          {warning !== null && <div className="qtd-notice qtd-warning" role="alert" title={warning} aria-description={warning}>{warning}</div>}
+          {error !== null && <div className="qtd-notice qtd-error" role="alert" title={error} aria-description={error}>{error}</div>}
+        </div>
+      )}
+      {(activeQuestion !== null && !activeQuestion.dismissed || picker !== null) && (
+        <div className="qtd-overlay-stack">
+          {activeQuestion !== null && !activeQuestion.dismissed && (
+            <QuestionCard
+              question={activeQuestion}
+              answers={answers}
+              answering={answering}
+              disabled={state?.enabled !== true}
+              onAnswer={chooseAnswer}
+              onSubmit={() => void answerQuestion()}
+              onInteract={(action) => void interact(activeQuestion, action)}
+            />
+          )}
+          {picker !== null && <PickerMenu picker={picker} onChoose={insertPickerItem} onSelect={(selected) => {
+            const next = { ...picker, selected }
+            pickerRef.current = next
+            setPicker(next)
+          }} />}
+        </div>
       )}
       <div className="qtd-editor-region">
         <pre ref={overlayRef} className="qtd-editor-overlay" aria-hidden="true">{draft.length === 0 ? '\u200b' : emphasisOverlay(draft)}</pre>
@@ -768,11 +781,6 @@ export function Composer({ context, pane, session, registerActions }: Props) {
           data-conflicted={conflicted ? 'true' : 'false'}
         />
       </div>
-      {picker !== null && <PickerMenu picker={picker} onChoose={insertPickerItem} onSelect={(selected) => {
-        const next = { ...picker, selected }
-        pickerRef.current = next
-        setPicker(next)
-      }} />}
       <div className="qtd-attachments" role="list" aria-label="Attachments">
         {state === null ? null : state.attachments.map((attachment) => (
           <AttachmentChip key={attachment.id} attachment={attachment} disabled={!state.enabled} onRemove={() => {
@@ -784,28 +792,28 @@ export function Composer({ context, pane, session, registerActions }: Props) {
           }} />
         ))}
       </div>
-      <div className="qtd-toolbar">
-        <div className="qtd-control-group" role="group" aria-label="Session options">
-          <SessionOption state={state} kind="model" onChange={optionChange} />
-          <SessionOption state={state} kind="effort" onChange={optionChange} />
-          <SessionOption state={state} kind="permission" onChange={optionChange} />
-        </div>
-        <div className="qtd-context" aria-label="Context usage">
-          {contextPercent === null ? <span>Context usage unknown</span> : (
-            <span className="qtd-context__ring" role="progressbar" aria-label="Context usage" aria-valuemin={0} aria-valuemax={100} aria-valuenow={contextPercent} style={contextStyle}>
-              {contextPercent}%
-            </span>
-          )}
-        </div>
-      </div>
       <div className="qtd-actions">
-        <input ref={fileRef} className="qtd-file-input" type="file" multiple aria-label="Attach files" disabled={state === null || !state.enabled} onChange={onFileChange} />
-        <button type="button" className="qtd-attach" aria-label="Attach file" disabled={state === null || !state.enabled} onClick={() => fileRef.current?.click()}>Attach</button>
-        <span className="qtd-actions-spacer" />
-        {dirty && <span className="qtd-draft-status" role="status">{conflicted ? 'Draft conflict' : 'Saving draft…'}</span>}
-        {state?.activeSend !== null && state?.activeSend !== undefined && <span className="qtd-send-phase" role="status">{state.activeSend.phase}</span>}
-        {disabledReason !== null && state !== null && <span id="qtd-disabled-reason" className="qtd-disabled-reason">{disabledReason}</span>}
-        <button type="button" className="qtd-send" aria-label={shouldStop ? 'Stop' : 'Send'} disabled={state === null || !state.enabled || !shouldStop && sendDisabled} onClick={() => shouldStop ? void stop() : void send()}>{shouldStop ? 'Stop' : 'Send'}</button>
+        <div className="qtd-action-controls">
+          <div className="qtd-control-group" role="group" aria-label="Session options">
+            <SessionOption state={state} kind="model" onChange={optionChange} />
+            <SessionOption state={state} kind="effort" onChange={optionChange} />
+            <SessionOption state={state} kind="permission" onChange={optionChange} />
+          </div>
+          <div className="qtd-context" aria-label="Context usage">
+            {contextPercent === null ? <span title="Context usage unknown" aria-description="Context usage unknown">Context usage unknown</span> : (
+              <span className="qtd-context__ring" role="progressbar" aria-label="Context usage" aria-valuemin={0} aria-valuemax={100} aria-valuenow={contextPercent} style={contextStyle}>
+                {contextPercent}%
+              </span>
+            )}
+          </div>
+          {dirty && <span className="qtd-action-status" role="status" title={conflicted ? 'Draft conflict' : 'Saving draft…'} aria-description={conflicted ? 'Draft conflict' : 'Saving draft…'}>{conflicted ? 'Draft conflict' : 'Saving draft…'}</span>}
+          {state?.activeSend !== null && state?.activeSend !== undefined && <span className="qtd-action-status" role="status" title={state.activeSend.phase} aria-description={state.activeSend.phase}>{state.activeSend.phase}</span>}
+        </div>
+        <div className="qtd-action-buttons">
+          <input ref={fileRef} className="qtd-file-input" type="file" multiple aria-label="Attach files" disabled={state === null || !state.enabled} onChange={onFileChange} />
+          <button type="button" className="qtd-attach" aria-label="Attach file" disabled={state === null || !state.enabled} onClick={() => fileRef.current?.click()}>Attach</button>
+          <button type="button" className="qtd-send" aria-label={shouldStop ? 'Stop' : 'Send'} disabled={state === null || !state.enabled || !shouldStop && sendDisabled} onClick={() => shouldStop ? void stop() : void send()}>{shouldStop ? 'Stop' : 'Send'}</button>
+        </div>
       </div>
     </div>
   )
@@ -897,15 +905,19 @@ function SessionOption({ state, kind, onChange }: {
   const current = state?.options[kind] ?? ''
   const choices = state?.options.choices[kind] ?? []
   const disabled = state === null || !state.enabled || !state.supported || choices.length === 0
+  const description = choices.length === 0
+    ? `No session-specific ${labels[kind].toLowerCase()} choices available. ${labels[kind]} control unavailable for this session.`
+    : current !== '' && !choices.includes(current)
+      ? `${labels[kind]} ${current} is reported but is not in the advertised session choices.`
+      : undefined
   return (
     <label className="qtd-control-option">
       <span>{labels[kind]}</span>
-      <select aria-label={labels[kind]} value={current} disabled={disabled} onChange={(event) => onChange(kind, event)}>
+      <select aria-label={labels[kind]} aria-description={description} title={description} value={current} disabled={disabled} onChange={(event) => onChange(kind, event)}>
         {current === '' && <option value="">Not reported</option>}
-        {choices.length === 0 && <option value="">No session-specific {labels[kind].toLowerCase()} choices available</option>}
+        {current !== '' && !choices.includes(current) && <option value={current}>{current} (current)</option>}
         {choices.map((choice) => <option key={choice} value={choice}>{choice}</option>)}
       </select>
-      {choices.length === 0 && <small>{labels[kind]} control unavailable for this session.</small>}
     </label>
   )
 }
