@@ -179,7 +179,9 @@ const uiLayout = object(
     view: { description: 'The open view as {id, input?}, or null.' },
     panel: { description: 'The open panel ID, or null.' },
     sidebar: boolean(),
-    focus: { description: "'sidebar', 'view', 'panel' or null." }
+    focus: { description: "'sidebar', 'view', 'panel' or null." },
+    panelWidths: { type: 'object', additionalProperties: true, description: 'Desired width by panel ID.' },
+    activityBarPosition: { type: 'string', enum: ['top', 'side'], description: 'Global panel activity-bar position.' }
   },
   ['view', 'panel', 'sidebar', 'focus']
 )
@@ -377,6 +379,19 @@ export const KERNEL_METHOD_SCHEMAS = {
     result: uiLayout
   },
   'ui.panel.close': { description: 'Closes the open panel.', params: noParams, result: uiLayout },
+  'ui.panel.configure': {
+    description:
+      'Configures an effective panel width (an integer from 220 through 4096) and/or the global activity bar position.',
+    params: object(
+      {
+        id: string('An effective panel contribution ID.'),
+        width: { type: 'integer', minimum: 220, maximum: 4096 },
+        activityBarPosition: { type: 'string', enum: ['top', 'side'] }
+      },
+      ['id']
+    ),
+    result: uiLayout
+  },
   'ui.sidebar.set': {
     description: 'Shows or hides the sidebar.',
     params: object({ visible: boolean() }, ['visible']),

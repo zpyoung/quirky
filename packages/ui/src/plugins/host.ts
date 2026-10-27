@@ -310,6 +310,11 @@ export class WindowPluginHost {
     else if (this.state.layout.panel === id) this.layoutCall('ui.panel.close', {})
   }
 
+  /** Configures one panel's desired geometry through the daemon's public layout API. */
+  configurePanel(id: string, options: { width?: number; activityBarPosition?: 'top' | 'side' }): void {
+    this.layoutCall('ui.panel.configure', { id, ...options })
+  }
+
   /** Tells the daemon that the person put focus in `target`, unless it is already there. */
   focus(target: 'sidebar' | 'view' | 'panel'): void {
     if (this.state.layout.focus !== target) this.layoutCall('ui.focus', { target })

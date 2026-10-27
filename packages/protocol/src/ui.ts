@@ -153,12 +153,16 @@ export type UiModel = {
   modules: Record<string, { url: string; provides: string[] }>
 }
 
-/** Which view and panel are open, whether the sidebar shows, and where focus is; owned by the daemon. */
+/** Which view and panel are open, whether the sidebar shows, and the desired panel geometry; owned by the daemon. */
 export type UiLayout = {
   view: { id: string; input?: unknown } | null
   panel: string | null
   sidebar: boolean
   focus: 'sidebar' | 'view' | 'panel' | null
+  /** Desired width by effective panel ID; absent entries retain the shell's default width. */
+  panelWidths?: Record<string, number>
+  /** Global activity-bar position; absence retains the shell's existing default geometry. */
+  activityBarPosition?: 'top' | 'side'
 }
 
 /** A connected window (a client with role `ui`). */

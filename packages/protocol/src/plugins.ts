@@ -61,6 +61,12 @@ export type PluginContext = {
   subscribe(listener: (event: QuirkyEvent) => void | Promise<void>): () => void
   /** Invokes a daemon or plugin method as this plugin. */
   call(method: string, params?: Record<string, unknown>): Promise<unknown>
+  /** Creates a same-origin opaque capability URL for an authorized local file. */
+  createFileResource(options: {
+    path: string
+    contentType: string
+    disposition?: 'inline' | 'attachment'
+  }): Promise<{ url: string; revoke(): void }>
   /** Opens this plugin's private SQLite store, applying any migrations it has not yet run. */
   openStore(migrations: StoreMigration[]): PluginStore
   /** The current value of a setting: a short name in this plugin's own namespace, or a full setting ID. */
