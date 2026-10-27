@@ -449,5 +449,35 @@
 - **Confidence:** high
 - **Source:** assumed — autonomous
 
+## D45: A later land failed on a quirky.worktree test race; this branch carries that plugin's own fix
+- **Question:** LOOP.md step 7.3 after `queue.ts land` reported `bun run test` failing on the merge result
+- **Options:** cherry-pick the upstream fix; write a new fix; retry unchanged
+- **Chose:** cherry-picked fce1b6a ("wait for the sidebar report after moving a project into a group") onto this branch after merging build/roadmap. The failure was `plugins/quirky.worktree/test/window-projects.test.ts` SC-10, which read the window report before it caught up with the DOM; it failed alone too, so a plain retry would not help. The same fix already exists on build-loop/faster-lands and build/m5-structured-runner but not yet on build/roadmap; git drops the duplicate when those land.
+- **Why:** the test is outside this item, but LOOP.md says to fix a failed land on the item branch, and reusing the existing fix avoids a second version of it
+- **Evidence:** the file passes alone after the cherry-pick (18 pass)
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** assumed — autonomous
+
+## D46: The resumed lane verifies the existing final fix batch and proceeds to land
+- **Question:** whether to rebuild or repeat review after resuming the completed branch at step 7
+- **Options:** repeat implementation and review; retain the recorded final review and rerun the required gate plus a live CLI smoke
+- **Chose:** retain the completed work and review. `bun install` made no changes. The fresh gate passed: 440 remote test files and two macOS-only files, no flaky files; 49 script tests; typecheck. A throwaway smoke started a daemon and PTY host with fresh temporary homes, created `lane1-smoke`, posted a Claude PermissionRequest, resolved the name with `session get`, explained the hook approval, waited for blocked, and verified send exited 1 with `agent-blocked` without sending any input. The harness stopped its processes and removed its temporary homes.
+- **Why:** Progress already recorded completion of implementation, catch-up, Final Round 1 and its fix batch; the fresh gate and actual CLI flow verify the resumed tree without reopening finished work.
+- **Evidence:** iteration 2 verification command `bun run test && bun test scripts && bun run typecheck` exited 0; smoke printed `SMOKE_OK` and `SMOKE_CLEANUP_OK`, exited 0
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** assumed — autonomous
+
+## D47: Retry landing after the protected queue tests pass unchanged
+- **Question:** the first resumed land failed in `bun test scripts` after its product suite passed
+- **Options:** modify the protected queue tests; merge upstream loop updates and verify unchanged
+- **Chose:** merged `build/roadmap` cleanly and read the updated LOOP.md, including night mode. No new item decision logs or product code came with this merge. The rejected land's product suite was successful (shell-path passed its isolated retry); its script failures were two 5-second timeout failures in `scripts/build-loop/lanes.test.ts`. After catch-up, `bun test scripts && bun run typecheck` exited 0: 62 script tests passed, no failures. No protected file was manually edited.
+- **Why:** the same script gate passes without a code fix; the observed timeout failures do not justify changing protected loop code. Leave the complete suite to the next land as the updated instructions require.
+- **Evidence:** resumed land output; clean catch-up merge; subsequent script gate 62 pass, 0 fail, typecheck exit 0
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** locked by docs/loop/LOOP.md
+
 ## Progress
-Step 7 (land). Build, Final Round 1, its fix batch and the final gate are done (head 2d20a80 plus this note). No UI or native scenarios (D25). If this iteration stopped before landing: run `bun install`, the gate (`bun run test && bun test scripts && bun run typecheck`), commit, `git switch --detach`, check `pgrep -fl "queue.ts land"` is empty, then `bun scripts/build-loop/queue.ts land m1-agent-status-scripting`.
+Step 7 (land). Iteration 2 completed fresh verification and a live CLI smoke (D46), then caught up after a script-test timeout rejected the land. The script gate and typecheck pass unchanged (D47). Next: commit this note, detach and retry `bun scripts/build-loop/queue.ts land m1-agent-status-scripting`.

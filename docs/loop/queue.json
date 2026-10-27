@@ -244,8 +244,9 @@
         "m1-worktrees",
         "m1-agent-status"
       ],
-      "status": "todo",
-      "early": true
+      "status": "in-progress",
+      "early": true,
+      "lane": 1
     },
     {
       "id": "m6-orchestration-workers",
@@ -350,8 +351,7 @@
       "deps": [
         "m1-agent-status"
       ],
-      "status": "in-progress",
-      "lane": 1
+      "status": "done"
     },
     {
       "id": "m2-editor",
@@ -1116,6 +1116,18 @@
       ],
       "deps": [
         "m2-editor"
+      ],
+      "status": "todo"
+    },
+    {
+      "id": "m3-accounts-overflow-verification",
+      "milestone": "M3",
+      "title": "Finish Accounts narrow-width +N overflow, tooltip and badge-only responsive verification, and diagnose the affected-package suite hang: the repaired full-width popover passed but four fixture providers fit at 1280px so overflow was not forced; the ten-directory bun scripts/suite.ts attempt timed out after 1800 seconds without a test verdict. These checks were not finished under the operator's one-hour landing deadline. Preserve the 48-test core pass and actual transcript-content/UI reports, then complete the missing observations and restore a bounded passing affected-package run without suppressing tests.",
+      "docs": [
+        "accounts.md"
+      ],
+      "deps": [
+        "m3-accounts"
       ],
       "status": "todo"
     }
