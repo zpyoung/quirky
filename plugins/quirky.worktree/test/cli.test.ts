@@ -1,14 +1,17 @@
 import { afterEach, describe, expect, test } from 'bun:test'
-import { realpathSync } from 'node:fs'
+import { mkdirSync, realpathSync } from 'node:fs'
 import { join } from 'node:path'
-import type { QuirkyClient, Repo, Worktree } from '@quirky/protocol'
+import type { QuirkyClient, Repo, Worktree, WorktreeCreateResult } from '@quirky/protocol'
 import { spawnCli } from '../../../packages/cli/test/fixtures/fake-daemon'
 import { makeTempDir } from '../../../packages/daemon/test/plugins/fixtures'
 import { waitFor } from '../../../packages/daemon/test/helpers'
+import { isolateGitConfig } from '../../quirky.repo/test/git-fixtures'
 import { fakeAsks } from '../../quirky.repo/test/fakes/quirky.ask/main'
 import { startPluginHarness, testCliContext, type PluginHarness } from '../../quirky.repo/test/harness'
 import { commands } from '../cli'
+import { addFakeRepo, fakeRegistrations } from './fixtures/fake-git'
 
+isolateGitConfig()
 let t: PluginHarness | undefined
 afterEach(async () => {
   await t?.cleanup()
@@ -19,56 +22,63 @@ const call = (client: QuirkyClient, method: string, params: Record<string, unkno
 
 async function start(options: Parameters<typeof startPluginHarness>[0] = {}) {
   t = await startPluginHarness(options)
-  t.git!.addRepo('/fake/alpha')
+  fakeRegistrations(t.git!)
+  const alpha = addFakeRepo(t.git!, 'alpha')
   const root = realpathSync(makeTempDir('qw-'))
   await call(t.client, 'setting.set', { id: 'setting:quirky.worktree/worktreesRoot', value: root })
-  const repo = (await call(t.client, 'quirky.repo/add', { path: '/fake/alpha' })) as Repo
-  return { t, client: t.client, root, repo }
+  const repo = (await call(t.client, 'quirky.repo/add', { path: alpha })) as Repo
+  return { t, client: t.client, root, repo, alpha }
 }
 
 describe('SC-20: quirky worktree commands keep v1 output', () => {
   test('list prints "no worktrees" without repos, then a table with a detached placeholder', async () => {
     t = await startPluginHarness()
+    fakeRegistrations(t.git!)
     const empty = testCliContext(t.client)
     await commands.list!({ positionals: [], flags: {} }, empty.ctx)
     expect(empty.lines).toEqual(['no worktrees'])
 
-    t.git!.addRepo('/fake/alpha')
-    t.git!.worktreesByRepo.get('/fake/alpha')!.push({ path: '/fake/alpha-det', branch: null, head: 'd'.repeat(40), isMain: false, locked: null })
-    await call(t.client, 'quirky.repo/add', { path: '/fake/alpha' })
+    const alpha = addFakeRepo(t.git!, 'alpha')
+    const detached = `${alpha}-det`
+    mkdirSync(detached)
+    t.git!.worktreesByRepo.get(alpha)!.push({ path: detached, branch: null, head: 'd'.repeat(40), isMain: false, locked: null })
+    await call(t.client, 'quirky.repo/add', { path: alpha })
     const filled = testCliContext(t.client)
     await commands.list!({ positionals: [], flags: {} }, filled.ctx)
     const rows = filled.lines[0]!.split('\n')
-    expect(rows[0]).toMatch(/^ID\s+NAME\s+BRANCH\s+PATH$/)
-    expect(rows[1]).toMatch(/^wt_[0-9a-f]{12}\s+main\s+main\s+\/fake\/alpha$/)
-    expect(rows[2]).toMatch(/\(detached\)\s+\/fake\/alpha-det$/)
+    // the table grew a STATUS column (m1-worktrees tech.md "CLI")
+    expect(rows[0]).toMatch(/^ID\s+NAME\s+BRANCH\s+STATUS\s+PATH$/)
+    expect(rows[1]).toMatch(new RegExp(`^wt_[0-9a-f]{12}\\s+main\\s+main\\s+in-progress\\s+${alpha}$`))
+    expect(rows[2]).toMatch(new RegExp(`\\(detached\\)\\s+in-progress\\s+${detached}$`))
   })
 
   test('list --repo takes a selector', async () => {
     const { client } = await start()
-    t!.git!.addRepo('/fake/beta')
-    await call(client, 'quirky.repo/add', { path: '/fake/beta' })
+    const beta = addFakeRepo(t!.git!, 'beta')
+    await call(client, 'quirky.repo/add', { path: beta })
     const { ctx, lines } = testCliContext(client, { json: true })
     await commands.list!({ positionals: [], flags: { repo: 'name:beta' } }, ctx)
     const listed = JSON.parse(lines[0]!) as Worktree[]
-    expect(listed.map((w) => w.path)).toEqual(['/fake/beta'])
+    expect(listed.map((w) => w.path)).toEqual([beta])
   })
 
-  test('create prints the record and passes --base as baseRef', async () => {
+  test('create prints the record and resolves --base to a full ref', async () => {
     const { t, client, root } = await start()
     const { ctx, lines } = testCliContext(client)
     await commands.create!({ positionals: ['name:alpha', 'feature-x'], flags: { base: 'main' } }, ctx)
     expect(lines[0]).toMatch(
       new RegExp(`^id: wt_[0-9a-f]{12}\\nname: feature-x\\nbranch: feature-x\\npath: ${join(root, 'alpha', 'feature-x')}$`)
     )
-    expect(t.git!.calls.find((c) => c.fn === 'addWorktree')?.args[3]).toBe('main')
+    // D14: the git primitive receives the full ref the base resolved to
+    expect(t.git!.calls.find((c) => c.fn === 'addWorktree')?.args[3]).toBe('refs/heads/main')
   })
 
-  test('create without --base sends no baseRef', async () => {
+  test('create without --base cuts from the detected default branch, not HEAD', async () => {
     const { t, client } = await start()
     const { ctx } = testCliContext(client)
     await commands.create!({ positionals: ['alpha', 'feature-x'], flags: {} }, ctx)
-    expect(t.git!.calls.find((c) => c.fn === 'addWorktree')?.args[3]).toBeUndefined()
+    // D14: the fake's detected default is main
+    expect(t.git!.calls.find((c) => c.fn === 'addWorktree')?.args[3]).toBe('refs/heads/main')
   })
 
   test('rm prints "removed <worktree>" and passes --force', async () => {
@@ -102,7 +112,7 @@ describe('quirky worktree through the real CLI', () => {
     expect(listed.code).toBe(0)
     expect((JSON.parse(listed.stdout) as Worktree[]).map((w) => w.name)).toEqual(['main', 'feature-x'])
     const text = await run(['worktree', 'list', '--repo', 'name:alpha'])
-    expect(text.stdout.split('\n')[0]).toMatch(/^ID\s+NAME\s+BRANCH\s+PATH$/)
+    expect(text.stdout.split('\n')[0]).toMatch(/^ID\s+NAME\s+BRANCH\s+STATUS\s+PATH$/)
   })
 
   test('SC-44: worktree rm --yes removes at once', async () => {
@@ -117,7 +127,7 @@ describe('quirky worktree through the real CLI', () => {
 
   test('SC-43: worktree rm asks first; Yes removes it and No keeps it', async () => {
     const { t, repo } = await start({ fakeAsk: true })
-    const created = (await call(t.client, 'quirky.worktree/create', { repo: repo.id, name: 'feature-x' })) as Worktree
+    const created = ((await call(t.client, 'quirky.worktree/create', { repo: repo.id, name: 'feature-x' })) as WorktreeCreateResult).worktree
 
     const yes = spawnCli(['worktree', 'rm', 'feature-x'], { home: t.h.home })
     const askId = await waitFor(() => [...fakeAsks().keys()][0])
