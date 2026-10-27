@@ -473,5 +473,16 @@
 - **Revisit if:** a contributed view reports mounted before its interactive root or steals background focus
 - **Source:** assumed — autonomous (concrete failed-land core blocker)
 
+## D44: Confirm repaired mount focus with real keyboard input before retrying land
+- **Question:** prove the readiness fix on the actual built web surface, not only the daemon/UI test
+- **Options:** rely on tests; click/fill the editor and imply automatic focus; inspect focus after visible Show and type through that focus
+- **Chose:** guarded web/yours/unattended run20261027T223455-bc3d, PASS. Enable through visible Settings; Hide/Show twice through the terminal context menu. After each Show the actual Message to agent textbox was active without editor click/fill. Current-keyboard PONG plus Enter produced terminal PONG. Keep F1's opacity-hidden terminal-input reference limitation; guarded visible pane coordinates opened the real menu.
+- **Why:** keyboard-only sending after Show proves the contributed root and registered focus action were ready. The accounts status UI coexists in the actual merged surface. No test overrides, API/CLI goal shortcuts or native chooser were used.
+- **Evidence:** run report.json/report.md and obs-12.png,obs-14.png,obs-18.png; parent independently read PONG screenshot. Browser closed with no cleanup errors; parent stopped only the owned fixture; private settings sentinel comparison returned true.
+- **Reversibility:** easy
+- **Confidence:** high for observed core focus/send
+- **Revisit if:** actual keyboard focus or background-pane ownership regresses
+- **Source:** assumed — autonomous (required post-fix runtime proof)
+
 ## Progress
-Core proofs, registered dependent follow-up and one final review remain complete; original noncore gaps/C1 stay open. First land stopped at a concurrent merge conflict, not a full-suite verdict. Required repair preserved dock focus fields and new accessories; imported logs were read. Initial-focus readiness was fixed at the actual React mount boundary, and dock E2E, full typecheck and14-plugin packaged build pass. One focused visible hide/show/focus/PONG smoke is finishing; then stop its private scene, commit the resolved merge, detach and retry queue.ts land. Do not claim authoritative integration validation until that command succeeds.
+Core, registered dependent follow-up, final review and required conflict recovery are complete. The first landing failed only on concurrent report edits; both intents were retained. Real mount readiness now gates focus, and dock E2E, full typecheck,14-plugin packaged build and actual keyboard-only focus/PONG smoke pass. Original noncore gaps/C1 remain open. Stop/verify the private scene, commit this evidence, detach and retry queue.ts land; authoritative integration validation is not claimed until that command succeeds.
