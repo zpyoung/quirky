@@ -4,6 +4,7 @@
   "version": "0.1.0",
   "description": "Turns agent hooks into a status row per session, the session's status and finish notifications.",
   "main": "main.ts",
+  "cli": "cli.ts",
   "activation": "startup",
   "dependencies": [
     "quirky.session"
@@ -49,7 +50,7 @@
                 "description": "One readable line; never a JSON object."
               },
               "progress": {
-                "description": "0 to 1, or null when the program reports none."
+                "description": "0 to 100 as a percentage, or null when the program reports none."
               },
               "stateStartedAt": {
                 "type": "number"
@@ -105,6 +106,143 @@
         "result": {
           "description": "The whole row plus `display` and `label`, or null."
         }
+      },
+      {
+        "id": "hooksStatus",
+        "description": "Whether Quirky's hooks are installed for each agent that takes them from a config file.",
+        "readOnly": true,
+        "params": {
+          "type": "object",
+          "properties": {}
+        },
+        "result": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "agent": {
+                "type": "string"
+              },
+              "status": {
+                "type": "string",
+                "enum": [
+                  "installed",
+                  "not-installed",
+                  "agent_disabled",
+                  "cli_not_found",
+                  "hooks_disabled",
+                  "error"
+                ]
+              },
+              "files": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "The files the installer may touch."
+              },
+              "message": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "agent",
+              "status",
+              "files"
+            ]
+          }
+        }
+      },
+      {
+        "id": "hooksSetup",
+        "description": "Installs Quirky's hooks for detected, enabled agents, or for one named agent. Refused while the Agent status hooks setting is off.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "agent": {
+              "type": "string",
+              "description": "The agent ID; every agent when omitted."
+            }
+          }
+        },
+        "result": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "agent": {
+                "type": "string"
+              },
+              "status": {
+                "type": "string",
+                "enum": [
+                  "installed",
+                  "not-installed",
+                  "agent_disabled",
+                  "cli_not_found",
+                  "hooks_disabled",
+                  "error"
+                ]
+              },
+              "changed": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "The files this run wrote."
+              },
+              "note": {
+                "type": "string"
+              },
+              "message": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "agent",
+              "status",
+              "changed"
+            ]
+          }
+        }
+      },
+      {
+        "id": "hooksRemove",
+        "description": "Removes Quirky's hooks for every agent, or for one named agent.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "agent": {
+              "type": "string",
+              "description": "The agent ID; every agent when omitted."
+            }
+          }
+        },
+        "result": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "agent": {
+                "type": "string"
+              },
+              "changed": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "The files this run changed or deleted."
+              },
+              "message": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "agent",
+              "changed"
+            ]
+          }
+        }
       }
     ],
     "launch-hook": [
@@ -132,6 +270,13 @@
         "type": "boolean",
         "title": "Notify when agents finish",
         "default": true
+      },
+      {
+        "id": "hooks",
+        "type": "boolean",
+        "title": "Agent status hooks",
+        "description": "Shows working, waiting, and done states in Quirky. Turn off to remove Quirky-managed hooks and stop reinstalling them.",
+        "default": true
       }
     ],
     "event": [
@@ -152,6 +297,46 @@
             "sessionId"
           ]
         }
+      }
+    ],
+    "cli-command": [
+      {
+        "id": "hooks-status",
+        "words": "hooks status",
+        "summary": "show whether agent status hooks are installed for each agent",
+        "methods": [
+          "quirky.agent-status/hooksStatus"
+        ]
+      },
+      {
+        "id": "hooks-setup",
+        "words": "hooks setup",
+        "summary": "install agent status hooks for detected agents, or for one agent",
+        "positionals": [
+          {
+            "name": "agent",
+            "description": "The agent ID; every agent when omitted.",
+            "required": false
+          }
+        ],
+        "methods": [
+          "quirky.agent-status/hooksSetup"
+        ]
+      },
+      {
+        "id": "hooks-remove",
+        "words": "hooks remove",
+        "summary": "remove Quirky's agent status hooks for every agent, or for one agent",
+        "positionals": [
+          {
+            "name": "agent",
+            "description": "The agent ID; every agent when omitted.",
+            "required": false
+          }
+        ],
+        "methods": [
+          "quirky.agent-status/hooksRemove"
+        ]
       }
     ]
   }
