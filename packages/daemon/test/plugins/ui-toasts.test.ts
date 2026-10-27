@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, test } from 'bun:test'
 import { RpcErrorCode, type QuirkyClient, type QuirkyEvent, type UiToastState } from '@quirky/protocol'
 import { sendNotification } from '../../src/notify'
+import { Connection } from '../../../ui/src/connection'
 import { bootWindow, closeWindows, installUiPlugin } from '../../../ui/test/fixtures/window-env'
 import { startHarness, waitForAsync, type Harness } from '../helpers'
 import { removeTempDirs } from './fixtures'
@@ -96,6 +97,18 @@ describe('ui.shell.report', () => {
     await waitForAsync(async () => (await keys()).join() === 'a')
   })
 
+  test('a focused window that has not reported shows an empty list, not another window\'s', async () => {
+    const { harness, caller } = await start()
+    const reporting = await openWindow(harness, 'reporting')
+    const silent = await openWindow(harness, 'silent')
+    await reporting.client.call('ui.shell.report', { toasts: [toast('a')] })
+    const keys = async () => (await caller.call('ui.state', {})).toasts.map((t) => t.key)
+
+    expect(await keys()).toEqual(['a'])
+    await silent.client.call('ui.window.focused', { focused: true })
+    expect(await keys()).toEqual([])
+  })
+
   test('only a window can report, and the list must be an array under 64 KiB', async () => {
     const { harness, caller } = await start()
     const window = await openWindow(harness)
@@ -131,6 +144,18 @@ describe('ui.toast.dismiss', () => {
     await caller.call('ui.toast.dismiss', { key: 'mine' })
     expect(first.requests).toHaveLength(1)
     expect(second.requests).toHaveLength(0)
+  })
+
+  test('a focused window that has not reported is the target: NotFound, and the background window gets nothing', async () => {
+    const { harness, caller } = await start()
+    const background = await openWindow(harness, 'background')
+    const focused = await openWindow(harness, 'focused')
+    await background.client.call('ui.shell.report', { toasts: [toast('theirs')] })
+    await focused.client.call('ui.window.focused', { focused: true })
+
+    expect(await failure(caller.call('ui.toast.dismiss', { key: 'theirs' }))).toMatchObject({ code: RpcErrorCode.NotFound })
+    expect(background.requests).toEqual([])
+    expect(focused.requests).toEqual([])
   })
 
   test('fails NotFound for a key no toast has and sends nothing', async () => {
@@ -200,6 +225,22 @@ describe('a real window', () => {
   }
 
   const ran = () => ((globalThis as { __ran?: unknown[] }).__ran ?? []) as unknown[]
+
+  test('a window reports its empty toast list as soon as it connects', async () => {
+    const reports: unknown[] = []
+    const callAny = Connection.prototype.callAny
+    Connection.prototype.callAny = function (this: Connection, method: string, params: Record<string, unknown>) {
+      if (method === 'ui.shell.report') reports.push(params)
+      return callAny.call(this, method, params)
+    }
+    try {
+      await bootWindow(writeToasts)
+      await waitForAsync(async () => reports.length > 0)
+      expect(reports[0]).toEqual({ toasts: [] })
+    } finally {
+      Connection.prototype.callAny = callAny
+    }
+  })
 
   test('reports what the plugin showed, and ui.toast.dismiss dismisses it and runs onDismiss once', async () => {
     const { agent } = await bootWindow(writeToasts)

@@ -23,7 +23,7 @@ afterEach(async () => {
 })
 
 const changes = () => events.filter((e) => e.type === 'quirky.session/changed')
-const setBadge = (session: string, key: string, badge: unknown) => call<Session>(client, 'quirky.session/setBadge', { session, key, badge })
+const setBadge = (session: string, key: string, badge: unknown) => call<{ session: Session }>(client, 'quirky.session/setBadge', { session, key, badge }).then((result) => result.session)
 
 describe('quirky.session/setBadge', () => {
   test('stores the badge under the caller-qualified key, returns the session and emits changed', async () => {
@@ -38,6 +38,13 @@ describe('quirky.session/setBadge', () => {
     await waitFor(() => changes().length === before + 1 || undefined)
     expect((changes().at(-1) as unknown as { data: { session: Session } }).data.session.badges).toEqual({ 'cli/lineage:1': badge })
     expect(await call(client, 'quirky.session/get', { session: session.id })).toMatchObject({ badges: { 'cli/lineage:1': badge } })
+  })
+
+  test('answers with a { session } envelope', async () => {
+    const session = await createSession(client, { worktree: 'id:wt_main', agent: 'claude' })
+    const result = await call<Record<string, unknown>>(client, 'quirky.session/setBadge', { session: session.id, key: 'a', badge: { label: 'A' } })
+    expect(Object.keys(result)).toEqual(['session'])
+    expect(result.session).toMatchObject({ id: session.id, badges: { 'cli/a': { label: 'A' } } })
   })
 
   test('null removes the badge and leaves the others', async () => {

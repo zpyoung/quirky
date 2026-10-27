@@ -80,7 +80,7 @@ export function createShell(options: ShellOptions): AppContextValue {
     reportToasts()
   })
   connection.onConnected(() => {
-    if (store.getState().toasts.length > 0) reportToasts()
+    reportToasts()
     plugins.connected().catch((error) => options.log(`plugin refresh failed: ${error}`))
   })
   return { store, connection, plugins }

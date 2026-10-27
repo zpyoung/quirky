@@ -116,8 +116,8 @@ export class LayoutService {
   /**
    * The effective layout, the connected windows, and every slot of the UI model with what it shows
    * and reports. An overlay is shown while a window has reported for it, unless the latest report
-   * is an object whose boolean `shown` says otherwise. `toasts` is the focused window's list, else
-   * the list reported last.
+   * is an object whose boolean `shown` says otherwise. `toasts` is the focused window's list (empty
+   * until it reports), else, with no window focused, the list reported last.
    */
   state(): UiState {
     const layout = this.layout()
@@ -364,8 +364,7 @@ export class LayoutService {
   }
 
   private toastsOf(focusedConn: number | undefined): { connId: number; toasts: UiToastState[] } | undefined {
-    const own = focusedConn !== undefined ? this.toastReports.get(focusedConn) : undefined
-    if (own) return { connId: focusedConn!, toasts: own.toasts }
+    if (focusedConn !== undefined) return { connId: focusedConn, toasts: this.toastReports.get(focusedConn)?.toasts ?? [] }
     let latest: { connId: number; toasts: UiToastState[]; order: number } | undefined
     for (const [connId, report] of this.toastReports) {
       if (!latest || report.order > latest.order) latest = { connId, ...report }

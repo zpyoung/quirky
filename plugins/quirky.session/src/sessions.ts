@@ -370,7 +370,7 @@ export class SessionService {
    * the calling plugin's ID, or the client role for a non-plugin caller, so callers never touch
    * each other's badges.
    */
-  setBadge = (params: Record<string, unknown>, caller: PluginCaller): Session => {
+  setBadge = (params: Record<string, unknown>, caller: PluginCaller): { session: Session } => {
     const before = this.require(params.session as string)
     const { key, badge } = params
     if (typeof key !== 'string' || key === '') throw this.context.error('invalid-params', 'key must be a non-empty string')
@@ -381,7 +381,7 @@ export class SessionService {
     const qualified = `${caller.role === 'plugin' ? caller.pluginId : caller.role}/${key}`
     if (badge === null) delete badges[qualified]
     else badges[qualified] = pickBadge(badge)
-    return this.publish(this.records.update(before.id, { badges }) as Session)
+    return { session: this.publish(this.records.update(before.id, { badges }) as Session) }
   }
 
   /**
