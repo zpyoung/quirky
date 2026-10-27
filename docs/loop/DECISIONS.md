@@ -311,6 +311,7 @@ files, not this one.
 | easy | high | [m2-ask-parity D34](decisions/m2-ask-parity.md) | UI scenarios pass in the web window; two goals were limited by the tool, not the app | assumed — autonomous |
 | easy | high | [m2-ask-parity D35](decisions/m2-ask-parity.md) | Catching up with build/roadmap (m1-term-daemon) needed no change here | assumed — autonomous |
 | easy | high | [m2-ask-parity D36](decisions/m2-ask-parity.md) | No native-only scenarios | assumed — autonomous |
+| easy | high | [m2-ask-parity D37](decisions/m2-ask-parity.md) | The first land was cut off by this iteration's own timeout, after its merge; land runs again once lane 2's land finishes | assumed — autonomous |
 | easy | high | [m1-launch-settings D1](decisions/m1-launch-settings.md) | Classify the item as Data, API, CLI and Integration work, and run research phases A and B | assumed — autonomous |
 | easy | high | [m1-launch-settings D2](decisions/m1-launch-settings.md) | Skip the visual companion and the adhd offer, and use the standard gray-area set | locked by docs/loop/LOOP.md |
 | easy | high | [m1-launch-settings D3](decisions/m1-launch-settings.md) | Select every gray area that matters: data-mapping, input-format, conflict-resolution, error-handling, output-format and flag-design | locked by docs/loop/LOOP.md |
