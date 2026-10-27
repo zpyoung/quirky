@@ -351,6 +351,61 @@ describe('DeliveryRunner', () => {
     expect(pty.paste).toEqual([frame('look at #5')])
   })
 
+  test('ready skips the subscribe and the ready scan and pastes at once', async () => {
+    const { pty, runner } = setup()
+    const start = Date.now()
+    expect(await runner.deliver(SESSION, entry('goose'), 'a\nb', false, { ready: true })).toBe('pasted')
+    expect(Date.now() - start).toBeLessThan(500 * SCALE)
+    expect(pty.subscribed).toEqual([])
+    expect(pty.paste).toEqual([frame('a\rb')])
+    expect(pty.listenerCount()).toBe(0)
+    expect(goneListeners.size).toBe(0)
+  })
+
+  test('ready with submit still sends Enter after the submit delay as a separate write', async () => {
+    const { pty, runner } = setup()
+    const agy = entry('antigravity', { lineSettleMs: 45 })
+    expect(await runner.deliver(SESSION, agy, 'a\nb', true, { ready: true })).toBe('pasted')
+    expect(pty.paste).toEqual([frame('a\rb'), '\r'])
+    expect(pty.writes[1]!.at - pty.writes[0]!.at).toBeGreaterThanOrEqual((500 + 2 * 45) * SCALE - 2)
+  })
+
+  test('ready with submit honours enterWithPaste and submitRetryMs', async () => {
+    const { pty, runner } = setup()
+    const omp = entry('omp', { enterWithPaste: true, submitRetryMs: 600 })
+    expect(await runner.deliver(SESSION, omp, 'x', true, { ready: true })).toBe('pasted')
+    expect(pty.paste).toEqual([`${frame('x')}\r`, '\r'])
+  })
+
+  test('ready without submit writes no Enter', async () => {
+    const { pty, runner } = setup()
+    const draft = entry('goose', { submitRetryMs: 1200, enterWithPaste: true })
+    expect(await runner.deliver(SESSION, draft, 'draft', false, { ready: true })).toBe('pasted')
+    await Bun.sleep(1200 * SCALE + 30)
+    expect(pty.paste).toEqual([frame('draft')])
+  })
+
+  test('ready on a dead session is not delivered and writes nothing', async () => {
+    const { pty, runner } = setup()
+    pty.alive = false
+    expect(await runner.deliver(SESSION, entry('goose'), 'hi', true, { ready: true })).toBe('not-delivered')
+    expect(pty.writes).toEqual([])
+    expect(pty.listenerCount()).toBe(0)
+  })
+
+  test('ready with a failing write is not delivered', async () => {
+    const { pty, runner } = setup()
+    pty.writeError = new Error('closed')
+    expect(await runner.deliver(SESSION, entry('goose'), 'hi', true, { ready: true })).toBe('not-delivered')
+  })
+
+  test('ready with a stalled liveness check gives up', async () => {
+    const { pty, runner } = setup()
+    pty.listStalls = true
+    expect(await runner.deliver(SESSION, entry('goose'), 'hi', true, { ready: true })).toBe('not-delivered')
+    expect(pty.writes).toEqual([])
+  })
+
   test('a draft waits on the ready signal, a submit on the submit signal', async () => {
     const opencode = entry('opencode', {
       readySignal: 'render-cursor-after-bracketed-paste',

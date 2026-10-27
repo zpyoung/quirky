@@ -1655,7 +1655,7 @@
       },
       {
         "id": "deliver",
-        "description": "Pastes a prompt into a running agent once it is ready; resolves when the delivery has settled.",
+        "description": "Pastes a prompt into a running agent once it is ready; resolves when the delivery has settled. The text is sent as one bracketed paste: line breaks become CR, ESC becomes ␛, and the whole is wrapped in ESC[200~ … ESC[201~.",
         "params": {
           "type": "object",
           "properties": {
@@ -1671,6 +1671,10 @@
             },
             "submit": {
               "type": "boolean"
+            },
+            "ready": {
+              "type": "boolean",
+              "description": "the agent already shows its input; paste without waiting for a ready signal"
             }
           },
           "required": [
@@ -1694,6 +1698,49 @@
           },
           "required": [
             "delivery"
+          ]
+        }
+      },
+      {
+        "id": "submitPlan",
+        "description": "How deliver would submit a prompt to an agent: whether Enter rides with the paste, the delay before a separate Enter, and the retry delay.",
+        "readOnly": true,
+        "params": {
+          "type": "object",
+          "properties": {
+            "agent": {
+              "type": "string",
+              "description": "The agent ID."
+            },
+            "text": {
+              "type": "string",
+              "description": "The prompt the delay is computed for."
+            }
+          },
+          "required": [
+            "agent",
+            "text"
+          ]
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "enterWithPaste": {
+              "type": "boolean",
+              "description": "Enter is written in the same write as the paste."
+            },
+            "delayMs": {
+              "type": "number",
+              "description": "Milliseconds between the paste and a separate Enter."
+            },
+            "retryMs": {
+              "description": "Milliseconds after the first Enter before a second one, or null when there is none."
+            }
+          },
+          "required": [
+            "enterWithPaste",
+            "delayMs",
+            "retryMs"
           ]
         }
       }
