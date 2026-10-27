@@ -231,5 +231,60 @@
 - **Revisit if:** Linux/Windows become an authorized build target
 - **Source:** deferred: platform
 
+## D22: Refresh on actual window focus with freshness debouncing
+- **Question:** Does the focus-refresh flow work through the real public event rather than a test-only job invocation?
+- **Options:** count job.run as focus proof; subscribe to ui.window.changed and retain freshness debouncing
+- **Chose:** refresh from the actual focused-window event; repeated focus within the freshness window does not fetch again
+- **Why:** the missing subscription left the documented flow unimplemented. The new daemon/API regression failed before the subscription and passed afterwards.
+- **Evidence:** commit 28e8b32; plugins/quirky.accounts/src/index.ts; plugins/quirky.accounts/test/acceptance-api.test.ts
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** the public window event or freshness policy changes
+- **Source:** assumed — autonomous
+
+## D23: Treat failed browser geometry as an application defect
+- **Question:** Can status-bar and settings layout be accepted from mounted-component tests alone?
+- **Options:** accept the passing component suite; repair actual daemon UI geometry and rerun the user goals
+- **Chose:** bottom-footer flex layout, same-root settings and usage selectors, and explicit interactive overlay pointer handling
+- **Why:** the first owned browser run showed Usage as a 207px top block and stacked settings navigation. Hide/restore worked, but that does not excuse the layout failure.
+- **Evidence:** .quirk/using-apps-like-a-user/runs/20261027T171413-740a/report.md and observations 7/8; commits de88160 and cd39a76; packages/ui/src/styles.css; plugins/quirky.accounts/src/ui.tsx
+- **Reversibility:** easy
+- **Confidence:** high for the observed defect; replacement geometry awaits a fresh browser run
+- **Revisit if:** the fresh empty/seeded user goals still fail
+- **Source:** assumed — autonomous
+
+## D24: Preserve real native conversation data across profile changes
+- **Question:** Does retaining provider ID and account environment prove native conversation continuation?
+- **Options:** keep metadata-only resume; expose all profile history; bridge the exact recorded Codex rollout and share Claude's canonical native history locations
+- **Chose:** validate the recorded source home, UUID and dated rollout; link one regular canonical rollout with bounded copy fallback; refuse conflicts and unsafe paths before replacing the old session. Return and persist the destination transcript locator so A→B→remove A→C does not reuse A's removed path.
+- **Why:** native Codex resume needs the rollout in the target home. An ID/env echo cannot prove that. Claude uses stable System-default history paths without overwriting existing configuration/auth/history bytes; the obsolete private history pool is removed.
+- **Evidence:** logic/tech resume acceptance amendments in cd39a76; session bridge 01d2398; conversation bridge 0f246ca; profiles 7 pass/50 assertions, restarts 3/21, accounts API 15/90, daemon acceptance 7/199 and session launch 44/108
+- **Reversibility:** medium
+- **Confidence:** high at the daemon/filesystem boundary; strengthened real-PTY fixture smoke still required
+- **Revisit if:** native rollout naming/storage or Claude history locations change
+- **Source:** assumed — autonomous
+
+## D25: Fix observed suite and fixture failures without changing production lifetime
+- **Question:** How should the first remote gate failures be handled?
+- **Options:** narrow or re-pin the suite; repair portable fixtures, readiness conditions and ownership-aware cleanup
+- **Chose:** platform-aware Cursor fixtures; one shell-ready helper at all callers; condition-based overlay/alternate-screen waits; delete incidental global built-in list/count assertions instead of re-pinning them
+- **Why:** the first remote run failed seven of 414 files. The isolated remote PTY-host file passed; that is load-sensitivity evidence, not proof of a prior defect. Production PTY persistence remains unchanged.
+- **Evidence:** first gate artifact 151; commits df6e35d, de7cf77 and 3602c48; isolated remote host suite passed in 11.76s; current full gate remains to be rerun
+- **Reversibility:** easy
+- **Confidence:** high for repaired assertions/fixtures; host race cause not established
+- **Revisit if:** the merged full gate reproduces a failure
+- **Source:** assumed — autonomous
+
+## D26: Preserve incoming integration contracts during roadmap catch-up
+- **Question:** Which side of the two merge conflicts preserves both feature contracts?
+- **Options:** discard account preparation; discard incoming session names/process ownership; combine the independent responsibilities
+- **Chose:** retain required account preparation and incoming script-only session names; preserve shell-init inputs and the incoming test ProcessScope environment
+- **Why:** all eight incoming decision logs were read. None conflicts with accounts. Ordinary first-shell creation, existing session-info statusline ownership, best-effort hooks, shared structured launch resolution and owned test-process cleanup must remain intact. Blocked sidebar/browser items are not dependencies.
+- **Evidence:** merge 8bfd81f; incoming logs fix-ask-regex-budget-20261027, fix-sc31-first-shell-race, fix-test-process-leaks, m1-agent-status-scripting, m2-sidebar-extras, m2-source-control-notes-ai, m5-structured-runner and sa-browser-agent; post-merge typecheck passed, shell 20/47 and session launch 44/108
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** final gate or real UI shows a concrete integration incompatibility
+- **Source:** locked by docs/loop/LOOP.md
+
 ## Progress
-Step 5 component integration. Accepted source commits: public integration32bc433, usage0e23da3, lifecycle/seam fixesef1dcbd (includes parent prerequisite merges), UI24267ab. Authoritative scopes/HEADs passed, with only parent-approved spec/log changes in the main tree. Targeted evidence: shell20/session44, lifecycle API9, profiles6, restarts2, daemon acceptance6, usage17 and UI6 all pass. UI covers reports/visibility gating and empty CTA; no built browser/runtime proof yet. Next commit amended specs/log, merge accepted components into main feature branch, install workspace dependencies, typecheck/build/remote whole gate. Then catch up roadmap decisions, one Gemini final round/fix batch, actual smoke/web/native handoff/docs and queue land. Scratch /tmp/quirky-m3-accounts-lane10.BBUvf8.
+Step 5 catch-up complete (8bfd81f), with all eight incoming decision logs read. Account/history integration and compiler repairs are committed. Latest targeted evidence: typecheck passes after catch-up; shell 20/47, session launch 44/108, accounts API 15/90, profiles 7/50, restarts 3/21, daemon acceptance 7/199. No green whole gate yet: the first remote run failed seven files, repaired as D25. The initial owned web run failed geometry; D23 repairs require fresh empty and seeded browser verification. Next: commit this log, build and run the exact full gate, execute strengthened real-daemon/PTY data smoke and all UI goals, then one actual cross-family Gemini Final Round 1 and one fix batch, rebuild/retest, native-only pending handoff, documentation and queue land. Scratch /tmp/quirky-m3-accounts-lane10.BBUvf8 retains source-bound audit/gate evidence and the smoke harness. Never claim completion from IDs/environment alone or reuse stale gate/tree hashes.
