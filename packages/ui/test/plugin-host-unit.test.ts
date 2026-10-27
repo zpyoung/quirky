@@ -58,6 +58,7 @@ const urlOf = (plugin: string) => `/plugins/${plugin}/ui.js`
 function makeModel(parts: Partial<UiModel> = {}): UiModel {
   const model: UiModel = {
     sidebarSections: [],
+    statusBars: [],
     panels: [],
     settingsSections: [],
     views: [],
@@ -71,7 +72,7 @@ function makeModel(parts: Partial<UiModel> = {}): UiModel {
     ...parts
   }
   if (parts.modules) return model
-  const entries = [...model.sidebarSections, ...model.panels, ...model.settingsSections, ...model.views, ...model.overlays, ...model.commands]
+  const entries = [...model.sidebarSections, ...model.statusBars, ...model.panels, ...model.settingsSections, ...model.views, ...model.overlays, ...model.commands]
   for (const entry of entries) {
     const module = (model.modules[entry.plugin] ??= { url: urlOf(entry.plugin), provides: [] })
     module.provides.push(entry.id)
@@ -256,6 +257,7 @@ function recording(ids: string[], implementation: (id: string) => unknown = () =
 const NOTES = 'acme.notes'
 const LIST = 'sidebar-section:acme.notes/list'
 const PAGE = 'view:acme.notes/page'
+const STATUS = 'status-bar:acme.notes/usage'
 const OPEN = 'command:acme.notes/open'
 const key = (code: string, mods: Partial<Record<'metaKey' | 'ctrlKey' | 'altKey' | 'shiftKey', boolean>> = {}) => ({
   key: code.replace('Key', ''),
@@ -298,6 +300,22 @@ test('SC-7: mounting a section reuses the module the window already loaded and m
   expect((el as Fake).text).toBe('3 notes')
   expect(state(t).plugins[NOTES]).toEqual({ state: 'active' })
   expect(cleanups).toBe(0)
+})
+
+test('SC-7: mounting a status bar loads its owning module and reports its slot mounted', async () => {
+  const t = setup(makeModel({ statusBars: [slot('status-bar', NOTES, 'usage')] }))
+  const { module, record } = recording([STATUS])
+  t.useModule(NOTES, module)
+  await t.host.refresh()
+
+  const unmount = t.host.mount(STATUS, element())
+  await settled(t, STATUS)
+
+  expect(state(t).slots[STATUS]).toEqual({ status: 'mounted' })
+  expect(record.activations).toBe(1)
+  expect(t.imports).toEqual([urlOf(NOTES)])
+  unmount()
+  expect(state(t).slots[STATUS]).toBeUndefined()
 })
 
 test('SC-7: concurrent mounts and commands share one import and one activation', async () => {

@@ -271,7 +271,7 @@ export function buildUiModel(input: {
   for (const pluginId of [...codeBackedOwners].sort(compare)) {
     const ui = byId.get(pluginId)?.ui
     if (ui === undefined) {
-      addWarning(warnings, pluginId, 'declares commands, views, panels, overlays, settings sections or sidebar sections but has no ui module')
+      addWarning(warnings, pluginId, 'declares code-backed contributions but has no ui module')
       continue
     }
     const url = moduleUrl(pluginId, ui)
@@ -324,6 +324,7 @@ export function buildUiModel(input: {
 
   const model: UiModel = {
     sidebarSections: slot('sidebar-section').sort(byOrder),
+    statusBars: slot('status-bar').sort(byOrder),
     panels: slot('panel').sort(byOrder),
     settingsSections: slot('settings-section').sort(byOrder),
     views: slot('view').sort((a, b) => compare(a.id, b.id)),

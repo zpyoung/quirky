@@ -3,7 +3,7 @@ import { WindowPluginHost } from '../src/plugins/host'
 
 type Deps = ConstructorParameters<typeof WindowPluginHost>[0]
 
-const MODEL = { sidebarSections: [], panels: [], settingsSections: [], views: [], overlays: [], commands: [], keybindings: [], settings: [], themes: [], modules: [] }
+const MODEL = { sidebarSections: [], statusBars: [], panels: [], settingsSections: [], views: [], overlays: [], commands: [], keybindings: [], settings: [], themes: [], modules: [] }
 const LAYOUT = { view: null, panel: null, sidebar: true, focus: null }
 
 function reply(method: string): unknown {

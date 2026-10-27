@@ -98,6 +98,8 @@ export type ViewReport = {
   layout: Workspace | null
   focusedPane: string | null
   panes: PaneStateReport[]
+  /** Mounted terminal accessory contribution IDs by pane ID. */
+  mountedAccessories: Record<string, string[]>
   menu: { kind: string; target: string | null; items: { label: string; key: string | null; enabled: boolean; separator: boolean }[] } | null
   dialog: { kind: string; title: string } | null
 }
@@ -150,6 +152,7 @@ export class WorkspaceController {
   private startSession: string | undefined
   private didFocusInput = false
   private lastReport = ''
+  private mountedAccessories: Record<string, string[]> = {}
   /** Receives the view report whenever it changes. */
   onReport: ((report: ViewReport) => void) | null = null
 
@@ -1098,6 +1101,18 @@ export class WorkspaceController {
 
   // ---- report
 
+  setMountedAccessories(paneId: string, ids: string[]): void {
+    if (this.stopped) return
+    const current = this.mountedAccessories[paneId]
+    if (current && current.length === ids.length && current.every((id, index) => id === ids[index])) return
+    if (current === undefined && ids.length === 0) return
+    const next = { ...this.mountedAccessories }
+    if (ids.length === 0) delete next[paneId]
+    else next[paneId] = [...ids]
+    this.mountedAccessories = next
+    this.publish()
+  }
+
   /** What `ui state` shows for this workspace. */
   report(): ViewReport {
     const ws = this.ws
@@ -1112,6 +1127,7 @@ export class WorkspaceController {
       layout: ws,
       focusedPane: focused?.leaf.id ?? null,
       panes: ws ? panesReport(ws, this.state.paneStates, this.state.settings['font-size']) : [],
+      mountedAccessories: this.mountedAccessories,
       menu: menu
         ? {
             kind: menu.kind,

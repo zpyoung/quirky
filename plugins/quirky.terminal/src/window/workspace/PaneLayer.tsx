@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react'
+import { parseContributionId } from '@quirky/protocol'
+
 import { paneLeaves, paneRects, roundRatio } from '../../layout/tree'
 import type { DividerRect, PaneRect } from '../../layout/tree'
 import type { Edge, Group, PaneLeaf, PaneNode, Tab } from '../../layout/types'
@@ -83,6 +85,139 @@ function StructuredHost({ controller, session }: { controller: WorkspaceControll
     <div className="qt-structured">
       <div ref={host} className="qt-structured-body" />
       {failed ? <p className="qt-muted">The structured session view is not available.</p> : null}
+    </div>
+  )
+}
+
+type TerminalAccessory = { id: string; plugin: string; title: string; order: number; view: string }
+
+function terminalAccessoriesOf(contributions: unknown, model: unknown): TerminalAccessory[] {
+  if (!Array.isArray(contributions) || typeof model !== 'object' || model === null || Array.isArray(model) || !('views' in model)) {
+    return []
+  }
+  const rawViews: unknown = model.views
+  if (!Array.isArray(rawViews)) return []
+  const views: unknown[] = rawViews
+  const accessories: TerminalAccessory[] = []
+  const entries: unknown[] = contributions
+  for (const raw of entries) {
+    if (
+      typeof raw !== 'object' ||
+      raw === null ||
+      Array.isArray(raw) ||
+      !('id' in raw) ||
+      !('kind' in raw) ||
+      !('plugin' in raw) ||
+      !('status' in raw) ||
+      !('data' in raw)
+    ) {
+      continue
+    }
+    const id = raw.id
+    if (typeof id !== 'string') continue
+    const parsedId = parseContributionId(id)
+    if (parsedId?.kind !== 'terminal-accessory' || raw.kind !== 'terminal-accessory' || raw.status !== 'effective') continue
+    if (typeof raw.plugin !== 'string') continue
+    const data = raw.data
+    if (typeof data !== 'object' || data === null || Array.isArray(data)) continue
+    if (Object.keys(data).some((key) => !['title', 'order', 'view'].includes(key))) continue
+    const title = Reflect.get(data, 'title')
+    const view = Reflect.get(data, 'view')
+    const rawOrder = Reflect.get(data, 'order')
+    if (typeof title !== 'string' || title.trim() === '' || typeof view !== 'string') continue
+    const order = rawOrder === undefined ? 100 : rawOrder
+    if (typeof order !== 'number' || !Number.isFinite(order) || parseContributionId(view)?.kind !== 'view') continue
+    const available = views.some(
+      (candidate) =>
+        typeof candidate === 'object' &&
+        candidate !== null &&
+        !Array.isArray(candidate) &&
+        'id' in candidate &&
+        candidate.id === view &&
+        'module' in candidate &&
+        typeof candidate.module === 'string' &&
+        candidate.module !== ''
+    )
+    if (!available) continue
+    accessories.push({ id, plugin: raw.plugin, title, order, view })
+  }
+  accessories.sort((a, b) => a.order - b.order || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
+  return accessories
+}
+
+function PaneAccessoryMount({
+  controller,
+  sessionId,
+  paneId,
+  accessory
+}: {
+  controller: WorkspaceController
+  sessionId: string
+  paneId: string
+  accessory: TerminalAccessory
+}) {
+  const host = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    const element = host.current
+    if (!element) return
+    let unmount: (() => void) | void
+    try {
+      unmount = controller.context.mountView(accessory.view, element, { sessionId, paneId })
+    } catch (error) {
+      controller.context.log(`terminal accessory ${accessory.id} could not mount: ${error instanceof Error ? error.message : String(error)}`)
+      return
+    }
+    return () => {
+      if (typeof unmount === 'function') unmount()
+    }
+  }, [controller, sessionId, paneId, accessory.id, accessory.plugin, accessory.view])
+  return <div ref={host} className="qt-pane-accessory" data-terminal-accessory={accessory.id} aria-label={accessory.title} />
+}
+
+function PaneAccessories({ controller, sessionId, paneId }: { controller: WorkspaceController; sessionId: string; paneId: string }) {
+  const [accessories, setAccessories] = useState<TerminalAccessory[]>([])
+  useEffect(() => {
+    let active = true
+    let generation = 0
+    const refresh = async () => {
+      const request = ++generation
+      try {
+        const [contributions, model] = await Promise.all([
+          controller.context.call('plugin.contributions', { kind: 'terminal-accessory' }),
+          controller.context.call('ui.contributions', {})
+        ])
+        if (active && request === generation) setAccessories(terminalAccessoriesOf(contributions, model))
+      } catch (error) {
+        if (active && request === generation) {
+          controller.context.log(`terminal accessory refresh failed: ${error instanceof Error ? error.message : String(error)}`)
+        }
+      }
+    }
+    const unsubscribe = controller.context.subscribe((event) => {
+      if (event.type === 'plugin.changed') void refresh()
+    })
+    void refresh()
+    return () => {
+      active = false
+      generation++
+      unsubscribe()
+    }
+  }, [controller])
+  useEffect(() => {
+    controller.setMountedAccessories(paneId, accessories.map((accessory) => accessory.id))
+  }, [controller, paneId, accessories])
+  useEffect(() => () => controller.setMountedAccessories(paneId, []), [controller, paneId])
+  return (
+    <div className="qt-pane-accessories" data-pane-accessories={paneId}>
+      {accessories.map((accessory) => (
+        <PaneAccessoryMount
+          key={`${accessory.id}:${accessory.plugin}:${accessory.view}`}
+          controller={controller}
+          sessionId={sessionId}
+          paneId={paneId}
+          accessory={accessory}
+        />
+      ))}
     </div>
   )
 }
@@ -335,6 +470,7 @@ export function PaneLayer({ controller, state, group, tab }: Props) {
                 createWebgl={controller.options.createWebgl}
               />
             )}
+            {session ? <PaneAccessories controller={controller} sessionId={leaf.session} paneId={leaf.id} /> : null}
             {focused ? <PaneHeader controller={controller} state={state} tab={tab} leaf={leaf} multi={multi} onGrip={(event) => startPaneDrag(leaf.id, event)} /> : null}
             {leaf.exit ? <ExitOverlay controller={controller} leaf={leaf} /> : null}
           </div>

@@ -506,5 +506,49 @@
 - **Revisit if:** The next base install still omits the workspace links; that is a verifier/install prerequisite, not permission to weaken types.
 - **Source:** assumed — autonomous, preserving protected loop and public module boundaries
 
+## D47: Keep the independent shared UI contributions in the account catch-up
+- **Question:** How should the next land-reported shared UI conflicts be resolved?
+- **Options:** Drop Vault settings sections; drop landed account status bars; retain the independent kinds in one model/schema/host.
+- **Chose:** Both settingsSections and statusBars remain required UI model arrays and code-backed kinds, with common host lookup/validation. Terminal accessory remains a separate owner contract. Preserve the opaque command-drag capability and owner revocation unchanged.
+- **Why:** These additions share insertion points but do not compete semantically. One generic contract avoids a Vault-specific shell branch or compatibility aliases.
+- **Evidence:** One scoped integration writer resolved16 blocks across12 files at unchanged78a9d2e; parent ownership audit artifact433. Canonical Vault settings mount/manifest needed no adapter change. New account/fix logs and changed prior logs read completely. Post-merge typecheck/build pass; remote affected verification266files plus2macOS-only files passes,flaky[].
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** A shared contribution cannot mount or a drop bypasses its host capability.
+- **Source:** locked by the independent Vault/account public UI contracts
+
+## D48: External history resume obeys required account preparation
+- **Question:** Does auto-merged resumeExternal preserve the newly landed account launch guard?
+- **Options:** Leave the bypass; treat preparation as best-effort; use the same mandatory public preparation helpers as create/resume.
+- **Chose:** Mandatory prepare before prepareResume/trust/spawn. Derive user env from the supplied record or side-effect-free agent plan, use preparedHookEnv and any prepared transcript locator, and never invent an old Quirky source-session ID.
+- **Why:** The failing-before service regression actually resolved despite a required preparation failure. That could launch with the wrong identity or an unusable managed home.
+- **Evidence:** RED artifact436. Real isolated account/provider/security/fetch fixtures now pass6 daemon-API cases22 assertions: final PTY managed home, explicit owned home precedence, no injected user launch record, and missing selected auth refuses with Conflict/no PTY/no session. A duplicate unit test pinned Error identity even though the owner wraps normal errors; it was deleted rather than repinned. Existing session unit cases pass44/108assertions.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** Account preparation failure spawns a process or an external source is silently moved across account homes.
+- **Source:** locked by m3-accounts required-preparation and home-provenance decisions
+
+## D49: Use the landed frozen-install typecheck lifecycle
+- **Question:** Is a Vault-specific module-resolution workaround needed?
+- **Options:** Add aliases/shims; alter protected verifier code; retain the newly landed typecheck command that installs merged workspace dependencies before compiling.
+- **Chose:** The canonical frozen install plus tsc command, with no lane-owned aliases, type weakening or protected-loop edit.
+- **Why:** The earlier verifier installed its base before feature merge. The landed typecheck command now runs installation against the merged tree, addressing that lifecycle boundary directly rather than changing source imports.
+- **Evidence:** bg109 prints bun install --frozen-lockfile then tsc and exits0; manifests/lockfile already contain the correct protocol/React dependencies. Accounts D34 and hosting D45 were read; public module boundaries remain unchanged.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** The land-owned merged-tree compiler still lacks workspace links.
+- **Source:** locked by the landed workspace/typecheck lifecycle
+
+## D50: Recheck the merged UI with startup credential owners absent
+- **Question:** How can the final Vault surface be exercised without touching real account/Keychain state?
+- **Options:** Boot all startup plugins then disable Accounts; use source-only mocks; select owned symlinks to compiled required plugins before daemon startup.
+- **Chose:** The compiled-plugin set omits Accounts/Hosting before startup, with owned HOME/XDG/Quirky/source/workspace and an absolute fake provider. Active-account behavior is separately covered by the real isolated account API regressions.
+- **Why:** Accounts activates at startup, so disabling it after boot would be too late to guarantee no credential-store reads. Genuine absence follows the supported unmanaged launch contract.
+- **Evidence:** final built-web report20261027T222716-ab20: all4 browse/consent-query/clear/fake-PTY-resume goals pass, no findings, nothing left open. Parent inspected obs5/11/17. Retained collector proves absolute executable/original cwd/provider ID; all owned daemon/browser/PTY/temp state was cleaned.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** The rebuilt merged surface differs or an optional startup credential owner becomes a hard Vault dependency.
+- **Source:** locked by LOOP.md test-state isolation and core UI verification
+
 ## Progress
-Core implementation, packaged smoke, review/fix batch and affected gates are complete; both completion items are queued. The AST import fence passes. Land's whole suite and scripts62pass completed, but verifier typecheck lacked workspace links; D46 records the dependency-layout diagnosis and changed-base retry. No runtime or type-safety workaround was added. Final merged/done status remains owned by queue.ts land.
+Core implementation and blocking integration fixes pass:266 remote affected files plus2macOS-only files, typecheck with frozen install, packaged build and all4 final core web goals. Required active-account behavior has6 passing public API cases. The single final review/fix batch and both parity completion items remain recorded. No protected-loop edit, type shim, manual whole suite or local multi-package run was used for this merge. Final done status and whole-suite verification remain owned by queue.ts land.

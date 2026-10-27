@@ -27,6 +27,8 @@ Inside any Quirky terminal, the `quirky` command is on PATH: try `quirky status`
 Open **Agent Session History** to browse agent-owned transcripts and resume a session in a
 terminal. Workspace/Project filters follow the current context; select **All** to browse other
 directories. Resume uses the agent's configured command and the transcript's original directory.
+When the Accounts plugin is active, required account preparation must succeed before resume.
+Explicit launch-home overrides keep their precedence; preparation failure does not start a process.
 
 Transcript search is **off until explicitly enabled**. Before consent, the search box filters
 titles only. Enabling stores a local searchable copy of unredacted conversations and up to 3,072

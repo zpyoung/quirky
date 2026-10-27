@@ -1,10 +1,10 @@
 import type { QuirkyEvent } from './rpc'
 
 /** The contribution kinds the UI plugin API adds. */
-export const UI_KINDS = ['sidebar-section', 'panel', 'view', 'overlay', 'command', 'keybinding', 'setting', 'settings-section', 'theme'] as const
+export const UI_KINDS = ['status-bar', 'sidebar-section', 'panel', 'view', 'overlay', 'command', 'keybinding', 'setting', 'settings-section', 'theme'] as const
 
 /** UI kinds whose implementation is code a plugin's UI module provides. */
-export const CODE_BACKED_KINDS = ['view', 'panel', 'sidebar-section', 'settings-section', 'overlay', 'command'] as const
+export const CODE_BACKED_KINDS = ['status-bar', 'view', 'panel', 'sidebar-section', 'settings-section', 'overlay', 'command'] as const
 
 /** The color slots a theme fills; window tokens map to CSS custom properties `--<token>`. */
 export const THEME_TOKENS = [
@@ -68,10 +68,10 @@ export const DEFAULT_THEME: ThemeInfo = {
 
 export type ThemeList = { chosen: string; active: string; themes: ThemeInfo[] }
 
-/** A sidebar section, panel, view or overlay in the UI model. */
+/** A code-backed status bar, sidebar section, panel, view, overlay, or generic settings section in the UI model. */
 export type UiSlotEntry = {
   id: string
-  kind: 'sidebar-section' | 'panel' | 'view' | 'overlay' | 'settings-section'
+  kind: 'status-bar' | 'sidebar-section' | 'panel' | 'view' | 'overlay' | 'settings-section'
   /** The plugin whose declaration is in effect. */
   plugin: string
   title: string
@@ -131,12 +131,13 @@ export type UiModel = {
   /** Order ascending, then ID. */
   sidebarSections: UiSlotEntry[]
   /** Order ascending, then ID. */
+  statusBars: UiSlotEntry[]
+  /** Order ascending, then ID. */
   panels: UiSlotEntry[]
   /** ID ascending. */
   views: UiSlotEntry[]
   /** Order ascending, then ID. */
   overlays: UiSlotEntry[]
-  /** Title ascending, then ID. */
   commands: UiCommandEntry[]
   /**
    * Registry precedence, highest first: the distro's bindings in manifest order, then plugin
@@ -182,7 +183,7 @@ export const DESKTOP_AWAY_MS = 180_000
 /** One slot in the UI model, with the latest report from its mounted window. */
 export type UiSlotState = {
   id: string
-  kind: 'sidebar-section' | 'panel' | 'view' | 'overlay' | 'settings-section'
+  kind: 'status-bar' | 'sidebar-section' | 'panel' | 'view' | 'overlay' | 'settings-section'
   plugin: string
   title: string
   shown: boolean

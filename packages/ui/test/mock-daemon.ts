@@ -7,6 +7,7 @@ const TOKEN = 'mock-token'
 const layout: UiLayout = { view: null, panel: null, sidebar: true, focus: null }
 const model: UiModel = {
   sidebarSections: [],
+  statusBars: [],
   panels: [],
   settingsSections: [],
   views: [],

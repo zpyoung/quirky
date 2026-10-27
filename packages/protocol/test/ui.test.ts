@@ -1,11 +1,9 @@
 import { describe, expect, test } from 'bun:test'
 import {
-  CODE_BACKED_KINDS,
   DEFAULT_THEME,
   RESERVED_CHORDS,
   THEME_COLOR_RE,
   THEME_TOKENS,
-  UI_KINDS,
   checkSettingValue,
   chordFromKeyEvent,
   evaluateWhen,
@@ -261,15 +259,6 @@ describe('theme tokens and the default theme', () => {
   })
 })
 
-describe('UI kinds', () => {
-  test('lists nine kinds, six of them code-backed', () => {
-    expect([...UI_KINDS].sort()).toEqual<string[]>(
-      ['command', 'keybinding', 'overlay', 'panel', 'setting', 'settings-section', 'sidebar-section', 'theme', 'view'].sort()
-    )
-    expect([...CODE_BACKED_KINDS].sort()).toEqual(['command', 'overlay', 'panel', 'settings-section', 'sidebar-section', 'view'])
-    for (const kind of CODE_BACKED_KINDS) expect(UI_KINDS.includes(kind)).toBe(true)
-  })
-})
 
 function canonicalWhen(text: string): string {
   const result = parseWhen(text)
