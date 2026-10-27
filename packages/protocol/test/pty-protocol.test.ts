@@ -15,9 +15,9 @@ import {
   type ShellState
 } from '../src'
 
-describe('pty protocol 2', () => {
-  test('speaks version 2', () => {
-    expect(PTY_PROTOCOL_VERSION).toBe(2)
+describe('pty protocol 3', () => {
+  test('speaks version 3', () => {
+    expect(PTY_PROTOCOL_VERSION).toBe(3)
   })
 
   test('shell states, exit causes and facts accept the documented values', () => {
@@ -65,7 +65,9 @@ describe('pty protocol 2', () => {
       { id: 4, type: 'subscribe', sessionId: 's_1', mode: 'raw' },
       { id: 5, type: 'snapshot', sessionId: 's_1' },
       { id: 6, type: 'history', sessionId: 's_1', lines: 100, before: 'c1', format: 'ansi' },
-      { id: 7, type: 'history', sessionId: 's_1' }
+      { id: 7, type: 'history', sessionId: 's_1' },
+      { id: 8, type: 'clear', sessionId: 's_1' },
+      { id: 9, type: 'resetModes', sessionId: 's_1' }
     ] as const satisfies readonly PtyRequest[]
 
     const subscription = {
@@ -111,6 +113,8 @@ describe('pty protocol 2', () => {
       subscribe: subscription,
       snapshot,
       history: page,
+      clear: {},
+      resetModes: {},
       list: [info]
     } satisfies Partial<PtyResults>
     const events = [
@@ -118,8 +122,8 @@ describe('pty protocol 2', () => {
       { type: 'fact', sessionId: 's_1', fact: { kind: 'bell' } }
     ] as const satisfies readonly PtyEvent[]
 
-    expect(requests).toHaveLength(7)
-    expect(Object.keys(results)).toHaveLength(5)
+    expect(requests).toHaveLength(9)
+    expect(Object.keys(results)).toHaveLength(7)
     expect(events.map((e) => e.type)).toEqual(['exit', 'fact'])
   })
 

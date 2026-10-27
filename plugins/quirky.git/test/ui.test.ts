@@ -111,7 +111,9 @@ function fakeContext(initial: UiLayout): Fake {
       onConnection: () => () => {},
       confirm: async () => true,
       toast: (title, body) => toasts.push([title, body]),
-      setPanelBadge() {}
+      setPanelBadge() {},
+      setContext() {},
+      mountView: () => () => {}
     }
   }
   return fake

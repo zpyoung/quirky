@@ -4,7 +4,8 @@ import { isPaletteChord } from '../plugins/palette'
 
 /**
  * Cmd+Shift+P toggles the command palette; every other chord goes to the plugins' keybindings,
- * which is where the session shortcuts live.
+ * which is where the session shortcuts live. Only a consumed chord stops propagating: one the
+ * host prevented but did not consume (a terminal-first key) still reaches the focused terminal.
  */
 export function useShortcuts(togglePalette: () => void): void {
   const host = usePluginHost()

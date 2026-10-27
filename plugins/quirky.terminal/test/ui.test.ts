@@ -73,17 +73,19 @@ const rows = () => [...element!.querySelectorAll('[data-session]')] as HTMLEleme
 const two = [row('s1', 'wt-main', 'w/api'), row('s2', 'wt-fix', 'api/fix-login')]
 
 describe('the plugin module', () => {
-  test('provides the panel and the command the manifest declares', () => {
+  test('provides every contribution the manifest declares or overrides, the Sessions panel and its command among them', () => {
     fake = fakeContext()
     activateModule(fake.context)
     const declared = [
       ...manifest.contributes.panel.map((entry) => `panel:quirky.terminal/${entry.id}`),
-      ...manifest.contributes.command.map((entry) => `command:quirky.terminal/${entry.id}`)
+      ...manifest.contributes.command.map((entry) => `command:quirky.terminal/${entry.id}`),
+      ...manifest.contributes.overlay.map((entry) => `overlay:quirky.terminal/${entry.id}`),
+      ...manifest.overrides.map((entry) => entry.id)
     ]
     expect([...fake.provided.keys()].sort()).toEqual(declared.sort())
     expect(manifest.ui).toBe('dist/ui.js')
-    expect(manifest.contributes.panel).toEqual([{ id: 'sessions', title: 'Terminal Sessions' }])
-    expect(manifest.contributes.command).toEqual([{ id: 'manage-sessions', title: 'Terminal: Manage Sessions' }])
+    expect(manifest.contributes.panel).toContainEqual({ id: 'sessions', title: 'Terminal Sessions' })
+    expect(manifest.contributes.command).toContainEqual({ id: 'manage-sessions', title: 'Terminal: Manage Sessions' })
   })
 
   test('SC-26: the command opens the panel', async () => {

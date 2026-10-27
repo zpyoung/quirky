@@ -1,6 +1,6 @@
 import type { SerializeAddon } from '@xterm/addon-serialize'
 import { Screen } from '../screen'
-import { LogReader } from './log'
+import { LogReader, newestClearOffset } from './log'
 
 /** The most output bytes one window reads, so a single page or attach stays bounded. */
 const READ_CAP_BYTES = 8 * 1024 * 1024
@@ -152,7 +152,8 @@ function locate(reader: LogReader, before: number | undefined, lines: number, sc
   const { segments } = reader
   if (segments.length === 0) return { start: 0, end: 0, oldest: 0, pieces: [] }
   const newest = segments[segments.length - 1].endOffset
-  const oldest = wholeLineStart(reader, segments[0].startOffset, newest)
+  // a clear starts the session's visible history afresh, on a line boundary by construction
+  const oldest = newestClearOffset(segments) ?? wholeLineStart(reader, segments[0].startOffset, newest)
   const end = before === undefined ? newest : Math.min(Math.max(before, oldest), newest)
   if (end <= oldest) return { start: oldest, end: oldest, oldest, pieces: [] }
 
@@ -255,7 +256,7 @@ function readWindow(dir: string, before: number | undefined, lines: number, scre
   try {
     reader = LogReader.open(dir)
     const located = locate(reader, before, lines, screenRows)
-    const floor = reader.segments[0]?.startOffset ?? 0
+    const floor = newestClearOffset(reader.segments) ?? reader.segments[0]?.startOffset ?? 0
     const lead = located.start > floor ? sgrState(readRange(reader, Math.max(floor, located.start - LEAD_IN_BYTES), located.start)) : new Uint8Array()
     return buildWindow(reader, located, lead)
   } catch {
@@ -414,7 +415,8 @@ function serializeRow(screen: Screen, y: number): string {
  * `before` omitted means the live end of the log; the page then stops where the live screen
  * (the last `screenRows` rows) begins. `lines` sizes the window rather than trimming the page,
  * so a page holds about that many rows, and the next page, asked for before `cursor`, begins
- * exactly where this one ends. `cursor` is null once the oldest retained line is reached. `ansi`
+ * exactly where this one ends. `cursor` is null once the oldest retained line is reached, which
+ * is the newest `clear` record when there is one: rows before it are not history. `ansi`
  * rows carry their SGR colours, one entry per buffer row, so a wrapped line is several entries.
  * A damaged log yields what can be read, never an error.
  */

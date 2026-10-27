@@ -13,7 +13,7 @@ import {
   writeModulePlugin
 } from '../../../packages/daemon/test/plugins/fixtures'
 import { fakeAgents, resetFakeAgents } from './fakes/quirky.agents/main'
-import { call, code, createSession, restartDaemon, SESSION_PLUGINS, startPluginHarness } from './support'
+import { call, code, createSession, restartDaemon, SESSION_PLUGINS, startPluginHarness, storedSessions } from './support'
 
 let h: Harness
 let client: QuirkyClient
@@ -908,5 +908,132 @@ describe('quirky.session/restore', () => {
 
   test('an unknown session is NotFound', async () => {
     expect(await code(restore('s_nope'))).toBe(RpcErrorCode.NotFound)
+  })
+})
+
+describe('a start cwd', () => {
+  test('SC-23: the session and its process start in the folder given, not the worktree path', async () => {
+    const dir = makeTempDir('qs-cwd-')
+    const session = await createSession(client, { worktree: 'id:wt_main', agent: 'shell', cwd: dir })
+    expect(session).toMatchObject({ worktreeId: 'wt_main', cwd: dir })
+    expect(spawned(session.id).cwd).toBe(dir)
+    expect((await call<Session>(client, 'quirky.session/get', { session: session.id })).cwd).toBe(dir)
+  })
+
+  test('an agent launch is prepared for the folder given', async () => {
+    const dir = makeTempDir('qs-cwd-')
+    const session = await createSession(client, { worktree: 'id:wt_main', agent: 'claude', cwd: dir })
+    expect(spawned(session.id).cwd).toBe(dir)
+    expect(fakeAgents().calls.find((c) => c.method === 'prepareLaunch')!.params.cwd).toBe(dir)
+  })
+
+  test('without cwd the worktree path is used', async () => {
+    const session = await createSession(client, { worktree: 'id:wt_main', agent: 'shell' })
+    expect(session.cwd).toBe('/fake/alpha')
+  })
+
+  test('a relative path, a missing folder and a file are each invalid-params naming the rule', async () => {
+    const dir = makeTempDir('qs-cwd-')
+    writeFileSync(join(dir, 'a-file'), 'x')
+    for (const cwd of ['relative/dir', join(dir, 'missing'), join(dir, 'a-file'), '']) {
+      const error = (await createSession(client, { worktree: 'id:wt_main', agent: 'shell', cwd }).catch((e: RpcError) => e)) as RpcError
+      expect(error.code).toBe(RpcErrorCode.InvalidParams)
+      expect(error.message).toBe('cwd must be an existing directory')
+    }
+    expect(h.pty.requests.some((r) => r.type === 'create')).toBe(false)
+    expect(await call(client, 'quirky.session/list')).toEqual([])
+  })
+})
+
+describe('the floating worktree', () => {
+  const realHome = process.env.HOME
+  let home: string
+  beforeEach(() => {
+    home = makeTempDir('qs-home-')
+    process.env.HOME = home
+  })
+  afterEach(() => {
+    if (realHome === undefined) delete process.env.HOME
+    else process.env.HOME = realHome
+  })
+
+  const asFloating = () => QuirkyClient.connect(rpcUrl(h.runtime), { role: 'cli', worktreeId: 'floating', sessionId: 's_float' })
+
+  test('SC-55: selector floating starts a session in $HOME without asking quirky.worktree', async () => {
+    const session = await createSession(client, { worktree: 'floating', agent: 'shell' })
+    expect(session).toMatchObject({ kind: 'terminal', worktreeId: 'floating', cwd: home, title: 'Shell', status: 'running' })
+    expect(spawned(session.id)).toMatchObject({ cwd: home })
+    expect(spawned(session.id).env.QUIRKY_WORKTREE_ID).toBe('floating')
+    expect(storedSessions(h.home)).toEqual([{ id: session.id, repo_id: null }])
+  })
+
+  test('the cwd param decides where a floating session starts', async () => {
+    const dir = makeTempDir('qs-cwd-')
+    const session = await createSession(client, { worktree: 'floating', agent: 'shell', cwd: dir })
+    expect(session).toMatchObject({ worktreeId: 'floating', cwd: dir })
+    expect(spawned(session.id).cwd).toBe(dir)
+  })
+
+  test('titles are numbered within the floating workspace only', async () => {
+    await createSession(client, { worktree: 'id:wt_main', agent: 'shell' })
+    const first = await createSession(client, { worktree: 'floating', agent: 'shell' })
+    const second = await createSession(client, { worktree: 'floating', agent: 'shell' })
+    expect([first.title, second.title]).toEqual(['Shell', 'Shell 2'])
+  })
+
+  test('an agent session can be floating', async () => {
+    const claude = await createSession(client, { worktree: 'floating', agent: 'claude', prompt: 'hi' })
+    expect(claude).toMatchObject({ agent: 'claude', worktreeId: 'floating', cwd: home, title: 'Claude' })
+    expect(fakeAgents().calls.find((c) => c.method === 'prepareLaunch')!.params).toMatchObject({ cwd: home })
+  })
+
+  test('list with worktree floating lists the floating sessions only', async () => {
+    const main = await createSession(client, { worktree: 'id:wt_main', agent: 'shell' })
+    const floating = await createSession(client, { worktree: 'floating', agent: 'shell' })
+    expect((await call<Session[]>(client, 'quirky.session/list', { worktree: 'floating' })).map((s) => s.id)).toEqual([floating.id])
+    expect((await call<Session[]>(client, 'quirky.session/list', { worktree: 'id:wt_main' })).map((s) => s.id)).toEqual([main.id])
+    expect(await call<Session[]>(client, 'quirky.session/list')).toHaveLength(2)
+  })
+
+  test('a call from a floating session defaults to floating, with selector current or none', async () => {
+    const inside = await asFloating()
+    try {
+      const omitted = await createSession(inside, { agent: 'shell' })
+      const current = await createSession(inside, { worktree: 'current', agent: 'shell' })
+      expect([omitted.worktreeId, current.worktreeId]).toEqual(['floating', 'floating'])
+      expect(omitted.cwd).toBe(home)
+      expect((await call<Session[]>(inside, 'quirky.session/list', { worktree: 'current' })).map((s) => s.id).sort()).toEqual(
+        [omitted.id, current.id].sort()
+      )
+    } finally {
+      inside.close()
+    }
+  })
+
+  test('a call from a floating session can still name a real worktree', async () => {
+    const inside = await asFloating()
+    try {
+      expect((await createSession(inside, { worktree: 'id:wt_other', agent: 'shell' })).worktreeId).toBe('wt_other')
+    } finally {
+      inside.close()
+    }
+  })
+
+  test('a structured session can be registered in the floating workspace', async () => {
+    const session = await call<Session>(client, 'quirky.session/register', {
+      worktree: 'floating',
+      agent: 'claude',
+      kind: 'structured',
+      title: 'Claude'
+    })
+    expect(session).toMatchObject({ kind: 'structured', worktreeId: 'floating', cwd: home, title: 'Claude' })
+    expect((await call<Session[]>(client, 'quirky.session/list', { worktree: 'floating' })).map((s) => s.id)).toEqual([session.id])
+  })
+
+  test('an unset HOME leaves floating without a folder and asks for cwd', async () => {
+    delete process.env.HOME
+    const error = (await createSession(client, { worktree: 'floating', agent: 'shell' }).catch((e: RpcError) => e)) as RpcError
+    expect(error.code).toBe(RpcErrorCode.InvalidParams)
+    expect(error.message).toContain('cwd')
   })
 })

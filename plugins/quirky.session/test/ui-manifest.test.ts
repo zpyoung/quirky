@@ -32,7 +32,8 @@ describe('the session plugin in the window', () => {
     const info = plugins.find((plugin) => plugin.id === 'quirky.session')!
     expect(info.diagnostics.filter((diagnostic) => diagnostic.level === 'error')).toEqual([])
     const model = (await client.call('ui.contributions', {})) as UiModel
-    expect(model.views.map((view) => view.id)).toContain('view:quirky.session/worktree')
+    expect(model.views.map((view) => view.id)).toEqual(expect.arrayContaining(['view:quirky.session/worktree', 'view:quirky.session/structured']))
+    expect(model.views.find((view) => view.id === 'view:quirky.session/structured')).toMatchObject({ title: 'Structured session' })
     expect(model.commands.map((command) => command.id)).toEqual(
       expect.arrayContaining([
         'command:quirky.session/new-shell',
@@ -42,6 +43,8 @@ describe('the session plugin in the window', () => {
     )
     const chords = model.keybindings.filter((binding) => binding.plugin === 'quirky.session').map((binding) => binding.key)
     expect(chords.sort()).toEqual(['mod+1', 'mod+2', 'mod+3', 'mod+4', 'mod+5', 'mod+6', 'mod+7', 'mod+8', 'mod+9', 'mod+t', 'mod+w'])
-    expect(model.modules['quirky.session']!.provides).toContain('view:quirky.session/worktree')
+    expect(model.modules['quirky.session']!.provides).toEqual(
+      expect.arrayContaining(['view:quirky.session/worktree', 'view:quirky.session/structured'])
+    )
   })
 })

@@ -1,12 +1,23 @@
 import type { PluginContext } from '@quirky/protocol'
-import { importMigrations, importV1Scrollback } from './src/scrollback'
+import { InputTracker } from './src/input-tracker'
+import { LayoutService } from './src/layout/service'
+import { LayoutStore, migrations } from './src/layout/store'
+import { QuickCommandService } from './src/quick-commands/service'
+import { importV1Scrollback } from './src/scrollback'
 import { factEvent, TerminalService } from './src/terminal'
 
 let service: TerminalService | undefined
+let layout: LayoutService | undefined
 
 export async function activate(context: PluginContext): Promise<void> {
-  const terminal = new TerminalService(context)
+  const store = context.openStore(migrations)
+  const inputs = new InputTracker()
+  const terminal = new TerminalService(context, inputs)
+  const layoutStore = new LayoutStore(store)
+  const layoutService = new LayoutService(context, layoutStore, inputs)
+  const quickCommands = new QuickCommandService(context, layoutStore, layoutService, inputs)
   service = terminal
+  layout = layoutService
 
   const methods = {
     attach: terminal.attach,
@@ -20,7 +31,9 @@ export async function activate(context: PluginContext): Promise<void> {
     sessions: terminal.sessions,
     kill: terminal.kill,
     killAll: terminal.killAll,
-    restartHost: terminal.restartHost
+    restartHost: terminal.restartHost,
+    ...layoutService.methods,
+    ...quickCommands.methods
   }
   for (const [name, handler] of Object.entries(methods)) context.provide(`method:${context.pluginId}/${name}`, handler)
 
@@ -28,12 +41,20 @@ export async function activate(context: PluginContext): Promise<void> {
   context.pty.onFact((sessionId, fact) => {
     const event = factEvent(sessionId, fact)
     if (event) context.emit(event.name, event.data)
+    layoutService.onFact(sessionId, fact)
   })
-  context.pty.onReconnect(() => void terminal.onReconnect())
-  context.subscribe(terminal.onEvent)
+  context.pty.onReconnect(() => {
+    void terminal.onReconnect()
+    layoutService.onReconnect()
+  })
+  context.subscribe((event) => {
+    terminal.onEvent(event)
+    if (event.type === 'quirky.session/changed' || event.type === 'quirky.session/removed') layoutService.requestReconcile()
+  })
+  layoutService.start()
 
   try {
-    await importV1Scrollback(context, context.openStore(importMigrations))
+    await importV1Scrollback(context, store)
   } catch (error) {
     context.log(`could not import v1 scrollback: ${error instanceof Error ? error.message : String(error)}`)
   }
@@ -41,5 +62,7 @@ export async function activate(context: PluginContext): Promise<void> {
 
 export function deactivate(): void {
   service?.shutdown()
+  layout?.shutdown()
   service = undefined
+  layout = undefined
 }

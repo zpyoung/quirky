@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { type Checkpoint, readCheckpoint, writeCheckpoint } from '../src/history/checkpoint'
 import { HistoryLog } from '../src/history/log'
-import { CheckpointScheduler, GROUND, rebuildScreen } from '../src/history/restore'
+import { CheckpointScheduler, GROUND, MODE_RESET, rebuildScreen } from '../src/history/restore'
 import { OutputScanner } from '../src/scanner'
 import { Screen } from '../src/screen'
 
@@ -71,6 +71,16 @@ class Live {
   resize(cols: number, rows: number): void {
     this.log.appendResize(cols, rows)
     this.screen.resize(cols, rows)
+  }
+
+  /** What the host does for `clear`: the emulator keeps the cursor row, the log marks it and records the cleared screen as output. */
+  async clear(): Promise<void> {
+    await this.screen.settled()
+    this.screen.clear()
+    this.log.appendClear()
+    const bytes = enc(`${ESC}[H${ESC}[2J${ESC}[3J${this.screen.snapshot().ansi}`)
+    this.log.appendOutput(bytes)
+    this.offset += bytes.length
   }
 
   async checkpoint(): Promise<void> {
@@ -309,6 +319,90 @@ describe('rebuildScreen', () => {
     await rebuildScreen(live.dir, screen, FALLBACK)
     await screen.settled()
     expect(replies).toEqual([])
+  })
+})
+
+describe('rebuildScreen after a clear (SC-34)', () => {
+  const lines = (n: number, prefix = 'old') => Array.from({ length: n }, (_, i) => `${prefix}-${i}`).join('\r\n')
+
+  test('log only: rebuilds the kept line and what came after, without the older output', async () => {
+    const live = new Live(freshDir())
+    live.feed(`${lines(40)}\r\n$ `)
+    await live.clear()
+    live.feed('ls\r\nnew-0\r\nnew-1\r\n$ ')
+    await live.screen.settled()
+
+    const { screen, result } = await rebuilt(live.dir)
+    expect(result.source).toBe('log')
+    expect(text(screen)).toEqual(text(live.screen))
+    expect(text(screen).filter((row) => row.startsWith('old-'))).toEqual([])
+    expect(text(screen).slice(0, 4)).toEqual(['$ ls', 'new-0', 'new-1', '$ '])
+    expect(screen.scrollbackRows).toBe(0)
+    expect(screen.snapshot().cursor).toEqual(live.screen.snapshot().cursor)
+    expect(result.offset).toBe(live.offset)
+  })
+
+  test('a checkpoint older than the clear is ignored', async () => {
+    const live = new Live(freshDir())
+    live.feed(`${lines(10)}\r\n$ `)
+    await live.checkpoint()
+    live.feed('echo hi\r\nhi\r\n$ ')
+    await live.clear()
+    live.feed('x')
+    await live.screen.settled()
+
+    const { screen, result } = await rebuilt(live.dir)
+    expect(result.source).toBe('log')
+    expect(text(screen).join('\n')).not.toContain('old-')
+    expect(text(screen)).toEqual(text(live.screen))
+  })
+
+  test('a checkpoint taken at the clear is used and the log after it replayed', async () => {
+    const live = new Live(freshDir())
+    live.feed(`${lines(10)}\r\n$ `)
+    await live.clear()
+    await live.checkpoint()
+    live.feed('pwd\r\n/tmp\r\n$ ')
+    await live.screen.settled()
+
+    const { screen, result } = await rebuilt(live.dir)
+    expect(result.source).toBe('checkpoint+log')
+    expect(text(screen)).toEqual(text(live.screen))
+    expect(text(screen).join('\n')).not.toContain('old-')
+  })
+
+  test('a checkpoint left exactly at the clear offset still shows the old screen and is ignored', async () => {
+    const live = new Live(freshDir())
+    live.feed(`${lines(5)}\r\n$ `)
+    await live.checkpoint()
+    await live.clear()
+    await live.screen.settled()
+
+    const { screen } = await rebuilt(live.dir)
+    expect(text(screen).join('\n')).not.toContain('old-')
+    expect(text(screen)[0]).toBe('$ ')
+  })
+
+  test('the cwd, title and size set before the clear still apply', async () => {
+    const live = new Live(freshDir())
+    live.feed(`${ESC}]7;file://localhost/tmp${BEL}${ESC}]0;before${BEL}${lines(5)}\r\n$ `)
+    live.resize(60, 20)
+    await live.clear()
+    await live.screen.settled()
+
+    const { screen, result } = await rebuilt(live.dir)
+    expect(result.cwd).toBe('/tmp')
+    expect(result.title).toBe('before')
+    expect([result.cols, result.rows]).toEqual([60, 20])
+    expect(screen.snapshot().cols).toBe(60)
+  })
+})
+
+describe('MODE_RESET', () => {
+  test('is the mode-switching part of GROUND, without the alternate screen, saved cursor or attributes', () => {
+    const decoded = new TextDecoder().decode(MODE_RESET)
+    expect(decoded).toBe(`${ESC}[?1000l${ESC}[?1002l${ESC}[?1003l${ESC}[?1006l${ESC}[?2004l${ESC}[?1l${ESC}[?25h`)
+    expect(new TextDecoder().decode(GROUND)).toContain(decoded)
   })
 })
 

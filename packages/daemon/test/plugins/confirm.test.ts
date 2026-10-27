@@ -74,6 +74,8 @@ function setup(options: { asks?: boolean; kernelDescribers?: Record<string, Kern
       data: { params: NAMED, readOnly: true },
       run: (params, caller) => {
         if (gone.has(params.name as string)) throw new DaemonError(RpcErrorCode.NotFound, `no such target: ${params.name}`)
+        if (params.name === 'quiet') return null
+        if (params.name === 'odd') return 42
         const where = 'worktreeId' in caller ? caller.worktreeId : undefined
         return params.name === 'current' ? `Remove worktree ${where ?? 'none'}?` : `Remove worktree ${params.name}?`
       }
@@ -260,6 +262,40 @@ describe('destructive methods', () => {
     const data = await askFor(t, 'acme.tools/rm', { name: 'feature-x' }, conn(1))
     expect(data.action).toBe('Remove worktree feature-x?')
     expect(t.asks.get(data.askId)!.spec.questions[0].question).toBe('Remove worktree feature-x?')
+  })
+
+  test('SC-14: a describe method returning null runs the call with no ask', async () => {
+    const t = setup()
+    expect(await t.dispatcher.dispatch('acme.tools/rm', { name: 'quiet' }, { conn: conn(1) })).toEqual({ removed: 'quiet' })
+    expect(t.asks.size).toBe(0)
+    expect(t.ran).toEqual([{ method: 'rm', params: { name: 'quiet' } }])
+  })
+
+  test('SC-14: a null describe still checks an explicit confirmation is unused and consumes none', async () => {
+    const t = setup()
+    const from = conn(1)
+    const stale = await failure(t.dispatcher.dispatch('acme.tools/rm', { name: 'quiet', confirmation: 'ask_missing' }, { conn: from }))
+    expect(stale.code).toBe(RpcErrorCode.Conflict)
+    expect(stale.message).toBe('confirmation is for another call')
+
+    const { askId } = await askFor(t, 'acme.tools/rm', { name: 'feature-x' }, from)
+    t.answer(askId, true)
+    expect(await t.dispatcher.dispatch('acme.tools/rm', { name: 'quiet', confirmation: askId }, { conn: from })).toEqual({ removed: 'quiet' })
+    expect(t.store.getConfirmation(askId)!.used).toBe(false)
+  })
+
+  test('SC-14: a describe method returning a string still asks', async () => {
+    const t = setup()
+    const data = await askFor(t, 'acme.tools/rm', { name: 'feature-x' }, conn(1))
+    expect(data.action).toBe('Remove worktree feature-x?')
+    expect(t.ran).toEqual([])
+  })
+
+  test('a describe method returning a non-string, non-null value is Internal', async () => {
+    const t = setup()
+    const error = await failure(t.dispatcher.dispatch('acme.tools/rm', { name: 'odd' }, { conn: conn(1) }))
+    expect(error.code).toBe(RpcErrorCode.Internal)
+    expect(t.ran).toEqual([])
   })
 
   test('a confirmation that is still unanswered or declined is refused with its reason', async () => {
