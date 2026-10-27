@@ -44,6 +44,8 @@ export function factEvent(sessionId: string, fact: PtyFact): { name: string; dat
       return { name: 'title', data: { sessionId, title: fact.title } }
     case 'cwd':
       return { name: 'cwd', data: { sessionId, cwd: fact.cwd } }
+    case 'notification':
+      return { name: 'notification', data: { sessionId, title: fact.title, body: fact.body, occasion: fact.occasion } }
     case 'prompt':
     case 'program-status':
       return null

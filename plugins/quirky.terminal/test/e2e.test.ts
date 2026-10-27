@@ -486,8 +486,21 @@ scenario('SC-40: every terminal host flow is scriptable', async () => {
     expect(words, command).toContain(command)
   }
   const events = api.events.map((event) => event.name)
-  for (const name of ['bell', 'commandFinished', 'title', 'cwd']) expect(events).toContain(`quirky.terminal/${name}`)
+  for (const name of ['bell', 'commandFinished', 'title', 'cwd', 'notification']) expect(events).toContain(`quirky.terminal/${name}`)
 })
+
+scenario('SC-29: a program notification in a real session becomes a terminal event', async () => {
+  const h = await start()
+  const session = await h.newSession()
+  await h.run(session.id, `printf '\\033]777;notify;Build;done in 4s\\007'`)
+  const event = await waitFor('the notification event', () =>
+    h.events.find((candidate) => candidate.type === 'quirky.terminal/notification')
+  )
+  expect(event).toMatchObject({
+    type: 'quirky.terminal/notification',
+    data: { sessionId: session.id, title: 'Build', body: 'done in 4s', occasion: 'always' }
+  })
+}, 90_000)
 
 scenario('SC-42: an ended session attaches read only after a host restart', async () => {
   const h = await start()
