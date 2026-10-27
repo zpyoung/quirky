@@ -2,7 +2,7 @@ import { existsSync, mkdirSync, mkdtempSync, rmSync, symlinkSync } from 'node:fs
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { QuirkyClient, type QuirkyEvent } from '@quirky/protocol'
-import { startHarness, type Harness } from '../../../packages/daemon/test/helpers'
+import { startHarness, type Harness } from '../../../../packages/daemon/test/helpers'
 import { writeEveryAgentFixture } from '../fixtures/scanner-fixtures'
 
 const SOURCE_HOME_ENV = 'QUIRKY_VAULT_SOURCE_HOME'
@@ -32,7 +32,7 @@ export class VaultRig {
     const sourceHome = mkdtempSync(join(tmpdir(), 'qv-source-'))
     const previousSourceHome = process.env[SOURCE_HOME_ENV]
     process.env[SOURCE_HOME_ENV] = sourceHome
-    const fixture = writeEveryAgentFixture(sourceHome)
+    const fixture = await writeEveryAgentFixture(sourceHome)
     const builtinPluginsDir = join(home, 'builtins')
     mkdirSync(builtinPluginsDir, { recursive: true })
     for (const id of PLUGIN_IDS) symlinkSync(join(PLUGINS_ROOT, id), join(builtinPluginsDir, id), 'dir')
