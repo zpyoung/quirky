@@ -188,6 +188,8 @@ export type ClientStream = {
 export type CallerConnection = {
   id: number
   transport: 'websocket' | 'socket'
+  /** Registers transport-neutral cleanup for disconnect, invoking immediately if already closed. */
+  onClose(callback: () => void): () => void
   /** Throws InvalidParams on a socket connection. */
   openStream(): ClientStream
 }
