@@ -21,13 +21,16 @@ type CoreTestHarness = {
   cleanup(): Promise<void>
 }
 type JsonSchemaNode = {
-  type?: string | string[]
+  type?: string
+  description?: string
   enum?: unknown[]
-  const?: unknown
-  properties?: Record<string, JsonSchemaNode>
   items?: JsonSchemaNode
-  oneOf?: JsonSchemaNode[]
-  anyOf?: JsonSchemaNode[]
+  properties?: Record<string, JsonSchemaNode>
+  required?: string[]
+  additionalProperties?: boolean
+  minimum?: number
+  maximum?: number
+  default?: unknown
 }
 type ApiDescription = {
   methods: { name: string; params: JsonSchemaNode; result: JsonSchemaNode }[]
@@ -168,6 +171,19 @@ describe('editor core through the daemon API', () => {
     expect(saved.draft).toBeNull()
     expect(saved.dirty).toBe(false)
   })
+
+  test('requires an explicit offset for text reads', async () => {
+    const t = await boot()
+    await write(t, 'offset.txt', 'content\n')
+    const buffer = await open(t, 'offset.txt')
+    await expect(t.call('quirky.editor/read', {
+      bufferId: buffer.id,
+      action: 'text',
+      kind: 'content',
+      contentRevision: buffer.contentRevision
+    })).rejects.toThrow(/offset/)
+  })
+
   test('preserves a leading UTF-8 BOM through open and guarded save', async () => {
     const t = await boot()
     const original = '\uFEFFconst answer = 1;\n'
@@ -455,20 +471,29 @@ describe('editor core through the daemon API', () => {
     const t = await boot()
     await write(t, 'src/README.md', 'one\ntwo\nthree\n')
     await write(t, 'src/readme-old.md', 'old\n')
-    const result = await t.call<{ results: { path: string; score: number }[]; truncated: boolean }>('quirky.editor/quickOpen', {
+    const result = await t.call<{ results: { path: string; name: string; score: number }[]; truncated: boolean }>('quirky.editor/quickOpen', {
       worktree: t.worktreeId,
       action: 'search',
       query: 'readme'
     })
-    expect(result.results.length).toBeGreaterThan(0)
-    expect(result.results.length).toBeLessThanOrEqual(50)
+    expect(result.results.map(({ path }) => path)).toEqual(['src/README.md', 'src/readme-old.md'])
+    expect(result.truncated).toBe(false)
     await t.call('quirky.editor/quickOpen', { worktree: t.worktreeId, action: 'record', path: 'src/readme-old.md' })
     const recent = await t.call<{ results: { path: string }[] }>('quirky.editor/quickOpen', {
       worktree: t.worktreeId,
       action: 'search',
       query: 'readme'
     })
-    expect(recent.results[0]?.path).toContain('readme-old.md')
+    expect(recent.results.map(({ path }) => path)).toEqual(['src/readme-old.md', 'src/README.md'])
+    const limited = await t.call<{ results: { path: string }[]; truncated: boolean }>('quirky.editor/quickOpen', {
+      worktree: t.worktreeId,
+      action: 'search',
+      query: 'readme',
+      limit: 1
+    })
+    expect(limited.results.map(({ path }) => path)).toEqual(['src/readme-old.md'])
+    expect(limited.results).toHaveLength(1)
+    expect(limited.truncated).toBe(false)
     const positionedTarget = await t.call<{ results: { path: string; line?: number; column?: number }[] }>('quirky.editor/quickOpen', {
       worktree: t.worktreeId,
       action: 'search',
@@ -615,7 +640,8 @@ describe('editor core through the daemon API', () => {
     expect(openSchema?.params.properties?.matchLength?.type).toBe('integer')
     expect(openSchema?.result.properties?.openedTabId?.type).toBe('string')
     const viewPatchSchema = methods.get('quirky.editor/view')?.params.properties?.patch
-    expect(viewPatchSchema?.properties?.markdownAnchor?.type).toEqual(['string', 'null'])
+    expect(viewPatchSchema?.properties?.markdownAnchor?.type).toBeUndefined()
+    expect(viewPatchSchema?.properties?.markdownAnchor?.description).toContain('512 UTF-8 bytes')
     expect(viewPatchSchema?.properties?.matchLength?.type).toBe('integer')
     const notebookSchema = methods.get('quirky.editor/notebook')?.params
     expect(notebookSchema?.properties?.browse?.type).toBe('boolean')

@@ -14,15 +14,17 @@ type Api = (method: string, params?: Record<string, unknown>) => Promise<any>
 type Fixture = { h: Harness; client: QuirkyClient; call: Api; root: string; worktree: string }
 
 let fixture: Fixture | null = null
+let activeHarness: Harness | null = null
 
 beforeEach(async () => {
   const home = makeHomeWithoutAutoHooks('m2-markdown-')
   const h = await startHarness({ home, builtinPluginsDir: builtinsDir() })
+  activeHarness = h
   const client = await h.connect('cli')
   const root = join(home, 'workspace')
   mkdirSync(root, { recursive: true })
-  const project = (await client.callAny('quirky.repo/add', { path: root, folder: true })) as { id: string }
-  const worktree = (await client.callAny('quirky.worktree/resolve', { selector: `id:${project.id}` })) as { id: string }
+  await client.callAny('quirky.repo/add', { path: root, folder: true })
+  const worktree = (await client.callAny('quirky.worktree/resolve', { selector: `path:${root}` })) as { id: string }
   fixture = {
     h,
     client,
@@ -33,7 +35,8 @@ beforeEach(async () => {
 })
 
 afterEach(async () => {
-  await fixture?.h.cleanup()
+  await activeHarness?.cleanup()
+  activeHarness = null
   fixture = null
 })
 

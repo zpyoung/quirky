@@ -9,13 +9,41 @@ import { python } from '@codemirror/lang-python'
 import { sql } from '@codemirror/lang-sql'
 import { yaml } from '@codemirror/lang-yaml'
 import { bracketMatching, defaultHighlightStyle, foldGutter, indentOnInput, syntaxHighlighting } from '@codemirror/language'
-import { findNext, openSearchPanel, search, searchKeymap } from '@codemirror/search'
+import { findNext, replaceAll, replaceNext, search, SearchQuery, searchKeymap, setSearchQuery } from '@codemirror/search'
 import { Compartment, EditorSelection, EditorState, Transaction, type Extension } from '@codemirror/state'
 import { EditorView, drawSelection, highlightActiveLine, highlightActiveLineGutter, keymap, lineNumbers } from '@codemirror/view'
 import type { EditorSurfaceBuffer } from '../types'
 
 const PASTE_LIMIT = 16 * 1024 * 1024
-const editorSearchKeymap = searchKeymap.filter((binding) => !['Mod-Shift-g', 'Ctrl-Shift-g', 'Mod-f', 'Ctrl-f', 'Mod-g', 'Ctrl-g'].includes(binding.key ?? ''))
+// The host routes these managed chords; CodeMirror must not also run a search action.
+const HOST_MANAGED_EDITOR_CHORDS: Record<string, true> = {
+  'Mod-p': true,
+  'Mod-Shift-e': true,
+  'Mod-Shift-f': true,
+  'Mod-s': true,
+  'Mod-w': true,
+  'Mod-Alt-w': true,
+  'Mod-Shift-t': true,
+  'Mod-Shift-g': true,
+  'Mod-f': true,
+  'Mod-Alt-f': true,
+  'Mod-Alt-c': true,
+  'Mod-Shift-v': true,
+  'Alt-z': true,
+  'Mod-Shift-a': true,
+  'Mod-Shift-=': true,
+  'Mod--': true,
+  'Mod-0': true,
+  'Mod-l': true,
+  'Mod-Shift-m': true,
+  'Mod-Shift-o': true
+}
+function withoutManagedEditorChords<T extends { key?: string }>(bindings: readonly T[]): T[] {
+  return bindings.filter((binding) => HOST_MANAGED_EDITOR_CHORDS[binding.key ?? ''] !== true)
+}
+const editorSearchKeymap = withoutManagedEditorChords(searchKeymap)
+const editorHistoryKeymap = withoutManagedEditorChords(historyKeymap)
+const editorDefaultKeymap = withoutManagedEditorChords(defaultKeymap)
 
 type SelectionSummary = { fromLine: number; toLine: number }
 type SourceMenu = { kind: 'editor' | 'gutter'; x: number; y: number; query?: string; line?: number }
@@ -26,6 +54,9 @@ export type SourceEditorHandle = {
   reveal(line: number, column?: number): void
   undo(): void
   redo(): void
+  find(query?: string): Promise<{ opened: true; query?: string }>
+  replace(query?: string): Promise<{ opened: true; query?: string }>
+  copyContext(): Promise<{ copied: true; path: string; lines: string }>
 }
 
 type Props = {
@@ -36,7 +67,6 @@ type Props = {
   fontSize: number
   fontFamily: string
   onDraft(content: string): void
-  onSave(): Promise<void>
   flushDraft(): Promise<void>
   onView(patch: Record<string, unknown>): void
   onEditorFocus(): void
@@ -160,57 +190,104 @@ export const SourceEditor = forwardRef<SourceEditorHandle, Props>(function Sourc
   const [pasteError, setPasteError] = useState<string | null>(null)
   const [selection, setSelection] = useState<SelectionSummary | null>(null)
   const [contextMenu, setContextMenu] = useState<SourceMenu | null>(null)
+  const [searchOpen, setSearchOpen] = useState(false)
+  const [replaceOpen, setReplaceOpen] = useState(false)
+  const [searchQuery, setSearchQueryText] = useState('')
+  const [replaceText, setReplaceText] = useState('')
+  const searchInput = useRef<HTMLInputElement>(null)
   const content = props.buffer.draft ?? props.buffer.content
+  const applySearchQuery = (view: EditorView, query: string, replacement: string) => {
+    view.dispatch({ effects: setSearchQuery.of(new SearchQuery({ search: query, replace: replacement })) })
+  }
+  const showSearch = (replace: boolean, query?: string) => {
+    const view = viewRef.current
+    if (!view) throw new Error('The source editor is not mounted.')
+    setSearchOpen(true)
+    setReplaceOpen(replace)
+    const value = typeof query === 'string' ? query : searchQuery
+    if (typeof query === 'string') setSearchQueryText(query)
+    applySearchQuery(view, value, replaceText)
+    window.requestAnimationFrame(() => searchInput.current?.focus())
+    if (value !== '' && !findNext(view)) throw new Error(`No match for “${value}”.`)
+    return { opened: true as const, ...(value === '' ? {} : { query: value }) }
+  }
+  const runFind = () => {
+    const view = viewRef.current
+    if (!view) throw new Error('The source editor is not mounted.')
+    if (searchQuery === '') throw new Error('Enter text to find in the source editor.')
+    applySearchQuery(view, searchQuery, replaceText)
+    if (!findNext(view)) throw new Error(`No match for “${searchQuery}”.`)
+  }
+  const runReplace = (all: boolean) => {
+    const view = viewRef.current
+    if (!view) throw new Error('The source editor is not mounted.')
+    if (searchQuery === '') throw new Error('Enter text to replace in the source editor.')
+    applySearchQuery(view, searchQuery, replaceText)
+    const replaced = all ? replaceAll(view) : replaceNext(view)
+    if (!replaced) throw new Error(`No match for “${searchQuery}”.`)
+    return { replaced: true, all }
+  }
   const copySelectionContext = async () => {
     const view = viewRef.current
-    if (!view) return
+    if (!view) throw new Error('The source editor is not mounted.')
     const range = view.state.selection.main
-    if (range.empty) return
+    if (range.empty) throw new Error('Select text before copying editor context.')
+    if (!navigator.clipboard) throw new Error('Clipboard access is unavailable.')
     const start = view.state.doc.lineAt(range.from)
     const end = view.state.doc.lineAt(range.to)
-    const lineRange = start.number === end.number ? `${start.number}` : `${start.number}-${end.number}`
-    try {
-      await navigator.clipboard.writeText(`${props.buffer.relativePath}:${lineRange}\n${view.state.doc.sliceString(range.from, range.to)}`)
-      callbacks.current.onError(null)
-    } catch (reason) {
-      callbacks.current.onError(`Unable to copy selection context: ${reason instanceof Error ? reason.message : String(reason)}`)
-    }
+    const lines = start.number === end.number ? `${start.number}` : `${start.number}-${end.number}`
+    const text = `${props.buffer.relativePath}:${lines}\n${view.state.doc.sliceString(range.from, range.to)}`
+    await navigator.clipboard.writeText(text)
+    callbacks.current.onError(null)
+    return { copied: true as const, path: props.buffer.relativePath, lines }
   }
+  const reportCopyError = (reason: unknown) => {
+    callbacks.current.onError(`Unable to copy selection context: ${reason instanceof Error ? reason.message : String(reason)}`)
+  }
+ 
   const callbacks = useRef({
     onDraft: props.onDraft,
-    onSave: props.onSave,
     flushDraft: props.flushDraft,
     onView: props.onView,
     onEditorFocus: props.onEditorFocus,
     onSearchInFiles: props.onSearchInFiles,
-    onCopyContext: copySelectionContext,
     onError: props.onError
   })
   callbacks.current = {
     onDraft: props.onDraft,
-    onSave: props.onSave,
     flushDraft: props.flushDraft,
     onView: props.onView,
     onEditorFocus: props.onEditorFocus,
     onSearchInFiles: props.onSearchInFiles,
-    onCopyContext: copySelectionContext,
     onError: props.onError
   }
 
   useImperativeHandle(forwardedRef, () => ({
     flush: async () => callbacks.current.flushDraft(),
-    focus: () => viewRef.current?.focus(),
+    focus: () => {
+      const view = viewRef.current
+      if (!view) throw new Error('The source editor is not mounted.')
+      view.focus()
+    },
     reveal: (line, column = 1) => {
       const view = viewRef.current
-      if (!view) return
+      if (!view) throw new Error('The source editor is not mounted.')
       const targetLine = view.state.doc.line(Math.max(1, Math.min(line, view.state.doc.lines)))
       const position = Math.min(targetLine.to, targetLine.from + Math.max(0, column - 1))
       view.dispatch({ selection: { anchor: position }, effects: EditorView.scrollIntoView(position, { y: 'center' }) })
       view.focus()
     },
-    undo: () => viewRef.current && undo(viewRef.current),
-    redo: () => viewRef.current && redo(viewRef.current)
-  }), [])
+    undo: () => { const view = viewRef.current; if (!view) throw new Error('The source editor is not mounted.'); undo(view) },
+    redo: () => { const view = viewRef.current; if (!view) throw new Error('The source editor is not mounted.'); redo(view) },
+    find: async (query) => showSearch(false, query),
+    replace: async (query) => showSearch(true, query),
+    copyContext: copySelectionContext
+  }), [copySelectionContext, showSearch])
+
+  useEffect(() => {
+    const view = viewRef.current
+    if (view) applySearchQuery(view, searchQuery, replaceText)
+  }, [replaceText, searchQuery])
 
   useEffect(() => {
     const parent = host.current
@@ -235,13 +312,10 @@ export const SourceEditor = forwardRef<SourceEditorHandle, Props>(function Sourc
         compartments.wrap.of(props.wrap ? EditorView.lineWrapping : []),
         compartments.zoom.of(EditorView.theme({ '&': { fontSize: `${props.fontSize}px`, fontFamily: props.fontFamily || 'var(--terminal-font-family, ui-monospace, monospace)' } })),
         keymap.of([
-          { key: 'Mod-s', run: () => { void callbacks.current.onSave(); return true } },
-          { key: 'Mod-f', run: openSearchPanel },
           { key: 'Mod-g', run: findNext },
-          { key: 'Mod-Alt-c', run: (view) => { if (view.state.selection.main.empty) return false; void callbacks.current.onCopyContext(); return true } },
           ...editorSearchKeymap,
-          ...historyKeymap,
-          ...defaultKeymap,
+          ...editorHistoryKeymap,
+          ...editorDefaultKeymap,
           indentWithTab
         ]),
         EditorView.updateListener.of((update) => {
@@ -441,9 +515,33 @@ export const SourceEditor = forwardRef<SourceEditorHandle, Props>(function Sourc
       {selection && (
         <div className="qe-selection-copy-hint">
           <span>{selection.fromLine === selection.toLine ? `Line ${selection.fromLine} selected` : `Lines ${selection.fromLine}–${selection.toLine} selected`}</span>
-          <button type="button" onClick={() => void copySelectionContext()}>Copy context ⌘⌥C</button>
+          <button type="button" onClick={() => { void copySelectionContext().catch(reportCopyError) }}>Copy context ⌘⌥C</button>
         </div>
       )}
+      {searchOpen && <div className="qe-source-search" role="search" aria-label="Find in source">
+        <input
+          ref={searchInput}
+          aria-label="Find in source"
+          value={searchQuery}
+          onChange={(event) => setSearchQueryText(event.currentTarget.value)}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter') {
+              event.preventDefault()
+              try { runFind() } catch (reason) { callbacks.current.onError(reason instanceof Error ? reason.message : String(reason)) }
+            } else if (event.key === 'Escape') {
+              event.preventDefault()
+              setSearchOpen(false)
+            }
+          }}
+        />
+        {replaceOpen && <input aria-label="Replace with" value={replaceText} onChange={(event) => setReplaceText(event.currentTarget.value)} />}
+        <button type="button" onClick={() => { try { runFind() } catch (reason) { callbacks.current.onError(reason instanceof Error ? reason.message : String(reason)) } }}>Find next</button>
+        {replaceOpen && <>
+          <button type="button" onClick={() => { try { runReplace(false) } catch (reason) { callbacks.current.onError(reason instanceof Error ? reason.message : String(reason)) } }}>Replace</button>
+          <button type="button" onClick={() => { try { runReplace(true) } catch (reason) { callbacks.current.onError(reason instanceof Error ? reason.message : String(reason)) } }}>Replace all</button>
+        </>}
+        <button type="button" aria-label="Close find" onClick={() => setSearchOpen(false)}>Close</button>
+      </div>}
       <div className="qe-source-editor-main">
         <div className="qe-codemirror-host" ref={host} />
         {props.minimap && <canvas ref={canvas} className="qe-editor-minimap" aria-label="Code minimap" title="Click to jump to a section of the file" onClick={scrollFromMinimap} />}

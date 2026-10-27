@@ -500,8 +500,15 @@ export function ExplorerPanel({ context, report }: { context: UiPluginContext; r
       await refreshExplorer()
       return
     }
+    const files = Array.from(event.dataTransfer.files)
+    if (files.length > 0) {
+      const imported = await importFiles(context, worktree, destination || '.', files)
+      for (const path of imported) await openFile(path, { preview: false, pinned: true })
+      await refreshExplorer()
+      return
+    }
     const uris = event.dataTransfer.getData('text/uri-list')
-    if (uris && rootListing) {
+    if (uris) {
       const paths = uris.split(/\r?\n/).filter((value) => value !== '' && !value.startsWith('#')).map((line) => {
         const url = new URL(line)
         if (url.protocol !== 'file:') throw new Error(`Unsupported dropped URL: ${line}`)
@@ -510,28 +517,14 @@ export function ExplorerPanel({ context, report }: { context: UiPluginContext; r
       if (paths.length > 256) throw new Error('Import is limited to 256 files.')
       const metadataBytes = paths.reduce((total, path) => total + new TextEncoder().encode(path).byteLength, 0)
       if (metadataBytes > 256 * 1024) throw new Error('Dropped path names exceed the 256 KiB metadata limit.')
-      const root = rootListing.root.replace(/\/$/, '')
-      const internal = paths.filter((path) => path === root || path.startsWith(`${root}/`))
-      const external = paths.filter((path) => !internal.includes(path))
-      if (internal.includes(root)) throw new Error('The worktree root cannot be moved into one of its folders.')
-      if (external.length > 0) {
-        const imported = await context.call('quirky.editor/mutate', { worktree, action: 'import', path: destination || '.', sourcePaths: external }) as { path?: string; paths?: string[] }
-        const copied = imported.paths ?? (imported.path ? [imported.path] : [])
-        if (copied.length === 0) throw new Error('The external files could not be imported.')
-        for (const path of copied) await openFile(path, { preview: false, pinned: true })
-      }
-      for (const path of internal) {
-        const relative = path.slice(root.length + 1)
-        await context.call('quirky.editor/open', { worktree, path, focus: false })
-        const newPath = joinPath(destination, basename(relative))
-        if (newPath !== relative) await context.call('quirky.editor/mutate', { worktree, action: 'move', path: relative, newPath })
-      }
-      await refreshExplorer()
-      return
-    }
-    const files = Array.from(event.dataTransfer.files)
-    if (files.length > 0) {
-      const imported = await importFiles(context, worktree, destination || '.', files)
+      const result = await context.call('quirky.editor/mutate', {
+        worktree,
+        action: 'import',
+        path: destination || '.',
+        sourcePaths: paths
+      }) as { path?: string; paths?: string[] }
+      const imported = result.paths ?? (result.path ? [result.path] : [])
+      if (imported.length === 0) throw new Error('The dropped files could not be imported.')
       for (const path of imported) await openFile(path, { preview: false, pinned: true })
       await refreshExplorer()
     }
@@ -600,7 +593,10 @@ export function ExplorerPanel({ context, report }: { context: UiPluginContext; r
           role="tree"
           tabIndex={0}
           onKeyDown={onTreeKeyDown}
-          onDragOver={(event) => { if (event.dataTransfer.types.includes(WORKTREE_PATHS_MIME) || event.dataTransfer.files.length > 0 || event.dataTransfer.types.includes('text/uri-list')) event.preventDefault() }}
+          onDragOver={(event) => {
+            const types = event.dataTransfer.types
+            if (types.includes(WORKTREE_PATHS_MIME) || types.includes('Files') || types.includes('text/uri-list')) event.preventDefault()
+          }}
           onDrop={(event) => { event.preventDefault(); void dropOnFolder(event, '.').catch((reason: unknown) => setError(messageOf(reason))) }}
         >
           {rows.map(({ entry, depth }) => (
@@ -622,7 +618,10 @@ export function ExplorerPanel({ context, report }: { context: UiPluginContext; r
                 event.dataTransfer.setData('text/uri-list', paths.map((path) => fileUrl(`${root}/${path}`)).join('\r\n'))
                 event.dataTransfer.effectAllowed = 'copyMove'
               }}
-              onDragOver={(event) => { if (entry.isDirectory) event.preventDefault() }}
+              onDragOver={(event) => {
+                const types = event.dataTransfer.types
+                if (entry.isDirectory && (types.includes(WORKTREE_PATHS_MIME) || types.includes('Files') || types.includes('text/uri-list'))) event.preventDefault()
+              }}
               onDrop={(event) => { if (entry.isDirectory) void dropOnFolder(event, entry.path).catch((reason: unknown) => setError(messageOf(reason))) }}
             >
               <span className="qe-explorer-chevron">{entry.isDirectory ? (expanded.has(entry.path) ? '▾' : '▸') : ''}</span>

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent } from 'react'
 import type { SurfaceProps } from '../types'
 import { parseNotebook, serializeNotebook, sourceLines, type NotebookParse } from './document'
 import { base64ImageDataUrl, outputText, parseAnsi, preferredOutput, sanitizeHtml } from './outputs'
@@ -104,6 +104,12 @@ export function NotebookSurface(props: SurfaceProps) {
   const [kernelError, setKernelError] = useState<string | null>(null)
   const [cellOffset, setCellOffset] = useState(0)
   const [outputLimits, setOutputLimits] = useState<Record<number, number>>({})
+  const [findOpen, setFindOpen] = useState(false)
+  const [findQuery, setFindQuery] = useState('')
+  const [findIndex, setFindIndex] = useState(-1)
+  const findInput = useRef<HTMLInputElement>(null)
+  const cellElements = useRef(new Map<number, HTMLElement>())
+  const cellTextareas = useRef(new Map<number, HTMLTextAreaElement>())
   const pendingCellChanges = useRef(new Map<number, string>())
   const cellTimer = useRef<number | undefined>(undefined)
   const sourceMode = buffer.mode === 'source'
@@ -314,10 +320,65 @@ export function NotebookSurface(props: SurfaceProps) {
       requestRun({ index, all: false, mode: 'advance' })
     }
   }
+  const findNotebookMatches = useCallback((query: string) => {
+    const needle = query.toLocaleLowerCase()
+    if (needle === '') return []
+    const matches: { cellIndex: number; from: number; to: number }[] = []
+    for (let cellIndex = 0; cellIndex < cells.length; cellIndex += 1) {
+      const text = cellDrafts[cellIndex] ?? cells[cellIndex]!.source
+      const lower = text.toLocaleLowerCase()
+      let from = lower.indexOf(needle)
+      while (from >= 0 && matches.length < 10_000) {
+        matches.push({ cellIndex, from, to: from + needle.length })
+        from = lower.indexOf(needle, from + needle.length)
+      }
+      if (matches.length === 10_000) break
+    }
+    return matches
+  }, [cellDrafts, cells])
+  const findMatches = useMemo(() => findNotebookMatches(findQuery), [findNotebookMatches, findQuery])
+  const selectNotebookMatch = useCallback((match: { cellIndex: number; from: number; to: number }) => {
+    setCellOffset(Math.floor(match.cellIndex / CELL_PAGE_SIZE) * CELL_PAGE_SIZE)
+    setEditingCell(match.cellIndex)
+    window.requestAnimationFrame(() => {
+      cellElements.current.get(match.cellIndex)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      const textarea = cellTextareas.current.get(match.cellIndex)
+      if (textarea) {
+        textarea.focus()
+        textarea.setSelectionRange(match.from, match.to)
+      }
+    })
+  }, [])
+  const moveFind = (direction: number) => {
+    if (findMatches.length === 0) throw new Error('Enter text found in the notebook before moving between matches.')
+    const next = findIndex < 0
+      ? (direction < 0 ? findMatches.length - 1 : 0)
+      : (findIndex + direction + findMatches.length) % findMatches.length
+    setFindIndex(next)
+    selectNotebookMatch(findMatches[next]!)
+    return { match: next + 1, total: findMatches.length, truncated: findMatches.length === 10_000 }
+  }
+  const openFind = useCallback((args?: Record<string, unknown>) => {
+    const query = typeof args?.query === 'string' ? args.query : undefined
+    setFindOpen(true)
+    if (query !== undefined) setFindQuery(query)
+    window.requestAnimationFrame(() => findInput.current?.focus())
+    if (query === undefined || query === '') return { opened: true }
+    const matches = findNotebookMatches(query)
+    if (matches.length === 0) throw new Error(`No notebook cell contains “${query}”.`)
+    setFindIndex(0)
+    selectNotebookMatch(matches[0]!)
+    return { opened: true, query, matches: matches.length, truncated: matches.length === 10_000 }
+  }, [findNotebookMatches, selectNotebookMatch])
+  useEffect(() => props.registerCommandHandlers({
+    find: openFind,
+    flush: () => flushCellChangesRef.current()
+  }), [openFind, props.registerCommandHandlers])
+
   const visibleCellEnd = Math.min(cellOffset + CELL_PAGE_SIZE, cells.length)
   const visibleCells = cells.slice(cellOffset, visibleCellEnd)
 
-  return <section className="quirky-notebook-surface" aria-label="Notebook">
+  return <section className="quirky-notebook-surface" aria-label="Notebook" style={{ fontSize: props.fontSize }}>
     <header className="notebook-toolbar">
       <strong>{buffer.name}</strong>
       <span>{parsed.valid ? `${parsed.cellCount} cells · ${parsed.language}` : 'Notebook parse error'}</span>
@@ -325,6 +386,7 @@ export function NotebookSurface(props: SurfaceProps) {
         {sourceMode ? 'Notebook' : 'Source'}
       </button>
       <button type="button" onClick={() => void saveNotebook()} disabled={buffer.readOnly || actionBusy}>Save notebook</button>
+      <button type="button" onClick={() => { setFindOpen(true); window.requestAnimationFrame(() => findInput.current?.focus()) }}>Find</button>
       {!sourceMode && parsed.valid && parsed.language.startsWith('python') && <>
         <button type="button" onClick={() => void loadEnvironments()} disabled={actionBusy}>
           {runtime.selectedPython?.name ? `${runtime.selectedPython.name}${runtime.selectedPython.version ? ` (Python ${runtime.selectedPython.version})` : ''}` : 'Select Kernel'}
@@ -335,10 +397,31 @@ export function NotebookSurface(props: SurfaceProps) {
         {runtime.kernel?.status === 'ready' && <button type="button" onClick={() => void action('restart').then(refreshRuntime)} disabled={actionBusy}>Restart kernel</button>}
       </>}
     </header>
+    {findOpen && <div className="notebook-toolbar" role="search" aria-label="Find in notebook">
+      <input
+        ref={findInput}
+        aria-label="Find in notebook"
+        value={findQuery}
+        onChange={(event) => { setFindQuery(event.currentTarget.value); setFindIndex(-1) }}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter') {
+            event.preventDefault()
+            try { moveFind(1) } catch (error) { setSourceError(error instanceof Error ? error.message : String(error)) }
+          } else if (event.key === 'Escape') {
+            event.preventDefault()
+            setFindOpen(false)
+          }
+        }}
+      />
+      <span>{findMatches.length === 10_000 ? '10,000+ matches' : `${findMatches.length} match${findMatches.length === 1 ? '' : 'es'}`}</span>
+      <button type="button" onClick={() => { try { moveFind(-1) } catch (error) { setSourceError(error instanceof Error ? error.message : String(error)) } }} disabled={findMatches.length === 0}>Previous</button>
+      <button type="button" onClick={() => { try { moveFind(1) } catch (error) { setSourceError(error instanceof Error ? error.message : String(error)) } }} disabled={findMatches.length === 0}>Next</button>
+      <button type="button" onClick={() => setFindOpen(false)}>Close</button>
+    </div>}
 
     {sourceMode ? <textarea
       aria-label="Notebook source JSON"
-      style={{ ...sourceStyle, minHeight: 420 }}
+      style={{ ...sourceStyle, minHeight: 420, fontSize: props.fontSize }}
       spellCheck={false}
       value={content}
       onChange={(event) => onDraft(event.currentTarget.value)}
@@ -357,7 +440,10 @@ export function NotebookSurface(props: SurfaceProps) {
         const outputList = Array.isArray(cell.outputs) ? cell.outputs.map(asRecord) : []
         const outputLimit = outputLimits[index] ?? OUTPUT_PAGE_SIZE
         const visibleOutputs = outputList.slice(0, outputLimit)
-        return <article className={`notebook-cell notebook-cell-${cell.cell_type}`} key={cell.id ?? index}>
+        return <article className={`notebook-cell notebook-cell-${cell.cell_type}`} key={cell.id ?? index} ref={(element) => {
+          if (element) cellElements.current.set(index, element)
+          else cellElements.current.delete(index)
+        }}>
           <div className="notebook-cell-toolbar">
             <span aria-label="Cell type">{cell.cell_type}</span>
             {cell.cell_type === 'code' && <span aria-label="Execution count">[{typeof cell.execution_count === 'number' ? cell.execution_count : runtime.busy ? '*' : ' '}]</span>}
@@ -381,8 +467,11 @@ export function NotebookSurface(props: SurfaceProps) {
             <button type="button" onClick={() => void mutateNotebook('delete', { index })} disabled={actionBusy || buffer.readOnly}>Delete cell</button>
           </div>
           {isEditing ? <textarea
-            aria-label={`${cell.cell_type} cell ${index + 1}`}
-            style={sourceStyle}
+            ref={(element) => {
+              if (element) cellTextareas.current.set(index, element)
+              else cellTextareas.current.delete(index)
+            }}
+            style={{ ...sourceStyle, fontSize: props.fontSize }}
             spellCheck={cell.cell_type === 'markdown'}
             value={cellText}
             onKeyDown={cell.cell_type === 'code' ? (event) => onCellKeyDown(event, index) : undefined}
