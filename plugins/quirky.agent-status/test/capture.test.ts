@@ -62,6 +62,10 @@ describe('captureProviderSession', () => {
     expect(captureProviderSession('claude', { session_id: 'abc', transcript_path: '  ' })).toEqual({ id: 'abc', transcriptPath: null })
   })
 
+  test.each(['constructor', 'toString', '__proto__'])('inherited property name %s is an unknown source', (source) => {
+    expect(captureProviderSession(source, { session_id: 'abc', transcript_path: T })).toBeNull()
+  })
+
   test('a falsy first key falls through to the next', () => {
     expect(captureProviderSession('grok', { sessionId: '', session_id: 'g2' })).toEqual({ id: 'g2', transcriptPath: null })
   })

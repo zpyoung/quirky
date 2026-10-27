@@ -75,8 +75,8 @@ function transcriptOf(payload: Record<string, unknown>, keys: string[]): string 
  * follow Orca's `extractAgentProviderSession`.
  */
 export function captureProviderSession(source: string, payload: Record<string, unknown>): ProviderSession | null {
+  if (!Object.hasOwn(SOURCES, source)) return null
   const rule = SOURCES[source]
-  if (!rule) return null
   const id = firstId(payload, rule.idKeys)
   if (!id) return null
   const transcriptPath = rule.transcriptKeys ? transcriptOf(payload, rule.transcriptKeys) : null
