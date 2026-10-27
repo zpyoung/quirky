@@ -95,7 +95,11 @@ export type PluginPty = {
   ): Promise<{ pid: number; restored: boolean; cwd: string; cols: number; rows: number }>
   write(sessionId: string, data: string | Uint8Array): void
   resize(sessionId: string, cols: number, rows: number): Promise<void>
-  read(sessionId: string, lines: number): Promise<{ lines: string[]; cols: number; rows: number; alt: boolean }>
+  /**
+   * The visible screen plus up to `lines` of scrollback, as text. `unwrap` joins rows the terminal
+   * wrapped into logical lines; a line that starts above the `lines` cutoff may be cut.
+   */
+  read(sessionId: string, lines: number, options?: { unwrap?: boolean }): Promise<{ lines: string[]; cols: number; rows: number; alt: boolean }>
   /** A `reason` records the exit as requested (cause `killed`) and defaults the signal to SIGKILL. */
   kill(sessionId: string, signal?: string, options?: { reason?: 'killed' }): Promise<void>
   forget(sessionId: string): Promise<void>

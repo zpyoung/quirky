@@ -16,7 +16,7 @@ import { descendantsOf } from './descendants'
 import { writeCheckpoint } from './history/checkpoint'
 import { DEFAULT_SEGMENT_BYTES, HistoryLog } from './history/log'
 import { type SessionMeta, writeMeta } from './history/meta'
-import { composeReplay, pageBefore, parseCursor, textLinesAbove } from './history/reader'
+import { composeReplay, pageBefore, parseCursor, textRowsAbove } from './history/reader'
 import { CheckpointScheduler, GROUND, MODE_RESET, rebuildScreen, type RestoredScreen } from './history/restore'
 import { spawnPty, type PtyProcess } from './pty-process'
 import { OutputScanner, type ScanFact } from './scanner'
@@ -270,21 +270,22 @@ export class SessionManager {
   /**
    * The last `lines` rows of history above the screen, then the visible screen, with trailing
    * whitespace trimmed from each row and trailing blank rows dropped. A blank screen with no
-   * history reads as `[]`; `rows` and `cols` report the screen size.
+   * history reads as `[]`; `rows` and `cols` report the screen size. With `unwrap`, every row the
+   * terminal wrapped is joined onto the row before it, across the history/screen seam.
    */
-  async read(sessionId: string, lines: number): Promise<PtyResults['read']> {
+  async read(sessionId: string, lines: number, unwrap = false): Promise<PtyResults['read']> {
     const { live, stored } = this.locate(sessionId)
     if (!Number.isInteger(lines) || lines < 0) throw new Error('lines must be a non-negative integer')
     if (live) {
       const grab = await this.atRest(live, () => {
         const visible = live.screen.lines()
-        return { visible, above: textLinesAbove(live.dir, lines, visible.length), alt: live.screen.isAlternate }
+        return { visible, above: textRowsAbove(live.dir, lines, visible.length), alt: live.screen.isAlternate }
       })
-      return readResult(await grab.above, grab.visible, live.cols, grab.visible.length, grab.alt)
+      return readResult(await grab.above, grab.visible, live.cols, grab.visible.length, grab.alt, unwrap)
     }
     return this.withRebuilt(stored, async (screen, rebuilt) => {
       const visible = screen.lines()
-      return readResult(await textLinesAbove(stored.dir, lines, visible.length), visible, rebuilt.cols, rebuilt.rows, screen.isAlternate)
+      return readResult(await textRowsAbove(stored.dir, lines, visible.length), visible, rebuilt.cols, rebuilt.rows, screen.isAlternate, unwrap)
     })
   }
 
@@ -919,8 +920,19 @@ function infoOf(session: Session): PtySessionInfo {
   }
 }
 
-function readResult(above: string[], visible: Array<{ text: string }>, cols: number, rows: number, alt: boolean): PtyResults['read'] {
-  const lines = [...above, ...visible.map((row) => row.text.trimEnd())]
+function readResult(
+  above: Array<{ text: string; wrapped: boolean }>,
+  visible: Array<{ text: string; wrapped: boolean }>,
+  cols: number,
+  rows: number,
+  alt: boolean,
+  unwrap: boolean
+): PtyResults['read'] {
+  const lines: string[] = []
+  for (const row of [...above, ...visible.map((row) => ({ text: row.text.trimEnd(), wrapped: row.wrapped }))]) {
+    if (unwrap && row.wrapped && lines.length > 0) lines[lines.length - 1] += row.text
+    else lines.push(row.text)
+  }
   while (lines.length > 0 && lines[lines.length - 1] === '') lines.pop()
   return { lines, cols, rows, alt }
 }

@@ -115,8 +115,11 @@ export type PtyRequest =
    */
   | { id: number; type: 'subscribe'; sessionId: string; mode?: 'screen' | 'raw'; historyLines?: number }
   | { id: number; type: 'unsubscribe'; sessionId: string }
-  /** The visible screen plus up to `lines` of scrollback from the host's emulator, as text. */
-  | { id: number; type: 'read'; sessionId: string; lines: number }
+  /**
+   * The visible screen plus up to `lines` of scrollback from the host's emulator, as text. With
+   * `unwrap`, rows the terminal wrapped are joined back into the logical line they came from.
+   */
+  | { id: number; type: 'read'; sessionId: string; lines: number; unwrap?: boolean }
   | { id: number; type: 'snapshot'; sessionId: string }
   /** A page of scrollback ending just before the `before` cursor, or at the newest line when absent. */
   | { id: number; type: 'history'; sessionId: string; lines?: number; before?: string; format?: 'text' | 'ansi' }
