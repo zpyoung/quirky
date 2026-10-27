@@ -12,6 +12,8 @@
 - 2026-10-27, Final Round 1: SC-33 no longer expects an ESC byte inside a notification's text. An
   ESC ends or aborts an OSC sequence before the payload is complete, so such a sequence makes no
   notification; the cleaning applies to the controls that can reach a payload.
+- 2026-10-27, UI pass setup: SC-46 follows SC-6 (opening a worktree from its card clears its
+  sessions too, D45), so the tab bell is shown with the person already on another tab of B.
 
 ## Conceptual model
 
@@ -426,14 +428,17 @@ These run in the web UI against a daemon on a temporary home.
     - **Given** worktrees A and B, the person on A, a claude session S in B
     - **When** S's hooks post Stop
     - **Then** B's card shows an amber bell where its status dot was, labelled "Unread", and its name
-      is bold; opening B shows S's tab with an amber bell labelled "Unread agent completion" until
-      the tab is shown, after which the card and tab return to their status glyphs
+      is bold; clicking the card clears it (SC-6). With the person on B's shell tab instead, S's
+      finish puts an amber bell labelled "Unread agent completion" on S's tab, which goes back to its
+      status glyph once S's tab is shown
     - **Screen states:**
 
       | Moment | B's card | S's tab |
       |---|---|---|
       | after Stop, on A | amber bell "Unread", bold name | not visible |
-      | after opening B on S | status dot, normal name | status dot |
+      | after clicking B's card | status dot, normal name | status dot |
+      | after Stop, on B's shell tab | status dot | amber bell "Unread agent completion" |
+      | after selecting S's tab | status dot | status dot |
 
 47. **SC-47: Settings > Notifications at its defaults** (UI)
     - **When** the person runs "Open notification settings"
