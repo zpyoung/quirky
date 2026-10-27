@@ -1,0 +1,449 @@
+{
+  "id": "quirky.ledger",
+  "name": "Project Ledger",
+  "version": "0.1.0",
+  "description": "Durable typed project and project-group engineering observations with revision history and replay-safe imports.",
+  "main": "main.ts",
+  "ui": "dist/ui.js",
+  "cli": "cli.ts",
+  "dependencies": [
+    "quirky.repo",
+    "quirky.worktree"
+  ],
+  "contributes": {
+    "method": [
+      {
+        "id": "request",
+        "description": "Runs one validated project ledger operation.",
+        "destructive": true,
+        "confirm": "Perform this project ledger operation?",
+        "describe": "describe",
+        "params": {
+          "type": "object",
+          "properties": {
+            "operation": { "type": "string", "enum": ["file", "list", "show", "edit", "state", "review", "revert", "import", "catalog", "approve", "bulk-state", "delete-entries", "delete-ledger", "attach", "settings", "removal-preview"] },
+            "target": {
+              "type": "object",
+              "properties": {
+                "workspaceId": { "type": "string" },
+                "owner": { "type": "object", "properties": { "tier": { "type": "string" }, "id": { "type": "string" } }, "required": ["tier", "id"] },
+                "ledgerId": { "type": "string" },
+                "group": { "type": "boolean" },
+                "groupSelector": { "type": "string" }
+              }
+            },
+            "type": { "type": "string" },
+            "content": { "type": "object" },
+            "id": { "type": "string" },
+            "ifRevision": { "type": "integer", "minimum": 1 },
+            "toRevision": { "type": "integer", "minimum": 1 },
+            "state": { "type": "string" },
+            "filters": {
+              "type": "object",
+              "properties": {
+                "type": { "type": "string" },
+                "state": { "type": "string" },
+                "reviewed": { "type": "boolean" },
+                "stale": { "type": "boolean" },
+                "workspaceId": { "type": "string" },
+                "branch": { "type": "string" },
+                "search": { "type": "string" },
+                "sort": { "type": "string" }
+              }
+            },
+            "selections": { "type": "array", "maxItems": 10000, "items": { "type": "object", "properties": { "id": { "type": "string" }, "revision": { "type": "integer", "minimum": 1 } }, "required": ["id", "revision"] } },
+            "ifLedgerRevision": { "type": "integer", "minimum": 0 },
+            "attachTo": { "type": "object", "properties": { "tier": { "type": "string" }, "id": { "type": "string" } }, "required": ["tier", "id"] },
+            "confirmed": { "type": "boolean" },
+            "staleAfterDays": { "type": "integer", "minimum": 0, "maximum": 3650 },
+            "removal": {
+              "type": "object",
+              "properties": {
+                "repoIds": { "type": "array", "maxItems": 10000, "items": { "type": "string" } },
+                "groupIds": { "type": "array", "maxItems": 10000, "items": { "type": "string" } },
+                "expectedLedgers": { "type": "array", "maxItems": 10000, "items": { "type": "object", "properties": { "ledgerId": { "type": "string" }, "revision": { "type": "integer", "minimum": 0 } }, "required": ["ledgerId", "revision"] } }
+              }
+            }
+          },
+          "required": ["operation"]
+        },
+        "result": { "type": "object" }
+      },
+      {
+        "id": "describe",
+        "description": "Describes the exact destructive action and immutable revision snapshots for standard confirmation.",
+        "readOnly": true,
+        "params": { "type": "object" },
+        "result": { "type": "string" }
+      },
+      {
+        "id": "file",
+        "description": "Files a typed observation in a project or group ledger.",
+        "params": { "type": "object", "properties": { "target": { "type": "object" }, "type": { "type": "string" }, "content": { "type": "object" } }, "required": ["type", "content"] },
+        "result": { "type": "object" }
+      },
+      {
+        "id": "list",
+        "description": "Lists entries in the selected ledger with origin, state, review and freshness filters.",
+        "readOnly": true,
+        "params": { "type": "object", "properties": { "target": { "type": "object" }, "filters": { "type": "object" } } },
+        "result": { "type": "object" }
+      },
+      {
+        "id": "show",
+        "description": "Shows one entry and its complete revision history.",
+        "readOnly": true,
+        "params": { "type": "object", "properties": { "target": { "type": "object" }, "id": { "type": "string" } }, "required": ["id"] },
+        "result": { "type": "object" }
+      },
+      {
+        "id": "edit",
+        "description": "Merges and validates entry content with an optimistic revision precondition.",
+        "params": { "type": "object", "properties": { "target": { "type": "object" }, "id": { "type": "string" }, "ifRevision": { "type": "integer", "minimum": 1 }, "content": { "type": "object" } }, "required": ["id", "ifRevision", "content"] },
+        "result": { "type": "object" }
+      },
+      {
+        "id": "state",
+        "description": "Changes an entry state with an optimistic revision precondition.",
+        "params": { "type": "object", "properties": { "target": { "type": "object" }, "id": { "type": "string" }, "ifRevision": { "type": "integer", "minimum": 1 }, "state": { "type": "string" } }, "required": ["id", "ifRevision", "state"] },
+        "result": { "type": "object" }
+      },
+      {
+        "id": "review",
+        "description": "Returns advisory triage candidates and safe filesystem/git evidence without changing entries.",
+        "readOnly": true,
+        "params": { "type": "object", "properties": { "target": { "type": "object" }, "filters": { "type": "object" } } },
+        "result": { "type": "object" }
+      },
+      {
+        "id": "revert",
+        "description": "Restores editable fields and state from a historical revision as a new revision.",
+        "params": { "type": "object", "properties": { "target": { "type": "object" }, "id": { "type": "string" }, "ifRevision": { "type": "integer", "minimum": 1 }, "toRevision": { "type": "integer", "minimum": 1 } }, "required": ["id", "ifRevision", "toRevision"] },
+        "result": { "type": "object" }
+      },
+      {
+        "id": "import",
+        "description": "Imports recognized legacy ledger records from the selected workspace without modifying source files.",
+        "params": { "type": "object", "properties": { "target": { "type": "object" } } },
+        "result": { "type": "object" }
+      },
+      {
+        "id": "catalog",
+        "description": "Lists attached and detached ledgers with available live owners for chooser and attachment flows.",
+        "readOnly": true,
+        "params": { "type": "object" },
+        "result": { "type": "object" }
+      },
+      {
+        "id": "approve",
+        "description": "Approves immutable entry revision snapshots and records review history.",
+        "params": { "type": "object", "properties": { "target": { "type": "object" }, "selections": { "type": "array", "maxItems": 10000, "items": { "type": "object", "properties": { "id": { "type": "string" }, "revision": { "type": "integer", "minimum": 1 } }, "required": ["id", "revision"] } } }, "required": ["selections"] },
+        "result": { "type": "object" }
+      },
+      {
+        "id": "bulk-state",
+        "description": "Atomically changes selected entry states after snapshot confirmation.",
+        "destructive": true,
+        "confirm": "Confirm the displayed bulk ledger state change?",
+        "describe": "describeBulkState",
+        "params": { "type": "object", "properties": { "target": { "type": "object" }, "state": { "type": "string" }, "selections": { "type": "array", "maxItems": 10000, "items": { "type": "object", "properties": { "id": { "type": "string" }, "revision": { "type": "integer", "minimum": 1 } }, "required": ["id", "revision"] } }, "confirmed": { "type": "boolean" } }, "required": ["state", "selections"] },
+        "result": { "type": "object" }
+      },
+      {
+        "id": "delete-entries",
+        "description": "Atomically deletes selected entries while keeping import tombstones and sequence history.",
+        "destructive": true,
+        "confirm": "Confirm deletion of the displayed ledger entries?",
+        "describe": "describeDeleteEntries",
+        "params": { "type": "object", "properties": { "target": { "type": "object" }, "selections": { "type": "array", "maxItems": 10000, "items": { "type": "object", "properties": { "id": { "type": "string" }, "revision": { "type": "integer", "minimum": 1 } }, "required": ["id", "revision"] } }, "confirmed": { "type": "boolean" } }, "required": ["selections"] },
+        "result": { "type": "object" }
+      },
+      {
+        "id": "delete-ledger",
+        "description": "Permanently deletes a ledger, all entry bodies, history and import anchors.",
+        "destructive": true,
+        "confirm": "Confirm permanent project ledger deletion?",
+        "describe": "describeDeleteLedger",
+        "params": { "type": "object", "properties": { "target": { "type": "object" }, "ifLedgerRevision": { "type": "integer", "minimum": 0 }, "confirmed": { "type": "boolean" } }, "required": ["ifLedgerRevision"] },
+        "result": { "type": "object" }
+      },
+      {
+        "id": "attach",
+        "description": "Attaches a detached ledger to a live, unoccupied same-tier owner.",
+        "destructive": true,
+        "confirm": "Confirm attachment of this detached ledger?",
+        "describe": "describeAttach",
+        "params": { "type": "object", "properties": { "target": { "type": "object" }, "attachTo": { "type": "object", "properties": { "tier": { "type": "string" }, "id": { "type": "string" } }, "required": ["tier", "id"] }, "ifLedgerRevision": { "type": "integer", "minimum": 0 }, "confirmed": { "type": "boolean" } }, "required": ["attachTo", "ifLedgerRevision"] },
+        "result": { "type": "object" }
+      },
+      {
+        "id": "settings",
+        "description": "Reads or changes the per-ledger stale-after-days threshold.",
+        "params": { "type": "object", "properties": { "target": { "type": "object" }, "ifLedgerRevision": { "type": "integer", "minimum": 0 }, "staleAfterDays": { "type": "integer", "minimum": 0, "maximum": 3650 } } },
+        "result": { "type": "object" }
+      },
+      {
+        "id": "removal-preview",
+        "description": "Previews ledgers affected by project/group removal and checks optional immutable revision snapshots.",
+        "readOnly": true,
+        "params": {
+          "type": "object",
+          "properties": {
+            "removal": {
+              "type": "object",
+              "properties": {
+                "repoIds": { "type": "array", "maxItems": 10000, "items": { "type": "string" } },
+                "groupIds": { "type": "array", "maxItems": 10000, "items": { "type": "string" } },
+                "expectedLedgers": { "type": "array", "maxItems": 10000, "items": { "type": "object", "properties": { "ledgerId": { "type": "string" }, "revision": { "type": "integer", "minimum": 0 } }, "required": ["ledgerId", "revision"] } }
+              }
+            }
+          },
+          "required": ["removal"]
+        },
+        "result": { "type": "object" }
+      },
+      {
+        "id": "describeBulkState",
+        "description": "Builds confirmation text for bulk-state snapshots.",
+        "readOnly": true,
+        "params": { "type": "object" },
+        "result": { "type": "string" }
+      },
+      {
+        "id": "describeDeleteEntries",
+        "description": "Builds confirmation text for entry-deletion snapshots.",
+        "readOnly": true,
+        "params": { "type": "object" },
+        "result": { "type": "string" }
+      },
+      {
+        "id": "describeDeleteLedger",
+        "description": "Builds confirmation text for ledger deletion snapshots.",
+        "readOnly": true,
+        "params": { "type": "object" },
+        "result": { "type": "string" }
+      },
+      {
+        "id": "describeAttach",
+        "description": "Builds confirmation text for detached ledger attachment snapshots.",
+        "readOnly": true,
+        "params": { "type": "object" },
+        "result": { "type": "string" }
+      }
+    ],
+    "event": [
+      {
+        "id": "changed",
+        "description": "A ledger entry, ledger metadata or owner reconciliation changed.",
+        "data": { "type": "object", "properties": { "ledgerId": { "type": "string" } } }
+      }
+    ],
+    "view": [
+      { "id": "ledger", "title": "Project Ledger" },
+      { "id": "settings", "title": "Ledger Staleness" }
+    ],
+    "panel": [
+      { "id": "ledger", "title": "Ledger" }
+    ],
+    "sidebar-section": [
+      { "id": "ledger", "title": "Ledger", "order": 40 }
+    ],
+    "command": [
+      {
+        "id": "open",
+        "title": "Open Ledger",
+        "description": "Open the project ledger or its attached/detached chooser.",
+        "args": { "type": "object", "properties": { "target": { "type": "object", "properties": { "workspaceId": { "type": "string" }, "owner": { "type": "object", "properties": { "tier": { "type": "string", "enum": ["project", "group"] }, "id": { "type": "string" } }, "required": ["tier", "id"] }, "ledgerId": { "type": "string" }, "group": { "type": "boolean" }, "groupSelector": { "type": "string" } } } } }
+      },
+      {
+        "id": "control",
+        "title": "Ledger Control",
+        "description": "Route ledger scope, filter, selection, detail and dialog actions to the mounted ledger view.",
+        "args": {
+          "type": "object",
+          "properties": {
+            "action": { "type": "string", "enum": ["scope", "filter", "sort", "selection", "detail", "new", "edit", "triage", "settings"] },
+            "scope": { "type": "string", "enum": ["worktree", "folder", "project", "group"] },
+            "filters": { "type": "object" },
+            "sort": { "type": "string", "enum": ["activity", "sequence", "title"] },
+            "selections": { "type": "array", "maxItems": 10000, "items": { "type": "object", "properties": { "id": { "type": "string" }, "revision": { "type": "integer", "minimum": 1 } }, "required": ["id", "revision"] } },
+            "id": { "type": "string" },
+            "target": { "type": "object", "properties": { "workspaceId": { "type": "string" }, "owner": { "type": "object", "properties": { "tier": { "type": "string", "enum": ["project", "group"] }, "id": { "type": "string" } }, "required": ["tier", "id"] }, "ledgerId": { "type": "string" }, "group": { "type": "boolean" }, "groupSelector": { "type": "string" } }
+          },
+          "required": ["action"]
+        }
+      }
+    ],
+    "cli-command": [
+      {
+        "id": "file",
+        "summary": "file a typed project ledger observation",
+        "flags": {
+          "type": { "type": "string", "description": "bug, deferred, test-gap, proposal or decision", "required": true },
+          "title": { "type": "string", "description": "entry title", "required": true },
+          "file": { "type": "string", "description": "bug location path or path:line" },
+          "description": { "type": "string", "description": "bug description" },
+          "severity": { "type": "string", "description": "critical, high, medium or low" },
+          "why-deferred": { "type": "string", "description": "why the work is deferred" },
+          "priority": { "type": "string", "description": "high, medium or low" },
+          "file-under-test": { "type": "string", "description": "test-gap location path or path:line" },
+          "reason-skipped": { "type": "string", "description": "why the test was skipped" },
+          "context": { "type": "string", "description": "proposal or decision context" },
+          "recommendation": { "type": "string", "description": "proposal recommendation" },
+          "decision": { "type": "string", "description": "decision text" },
+          "consequences": { "type": "string", "description": "decision consequences" },
+          "status": { "type": "string", "description": "proposed, accepted or superseded" },
+          "host": { "type": "string", "description": "required host for an external location" },
+          "external": { "type": "boolean", "description": "mark the location external" },
+          "location-base-kind": { "type": "string", "description": "project or workspace" },
+          "location-base-id": { "type": "string", "description": "project/workspace ID for the location" },
+          "workspace": { "type": "string", "description": "workspace ID or current/active" },
+          "group": { "type": "boolean", "description": "select the current workspace's group ledger" },
+          "group-selector": { "type": "string", "description": "select a membership group by ID or exact name" },
+          "owner": { "type": "string", "description": "explicit live project/group owner ID" },
+          "owner-tier": { "type": "string", "description": "project or group" }
+        },
+        "methods": ["quirky.ledger/file"]
+      },
+      {
+        "id": "list",
+        "summary": "list ledger entries with filters",
+        "flags": {
+          "type": { "type": "string", "description": "filter by entry type" },
+          "state": { "type": "string", "description": "filter by state" },
+          "reviewed": { "type": "boolean", "description": "filter review status" },
+          "stale": { "type": "boolean", "description": "filter staleness" },
+          "workspace": { "type": "string", "description": "target workspace or origin filter with --ledger/--owner" },
+          "origin-workspace": { "type": "string", "description": "filter the recorded origin workspace" },
+          "branch": { "type": "string", "description": "filter the origin branch" },
+          "search": { "type": "string", "description": "match entry ID or title" },
+          "sort": { "type": "string", "description": "activity, sequence or title" },
+          "ledger": { "type": "string", "description": "read an attached or detached ledger by ID" },
+          "group": { "type": "boolean", "description": "select the current workspace's group ledger" },
+          "group-selector": { "type": "string", "description": "select a membership group by ID or exact name" },
+          "owner": { "type": "string", "description": "explicit live owner ID" },
+          "owner-tier": { "type": "string", "description": "project or group" }
+        },
+        "methods": ["quirky.ledger/list"]
+      },
+      {
+        "id": "show",
+        "summary": "show an entry and its revision history",
+        "positionals": [{ "name": "id", "description": "entry ID", "required": false }],
+        "flags": { "id": { "type": "string", "description": "entry ID (alternative to the positional ID)" }, "ledger": { "type": "string", "description": "ledger ID" }, "workspace": { "type": "string", "description": "workspace ID or current/active" }, "group": { "type": "boolean", "description": "select the workspace group ledger" }, "group-selector": { "type": "string", "description": "membership group ID or exact name" } },
+        "methods": ["quirky.ledger/show"]
+      },
+      {
+        "id": "edit",
+        "summary": "edit entry content with an optimistic revision check",
+        "positionals": [{ "name": "id", "description": "entry ID", "required": false }],
+        "flags": {
+          "id": { "type": "string", "description": "entry ID (alternative to the positional ID)" },
+          "if-revision": { "type": "integer", "description": "revision read by the caller", "required": true },
+          "content": { "type": "json", "description": "content patch object" },
+          "title": { "type": "string", "description": "entry title" },
+          "file": { "type": "string", "description": "bug location path or path:line" },
+          "description": { "type": "string", "description": "bug description" },
+          "severity": { "type": "string", "description": "critical, high, medium or low" },
+          "why-deferred": { "type": "string", "description": "why work is deferred" },
+          "priority": { "type": "string", "description": "high, medium or low" },
+          "file-under-test": { "type": "string", "description": "test-gap location path or path:line" },
+          "reason-skipped": { "type": "string", "description": "why the test was skipped" },
+          "context": { "type": "string", "description": "proposal or decision context" },
+          "recommendation": { "type": "string", "description": "proposal recommendation" },
+          "decision": { "type": "string", "description": "decision text" },
+          "consequences": { "type": "string", "description": "decision consequences" },
+          "status": { "type": "string", "description": "proposed, accepted or superseded" },
+          "host": { "type": "string", "description": "external location host" },
+          "external": { "type": "boolean", "description": "mark the location external" },
+          "location-base-kind": { "type": "string", "description": "project or workspace" },
+          "location-base-id": { "type": "string", "description": "project/workspace ID for the location" },
+          "ledger": { "type": "string", "description": "ledger ID" },
+          "workspace": { "type": "string", "description": "workspace ID or current/active" },
+          "group": { "type": "boolean", "description": "select the workspace group ledger" },
+          "group-selector": { "type": "string", "description": "membership group ID or exact name" }
+        },
+        "methods": ["quirky.ledger/edit"]
+      },
+      {
+        "id": "state",
+        "summary": "change an entry state",
+        "positionals": [{ "name": "id", "description": "entry ID", "required": false }],
+        "flags": { "id": { "type": "string", "description": "entry ID (alternative to the positional ID)" }, "state": { "type": "string", "description": "open, resolved or archived", "required": true }, "if-revision": { "type": "integer", "description": "revision read by the caller", "required": true }, "ledger": { "type": "string", "description": "ledger ID" }, "workspace": { "type": "string", "description": "workspace ID or current/active" }, "group": { "type": "boolean", "description": "select the workspace group ledger" }, "group-selector": { "type": "string", "description": "membership group ID or exact name" } },
+        "methods": ["quirky.ledger/state"]
+      },
+      {
+        "id": "review",
+        "summary": "review ledger candidates and safe evidence",
+        "flags": { "type": { "type": "string", "description": "filter type" }, "state": { "type": "string", "description": "filter state" }, "reviewed": { "type": "boolean", "description": "filter review status" }, "stale": { "type": "boolean", "description": "filter freshness" }, "workspace": { "type": "string", "description": "workspace target or origin filter with --ledger" }, "origin-workspace": { "type": "string", "description": "origin workspace filter" }, "branch": { "type": "string", "description": "origin branch filter" }, "search": { "type": "string", "description": "title or ID" }, "ledger": { "type": "string", "description": "ledger ID" }, "group": { "type": "boolean", "description": "select the workspace group ledger" }, "group-selector": { "type": "string", "description": "membership group ID or exact name" } },
+        "methods": ["quirky.ledger/review"]
+      },
+      {
+        "id": "revert",
+        "summary": "revert editable fields and state to a historical revision",
+        "positionals": [{ "name": "id", "description": "entry ID", "required": false }],
+        "flags": { "id": { "type": "string", "description": "entry ID (alternative to the positional ID)" }, "if-revision": { "type": "integer", "description": "current revision", "required": true }, "to-revision": { "type": "integer", "description": "historical revision to restore", "required": true }, "ledger": { "type": "string", "description": "ledger ID" }, "workspace": { "type": "string", "description": "workspace ID or current/active" }, "group": { "type": "boolean", "description": "select the workspace group ledger" }, "group-selector": { "type": "string", "description": "membership group ID or exact name" } },
+        "methods": ["quirky.ledger/revert"]
+      },
+      {
+        "id": "import",
+        "summary": "import legacy ledger markdown from the selected workspace",
+        "flags": { "workspace": { "type": "string", "description": "workspace ID or current/active" }, "group": { "type": "boolean", "description": "select the workspace group ledger" }, "group-selector": { "type": "string", "description": "membership group ID or exact name" } },
+        "methods": ["quirky.ledger/import"]
+      },
+      {
+        "id": "catalog",
+        "summary": "list attached and detached ledgers",
+        "methods": ["quirky.ledger/catalog"]
+      },
+      {
+        "id": "approve",
+        "summary": "approve selected entry revision snapshots",
+        "positionals": [{ "name": "ledger", "description": "optional ledger ID", "required": false }],
+        "flags": { "ledger": { "type": "string", "description": "ledger ID" }, "selections": { "type": "json", "description": "array of immutable {id, revision} snapshots", "required": true }, "workspace": { "type": "string", "description": "workspace ID or current/active" }, "group": { "type": "boolean", "description": "select the workspace group ledger" } },
+        "methods": ["quirky.ledger/approve"]
+      },
+      {
+        "id": "bulk-state",
+        "summary": "atomically set selected entries to a state",
+        "positionals": [{ "name": "ledger", "description": "optional ledger ID", "required": false }],
+        "flags": { "ledger": { "type": "string", "description": "ledger ID" }, "state": { "type": "string", "description": "target state", "required": true }, "selections": { "type": "json", "description": "array of immutable {id, revision} snapshots", "required": true }, "workspace": { "type": "string", "description": "workspace ID or current/active" }, "group": { "type": "boolean", "description": "select the workspace group ledger" } },
+        "methods": ["quirky.ledger/bulk-state"]
+      },
+      {
+        "id": "delete-entries",
+        "summary": "delete selected entries and retain import tombstones",
+        "positionals": [{ "name": "ledger", "description": "optional ledger ID", "required": false }],
+        "flags": { "ledger": { "type": "string", "description": "ledger ID" }, "selections": { "type": "json", "description": "array of immutable {id, revision} snapshots", "required": true }, "workspace": { "type": "string", "description": "workspace ID or current/active" }, "group": { "type": "boolean", "description": "select the workspace group ledger" } },
+        "methods": ["quirky.ledger/delete-entries"]
+      },
+      {
+        "id": "delete-ledger",
+        "summary": "permanently delete a ledger and all of its data",
+        "positionals": [{ "name": "ledger", "description": "ledger ID", "required": false }],
+        "flags": { "ledger": { "type": "string", "description": "ledger ID" }, "if-ledger-revision": { "type": "integer", "description": "current ledger revision", "required": true } },
+        "methods": ["quirky.ledger/delete-ledger"]
+      },
+      {
+        "id": "attach",
+        "summary": "attach a detached ledger to an available same-tier owner",
+        "positionals": [{ "name": "ledger", "description": "detached ledger ID", "required": false }],
+        "flags": { "ledger": { "type": "string", "description": "detached ledger ID" }, "attach-to": { "type": "json", "description": "owner object {tier,id}", "required": true }, "if-ledger-revision": { "type": "integer", "description": "current ledger revision", "required": true } },
+        "methods": ["quirky.ledger/attach"]
+      },
+      {
+        "id": "settings",
+        "summary": "read or set per-ledger staleness days",
+        "positionals": [{ "name": "ledger", "description": "optional ledger ID", "required": false }],
+        "flags": { "ledger": { "type": "string", "description": "ledger ID" }, "stale-after-days": { "type": "integer", "description": "days before entries are stale (0–3650)" }, "if-ledger-revision": { "type": "integer", "description": "current ledger revision" }, "workspace": { "type": "string", "description": "workspace ID or current/active" }, "group": { "type": "boolean", "description": "select the workspace group ledger" } },
+        "methods": ["quirky.ledger/settings"]
+      },
+      {
+        "id": "removal-preview",
+        "summary": "preview retained ledgers before repository or group removal",
+        "flags": { "repo-id": { "type": "string", "repeatable": true, "description": "project ID to preview" }, "group-id": { "type": "string", "repeatable": true, "description": "group ID to preview" }, "expected-ledgers": { "type": "json", "description": "expected ledger ID/revision snapshots" }, "removal": { "type": "json", "description": "complete removal selector object" } },
+        "methods": ["quirky.ledger/removal-preview"]
+      }
+    ]
+  }
+}
