@@ -1266,6 +1266,48 @@ describe('session names', () => {
     expect((await sessionOf(holder.id)).name).toBeNull()
   })
 
+  test('a failed launch does not give a name back over a rename made while it was in flight', async () => {
+    await h.cleanup()
+    const home = makeTempHome()
+    const workDir = makeTempDir()
+    const marker = join(workDir, 'marker.log')
+    const release = join(workDir, 'release')
+    writeModulePlugin(
+      join(home, 'plugins'),
+      marker,
+      { id: 'acme.slow', contributes: { 'launch-hook': [{ id: 'wait', agents: ['claude'] }] } },
+      {
+        activate: `context.provide('launch-hook:acme.slow/wait', async () => {
+          record('hook waiting')
+          ${waitForFile(release)}
+          return { env: {}, args: [] }
+        })`
+      }
+    )
+    h = await startPluginHarness(SESSION_PLUGINS, { home })
+    try {
+      ;({ client, events } = await h.connectWithEvents('cli'))
+      const holder = await createSession(client, { worktree: 'id:wt_main', agent: 'shell', name: 'reviewer' })
+      await exitAndWait(holder.id)
+
+      const creating = failureOf(createSession(client, { worktree: 'id:wt_main', agent: 'claude', name: 'reviewer' }))
+      await waitFor(() => readMarker(marker).includes('hook waiting') || undefined)
+      expect((await sessionOf(holder.id)).name).toBeNull()
+      const starting = (await call<Session[]>(client, 'quirky.session/list')).find((s) => s.id !== holder.id)!
+
+      await setName(holder.id, 'renamed')
+      const before = changedSessions().length
+      await call(client, 'quirky.session/close', { session: starting.id })
+      writeFileSync(release, '')
+
+      expect(await creating).toMatchObject({ code: RpcErrorCode.Conflict })
+      expect(await sessionOf(holder.id)).toMatchObject({ status: 'exited', name: 'renamed' })
+      expect(changedSessions().slice(before).filter((s) => s.id === holder.id)).toEqual([])
+    } finally {
+      writeFileSync(release, '')
+    }
+  })
+
   test('SC-37: names survive a daemon restart', async () => {
     const session = await createSession(client, { worktree: 'id:wt_main', agent: 'shell', name: 'reviewer' })
     const again = await restartDaemon(h)
