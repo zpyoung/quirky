@@ -327,6 +327,23 @@ describe('quirky.git source-control panel', () => {
     unmount()
   })
 
+  test('SC-13: a folder workspace shows the unavailable sentence as a notice, with no changes or commit box', async () => {
+    const fake = fakeContext(layoutFor('wt_notes'))
+    const sentence = 'Opened as folder. Git features are unavailable for this workspace.'
+    const call = fake.context.call
+    fake.context.call = async (method, params) => {
+      if (method === 'quirky.git/status') throw Object.assign(new Error(sentence), { data: { reason: 'folder-workspace' } })
+      return call(method, params)
+    }
+    const { element, unmount } = mountPanel(fake)
+    await settle()
+    expect(element.querySelector('.scm-unavailable')?.textContent).toBe(sentence)
+    expect(element.querySelector('.scm-error')).toBeNull()
+    expect(element.querySelector('textarea')).toBeNull()
+    expect(element.textContent).not.toContain('Staged')
+    unmount()
+  })
+
   test('closing the panel unsubscribes from events and layout', async () => {
     const fake = fakeContext(layoutFor('w1'))
     const { unmount } = mountPanel(fake)
