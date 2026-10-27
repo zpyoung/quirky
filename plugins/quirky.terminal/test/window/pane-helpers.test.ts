@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 import { pathsFromDrop } from '../../src/window/pane/drop'
 import { KittyFlags } from '../../src/window/pane/kitty'
-import { OSC52_MAX_BASE64, createOsc52Base64, createOsc52Provider } from '../../src/window/pane/osc52'
+import { OSC52_MAX_BASE64, createOsc52Base64, createOsc52Provider, createOsc52QueryGuard } from '../../src/window/pane/osc52'
 import { trimGutter } from '../../src/window/pane/selection'
 import { ContextLossGuard, WebglBudget, MAX_WEBGL_PANES, loseWebglContext } from '../../src/window/pane/webgl'
 
@@ -87,6 +87,40 @@ describe('OSC 52', () => {
   test('reads are never answered with clipboard text', async () => {
     const provider = createOsc52Provider(() => {})
     expect(await provider.readText('c' as never)).toBe('')
+  })
+
+  test('a query is consumed without a reply while writes fall through to the clipboard addon', async () => {
+    const { ClipboardAddon } = await import('@xterm/addon-clipboard')
+    const ClipboardWithCodec = ClipboardAddon as unknown as new (base64: unknown, provider: unknown) => {
+      activate(terminal: unknown): void
+    }
+    const handlers: Array<(data: string) => boolean | Promise<boolean>> = []
+    const replies: string[] = []
+    const written: string[] = []
+    const terminal = {
+      parser: {
+        registerOscHandler: (_ident: number, handler: (data: string) => boolean | Promise<boolean>) => {
+          handlers.push(handler)
+          return { dispose: () => void handlers.splice(handlers.indexOf(handler), 1) }
+        }
+      },
+      input: (data: string) => void replies.push(data)
+    }
+    new ClipboardWithCodec(createOsc52Base64(), createOsc52Provider((text) => void written.push(text))).activate(terminal)
+    const guard = createOsc52QueryGuard()
+    guard.activate(terminal as never)
+
+    // xterm runs the newest handler first and stops at the first that returns true
+    const dispatch = async (data: string) => {
+      for (const handler of [...handlers].reverse()) if (await handler(data)) return
+    }
+    await dispatch('c;?')
+    expect(replies).toEqual([])
+    await dispatch(`c;${btoa('hello')}`)
+    expect(written).toEqual(['hello'])
+
+    guard.dispose()
+    expect(handlers).toHaveLength(1)
   })
 
   test('an empty decoded write does not clear the clipboard', async () => {

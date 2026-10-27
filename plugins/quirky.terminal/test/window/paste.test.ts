@@ -83,6 +83,32 @@ describe('planPaste', () => {
   })
 })
 
+describe('planPaste with malformed UTF-16', () => {
+  test('a high surrogate not followed by a low one counts as a 3-byte replacement character', () => {
+    const text = '\ud800\u20ac'.repeat(16385)
+    const plan = planPaste(text, false)
+    if (plan.kind !== 'write') throw new Error('refused')
+    expect(plan.chunks.every((chunk) => bytes(chunk) <= PASTE_CHUNK_BYTES)).toBe(true)
+    expect(plan.chunks.join('')).toBe(text)
+  })
+
+  test('a valid pair still counts as 4 bytes and is not split', () => {
+    const text = '\u{1f600}'.repeat(PASTE_CHUNK_BYTES + 1)
+    const plan = planPaste(text, false)
+    if (plan.kind !== 'write') throw new Error('refused')
+    expect(plan.chunks.every((chunk) => bytes(chunk) <= PASTE_CHUNK_BYTES)).toBe(true)
+    expect(plan.chunks.join('')).toBe(text)
+  })
+
+  test('lone surrogates at the end and the start of a pair are not budget bypasses', () => {
+    const text = '\ud800'.repeat(PASTE_DIRECT_BYTES)
+    const plan = planPaste(text, false)
+    if (plan.kind !== 'write') throw new Error('refused')
+    expect(plan.chunks.length).toBeGreaterThan(1)
+    expect(plan.chunks.every((chunk) => new TextEncoder().encode(chunk).length <= PASTE_CHUNK_BYTES)).toBe(true)
+  })
+})
+
 describe('runPaste', () => {
   test('awaits each write before sending the next', async () => {
     const order: string[] = []
@@ -118,6 +144,28 @@ describe('runPaste', () => {
     }
     expect(await runPaste(['a', 'b'], send, { timeoutMs: 20, closer: null })).toBe('timeout')
     expect(sent).toEqual(['a'])
+  })
+
+  test('a closer that never settles does not hold the paste past its deadline', async () => {
+    const sent: string[] = []
+    const send = (data: string) => {
+      sent.push(data)
+      return new Promise<void>(() => {})
+    }
+    const settled = await Promise.race([
+      runPaste(['body'], send, { timeoutMs: 5, closerTimeoutMs: 5, closer: BRACKETED_END }),
+      new Promise<string>((resolve) => setTimeout(() => resolve('still pending'), 500))
+    ])
+    expect(settled).toBe('timeout')
+    expect(sent).toEqual(['body', BRACKETED_END])
+  })
+
+  test('a closer that rejects is ignored', async () => {
+    const send = async (data: string) => {
+      if (data === BRACKETED_END) throw new Error('gone')
+      return new Promise<void>(() => {})
+    }
+    expect(await runPaste(['body'], send, { timeoutMs: 5, closer: BRACKETED_END })).toBe('timeout')
   })
 
   test('a failed write ends the paste', async () => {
