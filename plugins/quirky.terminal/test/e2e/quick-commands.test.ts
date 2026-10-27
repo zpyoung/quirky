@@ -75,7 +75,6 @@ test(
     await h.json<Commands>(['terminal', 'quick-command', 'add', '--label', 'Two lines', '--command', 'cd web\npwd'])
 
     const ran = await h.json<{ session: string; workspace: { id: string } }>(['terminal', 'quick-command', 'run', 'hello'])
-    h.noteProcesses()
     const rows = await h.waitForLine(ran.session, 'hello')
     expect(rows.filter((line) => line === 'hello')).toHaveLength(1)
     expect(rows.filter((line) => /[%#] echo hello$/.test(line))).toHaveLength(1)
@@ -86,7 +85,6 @@ test(
     expect(ws.activeGroup).toBe(groupOf(ws, tab.id).id)
 
     const multi = await h.json<{ session: string }>(['terminal', 'quick-command', 'run', 'two-lines'])
-    h.noteProcesses()
     const multiRows = await h.waitForLine(multi.session, web)
     expect(multiRows.some((line) => line.endsWith('cd web; pwd'))).toBe(true)
     expect(groupOf(await layoutOf(h), tab.id).lastQuickCommand).toBe('two-lines')

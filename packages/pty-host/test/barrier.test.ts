@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test'
+import { createProcessScope } from '../../../scripts/test-support/process-scope'
 import { ShellReadyBarrier, type ShellState } from '../src/barrier'
 import { concat, text, waitFor } from './helpers'
 
@@ -192,7 +193,8 @@ describe('ShellReadyBarrier with a real PTY', () => {
   test('input written before the marker reaches the shell once, after the marker', async () => {
     const script = `sleep 0.3; printf '\\033]777;quirky-shell-ready\\007'; read line; echo "echoed:$line"`
     const received: Uint8Array[] = []
-    let proc: { terminal: { write(d: string | Uint8Array): number; close(): void }; kill(): void; exited: Promise<number> } | undefined
+    let proc: { pid: number; terminal: { write(d: string | Uint8Array): number; close(): void }; kill(): void; exited: Promise<number> } | undefined
+    const scope = createProcessScope()
     const barrier = new ShellReadyBarrier({
       enabled: true,
       timeoutMs: 10000,
@@ -200,21 +202,23 @@ describe('ShellReadyBarrier with a real PTY', () => {
     })
     const spawn = Bun.spawn as unknown as (cmd: string[], init: object) => NonNullable<typeof proc>
     let sawMarker = false
-    proc = spawn(['/bin/sh', '-c', script], {
-      terminal: {
-        cols: 80,
-        rows: 24,
-        data: (_t: unknown, b: Uint8Array) => {
-          received.push(b.slice())
-          if (!sawMarker && text(concat(received)).includes('\x1b]777;quirky-shell-ready\x07')) {
-            sawMarker = true
-            barrier.ready()
-          }
-        },
-        exit: () => {}
-      }
-    })
     try {
+      proc = spawn(['/bin/sh', '-c', script], {
+        env: { ...process.env, ...scope.env },
+        terminal: {
+          cols: 80,
+          rows: 24,
+          data: (_t: unknown, b: Uint8Array) => {
+            received.push(b.slice())
+            if (!sawMarker && text(concat(received)).includes('\x1b]777;quirky-shell-ready\x07')) {
+              sawMarker = true
+              barrier.ready()
+            }
+          },
+          exit: () => {}
+        }
+      })
+      scope.track(proc.pid)
       barrier.input(bytes('hello'))
       barrier.input(bytes(' world\n'))
       expect(barrier.state).toBe('pending')
@@ -225,7 +229,8 @@ describe('ShellReadyBarrier with a real PTY', () => {
       expect(barrier.state).toBe('ready')
     } finally {
       barrier.dispose()
-      proc.kill()
+      proc?.kill()
+      await scope.cleanup()
     }
   })
 })

@@ -1,8 +1,9 @@
 import { afterEach, describe, expect, test } from 'bun:test'
-import { existsSync, mkdirSync, statSync } from 'node:fs'
+import { existsSync, mkdirSync, rmSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import { PROTOCOL_VERSION, RpcError, RpcErrorCode, type QuirkyClient, type QuirkyEvent } from '@quirky/protocol'
 import { connectDaemon } from '@quirky/protocol/node'
+import { createProcessScope, type ProcessScope } from '../../../scripts/test-support/process-scope'
 import { DaemonError } from '../src/errors'
 import { createRpcHandler } from '../src/rpc-handler'
 import type { ClientConn } from '../src/types'
@@ -11,11 +12,29 @@ import { makeTempDir, removeTempDirs, writeModulePlugin } from './plugins/fixtur
 
 let h: Harness | null = null
 const extra: QuirkyClient[] = []
+const scopes: ProcessScope[] = []
+const scopedHomes: string[] = []
 afterEach(async () => {
-  for (const client of extra.splice(0)) client.close()
-  await h?.cleanup()
+  let failed = false
+  let firstError: unknown
+  const attempt = async (action: () => void | Promise<void>) => {
+    try {
+      await action()
+    } catch (error) {
+      if (!failed) firstError = error
+      failed = true
+    }
+  }
+  for (const client of extra.splice(0)) await attempt(() => client.close())
+  const harness = h
   h = null
-  removeTempDirs()
+  if (harness) await attempt(() => harness.cleanup())
+  for (const scope of scopes.splice(0).reverse()) await attempt(() => scope.cleanup())
+  for (const home of scopedHomes.splice(0).reverse()) {
+    await attempt(() => rmSync(home, { recursive: true, force: true }))
+  }
+  await attempt(() => removeTempDirs())
+  if (failed) throw firstError
 })
 
 const uid = process.getuid!()
@@ -233,9 +252,12 @@ describe('unix socket transport', () => {
 
   test('SC-4: a stale socket file left by a killed daemon is replaced', async () => {
     const home = makeTempHome()
+    const scope = createProcessScope(home)
+    scopes.push(scope)
+    scopedHomes.push(home)
     const path = join(home, 'quirkyd.sock')
-    const orphan = Bun.spawn(
-      ['bun', '-e', 'Bun.listen({unix: process.argv[1], socket:{data(){}}}); console.log("ready"); setInterval(() => {}, 1000)', path],
+    const orphan = scope.spawn(
+      [process.execPath, '-e', 'Bun.listen({unix: process.argv[1], socket:{data(){}}}); console.log("ready"); setInterval(() => {}, 1000)', path],
       { stdout: 'pipe', stderr: 'inherit' }
     )
     await orphan.stdout.getReader().read()

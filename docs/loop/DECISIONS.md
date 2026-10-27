@@ -24,6 +24,7 @@ files, not this one.
 | hard | medium | [m1-providers D36](decisions/m1-providers.md) | Approach: port Orca's pure launch code into `quirky.agents`, with the catalog as manifest data | assumed — autonomous |
 | hard | high | [m0-scripting D4](decisions/m0-scripting.md) | Schemas are a flat subset of JSON Schema | assumed — autonomous |
 | hard | high | [m0-scripting D24](decisions/m0-scripting.md) | Choose schemas declared in the manifest, a daemon catalog, and a CLI that builds plugin commands from it at run time | assumed — autonomous |
+| hard (metadata and external api) | high | [m2-sidebar-extras D7](decisions/m2-sidebar-extras.md) | Worktree membership stays separate from repo ownership and group-folder identity | locked by research/orca-features/sidebar-extras.md |
 | hard | high | [m2-source-control-core D5](decisions/m2-source-control-core.md) | Extend `quirky.git` in place, with every composite (sync, discard-all, stage-all) in the daemon | assumed — autonomous |
 | hard | high | [m0-core D6](decisions/m0-core.md) | v1's methods are renamed to their plugin's namespace, with no aliases, and the protocol version goes to 2 | supersedes m0-daemon-api D5 |
 | hard | high | [m0-core D7](decisions/m0-core.md) | v1's events become the plugins' events | assumed — autonomous |
@@ -105,6 +106,17 @@ files, not this one.
 | medium | high | [m0-scripting D9](decisions/m0-scripting.md) | One command table drives parsing, validation, help, suggestions and the catalog | locked by research/orca-features/cli.md |
 | medium | high | [m0-scripting D15](decisions/m0-scripting.md) | Under `--json`, errors are a JSON document on stdout, and the exit codes stay 0, 1 and 2 | assumed — autonomous |
 | medium | high | [m0-scripting D17](decisions/m0-scripting.md) | `quirky api --json` returns one versioned catalog of methods, events, UI commands and CLI commands | assumed — autonomous |
+| medium (acceptance scope) | high | [m2-sidebar-extras D1](decisions/m2-sidebar-extras.md) | Implement the four M2 sidebar additions; leave review filters for M4 | locked by docs/roadmap.md |
+| medium | high | [m2-sidebar-extras D5](decisions/m2-sidebar-extras.md) | Activity windows are a visibility filter, not a new workspace list | locked by research/orca-features/sidebar-extras.md |
+| medium | high | [m2-sidebar-extras D6](decisions/m2-sidebar-extras.md) | Preserve recency, validate custom days, and do not let another client's preferences overwrite this client | locked by research/orca-features/sidebar-extras.md |
+| medium | high | [m2-sidebar-extras D8](decisions/m2-sidebar-extras.md) | Membership actions use one guarded write path and preserve deletion safety | locked by research/orca-features/sidebar-extras.md |
+| medium | high | [m2-sidebar-extras D11](decisions/m2-sidebar-extras.md) | Keep existing CLI/error conventions and expose every new action | locked by docs/roadmap.md |
+| medium | high | [m2-sidebar-extras D12](decisions/m2-sidebar-extras.md) | Add a thin presentation plugin and extend canonical owners | assumed — autonomous |
+| medium | high | [m2-sidebar-extras D13](decisions/m2-sidebar-extras.md) | Add the activity item without changing D10 panel placement or activation | locked by docs/loop/decisions/m0-ui-api.md (invariants); assumed — autonomous (additive extension) |
+| medium | high | [m2-sidebar-extras D15](decisions/m2-sidebar-extras.md) | Use runtime liveness, not timestamps or saved layout, for Live only | locked by research/orca-features/sidebar-extras.md (shared sleeping rule), assumed — autonomous (resolved source reading) |
+| medium | high | [m2-sidebar-extras D18](decisions/m2-sidebar-extras.md) | Accept confirmed spec defects and reject planned-artifact reference false positives | assumed — autonomous |
+| medium | high | [m2-sidebar-extras D20](decisions/m2-sidebar-extras.md) | Preserve accepted W1 components and repair only observed integration defects | assumed — autonomous |
+| medium | high | [m2-sidebar-extras D21](decisions/m2-sidebar-extras.md) | Preserve notification unread semantics when catching up | locked by docs/loop/decisions/m1-notifications.md |
 | medium | high | [m2-source-control-core D8](decisions/m2-source-control-core.md) | The status record grows additively, read from porcelain v2 | assumed — autonomous |
 | medium | high | [m2-source-control-core D20](decisions/m2-source-control-core.md) | The compare base is the worktree's base, else the project's, else the detected default, and Change Base Ref writes where the base came from | locked by research/orca-features/source-control.md |
 | medium | high | [m0-core D8](decisions/m0-core.md) | v1's CLI words stay, with `wt` and `term` as group aliases | assumed — autonomous |
@@ -119,6 +131,10 @@ files, not this one.
 | medium | high | [m1-worktrees D14](decisions/m1-worktrees.md) | The base is the requested one, else the project's saved base, else the detected default | locked by research/orca-features/worktrees.md |
 | medium | high | [m1-worktrees D49](decisions/m1-worktrees.md) | Project settings are a `quirky.repo` record, set with `repo set` and shown with `repo show` | supersedes nothing; works within m0-ui-api D17 |
 | medium | high | [m1-worktrees D52](decisions/m1-worktrees.md) | Platform-specific parts are logged and built for macOS only | deferred: platform |
+| medium | high | [fix-test-process-leaks D1](decisions/fix-test-process-leaks.md) | Treat test subprocess ownership as the fix boundary | locked by docs/architecture.md |
+| medium | high | [fix-test-process-leaks D4](decisions/fix-test-process-leaks.md) | Own disposable runs with an external process-scope guardian | assumed — autonomous |
+| medium | high | [fix-test-process-leaks D7](decisions/fix-test-process-leaks.md) | The test guardian requires POSIX process inspection | deferred: platform |
+| medium | high | [fix-test-process-leaks D10](decisions/fix-test-process-leaks.md) | Guardian control state must outlive the resource home | assumed — autonomous |
 | medium | high | [m1-agent-status D14](decisions/m1-agent-status.md) | The fold keeps a finished lead `working` while children or background work live | locked by research/orca-features/agent-status.md |
 | medium | high | [m1-notifications D5](decisions/m1-notifications.md) | A new built-in plugin, `quirky.notifications`, owns the policy; other plugins only report events | supersedes m0-core D12 |
 | medium | high | [m1-notifications D6](decisions/m1-notifications.md) | Producers emit settled and notification events; boundaries and replays still emit nothing | assumed — autonomous |
@@ -214,6 +230,7 @@ files, not this one.
 | easy | medium | [m1-worktrees D61](decisions/m1-worktrees.md) | W3 starts while W2's checkpoint review runs | assumed — autonomous |
 | easy | medium | [m1-worktrees D65](decisions/m1-worktrees.md) | W4 starts while W3's checkpoint review runs, and owns only the manifest's UI keys | assumed — autonomous |
 | easy | medium | [m1-worktrees D71](decisions/m1-worktrees.md) | SC-27 is run with base `origin/main` on both sides, because a create with no base never falls back | assumed — autonomous |
+| easy | medium | [fix-test-process-leaks D9](decisions/fix-test-process-leaks.md) | Final cross-family review returned no actionable findings | assumed — autonomous |
 | easy | medium | [m1-agent-status D1](decisions/m1-agent-status.md) | This item covers the dot, the hooks, provider capture and the fallbacks; the Activity view and the Agent Dashboard are out | assumed — autonomous |
 | easy | medium | [m1-agent-status D7](decisions/m1-agent-status.md) | Codex hooks go into `~/.codex/hooks.json` and the user approves them once in Codex | assumed — autonomous |
 | easy | medium | [m1-agent-status D13](decisions/m1-agent-status.md) | Cold-restore resume stays out | supersedes m1-providers D27 |
@@ -250,6 +267,7 @@ files, not this one.
 | easy | medium | [m1-notifications D45](decisions/m1-notifications.md) | Opening a worktree from its card counts as Mark Read | locked by research/orca-features/notifications.md |
 | easy | medium | [m1-notifications D50](decisions/m1-notifications.md) | The W1 gate's 65 `EBADF` failures are the suite's descriptor exhaustion, not a regression | assumed — autonomous |
 | easy | medium | [m1-notifications D55](decisions/m1-notifications.md) | The suite is over the descriptor limit after the catch-up; this item moves the remaining harnesses to shared plugin directories | supersedes m1-term-ui D51 |
+| easy | medium (review is not runtime proof) | [fix-sc31-first-shell-race D8](decisions/fix-sc31-first-shell-race.md) | Use Gemini for the resumed final review | assumed — autonomous |
 | easy | medium | [m0-daemon-api D22](decisions/m0-daemon-api.md) | A launch hook that fails or times out is skipped | assumed — autonomous |
 | easy | medium | [m0-daemon-api D23](decisions/m0-daemon-api.md) | Launch hooks apply to terminal sessions only | assumed — autonomous |
 | easy | medium | [m0-daemon-api D25](decisions/m0-daemon-api.md) | No rate limits on plugin events or method calls, and no event filters yet | assumed — autonomous |
@@ -341,6 +359,18 @@ files, not this one.
 | easy | high | [m0-scripting D38](decisions/m0-scripting.md) | Final round 1: fix three findings, two of which share a cause | assumed — autonomous |
 | easy | high | [m0-scripting D39](decisions/m0-scripting.md) | The final review loop ends after the closure round passes on all three lenses | locked by docs/loop/LOOP.md |
 | easy | high | [m0-scripting D40](decisions/m0-scripting.md) | Every scenario has a named test through the CLI or the daemon API, and the item's one CLI defect belongs to m0-cli-core | locked by docs/loop/LOOP.md |
+| easy | high | [m2-sidebar-extras D2](decisions/m2-sidebar-extras.md) | Resolve decisions autonomously; skip human-only offers | locked by docs/loop/LOOP.md |
+| easy | high | [m2-sidebar-extras D3](decisions/m2-sidebar-extras.md) | Research Visual, Organization, API, CLI and Data concerns before design | assumed — autonomous |
+| easy | high | [m2-sidebar-extras D4](decisions/m2-sidebar-extras.md) | Select the material gray areas across all five domains | assumed — autonomous |
+| easy | high | [m2-sidebar-extras D9](decisions/m2-sidebar-extras.md) | Dirty status is active-worktree-only and accessible without relying on color | locked by research/orca-features/sidebar-extras.md |
+| easy | high | [m2-sidebar-extras D10](decisions/m2-sidebar-extras.md) | Separators are visual-only and default on | locked by research/orca-features/sidebar-extras.md |
+| easy | high | [m2-sidebar-extras D14](decisions/m2-sidebar-extras.md) | Exclude only roadmap-owned navigation/platform flows, not the four additions | locked by docs/roadmap.md; deferred: platform |
+| easy | high | [m2-sidebar-extras D16](decisions/m2-sidebar-extras.md) | Author both specifications and use Codex for their one adversarial pass | locked by docs/loop/LOOP.md |
+| easy | high | [m2-sidebar-extras D17](decisions/m2-sidebar-extras.md) | Use omp OpenAI implementers with Gemini review after Opus preflight fails | locked by docs/loop/LOOP.md |
+| easy | high | [m2-sidebar-extras D19](decisions/m2-sidebar-extras.md) | Execute two waves with isolated component trees and tests-first checkpoints | assumed — autonomous |
+| easy | high | [m2-sidebar-extras D22](decisions/m2-sidebar-extras.md) | Do not advance past the red required W1 suite gate | locked by docs/loop/LOOP.md (verification); assumed — autonomous (repair routing) |
+| easy | high | [m2-sidebar-extras D23](decisions/m2-sidebar-extras.md) | Keep measured passing checks separate from the failing full suite | locked by docs/loop/LOOP.md |
+| easy | high for exercised behavior; no claim on unexercised save/reopen | [m2-sidebar-extras D24](decisions/m2-sidebar-extras.md) | Smoke the completed W1 paths without calling them full sidebar-extras parity | assumed — autonomous |
 | easy | high | [m2-source-control-core D1](decisions/m2-source-control-core.md) | Classify the item as a Visual, API, CLI and Integration design, and run research phases A and B | assumed — autonomous |
 | easy | high | [m2-source-control-core D2](decisions/m2-source-control-core.md) | Skip the visual companion and the adhd offer, use the standard gray-area set | locked by docs/loop/LOOP.md |
 | easy | high | [m2-source-control-core D4](decisions/m2-source-control-core.md) | Select every gray area that matters for source control | assumed — autonomous |
@@ -443,6 +473,13 @@ files, not this one.
 | easy | high | [m1-worktrees D69](decisions/m1-worktrees.md) | Final Round 1: accept all eight findings, which collapse to seven defects, and fix them in one batch | assumed — autonomous |
 | easy | high | [m1-worktrees D70](decisions/m1-worktrees.md) | The UI scenarios run as three web batches, each on its own daemon, temp HOME and fixture world | assumed — autonomous |
 | easy | high | [m1-worktrees D72](decisions/m1-worktrees.md) | The UI scenarios pass as a user, with SC-59's tooltip checked by its test because the tool can't hover | assumed — autonomous |
+| easy | high | [fix-test-process-leaks D2](decisions/fix-test-process-leaks.md) | Use OpenAI implementers and Gemini review | assumed — autonomous |
+| easy | high | [fix-test-process-leaks D3](decisions/fix-test-process-leaks.md) | Fix item skips brainstorming and specs | locked by docs/loop/LOOP.md |
+| easy | high | [fix-test-process-leaks D5](decisions/fix-test-process-leaks.md) | Add an owned CLI launch for unattended web passes | assumed — autonomous |
+| easy | high | [fix-test-process-leaks D6](decisions/fix-test-process-leaks.md) | Keep UI and native product behavior unchanged | assumed — autonomous |
+| easy | high | [fix-test-process-leaks D8](decisions/fix-test-process-leaks.md) | Preserve incoming integration decisions | locked by docs/loop/decisions/fix-sc31-first-shell-race.md |
+| easy | high | [fix-test-process-leaks D11](decisions/fix-test-process-leaks.md) | Scope every suite subprocess, including transport commands | assumed — autonomous |
+| easy | high for the observed result; no claim of eliminating the unrelated load sensitivity | [fix-test-process-leaks D12](decisions/fix-test-process-leaks.md) | Retain the runner's existing isolated-rerun policy | locked by scripts/suite.ts |
 | easy | high | [m1-agent-status D5](decisions/m1-agent-status.md) | Every hook source in the doc gets a normalizer with Orca's event mapping | locked by research/orca-features/agent-status.md |
 | easy | high | [m1-agent-status D8](decisions/m1-agent-status.md) | Installers merge only their own entries, keep the file byte-identical on a rerun, and never write a file they can't parse | locked by research/orca-features/agent-status.md |
 | easy | high | [m1-agent-status D9](decisions/m1-agent-status.md) | Claude's settings file lists only the events the installed Claude knows | locked by research/orca-features/agent-status.md |
@@ -513,6 +550,15 @@ files, not this one.
 | easy | high | [m1-notifications D60](decisions/m1-notifications.md) | The descriptor fix lives in `startHarness`, shared by every symlink-only built-in directory | supersedes m1-term-ui D51 |
 | easy | high | [m1-notifications D61](decisions/m1-notifications.md) | The final gate passes; nothing goes to BLOCKERS.md | locked by docs/loop/LOOP.md |
 | easy | high | [m1-notifications D62](decisions/m1-notifications.md) | The first land failed on the integration tree's missing package links for the new plugin; they were copied in, as m1-term-daemon D49 did | assumed — autonomous |
+| easy (workflow only) | high | [fix-sc31-first-shell-race D1](decisions/fix-sc31-first-shell-race.md) | Follow the fix-item workflow without new feature specs | locked by docs/loop/LOOP.md |
+| easy (test-only correction) | high | [fix-sc31-first-shell-race D2](decisions/fix-sc31-first-shell-race.md) | Skipping setup does not suppress the window's normal first shell | locked by /Users/zpyoung/PycharmProjects/PERSONAL/quirky/research/orca-features/worktrees.md |
+| easy (test synchronization only) | high | [fix-sc31-first-shell-race D3](decisions/fix-sc31-first-shell-race.md) | Wait for the terminal override's ensured shell before asserting setup was skipped | locked by docs/loop/decisions/m1-term-ui.md |
+| easy | high | [fix-sc31-first-shell-race D4](decisions/fix-sc31-first-shell-race.md) | Keep the fake PTY boundary explicit in the script side-effect assertion | assumed — autonomous |
+| easy | high | [fix-sc31-first-shell-race D5](decisions/fix-sc31-first-shell-race.md) | Record the guarded browser smoke as tool-blocked, not passed | assumed — autonomous |
+| easy (restore the preserved branch once the gate is repaired) | high for the gate failure; medium for its cause | [fix-sc31-first-shell-race D6](decisions/fix-sc31-first-shell-race.md) | Preserve the repaired item and block on the failing required full-suite gate | locked by docs/loop/LOOP.md |
+| easy | high | [fix-sc31-first-shell-race D7](decisions/fix-sc31-first-shell-race.md) | Resume the preserved correction after integration repairs | locked by docs/loop/decisions/fix-test-process-leaks.md |
+| easy | high for the exercised cli/api path; the guarded visual limitation remains d5. | [fix-sc31-first-shell-race D9](decisions/fix-sc31-first-shell-race.md) | Prove the skip/ordinary-shell contract with real CLI and PTY processes | assumed — autonomous |
+| easy | high for the observed result; no claim that the independent load sensitivity is fixed. | [fix-sc31-first-shell-race D10](decisions/fix-sc31-first-shell-race.md) | Retain the suite's existing isolated-rerun policy | locked by scripts/suite.ts |
 | easy | high | [m0-daemon-api D1](decisions/m0-daemon-api.md) | Classify the item as an API design, and run both research phases | assumed — autonomous |
 | easy | high | [m0-daemon-api D2](decisions/m0-daemon-api.md) | Skip the visual companion and the adhd offer, use the standard gray-area set | locked by docs/loop/LOOP.md |
 | easy | high | [m0-daemon-api D3](decisions/m0-daemon-api.md) | Select every gray area that matters for the daemon plugin API | assumed — autonomous |

@@ -60,20 +60,42 @@ export function sharedBuiltinDir(dir: string): string {
 }
 
 export async function startHarness(options: Partial<DaemonOptions> = {}): Promise<Harness> {
+  const ownsHome = options.home === undefined
   const home = options.home ?? makeTempHome()
   const pty = startFakePtyHost(home)
   const notifications: { title: string; body: string }[] = []
-  const daemon = await startDaemon({
-    home,
-    port: 0,
-    shell: '/bin/zsh',
-    notifier: ({ title, body }) => notifications.push({ title, body }),
-    cliEntry: '/opt/quirky/cli/main.ts',
-    uiDir: join(home, 'no-ui'),
-    builtinPluginsDir: null,
-    ...options,
-    ...(options.builtinPluginsDir ? { builtinPluginsDir: sharedBuiltinDir(options.builtinPluginsDir) } : {})
-  })
+  let daemon: DaemonHandle
+  try {
+    daemon = await startDaemon({
+      home,
+      port: 0,
+      shell: '/bin/zsh',
+      notifier: ({ title, body }) => notifications.push({ title, body }),
+      cliEntry: '/opt/quirky/cli/main.ts',
+      uiDir: join(home, 'no-ui'),
+      builtinPluginsDir: null,
+      ...options,
+      ...(options.builtinPluginsDir ? { builtinPluginsDir: sharedBuiltinDir(options.builtinPluginsDir) } : {})
+    })
+  } catch (error) {
+    const cleanupErrors: unknown[] = []
+    try {
+      pty.stop()
+    } catch (cleanupError) {
+      cleanupErrors.push(cleanupError)
+    }
+    if (ownsHome) {
+      try {
+        rmSync(home, { recursive: true, force: true })
+      } catch (cleanupError) {
+        cleanupErrors.push(cleanupError)
+      }
+    }
+    if (cleanupErrors.length > 0) {
+      throw new AggregateError([error, ...cleanupErrors], 'startHarness failed and rollback was incomplete', { cause: error })
+    }
+    throw error
+  }
   const clients: QuirkyClient[] = []
   const harness: Harness = {
     home,
@@ -95,10 +117,21 @@ export async function startHarness(options: Partial<DaemonOptions> = {}): Promis
       return { client, events }
     },
     async cleanup() {
-      for (const client of clients) client.close()
-      await daemon.stop()
-      pty.stop()
-      rmSync(home, { recursive: true, force: true })
+      let failed = false
+      let firstError: unknown
+      const attempt = async (action: () => void | Promise<void>) => {
+        try {
+          await action()
+        } catch (error) {
+          if (!failed) firstError = error
+          failed = true
+        }
+      }
+      for (const client of clients) await attempt(() => client.close())
+      await attempt(() => daemon.stop())
+      await attempt(() => pty.stop())
+      await attempt(() => rmSync(home, { recursive: true, force: true }))
+      if (failed) throw firstError
     }
   }
   return harness

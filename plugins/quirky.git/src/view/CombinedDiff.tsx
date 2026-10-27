@@ -1,6 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { GitCompare, GitDiff, GitStatus } from '@quirky/protocol'
 import { reuseGitDiff } from '../diffRefresh'
+import { useNotesBinding } from '../notes/binding'
+import { NotesPreview } from '../notes/NotesPreview'
+import { SendMenu } from '../notes/SendMenu'
+import { useNotes, type Note } from '../notes/useNotes'
 import { DIFF_VIEW_ID } from '../shared/view-input'
 import {
   changeSections,
@@ -44,6 +48,7 @@ export function CombinedDiff({ context, input, settings, setSetting, report, bin
   const [paneStates, setPaneStates] = useState<Record<string, PaneState>>({})
   const [activeKey, setActiveKey] = useState<string | null>(null)
   const [scrollEl, setScrollEl] = useState<HTMLElement | null>(null)
+  const notes = useNotes(context, worktree)
 
   const dataRef = useRef<Data | null>(null)
   const sectionsRef = useRef<Record<string, SectionState>>({})
@@ -300,6 +305,19 @@ export function CombinedDiff({ context, input, settings, setSetting, report, bin
       <header className="qgv-toolbar">
         <strong className="qgv-title">{title}</strong>
         {data && <span className="qgv-count">{`${count} changed file${count === 1 ? '' : 's'}`}</span>}
+        {notes.length > 0 && (
+          <span className="qgv-note-group">
+            <NotesPreview context={context} worktree={worktree} notes={notes} />
+            <SendMenu
+              context={context}
+              worktree={worktree}
+              className="qgv-note-send-button"
+              scopes={[{ id: 'all', label: 'All unsent notes', notes, params: { scope: 'all' } }]}
+            >
+              Send
+            </SendMenu>
+          </span>
+        )}
         <span className="qgv-spacer" />
         {input.commit === undefined && (
           <button type="button" onClick={() => open({ area: area === 'branch' ? 'all' : 'branch' })}>
@@ -364,6 +382,7 @@ export function CombinedDiff({ context, input, settings, setSetting, report, bin
               key={entry.key}
               context={context}
               worktree={worktree}
+              notes={notes}
               entry={entry}
               state={sections[entry.key] ?? { status: 'idle', revision: 0 }}
               dirty={paneStates[entry.key]?.dirty === true}
@@ -393,6 +412,7 @@ export function CombinedDiff({ context, input, settings, setSetting, report, bin
 type SectionProps = {
   context: ModeProps['context']
   worktree: string
+  notes: readonly Note[]
   entry: SectionEntry
   state: SectionState
   dirty: boolean
@@ -411,8 +431,10 @@ type SectionProps = {
 }
 
 function Section(props: SectionProps) {
-  const { context, worktree, entry, state, dirty, collapsed, root, settings, treeTargets, onToggle, onLoad, onVisible } = props
+  const { context, worktree, notes, entry, state, dirty, collapsed, root, settings, treeTargets, onToggle, onLoad, onVisible } = props
   const { key } = entry
+  const binding = useNotesBinding(context, worktree, notes)
+  const fileNotes = notes.filter((note) => note.path === entry.path)
   const element = useRef<HTMLElement | null>(null)
 
   useEffect(() => {
@@ -465,6 +487,17 @@ function Section(props: SectionProps) {
           </span>
         )}
         <span className="qgv-spacer" />
+        {fileNotes.length > 0 && (
+          <SendMenu
+            context={context}
+            worktree={worktree}
+            className="icon-button qgv-note-send"
+            scopes={[
+              { id: 'file', label: 'This file', notes: fileNotes, params: { scope: 'file', path: entry.path } },
+              { id: 'all', label: 'All unsent notes', notes, params: { scope: 'all' } }
+            ]}
+          />
+        )}
         <button type="button" aria-label="Copy path" title="Copy path" onClick={() => void navigator.clipboard?.writeText(entry.path)}>
           Copy path
         </button>
@@ -497,6 +530,7 @@ function Section(props: SectionProps) {
             key={state.revision}
             context={context}
             worktree={worktree}
+            path={entry.path}
             diff={state.diff}
             editable={isEditable(entry.source, state.diff)}
             settings={settings}
@@ -506,6 +540,7 @@ function Section(props: SectionProps) {
             onSaved={onSaved}
             onReload={onReload}
             onFocus={() => props.onActivate(key)}
+            notes={binding}
           />
         ) : state.status === 'idle' && mode !== 'auto' ? (
           <div className="qgv-notice">
