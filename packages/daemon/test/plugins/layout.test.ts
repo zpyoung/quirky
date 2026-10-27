@@ -116,7 +116,8 @@ function answerWith(window: Window, reply: (id: string, args: unknown) => { resu
   })
 }
 
-const changes = (window: Window) => window.events.filter((event) => event.type === 'ui.state.changed')
+const changes = (window: Window) =>
+  window.events.filter((event): event is Extract<QuirkyEvent, { type: 'ui.state.changed' }> => event.type === 'ui.state.changed')
 const slotOf = (state: UiState, id: string) => state.slots.find((slot) => slot.id === id)!
 
 async function start() {
@@ -213,11 +214,32 @@ describe('layout changes', () => {
     await caller.call('ui.view.close', {})
 
     await waitFor(() => changes(window).length === 6)
-    const layouts = changes(window).map((event) => (event as { layout: UiLayout }).layout)
+    const layouts = changes(window).map((event) => event.layout)
     expect(layouts[0]!.view).toEqual({ id: PAGE, input: { note: 'n2' } })
     expect(layouts[2]!.focus).toBe('panel')
     expect(layouts[5]).toEqual({ view: null, panel: null, sidebar: false, focus: null })
     expect((await caller.call('ui.state', {})).layout).toEqual(layouts[5]!)
+  })
+  test('ui.palette.set toggles atomically, broadcasts and persists its canonical state', async () => {
+    const env = makeEnv()
+    const harness = await env.start()
+    const caller = await harness.connect('cli')
+    const window = await openWindow(harness, 'palette')
+
+    const [first, second] = await Promise.all([
+      caller.call('ui.palette.set', {}),
+      caller.call('ui.palette.set', {})
+    ])
+    expect([first.palette === true, second.palette === true].sort()).toEqual([false, true])
+    await waitFor(() => changes(window).length === 2)
+    expect(changes(window).map((event) => event.layout.palette === true).sort()).toEqual([false, true])
+    expect((await caller.call('ui.state', {})).layout.palette).toBeUndefined()
+
+    await caller.call('ui.palette.set', { open: true })
+    expect((await caller.call('ui.state', {})).layout.palette).toBe(true)
+    const restarted = await env.restart()
+    const afterRestart = await restarted.connect('cli')
+    expect((await afterRestart.call('ui.state', {})).layout.palette).toBe(true)
   })
 
   test('SC-37: a window changing the layout broadcasts to every subscribed client', async () => {
@@ -227,7 +249,7 @@ describe('layout changes', () => {
     await clicker.client.call('ui.view.open', { id: OTHER_PAGE, input: { note: 'n3' } })
     await clicker.client.call('ui.view.open', { id: PAGE })
     await waitFor(() => changes(watcher).length === 2)
-    expect((changes(watcher)[1] as { layout: UiLayout }).layout.view).toEqual({ id: PAGE })
+    expect(changes(watcher)[1]!.layout.view).toEqual({ id: PAGE })
   })
 
   test('SC-38: the layout survives a restart on the same home', async () => {

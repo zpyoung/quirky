@@ -1,12 +1,3 @@
-import { chordFromKeyEvent } from '@quirky/protocol'
-
-const PALETTE_CHORD = 'mod+shift+p'
-
-/** Whether a key press is the window's reserved chord for the command palette. */
-export function isPaletteChord(event: Parameters<typeof chordFromKeyEvent>[0]): boolean {
-  return chordFromKeyEvent(event) === PALETTE_CHORD
-}
-
 export type PaletteKey = { selected: number; run: boolean }
 
 /**

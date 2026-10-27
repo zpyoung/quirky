@@ -222,6 +222,11 @@ export function createHandlers(
     },
 
     'ui.state': () => layout.state(),
+    'ui.palette.set': (params) => {
+      const open = optBool(params, 'open')
+      if (params.open !== undefined && open === undefined) throw invalidParams('open must be a boolean')
+      return layout.setPalette(open)
+    },
     'ui.view.open': (params) => layout.openView(str(params, 'id'), params.input),
     'ui.view.close': () => layout.closeView(),
     'ui.panel.open': (params) => layout.openPanel(str(params, 'id')),
