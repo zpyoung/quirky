@@ -84,6 +84,37 @@ export type AgentEntry = {
   install: string | null
   /** The model and option catalog; null when the agent takes no launch settings. */
   launchOptions: LaunchCatalog | null
+  /** How the agent runs once to produce text; null when it can't. */
+  oneShot: OneShotSpec | null
+}
+
+/**
+ * One item of a one-shot `args` template: a literal argument, or a group of arguments that is
+ * included only when `when` holds. Literals may contain `{model}`, `{thinking}` and `{prompt}`.
+ * `when` is `model` (the model isn't `default`), `thinking` (the model has a thinking level) or
+ * `thinking=<level>`; `{thinking}` is only allowed inside a thinking group.
+ */
+export type OneShotArg = string | { when: string; args: string[] }
+
+/** A model a one-shot run can use; `thinking` is the effort level it runs with, null when it has none. */
+export type OneShotModel = { id: string; label: string; thinking: string | null }
+
+/**
+ * The validated `oneShot` block of an agent entry; field meanings are in tech.md "Data models".
+ * `command` is what a run starts when the user hasn't overridden the agent's command, and
+ * defaults to the entry's `launch`. `singletonOptions` are alias groups the CLI accepts once, so
+ * a user argument naming one replaces the generated flag; the default is `[['--model']]`.
+ */
+export type OneShotSpec = {
+  args: OneShotArg[]
+  command: string | null
+  prompt: 'stdin' | 'argv'
+  output: 'text' | 'opencode-json'
+  singletonOptions: string[][]
+  models: OneShotModel[]
+  defaultModel: string | null
+  /** `claude` marks the entry whose run is retried without `--strict-mcp-config` when an enterprise MCP config refuses it. */
+  background: 'claude' | null
 }
 
 /** A declared agent the catalog left out, and why. */
@@ -127,6 +158,11 @@ export type AgentInfo = {
   envOverridden: boolean
   showEnv: boolean
   permissions: { mode: PermissionMode | 'custom' | null; hasAuto: boolean }
+  /**
+   * Whether the agent has a one-shot shape, so `quirky.agents/generate` can run it. The daemon
+   * always reports it; it is optional here only so fixtures built before it existed still type.
+   */
+  canGenerate?: boolean
 }
 
 /** The result of `quirky.agents/list` and `refresh`. */
