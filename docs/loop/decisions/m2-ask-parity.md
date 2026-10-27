@@ -306,5 +306,66 @@
 - **Confidence:** high
 - **Source:** assumed — autonomous
 
+## D31: Question ids `__proto__`, `constructor` and `prototype` are refused
+- **Question:** Final Round 1 (C2, S2, X2): a valid question id `__proto__` silently lost its answer and draft, because the records keyed by question id are ordinary objects
+- **Options:** build every record with a null prototype; refuse the three prototype names as ids
+- **Chose:** refuse them in the spec validator (`id must not be __proto__, constructor or prototype`), so every record keyed by question id holds only ordinary own properties
+- **Why:** one check at the boundary covers the answers, skipped list, partial and summary at once; no real question needs those ids. Severity taken as MEDIUM (data loss for a hostile or odd spec), not the CRITICAL one lens gave it.
+- **Evidence:** plugins/quirky.ask/src/core/spec.ts
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** assumed — autonomous
+
+## D32: Patterns are screened more strictly than Orca does
+- **Question:** Final Round 1 (X1, HIGH): Orca's screen accepts `^a*a*a*a*a*a*a*a*a*b$`, which hung spec validation for over 5 s on a 190-character default
+- **Options:** run patterns in a worker with a hard kill; tighten the screen
+- **Chose:** keep Orca's nested-repetition check and messages, and also refuse more than 3 variable quantifiers (`*`, `+`, `?`, `{n,}`, `{n,m}`; backreferences count too), and alternation inside a repeated group. Measured worst accepted case: about 88 ms on a 200-character input (`.*.*.*=`).
+- **Why:** a sync regex can't be interrupted in-process, and the 200-character cap bounds a degree-3 pattern; a worker per match would cost more than the patterns asks need
+- **Evidence:** plugins/quirky.ask/test/core/spec.test.ts (timing tests); https://dev.to/rxkov/redos-via-api-input-validation-how-a-single-request-stalls-the-event-loop-51kk
+- **Reversibility:** easy
+- **Confidence:** medium
+- **Revisit if:** agents need repeated alternation like `(foo|bar)+` in text patterns, or 88 ms per validation shows up in practice
+- **Source:** assumed — autonomous
+
+## D33: Final Round 1: accept all ten findings, which collapse to six defects, and fix them in one batch
+- **Question:** Final Round 1 over the item's code (three Codex lenses, deep) plus the first UI pass
+- **Options:** n/a
+- **Chose:** accepted and fixed: ReDoS (D32); `__proto__` ids (D31); the window let patterned text over 200 characters through to a daemon refusal; a promotion could surface an ask whose deadline passed mid-promotion (promotion now re-checks inside its transaction); a version probe ignoring SIGTERM outlived its timeout (now SIGKILL to its process group); and, from the UI pass, the header drew under the question because a `<legend>` always renders first (header and question now both sit in the legend), with a clearer pressed state. Every fix has a test that failed first. The gate after the batch: 3634 tests pass, `bun test scripts` 30 pass, typecheck clean. Nothing is left open, so nothing goes to BLOCKERS.md.
+- **Why:** each was reproduced by the reviewer's command or the UI screenshot
+- **Evidence:** run journal fr1; UI report .quirk/using-apps-like-a-user/runs/20261027T023455-cc0b/report.md
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** assumed — autonomous
+
+## D34: UI scenarios pass in the web window; two goals were limited by the tool, not the app
+- **Question:** LOOP.md step 6, the UI pass
+- **Options:** n/a
+- **Chose:** first pass (report `.quirk/using-apps-like-a-user/runs/20261027T023455-cc0b/report.md`): SC-14, SC-22, SC-15, SC-23 and SC-6 passed, and the envelopes the waiting `quirky ask` processes printed matched (SC-6's `note` and `other`, a `partial` for Deploy). SC-21 failed on the header order, fixed (D33), and passed in the second pass with SC-14 (`.quirk/using-apps-like-a-user/runs/20261027T024653-1744/report.md`). SC-13 was `blocked` because the skill's headless browser has no reload action (F5, Ctrl+R and Cmd+R did nothing); the draft restore is covered by `ui.test.ts` (a card mounted from `partial`) and the API restart test. SC-24 was `partial` only because a goal with no act of its own can't be verdicted `pass`: the screenshot 30 s later showed the card gone and the badge cleared, and its CLI printed `timed_out`. Both temporary homes and their daemons were removed.
+- **Why:** LOOP.md asks for a tool-caused `blocked` or `partial` to be recorded as a decision with the report path
+- **Evidence:** the two report paths above
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** assumed — autonomous
+
+## D35: Catching up with build/roadmap (m1-term-daemon) needed no change here
+- **Question:** LOOP.md step 5 catch-up merge
+- **Options:** n/a
+- **Chose:** merged build/roadmap (m1-term-daemon) before Final Round 1 with no conflicts; its decisions don't touch asks beyond confirming through the kernel's ask with boolean answers, which the new answer validation accepts. `bun install` was needed for its new packages.
+- **Why:** read docs/loop/decisions/m1-term-daemon.md D12, D30
+- **Evidence:** merge commit 2aab603
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** assumed — autonomous
+
+## D36: No native-only scenarios
+- **Question:** LOOP.md step 6
+- **Options:** n/a
+- **Chose:** none; the notification on surfacing uses the existing notify path, which earlier items hand to the native run
+- **Why:** every scenario is visible in the web window or through the API
+- **Evidence:** docs/quirk/specs/2026-10-26-m2-ask-parity/logic.md "Scope & non-goals"
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** assumed — autonomous
+
 ## Progress
-Building. Waves 1 and 2 and the wave-gate fixers (CLI, fake agent) are merged on build/m2-ask-parity, gate green. Next: wave 2 checkpoint review, wave 3 (suppression e2e), catch-up merge of build/roadmap, Final Round 1, verification (UI run), land.
+Done: built, reviewed (spec review, wave 2 checkpoint, Final Round 1 with one fix batch), UI pass passed, gate green. Next step is `queue.ts land m2-ask-parity`.

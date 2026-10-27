@@ -10,6 +10,9 @@
   client call (SC-9); an overdue ask is never surfaced, and cancelling one returns `timed_out`
   (SC-18, SC-19); a multiselect's free text survives a timeout when options are also picked (SC-8);
   answer refusals use Orca's messages (SC-5).
+- 2026-10-26, Final Round 1 ([D31, D32](../../../loop/decisions/m2-ask-parity.md)): question ids
+  `__proto__`, `constructor` and `prototype` are refused; a text `pattern` may have at most 3
+  variable quantifiers and no alternation inside a repeated group (SC-2's pattern rows).
 
 ## Conceptual model
 
