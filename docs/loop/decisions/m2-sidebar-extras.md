@@ -299,5 +299,16 @@ Reader: autonomous builders and later operator review — Decision: preserve the
 - **Revisit if:** the operator changes night mode or affected checks show a real regression
 - **Source:** locked by operator instruction in this conversation
 
+## D28: Accept the new-host affected gate and the bounded W1 checkpoint
+- **Question:** whether the preserved W1 can advance to its successor wave
+- **Options:** reuse the operator-stopped old-host run; rerun the same affected checks on the new host
+- **Chose:** rerun on the new host. The affected-directory suite, scripts, typecheck and build chain exited 0 in 300663 ms; scripts reported 49 pass / 223 assertions. Three concurrent standard Gemini promote/fresh-refute lenses C/S/X each returned PASS with no findings, advisories, suppressions, limitations or questions; no fix batch is needed. Continue the already specified two-component W2.
+- **Why:** the second operator note declared old-host load 35 and its stopped result meaningless. The new run provides fresh completed evidence; the bounded checkpoint covers W1 source changes, not the absent W2 or a whole-queue claim. Documentation rationale was withheld from reviewer prompts.
+- **Evidence:** /tmp/quirky-sidebar-lane7.APp4Co/checkpoint-newhost/{prepass,summary,C-gate,S-gate,X-gate,C-manifest,S-manifest,X-manifest}.json; actual six pi-watch dispatches completed; bg_5 exit 0 in 548.12 seconds
+- **Reversibility:** easy
+- **Confidence:** high for exercised checks, not a completeness guarantee
+- **Revisit if:** W2 or the landing gate exposes a missed W1 seam
+- **Source:** assumed — autonomous
+
 ## Progress
-Blocked at LOOP.md step 5, W1 mandatory suite gate; do not land. Both reviewed specs and W1 canonical/public-UI implementation are preserved. W2 presentation plugin and worktree-renderer integration were not started, so the four-feature item is not complete. All agents and finite/background commands have returned; smoke processes and browsers were stopped and temporary homes removed. Required prerequisite: repair fix-ask-regex-budget-20261027 and lane-7 PTY gate, restore this preserved branch to build/m2-sidebar-extras, merge current integration/read new decisions, install links, run the required gate; only then run the W1 three-lens Gemini checkpoint and proceed with W2. The resumable journal/plan/audits are in /tmp/quirky-sidebar-lane5-*; an exact W2 JSON seam draft is /tmp/quirky-sidebar-lane5-w2-api-contract.md and must be incorporated into tech.md before worker dispatch. Inherited .serena/ remains untouched/uncommitted.
+Resumed on lane 7. W1 affected-directory gate and required three-lens standard checkpoint passed (D28); the operator-stopped old-host runs are not results (D27). Begin W2 tests-first preparation in two isolated component worktrees, then implementation after parent-observed red. Exact presentation seam is committed in tech.md. Prior plan/journal remain under /tmp/quirky-sidebar-lane5-*; current review/staging artifacts under /tmp/quirky-sidebar-lane7.APp4Co. W2, full seventeen-scenario acceptance, final review, UI pass and landing are not complete. Inherited .serena/ remains untouched/uncommitted.
