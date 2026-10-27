@@ -1,7 +1,7 @@
 import { afterEach, expect, test } from 'bun:test'
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { delimiter, join } from 'node:path'
 import { randomUUID } from 'node:crypto'
 import { createProcessScope, type ProcessScope } from './test-support/process-scope'
 
@@ -348,6 +348,65 @@ test('a default scope registers a fresh home and track cleans an already-started
   expect(sameProcess(identity, processTable().get(tracked.pid))).toBe(false)
   expect(existsSync(home)).toBe(false)
 })
+
+test('a slow live guardian does not prevent scope startup or owned-process cleanup', async () => {
+  const home = mkdtempSync(join(tmpdir(), 'process-scope-slow-guardian-'))
+  homes.add(home)
+  const bin = join(home, 'bin')
+  const psPath = join(bin, 'ps')
+  const delayMarker = join(bin, 'delay-once')
+  mkdirSync(bin)
+  writeFileSync(psPath, `#!/bin/sh
+marker="\${0%/*}/delay-once"
+if [ ! -f "$marker" ]; then
+  caller=$(/bin/ps -ww -o command= -p "$PPID")
+  case "$caller" in
+    *--guardian*)
+      guardian_pid=$PPID
+      if (set -C; printf '%s\n' "$guardian_pid" > "$marker") 2>/dev/null; then
+# Keep the first guardian identity lookup blocked beyond bootstrap readiness.
+        sleep 4.5
+      fi
+      ;;
+  esac
+fi
+exec /bin/ps "$@"
+`, { mode: 0o755 })
+
+  const originalPath = process.env.PATH
+  let scope: ProcessScope
+  try {
+    process.env.PATH = originalPath === undefined ? bin : `${bin}${delimiter}${originalPath}`
+    scope = createProcessScope(home)
+    scopes.push(scope)
+  } catch (error) {
+    const markedGuardianPid = existsSync(delayMarker) ? Number(readFileSync(delayMarker, 'utf8')) : -1
+    const failedProcesses = [...processTable().values()].filter((row) =>
+      row.command.includes(home) || (row.pid === markedGuardianPid && row.command.includes('--guardian'))
+    )
+    scopeTestProcesses.push(...failedProcesses)
+    expect(existsSync(delayMarker)).toBe(true)
+    throw error
+  } finally {
+    if (originalPath === undefined) delete process.env.PATH
+    else process.env.PATH = originalPath
+  }
+
+  expect(existsSync(delayMarker)).toBe(true)
+  const guardianPid = Number(readFileSync(delayMarker, 'utf8'))
+  const guardian = await rememberProcess(guardianPid)
+
+  const child = scope.spawn(['bun', '-e', 'setInterval(() => {}, 60_000)'], {
+    stdin: 'ignore',
+    stdout: 'ignore',
+    stderr: 'ignore'
+  })
+  const childIdentity = await rememberProcess(child.pid)
+  await scope.cleanup()
+
+  await waitForProcessesGone([childIdentity, guardian])
+  expect(sameProcess(childIdentity, processTable().get(child.pid))).toBe(false)
+}, 30_000)
 
 test('a guardian cleans a pty.pid process tree after owner SIGKILL without killing runtime owner or sentinel', async () => {
   const home = mkdtempSync(join(tmpdir(), 'process-scope-owner-kill-'))
