@@ -198,5 +198,51 @@
 - **Revisit if:** scope audit finds a true dependency or conflict
 - **Source:** assumed — autonomous
 
+## D19: Import every Finder drop for this item
+- **Question:** How should SC-9 behave while Electrobun does not expose native dropped-file source paths?
+- **Options:** block m2-editor; add an unsupported native hook; import every Finder/OS file drop for now
+- **Chose:** every Finder/OS file drop into the editor/explorer imports a collision-safe copy, including files already inside the worktree. App-defined internal drags and terminal path insertion keep their existing semantics. Keep native SC-9 pending and land after all other gates pass.
+- **Why:** the user explicitly selected this policy through the operator. Native open-in-place belongs to the operator-queued `m4-editor-drop-open-in-place`; this lane must not add another item or block m2-editor over it.
+- **Evidence:** operator/user ruling in this conversation, 2026-10-27; docs/loop/native/m2-editor.json SC-9-native
+- **Reversibility:** easy (drop routing can use native source paths when the runtime supplies them)
+- **Confidence:** high
+- **Revisit if:** the operator's follow-up implements supported native drop-path events
+- **Source:** user ruling 2026-10-27 (via operator)
+
+## D20: Keep public file resources and panel geometry generic
+- **Question:** Which missing kernel capabilities does the editor need?
+- **Options:** private daemon/DOM access; full binary JSON payloads; public scoped resources and panel configuration
+- **Chose:** activation-scoped file capabilities with GET/HEAD/single-range; `ui.panel.configure` with per-panel width and global Top/Side preferences; existing public calls and generated CLI routes
+- **Why:** the changed paths were exercised through real daemon API, CLI and browser surfaces without coupling the shell to editor setting IDs.
+- **Evidence:** file-resources.test.ts: 11 pass/101 assertions; panel-geometry.test.ts: 3 pass/48 assertions; resource-tree typecheck and UI build pass; geometry browser reports 20261027T143038-f445 and 20261027T144225-3856 under the resource worktree's ignored .quirk directory
+- **Reversibility:** medium
+- **Confidence:** high
+- **Revisit if:** a consumer needs another passive MIME type, layout constraint or resource lifecycle
+- **Source:** assumed — autonomous
+
+## D21: Bound text transport instead of raising the RPC frame limit
+- **Question:** How can 50 MiB local files and 16 MiB pastes fit the existing 16 MiB JSON transports?
+- **Options:** reduce editor limits; raise global frame limits; metadata snapshots and bounded editor transfers
+- **Chose:** public buffer metadata with lazy text reads and staged 64 KiB byte uploads; internal buffers stay complete; compare-disk text uses its own signature; drafts commit only against the original content revision
+- **Why:** JSON escaping/envelopes make whole-string requests exceed the current socket cap. Chunking preserves the feature limits and stops incomplete uploads from autosaving.
+- **Evidence:** packages/daemon/src/socket-server.ts MAX_LINE_BYTES; packages/protocol/src/client.ts; plugins/quirky.editor/src/types.ts and src/daemon/service.ts
+- **Reversibility:** medium
+- **Confidence:** high
+- **Revisit if:** the public transport gains a generic bounded transfer primitive
+- **Source:** assumed — autonomous
+
+## D22: Stop unsafe smoke setup and preserve uncertain user configuration
+- **Question:** How should verification recover from the discovered hook-installer side effect?
+- **Options:** blindly uninstall every Quirky marker; restore unrelated old backups; preserve files without a trustworthy before-image and isolate subsequent runs
+- **Chose:** stop the unsafe smoke, inspect ownership read-only, leave the six real-home paths intact because their exact previous bytes are unknown, and preseed `setting:quirky.agent-status/hooks=false` before fixture startup. Child app runs also use a temporary HOME and an environment whitelist.
+- **Why:** a temporary QUIRKY_HOME does not change the installer HOME. Generic markers identify Quirky, not this run; uninstall could remove user-desired entries. No installer journal or suitable local Time Machine snapshot was available.
+- **Evidence:** the direct CLI smoke logged writes to ~/.codex/hooks.json, ~/.gemini/settings.json, ~/.cursor/hooks.json, ~/.config/opencode/plugins/quirky-opencode-status.js, ~/.pi/agent/extensions/quirky-agent-status.ts and ~/.omp/agent/extensions/quirky-agent-status.ts. Read-only installer audit found no preimage backup; `tmutil listlocalsnapshots /` returned no snapshots. The corrected CLI smoke exited 0 and all six before/after SHA-256 values matched.
+- **Reversibility:** hard (exact earlier configuration requires an independent baseline)
+- **Confidence:** high
+- **Revisit if:** a trustworthy pre-smoke snapshot becomes available
+- **Source:** assumed — autonomous
+
 ## Progress
-Step 4 complete: full logic and technical specs authored, self-reviewed and Codex promote/refute reviewed; accepted F1–F3 fixed, lexical planned-reference findings adjudicated in D15. Native scenarios written. Step 5 next: commit specs/log, record RUN_BASE and create six disjoint component worktrees, then dispatch omp implementers under contracts in tech.md. Pair fixed: OpenAI implementers + Gemini final reviewer (Opus unavailable). No implementation yet.
+Step 5: six implementation snapshots assembled and scoped-audited; component sources and API tests are present. The assembly checkpoint is `fccb94a496ccdc97ce321408236c737174ce0015` on an auxiliary verification branch, not a completion claim. Resource/geometry API, CLI and browser smoke are verified; 98 primitive terminal tests pass. Combined installation succeeded; parser defects were repaired, and 100 semantic diagnostics are being fixed in five disjoint worktrees. Next: merge audited compiler repairs, expose the remaining official view commands through declared API/CLI/window routes, run every acceptance and UI scenario, catch up with build/roadmap, perform the cross-family final review/fix batch, and land. No queue block or extra follow-up item is authorized.
+
+Last SC-9 point: Finder drops import copies under D19, including in-worktree sources. Native SC-9 stays pending for the nightly run. Open-in-place is owned by the operator's `m4-editor-drop-open-in-place`, not an m2-editor blocker.

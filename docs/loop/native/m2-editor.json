@@ -4,7 +4,7 @@
   "scenarios": [
     {
       "id": "SC-9-native",
-      "title": "On a disposable worktree, Finder file drops import collision-safe copies into editor groups; explorer row drag into a terminal inserts shell-escaped paths; Copy Path/Relative Path use the system clipboard and Reveal in Finder selects the file without stealing unrelated state.",
+      "title": "On a disposable worktree, every Finder file drop into the editor/explorer imports a collision-safe copy, including a source already inside the worktree; explorer row drag into a terminal inserts shell-escaped paths; Copy Path/Relative Path use the system clipboard and Reveal in Finder selects the file without stealing unrelated state.",
       "status": "pending", "lastRun": null, "report": null, "summary": null
     },
     {
