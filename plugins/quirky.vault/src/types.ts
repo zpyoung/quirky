@@ -58,6 +58,7 @@ export type ScannerOptions = {
   env: Record<string, string | undefined>
   progress?: (value: ScanProgress) => void
 }
+export type DeleteTarget = { path: string; kind: 'file' | 'directory' }
 export type VaultScanner = {
   discover(signal?: AbortSignal): Promise<Discovery>
   parse(candidate: SourceCandidate, onMessage?: (message: VaultMessage) => void, signal?: AbortSignal): Promise<VaultSession | null>
@@ -65,7 +66,7 @@ export type VaultScanner = {
   get(id: string): Promise<VaultSession | null>
   firstPrompt(id: string): Promise<string | null>
   subagents(id: string): Promise<VaultSession[]>
-  deleteTargets(id: string): Promise<string[]>
+  deleteTargets(id: string): Promise<DeleteTarget[]>
   invalidate(id: string): void
   close(): void | Promise<void>
 }

@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, test } from 'bun:test'
 import { mkdtemp, mkdir, readFile, rm, symlink, writeFile } from 'node:fs/promises'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { HISTORY_AGENTS } from '../src/agents'
 import { createScanner } from '../src/scanner'
@@ -186,10 +186,32 @@ describe('vault source scanner', () => {
     const metadataBefore = await readFile(files.metadata)
     const targets = await vault.deleteTargets(session.id)
 
-    expect(targets).toEqual([files.transcript])
-    expect(targets).not.toContain(outside)
+    expect(targets.map(({ path, kind }) => [path, kind])).toEqual([[files.transcript, 'file']])
+    expect(targets.map(({ path }) => path)).not.toContain(outside)
     expect((await readFile(files.transcript)).equals(transcriptBefore)).toBe(true)
     expect((await readFile(files.metadata)).equals(metadataBefore)).toBe(true)
+  })
+
+  test('marks only provider-owned session directories as directory delete targets', async () => {
+    const home = await temporaryHome()
+    await writeEveryAgentFixture(home)
+    const vault = scanner(home)
+    const listed = await vault.list({ unlimited: true, force: true })
+    const byAgent = new Map(listed.sessions.map((session) => [session.agent, session]))
+
+    for (const agent of ['grok', 'rovo', 'cline'] as const) {
+      const session = byAgent.get(agent)!
+      const targets = await vault.deleteTargets(session.id)
+      expect(targets.map(({ path, kind }) => [path, kind])).toEqual([[dirname(session.filePath), 'directory']])
+    }
+
+    const claude = byAgent.get('claude')!
+    const claudeTargets = await vault.deleteTargets(claude.id)
+    expect(claudeTargets.map(({ path, kind }) => [path, kind])).toEqual([
+      [join(dirname(claude.filePath), claude.sessionId), 'directory'],
+      [join(home, '.claude', 'session-env', claude.sessionId), 'directory'],
+      [claude.filePath, 'file']
+    ])
   })
 
   test('rejects symlink escapes, synthetic SQLite sources, unsupported deletion and stale cached reads', async () => {
