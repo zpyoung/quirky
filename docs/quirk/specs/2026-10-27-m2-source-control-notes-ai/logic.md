@@ -380,7 +380,7 @@ Nothing calls a real model.
 42. **NA-42: every note and AI method is scriptable** (CLI)
     - **Given** a fresh daemon
     - **When** the agent runs `quirky api --json` and `quirky git --help`
-    - **Then** `quirky.git` lists `notes`, `addNote`, `editNote`, `deleteNote`, `clearNotes` (destructive), `formatNotes`, `noteTargets`, `sendNotes`, `generateCommitMessage`, `cancelGenerate`, `aiFix`, `aiRecipe` and `setAiRecipe`, and the event `notesChanged`; `quirky.agents` lists `generate`; the help shows a command for each
+    - **Then** `quirky.git` lists `notes`, `addNote`, `editNote`, `deleteNote`, `clearNotes` (destructive), `formatNotes`, `noteTargets`, `sendNotes`, `generateCommitMessage`, `cancelGenerate`, `aiFix`, `aiFixPreview`, `aiRecipe` and `setAiRecipe`, and the events `notesChanged` and `aiChanged`; `quirky.agents` lists `generate` and `cancelGenerate`; the help shows a command for each
 
 ### Orca defects
 
