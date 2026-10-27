@@ -97,3 +97,5 @@ Operator-authorized nonblocking follow-up; the core Session Info flows are imple
 - **MEDIUM — local one-shot timeout verification:** `plugins/quirky.agents/test/generate.test.ts:305`. In the catch-up check, NA-29 returned the requested timeout at 311 ms but the test expected at least 2,000 ms for a SIGTERM-resistant group. The test stopped before its descendant-gone assertion. Startup/grace/platform behavior remains unconfirmed; this is not a Session Info core-flow failure, and no production timeout or cleanup assertion was weakened. Evidence: `/tmp/quirky-session-info.TBh9Q4/land-catchup-targeted/1-plugins_quirky.agents_test_generate.test.ts.txt`.
 
 Required follow-up: `followup-m3-session-info-parity-20261027`, depending on `m3-session-info`; register it through queue.ts before landing.
+
+Registration update: `bun scripts/build-loop/queue.ts add /tmp/quirky-session-info.TBh9Q4/operator-followup.json` returned 0 before landing. `followup-m3-session-info-parity-20261027` is registered with dependency `m3-session-info` and names the unfinished flows and their verification limits above.

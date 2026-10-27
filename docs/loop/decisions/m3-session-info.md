@@ -363,5 +363,17 @@
 - **Revisit if:** The fixture cannot complete within its bounded cleanup contract.
 - **Source:** assumed — autonomous
 
+## D34: Replace invalidated overloaded-host evidence with the operator's rerun
+- **Question:** The operator stopped the old overloaded-host affected suite and said its result was not meaningful.
+- **Options:** Diagnose that stopped run as a landing failure; discard it and rerun the exact command on the replacement host.
+- **Chose:** Discarded the old run as gate evidence. Reran exactly `bun scripts/suite.ts packages/protocol packages/daemon plugins/quirky.agents plugins/quirky.agent-status plugins/quirky.session plugins/quirky.session-info plugins/quirky.terminal plugins/quirky.ask`.
+- **Why:** The operator supplied the new test-host routing and explicitly required the same command, not another whole suite or speculative product changes.
+- **Evidence:** The replacement run used quirkyci@34.122.38.64 and returned 0: 241 remote files passed, zero failed; both macOS-only files passed; `suite-result {"ok":true,"flaky":[]}`. Runtime 738.99 seconds. Scripts remain 49 pass/zero fail and the post-change typecheck returned 0. The dependent follow-up registration returned 0 before landing.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** Queue land reports a new integration failure.
+- **Source:** locked by operator instruction
+
 ## Progress
-Operator-directed finish is active. Current catch-up is resolved; core API/planning checks, scripts (49 pass) and typecheck pass. The affected-package remote suite and dependent follow-up registration are running. Nonblocking checks are explicitly listed in BLOCKERS and the native handoff. Next: receive those results, commit the current merge/resolution records, detach and run queue.ts land. Do not start another pre-land whole suite or broaden the core scope.
+All operator-requested pre-land checks pass: scripts 49/0, typecheck 0, affected packages 241 remote files plus 2 macOS files with no failures or flaky retries. The stopped old-host result is invalidated, not a blocker. The once-only catch-up/resolution is committed as ad50873. Required followup-m3-session-info-parity-20261027 is registered through queue.ts add with dependency m3-session-info; unfinished native/polish checks and the local timing verification gap are recorded in BLOCKERS. No foreign lock/process or integration state was modified by this lane. Next: commit these verification/registration records, detach and run queue.ts land m3-session-info. No additional pre-land whole suite or scope expansion.
+
