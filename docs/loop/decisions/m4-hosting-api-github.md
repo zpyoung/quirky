@@ -358,5 +358,27 @@
 - **Revisit if:** GitHub replaces reported query cost with another authoritative budget mechanism.
 - **Source:** locked by hosting-api.md
 
+## D33: Implement required project issue fields instead of removing advertised functionality
+- **Question:** how to resolve the validator's finding that project labels/assignees are ignored?
+- **Options:** remove their advertised schema properties; implement the source-required edit flow and correct the other metadata errors.
+- **Chose:** implement label/assignee replacement and incremental add/remove, including collection-only edits, for project issues on the trusted ambient route. Reject those fields for incompatible actions. Require projectId/itemId/action in mutation and preview metadata; describe participant name/url as nullable.
+- **Why:** removing the parameters would hide a missing required flow, not fix it. The original Projects mutation contract explicitly includes labels and assignees. Partial multi-step writes retain the existing confirmed-step invalidation rule.
+- **Evidence:** hosting-api.md:321; original project-view/mutations.ts:20-57,104-193; FinalHostingPluginValidation reported46 methods/implementations/CLI entries but three metadata defects. Parent API regression returned labels:[] after requesting labels:['triaged'] alongside a successful title edit.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** the source-required issue edit semantics change.
+- **Source:** locked by hosting-api.md
+
+## D34: Preserve original project row content and built-in field values
+- **Question:** does the API return enough data for the source's table/board/roadmap consumers?
+- **Options:** return only custom scalar/select fields and basic content; preserve source-supported repository/label/user/issue metadata too.
+- **Chose:** include repository identity, label/user details, issue state reason/type and built-in label/user field values in normalized API rows.
+- **Why:** those are existing visible table data, not UI work or speculative new field types. Original source has no established milestone/linked-PR requirement, so do not add them.
+- **Evidence:** original project-view-query-fragments.ts:20-45,59-70; project-view-item-normalization.ts:93-143; project-view-field-normalization.ts:95-148; focused ProjectsRemainingParityScout comparison found only these additional row-data gaps.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** a documented source-supported field is still missing from actual rows.
+- **Source:** locked by hosting-api.md
+
 ## Progress
 Step5 catch-up completed. The original115 targeted tests, typecheck and isolated CLI smoke passed; the post-catch-up smoke also passed under owned-run. Before final gates, fix newly confirmed provider-wire and conditional-consent defects with failing-before/passing-after API regressions. Verify GraphQL queries against the authoritative schema rather than trusting synthetic fixtures. Then run required full gates, the one final cross-family review and accepted-finding fix batch, and land.
