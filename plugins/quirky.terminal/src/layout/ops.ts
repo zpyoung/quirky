@@ -295,7 +295,18 @@ export function closePaneOp(ws: Workspace, paneId: string, record: ClosedTab | n
 export function rebindPane(ws: Workspace, paneId: string, session: string): OpResult {
   const loc = locatePane(ws, paneId)
   if (!loc) return fail('not-found', `no pane ${paneId}`)
-  return ok(updateTab(ws, loc.tab.id, (tab) => ({ ...tab, root: mapLeaf(tab.root, paneId, (leaf) => ({ ...leaf, session, exit: null })) })))
+  const fresh = (leaf: PaneLeaf): PaneLeaf => {
+    const { typed: _typed, ...rest } = leaf
+    return { ...rest, session, exit: null }
+  }
+  return ok(updateTab(ws, loc.tab.id, (tab) => ({ ...tab, root: mapLeaf(tab.root, paneId, fresh) })))
+}
+
+/** Records that a pane's session received driving input; the revision is the caller's to bump. */
+export function setPaneTyped(ws: Workspace, paneId: string): OpResult {
+  const loc = locatePane(ws, paneId)
+  if (!loc) return fail('not-found', `no pane ${paneId}`)
+  return ok(updateTab(ws, loc.tab.id, (tab) => ({ ...tab, root: mapLeaf(tab.root, paneId, (leaf) => ({ ...leaf, typed: true as const })) })))
 }
 
 /** Records how a pane's process ended (or clears it with null). */

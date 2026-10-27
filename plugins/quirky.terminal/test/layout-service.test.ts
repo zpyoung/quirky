@@ -625,6 +625,28 @@ describe('panes', () => {
     expect(await api('paneOf', { session: pane.session })).toEqual({ workspace: WT, tab: tab.id, pane: pane.id })
   })
 
+  test('paneOf takes a pane ID of any workspace, and exactly one of pane or session', async () => {
+    const { tab } = await tabWithPanes(2)
+    const pane = panesOf(tab)[1]!
+    expect(await api('paneOf', { pane: pane.id })).toEqual({ workspace: WT, tab: tab.id, pane: pane.id })
+    const floating = (await api('workspace', { workspace: 'floating', ensure: true })).workspace as Workspace
+    const floatingPane = panesOf(tabsOf(floating)[0]!)[0]!
+    expect(await api('paneOf', { pane: floatingPane.id })).toEqual({ workspace: 'floating', tab: tabsOf(floating)[0]!.id, pane: floatingPane.id })
+    expect((await error(api('paneOf', { pane: 'pane-99' })))?.message).toBe('no pane pane-99')
+    expect((await error(api('paneOf', { pane: pane.id, session: pane.session })))?.code).toBe(RpcErrorCode.InvalidParams)
+    expect((await error(api('paneOf', {})))?.code).toBe(RpcErrorCode.InvalidParams)
+  })
+
+  test('newTab with a group and no workspace opens the tab in the workspace that holds the group', async () => {
+    const floating = (await api('workspace', { workspace: 'floating' })).workspace as Workspace
+    const groupId = groupsOf(floating)[0]!.id
+    const after = (await api('newTab', { group: groupId })).workspace as Workspace
+    expect(after.id).toBe('floating')
+    expect(tabsOf(after)).toHaveLength(1)
+    expect((await error(api('newTab', { group: 'grp-99' })))?.message).toBe('no group grp-99')
+    expect((await error(api('newTab', { workspace: WT, group: groupId })))?.message).toBe(`no group ${groupId}`)
+  })
+
   test('SC-34: clearPane and resetPane reach the PTY host for the pane\'s session', async () => {
     const { tab } = await tabWithPanes(2)
     const pane = panesOf(tab)[1]!
@@ -699,6 +721,35 @@ describe('SC-32, SC-33, SC-71: when a shell ends', () => {
     })
     expect(panesOf(lastTab(after))[0]!.exit).toEqual({ code: 0, signal: null })
     expect((await sessionList()).map((s) => s.id)).toEqual([pane.session])
+  })
+
+  test('SC-32c: a lone pane typed into before a daemon restart closes when its shell then exits 0', async () => {
+    const ws = await newTab()
+    const pane = panesOf(lastTab(ws))[0]!
+    await typeExit(pane.session)
+    expect(panesOf(lastTab(await layoutOf()))[0]).toMatchObject({ typed: true })
+    const restarted = await restartDaemon(h)
+    try {
+      h.pty.exit(pane.session, 0)
+      await waitForAsync(async () => (tabsOf(await layoutOf(WT, restarted.client)).length === 0 ? true : null))
+      expect(await call<Session[]>(restarted.client, 'quirky.session/list', {})).toEqual([])
+    } finally {
+      await restarted.stop()
+    }
+  })
+
+  test('SC-32d: recording the first input changes neither the revision nor the events, and a restarted pane starts untouched', async () => {
+    const ws = await newTab()
+    const pane = panesOf(lastTab(ws))[0]!
+    const seen = events.length
+    await typeExit(pane.session)
+    const typed = await layoutOf()
+    expect(typed.revision).toBe(ws.revision)
+    expect(events.slice(seen).filter((e) => e.type === 'quirky.terminal/layout')).toEqual([])
+    h.pty.exit(pane.session, 3)
+    await waitForAsync(async () => (panesOf(lastTab(await layoutOf()))[0]!.exit ? true : null))
+    const restarted = (await api('restartPane', { pane: pane.id })).workspace as Workspace
+    expect(panesOf(lastTab(restarted))[0]!.typed).toBeUndefined()
   })
 
   test('SC-33, SC-71: a non-zero exit keeps the pane with its code, in a lone pane and in a split', async () => {

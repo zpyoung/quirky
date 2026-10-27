@@ -52,6 +52,9 @@ export class LayoutService {
   private readonly unreadable = new Map<string, UnreadableRow>()
   private readonly titles = new Map<string, string>()
   private readonly cwds = new Map<string, string>()
+  private factClock = 0
+  private readonly titleAt = new Map<string, number>()
+  private readonly cwdAt = new Map<string, number>()
   private counter: number
   private floatingStored: StoredFloating
   private tail: Promise<unknown> = Promise.resolve()
@@ -75,6 +78,10 @@ export class LayoutService {
     }
     this.counter = counter
     this.floatingStored = store.floating()
+    for (const workspace of this.workspaces.values()) {
+      for (const leaf of ops.workspaceTabs(workspace).flatMap((tab) => paneLeaves(tab.root))) if (leaf.typed) inputs.mark(leaf.session)
+    }
+    inputs.onFirstMark((session) => this.enqueueBackground(async () => this.persistTyped(session), 'input record'))
   }
 
   /** The RPC methods of the plugin's layout half, by method name. */
@@ -137,9 +144,13 @@ export class LayoutService {
 
   /** Keeps the latest cwd and title per session; a title of the active pane also becomes its tab's live title. */
   onFact = (sessionId: string, fact: PtyFact): void => {
-    if (fact.kind === 'cwd') this.cwds.set(sessionId, fact.cwd)
+    if (fact.kind === 'cwd') {
+      this.cwds.set(sessionId, fact.cwd)
+      this.cwdAt.set(sessionId, ++this.factClock)
+    }
     if (fact.kind !== 'title') return
     this.titles.set(sessionId, fact.title)
+    this.titleAt.set(sessionId, ++this.factClock)
     this.enqueueBackground(async () => this.applyLiveTitle(sessionId, fact.title), 'title update')
   }
 
@@ -393,7 +404,10 @@ export class LayoutService {
   }
 
   private async newTab(params: Params, caller: PluginCaller): Promise<{ workspace: Workspace }> {
-    const id = await this.resolveWorkspace(params.workspace, caller)
+    const id =
+      params.group !== undefined && params.workspace === undefined
+        ? this.ownerOf('group', params.group as string).id
+        : await this.resolveWorkspace(params.workspace, caller)
     const { workspace } = await this.addTab(id, {
       ...(params.group === undefined ? {} : { group: params.group as string }),
       ...(params.cwd === undefined ? {} : { cwd: params.cwd as string }),
@@ -643,12 +657,9 @@ export class LayoutService {
   }
 
   private paneOf(params: Params): { workspace: string; tab: string; pane: string } {
-    const sessionId = params.session as string
-    for (const ws of this.workspaces.values()) {
-      const loc = ops.locateSession(ws, sessionId)
-      if (loc) return { workspace: ws.id, tab: loc.tab.id, pane: loc.pane.id }
-    }
-    throw this.context.error('not-found', `no pane for session ${sessionId}`)
+    if ((params.pane === undefined) === (params.session === undefined)) throw this.context.error('invalid-params', 'pass one of pane or session')
+    const { ws, loc } = this.paneTarget(params)
+    return { workspace: ws.id, tab: loc.tab.id, pane: loc.pane.id }
   }
 
   /**
@@ -734,16 +745,42 @@ export class LayoutService {
     return { exists: paths.map((path) => isAbsolute(path) && existsSync(path)) }
   }
 
-  /** Takes the latest title and directory the PTY host holds for sessions this service has no fact for. */
+  /** Takes the title and directory the PTY host holds, except where a live fact arrived while the list was in flight. */
   private async seedFacts(): Promise<void> {
+    const started = this.factClock
     try {
       for (const info of await this.context.pty.list()) {
-        if (info.title && !this.titles.has(info.sessionId)) this.titles.set(info.sessionId, info.title)
-        if (!this.cwds.has(info.sessionId)) this.cwds.set(info.sessionId, info.cwd)
+        if (info.title && (this.titleAt.get(info.sessionId) ?? 0) <= started) this.titles.set(info.sessionId, info.title)
+        if ((this.cwdAt.get(info.sessionId) ?? 0) <= started) this.cwds.set(info.sessionId, info.cwd)
       }
     } catch (error) {
       this.context.log(`could not read terminal facts: ${messageOf(error)}`)
     }
+  }
+
+  /**
+   * Stores that a pane's session received driving input. It is bookkeeping rather than a layout
+   * change, so the revision stays and no event fires, which keeps clients' revision checks valid.
+   */
+  private persistTyped(sessionId: string): void {
+    for (const ws of this.workspaces.values()) {
+      const loc = ops.locateSession(ws, sessionId)
+      if (!loc) continue
+      if (loc.pane.typed) return
+      const next = this.unwrap(ops.setPaneTyped(ws, loc.pane.id))
+      this.store.save(next)
+      this.workspaces.set(next.id, next)
+      return
+    }
+  }
+
+  /** The workspace with `typed` set on panes whose session got input before the pane existed. */
+  private withTyped(ws: Workspace): Workspace {
+    let next = ws
+    for (const leaf of ops.workspaceTabs(ws).flatMap((tab) => paneLeaves(tab.root))) {
+      if (!leaf.typed && this.inputs.has(leaf.session)) next = this.unwrap(ops.setPaneTyped(next, leaf.id))
+    }
+    return next
   }
 
   /** Reconciles every workspace (or only `only`) with the session list. */
@@ -758,7 +795,7 @@ export class LayoutService {
     }
     const known = new Set(sessions.map((session) => session.id))
     this.inputs.retain(known)
-    for (const map of [this.titles, this.cwds]) for (const id of map.keys()) if (!known.has(id)) map.delete(id)
+    for (const map of [this.titles, this.cwds, this.titleAt, this.cwdAt]) for (const id of map.keys()) if (!known.has(id)) map.delete(id)
 
     const ids = new Set([...this.workspaces.keys(), ...this.unreadable.keys(), ...sessions.filter(isTabbed).map((session) => session.worktreeId)])
     for (const id of ids) {
@@ -771,12 +808,13 @@ export class LayoutService {
     const current = this.workspaces.get(id)
     const unreadable = current ? undefined : this.unreadable.get(id)
     const ids = this.ids()
-    const base = current ?? ops.emptyWorkspace(id, ids, unreadable?.revision ?? 0)
+    const stored = current ?? ops.emptyWorkspace(id, ids, unreadable?.revision ?? 0)
+    const base = this.withTyped(stored)
     const boundElsewhere = new Set(
       [...this.workspaces.values()].filter((ws) => ws.id !== id).flatMap((ws) => ops.boundSessions(ws))
     )
     const result = reconcileWorkspace({ workspace: base, sessions, boundElsewhere, hasInput: (session) => this.inputs.has(session), ids, now: this.now() })
-    const changed = unreadable !== undefined || JSON.stringify(result.workspace) !== JSON.stringify(base)
+    const changed = unreadable !== undefined || JSON.stringify(result.workspace) !== JSON.stringify(stored)
     if (!changed) return
     this.commit(base, result.workspace, ids)
     this.context.log(

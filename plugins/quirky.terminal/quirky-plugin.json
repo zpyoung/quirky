@@ -667,7 +667,7 @@
             },
             "group": {
               "type": "string",
-              "description": "The group; default the active group."
+              "description": "The group; default the active group. Without `workspace`, the workspace that holds it."
             },
             "cwd": {
               "type": "string",
@@ -1563,19 +1563,20 @@
       },
       {
         "id": "paneOf",
-        "description": "The workspace, tab and pane that show a session.",
+        "description": "The workspace and tab that hold a pane, named by the pane or by the session it shows.",
         "readOnly": true,
         "params": {
           "type": "object",
           "properties": {
             "session": {
               "type": "string",
-              "description": "The session ID."
+              "description": "The session ID; pass this or `pane`."
+            },
+            "pane": {
+              "type": "string",
+              "description": "The pane ID, searched in every workspace; pass this or `session`."
             }
-          },
-          "required": [
-            "session"
-          ]
+          }
         },
         "result": {
           "type": "object",
@@ -3003,7 +3004,7 @@
         "flags": {
           "worktree": {
             "type": "string",
-            "description": "the worktree to look in (default: the caller's, then the floating workspace)"
+            "description": "the worktree to look in (default: wherever the pane is)"
           }
         },
         "methods": [

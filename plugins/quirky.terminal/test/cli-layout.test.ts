@@ -265,7 +265,7 @@ describe('human and JSON output', () => {
   })
 
   test('pane get prints the pane record and --json the located pane', async () => {
-    const answers = { workspace: { workspace: WORKSPACE } }
+    const answers = { paneOf: { workspace: 'main', tab: 'tab-2', pane: 'pane-3' }, workspace: { workspace: WORKSPACE } }
     const text = (await run('pane-get', ['pane-3'], {}, { answers })).lines[0]!
     expect(text.split('\n')).toEqual([
       'pane: pane-3',
@@ -281,13 +281,32 @@ describe('human and JSON output', () => {
     expect(json).toMatchObject({ workspace: 'main', tab: 'tab-2', group: 'grp-1', active: false, pane: { id: 'pane-4', session: 's-4' } })
   })
 
-  test('pane get looks in the floating workspace when the caller\'s has no such pane, and fails when none does', async () => {
+  test('pane get on a pane ID asks paneOf which workspace holds it, even another worktree or the floating one', async () => {
     const floatingWs: Workspace = { ...WORKSPACE, id: 'floating' }
-    const answers = { workspace: (params: Record<string, unknown>) => ({ workspace: params.workspace === 'floating' ? floatingWs : { ...WORKSPACE, root: group('grp-9', [], null) } }) }
+    const answers = {
+      paneOf: { workspace: 'floating', tab: 'tab-2', pane: 'pane-3' },
+      workspace: (params: Record<string, unknown>) => ({ workspace: params.workspace === 'floating' ? floatingWs : { ...WORKSPACE, root: group('grp-9', [], null) } })
+    }
     const found = await run('pane-get', ['pane-3'], {}, { answers, json: true })
-    expect(found.calls.map((c) => c.params)).toEqual([{}, { workspace: 'floating' }])
+    expect(found.calls).toEqual([
+      { method: 'paneOf', params: { pane: 'pane-3' } },
+      { method: 'workspace', params: { workspace: 'floating' } }
+    ])
     expect(JSON.parse(found.lines[0]!)).toMatchObject({ workspace: 'floating' })
-    expect(await failure(run('pane-get', ['pane-99'], {}, { answers }))).toMatchObject({ kind: 'fail', message: 'no pane pane-99' })
+  })
+
+  test('pane get on an unknown pane fails with the daemon\'s not-found', async () => {
+    const answers = {
+      paneOf: () => {
+        throw new Error('no pane pane-99')
+      }
+    }
+    expect((await failure(run('pane-get', ['pane-99'], {}, { answers }))).message).toBe('no pane pane-99')
+  })
+
+  test('pane get --worktree finds nothing when that worktree lacks the pane', async () => {
+    const answers = { workspace: { workspace: { ...WORKSPACE, root: group('grp-9', [], null) } } }
+    expect(await failure(run('pane-get', ['pane-3'], { worktree: 'api' }, { answers }))).toMatchObject({ kind: 'fail', message: 'no pane pane-3' })
   })
 
   test('pane get on a session looks in the workspace paneOf names, even another worktree', async () => {
