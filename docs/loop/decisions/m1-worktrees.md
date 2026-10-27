@@ -693,5 +693,16 @@
 - **Revisit if:** never
 - **Source:** assumed — autonomous
 
+## D64: Test runs wrote folders under the real home; they were removed and every later gate checks for them
+- **Question:** T7b reported folders under `~/quirky/workspaces` and `~/wt` that LOOP.md's "tests never touch real state" forbids
+- **Options:** leave them; remove them and find the cause; add a home check to every gate
+- **Chose:** they were test artifacts from this run (both trees created 18:27 today; `origin` was a clone of a temp `qd-repo-*` origin; the fake git's new folder creation met tests whose worktrees root was the `~` default). Removed them; T7b's own fix moved the `~` root test to `expandHome` plus a temp root, T7c's brief forbids any folder under `~`, and every wave gate and the final check now fail if `~/quirky` or `~/wt` exists afterwards.
+- **Why:** the rule is a hard one, and an empty folder under `~/quirky/workspaces` would also show up in a real user's worktrees root
+- **Evidence:** `stat` birth times 2026-10-26 18:27-18:47; `git -C ~/quirky/workspaces/origin remote -v` pointing at a temp origin; scratchpad journal.md
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** a gate finds them again
+- **Source:** locked by docs/loop/LOOP.md
+
 ## Progress
 Step 5, W3 in progress in the scratch worktree `sdd/m1wt/w3-t7` (T7a and T7a2 accepted, uncommitted; T7b dispatched; T7c next). W1, W2 and the W2 checkpoint fixes are merged on `build/m1-worktrees`. If stopped early: if that worktree is gone, rerun W3 from D59 against tech.md; then W3 checkpoint, W4 (window), Final Round 1.
