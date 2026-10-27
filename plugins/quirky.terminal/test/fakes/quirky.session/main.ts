@@ -81,6 +81,9 @@ export function activate(context: PluginContext): void {
   )
   context.provide('method:quirky.session/create', async (params: Record<string, unknown>) => {
     sessionCreates().push(params)
+    if (typeof params.extraArgs === 'string' && params.extraArgs.includes('--refused')) {
+      throw context.error('invalid-params', 'extraArgs flag --refused is not allowed')
+    }
     const agent = (params.agent ?? 'shell') as string
     const label = agent === 'shell' ? 'Shell' : ((await context.call('quirky.agents/get', { agent })) as { label: string }).label
     const session = await record(params, 'terminal', label)

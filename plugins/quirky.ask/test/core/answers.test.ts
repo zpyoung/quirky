@@ -74,6 +74,12 @@ describe('parseTextAnswerValue', () => {
     expect(parseTextAnswerValue(question, 'abc')).toBe('abc')
   })
 
+  test('rejects an answer missing a required literal in a long pattern input', () => {
+    const question: TextQuestion = { ...base, pattern: '^a*a*a*b$' }
+    expect(parseTextAnswerValue(question, `${'a'.repeat(199)}c`)).toBeNull()
+  })
+
+
   test('rejects text that fails the format', () => {
     const question: TextQuestion = { ...base, format: 'email' }
     expect(parseTextAnswerValue(question, 'not-an-email')).toBeNull()

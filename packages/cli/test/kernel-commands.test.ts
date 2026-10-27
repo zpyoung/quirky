@@ -3,6 +3,7 @@ import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, existsSync 
 import { join } from 'node:path'
 import type { DistroInspection, PluginInspection, UiLayout, UiState } from '@quirky/protocol'
 import { FakeDaemon, runCli } from './fixtures/fake-daemon'
+import { createProcessScope, type ProcessScope } from '../../../scripts/test-support/process-scope'
 
 let daemon: FakeDaemon
 
@@ -276,17 +277,20 @@ describe('daemon restart', () => {
   const ENTRY = join(import.meta.dir, 'fixtures', 'fake-daemon-entry.ts')
   const startedFile = () => join(daemon.home, 'started.json')
   const started = () => JSON.parse(readFileSync(startedFile(), 'utf8')) as { pid: number; args: string[] }
+  let scope: ProcessScope
 
-  afterEach(() => {
-    if (existsSync(startedFile())) {
-      try {
-        process.kill(started().pid)
-      } catch {}
-    }
+  beforeEach(() => {
+    scope = createProcessScope(daemon.home)
+  })
+
+  afterEach(async () => {
+    if (existsSync(startedFile())) scope.track(started().pid)
+    await scope.cleanup()
   })
 
   test('stops the daemon, waits for it to go, and starts a new one', async () => {
-    const result = await run(['daemon', 'restart'], { env: { QUIRKY_DAEMON_ENTRY: ENTRY } })
+    const result = await run(['daemon', 'restart'], { env: { ...scope.env, QUIRKY_DAEMON_ENTRY: ENTRY } })
+    if (existsSync(startedFile())) scope.track(started().pid)
     expect(result.code).toBe(0)
     expect(daemon.methodCalls('daemon.stop')).toEqual([{}])
     expect(started().args).toEqual([])
@@ -294,7 +298,8 @@ describe('daemon restart', () => {
   })
 
   test('SC-58: --disable-plugins starts the new daemon in safe mode', async () => {
-    const result = await run(['daemon', 'restart', '--disable-plugins'], { env: { QUIRKY_DAEMON_ENTRY: ENTRY } })
+    const result = await run(['daemon', 'restart', '--disable-plugins'], { env: { ...scope.env, QUIRKY_DAEMON_ENTRY: ENTRY } })
+    if (existsSync(startedFile())) scope.track(started().pid)
     expect(result.code).toBe(0)
     expect(started().args).toEqual(['--disable-plugins'])
   })
