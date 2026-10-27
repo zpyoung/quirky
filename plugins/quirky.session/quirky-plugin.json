@@ -74,6 +74,16 @@
               "exitCode": {
                 "description": "The exit code, or null while the process is alive."
               },
+              "exitSignal": {
+                "description": "The signal that ended the process, or null."
+              },
+              "exitCause": {
+                "description": "Why the session ended (exited, killed, host-restart or host-lost), or null while it is alive."
+              },
+              "restorable": {
+                "type": "boolean",
+                "description": "True when the session ended with the PTY host and can be restored."
+              },
               "launch": {
                 "description": "What the session launched with ({command, args, env}); null for a shell or a session recorded before launches were kept."
               },
@@ -166,6 +176,16 @@
             },
             "exitCode": {
               "description": "The exit code, or null while the process is alive."
+            },
+            "exitSignal": {
+              "description": "The signal that ended the process, or null."
+            },
+            "exitCause": {
+              "description": "Why the session ended (exited, killed, host-restart or host-lost), or null while it is alive."
+            },
+            "restorable": {
+              "type": "boolean",
+              "description": "True when the session ended with the PTY host and can be restored."
             },
             "launch": {
               "description": "What the session launched with ({command, args, env}); null for a shell or a session recorded before launches were kept."
@@ -292,6 +312,16 @@
             "exitCode": {
               "description": "The exit code, or null while the process is alive."
             },
+            "exitSignal": {
+              "description": "The signal that ended the process, or null."
+            },
+            "exitCause": {
+              "description": "Why the session ended (exited, killed, host-restart or host-lost), or null while it is alive."
+            },
+            "restorable": {
+              "type": "boolean",
+              "description": "True when the session ended with the PTY host and can be restored."
+            },
             "launch": {
               "description": "What the session launched with ({command, args, env}); null for a shell or a session recorded before launches were kept."
             },
@@ -395,6 +425,16 @@
             "exitCode": {
               "description": "The exit code, or null while the process is alive."
             },
+            "exitSignal": {
+              "description": "The signal that ended the process, or null."
+            },
+            "exitCause": {
+              "description": "Why the session ended (exited, killed, host-restart or host-lost), or null while it is alive."
+            },
+            "restorable": {
+              "type": "boolean",
+              "description": "True when the session ended with the PTY host and can be restored."
+            },
             "launch": {
               "description": "What the session launched with ({command, args, env}); null for a shell or a session recorded before launches were kept."
             },
@@ -494,6 +534,16 @@
             },
             "exitCode": {
               "description": "The exit code, or null while the process is alive."
+            },
+            "exitSignal": {
+              "description": "The signal that ended the process, or null."
+            },
+            "exitCause": {
+              "description": "Why the session ended (exited, killed, host-restart or host-lost), or null while it is alive."
+            },
+            "restorable": {
+              "type": "boolean",
+              "description": "True when the session ended with the PTY host and can be restored."
             },
             "launch": {
               "description": "What the session launched with ({command, args, env}); null for a shell or a session recorded before launches were kept."
@@ -605,6 +655,114 @@
             },
             "exitCode": {
               "description": "The exit code, or null while the process is alive."
+            },
+            "exitSignal": {
+              "description": "The signal that ended the process, or null."
+            },
+            "exitCause": {
+              "description": "Why the session ended (exited, killed, host-restart or host-lost), or null while it is alive."
+            },
+            "restorable": {
+              "type": "boolean",
+              "description": "True when the session ended with the PTY host and can be restored."
+            },
+            "launch": {
+              "description": "What the session launched with ({command, args, env}); null for a shell or a session recorded before launches were kept."
+            },
+            "providerSession": {
+              "description": "The agent CLI's own session ({id, transcriptPath}) that resume passes back; null until one is stored."
+            },
+            "promptDelivery": {
+              "description": "How the first prompt reached the agent: null (no prompt), command-line, pending, pasted, unconfirmed or not-delivered."
+            },
+            "resumedFrom": {
+              "description": "The session this one was resumed or forked from; null otherwise."
+            }
+          },
+          "required": [
+            "id",
+            "kind",
+            "agent",
+            "worktreeId",
+            "cwd",
+            "title",
+            "status",
+            "createdAt",
+            "lastActivityAt",
+            "exitCode"
+          ]
+        }
+      },
+      {
+        "id": "restore",
+        "description": "Starts a shell in a session that ended with the PTY host and can be restored; a running session is returned unchanged.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "session": {
+              "type": "string",
+              "description": "The session ID."
+            }
+          },
+          "required": [
+            "session"
+          ]
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "kind": {
+              "type": "string",
+              "enum": [
+                "terminal",
+                "structured"
+              ]
+            },
+            "agent": {
+              "type": "string",
+              "description": "`shell` or the ID of the agent the session runs."
+            },
+            "worktreeId": {
+              "type": "string"
+            },
+            "cwd": {
+              "type": "string"
+            },
+            "title": {
+              "type": "string"
+            },
+            "status": {
+              "type": "string",
+              "enum": [
+                "starting",
+                "running",
+                "working",
+                "waiting",
+                "done",
+                "exited"
+              ]
+            },
+            "createdAt": {
+              "type": "number"
+            },
+            "lastActivityAt": {
+              "type": "number"
+            },
+            "exitCode": {
+              "description": "The exit code, or null while the process is alive."
+            },
+            "exitSignal": {
+              "description": "The signal that ended the process, or null."
+            },
+            "exitCause": {
+              "description": "Why the session ended (exited, killed, host-restart or host-lost), or null while it is alive."
+            },
+            "restorable": {
+              "type": "boolean",
+              "description": "True when the session ended with the PTY host and can be restored."
             },
             "launch": {
               "description": "What the session launched with ({command, args, env}); null for a shell or a session recorded before launches were kept."
@@ -739,6 +897,16 @@
             "exitCode": {
               "description": "The exit code, or null while the process is alive."
             },
+            "exitSignal": {
+              "description": "The signal that ended the process, or null."
+            },
+            "exitCause": {
+              "description": "Why the session ended (exited, killed, host-restart or host-lost), or null while it is alive."
+            },
+            "restorable": {
+              "type": "boolean",
+              "description": "True when the session ended with the PTY host and can be restored."
+            },
             "launch": {
               "description": "What the session launched with ({command, args, env}); null for a shell or a session recorded before launches were kept."
             },
@@ -822,6 +990,16 @@
                 },
                 "exitCode": {
                   "description": "The exit code, or null while the process is alive."
+                },
+                "exitSignal": {
+                  "description": "The signal that ended the process, or null."
+                },
+                "exitCause": {
+                  "description": "Why the session ended (exited, killed, host-restart or host-lost), or null while it is alive."
+                },
+                "restorable": {
+                  "type": "boolean",
+                  "description": "True when the session ended with the PTY host and can be restored."
                 },
                 "launch": {
                   "description": "What the session launched with ({command, args, env}); null for a shell or a session recorded before launches were kept."
@@ -1132,6 +1310,23 @@
         },
         "methods": [
           "quirky.session/setProviderSession"
+        ]
+      },
+      {
+        "id": "restore",
+        "words": "restore",
+        "summary": "start a shell in a session that was lost with the terminal host",
+        "positionals": [
+          {
+            "name": "session",
+            "description": "the session to restore",
+            "required": true,
+            "param": "session"
+          }
+        ],
+        "methods": [
+          "quirky.session/get",
+          "quirky.session/restore"
         ]
       },
       {

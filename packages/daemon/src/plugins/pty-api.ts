@@ -1,8 +1,13 @@
-import type { PluginPty } from '@quirky/protocol'
+import type { ExitCause, PluginPty, PtyFact } from '@quirky/protocol'
 import type { PtyClient } from '../pty-client'
 
 type DataListener = (sessionId: string, bytes: Uint8Array) => void
-type ExitListener = (sessionId: string, exitCode: number | null) => void
+type ExitListener = (
+  sessionId: string,
+  exitCode: number | null,
+  exit: { exitSignal: string | null; exitCause: ExitCause }
+) => void
+type FactListener = (sessionId: string, fact: PtyFact) => void
 type ReconnectListener = () => void
 
 /**
@@ -12,6 +17,7 @@ type ReconnectListener = () => void
 type Fanout = {
   data: Set<{ pluginId: string; listener: DataListener }>
   exit: Set<{ pluginId: string; listener: ExitListener }>
+  fact: Set<{ pluginId: string; listener: FactListener }>
   reconnect: Set<{ pluginId: string; listener: ReconnectListener }>
   /** Plugins holding a host subscription per session; the host subscription ends when the last holder lets go. */
   holds: Map<string, Set<string>>
@@ -23,7 +29,14 @@ const fanouts = new WeakMap<PtyClient, Fanout>()
 function fanoutFor(pty: PtyClient, log: (message: string) => void): Fanout {
   const existing = fanouts.get(pty)
   if (existing) return existing
-  const fanout: Fanout = { data: new Set(), exit: new Set(), reconnect: new Set(), holds: new Map(), log }
+  const fanout: Fanout = {
+    data: new Set(),
+    exit: new Set(),
+    fact: new Set(),
+    reconnect: new Set(),
+    holds: new Map(),
+    log
+  }
   const run = (pluginId: string, call: () => unknown) => {
     try {
       const result = call()
@@ -35,8 +48,11 @@ function fanoutFor(pty: PtyClient, log: (message: string) => void): Fanout {
   pty.onData((sessionId, bytes) => {
     for (const entry of [...fanout.data]) run(entry.pluginId, () => entry.listener(sessionId, bytes))
   })
-  pty.onExit((sessionId, exitCode) => {
-    for (const entry of [...fanout.exit]) run(entry.pluginId, () => entry.listener(sessionId, exitCode))
+  pty.onExit((sessionId, exitCode, exit) => {
+    for (const entry of [...fanout.exit]) run(entry.pluginId, () => entry.listener(sessionId, exitCode, exit))
+  })
+  pty.onFact((sessionId, fact) => {
+    for (const entry of [...fanout.fact]) run(entry.pluginId, () => entry.listener(sessionId, fact))
   })
   pty.onReconnect(() => {
     for (const entry of [...fanout.reconnect]) run(entry.pluginId, () => entry.listener())
@@ -89,9 +105,9 @@ export function createPtyApi(
     get connected() {
       return pty.connected
     },
-    async spawn(sessionId, { argv, cwd, env, cols, rows }) {
+    async spawn(sessionId, { argv, cwd, env, cols, rows, shellReady, restore }) {
       live()
-      return pty.request('create', { sessionId, argv, cwd, env, cols, rows })
+      return pty.request('create', { sessionId, argv, cwd, env, cols, rows, shellReady, restore })
     },
     write(sessionId, data) {
       live()
@@ -105,9 +121,13 @@ export function createPtyApi(
       live()
       return pty.request('read', { sessionId, lines })
     },
-    async kill(sessionId, signal) {
+    async kill(sessionId, signal, options) {
       live()
-      await pty.request('kill', signal === undefined ? { sessionId } : { sessionId, signal })
+      await pty.request('kill', {
+        sessionId,
+        ...(signal === undefined ? {} : { signal }),
+        ...(options?.reason === undefined ? {} : { reason: options.reason })
+      })
     },
     async forget(sessionId) {
       live()
@@ -117,7 +137,7 @@ export function createPtyApi(
       live()
       return pty.request('list', {})
     },
-    async subscribe(sessionId) {
+    async subscribe(sessionId, options) {
       live()
       const holders = fanout.holds.get(sessionId) ?? new Set<string>()
       holders.add(pluginId)
@@ -126,7 +146,11 @@ export function createPtyApi(
       attempts.set(sessionId, attempt)
       attempt.inflight += 1
       try {
-        const result = await pty.request('subscribe', { sessionId })
+        const result = await pty.request('subscribe', {
+          sessionId,
+          ...(options?.mode === undefined ? {} : { mode: options.mode }),
+          ...(options?.historyLines === undefined ? {} : { historyLines: options.historyLines })
+        })
         attempt.succeeded = true
         return result
       } catch (error) {
@@ -138,6 +162,18 @@ export function createPtyApi(
         if (attempt.inflight === 0 && !attempt.succeeded && attempts.get(sessionId) === attempt) attempts.delete(sessionId)
       }
     },
+    async snapshot(sessionId) {
+      live()
+      return pty.request('snapshot', { sessionId })
+    },
+    async history(sessionId, options) {
+      live()
+      return pty.request('history', { sessionId, ...options })
+    },
+    async restartHost() {
+      live()
+      return pty.restartHost()
+    },
     async unsubscribe(sessionId) {
       live()
       attempts.delete(sessionId)
@@ -145,6 +181,7 @@ export function createPtyApi(
     },
     onData: (listener) => listen(fanout.data, { pluginId, listener }),
     onExit: (listener) => listen(fanout.exit, { pluginId, listener }),
+    onFact: (listener) => listen(fanout.fact, { pluginId, listener }),
     onReconnect: (listener) => listen(fanout.reconnect, { pluginId, listener })
   }
 

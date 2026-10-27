@@ -19,6 +19,9 @@ export function session(over: Partial<Session> & Pick<Session, 'id'>): Session {
     createdAt: 1,
     lastActivityAt: 1,
     exitCode: null,
+    exitSignal: null,
+    exitCause: null,
+    restorable: false,
     ...over
   }
 }
@@ -170,13 +173,29 @@ export async function mountView(fake: FakeContext, input: unknown, style: Record
   }
 }
 
+/** The result of `quirky.terminal/attach` for a live session, with `over` applied. */
+export function attachResult(over: Record<string, unknown> = {}): Record<string, unknown> {
+  return {
+    streamId: 7,
+    replay: '',
+    offset: 0,
+    historyCursor: null,
+    cols: 80,
+    rows: 24,
+    restored: false,
+    shellState: 'unsupported',
+    live: true,
+    ...over
+  }
+}
+
 /** Serves the calls the view makes with a worktree, its sessions and the lifecycle methods. */
 export function sessionHandlers(sessions: Session[], extra: Record<string, Handler> = {}): Record<string, Handler> {
   return {
     'quirky.worktree/resolve': () => WORKTREE,
     'quirky.session/list': () => sessions,
     'quirky.agents/list': () => DEFAULT_AGENTS,
-    'quirky.terminal/attach': () => ({ streamId: 7, replay: '', offset: 0 }),
+    'quirky.terminal/attach': () => attachResult(),
     'quirky.terminal/detach': () => ({ ok: true }),
     'quirky.terminal/write': () => ({ ok: true }),
     'quirky.terminal/resize': () => ({ ok: true }),

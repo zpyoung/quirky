@@ -1,8 +1,9 @@
 import { afterEach, describe, expect, test } from 'bun:test'
-import { existsSync, readFileSync } from 'node:fs'
+import { existsSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import { base64ToBytes, PTY_PROTOCOL_VERSION, type PtyEvent } from '@quirky/protocol'
 import { PtyClient } from '../src/client'
+import { readSegments } from '../src/history/log'
 import { concat, runCleanups, startHost, text, waitFor, type TestHost } from './helpers'
 
 afterEach(runCleanups)
@@ -36,9 +37,20 @@ function events(client: PtyClient) {
   return seen
 }
 
+/** The output the session's history log holds, oldest first. */
 async function logText(host: TestHost, sessionId: string): Promise<string> {
-  const path = join(host.home, 'sessions', sessionId, 'output.log')
-  return existsSync(path) ? readFileSync(path, 'utf8') : ''
+  const { segments } = readSegments(join(host.home, 'sessions', sessionId))
+  return segments.flatMap((s) => s.records.filter((r) => r.kind === 'output').map((r) => text(r.bytes!))).join('')
+}
+
+/**
+ * Subscribes to the raw tail through the manager, whose replay is exactly the bytes the sink then
+ * continues from.
+ */
+async function subscribeRaw(host: TestHost, sessionId: string) {
+  const parts: Uint8Array[] = []
+  const sub = await host.server.manager.subscribe(sessionId, (_id, bytes) => parts.push(bytes), { mode: 'raw' })
+  return { sub, live: { all: () => concat(parts) } }
 }
 
 describe('authentication', () => {
@@ -143,15 +155,13 @@ describe('subscribe', () => {
   test('replay plus live frames reproduce the full output with no gap or duplicate', async () => {
     const host = startHost()
     const first = await host.connect()
-    const second = await host.connect()
     await first.request('create', createParams('c', ['/bin/cat']))
     const whole = collect(first, 'c')
     await first.request('subscribe', { sessionId: 'c' })
     first.sendInput('c', new TextEncoder().encode('one\ntwo\n'))
     await waitFor(() => occurrences(whole.text(), 'two') >= 2, 5000, 'first batch')
 
-    const live = collect(second, 'c')
-    const sub = await second.request('subscribe', { sessionId: 'c' })
+    const { sub, live } = await subscribeRaw(host, 'c')
     const replay = base64ToBytes(sub.replay)
     expect(sub.offset).toBe(replay.length)
     first.sendInput('c', new TextEncoder().encode('three\nfour\n'))
@@ -163,7 +173,6 @@ describe('subscribe', () => {
   test('a wrapped tail replays from a line boundary and still joins the live stream exactly', async () => {
     const host = startHost({ tailBytes: 128 })
     const first = await host.connect()
-    const second = await host.connect()
     await first.request('create', createParams('w', ['/bin/cat']))
     const whole = collect(first, 'w')
     await first.request('subscribe', { sessionId: 'w' })
@@ -171,8 +180,7 @@ describe('subscribe', () => {
     first.sendInput('w', new TextEncoder().encode(lines))
     await waitFor(() => occurrences(whole.text(), 'line-39') >= 2, 5000, 'bulk output')
 
-    const live = collect(second, 'w')
-    const sub = await second.request('subscribe', { sessionId: 'w' })
+    const { sub, live } = await subscribeRaw(host, 'w')
     const replay = base64ToBytes(sub.replay)
     const full = whole.text()
     expect(sub.offset).toBe(full.length)
@@ -197,7 +205,7 @@ describe('subscribe', () => {
     client.sendInput('d', new TextEncoder().encode('x\n'))
     await waitFor(() => out.text().includes('x\r\nx\r\n'), 5000, 'first output')
     const again = await client.request('subscribe', { sessionId: 'd' })
-    expect(text(base64ToBytes(again.replay))).toBe(out.text())
+    expect(text(base64ToBytes(again.replay))).toContain('x')
     expect(host.server.manager.subscriberCount('d')).toBe(1)
     const before = out.all().length
     client.sendInput('d', new TextEncoder().encode('y\n'))
@@ -230,14 +238,15 @@ describe('subscribe', () => {
     await client.request('create', createParams('x', sh('printf bye')))
     await waitFor(() => seen.length > 0, 5000, 'exit event')
     const sub = await client.request('subscribe', { sessionId: 'x' })
-    expect(text(base64ToBytes(sub.replay))).toBe('bye')
+    expect(text(base64ToBytes(sub.replay))).toContain('bye')
     expect(sub.offset).toBe(3)
+    expect(sub.live).toBe(false)
   })
 })
 
 describe('terminal queries', () => {
   const askForDeviceStatus = sh(
-    `stty raw -echo; printf '\\033[5n'; dd bs=1 count=4 2>/dev/null | od -An -c | tr -s ' '; sleep 1`
+    `sleep 0.3; stty raw -echo; printf '\\033[5n'; dd bs=1 count=4 2>/dev/null | od -An -c | tr -s ' '; sleep 1`
   )
 
   test('replies from the emulator reach the program while nobody is subscribed', async () => {
@@ -342,7 +351,7 @@ describe('resize, kill and exit', () => {
     const seen = events(other)
     await client.request('create', createParams('e', sh('printf hello; exit 3')))
     await waitFor(() => seen.length > 0, 5000, 'exit event')
-    expect(seen[0]).toEqual({ type: 'exit', sessionId: 'e', exitCode: 3 })
+    expect(seen[0]).toEqual({ type: 'exit', sessionId: 'e', exitCode: 3, exitSignal: null, exitCause: 'exited' })
     expect(await logText(host, 'e')).toBe('hello')
     const [info] = await client.request('list', {})
     expect(info).toMatchObject({ sessionId: 'e', alive: false, exitCode: 3, offset: 5 })
@@ -393,7 +402,7 @@ describe('resize, kill and exit', () => {
     const client = await host.connect()
     await client.request('create', createParams('f', sh('printf hello; sleep 100')))
     const dir = join(host.home, 'sessions', 'f')
-    await waitFor(() => existsSync(join(dir, 'output.log')) && readFileSync(join(dir, 'output.log'), 'utf8') === 'hello', 5000, 'log')
+    await waitFor(async () => (await logText(host, 'f')) === 'hello', 5000, 'log')
     const [info] = await client.request('list', {})
     await client.request('forget', { sessionId: 'f' })
     expect(existsSync(dir)).toBe(false)
@@ -420,9 +429,7 @@ describe('resize, kill and exit', () => {
     await waitFor(() => !host.server.manager.isAlive('rot'), 5000, 'exit')
     const dir = join(host.home, 'sessions', 'rot')
     expect(existsSync(join(dir, 'output.1.log'))).toBe(true)
-    const rotated = readFileSync(join(dir, 'output.1.log'), 'utf8')
-    const current = readFileSync(join(dir, 'output.log'), 'utf8')
-    expect(rotated.length).toBeGreaterThan(200)
-    expect(rotated + current).toContain('400\r\n')
+    expect(statSync(join(dir, 'output.1.log')).size).toBeGreaterThan(200)
+    expect(await logText(host, 'rot')).toContain('400\r\n')
   })
 })

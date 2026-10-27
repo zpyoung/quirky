@@ -14,6 +14,9 @@ const session: Session = {
   createdAt: 2,
   lastActivityAt: 2,
   exitCode: null,
+  exitSignal: null,
+  exitCause: null,
+  restorable: false,
   launch: { command: 'claude', args: '--model haiku', env: { A: '1' } },
   providerSession: { id: 'abc', transcriptPath: '/t.jsonl' },
   promptDelivery: 'pending',
@@ -25,6 +28,28 @@ const session: Session = {
   },
   resumedFrom: 's_old'
 }
+
+describe('session store migration 4', () => {
+  test('a row written before it reads as not restorable, with no signal or cause', () => {
+    const store = memoryStore(3)
+    store.run(
+      "INSERT INTO sessions (id, kind, agent, worktree_id, cwd, title, status, created_at, last_activity_at, exit_code, repo_id) VALUES ('s_old', 'terminal', 'shell', 'wt', '/work', 'Shell', 'exited', 1, 1, 0, 'repo')"
+    )
+    migrateStore(store, 3)
+    const records = new SessionRecords(store)
+
+    expect(records.get('s_old')).toMatchObject({ exitCode: 0, exitSignal: null, exitCause: null, restorable: false, launch: null })
+  })
+
+  test('the exit columns round-trip through update, and agent can change', () => {
+    const records = new SessionRecords(memoryStore())
+    records.insert(session, 'repo')
+    records.update('s_new', { status: 'exited', exitCode: 137, exitSignal: 'SIGKILL', exitCause: 'killed', restorable: true })
+    expect(records.get('s_new')).toMatchObject({ exitCode: 137, exitSignal: 'SIGKILL', exitCause: 'killed', restorable: true })
+    records.update('s_new', { agent: 'shell', restorable: false })
+    expect(records.get('s_new')).toMatchObject({ agent: 'shell', restorable: false, exitCause: 'killed', promptDelivery: 'pending' })
+  })
+})
 
 describe('session store migration 2', () => {
   test('SC-38: a row written before it reads with null launch fields, and keeps working', () => {
@@ -46,6 +71,9 @@ describe('session store migration 2', () => {
       createdAt: 1,
       lastActivityAt: 1,
       exitCode: null,
+      exitSignal: null,
+      exitCause: null,
+      restorable: false,
       launch: null,
       providerSession: null,
       promptDelivery: null,

@@ -33,6 +33,8 @@ type Connection = {
   writer: SocketWriter
   decoder: PtyFrameDecoder
   sink: DataSink
+  /** Output of sessions whose subscribe response has not been sent yet; it follows the response. */
+  holding: Map<string, Uint8Array[]>
   authenticated: boolean
   closed: boolean
 }
@@ -51,7 +53,13 @@ export function startPtyServer(options: PtyServerOptions): PtyServer {
   writePrivate(join(home, 'pty.pid'), String(process.pid))
   rmSync(socketPath, { force: true })
 
-  const manager = new SessionManager({ home, logMaxBytes: options.logMaxBytes, tailBytes: options.tailBytes })
+  const manager = new SessionManager({
+    home,
+    logMaxBytes: options.logMaxBytes,
+    tailBytes: options.tailBytes,
+    checkpointIntervalMs: options.checkpointIntervalMs,
+    shellReadyTimeoutMs: options.shellReadyTimeoutMs
+  })
   const connections = new Set<Connection>()
 
   const send = (conn: Connection, message: unknown) => {
@@ -59,9 +67,11 @@ export function startPtyServer(options: PtyServerOptions): PtyServer {
     if (!conn.writer.send(encodePtyJson(message))) conn.socket.end()
   }
 
-  const stopSession = manager.onExit((event: PtyEvent) => {
+  const broadcast = (event: PtyEvent) => {
     for (const conn of connections) if (conn.authenticated) send(conn, event)
-  })
+  }
+  const stopExitEvents = manager.onExit(broadcast)
+  const stopFactEvents = manager.onFact(broadcast)
 
   const listener = Bun.listen<Connection>({
     unix: socketPath,
@@ -73,8 +83,11 @@ export function startPtyServer(options: PtyServerOptions): PtyServer {
           decoder: new PtyFrameDecoder(),
           authenticated: false,
           closed: false,
+          holding: new Map(),
           sink: (sessionId, bytes) => {
-            if (!conn.writer.send(encodePtyData(sessionId, bytes))) conn.socket.end()
+            const held = conn.holding.get(sessionId)
+            if (held) held.push(bytes.slice())
+            else if (!conn.writer.send(encodePtyData(sessionId, bytes))) conn.socket.end()
           }
         }
         socket.data = conn
@@ -166,7 +179,7 @@ export function startPtyServer(options: PtyServerOptions): PtyServer {
         manager.resize(request.sessionId, request.cols, request.rows)
         return {}
       case 'kill':
-        manager.kill(request.sessionId, request.signal)
+        manager.kill(request.sessionId, request.signal, request.reason)
         return {}
       case 'forget':
         manager.forget(request.sessionId)
@@ -174,12 +187,16 @@ export function startPtyServer(options: PtyServerOptions): PtyServer {
       case 'list':
         return manager.list()
       case 'subscribe':
-        return manager.subscribe(request.sessionId, conn.sink)
+        return subscribe(conn, request)
       case 'unsubscribe':
         manager.unsubscribe(request.sessionId, conn.sink)
         return {}
       case 'read':
         return manager.read(request.sessionId, request.lines)
+      case 'snapshot':
+        return manager.snapshot(request.sessionId)
+      case 'history':
+        return manager.history(request.sessionId, { lines: request.lines, before: request.before, format: request.format })
       case 'shutdown':
         return manager.shutdown().then(() => {
           void conn.writer.flushed().then(async () => {
@@ -193,10 +210,35 @@ export function startPtyServer(options: PtyServerOptions): PtyServer {
     }
   }
 
+  /**
+   * Output can start flowing as soon as the manager registers the sink, which is before the response
+   * is built. It is held back here so the first DATA frame follows the response.
+   */
+  function subscribe(conn: Connection, request: Extract<PtyRequest, { type: 'subscribe' }>): Promise<unknown> {
+    const { sessionId } = request
+    const held: Uint8Array[] = []
+    conn.holding.set(sessionId, held)
+    return manager.subscribe(sessionId, conn.sink, { mode: request.mode, historyLines: request.historyLines }).then(
+      (result) => {
+        // the reply is sent in a microtask after this returns; a timer runs after it
+        setTimeout(() => {
+          conn.holding.delete(sessionId)
+          for (const bytes of held) conn.sink(sessionId, bytes)
+        }, 0)
+        return result
+      },
+      (error) => {
+        conn.holding.delete(sessionId)
+        throw error
+      }
+    )
+  }
+
   let stopping: Promise<void> | null = null
   function stop(): Promise<void> {
     stopping ??= (async () => {
-      stopSession()
+      stopExitEvents()
+      stopFactEvents()
       await manager.shutdown()
       listener.stop(true)
       rmSync(socketPath, { force: true })

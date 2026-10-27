@@ -61,12 +61,13 @@ export function TerminalPane({ context, themeSource, sessionId, scrollback, inte
     fit.fit()
 
     let disposed = false
+    let readOnly = false
     let streamId: number | null = null
     let unsubscribe: (() => void) | null = null
 
     const inputGate = createInputGate()
     term.onData((data) => {
-      if (!interactiveRef.current || !inputGate.allows()) return
+      if (readOnly || !interactiveRef.current || !inputGate.allows()) return
       void context.call('quirky.terminal/write', { session: sessionId, data }).catch(() => {})
     })
     term.onResize(({ cols, rows }) => {
@@ -75,15 +76,19 @@ export function TerminalPane({ context, themeSource, sessionId, scrollback, inte
 
     const detach = (id: number) => void context.call('quirky.terminal/detach', { streamId: id }).catch(() => {})
     context
-      .call('quirky.terminal/attach', { session: sessionId, cols: term.cols, rows: term.rows })
+      .call('quirky.terminal/attach', { session: sessionId, cols: term.cols, rows: term.rows, historyLines: scrollbackRef.current })
       .then((value) => {
-        const result = value as { streamId: number; replay: string }
+        const result = value as { streamId: number; replay: string; live?: boolean }
         if (disposed) {
           detach(result.streamId)
           return
         }
         streamId = result.streamId
         writeReplay(term, base64ToBytes(result.replay), inputGate)
+        if (result.live === false) {
+          readOnly = true
+          return
+        }
         unsubscribe = context.onStream(result.streamId, (bytes) => term.write(bytes))
       })
       .catch((error: Error) => {

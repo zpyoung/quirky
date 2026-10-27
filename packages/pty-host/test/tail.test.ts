@@ -1,9 +1,5 @@
 import { describe, expect, test } from 'bun:test'
 import { TailBuffer } from '../src/tail'
-import { RotatingLog } from '../src/log'
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
-import { tmpdir } from 'node:os'
-import { join } from 'node:path'
 
 const enc = (s: string) => new TextEncoder().encode(s)
 const dec = (b: Uint8Array) => new TextDecoder().decode(b)
@@ -42,65 +38,24 @@ describe('TailBuffer', () => {
     tail.append(enc('no newline yet'))
     expect(dec(tail.replay())).toBe('no newline yet')
   })
-})
 
-describe('RotatingLog', () => {
-  const dir = () => mkdtempSync(join(tmpdir(), 'qpty-log-'))
-
-  test('appends to output.log', () => {
-    const d = dir()
-    const log = new RotatingLog(d, 1024)
-    log.append(enc('hello '))
-    log.append(enc('world'))
-    log.close()
-    expect(readFileSync(join(d, 'output.log'), 'utf8')).toBe('hello world')
-    rmSync(d, { recursive: true })
+  test('a starting total continues the output position without counting earlier bytes as dropped', () => {
+    const tail = new TailBuffer(16, 1000)
+    expect(tail.total).toBe(1000)
+    tail.append(enc('abc\ndef'))
+    expect(tail.total).toBe(1007)
+    expect(tail.wrapped).toBe(false)
+    expect(dec(tail.replay())).toBe('abc\ndef')
   })
 
-  test('rotates to output.1.log when the threshold is exceeded, replacing the previous one', () => {
-    const d = dir()
-    const log = new RotatingLog(d, 10)
-    log.append(enc('aaaaaaaa'))
-    expect(existsSync(join(d, 'output.1.log'))).toBe(false)
-    log.append(enc('bbbb'))
-    expect(readFileSync(join(d, 'output.1.log'), 'utf8')).toBe('aaaaaaaabbbb')
-    expect(statSync(join(d, 'output.log')).size).toBe(0)
-    log.append(enc('cc'))
-    log.append(enc('dddddddddd'))
-    expect(readFileSync(join(d, 'output.1.log'), 'utf8')).toBe('ccdddddddddd')
-    log.append(enc('e'))
-    log.close()
-    expect(readFileSync(join(d, 'output.log'), 'utf8')).toBe('e')
-    rmSync(d, { recursive: true })
-  })
-
-  test('truncates a stale log left by an earlier host', () => {
-    const d = dir()
-    const first = new RotatingLog(d, 4)
-    first.append(enc('stale-stale'))
-    first.close()
-    const second = new RotatingLog(d, 1024)
-    second.append(enc('fresh'))
-    second.close()
-    expect(readFileSync(join(d, 'output.log'), 'utf8')).toBe('fresh')
-    expect(existsSync(join(d, 'output.1.log'))).toBe(false)
-    rmSync(d, { recursive: true })
-  })
-
-  test('keeps the directory 0700 and the files 0600, including ones left by an earlier host', () => {
-    const d = dir()
-    const sessionDir = join(d, 'sessions', 's_1')
-    mkdirSync(sessionDir, { recursive: true, mode: 0o755 })
-    chmodSync(sessionDir, 0o755)
-    writeFileSync(join(sessionDir, 'output.log'), 'old', { mode: 0o644 })
-    chmodSync(join(sessionDir, 'output.log'), 0o644)
-    const log = new RotatingLog(sessionDir, 10)
-    expect(statSync(sessionDir).mode & 0o777).toBe(0o700)
-    expect(statSync(join(sessionDir, 'output.log')).mode & 0o777).toBe(0o600)
-    log.append(enc('aaaaaaaaaaaa'))
-    log.close()
-    expect(statSync(join(sessionDir, 'output.log')).mode & 0o777).toBe(0o600)
-    expect(statSync(join(sessionDir, 'output.1.log')).mode & 0o777).toBe(0o600)
-    rmSync(d, { recursive: true })
+  test('a buffer with a starting total wraps only after its own capacity is exceeded', () => {
+    const tail = new TailBuffer(8, 500)
+    tail.append(enc('aaaa\nbbb'))
+    expect(tail.wrapped).toBe(false)
+    tail.append(enc('cc\nd'))
+    expect(tail.wrapped).toBe(true)
+    expect(tail.total).toBe(512)
+    expect(dec(tail.snapshot())).toBe('\nbbbcc\nd')
+    expect(dec(tail.replay())).toBe('bbbcc\nd')
   })
 })

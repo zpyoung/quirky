@@ -24,7 +24,10 @@ const session = (id: string, worktreeId: string, status: Session['status']): Ses
   status,
   createdAt: 0,
   lastActivityAt: 0,
-  exitCode: null
+  exitCode: null,
+  exitSignal: null,
+  exitCause: null,
+  restorable: false
 })
 
 test('SC-35: the report groups worktrees under their repo with status and selection', () => {
