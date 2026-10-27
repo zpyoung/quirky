@@ -247,11 +247,15 @@ export class LayoutService {
     })
   }
 
-  /** Forgets a disconnected window's reports and fails commands routed to it, and announces the remaining windows. */
+  /**
+   * Forgets a disconnected window's reports, telling plugins about each one removed, fails commands
+   * routed to it, and announces the remaining windows.
+   */
   dropConnection(conn: ClientConn): void {
     for (const [slot, bySlot] of this.reports) {
-      bySlot.delete(conn.id)
+      const existed = bySlot.delete(conn.id)
       if (bySlot.size === 0) this.reports.delete(slot)
+      if (existed) this.options.broadcast({ type: 'ui.report.changed', slot, connId: conn.id })
     }
     for (const [requestId, pending] of this.pending) {
       if (pending.conn === conn) this.settle(requestId, (settled) => settled.reject(unanswered()))
