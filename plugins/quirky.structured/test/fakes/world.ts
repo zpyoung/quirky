@@ -18,7 +18,12 @@ const WORKTREE_DEFAULTS = {
 
 type PluginCtx = { error(kind: 'invalid-params' | 'not-found' | 'conflict', message: string): Error }
 
-type FakeAccountPreparation = { env: Record<string, string | null>; shellInit: string | null; account: null }
+type FakeAccountPreparation = {
+  env: Record<string, string | null>
+  shellInit: string | null
+  account: { provider: 'claude' | 'codex'; id: string | null; label: string; source: 'managed' | 'default' | 'custom' } | null
+  resumeTranscriptPath?: string
+}
 
 /**
  * The in-memory state behind the fake `quirky.session`, `quirky.worktree` and `quirky.ask`
@@ -123,7 +128,9 @@ export class FakeWorld {
   prepareAccount(params: Record<string, unknown>, context: PluginCtx): FakeAccountPreparation {
     this.accountPrepareCalls.push(params)
     if (this.accountPreparationFailure !== null) throw context.error('conflict', this.accountPreparationFailure)
-    return { ...this.accountPreparationResult, env: { ...this.accountPreparationResult.env } }
+    const result = { ...this.accountPreparationResult, env: { ...this.accountPreparationResult.env } }
+    if (params.resume === undefined) delete result.resumeTranscriptPath
+    return result
   }
 
   readonly ask = {
