@@ -69,15 +69,14 @@ describe('jobs', () => {
     const [listed] = await s.jobs()
     expect(listed).toMatchObject({ id: jobId('tick'), plugin: 'acme.poll', intervalMs: SECOND, state: 'idle', lastRun: null })
 
-    await Bun.sleep(2000)
-    const lines = s.lines()
-    expect(lines.slice(0, 3)).toEqual(['import acme.poll', 'activate acme.poll', 'tick'])
-    expect(lines.filter((line) => line === 'tick').length).toBeGreaterThanOrEqual(1)
-    expect((await s.plugin('acme.poll'))?.state).toBe('active')
     const job = await waitForAsync(async () => {
       const found = await s.job('tick')
       return found?.lastRun?.status === 'ok' && found
     })
+    const lines = s.lines()
+    expect(lines.slice(0, 3)).toEqual(['import acme.poll', 'activate acme.poll', 'tick'])
+    expect(lines.filter((line) => line === 'tick').length).toBeGreaterThanOrEqual(1)
+    expect((await s.plugin('acme.poll'))?.state).toBe('active')
     expect(job.lastRun).toMatchObject({ status: 'ok' })
     expect(job.lastRun?.finishedAt).not.toBeNull()
   })
@@ -292,7 +291,11 @@ describe('jobs', () => {
       ],
       { home }
     )
-    await waitFor(() => s.count('daily') >= 1, 3000)
+    const daily = await waitForAsync(async () => {
+      const found = await s.job('daily')
+      return found?.state === 'idle' && found.lastRun?.status === 'ok' && found.lastRun.startedAt >= seededAt && found
+    })
+    // Observe real post-restart timers through the daemon API; job.list cannot advance its clock.
     await Bun.sleep(500)
     expect(s.count('daily')).toBe(1)
     expect(s.count('hourly')).toBe(0)
@@ -303,10 +306,6 @@ describe('jobs', () => {
     expect(Math.abs(hourly.nextRunAt! - (seededAt + 50 * 60_000))).toBeLessThan(5000)
     expect(Math.abs(hourly.nextRunAt! - (Date.now() + 50 * 60_000))).toBeLessThan(10_000)
 
-    const daily = await waitForAsync(async () => {
-      const found = await s.job('daily')
-      return found?.state === 'idle' && found
-    })
     expect(daily.lastRun).toMatchObject({ status: 'ok' })
     expect(daily.lastRun!.startedAt).toBeGreaterThanOrEqual(seededAt)
     expect(Math.abs(daily.lastRun!.startedAt - seededAt)).toBeLessThan(5000)
