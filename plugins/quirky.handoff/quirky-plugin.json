@@ -1,0 +1,10 @@
+{
+  "id": "quirky.handoff",
+  "name": "Session handoff",
+  "version": "0.1.0",
+  "description": "Continues an agent's work in a fresh session: composes a brief from the old one, lets the person edit it, and starts the new session with it.",
+  "main": "main.ts",
+  "activation": "startup",
+  "dependencies": [],
+  "contributes": {}
+}
