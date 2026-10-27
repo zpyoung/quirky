@@ -200,6 +200,40 @@ describe('Screen scrollback', () => {
     expect(copy.buffer.active.cursorX).toBe(screenTerminal(screen).buffer.active.cursorX)
   })
 
+  test('an active scroll region survives, so output scrolls the same rows', async () => {
+    const screen = new Screen({ cols: 10, rows: 5 })
+    screen.write(`one\r\ntwo\r\nthree\r\nfour\r\nfive${ESC}[2;4r${ESC}[4;1H`)
+    await screen.settled()
+    const copy = await expectSameScreen(screen, 10, 5)
+    await Promise.all([feed(copy, '\r\nNEW'), feed(screenTerminal(screen), '\r\nNEW')])
+    expect(cells(copy)).toEqual(cells(screenTerminal(screen)))
+  })
+
+  test('a full-screen region adds no region sequence', async () => {
+    const screen = new Screen({ cols: 10, rows: 5 })
+    screen.write(`abc${ESC}[1;5r${ESC}[2;3H`)
+    await screen.settled()
+    expect(screen.snapshot().ansi).not.toMatch(/\x1b\[\d+;\d+r/)
+  })
+
+  test('origin mode inside a region keeps the cursor and relative addressing', async () => {
+    const screen = new Screen({ cols: 10, rows: 6 })
+    screen.write(`a\r\nb\r\nc\r\nd\r\ne\r\nf${ESC}[2;5r${ESC}[?6h${ESC}[2;3H`)
+    await screen.settled()
+    const copy = await expectSameScreen(screen, 10, 6)
+    await Promise.all([feed(copy, `${ESC}[1;1HX\r\n\r\n\r\n\r\nY`), feed(screenTerminal(screen), `${ESC}[1;1HX\r\n\r\n\r\n\r\nY`)])
+    expect(cells(copy)).toEqual(cells(screenTerminal(screen)))
+  })
+
+  test('a region, style and pending wrap all survive together', async () => {
+    const screen = new Screen({ cols: 5, rows: 5 })
+    screen.write(`1\r\n2\r\n3\r\n4\r\n5${ESC}[2;4r${ESC}[3;1H${ESC}[32mabcde`)
+    await screen.settled()
+    const copy = await expectSameScreen(screen, 5, 5)
+    await Promise.all([feed(copy, 'X\r\n\r\nZ'), feed(screenTerminal(screen), 'X\r\n\r\nZ')])
+    expect(cells(copy)).toEqual(cells(screenTerminal(screen)))
+  })
+
   test('lines reports wrapped rows', async () => {
     const screen = new Screen({ cols: 10, rows: 5, scrollback: 10 })
     screen.write('x'.repeat(25) + '\r\nshort')
