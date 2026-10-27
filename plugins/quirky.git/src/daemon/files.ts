@@ -53,12 +53,28 @@ export function diff(env: DaemonEnv): Handler {
   }
 }
 
-/** Writes a working file atomically; with `expected` it refuses when the file changed on disk. */
+const saveTails = new Map<string, Promise<unknown>>()
+
+/** Runs `task` after every earlier task for `key` has settled, so same-file saves never interleave. */
+function serialised<T>(key: string, task: () => Promise<T>): Promise<T> {
+  const run = (saveTails.get(key) ?? Promise.resolve()).then(task, task)
+  const tail = run.catch(() => {})
+  saveTails.set(key, tail)
+  void tail.then(() => {
+    if (saveTails.get(key) === tail) saveTails.delete(key)
+  })
+  return run
+}
+
+/**
+ * Writes a working file atomically; with `expected` it refuses when the file changed on disk.
+ * Saves to the same file run one at a time so the hash check and the write cannot interleave.
+ */
 export function save(env: DaemonEnv): Handler {
   return async (params, caller) => {
     const worktree = await env.resolve(params, caller)
-    const { rel } = await containedPath(worktree.path, params.path)
-    const result = await gitApi().saveWorkingFile(worktree.path, rel, params.content, params.expected)
+    const { rel, absolute } = await containedPath(worktree.path, params.path)
+    const result = await serialised(absolute, () => gitApi().saveWorkingFile(worktree.path, rel, params.content, params.expected))
     env.changed(worktree)
     return result
   }

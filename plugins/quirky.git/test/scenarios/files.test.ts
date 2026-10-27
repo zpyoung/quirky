@@ -49,6 +49,21 @@ describe('save', () => {
   })
 })
 
+describe('concurrent saves', () => {
+  test('two saves with the same expected hash: one wins, the other fails changed-on-disk', async () => {
+    s = await startScenario(scratch)
+    const expected = sha256('a\nb\nc\nd\ne\n')
+    const results = await Promise.allSettled([
+      s.api('save', { path: 'math.ts', content: 'first\n', expected }),
+      s.api('save', { path: 'math.ts', content: 'second\n', expected })
+    ])
+    expect(results.map((r) => r.status)).toEqual(['fulfilled', 'rejected'])
+    const rejected = results[1] as PromiseRejectedResult
+    expect(rejected.reason).toMatchObject({ code: RpcErrorCode.Conflict, data: { reason: 'changed-on-disk' } })
+    expect(read('math.ts')).toBe('first\n')
+  })
+})
+
 describe('paths never escape the worktree', () => {
   test('SC-67: a symlinked file is never read or written through, and a symlinked folder leads nowhere', async () => {
     s = await startScenario(scratch)
@@ -106,6 +121,20 @@ describe('huge folders', () => {
     expect(await s.api('hugeFolders')).toEqual({ folders: [] })
     await Bun.sleep(80)
     expect(s.changedEvents()).toBe(before + 2)
+  })
+
+  test('a .gitignore symlink is refused and its target stays unchanged', async () => {
+    s = await startScenario(scratch)
+    const folder = join(scratch(), 'ignore-outside')
+    mkdirSync(folder, { recursive: true })
+    const outside = join(folder, 'ignore-target')
+    writeFileSync(outside, 'keep\n')
+    symlinkSync(outside, join(s.feat.path, '.gitignore'))
+    expect(await s.fails(s.api('ignoreFolder', { folder: 'dist' }))).toMatchObject({
+      code: RpcErrorCode.InvalidParams,
+      data: { reason: 'not-allowed' }
+    })
+    expect(readFileSync(outside, 'utf8')).toBe('keep\n')
   })
 
   test('SC-59: a folder off the allowlist is refused (CLI)', async () => {
