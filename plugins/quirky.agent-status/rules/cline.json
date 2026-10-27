@@ -1,0 +1,25 @@
+{
+  "agent": "cline",
+  "description": "Cline detection rules.",
+  "rules": [
+    {
+      "id": "composer-ready",
+      "why": "Cline 3.0.x at rest shows an empty composer box over its Plan/Act mode row near the bottom, with no spinner frame in view; it repaints the same box while a reply streams, so the screen must be quiet.",
+      "state": "idle",
+      "region": "screen",
+      "lastLines": 6,
+      "all": [
+        {
+          "regex": "^─{8,}\\n❯ (?:what can i do for you\\?|ask anything\\.\\.\\.|plan something\\.\\.\\.)\\n─{8,}\\n[○●] plan [○●] act \\(tab\\)[ \\t]*$",
+          "ignoreCase": true
+        }
+      ],
+      "none": [
+        {
+          "regex": "[⠀-⣿]"
+        }
+      ],
+      "quietMs": 1000
+    }
+  ]
+}

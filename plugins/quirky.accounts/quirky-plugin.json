@@ -1,0 +1,276 @@
+{
+  "id": "quirky.accounts",
+  "name": "Accounts and Usage",
+  "version": "0.1.0",
+  "description": "Read provider usage and manage isolated Claude and Codex accounts.",
+  "main": "main.ts",
+  "cli": "cli.ts",
+  "ui": "dist/ui.js",
+  "activation": "startup",
+  "contributes": {
+    "method": [
+      {
+        "id": "list",
+        "description": "Returns managed Claude and Codex accounts, System default identities, transient UI preferences, and stale sessions. Provider filtering changes only accounts and staleSessions.",
+        "readOnly": true,
+        "params": { "type": "object", "properties": { "provider": { "type": "string", "enum": ["claude", "codex"] } } },
+        "result": {
+          "type": "object",
+          "properties": {
+            "accounts": { "type": "array", "items": { "type": "object", "properties": { "id": { "type": "string" }, "provider": { "type": "string", "enum": ["claude", "codex"] }, "label": { "type": "string" }, "email": { "description": "Email or null; never an auth token." }, "organization": { "description": "Organization or workspace label, or null." }, "createdAt": { "type": "integer" }, "updatedAt": { "type": "integer" }, "lastAuthenticatedAt": { "description": "Epoch milliseconds or null." }, "needsSignIn": { "type": "boolean" }, "active": { "type": "boolean" } }, "required": ["id", "provider", "label", "email", "organization", "createdAt", "updatedAt", "lastAuthenticatedAt", "needsSignIn", "active"] } },
+            "active": { "type": "object", "properties": { "claude": { "description": "Managed UUID or null for System default." }, "codex": { "description": "Managed UUID or null for System default." } }, "required": ["claude", "codex"] },
+            "systemDefault": { "type": "object", "properties": { "claude": { "type": "object", "properties": { "label": { "type": "string" }, "email": { "description": "Email or null." }, "hasAuth": { "type": "boolean" }, "authKind": { "type": "string", "enum": ["oauth", "api-key", "none", "unknown"] } }, "required": ["label", "email", "hasAuth", "authKind"] }, "codex": { "type": "object", "properties": { "label": { "type": "string" }, "email": { "description": "Email or null." }, "hasAuth": { "type": "boolean" }, "authKind": { "type": "string", "enum": ["oauth", "api-key", "none", "unknown"] } }, "required": ["label", "email", "hasAuth", "authKind"] } }, "required": ["claude", "codex"] },
+            "pendingLogin": { "description": "PendingLogin or null; contains only an allowlisted authorize URL and safe status." },
+            "staleSessions": { "type": "array", "items": { "type": "object", "properties": { "sessionId": { "type": "string" }, "provider": { "type": "string", "enum": ["claude", "codex"] }, "accountId": { "description": "Managed UUID or null." }, "accountLabel": { "type": "string" }, "selectedId": { "description": "Managed UUID or null." }, "selectedLabel": { "type": "string" }, "busy": { "type": "boolean" }, "queued": { "type": "boolean" }, "kept": { "type": "boolean" }, "error": { "description": "Safe error or null." }, "selectionRevision": { "type": "integer" } }, "required": ["sessionId", "provider", "accountId", "accountLabel", "selectedId", "selectedLabel", "busy", "queued", "kept", "error", "selectionRevision"] } },
+            "preferences": { "type": "object", "properties": { "mode": { "type": "string", "enum": ["compact", "detailed"] }, "direction": { "type": "string", "enum": ["used", "remaining"] }, "hidden": { "type": "boolean" }, "visibleProviders": { "type": "array", "items": { "type": "string" } }, "density": { "type": "string", "enum": ["normal", "icons"] }, "claudeSwitchPolicy": { "type": "string", "enum": ["ask", "always", "never"] }, "skipCodexResetConfirm": { "type": "boolean" } }, "required": ["mode", "direction", "hidden", "visibleProviders", "density", "claudeSwitchPolicy", "skipCodexResetConfirm"] },
+            "configWarnings": { "type": "array", "items": { "type": "object", "properties": { "provider": { "type": "string", "enum": ["codex"] }, "accountId": { "description": "Managed UUID or null." }, "kind": { "type": "string", "enum": ["source-missing", "source-empty", "source-unreadable", "sync-failed"] }, "message": { "type": "string" } }, "required": ["provider", "accountId", "kind", "message"], "additionalProperties": false } },
+            "revision": { "type": "integer" }
+          },
+          "required": ["accounts", "active", "systemDefault", "pendingLogin", "staleSessions", "configWarnings", "preferences", "revision"]
+        }
+      },
+      {
+        "id": "usage",
+        "description": "The current secret-free usage snapshots for all ten providers.",
+        "readOnly": true,
+        "params": { "type": "object" },
+        "result": { "type": "object", "properties": { "providers": { "type": "array", "items": { "type": "object", "properties": { "provider": { "type": "string" }, "accountId": { "description": "Managed UUID or null." }, "status": { "type": "string", "enum": ["idle", "fetching", "ok", "error", "unavailable"] }, "error": { "description": "Safe provider error or null." }, "updatedAt": { "type": "integer" }, "session": { "description": "Window or null." }, "weekly": { "description": "Window or null." }, "monthly": { "description": "Window or null." }, "fableWeekly": { "description": "Window or null." }, "buckets": { "type": "array", "items": { "type": "object", "additionalProperties": true } }, "extraUsage": { "type": "object", "additionalProperties": true }, "rateLimitResetCredits": { "type": "object", "additionalProperties": true }, "planType": { "description": "Plan label or null." }, "usageMetadata": { "type": "object", "additionalProperties": true } } } }, "inactive": { "type": "object", "additionalProperties": true }, "updatedAt": { "type": "integer" } }, "required": ["providers", "inactive", "updatedAt"] }
+      },
+      {
+        "id": "refresh",
+        "description": "Refreshes provider usage. Manual UI refresh passes force=true to bypass the normal debounce.",
+        "params": { "type": "object", "properties": { "provider": { "type": "string", "enum": ["claude", "codex", "gemini", "antigravity", "opencode-go", "kimi", "minimax", "grok", "cursor", "zcode"] }, "force": { "type": "boolean" } } },
+        "result": { "type": "object", "properties": { "providers": { "type": "array", "items": { "type": "object", "additionalProperties": true } }, "inactive": { "type": "object", "additionalProperties": true }, "updatedAt": { "type": "integer" } }, "required": ["providers", "inactive", "updatedAt"] }
+      },
+      {
+        "id": "inactiveUsage",
+        "description": "Expands inactive account snapshots for a Claude or Codex account switcher.",
+        "readOnly": true,
+        "params": { "type": "object", "properties": { "provider": { "type": "string", "enum": ["claude", "codex"] } }, "required": ["provider"] },
+        "result": { "type": "object", "properties": { "providers": { "type": "array", "items": { "type": "object", "additionalProperties": true } }, "inactive": { "type": "object", "additionalProperties": true }, "updatedAt": { "type": "integer" } }, "required": ["providers", "inactive", "updatedAt"] }
+      },
+      {
+        "id": "beginLogin",
+        "description": "Starts native Claude or Codex CLI sign-in in an ownership-proven private profile and returns its pending ID immediately.",
+        "params": { "type": "object", "properties": { "provider": { "type": "string", "enum": ["claude", "codex"] }, "label": { "type": "string", "description": "Optional display label." }, "accountId": { "type": "string", "description": "Existing managed account UUID for reauthentication." }, "copyLink": { "type": "boolean", "description": "Capture a trusted Claude authorize URL instead of opening its browser." } }, "required": ["provider"] },
+        "result": { "type": "object", "properties": { "id": { "type": "string" }, "provider": { "type": "string", "enum": ["claude", "codex"] }, "accountId": { "description": "Managed UUID or null." }, "status": { "type": "string", "enum": ["pending", "complete", "error", "cancelled"] }, "url": { "description": "Allowlisted authorize URL or null." }, "error": { "description": "Safe error or null." }, "result": { "description": "AccountSummary or null." } }, "required": ["id", "provider", "accountId", "status", "url", "error", "result"] }
+      },
+      {
+        "id": "loginStatus",
+        "description": "Reads pending/completed/error/cancelled sign-in state and an allowlisted authorize URL, if available.",
+        "readOnly": true,
+        "params": { "type": "object", "properties": { "id": { "type": "string" } }, "required": ["id"] },
+        "result": { "type": "object", "properties": { "id": { "type": "string" }, "provider": { "type": "string", "enum": ["claude", "codex"] }, "accountId": { "description": "Managed UUID or null." }, "status": { "type": "string", "enum": ["pending", "complete", "error", "cancelled"] }, "url": { "description": "Allowlisted authorize URL or null." }, "error": { "description": "Safe error or null." }, "result": { "description": "AccountSummary or null." } }, "required": ["id", "provider", "accountId", "status", "url", "error", "result"] }
+      },
+      {
+        "id": "cancelLogin",
+        "description": "Cancels pending native sign-in and removes only its never-saved owned profile. A completed Codex auth write is preserved.",
+        "params": { "type": "object", "properties": { "id": { "type": "string" } }, "required": ["id"] },
+        "result": { "type": "object", "properties": { "id": { "type": "string" }, "provider": { "type": "string", "enum": ["claude", "codex"] }, "accountId": { "description": "Managed UUID or null." }, "status": { "type": "string", "enum": ["pending", "complete", "error", "cancelled"] }, "url": { "description": "Allowlisted authorize URL or null." }, "error": { "description": "Safe error or null." }, "result": { "description": "AccountSummary or null." } }, "required": ["id", "provider", "accountId", "status", "url", "error", "result"] }
+      },
+      {
+        "id": "select",
+        "description": "Selects a saved account for future launches, or null for System default, committing its atomic home pointer with account state.",
+        "params": { "type": "object", "properties": { "provider": { "type": "string", "enum": ["claude", "codex"] }, "accountId": { "description": "Managed UUID or null for System default." } }, "required": ["provider", "accountId"] },
+        "result": { "type": "object", "properties": { "accounts": { "type": "array", "items": { "type": "object", "additionalProperties": true } }, "active": { "type": "object", "properties": { "claude": {}, "codex": {} }, "required": ["claude", "codex"] }, "systemDefault": { "type": "object", "properties": { "claude": { "type": "object", "additionalProperties": true }, "codex": { "type": "object", "additionalProperties": true } }, "required": ["claude", "codex"] }, "pendingLogin": {}, "staleSessions": { "type": "array", "items": { "type": "object", "additionalProperties": true } }, "configWarnings": { "type": "array", "items": { "type": "object", "properties": { "provider": { "type": "string", "enum": ["codex"] }, "accountId": { "description": "Managed UUID or null." }, "kind": { "type": "string", "enum": ["source-missing", "source-empty", "source-unreadable", "sync-failed"] }, "message": { "type": "string" } }, "required": ["provider", "accountId", "kind", "message"], "additionalProperties": false } }, "preferences": { "type": "object", "additionalProperties": true }, "revision": { "type": "integer" } }, "required": ["accounts", "active", "systemDefault", "pendingLogin", "staleSessions", "configWarnings", "preferences", "revision"] }
+      },
+      {
+        "id": "remove",
+        "description": "Removes an account only after confirmation, clearing its active pointer first and retaining the account if owned-home deletion fails.",
+        "destructive": true,
+        "confirm": "Remove this managed provider account and its private local sign-in?",
+        "describe": "describeRemove",
+        "params": { "type": "object", "properties": { "provider": { "type": "string", "enum": ["claude", "codex"] }, "accountId": { "type": "string" }, "yes": { "type": "boolean", "description": "Skip confirmation when the caller is authorized to do so." } }, "required": ["provider", "accountId"] },
+        "result": { "type": "object", "properties": { "accounts": { "type": "array", "items": { "type": "object", "additionalProperties": true } }, "active": { "type": "object", "properties": { "claude": {}, "codex": {} }, "required": ["claude", "codex"] }, "systemDefault": { "type": "object", "additionalProperties": true }, "pendingLogin": {}, "staleSessions": { "type": "array", "items": { "type": "object", "additionalProperties": true } }, "configWarnings": { "type": "array", "items": { "type": "object", "properties": { "provider": { "type": "string", "enum": ["codex"] }, "accountId": { "description": "Managed UUID or null." }, "kind": { "type": "string", "enum": ["source-missing", "source-empty", "source-unreadable", "sync-failed"] }, "message": { "type": "string" } }, "required": ["provider", "accountId", "kind", "message"], "additionalProperties": false } }, "preferences": { "type": "object", "additionalProperties": true }, "revision": { "type": "integer" } }, "required": ["accounts", "active", "systemDefault", "pendingLogin", "staleSessions", "configWarnings", "preferences", "revision"] }
+      },
+      {
+        "id": "describeRemove",
+        "description": "Returns provider-specific removal confirmation text; null means no destructive operation is available.",
+        "readOnly": true,
+        "params": { "type": "object", "properties": { "provider": { "type": "string", "enum": ["claude", "codex"] }, "accountId": { "type": "string" } }, "required": ["provider", "accountId"] },
+        "result": { "description": "Provider-specific confirmation question, or null." }
+      },
+      {
+        "id": "setPreferences",
+        "description": "Persists usage presentation and Claude/Codex restart-confirmation preferences.",
+        "params": { "type": "object", "properties": { "mode": { "type": "string", "enum": ["compact", "detailed"] }, "direction": { "type": "string", "enum": ["used", "remaining"] }, "hidden": { "type": "boolean" }, "visibleProviders": { "type": "array", "items": { "type": "string", "enum": ["claude", "codex", "gemini", "antigravity", "opencode-go", "kimi", "minimax", "grok", "cursor", "zcode"] } }, "density": { "type": "string", "enum": ["normal", "icons"] }, "claudeSwitchPolicy": { "type": "string", "enum": ["ask", "always", "never"] }, "skipCodexResetConfirm": { "type": "boolean" } } },
+        "result": {
+          "type": "object",
+          "properties": {
+            "accounts": { "type": "array", "items": { "type": "object", "additionalProperties": true } },
+            "active": { "type": "object", "properties": { "claude": {}, "codex": {} }, "required": ["claude", "codex"] },
+            "systemDefault": { "type": "object", "additionalProperties": true },
+            "pendingLogin": {},
+            "staleSessions": { "type": "array", "items": { "type": "object", "additionalProperties": true } },
+            "preferences": {
+              "type": "object",
+              "properties": {
+                "mode": { "type": "string", "enum": ["compact", "detailed"] },
+                "direction": { "type": "string", "enum": ["used", "remaining"] },
+                "hidden": { "type": "boolean" },
+                "visibleProviders": { "type": "array", "items": { "type": "string" } },
+                "density": { "type": "string", "enum": ["normal", "icons"] },
+                "claudeSwitchPolicy": { "type": "string", "enum": ["ask", "always", "never"] },
+                "skipCodexResetConfirm": { "type": "boolean" }
+              }
+            },
+            "configWarnings": { "type": "array", "items": { "type": "object", "properties": { "provider": { "type": "string", "enum": ["codex"] }, "accountId": { "description": "Managed UUID or null." }, "kind": { "type": "string", "enum": ["source-missing", "source-empty", "source-unreadable", "sync-failed"] }, "message": { "type": "string" } }, "required": ["provider", "accountId", "kind", "message"], "additionalProperties": false } },
+            "revision": { "type": "integer" }
+          },
+          "required": ["accounts", "active", "systemDefault", "pendingLogin", "staleSessions", "configWarnings", "preferences", "revision"]
+        }
+      },
+      {
+        "id": "uiState",
+        "description": "Reads daemon-owned transient Usage popover state, which resets on daemon restart.",
+        "readOnly": true,
+        "params": { "type": "object" },
+        "result": { "type": "object", "properties": { "open": { "type": "boolean" }, "provider": { "description": "Provider ID or null." }, "expanded": { "description": "Claude, Codex, or null." }, "settingsSection": { "description": "Settings section ID or null." } }, "required": ["open", "provider", "expanded", "settingsSection"] }
+      },
+      {
+        "id": "setUiState",
+        "description": "Patches daemon-owned transient Usage and account-switcher state.",
+        "params": { "type": "object", "properties": { "open": { "type": "boolean" }, "provider": { "description": "Provider ID or null." }, "expanded": { "description": "Claude, Codex, or null." }, "settingsSection": { "description": "Settings section ID or null." } } },
+        "result": { "type": "object", "properties": { "open": { "type": "boolean" }, "provider": { "description": "Provider ID or null." }, "expanded": { "description": "Claude, Codex, or null." }, "settingsSection": { "description": "Settings section ID or null." } }, "required": ["open", "provider", "expanded", "settingsSection"] }
+      },
+      {
+        "id": "sessionHome",
+        "description": "Reads an existing session's recorded effective provider home without preparing a launch or changing account selection. Returns null fields when no provider-home record exists.",
+        "readOnly": true,
+        "params": { "type": "object", "properties": { "session": { "type": "string" } }, "required": ["session"] },
+        "result": { "type": "object", "properties": { "provider": { "description": "claude, codex, or null when no record exists." }, "home": { "description": "Absolute recorded effective provider home, or null when no record exists." } }, "required": ["provider", "home"] }
+      },
+      {
+        "id": "prepare",
+        "description": "Required pre-spawn account preparation. Resolves home provenance and safely bridges one verified Codex rollout for a resume before returning the launch environment and actual account identity.",
+        "params": { "type": "object", "properties": { "agent": { "type": "string" }, "sessionId": { "type": "string" }, "worktreeId": { "type": "string" }, "cwd": { "type": "string" }, "homeOverrides": { "type": "object", "properties": { "claude": { "type": "object", "properties": { "value": {}, "source": { "type": "string", "enum": ["explicit", "inherited", "injected", "absent"] } }, "required": ["value", "source"] }, "codex": { "type": "object", "properties": { "value": {}, "source": { "type": "string", "enum": ["explicit", "inherited", "injected", "absent"] } }, "required": ["value", "source"] } }, "required": ["claude", "codex"] }, "resume": { "type": "object", "properties": { "sourceSessionId": { "type": "string" }, "providerSession": { "type": "object", "properties": { "id": { "type": "string" }, "transcriptPath": { "description": "Absolute captured Codex rollout path or null." } }, "required": ["id", "transcriptPath"], "additionalProperties": false } }, "required": ["sourceSessionId", "providerSession"], "additionalProperties": false } }, "required": ["agent", "sessionId", "worktreeId", "cwd", "homeOverrides"] },
+        "result": { "type": "object", "properties": { "env": { "type": "object", "additionalProperties": true }, "shellInit": { "description": "Absolute private path to a generated shell init file, or null." }, "account": { "description": "Actual resolved account identity, or null." }, "resumeTranscriptPath": { "type": "string", "description": "Absolute verified target rollout path for Codex resume preparation, when present." } }, "required": ["env", "shellInit", "account"] }
+      },
+      {
+        "id": "restart",
+        "description": "Restarts only stale recorded sessions at the given selection revision; busy Claude sessions queue against that exact target and revision.",
+        "params": { "type": "object", "properties": { "sessions": { "type": "array", "items": { "type": "string" } }, "selectionRevision": { "type": "integer", "minimum": 0 }, "yes": { "type": "boolean" } }, "required": ["sessions", "selectionRevision"] },
+        "result": { "type": "object", "properties": { "accounts": { "type": "array", "items": { "type": "object", "additionalProperties": true } }, "active": { "type": "object", "properties": { "claude": {}, "codex": {} }, "required": ["claude", "codex"] }, "systemDefault": { "type": "object", "additionalProperties": true }, "pendingLogin": {}, "staleSessions": { "type": "array", "items": { "type": "object", "additionalProperties": true } }, "configWarnings": { "type": "array", "items": { "type": "object", "properties": { "provider": { "type": "string", "enum": ["codex"] }, "accountId": { "description": "Managed UUID or null." }, "kind": { "type": "string", "enum": ["source-missing", "source-empty", "source-unreadable", "sync-failed"] }, "message": { "type": "string" } }, "required": ["provider", "accountId", "kind", "message"], "additionalProperties": false } }, "preferences": { "type": "object", "additionalProperties": true }, "revision": { "type": "integer" } }, "required": ["accounts", "active", "systemDefault", "pendingLogin", "staleSessions", "configWarnings", "preferences", "revision"] }
+      },
+      {
+        "id": "keep",
+        "description": "Keeps only stale recorded sessions at the given selection revision on their original accounts.",
+        "params": { "type": "object", "properties": { "sessions": { "type": "array", "items": { "type": "string" } }, "selectionRevision": { "type": "integer", "minimum": 0 } }, "required": ["sessions", "selectionRevision"] },
+        "result": { "type": "object", "properties": { "accounts": { "type": "array", "items": { "type": "object", "additionalProperties": true } }, "active": { "type": "object", "properties": { "claude": {}, "codex": {} }, "required": ["claude", "codex"] }, "systemDefault": { "type": "object", "additionalProperties": true }, "pendingLogin": {}, "staleSessions": { "type": "array", "items": { "type": "object", "additionalProperties": true } }, "configWarnings": { "type": "array", "items": { "type": "object", "properties": { "provider": { "type": "string", "enum": ["codex"] }, "accountId": { "description": "Managed UUID or null." }, "kind": { "type": "string", "enum": ["source-missing", "source-empty", "source-unreadable", "sync-failed"] }, "message": { "type": "string" } }, "required": ["provider", "accountId", "kind", "message"], "additionalProperties": false } }, "preferences": { "type": "object", "additionalProperties": true }, "revision": { "type": "integer" } }, "required": ["accounts", "active", "systemDefault", "pendingLogin", "staleSessions", "configWarnings", "preferences", "revision"] }
+      },
+      {
+        "id": "ingestClaude",
+        "description": "Accepts the authenticated session-info Claude rate_limits payload only for the recorded active Claude home; provider identity is derived from required preparation, never the payload.",
+        "params": { "type": "object", "properties": { "session": { "type": "string" }, "configDir": { "type": "string" }, "payload": { "type": "object", "additionalProperties": true } }, "required": ["session", "configDir", "payload"] },
+        "result": { "type": "boolean" }
+      },
+      {
+        "id": "credentialStatus",
+        "description": "Returns configured/readable status for supported usage credentials without returning credential values.",
+        "readOnly": true,
+        "params": { "type": "object" },
+        "result": { "type": "array", "items": { "type": "object", "properties": { "provider": { "type": "string" }, "kind": { "type": "string" }, "configured": { "type": "boolean" }, "readable": { "type": "boolean" } }, "required": ["provider", "kind", "configured", "readable"] } }
+      },
+      {
+        "id": "setCredential",
+        "description": "Sets a supported provider credential. Values are accepted from a protected file or stdin by the CLI and are never returned.",
+        "params": { "type": "object", "properties": { "provider": { "type": "string", "enum": ["minimax", "opencode-go", "zcode"] }, "kind": { "type": "string" }, "value": { "type": "string", "description": "Secret; never echoed or returned." } }, "required": ["provider", "kind", "value"] },
+        "result": { "type": "object", "properties": { "provider": { "type": "string" }, "kind": { "type": "string" }, "configured": { "type": "boolean" }, "readable": { "type": "boolean" } }, "required": ["provider", "kind", "configured", "readable"] }
+      },
+      {
+        "id": "clearCredential",
+        "description": "Clears one supported provider credential without changing provider-native login files.",
+        "params": { "type": "object", "properties": { "provider": { "type": "string", "enum": ["minimax", "opencode-go", "zcode"] }, "kind": { "type": "string" } }, "required": ["provider", "kind"] },
+        "result": { "type": "object", "properties": { "provider": { "type": "string" }, "kind": { "type": "string" }, "configured": { "type": "boolean" }, "readable": { "type": "boolean" } }, "required": ["provider", "kind", "configured", "readable"] }
+      },
+      {
+        "id": "describeReset",
+        "description": "Returns the Codex reset-credit confirmation action, or null when the skip-confirm preference applies.",
+        "readOnly": true,
+        "params": { "type": "object", "properties": { "idempotencyKey": { "type": "string" }, "expectedScope": { "type": "object", "additionalProperties": true } }, "required": ["idempotencyKey", "expectedScope"] },
+        "result": { "description": "Confirmation question, or null." }
+      },
+      {
+        "id": "consumeResetCredit",
+        "description": "Consumes one Codex reset credit only when the idempotency key and displayed account/revision/offer scope still match.",
+        "destructive": true,
+        "confirm": "Use one rate-limit reset credit for the displayed active Codex account?",
+        "describe": "describeReset",
+        "params": { "type": "object", "properties": { "idempotencyKey": { "type": "string" }, "expectedScope": { "type": "object", "properties": { "accountId": {}, "accountRevision": { "type": "integer", "minimum": 0 }, "offerRevision": { "type": "string" } }, "required": ["accountId", "accountRevision", "offerRevision"] }, "yes": { "type": "boolean" } }, "required": ["idempotencyKey", "expectedScope"] },
+        "result": { "type": "object", "properties": { "outcome": { "type": "string", "enum": ["reset", "nothingToReset", "noCredit", "alreadyRedeemed"] }, "state": { "type": "object", "additionalProperties": true } } }
+      }
+    ],
+    "event": [
+      {
+        "id": "changed",
+        "description": "Account, preference, sign-in, selection, and stale-session state changed; clients refetch the current generation.",
+        "data": { "type": "object", "properties": { "revision": { "type": "integer" } }, "required": ["revision"] }
+      },
+      {
+        "id": "usageChanged",
+        "description": "A secret-free provider usage snapshot changed.",
+        "data": { "type": "object", "properties": { "providers": { "type": "array", "items": { "type": "object", "additionalProperties": true } }, "inactive": { "type": "object", "additionalProperties": true }, "updatedAt": { "type": "integer" } }, "required": ["providers", "inactive", "updatedAt"] }
+      }
+    ],
+    "job": [
+      {
+        "id": "usage-refresh",
+        "description": "Refreshes provider usage only while a UI window is focused and present.",
+        "interval": "15m",
+        "initialDelay": "1s",
+        "timeout": "2m"
+      }
+    ],
+    "setting": [
+      {
+        "id": "gemini-cli-oauth-enabled",
+        "type": "boolean",
+        "title": "Gemini CLI usage",
+        "description": "Opt-in permits using and refreshing Gemini CLI OAuth credentials to read subscription usage. When disabled, Quirky does not read or refresh these credentials.",
+        "default": false
+      }
+    ],
+    "status-bar": [
+      { "id": "usage", "title": "Usage", "order": 30 }
+    ],
+    "view": [
+      { "id": "settings", "title": "AI Provider Accounts" },
+      { "id": "session-accessory", "title": "Account switch" }
+    ],
+    "terminal-accessory": [
+      { "id": "account-switch", "title": "Account switch", "order": 30, "view": "view:quirky.accounts/session-accessory" }
+    ],
+    "overlay": [
+      { "id": "switch-dialog", "title": "Switched to account" }
+    ],
+    "command": [
+      { "id": "open", "title": "Open Accounts and Usage" },
+      { "id": "refresh", "title": "Refresh usage" }
+    ],
+    "cli-command": [
+      { "id": "list", "words": "list", "summary": "list managed accounts and System default identities", "flags": { "provider": { "type": "string", "description": "Limit managed account rows to claude or codex." } }, "methods": ["quirky.accounts/list"] },
+      { "id": "usage", "words": "usage", "summary": "show current provider usage snapshots", "methods": ["quirky.accounts/usage"] },
+      { "id": "refresh", "words": "refresh", "summary": "force-refresh provider usage", "flags": { "provider": { "type": "string", "description": "Optional provider ID; omit to refresh all providers." } }, "methods": ["quirky.accounts/refresh"] },
+      { "id": "inactive-usage", "words": "inactive-usage", "summary": "load inactive Claude or Codex account usage", "flags": { "provider": { "type": "string", "required": true, "description": "Provider whose inactive account snapshots to load." } }, "methods": ["quirky.accounts/inactiveUsage"] },
+      { "id": "add", "words": "add", "summary": "begin official Claude or Codex sign-in in a private account home", "flags": { "provider": { "type": "string", "required": true, "description": "Provider to sign in to." }, "label": { "type": "string", "description": "Optional display label for the managed account." }, "copy-link": { "type": "boolean", "description": "Capture a trusted Claude authorize URL for manual opening." }, "account-id": { "type": "string", "description": "Existing managed UUID to reauthenticate instead of adding an account." } }, "methods": ["quirky.accounts/beginLogin"] },
+      { "id": "login-status", "words": "login-status", "summary": "read sign-in progress and a trusted authorize URL", "flags": { "id": { "type": "string", "required": true, "description": "Pending sign-in request ID returned by accounts add." } }, "methods": ["quirky.accounts/loginStatus"] },
+      { "id": "cancel-login", "words": "cancel-login", "summary": "cancel sign-in without removing a committed Codex auth write", "flags": { "id": { "type": "string", "required": true, "description": "Pending sign-in request ID returned by accounts add." } }, "methods": ["quirky.accounts/cancelLogin"] },
+      { "id": "select", "words": "select", "summary": "select a managed account or System default", "flags": { "provider": { "type": "string", "required": true, "description": "Managed provider to select: claude or codex." }, "account-id": { "type": "string", "description": "Managed account UUID; omit with --system-default for System default." }, "system-default": { "type": "boolean", "description": "Select the provider's inherited System default instead of a managed account." } }, "methods": ["quirky.accounts/select"] },
+      { "id": "remove", "words": "remove", "summary": "remove a managed account after provider-specific confirmation", "flags": { "provider": { "type": "string", "required": true, "description": "Managed provider that owns the account." }, "account-id": { "type": "string", "required": true, "description": "Managed account UUID to remove." } }, "methods": ["quirky.accounts/remove"] },
+      { "id": "describe-remove", "words": "describe-remove", "summary": "show the provider-specific account removal confirmation", "flags": { "provider": { "type": "string", "required": true, "description": "Managed provider that owns the account." }, "account-id": { "type": "string", "required": true, "description": "Managed account UUID to describe." } }, "methods": ["quirky.accounts/describeRemove"] },
+      { "id": "preferences", "words": "preferences", "summary": "read or patch durable usage and switch preferences", "flags": { "patch": { "type": "json", "description": "JSON object of Preferences fields to patch; omit to read current state." } }, "methods": ["quirky.accounts/list", "quirky.accounts/setPreferences"] },
+      { "id": "ui-state", "words": "ui-state", "summary": "read transient Usage popover and switcher state", "methods": ["quirky.accounts/uiState"] },
+      { "id": "ui-state-set", "words": "ui-state-set", "summary": "patch transient Usage popover and switcher state", "flags": { "patch": { "type": "json", "required": true, "description": "JSON object containing transient UI state fields to patch." } }, "methods": ["quirky.accounts/setUiState"] },
+      { "id": "session-home", "words": "session-home", "summary": "read a session's recorded effective provider home", "flags": { "session": { "type": "string", "required": true, "description": "Existing session ID whose provider-home provenance to inspect." } }, "methods": ["quirky.accounts/sessionHome"] },
+      { "id": "prepare", "words": "prepare", "summary": "resolve account identity and launch environment for a provider or shell", "flags": { "agent": { "type": "string", "required": true, "description": "Agent being launched, including claude, codex, or shell." }, "session-id": { "type": "string", "required": true, "description": "Session ID being prepared." }, "worktree-id": { "type": "string", "required": true, "description": "Worktree ID for the session." }, "cwd": { "type": "string", "required": true, "description": "Absolute working directory for the session." }, "home-overrides": { "type": "json", "required": true, "description": "Claude and Codex home values with explicit/inherited/injected/absent provenance." }, "resume": { "type": "json", "description": "Optional JSON object with sourceSessionId and providerSession (id plus transcriptPath or null) for a session resume." } }, "methods": ["quirky.accounts/prepare"] },
+      { "id": "restart", "words": "restart", "summary": "restart stale sessions at an exact account selection revision", "flags": { "session": { "type": "string", "repeatable": true, "required": true, "description": "Stale session ID to restart; repeat for multiple sessions." }, "selection-revision": { "type": "integer", "required": true, "description": "AccountState revision shown with the stale-session choices." } }, "methods": ["quirky.accounts/restart"] },
+      { "id": "keep", "words": "keep", "summary": "keep stale sessions on their original accounts", "flags": { "session": { "type": "string", "repeatable": true, "required": true, "description": "Stale session ID to keep; repeat for multiple sessions." }, "selection-revision": { "type": "integer", "required": true, "description": "AccountState revision shown with the stale-session choices." } }, "methods": ["quirky.accounts/keep"] },
+      { "id": "ingest-claude", "words": "ingest-claude", "summary": "ingest a fixture or authenticated Claude statusline payload for a recorded session", "flags": { "session": { "type": "string", "required": true, "description": "Recorded Claude session ID." }, "config-dir": { "type": "string", "required": true, "description": "Claude config directory reported by the authenticated producer." }, "payload-file": { "type": "string", "required": true, "description": "Path to a JSON statusline payload fixture." } }, "methods": ["quirky.accounts/ingestClaude"] },
+      { "id": "credential-status", "words": "credential-status", "summary": "show configured/readable state for provider usage credentials", "methods": ["quirky.accounts/credentialStatus"] },
+      { "id": "credential-set", "words": "credential-set", "summary": "set a provider usage credential from a protected file or stdin", "flags": { "provider": { "type": "string", "required": true, "description": "Credential-owning usage provider: minimax, opencode-go, or zcode." }, "kind": { "type": "string", "required": true, "description": "Supported credential kind for the selected provider." }, "file": { "type": "string", "description": "Read the secret from this file; never pass it as a flag value." }, "stdin": { "type": "boolean", "description": "Read the secret from standard input." } }, "methods": ["quirky.accounts/setCredential"] },
+      { "id": "credential-clear", "words": "credential-clear", "summary": "clear a provider usage credential", "flags": { "provider": { "type": "string", "required": true, "description": "Credential-owning usage provider: minimax, opencode-go, or zcode." }, "kind": { "type": "string", "required": true, "description": "Supported credential kind to clear." } }, "methods": ["quirky.accounts/clearCredential"] },
+      { "id": "reset-credit", "words": "reset-credit", "summary": "redeem one Codex reset credit bound to the displayed account and offer revision", "flags": { "idempotency-key": { "type": "string", "required": true, "description": "Stable request ID used to make retries idempotent." }, "account-id": { "type": "string", "description": "Displayed managed Codex UUID; omit with --system-default for System default." }, "system-default": { "type": "boolean", "description": "Bind the displayed offer to System default instead of a managed account." }, "account-revision": { "type": "integer", "required": true, "description": "AccountState revision attached to the displayed reset-credit offer." }, "offer-revision": { "type": "string", "required": true, "description": "Offer revision attached to the displayed reset-credit offer." } }, "methods": ["quirky.accounts/consumeResetCredit"] },
+      { "id": "describe-reset", "words": "describe-reset", "summary": "show the Codex reset-credit confirmation action", "flags": { "idempotency-key": { "type": "string", "required": true, "description": "Stable request ID used to bind the redemption attempt." }, "account-id": { "type": "string", "description": "Displayed managed Codex UUID; omit with --system-default for System default." }, "system-default": { "type": "boolean", "description": "Bind the displayed offer to System default instead of a managed account." }, "account-revision": { "type": "integer", "required": true, "description": "AccountState revision attached to the displayed reset-credit offer." }, "offer-revision": { "type": "string", "required": true, "description": "Offer revision attached to the displayed reset-credit offer." } }, "methods": ["quirky.accounts/describeReset"] }
+    ]
+  }
+}

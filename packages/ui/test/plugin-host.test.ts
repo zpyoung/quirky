@@ -151,7 +151,7 @@ async function boot(write: Writer, options: BootOptions = {}) {
       }),
     inModel: (id: string) => {
       const model = host.getState().model!
-      return [...model.sidebarSections, ...model.activityItems, ...model.panels, ...model.views, ...model.overlays, ...model.commands].some((e) => e.id === id)
+      return [...model.sidebarSections, ...model.activityItems, ...model.statusBars, ...model.panels, ...model.views, ...model.overlays, ...model.commands].some((e) => e.id === id)
     },
     waitForLine: (line: string) => waitFor(() => readMarker(marker).includes(line)),
     waitForGone: (id: string) => waitFor(() => !booted.inModel(id) && host.getState().slots[id] === undefined),

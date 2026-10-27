@@ -1,10 +1,10 @@
 # Quirky
 
 Quirky is a memory-efficient rewrite of [Orca](https://github.com/zpyoung/orca) for running coding
-agents in git worktrees. v1 runs on macOS: you add repos, create worktrees, run shells and agents
+agents in git worktrees. Quirky runs on macOS: you add repos, create worktrees, run shells and agents
 in terminals that survive closing the app, see which agents are working, waiting or done, review
 and commit diffs, answer `quirky ask` questions, and run background Claude sessions with no
-terminal. Its daemon and PTY host together use about 43 MB with eight busy terminals
+terminal. The measured v1 daemon and PTY host together used about 43 MB with eight busy terminals
 (`research/memory-probe/quirky-v1-daemon.md`).
 
 ## Try it
@@ -32,9 +32,9 @@ Inside any Quirky terminal, the `quirky` command is on PATH: try `quirky status`
 - **`apps/desktop`:** the Electrobun window.
 - **`prototypes/`:** stack experiments, such as the native Swift shell.
 
-Run the full package, app and plugin suite with `bun run test` (the remote test-host runner).
-Run script tests with `bun test scripts` and static checks with `bun run typecheck`.
-For a single local test file, use `bun test <file>`.
+`bun run test` runs the package, app and plugin suite on the configured remote test host, plus
+macOS-only checks locally. Use `bun test <file>` for a targeted file, `bun test scripts` for the
+runner tests, and `bun run typecheck` for TypeScript.
 
 ### Public plugin UI and grouping APIs
 
@@ -57,6 +57,20 @@ Project groups expose `parentId`. `quirky repo group create <name> --parent <gro
 `quirky repo group set-parent <group> --parent <parent>` manage hierarchy; `--no-parent` clears it.
 Deleting a group deletes its group subtree and releases loose worktree memberships without
 deleting their Git worktrees or metadata.
+
+The built-in `quirky.sidebar-extras` plugin adds cross-repository worktree placement, client-local
+activity windows, a live Source Control dirty indicator, and configurable sidebar separators.
+`quirky sidebar-extras set --workspace-activity-window week` changes the activity window;
+`state`, `projection`, and `dirty` provide JSON readback with `--json`.
+`activate --worktree <id>` records a visit; `activate --clear` clears it.
+Preferences persist per client. Visit and departure stamps are keyed to filesystem-instance
+identity, so replacing a worktree does not inherit its predecessor's recency.
+The separator switch is under Appearance > Window & Sidebar. The original header panel toggles
+remain available alongside the Source Control activity item.
+
+The operator-directed core landing leaves exhaustive parity and browser verification to
+`m2-sidebar-extras-followup`; see [the sidebar specification](docs/quirk/specs/2026-10-27-m2-sidebar-extras/logic.md)
+for that remaining acceptance target.
 
 ## Docs
 

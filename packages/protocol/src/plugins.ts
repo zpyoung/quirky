@@ -1,5 +1,7 @@
 import type { ExitCause, PtyFact, PtyHistoryPage, PtySessionInfo, PtySnapshot, PtySubscription } from './pty'
 import type { ClientRole, QuirkyEvent } from './rpc'
+import type { ToastAction, ToastKind } from './ui'
+import type { SessionLaunch } from './model'
 
 /** Where a plugin was found: shipped with Quirky, or installed by the user. */
 export type PluginSource = 'builtin' | 'installed'
@@ -97,7 +99,11 @@ export type PluginPty = {
   ): Promise<{ pid: number; restored: boolean; cwd: string; cols: number; rows: number }>
   write(sessionId: string, data: string | Uint8Array): void
   resize(sessionId: string, cols: number, rows: number): Promise<void>
-  read(sessionId: string, lines: number): Promise<{ lines: string[]; cols: number; rows: number; alt: boolean }>
+  /**
+   * The visible screen plus up to `lines` of scrollback, as text. `unwrap` joins rows the terminal
+   * wrapped into logical lines; a line that starts above the `lines` cutoff may be cut.
+   */
+  read(sessionId: string, lines: number, options?: { unwrap?: boolean }): Promise<{ lines: string[]; cols: number; rows: number; alt: boolean }>
   /** A `reason` records the exit as requested (cause `killed`) and defaults the signal to SIGKILL. */
   kill(sessionId: string, signal?: string, options?: { reason?: 'killed' }): Promise<void>
   forget(sessionId: string): Promise<void>
@@ -144,6 +150,17 @@ export type PluginNotification = {
   sound?: { file: string | null; volume: number }
   /** Whether the webview shows a toast; defaults to true. */
   toast?: boolean
+  /** The toast's look; defaults to `info`. */
+  kind?: ToastKind
+  /** A new toast with the same key replaces the old one without dismissing it. */
+  key?: string
+  /** Keeps the toast until it is dismissed instead of after six seconds. */
+  persistent?: boolean
+  /** A second line under the body. */
+  detail?: string
+  actions?: ToastAction[]
+  /** A window command to run once when the toast is dismissed. */
+  onDismiss?: { command: string; args?: unknown }
 }
 
 /** The kernel half of launching a session. */
@@ -156,6 +173,8 @@ export type PluginLaunch = {
     worktreeId: string
     agent: string
     envPatch?: Record<string, string | null>
+    /** Absolute path to the trusted plugin shell init file for an interactive shell session. */
+    shellInit?: string
   }): Record<string, string>
   shellArgv(): string[]
   /** True when the configured shell gets Quirky's ready-marker wrapper (zsh or bash). */
@@ -169,6 +188,11 @@ export type PluginLaunch = {
     cwd: string
     agent: string
     prompt?: string
+    /** Replay launch context; absent on create. */
+    record?: SessionLaunch
+    model?: string
+    options?: Record<string, string | boolean>
+    extraArgs?: string
   }): Promise<{ env: Record<string, string | null>; args: string[] }>
 }
 
@@ -184,6 +208,8 @@ export type ClientStream = {
 export type CallerConnection = {
   id: number
   transport: 'websocket' | 'socket'
+  /** Registers transport-neutral cleanup for disconnect, invoking immediately if already closed. */
+  onClose(callback: () => void): () => void
   /** Throws InvalidParams on a socket connection. */
   openStream(): ClientStream
 }
@@ -240,16 +266,27 @@ export type LaunchHookInput = {
   cwd: string
   agent: string
   prompt?: string
+  /** Replay launch context; absent on create. */
+  record?: SessionLaunch
+  model?: string
+  options?: Record<string, string | boolean>
+  extraArgs?: string
   /** Additions from earlier hooks only. */
   env: Readonly<Record<string, string>>
   /** Extra args from earlier hooks. */
   args: readonly string[]
+  /** Deeply frozen JSON-valued arguments accumulated from earlier hooks. */
+  jsonArgs: Readonly<Record<string, Readonly<Record<string, unknown>>>>
 }
 
-/** What a launch hook changes: env additions (null removes a name) and extra agent args. */
-export type LaunchPatch = { env?: Record<string, string | null>; args?: string[] }
+/** What a launch hook changes: env additions, extra agent args and JSON-valued long options. */
+export type LaunchPatch = {
+  env?: Record<string, string | null>
+  args?: string[]
+  jsonArgs?: Record<string, Record<string, unknown>>
+}
 
-/** Adjusts a session's launch environment and args before the agent starts. */
+/** Adjusts a session's launch environment, args and JSON args before the agent starts. */
 export type LaunchHook = (launch: LaunchHookInput) => LaunchPatch | void | Promise<LaunchPatch | void>
 
 export type JobRunStatus = 'running' | 'ok' | 'failed' | 'timed-out'

@@ -15,6 +15,7 @@ export function PluginSlot({ id, input }: Props) {
   const entry = [
     ...(state.model?.sidebarSections ?? []),
     ...(state.model?.activityItems ?? []),
+    ...(state.model?.statusBars ?? []),
     ...(state.model?.panels ?? []),
     ...(state.model?.views ?? []),
     ...(state.model?.overlays ?? [])
@@ -38,9 +39,14 @@ export function PluginSlot({ id, input }: Props) {
     }
   }, [host, id, input, plugin, module])
 
+  const statusBar = entry?.kind === 'status-bar'
   return (
-    <section className="plugin-slot" data-plugin-slot={id}>
-      {slot.status === 'loading' && (
+    <section
+      className={`plugin-slot${statusBar ? ' plugin-status-bar-slot' : ''}`}
+      data-plugin-slot={id}
+      {...(statusBar && entry ? { 'aria-label': entry.title } : {})}
+    >
+      {!statusBar && slot.status === 'loading' && (
         <header className="plugin-slot-head">
           <span className="plugin-slot-title">{entry?.title ?? id}</span>
           <span className="muted">Loading</span>

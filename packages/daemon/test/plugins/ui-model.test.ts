@@ -78,6 +78,35 @@ describe('slots', () => {
     })
   })
 
+  test('status bars sort by order then ID and only effective override owners appear', () => {
+    const base = withStatus(decl('status-bar', 'quirky.accounts', 'usage', { title: 'Usage', order: 10 }), 'overridden')
+    const override = decl(
+      'status-bar',
+      'acme.status',
+      'usage',
+      { title: 'Account', order: 5 },
+      { id: 'status-bar:quirky.accounts/usage', override: true }
+    )
+    const { model } = build(
+      [
+        base,
+        override,
+        decl('status-bar', 'acme.zed', 'late', { title: 'Late', order: 20 }),
+        decl('status-bar', 'acme.alpha', 'early', { title: 'Early', order: 20 }),
+        withStatus(decl('status-bar', 'acme.disabled', 'hidden', { title: 'Hidden' }), 'disabled')
+      ],
+      [withUi('acme.status'), withUi('acme.zed'), withUi('acme.alpha'), withUi('acme.disabled')]
+    )
+
+    expect(model.statusBars.map(({ id, order, plugin }) => [id, order, plugin])).toEqual([
+      ['status-bar:quirky.accounts/usage', 5, 'acme.status'],
+      ['status-bar:acme.alpha/early', 20, 'acme.alpha'],
+      ['status-bar:acme.zed/late', 20, 'acme.zed']
+    ])
+    expect(model.modules['acme.status']?.provides).toEqual(['status-bar:quirky.accounts/usage'])
+    expect(model.modules['quirky.accounts']).toBeUndefined()
+  })
+
   test('panels sort by order then id; views by id with title defaulting to the name', () => {
     const { model } = build(
       [
@@ -622,7 +651,7 @@ describe('warnings', () => {
       ],
       [plugin('acme.bare')]
     )
-    expect(warnings.get('acme.bare')?.map(({ level }) => level)).toEqual(['warning'])
+    expect(warnings.get('acme.bare')).toMatchObject([{ level: 'warning' }])
   })
 
   test('a plugin whose only code-backed entry is an overlay and has no ui is warned', () => {

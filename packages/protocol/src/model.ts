@@ -198,6 +198,14 @@ export type AgentStatusSummary = {
 /** Why a session is marked unread: an agent finished, a terminal bell rang, or a program posted a notification. */
 export type SessionUnread = 'agent' | 'bell' | 'notification'
 
+/** A chip a plugin attaches to a session's tab; clicking it runs `command` with `args` when `command` is set. */
+export type SessionBadge = {
+  label: string
+  tooltip?: string
+  command?: string
+  args?: unknown
+}
+
 export type Session = {
   id: string
   kind: SessionKind
@@ -225,8 +233,12 @@ export type Session = {
   resumedFrom?: string | null
   /** Null or absent until the agent-status plugin has evidence; the coarse `status` then stands alone. */
   agentStatus?: AgentStatusSummary | null
+  /** Lowercase, unique among sessions that have not exited; scripts can pass it wherever a session ID is taken. */
+  name?: string | null
   /** Why the session is marked unread; null or absent when it is not. */
   unread?: SessionUnread | null
+  /** Chips on the session's tab, keyed `<plugin id>/<key>`; absent when there are none. */
+  badges?: Record<string, SessionBadge>
 }
 
 export type GitFileStatus = {

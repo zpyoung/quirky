@@ -142,6 +142,35 @@ textarea {
   flex-direction: column;
 }
 
+.plugin-status-bar {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 8px;
+  overflow: visible;
+  background: var(--bg-raised);
+}
+
+.plugin-status-bar .plugin-status-bar-slot {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: row;
+  align-items: center;
+  min-width: 0;
+}
+
+.plugin-status-bar-slot .plugin-slot-body {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  min-width: 0;
+}
+
+.plugin-status-bar-slot .plugin-slot-error {
+  margin: 0;
+}
+
 .layout {
   flex: 1;
   min-height: 0;
@@ -936,6 +965,14 @@ textarea {
   border-left-color: var(--danger);
 }
 
+.toast-success {
+  border-left-color: var(--green);
+}
+
+.toast-warning {
+  border-left-color: var(--amber);
+}
+
 .toast-title {
   font-weight: 600;
 }
@@ -943,6 +980,18 @@ textarea {
 .toast-body {
   color: var(--muted);
   overflow-wrap: anywhere;
+}
+
+.toast-detail {
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+.toast-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
 }
 
 .toast .icon-button {

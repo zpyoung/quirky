@@ -59,19 +59,21 @@ function makeModel(parts: Partial<UiModel> = {}): UiModel {
   const model: UiModel = {
     sidebarSections: [],
     activityItems: [],
+    statusBars: [],
     panels: [],
     views: [],
     overlays: [],
     commands: [],
     keybindings: [],
     settings: [],
+    menuItems: [],
     themes: [DEFAULT_THEME],
     theme: { chosen: 'default', active: 'default' },
     modules: {},
     ...parts
   }
   if (parts.modules) return model
-  const entries = [...model.sidebarSections, ...model.activityItems, ...model.panels, ...model.views, ...model.overlays, ...model.commands]
+  const entries = [...model.sidebarSections, ...model.activityItems, ...model.statusBars, ...model.panels, ...model.views, ...model.overlays, ...model.commands]
   for (const entry of entries) {
     const module = (model.modules[entry.plugin] ??= { url: urlOf(entry.plugin), provides: [] })
     module.provides.push(entry.id)
@@ -256,6 +258,7 @@ function recording(ids: string[], implementation: (id: string) => unknown = () =
 const NOTES = 'acme.notes'
 const LIST = 'sidebar-section:acme.notes/list'
 const PAGE = 'view:acme.notes/page'
+const STATUS = 'status-bar:acme.notes/usage'
 const OPEN = 'command:acme.notes/open'
 const key = (code: string, mods: Partial<Record<'metaKey' | 'ctrlKey' | 'altKey' | 'shiftKey', boolean>> = {}) => ({
   key: code.replace('Key', ''),
@@ -298,6 +301,28 @@ test('SC-7: mounting a section reuses the module the window already loaded and m
   expect((el as Fake).text).toBe('3 notes')
   expect(state(t).plugins[NOTES]).toEqual({ state: 'active' })
   expect(cleanups).toBe(0)
+})
+
+test('SC-7: mounting a status bar and activity item loads their owning module and reports both slots mounted', async () => {
+  const activity = slot('activity-item', NOTES, 'today')
+  const t = setup(makeModel({ statusBars: [slot('status-bar', NOTES, 'usage')], activityItems: [activity] }))
+  const { module, record } = recording([STATUS, activity.id])
+  t.useModule(NOTES, module)
+  await t.host.refresh()
+
+  const unmountStatus = t.host.mount(STATUS, element())
+  const unmountActivity = t.host.mount(activity.id, element())
+  await settled(t, STATUS)
+  await settled(t, activity.id)
+
+  expect(state(t).slots[STATUS]).toEqual({ status: 'mounted' })
+  expect(state(t).slots[activity.id]).toEqual({ status: 'mounted' })
+  expect(record.activations).toBe(1)
+  expect(t.imports).toEqual([urlOf(NOTES)])
+  unmountStatus()
+  unmountActivity()
+  expect(state(t).slots[STATUS]).toBeUndefined()
+  expect(state(t).slots[activity.id]).toBeUndefined()
 })
 
 test('SC-7: concurrent mounts and commands share one import and one activation', async () => {

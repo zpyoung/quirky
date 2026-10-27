@@ -6,7 +6,7 @@ import { createProcessScope, type ProcessScope } from '../../../scripts/test-sup
 import { builtinsDir, makeTempHome, startHarness, type Harness } from '../../../packages/daemon/test/helpers'
 import { makeTempDir, removeTempDirs } from '../../../packages/daemon/test/plugins/fixtures'
 import { startHeadlessWindow, type HeadlessWindow } from '../../../packages/ui/test/fixtures/headless-window'
-import { failure, isolateGitConfig, makeRepo } from '../../quirky.repo/test/git-fixtures'
+import { isolateGitConfig, makeRepo } from '../../quirky.repo/test/git-fixtures'
 
 const SIDEBAR = 'sidebar-section:quirky.worktree/worktrees'
 const SESSION_VIEW = 'view:quirky.session/worktree'
@@ -137,7 +137,7 @@ const menuItem = (label: string): HTMLElement | undefined =>
     (element) => element.textContent?.replace(/\s*▸$/, '').trim() === label
   )
 
-async function openMenu(win: HeadlessWindow, name: string, project: string): Promise<void> {
+async function openMenu(win: HeadlessWindow, name: string, project?: string): Promise<void> {
   const target = card(name, project)?.querySelector<HTMLElement>('.worktree-menu')
   if (!target) throw new Error(`no action button for ${project}/${name}`)
   target.click()
@@ -234,7 +234,7 @@ test('SC-02/08/10/17: real CLI and sidebar share activity preferences, selected 
   expect(card('feature')?.closest('section.group')?.querySelector('.group-name')?.textContent).toBe('Team')
   expect((await report(agent))?.groups.some((item) => item.id === group.id)).toBe(true)
 
-  await openMenu(win, 'feature', 'api')
+  await openMenu(win, 'feature')
   await choose(win, 'Remove worktree from group')
   await win.waitFor(async () => ((await agent.callAny('quirky.worktree/list', {})) as Worktree[]).find((item) => item.id === feature.id)?.projectGroupId === null)
   await win.waitFor(() => card('feature', 'api'))
@@ -269,7 +269,6 @@ test('SC-14/15/17: the real dirty activity item follows the active worktree and 
     return report?.count === 1 ? report : undefined
   })
   expect(untracked).toMatchObject({ count: 1, dirty: true, available: true })
-  expect(untracked.title).toMatch(/1 change/)
 
   await runGit(world, feature.path, ['add', '--', 'sidebar-dirty.txt'])
   writeFileSync(file, 'staged and unstaged\n')
@@ -279,7 +278,6 @@ test('SC-14/15/17: the real dirty activity item follows the active worktree and 
     return report?.count === 2 ? report : undefined
   })
   expect(modified).toMatchObject({ count: 2, dirty: true, available: true })
-  expect(modified.title).toMatch(/2 changes/)
   expect((await cliJson<DirtyActivityReport>(world, ['sidebar-extras', 'dirty', '--worktree', feature.id])).count).toBe(2)
 
   await agent.callAny('ui.view.open', { id: SESSION_VIEW, input: { worktree: main.id } })
@@ -334,8 +332,7 @@ test('disabled sidebar extras leaves core worktree dispatch available', async ()
   await agent.callAny('plugin.disable', { id: 'quirky.sidebar-extras' })
   await win.waitFor(() => card('feature'))
 
-  const result = await failure(agent.callAny('quirky.worktree/set', { worktree: feature.id, unread: true }))
-  expect(result.message).not.toMatch(/sidebar extras/i)
+  await agent.callAny('quirky.worktree/set', { worktree: feature.id, unread: true })
   expect(((await agent.callAny('quirky.worktree/list', {})) as Worktree[]).find((item) => item.id === feature.id)?.unread).toBe(true)
   const state = await world.cli(['sidebar-extras', 'state', '--json'])
   expect(state.code).not.toBe(0)

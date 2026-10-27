@@ -60,6 +60,9 @@ async function wire(options: { mount?: boolean; settings?: Record<string, unknow
       ...daemon.handlers,
       'quirky.terminal/quickCommands': () => ({ commands: options.commands ?? [GLOBAL_HELLO, REPO_TEST] }),
       'quirky.terminal/runQuickCommand': () => ({}),
+      'quirky.terminal/paneOf': (params) => ({ workspace: 'wt-main', tab: 'tab-1', pane: params.pane }),
+      'quirky.terminal/focusContext': (params) => ({ workspace: params.workspace ?? null }),
+      'quirky.terminal/openSession': () => ({ workspace: daemon.current, pane: 'pane-1' }),
       'quirky.worktree/resolve': () => ({ repoId: 'repo-1' }),
       'quirky.terminal/floating': () => floating,
       'quirky.terminal/setFloating': (params) => {
@@ -167,6 +170,55 @@ describe('window commands route to the focused workspace', () => {
     await wired.run('close-pane')
     await wired.run('close-pane', { pane: 'pane-2' })
     expect(wired.calls('closePane').map((params) => params.pane)).toEqual(['pane-3', 'pane-2'])
+  })
+
+  test('focus-pane from another panel opens the terminal view and focuses, flashes and scrolls the exact pane', async () => {
+    const wired = await track()
+    const panel = document.createElement('button')
+    document.body.appendChild(panel)
+    await act(async () => void panel.focus())
+
+    expect(await wired.run('focus-pane', { pane: 'pane-1', workspace: 'wt-main' })).toEqual({ ok: true })
+    expect(wired.fake.opened.at(-1)).toEqual({ id: VIEW, input: { worktree: 'wt-main' } })
+    expect(wired.calls('focusPane')).toEqual([{ pane: 'pane-1' }])
+    const pane = wired.element.querySelector<HTMLElement>('[data-pane="pane-1"]')!
+    expect(pane.querySelector('[data-focus-flash]')).not.toBeNull()
+    const term = terminals.find((entry) => pane.contains(entry.element ?? null))
+    if (!term) throw new Error('focused pane has no terminal')
+    await act(async () => {
+      term.write(Array.from({ length: 120 }, (_, line) => `line ${line}\r\n`).join(''))
+    })
+    const written = Promise.withResolvers<void>()
+    term.write('', written.resolve)
+    await written.promise
+    const bottom = term.buffer.active.baseY
+    expect(bottom).toBeGreaterThan(0)
+    term.scrollToLine(0)
+    expect(term.buffer.active.viewportY).toBe(0)
+
+    await wired.run('focus-pane', { pane: 'pane-1', workspace: 'wt-main' })
+    const textarea = term.textarea
+    if (!textarea) throw new Error('focused pane terminal has no textarea')
+    expect(document.activeElement).toBe(textarea)
+    expect(term.buffer.active.viewportY).toBe(term.buffer.active.baseY)
+  })
+
+  test('open-session delegates terminal focus to the public focus-pane command', async () => {
+    const wired = await track()
+    const executions: { command: string; args: unknown }[] = []
+    wired.fake.context.executeCommand = async (command, args) => {
+      executions.push({ command, args })
+      const handler = wired.fake.provided.get(command)
+      if (!handler) throw new Error(`command ${command} is not provided`)
+      await handler(args)
+    }
+
+    expect(await wired.run('open-session', { session: 's-1', workspace: 'wt-main' })).toEqual({ ok: true })
+    expect(wired.calls('openSession')).toEqual([{ session: 's-1', workspace: 'wt-main' }])
+    expect(executions).toEqual([
+      { command: 'command:quirky.terminal/focus-pane', args: { pane: 'pane-1', workspace: 'wt-main' } }
+    ])
+    expect(wired.calls('focusPane')).toEqual([{ pane: 'pane-1' }])
   })
 
   test('the inline fields and the switcher open: rename-tab, set-pane-title, recent-tab', async () => {

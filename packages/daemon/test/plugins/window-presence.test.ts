@@ -29,7 +29,7 @@ function makeLayout(options: { awayMs?: number } = {}) {
   const layout = new LayoutService({
     plugins: { contributions: () => [], addWarning: () => {} },
     store: { getUiState: () => null, setUiState: () => {} },
-    ui: { contributions: () => ({ sidebarSections: [], panels: [], views: [], overlays: [], commands: [], activityItems: [] }) as unknown as UiModel },
+    ui: { contributions: () => ({ sidebarSections: [], statusBars: [], activityItems: [], panels: [], views: [], overlays: [], commands: [] }) as unknown as UiModel },
     clients: () => conns,
     broadcast: (event) => broadcasts.push(event),
     sendTo: () => {},

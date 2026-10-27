@@ -45,6 +45,7 @@ export function App() {
 
   const panel = layout.panel !== null && model?.panels.some((candidate) => candidate.id === layout.panel) ? layout.panel : null
   const hasActivityItems = (model?.activityItems.length ?? 0) > 0
+  const statusBars = model?.statusBars ?? []
   return (
     <div className="app">
       <ConnectionBanner />
@@ -56,6 +57,11 @@ export function App() {
         {hasActivityItems && <ActivityItems />}
         {panel !== null && <PanelColumn id={panel} />}
       </div>
+      {statusBars.length > 0 && (
+        <div className="plugin-status-bar" data-region="status-bar" aria-label="Plugin status bar">
+          {statusBars.map((entry) => <PluginSlot key={entry.id} id={entry.id} />)}
+        </div>
+      )}
       <OverlayLayer />
       {paletteOpen && <CommandPalette onClose={() => setPaletteOpen(false)} />}
       <Toasts />

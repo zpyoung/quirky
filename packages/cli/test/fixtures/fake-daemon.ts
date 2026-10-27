@@ -71,12 +71,14 @@ export class FakeDaemon {
   readonly ui: UiModel = {
     sidebarSections: [],
     activityItems: [],
+    statusBars: [],
     panels: [],
     views: [],
     overlays: [],
     commands: [],
     keybindings: [],
     settings: [],
+    menuItems: [],
     themes: [DEFAULT_THEME],
     theme: { chosen: 'default', active: 'default' },
     modules: {}
@@ -296,6 +298,8 @@ export class FakeDaemon {
         ? this.ui.sidebarSections
         : kind === 'activity-item'
           ? this.ui.activityItems
+        : kind === 'status-bar'
+          ? this.ui.statusBars
           : kind === 'panel'
             ? this.ui.panels
             : kind === 'overlay'

@@ -108,6 +108,754 @@
         }
       },
       {
+        "id": "explain",
+        "description": "Why a session has its script state: the status row and the evidence behind it, the screen rule that matched, and which of them decided.",
+        "readOnly": true,
+        "params": {
+          "type": "object",
+          "properties": {
+            "session": {
+              "type": "string",
+              "description": "The session ID or name."
+            },
+            "at": {
+              "type": "number",
+              "description": "Judge the row's freshness at this time, in ms since the epoch; defaults to now."
+            }
+          },
+          "required": [
+            "session"
+          ]
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "session": {
+              "type": "string"
+            },
+            "name": {
+              "description": "Null when absent."
+            },
+            "agent": {
+              "description": "Null when absent."
+            },
+            "state": {
+              "type": "string",
+              "enum": [
+                "working",
+                "blocked",
+                "idle",
+                "unknown",
+                "exited"
+              ],
+              "description": "The script state."
+            },
+            "kind": {
+              "type": "string",
+              "enum": [
+                "approval",
+                "question"
+              ],
+              "description": "Present when the state is blocked."
+            },
+            "decidedBy": {
+              "type": "string",
+              "enum": [
+                "session",
+                "rule",
+                "row",
+                "none"
+              ]
+            },
+            "row": {
+              "description": "The session's status row as it reads now; null when it has none.",
+              "properties": {
+                "state": {
+                  "type": "string",
+                  "enum": [
+                    "working",
+                    "waiting",
+                    "blocked",
+                    "done"
+                  ]
+                },
+                "display": {
+                  "type": "string"
+                },
+                "label": {
+                  "type": "string"
+                },
+                "detail": {
+                  "type": "string"
+                },
+                "source": {
+                  "type": "string",
+                  "enum": [
+                    "hook",
+                    "replay",
+                    "title",
+                    "program-status",
+                    "inference"
+                  ]
+                },
+                "fresh": {
+                  "type": "boolean",
+                  "description": "Evidence under 30 minutes old and not restored unconfirmed."
+                },
+                "ageMs": {
+                  "type": "number"
+                },
+                "because": {
+                  "description": "The evidence that last changed the row; null for a row stored before explain existed.",
+                  "properties": {
+                    "source": {
+                      "type": "string",
+                      "enum": [
+                        "hook",
+                        "replay",
+                        "title",
+                        "program-status",
+                        "inference"
+                      ]
+                    },
+                    "rule": {
+                      "type": "string"
+                    },
+                    "event": {
+                      "type": "string"
+                    },
+                    "at": {
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "source",
+                    "rule",
+                    "at"
+                  ]
+                },
+                "lead": {
+                  "type": "object",
+                  "properties": {
+                    "state": {
+                      "type": "string",
+                      "enum": [
+                        "working",
+                        "waiting",
+                        "blocked",
+                        "done"
+                      ]
+                    },
+                    "since": {
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "state",
+                    "since"
+                  ]
+                },
+                "children": {
+                  "type": "object",
+                  "properties": {
+                    "agent": {
+                      "type": "number"
+                    },
+                    "shell": {
+                      "type": "number"
+                    },
+                    "cron": {
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "agent",
+                    "shell",
+                    "cron"
+                  ]
+                }
+              },
+              "required": [
+                "state",
+                "display",
+                "label",
+                "detail",
+                "source",
+                "fresh",
+                "ageMs",
+                "because",
+                "lead",
+                "children"
+              ]
+            },
+            "screen": {
+              "type": "object",
+              "properties": {
+                "origin": {
+                  "description": "Where a rule set comes from; null when absent.",
+                  "properties": {
+                    "kind": {
+                      "type": "string",
+                      "enum": [
+                        "user",
+                        "plugin",
+                        "built-in"
+                      ]
+                    },
+                    "path": {
+                      "type": "string",
+                      "description": "The file, for a user or built-in set."
+                    },
+                    "plugin": {
+                      "type": "string"
+                    },
+                    "contribution": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "kind"
+                  ]
+                },
+                "verdict": {
+                  "description": "The rule that decided, or null.",
+                  "properties": {
+                    "rule": {
+                      "type": "string"
+                    },
+                    "state": {
+                      "type": "string",
+                      "enum": [
+                        "working",
+                        "blocked",
+                        "idle"
+                      ]
+                    },
+                    "kind": {
+                      "type": "string",
+                      "enum": [
+                        "approval",
+                        "question"
+                      ]
+                    },
+                    "origin": {
+                      "type": "object",
+                      "description": "Where a rule set comes from.",
+                      "properties": {
+                        "kind": {
+                          "type": "string",
+                          "enum": [
+                            "user",
+                            "plugin",
+                            "built-in"
+                          ]
+                        },
+                        "path": {
+                          "type": "string",
+                          "description": "The file, for a user or built-in set."
+                        },
+                        "plugin": {
+                          "type": "string"
+                        },
+                        "contribution": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "kind"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "rule",
+                    "state",
+                    "origin"
+                  ]
+                },
+                "pendingQuiet": {
+                  "type": "string",
+                  "description": "A rule that matches except that the screen has not been quiet long enough."
+                },
+                "ignored": {
+                  "type": "array",
+                  "description": "Sources skipped because they are invalid, with the reason.",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "origin": {
+                        "type": "object",
+                        "description": "Where a rule set comes from.",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "user",
+                              "plugin",
+                              "built-in"
+                            ]
+                          },
+                          "path": {
+                            "type": "string",
+                            "description": "The file, for a user or built-in set."
+                          },
+                          "plugin": {
+                            "type": "string"
+                          },
+                          "contribution": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "kind"
+                        ]
+                      },
+                      "reason": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "origin",
+                      "reason"
+                    ]
+                  }
+                },
+                "unavailable": {
+                  "type": "string",
+                  "description": "Why the rules could not be run."
+                }
+              },
+              "required": [
+                "origin",
+                "verdict",
+                "ignored"
+              ]
+            },
+            "exit": {
+              "type": "object",
+              "properties": {
+                "code": {
+                  "description": "Null when absent."
+                },
+                "signal": {
+                  "description": "Null when absent."
+                }
+              },
+              "required": [
+                "code",
+                "signal"
+              ]
+            },
+            "summary": {
+              "type": "string",
+              "description": "One sentence naming the state and why."
+            }
+          },
+          "required": [
+            "session",
+            "name",
+            "agent",
+            "state",
+            "decidedBy",
+            "row",
+            "screen",
+            "summary"
+          ]
+        }
+      },
+      {
+        "id": "send",
+        "description": "Types a prompt into a session's agent, but never into one waiting for approval or an answer. The text is pasted, then Enter is written after the agent's submit delay and only after a fresh check; the call waits for the agent to start. Fails with conflict and a data.reason: agent-blocked (the agent is waiting; nothing was submitted), prompt-stalled (typed and submitted but the agent did not start in time), not-an-agent, or session-exited.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "session": {
+              "type": "string",
+              "description": "The session ID or name."
+            },
+            "text": {
+              "type": "string",
+              "description": "The prompt. Line breaks stay inside the one prompt."
+            },
+            "startTimeoutMs": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "How long to watch for the agent to start after the first Enter, in ms; defaults to 5000."
+            }
+          },
+          "required": [
+            "session",
+            "text"
+          ]
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "session": {
+              "type": "string",
+              "description": "The session ID."
+            },
+            "state": {
+              "type": "string",
+              "enum": [
+                "working",
+                "blocked",
+                "idle"
+              ],
+              "description": "What the agent was doing when the send settled; idle means a whole turn started and ended inside the window."
+            },
+            "kind": {
+              "type": "string",
+              "enum": [
+                "approval",
+                "question"
+              ],
+              "description": "Present when state is blocked."
+            },
+            "sentAt": {
+              "type": "number",
+              "description": "When the first Enter was written, in ms since the epoch."
+            },
+            "startedAt": {
+              "type": "number",
+              "description": "When the agent was seen to have taken the prompt, in ms since the epoch."
+            }
+          },
+          "required": [
+            "session",
+            "state",
+            "sentAt",
+            "startedAt"
+          ]
+        }
+      },
+      {
+        "id": "wait",
+        "description": "Waits until a session's script state is one of the wanted states, for up to timeoutMs (at most 60000). Returns status matched with the state at once if it already is, else pending with the last state. Fails with conflict and data.reason session-exited when the session has exited and exited is not wanted. Callers that wait longer repeat the call.",
+        "readOnly": true,
+        "params": {
+          "type": "object",
+          "properties": {
+            "session": {
+              "type": "string",
+              "description": "The session ID or name."
+            },
+            "until": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "working",
+                  "blocked",
+                  "idle",
+                  "unknown",
+                  "exited"
+                ]
+              },
+              "description": "The script states that end the wait, at least one; defaults to idle and blocked."
+            },
+            "timeoutMs": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 60000,
+              "description": "How long to wait in this call, in ms; defaults to 60000."
+            }
+          },
+          "required": [
+            "session"
+          ]
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "status": {
+              "type": "string",
+              "enum": [
+                "matched",
+                "pending"
+              ],
+              "description": "pending means timeoutMs passed without a wanted state."
+            },
+            "state": {
+              "type": "string",
+              "enum": [
+                "working",
+                "blocked",
+                "idle",
+                "unknown",
+                "exited"
+              ],
+              "description": "The script state at the last look."
+            },
+            "kind": {
+              "type": "string",
+              "enum": [
+                "approval",
+                "question"
+              ],
+              "description": "Present when the state is blocked."
+            },
+            "decidedBy": {
+              "type": "string",
+              "enum": [
+                "session",
+                "rule",
+                "row",
+                "none"
+              ],
+              "description": "What decided the state: the session itself, a screen rule, the status row, or nothing."
+            },
+            "rule": {
+              "type": "string",
+              "description": "The screen rule that decided, when one did."
+            },
+            "at": {
+              "type": "number",
+              "description": "When the state was read, in ms since the epoch."
+            }
+          },
+          "required": [
+            "status",
+            "state",
+            "decidedBy",
+            "at"
+          ]
+        }
+      },
+      {
+        "id": "waitOutput",
+        "description": "Waits until a line of a session's recent text matches a regular expression, for up to timeoutMs (at most 60000). Lines the terminal wrapped are read as one line. Returns status matched with the newest matching line at once if one does, else pending. An exited session's final text is matched before the exit counts. Fails with invalid-params for a pattern that does not compile, is unsafe or runs too long, and with conflict and data.reason session-exited when the session exited without a match.",
+        "readOnly": true,
+        "params": {
+          "type": "object",
+          "properties": {
+            "session": {
+              "type": "string",
+              "description": "The session ID or name."
+            },
+            "pattern": {
+              "type": "string",
+              "description": "A JavaScript regular expression, without flags."
+            },
+            "ignoreCase": {
+              "type": "boolean",
+              "description": "Match regardless of case."
+            },
+            "lines": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 2000,
+              "description": "How many lines of scrollback above the screen to read; defaults to 200."
+            },
+            "timeoutMs": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 60000,
+              "description": "How long to wait in this call, in ms; defaults to 60000."
+            }
+          },
+          "required": [
+            "session",
+            "pattern"
+          ]
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "status": {
+              "type": "string",
+              "enum": [
+                "matched",
+                "pending"
+              ],
+              "description": "pending means timeoutMs passed without a match."
+            },
+            "line": {
+              "type": "string",
+              "description": "The matching line; present when matched."
+            },
+            "match": {
+              "type": "string",
+              "description": "The text the pattern matched; present when matched."
+            },
+            "groups": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "The capture groups, empty text for one that did not take part; present when matched."
+            },
+            "at": {
+              "type": "number",
+              "description": "When the text was read, in ms since the epoch."
+            }
+          },
+          "required": [
+            "status",
+            "at"
+          ]
+        }
+      },
+      {
+        "id": "rules",
+        "description": "The effective detection rules of every agent that has any, where each comes from, and the sources skipped as invalid.",
+        "readOnly": true,
+        "params": {
+          "type": "object",
+          "properties": {}
+        },
+        "result": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "agent": {
+                "type": "string"
+              },
+              "origin": {
+                "description": "Where a rule set comes from; null when absent.",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "user",
+                      "plugin",
+                      "built-in"
+                    ]
+                  },
+                  "path": {
+                    "type": "string",
+                    "description": "The file, for a user or built-in set."
+                  },
+                  "plugin": {
+                    "type": "string"
+                  },
+                  "contribution": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind"
+                ]
+              },
+              "rules": {
+                "type": "number",
+                "description": "How many rules the effective set holds."
+              },
+              "ignored": {
+                "type": "array",
+                "description": "Sources skipped because they are invalid, with the reason.",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "origin": {
+                      "type": "object",
+                      "description": "Where a rule set comes from.",
+                      "properties": {
+                        "kind": {
+                          "type": "string",
+                          "enum": [
+                            "user",
+                            "plugin",
+                            "built-in"
+                          ]
+                        },
+                        "path": {
+                          "type": "string",
+                          "description": "The file, for a user or built-in set."
+                        },
+                        "plugin": {
+                          "type": "string"
+                        },
+                        "contribution": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "kind"
+                      ]
+                    },
+                    "reason": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "origin",
+                    "reason"
+                  ]
+                }
+              }
+            },
+            "required": [
+              "agent",
+              "origin",
+              "rules",
+              "ignored"
+            ]
+          }
+        }
+      },
+      {
+        "id": "ruleSet",
+        "description": "The detection rules that apply to one agent and where they come from, or null when none does.",
+        "readOnly": true,
+        "params": {
+          "type": "object",
+          "properties": {
+            "agent": {
+              "type": "string",
+              "description": "The agent ID."
+            }
+          },
+          "required": [
+            "agent"
+          ]
+        },
+        "result": {
+          "properties": {
+            "agent": {
+              "type": "string"
+            },
+            "origin": {
+              "type": "object",
+              "description": "Where a rule set comes from.",
+              "properties": {
+                "kind": {
+                  "type": "string",
+                  "enum": [
+                    "user",
+                    "plugin",
+                    "built-in"
+                  ]
+                },
+                "path": {
+                  "type": "string",
+                  "description": "The file, for a user or built-in set."
+                },
+                "plugin": {
+                  "type": "string"
+                },
+                "contribution": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "kind"
+              ]
+            },
+            "set": {
+              "type": "object",
+              "description": "The rule file: agent, optional description and the ordered rules."
+            }
+          },
+          "required": [
+            "agent",
+            "origin",
+            "set"
+          ],
+          "description": "Null when absent."
+        }
+      },
+      {
         "id": "hooksStatus",
         "description": "Whether Quirky's hooks are installed for each agent that takes them from a config file.",
         "readOnly": true,
@@ -248,7 +996,7 @@
     "launch-hook": [
       {
         "id": "agent-hooks",
-        "description": "Points Claude at the hook settings file for its version and Codex at the notify script.",
+        "description": "Adds Claude's version-gated hooks through inline --settings JSON and Codex's notify script.",
         "agents": [
           "claude",
           "claude-agent-teams",
@@ -334,6 +1082,118 @@
         },
         "methods": [
           "quirky.agent-status/get"
+        ]
+      },
+      {
+        "id": "explain",
+        "words": "explain",
+        "summary": "explain why a session is working, blocked, idle or unknown",
+        "positionals": [
+          {
+            "name": "session",
+            "description": "the session ID or name",
+            "required": true
+          }
+        ],
+        "flags": {
+          "at": {
+            "type": "number",
+            "description": "judge the row's freshness at this time, in ms since the epoch (default: now)"
+          }
+        },
+        "methods": [
+          "quirky.agent-status/explain"
+        ]
+      },
+      {
+        "id": "send",
+        "words": "send",
+        "summary": "type a prompt into an agent unless it is waiting for approval, then wait for it to start; the prompt is <text> or --file (- reads stdin)",
+        "positionals": [
+          {
+            "name": "session",
+            "description": "the session ID or name",
+            "required": true
+          },
+          {
+            "name": "text",
+            "description": "the prompt; omit it when using --file",
+            "required": false
+          }
+        ],
+        "flags": {
+          "file": {
+            "type": "string",
+            "description": "read the prompt from this file, or from stdin when -"
+          },
+          "start-timeout-ms": {
+            "type": "integer",
+            "description": "fail with prompt-stalled when the agent has not started this many milliseconds after Enter (default: 5000)"
+          }
+        },
+        "methods": [
+          "quirky.agent-status/send"
+        ]
+      },
+      {
+        "id": "wait",
+        "words": "wait",
+        "summary": "wait until a session reaches a script state (default idle or blocked), or until its text matches --output",
+        "positionals": [
+          {
+            "name": "session",
+            "description": "the session ID or name",
+            "required": true
+          }
+        ],
+        "flags": {
+          "until": {
+            "type": "string",
+            "description": "comma list of working, blocked, idle, unknown, exited (default: idle,blocked)"
+          },
+          "output": {
+            "type": "string",
+            "description": "wait for a line of the session's recent text to match this regular expression instead"
+          },
+          "ignore-case": {
+            "type": "boolean",
+            "description": "with --output, match regardless of case"
+          },
+          "lines": {
+            "type": "integer",
+            "description": "with --output, lines of scrollback to read above the screen, 0 to 2000 (default: 200)"
+          },
+          "timeout-ms": {
+            "type": "integer",
+            "description": "give up after this many milliseconds and exit 1 (default: wait without limit)"
+          }
+        },
+        "methods": [
+          "quirky.agent-status/wait",
+          "quirky.agent-status/waitOutput"
+        ]
+      },
+      {
+        "id": "rules-list",
+        "words": "rules list",
+        "summary": "list the detection rules in effect for each agent and where they come from",
+        "methods": [
+          "quirky.agent-status/rules"
+        ]
+      },
+      {
+        "id": "rules-show",
+        "words": "rules show",
+        "summary": "show the detection rules that apply to one agent",
+        "positionals": [
+          {
+            "name": "agent",
+            "description": "the agent ID",
+            "required": true
+          }
+        ],
+        "methods": [
+          "quirky.agent-status/ruleSet"
         ]
       },
       {

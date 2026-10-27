@@ -32,6 +32,7 @@ function renderModel(model: UiModel): string {
   const sections: [string, unknown[], () => string][] = [
     ['SIDEBAR', model.sidebarSections, () => slotTable(model.sidebarSections)],
     ['ACTIVITY ITEMS', model.activityItems, () => slotTable(model.activityItems)],
+    ['STATUS BARS', model.statusBars, () => slotTable(model.statusBars)],
     ['PANELS', model.panels, () => slotTable(model.panels)],
     ['VIEWS', model.views, () => slotTable(model.views)],
     ['OVERLAYS', model.overlays, () => slotTable(model.overlays)],

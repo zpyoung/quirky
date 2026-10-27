@@ -1,6 +1,6 @@
 # Sidebar extras technical specification
 
-Status: Specs accepted after mandatory Codex promote/refute review; resumed on lane 7 after the independent W1 gate repairs landed. W2 is not implemented. See the item decision log for verification and progress.
+Status: W1 and W2 core implementations are merged on the feature branch. Core acceptance passed in isolated components; the caught-up affected-directory gate and queue landing remain required. The operator explicitly deferred exhaustive seventeen-scenario validation, fresh-agent-only liveness coverage, and unstarted final review/dogfood to `m2-sidebar-extras-followup`. This document retains the full follow-up target, not a claim of exhaustive completion.
 
 ## Architecture
 
@@ -106,7 +106,7 @@ Add `activity-item` to public UI and code-backed kinds, slot entry/state unions 
 
 The extras UI provides `activity-item:quirky.sidebar-extras/source-control`, draws branch icon and optional dot with title/aria text, reports active ID/count/capped/title/availability, and updates at the existing status-poll cadence (3s safety while item mounted), on git/canonical/layout/reconnect events. Keep latest-ticket/identity guard and cancel/ignore after unmount. Errors clear stale decoration and remain visible as status/report information. No unbounded polling work while UI item is unmounted.
 
-Extend SettingDeclaration with optional `category?:string`, `section?:string`; reject empty/non-string fields. Preserve uncategorized plugin settings grouping. Render categorized settings generically. Extras declares boolean `sidebarSectionSeparators` default true, category Appearance, section Window & Sidebar. UI reads full setting ID and reacts to setting changes. No hardcoded plugin ID or setting label in shell.
+Extend SettingDeclaration with optional `category?:string`, `section?:string`; reject empty/non-string fields. Preserve uncategorized plugin settings grouping. Render categorized settings generically. Extras declares `setting:quirky.sidebar-extras/sidebar-section-separators`, boolean default true, category Appearance, section Window & Sidebar. UI reads this full setting ID and reacts to setting changes. No hardcoded plugin ID or setting label in shell.
 
 ### Existing sidebar renderer integration
 
@@ -162,7 +162,7 @@ Implements every [logic scenario](logic.md#behavior--scenarios). Tests are accep
 - Sidebar renderer tests `plugins/quirky.worktree/test/sidebar-extras-ui.test.ts` and real daemon/window/CLI test `sidebar-extras.e2e.test.ts`: drive controls, membership, hidden count, custom Enter/Tab, reports, dirty switch races, separator geometry, group deletion and unchanged full descendants. Pure geometry resolver tests supplement actual web drag smoke rather than replacing it.
 - Delete tests that pin obsolete menu wording/implementation details; do not re-pin them. Preserve meaningful preexisting behavioral tests.
 - Orchestrator runs task-scoped files after workers return. Operator night-mode override (2026-10-27): run `bun scripts/suite.ts packages/protocol packages/daemon/test/plugins packages/ui packages/cli plugins/quirky.repo plugins/quirky.worktree` (also `plugins/quirky.sidebar-extras` after W2), `bun test scripts`, `bun run typecheck`, and `bun run build`. The operator-stopped whole-suite run is not a test result; `queue.ts land` runs the whole suite. No full raw `bun test` suite on this Mac.
-- Actual web UI: built app, fresh temp HOME/QUIRKY_HOME, daemon UI URL, `using-apps-like-a-user --surface web --owner yours --unattended` for all visible goals. Record tool-only blocked/partial reports, fix app failures, stop daemon/PTY and delete temp homes. No native-only scenario in this item.
+- Operator sprint amendment: skip the unstarted W2 final review and guarded dogfood campaign for this landing. `m2-sidebar-extras-followup` owns exhaustive browser scenarios, quiet-aging/fresh-agent-only/corrupt-preference coverage and completion audit against all seventeen logic scenarios. No native-only scenario is introduced.
 
 ## Non-goals
 

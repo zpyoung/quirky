@@ -151,6 +151,8 @@ Only [tech-spec] questions remain: exact method/schema names, client keys, activ
 
 ## Status & amendments
 
-Status: Specs accepted autonomously after the mandatory Codex review; execution blocked at the W1 required-suite gate. W2 and full sidebar-extras acceptance are not complete; see the item decision log.
+Status: Core implementation is being landed under the operator's 4am sprint override. Exhaustive seventeen-scenario validation, fresh-agent-only liveness edge coverage, the unstarted final review, and guarded browser scenarios are assigned to queue item `m2-sidebar-extras-followup`; they are not claimed complete by this landing. Core affected tests and typecheck must pass.
 
 **Amendments:** 2026-10-27 — correct SC-03 fixture sequence; define unknown-liveness retention/reporting and zero-birthtime replacement protection; restore remembered pre-Live window and Git-card project move. Rename the purpose heading for deterministic coverage. Review/adjudication evidence is in the item decision log.
+
+2026-10-27 operator amendment — land the passing core, skip unstarted final review/dogfood, run affected-directory tests and typecheck, catch up once, then use queue.ts land. The scenarios above remain the follow-up parity target; this amendment narrows the current landing acceptance with explicit operator approval.

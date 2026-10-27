@@ -1,4 +1,10 @@
 const CSS = `
+
+@keyframes qt-pane-focus-flash {
+  0% { box-shadow: inset 0 0 0 2px var(--accent), 0 0 18px var(--accent); opacity: 0.95; }
+  100% { box-shadow: inset 0 0 0 1px var(--accent); opacity: 0; }
+}
+.qt-focus-flash { position: absolute; inset: 0; z-index: 10; border: 2px solid var(--accent); pointer-events: none; animation: qt-pane-focus-flash 800ms ease-out both; }
 .qt-workspace { position: relative; flex: 1; min-width: 0; min-height: 0; display: flex; background: var(--bg); color: var(--text); }
 .qt-muted { color: var(--muted); }
 .qt-pad { padding: 12px; }
@@ -19,6 +25,9 @@ const CSS = `
 .qt-tab.qt-drop-before { box-shadow: inset 2px 0 0 var(--accent); }
 .qt-tab.qt-drop-target { background: var(--bg-active); outline: 1px dashed var(--accent); }
 .qt-tab-title { overflow: hidden; text-overflow: ellipsis; }
+.qt-badge { flex: none; max-width: 90px; overflow: hidden; text-overflow: ellipsis; padding: 0 6px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg-hover); color: var(--muted); font: inherit; font-size: 10px; line-height: 14px; cursor: default; }
+button.qt-badge { cursor: pointer; }
+button.qt-badge:hover { background: var(--bg-active); color: var(--text); }
 .qt-dot { display: inline-block; flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--grey); }
 .qt-dot-waiting { background: var(--amber); }
 .qt-dot-working { background: var(--accent); }
@@ -39,6 +48,8 @@ const CSS = `
 .qt-divider-right { cursor: col-resize; }
 .qt-divider-down { cursor: row-resize; }
 .qt-pane-header { position: absolute; top: 4px; right: 8px; z-index: 12; display: flex; align-items: center; gap: 2px; padding: 2px 4px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg-raised); font-size: 12px; }
+.qt-pane-accessories { position: absolute; top: 4px; left: 8px; z-index: 11; display: flex; align-items: center; gap: 4px; max-width: calc(100% - 16px); }
+.qt-pane-accessory { display: flex; align-items: center; min-width: 0; }
 .qt-pane-title { max-width: 200px; padding: 0 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .qt-grip { cursor: grab; }
 .qt-exit { position: absolute; inset: 0; z-index: 14; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; padding: 16px; background: rgba(0, 0, 0, 0.6); text-align: center; }
