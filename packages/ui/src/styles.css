@@ -1826,9 +1826,18 @@ select {
   text-align: left;
 }
 
+.scm-ref-list button::before {
+  content: '';
+  flex: none;
+  width: 1.2em;
+}
+
 .scm-ref-list button[data-current]::before {
   content: '\2713';
-  margin-right: 6px;
+}
+
+.scm-ref-list button > span:first-child {
+  flex: 1;
 }
 
 .menu-separated {

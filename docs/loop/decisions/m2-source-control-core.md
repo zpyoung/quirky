@@ -627,5 +627,16 @@
 - **Revisit if:** a remote call is seen holding a worktree's lock past its timeout
 - **Source:** assumed — autonomous
 
+## D58: All seven Final Round 1 defects are closed by the fix batch, each with a test
+- **Question:** whether the one fix batch LOOP.md allows closed every accepted finding, or some go to BLOCKERS.md
+- **Options:** confirm each fix against its finding and merge; log the unconfirmed ones as open
+- **Chose:** all seven are closed and merged (`sdd/m2sc-fix-f1..f3`), so BLOCKERS.md gets no entry. C2/X1: a save that finishes compares the editor's text now with what it wrote, so newer typing stays dirty. C1: the combined diff re-reads a section's content on every refresh, not only when its counts change. C3/S1: whitespace-off hides only blanks in a line's indentation or trailing run; blanks between other characters still show. C4: the panel checks every conflict's Stage eligibility with eight at a time, not only the first 50. S2: submodule rows expand to their own changes. X2: `appendIgnore` refuses a `.gitignore` that is a symlink or not a regular file and writes through a temp file and rename. X3: saves to the same file run one at a time in the daemon, so two saves with one precondition can't both pass the hash check.
+- **Why:** each fix came with a test that fails without it (scratchpad wt acceptance: f1 283 pass, f2 451 pass, f3 21 pass, typecheck clean in each), every tree passed the scope audit, and the merges were conflict-free
+- **Evidence:** merge commits 6f307c9, f6a1bc6, 4d294af; packages/git/test/huge.test.ts; plugins/quirky.git/test/scenarios/files.test.ts, test/ui/view-{file,combined,merge}.test.ts, test/ui/panel-{conflicts,submodule}.test.ts
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** the full suite or the UI run shows one of them reopened
+- **Source:** assumed — autonomous
+
 ## Progress
-Final Round 1 done (D56); its fix batch (view, panel, git/daemon) is running. Next: audit and merge the fixes, rerun the three suites, UI verification with quirk:using-apps-like-a-user on a built daemon, land. If this iteration stops, rerun the fix batch from D56's list on the branch tip.
+Fix batch merged (D58). Running: the full gate and the UI verification (four worlds A to D, one subagent each). Next: record the UI run, land. If this iteration stops, rerun the gate and the UI verification from scratch on the branch tip, then land.
