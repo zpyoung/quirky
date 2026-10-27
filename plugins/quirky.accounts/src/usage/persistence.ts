@@ -29,7 +29,7 @@ const FAILURE_KINDS: readonly UsageFailureKind[] = [
 
 export type ResetLedgerEntry = {
   scope: ResetCreditExpectedScope
-  status: 'in-flight' | 'unknown' | 'completed'
+  status: 'reserved' | 'in-flight' | 'unknown' | 'completed'
   outcome?: 'reset' | 'nothingToReset' | 'noCredit' | 'alreadyRedeemed'
 }
 
@@ -182,7 +182,7 @@ function parseLedger(value: unknown): Map<string, ResetLedgerEntry> {
     const entry = record(raw)
     const scope = parseScope(entry?.scope)
     const status = entry?.status
-    if (!scope || (status !== 'in-flight' && status !== 'unknown' && status !== 'completed')) continue
+    if (!scope || (status !== 'reserved' && status !== 'in-flight' && status !== 'unknown' && status !== 'completed')) continue
     const outcome = entry?.outcome
     entries.set(key, {
       scope,

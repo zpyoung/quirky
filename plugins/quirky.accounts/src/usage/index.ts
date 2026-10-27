@@ -261,6 +261,10 @@ export class UsageService {
     return this.consumeResetCreditInScope(options)
   }
 
+  consumeResetCreditAuthorized(options: Omit<ResetCreditConsumeOptions, 'yes'>): Promise<unknown> {
+    return this.consumeResetCreditInScope({ ...options, yes: true })
+  }
+
   credentialStatus(): CredentialStatus[] {
     return credentialStatuses(this.context.dataDir)
   }
@@ -441,6 +445,16 @@ export class UsageService {
     if (typeof options.idempotencyKey !== 'string' || !options.idempotencyKey.trim()) throw new Error('Codex reset idempotency key is required')
     if (!options.expectedScope || !Number.isFinite(options.expectedScope.accountRevision) || !options.expectedScope.offerRevision) throw new Error('Codex reset scope is invalid')
     if (options.yes !== true) return { confirmationRequired: true, expectedScope: clone(options.expectedScope) }
+
+    const key = resetIdKey(options.idempotencyKey)
+    const existing = this.ledger.get(key)
+    if (existing && !sameScope(existing.scope, options.expectedScope)) throw new Error('Codex reset idempotency key is already bound to another offer')
+    if (existing?.status === 'completed' && existing.outcome) return existing.outcome
+    if (!existing) {
+      this.ledger.set(key, { scope: clone(options.expectedScope), status: 'reserved' })
+      persistResetLedger(this.context.dataDir, this.ledger)
+    }
+
     let targets: UsageTarget[]
     try {
       targets = await this.targets()
@@ -454,19 +468,16 @@ export class UsageService {
     if (!target || snapshot?.status !== 'ok' || !currentScope || !sameScope(options.expectedScope, currentScope) || target.accountId !== options.expectedScope.accountId || revisionFor(target) !== options.expectedScope.accountRevision) {
       throw new Error('Codex reset offer changed; refresh usage and confirm again')
     }
-    const key = resetIdKey(options.idempotencyKey)
-    const existing = this.ledger.get(key)
-    if (existing && !sameScope(existing.scope, options.expectedScope)) throw new Error('Codex reset idempotency key is already bound to another offer')
-    if (existing?.status === 'completed' && existing.outcome) return existing.outcome
-    const entry: ResetLedgerEntry = { scope: clone(options.expectedScope), status: 'in-flight' }
-    this.ledger.set(key, entry)
-    persistResetLedger(this.context.dataDir, this.ledger)
     const controller = new AbortController()
     this.controllers.add(controller)
+    let attemptStarted = false
     try {
       const latest = await this.targets()
       const stillSelected = latest.some((candidate) => candidate.provider === 'codex' && candidate.active && candidate.accountId === target.accountId && candidate.home === target.home && revisionFor(candidate) === revisionFor(target))
       if (!stillSelected) throw new Error('Codex reset offer changed; refresh usage and confirm again')
+      this.ledger.set(key, { scope: clone(options.expectedScope), status: 'in-flight' })
+      persistResetLedger(this.context.dataDir, this.ledger)
+      attemptStarted = true
       const outcome = await consumeCodexResetCredit({ processes: this.processes, signal: controller.signal, now: () => Date.now(), fetch: async (url, init, timeout) => {
         const abortController = new AbortController()
         const onAbort = (): void => abortController.abort()
@@ -484,8 +495,10 @@ export class UsageService {
       persistResetLedger(this.context.dataDir, this.ledger)
       return outcome
     } catch (error) {
-      this.ledger.set(key, { scope: clone(options.expectedScope), status: 'unknown' })
-      persistResetLedger(this.context.dataDir, this.ledger)
+      if (attemptStarted) {
+        this.ledger.set(key, { scope: clone(options.expectedScope), status: 'unknown' })
+        persistResetLedger(this.context.dataDir, this.ledger)
+      }
       throw error
     } finally {
       this.controllers.delete(controller)
