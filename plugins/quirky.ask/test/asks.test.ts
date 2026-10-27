@@ -549,6 +549,31 @@ describe('the queue', () => {
     expect(surfaced).toEqual([c.id])
   })
 
+  test('a deadline that passes while the ask is being created resolves it only after created', () => {
+    const clock = fakeClock()
+    const readings = [clock.time, clock.time + 5]
+    clock.now = () => readings.shift() ?? clock.time + 5
+    const order: [string, number][] = []
+    const created: Ask[] = []
+    const service = new AskService(
+      migratedStore(),
+      errors,
+      {
+        ...noHooks,
+        created: (ask, seq) => {
+          created.push(ask)
+          order.push(['created', seq])
+        },
+        resolved: (_id, _envelope, seq) => order.push(['resolved', seq])
+      },
+      clock
+    )
+    const ask = service.create(spec, null, null, { timeoutMs: 1, checkCredentialText: true })
+    expect(order).toEqual([['created', 1], ['resolved', 2]])
+    expect(created[0]).toMatchObject({ seq: 1, envelope: { status: 'pending' } })
+    expect(ask.envelope.status).toBe('timed_out')
+  })
+
   test('SC-19: seq keeps rising across restarts and the queue order survives', async () => {
     const window1 = await openWindow(h)
     const s1 = await connectAs(h, { sessionId: 's1' })
