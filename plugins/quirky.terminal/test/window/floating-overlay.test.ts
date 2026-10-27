@@ -475,9 +475,16 @@ describe('SC-67: the overlay report and its events', () => {
     expect(report.panes.map((entry: any) => entry.pane).sort()).toEqual(['pane-2', 'pane-3', 'pane-4', 'pane-5'])
   })
 
+  test('visibleSessions lists the panes the open panel shows and none while minimized', async () => {
+    const open = await mountOverlay({ state: { open: true }, floatingWorkspace: oneTab() })
+    expect(open.last().visibleSessions).toEqual(['s-2', 's-3', 's-4', 's-5'])
+    const closed = await mountOverlay({ floatingWorkspace: oneTab() })
+    expect(closed.last().visibleSessions).toEqual([])
+  })
+
   test('reports shown false with no layout while minimized', async () => {
     const view = await mountOverlay()
-    expect(view.last()).toEqual({ shown: false, state: expect.objectContaining({ open: false }), layout: null, focusedPane: null, panes: [] })
+    expect(view.last()).toEqual({ shown: false, state: expect.objectContaining({ open: false }), layout: null, focusedPane: null, panes: [], visibleSessions: [] })
   })
 
   test('a floating event shows or hides the panel and refreshes the report', async () => {

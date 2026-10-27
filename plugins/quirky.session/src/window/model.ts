@@ -8,6 +8,8 @@ export type SessionViewReport = {
   worktree: string
   tabs: { session: string; title: string; agent: AgentKind; status: DisplayStatus; display?: AgentDisplayState; label?: string }[]
   active: string | null
+  /** The sessions on screen, which the notifications plugin treats as viewed: the active tab, or none. */
+  visibleSessions: string[]
 }
 
 export type ViewSnapshot = {
@@ -103,7 +105,8 @@ export class WorktreeSessions {
         status: displayStatus(session.status),
         ...(session.agentStatus ? windowDisplay(session.agentStatus, Date.now(), session.status !== 'exited') : {})
       })),
-      active: active?.id ?? null
+      active: active?.id ?? null,
+      visibleSessions: active ? [active.id] : []
     }
   }
 

@@ -1,22 +1,5 @@
-import { Database } from 'bun:sqlite'
-import { existsSync } from 'node:fs'
-import { join } from 'node:path'
-import type { PluginContext, PluginStore, StoreMigration } from '@quirky/protocol'
+import type { PluginStore, StoreMigration } from '@quirky/protocol'
 import type { AgentRow } from './types'
-
-const NOTIFICATIONS_SETTING = 'setting:quirky.agent-status/notifications'
-
-/** Creates v1's tables and stages v1's `notifications` value for `importNotificationsSetting`. */
-function firstMigration(home: string): (store: PluginStore) => void {
-  return (store) => {
-    store.exec(`
-      CREATE TABLE hooks (session_id TEXT PRIMARY KEY, last_hook_at INTEGER NOT NULL);
-      CREATE TABLE pending_setting (value TEXT NOT NULL);
-    `)
-    const v1 = readV1Notifications(home)
-    if (v1 !== null) store.run('INSERT INTO pending_setting (value) VALUES (?)', v1)
-  }
-}
 
 /** One row per session, and the per-session OSC 7501 records. The v1 `hooks` table stays but is no longer read. */
 const rowsMigration: StoreMigration = `
@@ -25,44 +8,10 @@ const rowsMigration: StoreMigration = `
 `
 
 /** The plugin's migrations in order; a store opened with them holds `RowStore`'s tables. */
-export function migrations(home: string): StoreMigration[] {
-  return [firstMigration(home), rowsMigration]
-}
-
-/** The raw JSON of v1's `notifications` setting, or null when the v1 database or row is absent. */
-function readV1Notifications(home: string): string | null {
-  const path = join(home, 'quirky.db')
-  if (!existsSync(path)) return null
-  let db: Database | null = null
-  try {
-    db = new Database(path, { readonly: true })
-    const row = db.query("SELECT value FROM settings WHERE key = 'notifications'").get() as { value: string } | null
-    return row?.value ?? null
-  } catch {
-    return null
-  } finally {
-    db?.close()
-  }
-}
-
-/** Carries v1's `notifications` value into the setting once; a value that is not a boolean is skipped. */
-export async function importNotificationsSetting(context: PluginContext, store: PluginStore): Promise<void> {
-  const pending = store.get<{ value: string }>('SELECT value FROM pending_setting')
-  if (!pending) return
-  try {
-    const value: unknown = JSON.parse(pending.value)
-    if (typeof value !== 'boolean') {
-      context.log(`skipped v1 notifications setting: ${pending.value} is not a boolean`)
-    } else {
-      const current = (await context.call('setting.get', { id: NOTIFICATIONS_SETTING })) as { stored?: unknown }
-      if (current.stored === undefined) await context.call('setting.set', { id: NOTIFICATIONS_SETTING, value })
-    }
-  } catch (error) {
-    context.log(`v1 notifications setting not imported: ${(error as Error).message}`)
-    return
-  }
-  store.run('DELETE FROM pending_setting')
-}
+export const migrations: StoreMigration[] = [
+  'CREATE TABLE hooks (session_id TEXT PRIMARY KEY, last_hook_at INTEGER NOT NULL)',
+  rowsMigration
+]
 
 export type StoredRow = { row: AgentRow; updatedAt: number }
 

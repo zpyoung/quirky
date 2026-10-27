@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from 'bun:test'
-import type { QuirkyEvent, UiState } from '@quirky/protocol'
+import type { UiState } from '@quirky/protocol'
 import { waitFor } from '../../../packages/daemon/test/helpers'
 import { writePlugin } from '../../../packages/daemon/test/plugins/fixtures'
 import { askOnlyPluginsDir, cleanupAll, openWindow, PANEL, spec, startAsk } from './support'
@@ -22,7 +22,7 @@ async function startWithOtherPanel() {
 const layoutOf = async (client: { call: (method: 'ui.state', params: {}) => Promise<UiState> }) => (await client.call('ui.state', {})).layout
 
 describe('the Questions panel', () => {
-  test('SC-31: with a window connected and no panel open, a new ask opens the panel and notifies', async () => {
+  test('SC-31: with a window connected and no panel open, a new ask opens the panel and sends no notify', async () => {
     const h = await startAsk()
     const window = await openWindow(h)
     const agent = await h.connect('cli')
@@ -31,9 +31,8 @@ describe('the Questions panel', () => {
     const { askId } = (await agent.callAny('quirky.ask/create', { spec })) as { askId: string }
 
     expect((await layoutOf(agent)).panel).toBe(PANEL)
-    const notify = await waitFor(() => window.events.find((event): event is Extract<QuirkyEvent, { type: 'notify' }> => event.type === 'notify'))
-    expect(notify).toMatchObject({ title: 'Deploy?', body: 'Which environment?' })
-    expect(notify.open).toBeUndefined()
+    await waitFor(() => window.events.find((event) => event.type === 'quirky.ask/created'))
+    expect(window.events.filter((event) => event.type === 'notify')).toEqual([])
     expect((await agent.callAny('quirky.ask/list', { pendingOnly: true })) as unknown[]).toHaveLength(1)
     expect(askId).toMatch(/^ask_/)
   })
@@ -72,6 +71,6 @@ describe('the Questions panel', () => {
     await agent.callAny('quirky.ask/create', { spec })
 
     expect((await layoutOf(agent)).panel).toBeNull()
-    expect(h.notifications).toEqual([{ title: 'Deploy?', body: 'Which environment?' }])
+    expect(h.notifications).toEqual([])
   })
 })

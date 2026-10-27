@@ -169,7 +169,7 @@ describe('calling plugin methods', () => {
             }))
             context.provide('method:acme.caller/connection', async () => {
               const outcomes = {}
-              for (const name of ['client.hello', 'events.subscribe', 'ui.report', 'ui.window.focused']) {
+              for (const name of ['client.hello', 'events.subscribe', 'ui.report', 'ui.window.focused', 'ui.window.activity']) {
                 try {
                   await context.call(name, {})
                   outcomes[name] = 'resolved'
@@ -193,7 +193,7 @@ describe('calling plugin methods', () => {
     const outcomes = await call(s.client, 'acme.caller/connection')
     expect(outcomes).toEqual(
       Object.fromEntries(
-        ['client.hello', 'events.subscribe', 'ui.report', 'ui.window.focused'].map((name) => [
+        ['client.hello', 'events.subscribe', 'ui.report', 'ui.window.focused', 'ui.window.activity'].map((name) => [
           name,
           { code: RpcErrorCode.InvalidParams, message: `${name} needs a client connection` }
         ])

@@ -115,6 +115,22 @@
           },
           "required": ["message"]
         }
+      },
+      {
+        "id": "settled",
+        "description": "A structured session finished a turn or needs input.",
+        "data": {
+          "type": "object",
+          "properties": {
+            "sessionId": { "type": "string" },
+            "worktreeId": { "type": "string" },
+            "agent": { "type": "string" },
+            "state": { "type": "string", "enum": ["done", "waiting"] },
+            "lastAssistantMessage": { "description": "The text of the latest assistant message of the session since the plugin started, or null." },
+            "at": { "type": "number", "description": "When the session settled, in ms since the epoch." }
+          },
+          "required": ["sessionId", "worktreeId", "agent", "state", "at"]
+        }
       }
     ]
   }
