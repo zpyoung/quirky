@@ -772,6 +772,7 @@ describe('the session store migration', () => {
         launchSettings: null,
         resumedFrom: null,
         agentStatus: null,
+        name: null,
         unread: null
       }
     ])
@@ -1081,5 +1082,243 @@ describe('the floating worktree', () => {
     const error = (await createSession(client, { worktree: 'floating', agent: 'shell' }).catch((e: RpcError) => e)) as RpcError
     expect(error.code).toBe(RpcErrorCode.InvalidParams)
     expect(error.message).toContain('cwd')
+  })
+})
+
+describe('session names', () => {
+  const setName = (session: string, name: string | null) => call<Session>(client, 'quirky.session/setName', { session, name })
+  const exitAndWait = async (sessionId: string) => {
+    h.pty.exit(sessionId, 0)
+    await waitForAsync(async () => (await sessionOf(sessionId)).status === 'exited', 5000)
+  }
+  const changedSessions = () =>
+    events.flatMap((e) => (e.type === 'quirky.session/changed' ? [(e.data as { session: Session }).session] : []))
+  const failureOf = async (promise: Promise<unknown>) => ((await promise.then(() => null, (e: RpcError) => e)) as RpcError | null)!
+
+  test('a new session has no name', async () => {
+    expect((await shellSession()).name).toBeNull()
+  })
+
+  test('SC-33: naming stores the name in lowercase, emits changed, and null clears it', async () => {
+    const session = await shellSession()
+    const before = changedSessions().length
+    const named = await setName(session.id, 'Builder')
+    expect(named).toMatchObject({ id: session.id, name: 'builder' })
+    expect((await sessionOf(session.id)).name).toBe('builder')
+    await waitFor(() => (changedSessions().length > before ? true : undefined))
+    expect(changedSessions().at(-1)).toMatchObject({ id: session.id, name: 'builder' })
+
+    expect((await setName(session.id, null)).name).toBeNull()
+    expect((await sessionOf(session.id)).name).toBeNull()
+  })
+
+  test('naming a session with its own name changes nothing and emits nothing', async () => {
+    const session = await shellSession()
+    await setName(session.id, 'builder')
+    await Bun.sleep(30)
+    const count = changedSessions().length
+    expect((await setName(session.id, 'BUILDER')).name).toBe('builder')
+    await Bun.sleep(30)
+    expect(changedSessions()).toHaveLength(count)
+  })
+
+  test('SC-34: a refused name says which rule it broke and leaves the session as it was', async () => {
+    const session = await shellSession()
+    await setName(session.id, 'keeper')
+    const refused: [string, string][] = [
+      ['', 'empty'],
+      ['a'.repeat(65), 'longer than 64'],
+      ['has space', 'letters, digits'],
+      ['build/1', 'letters, digits'],
+      ['-lead', 'start with a letter or digit'],
+      ['s_reviewer', "start with 's_'"],
+      ['S_Reviewer', "start with 's_'"]
+    ]
+    for (const [name, rule] of refused) {
+      const error = await failureOf(setName(session.id, name))
+      expect(error, name).toMatchObject({ code: RpcErrorCode.InvalidParams })
+      expect(error.message, name).toContain(rule)
+    }
+    expect((await sessionOf(session.id)).name).toBe('keeper')
+    expect((await setName(session.id, 'a'.repeat(64))).name).toBe('a'.repeat(64))
+    expect((await setName(session.id, '0.a_b-c')).name).toBe('0.a_b-c')
+  })
+
+  test('a name that is not a string is invalid-params', async () => {
+    const session = await shellSession()
+    expect(await code(call(client, 'quirky.session/setName', { session: session.id, name: 7 }))).toBe(RpcErrorCode.InvalidParams)
+    expect(await code(call(client, 'quirky.session/setName', { session: session.id }))).toBe(RpcErrorCode.InvalidParams)
+  })
+
+  test('SC-35: a running session keeps its name; an exited one loses it to the next session that asks', async () => {
+    const a = await shellSession()
+    const b = await shellSession()
+    await setName(a.id, 'reviewer')
+
+    const taken = await failureOf(setName(b.id, 'Reviewer'))
+    expect(taken).toMatchObject({ code: RpcErrorCode.Conflict, data: { reason: 'name-taken' } })
+    expect(taken.message).toContain(a.id)
+    expect((await sessionOf(b.id)).name).toBeNull()
+
+    await exitAndWait(a.id)
+    expect((await sessionOf(a.id)).name).toBe('reviewer')
+    const before = changedSessions().length
+    expect((await setName(b.id, 'reviewer')).name).toBe('reviewer')
+    expect((await sessionOf(a.id)).name).toBeNull()
+    expect((await sessionOf(a.id)).status).toBe('exited')
+    await waitFor(() => changedSessions().slice(before).find((moved) => moved.id === a.id && moved.name === null))
+  })
+
+  test('a starting session that holds a name counts as running', async () => {
+    const structured = await call<Session>(client, 'quirky.session/register', {
+      worktree: 'id:wt_main',
+      agent: 'claude',
+      kind: 'structured',
+      title: 'Claude'
+    })
+    expect(structured.status).toBe('starting')
+    await setName(structured.id, 'reviewer')
+    const other = await shellSession()
+    expect(await code(setName(other.id, 'reviewer'))).toBe(RpcErrorCode.Conflict)
+  })
+
+  test('SC-32: get, close and every other session parameter accept the name, in any case', async () => {
+    const session = await createSession(client, { worktree: 'id:wt_main', agent: 'shell', name: 'Reviewer' })
+    expect(session.name).toBe('reviewer')
+    expect(await sessionOf('reviewer')).toMatchObject({ id: session.id })
+    expect(await sessionOf('REVIEWER')).toMatchObject({ id: session.id })
+    expect((await call<Session>(client, 'quirky.session/setStatus', { session: 'reviewer', status: 'working' })).id).toBe(session.id)
+    expect((await call<Session[]>(client, 'quirky.session/list')).map((s) => [s.id, s.name])).toEqual([[session.id, 'reviewer']])
+
+    await call(client, 'quirky.session/close', { session: 'reviewer' })
+    expect(await call(client, 'quirky.session/list')).toEqual([])
+    expect(h.pty.requests.some((r) => r.type === 'forget' && r.sessionId === session.id)).toBe(true)
+  })
+
+  test('an argument that is neither an ID nor a name is NotFound and says so', async () => {
+    const error = await failureOf(sessionOf('nobody'))
+    expect(error).toMatchObject({ code: RpcErrorCode.NotFound, message: 'no such session: nobody' })
+  })
+
+  test('an ID is looked up as an ID even when a name could match', async () => {
+    const a = await shellSession()
+    const b = await shellSession()
+    await setName(a.id, 'builder')
+    expect((await sessionOf(b.id)).id).toBe(b.id)
+    expect((await sessionOf(a.id)).id).toBe(a.id)
+  })
+
+  test('SC-36: an exited session still resolves by its name', async () => {
+    const session = await createSession(client, { worktree: 'id:wt_main', agent: 'shell', name: 'reviewer' })
+    await exitAndWait(session.id)
+    expect(await sessionOf('reviewer')).toMatchObject({ id: session.id, status: 'exited', name: 'reviewer' })
+  })
+
+  test('a name held by several records resolves to the running one, else the most recently created', async () => {
+    const old = await createSession(client, { worktree: 'id:wt_main', agent: 'shell', name: 'twin' })
+    const recent = await shellSession()
+    await exitAndWait(old.id)
+    await exitAndWait(recent.id)
+    const store = new Database(join(h.home, 'plugin-data', 'quirky.session', 'store.db'))
+    try {
+      store.query("UPDATE sessions SET name = 'twin' WHERE id = ?").run(recent.id)
+      expect((await sessionOf('twin')).id).toBe(recent.id)
+      store.query("UPDATE sessions SET status = 'running', created_at = created_at - 1000 WHERE id = ?").run(old.id)
+    } finally {
+      store.close()
+    }
+    expect((await sessionOf('twin')).id).toBe(old.id)
+  })
+
+  test('create takes a name, refuses a bad or taken one before creating anything, and moves an exited holder', async () => {
+    const first = await createSession(client, { worktree: 'id:wt_main', agent: 'shell', name: 'reviewer' })
+    const spawns = () => h.pty.requests.filter((r) => r.type === 'create').length
+    const spawned = spawns()
+
+    expect(await code(createSession(client, { worktree: 'id:wt_main', agent: 'shell', name: 'bad name' }))).toBe(RpcErrorCode.InvalidParams)
+    const taken = await failureOf(createSession(client, { worktree: 'id:wt_main', agent: 'shell', name: 'REVIEWER' }))
+    expect(taken).toMatchObject({ code: RpcErrorCode.Conflict, data: { reason: 'name-taken' } })
+    expect(taken.message).toContain(first.id)
+    expect(spawns()).toBe(spawned)
+    expect(await call<Session[]>(client, 'quirky.session/list')).toHaveLength(1)
+    expect(storedSessions(h.home)).toHaveLength(1)
+
+    await exitAndWait(first.id)
+    const second = await createSession(client, { worktree: 'id:wt_main', agent: 'shell', name: 'reviewer' })
+    expect(second.name).toBe('reviewer')
+    expect((await sessionOf(first.id)).name).toBeNull()
+  })
+
+  test('SC-35: a launch that fails leaves the exited holder named; a successful one moves the name', async () => {
+    const holder = await createSession(client, { worktree: 'id:wt_main', agent: 'shell', name: 'reviewer' })
+    await exitAndWait(holder.id)
+
+    fakeAgents().disabled.add('claude')
+    const failed = await failureOf(createSession(client, { worktree: 'id:wt_main', agent: 'claude', name: 'reviewer' }))
+    expect(failed).not.toBeNull()
+    expect(await sessionOf(holder.id)).toMatchObject({ status: 'exited', name: 'reviewer' })
+    expect((await call<Session[]>(client, 'quirky.session/list')).map((s) => s.id)).toEqual([holder.id])
+    expect((await sessionOf('reviewer')).id).toBe(holder.id)
+    expect(changedSessions().at(-1)).toMatchObject({ id: holder.id, name: 'reviewer' })
+
+    fakeAgents().disabled.delete('claude')
+    const next = await createSession(client, { worktree: 'id:wt_main', agent: 'claude', name: 'reviewer' })
+    expect(next.name).toBe('reviewer')
+    expect((await sessionOf(holder.id)).name).toBeNull()
+  })
+
+  test('a failed launch does not give a name back over a rename made while it was in flight', async () => {
+    await h.cleanup()
+    const home = makeTempHome()
+    const workDir = makeTempDir()
+    const marker = join(workDir, 'marker.log')
+    const release = join(workDir, 'release')
+    writeModulePlugin(
+      join(home, 'plugins'),
+      marker,
+      { id: 'acme.slow', contributes: { 'launch-hook': [{ id: 'wait', agents: ['claude'] }] } },
+      {
+        activate: `context.provide('launch-hook:acme.slow/wait', async () => {
+          record('hook waiting')
+          ${waitForFile(release)}
+          return { env: {}, args: [] }
+        })`
+      }
+    )
+    h = await startPluginHarness(SESSION_PLUGINS, { home })
+    try {
+      ;({ client, events } = await h.connectWithEvents('cli'))
+      const holder = await createSession(client, { worktree: 'id:wt_main', agent: 'shell', name: 'reviewer' })
+      await exitAndWait(holder.id)
+
+      const creating = failureOf(createSession(client, { worktree: 'id:wt_main', agent: 'claude', name: 'reviewer' }))
+      await waitFor(() => readMarker(marker).includes('hook waiting') || undefined)
+      expect((await sessionOf(holder.id)).name).toBeNull()
+      const starting = (await call<Session[]>(client, 'quirky.session/list')).find((s) => s.id !== holder.id)!
+
+      await setName(holder.id, 'renamed')
+      const before = changedSessions().length
+      await call(client, 'quirky.session/close', { session: starting.id })
+      writeFileSync(release, '')
+
+      expect(await creating).toMatchObject({ code: RpcErrorCode.Conflict })
+      expect(await sessionOf(holder.id)).toMatchObject({ status: 'exited', name: 'renamed' })
+      expect(changedSessions().slice(before).filter((s) => s.id === holder.id)).toEqual([])
+    } finally {
+      writeFileSync(release, '')
+    }
+  })
+
+  test('SC-37: names survive a daemon restart', async () => {
+    const session = await createSession(client, { worktree: 'id:wt_main', agent: 'shell', name: 'reviewer' })
+    const again = await restartDaemon(h)
+    try {
+      expect(await call<Session>(again.client, 'quirky.session/get', { session: 'reviewer' })).toMatchObject({
+        id: session.id,
+        name: 'reviewer'
+      })
+    } finally {
+      await again.stop()
+    }
   })
 })

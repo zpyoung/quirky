@@ -374,6 +374,17 @@
 - **Revisit if:** Queue land reports a new integration failure.
 - **Source:** locked by operator instruction
 
+## D35: Resolve the actual landing conflict without dropping either core contract
+- **Question:** After the operator repaired the foreign queue pollution, guarded land reached a real conflict with newer integration.
+- **Options:** Drop newer naming/runtime behavior; drop Session Info's settings/metadata; merge both narrowly and verify.
+- **Chose:** Merged build/roadmap as required by the reported land failure. Agents service keeps one combined plan/settings import plus submitDelayMs. Session start releases exited name holders and inserts exactly once in the same transaction, publishes released holders, and retains metadata plus failure/concurrent-rename rollback protection. Read the complete changed M1 agent-status scripting and M5 structured-runner decision logs; preserved M1 D36/D39 and M5 D4/D21. No new feature or compatibility shim was added.
+- **Why:** The reported conflict is a blocking integration defect, not permission to discard either shipped API contract or broaden the item.
+- **Evidence:** Post-merge typecheck returned 0. Exact affected-package command passed 257 remote files and both macOS-only files on quirkyci@34.122.38.64, with no failures or flaky retries (609.38 seconds). Exact bun test scripts passed 62 tests/460 assertions after rerunning without concurrent local compilation; the first run's six outer fixture timeouts are not hidden, and no assertion/deadline/protected-file change was made for them. Actual named-session launch and session-info CLI/API smoke passed all 18 assertions: provider/session/worktree/model identity, model telemetry and byte-for-byte unchanged isolated user settings. Its cleanup was awaited and both disposable homes removed; full output is artifact450 in the lane transcript. The throwaway script was removed after proof.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** Guarded land reports a new integration failure.
+- **Source:** assumed — autonomous, within LOOP.md step 7.3
+
 ## Progress
-All operator-requested pre-land checks pass: scripts 49/0, typecheck 0, affected packages 241 remote files plus 2 macOS files with no failures or flaky retries. The stopped old-host result is invalidated, not a blocker. The once-only catch-up/resolution is committed as ad50873. Required followup-m3-session-info-parity-20261027 is registered through queue.ts add with dependency m3-session-info; unfinished native/polish checks and the local timing verification gap are recorded in BLOCKERS. No foreign lock/process or integration state was modified by this lane. Next: commit these verification/registration records, detach and run queue.ts land m3-session-info. No additional pre-land whole suite or scope expansion.
+Latest source merge is resolved and all operator-requested pre-land checks pass: scripts 62/0, typecheck 0, affected packages 257 remote files plus 2 macOS files, no failures/flaky retries. The standalone core CLI/API smoke passed with awaited cleanup. Required followup-m3-session-info-parity-20261027 is registered with dependency m3-session-info; unfinished native/polish checks and the local timing verification gap remain recorded in BLOCKERS. The operator resolved the foreign queue scratch pollution; this lane changed no foreign queue/lock/process/integration state and stopped that investigation. Next: commit the resolved merge and this evidence, detach, and retry queue.ts land m3-session-info. No additional pre-land whole suite or scope expansion.
 
