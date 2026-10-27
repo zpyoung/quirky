@@ -10,6 +10,7 @@ const CSS = `
 .qf-control { display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; padding: 0; border: none; border-radius: 4px; background: transparent; color: inherit; cursor: pointer; }
 .qf-control:hover { background: var(--bg-active); }
 .qf-body { position: relative; flex: 1; min-height: 0; min-width: 0; display: flex; }
+.qf-menu-layer { pointer-events: auto; }
 .qf-edge { position: absolute; z-index: 5; }
 .qf-edge-n { top: 0; left: 8px; right: 8px; height: 5px; cursor: ns-resize; }
 .qf-edge-s { bottom: 0; left: 8px; right: 8px; height: 5px; cursor: ns-resize; }

@@ -206,6 +206,34 @@ describe('window commands route to the focused workspace', () => {
     expect(search()).toBeNull()
   })
 
+  test('search with an empty query clears the query; omitting it keeps the search', async () => {
+    const wired = await track()
+    const search = () => wired.last().panes.find((entry: any) => entry.pane === 'pane-3').search
+    await wired.run('search', { query: 'abc' })
+    expect(search()).toMatchObject({ query: 'abc' })
+    await wired.run('search', { regex: true })
+    expect(search()).toMatchObject({ query: 'abc', regex: true })
+    await wired.run('search', { query: '' })
+    expect(search()).toMatchObject({ query: '' })
+  })
+
+  test('watchQuickCommands keeps the newest refresh when an older one answers last', async () => {
+    const { watchQuickCommands } = await import('../../src/window/commands')
+    const pending: ((value: unknown) => void)[] = []
+    const fake = fakeContext({
+      'quirky.terminal/quickCommands': () => new Promise((resolve) => pending.push(resolve)),
+      'quirky.worktree/resolve': () => ({ repoId: null })
+    })
+    const source = watchQuickCommands(fake.context, 'wt')
+    await fake.emit({ type: 'quirky.terminal/quickCommands' } as never)
+    pending[1]!({ commands: [{ ...GLOBAL_HELLO, id: 'new' }] })
+    await settle()
+    pending[0]!({ commands: [{ ...GLOBAL_HELLO, id: 'deleted' }] })
+    await settle()
+    expect(source.commands().map((entry) => entry.id)).toEqual(['new'])
+    source.dispose()
+  })
+
   test('copy returns the selected text, select-all selects, paste writes through the chunked path', async () => {
     const wired = await track()
     const term = terminals.find((entry) => wired.element.querySelector('[data-pane="pane-3"]')!.contains(entry.element ?? null))!
