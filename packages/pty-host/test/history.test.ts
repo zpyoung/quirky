@@ -3,8 +3,8 @@ import * as fs from 'node:fs'
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { HistoryLog, newestOffset, oldestOffset } from '../src/history/log'
-import { composeReplay, formatCursor, pageBefore, parseCursor, textLinesAbove } from '../src/history/reader'
+import { HistoryLog, LogReader, newestOffset, oldestOffset } from '../src/history/log'
+import { composeReplay, formatCursor, pageBefore, parseCursor, scratchControlRows, textLinesAbove } from '../src/history/reader'
 import { Screen } from '../src/screen'
 
 const realFs = { ...fs }
@@ -442,7 +442,7 @@ describe('composeReplay', () => {
     fresh.dispose()
   })
 
-  test('an empty log gives just the live snapshot and the cursor position', async () => {
+  test('an empty log gives just the live snapshot, which already ends with the cursor', async () => {
     const live = liveScreen('\x1b[31mhello\x1b[0m')
     await live.settled()
     const snapshot = live.snapshot()
@@ -452,7 +452,7 @@ describe('composeReplay', () => {
     for (const target of [dir, freshDir()]) {
       const { replay, historyCursor } = await composeReplay(target, { historyLines: 2000, live: snapshot })
       expect(historyCursor).toBeNull()
-      expect(dec(replay)).toBe(`${snapshot.ansi}\x1b[${snapshot.cursor.y + 1};${snapshot.cursor.x + 1}H`)
+      expect(dec(replay)).toBe(snapshot.ansi)
     }
     live.dispose()
   })
@@ -475,5 +475,233 @@ describe('composeReplay', () => {
     expect(fresh.scrollbackRows).toBeGreaterThanOrEqual(50)
     live.dispose()
     fresh.dispose()
+  })
+})
+
+describe('attach replay cursor state', () => {
+  async function replayInto(dir: string, live: Screen, historyLines: number): Promise<Screen> {
+    const { replay } = await composeReplay(dir, { historyLines, live: live.snapshot() })
+    const pane = new Screen({ cols: 5, rows: 3, scrollback: 1000 })
+    pane.write(replay)
+    await pane.settled()
+    return pane
+  }
+
+  test('a pending wrap survives the replay without history, so the next character wraps', async () => {
+    const host = new Screen({ cols: 5, rows: 3 })
+    host.write('abcde')
+    await host.settled()
+    const pane = await replayInto(freshDir(), host, 0)
+    host.write('X')
+    pane.write('X')
+    await Promise.all([host.settled(), pane.settled()])
+    expect(pane.lines().map((row) => row.text)).toEqual(host.lines().map((row) => row.text))
+    expect(host.lines()[1].text).toBe('X')
+    host.dispose()
+    pane.dispose()
+  })
+
+  test('a pending wrap survives the replay with history behind it', async () => {
+    const output = `${numbered('h', 1, 20)}abcde`
+    const dir = logWith(output, { cols: 5, rows: 3 })
+    const host = new Screen({ cols: 5, rows: 3, scrollback: 1000 })
+    host.write(output)
+    await host.settled()
+    const pane = await replayInto(dir, host, 100)
+    host.write('X')
+    pane.write('X')
+    await Promise.all([host.settled(), pane.settled()])
+    expect(pane.lines().map((row) => row.text)).toEqual(host.lines().map((row) => row.text))
+    host.dispose()
+    pane.dispose()
+  })
+
+  test('a scroll region survives the replay', async () => {
+    const output = `${numbered('h', 1, 20)}one\r\ntwo\r\nthree\r\nfour\r\nfive\x1b[2;4r\x1b[4;1H`
+    const dir = logWith(output, { cols: 10, rows: 5 })
+    const host = new Screen({ cols: 10, rows: 5, scrollback: 1000 })
+    host.write(output)
+    await host.settled()
+    const { replay } = await composeReplay(dir, { historyLines: 100, live: host.snapshot() })
+    const pane = new Screen({ cols: 10, rows: 5, scrollback: 1000 })
+    pane.write(replay)
+    await pane.settled()
+    host.write('\r\nNEW')
+    pane.write('\r\nNEW')
+    await Promise.all([host.settled(), pane.settled()])
+    expect(pane.lines().slice(-5).map((row) => row.text)).toEqual(host.lines().slice(-5).map((row) => row.text))
+    host.dispose()
+    pane.dispose()
+  })
+})
+
+describe('history colours', () => {
+  const RED = /\x1b\[(?:[0-9;]*;)?31m/
+
+  test('an ansi page keeps a colour set before its window (SC-11)', async () => {
+    const dir = logWith(`\x1b[31m${numbered('h', 1, 100)}`)
+    const page = await pageBefore(dir, { lines: 10, format: 'ansi', screenRows: 24 })
+    expect(page.lines.length).toBeGreaterThanOrEqual(10)
+    for (const line of page.lines) expect(line).toMatch(RED)
+  })
+
+  test('every page of a long coloured stretch carries the colour, and pages stay contiguous', async () => {
+    const dir = logWith(`\x1b[31m${numbered('h', 1, 300)}\x1b[0m${numbered('p', 1, 100)}`)
+    const pages = await pageToTheEnd(dir, 50, 'ansi')
+    const all = pages.slice().reverse().flat()
+    const reds = all.filter((line) => line.includes('h-'))
+    expect(reds.length).toBe(300)
+    for (const line of reds) expect(line).toMatch(RED)
+    for (const line of all.filter((row) => row.includes('p-'))) expect(line).not.toMatch(RED)
+    expect(all.map((line) => line.replace(/\x1b\[[0-9;]*m/g, '')).filter((line) => line !== '').length).toBe(all.length)
+  })
+
+  test('a reset before the window drops the colour', async () => {
+    const dir = logWith(`\x1b[31mred\x1b[0m\r\n${numbered('h', 1, 100)}`)
+    const page = await pageBefore(dir, { lines: 10, format: 'ansi', screenRows: 24 })
+    for (const line of page.lines) expect(line).not.toMatch(RED)
+  })
+
+  test('the colour is looked for only a bounded distance before the window', async () => {
+    const dir = logWith(`\x1b[31m${'filler\r\n'.repeat(20_000)}${numbered('h', 1, 100)}`)
+    const page = await pageBefore(dir, { lines: 10, format: 'ansi', screenRows: 24 })
+    expect(page.lines.length).toBeGreaterThanOrEqual(10)
+    for (const line of page.lines) expect(line).not.toMatch(RED)
+  })
+
+  test('a colour set before an attach window colours its replayed history', async () => {
+    const output = `\x1b[32m${numbered('h', 1, 300)}\x1b[0m`
+    const dir = logWith(output)
+    const live = new Screen({ cols: 80, rows: 24, scrollback: 1000 })
+    live.write(output)
+    await live.settled()
+    const { replay } = await composeReplay(dir, { historyLines: 50, live: live.snapshot() })
+    const pane = new Screen({ cols: 80, rows: 24, scrollback: 1000 })
+    pane.write(replay)
+    await pane.settled()
+    expect(pane.serialize().startsWith('\x1b[32mh-')).toBe(true)
+    live.dispose()
+    pane.dispose()
+  })
+})
+
+describe('scratch screen memory', () => {
+  test('a page of vertical tabs holds a window sized by the page, not by the bytes', async () => {
+    const total = 64 * 1024
+    const dir = logWith('\x0b'.repeat(total))
+    const page = await pageBefore(dir, { lines: 1, format: 'text', screenRows: 24 })
+    expect(page.lines).toEqual([])
+    // 1 line plus 24 screen rows is 25 row breaks, so the window is those 25 bytes at most
+    expect(parseCursor(page.cursor!)).toBeGreaterThanOrEqual(total - 25)
+  })
+
+  test('a page of 1 line over text split by vertical tabs returns a few rows, not all of them', async () => {
+    const dir = logWith('x\x0b'.repeat(30_000))
+    const page = await pageBefore(dir, { lines: 1, format: 'text', screenRows: 24 })
+    expect(page.lines.length).toBeGreaterThanOrEqual(1)
+    expect(page.lines.length).toBeLessThanOrEqual(3)
+    expect(page.cursor).not.toBeNull()
+  })
+
+  test('form feeds count as row breaks too', async () => {
+    const dir = logWith('x\x0c'.repeat(30_000))
+    const page = await pageBefore(dir, { lines: 1, format: 'text', screenRows: 24 })
+    expect(page.lines.length).toBeLessThanOrEqual(3)
+  })
+
+  test('control bytes that open rows without a break are held to the budget, and paging still ends', async () => {
+    // ESC D (IND) opens a row per two bytes and is not a line break
+    const dir = logWith('x\x1bD'.repeat(30_000))
+    const budget = scratchControlRows(1, 24)
+    expect(budget).toBeLessThan(10_000)
+    const page = await pageBefore(dir, { lines: 1, format: 'text', screenRows: 24 })
+    const textRows = Math.ceil((3 * 30_000) / 80)
+    expect(page.lines.length).toBeGreaterThan(0)
+    expect(page.lines.length).toBeLessThanOrEqual(budget + textRows + 24 * 2 + 16)
+    expect(page.cursor).not.toBeNull()
+
+    let seen = page.lines.length
+    let cursor = page.cursor
+    let pages = 0
+    while (cursor !== null) {
+      const older = await pageBefore(dir, { before: parseCursor(cursor), lines: 1, format: 'text', screenRows: 24 })
+      expect(older.lines.length).toBeLessThanOrEqual(budget + textRows + 24 * 2 + 16)
+      if (older.cursor !== null) expect(parseCursor(older.cursor)).toBeLessThan(parseCursor(cursor))
+      seen += older.lines.length
+      cursor = older.cursor
+      expect(++pages).toBeLessThan(200)
+    }
+    expect(seen).toBeGreaterThan(29_000)
+  }, 60_000)
+
+  test('the budget scales with the page and has a floor', () => {
+    expect(scratchControlRows(0, 0)).toBeGreaterThan(0)
+    expect(scratchControlRows(2000, 24)).toBeGreaterThan(scratchControlRows(10, 24))
+  })
+})
+
+describe('unreadable history', () => {
+  function failingReads<T>(work: () => Promise<T>, after = 0): Promise<T> {
+    const open = LogReader.open
+    LogReader.open = (dir: string) => {
+      const reader = open.call(LogReader, dir)
+      const readOutput = reader.readOutput.bind(reader)
+      let reads = 0
+      reader.readOutput = (...args: Parameters<LogReader['readOutput']>) => {
+        if (reads++ >= after) throw Object.assign(new Error('EIO'), { code: 'EIO' })
+        return readOutput(...args)
+      }
+      return reader
+    }
+    return work().finally(() => {
+      LogReader.open = open
+    })
+  }
+
+  test('a page whose reads fail is empty with no cursor', async () => {
+    const dir = logWith(numbered('h', 1, 200))
+    const page = await failingReads(() => pageBefore(dir, { lines: 10, format: 'text', screenRows: 24 }))
+    expect(page).toEqual({ lines: [], cursor: null })
+    const before = await failingReads(() => pageBefore(dir, { before: 500, lines: 10, format: 'ansi', screenRows: 24 }))
+    expect(before).toEqual({ lines: [], cursor: null })
+  })
+
+  test('attach still returns the live screen when history reads fail', async () => {
+    const output = numbered('h', 1, 200)
+    const dir = logWith(output)
+    const live = new Screen({ cols: 80, rows: 24, scrollback: 1000 })
+    live.write(output)
+    await live.settled()
+    const snapshot = live.snapshot()
+    const { replay, historyCursor } = await failingReads(() => composeReplay(dir, { historyLines: 100, live: snapshot }))
+    expect(historyCursor).toBeNull()
+    expect(dec(replay)).toBe(snapshot.ansi)
+    live.dispose()
+  })
+
+  test('a failure after some data was read returns what was read, and the next page ends', async () => {
+    const dir = logWith(numbered('h', 1, 3000), { maxSegmentBytes: 8 * 1024, chunk: 1024 })
+    const page = await failingReads(() => pageBefore(dir, { lines: 2000, format: 'text', screenRows: 24 }), 3)
+    expect(page.lines.length).toBeGreaterThan(0)
+    expect(page.lines.length).toBeLessThan(2000)
+    const next = await failingReads(() => pageBefore(dir, { before: parseCursor(page.cursor!), lines: 10, format: 'text', screenRows: 24 }))
+    expect(next).toEqual({ lines: [], cursor: null })
+  })
+
+  test('a log that cannot be opened gives an empty page and the live screen', async () => {
+    const open = LogReader.open
+    LogReader.open = () => {
+      throw Object.assign(new Error('EMFILE'), { code: 'EMFILE' })
+    }
+    try {
+      expect(await pageBefore(freshDir(), { lines: 10, format: 'text', screenRows: 24 })).toEqual({ lines: [], cursor: null })
+      const { replay } = await composeReplay(freshDir(), {
+        historyLines: 10,
+        live: { ansi: 'live', cols: 80, rows: 24, cursor: { x: 0, y: 0 } }
+      })
+      expect(dec(replay)).toBe('live')
+    } finally {
+      LogReader.open = open
+    }
   })
 })

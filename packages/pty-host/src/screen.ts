@@ -34,7 +34,8 @@ interface StyleSource {
 
 interface EmulatorInternals {
   _core?: {
-    buffer?: { savedX?: number; savedY?: number; savedCurAttrData?: StyleSource }
+    buffer?: { savedX?: number; savedY?: number; savedCurAttrData?: StyleSource; scrollTop?: number; scrollBottom?: number }
+    coreService?: { decPrivateModes?: { origin?: boolean } }
     _inputHandler?: { _curAttrData?: StyleSource }
   }
 }
@@ -124,13 +125,20 @@ export class Screen {
 
   /**
    * The whole buffer, with up to `scrollback` rows above the viewport (all of them when omitted),
-   * then the DEC saved cursor and an absolute cursor position.
+   * then the scroll region and origin mode, the DEC saved cursor, and the cursor position, style
+   * and pending wrap, in that order because setting a region or origin mode homes the cursor.
    */
   serialize(options?: { scrollback?: number }): string {
     const { x, y } = this.cursor()
     const core = (this.term as unknown as EmulatorInternals)._core
     const current = core?._inputHandler?._curAttrData
     let ansi = this.addon.serialize({ scrollback: options?.scrollback })
+
+    const origin = core?.coreService?.decPrivateModes?.origin === true
+    const { scrollTop = 0, scrollBottom = this.term.rows - 1 } = core?.buffer ?? {}
+    // the addon turns origin mode on before the cursor is placed; absolute positioning below needs it off
+    if (origin) ansi += '\x1b[?6l'
+    if (scrollTop !== 0 || scrollBottom !== this.term.rows - 1) ansi += `\x1b[${scrollTop + 1};${scrollBottom + 1}r`
 
     const { savedX = 0, savedY = 0, savedCurAttrData } = core?.buffer ?? {}
     const savedStyle = savedCurAttrData ? sgr(savedCurAttrData) : ''
@@ -142,9 +150,12 @@ export class Screen {
       ansi += `\x1b[${savedRow + 1};${savedX + 1}H${savedStyle}\x1b7`
     }
 
+    // with origin mode on, CUP rows count from the top of the scroll region
+    const rowBase = origin ? scrollTop : 0
+    if (origin) ansi += '\x1b[?6h'
     // the addon's relative cursor move is one column off after a full last row (xterm.js #6165),
     // and no cursor move can recreate a pending wrap, so print the row's last character again
-    ansi += x >= this.term.cols ? this.pendingWrapCursor(y) : `\x1b[${y + 1};${x + 1}H`
+    ansi += x >= this.term.cols ? this.pendingWrapCursor(y, rowBase) : `\x1b[${Math.max(1, y - rowBase + 1)};${x + 1}H`
     return current ? ansi + sgr(current) : ansi
   }
 
@@ -172,14 +183,15 @@ export class Screen {
     this.term.dispose()
   }
 
-  private pendingWrapCursor(y: number): string {
+  private pendingWrapCursor(y: number, rowBase: number): string {
     const buffer = this.term.buffer.active
     const line = buffer.getLine(buffer.baseY + y)
     let col = this.term.cols - 1
     let cell = line?.getCell(col)
     if (cell && cell.getWidth() === 0) cell = line?.getCell(--col)
-    if (!cell || !cell.getChars()) return `\x1b[${y + 1};${this.term.cols}H`
-    return `\x1b[${y + 1};${col + 1}H${sgr(cell)}${cell.getChars()}`
+    const row = Math.max(1, y - rowBase + 1)
+    if (!cell || !cell.getChars()) return `\x1b[${row};${this.term.cols}H`
+    return `\x1b[${row};${col + 1}H${sgr(cell)}${cell.getChars()}`
   }
 
   private cursor(): { x: number; y: number } {
