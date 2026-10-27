@@ -229,7 +229,6 @@ claude() {
 }`
     )
     const session = startInteractive(init, { QK_TEST_POINTER: pointer })
-    await session.awaitFirstPrompt()
     await session.awaitShellReady()
 
     const ready = session.output().indexOf(`${ESC}]777;quirky-shell-ready${BEL}`)
@@ -268,7 +267,7 @@ claude() {
 }`
     )
     const session = startInteractive(init, { QK_TEST_POINTER: pointer, CLAUDE_CONFIG_DIR: customHome })
-    await session.awaitFirstPrompt()
+    await session.awaitShellReady()
     await session.run('claude')
     expect(session.output()).toContain(`route:${customHome}`)
     session.proc.terminal.write('exit\r')
@@ -278,7 +277,7 @@ claude() {
 
   test('reports readiness once, each command exit code, the cwd, and keeps the exit status', async () => {
     const session = startInteractive()
-    await session.awaitFirstPrompt()
+    await session.awaitShellReady()
     await session.run('true')
     await session.run('false')
     await session.run('')
@@ -297,7 +296,7 @@ claude() {
 
   test('sourcing the wrapper again does not repeat the reports', async () => {
     const session = startInteractive()
-    await session.awaitFirstPrompt()
+    await session.awaitShellReady()
     const wrapper = shell.endsWith('zsh') ? join(quirkyHome, 'shell', 'zsh', '.zshrc') : join(quirkyHome, 'shell', 'bash', 'rcfile')
     await session.run(`. ${wrapper}`)
     await session.run('true')

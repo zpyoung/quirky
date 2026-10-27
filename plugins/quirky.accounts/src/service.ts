@@ -591,6 +591,10 @@ export class AccountService {
 
   onEvent(event: QuirkyEvent): void {
     if (!this.active) return
+    if (event.type === 'ui.window.changed') {
+      void this.backgroundUsageRefresh()
+      return
+    }
     if (event.type === 'quirky.session/changed') {
       const data = asRecord(event.data)
       const session = parseSessionSnapshot(data?.session)

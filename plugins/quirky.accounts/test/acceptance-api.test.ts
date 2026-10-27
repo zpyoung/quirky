@@ -362,14 +362,21 @@ describe('quirky.accounts daemon API acceptance', () => {
     }
   })
 
-  test('background refresh requires a focused present window while manual refresh bypasses debounce', async () => {
+  test('focus refresh resumes after a skipped startup run and debounces while manual refresh bypasses it', async () => {
     const h = await startAccounts()
     await h.client.callAny('quirky.accounts/setCredential', { provider: 'opencode-go', kind: 'api-key', value: 'fixture-opencode-focus-secret' })
+    const actualNow = Date.now
+    let offset = 0
+    let usedPercent = 20
     let usageRequests = 0
+    Date.now = () => actualNow() + offset
     const fetchFixture = interceptProviderFetch((url) => {
-      if (url.hostname === 'opencode.ai' && url.pathname === '/zen/go/v1/usage') usageRequests += 1
-      return null
+      if (url.hostname !== 'opencode.ai' || url.pathname !== '/zen/go/v1/usage') return null
+      usageRequests += 1
+      const resetsAt = new Date(Date.now() + 60 * 60_000).toISOString()
+      return Response.json({ usage: { rolling: { percent: usedPercent, resetsAt }, weekly: { percent: 10, resetsAt } } })
     })
+    const currentUsed = async () => snapshot(await call<UsageState>(h, 'quirky.accounts/usage'), 'opencode-go').session?.usedPercent
     try {
       await h.client.callAny('job.run', { id: 'job:quirky.accounts/usage-refresh' })
       expect(usageRequests).toBe(0)
@@ -377,15 +384,28 @@ describe('quirky.accounts daemon API acceptance', () => {
       const ui = await h.harness.connect('ui', 'accounts-focused-window')
       await ui.call('ui.window.focused', { focused: true })
       await ui.call('ui.window.activity', {})
-      await h.client.callAny('job.run', { id: 'job:quirky.accounts/usage-refresh' })
+      await waitForAsync(async () => await currentUsed() === 20 || undefined)
       expect(usageRequests).toBe(1)
 
       await call(h, 'quirky.accounts/refresh', { provider: 'opencode-go', force: true })
       expect(usageRequests).toBe(2)
       await h.client.callAny('job.run', { id: 'job:quirky.accounts/usage-refresh' })
       expect(usageRequests).toBe(2)
+
+      await ui.call('ui.window.focused', { focused: false })
+      offset = 6 * 60_000
+      usedPercent = 44
+      await ui.call('ui.window.focused', { focused: true })
+      await ui.call('ui.window.activity', {})
+      await waitForAsync(async () => await currentUsed() === 44 || undefined)
+      expect(usageRequests).toBe(3)
+      await ui.call('ui.window.focused', { focused: false })
+      await ui.call('ui.window.focused', { focused: true })
+      await h.client.callAny('job.run', { id: 'job:quirky.accounts/usage-refresh' })
+      expect(usageRequests).toBe(3)
     } finally {
       await fetchFixture.restore()
+      Date.now = actualNow
     }
   })
 
