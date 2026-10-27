@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, symlinkSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { NotAllowedError } from '../src/conflicts'
 import { HUGE_FOLDER_NAMES, appendIgnore, hugeFolders } from '../src/huge'
@@ -63,6 +63,42 @@ describe('appendIgnore', () => {
     for (const name of ['src', '../x', 'node_modules/foo', '']) {
       await expect(appendIgnore(repo, name)).rejects.toBeInstanceOf(NotAllowedError)
     }
+  })
+
+  test('refuses a .gitignore symlink and leaves its target untouched', async () => {
+    const repo = makeRepo(scratch())
+    const folder = join(scratch(), 'outside')
+    mkdirSync(folder, { recursive: true })
+    const outside = join(folder, 'target')
+    writeFileSync(outside, 'keep\n')
+    symlinkSync(outside, join(repo, '.gitignore'))
+    await expect(appendIgnore(repo, 'dist')).rejects.toBeInstanceOf(NotAllowedError)
+    expect(readFileSync(outside, 'utf8')).toBe('keep\n')
+    expect(lstatSync(join(repo, '.gitignore')).isSymbolicLink()).toBe(true)
+  })
+
+  test('refuses a dangling .gitignore symlink without creating its target', async () => {
+    const repo = makeRepo(scratch())
+    const folder = join(scratch(), 'outside')
+    mkdirSync(folder, { recursive: true })
+    const outside = join(folder, 'not-yet')
+    symlinkSync(outside, join(repo, '.gitignore'))
+    await expect(appendIgnore(repo, 'dist')).rejects.toBeInstanceOf(NotAllowedError)
+    expect(existsSync(outside)).toBe(false)
+  })
+
+  test('refuses a .gitignore that is a directory', async () => {
+    const repo = makeRepo(scratch())
+    mkdirSync(join(repo, '.gitignore'))
+    await expect(appendIgnore(repo, 'dist')).rejects.toBeInstanceOf(NotAllowedError)
+  })
+
+  test('keeps the file mode and leaves no temp files behind', async () => {
+    const repo = makeRepo(scratch())
+    writeFileSync(join(repo, '.gitignore'), 'logs\n', { mode: 0o640 })
+    await appendIgnore(repo, 'dist')
+    expect(lstatSync(join(repo, '.gitignore')).mode & 0o777).toBe(0o640)
+    expect(readdirSync(repo).filter((name) => name.endsWith('.tmp'))).toEqual([])
   })
 
   test('exports the allowlist in order', () => {
