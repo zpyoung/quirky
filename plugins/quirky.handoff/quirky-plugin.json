@@ -5,6 +5,7 @@
   "description": "Continues an agent's work in a fresh session: composes a brief from the old one, lets the person edit it, and starts the new session with it.",
   "main": "main.ts",
   "cli": "cli.ts",
+  "ui": "dist/ui.js",
   "activation": "startup",
   "dependencies": [
     "quirky.session",
@@ -1684,6 +1685,274 @@
         "methods": [
           "quirky.handoff/templateMutate"
         ]
+      }
+    ],
+    "overlay": [
+      {
+        "id": "dialog",
+        "title": "Continue in New Session"
+      }
+    ],
+    "view": [
+      {
+        "id": "settings",
+        "title": "Session handoff"
+      }
+    ],
+    "menu-item": [
+      {
+        "id": "hand-off",
+        "menu": "quirky.terminal/pane",
+        "title": "Hand Off to Another Agent",
+        "command": "command:quirky.handoff/open",
+        "when": {
+          "agent": "any"
+        },
+        "after": "quick-commands"
+      }
+    ],
+    "command": [
+      {
+        "id": "open",
+        "title": "Hand Off to Another Agent",
+        "description": "Opens the Continue in New Session dialog on a session.",
+        "args": {
+          "type": "object",
+          "properties": {
+            "session": {
+              "type": "string",
+              "description": "The source session id."
+            }
+          },
+          "required": [
+            "session"
+          ]
+        }
+      },
+      {
+        "id": "set",
+        "title": "Set a handoff control",
+        "description": "Changes one control of the open dialog. Fields: worktree (id), create (boolean), createName, createBase, agent, relationship (continues, reviews, branches-from), context (focused, full), repoState, diffBodies, openEditorTabs (booleans), template (a template id, \"new\" for New Template, or null), templateName, note.",
+        "args": {
+          "type": "object",
+          "properties": {
+            "field": {
+              "type": "string",
+              "enum": [
+                "worktree",
+                "create",
+                "createName",
+                "createBase",
+                "agent",
+                "relationship",
+                "context",
+                "repoState",
+                "diffBodies",
+                "openEditorTabs",
+                "template",
+                "templateName",
+                "note"
+              ]
+            },
+            "value": {
+              "description": "The new value; its type depends on the field."
+            }
+          },
+          "required": [
+            "field",
+            "value"
+          ]
+        }
+      },
+      {
+        "id": "edit",
+        "title": "Edit the handoff preview",
+        "description": "Replaces the preview text, which detaches it from the controls.",
+        "args": {
+          "type": "object",
+          "properties": {
+            "text": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "text"
+          ]
+        }
+      },
+      {
+        "id": "regenerate",
+        "title": "Regenerate the handoff preview from controls"
+      },
+      {
+        "id": "wait-idle",
+        "title": "Wait for the source to go idle"
+      },
+      {
+        "id": "capture",
+        "title": "Capture the source now"
+      },
+      {
+        "id": "start",
+        "title": "Start the new session"
+      },
+      {
+        "id": "cancel",
+        "title": "Close the handoff dialog and keep a draft",
+        "args": {
+          "type": "object",
+          "properties": {
+            "via": {
+              "type": "string",
+              "enum": [
+                "button",
+                "escape"
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": "save-template",
+        "title": "Save the steering note as a template",
+        "args": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      {
+        "id": "search",
+        "title": "Search the handoff worktree list",
+        "args": {
+          "type": "object",
+          "properties": {
+            "query": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "query"
+          ]
+        }
+      },
+      {
+        "id": "resend-confirm",
+        "title": "Resend a handoff brief",
+        "description": "Asks to confirm, then sends the retained brief again.",
+        "args": {
+          "type": "object",
+          "properties": {
+            "session": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "session"
+          ]
+        }
+      },
+      {
+        "id": "discard",
+        "title": "Discard a retained handoff brief",
+        "args": {
+          "type": "object",
+          "properties": {
+            "session": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "session"
+          ]
+        }
+      },
+      {
+        "id": "jump",
+        "title": "Go to the other end of a handoff",
+        "args": {
+          "type": "object",
+          "properties": {
+            "session": {
+              "type": "string"
+            },
+            "lineage": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "session"
+          ]
+        }
+      },
+      {
+        "id": "open-settings",
+        "title": "Open session handoff settings"
+      },
+      {
+        "id": "template-add",
+        "title": "Add a handoff template",
+        "description": "Opens the template editor; with save it stores the template at once.",
+        "args": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "body": {
+              "type": "string"
+            },
+            "save": {
+              "type": "boolean"
+            }
+          }
+        }
+      },
+      {
+        "id": "template-edit",
+        "title": "Edit a handoff template",
+        "args": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            },
+            "body": {
+              "type": "string"
+            },
+            "save": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "id"
+          ]
+        }
+      },
+      {
+        "id": "template-remove",
+        "title": "Remove a handoff template",
+        "args": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "id"
+          ]
+        }
+      },
+      {
+        "id": "templates-reset",
+        "title": "Reset handoff templates to the defaults"
       }
     ]
   }
