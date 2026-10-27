@@ -599,11 +599,35 @@
 - **Revisit if:** the user finds a hook of theirs missing or reordered in those three files
 - **Source:** locked by docs/loop/LOOP.md
 
-## Progress
-Step 5 (build), between waves. RUN_BASE 13deb24 (specs fixed). W1 and its checkpoint fixes (D46, D47) and W2 (D48) are merged; HEAD c99d239, full gate green (4419 pass, scripts 30, typecheck clean). Backend: claude-task implementers (Agent, sonnet, effort high) + codex reviewer (D44).
+## D59: Final Round 1: accept all six findings, which collapse to four defects; none stays open
+- **Question:** adjudicating Final Round 1 (three lenses, deep, codex gpt-6.1-sol; the item's non-test source diff against build/roadmap at 1f323f4's catch-up, tests readable by tool; 2 suppressed)
+- **Options:** accept or reject each
+- **Chose:** accept all: the window's tab and worktree glyphs decayed a restored-unconfirmed row to unverifiable after 30 minutes, though no evidence confirmed it (C1/S1); Hermes remove restored the line saved at install, discarding plugins the user added to the flow list since (C3/X1); the dsh installer edited malformed YAML (S2); spool replay deleted the spool file after awaiting ingestion, losing lines the shim appended meanwhile (X2). Three fixers closed them with regression tests seen failing first. Fixer choices: the window's `windowDisplay` copies skip decay for `restoredUnconfirmed`; Hermes remove takes out only `quirky-status` from `enabled` (and puts it back in `disabled` only where Quirky took it out) unless the line still reads exactly as install left it; dsh validates with `Bun.YAML.parse` before and after editing and writes `dsh-hooks.json` only after the edit validates; spool drain renames the file to `.draining` before reading, re-reads until it stops growing, then claims any fresh file for up to 8 rounds; a crash mid-replay replays the claimed file first at the next start (at-least-once, as before). Nothing goes to BLOCKERS.md because the fix batch closed every finding and the post-fix gate passed.
+- **Why:** each reproduced with the reviewer's command
+- **Evidence:** review bundle in the session scratchpad (rev-final/*-gate.json); merges 40d4aea, b6639b6, 0b7a2e5
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** assumed — autonomous
 
-Next iteration, in order:
-1. **W2 checkpoint review**: three lenses (C correctness, S spec compliance, X security/failure modes), depth standard, profile code-diff, reviewer codex, target `6c67ce0..c99d239` (W2_BASE was 6c67ce0). Criteria = the W2 task contracts: T7a (normalize/index, store migration 2, identity, apply, service wiring, list/get, launch hook, hydration, fakes), T7b (titles and OSC 7501 fallbacks with hook precedence, interrupt and question inference, presence job, spool drain, time scale), T5b (kimi, jcode, dsh, hermes, amp, opencode family, pi family installers and generated sources), T8 (session migration 5, setStatus agentStatus, glyphs and labels, worktree priority, progress 0-100), plus tech.md sections they cite. Reuse the gate: build a ReusedCheckInput (tree_hash = HEAD^{tree}, clean_tree true, one check with command `bun run test && bun test scripts && bun run typecheck`). Adjudicate, fix with parallel scoped fixers, gate again.
-2. **W3** (one component, plugins/quirky.agent-status): `src/install/registry.ts` listing `JSON_INSTALLERS` (other-json.ts) + `OTHER_INSTALLERS` (other-installers.ts); methods `hooksStatus`, `hooksSetup {agent?}`, `hooksRemove {agent?}` with schemas; `cli.ts` + `cli-command` entries `hooks-status`/`hooks-setup`/`hooks-remove` (words `hooks status|setup|remove`, positional agent); setting `hooks` (boolean, default true, title "Agent status hooks", description per D26); on `setting.changed` off → remove all, on → install detected+enabled (`quirky.agents/list` installed && enabled); install at activation when on, never remove at start; setup refuses with "Agent status hooks are turned off" while off; status values per D25; the InstallEnv home is `$HOME` with the test guard. Tests through the daemon API and CLI.
-3. **W3 checkpoint** (standard, codex), then **W4**: end-to-end CLI scenarios on a real daemon subprocess with temp HOME and QUIRKY_HOME (pattern: plugins/quirky.agents/test/support/e2e.ts `startAgentsE2E`, fake agents): SC-12 (resume uses captured id), SC-19 (real fake-agent pid killed), SC-24..SC-29 via `quirky agent-status hooks …`, SC-27 (setting off/restart/on), SC-28 (fake claude versions), SC-29, SC-33 (`list --json`, `get --json`).
-4. Catch up with build/roadmap (`git merge build/roadmap`; lane 3's m1-worktrees and lane 1's m1-term-ui may touch quirky.session/quirky.worktree; renumber session migration 5 if another item took it, D36), then **Final Round 1** (deep, three lenses, RUN_BASE..HEAD) and one fix batch, then step 6 (UI pass for SC-34..SC-37 with using-apps-like-a-user; native scenarios: none expected) and step 7 (land).
+## D60: The UI pass: SC-34 to SC-37 all pass
+- **Question:** LOOP.md step 6, the window scenarios, run with using-apps-like-a-user (`--surface web --owner yours --unattended`) against a built quirkyd on a temporary HOME and QUIRKY_HOME, with a fake claude and hooks posted through the installed shim
+- **Options:** pass; fail and fix
+- **Chose:** pass, report run 20261027T065805-b579 (16 actions): SC-34 the Claude tab glyph went spinner "Working", amber "?" "Waiting for input", green "Done", red "Failed" (StopFailure) and muted "Interrupted" after a Ctrl-C typed in the terminal; SC-35 the worktree card showed the amber "?" with one session waiting and one working, the spinner once the question was answered with Enter, and green once both finished; SC-36 a shell typing `printf` of OSC 7501 `state=working:progress=60` showed a static ring about 60% full (not the animated spinner); SC-37 Settings shows "Agent status hooks" checked with the D26 description as hover text, and unchecking and saving made `hooks status` report `hooks_disabled` and removed the gemini file Quirky had created. Tool limits recorded: the driver has no hover, so labels were read from the glyph's accessible name, which is the same `title` a hover shows; the two `visibility` findings are xterm's transparent helper textarea, by design. Plain Escape doesn't interrupt Claude (Orca's rule: Escape also navigates Claude's UI), so the interrupt used Ctrl-C. The daemon was stopped and the temporary home deleted.
+- **Why:** every goal passed with the acting step OBSERVED and a screenshot showing the result
+- **Evidence:** .quirk/using-apps-like-a-user/runs/20261027T065805-b579/report.md (local, uncommitted)
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** assumed — autonomous
+
+## D61: No native-only scenarios
+- **Question:** LOOP.md step 6, scenarios only the real window can show
+- **Options:** hand some off in docs/loop/native/m1-agent-status.json; none
+- **Chose:** none: the window scenarios are tab and card glyphs and a Settings checkbox, all in the web UI; finish notifications stay with m1-notifications (D27)
+- **Why:** nothing in SC-34..SC-37 needs the window frame, menu bar, tray, OS notifications or focus
+- **Evidence:** logic.md "The window"
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** assumed — autonomous
+
+## Progress
+Step 7 (land). All four waves, the W1/W2/W3 checkpoints, the catch-up with build/roadmap (m1-worktrees), Final Round 1 with its fix batch, and the UI pass are done. If this iteration stopped before landing: run the gate (`bun run test && bun test scripts && bun run typecheck`, and check the real home's agent configs, `~/quirky`, `~/wt` and `~/.quirky` as D58 says), commit, `git switch --detach`, `bun scripts/build-loop/queue.ts land m1-agent-status`.
