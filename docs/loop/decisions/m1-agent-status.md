@@ -558,6 +558,47 @@
 - **Confidence:** high
 - **Source:** assumed — autonomous
 
+## D55: W3 checkpoint: accept all three findings, which collapse to two defects
+- **Question:** adjudicating the W3 checkpoint review (three lenses, standard depth, codex gpt-6.1-sol; target 1341faf..71410b4, which also covers the W2 fix batch; X passed)
+- **Options:** accept or reject each
+- **Chose:** accept both: a child's tool event with the approved tool's name and input but another tool-use id consumed the normalizer's approval memory, so the real approved tool never released the hold (C1/S2); an accepted event that can't start a row still skipped provider capture (S1, HIGH, a gap left by the W2 fix). One fixer closed both with regression tests seen failing first; the approval memory now matches the tool-use id when both sides have one, and capture runs right after an accepted identity verdict.
+- **Why:** each reproduced with the reviewer's command; tech.md "Apply order" captures every event identity accepts
+- **Evidence:** review bundle in the session scratchpad (rev-w3/*-gate.json); merge 04e6ad7
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** assumed — autonomous
+
+## D56: Catching up with m1-worktrees puts the agent glyph on the new tree's workspace card
+- **Question:** `git merge build/roadmap` conflicted in `plugins/quirky.worktree` (report.ts, WorktreesSection.tsx, ui.test.ts): m1-worktrees rewrote the sidebar as a tree while this item had added the agent glyph to the old cards
+- **Options:** keep either side and drop the other; take m1-worktrees's structure and re-apply the glyph
+- **Chose:** m1-worktrees's structure, with the glyph re-applied: `WorktreeCard` in Tree.tsx draws `StatusDot` with `worktreeGlyph(...)` (agent glyph and label when an agent's display wins, the coarse dot otherwise) on every card (pinned, nested, group); `WorkspaceReport` gains optional `display` and `label`; the section passes one `now` to the tree and the report. Session migration 5 stays (m1-worktrees added no session migration). Read m1-worktrees's decision log: D64 adds a gate check that `~/quirky` and `~/wt` don't exist, which this item's gates now run; D24 (session create takes title and command) and D68 (create takes any installed agent) merged cleanly with this item's session changes; nothing conflicts with this item's decisions.
+- **Why:** the tree is the landed UI; the glyph is this item's SC-34..SC-37 behavior and must survive
+- **Evidence:** merge 1f323f4; docs/loop/decisions/m1-worktrees.md D24, D36, D64, D68
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** assumed — autonomous
+
+## D57: W4's end-to-end scenarios run on a daemon subprocess, and `get` takes a positional session
+- **Question:** the W4 barrier, and the gap it found: `quirky agent-status get <id>` (SC-33's wording) didn't exist; the generated command took `--session`
+- **Options:** change the scenario's wording to `--session`; add a `get` cli-command with a positional, as `quirky session get` has
+- **Chose:** add the positional command (`get <session> [--at ms]`, printing the row or "no agent status", `--json` the method result); the e2e test uses it. W4's tests: SC-12, SC-19, SC-33 (session-flows), SC-24..SC-27 and SC-29 (hooks-cli), SC-28 (claude-settings) on `startAgentsE2E` with a temp HOME and QUIRKY_HOME; SC-25 covers all 28 installer agents. Where the tests differ from the scenario text: SC-19 runs claude inside a shell session (killing a session's own process ends the session) and triggers the presence probe with `job.run`; SC-28 restarts the daemon between versions because the version gate caches per daemon; SC-29 adds the codex fake after start so the startup install hasn't already run.
+- **Why:** the logic spec is the requirement; the positional matches the CLI's convention
+- **Evidence:** merge da13b21; commit e48e4b9
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** assumed — autonomous
+
+## D58: A W4 run wrote Quirky hooks into the real home; they were removed and every later gate checks for them
+- **Question:** the W4 implementer ran the CLI once without `HOME`/`QUIRKY_HOME`; it auto-started a daemon on the real `~/.quirky`, whose startup hook install (D54) wrote Quirky entries into the real `~/.codex/hooks.json`, `~/.gemini/settings.json`, `~/.cursor/hooks.json` and plugin files under `~/.config/opencode/plugins`, `~/.pi` and `~/.omp`
+- **Options:** leave them; remove them with the product's own removers and check
+- **Chose:** removed: the implementer killed that daemon, ran each installer's `remove` against the real home, and deleted the `~/.quirky` it had created (birth time 01:27 today). I verified afterwards that no installer target in the real home holds a Quirky entry, the three JSON files parse with their other keys intact (gemini: theme, selectedAuthType, mcpServers, ide, security, general, hooks; cursor: hooks, version; codex: hooks), and `~/.quirky` is gone. The three JSON files were rewritten by Quirky's writer, so their formatting may differ from the originals; copies taken after the install are in the session scratchpad (`realhome-backup/`). Every later gate checks the real home's installer targets for Quirky entries, as well as `~/quirky`, `~/wt` and `~/.quirky`.
+- **Why:** LOOP.md's "tests never touch real state" is a hard rule; the committed tests never touch the real home
+- **Evidence:** file mtimes 2026-10-27 01:34 on the three JSON files; the scan in this session's journal
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** the user finds a hook of theirs missing or reordered in those three files
+- **Source:** locked by docs/loop/LOOP.md
+
 ## Progress
 Step 5 (build), between waves. RUN_BASE 13deb24 (specs fixed). W1 and its checkpoint fixes (D46, D47) and W2 (D48) are merged; HEAD c99d239, full gate green (4419 pass, scripts 30, typecheck clean). Backend: claude-task implementers (Agent, sonnet, effort high) + codex reviewer (D44).
 
