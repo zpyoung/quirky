@@ -462,5 +462,16 @@
 - **Revisit if:** The final packaged build differs on a core surface from the verified components.
 - **Source:** locked by docs/loop/LOOP.md verification requirements
 
+## D43: Final affected verification runs on the operator's16-core host
+- **Question:** How should verification proceed after the old host timed out and the operator prohibited a local multi-package run?
+- **Options:** Continue the local override; weaken/skip failed gates; cancel local work and use the configured test host.
+- **Chose:** Cancel the local multi-package job immediately. Direct plain bun test is single-file only. Use bun scripts/suite.ts with the ten affected directories and the updated shared host configuration; do not change protected runner code or duplicate the whole suite manually.
+- **Why:** The operator reported Mac load80 and supplied the remote-only priority. The old remote run had no final verdict, so it was never counted passing. A local ownership check found no remaining cancelled multi-package Bun process at lane8.
+- **Evidence:** Final run on quirkyci@34.122.38.64, jobs8/slots16:323 remote files pass,2 macOS-only files pass,0 failures,flaky[] (250.52s). Final build exits0; scripts49 pass285 assertions and typecheck exits0 (artifact390). The old run1793132772472-82913 matched both exact source fingerprints; its worker/guardians were disposed and its owned directory removed, without touching another lane's queue owner. Actual assembled retirement smoke returns completed/value1 after the earlier stranded reproduction.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** The land-owned whole-suite gate reports a blocking integration failure.
+- **Source:** locked by the latest operator test-host instruction
+
 ## Progress
-Core implementation and the one final review/fix batch are ready for final assembly. Built-web browse/title/consent/search/disable passed; corrected clear and absolute-owned-provider resume passed the focused packaged run. All25 copied commands, private-APFS file/directory Trash, typed APIs, scan/search boundaries and the S1 retirement regression have direct checks. Integration catch-up happened once at9ec4c97; all eight brought-in decision logs were read without conflict. Main parity completion item was added through queue.ts with dependency m3-vault; supplemental SC-07 tip flow must also be added before land. Next: merge the verified component fixes, run final build/scripts/typecheck/affected suites (not the whole suite), commit/detach and queue.ts land. Whole-suite and successful landing are not yet claimed.
+Implementation, core packaged UI smoke, the one review/fix batch and final affected gates are complete. Catch-up occurred once at9ec4c97; all brought-in decisions were read. Both dependent completion items are confirmed in the queue, with unfinished flows/reasons recorded in BLOCKERS.md. Build, scripts49/0, typecheck and affected files325/0 pass. Whole-suite verification and merged/done status are owned by queue.ts land; no manual whole-suite run is claimed.
