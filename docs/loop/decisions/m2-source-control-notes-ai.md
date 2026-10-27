@@ -341,5 +341,16 @@
 - **Revisit if:** never for headless runs
 - **Source:** locked by docs/loop/LOOP.md
 
+## D32: Spec review: fix the three standing findings; dismiss the prepass reference and heading checks
+- **Question:** what to do with the adversarial review's findings (LOOP.md step 4)
+- **Options:** fix the standing ones; also act on the refuted one
+- **Chose:** CRITICAL_ISSUES from Codex (gpt-6.1-sol, independence full, depth deep, profile spec-design, target logic.md with tech.md staged beside it); 4 promoted, 3 standing, 1 refuted, nothing contested. Fixed: F2 (CRITICAL) an `unconfirmed` new-agent delivery can mean the agent exited before Enter, so it now keeps the notes and fails with "The agent may not have received the notes. They were kept." (NA-18); F1 (HIGH) OpenCode's one-shot arguments ask for JSON events, so `oneShot` gains `output: opencode-json` with Orca's decoder, and generated text is cleaned by Orca's `cleanGeneratedCommitMessage` before the subject split (NA-27); F3 (MEDIUM) the window guards generation with an edit counter, so typing then deleting keeps the box (NA-30). F4 (NA-8 not mapped to a test) was refuted: the UI pass covers every (UI) scenario. Dismissed: F5 and the 46 reference findings (method names, CLI lines and fixture names read as paths; no Purpose/Overview heading), as earlier items did (m2-ask-parity D27)
+- **Why:** each standing finding named a flow that would lose notes or put the wrong text in the commit box
+- **Evidence:** scratchpad ar/gate.json and ar/manifest.json; Orca src/shared/opencode-generation-output.ts, commit-message-agent-output.ts; plugins/quirky.agents/test/delivery.test.ts:416-424
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** blind pastes prove reliable enough that keeping notes causes duplicate sends
+- **Source:** assumed — autonomous
+
 ## Progress
-Brainstorming done; logic.md written (NA-1 to NA-47). Next: write tech.md beside it, run one Codex adversarial review over both specs, fix findings, commit, then quirk:subagent-driven-development.
+Specs written, reviewed (D32) and committed. Next: quirk:subagent-driven-development against tech.md (preflight pairing claude-task + codex, record it), waves per tech.md Architecture.

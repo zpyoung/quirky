@@ -51,7 +51,8 @@ Small cross-plugin growths (API unstable until M7):
   `promptDelivery`, `singletonOptions`, `models`, `defaultModelId`, default thinking level) and
   `O/shared/claude-background-run-isolation.ts` (`--strict-mcp-config`, `--settings
   {"disableAllHooks":true}` unless the user args set `--settings`; retry once without
-  `--strict-mcp-config` when output contains the enterprise refusal text).
+  `--strict-mcp-config` when output contains the enterprise refusal text). OpenCode's block sets
+  `output: "opencode-json"` because its arguments ask for `--format json`.
 - `QA/main.ts:13-29` methods map: add `generate`; manifest entry beside `deliver` (`:1657`).
 - `QA/src/service.ts:95` `AgentsService`: `generate` handler. Command and environment come from
   `buildLaunchPlan` (`QA/src/core/plan.ts:267`) with `config: this.configs.get(id)` and
@@ -145,7 +146,11 @@ generate({agent: string, prompt: string, args?: string, cwd?: string, worktree?:
   both, NA-32).
 - `cwd`: default the caller's worktree path; must be an existing directory (`invalid-params`).
 - stdin: write the prompt (stdin delivery) and close; argv delivery closes stdin at once.
-- Result `text` is stdout decoded as UTF-8, ANSI-stripped, trimmed. Exit 0 required.
+- Result `text`: stdout decoded as UTF-8, ANSI-stripped, then decoded per `oneShot.output`:
+  `text` (default) as is; `opencode-json` through a port of `parseOpenCodeGenerationOutput`
+  (`O/shared/opencode-generation-output.ts`: concatenated `text` events; an `error` event fails
+  the run with reason `failed` and that event's message). Exit 0 required. `generate` returns the
+  decoded text untrimmed of content; the caller cleans it.
 - Errors (all `conflict` unless noted; message uses the agent's label):
   - not installed / not enabled: `invalid-params` reason `not-installed`
   - no `oneShot` block: `invalid-params` reason `cannot-generate`, "<Label> can't generate text.
@@ -201,9 +206,11 @@ sendNotes({worktree?, scope: 'note'|'file'|'all', id?, path?, session?, agent?})
   - session delivery: `quirky.terminal/send {session, text, enter: true}`; `delivery: "pasted"`.
   - agent delivery: `quirky.terminal/newTab {workspace: worktree.id, agent, prompt: text}` then
     wait for the new session's `promptDelivery` to leave `pending` (poll `quirky.session/get` or
-    subscribe to `quirky.session/changed`, 30 s cap). `pasted`, `command-line` and `unconfirmed`
-    count as delivered; `not-delivered` or the cap → `conflict` reason `not-delivered` "The agent
-    did not receive the notes." and nothing is deleted. The new session ID comes from the
+    subscribe to `quirky.session/changed`, 30 s cap). Only `pasted` and `command-line` count as
+    delivered. `unconfirmed` (blind paste: no ready signal, or the session exited before Enter) →
+    `conflict` reason `unconfirmed` "The agent may not have received the notes. They were kept.";
+    `not-delivered` or the cap → `conflict` reason `not-delivered` "The agent did not receive the
+    notes."; in both nothing is deleted. The new session ID comes from the
     workspace returned by `newTab` (the tab added last in the active group).
   - on delivery: delete each picked note whose current row still equals its snapshot (`id`,
     `body`, `path`, `startLine`, `line`); return those as `sent`, the rest as `kept`.
@@ -245,6 +252,12 @@ cancelGenerate({worktree?}) -> {cancelled: boolean}
   (`{name}` or `{{name}}` with optional spaces; unknown or null stay verbatim); variables
   `basePrompt, branch, stagedFiles, stagedPatch, linkedIssue` (`linkedIssue` is always empty
   until M4).
+- Output cleaning first: port `cleanGeneratedCommitMessage` from
+  `O/shared/commit-message-agent-output.ts` (jcode `{"text"}` envelope, trailing `[Tokens]` line,
+  a leading "Generating"/"Thinking"/ellipsis line, a leading `<think>` or `◁think▷` block, one
+  enclosing fence, a leading list marker), plus `stripPrefilledReasoningPreamble` for the custom
+  command only. Failure detail for non-zero exits: port `excerptAgentFailureOutput` and
+  `sanitizeAgentFailureDetail` from the same file.
 - Output split: port `splitGeneratedCommitMessage` from `O/shared/commit-message-generation.ts`
   (subject = first line, trailing dots stripped, cut to 72; empty → "Update project files"; body
   after the first blank line, trimmed).
@@ -325,8 +338,9 @@ worktree has no unsent notes.
 - Send menu: scope entries (with counts) each with a submenu "Send notes to" (sessions, separator,
   "New agent" agents). A single scope shows its targets directly. Toasts "Sending notes...",
   "Notes sent."; errors toast their message.
-- Generation in the window: start records `message` at click; on result, apply only if the box
-  still equals that value and no stop was pressed.
+- Generation in the window: keep an edit counter bumped by every change to the message box;
+  record it at click; on result, apply only if the counter is unchanged and no stop was pressed
+  (typing then deleting still counts as typing, NA-30).
 - Launch dialog fields and texts: port from `O/renderer/src/components/right-sidebar/source-control/ai/`
   and `RS/source-control-fix-split-button.tsx` as the feature doc lists them.
 
@@ -351,6 +365,7 @@ NoteTarget = {session, agent, label, title, status, state: string | null,
 EffectiveRecipe = {action, agent: string | null, args: string, template: string,
                    sources: {agent: Source, args: Source, template: Source}}   Source = 'repo'|'global'|'default'
 OneShotSpec = {args: string[] /* may contain {model} {thinking} {prompt} */, prompt: 'stdin'|'argv',
+               output?: 'text'|'opencode-json',
                singletonOptions?: string[][], models?: {id, label, thinking?: string}[],
                defaultModel?: string, background?: 'claude'}
 ```
@@ -399,7 +414,8 @@ Pruning (D6): on activate, and in `notes` for a worktree that fails `env.resolve
 ## Testing strategy
 
 - `QA/test/one-shot.test.ts` (pure): argv for every ported agent against Orca's shapes, singleton
-  override, `{prompt}` custom command, `oneShot` validation errors (NA-26, NA-31, NA-32, NA-41).
+  override, `{prompt}` custom command, `oneShot` validation errors, OpenCode JSON decoding and
+  error events (NA-26, NA-27, NA-31, NA-32, NA-41).
 - `QA/test/generate.test.ts` (service with fake executables, as `QA/test/service.test.ts:61+`):
   stdin delivery and close, argv delivery, timeout with a child that ignores SIGTERM (group gone),
   4 MiB cap, non-zero exit, ENOENT, cancel, Claude strict-MCP retry (NA-29, NA-30, NA-41).

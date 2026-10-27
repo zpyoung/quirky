@@ -4,7 +4,8 @@
 
 **Status:** Approved (headless build loop; decisions in [m2-source-control-notes-ai.md](../../../loop/decisions/m2-source-control-notes-ai.md)). Tech spec: requested; authored as [tech.md](tech.md) (gate: requested, crosses `quirky.git`'s daemon and window halves, `quirky.agents` and `quirky.terminal`).
 
-**Amendments:** none yet.
+**Amendments:**
+- 2026-10-27, before build: Codex adversarial review ([D32](../../../loop/decisions/m2-source-control-notes-ai.md)). An unconfirmed delivery keeps the notes (NA-18); agent output is decoded and cleaned before it becomes a message, including OpenCode's JSON events (NA-27); any typing during a generation keeps the box, even if the text typed was deleted again (NA-30).
 
 ## Conceptual model
 
@@ -245,7 +246,7 @@ Nothing calls a real model.
 18. **NA-18: notes start a new agent tab** (UI, CLI)
     - **Given** the note on `math.ts` line 30 and no sessions
     - **When** the person picks "This note" > New agent > Claude; and the agent runs `quirky git sendNotes --scope file --path util.ts --agent claude --json` for the `util.ts` note
-    - **Then** each opens a new Claude tab in **feat** whose first prompt is that note's text, submitted once the agent is ready; each note is deleted once delivery is reported; when the new agent never reports ready and the prompt can't be delivered, the send fails with "The agent did not receive the notes." and the note stays
+    - **Then** each opens a new Claude tab in **feat** whose first prompt is that note's text, submitted once the agent is ready; each note is deleted once the prompt is confirmed delivered (pasted after the agent reported ready, or passed on the command line); when the prompt can't be delivered the send fails with "The agent did not receive the notes.", and when it was pasted blind (the agent never reported ready, or exited before Enter) it fails with "The agent may not have received the notes. They were kept."; in both cases the note stays
 
 19. **NA-19: a note edited during its send survives** (API)
     - **Given** notes on `math.ts` 5 and 30, and a send of all notes to a new Claude tab whose fake agent takes 2 seconds to become ready
@@ -297,9 +298,9 @@ Nothing calls a real model.
     - **Data after:** **Result**: ✓ subject "Rename x to count"; ✓ body "Clearer name."
 
 27. **NA-27: the output becomes a subject and body by Orca's rules** (API)
-    - **Given** fake agents printing (a) "Add parser for the new config format and wire it into the loader and the CLI." ; (b) nothing; (c) "Fix crash..." then two blank lines and "Because the list was empty."
+    - **Given** fake agents printing (a) "Add parser for the new config format and wire it into the loader and the CLI." ; (b) nothing; (c) "Fix crash..." then two blank lines and "Because the list was empty."; (d) a "Generating…" line, then the message inside a fenced code block; (e) a `<think>` block, then "- Fix crash"; (f) OpenCode's JSON event stream with a `text` event holding "Fix crash"; (g) OpenCode's JSON event stream with an `error` event "model not found"
     - **When** an API client generates each
-    - **Then** (a) the subject is the first 72 characters with no trailing dot and no body; (b) "Update project files"; (c) subject "Fix crash", body "Because the list was empty."
+    - **Then** (a) the subject is the first 72 characters with no trailing dot and no body; (b) "Update project files"; (c) subject "Fix crash", body "Because the list was empty."; (d) the status line and the fence are dropped; (e) the reasoning block and the list marker are dropped, giving "Fix crash"; (f) "Fix crash", never the JSON; (g) the generation fails with "OpenCode failed: model not found"
 
 28. **NA-28: large staged changes are cut to Orca's budget** (API)
     - **Given** (a) two staged files whose patches total 300 000 bytes; (b) a staged file whose patch is over 10 MiB; (c) 400 staged files whose name list exceeds 6000 characters
@@ -313,8 +314,8 @@ Nothing calls a real model.
 
 30. **NA-30: one generation per worktree, and stop means stop** (UI, API)
     - **Given** a fake agent that takes 5 seconds and starts a child process
-    - **When** (a) an API client starts a generation and a second client starts another in **feat**; (b) the person clicks the sparkle, then clicks it again (stop); (c) the person clicks the sparkle, then types in the box before it finishes
-    - **Then** (a) the second fails with `conflict` "A commit message is already being generated."; (b) `cancelGenerate` ends the run, the agent and its child are gone, and the box is untouched; (c) the run finishes but the box keeps what the person typed
+    - **When** (a) an API client starts a generation and a second client starts another in **feat**; (b) the person clicks the sparkle, then clicks it again (stop); (c) the person clicks the sparkle, then types in the box before it finishes, or types and deletes it again
+    - **Then** (a) the second fails with `conflict` "A commit message is already being generated."; (b) `cancelGenerate` ends the run, the agent and its child are gone, and the box is untouched; (c) the run finishes but the box keeps what the person left there, even when that is empty again
 
 31. **NA-31: a custom command takes the prompt in argv or on stdin** (CLI)
     - **Given** `ai-custom-command` set to `my-gen --fast {prompt}`, then to `my-gen --fast`, and the commit message recipe's agent set to "Custom command"
