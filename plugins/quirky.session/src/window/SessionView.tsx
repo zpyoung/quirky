@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { Session, UiPluginContext } from '@quirky/protocol'
 import { ExitedBar } from './ExitedBar'
 import { StructuredView } from './StructuredView'
@@ -39,15 +39,34 @@ type Props = {
   onClose: () => void
 }
 
+/**
+ * Counts up each time the session turns `exited` and restorable while shown, so the pane remounts
+ * and its attach restores the session. A session that is already lost when shown needs no
+ * remount: the first attach restores it.
+ */
+function useRestoreAttempt(session: Session): number {
+  const [attempt, setAttempt] = useState(0)
+  const previous = useRef({ id: session.id, status: session.status })
+  useEffect(() => {
+    const before = previous.current
+    previous.current = { id: session.id, status: session.status }
+    if (before.id === session.id && before.status !== 'exited' && session.status === 'exited' && session.restorable) {
+      setAttempt((count) => count + 1)
+    }
+  }, [session.id, session.status, session.restorable])
+  return attempt
+}
+
 export function SessionView({ context, themeSource, session, connected, onClose }: Props) {
   const scrollback = useScrollback(context)
+  const attempt = useRestoreAttempt(session)
   if (session.kind === 'structured') return <StructuredView context={context} session={session} />
 
   return (
     <div className="session-view">
       {connected && (
         <TerminalPane
-          key={session.id}
+          key={`${session.id}:${attempt}`}
           context={context}
           themeSource={themeSource}
           sessionId={session.id}
