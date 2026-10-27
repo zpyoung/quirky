@@ -1,7 +1,7 @@
 import type { CliArgs, CliContext } from '@quirky/protocol'
 import { findPane, groupsInOrder } from '../layout/tree'
 import type { Workspace } from '../layout/types'
-import { atMost, paneIdOf, positional, requiredNumber, showWorkspace, stringFlag, workspaceParam, type Handler } from './shared'
+import { atMost, paneIdOf, positional, resolvePane, requiredNumber, showWorkspace, stringFlag, workspaceParam, type Handler } from './shared'
 
 const call = (ctx: CliContext, method: string, params: Record<string, unknown>) => ctx.call(`quirky.terminal/${method}`, params)
 
@@ -83,8 +83,8 @@ async function locatePane(ctx: CliContext, paneId: string, selectors: (string | 
 
 async function getPane(args: CliArgs, ctx: CliContext): Promise<void> {
   atMost(args, ctx, 1)
-  const pane = await paneIdOf(args.positionals[0], ctx)
-  const scope = workspaceParam(args, ctx).workspace
+  const { pane, workspace } = await resolvePane(args.positionals[0], ctx)
+  const scope = workspaceParam(args, ctx).workspace ?? workspace
   const found = await locatePane(ctx, pane, scope === undefined ? [undefined, 'floating'] : [scope])
   if (!found) throw ctx.fail(`no pane ${pane}`)
   ctx.out.result(found, () =>

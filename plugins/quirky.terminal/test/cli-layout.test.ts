@@ -290,6 +290,34 @@ describe('human and JSON output', () => {
     expect(await failure(run('pane-get', ['pane-99'], {}, { answers }))).toMatchObject({ kind: 'fail', message: 'no pane pane-99' })
   })
 
+  test('pane get on a session looks in the workspace paneOf names, even another worktree', async () => {
+    const other: Workspace = { ...WORKSPACE, id: 'wt-other' }
+    const answers = {
+      paneOf: { workspace: 'wt-other', tab: 'tab-2', pane: 'pane-3' },
+      workspace: (params: Record<string, unknown>) => ({ workspace: params.workspace === 'wt-other' ? other : { ...WORKSPACE, root: group('grp-9', [], null) } })
+    }
+    const found = await run('pane-get', ['s-other'], {}, { answers, json: true })
+    expect(found.calls).toEqual([
+      { method: 'paneOf', params: { session: 's-other' } },
+      { method: 'workspace', params: { workspace: 'wt-other' } }
+    ])
+    expect(JSON.parse(found.lines[0]!)).toMatchObject({ workspace: 'wt-other', pane: { id: 'pane-3' } })
+    const fromEnv = await run('pane-get', [], {}, { answers, json: true, env: { QUIRKY_SESSION_ID: 's-other' } })
+    expect(JSON.parse(fromEnv.lines[0]!)).toMatchObject({ workspace: 'wt-other' })
+  })
+
+  test('pane get on a session with --worktree looks in the worktree named, not the one paneOf names', async () => {
+    const answers = {
+      paneOf: { workspace: 'wt-other', tab: 'tab-2', pane: 'pane-3' },
+      workspace: { workspace: WORKSPACE }
+    }
+    const { calls } = await run('pane-get', ['s-other'], { worktree: 'api' }, { answers })
+    expect(calls).toEqual([
+      { method: 'paneOf', params: { session: 's-other' } },
+      { method: 'workspace', params: { workspace: 'api' } }
+    ])
+  })
+
   test('pane get --worktree looks only in that worktree', async () => {
     const { calls } = await run('pane-get', ['pane-3'], { worktree: 'api' }, { answers: { workspace: { workspace: WORKSPACE } } })
     expect(calls).toEqual([{ method: 'workspace', params: { workspace: 'api' } }])
