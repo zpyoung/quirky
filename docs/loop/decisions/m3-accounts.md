@@ -363,5 +363,27 @@
 - **Revisit if:** a preserved file needs restoring or a named evidence artifact is missing
 - **Source:** locked by docs/loop/LOOP.md
 
+## D34: Install the merged workspace graph before typechecking it
+- **Question:** Why did clean landing verification fail to resolve every Accounts dependency after product tests passed?
+- **Options:** add type aliases/suppressions; change protected loop code; make the existing public typecheck command prepare its current frozen workspace graph
+- **Chose:** `bun run typecheck` now runs `bun install --frozen-lockfile` before the unchanged TypeScript command. Preserve ordinary module resolution and every existing compiler option; no fallback source mappings remain.
+- **Why:** protected `prepareVerify` installs on the base before merging the lane branch. The Accounts manifest/lock entry is correct, but its dependency links therefore do not exist when merged typecheck runs. An isolated owned checkout with the Accounts node_modules removed repaired those links and passed the new command in 30.62 seconds (install 66ms). This fixes protocol, React and test dependencies together rather than hiding missing imports.
+- **Evidence:** scripts/build-loop/lanes.ts:158-167; second land product suite `ok:true` (448 remote files, two Mac files) and scripts 62/460, then typecheck failure; isolated fresh-resolution bootstrap smoke; package.json typecheck script
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** current-tree frozen installation or typecheck fails on the next merge result
+- **Source:** assumed — autonomous
+
+## D35: Preserve protected script assertions after an isolated passing rerun
+- **Question:** Do three five-second script-test timeouts justify changing protected infrastructure?
+- **Options:** weaken caps/assertions; isolate the affected file and retain its actual result
+- **Chose:** leave protected code unchanged; record the full scripts run as 59 pass/3 timeouts and its isolated lanes.test.ts run as 23 pass/60 assertions. The new current-tree typecheck passed as well.
+- **Why:** the failures occurred while Git-based fixture operations exceeded the existing five-second test budget, followed by fixture teardown errors. The file passed unchanged alone, matching the incoming m1-agent-status-scripting D47 precedent. The landing command must still run its complete required gates.
+- **Evidence:** script timeout output artifact 372; isolated typecheck plus lanes.test.ts passed in 60.89 seconds
+- **Reversibility:** easy
+- **Confidence:** high for the observed load-sensitive result
+- **Revisit if:** the isolated file or authoritative gate fails persistently
+- **Source:** locked by docs/loop/LOOP.md
+
 ## Progress
-Ready to retry authoritative landing after actual blocking repairs ca55659 and updated-loop catch-up 86ff0426. Source is built; Mac consumer regressions passed 135 tests/752 assertions; scripts passed 62/458, typecheck passed, and all 12 focused Linux files passed with no flaky rerun. Fresh real-daemon/PTY smoke again verified Claude/Codex prior-content continuation A→B and cleaned every owned runtime process/home. Independent review remains partial/NOT_REVIEWABLE; S1 and extended UI/native verification stay open in BLOCKERS and dependent items m3-accounts-remaining-flows plus m3-accounts-overflow-verification. The one-hour deadline was missed, not retroactively claimed. Evidence is archived under the loop notes directory; eleven clean merged worktrees removed and one dirty lifecycle tree preserved intact. Next: commit these amendments, detach and retry queue.ts land; only its verified result marks the item done.
+Ready for the next authoritative landing retry. Core native boundaries are repaired and runtime smoke passed; 135 Mac consumer tests/752 assertions and 12 focused Linux files passed. The second land's complete product suite passed 448 remote files plus two Mac files with five runner-confirmed load flakies, and scripts passed 62/460; only post-merge dependency setup blocked typecheck. D34 repairs that setup without protected-loop edits or compiler fallbacks, proven in an isolated checkout with missing Accounts dependency links. Extended UI/native flows, incomplete independent review and unconfirmed S1 remain tracked in the two dependent items and BLOCKERS. Deadline miss remains explicit. Commit the dependency-setup fix/evidence, detach and retry queue.ts land; do not claim done until its verified result.
