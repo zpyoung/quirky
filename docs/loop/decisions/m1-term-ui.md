@@ -489,5 +489,16 @@
 - **Revisit if:** it fails again in a gate with nothing else running
 - **Source:** assumed — autonomous
 
+## D49: Wave 3 runs while the waves 1–2 checkpoint review runs
+- **Question:** subagent-driven-development runs a checkpoint review and its fix batch before the next wave
+- **Options:** wait for the review and fixes; dispatch wave 3 from the wave 2 merge at once and apply the checkpoint fixes after wave 3 merges
+- **Chose:** dispatch wave 3 at once. Its tasks create new window files and the CLI; the review covers the daemon, kernel and pane code those tasks only call, so the fix batch lands on the merged tree afterwards and the wave 3 gate and the next checkpoint see both.
+- **Why:** the review takes about half an hour, and this item already spans more than one session; wave 3's scopes don't overlap the reviewed files except `quirky-plugin.json` (CLI entries), which a fixer would only touch after wave 3 merges.
+- **Evidence:** run journal, wave 3
+- **Reversibility:** easy
+- **Confidence:** medium
+- **Revisit if:** a checkpoint finding changes a contract wave 3 builds against
+- **Source:** assumed — autonomous
+
 ## Progress
-Wave 1 merged (1d73ea1, gate green apart from D48). Wave 2 (B1 layout service + manifest daemon entries; B2 pane component) dispatched from 1d73ea1 on sdd/termui/B1, B2. Next: checkpoint review over 0fc710b..wave-2 merge, then wave 3 (workspace view, quick-command window parts, CLI), wave 4 (wiring with overrides/keybindings/commands, floating overlay, scenario tests).
+Waves 1–2 merged (d2bed5f, gate green 4214/30/tsc). Checkpoint cp1 (0fc710b..d2bed5f) running; wave 3 (C1 workspace view, C2 quick-command window parts, C3 CLI) dispatched from d2bed5f on sdd/termui/C1..C3. Next: merge wave 3, apply cp1 fixes, then wave 4 (ui.tsx wiring with overrides/commands/keybindings/panel/overlay, floating overlay, scenario tests).
