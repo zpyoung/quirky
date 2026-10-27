@@ -1,4 +1,4 @@
-import type { GitDiffPair, GitFileStatus } from '@quirky/protocol'
+import type { GitDiff, GitDiffPair, GitFileStatus } from '@quirky/protocol'
 
 export type DiffSelection = { path: string; staged: boolean }
 
@@ -25,6 +25,28 @@ export function reuseDiff(prev: GitDiffPair | null, next: GitDiffPair): GitDiffP
     prev.binary === next.binary &&
     prev.original === next.original &&
     prev.modified === next.modified
+  ) {
+    return prev
+  }
+  return next
+}
+
+/**
+ * The previous full diff when a refetch returned the same sides, hash and markers, so the view's
+ * poll does not rebuild the editor (and lose the scroll position or cursor) when nothing changed.
+ */
+export function reuseGitDiff(prev: GitDiff | null, next: GitDiff): GitDiff {
+  if (
+    prev &&
+    prev.path === next.path &&
+    prev.source === next.source &&
+    prev.kind === next.kind &&
+    prev.mime === next.mime &&
+    prev.original === next.original &&
+    prev.modified === next.modified &&
+    prev.modifiedHash === next.modifiedHash &&
+    prev.modifiedDeleted === next.modifiedDeleted &&
+    JSON.stringify(prev.tooLarge) === JSON.stringify(next.tooLarge)
   ) {
     return prev
   }
