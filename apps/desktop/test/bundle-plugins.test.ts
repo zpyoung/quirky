@@ -75,6 +75,19 @@ describe('bundlePlugins', () => {
     expect(readManifest('quirky.demo').ui).toBe('dist/ui.js')
   })
 
+  test('copies a sounds/ directory when the plugin has one', async () => {
+    const dir = writePlugin('quirky.demo', { main: 'main.ts' }, { 'main.ts': 'export const x = 1\n' })
+    write(join(dir, 'sounds', 'ding.wav'), 'RIFF-ding')
+    write(join(dir, 'sounds', 'nested', 'blip.wav'), 'RIFF-blip')
+    writePlugin('quirky.plain', { main: 'main.ts' }, { 'main.ts': 'export const x = 1\n' })
+
+    await bundlePlugins(src, out)
+
+    expect(readFileSync(join(out, 'quirky.demo', 'sounds', 'ding.wav'), 'utf8')).toBe('RIFF-ding')
+    expect(readFileSync(join(out, 'quirky.demo', 'sounds', 'nested', 'blip.wav'), 'utf8')).toBe('RIFF-blip')
+    expect(existsSync(join(out, 'quirky.plain', 'sounds'))).toBe(false)
+  })
+
   test('a plugin without cli.ts gets no cli entry', async () => {
     writePlugin('quirky.demo', { main: 'main.ts' }, { 'main.ts': 'export const x = 1\n' })
     await bundlePlugins(src, out)

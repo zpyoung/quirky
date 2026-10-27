@@ -17,13 +17,23 @@ export class BrowserWindow {
   on(name: string, handler: (event: unknown) => void): void
   show(): void
   activate(): void
+  isVisible(): boolean
+  isMinimized(): boolean
 }
 
 export class Tray {
-  constructor(options?: { title?: string })
+  constructor(options?: { title?: string; image?: string; template?: boolean; width?: number; height?: number })
   setMenu(menu: MenuItem[]): void
+  setVisible(visible: boolean): void
+  remove(): void
   on(name: 'tray-clicked', handler: (event: unknown) => void): void
 }
 
-export const Utils: { showNotification(options: { title: string; body?: string }): void }
-export const app: { quit(): void; readonly isPackaged: boolean }
+export const Utils: {
+  showNotification(options: { title: string; body?: string; subtitle?: string; silent?: boolean }): void
+}
+export const app: {
+  quit(): void
+  on(name: string, handler: (payload: unknown) => void): () => void
+  readonly isPackaged: boolean
+}
