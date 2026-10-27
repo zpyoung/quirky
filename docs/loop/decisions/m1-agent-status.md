@@ -629,5 +629,16 @@
 - **Confidence:** high
 - **Source:** assumed — autonomous
 
+## D62: The post-fix gate's one failure is a terminal timing flake under load
+- **Question:** the gate after the Final Round fix batch had 4922 pass and 1 fail: `plugins/quirky.terminal/test/e2e.test.ts` "SC-2: input sent before the prompt waits for it and runs once, in order" saw the typed-ahead `echo one` drawn twice
+- **Options:** treat it as a regression and debug; establish a flake
+- **Chose:** flake: it passed 5 of 5 runs alone on the same tree; nothing under plugins/quirky.terminal, packages/pty-host or packages/daemon changed since the gate at e48e4b9, which passed it; other lanes were running their suites at the same time (the suite took 933 s against about 350 s on a quiet machine)
+- **Why:** the assertion counts how often zsh redraws typed-ahead input, which depends on timing
+- **Evidence:** gate-fr.test in the session scratchpad; `git diff --stat edbb8b2 HEAD -- plugins/quirky.terminal packages/pty-host packages/daemon` is empty
+- **Reversibility:** easy
+- **Confidence:** medium
+- **Revisit if:** it fails on a quiet machine, or on the land run
+- **Source:** assumed — autonomous
+
 ## Progress
 Step 7 (land). All four waves, the W1/W2/W3 checkpoints, the catch-up with build/roadmap (m1-worktrees), Final Round 1 with its fix batch, and the UI pass are done. If this iteration stopped before landing: run the gate (`bun run test && bun test scripts && bun run typecheck`, and check the real home's agent configs, `~/quirky`, `~/wt` and `~/.quirky` as D58 says), commit, `git switch --detach`, `bun scripts/build-loop/queue.ts land m1-agent-status`.
