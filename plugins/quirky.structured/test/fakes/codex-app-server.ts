@@ -103,6 +103,15 @@ function startTurn(message, threadId, text) {
     const child = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], { stdio: 'ignore' })
     fs.writeFileSync(logPath + '.pid', String(child.pid))
   }
+  if (text.includes('[escaped-stdio]')) {
+    const child = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], {
+      detached: true,
+      stdio: ['ignore', 1, 2]
+    })
+    child.unref()
+    fs.writeFileSync(logPath + '.escaped-pid', String(child.pid))
+  }
+
   if (text.includes('[rpc-error]')) {
     send({ id: message.id, error: { code: -32001, message: 'scripted turn request error' } })
     return

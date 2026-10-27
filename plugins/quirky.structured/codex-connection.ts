@@ -22,6 +22,7 @@ const STDERR_TAIL_CHARS = 16 * 1024
 const DEFAULT_CONTROL_TIMEOUT_MS = 15_000
 const STDIN_GRACE_MS = 250
 const TERM_GRACE_MS = 2_000
+const FINAL_CLOSE_GRACE_MS = 500
 
 
 const isRpcId = (value: unknown): value is CodexRpcId => typeof value === 'string' || typeof value === 'number'
@@ -129,7 +130,12 @@ export class CodexConnection {
       }
       await this.waitForClose(STDIN_GRACE_MS)
       await this.terminateProcessGroup()
-      if (!this.isClosed) await this.closed.promise
+      if (!this.isClosed) {
+        this.child.stdin.destroy()
+        this.child.stdout.destroy()
+        this.child.stderr.destroy()
+        await this.waitForClose(FINAL_CLOSE_GRACE_MS)
+      }
     } finally {
       this.cleanup.resolve()
     }
