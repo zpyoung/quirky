@@ -318,5 +318,26 @@
 - **Confidence:** high
 - **Source:** supersedes m1-agent-status-scripting D13 (when the window starts)
 
+## D32: The matcher runs in a killable child process, not a Bun Worker
+- **Question:** how to enforce D29's time budget (subagent-driven development, wave 1, task T3)
+- **Options:** a Bun `Worker` terminated on overrun; a child process killed on overrun
+- **Chose:** a child process started like the PTY host (`Bun.spawn` with IPC), killed with SIGKILL and respawned on overrun
+- **Why:** the T3 implementer measured that `worker.terminate()` returns but the regex thread keeps spinning and the process never exits; a child process dies in about 1 ms. A daemon killed with SIGKILL mid-match can leave the child spinning until its regex ends.
+- **Evidence:** packages/daemon/src/pty-client.ts:413 (same spawn shape); T3 report in the run journal
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** the orphan case shows up in practice
+- **Source:** supersedes m1-agent-status-scripting D29 (mechanism only)
+
+## D33: Build pairing and waves
+- **Question:** subagent-driven development preflight: implementer/reviewer pairing and wave plan
+- **Options:** claude-task + codex (recommended), other cross-family pairs; any decomposition
+- **Chose:** Claude Sonnet subagents implement, Codex (`pi-watch`, verified reachable) reviews, Gemini tiebreaks. Wave 1: PTY unwrap (T1), session names (T2), rule engine (T3), `because` (T5), agents delivery and fake outbox (T6). Wave 2: built-in rules (T4) beside the chain script state and explain (T7), send (T8), waits (T9). Wave 3: end-to-end scenario tests by area. Checkpoint reviews after waves 1 and 2, then Final Round 1.
+- **Why:** LOOP.md's pairing for a Claude Code lane; the waves follow the real dependencies (the engine and the rows before the state, the state before send and the waits) and keep scopes disjoint within a wave
+- **Evidence:** docs/loop/LOOP.md step 5
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** locked by docs/loop/LOOP.md
+
 ## Progress
 Step 4 (specs) done: logic.md and tech.md written, reviewed by Codex (D27) and amended. Next: step 5, build with subagent-driven development.

@@ -161,11 +161,12 @@ Verdict = { rule: string, state: 'working' | 'blocked' | 'idle', kind?: 'approva
 - `evaluate(set, sample)` tries the file's blocked rules first, in file order, then its working
   and idle rules in file order; the first whose region matchers hold and whose `quietMs` is met
   (`quietForMs !== null && quietForMs >= quietMs`) wins ([D28](../../../loop/decisions/m1-agent-status-scripting.md)).
-- Matching runs in `src/rules/matcher-worker.ts`, one long-lived Bun `Worker` per plugin
-  activation, never on the daemon's event loop ([D29](../../../loop/decisions/m1-agent-status-scripting.md)).
-  Each request (a rule file, or a single wait pattern, plus the text) has a 250 ms budget
-  (`QUIRKY_TEST_AGENT_STATUS_TIME_SCALE` scales it). On overrun the worker is terminated and
-  respawned; for a rule file the source is recorded as ignored with reason `a pattern ran longer
+- Matching runs in `src/rules/matcher-worker.ts`, one long-lived child process (`Bun.spawn` with
+  IPC) per plugin activation, never on the daemon's event loop ([D29](../../../loop/decisions/m1-agent-status-scripting.md),
+  [D32](../../../loop/decisions/m1-agent-status-scripting.md): a terminated Bun `Worker` keeps
+  running a stuck regex). Each request (a rule file, or a single wait pattern, plus the text) has
+  a 250 ms budget (`QUIRKY_TEST_AGENT_STATUS_TIME_SCALE` scales it). On overrun the process is
+  killed and respawned; for a rule file the source is recorded as ignored with reason `a pattern ran longer
   than 250 ms` until the file changes, and the next source is used; for a wait pattern the call
   fails `invalid-params` `pattern is too slow`. A worker that can't start makes every evaluation
   return no verdict and explain says why.
