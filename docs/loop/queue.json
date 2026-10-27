@@ -311,18 +311,6 @@
       "lane": 10
     },
     {
-      "id": "m3-vault",
-      "milestone": "M3",
-      "title": "AI vault: browse and resume sessions across agents, opt-in full-text search",
-      "docs": [
-        "ai-vault.md"
-      ],
-      "deps": [
-        "m1-providers"
-      ],
-      "status": "todo"
-    },
-    {
       "id": "m4-hosting-api-github",
       "milestone": "M4",
       "title": "Git hosting API: GitHub, with one merge path shared by people and the sitter",
@@ -332,6 +320,33 @@
       "deps": [
         "m1-worktrees",
         "m2-source-control-core"
+      ],
+      "status": "todo"
+    },
+    {
+      "id": "m5-structured-runner",
+      "milestone": "M5",
+      "title": "Shared seams: Codex structured runner over app-server, structured resume, model and effort on structured launches, checks runner",
+      "docs": [
+        "automations.md",
+        "fork-loops.md",
+        "launch-settings.md"
+      ],
+      "deps": [
+        "m1-launch-settings",
+        "m1-agent-status"
+      ],
+      "status": "todo"
+    },
+    {
+      "id": "m3-vault",
+      "milestone": "M3",
+      "title": "AI vault: browse and resume sessions across agents, opt-in full-text search",
+      "docs": [
+        "ai-vault.md"
+      ],
+      "deps": [
+        "m1-providers"
       ],
       "status": "todo"
     },
@@ -405,21 +420,6 @@
       ],
       "deps": [
         "sa-browser-agent"
-      ],
-      "status": "todo"
-    },
-    {
-      "id": "m5-structured-runner",
-      "milestone": "M5",
-      "title": "Shared seams: Codex structured runner over app-server, structured resume, model and effort on structured launches, checks runner",
-      "docs": [
-        "automations.md",
-        "fork-loops.md",
-        "launch-settings.md"
-      ],
-      "deps": [
-        "m1-launch-settings",
-        "m1-agent-status"
       ],
       "status": "todo"
     },
