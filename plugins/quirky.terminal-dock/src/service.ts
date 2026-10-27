@@ -1,18 +1,20 @@
 import { randomUUID } from 'node:crypto'
 import { realpathSync, statSync, unlinkSync } from 'node:fs'
 import { isAbsolute, relative, sep } from 'node:path'
-import type { MethodHandler, PluginCaller, PluginContext, PtySessionInfo, Session } from '@quirky/protocol'
+import type { MethodHandler, PluginCaller, PluginContext, PtyFact, PtySessionInfo, Session } from '@quirky/protocol'
 import { acquireAttachment } from './attachments'
 import { pickItems } from './pickers'
 import type { ProviderBridge } from './providers'
 import { executePrompt } from './send'
+import { agentForAlias, agentForManagedLaunch, agentForTitle, catalogFromListing, isCatalogAgent } from './recognition'
+import type { AgentCatalog } from './recognition'
 import { boundedHistory, defaultDockRecord, DockStore, recoverableAttachmentCount, recoverableTextLength } from './store'
 import type { DockAttachment, DockOptions, DockQuestion, DockRecord, DockRecovery, DockState, PickerItem, SendResult } from './types'
 import { MAX_ATTACHMENTS, MAX_RECOVERABLE_CHARS, MIN_GUTTER_ROWS, MAX_GUTTER_ROWS } from './types'
 
-const SUPPORTED_AGENTS: Record<string, true> = {
+// Provider question/options adapters are narrower than the public dock catalog.
+const PROVIDER_AGENTS: Record<string, true> = {
   claude: true,
-  'claude-agent-teams': true,
   openclaude: true,
   codex: true,
   grok: true,
@@ -32,12 +34,31 @@ const DEFAULT_OPTIONS: DockOptions = {
 }
 const PROVIDER_READ_DEADLINE_MS = 1_500
 const TERMINAL_CHECK_DEADLINE_MS = 1_200
+const AGENT_CATALOG_REFRESH_MS = 30_000
+const MAX_RECOGNITION_SESSIONS = 512
 
-type PaneBinding = { pane: string; tab: string; workspace: string; session: Session }
-type StatusProjection = { lead?: { ended?: boolean }; state?: string } | null
+type PaneBinding = {
+  pane: string
+  tab: string
+  workspace: string
+  canonicalSession: Session
+  session: Session
+  status: StatusProjection
+}
+type StatusProjection = {
+  agent?: string
+  source?: string
+  restoredUnconfirmed?: boolean
+  evidenceAt?: number
+  lead?: { ended?: boolean }
+  programStatus?: { app?: string } | null
+  state?: string
+} | null
 type TransportReport = { noTerminal: boolean; reason: string | null }
 type HostReport = { pane: string; mounted: boolean; focused: boolean; transport?: string; updatedAt: number }
-type ProviderCache = { session: string; question: DockQuestion | null; options: DockOptions; readAt: number }
+type ProviderCache = { session: string; agent: string; question: DockQuestion | null; options: DockOptions; readAt: number }
+type CachedTitle = { title: string; source: 'fact' | 'list'; updatedAt: number }
+type FreshEvidence = { source: 'hook' | 'program-app'; value: string; at: number }
 type QuestionOverlay = { id: string; collapsed: boolean; dismissed: boolean }
 type HistoryBrowse = { index: number; savedDraft: string }
 type DriverLease = { owner: string; expiresAt: number; timer: ReturnType<typeof setTimeout> }
@@ -63,7 +84,6 @@ type ProviderRead = { question: DockQuestion | null; options: DockOptions; promp
 type AttachInput = { path?: string; name?: string; mime?: string; base64?: string }
 
 const isObject = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value)
-const isSupported = (agent: string) => Object.hasOwn(SUPPORTED_AGENTS, agent)
 const statusEnded = (status: StatusProjection) => status?.lead?.ended === true
 
 function findPaneSession(value: unknown, pane: string): string | null {
@@ -133,6 +153,14 @@ export class DockService {
   private readonly resolvedQuestions = new Map<string, Set<string>>()
   private readonly historyBrowse = new Map<string, HistoryBrowse>()
   private readonly statusStates = new Map<string, string>()
+  private catalog: AgentCatalog = { byId: new Map(), aliasIds: new Map() }
+  private catalogReadAt = 0
+  private catalogRefresh: Promise<void> | null = null
+  private readonly titles = new Map<string, CachedTitle>()
+  private readonly manualAgents = new Map<string, string>()
+  private readonly manualCandidates = new Map<string, string>()
+  private readonly confirmedExits = new Map<string, number>()
+  private readonly freshEvidence = new Map<string, FreshEvidence>()
   private readonly queues = new Map<string, SessionQueue>()
   private readonly sendOperations = new Map<string, Operation>()
   private mutationTail: Promise<void> = Promise.resolve()
@@ -165,8 +193,15 @@ export class DockService {
   async start(): Promise<void> {
     this.wasEnabled = this.enabled()
     this.subscriptions.push(this.context.subscribe((event) => this.onEvent(event)))
+    this.subscriptions.push(this.context.pty.onFact((sessionId, fact) => this.onPtyFact(sessionId, fact)))
     this.subscriptions.push(this.context.pty.onExit((sessionId) => this.onSessionExit(sessionId)))
-    this.subscriptions.push(this.context.pty.onReconnect(() => this.background(() => this.reconcileAll())))
+    this.subscriptions.push(this.context.pty.onReconnect(() => this.background(async () => {
+      await this.refreshCatalog(true)
+      await this.seedTerminalTitles()
+      if (this.enabled()) await this.reconcileAll()
+    })))
+    await this.refreshCatalog(true)
+    await this.seedTerminalTitles()
     if (!this.wasEnabled) return
     await this.ensureRecovered()
     await this.reconcileAll()
@@ -204,6 +239,12 @@ export class DockService {
 
   private async onEvent(event: { type: string }): Promise<void> {
     const detail = event as unknown as Record<string, unknown>
+    if (event.type === 'hook.received') {
+      if (typeof detail.sessionId === 'string' && typeof detail.agent === 'string') {
+        this.rememberFreshEvidence(detail.sessionId, detail.agent, 'hook')
+      }
+      return
+    }
     if (event.type === 'setting.changed' && detail.id === 'setting:quirky.terminal-dock/enabled') {
       const enabledNow = this.enabled()
       if (enabledNow === this.wasEnabled) return
@@ -215,6 +256,8 @@ export class DockService {
         for (const pane of this.store.all().map((record) => record.pane)) this.announce(pane)
       } else {
         this.recoveryPending = true
+        await this.refreshCatalog(true)
+        await this.seedTerminalTitles()
         await this.ensureRecovered()
         await this.reconcileAll()
       }
@@ -228,6 +271,11 @@ export class DockService {
       this.announceAllMounted()
       return
     }
+    if (event.type === 'quirky.agents/changed') {
+      await this.refreshCatalog(true)
+      if (this.enabled()) await this.reconcileAll()
+      return
+    }
     if (
       event.type === 'quirky.session/changed' || event.type === 'quirky.session/removed' ||
       event.type === 'quirky.terminal/layout' || event.type === 'quirky.terminal/floating' ||
@@ -236,6 +284,222 @@ export class DockService {
       if (this.enabled()) await this.reconcileAll()
     }
   }
+  private onPtyFact(sessionId: string, fact: PtyFact): void {
+    if (fact.kind === 'title') {
+      this.rememberTitle(sessionId, fact.title, 'fact')
+      const agent = agentForTitle(fact.title, this.catalog)
+      if (agent) {
+        this.rememberManualCandidate(sessionId, agent)
+        this.clearConfirmedExit(sessionId)
+      }
+      if (this.enabled()) this.background(() => this.reconcileAll())
+      return
+    }
+    if (fact.kind === 'command-finished') {
+      const agent = this.manualAgents.get(sessionId) ?? this.manualCandidates.get(sessionId)
+      if (!agent || this.confirmedExits.has(sessionId)) return
+      if (this.manualAgents.has(sessionId)) {
+        this.markConfirmedExit(sessionId)
+        if (this.enabled()) this.background(() => this.reconcileAll())
+      } else {
+        this.background(async () => {
+          const session = await this.readCanonicalSession(sessionId)
+          if (!session) return
+          if (session.kind !== 'terminal' || session.agent !== 'shell') {
+            this.manualCandidates.delete(sessionId)
+            return
+          }
+          this.rememberManualAgent(session, agent)
+          this.markConfirmedExit(sessionId)
+          if (this.enabled()) await this.reconcileAll()
+        })
+      }
+      return
+    }
+    if (fact.kind === 'program-status') {
+      const fields = new Map<string, string>()
+      for (const part of fact.body.split(':')) {
+        const equals = part.indexOf('=')
+        if (equals > 0) fields.set(part.slice(0, equals).trim(), part.slice(equals + 1).trim())
+      }
+      const state = fields.get('state')
+      const app = fields.get('app')
+      const appAgent = app ? agentForAlias(app, this.catalog) : null
+      if (app && state && state !== 'clear' && state !== 'done') {
+        this.rememberFreshEvidence(sessionId, app, 'program-app')
+        if (appAgent) this.rememberManualCandidate(sessionId, appAgent)
+      }
+      if (this.enabled()) this.background(() => this.reconcileAll())
+    }
+  }
+  private async refreshCatalog(force = false): Promise<void> {
+    if (this.stopped) return
+    if (this.catalogRefresh) return this.catalogRefresh
+    if (!force && Date.now() - this.catalogReadAt < AGENT_CATALOG_REFRESH_MS) return
+    const refresh = (async () => {
+      try {
+        const value = await this.withDeadline(
+          this.context.call('quirky.agents/list', { all: true }),
+          PROVIDER_READ_DEADLINE_MS,
+          'agent catalog lookup'
+        )
+        const catalog = catalogFromListing(value)
+        if (catalog) this.catalog = catalog
+      } catch {
+        // Keep the last successful public catalog; a failed lookup cannot add an agent.
+      } finally {
+        this.catalogReadAt = Date.now()
+      }
+    })()
+    this.catalogRefresh = refresh
+    try {
+      await refresh
+    } finally {
+      if (this.catalogRefresh === refresh) this.catalogRefresh = null
+    }
+  }
+
+  private async seedTerminalTitles(): Promise<void> {
+    if (this.stopped || !this.context.pty.connected) return
+    try {
+      const sessions = await this.withDeadline(this.context.pty.list(), TERMINAL_CHECK_DEADLINE_MS, 'terminal title seed')
+      for (const session of sessions) {
+        if (!this.confirmedExits.has(session.sessionId)) {
+          const title = session.title ?? ''
+          this.rememberTitle(session.sessionId, title, 'list')
+          const agent = agentForTitle(title, this.catalog)
+          if (agent) this.rememberManualCandidate(session.sessionId, agent)
+        }
+      }
+    } catch {
+      // Live title facts still populate the bounded cache when the PTY host is unavailable.
+    }
+  }
+
+  private rememberTitle(sessionId: string, title: string, source: CachedTitle['source']): void {
+    this.titles.delete(sessionId)
+    this.titles.set(sessionId, { title, source, updatedAt: Date.now() })
+    while (this.titles.size > MAX_RECOGNITION_SESSIONS) this.titles.delete(this.titles.keys().next().value as string)
+  }
+
+  private rememberManualAgent(session: Session, agent: string): void {
+    if (session.kind !== 'terminal' || session.agent !== 'shell') return
+    this.manualAgents.delete(session.id)
+    this.manualAgents.set(session.id, agent)
+    this.rememberManualCandidate(session.id, agent)
+    while (this.manualAgents.size > MAX_RECOGNITION_SESSIONS) this.manualAgents.delete(this.manualAgents.keys().next().value as string)
+  }
+
+  private rememberManualCandidate(sessionId: string, agent: string): void {
+    this.manualCandidates.delete(sessionId)
+    this.manualCandidates.set(sessionId, agent)
+    while (this.manualCandidates.size > MAX_RECOGNITION_SESSIONS) {
+      this.manualCandidates.delete(this.manualCandidates.keys().next().value as string)
+    }
+  }
+  private rememberFreshEvidence(sessionId: string, value: string, source: FreshEvidence['source']): void {
+    this.freshEvidence.delete(sessionId)
+    this.freshEvidence.set(sessionId, { source, value, at: Date.now() })
+    while (this.freshEvidence.size > MAX_RECOGNITION_SESSIONS) {
+      this.freshEvidence.delete(this.freshEvidence.keys().next().value as string)
+    }
+  }
+
+  private clearConfirmedExit(sessionId: string): void {
+    this.confirmedExits.delete(sessionId)
+  }
+
+  private markConfirmedExit(sessionId: string): void {
+    if (!this.confirmedExits.has(sessionId)) {
+      this.confirmedExits.set(sessionId, Date.now())
+      while (this.confirmedExits.size > MAX_RECOGNITION_SESSIONS) {
+        this.confirmedExits.delete(this.confirmedExits.keys().next().value as string)
+      }
+    }
+    this.titles.delete(sessionId)
+    this.manualAgents.delete(sessionId)
+    this.manualCandidates.delete(sessionId)
+    this.statusStates.delete(sessionId)
+  }
+
+  private liveStatusAgent(status: StatusProjection): string | null {
+    if (!status || status.restoredUnconfirmed === true || status.lead?.ended !== false) return null
+    if (status.source === 'hook' && typeof status.agent === 'string' && isCatalogAgent(status.agent, this.catalog)) {
+      return status.agent
+    }
+    if (status.source !== 'hook' && status.source !== 'program-status' && status.source !== 'title') return null
+    return agentForAlias(status.programStatus?.app, this.catalog)
+  }
+
+  private agentForSession(session: Session, pane: string, status: StatusProjection): string | null {
+    if (session.kind !== 'terminal') return null
+    if (session.status === 'exited') {
+      this.markConfirmedExit(session.id)
+      return null
+    }
+    const cachedTitle = this.titles.get(session.id)
+    const factTitleAgent = cachedTitle?.source === 'fact' ? agentForTitle(cachedTitle.title, this.catalog) : null
+    if (statusEnded(status)) {
+      const freshEvidence = this.freshEvidence.get(session.id)
+      const newerEvidence = freshEvidence && cachedTitle && freshEvidence.at >= cachedTitle.updatedAt
+      if (
+        factTitleAgent && !newerEvidence &&
+        (typeof status?.evidenceAt !== 'number' || cachedTitle!.updatedAt > status.evidenceAt)
+      ) {
+        this.clearConfirmedExit(session.id)
+        this.rememberManualAgent(session, factTitleAgent)
+        return factTitleAgent
+      }
+      this.markConfirmedExit(session.id)
+      return null
+    }
+
+    const liveAgent = this.liveStatusAgent(status)
+    const confirmedAt = this.confirmedExits.get(session.id)
+    if (confirmedAt !== undefined) {
+      const fresh = this.freshEvidence.get(session.id)
+      const freshAgent = fresh?.source === 'hook'
+        ? (isCatalogAgent(fresh.value, this.catalog) ? fresh.value : null)
+        : fresh?.source === 'program-app'
+          ? agentForAlias(fresh.value, this.catalog)
+          : null
+      if (
+        liveAgent && freshAgent === liveAgent && fresh && fresh.at > confirmedAt &&
+        typeof status?.evidenceAt === 'number' && status.evidenceAt >= fresh.at
+      ) {
+        this.clearConfirmedExit(session.id)
+        this.rememberManualAgent(session, liveAgent)
+        return liveAgent
+      }
+      const freshTitle = cachedTitle?.source === 'fact' && cachedTitle.updatedAt >= confirmedAt ? factTitleAgent : null
+      if (freshTitle) {
+        this.clearConfirmedExit(session.id)
+        this.rememberManualAgent(session, freshTitle)
+        return freshTitle
+      }
+      return null
+    }
+
+    if (liveAgent) {
+      this.rememberManualAgent(session, liveAgent)
+      return liveAgent
+    }
+
+    const managedAgent = agentForManagedLaunch(session, this.catalog)
+    if (managedAgent) return managedAgent
+
+    const titleAgent = agentForTitle(this.titles.get(session.id)?.title, this.catalog)
+    if (titleAgent) {
+      this.rememberManualAgent(session, titleAgent)
+      return titleAgent
+    }
+
+    const record = this.store.get(pane)
+    return record?.session === session.id && record.docked && isCatalogAgent(record.agent ?? '', this.catalog)
+      ? record.agent
+      : null
+  }
+
 
   private background(work: () => Promise<void>): void {
     void work().catch(() => this.context.log('terminal dock background reconciliation failed'))
@@ -302,7 +566,36 @@ export class DockService {
       throw this.context.error('not-found', 'terminal session is unavailable')
     }
     if (!isObject(session) || session.id !== sessionId) throw this.context.error('not-found', 'terminal session is unavailable')
-    return { pane: location.pane, tab: location.tab, workspace: location.workspace, session }
+    const canonicalSession = session
+    let status: StatusProjection = null
+    let effectiveSession = canonicalSession
+    if (this.enabled()) {
+      await this.refreshCatalog()
+      status = await this.readStatus(canonicalSession)
+      const agent = this.agentForSession(canonicalSession, location.pane as string, status)
+      if (agent && agent !== canonicalSession.agent) effectiveSession = { ...canonicalSession, agent }
+    }
+    return {
+      pane: location.pane,
+      tab: location.tab,
+      workspace: location.workspace,
+      canonicalSession,
+      session: effectiveSession,
+      status
+    }
+  }
+
+  private async readCanonicalSession(sessionId: string): Promise<Session | null> {
+    try {
+      const value = await this.withDeadline(
+        this.context.call('quirky.session/get', { session: sessionId }),
+        TERMINAL_CHECK_DEADLINE_MS,
+        'session lookup'
+      )
+      return isObject(value) && value.id === sessionId ? value as Session : null
+    } catch {
+      return null
+    }
   }
 
   private conflict(message: string, state: DockState): Error {
@@ -363,18 +656,24 @@ export class DockService {
       }
 
       const supported = this.supported(binding.session)
-      const ended = binding.session.status === 'exited' || statusEnded(status)
-      if (!supported) {
-        if (record.docked || record.agent !== null || !record.autoOpenEvaluated) changed = true
-        record.docked = false
-        record.agent = null
-        record.autoOpenEvaluated = true
-        this.clearPanePassthrough(binding.pane)
-      } else if (ended) {
+      const ended = this.sessionEnded(binding, status)
+      if (ended) {
         if (record.docked || record.agent !== null || record.autoOpenEvaluated) changed = true
         record.docked = false
         record.agent = null
         record.autoOpenEvaluated = false
+        this.providers.delete(binding.pane)
+        this.overlays.delete(binding.pane)
+        this.resolvedQuestions.delete(binding.pane)
+        this.clearPanePassthrough(binding.pane)
+      } else if (!supported) {
+        if (record.docked || record.agent !== null || !record.autoOpenEvaluated) changed = true
+        record.docked = false
+        record.agent = null
+        record.autoOpenEvaluated = true
+        this.providers.delete(binding.pane)
+        this.overlays.delete(binding.pane)
+        this.resolvedQuestions.delete(binding.pane)
         this.clearPanePassthrough(binding.pane)
       } else {
         if (!record.autoOpenEvaluated) {
@@ -384,6 +683,9 @@ export class DockService {
         }
         if (record.docked && record.agent !== binding.session.agent) {
           record.agent = binding.session.agent
+          this.providers.delete(binding.pane)
+          this.overlays.delete(binding.pane)
+          this.resolvedQuestions.delete(binding.pane)
           changed = true
         } else if (!record.docked && record.agent !== null) {
           record.agent = null
@@ -449,7 +751,7 @@ export class DockService {
         const binding = await this.resolveBinding({ session: session.id })
         retained.add(binding.pane)
         tabByPane.set(binding.pane, binding.tab)
-        await this.reconcileBinding(binding, await this.readStatus(binding.session))
+        await this.reconcileBinding(binding, binding.status)
       } catch {
         // A session not represented by a public live pane has no dock scope to retain.
       }
@@ -466,7 +768,12 @@ export class DockService {
     const uploads = before.flatMap((record) => record.attachments.filter((attachment) => record.ownedAttachmentIds.includes(attachment.id) && !remaining.has(record.pane)))
     await this.deleteOwnedUploads(uploads)
     const activeSessions = new Set(sessions.filter((session) => session?.kind === 'terminal').map((session) => session.id))
-    for (const session of this.statusStates.keys()) if (!activeSessions.has(session)) this.statusStates.delete(session)
+    for (const sessionId of this.statusStates.keys()) if (!activeSessions.has(sessionId)) this.statusStates.delete(sessionId)
+    for (const sessionId of this.titles.keys()) if (!activeSessions.has(sessionId)) this.titles.delete(sessionId)
+    for (const sessionId of this.manualAgents.keys()) if (!activeSessions.has(sessionId)) this.manualAgents.delete(sessionId)
+    for (const sessionId of this.manualCandidates.keys()) if (!activeSessions.has(sessionId)) this.manualCandidates.delete(sessionId)
+    for (const sessionId of this.confirmedExits.keys()) if (!activeSessions.has(sessionId)) this.confirmedExits.delete(sessionId)
+    for (const sessionId of this.freshEvidence.keys()) if (!activeSessions.has(sessionId)) this.freshEvidence.delete(sessionId)
     const knownPanes = new Set([
       ...this.providers.keys(),
       ...this.overlays.keys(),
@@ -517,14 +824,14 @@ export class DockService {
   private async stateForBinding(binding: PaneBinding, reconcile = true): Promise<DockState> {
     if (this.enabled()) {
       await this.ensureRecovered()
-      if (reconcile) await this.reconcileBinding(binding, await this.readStatus(binding.session))
+      if (reconcile) await this.reconcileBinding(binding, binding.status)
     }
     if (this.enabled() && this.supported(binding.session) && binding.session.status !== 'exited') {
       await this.refreshProvider(binding)
     }
     const record = this.store.get(binding.pane) ?? defaultDockRecord(binding.pane, binding.session.id, binding.tab)
-    const [transport, status] = await Promise.all([this.transportFor(binding), this.readStatus(binding.session)])
-    return this.stateFrom(binding, record, transport, status)
+    const transport = await this.transportFor(binding)
+    return this.stateFrom(binding, record, transport, binding.status)
   }
 
   private stateFrom(binding: PaneBinding, record: DockRecord, transport: TransportReport, status: StatusProjection): DockState {
@@ -537,8 +844,10 @@ export class DockService {
       .filter((operation) => operation.kind === 'send' && operation.pane === binding.pane && !operation.settled)
       .map((operation) => ({ id: operation.id, phase: operation.phase }))
     const provider = this.providers.get(binding.pane)
-    const question = provider?.session === binding.session.id ? this.questionFor(binding.pane, provider.question) : null
-    const supportedLiveAgent = supported && binding.session.status !== 'exited' && !statusEnded(status)
+    const question = provider?.session === binding.session.id && provider.agent === binding.session.agent
+      ? this.questionFor(binding.pane, provider.question)
+      : null
+    const supportedLiveAgent = supported && !this.sessionEnded(binding, status)
     const mounted = enabled && record.docked && this.hasMountedReport(binding.pane)
     const passthrough = mounted && this.hasActivePassthrough(binding.pane)
     const state: DockState = {
@@ -563,7 +872,9 @@ export class DockService {
       activeSend: current ? { id: current.id, phase: current.phase } : null,
       queuedSends: queued,
       question,
-      options: provider?.session === binding.session.id ? optionsWithNotice(provider.options, provider.options.notice) : this.emptyOptions(),
+      options: provider?.session === binding.session.id && provider.agent === binding.session.agent
+        ? optionsWithNotice(provider.options, provider.options.notice)
+        : this.emptyOptions(),
       notice: record.notice,
       ...(lease ? { driverOwner: lease.owner } : {})
     }
@@ -571,7 +882,7 @@ export class DockService {
   }
 
   private reasonFor(binding: PaneBinding, enabled: boolean, supported: boolean, transport: TransportReport, lease: DriverLease | undefined, status: StatusProjection): string | null {
-    if (binding.session.kind !== 'terminal' || binding.session.status === 'exited' || statusEnded(status) || transport.noTerminal) return 'No terminal session'
+    if (binding.session.kind !== 'terminal' || this.sessionEnded(binding, status) || transport.noTerminal) return 'No terminal session'
     if (transport.reason) return transport.reason
     if (lease) return 'Mobile device is composing'
     if (!enabled) return 'Terminal dock is disabled'
@@ -589,6 +900,12 @@ export class DockService {
       return { noTerminal: false, reason: this.reportReason(binding.pane) ?? 'Terminal is disconnected' }
     }
     const current = sessions.find((session) => session.sessionId === binding.session.id)
+    if (current && !this.confirmedExits.has(current.sessionId)) {
+      const title = current.title ?? ''
+      this.rememberTitle(current.sessionId, title, 'list')
+      const agent = agentForTitle(title, this.catalog)
+      if (agent) this.rememberManualCandidate(current.sessionId, agent)
+    }
     if (current?.state === 'exited') return { noTerminal: true, reason: null }
     if (current?.state === 'restorable') return { noTerminal: false, reason: 'Terminal is recovering' }
     if (!current || !current.alive) {
@@ -620,8 +937,13 @@ export class DockService {
   }
 
   private supported(session: Session): boolean {
-    return session.kind === 'terminal' && isSupported(session.agent)
+    return session.kind === 'terminal' && isCatalogAgent(session.agent, this.catalog)
   }
+  private sessionEnded(binding: PaneBinding, status: StatusProjection): boolean {
+    if (binding.canonicalSession.status === 'exited' || this.confirmedExits.has(binding.session.id)) return true
+    return statusEnded(status) && binding.session.agent === binding.canonicalSession.agent
+  }
+
 
   private async set(params: Record<string, unknown>, caller: PluginCaller): Promise<DockState> {
     if (Object.hasOwn(params, 'passthrough') && caller.role !== 'ui') {
@@ -634,7 +956,7 @@ export class DockService {
     const binding = await this.resolveBinding({ pane: params.pane })
     await this.ensureRecovered()
     if (!this.enabled()) throw this.context.error('invalid-params', 'Terminal dock is disabled')
-    const status = await this.readStatus(binding.session)
+    const status = binding.status
     await this.reconcileBinding(binding, status)
     const callerConnection = this.connectionId(caller)
     const changesPassthrough = Object.hasOwn(params, 'passthrough')
@@ -661,7 +983,7 @@ export class DockService {
       if (params.docked === true && !this.supported(binding.session)) {
         throw this.context.error('invalid-params', 'Terminal Dock only opens for supported agent terminals')
       }
-      if (params.docked === true && (binding.session.status === 'exited' || statusEnded(status))) {
+      if (params.docked === true && this.sessionEnded(binding, status)) {
         throw this.context.error('invalid-params', 'No terminal session')
       }
       if (Object.hasOwn(params, 'draft') && typeof params.draft !== 'string') throw this.context.error('invalid-params', 'draft must be a string')
@@ -754,7 +1076,7 @@ export class DockService {
     }
     if (this.enabled()) {
       await this.ensureRecovered()
-      await this.reconcileBinding(binding, await this.readStatus(binding.session))
+      await this.reconcileBinding(binding, binding.status)
     }
     const reports = this.reports.get(connection) ?? new Map<string, HostReport>()
     reports.set(binding.pane, {
@@ -774,7 +1096,7 @@ export class DockService {
     const binding = await this.resolveBinding({ pane: params.pane })
     if (!this.enabled()) throw this.context.error('invalid-params', 'Terminal dock is disabled')
     await this.ensureRecovered()
-    await this.reconcileBinding(binding, await this.readStatus(binding.session))
+    await this.reconcileBinding(binding, binding.status)
     const direction = params.direction
     if (direction !== undefined && direction !== 'previous' && direction !== 'next') {
       throw this.context.error('invalid-params', 'history direction must be previous or next')
@@ -844,7 +1166,7 @@ export class DockService {
     if (!path && (name === undefined || base64 === undefined)) throw this.context.error('invalid-params', 'attachment upload needs both name and base64')
     const input: AttachInput = { ...(path ? { path } : { name, base64 }), ...(mime ? { mime } : {}) }
     await this.ensureRecovered()
-    await this.reconcileBinding(binding, await this.readStatus(binding.session))
+    await this.reconcileBinding(binding, binding.status)
     const current = this.store.get(binding.pane) ?? defaultDockRecord(binding.pane, binding.session.id, binding.tab)
     if (recoverableAttachmentCount(current.draftAttachments, current.recovery) >= MAX_ATTACHMENTS) {
       throw this.context.error('invalid-params', `current and queued attachments already use the ${MAX_ATTACHMENTS}-attachment limit`)
@@ -910,7 +1232,7 @@ export class DockService {
     if (typeof id !== 'string' || id.length === 0 || id.length > 160) throw this.context.error('invalid-params', 'send id must be a nonempty string of at most 160 characters')
     if (!this.enabled()) return { id, outcome: 'refused', accepted: false, reason: 'Terminal dock is disabled' }
     await this.ensureRecovered()
-    const status = await this.readStatus(binding.session)
+    const status = binding.status
     await this.reconcileBinding(binding, status)
     const refusal = await this.writeRefusal(binding, status)
     if (refusal) return { id, outcome: 'refused', accepted: false, reason: refusal }
@@ -1073,6 +1395,7 @@ export class DockService {
       if (!result.confirmed) {
         this.providers.set(binding.pane, {
           session: binding.session.id,
+          agent: binding.session.agent,
           question: refreshed.question,
           options: optionsWithNotice(refreshed.options, optionNotice(result.notice) ?? 'Sent to the agent — not confirmed'),
           readAt: Date.now()
@@ -1112,10 +1435,17 @@ export class DockService {
       const refreshed = await this.refreshProvider(binding, true)
       if (result.confirmed) {
         const confirmed = { ...refreshed.options, choices: { ...refreshed.options.choices }, [kind]: value }
-        this.providers.set(binding.pane, { session: binding.session.id, question: refreshed.question, options: confirmed, readAt: Date.now() })
+        this.providers.set(binding.pane, {
+          session: binding.session.id,
+          agent: binding.session.agent,
+          question: refreshed.question,
+          options: confirmed,
+          readAt: Date.now()
+        })
       } else {
         this.providers.set(binding.pane, {
           session: binding.session.id,
+          agent: binding.session.agent,
           question: refreshed.question,
           options: optionsWithNotice(refreshed.options, optionNotice(result.notice) ?? 'Sent to the agent — not confirmed'),
           readAt: Date.now()
@@ -1130,7 +1460,7 @@ export class DockService {
     const binding = await this.resolveBinding({ pane: params.pane })
     if (this.enabled()) {
       await this.ensureRecovered()
-      await this.reconcileBinding(binding, await this.readStatus(binding.session))
+      await this.reconcileBinding(binding, binding.status)
     }
     if (params.owner === undefined) {
       if (params.ttlMs !== undefined) throw this.context.error('invalid-params', 'ttlMs requires a driver owner')
@@ -1323,18 +1653,21 @@ export class DockService {
   private async ensureWritable(binding: PaneBinding, signal: AbortSignal): Promise<void> {
     if (signal.aborted) throw new Error('send cancelled')
     const current = await this.resolveBinding({ pane: binding.pane, session: binding.session.id })
-    if (current.session.id !== binding.session.id || current.session.kind !== 'terminal' || current.session.status === 'exited') {
+    if (
+      current.session.id !== binding.session.id || current.session.kind !== 'terminal' ||
+      current.session.status === 'exited' || current.session.agent !== binding.session.agent
+    ) {
       throw new Error('No terminal session')
     }
-    const status = await this.readStatus(current.session)
+    const status = current.status
     const refusal = await this.writeRefusal(current, status)
     if (refusal) throw new Error(refusal)
   }
 
   private async writeRefusal(binding: PaneBinding, status?: StatusProjection): Promise<string | null> {
-    const activeStatus = status ?? await this.readStatus(binding.session)
+    const activeStatus = status ?? binding.status
     const transport = await this.transportFor(binding)
-    if (binding.session.kind !== 'terminal' || binding.session.status === 'exited' || statusEnded(activeStatus) || transport.noTerminal) return 'No terminal session'
+    if (binding.session.kind !== 'terminal' || this.sessionEnded(binding, activeStatus) || transport.noTerminal) return 'No terminal session'
     if (transport.reason) return transport.reason
     if (this.activeDriver(binding.pane)) return 'Mobile device is composing'
     if (!this.enabled()) return 'Terminal dock is disabled'
@@ -1343,7 +1676,7 @@ export class DockService {
   }
 
   private async interrupt(binding: PaneBinding): Promise<void> {
-    const status = await this.readStatus(binding.session)
+    const status = binding.status
     const refusal = await this.writeRefusal(binding, status)
     if (refusal) return
     const signal = status?.state === 'working' || binding.session.status === 'working' ? String.fromCharCode(3) : String.fromCharCode(27)
@@ -1360,11 +1693,17 @@ export class DockService {
   }
 
   private async refreshProvider(binding: PaneBinding, force = false): Promise<{ question: DockQuestion | null; options: DockOptions }> {
-    const cached = this.providers.get(binding.pane)
-    if (!force && cached?.session === binding.session.id && Date.now() - cached.readAt < 500) {
+    let cached = this.providers.get(binding.pane)
+    if (cached && (cached.session !== binding.session.id || cached.agent !== binding.session.agent)) {
+      this.providers.delete(binding.pane)
+      this.overlays.delete(binding.pane)
+      this.resolvedQuestions.delete(binding.pane)
+      cached = undefined
+    }
+    if (!force && cached && Date.now() - cached.readAt < 500) {
       return { question: cached.question, options: cached.options }
     }
-    if (!this.enabled() || !this.supported(binding.session) || binding.session.status === 'exited') {
+    if (!this.enabled() || !this.supported(binding.session) || !Object.hasOwn(PROVIDER_AGENTS, binding.session.agent) || binding.session.status === 'exited') {
       return { question: null, options: this.emptyOptions() }
     }
     try {
@@ -1376,13 +1715,13 @@ export class DockService {
       }
       if (!value.question && previousQuestion) this.overlays.delete(binding.pane)
       const result = { question: value.question, options: value.options }
-      this.providers.set(binding.pane, { session: binding.session.id, ...result, readAt: Date.now() })
+      this.providers.set(binding.pane, { session: binding.session.id, agent: binding.session.agent, ...result, readAt: Date.now() })
       if (value.prompts.length > 0) await this.seedHistory(binding.pane, binding.session.id, value.prompts)
       return result
     } catch (error) {
       const unavailable = `Provider status unavailable: ${error instanceof Error ? error.message : String(error)}`
       const failed = { question: null, options: optionsWithNotice(this.emptyOptions(), unavailable) }
-      this.providers.set(binding.pane, { session: binding.session.id, ...failed, readAt: Date.now() })
+      this.providers.set(binding.pane, { session: binding.session.id, agent: binding.session.agent, ...failed, readAt: Date.now() })
       return failed
     }
   }
@@ -1503,6 +1842,7 @@ export class DockService {
 
 
   private async onSessionExit(sessionId: string): Promise<void> {
+    this.markConfirmedExit(sessionId)
     const queue = this.queues.get(sessionId)
     if (queue?.active) queue.active.controller.abort()
     if (queue) {
@@ -1520,7 +1860,11 @@ export class DockService {
     await this.mutate(() => {
       if (!this.enabled() || this.stopped) return
       for (const record of this.store.all()) {
-        if (record.session !== sessionId || (!record.docked && record.agent === null && !record.autoOpenEvaluated)) continue
+        if (record.session !== sessionId) continue
+        this.providers.delete(record.pane)
+        this.overlays.delete(record.pane)
+        this.resolvedQuestions.delete(record.pane)
+        if (!record.docked && record.agent === null && !record.autoOpenEvaluated) continue
         record.docked = false
         record.agent = null
         record.autoOpenEvaluated = false
