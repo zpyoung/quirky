@@ -37,8 +37,8 @@ export async function reviewStates(
       if (rows.some((row) => row.area === 'conflicts' && row.conflict?.state === 'unresolved')) {
         return { path, kind, state: 'unresolved' }
       }
+      if (rows.some((row) => row.area !== 'conflicts' && row.status === 'deleted')) return { path, kind, state: 'gone' }
       if (rows.some((row) => row.area === 'conflicts')) return { path, kind, state: 'resolved' }
-      if (rows.some((row) => row.status === 'deleted')) return { path, kind, state: 'gone' }
       if (rows.length > 0) return { path, kind, state: 'resolved' }
       return { path, kind, state: (await onDisk(path)) ? 'resolved' : 'gone' }
     })
@@ -60,7 +60,7 @@ export function ConflictReview({ context, input, report, bind, close }: ModeProp
 
   const onDisk = async (path: string): Promise<boolean> => {
     try {
-      const file = (await context.call('quirky.git/conflictFile', { worktree, path })) as { content: string | null }
+      const file = (await context.call('quirky.git/conflictFile', { worktree, path, peek: true })) as { content: string | null }
       return file.content !== null
     } catch {
       return true

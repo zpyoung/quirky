@@ -1,8 +1,9 @@
 import { afterAll, afterEach, beforeEach, describe, expect, test } from 'bun:test'
 import { GlobalRegistrator } from '@happy-dom/global-registrator'
+import { registerDom } from './register-dom'
 import type { GitStatusEntry } from '@quirky/protocol'
 
-if (!GlobalRegistrator.isRegistered) GlobalRegistrator.register()
+registerDom()
 const s = await import('./support')
 afterAll(() => GlobalRegistrator.unregister())
 

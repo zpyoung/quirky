@@ -74,7 +74,7 @@ async function findMarkersGone(context: UiPluginContext, worktree: string, statu
   await Promise.all(
     unresolved.map(async (entry) => {
       try {
-        const file = (await context.call('quirky.git/conflictFile', { worktree, path: entry.path })) as { content: string | null }
+        const file = (await context.call('quirky.git/conflictFile', { worktree, path: entry.path, peek: true })) as { content: string | null }
         if (file.content === null || conflictBlocks(file.content).length === 0) gone.add(entry.path)
       } catch (error) {
         // binary or linked files have no text markers to wait for

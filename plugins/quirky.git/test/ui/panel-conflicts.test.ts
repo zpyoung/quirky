@@ -1,7 +1,8 @@
 import { afterAll, beforeEach, describe, expect, test } from 'bun:test'
 import { GlobalRegistrator } from '@happy-dom/global-registrator'
+import { registerDom } from './register-dom'
 
-GlobalRegistrator.register()
+registerDom()
 ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 const s = await import('./panel-support')
 const { act, byLabel, buttonText, click, entry, fakeContext, layoutFor, mountPanel, q, qa, rowOf, settle, statusOf } = s
