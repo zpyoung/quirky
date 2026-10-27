@@ -1213,6 +1213,35 @@
       ],
       "deps": [],
       "status": "todo"
+    },
+    {
+      "id": "m4-hosting-ui-review-provider-parity",
+      "milestone": "M4",
+      "title": "Complete deferred GitLab/Bitbucket/Gitea/Azure Checks, creation composer and integration settings from hosting-ui.md sections10–12 when their currently blocked canonical provider APIs are available; preserve MR labels, no-draft Bitbucket and provider auth/settings contracts rather than fake success",
+      "docs": [
+        "hosting-ui.md"
+      ],
+      "deps": [
+        "m4-hosting-ui-reviews",
+        "m4-hosting-api-gitlab",
+        "m4-hosting-api-bitbucket-gitea-azure"
+      ],
+      "status": "todo"
+    },
+    {
+      "id": "m4-hosting-ui-review-browser-routing",
+      "milestone": "M4",
+      "title": "Complete review and stack-link in-app browser routing plus Shift+Cmd destination inversion after the public human browser pane and Link Routing setting land; current review links support the canonical system opener and explicitly refuse unavailable in-app delivery",
+      "docs": [
+        "hosting-ui.md",
+        "browser.md"
+      ],
+      "deps": [
+        "m4-hosting-ui-reviews",
+        "sa-browser-pane",
+        "sa-browser-profiles-settings"
+      ],
+      "status": "todo"
     }
   ]
 }
