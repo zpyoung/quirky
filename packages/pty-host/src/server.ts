@@ -213,7 +213,7 @@ export function startPtyServer(options: PtyServerOptions): PtyServer {
         manager.unsubscribe(request.sessionId, conn.sink)
         return {}
       case 'read':
-        return manager.read(request.sessionId, request.lines)
+        return manager.read(request.sessionId, request.lines, request.unwrap === true)
       case 'snapshot':
         return manager.snapshot(request.sessionId)
       case 'history':

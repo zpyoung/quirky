@@ -4,6 +4,7 @@ import { buildCatalog } from './core/catalog'
 import { extrasSummary, parseExtraArgs } from './core/extras'
 import { agentPermissionMode, applyPermissionMode, effectiveArgs, effectiveEnv, PermissionError, permissionSummary } from './core/permissions'
 import { buildLaunchPlan, buildResumePlan, PlanError } from './core/plan'
+import { submitDelayMs } from './core/paste'
 import { resolveLaunch } from './core/resolve'
 import { pickAgent } from './core/select'
 import { SelectionError, validateSelection } from './core/selection'
@@ -308,8 +309,16 @@ export class AgentsService {
 
   deliver = async (params: Params): Promise<{ delivery: DeliveryOutcome }> => {
     const entry = this.entryOf(params.agent as string)
-    const delivery = await this.runner.deliver(params.sessionId as string, entry, params.text as string, params.submit as boolean)
+    const delivery = await this.runner.deliver(params.sessionId as string, entry, params.text as string, params.submit as boolean, {
+      ready: params.ready === true
+    })
     return { delivery }
+  }
+
+  /** How `deliver` would submit `text` to this agent, for callers that guard the Enter themselves. */
+  submitPlan = (params: Params): { enterWithPaste: boolean; delayMs: number; retryMs: number | null } => {
+    const entry = this.entryOf(params.agent as string)
+    return { enterWithPaste: entry.enterWithPaste, delayMs: submitDelayMs(params.text as string, entry), retryMs: entry.submitRetryMs }
   }
 
   /** Runs one agent (or a custom command) once and returns its decoded output; see `generate.ts`. */

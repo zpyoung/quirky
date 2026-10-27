@@ -1,0 +1,24 @@
+{
+  "agent": "prime-agent",
+  "description": "Prime Agent detection rules.",
+  "rules": [
+    {
+      "id": "composer-ready",
+      "why": "Prime Agent 0.9.5+ at rest shows a bare `>` over the `← manage` footer with no braille status row above; both stay painted through a turn, so the screen must be quiet.",
+      "state": "idle",
+      "region": "screen",
+      "lastLines": 4,
+      "all": [
+        {
+          "regex": "^>[ \\t]*\\n← manage[^\\n]*(?![\\s\\S])"
+        }
+      ],
+      "none": [
+        {
+          "regex": "[⠀-⣿]"
+        }
+      ],
+      "quietMs": 1000
+    }
+  ]
+}
