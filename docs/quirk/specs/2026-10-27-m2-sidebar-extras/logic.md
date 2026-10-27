@@ -2,7 +2,7 @@
 
 Reader: builders and operator review — Decision: implement the four M2 additions without changing workspace execution ownership.
 
-## Conceptual model
+## Purpose
 
 A sidebar is a presentation of existing workspaces, not another workspace registry. A Git worktree may appear under a project group independently of its repository. Git, terminals and agents continue to use the same repository and path. Activity windows hide rows without archiving or deleting them. Source Control gets an active-worktree dirty indication, and top-level sidebar boundaries get optional hairlines.
 
@@ -22,7 +22,7 @@ Canonical repository/group and worktree APIs supply identity, membership and act
 ### Membership and organization
 
 - Cross-repo membership is nullable `projectGroupId`, distinct from group-hosted folder workspace `groupId` and lineage `parentId`.
-- New-group action affects only the selected eligible worktree, with selected default name “<display name> group”. Current membership is disabled in the target submenu. Folder rows expose project-level actions instead.
+- New-group action affects only the selected eligible worktree, with selected default name “<display name> group”. Current membership is disabled in the target submenu. Git cards also offer Move project to group when groups exist; folder rows expose only project-level actions instead.
 - Menu and drag are equivalent. A group-header hit wins over a leave target, current-group drop does nothing, and only the row's owning project is a valid leave target. Drag membership is enabled only in Project grouping.
 - Loose rows render directly under the group, before repo sections, with repo identity. A moved parent leaves its child flat in the repo; returning restores nesting. Empty owning repos remain placeholders. Missing/unrendered groups do not erase membership.
 - Group deletion clears member references across its subtree but preserves Git worktrees and metadata. Parent cycles/missing parents are normalized so every group is renderable. A delayed create-then-assign must not overwrite replacement identity or newer membership.
@@ -31,9 +31,9 @@ Canonical repository/group and worktree APIs supply identity, membership and act
 
 - Windows: All (default), Live only, Past 24 hours, Past 7 days, Past 30 days, Custom. Day windows are rolling durations, inclusive at the cutoff, not calendar dates.
 - Activity=max(workspace activity, last visit, last departure), falling back to creation then repository addition. Departure stamps are session-lived and separate from visit ordering. Quiet lists reevaluate at least every 60 seconds.
-- Open workspace is always retained. Live only has an Except default branch switch, default on. Sleeping derives from terminal/agent workspace liveness, not recency or whether an agent is currently busy.
+- Open workspace is always retained. Live only has an Except default branch switch, default on. Sleeping derives from terminal/agent workspace liveness, not recency or whether an agent is currently busy. Unknown/unavailable runtime liveness conservatively retains the row and reports the unavailable source instead of claiming it is live.
 - Custom days defaults to 30; digits and positive safe integer only. Enter or blur commits. Invalid input keeps the stored value and shows “Enter a positive whole number.” This fixes the recorded Tab/blur discrepancy rather than preserving it.
-- A selected non-All window counts as one filter. Hidden count includes Git and folder rows hidden by activity only. Clicking the count or Clear filters selects All. Preferences survive restart and are client-local; legacy hide/show sleeping cannot silently widen another time window.
+- A selected non-All window counts as one filter. Hidden count includes Git and folder rows hidden by activity only. Clicking the count or Clear filters selects All. Preferences survive restart and are client-local; remember the pre-Live window so toggling sleeping off/on returns to it, while legacy hide/show sleeping cannot silently widen another time window.
 
 ### Dirty marker and separators
 
@@ -56,11 +56,11 @@ Before: Git project `api` contains `fix` and `other`, neither grouped. Walkthrou
 
 ### SC-02: Add, move and remove membership
 
-Before: groups Team and Release, `fix` in Team. Walkthrough: Add worktree to group disables Team; choose Release, then Remove worktree from group. After: membership moves to Release then null, persists across restart, and unrelated metadata remains unchanged. A set request omitting membership, including a mobile-shaped partial metadata edit, preserves it.
+Before: groups Team and Release, `fix` in Team. Walkthrough: Add worktree to group disables Team; choose Release, then Remove worktree from group; with a group present, use Move project to group on a Git card and verify its repo moves as a whole independently of loose membership. After: loose membership moves to Release then null, persists across restart, and unrelated metadata remains unchanged. A set request omitting membership, including a mobile-shaped partial metadata edit, preserves it.
 
 ### SC-03: Parent/child placement and empty projects
 
-Before: parent `fix` and child `docs` are nested in `api`. Walkthrough: group only `fix`; group every remaining visible row too; remove `fix` from its group. After each step: child stays flat in its repo while parent is elsewhere; repo remains as an empty placeholder once all rows are diverted; returning parent restores nesting and child count. Group folder rows precede loose Git rows, which precede repo sections.
+Before: parent `fix` and child `docs` are nested in `api`. Walkthrough: group only `fix`; remove it to verify nesting restoration. In a separate fixture group every visible row to verify empty-project retention, then explicitly return both `fix` and `docs`. After each step: child stays flat in its repo while parent is elsewhere; returning parent while child is repo-owned restores nesting and child count; repo remains as an empty placeholder once all rows are diverted. Group folder rows precede loose Git rows, which precede repo sections.
 
 ### SC-04: Drag join and leave
 
@@ -76,7 +76,7 @@ Before: folder project/workspace, group-folder workspace, missing group referenc
 
 ### SC-07: Async identity and concurrent regroup protection
 
-Before: `fix` has instance A and no membership; group creation is delayed. Walkthrough: separately delete/replace the worktree at the same path, or assign it to another group, before creation finishes. After: stale create never assigns the replacement or overwrites newer membership. The new group may remain empty; the caller gets an explicit stale-assignment result, not a misleading move success.
+Before: `fix` has instance A and no membership; group creation is delayed. Walkthrough: separately delete/replace the worktree at the same path (including a filesystem reporting zero birthtime), or assign it to another group, before creation finishes. After: stale create never assigns the replacement or overwrites newer membership. The new group may remain empty; the caller gets an explicit stale-assignment result, not a misleading move success.
 
 ### SC-08: Activity window controls, badge and clear
 
@@ -88,7 +88,7 @@ Before: active `open` is old; non-active rows have activity exactly at cutoff, o
 
 ### SC-10: Live only and default-branch exception
 
-Before: one workspace has live terminal/agent state, one is sleeping, default workspace is sleeping, and sleeping `open` is selected. Walkthrough: choose Live only, then disable Except default branch. After: live and selected rows stay; ordinary sleeper hides; main stays only with exception on. Agent idle versus working alone does not decide sleeping. Folder behavior follows the shared workspace sleeping rule rather than a fabricated activity threshold.
+Before: one workspace has live terminal/agent state, one is sleeping, one has unknown runtime liveness, default workspace is sleeping, and sleeping `open` is selected. Walkthrough: choose Live only, then disable Except default branch. After: live and selected rows stay; unknown stays with its unavailable source reported; ordinary sleeper hides; main stays only with exception on. Agent idle versus working alone does not decide sleeping. Folder rows bypass this sleeping sweep but still obey time windows.
 
 ### SC-11: Custom validation fixes blur behavior
 
@@ -100,7 +100,7 @@ Before: old Git and folder rows fail activity, while an unrelated ordinary filte
 
 ### SC-13: Recency, restart and client isolation
 
-Before: old workspace A open, B next, independent clients desktop and phone. Walkthrough: switch A→B; read stamps and visit ordering; restart daemon; reload preferences; change phone filter; apply legacy hide/show sleeping patches. After: A's departure makes it recent without moving it ahead in visit ordering; departure stamps do not survive session restart; preferences do; phone changes do not clobber desktop; legacy hide=true selects Live only, bare show=true lifts Live only but does not widen week/custom.
+Before: old workspace A open, B next, independent clients desktop and phone. Walkthrough: switch A→B; read stamps and visit ordering; restart daemon; reload preferences; change phone filter; from week toggle sleeping off/on; apply legacy hide/show sleeping patches. After: A's departure makes it recent without moving it ahead in visit ordering; departure stamps do not survive session restart; preferences do; phone changes do not clobber desktop; hide=true selects Live only, show=true restores the remembered week/custom selection, and a bare show=true while already on week/custom never widens it.
 
 ### SC-14: Active dirty marker including count boundaries
 
@@ -151,6 +151,6 @@ Only [tech-spec] questions remain: exact method/schema names, client keys, activ
 
 ## Status & amendments
 
-Status: Design accepted autonomously under LOOP.md; spec review required. Tech spec: requested by LOOP.md and required by cross-subsystem/file-count complexity.
+Status: Accepted autonomously after the mandatory Codex spec review; confirmed findings amended. Tech spec required by LOOP.md and cross-subsystem/file-count complexity.
 
-**Amendments:** None.
+**Amendments:** 2026-10-27 — correct SC-03 fixture sequence; define unknown-liveness retention/reporting and zero-birthtime replacement protection; restore remembered pre-Live window and Git-card project move. Rename the purpose heading for deterministic coverage. Review/adjudication evidence is in the item decision log.

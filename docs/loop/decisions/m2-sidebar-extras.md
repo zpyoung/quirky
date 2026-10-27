@@ -189,5 +189,27 @@ Reader: autonomous builders and later operator review — Decision: preserve the
 - **Revisit if:** real reviewer dispatch fails; use the skill's fallback ladder and record it
 - **Source:** locked by docs/loop/LOOP.md
 
+## D18: Accept confirmed spec defects and reject planned-artifact reference false positives
+- **Question:** adjudication of mandatory Codex spec review
+- **Options:** accept mechanical counts wholesale; adjudicate against source and current artifacts
+- **Chose:** accept F1 (SC-03 fixture sequence), F4 (zero-birthtime replacement guard), F6 (unknown liveness), F7 (Purpose heading). Also accept source-required restoration of remembered pre-Live window and Git-card Move project to group despite refuter F2/F3 suppression: their criteria explicitly require both. Keep F5 refuted: activity counting belongs to the existing pipeline. Amend logic first, then tech. Reject F8-F33 as stale-reference defects: they are planned APIs/tests/plugin paths, resolvable shorthand/range tokens, or executable names not on PATH, not absent existing implementation prerequisites. Expand ambiguous shorthand paths where useful.
+- **Why:** criteria-free refutation cannot negate a source requirement. Prepass “unresolved today” is not proof a planned file should already exist. Zero-birthtime async identity now holds a directory descriptor across the delay and compares filesystem identity; unknown Live-only providers preserve rows while reporting unavailability.
+- **Evidence:** /tmp/m2-sidebar-extras-review.4jLvDM/final/{gate.json,manifest.json,prepass-adjudication.md,criteria.md}; actual promote/refute exit 0; final gate NEEDS_FIXES (1 HIGH,29 MEDIUM,3 suppressed), reviewer Codex independence reduced; amended specs
+- **Reversibility:** medium
+- **Confidence:** high
+- **Revisit if:** implementation or review finds these amendments still ambiguous
+- **Source:** assumed — autonomous
+
+## D19: Execute two waves with isolated component trees and tests-first checkpoints
+- **Question:** decomposition, dirty-state preservation and verification ownership
+- **Options:** one broad worker; parallel shared-tree edits; two disjoint waves with orchestrator checks
+- **Chose:** W1 canonical repo/worktree metadata/lifecycle plus public UI slots/settings in parallel; W2 new extras plugin plus existing-sidebar integration in parallel using the committed public contract. Width cap 4, not binding. Workers own isolated /tmp worktrees and never commit. Tests-first preparation returns before implementation so the orchestrator can observe expected red results without workers running checks mid-flight; orchestrator checks after each barrier. Main inherited .serena/ stays untouched and outside item commits. Full commands are bun run test (remote), bun test scripts, bun run typecheck, bun run build.
+- **Why:** canonical and UI API files are independent in W1; W2 has a fixed method contract and disjoint write scopes. Avoids private cross-plugin imports and concurrent hub-file edits. Scope and HEAD audits are meaningful only before orchestrator commits.
+- **Evidence:** /tmp/quirky-sidebar-extras-lane5-plan.md; ProtocolFactoryInventory source/reference inventory; bun 1.4.0 probe; likeuser doctor web ready (playwright-cli 0.1.22)
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** a real semantic dependency or unowned caller requires an explicit re-plan
+- **Source:** assumed — autonomous
+
 ## Progress
 Step 4 in progress. Completed Phase A, Phase B and technical source surveys; all agents returned. Design presented and accepted autonomously; logic.md authored, tech.md next. Specs must undergo Codex adversarial review and be committed before code. Worktree branch build/m2-sidebar-extras; inherited untracked .serena/ remains untouched. No application behavior, tests, builds or completion claimed.
