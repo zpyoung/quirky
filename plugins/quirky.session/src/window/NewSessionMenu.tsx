@@ -1,22 +1,14 @@
 import { useEffect, useRef, useState } from 'react'
-import type { AgentKind } from '@quirky/protocol'
+import type { UiPluginContext } from '@quirky/protocol'
+import { AGENTS_VIEW_ID, loadMenuEntries, SHELL_ONLY_MENU, type MenuEntry } from './menuEntries'
 import type { NewSessionRequest } from './PromptDialog'
 
-type Entry = NewSessionRequest
+type Props = { context: UiPluginContext; onPick: (request: NewSessionRequest) => void }
 
-export const SESSION_MENU: Entry[] = [
-  { agent: 'shell', background: false, label: 'Shell' },
-  { agent: 'claude', background: false, label: 'Claude' },
-  { agent: 'codex', background: false, label: 'Codex' },
-  { agent: 'opencode', background: false, label: 'OpenCode' },
-  { agent: 'gemini', background: false, label: 'Gemini' },
-  { agent: 'claude', background: true, label: 'Claude (background)' }
-]
-
-type Props = { onPick: (entry: Entry) => void }
-
-export function NewSessionMenu({ onPick }: Props) {
+/** The `+` menu: Shell, the installed enabled agents from the catalog, and a way to manage them. */
+export function NewSessionMenu({ context, onPick }: Props) {
   const [open, setOpen] = useState(false)
+  const [entries, setEntries] = useState<MenuEntry[]>(SHELL_ONLY_MENU)
   const root = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -27,6 +19,33 @@ export function NewSessionMenu({ onPick }: Props) {
     window.addEventListener('mousedown', onDown)
     return () => window.removeEventListener('mousedown', onDown)
   }, [open])
+
+  useEffect(() => {
+    if (!open) return
+    let current = true
+    let latest = 0
+    const load = () => {
+      const request = ++latest
+      void loadMenuEntries(context).then((loaded) => {
+        if (current && request === latest) setEntries(loaded)
+      })
+    }
+    setEntries(SHELL_ONLY_MENU)
+    load()
+    const unsubscribe = context.subscribe((event) => {
+      if (event.type === 'quirky.agents/changed' || event.type === 'setting.changed') load()
+    })
+    return () => {
+      current = false
+      unsubscribe()
+    }
+  }, [open, context])
+
+  const choose = (entry: MenuEntry) => {
+    setOpen(false)
+    if (entry.kind === 'manage') context.openView(AGENTS_VIEW_ID)
+    else onPick(entry.request)
+  }
 
   return (
     <div className="menu-root" ref={root}>
@@ -42,15 +61,9 @@ export function NewSessionMenu({ onPick }: Props) {
       </button>
       {open && (
         <ul className="menu" role="menu">
-          {SESSION_MENU.map((entry) => (
+          {entries.map((entry) => (
             <li key={entry.label} role="none">
-              <button
-                role="menuitem"
-                onClick={() => {
-                  setOpen(false)
-                  onPick(entry)
-                }}
-              >
+              <button role="menuitem" onClick={() => choose(entry)}>
                 {entry.label}
               </button>
             </li>
@@ -59,8 +72,4 @@ export function NewSessionMenu({ onPick }: Props) {
       )}
     </div>
   )
-}
-
-export function agentLabel(agent: AgentKind): string {
-  return SESSION_MENU.find((entry) => entry.agent === agent && !entry.background)?.label ?? agent
 }

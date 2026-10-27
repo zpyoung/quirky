@@ -30,7 +30,7 @@ async function v1Home(sessions: Parameters<typeof writeV1Sessions>[1], live: str
 }
 
 describe('SC-26: a v1 home carries over', () => {
-  test('sessions import once, keep their PTY session and their repo', async () => {
+  test('SC-38: sessions import once, keep their PTY session and their repo, and read with no launch record', async () => {
     h = await v1Home(
       [
         { id: 's_v1', repoId: 'repo_alpha' },
@@ -48,6 +48,9 @@ describe('SC-26: a v1 home carries over', () => {
         ['s_claude', 'running']
       ])
       expect(sessions[0]).toMatchObject({ kind: 'terminal', agent: 'shell', title: 'Shell', worktreeId: 'wt_main', cwd: '/fake/alpha' })
+      expect(sessions.map((s) => [s.launch, s.providerSession, s.promptDelivery, s.resumedFrom])).toEqual(
+        Array(3).fill([null, null, null, null])
+      )
       expect(await call(first.client, 'quirky.session/get', { session: 's_v1' })).toMatchObject({ id: 's_v1' })
       expect(h.pty.sessions.has('s_v1')).toBe(true)
       expect(h.pty.requests.some((r) => r.type === 'forget')).toBe(false)

@@ -1,5 +1,6 @@
 import { act } from 'react'
 import { RpcError, RpcErrorCode, type QuirkyEvent, type Session, type UiLayout, type UiPluginContext } from '@quirky/protocol'
+import type { AgentInfo, AgentListing } from '../../quirky.agents/src/core/types'
 
 type Handler = (params: Record<string, any>) => unknown
 
@@ -24,6 +25,44 @@ export function session(over: Partial<Session> & Pick<Session, 'id'>): Session {
     ...over
   }
 }
+
+/** One catalog agent as `quirky.agents/list` reports it; installed and enabled unless `over` says otherwise. */
+export function agentInfo(id: string, label: string, over: Partial<AgentInfo> = {}): AgentInfo {
+  return {
+    id,
+    label,
+    plugin: 'quirky.agents',
+    installed: true,
+    enabled: true,
+    isDefault: false,
+    promptMode: 'argv',
+    resumable: false,
+    canFork: false,
+    homepage: null,
+    install: null,
+    command: id,
+    commandOverridden: false,
+    args: '',
+    argsOverridden: false,
+    env: {},
+    envOverridden: false,
+    showEnv: false,
+    permissions: { mode: null, hasAuto: false },
+    ...over
+  }
+}
+
+/** A `quirky.agents/list` result holding `agents`, with `defaultAgent` as the default. */
+export function agentListing(agents: AgentInfo[], defaultAgent = 'auto'): AgentListing {
+  return {
+    defaultAgent,
+    workspaceTrust: true,
+    permissions: { summary: 'manual', nonAuto: 'manual' },
+    agents: agents.map((agent) => ({ ...agent, isDefault: agent.id === defaultAgent }))
+  }
+}
+
+export const DEFAULT_AGENTS = agentListing([agentInfo('claude', 'Claude'), agentInfo('codex', 'Codex'), agentInfo('goose', 'Goose')])
 
 /** A `UiPluginContext` whose daemon calls are served by `handlers`; every other method rejects as unknown. */
 export function fakeContext(handlers: Record<string, Handler> = {}, settings: Record<string, unknown> = {}) {
@@ -155,6 +194,7 @@ export function sessionHandlers(sessions: Session[], extra: Record<string, Handl
   return {
     'quirky.worktree/resolve': () => WORKTREE,
     'quirky.session/list': () => sessions,
+    'quirky.agents/list': () => DEFAULT_AGENTS,
     'quirky.terminal/attach': () => attachResult(),
     'quirky.terminal/detach': () => ({ ok: true }),
     'quirky.terminal/write': () => ({ ok: true }),

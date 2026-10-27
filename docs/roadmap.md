@@ -112,11 +112,17 @@ All of these apply to every milestone:
   - One catalog yields both argv and structured-session options.
 - [Agent status](../research/orca-features/agent-status.md):
   - The full state machine.
-  - Hook installers beyond Claude and Codex.
+  - Hook installers beyond Claude and Codex. Each agent gets one CLI command that is safe to rerun
+    and prints every file it changed, the way `cmux hooks setup` works.
   - Capture of each session's provider id and transcript path.
   - Title and OSC fallback.
-- [Notifications](../research/orca-features/notifications.md): unread markers, cooldown, banner
-  text, sounds, tray dot.
+  - Status that programs report with cmux's OSC 7501 sequence, so tools that already report to
+    cmux show their status in Quirky.
+- [Notifications](../research/orca-features/notifications.md):
+  - Unread markers, cooldown, banner text, sounds, tray dot.
+  - Notifications from the OSC 9, OSC 99 and OSC 777 sequences that terminal programs already
+    emit, which cmux also reads. They follow the same cooldown and unread rules as hook
+    notifications.
 - [Worktrees](../research/orca-features/worktrees.md):
   - The metadata model.
   - Create and delete flows.
@@ -214,6 +220,10 @@ it needs worktrees and the CLI. It runs in four slices:
 3. Design mode.
 4. Cookie import.
 
+cmux puts agent-browser's command set on its WKWebView pane, so its browser API is a reference for
+the pane's accessibility snapshot, script injection and design mode. Agents still drive Chrome, as
+the [Browser](architecture.md#browser) decision says.
+
 **Exit test:** an agent drives a page while you watch it in the pane.
 
 ### Side track B: mobile
@@ -261,10 +271,13 @@ be planned from that list later.
 
 ## How it gets built
 
-An unattended Orca loop works through these milestones one item at a time
+Three unattended Orca loops work through these milestones in parallel, one item each at a time
 ([docs/loop/](loop/README.md)). The order of work items is in `docs/loop/queue.json`, and each
 decision the loop makes is logged for review.
 
-- **Browser placement:** the browser side track is queued after M4, because one loop builds one item
-  at a time.
+- **Browser placement:** the browser side track is queued after M4, so lanes take it once the
+  ready items ahead of it are claimed.
+- **Ideas from cmux:** a few items follow conventions from cmux, a GPL-3.0 macOS terminal for
+  agents. Those items match cmux's documented behavior and never copy its code, which would bring
+  the GPL with it.
 - **Review stop:** the loop stops for review after M0.
