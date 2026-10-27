@@ -19,6 +19,8 @@ export async function activate(context: PluginContext): Promise<void> {
     configure: service.configure,
     setPermissions: service.setPermissions,
     plan: service.plan,
+    options: service.options,
+    resolveLaunch: service.resolveLaunch,
     pick: service.pick,
     prepareLaunch: service.prepareLaunch,
     prepareResume: service.prepareResume,

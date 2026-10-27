@@ -1,4 +1,5 @@
 import type { CliContext, CliModule } from '@quirky/protocol'
+import { joinCommand } from './src/core/shell'
 
 type Permissions = { mode: string | null; hasAuto: boolean }
 
@@ -30,11 +31,35 @@ type Listing = {
   problems?: { plugin: string; id: string; status: string; error: string }[]
 }
 
+type LaunchSettings = { summary: string }
+
 type Plan = {
   command: string
   env: Record<string, string | null>
   promptDelivery: string | null
+  launchSettings: LaunchSettings | null
 }
+
+type OptionInfo = { id: string; type: string; choices: { value: string }[] | null }
+
+type OptionsInfo = {
+  agent: string
+  supported: boolean
+  models: { id: string; label: string; options: OptionInfo[] }[]
+  unlisted: 'accept' | 'refuse'
+  unlistedOptions: OptionInfo[]
+  extraArgs: { supported: boolean; allowed: string | null; placeholder: string | null; message: string | null }
+}
+
+type Resolved = {
+  added: string[]
+  args: string
+  structured: Record<string, string | boolean>
+  shadowed: string[]
+  launchSettings: LaunchSettings | null
+}
+
+type LaunchPicks = { model?: string; options?: Record<string, string | boolean>; extraArgs?: string }
 
 const MODES = ['manual', 'auto', 'yolo']
 
@@ -61,6 +86,66 @@ function parseEnv(pairs: unknown, ctx: CliContext): Record<string, string> {
 function formatEnv(env: Record<string, string | null>): string {
   const words = Object.entries(env).map(([key, value]) => (value === null ? `-${key}` : `${key}=${value}`))
   return words.length ? words.join(' ') : '-'
+}
+
+/**
+ * Turns `--model`, `--effort`, `--option KEY=VALUE` and `--extra-args` into launch params. An option
+ * needs a model, a key is set once, and `true`/`false` values become booleans.
+ */
+function selectionParams(flags: Record<string, unknown>, ctx: CliContext): LaunchPicks {
+  const model = flags.model as string | undefined
+  const effort = flags.effort as string | undefined
+  const entries = flags.option === undefined ? [] : ([flags.option].flat() as string[])
+  const options: Record<string, string | boolean> = Object.create(null)
+  for (const entry of entries) {
+    const at = entry.indexOf('=')
+    if (at === -1) throw ctx.usage(`--option expects KEY=VALUE, got "${entry}"`)
+    const key = entry.slice(0, at)
+    if (key === '') throw ctx.usage(`--option needs a key before "=", got "${entry}"`)
+    if (Object.hasOwn(options, key)) throw ctx.usage(`--option ${key} given more than once`)
+    const value = entry.slice(at + 1)
+    options[key] = value === 'true' ? true : value === 'false' ? false : value
+  }
+  if (effort !== undefined) {
+    if (Object.hasOwn(options, 'effort')) throw ctx.usage('effort is set by both --effort and --option effort=…')
+    options.effort = effort
+  }
+  if (model === undefined && effort !== undefined) throw ctx.usage('--effort requires --model')
+  if (model === undefined && entries.length > 0) throw ctx.usage('--option requires --model')
+  return {
+    ...(model === undefined ? {} : { model }),
+    ...(Object.keys(options).length === 0 ? {} : { options }),
+    ...(flags['extra-args'] === undefined ? {} : { extraArgs: flags['extra-args'] as string })
+  }
+}
+
+/** Options as `id: v1|v2` cells joined by `; `, with `-` for none; a boolean offers `true|false`. */
+function formatOptions(options: OptionInfo[]): string {
+  if (options.length === 0) return '-'
+  return options.map((o) => `${o.id}: ${o.choices ? o.choices.map((c) => c.value).join('|') : 'true|false'}`).join('; ')
+}
+
+function formatCatalog(info: OptionsInfo, ctx: CliContext): string {
+  const lines: string[] = []
+  if (!info.supported) {
+    lines.push(`Agent ${info.agent} does not support launch-time model selection.`)
+  } else {
+    lines.push(
+      info.models.length
+        ? ctx.format.table(['MODEL', 'LABEL', 'OPTIONS'], info.models.map((m) => [m.id, m.label, formatOptions(m.options)]))
+        : 'no listed models'
+    )
+    lines.push(
+      info.unlisted === 'refuse'
+        ? 'unlisted models: refused'
+        : `unlisted models: accepted${info.unlistedOptions.length ? `, with ${formatOptions(info.unlistedOptions)}` : ''}`
+    )
+  }
+  const extra = info.extraArgs
+  lines.push(
+    `extra arguments: ${extra.supported ? `${extra.allowed} (for example ${extra.placeholder})` : extra.message}`
+  )
+  return lines.join('\n')
 }
 
 function formatListing(listing: Listing, ctx: CliContext): string {
@@ -159,15 +244,36 @@ const named: CliModule['commands'] = {
     ctx.out.result(result, () => (result.changed.length ? `changed: ${result.changed.join(', ')}` : 'no changes'))
   },
 
+  async options(args, ctx) {
+    const info = (await ctx.call('quirky.agents/options', { agent: agentArg(args.positionals, ctx) })) as OptionsInfo
+    ctx.out.result(info, () => formatCatalog(info, ctx))
+  },
+
+  async resolve(args, ctx) {
+    const agent = agentArg(args.positionals, ctx)
+    const result = (await ctx.call('quirky.agents/resolveLaunch', { agent, ...selectionParams(args.flags, ctx) })) as Resolved
+    const structured = Object.entries(result.structured).map(([key, value]) => `${key}=${value}`)
+    ctx.out.result(result, () =>
+      ctx.format.record([
+        ['added', result.added.length ? joinCommand(result.added) : '-'],
+        ['args', result.args || '-'],
+        ['structured', structured.length ? structured.join(' ') : '-'],
+        ['set by extra args', result.shadowed.length ? result.shadowed.join(', ') : '-'],
+        ['launch', result.launchSettings?.summary ?? '-']
+      ])
+    )
+  },
+
   async plan(args, ctx) {
     const agent = agentArg(args.positionals, ctx)
-    const params: Record<string, unknown> = { agent }
+    const params: Record<string, unknown> = { agent, ...selectionParams(args.flags, ctx) }
     if (typeof args.flags.prompt === 'string') params.prompt = args.flags.prompt
     if (args.flags.draft === true) params.submitPrompt = false
     const plan = (await ctx.call('quirky.agents/plan', params)) as Plan
     ctx.out.result(plan, () =>
       ctx.format.record([
         ['command', plan.command],
+        ...(plan.launchSettings ? [['launch', plan.launchSettings.summary] as [string, string]] : []),
         ['prompt', plan.promptDelivery ?? 'none'],
         ['env', formatEnv(plan.env)]
       ])

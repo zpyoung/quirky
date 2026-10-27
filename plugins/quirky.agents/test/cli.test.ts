@@ -291,7 +291,7 @@ describe('agents plan', () => {
     const { h, client } = await start()
     const { ctx, lines } = testCliContext(client)
     await run('plan', ctx, ['grok'], { prompt: 'help' })
-    expect(lines[0]).toBe("command: grok --permission-mode bypassPermissions -- 'help'\nprompt: command-line\nenv: -")
+    expect(lines[0]).toBe("command: grok --permission-mode bypassPermissions -- 'help'\nlaunch: Grok\nprompt: command-line\nenv: -")
     expect(h.pty.requests.some((r) => r.type === 'create')).toBe(false)
   })
 
@@ -320,6 +320,163 @@ describe('agents plan', () => {
   })
 })
 
+describe('agents options', () => {
+  test('SC-1: prints a table of models with the choices each offers, then the unlisted and extra argument lines', async () => {
+    const { client } = await start()
+    const { ctx, lines } = testCliContext(client)
+    await run('options', ctx, ['claude'])
+    const rows = lines[0]!.split('\n')
+    expect(cells(rows[0]!)).toEqual(['MODEL', 'LABEL', 'OPTIONS'])
+    expect(cells(rows[1]!)).toEqual(['fable', 'Fable', 'effort: low|medium|high|xhigh|max'])
+    expect(cells(rows[4]!)).toEqual(['haiku', 'Haiku', '-'])
+    expect(rows[5]).toBe('unlisted models: accepted, with effort: low|medium|high|xhigh|max')
+    expect(rows[6]).toBe('extra arguments: --model, --effort, --add-dir (for example --model opus --effort high --add-dir docs)')
+  })
+
+  test('SC-2: a boolean option lists true|false and each model keeps its own ceiling', async () => {
+    const { client } = await start()
+    const codex = testCliContext(client)
+    await run('options', codex.ctx, ['codex'])
+    const luna = codex.lines[0]!.split('\n').find((row) => row.startsWith('gpt-5.6-luna '))!
+    expect(cells(luna)[2]).toBe('effort: minimal|low|medium|high|xhigh|max')
+
+    const cursor = testCliContext(client)
+    await run('options', cursor.ctx, ['cursor'])
+    const row = cursor.lines[0]!.split('\n').find((line) => line.startsWith('gpt-5.3-codex '))!
+    expect(cells(row)[2]).toContain('fastMode: true|false')
+    expect(cursor.lines[0]).toContain('unlisted models: refused')
+  })
+
+  test('SC-3: an agent without a catalog says so, and --json prints the method result', async () => {
+    const { client } = await start()
+    const { ctx, lines } = testCliContext(client)
+    await run('options', ctx, ['aider'])
+    expect(lines[0]).toBe(
+      "Agent aider does not support launch-time model selection.\nextra arguments: Extra arguments aren't supported for this agent yet."
+    )
+
+    const omp = testCliContext(client)
+    await run('options', omp.ctx, ['omp'])
+    expect(omp.lines[0]).toStartWith('no listed models\nunlisted models: accepted\n')
+
+    const json = testCliContext(client, { json: true })
+    await run('options', json.ctx, ['codex'])
+    expect(JSON.parse(json.lines[0]!)).toEqual(await client.callAny('quirky.agents/options', { agent: 'codex' }))
+  })
+
+  test('needs an agent and refuses an unknown one', async () => {
+    const { client } = await start()
+    const { ctx } = testCliContext(client)
+    expect(await failure(run('options', ctx))).toMatchObject({ message: 'missing <agent>', kind: 'usage' })
+    expect((await failure(run('options', ctx, ['nope']))).message).toBe('unknown agent: nope')
+  })
+})
+
+describe('agents resolve', () => {
+  test('SC-6: prints what the pick adds, the full arguments, the structured options and the summary', async () => {
+    const { client } = await start()
+    const { ctx, lines } = testCliContext(client)
+    await run('resolve', ctx, ['claude'], { model: 'opus', effort: 'high' })
+    expect(lines[0]).toBe(
+      [
+        'added: --model opus --effort high',
+        'args: --dangerously-skip-permissions --model opus --effort high',
+        'structured: model=opus effort=high',
+        'set by extra args: -',
+        'launch: Claude · Opus · Effort: high'
+      ].join('\n')
+    )
+  })
+
+  test('SC-7: Codex\'s effort goes through -c', async () => {
+    const { client } = await start()
+    const { ctx, lines } = testCliContext(client)
+    await run('resolve', ctx, ['codex'], { model: 'gpt-5.5', effort: 'low' })
+    expect(lines[0]).toContain('added: -m gpt-5.5 -c model_reasoning_effort=low')
+    expect(lines[0]).toContain('launch: Codex · GPT-5.5 · Reasoning effort: low')
+  })
+
+  test('SC-8: no pick shows only the inherited arguments', async () => {
+    const { client } = await start()
+    const { ctx, lines } = testCliContext(client)
+    await run('resolve', ctx, ['claude'])
+    expect(lines[0]).toBe(
+      ['added: -', 'args: --dangerously-skip-permissions', 'structured: -', 'set by extra args: -', 'launch: Claude'].join('\n')
+    )
+  })
+
+  test('SC-13: extra arguments win, and the row names the option they set', async () => {
+    const { client } = await start()
+    const { ctx, lines } = testCliContext(client)
+    await run('resolve', ctx, ['claude'], { model: 'opus', effort: 'low', 'extra-args': '--effort high --add-dir docs' })
+    expect(lines[0]).toBe(
+      [
+        'added: --model opus',
+        'args: --dangerously-skip-permissions --effort high --add-dir docs --model opus',
+        'structured: model=opus',
+        'set by extra args: effort',
+        'launch: Claude · Opus'
+      ].join('\n')
+    )
+  })
+
+  test('--json prints the method result, with --option values as typed', async () => {
+    const { client } = await start()
+    const json = testCliContext(client, { json: true })
+    await run('resolve', json.ctx, ['cursor'], { model: 'gpt-5.3-codex', option: ['effort=low', 'fastMode=true'] })
+    const result = JSON.parse(json.lines[0]!)
+    expect(result.added).toEqual(['--model', 'gpt-5.3-codex-low-fast'])
+    expect(result).toEqual(
+      await client.callAny('quirky.agents/resolveLaunch', { agent: 'cursor', model: 'gpt-5.3-codex', options: { effort: 'low', fastMode: true } })
+    )
+  })
+
+  test('SC-9: the daemon\'s refusals reach the user unchanged', async () => {
+    const { client } = await start()
+    const { ctx } = testCliContext(client)
+    expect((await failure(run('resolve', ctx, ['claude'], { model: 'haiku', effort: 'low' }))).message).toBe(
+      'Agent claude model haiku does not support effort low.'
+    )
+    expect((await failure(run('resolve', ctx, ['aider'], { model: 'gpt-4o' }))).message).toBe(
+      'Agent aider does not support launch-time model selection.'
+    )
+    expect((await failure(run('resolve', ctx, ['claude'], { 'extra-args': '--verbose' }))).message).toContain('"--verbose" isn\'t allowed')
+  })
+
+  test('SC-9: usage errors come before any call to the daemon', async () => {
+    const { client } = await start()
+    const { ctx } = testCliContext(client)
+    const usage = async (flags: Record<string, unknown>, message: string) =>
+      expect(await failure(run('resolve', ctx, ['claude'], flags))).toMatchObject({ message, kind: 'usage' })
+    await usage({ effort: 'high' }, '--effort requires --model')
+    await usage({ option: ['effort=high'] }, '--option requires --model')
+    await usage({ model: 'opus', effort: 'high', option: ['effort=low'] }, 'effort is set by both --effort and --option effort=…')
+    await usage({ model: 'opus', option: ['speed=fast', 'speed=slow'] }, '--option speed given more than once')
+    await usage({ model: 'opus', option: ['speed'] }, '--option expects KEY=VALUE, got "speed"')
+    await usage({ model: 'opus', option: ['=fast'] }, '--option needs a key before "=", got "=fast"')
+    expect(await failure(run('resolve', ctx))).toMatchObject({ message: 'missing <agent>', kind: 'usage' })
+  })
+
+  test('the first = splits a --option, so a value may contain =', async () => {
+    const { client } = await start()
+    const { ctx } = testCliContext(client)
+    expect((await failure(run('resolve', ctx, ['claude'], { model: 'opus', option: ['speed=a=b'] }))).message).toBe(
+      'Agent claude model opus does not support speed a=b.'
+    )
+  })
+})
+
+describe('agents plan with a pick', () => {
+  test('passes the flags through and prints a launch row', async () => {
+    const { client } = await start()
+    const { ctx, lines } = testCliContext(client)
+    await run('plan', ctx, ['claude'], { model: 'opus', effort: 'high', prompt: 'hi' })
+    expect(lines[0]).toBe(
+      "command: claude --dangerously-skip-permissions --model opus --effort high 'hi'\nlaunch: Claude · Opus · Effort: high\nprompt: command-line\nenv: -"
+    )
+  })
+})
+
 describe('the CLI catalog', () => {
   test('lists the agents group with every command and the methods each calls', async () => {
     const { client } = await start()
@@ -333,12 +490,16 @@ describe('the CLI catalog', () => {
       'agents enable',
       'agents get',
       'agents list',
+      'agents options',
       'agents permissions',
       'agents plan',
-      'agents refresh'
+      'agents refresh',
+      'agents resolve'
     ])
     expect(own.every((c) => c.module?.endsWith('/quirky.agents/cli.ts'))).toBe(true)
     expect(own.find((c) => c.words === 'agents disable')!.methods).toEqual(['quirky.agents/setEnabled'])
+    expect(own.find((c) => c.words === 'agents options')!.methods).toEqual(['quirky.agents/options'])
+    expect(own.find((c) => c.words === 'agents resolve')!.methods).toEqual(['quirky.agents/resolveLaunch'])
   })
 
   test('quirky agents list --json resolves through the real CLI', async () => {

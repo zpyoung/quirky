@@ -1,10 +1,13 @@
 import { homedir } from 'node:os'
 import { isReservedLaunchEnv, type ContributionInfo, type PluginContext, type QuirkyEvent } from '@quirky/protocol'
 import { buildCatalog } from './core/catalog'
+import { extrasSummary, parseExtraArgs } from './core/extras'
 import { agentPermissionMode, applyPermissionMode, effectiveArgs, effectiveEnv, PermissionError, permissionSummary } from './core/permissions'
 import { buildLaunchPlan, buildResumePlan, PlanError } from './core/plan'
+import { resolveLaunch } from './core/resolve'
 import { pickAgent } from './core/select'
-import { tokenize } from './core/shell'
+import { SelectionError, validateSelection } from './core/selection'
+import { joinCommand, tokenize } from './core/shell'
 import {
   EMPTY_CONFIG,
   type AgentConfig,
@@ -15,8 +18,13 @@ import {
   type DeliveryOutcome,
   type LaunchPlan,
   type LaunchRecord,
+  type OptionDecl,
+  type OptionUse,
+  type ParsedExtras,
   type PermissionSummary,
-  type ProviderSession
+  type ProviderSession,
+  type Resolution,
+  type ValidSelection
 } from './core/types'
 import { DeliveryRunner } from './delivery'
 import { detect, readLoginPath, searchDirs, type Detection, type SearchDirs } from './detect'
@@ -26,6 +34,23 @@ import { writeTrust } from './trust'
 type Params = Record<string, unknown>
 type Env = Record<string, string | null>
 type Resettable = 'command' | 'args' | 'env'
+
+type OptionInfo = { id: string; label: string; type: 'select' | 'boolean'; choices: { value: string; label: string }[] | null }
+
+/** What `quirky.agents/options` reports for one agent. */
+type OptionsInfo = {
+  agent: string
+  label: string
+  supported: boolean
+  models: { id: string; label: string; description: string | null; options: OptionInfo[] }[]
+  unlisted: 'accept' | 'refuse'
+  unlistedOptions: OptionInfo[]
+  structured: boolean
+  extraArgs: ReturnType<typeof extrasSummary>
+}
+
+/** What `quirky.agents/resolveLaunch` reports: the pick's effect on the launch, `args` shell-quoted. */
+type ResolvedLaunch = Omit<Resolution, 'args'> & { args: string }
 
 const SETTING_PREFIX = 'setting:quirky.agents/'
 const DEFAULT_SETTING = 'default-agent'
@@ -38,6 +63,28 @@ const userHome = () => process.env.HOME || homedir()
 function timeScaleFromEnv(): number {
   const scale = Number(process.env.QUIRKY_TEST_AGENT_TIME_SCALE)
   return Number.isFinite(scale) && scale > 0 ? scale : 1
+}
+
+/** An option as a model offers it: the declared choices narrowed to the model's subset. */
+function optionInfo(decls: OptionDecl[], use: OptionUse): OptionInfo {
+  const decl = decls.find((candidate) => candidate.id === use.id)!
+  const choices = decl.choices && (use.choices ? decl.choices.filter((choice) => use.choices!.includes(choice.value)) : decl.choices)
+  return { id: decl.id, label: decl.label, type: decl.type, choices: choices ? choices.map(({ value, label }) => ({ value, label })) : null }
+}
+
+function optionsInfo(entry: AgentEntry): OptionsInfo {
+  const catalog = entry.launchOptions
+  const info = (uses: OptionUse[]) => uses.map((use) => optionInfo(catalog!.options, use))
+  return {
+    agent: entry.id,
+    label: entry.label,
+    supported: catalog !== null,
+    models: catalog ? catalog.models.map((model) => ({ id: model.id, label: model.label, description: model.description, options: info(model.options) })) : [],
+    unlisted: catalog?.unlisted ?? 'refuse',
+    unlistedOptions: catalog ? info(catalog.unlistedOptions) : [],
+    structured: catalog?.model.structured != null,
+    extraArgs: extrasSummary(entry)
+  }
 }
 
 /**
@@ -155,12 +202,39 @@ export class AgentsService {
     return { summary: permissionSummary(entries, applied.configs).summary, changed: applied.changed }
   }
 
+  /** The models and options an agent offers at launch, and the extra arguments it accepts. */
+  options = (params: Params): OptionsInfo => optionsInfo(this.entryOf(params.agent as string))
+
+  /**
+   * Previews what a pick and extra arguments add to the agent's launch under its saved
+   * configuration. Starts nothing, writes no trust record and emits no event, so it also
+   * resolves for a disabled agent.
+   */
+  resolveLaunch = (params: Params): ResolvedLaunch => {
+    const entry = this.entryOf(params.agent as string)
+    const config = this.configs.get(entry.id)
+    const structured = params.structured === true
+    return this.guard(() => {
+      const { selection, extras } = this.picks(entry, params)
+      const resolution = resolveLaunch({
+        entry,
+        commandTokens: config.command === null || config.command.trim() === '' ? [] : this.commandTokens(config.command),
+        configuredArgs: this.configuredArgs(entry, config),
+        selection,
+        extras,
+        structured
+      })
+      return { ...resolution, args: structured ? '' : joinCommand(resolution.args) }
+    })
+  }
+
   plan = (params: Params): LaunchPlan => {
     const entry = this.entryOf(params.agent as string)
     return this.guard(() =>
       buildLaunchPlan({
         entry,
         config: this.configs.get(entry.id),
+        ...this.picks(entry, params),
         ...(params.prompt === undefined ? {} : { prompt: params.prompt as string }),
         ...(params.submitPrompt === undefined ? {} : { submitPrompt: params.submitPrompt as boolean })
       })
@@ -198,6 +272,7 @@ export class AgentsService {
         config,
         ...(params.prompt === undefined ? {} : { prompt: params.prompt as string }),
         ...(params.submitPrompt === undefined ? {} : { submitPrompt: params.submitPrompt as boolean }),
+        ...this.picks(entry, params),
         hookArgs: (params.hookArgs as string[] | undefined) ?? [],
         hookEnv: (params.hookEnv as Env | undefined) ?? {},
         resolveExecutable: (name) => this.detection.resolveExecutable(name)
@@ -328,9 +403,30 @@ export class AgentsService {
     try {
       return work()
     } catch (error) {
-      if (error instanceof PlanError) throw this.context.error('invalid-params', error.message)
+      if (error instanceof PlanError || error instanceof SelectionError) throw this.context.error('invalid-params', error.message)
       throw error
     }
+  }
+
+  /** The caller's pick and extra arguments, checked against the agent's catalog and allowlist. */
+  private picks(entry: AgentEntry, params: Params): { selection: ValidSelection | null; extras: ParsedExtras | null } {
+    return {
+      selection: validateSelection(entry, { model: params.model, options: params.options }),
+      extras: parseExtraArgs(entry, (params.extraArgs as string | undefined) ?? '')
+    }
+  }
+
+  private commandTokens(text: string): string[] {
+    const result = tokenize(text)
+    if (!result.ok) throw new PlanError(`Agent command override is invalid: ${result.error}`)
+    if (result.tokens.length === 0) throw new PlanError('Agent command override is invalid: the command is empty')
+    return result.tokens
+  }
+
+  private configuredArgs(entry: AgentEntry, config: AgentConfig): string[] {
+    const result = tokenize(config.args ?? entry.yolo ?? '')
+    if (!result.ok) throw new PlanError(`CLI arguments are invalid: ${result.error}`)
+    return entry.stripArgs.length === 0 ? result.tokens : result.tokens.filter((token) => !entry.stripArgs.includes(token))
   }
 
   private commandOverride(entry: AgentEntry, text: string): string | null {
