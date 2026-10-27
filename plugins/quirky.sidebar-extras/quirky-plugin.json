@@ -1,0 +1,353 @@
+{
+  "id": "quirky.sidebar-extras",
+  "name": "Sidebar extras",
+  "version": "0.1.0",
+  "description": "Client-local workspace activity filters and the Source Control activity item.",
+  "main": "main.ts",
+  "ui": "dist/ui.js",
+  "cli": "cli.ts",
+  "activation": "lazy",
+  "dependencies": [
+    "quirky.repo",
+    "quirky.worktree"
+  ],
+  "contributes": {
+    "method": [
+      {
+        "id": "state",
+        "description": "Reads one client's sidebar-extras preferences and session activation state.",
+        "readOnly": true,
+        "params": {
+          "type": "object",
+          "properties": {
+            "client": {
+              "type": "string",
+              "description": "Client-local preference key; defaults to desktop.",
+              "default": "desktop"
+            }
+          },
+          "additionalProperties": false
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "client": { "type": "string" },
+            "preferences": {
+              "type": "object",
+              "properties": {
+                "workspaceActivityWindow": {
+                  "type": "string",
+                  "enum": ["all", "live-only", "today", "week", "month", "custom"]
+                },
+                "workspaceActivityCustomDays": { "type": "integer", "minimum": 1, "maximum": 9007199254740991 },
+                "alwaysShowDefaultBranchWorkspace": { "type": "boolean" },
+                "workspaceActivityWindowBeforeLiveOnly": {
+                  "type": "string",
+                  "enum": ["all", "today", "week", "month", "custom"]
+                }
+              },
+              "required": [
+                "workspaceActivityWindow",
+                "workspaceActivityCustomDays",
+                "alwaysShowDefaultBranchWorkspace",
+                "workspaceActivityWindowBeforeLiveOnly"
+              ],
+              "additionalProperties": false
+            },
+            "active": {
+              "description": "Current {worktreeId, instanceId}, or null when no workspace is active.",
+              "properties": {
+                "worktreeId": { "type": "string" },
+                "instanceId": { "type": "string" }
+              },
+              "required": ["worktreeId", "instanceId"]
+            },
+            "visits": {
+              "type": "object",
+              "description": "Persistent visit timestamps keyed by canonical worktree ID + @ + instance ID.",
+              "additionalProperties": true
+            },
+            "exits": {
+              "type": "object",
+              "description": "Current-daemon-session departure timestamps keyed by canonical worktree ID + @ + instance ID.",
+              "additionalProperties": true
+            }
+          },
+          "required": ["client", "preferences", "active", "visits", "exits"],
+          "additionalProperties": false
+        }
+      },
+      {
+        "id": "set",
+        "description": "Atomically merges validated client-local activity preferences and legacy sleeping-workspace patches.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "client": { "type": "string", "description": "Client-local preference key; defaults to desktop." },
+            "workspaceActivityWindow": {
+              "type": "string",
+              "enum": ["all", "live-only", "today", "week", "month", "custom"]
+            },
+            "workspaceActivityCustomDays": { "type": "integer", "minimum": 1, "maximum": 9007199254740991 },
+            "alwaysShowDefaultBranchWorkspace": { "type": "boolean" },
+            "hideSleepingWorkspaces": { "type": "boolean", "description": "Legacy patch: true selects live-only; false restores the remembered non-live window." },
+            "showSleepingWorkspaces": { "type": "boolean", "description": "Legacy patch: true restores the remembered window only while live-only is selected." }
+          },
+          "additionalProperties": false
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "client": { "type": "string" },
+            "preferences": {
+              "type": "object",
+              "properties": {
+                "workspaceActivityWindow": { "type": "string", "enum": ["all", "live-only", "today", "week", "month", "custom"] },
+                "workspaceActivityCustomDays": { "type": "integer", "minimum": 1, "maximum": 9007199254740991 },
+                "alwaysShowDefaultBranchWorkspace": { "type": "boolean" },
+                "workspaceActivityWindowBeforeLiveOnly": { "type": "string", "enum": ["all", "today", "week", "month", "custom"] }
+              },
+              "required": ["workspaceActivityWindow", "workspaceActivityCustomDays", "alwaysShowDefaultBranchWorkspace", "workspaceActivityWindowBeforeLiveOnly"],
+              "additionalProperties": false
+            },
+            "active": {
+              "description": "Current {worktreeId, instanceId}, or null when no workspace is active.",
+              "properties": { "worktreeId": { "type": "string" }, "instanceId": { "type": "string" } },
+              "required": ["worktreeId", "instanceId"]
+            },
+            "visits": { "type": "object", "description": "Persistent visit timestamps keyed by canonical worktree ID + @ + instance ID.", "additionalProperties": true },
+            "exits": { "type": "object", "description": "Current-daemon-session departure timestamps keyed by canonical worktree ID + @ + instance ID.", "additionalProperties": true }
+          },
+          "required": ["client", "preferences", "active", "visits", "exits"],
+          "additionalProperties": false
+        }
+      },
+      {
+        "id": "activate",
+        "description": "Records a client workspace visit and the previous workspace's departure after canonical identity resolution.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "client": { "type": "string", "description": "Client-local state key; defaults to desktop." },
+            "worktree": { "description": "Canonical worktree selector to activate, or null to clear the activation." }
+          },
+          "required": ["worktree"],
+          "additionalProperties": false
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "client": { "type": "string" },
+            "preferences": {
+              "type": "object",
+              "properties": {
+                "workspaceActivityWindow": { "type": "string", "enum": ["all", "live-only", "today", "week", "month", "custom"] },
+                "workspaceActivityCustomDays": { "type": "integer", "minimum": 1, "maximum": 9007199254740991 },
+                "alwaysShowDefaultBranchWorkspace": { "type": "boolean" },
+                "workspaceActivityWindowBeforeLiveOnly": { "type": "string", "enum": ["all", "today", "week", "month", "custom"] }
+              },
+              "required": ["workspaceActivityWindow", "workspaceActivityCustomDays", "alwaysShowDefaultBranchWorkspace", "workspaceActivityWindowBeforeLiveOnly"],
+              "additionalProperties": false
+            },
+            "active": {
+              "description": "Current {worktreeId, instanceId}, or null when no workspace is active.",
+              "properties": { "worktreeId": { "type": "string" }, "instanceId": { "type": "string" } },
+              "required": ["worktreeId", "instanceId"]
+            },
+            "visits": { "type": "object", "description": "Persistent visit timestamps keyed by canonical worktree ID + @ + instance ID.", "additionalProperties": true },
+            "exits": { "type": "object", "description": "Current-daemon-session departure timestamps keyed by canonical worktree ID + @ + instance ID.", "additionalProperties": true }
+          },
+          "required": ["client", "preferences", "active", "visits", "exits"],
+          "additionalProperties": false
+        }
+      },
+      {
+        "id": "projection",
+        "description": "Projects canonical worktrees through one client's activity window and current runtime liveness.",
+        "readOnly": true,
+        "params": {
+          "type": "object",
+          "properties": {
+            "client": { "type": "string", "description": "Client-local preference key; defaults to desktop." }
+          },
+          "additionalProperties": false
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "client": { "type": "string" },
+            "preferences": {
+              "type": "object",
+              "properties": {
+                "workspaceActivityWindow": { "type": "string", "enum": ["all", "live-only", "today", "week", "month", "custom"] },
+                "workspaceActivityCustomDays": { "type": "integer", "minimum": 1, "maximum": 9007199254740991 },
+                "alwaysShowDefaultBranchWorkspace": { "type": "boolean" },
+                "workspaceActivityWindowBeforeLiveOnly": { "type": "string", "enum": ["all", "today", "week", "month", "custom"] }
+              },
+              "required": ["workspaceActivityWindow", "workspaceActivityCustomDays", "alwaysShowDefaultBranchWorkspace", "workspaceActivityWindowBeforeLiveOnly"],
+              "additionalProperties": false
+            },
+            "active": {
+              "description": "Current {worktreeId, instanceId}, or null when no workspace is active.",
+              "properties": { "worktreeId": { "type": "string" }, "instanceId": { "type": "string" } },
+              "required": ["worktreeId", "instanceId"]
+            },
+            "visits": { "type": "object", "description": "Persistent visit timestamps keyed by canonical worktree ID + @ + instance ID.", "additionalProperties": true },
+            "exits": { "type": "object", "description": "Current-daemon-session departure timestamps keyed by canonical worktree ID + @ + instance ID.", "additionalProperties": true },
+            "visibleIds": { "type": "array", "items": { "type": "string" } },
+            "hiddenIds": { "type": "array", "items": { "type": "string" } },
+            "hiddenCount": { "type": "integer", "minimum": 0 },
+            "filterCount": { "type": "integer", "minimum": 0 },
+            "workspaces": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "worktreeId": { "type": "string" },
+                  "activityAt": { "type": "number" },
+                  "live": { "description": "Runtime liveness: true, false, or null when an existing provider is unavailable." },
+                  "reason": { "type": "string", "enum": ["selected", "all", "recent", "old", "live", "sleeping", "main", "folder", "unknown"] },
+                  "error": { "type": "string", "description": "Why runtime liveness could not be established, when applicable." }
+                },
+                "required": ["worktreeId", "activityAt", "live", "reason"],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": ["client", "preferences", "active", "visits", "exits", "visibleIds", "hiddenIds", "hiddenCount", "filterCount", "workspaces"],
+          "additionalProperties": false
+        }
+      },
+      {
+        "id": "dirty",
+        "description": "Reads Source Control panel rows for a requested workspace or the one in daemon UI layout.",
+        "readOnly": true,
+        "params": {
+          "type": "object",
+          "properties": {
+            "worktree": { "description": "Optional worktree selector; null means no active workspace. When omitted, the daemon UI layout is authoritative." }
+          },
+          "additionalProperties": false
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "worktreeId": { "description": "Canonical worktree ID, or null when there is no active selection." },
+            "count": { "type": "integer", "minimum": 0 },
+            "capped": { "type": "boolean" },
+            "title": { "type": "string" },
+            "dirty": { "type": "boolean" },
+            "available": { "type": "boolean" },
+            "error": { "type": "string", "description": "Reason status could not be read, when unavailable." }
+          },
+          "required": ["worktreeId", "count", "capped", "title", "dirty", "available"],
+          "additionalProperties": false
+        }
+      }
+    ],
+    "event": [
+      {
+        "id": "changed",
+        "description": "One client's preferences or active workspace identity changed.",
+        "data": {
+          "type": "object",
+          "properties": {
+            "client": { "type": "string" },
+            "preferences": {
+              "type": "object",
+              "properties": {
+                "workspaceActivityWindow": { "type": "string", "enum": ["all", "live-only", "today", "week", "month", "custom"] },
+                "workspaceActivityCustomDays": { "type": "integer", "minimum": 1, "maximum": 9007199254740991 },
+                "alwaysShowDefaultBranchWorkspace": { "type": "boolean" },
+                "workspaceActivityWindowBeforeLiveOnly": { "type": "string", "enum": ["all", "today", "week", "month", "custom"] }
+              },
+              "required": ["workspaceActivityWindow", "workspaceActivityCustomDays", "alwaysShowDefaultBranchWorkspace", "workspaceActivityWindowBeforeLiveOnly"],
+              "additionalProperties": false
+            },
+            "active": {
+              "description": "Current {worktreeId, instanceId}, or null when no workspace is active.",
+              "properties": { "worktreeId": { "type": "string" }, "instanceId": { "type": "string" } },
+              "required": ["worktreeId", "instanceId"]
+            },
+            "visits": { "type": "object", "description": "Persistent visit timestamps keyed by canonical worktree ID + @ + instance ID.", "additionalProperties": true },
+            "exits": { "type": "object", "description": "Current-daemon-session departure timestamps keyed by canonical worktree ID + @ + instance ID.", "additionalProperties": true }
+          },
+          "required": ["client", "preferences", "active", "visits", "exits"],
+          "additionalProperties": false
+        }
+      }
+    ],
+    "activity-item": [
+      {
+        "id": "source-control",
+        "title": "Source Control",
+        "order": 0
+      }
+    ],
+    "setting": [
+      {
+        "id": "sidebar-section-separators",
+        "type": "boolean",
+        "title": "Sidebar section separators",
+        "description": "Show divider lines between top-level projects and groups.",
+        "category": "Appearance",
+        "section": "Window & Sidebar",
+        "default": true
+      }
+    ],
+    "cli-command": [
+      {
+        "id": "state",
+        "summary": "read sidebar activity preferences and activation state",
+        "flags": {
+          "client": { "type": "string", "description": "client-local state key" }
+        },
+        "methods": ["quirky.sidebar-extras/state"]
+      },
+      {
+        "id": "set",
+        "summary": "change sidebar activity preferences",
+        "flags": {
+          "client": { "type": "string", "description": "client-local state key" },
+          "workspace-activity-window": {
+            "type": "string",
+            "description": "activity window: all, live-only, today, week, month or custom",
+            "enum": ["all", "live-only", "today", "week", "month", "custom"]
+          },
+          "workspace-activity-custom-days": { "type": "integer", "description": "positive whole-number days for the custom window" },
+          "always-show-default-branch-workspace": { "type": "boolean", "description": "keep the default-branch workspace visible in live-only mode" },
+          "hide-sleeping-workspaces": { "type": "boolean", "description": "legacy live-only patch" },
+          "show-sleeping-workspaces": { "type": "boolean", "description": "restore the remembered non-live window" }
+        },
+        "methods": ["quirky.sidebar-extras/set"]
+      },
+      {
+        "id": "activate",
+        "summary": "record a workspace visit or clear the current activation",
+        "flags": {
+          "client": { "type": "string", "description": "client-local state key" },
+          "worktree": { "type": "string", "description": "worktree selector" },
+          "clear": { "type": "boolean", "description": "clear the current workspace activation" }
+        },
+        "methods": ["quirky.sidebar-extras/activate"]
+      },
+      {
+        "id": "projection",
+        "summary": "read the canonical activity and liveness projection",
+        "flags": {
+          "client": { "type": "string", "description": "client-local state key" }
+        },
+        "methods": ["quirky.sidebar-extras/projection"]
+      },
+      {
+        "id": "dirty",
+        "summary": "read Source Control panel-row status for an active or selected workspace",
+        "flags": {
+          "worktree": { "type": "string", "description": "optional worktree selector" },
+          "no-active": { "type": "boolean", "description": "query the explicit no-active state" }
+        },
+        "methods": ["quirky.sidebar-extras/dirty"]
+      }
+    ]
+  }
+}
