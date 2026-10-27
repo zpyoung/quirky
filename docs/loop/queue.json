@@ -258,8 +258,9 @@
       "deps": [
         "m6-orchestration-core"
       ],
-      "status": "todo",
-      "early": true
+      "status": "in-progress",
+      "early": true,
+      "lane": 9
     },
     {
       "id": "m6-heimdall-core",
