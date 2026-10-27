@@ -361,12 +361,14 @@ export class AskService {
         this.timeOut(toAsk(row, false), false)
         continue
       }
-      const seq = this.store.transaction(() => {
+      const surfaced = this.store.transaction(() => {
+        if (this.overdue(row)) return null
         const next = this.nextSeq()
-        this.store.run('UPDATE asks SET seq = ? WHERE id = ?', next, row.id)
-        return next
+        this.store.run("UPDATE asks SET seq = ? WHERE id = ? AND status = 'pending'", next, row.id)
+        return { ask: toAsk({ ...row, seq: next }, false), seq: next }
       })
-      this.hooks.surfaced(this.get(row.id), seq)
+      if (!surfaced) continue
+      this.hooks.surfaced(surfaced.ask, surfaced.seq)
       return
     }
   }
