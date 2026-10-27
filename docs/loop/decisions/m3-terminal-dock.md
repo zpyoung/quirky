@@ -374,5 +374,27 @@
 - **Revisit if:** a real native session proves the current opener cannot expose effort or a global write occurs
 - **Source:** assumed — autonomous (same-round recovery); locked by operator D33 (nonblocking findings remain open)
 
+## D35: Fix the confirmed fresh-plugin public-import blocker
+- **Question:** the incoming structured-runner log described an integration typecheck failure when new plugins lacked generated local dependency links
+- **Options:** depend on an install step the land does not run; add per-plugin/private import workarounds; map the two existing public exports to their canonical source entries
+- **Chose:** add exactly @quirky/protocol and @quirky/protocol/node paths in root tsconfig, matching public package exports and m5-structured-runner D25. No wildcard/private alias, suppression, API change or runtime fallback.
+- **Why:** a throwaway real TypeScript resolver smoke hid only the two new plugins' generated node_modules links. Before the fix all four public resolutions were null; afterward they resolved to the existing public index files. This is a blocking clean-integration prerequisite, not an optional feature.
+- **Evidence:** packages/protocol/package.json:6-8; check-fresh-resolution.ts red/green output; full typecheck exit0; actual public daemon/PTy defects.e2e.test.ts rerun2pass/26assertions after mapping. The affected remote suite uses unchanged business code; the wrapper's final build will consume the mapping. No permanent source-text/wiring test was added.
+- **Reversibility:** easy
+- **Confidence:** high for exercised resolution and public runtime flows
+- **Revisit if:** the package's public export entries change
+- **Source:** locked by m5-structured-runner D25 public-entry contract; assumed — autonomous (observed blocker repair)
+
+## D36: Register the explicit follow-up without bypassing the shared queue lock
+- **Question:** the required follow-up transaction waited behind shared maintenance
+- **Options:** edit shared queue/index or kill the owner; attribute the contention and retry the supported command
+- **Chose:** leave PID61380 and its merge untouched. Retry queue.ts add with the same external JSON. The final attempt exited0, registering fix-terminal-dock-unfinished-flows-20261027 with dependency m3-terminal-dock before landing.
+- **Why:** the first short outer attempt timed out; the next reported the shared lock held over30minutes. Exact process attribution showed queue.ts merge build-loop/faster-lands, not a dead lock. No other lane or operator process was signaled and no terminal draft was overwritten.
+- **Evidence:** bg36 outer timeout; bg37 lock timeout; ps/lsof attribution; bg50 queue.ts add exit0 in11.43seconds; scratch follow-up.json names deferred flows/reasons
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** queue landing reports a dependency or item-state conflict
+- **Source:** locked by operator D33 follow-up requirement; docs/loop/LOOP.md shared-file ownership
+
 ## Progress
-Core implementation and catalog/manual recognition are integrated. Original full acceptance is explicitly reduced for this landing by operator D33; named unfinished flows and unresolved C1 are in BLOCKERS.md and the dependent follow-up request. The three-lens final round is complete with no upheld core blocker, preserving mechanical suppression/transport limits in D34. Scripts49pass/223assertions and typecheck passed; affected-directory remote suite/build and follow-up queue registration are still pending. After their actual results, catch up build/roadmap once/read new decisions, commit/detach and queue.ts land (full suite there). Superseded whole-suite preflight was cancelled with no result; no final scoped-suite result or landing is claimed yet.
+Core implementation and catalog/manual recognition are integrated. Operator D33 explicitly moves unfinished flows to the registered dependent item; BLOCKERS.md retains every observed UI limitation and unresolved C1. Final three-lens review is complete with no upheld core blocker; D34 preserves its evidence/transport limits. Scripts49pass/223assertions and typecheck passed. D35 fixes the demonstrated fresh-link compiler prerequisite with red/green resolution, typecheck and real public API/PTy proof. Affected-directory remote suite/build remain pending. After actual results, catch up build/roadmap once/read new decisions, commit/detach and queue.ts land. No final scoped-suite result or landing is claimed yet.
