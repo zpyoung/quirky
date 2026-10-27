@@ -154,7 +154,7 @@ test('SC-63: a draft that crosses the display limit is replaced by the fallback 
   expect(text(q('.qgv-overflow'))).toContain('This diff is too large to display safely.')
   expect(text(q('.qgv-overflow'))).toContain('character count exceeds the safe display limit')
   expect(text(q('.qgv-overflow'))).toContain('This draft crossed the safe display limit, but it can still be saved.')
-  expect(q('.cm-editor')).toBeNull()
+  await w.win.waitFor(() => q('.cm-editor') === null)
   await w.win.waitFor(async () => {
     const r = await w.viewReport()
     return r?.tooLarge === true && r.dirty === true
