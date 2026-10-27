@@ -218,6 +218,15 @@ export type UiPluginContext = {
   /** Reads a setting by short name in the plugin's own namespace, or by full setting ID. */
   getSetting(name: string): unknown
   executeCommand(id: string, args?: unknown): Promise<void>
+  /**
+   * Mints a one-use, same-window drag capability. Put only its opaque token in DataTransfer;
+   * external bytes cannot create a capability.
+   */
+  createCommandDrag(commandId: string, args?: Record<string, unknown>): string
+  /** Consumes a capability once, returning the trusted command and its snapshotted arguments. */
+  consumeCommandDrag(token: string): { command: string; args: Record<string, unknown> } | null
+  /** Cancels a capability minted by this context. */
+  cancelCommandDrag(token: string): void
   openView(id: string, input?: unknown): void
   closeView(): void
   togglePanel(id: string, open?: boolean): void

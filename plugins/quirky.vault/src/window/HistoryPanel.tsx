@@ -26,6 +26,16 @@ type RenderEntry = { kind: 'group'; id: string; label: string; count: number; co
 type DetailState = { session: HostedSession | null; firstPrompt: string | null; subagents: HostedSession[]; loading: boolean; error: string | null }
 
 type GroupedRows = { entries: RenderEntry[]; allRows: VaultRow[]; totalHeight: number; offsets: number[]; heights: number[] }
+function cancelCommandDrag(context: UiPluginContext, token: { current: string | null }): void {
+  const value = token.current
+  token.current = null
+  if (value === null) return
+  try {
+    context.cancelCommandDrag(value)
+  } catch {
+    // The host may have revoked the owner context and cleared the entry already.
+  }
+}
 
 const messageOf = (error: unknown): string => (error instanceof Error ? error.message : String(error))
 function isHostedSession(value: unknown): value is HostedSession {
@@ -292,6 +302,8 @@ function SessionRow({
   onDelete(): void
 }) {
   const [dragAllowed, setDragAllowed] = useState(false)
+  const commandDragToken = useRef<string | null>(null)
+  useEffect(() => () => cancelCommandDrag(context, commandDragToken), [context])
   const resumable = isResumable(row)
   const handleMenu = (event: MouseEvent) => {
     event.stopPropagation()
@@ -370,14 +382,26 @@ function SessionRow({
     onDoubleClick={() => { if (resumable) onResume() }}
     onContextMenu={(event) => { event.preventDefault(); onMenu() }}
     onDragStart={(event) => {
+      cancelCommandDrag(context, commandDragToken)
       if (!resumable || row.hostId !== 'local') { event.preventDefault(); return }
       const transfer = event.dataTransfer
       if (!transfer) { event.preventDefault(); return }
-      transfer.setData('application/x-quirky-command', JSON.stringify({ command: VAULT_RESUME_COMMAND, args: { id: row.id } }))
-      transfer.effectAllowed = 'copy'
-      setDragAllowed(true)
+      try {
+        const token = context.createCommandDrag(VAULT_RESUME_COMMAND, { id: row.id })
+        commandDragToken.current = token
+        transfer.setData('application/x-quirky-command', token)
+        transfer.effectAllowed = 'copy'
+        setDragAllowed(true)
+      } catch {
+        cancelCommandDrag(context, commandDragToken)
+        setDragAllowed(false)
+        event.preventDefault()
+      }
     }}
-    onDragEnd={() => setDragAllowed(false)}
+    onDragEnd={() => {
+      cancelCommandDrag(context, commandDragToken)
+      setDragAllowed(false)
+    }}
     data-dragging={dragAllowed ? 'true' : undefined}
   >
     <div className="qvh-row-top">

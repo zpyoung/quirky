@@ -113,48 +113,11 @@ function isEditableControl(element: Element): boolean {
   return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || (element as HTMLElement).isContentEditable === true
 }
 
-/** MIME payloads carry a bounded, declared UI command rather than arbitrary shell text. */
+/** The MIME type identifies a host-minted one-use token; dragover checks only its presence. */
 export const COMMAND_DROP_MIME = 'application/x-quirky-command'
-
-export type CommandDropDescriptor = { command: string; args: Record<string, unknown> }
 
 export function hasCommandDrop(transfer: DataTransfer | null): transfer is DataTransfer {
   return transfer !== null && Array.from(transfer.types).includes(COMMAND_DROP_MIME)
-}
-
-function boundedValue(value: unknown, depth: number, budget: { nodes: number }): boolean {
-  budget.nodes += 1
-  if (budget.nodes > 256 || depth > 5) return false
-  if (value === null || typeof value === 'boolean') return true
-  if (typeof value === 'number') return Number.isFinite(value)
-  if (typeof value === 'string') return value.length <= 4096
-  if (Array.isArray(value)) return value.length <= 32 && value.every((item) => boundedValue(item, depth + 1, budget))
-  if (typeof value !== 'object') return false
-  const entries = Object.entries(value)
-  if (entries.length > 32) return false
-  return entries.every(([key, item]) =>
-    key.length <= 128 && key !== '__proto__' && key !== 'prototype' && key !== 'constructor' && boundedValue(item, depth + 1, budget)
-  )
-}
-
-export function parseCommandDrop(transfer: DataTransfer | null): CommandDropDescriptor | null {
-  const data = transfer
-  if (!hasCommandDrop(data)) return null
-  const raw = data.getData(COMMAND_DROP_MIME)
-  if (raw.length === 0 || raw.length > 8192) return null
-  try {
-    const parsed: unknown = JSON.parse(raw)
-    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return null
-    const descriptor = parsed as Record<string, unknown>
-    if (Object.keys(descriptor).some((key) => key !== 'command' && key !== 'args')) return null
-    const command = descriptor.command
-    if (typeof command !== 'string' || command.length > 192 || !/^command:[A-Za-z0-9][A-Za-z0-9._-]{0,95}\/[A-Za-z0-9][A-Za-z0-9._-]{0,95}$/.test(command)) return null
-    const args = descriptor.args === undefined ? {} : descriptor.args
-    if (!args || typeof args !== 'object' || Array.isArray(args) || !boundedValue(args, 0, { nodes: 0 })) return null
-    return { command, args: args as Record<string, unknown> }
-  } catch {
-    return null
-  }
 }
 
 /** Writes to the clipboard; the failure case is the caller's to report. */
@@ -1113,9 +1076,10 @@ export class WorkspaceController {
     else await this.moveTabToSplit(drag.tab, drop.zone, drop.group)
   }
 
-  /** Executes one declared UI command after the daemon validates its explicit group target. */
+  /** Executes a trusted command after the daemon validates its explicit group target. */
   async dropCommand(transfer: DataTransfer | null, groupId: string): Promise<void> {
-    const descriptor = parseCommandDrop(transfer)
+    const token = hasCommandDrop(transfer) ? transfer.getData(COMMAND_DROP_MIME) : ''
+    const descriptor = token === '' ? null : this.context.consumeCommandDrag(token)
     const workspace = this.ws
     if (!descriptor || !workspace || workspace.id === FLOATING_WORKSPACE || !findGroup(workspace.root, groupId)) return
     try {

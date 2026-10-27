@@ -10,6 +10,7 @@ import {
   groupsOf,
   layoutOf,
   leavesOf,
+  runCommand,
   stopAll,
   tabsOf,
   terminal,
@@ -27,6 +28,27 @@ afterEach(async () => {
 })
 
 const MIME = 'application/x-quirky-command'
+
+type DragTransfer = { types: string[]; getData(type: string): string }
+type DragContext = { createCommandDrag(commandId: string, args?: Record<string, unknown>): string }
+type HostSession = { pluginId: string }
+type HostWithContext = {
+  runtimes: Map<string, { session?: HostSession }>
+  contextFor(session: HostSession): DragContext
+}
+
+function trustedCommandTransfer(features: Features, command: string, args: Record<string, unknown>): DragTransfer {
+  const host = features.win.host as unknown as HostWithContext
+  const session = host.runtimes.get('quirky.vault')?.session
+  if (!session) throw new Error('the vault UI plugin is not active in the window')
+  const token = host.contextFor(session).createCommandDrag(command, args)
+  return {
+    types: [MIME],
+    getData(type: string) {
+      return type === MIME ? token : ''
+    }
+  }
+}
 
 function writeSource(home: string): void {
   const root = join(home, '.claude', 'projects', 'drop-fixtures')
@@ -50,23 +72,16 @@ function writeSource(home: string): void {
   writeFileSync(join(root, 'vault-drop-provider-session.jsonl'), `${records.map((record) => JSON.stringify(record)).join('\n')}\n`)
 }
 
-function dropCommand(features: Features, group: string, command: string, args: Record<string, unknown>): void {
+function dropCommand(features: Features, group: string, transfer: DragTransfer): void {
   const body = features.win.document.querySelector<HTMLElement>(`[data-group-body="${group}"]`)
   if (!body) throw new Error(`the target group ${group} is not mounted`)
-  const payload = JSON.stringify({ command, args })
-  const transfer = {
-    types: [MIME],
-    getData(type: string) {
-      return type === MIME ? payload : ''
-    }
-  }
   const event = new Event('drop', { bubbles: true, cancelable: true })
   Object.defineProperty(event, 'dataTransfer', { value: transfer })
   body.dispatchEvent(event)
 }
 
 test(
-  'SC-20: a declared vault resume drop launches once into its explicit nonactive group and worktree',
+  'a trusted vault command drag launches once into its explicit nonactive group and worktree',
   async () => {
     const sourceHome = mkdtempSync(join(tmpdir(), 'quirky-vault-drop-'))
     try {
@@ -82,6 +97,7 @@ test(
       const session = source.sessions.find((entry) => entry.sessionId === 'vault-drop-provider-session')!
       expect(session).toBeDefined()
 
+      await runCommand(features, 'command:quirky.vault/open', { agent: 'claude', sessionId: session.sessionId })
       const initial = await layoutOf(h)
       const sourceTab = tabsOf(initial)[0]!
       const sourceGroup = groupsOf(initial).find((group) => group.tabs.some((tab) => tab.id === sourceTab.id))!
@@ -104,7 +120,13 @@ test(
       })
       expect(layout.activeGroup).not.toBe(targetGroup.id)
 
-      dropCommand(features, targetGroup.id, 'command:quirky.vault/resume', { id: session.id, group: 'spoofed-group', worktree: 'spoofed-worktree' })
+      const transfer = trustedCommandTransfer(features, 'command:quirky.vault/resume', {
+        id: session.id,
+        group: 'spoofed-group',
+        worktree: 'spoofed-worktree'
+      })
+      dropCommand(features, targetGroup.id, transfer)
+      dropCommand(features, targetGroup.id, transfer)
       layout = await waitFor(
         'one resumed tab in the exact target group',
         async () => {
@@ -126,7 +148,7 @@ test(
       expect(starts).toHaveLength(1)
       expect(starts[0]!.argv).toContain('vault-drop-provider-session')
 
-      dropCommand(features, targetGroup.id, 'command:quirky.vault/resume', { id: 'missing-vault-source' })
+      dropCommand(features, targetGroup.id, trustedCommandTransfer(features, 'command:quirky.vault/resume', { id: 'missing-vault-source' }))
       await waitFor(
         'refusal of a missing source session',
         () => features.win.document.querySelector('.toast .toast-title')?.textContent === 'Could not run dropped command' ? true : undefined,
