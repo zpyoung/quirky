@@ -573,6 +573,37 @@ describe('history and read', () => {
     expect((await manager.read('uwx', 0, true)).lines).toEqual([long])
   })
 
+  test('read with unwrap keeps the space at a wrap point', async () => {
+    const { manager } = newManager()
+    await manager.create(params('uwsp', sh(`printf 'hello world'; sleep 30`), { cols: 6, rows: 5 }))
+    await readUntil(manager, 'uwsp', 0, (lines) => lines.at(-1) === 'world')
+    expect((await manager.read('uwsp', 0)).lines).toEqual(['hello', 'world'])
+    expect((await manager.read('uwsp', 0, true)).lines).toEqual(['hello world'])
+  })
+
+  test('read with unwrap keeps a space that sits exactly at the wrap column, on either side of it', async () => {
+    const { manager } = newManager()
+    await manager.create(params('uwcol', sh(`printf 'abcde fghij\\nabcdef ghijkl'; sleep 30`), { cols: 6, rows: 8 }))
+    await readUntil(manager, 'uwcol', 0, (lines) => lines.includes('l'))
+    expect((await manager.read('uwcol', 0, true)).lines).toEqual(['abcde fghij', 'abcdef ghijkl'])
+  })
+
+  test('read with unwrap keeps the space when the wrapped line crosses from scrollback to the screen', async () => {
+    const { manager } = newManager()
+    await manager.create(params('uwseam', sh(`printf 'abcde fghij klmno pqrst'; sleep 30`), { cols: 6, rows: 3 }))
+    await readUntil(manager, 'uwseam', 0, (lines) => lines.includes('pqrst'))
+    const rows = await manager.read('uwseam', 10)
+    expect(rows.lines).toEqual(['abcde', 'fghij', 'klmno', 'pqrst'])
+    expect((await manager.read('uwseam', 10, true)).lines).toEqual(['abcde fghij klmno pqrst'])
+  })
+
+  test('read with unwrap keeps the space across scrollback rows of a stopped session', async () => {
+    const { manager } = newManager()
+    await manager.create(params('uwstop', sh(`printf 'abcde fghij klmno pqrst'`), { cols: 6, rows: 3 }))
+    await waitFor(() => manager.list().every((info) => !info.alive), 5000, 'exit')
+    expect((await manager.read('uwstop', 10, true)).lines).toEqual(['abcde fghij klmno pqrst'])
+  })
+
   test('read validates its line count', async () => {
     const { manager } = newManager()
     await manager.create(params('v', ['/bin/cat']))
