@@ -257,5 +257,66 @@
 - **Confidence:** high
 - **Source:** assumed — autonomous
 
+## D26: The tech spec's reviewer step is folded into the one adversarial review of both specs
+- **Question:** the tech-spec rubric's default reviewer dispatch (writing-specs, tech-spec.md "After authoring")
+- **Options:** run the tech-spec reviewer and the adversarial review; run only the adversarial review LOOP.md asks for
+- **Chose:** only the adversarial review, over both specs together, with Codex, whose criteria include the rubric's checks (pointer precision, back-links, no pasted code, contract completeness)
+- **Why:** LOOP.md step 4 replaces the user's spec review with one pass; m1-agent-status D42 did the same
+- **Evidence:** docs/loop/LOOP.md step 4; docs/loop/decisions/m1-agent-status.md D42
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** locked by docs/loop/LOOP.md
+
+## D27: Spec review: accept eleven findings, reject the pre-pass's heading and reference findings
+- **Question:** how to rule on the Codex review of both specs (adversarial-review, deep, gpt-6.1-sol, independence full; verdict NEEDS_FIXES, 20 blocking, 5 suppressed)
+- **Options:** accept all; accept the reproduced and reasoned ones and reject the pre-pass false positives
+- **Chose:** accept F1 (a retried Enter can land on an approval), F2 (an earlier working rule hides an approval rule), F3 (`a+a+a+a+$` passes the shape check and stalls), F4 (a turn that ends inside the retry delay reads as stalled), F7 (no wakeup when freshness alone changes the state), F8 (SC-4 (c) needed Claude Esc inference on a hookless row, which locked behavior forbids), F9 (SC-7 (c) screen still matched `busy`), F10 (send printed working when it reached blocked), F11 (output timeout had no state to print), F12 (wait couldn't name its rule), F15 (output waits had no exit rule). Reject F17 (the pre-pass wants a "Purpose" or "Overview" heading; the writing rules forbid "Overview" and Conceptual model states the purpose) and F18 to F25 (method IDs, CLI prose and planned files flagged as unresolved paths).
+- **Why:** each accepted finding carried a reproduction or a quote that shows the defect; the rejected ones are the same pre-pass false positives m1-agent-status D43 rejected
+- **Evidence:** scratchpad sr1/gate.json; docs/loop/decisions/m1-agent-status.md D43; plugins/quirky.agents/quirky-plugin.json:1936 (`submitRetryMs: 1200`); plugins/quirky.agent-status/src/inference.ts:32-41
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** assumed — autonomous
+
+## D28: Blocked rules are tried before working and idle rules
+- **Question:** F2: with first-match-wins, an earlier working rule could hide an approval
+- **Options:** reject files that order a working rule before a blocked one; try blocked rules first; evaluate all rules and prefer blocked
+- **Chose:** try the file's blocked rules first in file order, then the rest in file order
+- **Why:** the precedence table promises that any matching blocked rule wins; validating order would reject reasonable files, and trying blocked first keeps file order meaningful within each group
+- **Evidence:** logic.md "The script state" table; scratchpad sr1 F2
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** supersedes m1-agent-status-scripting D5 (ordering only)
+
+## D29: Patterns run in a worker with a 250 ms budget per evaluation
+- **Question:** F3: the shape checks don't stop polynomial backtracking like `a+a+a+a+$`, and the daemon has no regex timeout
+- **Options:** a linear-time regex engine (a new dependency); stricter static checks (still incomplete); run matching off the event loop with a time budget
+- **Chose:** one long-lived Bun Worker runs every rule evaluation and wait-pattern match with a 250 ms budget; on overrun it is terminated and respawned, a rule source is ignored with a reason until its file changes, and a wait pattern fails as too slow. The shape checks stay as a first filter.
+- **Why:** research found caps and shape checks insufficient and recommends a linear engine or a timeout; a worker gives the timeout with no new dependency
+- **Evidence:** scratchpad sr1 F3 reproduction; research: regular-expressions.info ReDoS, TechDebtMCP PR #48
+- **Reversibility:** medium
+- **Confidence:** medium
+- **Revisit if:** worker start-up or message cost shows in send or wait latency
+- **Source:** supersedes m1-agent-status-scripting D8 (adds the time limit)
+
+## D30: Send writes each Enter itself and re-checks for an approval before every one
+- **Question:** F1: `quirky.agents/deliver` retries Enter after `submitRetryMs` with no state check
+- **Options:** let deliver re-check through a callback (no callbacks across plugin RPC); drop Enter retries; have send paste through deliver with `submit: false` and write Enter itself after a fresh check, using a new `quirky.agents/submitPlan` for the agent's timing
+- **Chose:** the third; for agents whose entry sends Enter with the paste, the single write follows the first check
+- **Why:** the only way to guarantee no Enter reaches an approval prompt is to check right before each write; the per-agent timing stays owned by quirky.agents
+- **Evidence:** scratchpad sr1 F1 reproduction; plugins/quirky.agents/src/delivery.ts:125-158
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** supersedes m1-agent-status-scripting D14 (who writes Enter)
+
+## D31: The start check watches row commits from the first Enter
+- **Question:** F4: polling only after delivery settles misses a turn that starts and ends inside the retry delay
+- **Options:** poll after delivery; observe commits and the screen from the first Enter, counting a turn that already ended
+- **Chose:** the observer starts at the first Enter and counts a committed row with evidence after it in working, waiting or blocked, a row whose turn started after it, or a screen verdict of working or blocked; send then reports the state at that moment, which may be idle
+- **Why:** the prompt was taken in that case, and reporting `prompt-stalled` would make a script resend it
+- **Evidence:** scratchpad sr1 F4 reproduction; plugins/quirky.agent-status/src/types.ts (`turnStartedAt`)
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** supersedes m1-agent-status-scripting D13 (when the window starts)
+
 ## Progress
-Step 4 (specs). Brainstorming decisions D1-D25 recorded. Next: write docs/quirk/specs/2026-10-27-m1-agent-status-scripting/logic.md.
+Step 4 (specs) done: logic.md and tech.md written, reviewed by Codex (D27) and amended. Next: step 5, build with subagent-driven development.

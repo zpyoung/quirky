@@ -4,7 +4,15 @@
 
 **Status:** Approved (headless build loop; decisions in [m1-agent-status-scripting.md](../../../loop/decisions/m1-agent-status-scripting.md)). Tech spec: requested.
 
-**Amendments:** none yet.
+**Amendments:**
+- 2026-10-27, Codex spec review (D27-D31): a rule file's blocked rules are tried before its
+  working and idle rules, so an approval can't hide behind an earlier working rule (D28); rules
+  and wait patterns run with a time limit, and a pattern that runs too long has its rule source
+  ignored (D29); send writes each Enter itself and checks for an approval just before it, so a
+  delayed or retried Enter never lands on an approval prompt (D30); the start check watches from
+  the first Enter, so a turn that starts and ends inside the submit delay still counts (D31). New
+  scenarios SC-38 to SC-41; SC-4 (c), SC-7 and SC-31 corrected; send prints the state it reached;
+  output waits say what happens when the session exits.
 
 ## Conceptual model
 
@@ -43,8 +51,9 @@ and, if a rule file applies to the session's agent, the session's rendered scree
 runs the rules. The precedence below combines them. Rule files are found per agent in a fixed
 order of sources and read again when they change.
 
-Send checks the script state, types the prompt as a bracketed paste with Enter after the agent's
-submit delay, then watches the script state for up to 5 seconds. Waits re-check the script state
+Send checks the script state, types the prompt as a bracketed paste, and after the agent's submit
+delay checks again before it writes Enter (and before any retried Enter). From the first Enter it
+watches the script state for up to 5 seconds. Waits re-check the script state
 or the rendered text as events and output arrive, in calls of at most 60 seconds that the CLI
 repeats.
 
@@ -57,8 +66,11 @@ item's methods accepts a name or an ID.
   re-reading every agent's screen after each output burst costs more than the dot gains.
 - **Hooks decide working and idle; the screen can always add blocked** (D4). Several agents' hooks
   can't report an approval, and typing into one is the mistake send exists to prevent.
-- **One file per agent, first matching rule wins, whole-file overrides** (D5, D6). File order is
-  the ranking, and nothing merges, so a reader of one file knows what will happen.
+- **One file per agent, blocked rules first, then the first matching rule; whole-file overrides**
+  (D5, D6, D28). File order is the ranking within each group, and nothing merges, so a reader of
+  one file knows what will happen.
+- **Patterns run on a time limit** (D29). A regex that runs too long is treated as broken, never
+  allowed to stall the daemon.
 - **Send refuses only blocked** (D12) and reports a stall after 5 seconds (D13), following herdr's
   prompt guard. Agents queue input typed mid-turn.
 - **Waits use the script states and long-poll** (D16, D18), as `quirky ask wait` does.
@@ -121,13 +133,14 @@ kind: approval, or question.
      limit.
 
 4. **SC-4: explain names title, OSC 7501 and inferred evidence** (API)
-   - **Given** three sessions with no hooks: (a) one whose title became `✋ gemini` (read as needs
-     attention), (b) one whose program reported OSC 7501 state `blocked` kind `permission`, (c) a
-     claude row that went done because Esc settled with no hook
+   - **Given** three sessions: (a) one with no hooks whose title became `✋ gemini` (read as needs
+     attention), (b) one with no hooks whose program reported OSC 7501 state `blocked` kind
+     `permission`, (c) a claude session whose hooks made it working, where the person then pressed
+     Ctrl+C and no hook followed within the settle time
    - **When** explain runs for each
    - **Then** (a) names the title text and that it read as needs-attention, giving blocked; (b)
-     names the OSC 7501 state and kind, giving blocked; (c) names the inferred interrupt from the
-     Esc key, giving idle.
+     names the OSC 7501 state and kind, giving blocked; (c) names the interrupt inferred from
+     Ctrl+C, giving idle.
 
 5. **SC-5: explain with no row, an exited session and an unknown one** (CLI)
    - **When** explain runs for (a) a running cursor session with no row whose screen matches
@@ -150,12 +163,14 @@ kind: approval, or question.
      last 6 lines; all of: contains "allow this?", regex `\(y/n\)\s*$`), `busy` (working; screen;
      regex `esc to interrupt`), `ready` (idle; title; regex `^✳`; quiet 1000 ms)
    - **When** the fake agent shows, in turn: (a) a screen with "Allow this? (y/n)" on its last line
-     and "esc to interrupt" above it; (b) "esc to interrupt" only; (c) title `✳ fake` with the
-     screen unchanged for 2 s; (d) title `✳ fake` with the screen changing every 200 ms; (e)
-     "allow this?" ten lines above the bottom
-   - **Then** the verdicts are (a) blocked approval by `approval` (first match wins); (b) working by
-     `busy`; (c) idle by `ready`; (d) no verdict, since the screen never stays quiet for 1000 ms;
-     (e) no verdict from `approval`, which reads only the last 6 lines.
+     and "esc to interrupt" above it; (b) "esc to interrupt" only; (c) title `✳ fake` and a screen
+     holding only `>`, unchanged for 2 s; (d) title `✳ fake` with the screen changing every 200 ms
+     and never showing "esc to interrupt"; (e) "allow this?" ten lines above the bottom and
+     nothing else; (f) the same file reordered so `busy` comes first, with screen (a)
+   - **Then** the verdicts are (a) blocked approval by `approval`; (b) working by `busy`; (c) idle
+     by `ready`; (d) no verdict, since the screen never stays quiet for 1000 ms; (e) no verdict,
+     because `approval` reads only the last 6 lines; (f) still blocked approval by `approval`,
+     because blocked rules are tried before the others whatever their place in the file.
 
 8. **SC-8: built-in rules catch what hooks can't** (API)
    - **Given** sessions of (a) cursor showing its command approval menu, (b) codex showing its
@@ -211,12 +226,13 @@ kind: approval, or question.
     - **When** a script runs `quirky agent-status send <session> "fix the tests"`, and the agent
       posts UserPromptSubmit 1 s after it receives Enter
     - **Then** the session receives the text as one bracketed paste and, after the claude entry's
-      submit delay, Enter as a separate write; send exits 0 and prints that the agent is working.
+      submit delay, Enter as a separate write; send exits 0 and prints `<session>: working`.
     - **Data before:** **Row**: claude, done; **Screen**: no blocked rule matches
     - **Walkthrough:**
       1. The script runs send at 0 s; the state is idle, so typing is allowed
-      2. The paste `fix the tests` is written at 0 s; Enter follows after the submit delay*
-      3. The agent posts UserPromptSubmit 1 s after Enter → row working
+      2. The paste `fix the tests` is written at 0 s
+      3. After the submit delay* the state is checked again, still not blocked, and Enter is written
+      4. The agent posts UserPromptSubmit 1 s after Enter → row working
     - **Data after:** **Send result**: ✓ working; **Session input**: ✓ one paste then one Enter
 
 15. **SC-15: send refuses an agent waiting for approval and types nothing** (CLI)
@@ -251,7 +267,8 @@ kind: approval, or question.
 20. **SC-20: a start that blocks counts as started** (API)
     - **Given** an idle claude session that posts PermissionRequest 1 s after the prompt's Enter
     - **When** send runs
-    - **Then** send succeeds and reports blocked (kind approval).
+    - **Then** send succeeds and reports blocked (kind approval); the CLI prints
+      `<session>: blocked (approval)`.
 
 21. **SC-21: send refuses shells and exited sessions** (CLI)
     - **When** send targets (a) a plain shell session with no agent and no row, (b) an exited
@@ -320,10 +337,42 @@ kind: approval, or question.
 31. **SC-31: output waits read recent scrollback and reject bad patterns** (CLI)
     - **When** (a) the matching line has scrolled 150 lines above the screen, (b) it scrolled 250
       lines above, with `--lines 300`, (c) the pattern is `([a-z`, (d) the pattern is `(a+)+$`,
-      (e) nothing matches before `--timeout-ms 2000`
+      (e) nothing matches before `--timeout-ms 2000`, (f) the session prints the matching line
+      and exits at once, (g) the session exits without ever printing a match
     - **Then** (a) and (b) match; (c) and (d) are usage errors naming the problem, exit 2, checked
       before the daemon is called (the method itself fails with `invalid-params`); (e) prints a
-      timeout result and exits 1.
+      timeout result naming the pattern and exits 1; (f) matches, because the exited session's
+      last text is read before its exit counts; (g) fails with `session-exited` and exit 1.
+
+### Safety under timing
+
+38. **SC-38: an approval that appears before Enter stops the Enter** (API)
+    - **Given** an idle fake cursor session, and a test that makes the screen show Cursor's
+      approval menu right after the paste arrives
+    - **When** send runs
+    - **Then** no Enter is written; send fails with `agent-blocked` and a message that the text was
+      pasted but not submitted because the agent is now waiting for approval.
+
+39. **SC-39: a retried Enter is never written into an approval** (API)
+    - **Given** an idle session of an agent whose entry retries Enter after 1200 ms, which starts
+      working on the first Enter and shows an approval menu 300 ms later
+    - **When** send runs
+    - **Then** exactly one Enter is written, and send succeeds reporting blocked (kind approval).
+
+40. **SC-40: a turn that starts and ends inside the submit window still counts** (API)
+    - **Given** an idle claude session that posts UserPromptSubmit 10 ms after Enter and Stop
+      20 ms after that
+    - **When** send runs
+    - **Then** send succeeds and reports idle, the state the agent reached; it does not fail with
+      `prompt-stalled`.
+
+41. **SC-41: a pattern that runs too long is cut off** (CLI)
+    - **When** (a) a user rule file holds a regex that passes the shape checks but takes longer than
+      the time limit on the session's screen (for example `a+a+a+a+$` over a long run of `a`
+      followed by `!`), (b) a script waits with `--output` for the same pattern over that text
+    - **Then** (a) the daemon keeps answering other calls, and the rule file is ignored with the
+      reason that a pattern ran too long, shown by `rules list` and explain; (b) fails with
+      `invalid-params` naming the pattern as too slow.
 
 ### Session names
 
@@ -396,6 +445,8 @@ Non-goals:
 - **Exit codes:** D18
 - **Duplicate handling:** D21, D22
 - **Defects:** D23
+- **Spec review amendments:** D27 (rulings), D28 (blocked rules first), D29 (time limit), D30
+  (send owns Enter), D31 (start watched from the first Enter)
 
 ## Industry Insights
 

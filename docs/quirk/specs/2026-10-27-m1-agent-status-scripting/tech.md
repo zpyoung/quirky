@@ -63,7 +63,8 @@ an old host ignores `unwrap` and returns rows, which is the old behavior.
 |---|---|
 | `plugins/quirky.agents/src/delivery.ts:48` `deliver` | an `options.ready` flag: skip subscribing and the ready scanner; check liveness, then `writePaste('pasted')` and the entry's submit path (`submitDelayMs`, `submitRetryMs`, `enterWithPaste`) exactly as today |
 | `plugins/quirky.agents/src/service.ts:300-304` | pass `params.ready === true` |
-| `plugins/quirky.agents/quirky-plugin.json` (`deliver`) | `ready` boolean param, described "the agent already shows its input; paste without waiting for a ready signal" |
+| `plugins/quirky.agents/src/service.ts` | new read-only `submitPlan({ agent, text }) → { enterWithPaste: boolean, delayMs: number, retryMs: number \| null }` from the entry: `enterWithPaste`, `submitDelayMs(text, entry)` (`src/core/paste.ts:22`), `submitRetryMs`; unknown agent → `not-found` |
+| `plugins/quirky.agents/quirky-plugin.json` (`deliver`, new `submitPlan`) | `ready` boolean param on deliver, described "the agent already shows its input; paste without waiting for a ready signal"; the deliver description states the paste encoding (line breaks become CR, ESC becomes `␛`, wrapped in `ESC[200~`…`ESC[201~`); the `submitPlan` method with its schema |
 
 ### quirky.agent-status
 
@@ -79,7 +80,8 @@ an old host ignores `unwrap` and returns rows, which is the old behavior.
 | `cli.ts` | printers and the long-poll loops |
 | new `src/rules/format.ts` | parse and validate one rule file |
 | new `src/rules/safety.ts` | `unsafePatternReason(pattern): string \| null`, used by format.ts, the CLI and `waitOutput` |
-| new `src/rules/match.ts` | `evaluate(set, input) → Verdict \| null` |
+| new `src/rules/match.ts` | `evaluate(set, input) → Verdict \| null` (pure; runs inside the worker) |
+| new `src/rules/matcher-worker.ts`, `src/rules/matcher.ts` | the worker entry and its client with the time budget ([Screen sampler and verdicts](#screen-sampler-and-verdicts)) |
 | new `src/rules/sources.ts` | `RuleSources`: effective set per agent, with origin and ignored sources |
 | new `src/screen.ts` | `ScreenSampler`: reads the screen and title, tracks output quiet per session |
 | new `src/script-state.ts` | `scriptState(...)`, pure, per [Script state](#script-state) |
@@ -156,8 +158,17 @@ Sample = { title: string, lines: string[], offset: number, quietForMs: number | 
 Verdict = { rule: string, state: 'working' | 'blocked' | 'idle', kind?: 'approval' | 'question', origin: Origin }
 ```
 
-- `evaluate(set, sample)` runs rules in order; the first whose region matchers hold and whose
-  `quietMs` is met (`quietForMs !== null && quietForMs >= quietMs`) wins.
+- `evaluate(set, sample)` tries the file's blocked rules first, in file order, then its working
+  and idle rules in file order; the first whose region matchers hold and whose `quietMs` is met
+  (`quietForMs !== null && quietForMs >= quietMs`) wins ([D28](../../../loop/decisions/m1-agent-status-scripting.md)).
+- Matching runs in `src/rules/matcher-worker.ts`, one long-lived Bun `Worker` per plugin
+  activation, never on the daemon's event loop ([D29](../../../loop/decisions/m1-agent-status-scripting.md)).
+  Each request (a rule file, or a single wait pattern, plus the text) has a 250 ms budget
+  (`QUIRKY_TEST_AGENT_STATUS_TIME_SCALE` scales it). On overrun the worker is terminated and
+  respawned; for a rule file the source is recorded as ignored with reason `a pattern ran longer
+  than 250 ms` until the file changes, and the next source is used; for a wait pattern the call
+  fails `invalid-params` `pattern is too slow`. A worker that can't start makes every evaluation
+  return no verdict and explain says why.
 - A rule that matches except for quiet is reported as `pendingQuiet: rule id` so explain can say
   so; explain, send and the waits re-sample until the quiet is known (at most the rule's
   `quietMs` plus one poll) before giving up on it.
@@ -190,9 +201,9 @@ CONTRACT:
 ```
 explain { session, at? }          → Explanation
 send    { session, text, startTimeoutMs? = 5000 }
-                                  → { session, state: 'working' | 'blocked', kind?, sentAt, startedAt }
+                                  → { session, state: 'working' | 'blocked' | 'idle', kind?, sentAt, startedAt }
 wait    { session, until? = ['idle','blocked'], timeoutMs? = 60000 (max 60000) }
-                                  → { status: 'matched' | 'pending', state, kind?, at }
+                                  → { status: 'matched' | 'pending', state, kind?, decidedBy, rule?, at }
 waitOutput { session, pattern, ignoreCase?, lines? = 200 (0..2000), timeoutMs? = 60000 (max 60000) }
                                   → { status: 'matched', line, match, groups: string[], at } | { status: 'pending', at }
 rules   {}                        → RuleListing[]
@@ -210,23 +221,41 @@ Errors (all `conflict` carry `data.reason`):
 | send to, or wait (without `exited` in `until`) on, an exited session | `conflict` | `session-exited` |
 | bad `until` value, bad or unsafe `pattern` | `invalid-params` | — |
 
-- **Send**: per-session queue (one send at a time, after the event queue settles). Order: resolve;
-  sample; script state; refuse blocked; record `sentAt`; type via
-  `quirky.agents/deliver {sessionId, agent, text, submit: true, ready: true}` where `agent` is the
-  row's agent if the session's own is `shell`; a `not-found` agent falls back to
-  `pty.write(encodeBracketedPaste(text))` then `\r` after 500 ms. A delivery of `not-delivered` is
-  `session-exited`. Then poll the script state every 100 ms until `startTimeoutMs`: started when it
-  is blocked, or working with `row.evidenceAt >= sentAt` or a screen verdict, or it was working
-  before the send. The `agent-blocked` message names the detail (`Bash: rm -rf build`) or the
-  question text, else the rule id.
+- **Send** ([D30](../../../loop/decisions/m1-agent-status-scripting.md),
+  [D31](../../../loop/decisions/m1-agent-status-scripting.md)): per-session queue (one send at a
+  time, after the session's event queue settles). `agent` is the row's agent when the session's
+  own is `shell`. Order:
+  1. Resolve; sample; script state; refuse blocked (`agent-blocked`, nothing written).
+  2. Get the agent's submit plan from `quirky.agents/submitPlan {agent, text}`
+     (`{ enterWithPaste, delayMs, retryMs }`); an agent quirky.agents doesn't know gets
+     `{ enterWithPaste: false, delayMs: 500, retryMs: null }`.
+  3. Paste with `quirky.agents/deliver {sessionId, agent, text, submit: false, ready: true}` (for
+     an unknown agent, `pty.write` of the same bracketed-paste bytes `encodeBracketedPaste` makes,
+     whose rules are restated in the deliver manifest description). With `enterWithPaste`, the
+     paste and Enter go in one deliver call with `submit: true` and step 4 is skipped.
+  4. After `delayMs`: sample and re-check; blocked → `agent-blocked` with the message "pasted but
+     not submitted"; else write `\r` and record `enterAt`. Start the observer now.
+  5. If `retryMs` is set and the observer has seen no start by `enterAt + retryMs`: sample and
+     re-check exactly as in 4, then write the retry `\r`. At most one retry.
+  6. The observer, from `enterAt` until `enterAt + startTimeoutMs`, subscribes to the service's
+     row commits for the session and samples the screen every 100 ms. Started is the first of: a
+     committed row with `evidenceAt >= enterAt` whose state is working, waiting or blocked; a
+     committed row with `turnStartedAt >= enterAt` (a turn that already ended still started); a
+     screen verdict of working or blocked; or the agent was working before step 1. The result's
+     `state` is the script state at the moment the observer settles (working, blocked or idle).
+  - A deliver of `not-delivered` is `session-exited`. The `agent-blocked` message names the
+    detail (`Bash: rm -rf build`) or the question text, else the rule id.
 - **Nested helpers** never count as a start because `decideIdentity` already drops their events
-  before the row changes (`src/service.ts:230-240`); the start check reads only the row.
-- **wait**: resolves at once when already matched. Otherwise wakes on the service's `commit` for
-  the session, on `quirky.session/changed` with an exited session, and on a 250 ms screen poll
-  while the session has a rule file. Returns `pending` at `timeoutMs`.
-- **waitOutput**: samples `pty.read(id, lines, { unwrap: true })` at start and every 250 ms
-  while the offset grows; tests each line in order, newest last, returning the first match of
-  the newest sample. Regex compiled with no `g`, plus `i` for `ignoreCase`.
+  before the row changes (`src/service.ts:230-240`); the observer reads only committed rows.
+- **wait**: resolves at once when already matched. Otherwise re-evaluates on the service's
+  `commit` for the session, on `quirky.session/changed` with an exited session, and every 250 ms
+  (sampling the screen only when the session has a rule file), so freshness expiry is noticed.
+  Returns `pending` at `timeoutMs`. `decidedBy` and `rule` come from `scriptState` and the verdict.
+- **waitOutput**: samples `pty.read(id, lines, { unwrap: true })` at start and every 250 ms while
+  the offset grows; matches every line of a sample in the matcher worker, returning the newest
+  matching line. Regex compiled with no `g`, plus `i` for `ignoreCase`. When the session has
+  exited (at start or during the wait) it reads the session's text once more after the exit and
+  matches it; only if that fails is it `session-exited`.
 
 ### CLI
 
@@ -247,11 +276,12 @@ quirky session name <session> [<name>] [--clear]
 - `wait` loops the method like `plugins/quirky.ask/cli.ts:31` `waitForAsk` (reconnect on lost
   connection; RPC errors rethrown). With `--timeout-ms` exhausted it prints
   `{status: 'timeout', state, …}` (text: `timed out after Ns; <session> is <state>`) and exits 1
-  via `ctx.fail`. With `--output`, the pattern is checked with `unsafePatternReason` before any
-  call; a bad one is `ctx.usage` (exit 2).
+  via `ctx.fail`; with `--output` the timeout result is `{status: 'timeout', pattern}` (text:
+  `timed out after Ns; no line matched <pattern>`). With `--output`, the pattern is checked with
+  `unsafePatternReason` before any call; a bad one is `ctx.usage` (exit 2).
 - Text output: explain prints the state line, a `because:` line, then `row:`, `fold:` (when the
   folded state differs from the lead's), `screen:` and any `warning:` lines; `--json` prints
-  `Explanation`. Send prints `<session>: working`. Rules list prints one line per agent
+  `Explanation`. Send prints `<session>: <state>`, with ` (<kind>)` after blocked. Rules list prints one line per agent
   (`agent  origin  path-or-contribution  N rules`) plus `  ignored <origin>: <reason>` lines.
 
 ## Data models
@@ -354,7 +384,8 @@ setName { session, name: string | null } → Session
 | `test/rules-builtin.test.ts` | SC-8: every built-in rule has at least one fixture screen/title (under `test/fixtures/screens/<agent>/`) that matches it and one that must not |
 | `test/script-state.test.ts` | the precedence table row by row, freshness edges |
 | `test/because.test.ts` | stamping in apply, titles, OSC 7501, inference; tool pings don't restamp |
-| `test/e2e/scripting.e2e.test.ts` | SC-1–6, SC-9, SC-11–37 through the `quirky` CLI or `client.call` on a daemon subprocess (`startStatusE2E`, `plugins/quirky.agent-status/test/e2e/support.ts:28`) |
+| `test/e2e/*.e2e.test.ts` (split by area: explain, send, waits, names) | SC-1–6, SC-9, SC-11–41 through the `quirky` CLI or `client.call` on a daemon subprocess (`startStatusE2E`, `plugins/quirky.agent-status/test/e2e/support.ts:28`) |
+| `test/rules-matcher.test.ts` | the worker's time budget: an overrunning pattern is cut off, the worker respawns, other evaluations keep answering (SC-41) |
 | `test/rules-network.test.ts` | SC-13: no module under `src/rules/` imports `node:http(s)`, `node:net`, `node:dns`, or calls `fetch` |
 | `packages/pty-host/test/` (existing read tests) | `unwrap` joins rows across the scrollback/screen seam; without it, rows as today |
 | `plugins/quirky.session/test/records.test.ts`, `sessions.test.ts`, `cli.test.ts` (existing) | migration 6, `setName`, resolution by name, `list` NAME column |
