@@ -2,15 +2,7 @@ import { useSyncExternalStore } from 'react'
 import { createRoot } from 'react-dom/client'
 import type { UiPluginContext } from '@quirky/protocol'
 import { SessionsPanel, type SessionsReport } from './window/SessionsPanel'
-import {
-  QUICK_COMMANDS_MENU,
-  paneMenuQuickCommands,
-  sessionCommands,
-  stripQuickCommandItems,
-  terminalCommands,
-  watchQuickCommands,
-  type QuickCommandSource
-} from './window/commands'
+import { paneMenuQuickCommands, reportQuickCommandsMenu, sessionCommands, terminalCommands, watchQuickCommands, type QuickCommandSource } from './window/commands'
 import { mountFloatingOverlay } from './window/floating'
 import { QuickCommandsStripButton, mountQuickCommandsPanel } from './window/quick-commands'
 import { mountWorkspace, type WorkspaceOptions } from './window/workspace'
@@ -26,15 +18,24 @@ type MountProps = { input?: unknown; report?(state: unknown): void }
 
 function StripQuickCommands({ context, workspace, group, source }: { context: UiPluginContext; workspace: string; group: Group; source: QuickCommandSource }) {
   const repo = useSyncExternalStore(source.subscribe, source.repo)
-  return <QuickCommandsStripButton context={context} workspace={workspace} group={group} repo={repo} />
+  const menu = useSyncExternalStore(source.subscribe, source.menu)
+  return (
+    <QuickCommandsStripButton
+      context={context}
+      workspace={workspace}
+      group={group}
+      repo={repo}
+      menuOpen={menu === group.id}
+      onMenuOpenChange={(open) => (open ? source.openMenu(group.id) : source.closeMenu(group.id))}
+    />
+  )
 }
 
-/** The slots a workspace view fills beyond the tab area: the strip's quick-command button (not in the floating workspace), the pane menu rows and the quick-commands menu. */
+/** The slots a workspace view fills beyond the tab area: the strip's quick-command button (not in the floating workspace) and the pane menu rows. */
 function workspaceSlots(context: UiPluginContext, workspace: string, source: QuickCommandSource): WorkspaceOptions {
   return {
     ...(workspace === FLOATING_WORKSPACE ? {} : { stripExtras: (group: Group) => <StripQuickCommands context={context} workspace={workspace} group={group} source={source} /> }),
-    paneMenuExtras: (pane) => paneMenuQuickCommands(context, source, pane.id),
-    extraMenus: { [QUICK_COMMANDS_MENU]: (target) => stripQuickCommandItems(context, source, workspace, target) }
+    paneMenuExtras: (pane) => paneMenuQuickCommands(context, source, pane.id)
   }
 }
 
@@ -60,9 +61,11 @@ export function activate(context: UiPluginContext): void {
   context.provide(WORKTREE_VIEW, (element: HTMLElement, props: MountProps) => {
     const worktree = worktreeOf(props.input)
     const source = worktree === null ? null : watchQuickCommands(context, worktree)
-    const unmount = mountWorkspace(context, element, props, worktree !== null && source ? workspaceSlots(context, worktree, source) : {})
+    const reporting = source ? reportQuickCommandsMenu(source, (state) => props.report?.(state)) : null
+    const unmount = mountWorkspace(context, element, reporting ? { ...props, report: reporting.report } : props, worktree !== null && source ? workspaceSlots(context, worktree, source) : {})
     return () => {
       unmount()
+      reporting?.stop()
       source?.dispose()
     }
   })
