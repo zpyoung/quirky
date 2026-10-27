@@ -1152,6 +1152,18 @@
         "sa-browser-agent"
       ],
       "status": "todo"
+    },
+    {
+      "id": "m2-sidebar-extras-followup",
+      "milestone": "M7",
+      "title": "Complete sidebar-extras deferred parity and verification: audit all 17 spec scenarios, guarded web flows, quiet aging/runtime freshness/corrupt-preference edges, and nonblocking findings recorded in m2-sidebar-extras decisions",
+      "docs": [
+        "sidebar-extras.md"
+      ],
+      "deps": [
+        "m2-sidebar-extras"
+      ],
+      "status": "todo"
     }
   ]
 }
