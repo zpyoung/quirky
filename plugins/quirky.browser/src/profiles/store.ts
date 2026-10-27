@@ -3,8 +3,17 @@ import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, wri
 import { join, resolve, sep } from 'node:path'
 import { validateValue, type Schema } from '@quirky/protocol'
 import { fault } from '../runtime/errors'
-import type { BrowserPage, BrowserProfile } from '../cookies/types'
-
+export type BrowserProfile = { id: string; label: string; scope: 'default' | 'isolated' }
+export type BrowserPage = {
+  browserPageId: string
+  worktreeId: string | null
+  profileId: string
+  index: number
+  active: boolean
+  url: string
+  title: string
+  loadError: null | { code: string; description: string; validatedUrl: string }
+}
 export type BrowserState = { profiles: BrowserProfile[]; pages: BrowserPage[] }
 
 const PROFILE_SCHEMA: Schema = {
@@ -12,20 +21,9 @@ const PROFILE_SCHEMA: Schema = {
   properties: {
     id: { type: 'string' },
     label: { type: 'string' },
-    scope: { type: 'string', enum: ['default', 'isolated', 'imported'] },
-    source: {}
+    scope: { type: 'string', enum: ['default', 'isolated'] }
   },
-  required: ['id', 'label', 'scope', 'source'],
-  additionalProperties: false
-}
-const PROFILE_SOURCE_SCHEMA: Schema = {
-  type: 'object',
-  properties: {
-    browserFamily: { type: 'string' },
-    profileName: { type: 'string' },
-    importedAt: { type: 'number' }
-  },
-  required: ['browserFamily', 'importedAt'],
+  required: ['id', 'label', 'scope'],
   additionalProperties: false
 }
 
@@ -81,7 +79,7 @@ export class BrowserStore {
     this.statePath = join(dataDir, 'browser-state.json')
     this.state = this.readState()
     if (!this.state.profiles.some((profile) => profile.id === 'default')) {
-      this.state.profiles.unshift({ id: 'default', label: 'Default', scope: 'default', source: null })
+      this.state.profiles.unshift({ id: 'default', label: 'Default', scope: 'default' })
       this.persist()
     }
   }
@@ -99,9 +97,6 @@ export class BrowserStore {
     const state = parsed as BrowserState
     if (state.profiles.some((profile) => !validProfileId(profile.id)) || state.pages.some((page) => !validProfileId(page.profileId))) {
       throw fault('browser_error', 'persisted browser metadata contains an unsafe profile identifier')
-    }
-    if (state.profiles.some((profile) => profile.source !== null && validateValue(PROFILE_SOURCE_SCHEMA, profile.source, 'profile source'))) {
-      throw fault('browser_error', 'persisted browser metadata contains an invalid profile source')
     }
     if (state.pages.some((page) =>
       page.worktreeId !== null && typeof page.worktreeId !== 'string' ||
@@ -145,10 +140,10 @@ export class BrowserStore {
     return profile
   }
 
-  createProfile(name: string, scope: 'isolated' | 'imported' = 'isolated'): BrowserProfile {
+  createProfile(name: string): BrowserProfile {
     if (name.trim() === '') throw fault('invalid_argument', 'profile name must not be empty')
     if (this.state.profiles.some((profile) => profile.label === name.trim())) throw fault('invalid_argument', 'a browser profile with that label already exists')
-    const profile: BrowserProfile = { id: `profile_${randomUUID().replaceAll('-', '')}`, label: name.trim(), scope, source: null }
+    const profile: BrowserProfile = { id: `profile_${randomUUID().replaceAll('-', '')}`, label: name.trim(), scope: 'isolated' }
     this.state.profiles.push(profile)
     this.persist()
     this.profilePath(profile.id)
@@ -210,35 +205,6 @@ export class BrowserStore {
     return { ...page }
   }
 
-  deleteProfile(id: string): BrowserPage[] {
-    if (id === 'default') throw fault('invalid_argument', 'the Default profile cannot be deleted')
-    this.getProfile(id)
-    const changed: BrowserPage[] = []
-    for (const page of this.state.pages) {
-      if (page.profileId !== id) continue
-      page.profileId = 'default'
-      page.loadError = null
-      changed.push({ ...page })
-    }
-    this.state.profiles = this.state.profiles.filter((profile) => profile.id !== id)
-    this.persist()
-    return changed
-  }
-
-  removeProfileData(profileId: string): void {
-    if (profileId === 'default') throw fault('invalid_argument', 'the Default profile data cannot be removed')
-    const path = resolve(this.dataDir, 'profiles', profileId)
-    if (!isWithin(resolve(this.dataDir, 'profiles'), path)) throw fault('invalid_argument', 'profile identifier is not a safe path')
-    rmSync(path, { recursive: true, force: true })
-  }
-
-  setPageProfile(id: string, profileId: string): BrowserPage {
-    this.getProfile(profileId)
-    return this.updatePage(id, (page) => {
-      page.profileId = profileId
-      page.loadError = null
-    })
-  }
 
   private normalizePages(): void {
     this.state.pages.forEach((page, index) => { page.index = index })

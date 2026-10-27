@@ -5,8 +5,7 @@
   "type": "module",
   "dependencies": {
     "@quirky/protocol": "workspace:*",
-    "agent-browser": "0.27.0",
-    "tldts": "7.4.16"
+    "agent-browser": "0.27.0"
   },
   "devDependencies": {
     "@quirky/git": "workspace:*"
@@ -23,11 +22,6 @@
         "dependency": "agent-browser",
         "source": "LICENSE",
         "destination": "licenses/agent-browser-LICENSE"
-      },
-      {
-        "dependency": "tldts",
-        "source": "LICENSE",
-        "destination": "licenses/tldts.LICENSE"
       }
     ]
   }

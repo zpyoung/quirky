@@ -396,7 +396,62 @@
 - **Revisit if:** CDP envelope shape changes or a domain handler assumes unvalidated parameter fields
 - **Source:** assumed — autonomous
 
-## Progress
-Iteration6 remains on exactly sa-browser-agent. Specs were committed72be708 before code. First full implementation task returned FAILED after writing source/tests; parent audited expected HEAD and every changed path, then observed actual acceptance/type failures (D33). Parent fixed and exercised generic native packaging to16pass/0fail, without claiming browser implementation complete. Component-only logic/tech amendments preserve safe native exec navigation and route OS focus to the pending native scenario (D31/D32). Error transport wording is clarified to BrowserReason: detail, not a literal reason: prefix.
+## D37: Ship only the operator-authorized browser core
+- **Question:** How should the overdue browser item unblock the browser pane and design-mode items before the operator's night target?
+- **Options:** continue full parity; block the item again; land a complete core and queue the remaining flows
+- **Chose:** the user's explicit core cutover: one helper per profile; managed profile/page lifecycle; page commands through API and CLI; atomic profile-wide selection plus complete command. Exactly fifteen public methods are enumerated in the revised logic spec. Remove deferred API/CLI/runtime paths rather than leave stubs or hidden exec access.
+- **Why:** the operator explicitly authorized the scope reduction and prescribed affected-directory checks, one blocking-only review round, one catch-up and landing. This supersedes the full-parity implementation scope in D29/D33/D35, not D19's target-safety invariants.
+- **Evidence:** operator note in iteration6; authoritative core contract commit913723c; pre-cutover full-source/spec commit1d05b63 retained on build/sa-browser-agent-full-snapshot
+- **Reversibility:** medium (deferred APIs return under a separately reviewed follow-up)
+- **Confidence:** high
+- **Revisit if:** the core cannot satisfy its real API/CLI/locking acceptance
+- **Source:** supersedes sa-browser-agent D29
 
-Next: fresh scoped complete repair in /tmp/quirky-browser-lane5-v6-bZl06I/component. Parent owns the four doc/native preparation paths, workers own only original implementation scope; expanded component union is journaled before edits. Main build/sa-browser-agent must remain72be708 during the wave. Retry must complete real per-method/API/CLI/import coverage, not claim injected memory-cookie transport as proof of live Chrome destination state. Then audit again, run all targeted checks/build/full suite/scripts/typecheck, catch up/read incoming logs, final Gemini review+one fix batch, actual prepared packaged CLI smoke, commit/detach/queue land. No review over red build; original .serena remains untouched, copied metadata stash preserved.
+## D38: Queue every unshipped flow with recoverable source
+- **Question:** Where does unfinished work go without misrepresenting this core as full browser parity?
+- **Options:** keep advertised incomplete methods; discard work; remove them from shipping HEAD and retain a dependent follow-up
+- **Chose:** queue.ts add created sa-browser-agent-extras, Side A, dependent on sa-browser-agent. It owns cookie detection/import/rollback and cookie/storage APIs; profile default/switch/clone/delete; history; advanced interactions/keyboard/find/mouse/upload/download; full screenshots/PDF; network/HAR/interception; device/emulation/permissions/clipboard/dialog; identity settings; explicit bulk CLI file/stdin inputs. Full source and original specs remain at1d05b63.
+- **Why:** the operator authorized deferral, not fake successful implementations or a permanent loss of the completed portions. CLI data must remain literal: the old implicit @file: expansion read a real synthetic file and substituted its contents, so remove that interpretation rather than add more convenience controls now.
+- **Evidence:** queue.ts add /tmp/quirky-browser-lane5-v6-bZl06I/deferred-item.json exited0; integration queue observed id sa-browser-agent-extras/status todo/deps[sa-browser-agent]; core logic Deferred flows and C5
+- **Reversibility:** easy (archive commit retained)
+- **Confidence:** high
+- **Revisit if:** a deferred flow becomes necessary for an approved dependent item's acceptance
+- **Source:** deferred: cookie import and advanced automation
+
+## D39: Repair the fixture and pinned helper-reference contracts, not browser symptoms
+- **Question:** Why did the real browser show empty titles, missing controls and failed snapshot clicks?
+- **Options:** synthesize titles/DOM or sleeps; change Chrome; correct fixture MIME and pinned reference handling
+- **Chose:** serve actual HTML as text/html; map validated native eN reference keys to @eN selectors; avoid redundant tab_switch, and invalidate refs when actual switching/lifecycle clears the helper map. Keep actual loaded URL after page creation.
+- **Why:** Bun served the old string responses as text/plain, so Chrome correctly rendered markup. Pinned0.27 tab_switch clears its ref map. NativeRuntimeRepair then observed two isolated API-created pages sharing one Chrome/helper pair, real fills/evals, named Submit ref/click, CLI fill exit0 and selected-page metadata.
+- **Evidence:** /tmp/quirky-browser-lane5-v6-bZl06I/{runtime-diagnostic,daemon-binding-probe,snapshot-refs-diagnostic,native-action-diagnostic}.json; NativeRuntimeRepair return scope audit: six paths, none outside authorization; all owned diagnostic scopes stopped
+- **Reversibility:** easy
+- **Confidence:** high for the exercised path; final core suite still required
+- **Revisit if:** helper snapshot/tab-switch semantics change
+- **Source:** assumed — autonomous
+
+## D40: Skip unstarted review and dogfood under the latest sprint ruling
+- **Question:** Should this overdue item start its planned review and additional dogfood before landing?
+- **Options:** follow the earlier one-review instruction; obey the newer accelerated landing direction
+- **Chose:** skip both unstarted passes; land once the core's affected tests and typecheck pass, retaining the earlier explicit scripts check. Catch up once, then queue.ts land. Keep NativeRuntimeRepair's already-observed real API/CLI smoke as limited evidence, not a claim that the prepared additional smoke or review ran.
+- **Why:** the operator's latest note explicitly replaces the earlier review/dogfood requirement and sets night mode to two hours per item. Deferred work is already queued under D38.
+- **Evidence:** latest iteration6 operator sprint note; core review and additional smoke were prepared but never started
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** an affected test or typecheck exposes a core blocker
+- **Source:** supersedes sa-browser-agent D37
+
+## D41: Pass the core's affected acceptance before integration
+- **Question:** What did final core verification actually establish?
+- **Options:** rely on worker completion; run the prescribed affected gates and repair actual failures
+- **Chose:** run affected browser/desktop tests, scripts and typecheck. The final affected runner passed all8 remote files and1 macOS browser file, zero failures/flaky reruns (19.92s). Scripts passed49 tests/0fail/223assertions; corrected typecheck exited0 (21.93s).
+- **Why:** initial typecheck exposed three references to removed history methods and an unused requestedUrl property; removed them. The initial affected run enumerated deleted tracked tests before staging deletions, and C4's gate fixture omitted the input whose real DOM state it asserted. Staged the actual deletions and supplied the fixture input; did not weaken C4, skip files, increase timeouts or alter browser behavior. Initial isolated rerun also recorded startup timeouts; final full affected run passed without reruns.
+- **Evidence:** bun scripts/suite.ts plugins/quirky.browser apps/desktop final output8/8 remote plus1/1 macOS, suite-result ok:true/flaky:[]; bun test scripts artifact://238; initial compiler artifact://237 and final bun run typecheck exit0. NativeRuntimeRepair's prior real API/CLI smoke is scoped in D39.
+- **Reversibility:** easy
+- **Confidence:** high for exercised core acceptance, not deferred flows
+- **Revisit if:** integrated landing gate exposes an interaction absent from the affected run
+- **Source:** assumed — autonomous
+
+## Progress
+Iteration6 holds exactly sa-browser-agent. Core affected tests, scripts and typecheck passed (D41). Full pre-cutover work is preserved at1d05b63/build/sa-browser-agent-full-snapshot; queued sa-browser-agent-extras owns every deferred flow. Review and additional dogfood were not started, per D40. Original parent metadata and copied metadata stash remain untouched.
+
+Next: commit/merge component into build/sa-browser-agent, remove its clean worktree, catch up once/read incoming decisions, detach and queue.ts land; wait for its integrated gate. No second item and no whole-queue completion claim.

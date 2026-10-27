@@ -1,16 +1,13 @@
 import { realpathSync } from 'node:fs'
 import { basename, isAbsolute, join, relative, resolve, sep } from 'node:path'
 import { validateValue, type PluginCaller, type PluginContext, type Schema } from '@quirky/protocol'
-import { BrowserActions, validateFindParams } from './runtime/actions'
+import { BrowserActions } from './runtime/actions'
 import { BROWSER_METHODS, READ_ONLY_METHODS, type BrowserMethod } from './runtime/catalog'
 import { BrowserRuntime } from './runtime/driver'
 import { asPluginError, fault } from './runtime/errors'
 import { parseExec } from './runtime/exec'
 import type { BrowserDependencies } from './runtime/dependencies'
-import { BrowserStore } from './profiles/store'
-import { CookieImporter } from './cookies/importer'
-import { detectBrowsers } from './cookies/sources'
-import type { BrowserPage, Cookie, ImportJob } from './cookies/types'
+import { BrowserStore, type BrowserPage } from './profiles/store'
 
 export type BrowserPlugin = { deactivate(): Promise<void> }
 type Worktree = { id: string; name: string; path: string; branch?: unknown }
@@ -80,14 +77,11 @@ export class BrowserService {
   private readonly store: BrowserStore
   private readonly runtime: BrowserRuntime
   private readonly actions: BrowserActions
-  private readonly importer: CookieImporter
-  private identityMode: 'clean' | 'native' = 'clean'
   private active = true
-  constructor(private readonly context: PluginContext, private readonly dependencies: BrowserDependencies) {
+  constructor(private readonly context: PluginContext, dependencies: BrowserDependencies) {
     this.store = new BrowserStore(context.dataDir)
     this.runtime = new BrowserRuntime(this.store, dependencies, (pageId) => this.actions?.clearPageRefs(pageId))
     this.actions = new BrowserActions(this.store, this.runtime)
-    this.importer = new CookieImporter(this.store, this.runtime, dependencies)
   }
 
   activate(): void {
@@ -98,7 +92,6 @@ export class BrowserService {
 
   async deactivate(): Promise<void> {
     this.active = false
-    this.importer.cancelAll()
     await this.runtime.stopAll()
   }
 
@@ -120,34 +113,12 @@ export class BrowserService {
       case 'tabSwitch': return await this.tabSwitch(params, caller)
       case 'tabClose': return await this.tabClose(params, caller)
       case 'profileList': return { profiles: this.store.listProfiles() }
-      case 'profileCreate': return { profile: this.store.createProfile(stringParam(params, 'name'), params.scope === 'imported' ? 'imported' : 'isolated') }
-      case 'profileDelete': return await this.profileDelete(stringParam(params, 'profile'))
-      case 'profileShow': return this.profileShow(params)
-      case 'profileSet': return await this.profileSet(params, caller, stringParam(params, 'profile'))
-      case 'profileUseDefault': return await this.profileSet(params, caller, 'default')
-      case 'profileClone': return await this.profileClone(params, stringParam(params, 'profile'))
-      case 'detectBrowsers': return detectBrowsers(this.dependencies)
-      case 'importCookies': return await this.importer.importCookies(optionalString(params, 'profile'), params.source)
-      case 'importStart': return this.importer.start(optionalString(params, 'profile'), params.source)
-      case 'importGet': return this.importer.get(stringParam(params, 'id'))
-      case 'importList': return this.importer.list(optionalString(params, 'profile'), this.importStatus(params.status))
-      case 'identityGet': return { mode: this.identityMode, effective: false }
-      case 'identitySet':
-        this.identityMode = stringParam(params, 'mode') as 'clean' | 'native'
-        return { mode: this.identityMode, effective: false }
-      case 'openUrl': return await this.createPage({ ...params, profile: 'default' }, caller)
-      case 'dialogAccept': return await this.dialog(params, caller, true)
-      case 'dialogDismiss': return await this.dialog(params, caller, false)
+      case 'profileCreate': return { profile: this.store.createProfile(stringParam(params, 'name')) }
       case 'exec': return await this.exec(params, caller)
       default: return await this.pageAction(name, params, caller)
     }
   }
 
-  private importStatus(value: unknown): ImportJob['status'] | undefined {
-    if (value === undefined) return undefined
-    if (value === 'queued' || value === 'running' || value === 'succeeded' || value === 'failed') return value
-    throw fault('invalid_argument', 'import status is invalid')
-  }
 
   private async tabList(params: Record<string, unknown>, caller: PluginCaller) {
     const selector = optionalString(params, 'worktree')
@@ -193,7 +164,7 @@ export class BrowserService {
     } catch (error) {
       try { await this.runtime.closePageOutOfBand(page.browserPageId) } catch { /* preserve the launch failure */ }
       try {
-        await this.runtime.withProfiles([profileId], async () => {
+        await this.runtime.withProfileLock(profileId, async () => {
           await this.runtime.closePageLocked(profileId, page.browserPageId)
           this.store.removePage(page.browserPageId)
         })
@@ -216,9 +187,6 @@ export class BrowserService {
       const candidates = this.store.listPages().filter((item) => item.worktreeId === worktreeId)
       page = candidates[indexParam] ?? (() => { throw fault('browser_tab_not_found', `tab index ${indexParam} does not exist`) })()
     }
-    const previous = this.store.listPages().find((item) => item.worktreeId === page.worktreeId && item.active)
-    if (previous) this.runtime.invalidatePage(previous.browserPageId, true)
-    this.runtime.invalidatePage(page.browserPageId, true)
     await this.runtime.withPage(page, 'tabSwitch', async () => {
       this.store.switchPage(page.browserPageId)
       return undefined
@@ -240,7 +208,7 @@ export class BrowserService {
       } else page = this.activePage(candidates)
     }
     await this.runtime.closePageOutOfBand(page.browserPageId)
-    await this.runtime.withProfiles([page.profileId], async () => {
+    await this.runtime.withProfileLock(page.profileId, async () => {
       await this.runtime.closePageLocked(page.profileId, page.browserPageId)
       this.store.removePage(page.browserPageId)
     })
@@ -248,121 +216,18 @@ export class BrowserService {
   }
 
   private async pageAction(method: BrowserMethod, params: Record<string, unknown>, caller: PluginCaller): Promise<unknown> {
-    if (method === 'find') validateFindParams(params)
     if (method === 'goto') validateNavigationUrl(stringParam(params, 'url'))
     const page = await this.resolvePageTarget(params, caller, Object.hasOwn(READ_ONLY_METHODS, method))
-    if (method === 'goto' || method === 'back' || method === 'forward' || method === 'reload') this.runtime.invalidatePage(page.browserPageId, true)
+    if (method === 'goto') this.runtime.invalidatePage(page.browserPageId, true)
     return await this.runtime.withPage(page, method, (execution) => this.actions.run(method, params, execution))
   }
 
-  private async dialog(params: Record<string, unknown>, caller: PluginCaller, accept: boolean) {
-    const page = await this.resolvePageTarget(params, caller, false)
-    await this.runtime.answerDialog(page.browserPageId, accept, accept ? optionalString(params, 'text', true) : undefined)
-    return accept ? { accepted: true } : { dismissed: true }
-  }
-
-  private async profileShow(params: Record<string, unknown>) {
-    const page = this.store.getPage(stringParam(params, 'page'))
-    const profile = this.store.getProfile(page.profileId)
-    return { browserPageId: page.browserPageId, worktreeId: page.worktreeId, profileId: profile.id, profileLabel: profile.label }
-  }
-
-  private async profileSet(params: Record<string, unknown>, caller: PluginCaller, profileId: string) {
-    const page = await this.resolvePageTarget(params, caller, false)
-    this.store.getProfile(profileId)
-    if (page.profileId === profileId) {
-      const profile = this.store.getProfile(profileId)
-      return { browserPageId: page.browserPageId, profileId, profileLabel: profile.label }
-    }
-    const oldProfileId = page.profileId
-    await this.runtime.cancelPageForChange(page.browserPageId)
-    try {
-      await this.runtime.withProfiles([oldProfileId, profileId], async () => {
-        await this.runtime.rebindPageLocked(oldProfileId, page.browserPageId)
-        const changed = this.store.setPageProfile(page.browserPageId, profileId)
-        await this.runtime.ensurePageLocked(changed)
-      })
-    } finally {
-      this.runtime.finishPageChange(page.browserPageId)
-    }
-    const profile = this.store.getProfile(profileId)
-    return { browserPageId: page.browserPageId, profileId, profileLabel: profile.label }
-  }
-
-  private async profileDelete(profileId: string) {
-    if (profileId === 'default') throw fault('invalid_argument', 'the Default profile cannot be deleted')
-    const profile = this.store.getProfile(profileId)
-    const pages = this.store.listPages().filter((page) => page.profileId === profileId)
-    for (const page of pages) await this.runtime.cancelPageForChange(page.browserPageId)
-    try {
-      await this.runtime.withProfiles([profileId, 'default'], async () => {
-        for (const page of pages) {
-          await this.runtime.rebindPageLocked(profileId, page.browserPageId)
-          const moved = this.store.setPageProfile(page.browserPageId, 'default')
-          await this.runtime.ensurePageLocked(moved)
-        }
-        this.store.deleteProfile(profileId)
-        await this.runtime.stopProfileLocked(profileId)
-        this.store.removeProfileData(profileId)
-      })
-    } finally {
-      for (const page of pages) this.runtime.finishPageChange(page.browserPageId)
-    }
-    return { deleted: true, profileId }
-  }
-
-  private async profileClone(params: Record<string, unknown>, destinationId: string) {
-    const destination = this.store.getProfile(destinationId)
-    if (destination.scope !== 'isolated') throw fault('invalid_argument', 'profile clone destination must be an isolated profile')
-    const sourceId = stringParam(params, 'source')
-    const sourcePage = this.store.getPage(sourceId)
-    if (this.store.listPages().some((page) => page.profileId === destinationId)) throw fault('invalid_argument', 'profile clone destination must be empty')
-    return await this.runtime.withProfiles([sourcePage.profileId, destinationId], async () => {
-      const sourceTransport = await this.runtime.cookieTransportLocked(sourcePage.profileId)
-      const destinationTransport = await this.runtime.cookieTransportLocked(destinationId)
-      const destinationCookies = await destinationTransport.list(destinationId)
-      if (destinationCookies.length > 0) throw fault('invalid_argument', 'profile clone destination must not contain cookies')
-      const sourceCookies = await sourceTransport.list(sourcePage.profileId)
-      const copied: Cookie[] = []
-      try {
-        for (const cookie of sourceCookies) {
-          copied.push(cookie)
-          await destinationTransport.set(destinationId, cookie)
-        }
-      } catch {
-        let rollbackFailed = false
-        for (const cookie of copied) {
-          try { await destinationTransport.delete(destinationId, cookie) } catch { rollbackFailed = true }
-        }
-        if (rollbackFailed) throw fault('browser_unsafe_replace', 'profile clone failed and destination cookies could not be rolled back')
-        throw fault('browser_error', 'profile cookie clone failed')
-      }
-      const page = this.store.addPage({ worktreeId: sourcePage.worktreeId, profileId: destinationId, url: sourcePage.url, title: sourcePage.title, active: false })
-      try {
-        await this.runtime.ensurePageLocked(page)
-      } catch (error) {
-        this.store.removePage(page.browserPageId)
-        let rollbackFailed = false
-        for (const cookie of copied) {
-          try { await destinationTransport.delete(destinationId, cookie) } catch { rollbackFailed = true }
-        }
-        if (rollbackFailed) throw fault('browser_unsafe_replace', 'profile clone page creation failed and destination cookies could not be rolled back')
-        throw error
-      }
-      return { browserPageId: page.browserPageId, sourceBrowserPageId: sourceId, profileId: destinationId, profileLabel: destination.label }
-    })
-  }
 
   private async exec(params: Record<string, unknown>, caller: PluginCaller) {
     const plan = parseExec(stringParam(params, 'command'))
-    if (plan.method === 'find') validateFindParams(plan.params)
     if (plan.method === 'goto') validateNavigationUrl(stringParam(plan.params, 'url'))
     const page = await this.resolvePageTarget(params, caller, false)
-    if (plan.method === 'dialogAccept' || plan.method === 'dialogDismiss') {
-      const result = await this.runtime.answerDialog(page.browserPageId, plan.method === 'dialogAccept', typeof plan.params.text === 'string' ? plan.params.text : undefined)
-      return { command: plan.command, result: plan.method === 'dialogAccept' ? { accepted: true } : { dismissed: true } }
-    }
-    if (plan.method === 'goto' || plan.method === 'back' || plan.method === 'forward' || plan.method === 'reload') this.runtime.invalidatePage(page.browserPageId, true)
+    if (plan.method === 'goto') this.runtime.invalidatePage(page.browserPageId, true)
     const result = await this.runtime.withPage(page, 'exec', (execution) => this.actions.run(plan.method, plan.params, execution))
     return { command: plan.command, result }
   }

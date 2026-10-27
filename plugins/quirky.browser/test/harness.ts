@@ -17,49 +17,55 @@ export type BrowserTestHarness = {
   scope: ProcessScope
   daemon: Harness
   client: QuirkyClient
-  sourceRoots: Record<string, string>
   fixtureUrl: string
   spawnCount: () => number
+  spawnCommands: () => string[][]
+  fixtureGate: (id: string) => { requested: Promise<void>; release(): void }
   addFolderWorktree(name: string): Promise<string>
   cleanup(): Promise<void>
 }
 
-export type FixtureServer = { url: string; stop(): void }
+export type FixtureGate = { requested: Promise<void>; release(): void }
+export type FixtureServer = { url: string; gate(id: string): FixtureGate; stop(): void }
 
 export function startFixtureServer(): FixtureServer {
   const html = (body: string) => new Response(body, { headers: { 'content-type': 'text/html; charset=utf-8' } })
+  const gates = new Map<string, { requested: Promise<void>; announce(): void; released: Promise<void>; release(): void }>()
   const server = Bun.serve({
     hostname: '127.0.0.1',
     port: 0,
-    fetch(request) {
+    async fetch(request) {
       const path = new URL(request.url).pathname
       if (path === '/first') return html('<!doctype html><title>First</title><h1>First</h1>')
       if (path === '/second') return html('<!doctype html><title>Second</title><h1>Second</h1>')
-      if (path === '/asset') return new Response('fixture-download-bytes', { headers: { 'content-type': 'application/octet-stream' } })
-      if (path === '/download') return html('<!doctype html><title>Download</title><a id="download" href="/asset" download="fixture.bin">download</a>')
       if (path === '/tall') return html('<!doctype html><title>Tall</title><div style="height:2600px;background:linear-gradient(red,blue)">tall</div>')
+      if (path.startsWith('/gate/')) {
+        const gate = gates.get(path.slice('/gate/'.length))
+        if (!gate) return new Response('fixture gate was not registered', { status: 404 })
+        gate.announce()
+        await gate.released
+        return html('<!doctype html><title>Gate</title><h1>Gate</h1><input id="text" value="seed">')
+      }
       if (path === '/events') {
         return html(`<!doctype html><title>Events</title>
-          <input id="text" value="seed"><input id="other"><select id="choice"><option value="a">A</option><option value="b">B</option></select>
-          <input id="check" type="checkbox"><div id="drag" draggable="true">drag</div><div id="drop">drop</div><input id="files" type="file">
-          <button id="submit">Submit</button><p id="delayed" hidden>ready</p>
-          <script>
-            setTimeout(() => { document.querySelector('#delayed').hidden = false }, 150)
-            console.log('one'); console.warn('two'); console.error('three')
-            window.fixtureFetch = () => Promise.all([fetch('/one').then(r => r.text()), fetch('/two').then(r => r.text())])
-          </script>`)
+          <label for="text">Text field</label><input id="text" value="seed">
+          <button id="submit" onclick="document.querySelector('#result').textContent='clicked'">Submit</button>
+          <output id="result"></output>`)
       }
-      if (path === '/headers') return new Response(request.headers.get('x-fixture') ?? 'missing')
-      if (path === '/auth') {
-        const expected = `Basic ${Buffer.from('fixture-user:secret').toString('base64')}`
-        if (request.headers.get('authorization') === expected) return new Response('authenticated')
-        return new Response('authentication required', { status: 401, headers: { 'www-authenticate': 'Basic realm="fixture"' } })
-      }
-      if (path === '/one' || path === '/two') return new Response(path.slice(1))
       return html('<!doctype html><title>Blank fixture</title><main>fixture</main>')
     }
   })
-  return { url: server.url.href, stop: () => server.stop(true) }
+  return {
+    url: server.url.href,
+    gate(id) {
+      const requested = Promise.withResolvers<void>()
+      const released = Promise.withResolvers<void>()
+      if (gates.has(id)) throw new Error(`fixture gate ${id} already exists`)
+      gates.set(id, { requested: requested.promise, announce: requested.resolve, released: released.promise, release: released.resolve })
+      return { requested: requested.promise, release: released.resolve }
+    },
+    stop: () => server.stop(true)
+  }
 }
 
 function createTestPluginDir(builtinPluginsDir: string): void {
@@ -92,23 +98,15 @@ export async function startBrowserHarness(extra: Partial<BrowserTestOverrides> =
   const scope = createProcessScope()
   const home = scope.home
   const fixture = startFixtureServer()
-  const sourcesRoot = join(home, 'source-fixtures')
-  const sourceRoots: Record<string, string> = {}
-  for (const family of ['chrome', 'edge', 'arc', 'chromium', 'comet', 'helium', 'firefox', 'safari']) {
-    sourceRoots[family] = join(sourcesRoot, family)
-    mkdirSync(sourceRoots[family]!, { recursive: true, mode: 0o700 })
-  }
-  const launched: string[] = []
+  const launched: string[][] = []
   const overrides: BrowserTestOverrides = {
     runtimeRoot: BROWSER,
     spawn(command, options) {
-      launched.push(command[0] ?? '')
+      launched.push([...command])
       return scope.spawn(command, options)
     },
     chromeArguments: ['--use-mock-keychain'],
     chromePath: null,
-    sourceRoots,
-    keyProvider: async () => Buffer.from('synthetic-safe-storage-key'),
     ...extra
   }
   setBrowserTestOverrides(home, overrides)
@@ -128,9 +126,10 @@ export async function startBrowserHarness(extra: Partial<BrowserTestOverrides> =
       scope,
       daemon,
       client,
-      sourceRoots,
       fixtureUrl: fixture.url,
       spawnCount: () => launched.length,
+      spawnCommands: () => launched.map((command) => [...command]),
+      fixtureGate: (id) => fixture.gate(id),
       async addFolderWorktree(name: string) {
         const path = join(home, 'projects', name)
         mkdirSync(path, { recursive: true })

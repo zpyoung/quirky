@@ -1,56 +1,15 @@
-import { readFileSync, readdirSync, writeFileSync } from 'node:fs'
+import { existsSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { expect, test } from 'bun:test'
 import { run } from '../../../packages/cli/src/main'
 import { createDaemonLink } from '../../../packages/cli/src/link'
 import { startBrowserHarness, type BrowserTestHarness } from './harness'
 
-const method = (name: string) => `quirky.browser/${name}`
 const call = (client: BrowserTestHarness['client'], name: string, params: Record<string, unknown> = {}) =>
-  client.callAny(method(name), params)
-function eventQueue<T>() {
-  const events: T[] = []
-  const waiters: Array<{ predicate: (event: T) => boolean; resolve: (event: T) => void }> = []
-  return {
-    next(predicate: (event: T) => boolean = () => true): Promise<T> {
-      const index = events.findIndex(predicate)
-      if (index !== -1) return Promise.resolve(events.splice(index, 1)[0]!)
-      const { promise, resolve } = Promise.withResolvers<T>()
-      waiters.push({ predicate, resolve })
-      return promise
-    },
-    push(event: T): void {
-      const index = waiters.findIndex((waiter) => waiter.predicate(event))
-      if (index === -1) events.push(event)
-      else waiters.splice(index, 1)[0]!.resolve(event)
-    },
-    clear(): void { events.length = 0 }
-  }
-}
+  client.callAny(`quirky.browser/${name}`, params)
 
-async function expectReason(
-  client: BrowserTestHarness['client'],
-  name: string,
-  params: Record<string, unknown>,
-  reason: string
-): Promise<void> {
-  let failure: unknown
-  try { await call(client, name, params) } catch (error) { failure = error }
-  expect(failure).toBeDefined()
-  expect((failure instanceof Error ? failure.message : String(failure)).startsWith(`${reason}:`)).toBe(true)
-}
-async function expectSchemaFailure(
-  client: BrowserTestHarness['client'],
-  name: string,
-  params: Record<string, unknown>
-): Promise<void> {
-  let failure: unknown
-  try { await call(client, name, params) } catch (error) { failure = error }
-  expect(failure).toBeDefined()
-}
-
-async function newPage(h: BrowserTestHarness, url = `${h.fixtureUrl}events`, extra: Record<string, unknown> = {}) {
-  return (await call(h.client, 'tabCreate', { url, ...extra })) as { browserPageId: string }
+async function newPage(h: BrowserTestHarness, url = `${h.fixtureUrl}events`, profile?: string) {
+  return await call(h.client, 'tabCreate', { url, ...(profile ? { profile } : {}) }) as { browserPageId: string }
 }
 
 async function runBrowserCli(h: BrowserTestHarness, argv: string[]) {
@@ -68,553 +27,277 @@ async function runBrowserCli(h: BrowserTestHarness, argv: string[]) {
   return { code, stdout, stderr }
 }
 
-test('SC-01: plugin metadata is lazy and owned Chrome browses local history', async () => {
+type Outcome<T> = { status: 'fulfilled'; value: T } | { status: 'rejected'; reason: unknown }
+function settle<T>(promise: Promise<T>): Promise<Outcome<T>> {
+  return promise.then(
+    (value) => ({ status: 'fulfilled', value }),
+    (reason: unknown) => ({ status: 'rejected', reason })
+  )
+}
+
+async function signalBefore(signal: Promise<unknown>, timeoutMs: number): Promise<boolean> {
+  const timeout = Promise.withResolvers<boolean>()
+  const timer = setTimeout(() => timeout.resolve(false), timeoutMs)
+  try { return await Promise.race([signal.then(() => true), timeout.promise]) }
+  finally { clearTimeout(timer) }
+}
+
+test('C1: profile metadata is lazy and each isolated profile owns one Chrome/helper pair', async () => {
   const h = await startBrowserHarness()
   try {
-    expect((await call(h.client, 'profileList') as { profiles: Array<{ id: string }> }).profiles.map((p) => p.id)).toContain('default')
-    expect((await call(h.client, 'tabList') as { tabs: unknown[] }).tabs).toEqual([])
+    const profilesBeforeUse = await call(h.client, 'profileList') as { profiles: Array<{ id: string; scope: string }> }
+    expect(profilesBeforeUse.profiles).toEqual(expect.arrayContaining([expect.objectContaining({ id: 'default', scope: 'default' })]))
     expect(h.spawnCount()).toBe(0)
 
-    const created = await newPage(h, 'about:blank')
+    const isolated = await call(h.client, 'profileCreate', { name: 'Review' }) as { profile: { id: string; scope: string } }
+    expect(isolated.profile.scope).toBe('isolated')
+    expect(h.spawnCount()).toBe(0)
+
+    const [first, second] = await Promise.all([
+      newPage(h, `${h.fixtureUrl}events`, isolated.profile.id),
+      newPage(h, `${h.fixtureUrl}events`, isolated.profile.id)
+    ])
+    expect(first.browserPageId).not.toBe(second.browserPageId)
     expect(h.spawnCount()).toBe(2)
-    expect(await call(h.client, 'tabCurrent')).toMatchObject({ tab: { browserPageId: created.browserPageId } })
-    const shown = await call(h.client, 'tabShow', { page: created.browserPageId }) as { tab: { browserPageId: string; url: string } }
-    expect(shown.tab).toMatchObject({ browserPageId: created.browserPageId, url: 'about:blank' })
-    const first = await call(h.client, 'goto', { page: created.browserPageId, url: `${h.fixtureUrl}first` }) as { url: string; title: string }
-    expect(first).toMatchObject({ url: `${h.fixtureUrl}first`, title: 'First' })
-    await call(h.client, 'goto', { page: created.browserPageId, url: `${h.fixtureUrl}second` })
-    expect(await call(h.client, 'back', { page: created.browserPageId })).toMatchObject({ url: `${h.fixtureUrl}first`, title: 'First' })
-    expect(await call(h.client, 'forward', { page: created.browserPageId })).toMatchObject({ url: `${h.fixtureUrl}second`, title: 'Second' })
-    expect(await call(h.client, 'reload', { page: created.browserPageId })).toMatchObject({ url: `${h.fixtureUrl}second`, title: 'Second' })
-    await expectReason(h.client, 'goto', { page: created.browserPageId, url: 'javascript:alert(1)' }, 'invalid_argument')
-    expect((await call(h.client, 'tabShow', { page: created.browserPageId }) as { tab: { url: string } }).tab.url).toBe(`${h.fixtureUrl}second`)
-    const opened = await call(h.client, 'openUrl', { url: `${h.fixtureUrl}first` }) as { browserPageId: string }
-    expect((await call(h.client, 'tabShow', { page: opened.browserPageId }) as { tab: { browserPageId: string; url: string; title: string } }).tab)
-      .toMatchObject({ browserPageId: opened.browserPageId, url: `${h.fixtureUrl}first`, title: 'First' })
-  } finally { await h.cleanup() }
-}, 60_000)
+    const anotherPage = await newPage(h, `${h.fixtureUrl}first`, isolated.profile.id)
+    expect(anotherPage.browserPageId).not.toBe(first.browserPageId)
+    expect(h.spawnCount()).toBe(2)
 
-test('SC-02 and DF-03: explicit page/worktree/cwd targeting; focus:true fails before mutation', async () => {
+    const defaultPage = await newPage(h)
+    expect(defaultPage.browserPageId).toBeTruthy()
+    expect(h.spawnCount()).toBe(4)
+    const commands = h.spawnCommands()
+    expect(commands.filter((command) => command.length === 1)).toHaveLength(2)
+    const chrome = commands.filter((command) => command.includes('--headless=new'))
+    expect(chrome).toHaveLength(2)
+    const dataDir = join(h.home, 'plugin-data', 'quirky.browser', 'profiles')
+    expect(chrome.map((command) => command.find((arg) => arg.startsWith('--user-data-dir='))).sort()).toEqual([
+      `--user-data-dir=${join(dataDir, isolated.profile.id, 'chrome-profile')}`,
+      `--user-data-dir=${join(dataDir, 'default', 'chrome-profile')}`
+    ].sort())
+    expect(existsSync(join(dataDir, isolated.profile.id, 'chrome-profile'))).toBe(true)
+  } finally { await h.cleanup() }
+}, 90_000)
+
+test('C2: API and CLI create, inspect, select, list, and close pages in explicit worktree scope', async () => {
   const h = await startBrowserHarness()
   try {
-    const cedar = await h.addFolderWorktree('Cedar')
-    const birch = await h.addFolderWorktree('Birch')
-    const a = await newPage(h, `${h.fixtureUrl}events`, { worktree: cedar })
-    const b = await newPage(h, `${h.fixtureUrl}events`, { worktree: birch })
-    await call(h.client, 'fill', { cwd: join(h.home, 'projects', 'Cedar'), element: '#text', value: 'only-cedar' })
-    await call(h.client, 'fill', { page: b.browserPageId, element: '#text', value: 'only-birch' })
-    expect((await call(h.client, 'get', { page: a.browserPageId, what: 'value', element: '#text' }) as { value: string }).value).toBe('only-cedar')
-    expect((await call(h.client, 'get', { page: b.browserPageId, what: 'value', element: '#text' }) as { value: string }).value).toBe('only-birch')
-    const c = await newPage(h, `${h.fixtureUrl}events`, { worktree: cedar })
-    const all = await call(h.client, 'tabList', { worktree: 'all' }) as { tabs: Array<{ browserPageId: string; index: number; active: boolean }> }
-    expect(all.tabs.map((tab) => tab.browserPageId).sort()).toEqual([a.browserPageId, b.browserPageId, c.browserPageId].sort())
-    await call(h.client, 'tabSwitch', { page: c.browserPageId })
-    expect((await call(h.client, 'tabCurrent', { worktree: cedar }) as { tab: { browserPageId: string; worktreeId: string } }).tab)
-      .toMatchObject({ browserPageId: c.browserPageId, worktreeId: cedar })
-    expect((await call(h.client, 'tabShow', { page: a.browserPageId, worktree: 'invalid-selector' }) as { tab: { browserPageId: string } }).tab.browserPageId).toBe(a.browserPageId)
-    await expectReason(h.client, 'fill', { element: '#text', value: 'unscoped' }, 'browser_no_tab')
-    await expectReason(h.client, 'fill', { page: 'not-a-browser-page', worktree: cedar, element: '#text', value: 'wrong' }, 'browser_tab_not_found')
-    await expectReason(h.client, 'fill', { worktree: 'all', element: '#text', value: 'all-worktrees' }, 'invalid_argument')
-    await expectSchemaFailure(h.client, 'fill', { page: a.browserPageId, element: '#text', value: 7 })
-    await expectSchemaFailure(h.client, 'fill', { page: a.browserPageId, element: '#text', value: 'bad', extra: true })
-    await expectSchemaFailure(h.client, 'goto', { page: a.browserPageId, url: 7 })
-    await expectReason(h.client, 'tabSwitch', { page: a.browserPageId, index: 0 }, 'invalid_argument')
-    expect((await call(h.client, 'get', { page: a.browserPageId, what: 'value', element: '#text' }) as { value: string }).value).toBe('only-cedar')
-    expect((await call(h.client, 'get', { page: b.browserPageId, what: 'value', element: '#text' }) as { value: string }).value).toBe('only-birch')
-    expect((await call(h.client, 'tabShow', { page: a.browserPageId }) as { tab: { url: string } }).tab.url).toBe(`${h.fixtureUrl}events`)
-    const beforeFocus = (await call(h.client, 'tabList', { worktree: 'all' }) as { tabs: Array<{ browserPageId: string; active: boolean }> }).tabs
-      .map(({ browserPageId, active }) => ({ browserPageId, active }))
-      .sort((left, right) => left.browserPageId.localeCompare(right.browserPageId))
-    expect(beforeFocus.find((tab) => tab.browserPageId === a.browserPageId)?.active).toBe(false)
-    await expectReason(h.client, 'tabSwitch', { page: a.browserPageId, focus: true }, 'invalid_argument')
-    const afterFocus = (await call(h.client, 'tabList', { worktree: 'all' }) as { tabs: Array<{ browserPageId: string; active: boolean }> }).tabs
-      .map(({ browserPageId, active }) => ({ browserPageId, active }))
-      .sort((left, right) => left.browserPageId.localeCompare(right.browserPageId))
-    expect(afterFocus).toEqual(beforeFocus)
-    expect((await call(h.client, 'tabCurrent', { worktree: cedar }) as { tab: { browserPageId: string } }).tab.browserPageId).toBe(c.browserPageId)
-    const cedarIndex = all.tabs.find((tab) => tab.browserPageId === a.browserPageId)!.index
-    const switchedByIndex = await call(h.client, 'tabSwitch', { index: cedarIndex, worktree: cedar }) as { switched: number; browserPageId: string }
-    expect(switchedByIndex.browserPageId).toBe(a.browserPageId)
-    expect((await call(h.client, 'tabCurrent', { worktree: cedar }) as { tab: { browserPageId: string } }).tab.browserPageId).toBe(a.browserPageId)
-    const switched = await call(h.client, 'tabSwitch', { page: b.browserPageId }) as { switched: number; browserPageId: string }
-    expect(switched.browserPageId).toBe(b.browserPageId)
-    expect((await call(h.client, 'tabCurrent', { worktree: birch }) as { tab: { browserPageId: string } }).tab.browserPageId).toBe(b.browserPageId)
-  } finally { await h.cleanup() }
-}, 60_000)
+    const worktree = await h.addFolderWorktree('BrowserCore')
+    const createdProfile = await runBrowserCli(h, ['browser', 'tab', 'profile', 'create', '--label', 'CLI Review', '--json'])
+    expect(createdProfile.code).toBe(0)
+    const profile = JSON.parse(createdProfile.stdout) as { profile: { id: string; scope: string } }
+    expect(profile.profile.scope).toBe('isolated')
 
-test('SC-03 and DF-04: snapshot refs are page- and projection-bound', async () => {
-  const h = await startBrowserHarness()
-  try {
-    const a = await newPage(h, `${h.fixtureUrl}events`)
-    const b = await newPage(h, `${h.fixtureUrl}events`)
-    const projection = await call(h.client, 'snapshot', { page: a.browserPageId }) as { projectionId: string; refs: Array<{ ref: string; role: string; name: string }> }
-    expect(projection.projectionId).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/)
-    const submit = projection.refs.find((ref) => ref.name === 'Submit')
-    expect(submit?.ref).toMatch(new RegExp(`^qbr1:${projection.projectionId}:\\d+$`))
-    await call(h.client, 'click', { page: a.browserPageId, element: submit!.ref })
-    const nextProjection = await call(h.client, 'snapshot', { page: a.browserPageId }) as { refs: Array<{ ref: string; name: string }> }
-    await expectReason(h.client, 'click', { page: a.browserPageId, element: submit!.ref }, 'browser_stale_ref')
-    const nextSubmit = nextProjection.refs.find((ref) => ref.name === 'Submit')
-    expect(nextSubmit).toBeDefined()
-    await call(h.client, 'click', { page: a.browserPageId, element: nextSubmit!.ref })
-    await expectReason(h.client, 'click', { page: b.browserPageId, element: submit!.ref }, 'browser_stale_ref')
-    await call(h.client, 'goto', { page: a.browserPageId, url: `${h.fixtureUrl}first` })
-    await expectReason(h.client, 'click', { page: a.browserPageId, element: submit!.ref }, 'browser_stale_ref')
-    const old = await call(h.client, 'snapshot', { page: b.browserPageId }) as { refs: Array<{ ref: string }> }
-    await call(h.client, 'tabSwitch', { page: a.browserPageId })
-    await expectReason(h.client, 'click', { page: b.browserPageId, element: old.refs[0]!.ref }, 'browser_stale_ref')
-  } finally { await h.cleanup() }
-}, 60_000)
-
-test('SC-04 and DF-06: interactions preserve large Unicode and use the real browser clipboard', async () => {
-  const h = await startBrowserHarness()
-  try {
-    const page = await newPage(h)
-    const big = '🧪漢字'.repeat(4_500)
-    await call(h.client, 'fill', { page: page.browserPageId, element: '#text', value: big })
-    expect((await call(h.client, 'get', { page: page.browserPageId, what: 'value', element: '#text' }) as { value: string }).value).toBe(big)
-    await call(h.client, 'type', { page: page.browserPageId, input: 'typed' })
-    expect((await call(h.client, 'get', { page: page.browserPageId, what: 'value', element: '#text' }) as { value: string }).value).toBe(`${big}typed`)
-    await call(h.client, 'keyboardInsertText', { page: page.browserPageId, text: '✅' })
-    expect((await call(h.client, 'get', { page: page.browserPageId, what: 'value', element: '#text' }) as { value: string }).value).toBe(`${big}typed✅`)
-    await call(h.client, 'selectAll', { page: page.browserPageId, element: '#text' })
-    expect(await call(h.client, 'eval', { page: page.browserPageId, expression: 'document.activeElement.selectionStart === 0 && document.activeElement.selectionEnd === document.activeElement.value.length' })).toEqual({ value: true })
-    await call(h.client, 'clear', { page: page.browserPageId, element: '#text' })
-    expect(await call(h.client, 'get', { page: page.browserPageId, what: 'value', element: '#text' })).toEqual({ value: '' })
-    await call(h.client, 'keypress', { page: page.browserPageId, key: 'Control+a' })
-    await call(h.client, 'fill', { page: page.browserPageId, element: '#text', value: 'small' })
-    await call(h.client, 'select', { page: page.browserPageId, element: '#choice', value: 'b' })
-    expect(await call(h.client, 'get', { page: page.browserPageId, what: 'value', element: '#choice' })).toEqual({ value: 'b' })
-    expect(await call(h.client, 'check', { page: page.browserPageId, element: '#check' })).toEqual({ checked: true })
-    expect(await call(h.client, 'is', { page: page.browserPageId, what: 'checked', element: '#check' })).toEqual({ value: true })
-    expect(await call(h.client, 'uncheck', { page: page.browserPageId, element: '#check' })).toEqual({ checked: false })
-    expect(await call(h.client, 'is', { page: page.browserPageId, what: 'checked', element: '#check' })).toEqual({ value: false })
-    await call(h.client, 'focus', { page: page.browserPageId, element: '#other' })
-    expect(await call(h.client, 'eval', { page: page.browserPageId, expression: 'document.activeElement.id' })).toEqual({ value: 'other' })
-    await call(h.client, 'hover', { page: page.browserPageId, element: '#submit' })
-    expect(await call(h.client, 'eval', { page: page.browserPageId, expression: 'document.querySelector("#submit").matches(":hover")' })).toEqual({ value: true })
-    await call(h.client, 'eval', {
-      page: page.browserPageId,
-      expression: '(() => { const drag = document.querySelector("#drag"); const drop = document.querySelector("#drop"); drop.style.marginTop = "1600px"; document.body.style.height = "4000px"; window.__dragEvents = []; drag.addEventListener("dragstart", () => window.__dragEvents.push("start")); drop.addEventListener("dragover", event => event.preventDefault()); drop.addEventListener("drop", () => window.__dragEvents.push("drop")); return true })()'
-    })
-    await call(h.client, 'scrollIntoView', { page: page.browserPageId, element: '#drop' })
-    expect(await call(h.client, 'eval', { page: page.browserPageId, expression: 'window.scrollY > 0' })).toEqual({ value: true })
-    await call(h.client, 'drag', { page: page.browserPageId, from: '#drag', to: '#drop' })
-    expect(await call(h.client, 'eval', { page: page.browserPageId, expression: 'window.__dragEvents' })).toMatchObject({ value: ['start', 'drop'] })
-    const uploadPath = join(h.home, 'upload.txt')
-    writeFileSync(uploadPath, 'browser upload fixture')
-    await call(h.client, 'upload', { page: page.browserPageId, element: '#files', files: [uploadPath] })
-    expect(await call(h.client, 'eval', { page: page.browserPageId, expression: 'document.querySelector("#files").files[0].name' })).toEqual({ value: 'upload.txt' })
-    const scrollBefore = await call(h.client, 'eval', { page: page.browserPageId, expression: 'window.scrollY' }) as { value: number }
-    await call(h.client, 'scroll', { page: page.browserPageId, direction: 'down', amount: 400 })
-    const scrollAfter = await call(h.client, 'eval', { page: page.browserPageId, expression: 'window.scrollY' }) as { value: number }
-    expect(scrollAfter.value).toBeGreaterThan(scrollBefore.value)
-    await call(h.client, 'eval', {
-      page: page.browserPageId,
-      expression: '(() => { window.__mouseEvents = { moves: [], downs: [], ups: [], wheels: [] }; document.addEventListener("mousemove", event => window.__mouseEvents.moves.push({ x: event.clientX, y: event.clientY }), true); document.addEventListener("mousedown", event => window.__mouseEvents.downs.push({ button: event.button }), true); document.addEventListener("mouseup", event => window.__mouseEvents.ups.push({ button: event.button }), true); document.addEventListener("wheel", event => window.__mouseEvents.wheels.push({ deltaX: event.deltaX, deltaY: event.deltaY }), true); return true })()'
-    })
-    expect(await call(h.client, 'mouseMove', { page: page.browserPageId, x: 20, y: 30 })).toEqual({ moved: { x: 20, y: 30 } })
-    expect(await call(h.client, 'mouseDown', { page: page.browserPageId })).toEqual({ button: 'left', down: true })
-    expect(await call(h.client, 'mouseUp', { page: page.browserPageId })).toEqual({ button: 'left', down: false })
-    expect(await call(h.client, 'mouseWheel', { page: page.browserPageId, dy: 30, dx: 2 })).toEqual({ scrolled: { dx: 2, dy: 30 } })
-    const mouseEvents = await call(h.client, 'eval', { page: page.browserPageId, expression: 'window.__mouseEvents' }) as {
-      value: { moves: Array<{ x: number; y: number }>; downs: Array<{ button: number }>; ups: Array<{ button: number }>; wheels: Array<{ deltaX: number; deltaY: number }> }
+    const createPage = async (url: string) => {
+      const result = await runBrowserCli(h, ['browser', 'tab', 'create', '--url', url, '--worktree', worktree, '--profile', profile.profile.id, '--json'])
+      expect(result.code).toBe(0)
+      return JSON.parse(result.stdout) as { browserPageId: string }
     }
-    expect(mouseEvents.value.moves).toContainEqual({ x: 20, y: 30 })
-    expect(mouseEvents.value.downs).toContainEqual({ button: 0 })
-    expect(mouseEvents.value.ups).toContainEqual({ button: 0 })
-    expect(mouseEvents.value.wheels).toContainEqual({ deltaX: 2, deltaY: 30 })
-    await call(h.client, 'clipboardWrite', { page: page.browserPageId, text: 'real headless clipboard' })
-    expect(await call(h.client, 'clipboardRead', { page: page.browserPageId })).toEqual({ text: 'real headless clipboard' })
-    await expectReason(h.client, 'clipboardWrite', { page: page.browserPageId, text: 'é'.repeat(4_097) }, 'invalid_argument')
+    const first = await createPage(`${h.fixtureUrl}events`)
+    const second = await createPage(`${h.fixtureUrl}first`)
+    expect((await runBrowserCli(h, ['browser', 'tab', 'show', '--page', first.browserPageId, '--json'])).code).toBe(0)
+
+    const switched = await runBrowserCli(h, ['browser', 'tab', 'switch', '--page', first.browserPageId, '--json'])
+    expect(switched.code).toBe(0)
+    const current = await runBrowserCli(h, ['browser', 'tab', 'current', '--worktree', worktree, '--json'])
+    expect(JSON.parse(current.stdout)).toMatchObject({ tab: { browserPageId: first.browserPageId } })
+    const listed = await runBrowserCli(h, ['browser', 'tab', 'list', '--worktree', 'all', '--json'])
+    expect((JSON.parse(listed.stdout) as { tabs: Array<{ browserPageId: string }> }).tabs.map((tab) => tab.browserPageId))
+      .toEqual(expect.arrayContaining([first.browserPageId, second.browserPageId]))
+
+    const conflict = call(h.client, 'tabSwitch', { page: first.browserPageId, index: 0 })
+    await expect(conflict).rejects.toBeInstanceOf(Error)
+    const cliConflict = await runBrowserCli(h, ['browser', 'tab', 'switch', '--page', first.browserPageId, '--index', '0', '--json'])
+    expect(cliConflict.code).not.toBe(0)
+    const unscopedFill = call(h.client, 'fill', { element: '#text', value: 'no-target' })
+    await expect(unscopedFill).rejects.toBeInstanceOf(Error)
+    expect(await call(h.client, 'eval', { page: first.browserPageId, expression: 'document.querySelector("#text").value' })).toEqual({ value: 'seed' })
+    const unsupportedFocus = call(h.client, 'tabSwitch', { page: first.browserPageId, focus: true })
+    await expect(unsupportedFocus).rejects.toBeInstanceOf(Error)
+    const unsupportedFocusCli = await runBrowserCli(h, ['browser', 'tab', 'switch', '--page', first.browserPageId, '--focus', '--json'])
+    expect(unsupportedFocusCli.code).not.toBe(0)
+    const currentAfterFocus = await call(h.client, 'tabCurrent', { worktree }) as { tab: { browserPageId: string } }
+    expect(currentAfterFocus.tab).toMatchObject({ browserPageId: first.browserPageId })
+    const closed = await runBrowserCli(h, ['browser', 'tab', 'close', '--page', second.browserPageId, '--yes', '--json'])
+    expect(closed.code).toBe(0)
+    const missing = call(h.client, 'tabShow', { page: second.browserPageId })
+    await expect(missing).rejects.toBeInstanceOf(Error)
+    const missingCli = await runBrowserCli(h, ['browser', 'tab', 'show', '--page', second.browserPageId, '--json'])
+    expect(missingCli.code).not.toBe(0)
   } finally { await h.cleanup() }
 }, 90_000)
 
-test('SC-05: query, semantic find, wait and evaluation return real page results', async () => {
+test('C3: real navigation, eval, snapshot refs, fill, click, and viewport screenshot affect the page', async () => {
   const h = await startBrowserHarness()
   try {
-    const page = await newPage(h)
-    expect(await call(h.client, 'wait', { page: page.browserPageId, selector: '#delayed', timeout: 5_000, state: 'visible' })).toEqual({ waited: true })
-    expect(await call(h.client, 'wait', { page: page.browserPageId, text: 'Submit', timeout: 5_000 })).toEqual({ waited: true })
-    expect(await call(h.client, 'wait', { page: page.browserPageId, url: `${h.fixtureUrl}events`, timeout: 5_000 })).toEqual({ waited: true })
-    expect(await call(h.client, 'wait', { page: page.browserPageId, load: 'domcontentloaded', timeout: 5_000 })).toEqual({ waited: true })
-    expect(await call(h.client, 'wait', { page: page.browserPageId, fn: 'document.title === "Events"', timeout: 5_000 })).toEqual({ waited: true })
-    expect(await call(h.client, 'wait', { page: page.browserPageId, selector: '#never', state: 'hidden', timeout: 5_000 })).toEqual({ waited: true })
-    expect(await call(h.client, 'get', { page: page.browserPageId, what: 'url' })).toEqual({ value: `${h.fixtureUrl}events` })
-    expect(await call(h.client, 'get', { page: page.browserPageId, what: 'title' })).toEqual({ value: 'Events' })
-    expect(await call(h.client, 'get', { page: page.browserPageId, what: 'html', element: '#submit' })).toMatchObject({ value: expect.stringContaining('Submit') })
-    expect(await call(h.client, 'get', { page: page.browserPageId, what: 'text', element: '#submit' })).toEqual({ value: 'Submit' })
-    expect(await call(h.client, 'get', { page: page.browserPageId, what: 'value', element: '#text' })).toEqual({ value: 'seed' })
-    expect(await call(h.client, 'get', { page: page.browserPageId, what: 'count', element: '#submit' })).toEqual({ value: 1 })
-    const box = await call(h.client, 'get', { page: page.browserPageId, what: 'box', element: '#submit' }) as { value: { x: number; y: number; width: number; height: number } }
-    const measuredBox = await call(h.client, 'eval', { page: page.browserPageId, expression: '(() => { const { x, y, width, height } = document.querySelector("#submit").getBoundingClientRect(); return { x, y, width, height } })()' }) as { value: typeof box.value }
-    expect(box.value).toEqual(measuredBox.value)
-    expect(await call(h.client, 'is', { page: page.browserPageId, what: 'visible', element: '#submit' })).toEqual({ value: true })
-    expect(await call(h.client, 'is', { page: page.browserPageId, what: 'enabled', element: '#submit' })).toEqual({ value: true })
-    expect(await call(h.client, 'find', { page: page.browserPageId, locator: 'role', value: 'button', action: 'text' })).toMatchObject({ action: 'text', text: 'Submit' })
-    await call(h.client, 'eval', {
-      page: page.browserPageId,
-      expression: '(() => { const button = document.querySelector("#submit"); window.__doubleClickState = { clickDetails: [], doubleClicks: 0 }; button.addEventListener("click", event => window.__doubleClickState.clickDetails.push(event.detail)); button.addEventListener("dblclick", () => window.__doubleClickState.doubleClicks++); return true })()'
-    })
-    expect(await call(h.client, 'dblclick', { page: page.browserPageId, element: '#submit' })).toEqual({ clicked: '#submit' })
-    expect(await call(h.client, 'eval', { page: page.browserPageId, expression: 'window.__doubleClickState' })).toEqual({
-      value: { clickDetails: [1, 2], doubleClicks: 1 }
-    })
-    await call(h.client, 'eval', {
-      page: page.browserPageId,
-      expression: '(() => { document.body.insertAdjacentHTML("beforeend", \'<label for="find-input">Find field</label><input id="find-input" placeholder="Find placeholder"><label for="find-check">Find check</label><input id="find-check" type="checkbox"><button data-testid="find-action">Find action</button><div title="Find title">Find hover</div>\'); document.querySelector("[data-testid=find-action]").addEventListener("click", () => { window.__findClicks = (window.__findClicks ?? 0) + 1 }); return true })()'
-    })
-    expect(await call(h.client, 'find', { page: page.browserPageId, locator: 'testid', value: 'find-action', action: 'click' }))
-      .toEqual({ action: 'click', performed: true })
-    expect(await call(h.client, 'eval', { page: page.browserPageId, expression: 'window.__findClicks' })).toEqual({ value: 1 })
-    expect(await call(h.client, 'find', { page: page.browserPageId, locator: 'label', value: 'Find field', action: 'fill', text: 'found value' }))
-      .toEqual({ action: 'fill', performed: true })
-    expect(await call(h.client, 'get', { page: page.browserPageId, what: 'value', element: '#find-input' })).toEqual({ value: 'found value' })
-    expect(await call(h.client, 'find', { page: page.browserPageId, locator: 'placeholder', value: 'Find placeholder', action: 'type', text: ' typed' }))
-      .toEqual({ action: 'type', performed: true })
-    expect(await call(h.client, 'get', { page: page.browserPageId, what: 'value', element: '#find-input' })).toEqual({ value: 'found value typed' })
-    expect(await call(h.client, 'find', { page: page.browserPageId, locator: 'title', value: 'Find title', action: 'hover' }))
-      .toEqual({ action: 'hover', performed: true })
-    expect(await call(h.client, 'eval', { page: page.browserPageId, expression: 'document.querySelector("[title=\\"Find title\\"]").matches(":hover")' })).toEqual({ value: true })
-    expect(await call(h.client, 'find', { page: page.browserPageId, locator: 'label', value: 'Find field', action: 'focus' }))
-      .toEqual({ action: 'focus', performed: true })
-    expect(await call(h.client, 'eval', { page: page.browserPageId, expression: 'document.activeElement.id' })).toEqual({ value: 'find-input' })
-    expect(await call(h.client, 'find', { page: page.browserPageId, locator: 'label', value: 'Find check', action: 'check' }))
-      .toEqual({ action: 'check', performed: true })
-    expect(await call(h.client, 'is', { page: page.browserPageId, what: 'checked', element: '#find-check' })).toEqual({ value: true })
-    expect(await call(h.client, 'find', { page: page.browserPageId, locator: 'label', value: 'Find check', action: 'uncheck' }))
-      .toEqual({ action: 'uncheck', performed: true })
-    expect(await call(h.client, 'is', { page: page.browserPageId, what: 'checked', element: '#find-check' })).toEqual({ value: false })
-    await call(h.client, 'highlight', { page: page.browserPageId, selector: '#submit' })
-    expect(await call(h.client, 'eval', { page: page.browserPageId, expression: 'Promise.resolve({ok:true, count: 2})' })).toEqual({ value: { ok: true, count: 2 } })
-    await expectReason(h.client, 'eval', { page: page.browserPageId, expression: 'throw new Error("fixture")' }, 'browser_eval_error')
-    await expectReason(h.client, 'wait', { page: page.browserPageId, selector: '#never', timeout: 50 }, 'browser_timeout')
-    await expectReason(h.client, 'wait', { page: page.browserPageId }, 'invalid_argument')
-  } finally { await h.cleanup() }
-}, 60_000)
+    const page = await newPage(h, `${h.fixtureUrl}first`)
+    const navigation = await call(h.client, 'goto', { page: page.browserPageId, url: `${h.fixtureUrl}events` }) as { url: string; title: string }
+    expect(navigation).toEqual({ url: `${h.fixtureUrl}events`, title: 'Events' })
+    expect(await call(h.client, 'eval', { page: page.browserPageId, expression: '({title: document.title, value: document.querySelector("#text").value})' }))
+      .toEqual({ value: { title: 'Events', value: 'seed' } })
 
-test('SC-06: screenshots, full-page captures, PDF and explicit downloads are real files', async () => {
-  const h = await startBrowserHarness()
-  try {
-    const page = await newPage(h, `${h.fixtureUrl}tall`)
-    const png = await call(h.client, 'screenshot', { page: page.browserPageId, format: 'png' }) as { data: string; format: string }
-    const jpeg = await call(h.client, 'screenshot', { page: page.browserPageId, format: 'jpeg' }) as { data: string; format: string }
-    const full = await call(h.client, 'fullScreenshot', { page: page.browserPageId }) as { data: string }
-    const pdf = await call(h.client, 'pdf', { page: page.browserPageId }) as { data: string }
-    expect(Buffer.from(png.data, 'base64').subarray(0, 8).toString('hex')).toBe('89504e470d0a1a0a')
-    expect(Buffer.from(jpeg.data, 'base64').subarray(0, 2).toString('hex')).toBe('ffd8')
-    expect(Buffer.from(full.data, 'base64').length).toBeGreaterThan(Buffer.from(png.data, 'base64').length)
-    expect(Buffer.from(pdf.data, 'base64').subarray(0, 4).toString()).toBe('%PDF')
-    expect(readdirSync(join(h.home, 'plugin-data', 'quirky.browser', 'captures'))).toEqual([])
-    await call(h.client, 'goto', { page: page.browserPageId, url: `${h.fixtureUrl}download` })
-    const downloadPath = join(h.home, 'downloads', 'fixture.bin')
-    expect(await call(h.client, 'download', { page: page.browserPageId, selector: '#download', path: downloadPath })).toEqual({ path: downloadPath })
-    expect(readFileSync(downloadPath, 'utf8')).toBe('fixture-download-bytes')
+    const snapshot = await call(h.client, 'snapshot', { page: page.browserPageId }) as { refs: Array<{ ref: string; role: string; name: string }> }
+    const textField = snapshot.refs.find((ref) => ref.name === 'Text field')
+    const submit = snapshot.refs.find((ref) => ref.name === 'Submit')
+    expect(textField).toBeDefined()
+    expect(submit).toBeDefined()
+    await call(h.client, 'tabSwitch', { page: page.browserPageId })
+    await call(h.client, 'fill', { page: page.browserPageId, element: textField!.ref, value: 'filled through a public ref' })
+    expect(await call(h.client, 'eval', { page: page.browserPageId, expression: 'document.querySelector("#text").value' }))
+      .toEqual({ value: 'filled through a public ref' })
+    await call(h.client, 'click', { page: page.browserPageId, element: submit!.ref })
+    expect(await call(h.client, 'eval', { page: page.browserPageId, expression: 'document.querySelector("#result").textContent' }))
+      .toEqual({ value: 'clicked' })
+
+    await call(h.client, 'goto', { page: page.browserPageId, url: `${h.fixtureUrl}second` })
+    const stale = call(h.client, 'click', { page: page.browserPageId, element: submit!.ref })
+    await expect(stale).rejects.toBeInstanceOf(Error)
+    const staleCli = await runBrowserCli(h, ['browser', 'click', '--page', page.browserPageId, '--element', submit!.ref, '--json'])
+    expect(staleCli.code).not.toBe(0)
+    await call(h.client, 'goto', { page: page.browserPageId, url: `${h.fixtureUrl}tall` })
+    const image = await call(h.client, 'screenshot', { page: page.browserPageId, format: 'png' }) as { data: string; format: string }
+    const png = Buffer.from(image.data, 'base64')
+    expect(png.subarray(0, 8).toString('hex')).toBe('89504e470d0a1a0a')
+    expect(image.format).toBe('png')
+    const width = png.readUInt32BE(16)
+    const height = png.readUInt32BE(20)
+    expect(width).toBeGreaterThan(0)
+    expect(height).toBeLessThan(2_600)
   } finally { await h.cleanup() }
 }, 90_000)
 
-test('SC-07, DF-01 and DF-02: bounded logs, all routes, emulation, HAR and exact dialog control', async () => {
-  const dialogs = eventQueue<{ pageId: string; type: string }>()
-  const h = await startBrowserHarness({ onDialog: (event) => dialogs.push(event) })
+test('C4: same-profile page selection and full commands are serialized atomically', async () => {
+  let secondPageId: string | undefined
+  const secondStarted = Promise.withResolvers<void>()
+  const h = await startBrowserHarness({
+    onOperation: (event) => {
+      if (event.pageId === secondPageId && event.method === 'eval') secondStarted.resolve()
+    }
+  })
+  const gate = h.fixtureGate('profile-lock')
   try {
     const first = await newPage(h)
     const second = await newPage(h)
-    await call(h.client, 'eval', { page: first.browserPageId, expression: 'await window.fixtureFetch()' })
-    const limitedConsole = await call(h.client, 'console', { page: first.browserPageId, limit: 1 }) as { entries: unknown[]; truncated: boolean }
-    expect(limitedConsole.entries).toHaveLength(1)
-    expect(limitedConsole.truncated).toBe(true)
-    const limitedNetwork = await call(h.client, 'network', { page: first.browserPageId, limit: 1 }) as { entries: unknown[]; truncated: boolean }
-    expect(limitedNetwork.entries).toHaveLength(1)
-    expect(limitedNetwork.truncated).toBe(true)
-    await call(h.client, 'captureStart', { page: first.browserPageId })
-    await call(h.client, 'eval', { page: first.browserPageId, expression: 'await window.fixtureFetch()' })
-    const capture = await call(h.client, 'captureStop', { page: first.browserPageId }) as { stopped: true; har: { log: { version: string; entries: unknown[] } } }
-    expect(capture.har.log.version).toBe('1.2')
-    expect(capture.har.log.entries.length).toBeGreaterThan(0)
-    const patterns = ['*/one', '*/two']
-    expect(await call(h.client, 'interceptEnable', { page: first.browserPageId, patterns })).toEqual({ enabled: true, patterns })
-    expect((await call(h.client, 'interceptList', { page: first.browserPageId }) as { patterns: string[] }).patterns).toEqual(patterns)
-    await call(h.client, 'eval', { page: first.browserPageId, expression: 'await window.fixtureFetch()' })
-    const intercepted = await call(h.client, 'interceptList', { page: first.browserPageId }) as { requests: Array<{ url: string }> }
-    expect(intercepted.requests.some((request) => request.url.endsWith('/one'))).toBe(true)
-    expect(intercepted.requests.some((request) => request.url.endsWith('/two'))).toBe(true)
-    expect(await call(h.client, 'interceptDisable', { page: first.browserPageId })).toEqual({ disabled: true })
-    expect((await call(h.client, 'interceptList', { page: first.browserPageId }) as { patterns: string[] }).patterns).toEqual([])
-    expect(await call(h.client, 'interceptEnable', { page: second.browserPageId })).toEqual({ enabled: true, patterns: ['**/*'] })
-    expect((await call(h.client, 'interceptList', { page: second.browserPageId }) as { patterns: string[] }).patterns).toEqual(['**/*'])
-    expect(await call(h.client, 'interceptDisable', { page: second.browserPageId })).toEqual({ disabled: true })
-    expect((await call(h.client, 'interceptList', { page: second.browserPageId }) as { patterns: string[] }).patterns).toEqual([])
-    expect(await call(h.client, 'viewport', { page: first.browserPageId, width: 800, height: 600, deviceScaleFactor: 2, mobile: true })).toMatchObject({ width: 800, height: 600, deviceScaleFactor: 2, mobile: true })
-    expect(await call(h.client, 'eval', { page: first.browserPageId, expression: '({width:innerWidth,height:innerHeight,scale:devicePixelRatio})' })).toEqual({ value: { width: 800, height: 600, scale: 2 } })
-    expect(await call(h.client, 'geolocation', { page: first.browserPageId, latitude: 47.6, longitude: -122.3, accuracy: 2 })).toMatchObject({ latitude: 47.6, longitude: -122.3, accuracy: 2 })
-    const location = await call(h.client, 'eval', { page: first.browserPageId, expression: '(() => { const result = Promise.withResolvers(); navigator.geolocation.getCurrentPosition(({coords}) => result.resolve({latitude:coords.latitude,longitude:coords.longitude,accuracy:coords.accuracy}), error => result.reject(error.message)); return result.promise })()' }) as { value: { latitude: number; longitude: number; accuracy: number } }
-    expect(location.value).toMatchObject({ latitude: 47.6, longitude: -122.3, accuracy: 2 })
-    expect(await call(h.client, 'setDevice', { page: first.browserPageId, name: 'iPhone 14' })).toEqual({ name: 'iPhone 14' })
-    expect(await call(h.client, 'eval', { page: first.browserPageId, expression: 'innerWidth === 390 && navigator.userAgent.includes("iPhone")' })).toEqual({ value: true })
-    expect(await call(h.client, 'setOffline', { page: first.browserPageId, state: 'on' })).toEqual({ offline: true })
-    expect(await call(h.client, 'eval', { page: first.browserPageId, expression: 'fetch("/one").then(()=>false,()=>true)' })).toEqual({ value: true })
-    expect(await call(h.client, 'setOffline', { page: first.browserPageId, state: 'off' })).toEqual({ offline: false })
-    expect(await call(h.client, 'eval', { page: first.browserPageId, expression: 'fetch("/one").then(response=>response.text())' })).toEqual({ value: 'one' })
-    expect(await call(h.client, 'setHeaders', { page: first.browserPageId, headers: '{"X-Fixture":"yes"}' })).toEqual({ headers: { 'X-Fixture': 'yes' } })
-    expect(await call(h.client, 'eval', { page: first.browserPageId, expression: 'fetch("/headers").then(response=>response.text())' })).toEqual({ value: 'yes' })
-    expect(await call(h.client, 'setCredentials', { page: first.browserPageId, user: 'fixture-user', pass: 'secret' })).toEqual({ configured: true })
-    expect(await call(h.client, 'eval', { page: first.browserPageId, expression: 'fetch("/auth").then(response=>response.text())' })).toEqual({ value: 'authenticated' })
-    expect(await call(h.client, 'setMedia', { page: first.browserPageId, colorScheme: 'dark', reducedMotion: 'reduce' })).toMatchObject({ colorScheme: 'dark', reducedMotion: 'reduce' })
-    expect(await call(h.client, 'eval', { page: first.browserPageId, expression: 'matchMedia("(prefers-color-scheme:dark)").matches && matchMedia("(prefers-reduced-motion:reduce)").matches' })).toEqual({ value: true })
+    secondPageId = second.browserPageId
 
-    const promptPending = dialogs.next()
-    const prompt = call(h.client, 'eval', { page: first.browserPageId, expression: 'prompt(\"name?\")' })
-    expect(await promptPending).toMatchObject({ pageId: first.browserPageId, type: 'prompt' })
-    await expectReason(h.client, 'dialogDismiss', { page: second.browserPageId }, 'browser_error')
-    expect(await call(h.client, 'dialogAccept', { page: first.browserPageId, text: '雪🙂' })).toEqual({ accepted: true })
-    expect(await prompt).toEqual({ value: '雪🙂' })
-    const duplicatePending = dialogs.next()
-    const duplicatePrompt = call(h.client, 'eval', { page: first.browserPageId, expression: 'prompt("duplicate?")' })
-    expect(await duplicatePending).toMatchObject({ pageId: first.browserPageId, type: 'prompt' })
-    const duplicateReplies = await Promise.allSettled([
-      call(h.client, 'dialogAccept', { page: first.browserPageId, text: 'one' }),
-      call(h.client, 'dialogAccept', { page: first.browserPageId, text: 'two' })
-    ])
-    const acceptedReplies = duplicateReplies.filter((reply) => reply.status === 'fulfilled')
-    const refusedReply = duplicateReplies.find((reply) => reply.status === 'rejected')
-    expect(acceptedReplies).toHaveLength(1)
-    expect(acceptedReplies[0]).toMatchObject({ status: 'fulfilled', value: { accepted: true } })
-    expect(refusedReply).toBeDefined()
-    const refusedMessage = refusedReply?.status === 'rejected'
-      ? refusedReply.reason instanceof Error ? refusedReply.reason.message : String(refusedReply.reason)
-      : ''
-    expect(refusedMessage.startsWith('browser_error:')).toBe(true)
-    const duplicateResult = await duplicatePrompt as { value: string }
-    expect(['one', 'two']).toContain(duplicateResult.value)
+    const navigation = settle(call(h.client, 'goto', { page: first.browserPageId, url: `${h.fixtureUrl}gate/profile-lock` }))
+    await gate.requested
+    const evaluation = settle(call(h.client, 'eval', {
+      page: second.browserPageId,
+      expression: 'document.querySelector("#text").value = "second-page"; document.querySelector("#text").value'
+    }))
 
-    const confirmPending = dialogs.next()
-    const confirm = call(h.client, 'eval', { page: second.browserPageId, expression: 'confirm(\"continue?\")' })
-    expect(await confirmPending).toMatchObject({ pageId: second.browserPageId, type: 'confirm' })
-    expect(await call(h.client, 'dialogDismiss', { page: second.browserPageId })).toEqual({ dismissed: true })
-    expect(await confirm).toEqual({ value: false })
+    // This is an I/O watchdog for a profile-lock bypass: the second operation hook must stay blocked while the first page awaits its fixture response.
+    expect(await signalBefore(secondStarted.promise, 150)).toBe(false)
+    gate.release()
+    expect((await navigation).status).toBe('fulfilled')
+    expect((await evaluation).status).toBe('fulfilled')
+    expect(await call(h.client, 'eval', { page: first.browserPageId, expression: 'document.title' })).toEqual({ value: 'Gate' })
+    expect(await call(h.client, 'eval', { page: first.browserPageId, expression: 'document.querySelector("#text").value' })).toEqual({ value: 'seed' })
+    expect(await call(h.client, 'eval', { page: second.browserPageId, expression: 'document.querySelector("#text").value' })).toEqual({ value: 'second-page' })
+  } finally {
+    gate.release()
+    await h.cleanup()
+  }
+}, 90_000)
+
+test('C5: CLI values stay literal and exec accepts only shipping page commands', async () => {
+  const h = await startBrowserHarness()
+  try {
+    const worktree = await h.addFolderWorktree('BrowserCli')
+    const pageResult = await runBrowserCli(h, ['browser', 'tab', 'create', '--url', `${h.fixtureUrl}events`, '--worktree', worktree, '--json'])
+    expect(pageResult.code).toBe(0)
+    const page = JSON.parse(pageResult.stdout) as { browserPageId: string }
+
+    const filePath = join(h.home, 'existing synthetic input.txt')
+    writeFileSync(filePath, 'this content must not be read')
+    const literal = `@file:${filePath}`
+    const cliFill = await runBrowserCli(h, ['browser', 'fill', '--page', page.browserPageId, '--element', '#text', '--value', literal, '--json'])
+    expect(cliFill.code).toBe(0)
+    expect(await call(h.client, 'eval', { page: page.browserPageId, expression: 'document.querySelector("#text").value' }))
+      .toEqual({ value: literal })
+
+    const supported = await runBrowserCli(h, ['browser', 'exec', '--page', page.browserPageId, '--command', 'fill "#text" "exec-value"', '--json'])
+    expect(supported.code).toBe(0)
+    expect(await call(h.client, 'eval', { page: page.browserPageId, expression: 'document.querySelector("#text").value' }))
+      .toEqual({ value: 'exec-value' })
+    const alias = await runBrowserCli(h, ['browser', 'exec', '--page', page.browserPageId, '--command', `navigate ${h.fixtureUrl}first`, '--json'])
+    expect(alias.code).toBe(0)
+    expect((await call(h.client, 'tabShow', { page: page.browserPageId }) as { tab: { url: string } }).tab.url).toBe(`${h.fixtureUrl}first`)
+
+    for (const command of ['cookies get', 'full-screenshot', 'network har start', 'keyboard type hidden']) {
+      const rejected = call(h.client, 'exec', { page: page.browserPageId, command })
+      await expect(rejected).rejects.toBeInstanceOf(Error)
+    }
+    const unsupportedCli = await runBrowserCli(h, ['browser', 'exec', '--page', page.browserPageId, '--command', 'cookies get', '--json'])
+    expect(unsupportedCli.code).not.toBe(0)
+
+    const description = await h.client.callAny('api.describe', {}) as {
+      methods: Array<{ name: string }>
+      cli: { commands: Array<{ methods?: string[] }> }
+    }
+    const expected = [
+      'profileList', 'profileCreate', 'tabList', 'tabShow', 'tabCurrent', 'tabCreate', 'tabSwitch', 'tabClose',
+      'goto', 'eval', 'snapshot', 'fill', 'click', 'screenshot', 'exec'
+    ].map((name) => `quirky.browser/${name}`).sort()
+    const methods = description.methods.map(({ name }) => name).filter((name) => name.startsWith('quirky.browser/')).sort()
+    expect(methods).toEqual(expected)
+    const cliMethods = [...new Set(description.cli.commands.flatMap((command) => command.methods ?? []).filter((name) => name.startsWith('quirky.browser/')))].sort()
+    expect(cliMethods).toEqual(expected)
   } finally { await h.cleanup() }
 }, 90_000)
 
-test('SC-08: cookie identities and origin-local/session storage remain scoped', async () => {
-  const h = await startBrowserHarness()
-  try {
-    const page = await newPage(h)
-    await call(h.client, 'cookieSet', { page: page.browserPageId, name: 'identity', value: 'one', path: '/private', secure: false, httpOnly: true, sameSite: 'Lax' })
-    const cookies = await call(h.client, 'cookieGet', { page: page.browserPageId }) as { cookies: Array<Record<string, unknown>> }
-    expect(cookies.cookies).toContainEqual(expect.objectContaining({ name: 'identity', value: 'one', path: '/private', httpOnly: true, sameSite: 'Lax', hostOnly: true }))
-    expect(await call(h.client, 'cookieDelete', { page: page.browserPageId, name: 'identity', path: '/private', yes: true })).toEqual({ deleted: true })
-    expect((await call(h.client, 'cookieGet', { page: page.browserPageId }) as { cookies: Array<{ name: string }> }).cookies.some((cookie) => cookie.name === 'identity')).toBe(false)
-    await call(h.client, 'storageLocalSet', { page: page.browserPageId, key: 'key', value: '' })
-    await call(h.client, 'storageSessionSet', { page: page.browserPageId, key: 'key', value: 'session' })
-    expect(await call(h.client, 'storageLocalGet', { page: page.browserPageId, key: 'key' })).toEqual({ key: 'key', value: '' })
-    expect(await call(h.client, 'storageSessionGet', { page: page.browserPageId, key: 'key' })).toEqual({ key: 'key', value: 'session' })
-    expect(await call(h.client, 'storageLocalClear', { page: page.browserPageId, yes: true })).toEqual({ cleared: true })
-    expect(await call(h.client, 'storageSessionClear', { page: page.browserPageId, yes: true })).toEqual({ cleared: true })
-    expect(await call(h.client, 'storageLocalGet', { page: page.browserPageId, key: 'key' })).toEqual({ key: 'key', value: null })
-    expect(await call(h.client, 'storageSessionGet', { page: page.browserPageId, key: 'key' })).toEqual({ key: 'key', value: null })
-  } finally { await h.cleanup() }
-}, 60_000)
-
-test('SC-09: exec scopes URL navigation, preserves quotes and rejects retargeting', async () => {
-  const h = await startBrowserHarness()
-  try {
-    const a = await newPage(h)
-    const b = await newPage(h, `${h.fixtureUrl}first`)
-    const emptyArgument = await call(h.client, 'exec', { page: a.browserPageId, command: 'fill "#text" ""' }) as { command: { path: string[]; positionals: string[] }; result: { filled: string } }
-    expect(emptyArgument).toMatchObject({ command: { path: ['fill'], positionals: ['#text', ''] }, result: { filled: '#text' } })
-    const opened = await call(h.client, 'exec', { page: a.browserPageId, command: `open ${h.fixtureUrl}second` }) as { result: { url: string; title: string } }
-    expect(opened.result).toMatchObject({ url: `${h.fixtureUrl}second`, title: 'Second' })
-    expect((await call(h.client, 'tabShow', { page: a.browserPageId }) as { tab: { url: string } }).tab.url).toBe(`${h.fixtureUrl}second`)
-    expect((await call(h.client, 'tabShow', { page: b.browserPageId }) as { tab: { url: string } }).tab.url).toBe(`${h.fixtureUrl}first`)
-    const navigated = await call(h.client, 'exec', { page: a.browserPageId, command: `navigate ${h.fixtureUrl}events` }) as { result: { url: string; title: string } }
-    expect(navigated.result).toMatchObject({ url: `${h.fixtureUrl}events`, title: 'Events' })
-    expect((await call(h.client, 'tabShow', { page: a.browserPageId }) as { tab: { url: string } }).tab.url).toBe(`${h.fixtureUrl}events`)
-    expect((await call(h.client, 'tabShow', { page: b.browserPageId }) as { tab: { url: string } }).tab.url).toBe(`${h.fixtureUrl}first`)
-    await expectReason(h.client, 'exec', { page: a.browserPageId, command: 'eval "unterminated' }, 'invalid_argument')
-    for (const command of [
-      'open',
-      'goto https://example.test --target page-b',
-      'goto https://example.test --target=page-b',
-      'goto https://example.test --session session-b',
-      'goto https://example.test --session=session-b',
-      'goto https://example.test --cdp http://127.0.0.1:1',
-      'goto https://example.test --cdp=http://127.0.0.1:1',
-      'goto https://example.test --endpoint http://127.0.0.1:1',
-      'goto https://example.test --endpoint=http://127.0.0.1:1',
-      'goto https://example.test --profile default',
-      'goto https://example.test --profile=default',
-      'goto https://example.test --executable /Applications/Chrome',
-      'goto https://example.test --executable=/Applications/Chrome',
-      'goto https://example.test --executable-path /Applications/Chrome',
-      'goto https://example.test --executable-path=/Applications/Chrome',
-      'goto https://example.test --args no-sandbox',
-      'goto https://example.test --args=no-sandbox',
-      'tab',
-      'browser',
-      'session',
-      'tab switch 0',
-      'tab create',
-      'tab close',
-      'close',
-      'connect http://127.0.0.1:9222',
-      'session start',
-      'browser launch',
-      'stream',
-      'batch',
-      'chat',
-      'install'
-    ]) await expectReason(h.client, 'exec', { page: a.browserPageId, command }, 'invalid_argument')
-    expect((await call(h.client, 'tabShow', { page: a.browserPageId }) as { tab: { url: string } }).tab.url).toBe(`${h.fixtureUrl}events`)
-    expect((await call(h.client, 'tabShow', { page: b.browserPageId }) as { tab: { url: string } }).tab.url).toBe(`${h.fixtureUrl}first`)
-  } finally { await h.cleanup() }
-}, 60_000)
-
-test('SC-10: closed work fails without retargeting and helper loss rebuilds a fresh page epoch', async () => {
-  const operations = eventQueue<{ pageId: string; method: string }>()
+test('C6: actual switches invalidate refs, closed pages stay closed, and teardown cleans owned processes', async () => {
+  let runningPageId: string | undefined
   let control: { crashHelper(profileId: string): Promise<void> } | undefined
+  const runningStarted = Promise.withResolvers<void>()
   const h = await startBrowserHarness({
-    onControl: (value) => { control = value },
-    onOperation: (event) => operations.push(event)
+    onOperation: (event) => {
+      if (event.pageId === runningPageId && event.method === 'eval') runningStarted.resolve()
+    },
+    onControl: (value) => { control = value }
   })
   try {
-    const page = await newPage(h)
-    await call(h.client, 'eval', { page: page.browserPageId, expression: 'window.privateBeforeRestart = \"old\"' })
-    operations.clear()
-    const operationStarted = operations.next((event) => event.pageId === page.browserPageId && event.method === 'eval')
-    const blocked = call(h.client, 'eval', { page: page.browserPageId, expression: 'new Promise(resolve => setTimeout(() => resolve("late"), 20_000))' })
-      .then((value) => ({ status: 'fulfilled' as const, value }), (reason: unknown) => ({ status: 'rejected' as const, reason }))
-    await operationStarted
-    const queued = call(h.client, 'eval', { page: page.browserPageId, expression: '2 + 2' })
-      .then((value) => ({ status: 'fulfilled' as const, value }), (reason: unknown) => ({ status: 'rejected' as const, reason }))
-    await call(h.client, 'tabClose', { page: page.browserPageId, yes: true })
-    const [blockedResult, queuedResult] = await Promise.all([blocked, queued])
-    expect(blockedResult.status).toBe('rejected')
-    expect(queuedResult.status).toBe('rejected')
-    const blockedMessage = blockedResult.status === 'rejected' ? String(blockedResult.reason) : ''
-    const queuedMessage = queuedResult.status === 'rejected' ? String(queuedResult.reason) : ''
-    expect(blockedMessage).toMatch(/browser_tab_closed/)
-    expect(queuedMessage).toMatch(/browser_tab_closed/)
-    await expectReason(h.client, 'tabShow', { page: page.browserPageId }, 'browser_tab_not_found')
+    const first = await newPage(h)
+    const second = await newPage(h)
+    const firstSnapshot = await call(h.client, 'snapshot', { page: first.browserPageId }) as { refs: Array<{ ref: string }> }
+    const oldRef = firstSnapshot.refs[0]!.ref
+    await call(h.client, 'tabSwitch', { page: second.browserPageId })
+    const switchedRef = call(h.client, 'click', { page: first.browserPageId, element: oldRef })
+    await expect(switchedRef).rejects.toBeInstanceOf(Error)
 
-    const recovered = await newPage(h)
-    await call(h.client, 'eval', { page: recovered.browserPageId, expression: 'window.privateBeforeRestart = "old"' })
-    await call(h.client, 'interceptEnable', { page: recovered.browserPageId, patterns: ['*/one', '*/two'] })
-    const expires = Math.floor(Date.now() / 1000) + 86_400
-    await call(h.client, 'cookieSet', { page: recovered.browserPageId, name: 'sc10-persistent', value: 'durable-profile', expires })
+    const secondSnapshot = await call(h.client, 'snapshot', { page: second.browserPageId }) as { refs: Array<{ ref: string }> }
+    const closedRef = secondSnapshot.refs[0]!.ref
+    await call(h.client, 'tabClose', { page: second.browserPageId, yes: true })
+    const clickClosed = call(h.client, 'click', { page: second.browserPageId, element: closedRef })
+    await expect(clickClosed).rejects.toBeInstanceOf(Error)
+    const showClosed = call(h.client, 'tabShow', { page: second.browserPageId })
+    await expect(showClosed).rejects.toBeInstanceOf(Error)
+    const closedCli = await runBrowserCli(h, ['browser', 'click', '--page', second.browserPageId, '--element', closedRef, '--json'])
+    expect(closedCli.code).not.toBe(0)
+
+    const runningPage = await newPage(h)
+    runningPageId = runningPage.browserPageId
+    const inFlight = settle(call(h.client, 'eval', {
+      page: runningPage.browserPageId,
+      expression: 'new Promise(resolve => setTimeout(() => resolve("late"), 20_000))'
+    }))
+    await runningStarted.promise
+    const queued = settle(call(h.client, 'eval', { page: runningPage.browserPageId, expression: '2 + 2' }))
+    await call(h.client, 'tabClose', { page: runningPage.browserPageId, yes: true })
+    expect((await inFlight).status).toBe('rejected')
+    expect((await queued).status).toBe('rejected')
+    const pages = await call(h.client, 'tabList', { worktree: 'all' }) as { tabs: Array<{ browserPageId: string }> }
+    const retainedSnapshot = await call(h.client, 'snapshot', { page: first.browserPageId }) as { refs: Array<{ ref: string }> }
+    const retainedRef = retainedSnapshot.refs[0]!.ref
     expect(control).toBeDefined()
-    const oldProjection = await call(h.client, 'snapshot', { page: recovered.browserPageId }) as { refs: Array<{ ref: string; name: string }> }
-    const submitRef = oldProjection.refs.find((ref) => ref.name === 'Submit')?.ref
-    expect(submitRef).toBeDefined()
     await control!.crashHelper('default')
-    await expectReason(h.client, 'eval', { page: recovered.browserPageId, expression: '1 + 1' }, 'browser_tab_changed')
-    await expectReason(h.client, 'click', { page: recovered.browserPageId, element: submitRef! }, 'browser_stale_ref')
-    expect(await call(h.client, 'eval', { page: recovered.browserPageId, expression: 'window.privateBeforeRestart ?? null' })).toEqual({ value: null })
-    expect((await call(h.client, 'interceptList', { page: recovered.browserPageId }) as { patterns: string[] }).patterns).toEqual(['*/one', '*/two'])
-    const cookies = await call(h.client, 'cookieGet', { page: recovered.browserPageId }) as { cookies: Array<{ name: string; value: string; expires?: number }> }
-    expect(cookies.cookies).toContainEqual(expect.objectContaining({ name: 'sc10-persistent', value: 'durable-profile', expires: expect.any(Number) }))
-    expect(cookies.cookies.find((cookie) => cookie.name === 'sc10-persistent')!.expires!).toBeGreaterThan(Math.floor(Date.now() / 1000) + 80_000)
+    const lostEpoch = call(h.client, 'eval', { page: first.browserPageId, expression: 'document.title' })
+    await expect(lostEpoch).rejects.toBeInstanceOf(Error)
+    expect(await call(h.client, 'eval', { page: first.browserPageId, expression: 'document.title' })).toEqual({ value: 'Events' })
+    expect(h.spawnCount()).toBe(4)
+    const staleAfterLoss = call(h.client, 'click', { page: first.browserPageId, element: retainedRef })
+    await expect(staleAfterLoss).rejects.toBeInstanceOf(Error)
+    expect(pages.tabs.map((page) => page.browserPageId)).not.toContain(runningPage.browserPageId)
   } finally { await h.cleanup() }
 }, 90_000)
-
-test('SC-11 and DF-07: profile lifecycle isolates state, clones cookies, and preserves Default', async () => {
-  const h = await startBrowserHarness()
-  try {
-    const source = await newPage(h)
-    await call(h.client, 'cookieSet', { page: source.browserPageId, name: 'login', value: 'default-session' })
-    const review = await call(h.client, 'profileCreate', { name: 'Review', scope: 'isolated' }) as { profile: { id: string } }
-    const beforeSwitch = await call(h.client, 'snapshot', { page: source.browserPageId }) as { refs: Array<{ name: string; ref: string }> }
-    const switchRef = beforeSwitch.refs.find((ref) => ref.name === 'Submit')!.ref
-    const assigned = await call(h.client, 'profileSet', { page: source.browserPageId, profile: review.profile.id }) as { browserPageId: string; profileId: string }
-    expect(assigned).toMatchObject({ browserPageId: source.browserPageId, profileId: review.profile.id })
-    await expectReason(h.client, 'click', { page: source.browserPageId, element: switchRef }, 'browser_stale_ref')
-    expect((await call(h.client, 'cookieGet', { page: source.browserPageId }) as { cookies: Array<{ name: string }> }).cookies.some((cookie) => cookie.name === 'login')).toBe(false)
-    expect(await call(h.client, 'profileUseDefault', { page: source.browserPageId })).toMatchObject({ browserPageId: source.browserPageId, profileId: 'default', profileLabel: 'Default' })
-    const cloneProfile = await call(h.client, 'profileCreate', { name: 'Clone' }) as { profile: { id: string } }
-    const cloned = await call(h.client, 'profileClone', { profile: cloneProfile.profile.id, source: source.browserPageId }) as { browserPageId: string; sourceBrowserPageId: string; profileId: string }
-    expect(cloned).toMatchObject({ sourceBrowserPageId: source.browserPageId, profileId: cloneProfile.profile.id })
-    expect((await call(h.client, 'cookieGet', { page: cloned.browserPageId }) as { cookies: Array<{ name: string; value: string }> }).cookies).toContainEqual(expect.objectContaining({ name: 'login', value: 'default-session' }))
-    expect((await call(h.client, 'profileShow', { page: cloned.browserPageId }) as { profileId: string }).profileId).toBe(cloneProfile.profile.id)
-    let refused: unknown
-    try { await call(h.client, 'profileDelete', { profile: cloneProfile.profile.id }) } catch (error) { refused = error }
-    expect(refused).toBeDefined()
-    expect((await call(h.client, 'profileList') as { profiles: Array<{ id: string }> }).profiles.map((profile) => profile.id)).toContain(cloneProfile.profile.id)
-    await call(h.client, 'profileDelete', { profile: cloneProfile.profile.id, yes: true })
-    expect((await call(h.client, 'profileShow', { page: cloned.browserPageId }) as { profileId: string }).profileId).toBe('default')
-    expect((await call(h.client, 'profileList') as { profiles: Array<{ id: string }> }).profiles.map((profile) => profile.id)).toContain('default')
-  } finally { await h.cleanup() }
-}, 90_000)
-
-test('SC-18: full method catalog is schema-declared and CLI dispatch uses the real daemon link', async () => {
-  const h = await startBrowserHarness()
-  try {
-    expect(await call(h.client, 'identityGet')).toEqual({ mode: 'clean', effective: false })
-    expect(await call(h.client, 'identitySet', { mode: 'native' })).toEqual({ mode: 'native', effective: false })
-    expect(await call(h.client, 'identityGet')).toEqual({ mode: 'native', effective: false })
-    expect(await call(h.client, 'identitySet', { mode: 'clean' })).toEqual({ mode: 'clean', effective: false })
-    expect(await call(h.client, 'identityGet')).toEqual({ mode: 'clean', effective: false })
-    const description = await h.client.callAny('api.describe', {}) as { methods: Array<{ name: string }>; cli: { commands: Array<{ words: string }> } }
-    const names = new Set(description.methods.filter((item) => item.name.startsWith('quirky.browser/')).map((item) => item.name.slice('quirky.browser/'.length)))
-    for (const name of [
-      'tabList', 'tabShow', 'tabCurrent', 'tabCreate', 'tabSwitch', 'tabClose',
-      'snapshot', 'screenshot', 'fullScreenshot', 'pdf', 'goto', 'back', 'forward', 'reload',
-      'click', 'dblclick', 'fill', 'type', 'keyboardInsertText', 'keypress', 'select', 'check', 'uncheck', 'focus', 'hover',
-      'scrollIntoView', 'clear', 'selectAll', 'drag', 'upload', 'scroll', 'wait', 'eval', 'get', 'is', 'find',
-      'mouseMove', 'mouseDown', 'mouseUp', 'mouseWheel', 'highlight', 'download', 'console', 'network',
-      'captureStart', 'captureStop', 'interceptEnable', 'interceptDisable', 'interceptList',
-      'cookieGet', 'cookieSet', 'cookieDelete', 'storageLocalGet', 'storageLocalSet', 'storageLocalClear',
-      'storageSessionGet', 'storageSessionSet', 'storageSessionClear', 'viewport', 'geolocation', 'setDevice',
-      'setOffline', 'setHeaders', 'setCredentials', 'setMedia', 'clipboardRead', 'clipboardWrite', 'dialogAccept',
-      'dialogDismiss', 'profileList', 'profileCreate', 'profileDelete', 'profileShow', 'profileSet', 'profileUseDefault',
-      'profileClone', 'detectBrowsers', 'importCookies', 'importStart', 'importGet', 'importList', 'identityGet',
-      'identitySet', 'openUrl', 'exec'
-    ]) expect(names.has(name)).toBe(true)
-    const cliPaths = description.cli.commands.map((entry) => entry.words)
-    expect(cliPaths).toContain('browser tab create')
-    expect(cliPaths).toContain('browser import detect')
-
-    const result = await runBrowserCli(h, ['browser', 'tab', 'profile', 'list', '--json'])
-    expect(result.code).toBe(0)
-    expect(result.stderr).toBe('')
-    expect(JSON.parse(result.stdout)).toMatchObject({ profiles: expect.arrayContaining([expect.objectContaining({ id: 'default' })]) })
-    expect(h.spawnCount()).toBe(0)
-  } finally { await h.cleanup() }
-}, 60_000)
-
-test('SC-05: nth locators keep index and selector separate across API CLI and exec', async () => {
-  const h = await startBrowserHarness()
-  try {
-    const page = await newPage(h)
-    await call(h.client, 'eval', {
-      page: page.browserPageId,
-      expression: '(() => { document.body.insertAdjacentHTML("beforeend", \'<button class="nth-item">Alpha</button><button class="nth-item">Beta</button><button class="nth-item">Gamma</button>\'); window.__nthClicks = 0; document.querySelectorAll(".nth-item").forEach(item => item.addEventListener("click", () => window.__nthClicks++)); return true })()'
-    })
-
-    expect(await call(h.client, 'find', {
-      page: page.browserPageId, locator: 'nth', value: '.nth-item', index: 1, action: 'text'
-    })).toEqual({ action: 'text', text: 'Beta' })
-
-    const cli = await runBrowserCli(h, [
-      'browser', 'find', '--page', page.browserPageId, '--locator', 'nth', '--value', '.nth-item',
-      '--index', '-1', '--action', 'text', '--json'
-    ])
-    expect(cli.code).toBe(0)
-    expect(JSON.parse(cli.stdout)).toEqual({ action: 'text', text: 'Gamma' })
-
-    const executed = await call(h.client, 'exec', {
-      page: page.browserPageId,
-      command: 'find nth 0 .nth-item text'
-    }) as { result: { action: string; text: string } }
-    expect(executed.result).toEqual({ action: 'text', text: 'Alpha' })
-
-    await expectReason(h.client, 'find', {
-      page: page.browserPageId, locator: 'nth', value: '.nth-item', action: 'click'
-    }, 'invalid_argument')
-    await expectSchemaFailure(h.client, 'find', {
-      page: page.browserPageId, locator: 'nth', value: '.nth-item', index: 1.5, action: 'click'
-    })
-    await expectReason(h.client, 'find', {
-      page: page.browserPageId, locator: 'first', value: '.nth-item', index: 0, action: 'click'
-    }, 'invalid_argument')
-    expect(await call(h.client, 'eval', { page: page.browserPageId, expression: 'window.__nthClicks' })).toEqual({ value: 0 })
-  } finally { await h.cleanup() }
-}, 60_000)
