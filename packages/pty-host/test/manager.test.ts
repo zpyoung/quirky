@@ -63,6 +63,29 @@ async function feed(term: Terminal, bytes: Uint8Array): Promise<void> {
   await new Promise<void>((resolve) => term.write(bytes, resolve))
 }
 
+/** A /bin/sh command that writes `bytes` to the terminal one byte at a time, pausing between bytes. */
+function dribble(bytes: string): string {
+  return Array.from(enc(bytes), (b) => `printf '\\${b.toString(8).padStart(3, '0')}'; sleep 0.05`).join('; ')
+}
+
+/** Every visible cell of the active buffer, with the colours and attributes that make it look the way it does. */
+function visibleCells(term: Terminal): string[][] {
+  const buffer = term.buffer.active
+  return Array.from({ length: term.rows }, (_, y) => {
+    const line = buffer.getLine(buffer.baseY + y)!
+    return Array.from({ length: term.cols }, (_, x) => {
+      const cell = line.getCell(x)!
+      return [
+        cell.getChars() || ' ',
+        `fg${cell.getFgColorMode()}:${cell.getFgColor()}`,
+        `bg${cell.getBgColorMode()}:${cell.getBgColor()}`,
+        cell.isBold() ? 'b' : '',
+        cell.isInverse() ? 'i' : ''
+      ].join('|')
+    })
+  })
+}
+
 function bufferLines(term: Terminal): string[] {
   const buffer = term.buffer.active
   return Array.from({ length: buffer.length }, (_, y) => buffer.getLine(y)!.translateToString(true))
@@ -251,6 +274,26 @@ describe('facts', () => {
     expect(manager.list()[0]).toMatchObject({ title: 't2', cwd: '/tmp' })
   })
 
+  test('SC-32: sequences split across reads are seen once', async () => {
+    const { manager } = newManager()
+    const facts = factEvents(manager)
+    const script = [
+      dribble('\x07'),
+      dribble('\x1b]133;D;4\x07'),
+      dribble('\x1b]7;file://host/tmp\x07'),
+      `printf 'split-done\\n'`,
+      'sleep 30'
+    ].join('; ')
+    await manager.create(params('split', sh(script)))
+    await readUntil(manager, 'split', 0, (lines) => lines.includes('split-done'), 20000)
+    expect(facts).toEqual([
+      { type: 'fact', sessionId: 'split', fact: { kind: 'bell' } },
+      { type: 'fact', sessionId: 'split', fact: { kind: 'command-finished', exitCode: 4 } },
+      { type: 'fact', sessionId: 'split', fact: { kind: 'cwd', cwd: '/tmp' } }
+    ])
+    expect(manager.list()[0]).toMatchObject({ cwd: '/tmp' })
+  }, 30000)
+
   test('a listener that stops listening gets no more events', async () => {
     const { manager } = newManager()
     const seen: PtyEvent[] = []
@@ -287,6 +330,62 @@ describe('attach', () => {
     const none = await manager.subscribe('s', () => {}, { historyLines: 0 })
     expect((await paint(base64ToBytes(none.replay))).buffer.active.baseY).toBeLessThanOrEqual(1)
   }, 30000)
+
+  test('SC-7: attach restores a full-screen program frame and modes', async () => {
+    const { manager } = newManager()
+    const frame = [
+      '\\033[?1049h',
+      '\\033[?2004h',
+      '\\033[?1000h',
+      '\\033[2J',
+      '\\033[1;3H\\033[31mred\\033[0m \\033[1;42mgreen-bold\\033[0m',
+      '\\033[3;5H\\033[38;5;208morange\\033[0m',
+      '\\033[5;1H\\033[48;2;10;20;30m\\033[38;2;200;100;50mtruecolor\\033[0m',
+      '\\033[7;2H\\033[7mreverse\\033[0m',
+      '\\033[10;20H'
+    ].join('')
+    await manager.create(params('full', sh(`printf '${frame}'; sleep 30`)))
+    const out = await tap(manager, 'full')
+    const hostScreen = await waitFor(
+      async () => {
+        const snap = await manager.snapshot('full')
+        return snap.ansi.includes('truecolor') && snap.cursor.y === 9 ? snap : null
+      },
+      5000,
+      'the frame'
+    )
+    const sub = await manager.subscribe('full', () => {}, { mode: 'screen' })
+    expect(sub).toMatchObject({ cols: 80, rows: 24 })
+    const pane = await paint(base64ToBytes(sub.replay), sub.cols, sub.rows)
+    const truth = await paint(enc(out.all()), 80, 24)
+
+    expect(truth.buffer.active.type).toBe('alternate')
+    expect(pane.buffer.active.type).toBe('alternate')
+    expect(visibleCells(pane)).toEqual(visibleCells(truth))
+    expect(bufferLines(pane).slice(-24).slice(0, 7).map((line) => line.trimEnd())).toEqual([
+      '  red green-bold',
+      '',
+      '    orange',
+      '',
+      'truecolor',
+      '',
+      ' reverse'
+    ])
+    const cells = visibleCells(pane)
+    expect(cells[0]![2]).toBe('r|fg16777216:1|bg0:-1||')
+    expect(cells[0]![6]).toBe('g|fg0:-1|bg16777216:2|b|')
+    expect(cells[2]![4]).toBe('o|fg33554432:208|bg0:-1||')
+    expect(cells[4]![0]).toBe('t|fg50331648:13132850|bg50331648:660510||')
+    expect(cells[6]![1]).toBe('r|fg0:-1|bg0:-1||i')
+    expect({ x: pane.buffer.active.cursorX, y: pane.buffer.active.cursorY }).toEqual({ x: 19, y: 9 })
+    expect(pane.modes.bracketedPasteMode).toBe(true)
+    expect(pane.modes.mouseTrackingMode).not.toBe('none')
+
+    const fromSnapshot = await paint(enc(hostScreen.ansi), 80, 24)
+    expect(visibleCells(fromSnapshot)).toEqual(visibleCells(truth))
+    expect(hostScreen.cursor).toEqual({ x: 19, y: 9 })
+    expect(hostScreen.modes).toEqual({ alternateScreen: true, bracketedPaste: true, mouseTracking: true, applicationCursor: false })
+  })
 
   test('SC-9: the replay and the live stream join without a gap or a repeat', async () => {
     const { manager } = newManager()

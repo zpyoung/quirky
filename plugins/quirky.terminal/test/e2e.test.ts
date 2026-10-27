@@ -1,7 +1,7 @@
 import { afterEach, expect, test } from 'bun:test'
-import { existsSync, mkdirSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, readdirSync } from 'node:fs'
 import { basename, join } from 'node:path'
-import type { Session } from '@quirky/protocol'
+import { base64ToBytes, type Session } from '@quirky/protocol'
 import {
   E2eHarness,
   cleanupAll,
@@ -96,6 +96,53 @@ scenario('SC-2: input sent before the prompt waits for it and runs once, in orde
   expect(outputs).toEqual(['one', 'two'])
   expect(rows.filter((line) => line.endsWith('echo one'))).toHaveLength(1)
   expect((await h.hostRow(session.id))?.shellState).toBe('ready')
+})
+
+/** The bytes of every history log file the PTY host wrote for a session. */
+function sessionLogText(home: string, id: string): string {
+  const dir = join(home, 'sessions', id)
+  return readdirSync(dir)
+    .filter((name) => /^output.*\.log$/.test(name))
+    .map((name) => readFileSync(join(dir, name), 'latin1'))
+    .join('')
+}
+
+scenario('SC-3: the ready marker never shows', async () => {
+  const shells = ['/bin/zsh', '/bin/bash'].filter((shell) => {
+    const present = existsSync(shell)
+    if (!present) console.warn(`SC-3: skipping ${shell}, it is not installed on this machine`)
+    return present
+  })
+  expect(shells).toContain('/bin/zsh')
+
+  for (const shell of shells) {
+    const h = await start({ shell })
+    const session = await h.newSession()
+    await waitFor(`${shell} ready`, async () => (await h.hostRow(session.id))?.shellState === 'ready')
+    const name = basename(h.repo)
+    await waitFor(`${shell} prompt in the snapshot`, async () => (await h.ok(['terminal', 'snapshot', session.id])).includes(name) || undefined)
+    await h.run(session.id, 'seq 1 60')
+    await waitFor(`${shell} prompt in the log`, () => sessionLogText(h.home, session.id).includes(name) || undefined)
+
+    const snapshot = JSON.stringify(await h.call('quirky.terminal/snapshot', { session: session.id }))
+    const history = JSON.stringify([
+      await h.call('quirky.terminal/history', { session: session.id }),
+      await h.call('quirky.terminal/history', { session: session.id, format: 'ansi' })
+    ])
+    const pane = await h.attach(session.id)
+    const replay = new TextDecoder().decode(base64ToBytes(pane.result.replay))
+    await pane.detach()
+    const logged = sessionLogText(h.home, session.id)
+
+    expect(snapshot, `${shell} snapshot`).toContain(name)
+    expect(history, `${shell} history`).toContain('seq 1 60')
+    expect(replay, `${shell} replay`).toContain(name)
+    for (const [what, content] of [['snapshot', snapshot], ['history', history], ['replay', replay], ['log', logged]] as const) {
+      expect(content, `${shell} ${what}`).not.toContain('777')
+      expect(content, `${shell} ${what}`).not.toContain('quirky-shell-ready')
+    }
+    await h.cleanup()
+  }
 })
 
 scenario('SC-6: restarting quirkyd keeps a running command and repaints the pane', async () => {
