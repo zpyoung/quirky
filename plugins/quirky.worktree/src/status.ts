@@ -33,11 +33,12 @@ export type WindowDisplay = { display: AgentDisplayState; label: string }
 
 /**
  * What a window draws for an agent-status summary at `now`: the summary's own display and label,
- * unless the state is unfinished and has had no evidence for 30 minutes. Window code can't import
+ * unless the state is unfinished and has had no evidence for 30 minutes. A restored-unconfirmed
+ * summary never decays: only fresh evidence confirms it. Window code can't import
  * plugin code, so `quirky.session/src/window/status.ts` carries a copy; keep the two in step.
  */
 export function windowDisplay(summary: AgentStatusSummary, now: number, sessionRunning: boolean): WindowDisplay {
-  if (summary.state !== 'done' && now - summary.evidenceAt > STALE_AFTER_MS) {
+  if (summary.state !== 'done' && !summary.restoredUnconfirmed && now - summary.evidenceAt > STALE_AFTER_MS) {
     return sessionRunning ? { display: 'unverifiable', label: 'No recent update' } : { display: 'idle', label: 'Idle' }
   }
   return { display: summary.display, label: summary.label }
