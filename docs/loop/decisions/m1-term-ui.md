@@ -522,4 +522,4 @@
 - **Source:** assumed — autonomous
 
 ## Progress
-Waves 1–3 and the cp1 fix batch merged (350bc59 + test fix b16e767; gate green apart from the pinned word list, fixed). Wave 4 (D1 window wiring with overrides/commands/keybindings/panel/overlay and the floating overlay; D2 CLI/API scenario tests in test/e2e/) dispatched from b16e767 on sdd/termui/D1, D2. Checkpoint cp2 (d2bed5f..b16e767) running. Next: merge wave 4, fix cp2 findings, wave 5 (E1/E2 UI scenario tests in test/e2e-ui/ against a real daemon and the headless window; briefs in the session scratchpad), then catch-up merge of build/roadmap, Final Round 1, the like-a-user web pass, land.
+All five waves and three checkpoint fix batches merged (a1c5387), with the catch-up merge of build/roadmap (m1-worktrees) and the descriptor fix (D51). Gate w5 running. Next: Final Round 1 (deep, three lenses, two partitions over build/roadmap..HEAD minus tests/docs), one fix batch, the like-a-user web pass on the (UI) scenarios, native handoff file, then land. Known small bug for the final batch: the Add Quick Command dialog doesn't preselect Project scope when the repo lookup resolves after it opens.
