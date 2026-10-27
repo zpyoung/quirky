@@ -2,7 +2,7 @@ import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { Handler, HostingEnv, Scope } from './env'
-import { isRecord, nonEmptyString, parseBranch, parseIdentity, parsePositiveInteger, sameIdentity, type IdentityValue } from './pr-data'
+import { isRecord, nonEmptyString, parseBranch, parseIdentity, parsePositiveInteger, sameIdentity, providerReason, type IdentityValue } from './pr-data'
 import type { PRLookup } from './pr-review'
 
 type Blocker = { reason: string; nextAction: string; message: string }
@@ -154,8 +154,12 @@ async function remoteBaseExists(env: HostingEnv, scope: Scope, base: string): Pr
 
 async function authenticated(env: HostingEnv, scope: Scope): Promise<boolean> {
   try {
-    await env.run(scope, ['auth', 'status'], { idempotent: true })
-    return true
+    const accounts = await env.authAccounts(scope, true)
+    const host = scope.origin.host.toLowerCase()
+    const user = scope.binding?.user.toLowerCase()
+    return accounts.some((account) =>
+      account.host.toLowerCase() === host && (user === undefined || account.user.toLowerCase() === user)
+    )
   } catch {
     return false
   }
@@ -172,7 +176,7 @@ export async function creationEligibility(
   try {
     scope = await env.resolve(params, caller)
   } catch (error) {
-    const reason = isRecord(error) && isRecord(error.data) && typeof error.data.reason === 'string' ? error.data.reason : undefined
+    const reason = providerReason(error)
     if (reason !== 'unsupported_provider') throw error
     const item = blocker('unsupported_provider', 'select_github_repo', 'Pull request creation requires a configured GitHub repository.')
     return {
@@ -198,7 +202,12 @@ export async function creationEligibility(
     return { eligible: false, defaultBase: null, head: branch, title, body, blockers: [item], reason: item.reason, nextAction: item.nextAction }
   }
 
-  const lookupResult = await lookup.forBranch({ worktree: worktreeSelector(scope), branch, headOid: scope.worktree.head, active: true }, caller)
+  const lookupResult = await lookup.forBranch({
+    worktree: worktreeSelector(scope),
+    branch,
+    headOid: scope.worktree.head,
+    active: true
+  }, caller, { noCache: true })
   if (lookupResult.kind === 'found') {
     const item = blocker('existing_review', 'open_existing_review', 'This branch already has a pull request.')
     return { eligible: false, defaultBase: null, head: branch, title, body, blockers: [item], reason: item.reason, nextAction: item.nextAction, review: lookupResult.review }
@@ -287,22 +296,19 @@ function parseCreatedReview(value: unknown, repository: IdentityValue): CreateRe
 }
 
 function createListMatches(value: unknown, head: string, base: string, repository: IdentityValue, headOwner: string): CreateResult[] {
-  if (!Array.isArray(value)) return []
-  const matches: CreateResult[] = []
-  for (const item of value) {
-    if (!isRecord(item)) continue
-    const number = parsePositiveInteger(item.number)
-    const url = nonEmptyString(item.url)
-    const branch = parseBranch(item.headRefName)
-    const target = parseBranch(item.baseRefName)
-    const owner = isRecord(item.headRepositoryOwner) ? nonEmptyString(item.headRepositoryOwner.login) : undefined
-    const headRepository = isRecord(item.headRepository) ? nonEmptyString(item.headRepository.name) : undefined
-    if (!number || !url || branch !== head || target !== base || !owner || owner.toLowerCase() !== headOwner.toLowerCase() ||
-      !headRepository || headRepository.toLowerCase() !== repository.repo.toLowerCase()) continue
-    const parsed = parseCreatedReview({ number, url }, repository)
-    if (parsed) matches.push(parsed)
-  }
-  return matches
+  if (!Array.isArray(value) || value.length !== 1) return []
+  const item = value[0]
+  if (!isRecord(item)) return []
+  const number = parsePositiveInteger(item.number)
+  const url = nonEmptyString(item.url)
+  const branch = parseBranch(item.headRefName)
+  const target = parseBranch(item.baseRefName)
+  const owner = isRecord(item.headRepositoryOwner) ? nonEmptyString(item.headRepositoryOwner.login) : undefined
+  const headRepository = isRecord(item.headRepository) ? nonEmptyString(item.headRepository.name) : undefined
+  if (!number || !url || branch !== head || target !== base || !owner || owner.toLowerCase() !== headOwner.toLowerCase() ||
+    !headRepository || headRepository.toLowerCase() !== repository.repo.toLowerCase()) return []
+  const parsed = parseCreatedReview({ number, url }, repository)
+  return parsed ? [parsed] : []
 }
 
 async function probeCreate(env: HostingEnv, scope: Scope, repository: IdentityValue, headOwner: string, head: string, base: string): Promise<CreateResult[]> {
@@ -315,20 +321,16 @@ async function probeCreate(env: HostingEnv, scope: Scope, repository: IdentityVa
 }
 
 function createErrorReason(error: unknown): string {
-  if (isRecord(error) && isRecord(error.data) && typeof error.data.reason === 'string') return error.data.reason
-  const message = error instanceof Error ? error.message.toLowerCase() : ''
-  if (/401|authentication|not logged|bad credentials/.test(message)) return 'auth_required'
-  if (/403|permission/.test(message)) return 'permission_denied'
-  if (/422|validation/.test(message)) return 'validation_error'
-  if (/429|rate limit|retry-after/.test(message)) return 'rate_limited'
-  if (/already exists|already a pull request|duplicate/.test(message)) return 'already_exists'
-  if (/timed out|timeout|connection lost|unknown completion/.test(message)) return 'unknown_completion'
-  return 'upstream_unavailable'
+  return providerReason(error) ?? 'upstream_error'
 }
 
 function isAmbiguousCreate(error: unknown): boolean {
   const reason = createErrorReason(error)
-  return !['auth_required', 'permission_denied', 'validation_error', 'rate_limited', 'repo_unavailable', 'gh_unavailable', 'unsupported_provider'].includes(reason)
+  return ![
+    'auth_required', 'not_authenticated', 'permission_denied', 'validation_error', 'rate_limited',
+    'repo_unavailable', 'repository_unavailable', 'gh_unavailable', 'unsupported_provider', 'not_found',
+    'body_too_long', 'schema_drift', 'scope_missing'
+  ].includes(reason)
 }
 
 function unknownCompletion(env: HostingEnv): Error {
@@ -389,6 +391,9 @@ export function createPRCreationMethods(env: HostingEnv, lookup: PRLookup): Reco
     let mutationError: unknown
     try {
       await writeFile(bodyFile, body, 'utf8')
+      if (!(await authenticated(env, mutationScope))) {
+        throw env.invalid('authentication_required', 'GitHub authentication is unavailable. Check your gh login.')
+      }
       const args = [
         'pr', 'create', '--repo', repoArg(repository), '--base', base, '--head', `${scope.origin.owner}:${head}`,
         '--title', title, '--body-file', bodyFile
@@ -411,9 +416,16 @@ export function createPRCreationMethods(env: HostingEnv, lookup: PRLookup): Reco
 
     if (mutationError !== undefined && !isAmbiguousCreate(mutationError)) {
       const reason = createErrorReason(mutationError)
-      if (reason === 'auth_required') throw env.invalid('auth_required', 'GitHub authentication is unavailable. Check your gh login.')
+      if (reason === 'auth_required' || reason === 'not_authenticated') throw env.invalid('auth_required', 'GitHub authentication is unavailable. Check your gh login.')
       if (reason === 'permission_denied') throw env.invalid('permission_denied', 'GitHub did not allow pull request creation.')
       if (reason === 'rate_limited') throw env.invalid('rate_limited', 'GitHub rate limits prevent pull request creation.')
+      if (reason === 'body_too_long') throw env.invalid('body_too_long', 'GitHub rejected the request because its body is too long.')
+      if (reason === 'schema_drift') throw env.invalid('schema_drift', 'GitHub returned an unsupported API schema.')
+      if (reason === 'scope_missing') throw env.invalid('scope_missing', 'The authenticated GitHub account lacks the required API scopes.')
+      if (reason === 'repo_unavailable' || reason === 'repository_unavailable' || reason === 'not_found') {
+        throw env.invalid('repo_unavailable', 'The GitHub repository is unavailable or inaccessible.')
+      }
+      if (reason === 'gh_unavailable') throw env.invalid('gh_unavailable', 'GitHub CLI is unavailable.')
       throw env.invalid('validation_error', 'GitHub rejected the pull request details.')
     }
 
@@ -473,7 +485,7 @@ export function createPRCreationMethods(env: HostingEnv, lookup: PRLookup): Reco
       branch: head,
       headOid: scope.worktree.head,
       active: true
-    }, caller)
+    }, caller, { noCache: true })
     if (current.kind === 'unavailable') {
       throw env.invalid('lookup_unavailable', 'Could not verify whether this branch already has a pull request.')
     }
@@ -498,10 +510,12 @@ export function createPRCreationMethods(env: HostingEnv, lookup: PRLookup): Reco
       }
     } else {
       const created = await create({ ...params, base }, caller)
-      const number = isRecord(created) ? parsePositiveInteger(created.number) : undefined
-      const url = isRecord(created) ? nonEmptyString(created.url) : undefined
-      if (!number || !url) throw env.invalid('upstream_unavailable', 'GitHub created a pull request without a confirmed identity.')
-      result = { number, url, ...(created.existing === true ? { existing: true } : {}) }
+      if (!isRecord(created) || (created.existing !== undefined && typeof created.existing !== 'boolean')) {
+        throw env.invalid('upstream_unavailable', 'GitHub created a pull request without a confirmed identity.')
+      }
+      const parsed = parseCreatedReview(created, parent.repository)
+      if (!parsed) throw env.invalid('upstream_unavailable', 'GitHub created a pull request without a confirmed identity.')
+      result = { ...parsed, ...(created.existing === true ? { existing: true } : {}) }
       createdNow = result.existing !== true
     }
 

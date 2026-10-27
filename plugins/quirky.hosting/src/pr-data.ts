@@ -4,6 +4,11 @@ export function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
+export function providerReason(error: unknown): string | undefined {
+  if (!isRecord(error) || !isRecord(error.data)) return undefined
+  return typeof error.data.reason === 'string' ? error.data.reason : undefined
+}
+
 
 export function nonEmptyString(value: unknown): string | undefined {
   if (typeof value !== 'string') return undefined

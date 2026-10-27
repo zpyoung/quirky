@@ -1,5 +1,5 @@
 import type { Handler, HostingEnv, Scope } from './env'
-import { isRecord, nonEmptyString, parseOid, parsePositiveInteger } from './pr-data'
+import { isRecord, nonEmptyString, parseOid, parsePositiveInteger, providerReason } from './pr-data'
 import type { PRLookup, PRRead } from './pr-review'
 
 type MergeMethod = 'squash' | 'merge' | 'rebase'
@@ -12,6 +12,22 @@ function repoArg(read: PRRead): string {
 
 function invalid(env: HostingEnv, reason: string, message: string): never {
   throw env.invalid(reason, message)
+}
+function safeProviderFailure(env: HostingEnv, error: unknown): Error | undefined {
+  const reason = providerReason(error)
+  if (reason === 'already_exists') return env.invalid(reason, 'A matching GitHub item already exists.')
+  if (reason === 'body_too_long') return env.invalid(reason, 'GitHub rejected the request because its body is too long.')
+  if (reason === 'schema_drift') return env.invalid(reason, 'GitHub returned an unsupported API schema.')
+  if (reason === 'scope_missing') return env.invalid(reason, 'The authenticated GitHub account lacks the required API scopes.')
+  if (reason === 'head_changed') return env.invalid(reason, 'The pull request head changed. Refresh and review the new commit before trying again.')
+  if (reason === 'not_found') return env.invalid(reason, 'The GitHub pull request was not found in the configured repository.')
+  if (reason === 'not_authenticated' || reason === 'auth_required') return env.invalid('auth_required', 'GitHub authentication is unavailable. Check your gh login.')
+  if (reason === 'permission_denied') return env.invalid(reason, 'GitHub did not allow access to this pull request.')
+  if (reason === 'rate_limited') return env.invalid(reason, 'GitHub rate limits prevent this pull request operation.')
+  if (reason === 'repository_unavailable' || reason === 'repo_unavailable') return env.invalid('repo_unavailable', 'The GitHub repository is unavailable or inaccessible.')
+  if (reason === 'gh_unavailable') return env.invalid(reason, 'GitHub CLI is unavailable.')
+  if (reason === 'validation_error') return env.invalid(reason, 'GitHub rejected the requested operation.')
+  return undefined
 }
 
 function numberParam(env: HostingEnv, params: Record<string, unknown>): number {
@@ -122,8 +138,7 @@ function unknownCompletion(env: HostingEnv): Error {
   return env.invalid('unknown_completion', 'GitHub may still be processing this merge. Refresh the pull request state before retrying.')
 }
 function isHeadMismatch(error: unknown): boolean {
-  const message = error instanceof Error ? error.message.toLowerCase() : ''
-  return /head sha does not match|match-head-commit|expected head|head oid.*changed/.test(message)
+  return providerReason(error) === 'head_changed'
 }
 
 function recordUnknownCompletion(lookup: PRLookup, scope: Scope, number: number): void {
@@ -155,6 +170,8 @@ async function asyncMerge(
     result = parseAsync(response)
   } catch (error) {
     if (isHeadMismatch(error)) invalid(env, 'head_changed', 'The pull request head changed. Refresh and review the new commit before trying again.')
+    const failure = safeProviderFailure(env, error)
+    if (failure) throw failure
     recordUnknownCompletion(lookup, read.scope, number)
     throw unknownCompletion(env)
   }
@@ -201,10 +218,12 @@ export function createPRMutationMethods(env: HostingEnv, lookup: PRLookup): Reco
 
     try {
       await env.run(read.scope, [
-        'pr', 'merge', String(number), `--${method}`, '--match-head-commit', expectedHead, '--repo', repoArg(read.repository)
+        'pr', 'merge', String(number), `--${method}`, '--match-head-commit', expectedHead, '--repo', repoArg(read)
       ], { idempotent: false, timeoutMs: 60_000 })
     } catch (error) {
       if (isHeadMismatch(error)) invalid(env, 'head_changed', 'The pull request head changed. Refresh and review the new commit before trying again.')
+      const failure = safeProviderFailure(env, error)
+      if (failure) throw failure
       recordUnknownCompletion(lookup, read.scope, number)
       throw unknownCompletion(env)
     }
@@ -234,35 +253,48 @@ export function createPRMutationMethods(env: HostingEnv, lookup: PRLookup): Reco
       if (read.metadata.mergeQueueRequired) {
         try {
           await env.run(read.scope, [
-            'pr', 'merge', String(number), '--auto', `--${method}`, '--match-head-commit', expectedHead!, '--repo', repoArg(read.repository)
+            'pr', 'merge', String(number), '--auto', `--${method}`, '--match-head-commit', expectedHead!, '--repo', repoArg(read)
           ], { idempotent: false, timeoutMs: 60_000 })
         } catch (error) {
-          const message = error instanceof Error ? error.message.toLowerCase() : ''
-          if (/clean status|already be merged/.test(message)) invalid(env, 'already_mergeable', 'This pull request can already be merged. Use Merge instead of auto-merge.')
+          if (providerReason(error) === 'already_exists') invalid(env, 'already_mergeable', 'This pull request can already be merged. Use Merge instead of auto-merge.')
           if (isHeadMismatch(error)) invalid(env, 'head_changed', 'The pull request head changed. Refresh and review the new commit before trying again.')
+          const failure = safeProviderFailure(env, error)
+          if (failure) throw failure
           recordUnknownCompletion(lookup, read.scope, number)
           throw env.invalid('unknown_completion', 'GitHub may still be processing the auto-merge request. Refresh before retrying.')
         }
       } else {
+        let response: unknown
         try {
-          await env.graphql(read.scope,
+          response = await env.graphql(read.scope,
             'mutation EnableHostingPullRequestAutoMerge($pullRequestId:ID!,$mergeMethod:PullRequestMergeMethod!,$expectedHeadOid:GitObjectID!){enablePullRequestAutoMerge(input:{pullRequestId:$pullRequestId,mergeMethod:$mergeMethod,expectedHeadOid:$expectedHeadOid}){pullRequest{id autoMergeRequest{enabledAt}}}}',
             { pullRequestId: id, mergeMethod: method.toUpperCase(), expectedHeadOid: expectedHead },
             { idempotent: false, timeoutMs: 60_000 }
           )
         } catch (error) {
-          const message = error instanceof Error ? error.message.toLowerCase() : ''
-          if (/clean status|already be merged/.test(message)) invalid(env, 'already_mergeable', 'This pull request can already be merged. Use Merge instead of auto-merge.')
+          if (providerReason(error) === 'already_exists') invalid(env, 'already_mergeable', 'This pull request can already be merged. Use Merge instead of auto-merge.')
           if (isHeadMismatch(error)) invalid(env, 'head_changed', 'The pull request head changed. Refresh and review the new commit before trying again.')
+          const failure = safeProviderFailure(env, error)
+          if (failure) throw failure
           recordUnknownCompletion(lookup, read.scope, number)
           throw env.invalid('unknown_completion', 'GitHub may still be processing the auto-merge request. Refresh before retrying.')
+        }
+        const data = isRecord(response) && isRecord(response.data) ? response.data : undefined
+        const payload = data?.enablePullRequestAutoMerge
+        const pullRequest = isRecord(payload) ? payload.pullRequest : undefined
+        const autoMergeRequest = isRecord(pullRequest) ? pullRequest.autoMergeRequest : undefined
+        if (!isRecord(pullRequest) || pullRequest.id !== id || !isRecord(autoMergeRequest) || !nonEmptyString(autoMergeRequest.enabledAt)) {
+          recordUnknownCompletion(lookup, read.scope, number)
+          throw unknownCompletion(env)
         }
       }
     } else {
       if (read.review.autoMergeRequest === null || read.review.autoMergeRequest === undefined) return { number, enabled: false, alreadyDisabled: true }
       try {
-        await env.run(read.scope, ['pr', 'merge', String(number), '--disable-auto', '--repo', repoArg(read.repository)], { idempotent: false, timeoutMs: 60_000 })
-      } catch {
+        await env.run(read.scope, ['pr', 'merge', String(number), '--disable-auto', '--repo', repoArg(read)], { idempotent: false, timeoutMs: 60_000 })
+      } catch (error) {
+        const failure = safeProviderFailure(env, error)
+        if (failure) throw failure
         recordUnknownCompletion(lookup, read.scope, number)
         throw env.invalid('unknown_completion', 'GitHub may still be processing the auto-merge cancellation. Refresh before retrying.')
       }
@@ -293,15 +325,17 @@ export function createPRMutationMethods(env: HostingEnv, lookup: PRLookup): Reco
     if (action === 'edit') {
       try {
         await env.rest(read.scope, `repos/${read.repository.owner}/${read.repository.repo}/pulls/${number}`, 'PATCH', fields, { idempotent: false, timeoutMs: 60_000 })
-      } catch {
-        throw env.invalid('upstream_unavailable', 'GitHub could not update the pull request.')
+      } catch (error) {
+        const failure = safeProviderFailure(env, error)
+        throw failure ?? env.invalid('upstream_unavailable', 'GitHub could not update the pull request.')
       }
     } else {
       const verb = action === 'ready' ? 'ready' : action
       try {
-        await env.run(read.scope, ['pr', verb, String(number), '--repo', repoArg(read.repository)], { idempotent: false, timeoutMs: 60_000 })
-      } catch {
-        throw env.invalid('upstream_unavailable', `GitHub could not ${action} the pull request.`)
+        await env.run(read.scope, ['pr', verb, String(number), '--repo', repoArg(read)], { idempotent: false, timeoutMs: 60_000 })
+      } catch (error) {
+        const failure = safeProviderFailure(env, error)
+        throw failure ?? env.invalid('upstream_unavailable', `GitHub could not ${action} the pull request.`)
       }
     }
     lookup.invalidate(read.scope, { type: 'pr', number, action })
@@ -322,9 +356,10 @@ export function createPRMutationMethods(env: HostingEnv, lookup: PRLookup): Reco
     const read = await freshRead(env, lookup, { ...params, number }, caller)
     const option = params.action === 'add' ? '--add-reviewer' : '--remove-reviewer'
     try {
-      await env.run(read.scope, ['pr', 'edit', String(number), option, logins.join(','), '--repo', repoArg(read.repository)], { idempotent: false, timeoutMs: 60_000 })
-    } catch {
-      throw env.invalid('upstream_unavailable', 'GitHub could not update pull request reviewers.')
+      await env.run(read.scope, ['pr', 'edit', String(number), option, logins.join(','), '--repo', repoArg(read)], { idempotent: false, timeoutMs: 60_000 })
+    } catch (error) {
+      const failure = safeProviderFailure(env, error)
+      throw failure ?? env.invalid('upstream_unavailable', 'GitHub could not update pull request reviewers.')
     }
     lookup.invalidate(read.scope, { type: 'pr', number, reviewers: params.action })
     return { number, updated: true }

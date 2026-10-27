@@ -39,6 +39,26 @@ type ProcessResult = {
   outputLimit: boolean
   aborted: boolean
 }
+type FailureReason =
+  | 'gh_unavailable'
+  | 'not_authenticated'
+  | 'permission_denied'
+  | 'repository_unavailable'
+  | 'not_found'
+  | 'network_error'
+  | 'server_error'
+  | 'rate_limited'
+  | 'timeout'
+  | 'output_limit'
+  | 'cancelled'
+  | 'validation_error'
+  | 'schema_drift'
+  | 'scope_missing'
+  | 'body_too_long'
+  | 'already_exists'
+  | 'head_changed'
+  | 'upstream_error'
+type FailureClassification = { reason: FailureReason; retryAfterMs?: number }
 type Circuit = { until: number }
 type AuthCache = { accounts: AuthAccount[]; expiresAt: number }
 type TokenCache = { token: string | null; expiresAt: number }
@@ -122,12 +142,12 @@ export function createRuntimeRunner(context: PluginContext, invalidateUnknownWri
 
   async function run(scope: Scope, args: string[], options: RunOptions = {}): Promise<string> {
     validateArguments(args, invalidError)
-    const target = trustedTarget(scope)
+    const target = await trustedTarget(scope, options)
     const pinnedArgs = pinArguments(args, target)
     const isAuthCommand = args[0] === 'auth'
     const rateProbe = isRateLimitProbe(args)
     const bucket = classifyBucket(args)
-    const budgetKey = authenticationScopeKey(scope)
+    const budgetKey = authenticationScopeKey(scope, options.ambient === true)
     const circuitKey = `${budgetKey}:${bucket}`
     const retryable = isIdempotent(args, options)
     if (!isAuthCommand && !rateProbe) {
@@ -166,7 +186,7 @@ export function createRuntimeRunner(context: PluginContext, invalidateUnknownWri
           && (/^Logged in to /m.test(combined) || /not logged in|not logged into any GitHub hosts|no hosts are logged in/i.test(combined))) return combined
         if (args[0] === 'pr' && args[1] === 'checks' && /no checks reported/i.test(combined)) return '[]'
 
-        const failure = classifyFailure(result, combined)
+        const failure = classifyFailure(result, combined, args)
         if (failure.reason === 'rate_limited' && !rateProbe) setCircuit(circuitKey, bucket, failure.retryAfterMs)
         if (failure.reason === 'timeout' && !retryable) invalidateUnknownWrite(scope)
         const canRetry = retryable && isTransient(result, combined) && failure.retryAfterMs === undefined && attempt < RETRY_DELAYS_MS.length
@@ -261,6 +281,7 @@ export function createRuntimeRunner(context: PluginContext, invalidateUnknownWri
     if (cached && cached.expiresAt > Date.now()) return cached.supported
     try {
       if (disposed) throw pluginError('plugin_inactive', 'The GitHub hosting plugin is shutting down.')
+      const env = processEnvironment()
       stripTokenEnvironment(env)
       delete env.GH_HOST
       delete env.GH_REPO
@@ -286,7 +307,7 @@ export function createRuntimeRunner(context: PluginContext, invalidateUnknownWri
   }
 
   async function authAccounts(scope: Scope, force = false): Promise<AuthAccount[]> {
-    const key = authenticationScopeKey(scope)
+    const key = authenticationScopeKey(scope, true)
     const cached = authCache.get(key)
     if (!force && cached && cached.expiresAt > Date.now()) {
       refreshMapLru(authCache, key, cached)
@@ -332,7 +353,7 @@ export function createRuntimeRunner(context: PluginContext, invalidateUnknownWri
       .then((output) => {
         let snapshot: Omit<RateLimitSnapshot, 'fetchedAt'>
         try {
-          snapshot = parseRateLimit(parsed)
+          snapshot = parseRateLimit(parseJson(output))
         } catch {
           throw pluginError('invalid_response', 'GitHub returned an invalid rate-limit response.')
         }
@@ -470,16 +491,30 @@ export function createRuntimeRunner(context: PluginContext, invalidateUnknownWri
     }
   }
 
-  function trustedTarget(scope: Scope): Identity {
+  async function trustedTarget(scope: Scope, options: RunOptions): Promise<Identity> {
     if (!isRecord(scope) || !isRecord(scope.repository)) throw invalidError('invalid_scope', 'The selected GitHub repository is invalid.')
     const { host, owner, repo } = scope.repository
     if (typeof host !== 'string' || !isTrustedHost(host) || typeof owner !== 'string' || !isSlug(owner) || typeof repo !== 'string' || !isSlug(repo)) {
       throw invalidError('invalid_scope', 'The selected GitHub repository is invalid.')
     }
+    const isProjectRoute = options.projectHost !== undefined
+    if (isProjectRoute && (options.ambient !== true || options.projectHost !== host)) {
+      throw invalidError('repository_mismatch', 'The GitHub repository does not match a configured remote.')
+    }
     const origin = scope.origin
     const candidates = scope.candidates
-    if (!sameIdentity(scope.repository, origin) && !candidates.some((candidate) => sameIdentity(scope.repository, candidate))) {
+    if (sameIdentity(scope.repository, origin) || candidates.some((candidate) => sameIdentity(scope.repository, candidate))) {
+      return { host, owner, repo }
+    }
+    if (!isProjectRoute || options.ambient !== true || options.projectHost !== host) {
       throw invalidError('repository_mismatch', 'The GitHub repository does not match a configured remote.')
+    }
+    if (host !== 'github.com') {
+      const inventoryScope = { ...scope, repository: origin }
+      const accounts = await authAccounts(inventoryScope)
+      if (!accounts.some((account) => account.host.toLowerCase() === host.toLowerCase())) {
+        throw invalidError('repository_mismatch', 'The GitHub repository does not match a configured remote.')
+      }
     }
     return { host, owner, repo }
   }
@@ -746,9 +781,11 @@ function isGraphqlMutation(query: string): boolean {
   return /^mutation\b/i.test(candidate)
 }
 
-function authenticationScopeKey(scope: Scope): string {
-  const ambient = TOKEN_ENV_NAMES.map((name) => `${name}=${process.env[name] ?? ''}`).join('\0')
-  const account = scope.binding ? `${scope.binding.host}:${scope.binding.user}` : `ambient:${createHash('sha256').update(ambient).digest('hex')}`
+function authenticationScopeKey(scope: Scope, ambient = false): string {
+  const tokenEnvironment = TOKEN_ENV_NAMES.map((name) => `${name}=${process.env[name] ?? ''}`).join('\0')
+  const account = !ambient && scope.binding
+    ? `${scope.binding.host}:${scope.binding.user}`
+    : `ambient:${createHash('sha256').update(tokenEnvironment).digest('hex')}`
   return `${scope.repository.host}|${account}`
 }
 
@@ -779,7 +816,7 @@ function isSlug(value: string): boolean {
 function isSafeApiPath(path: string): boolean {
   if (!path || path.length > 8192 || path.startsWith('/') || path.startsWith('-') || path.includes('\\') || path.includes('\0') || /^[a-z][a-z0-9+.-]*:/i.test(path)) return false
   const [endpoint = '', query] = path.split('?', 2)
-  if (!/^[A-Za-z0-9._~\/-]+$/.test(endpoint)) return false
+  if (!/^[A-Za-z0-9._~%\/-]+$/.test(endpoint)) return false
   try {
     if (decodeURIComponent(endpoint).split('/').some((part) => part === '.' || part === '..')) return false
   } catch {
@@ -810,14 +847,15 @@ function normalizeFailure(
   context: PluginContext,
   result: ProcessResult,
   combined: string,
-  classified = classifyFailure(result, combined)
+  classified: FailureClassification = classifyFailure(result, combined)
 ): Error {
   const { reason, retryAfterMs } = classified
-  const messages: Record<string, string> = {
+  const messages: Record<FailureReason, string> = {
     gh_unavailable: 'GitHub CLI is unavailable. Install gh and make it available on PATH.',
     not_authenticated: 'GitHub authentication is required. Run gh auth login.',
     permission_denied: 'The authenticated GitHub account cannot perform this operation.',
     repository_unavailable: 'The configured GitHub repository is unavailable or inaccessible.',
+    not_found: 'The GitHub pull request was not found in the configured repository.',
     network_error: 'The GitHub request could not reach the service.',
     server_error: 'GitHub returned a service error.',
     rate_limited: 'GitHub API rate limit reached.',
@@ -825,6 +863,11 @@ function normalizeFailure(
     output_limit: 'The GitHub response exceeded the configured output limit.',
     cancelled: 'The GitHub request was cancelled.',
     validation_error: 'GitHub rejected the requested operation.',
+    schema_drift: 'GitHub returned an unsupported API schema.',
+    scope_missing: 'The authenticated GitHub account lacks the required API scopes.',
+    body_too_long: 'GitHub rejected the request because its body is too long.',
+    head_changed: 'The pull request head changed. Refresh and review the new commit before trying again.',
+    already_exists: 'A matching GitHub item already exists.',
     upstream_error: 'The GitHub request failed.'
   }
   const extra: Record<string, unknown> = {}
@@ -833,12 +876,12 @@ function normalizeFailure(
     extra.retryDisabledUntil = retryDisabledUntil
     extra.nextAutoRetryAt = retryDisabledUntil
   }
-  return Object.assign(context.error('conflict', messages[reason] ?? messages.upstream_error ?? 'The GitHub request failed.'), {
+  return Object.assign(context.error('conflict', messages[reason]), {
     data: { reason, ...extra }
   })
 }
 
-function classifyFailure(result: ProcessResult, combined: string): { reason: string; retryAfterMs?: number } {
+function classifyFailure(result: ProcessResult, combined: string, args: readonly string[] = []): FailureClassification {
   if (result.timedOut) return { reason: 'timeout' }
   if (result.outputLimit) return { reason: 'output_limit' }
   if (result.aborted) return { reason: 'cancelled' }
@@ -848,12 +891,29 @@ function classifyFailure(result: ProcessResult, combined: string): { reason: str
   const retryAfterMs = readRetryAfter(combined)
   if (/api rate limit exceeded|secondary rate limit|rate limit exceeded|http 429|status 429/.test(lower)) return { reason: 'rate_limited', ...(retryAfterMs !== undefined ? { retryAfterMs } : {}) }
   if (/http 401|status 401|not logged in|authentication required|bad credentials/.test(lower)) return { reason: 'not_authenticated' }
+  if ((lower.includes('body') || lower.includes('description')) && /too long|too large|maximum length|exceeds.*limit/.test(lower)) {
+    return { reason: 'body_too_long' }
+  }
+  if (/head sha does not match|match-head-commit|expected head|head oid.*changed/.test(lower)) return { reason: 'head_changed' }
+  if (/already exists|already a pull request|duplicate/.test(lower)) return { reason: 'already_exists' }
+  if (/insufficient scope|resource not accessible|missing.*scope|project.*scope|read:org/.test(lower)) return { reason: 'scope_missing' }
+  if (/field .* not found|could not resolve to a type|unknown field|schema/.test(lower)) return { reason: 'schema_drift' }
   if (/http 403|status 403|forbidden|resource not accessible|insufficient scope|permission denied/.test(lower)) return { reason: 'permission_denied' }
-  if (/http 404|status 404|not found/.test(lower)) return { reason: 'repository_unavailable' }
+  if (/http 404|status 404|not found/.test(lower)) {
+    return { reason: isPullRequestReadCommand(args) ? 'not_found' : 'repository_unavailable' }
+  }
   if (/http 5\d\d|status 5\d\d|internal server error|service unavailable|bad gateway/.test(lower)) return { reason: 'server_error' }
   if (/econnreset|etimedout|ehostunreach|enetunreach|socket hang up|connection reset|network is unreachable|temporary failure/.test(lower)) return { reason: 'network_error' }
   if (/http 422|status 422|validation failed|unprocessable entity/.test(lower)) return { reason: 'validation_error' }
   return { reason: 'upstream_error' }
+}
+function isPullRequestReadCommand(args: readonly string[]): boolean {
+  if (args[0] === 'pr') return args[1] === 'view' || args[1] === 'list'
+  if (args[0] !== 'api') return false
+  const path = args[1] ?? ''
+  if (!/^repos\/[^/]+\/[^/]+\/pulls(?:\/\d+)?(?:\?.*)?$/.test(path)) return false
+  const methodIndex = args.findIndex((argument) => argument === '-X' || argument === '--method')
+  return methodIndex < 0 || args[methodIndex + 1]?.toUpperCase() === 'GET'
 }
 
 function isTransient(result: ProcessResult, combined: string): boolean {

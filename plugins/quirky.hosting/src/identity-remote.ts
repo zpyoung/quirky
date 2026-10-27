@@ -89,7 +89,7 @@ async function resolveSshAlias(alias: string): Promise<string | null> {
       encoding: 'utf8',
       windowsHide: true
     })
-    const stdout = typeof result.stdout === 'string' ? result.stdout : result.stdout.toString('utf8')
+    const stdout = result.stdout
     const hostname = /^hostname\s+(\S+)\s*$/im.exec(stdout)?.[1]
     if (hostname && hostname.toLowerCase() !== alias.toLowerCase()) {
       const normalized = normalizeHost(hostname)

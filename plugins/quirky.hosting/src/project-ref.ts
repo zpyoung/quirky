@@ -1,11 +1,11 @@
-import type { HostingEnv, Identity, Scope } from './env'
+import type { HostingEnv, Identity, RunOptions, Scope } from './env'
 import {
   configuredRepositories,
   positiveInteger,
   record,
   scopeForRepository,
-  safeErrorMessage,
   safeErrorReason,
+  utf8Length,
 } from './item-data'
 import { classifyProjectError, projectError } from './project-errors'
 
@@ -37,19 +37,27 @@ export function resolveProjectHost(env: HostingEnv, scope: Scope, hostValue: unk
   const identity = configuredRepositories(scope).find((candidate) => candidate.host.toLowerCase() === requested.toLowerCase())
   if (identity) return { host: identity.host, identity }
   if (requested.toLowerCase() === 'github.com') return { host: 'github.com', identity: { ...scope.origin, host: 'github.com' } }
-  throw projectError(env, 'auth_required', `GitHub CLI is not authenticated to ${requested}. Run gh auth login --hostname ${requested}.`)
+  const host = requested.toLowerCase()
+  return { host, identity: { ...scope.origin, host } }
+}
+
+async function requireAuthenticatedProjectHost(env: HostingEnv, scope: Scope, host: string): Promise<void> {
+  if (host.toLowerCase() === 'github.com') return
+  const accounts = await env.authAccounts({ ...scope, repository: scope.origin })
+  if (accounts.some((account) => account.host.toLowerCase() === host.toLowerCase())) return
+  throw projectError(env, 'auth_required', `GitHub CLI is not authenticated to ${host}. Run gh auth login --hostname ${host}.`)
 }
 
 export function projectScope(scope: Scope, identity: Identity): Scope {
   return scopeForRepository(scope, identity)
 }
 
-export function parseProjectReference(
+export async function parseProjectReference(
   env: HostingEnv,
   scope: Scope,
   inputValue: unknown,
   hostValue: unknown
-): ProjectReference {
+): Promise<ProjectReference> {
   if (typeof inputValue !== 'string' || inputValue.length === 0 || utf8Length(inputValue) > 2048 || inputValue.trim() !== inputValue) {
     throw env.invalid('validation_error', 'input must be a project reference no longer than 2048 bytes.')
   }
@@ -65,7 +73,7 @@ export function parseProjectReference(
       throw env.invalid('validation_error', 'Project URL must be credential-free HTTPS without a query or fragment.')
     }
   }
-  const configuredHost = resolveProjectHost(env, scope, hostValue ?? url?.host)
+  const configuredHost = await resolveProjectHost(env, scope, hostValue ?? url?.host)
   if (url) {
     if (url.host.toLowerCase() !== configuredHost.host.toLowerCase()) {
       throw env.invalid('validation_error', 'Project URL host must match the selected trusted GitHub host.')
@@ -94,8 +102,13 @@ export async function projectGraphql(
   variables: Record<string, unknown>,
   idempotent: boolean
 ): Promise<unknown> {
+  await requireAuthenticatedProjectHost(env, scope, identity.host)
   try {
-    const result = await env.graphql(projectScope(scope, identity), query, variables, { idempotent, ambient: true })
+    const result = await env.graphql(projectScope(scope, identity), query, variables, {
+      idempotent,
+      ambient: true,
+      projectHost: identity.host
+    })
     const errors = record(result)?.errors
     if (Array.isArray(errors) && errors.length > 0) {
       const first = record(errors[0])
@@ -106,10 +119,9 @@ export async function projectGraphql(
   } catch (error: unknown) {
     const classified = classifyProjectError(env, error, identity.host)
     if (safeErrorReason(classified) === 'schema_drift') {
-      const text = safeErrorMessage(error).toLowerCase()
-      const schemaField = text.includes('verticalgroupbyfields')
+      const schemaField = query.includes('verticalGroupByFields')
         ? 'verticalGroupByFields'
-        : text.includes('parent')
+        : query.includes('parent { number title url }')
           ? 'parent'
           : null
       if (schemaField !== null) {
@@ -121,3 +133,19 @@ export async function projectGraphql(
   }
 }
 
+export async function projectRest(
+  env: HostingEnv,
+  scope: Scope,
+  identity: Identity,
+  path: string,
+  method: string,
+  fields?: Record<string, unknown>,
+  options: RunOptions = {}
+): Promise<unknown> {
+  await requireAuthenticatedProjectHost(env, scope, identity.host)
+  return env.rest(projectScope(scope, identity), path, method, fields, {
+    ...options,
+    ambient: true,
+    projectHost: identity.host
+  })
+}

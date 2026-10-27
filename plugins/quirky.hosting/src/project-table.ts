@@ -7,6 +7,7 @@ import {
   positiveInteger,
   positiveParam,
   record,
+  safeErrorReason,
   ensureOutputBound,
   utf8Length,
   type WorkItemKind
@@ -213,7 +214,7 @@ function chooseView(env: HostingEnv, params: Record<string, unknown>, views: Rec
   if (viewId !== undefined && (typeof viewId !== 'string' || viewId.trim().length === 0 || viewId.length > 256)) throw env.invalid('validation_error', 'viewId must be a non-empty ID.')
   const viewNumber = positiveParam(env, params, 'viewNumber', false)
   const viewNameValue = params.viewName
-  if (viewNameValue !== undefined && (typeof viewNameValue !== 'string' || viewNameValue.trim().length === 0 || new TextEncoder().encode(viewNameValue).byteLength > 256)) {
+  if (viewNameValue !== undefined && (typeof viewNameValue !== 'string' || viewNameValue.trim().length === 0 || utf8Length(viewNameValue) > 256)) {
     throw env.invalid('validation_error', 'viewName must be a non-empty name no longer than 256 bytes.')
   }
   let selected: Record<string, unknown> | undefined
@@ -233,12 +234,13 @@ async function getProjectTable(env: HostingEnv, params: Record<string, unknown>,
   const owner = ownerLogin(env, params.owner)
   const kind = ownerKind(env, params.ownerType)
   const projectNumber = positiveParam(env, params, 'projectNumber') ?? 0
-  const queryOverride = boundedText(env, params, 'queryOverride', { maxBytes: 8192 }) ?? ''
+  const queryOverride = boundedText(env, params, 'queryOverride', { maxBytes: 8192 })
   const scope = await env.resolve(params, caller)
   const { host, identity } = resolveProjectHost(env, scope, params.host)
   const cacheKey = env.cacheKey(scope, `project-views:${host}:${kind}:${owner.toLowerCase()}:${projectNumber}`)
   const viewResult = await env.cache(cacheKey, 60_000, () => loadProjectViews(env, scope, identity, owner, kind, projectNumber))
   const selectedView = chooseView(env, params, viewResult.views)
+  const filter = queryOverride ?? (typeof selectedView.filter === 'string' ? selectedView.filter : '')
   const layout = typeof selectedView.layout === 'string' ? selectedView.layout.toUpperCase() : 'UNKNOWN'
   if (utf8Length(filter) > 8192) throw projectError(env, 'too_large', 'The project view filter exceeds the 8192-byte limit.')
   const itemsCacheKey = env.cacheKey(scope, `project-items:${host}:${kind}:${owner.toLowerCase()}:${projectNumber}:${String(selectedView.id)}:${filter}`)

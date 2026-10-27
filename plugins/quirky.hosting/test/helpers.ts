@@ -1,4 +1,4 @@
-import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, renameSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { delimiter, join, resolve } from 'node:path'
 import { QuirkyClient, type ClientRole } from '@quirky/protocol'
@@ -40,6 +40,18 @@ const ENVIRONMENT_KEYS = [
   'QUIRKY_TEST_FIXTURE_DIR', 'QUIRKY_TEST_GH_SOURCE', 'QUIRKY_TEST_GH_LOG', 'QUIRKY_TEST_GH_ACTIVITY',
   'QUIRKY_TEST_SSH_CONFIG'
 ] as const
+const CONNECTION_SCOPED_METHODS: Record<string, true> = {
+  refresh: true,
+  enqueueRefresh: true,
+  visibleRefreshCandidates: true,
+  refreshState: true
+}
+
+function withWorktreeContext(method: string, worktree: string, params: Record<string, unknown>): Record<string, unknown> {
+  const methodName = method.slice(method.lastIndexOf('/') + 1)
+  if (method.startsWith('quirky.hosting/') && CONNECTION_SCOPED_METHODS[methodName] === true) return params
+  return { worktree, ...params }
+}
 const UPSTREAM_SOURCE = `
 import { appendFileSync } from 'node:fs'
 const input = await new Response(Bun.stdin.stream()).text()
@@ -100,7 +112,7 @@ const BRIDGE_MANIFEST = {
     method: [{
       id: 'call',
       readOnly: true,
-      params: { type: 'object', properties: { method: { type: 'string' }, params: { type: 'object' } }, required: ['method'] },
+      params: { type: 'object', properties: { method: { type: 'string' }, params: {} }, required: ['method'] },
       result: { type: 'object', properties: { ok: { type: 'boolean' }, rejected: { type: 'boolean' }, value: {}, error: { type: 'object' } }, required: ['ok'] }
     }]
   }
@@ -126,7 +138,7 @@ const BRIDGE_SOURCE = `export function activate(context) {
 `
 
 export async function bootHosting(ghSource: string, options: HostingTestOptions = {}): Promise<HostingTest> {
-  const root = mkdtempSync(join(tmpdir(), 'quirky-hosting-'))
+  const root = realpathSync(mkdtempSync(join(tmpdir(), 'quirky-hosting-')))
   const home = join(root, 'home')
   const repoPath = join(root, 'repo')
   const fakebin = join(root, 'fakebin')
@@ -217,11 +229,14 @@ export async function bootHosting(ghSource: string, options: HostingTestOptions 
       client,
       async call(name, params = {}) {
         const method = name.includes('/') ? name : `quirky.hosting/${name}`
-        return client.callAny(method, { worktree: hosting.worktree, ...params })
+        return client.callAny(method, withWorktreeContext(method, hosting.worktree, params))
       },
       async pluginCall(name, params = {}) {
         const method = name.includes('/') ? name : `quirky.hosting/${name}`
-        return client.callAny('quirky.hosting-test-bridge/call', { method, params: { worktree: hosting.worktree, ...params } })
+        return client.callAny('quirky.hosting-test-bridge/call', {
+          method,
+          params: withWorktreeContext(method, hosting.worktree, params)
+        })
       },
       async cli(args) {
         const proc = Bun.spawn([process.execPath, CLI_ENTRY, ...args], {
@@ -239,7 +254,9 @@ export async function bootHosting(ghSource: string, options: HostingTestOptions 
         return { code, stdout, stderr }
       },
       writeState(value) {
-        writeFileSync(statePath, JSON.stringify(value))
+        const temporaryStatePath = statePath + '.' + process.pid + '.tmp'
+        writeFileSync(temporaryStatePath, JSON.stringify(value))
+        renameSync(temporaryStatePath, statePath)
       },
       readState() {
         return JSON.parse(readFileSync(statePath, 'utf8')) as unknown

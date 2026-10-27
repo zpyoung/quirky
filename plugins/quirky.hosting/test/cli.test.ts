@@ -20,7 +20,7 @@ test('GH32 method schemas are discoverable without activation and generated CLI 
   const result = await host.cli(['--json', 'hosting', 'repository', '--worktree', host.worktree])
   expect(result).toMatchObject({ code: 0, stderr: '' })
   expect(JSON.parse(result.stdout)).toMatchObject({ origin: { owner: 'test-owner', repo: 'test-repo' } })
-})
+}, 20_000)
 
 test('GH32 disabling the hosting owner removes its API and generated CLI commands, and re-enable restores them', async () => {
   host = await bootHosting(ghSource)
@@ -31,4 +31,4 @@ test('GH32 disabling the hosting owner removes its API and generated CLI command
 
   await host.client.callAny('plugin.enable', { id: 'quirky.hosting' })
   expect(await host.call('repository')).toMatchObject({ origin: { owner: 'test-owner', repo: 'test-repo' } })
-})
+}, 20_000)

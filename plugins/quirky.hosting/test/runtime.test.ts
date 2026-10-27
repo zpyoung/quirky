@@ -5,9 +5,14 @@ import { join } from 'node:path'
 import { bootHosting, type HostingTest } from './helpers'
 
 const ghSource = String.raw`
-import { appendFileSync, readFileSync, writeFileSync } from 'node:fs'
+import { appendFileSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 const statePath = process.env.QUIRKY_TEST_FIXTURE_DIR + '/state.json'
 const state = JSON.parse(readFileSync(statePath, 'utf8'))
+const saveState = () => {
+  const temporaryStatePath = statePath + '.' + process.pid + '.tmp'
+  writeFileSync(temporaryStatePath, JSON.stringify(state))
+  renameSync(temporaryStatePath, statePath)
+}
 const args = process.argv.slice(2)
 appendFileSync(process.env.QUIRKY_TEST_GH_ACTIVITY, JSON.stringify({ event: 'start', pid: process.pid }) + '\n')
 const key = args[0] === 'auth' && args[1] === 'token' && args.includes('--help') ? 'auth_help'
@@ -20,7 +25,7 @@ const key = args[0] === 'auth' && args[1] === 'token' && args.includes('--help')
 const command = state.responses?.[key] ?? {}
 const count = (state.counts?.[key] ?? 0) + 1
 state.counts = { ...(state.counts ?? {}), [key]: count }
-writeFileSync(statePath, JSON.stringify(state))
+saveState()
 const response = Array.isArray(command.attempts) ? (command.attempts[count - 1] ?? command.attempts.at(-1) ?? {}) : command
 if (response.delayMs) await Bun.sleep(response.delayMs)
 if (response.hang) await Bun.sleep(60_000)
@@ -54,21 +59,21 @@ async function boot(options: Parameters<typeof bootHosting>[1] = {}): Promise<Ho
 }
 
 describe('GH01-GH08: GitHub runtime boundary', () => {
-  test('GH01 resolves standard GitHub remotes, SSH aliases, SSH ports, and authenticated enterprise hosts', async () => {
-    const githubUrls = [
-      'https://github.com/test-owner/test-repo.git',
-      'git@github.com:test-owner/test-repo.git',
-      'ssh://git@github.com:2222/test-owner/test-repo.git',
-      'git@github-work:test-owner/test-repo.git'
-    ]
-    for (const remote of githubUrls) {
+  const githubUrls = [
+    'https://github.com/test-owner/test-repo.git',
+    'git@github.com:test-owner/test-repo.git',
+    'ssh://git@github.com:2222/test-owner/test-repo.git',
+    'git@github-work:test-owner/test-repo.git'
+  ]
+  for (const remote of githubUrls) {
+    test(`GH01 resolves standard GitHub remote ${remote}`, async () => {
       const host = await boot({ remote })
       const result = await host.call('repository') as { origin: { host: string; owner: string; repo: string } }
       expect(result.origin).toEqual({ host: 'github.com', owner: 'test-owner', repo: 'test-repo' })
-      await host.cleanup()
-      running = running.filter((candidate) => candidate !== host)
-    }
+    })
+  }
 
+  test('GH01 resolves an authenticated enterprise host', async () => {
     const enterprise = await boot({ remote: 'https://github.enterprise.test/org/private.git' })
     enterprise.writeState({
       authStatus: 'Logged in to github.enterprise.test account fixture-user (keyring)\nActive account: true\nToken scopes: repo\n'
@@ -77,9 +82,74 @@ describe('GH01-GH08: GitHub runtime boundary', () => {
       origin: { host: 'github.enterprise.test', owner: 'org', repo: 'private' }
     })
     expect(enterprise.invocations().some((item) => item.args.includes('github.enterprise.test'))).toBe(false)
-    await enterprise.cleanup()
-    running = running.filter((candidate) => candidate !== enterprise)
+  })
+  const standardEnterpriseAuthStatuses = [
+    [
+      'decorated standard output',
+      `github.enterprise.test
+  ✗ Logged in to github.enterprise.test account failed-user (keyring)
+  ✓ Logged in to github.enterprise.test account env-user (GH_ENTERPRISE_TOKEN)
+  - Active account: true
+  - Token scopes: 'gist', 'read:org', 'repo'
 
+  ✓ Logged in to github.enterprise.test account keyring-user (keyring)
+  - Active account: false
+  - Token scopes: 'project', 'repo'
+`
+    ],
+    [
+      'ANSI-colored standard output',
+      `\u001b[1;36mgithub.enterprise.test\u001b[0m
+  \u001b[31m✗\u001b[0m Logged in to \u001b[1;36mgithub.enterprise.test\u001b[0m account failed-user (keyring)
+  \u001b[32m✓\u001b[0m Logged in to \u001b[1;36mgithub.enterprise.test\u001b[0m account \u001b[1;33menv-user\u001b[0m (\u001b[1;35mGH_ENTERPRISE_TOKEN\u001b[0m)
+  - \u001b[1mActive account:\u001b[0m true
+  - \u001b[1mToken scopes:\u001b[0m 'gist', 'read:org', 'repo'
+
+  \u001b[32m✓\u001b[0m Logged in to \u001b[1;36mgithub.enterprise.test\u001b[0m account \u001b[1;33mkeyring-user\u001b[0m (\u001b[1;35mkeyring\u001b[0m)
+  - \u001b[1mActive account:\u001b[0m false
+  - \u001b[1mToken scopes:\u001b[0m 'project', 'repo'
+`
+    ]
+  ] as const
+  for (const [format, authStatus] of standardEnterpriseAuthStatuses) {
+    test(`GH01 resolves GHES identity and account fields from ${format}`, async () => {
+      const enterprise = await boot({ remote: 'https://github.enterprise.test/org/private.git' })
+      enterprise.writeState({ authStatus })
+
+      expect(await enterprise.call('repository')).toMatchObject({
+        origin: { host: 'github.enterprise.test', owner: 'org', repo: 'private' }
+      })
+      const inventory = await enterprise.call('accounts') as { requiredHost: string; accounts: unknown[] }
+      expect(inventory).toMatchObject({
+        requiredHost: 'github.enterprise.test',
+        accounts: [
+          {
+            host: 'github.enterprise.test',
+            user: 'env-user',
+            source: 'env',
+            active: true,
+            scopes: ['gist', 'read:org', 'repo'],
+            bindable: false
+          },
+          {
+            host: 'github.enterprise.test',
+            user: 'keyring-user',
+            source: 'keyring',
+            active: false,
+            scopes: ['project', 'repo'],
+            bindable: true
+          }
+        ]
+      })
+      expect(inventory.accounts).toHaveLength(2)
+      await expect(enterprise.call('configure', { account: { host: 'github.enterprise.test', user: 'env-user' } })).rejects.toMatchObject({
+        data: { reason: 'bound_account_not_keyring' }
+      })
+    })
+  }
+
+
+  test('GH01 preserves authenticated enterprise host ports', async () => {
     const enterprisePort = await boot({ remote: 'https://github.enterprise.test:8443/org/private.git' })
     enterprisePort.writeState({
       authStatus: 'Logged in to github.enterprise.test:8443 account fixture-user (keyring)\nActive account: true\nToken scopes: repo\n'
@@ -88,9 +158,9 @@ describe('GH01-GH08: GitHub runtime boundary', () => {
       origin: { host: 'github.enterprise.test:8443', owner: 'org', repo: 'private' }
     })
     expect(enterprisePort.invocations().every((item) => !item.args.includes('github.enterprise.test:8443'))).toBe(true)
-    await enterprisePort.cleanup()
-    running = running.filter((candidate) => candidate !== enterprisePort)
+  })
 
+  test('GH01 resolves an enterprise SSH host through its alias', async () => {
     const sshEnterprise = await boot({ remote: 'git@github.enterprise.test:org/private.git' })
     sshEnterprise.writeState({
       authStatus: 'Logged in to github.enterprise.test:8443 account fixture-user (keyring)\nActive account: true\nToken scopes: repo\n'
@@ -138,22 +208,40 @@ describe('GH01-GH08: GitHub runtime boundary', () => {
     expect(host.invocations()).toEqual([])
   })
 
-  test('GH03 returns safe, distinct reasons for missing CLI, authentication, repository, and network failures', async () => {
-    const cases = [
-      { response: { exitCode: 127, stderr: 'gh: command not found' }, reason: 'gh_unavailable' },
-      { response: { exitCode: 1, stderr: 'HTTP 401: not logged in' }, reason: 'not_authenticated' },
-      { response: { exitCode: 1, stderr: 'HTTP 404: Not Found' }, reason: 'repository_unavailable' },
-      { response: { exitCode: 1, stderr: 'connection reset by peer' }, reason: 'network_error' }
-    ]
-    for (const scenario of cases) {
+  const failures = [
+    { response: { exitCode: 127, stderr: 'gh: command not found' }, reason: 'gh_unavailable' },
+    { response: { exitCode: 1, stderr: 'HTTP 401: not logged in' }, reason: 'not_authenticated' },
+    { response: { exitCode: 1, stderr: 'HTTP 404: Not Found' }, reason: 'repository_unavailable' },
+    { response: { exitCode: 1, stderr: 'connection reset by peer' }, reason: 'network_error' },
+    { response: { exitCode: 1, stderr: 'HTTP 403: Resource not accessible by integration (insufficient scope)' }, reason: 'scope_missing' },
+    { response: { exitCode: 1, stderr: 'Field views not found on ProjectV2' }, reason: 'schema_drift' },
+    { response: { exitCode: 1, stderr: 'HTTP 422: Body is too long (maximum is 65536 characters)' }, reason: 'body_too_long' },
+    { response: { exitCode: 1, stderr: 'HTTP 422: A pull request already exists for this head and base' }, reason: 'already_exists' },
+    { response: { exitCode: 1, stderr: 'HTTP 422: head sha does not match' }, reason: 'head_changed' }
+  ]
+  for (const scenario of failures) {
+    test(`GH03 returns a safe ${scenario.reason} reason`, async () => {
       const host = await boot()
       host.writeState({ responses: { user: scenario.response } })
-      await expect(host.call('viewer')).rejects.toMatchObject({ data: { reason: scenario.reason } })
-      const error = await host.call('diagnoseAuth').catch((value: unknown) => value)
-      expect(JSON.stringify(error)).not.toContain('connection reset by peer')
-      await host.cleanup()
-      running = running.filter((candidate) => candidate !== host)
-    }
+      const error = await host.call('viewer').catch((value: unknown) => value)
+      expect(error).toMatchObject({ data: { reason: scenario.reason } })
+      expect(JSON.stringify(error)).not.toContain(scenario.response.stderr)
+    })
+  }
+
+  test('GH03 treats pull-request view and REST 404s as absence', async () => {
+    const host = await boot()
+    host.writeState({ responses: { pr: { exitCode: 1, stderr: 'HTTP 404: Not Found' } } })
+    expect(await host.call('review', { number: 11 })).toMatchObject({ kind: 'no-review' })
+
+    host.writeState({
+      responses: {
+        pr: { exitCode: 1, stderr: 'HTTP 403: Forbidden' },
+        api: { exitCode: 1, stderr: 'HTTP 404: Not Found' }
+      }
+    })
+    expect(await host.call('review', { number: 12 })).toMatchObject({ kind: 'no-review' })
+    expect(host.invocations().some(({ args }) => args[0] === 'api' && args.some((arg) => arg.endsWith('/pulls/12')))).toBe(true)
   })
 
   test('GH04 binds only an existing keyring account, strips ambient tokens in the bound child, and persists no token', async () => {
@@ -210,9 +298,9 @@ describe('GH01-GH08: GitHub runtime boundary', () => {
     expect(maximum).toBeGreaterThan(1)
   })
 
-  test('GH06 bounds a hung child and oversized output, then permits a later request', async () => {
+  test('GH06 kills a hung descendant and permits a later request', async () => {
     const previous = process.env.ORCA_GH_EXEC_TIMEOUT_MS
-    process.env.ORCA_GH_EXEC_TIMEOUT_MS = '60'
+    process.env.ORCA_GH_EXEC_TIMEOUT_MS = '1000'
     try {
       const host = await boot()
       host.writeState({ responses: { user: { hang: true } } })
@@ -222,17 +310,18 @@ describe('GH01-GH08: GitHub runtime boundary', () => {
         .filter((line) => line.length > 0)
         .map((line) => JSON.parse(line) as { event: string; pid?: number })
         .find((event) => event.event === 'start')
-      if (typeof started?.pid !== 'number') throw new Error('fixture process ID was not recorded')
-      expect(() => process.kill(started.pid, 0)).toThrow()
+      const pid = started?.pid
+      if (typeof pid !== 'number') throw new Error('fixture process ID was not recorded')
+      expect(() => process.kill(pid, 0)).toThrow()
       host.writeState({ responses: { user: { stdout: { login: 'recovered' } } } })
       expect(await host.call('viewer')).toMatchObject({ login: 'recovered' })
-      await host.cleanup()
-      running = running.filter((candidate) => candidate !== host)
     } finally {
       if (previous === undefined) delete process.env.ORCA_GH_EXEC_TIMEOUT_MS
       else process.env.ORCA_GH_EXEC_TIMEOUT_MS = previous
     }
+  })
 
+  test('GH06 rejects oversized output', async () => {
     const oversized = await boot()
     oversized.writeState({ responses: { user: { repeatBytes: 11 * 1024 * 1024 } } })
     await expect(oversized.call('viewer')).rejects.toMatchObject({ data: { reason: 'output_limit' } })

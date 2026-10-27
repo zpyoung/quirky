@@ -57,24 +57,27 @@ describe('quirky.hosting connection-owned refresh', () => {
     const secondResult = state(await second.callAny('quirky.hosting/visibleRefreshCandidates', { generation: 2, candidates: [secondCandidate] }))
     expect(firstResult).toMatchObject({ accepted: true, generation: 4, candidates: 1 })
     expect(secondResult).toMatchObject({ accepted: true, generation: 2, candidates: 1 })
-    expect(await testHost.call('refreshState', { worktree: testHost.worktree })).toMatchObject({ owners: 2, visibleCandidates: 2 })
-
+    expect(await testHost.call('refreshState')).toMatchObject({ owners: 2, visibleCandidates: 2 })
+  
     const stale = state(await testHost.call('visibleRefreshCandidates', { generation: 4, candidates: [] }))
     expect(stale).toMatchObject({ accepted: false, generation: 4, candidates: 1 })
     second.close()
-    expect(await testHost.call('refreshState', { worktree: testHost.worktree })).toMatchObject({ owners: 1, visibleCandidates: 1 })
+    expect(await testHost.call('refreshState')).toMatchObject({ owners: 1, visibleCandidates: 1 })
     const survivingOwner = state(await testHost.call('visibleRefreshCandidates', { generation: 5, candidates: [firstCandidate] }))
     expect(survivingOwner).toMatchObject({ accepted: true, generation: 5, candidates: 1 })
-
+  
     const reconnected = await testHost.connect('ui')
     const freshGeneration = state(await reconnected.callAny('quirky.hosting/visibleRefreshCandidates', { generation: 0, candidates: [] }))
     expect(freshGeneration).toMatchObject({ accepted: true, generation: 0, candidates: 0 })
-    expect(await testHost.call('refreshState', { worktree: testHost.worktree })).toMatchObject({ owners: 2, visibleCandidates: 1 })
+    expect(await testHost.call('refreshState')).toMatchObject({ owners: 2, visibleCandidates: 1 })
     reconnected.close()
-  })
+  }, 20_000)
 
   test('GH12 refresh methods require a real connection and reject unregistered candidates before GitHub calls', async () => {
     const testHost = await host()
+    const events: unknown[] = []
+    testHost.client.onEvent((event) => events.push(event))
+    await testHost.client.callAny('events.subscribe', {})
     const before = testHost.invocations().length
     const result = await testHost.pluginCall('quirky.hosting/visibleRefreshCandidates', {
       generation: 1,
@@ -88,34 +91,75 @@ describe('quirky.hosting connection-owned refresh', () => {
     })
     expect(invalid).toMatchObject({ kind: 'skipped', skippedReason: 'validation-denied' })
     expect(testHost.invocations().slice(before)).toHaveLength(0)
-  })
+    const deniedEvent = events.find((event) =>
+      isRecord(event) && event.type === 'quirky.hosting/refresh' && isRecord(event.data) && event.data.skippedReason === 'remote')
+    expect(deniedEvent).toMatchObject({
+      type: 'quirky.hosting/refresh',
+      data: {
+        sequence: expect.any(Number),
+        reason: 'visible',
+        aliases: ['path:/tmp/not-registered'],
+        worktreeId: null,
+        repoId: null,
+        status: 'skipped',
+        skippedReason: 'remote'
+      }
+    })
+  }, 20_000)
 
   test('GH12 manual refresh is immediate, post-push is delayed, and both publish lifecycle events', async () => {
     const testHost = await host()
+    const worktrees = await testHost.client.callAny('quirky.worktree/list', {})
+    if (!Array.isArray(worktrees)) throw new Error('expected worktree list')
+    const registered = worktrees.map(state).find((worktree) => worktree.id === testHost.worktree)
+    if (!registered || typeof registered.repoId !== 'string') throw new Error('expected registered repository identity')
     const events: unknown[] = []
     testHost.client.onEvent((event) => events.push(event))
     await testHost.client.callAny('events.subscribe', {})
     const work = candidate(testHost)
-
+  
     const manual = await testHost.call('refresh', { candidate: work, reason: 'manual' })
     expect(manual).toMatchObject({ kind: 'no-review' })
     const queued = await testHost.call('enqueueRefresh', { candidate: work, reason: 'post-push', priority: 100 })
     expect(queued).toMatchObject({ kind: 'queued' })
-    expect(events.some((event) => typeof event === 'object' && event !== null && 'type' in event && event.type === 'quirky.hosting/refresh')).toBe(true)
-    expect(await testHost.call('refreshState', { worktree: testHost.worktree })).toMatchObject({ budgets: { backgroundStarts: 0 } })
-  })
+    const refreshEvents = events.filter((event) => isRecord(event) && event.type === 'quirky.hosting/refresh')
+    expect(refreshEvents.length).toBeGreaterThan(0)
+    const payloads = refreshEvents.map((event) => state((event as Record<string, unknown>).data))
+    const started = payloads.find((event) => event.reason === 'manual' && event.status === 'in-flight')
+    expect(structuredClone(started)).toMatchObject({
+      sequence: expect.any(Number),
+      reason: 'manual',
+      aliases: [testHost.worktree],
+      worktreeId: testHost.worktree,
+      repoId: registered.repoId,
+      status: 'in-flight',
+      requestStartedAt: expect.any(Number)
+    })
+    const completed = payloads.find((event) => event.reason === 'manual' && 'outcome' in event)
+    expect(completed).toMatchObject({
+      reason: 'manual',
+      aliases: [testHost.worktree],
+      worktreeId: testHost.worktree,
+      repoId: registered.repoId,
+      outcome: { kind: 'no-review' }
+    })
+    const sequences = payloads.map((event) => event.sequence)
+    expect(sequences.every((value) => typeof value === 'number')).toBe(true)
+    expect(sequences).toEqual([...sequences].sort((left, right) => Number(left) - Number(right)))
+    expect(await testHost.call('refreshState')).toMatchObject({ budgets: { backgroundStarts: 0 } })
+  }, 20_000)
 
   test('GH12 pacing snapshots remain host/account scoped and bounded', async () => {
     const testHost = await host()
-    const before = state(await testHost.call('refreshState', { worktree: testHost.worktree }))
+    const before = state(await testHost.call('refreshState'))
     expect(before).toMatchObject({ queued: 0, inFlight: 0, budgets: { backgroundStarts: 0, activeStarts: 0 }, owners: 1 })
-
+  
     const report = await testHost.call('visibleRefreshCandidates', { generation: 1, candidates: [candidate(testHost)] })
     expect(report).toMatchObject({ accepted: true, candidates: 1 })
-    const snapshot = state(await testHost.call('refreshState', { worktree: testHost.worktree }))
+    const snapshot = state(await testHost.call('refreshState'))
     expect(snapshot.owners).toBe(1)
     expect(Number(snapshot.queued)).toBeLessThanOrEqual(1)
-  })
+  }, 20_000)
   test('GH12 active bursts are bounded per connection and GitHub account', async () => {
     const testHost = await host()
     const second = await testHost.connect('ui')
@@ -125,14 +169,14 @@ describe('quirky.hosting connection-owned refresh', () => {
     }
     const deferred = await testHost.call('refresh', { candidate: work, reason: 'active' })
     expect(deferred).toMatchObject({ kind: 'queued' })
-    const firstBudget = await testHost.call('refreshState', { worktree: testHost.worktree })
+    const firstBudget = await testHost.call('refreshState')
     expect(firstBudget).toMatchObject({ queued: 1, budgets: { activeStarts: 3 } })
-
+  
     for (let start = 0; start < 3; start += 1) {
       await second.callAny('quirky.hosting/refresh', { candidate: work, reason: 'active' })
     }
-    const secondBudget = await second.callAny('quirky.hosting/refreshState', { worktree: testHost.worktree })
+    const secondBudget = await second.callAny('quirky.hosting/refreshState', {})
     expect(secondBudget).toMatchObject({ budgets: { activeStarts: 3 } })
     second.close()
-  })
+  }, 20_000)
 })

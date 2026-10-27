@@ -10,6 +10,7 @@ import {
   positiveInteger,
   readNoCache,
   resolveDetailContext,
+  shaValue,
   stringValue,
   validateFilePath,
   type DetailContext,
@@ -275,10 +276,11 @@ function mapRestIssueComment(value: DetailRecord): DetailComment | null {
 
 function mapRestReview(value: DetailRecord): DetailComment | null {
   const body = stringValue(value.body) ?? '';
-  if (body.length === 0) return null;
+  const id = commentId(value);
+  if (body.length === 0 || id === null) return null;
   return {
     kind: 'review',
-    id: commentId(value),
+    id,
     author: nonemptyString(asRecord(value.user)?.login),
     body,
     createdAt: nonemptyString(value.submitted_at),
@@ -337,7 +339,7 @@ async function reviewComment(
     throw env.invalid('invalid_input', 'Review comment action must be inline or reply.');
   }
   const body = params.body;
-  if (typeof body !== 'string' || body.trim().length === 0 || new TextEncoder().encode(body).byteLength > 65_536) {
+  if (typeof body !== 'string' || body.trim().length === 0 || Buffer.byteLength(body, 'utf8') > 65_536) {
     throw env.invalid('invalid_input', 'A non-empty review comment body of at most 64 KiB is required.');
   }
   if (action === 'reply') return addReply(env, context, params, body);
@@ -549,7 +551,7 @@ export const REACTION_TARGET_QUERY = `query HostingReactionTarget($owner: String
   node(id: $subjectId) {
     __typename
     ... on PullRequest { id }
-    ... on IssueComment { issue { __typename id ... on PullRequest { id } } }
+    ... on IssueComment { pullRequest { id } }
     ... on PullRequestReviewComment { pullRequest { id } }
     ... on PullRequestReview { pullRequest { id } }
   }
@@ -581,11 +583,7 @@ function graphqlPull(value: unknown): DetailRecord | null {
 function reactionParentId(node: DetailRecord): string | null {
   const typename = node.__typename;
   if (typename === 'PullRequest') return nonemptyString(node.id);
-  if (typename === 'IssueComment') {
-    const issue = asRecord(node.issue);
-    return issue?.__typename === 'PullRequest' ? nonemptyString(issue.id) : null;
-  }
-  if (typename === 'PullRequestReviewComment' || typename === 'PullRequestReview') {
+  if (typename === 'IssueComment' || typename === 'PullRequestReviewComment' || typename === 'PullRequestReview') {
     return nonemptyString(asRecord(node.pullRequest)?.id);
   }
   return null;

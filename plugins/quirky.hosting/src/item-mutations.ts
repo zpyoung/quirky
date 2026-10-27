@@ -6,6 +6,7 @@ import {
   mapWorkItem,
   positiveInteger,
   positiveParam,
+  record,
   requiredList,
   safeErrorMessage,
   safeErrorReason,
@@ -190,6 +191,7 @@ async function listCollection(env: HostingEnv, params: Record<string, unknown>, 
       })
     : entries.flatMap((value) => {
         const raw = record(value)
+        if (raw === null) return []
         const login = typeof raw?.login === 'string' ? raw.login : null
         return login !== null && login.toLowerCase().includes(query) ? [{ login, avatarUrl: typeof raw.avatar_url === 'string' ? raw.avatar_url : null }] : []
       })

@@ -9,6 +9,8 @@ export type ProjectErrorReason =
   | 'not_found'
   | 'validation_error'
   | 'schema_drift'
+  | 'body_too_long'
+  | 'already_exists'
   | 'too_large'
   | 'unsupported_layout'
   | 'unknown'
@@ -22,6 +24,8 @@ function isProjectErrorReason(value: string): value is ProjectErrorReason {
     case 'not_found':
     case 'validation_error':
     case 'schema_drift':
+    case 'body_too_long':
+    case 'already_exists':
     case 'too_large':
     case 'unsupported_layout':
     case 'unknown':

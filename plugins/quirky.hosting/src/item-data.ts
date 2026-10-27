@@ -26,6 +26,7 @@ export type WorkItemRecord = {
   stateReason?: 'completed' | 'not_planned' | 'unknown'
   duplicateOf?: number
   mergeStateStatus?: string
+  reviewDecision?: string
   partial?: boolean
 }
 
@@ -66,7 +67,7 @@ export function positiveInteger(value: unknown): number | null {
 }
 
 export function utf8Length(value: string): number {
-  return new TextEncoder().encode(value).byteLength
+  return Buffer.byteLength(value, 'utf8')
 }
 
 export function ensureOutputBound(env: HostingEnv, value: unknown, label: string): void {
@@ -263,14 +264,23 @@ export function graphqlSearch(value: unknown): { issueCount: number; nodes: unkn
   const data = graphqlData(value)
   const search = record(data?.search)
   if (!search) return null
-  const count = safeInteger(search.issueCount)
+  const issueCount = positiveCount(search.issueCount)
   const pageInfo = record(search.pageInfo)
-  if (count === null || !Array.isArray(search.nodes) || !pageInfo) return null
+  const hasNextPage = pageInfo?.hasNextPage
+  const endCursor = pageInfo?.endCursor
+  if (
+    issueCount === null ||
+    !Array.isArray(search.nodes) ||
+    !pageInfo ||
+    typeof hasNextPage !== 'boolean' ||
+    (endCursor !== undefined && endCursor !== null && typeof endCursor !== 'string') ||
+    (hasNextPage && (typeof endCursor !== 'string' || endCursor.length === 0))
+  ) return null
   return {
-    issueCount: count,
-    nodes: array(search.nodes),
-    endCursor: string(pageInfo.endCursor),
-    hasNextPage: pageInfo.hasNextPage === true
+    issueCount,
+    nodes: search.nodes,
+    endCursor: typeof endCursor === 'string' ? endCursor : null,
+    hasNextPage
   }
 }
 
@@ -290,7 +300,7 @@ export function safeErrorMessage(error: unknown): string {
 export function isBodyTooLarge(error: unknown): boolean {
   const reason = safeErrorReason(error).toLowerCase()
   const message = safeErrorMessage(error).toLowerCase()
-  return reason === 'too_large' || ((message.includes('body') || message.includes('description')) && /(too long|too large|maximum length|exceeds.*limit)/.test(message))
+  return reason === 'too_large' || reason === 'body_too_long' || ((message.includes('body') || message.includes('description')) && /(too long|too large|maximum length|exceeds.*limit)/.test(message))
 }
 
 

@@ -8,12 +8,15 @@ import {
   mapWorkItem,
   ensureOutputBound,
   nonEmptyString,
+  utf8Length,
   positiveInteger,
   positiveParam,
+  record,
   requiredList,
   safeErrorReason,
   scopeForRepository,
   pullRequestRepositories,
+  string,
   type WorkItemKind,
   type WorkItemRecord
 } from './item-data'
@@ -55,7 +58,7 @@ function validateKind(env: HostingEnv, value: unknown): WorkItemKind | undefined
 
 function parseReference(env: HostingEnv, scope: Scope, reference: unknown): ParsedReference | null {
   if (reference === undefined) return null
-  if (typeof reference !== 'string' || reference.length === 0 || new TextEncoder().encode(reference).byteLength > 2048) {
+  if (typeof reference !== 'string' || reference.length === 0 || utf8Length(reference) > 2048) {
     throw env.invalid('validation_error', 'reference must be a GitHub work-item URL no longer than 2048 bytes.')
   }
   let parsed: URL
@@ -136,6 +139,7 @@ async function resolveWorkItem(
 ): Promise<{ item: WorkItemRecord; identity: Identity } | null> {
   const identities = selectedIdentity ? [selectedIdentity] : workItemRepositoryOrder(scope, kind)
   const preferredPullRepository = selectedIdentity ?? pullRequestRepositories(scope)[0]
+  let latestError: unknown
   for (const identity of identities) {
     if (kind !== 'pullRequest') {
       try {
@@ -180,8 +184,9 @@ async function workItem(env: HostingEnv, params: Record<string, unknown>, caller
   const options = itemOptions(env, scope, params)
   const cacheKey = env.cacheKey(scope, `work-item:${options.kind ?? 'any'}:${options.number}:${options.identity ? identityKey(options.identity) : 'configured'}`)
   const result = await env.cache(cacheKey, 300_000, () => resolveWorkItem(env, scope, options.number, options.kind, options.identity))
-  ensureOutputBound(env, result, 'Work item')
-  return result
+  const item = result?.item ?? null
+  ensureOutputBound(env, item, 'Work item')
+  return item
 }
 
 function participantLogin(value: unknown): string | null {

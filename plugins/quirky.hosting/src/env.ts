@@ -34,6 +34,7 @@ export type RunOptions = {
   input?: string
   ambient?: boolean
   signal?: AbortSignal
+  projectHost?: string
 }
 export type HostingConfiguration = {
   issueSourcePreference: IssueSourcePreference
@@ -194,7 +195,7 @@ export function createEnv(context: PluginContext): HostingEnv {
         encoding: 'utf8',
         windowsHide: true
       })
-      return typeof result.stdout === 'string' ? result.stdout : result.stdout.toString('utf8')
+      return result.stdout
     } catch {
       throw reasoned('conflict', 'git_failed', 'The local Git query failed.')
     }
@@ -354,7 +355,7 @@ async function remoteUrl(worktree: Worktree, remote: 'origin' | 'upstream'): Pro
       encoding: 'utf8',
       windowsHide: true
     })
-    const output = typeof result.stdout === 'string' ? result.stdout : result.stdout.toString('utf8')
+    const output = result.stdout
     const value = output.trim()
     return value.length > 0 ? value : null
   } catch {

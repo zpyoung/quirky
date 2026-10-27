@@ -2,15 +2,13 @@ import type { Handler, HostingEnv, Identity, Scope } from './env'
 import {
   array,
   boundedText,
-  configuredRepositories,
   nonEmptyString,
   positiveInteger,
   record,
-  scopeForRepository,
   utf8Length
 } from './item-data'
 import { classifyProjectError, projectError } from './project-errors'
-import { projectGraphql, resolveProjectHost } from './project-ref'
+import { projectGraphql, projectRest, resolveProjectHost } from './project-ref'
 
 type ProjectItemAction = 'editIssue' | 'editReview' | 'addComment' | 'updateComment' | 'deleteComment' | 'updateIssueType'
 type ProjectCaller = Parameters<Handler>[1]
@@ -118,7 +116,7 @@ async function projectField(env: HostingEnv, params: Record<string, unknown>, ca
   if (!clear && value === undefined) throw env.invalid('validation_error', 'value is required unless clear is true.')
   const normalizedValue = clear ? null : fieldValue(env, value)
   const scope = await env.resolve(params, caller)
-  const { identity } = resolveProjectHost(env, scope, params.host)
+  const { identity } = await resolveProjectHost(env, scope, params.host)
   const mutation = clear ? PROJECT_FIELD_CLEAR : PROJECT_FIELD_UPDATE
   await assertProjectFieldContext(env, scope, identity, project, item)
   const variables = clear
@@ -133,28 +131,29 @@ async function projectField(env: HostingEnv, params: Record<string, unknown>, ca
   return { updated: true, projectId: project, itemId: updatedItem, fieldId: field, cleared: clear, value: normalizedValue }
 }
 
-function workItemIdentity(env: HostingEnv, scope: Scope, value: unknown, expectedNumber: number, expectedKind: 'issue' | 'pullRequest'): Identity {
-  if (typeof value !== 'string' || value.length > 2048) throw env.invalid('validation_error', 'Project item has no valid configured work-item URL.')
+function workItemIdentity(env: HostingEnv, hostIdentity: Identity, value: unknown, expectedNumber: number, expectedKind: 'issue' | 'pullRequest'): Identity {
+  if (typeof value !== 'string' || value.length === 0 || value.length > 2048) throw env.invalid('validation_error', 'Project item has no valid work-item URL.')
   let url: URL
   try {
     url = new URL(value)
   } catch {
-    throw env.invalid('validation_error', 'Project item has no valid configured work-item URL.')
+    throw env.invalid('validation_error', 'Project item has no valid work-item URL.')
   }
   if (url.protocol !== 'https:' || url.username.length > 0 || url.password.length > 0 || url.search.length > 0 || url.hash.length > 0) {
     throw env.invalid('validation_error', 'Project item URL must be credential-free HTTPS.')
   }
-  const match = /^\/([^/]+)\/([^/]+)\/(issues|pull)\/([1-9][0-9]*)\/?$/.exec(url.pathname)
-  if (!match || match[1] === undefined || match[2] === undefined || match[3] === undefined || Number(match[4]) !== expectedNumber || (match[3] === 'issues') !== (expectedKind === 'issue')) {
-    throw env.invalid('validation_error', 'Project item URL does not match its configured work-item identity.')
+  if (url.host.toLowerCase() !== hostIdentity.host.toLowerCase()) {
+    throw env.invalid('validation_error', 'Project item URL must match the selected trusted GitHub host.')
   }
-  const identity = configuredRepositories(scope).find((candidate) =>
-    candidate.host.toLowerCase() === url.host.toLowerCase() &&
-    candidate.owner.toLowerCase() === match[1]?.toLowerCase() &&
-    candidate.repo.toLowerCase() === match[2]?.toLowerCase()
-  )
-  if (!identity) throw env.invalid('validation_error', 'Project item repository must match a configured remote.')
-  return identity
+  const match = /^\/([A-Za-z0-9-]+)\/([A-Za-z0-9._-]+)\/(issues|pull)\/([1-9][0-9]*)\/?$/.exec(url.pathname)
+  if (!match || match[1] === undefined || match[2] === undefined || match[3] === undefined) {
+    throw env.invalid('validation_error', 'Project item URL does not match its work-item identity.')
+  }
+  const number = positiveInteger(Number(match[4]))
+  if (number === null || number !== expectedNumber || (match[3] === 'issues') !== (expectedKind === 'issue')) {
+    throw env.invalid('validation_error', 'Project item URL does not match its work-item identity.')
+  }
+  return { host: hostIdentity.host, owner: match[1], repo: match[2] }
 }
 
 type ProjectItemContext = { identity: Identity; number: number; kind: 'issue' | 'pullRequest'; owner: string; ownerType: 'organization' | 'user' }
@@ -183,7 +182,7 @@ async function projectItemContext(
   if (!item || kind === null || number === null || owner === null || projectType === null) {
     throw env.invalid('validation_error', 'Project item must contain a GitHub issue or pull request.')
   }
-  const identity = workItemIdentity(env, scope, issueContent?.url, number, kind)
+  const identity = workItemIdentity(env, hostIdentity, issueContent?.url, number, kind)
   return { identity, number, kind, owner, ownerType: projectType }
 }
 
@@ -296,16 +295,12 @@ async function projectItemMutation(env: HostingEnv, params: Record<string, unkno
   if (action !== 'updateIssueType' && (issueTypeId !== undefined || issueTypeName !== undefined)) throw env.invalid('validation_error', 'Issue type selectors are only valid for updateIssueType.')
 
   const scope = await env.resolve(params, caller)
-  const { identity: projectHostIdentity } = resolveProjectHost(env, scope, params.host)
+  const { identity: projectHostIdentity } = await resolveProjectHost(env, scope, params.host)
   const context = await projectItemContext(env, scope, project, item, projectHostIdentity)
-  if (context.identity.host.toLowerCase() !== projectHostIdentity.host.toLowerCase()) {
-    throw env.invalid('validation_error', 'Project item and project must use the same configured GitHub host.')
-  }
   validateMutationKind(env, context, params)
   if ((action === 'editIssue' && context.kind !== 'issue') || (action === 'editReview' && context.kind !== 'pullRequest')) {
     throw env.invalid('validation_error', 'Mutation action does not match the selected project item type.')
   }
-  const selected = scopeForRepository(scope, context.identity)
   const itemPath = `repos/${context.identity.owner}/${context.identity.repo}/${context.kind === 'issue' ? 'issues' : 'pulls'}/${context.number}`
 
   if (action === 'editIssue' || action === 'editReview') {
@@ -315,7 +310,7 @@ async function projectItemMutation(env: HostingEnv, params: Record<string, unkno
     if (stateValue !== undefined) fields.state = stateValue
     if (action === 'editIssue' && stateValue === 'closed' && stateReason !== undefined) fields.state_reason = stateReason
     try {
-      await env.rest(selected, itemPath, 'PATCH', fields, { idempotent: false, ambient: true })
+      await projectRest(env, scope, context.identity, itemPath, 'PATCH', fields, { idempotent: false })
     } catch (error: unknown) {
       throw classifyProjectError(env, error, projectHostIdentity.host)
     }
@@ -327,7 +322,7 @@ async function projectItemMutation(env: HostingEnv, params: Record<string, unkno
     const commentBody = body ?? ''
     let response: unknown
     try {
-      response = await env.rest(selected, `repos/${context.identity.owner}/${context.identity.repo}/issues/${context.number}/comments`, 'POST', { body: commentBody }, { idempotent: false, ambient: true })
+      response = await projectRest(env, scope, context.identity, `repos/${context.identity.owner}/${context.identity.repo}/issues/${context.number}/comments`, 'POST', { body: commentBody }, { idempotent: false })
     } catch (error: unknown) {
       throw classifyProjectError(env, error, projectHostIdentity.host)
     }
@@ -341,13 +336,13 @@ async function projectItemMutation(env: HostingEnv, params: Record<string, unkno
     const target = commentPath(env, context, commentId)
     let comment: unknown
     try {
-      comment = await env.rest(selected, target.path, 'GET', undefined, { idempotent: true, ambient: true })
+      comment = await projectRest(env, scope, context.identity, target.path, 'GET', undefined, { idempotent: true })
     } catch (error: unknown) {
       throw classifyProjectError(env, error, projectHostIdentity.host)
     }
-    if (!commentMatchesContext(context, comment)) throw env.invalid('validation_error', 'Comment does not belong to the selected configured work item.')
+    if (!commentMatchesContext(context, comment)) throw env.invalid('validation_error', 'Comment does not belong to the selected work item.')
     try {
-      await env.rest(selected, target.path, action === 'deleteComment' ? 'DELETE' : 'PATCH', action === 'deleteComment' ? undefined : { body }, { idempotent: false, ambient: true })
+      await projectRest(env, scope, context.identity, target.path, action === 'deleteComment' ? 'DELETE' : 'PATCH', action === 'deleteComment' ? undefined : { body }, { idempotent: false })
     } catch (error: unknown) {
       throw classifyProjectError(env, error, projectHostIdentity.host)
     }

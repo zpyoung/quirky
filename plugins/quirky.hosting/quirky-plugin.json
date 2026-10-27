@@ -26,7 +26,7 @@
         "description": "Return the authenticated viewer for the selected GitHub repository host.",
         "readOnly": true,
         "params": {"type": "object", "properties": {"worktree": {"type": "string"}}},
-        "result": {"type": "object", "properties": {"login": {"type": "string"}, "email": {}}
+        "result": {"type": "object", "properties": {"login": {"type": "string"}, "email": {}}}
       },
       {
         "id": "rateLimit",
@@ -46,73 +46,114 @@
         "id": "configure",
         "description": "Persist the issue source preference and/or a keyring account binding for this repository.",
         "params": {"type": "object", "properties": {"worktree": {"type": "string"}, "issueSourcePreference": {"type": "string", "enum": ["auto", "origin", "upstream"]}, "account": {}, "clearAccount": {"type": "boolean"}}},
-        "result": {"type": "object", "properties": {"ok": {"type": "boolean"}, "issueSourcePreference": {"type": "string", "enum": ["auto", "origin", "upstream"]}, "account": {}}
+        "result": {"type": "object", "properties": {"ok": {"type": "boolean"}, "issueSourcePreference": {"type": "string", "enum": ["auto", "origin", "upstream"]}, "account": {}}}
       },
       {
         "id": "configuration",
         "description": "Read the repository's persisted hosting preferences without exposing credentials.",
         "readOnly": true,
         "params": {"type": "object", "properties": {"worktree": {"type": "string"}}},
-        "result": {"type": "object", "properties": {"worktreeId": {"type": "string"}, "issueSourcePreference": {"type": "string", "enum": ["auto", "origin", "upstream"]}, "account": {}}
+        "result": {"type": "object", "properties": {"worktreeId": {"type": "string"}, "issueSourcePreference": {"type": "string", "enum": ["auto", "origin", "upstream"]}, "account": {}}}
       },
       {
         "id": "forBranch",
         "description": "Find a pull request for the registered worktree branch, distinguishing absence from unavailable lookups.",
         "readOnly": true,
-        "params": {"type": "object", "properties": {"worktree": {"type": "string"}, "branch": {"type": "string"}, "number": {"type": "integer", "minimum": 1}, "fallbackPRNumber": {"type": "integer", "minimum": 1}, "headOid": {"type": "string"}, "prRepo": {"type": "object", "properties": {"host": {"type": "string"}, "owner": {"type": "string"}, "repo": {"type": "string"}}, "required": ["host", "owner", "repo"]}}, "required": ["branch"]},
-        "result": {"type": "object", "properties": {"kind": {"type": "string", "enum": ["found", "no-review", "unavailable"]}, "review": {"type": "object"}, "reason": {"type": "string"}, "message": {"type": "string"}, "fetchedAt": {"type": "number"}, "retryDisabledUntil": {"type": "number"}}
+        "params": {"type": "object", "properties": {"worktree": {"type": "string"}, "branch": {"type": "string"}, "number": {"type": "integer", "minimum": 1}, "fallbackPRNumber": {"type": "integer", "minimum": 1}, "headOid": {"type": "string"}, "prRepo": {"type": "object", "properties": {"host": {"type": "string"}, "owner": {"type": "string"}, "repo": {"type": "string"}}, "required": ["host", "owner", "repo"]}}},
+        "result": {
+          "type": "object",
+          "description": "Lookup envelope; a review is present only when kind is found. unavailable includes reason, message, and optional retry timing.",
+          "properties": {
+            "kind": {"type": "string", "enum": ["found", "no-review", "unavailable"]},
+            "review": {"type": "object", "description": "Normalized GitHub pull request.", "properties": {"provider": {"type": "string", "enum": ["github"]}, "number": {"type": "integer"}, "url": {"type": "string"}, "title": {"type": "string"}, "body": {"type": "string"}, "state": {"type": "string", "enum": ["open", "draft", "closed", "merged"]}, "headRefName": {"type": "string"}, "baseRefName": {"type": "string"}, "headRefOid": {"type": "string"}, "baseRefOid": {"type": "string"}, "mergeable": {"type": "string", "enum": ["MERGEABLE", "CONFLICTING", "UNKNOWN"]}, "checksStatus": {"type": "string", "enum": ["neutral", "pending", "success", "failure"]}, "reviewDecision": {"type": "string"}, "mergeStateStatus": {"type": "string"}, "autoMergeRequest": {}, "stack": {}, "mergeMethods": {}, "headRepositoryOwner": {"type": "object", "properties": {"login": {"type": "string"}}}, "headRepository": {"type": "object", "properties": {"name": {"type": "string"}, "owner": {"type": "object", "properties": {"login": {"type": "string"}}}}}}, "required": ["provider", "number", "url", "title", "body", "state", "headRefName", "baseRefName", "headRefOid", "baseRefOid", "mergeable", "checksStatus", "reviewDecision", "mergeStateStatus", "autoMergeRequest", "stack", "mergeMethods"]},
+            "reason": {"type": "string", "description": "Unavailable lookup reason."},
+            "message": {"type": "string", "description": "Unavailable lookup explanation."},
+            "fetchedAt": {"type": "number"},
+            "retryDisabledUntil": {"type": "number"},
+            "nextAutoRetryAt": {"type": "number"}
+          },
+          "required": ["kind", "fetchedAt"]
+        }
       },
       {
         "id": "review",
         "description": "Read one pull request by number from a trusted GitHub candidate repository.",
         "readOnly": true,
         "params": {"type": "object", "properties": {"worktree": {"type": "string"}, "number": {"type": "integer", "minimum": 1}, "prRepo": {"type": "object", "properties": {"host": {"type": "string"}, "owner": {"type": "string"}, "repo": {"type": "string"}}, "required": ["host", "owner", "repo"]}}, "required": ["number"]},
-        "result": {"type": "object", "properties": {"provider": {"type": "string", "enum": ["github"]}, "number": {"type": "integer"}, "url": {"type": "string"}, "title": {"type": "string"}, "body": {"type": "string"}, "state": {"type": "string", "enum": ["open", "draft", "closed", "merged"]}, "headRefName": {"type": "string"}, "baseRefName": {"type": "string"}, "headRefOid": {"type": "string"}, "baseRefOid": {"type": "string"}, "mergeable": {"type": "string", "enum": ["MERGEABLE", "CONFLICTING", "UNKNOWN"]}, "checksStatus": {"type": "string", "enum": ["neutral", "pending", "success", "failure"]}, "reviewDecision": {"type": "string"}, "mergeStateStatus": {"type": "string"}, "autoMergeRequest": {}, "stack": {}, "mergeMethods": {}}
+        "result": {
+          "type": "object",
+          "description": "Lookup envelope; a review is present only when kind is found. unavailable includes reason, message, and optional retry timing.",
+          "properties": {
+            "kind": {"type": "string", "enum": ["found", "no-review", "unavailable"]},
+            "review": {"type": "object", "description": "Normalized GitHub pull request.", "properties": {"provider": {"type": "string", "enum": ["github"]}, "number": {"type": "integer"}, "url": {"type": "string"}, "title": {"type": "string"}, "body": {"type": "string"}, "state": {"type": "string", "enum": ["open", "draft", "closed", "merged"]}, "headRefName": {"type": "string"}, "baseRefName": {"type": "string"}, "headRefOid": {"type": "string"}, "baseRefOid": {"type": "string"}, "mergeable": {"type": "string", "enum": ["MERGEABLE", "CONFLICTING", "UNKNOWN"]}, "checksStatus": {"type": "string", "enum": ["neutral", "pending", "success", "failure"]}, "reviewDecision": {"type": "string"}, "mergeStateStatus": {"type": "string"}, "autoMergeRequest": {}, "stack": {}, "mergeMethods": {}, "headRepositoryOwner": {"type": "object", "properties": {"login": {"type": "string"}}}, "headRepository": {"type": "object", "properties": {"name": {"type": "string"}, "owner": {"type": "object", "properties": {"login": {"type": "string"}}}}}}, "required": ["provider", "number", "url", "title", "body", "state", "headRefName", "baseRefName", "headRefOid", "baseRefOid", "mergeable", "checksStatus", "reviewDecision", "mergeStateStatus", "autoMergeRequest", "stack", "mergeMethods"]},
+            "reason": {"type": "string", "description": "Unavailable lookup reason."},
+            "message": {"type": "string", "description": "Unavailable lookup explanation."},
+            "fetchedAt": {"type": "number"},
+            "retryDisabledUntil": {"type": "number"},
+            "nextAutoRetryAt": {"type": "number"}
+          },
+          "required": ["kind", "fetchedAt"]
+        }
       },
       {
         "id": "creationEligibility",
         "description": "Recheck all GitHub pull-request creation blockers for the current worktree.",
         "readOnly": true,
         "params": {"type": "object", "properties": {"worktree": {"type": "string"}, "base": {"type": "string"}, "head": {"type": "string"}, "title": {"type": "string"}}},
-        "result": {"type": "object", "properties": {"eligible": {"type": "boolean"}, "reason": {"type": "string"}, "nextAction": {"type": "string"}, "blockers": {"type": "array", "items": {"type": "object", "properties": {"reason": {"type": "string"}, "nextAction": {"type": "string"}, "message": {"type": "string"}}, "required": ["reason", "nextAction", "message"]}}}, "required": ["eligible"]}
+        "result": {
+          "type": "object",
+          "description": "Eligibility and actionable blockers. defaultBase and head are strings or null; review is included when an existing pull request blocks creation.",
+          "properties": {
+            "eligible": {"type": "boolean"},
+            "reason": {"type": "string"},
+            "nextAction": {"type": "string"},
+            "defaultBase": {"description": "Selected base branch, or null when no base could be selected."},
+            "head": {"description": "Current branch name, or null for a detached head."},
+            "title": {"type": "string"},
+            "body": {"type": "string"},
+            "blockers": {"type": "array", "items": {"type": "object", "properties": {"reason": {"type": "string"}, "nextAction": {"type": "string"}, "message": {"type": "string"}}, "required": ["reason", "nextAction", "message"]}},
+            "review": {"type": "object", "description": "Existing normalized GitHub pull request that should be opened instead of creating another.", "properties": {"provider": {"type": "string", "enum": ["github"]}, "number": {"type": "integer"}, "url": {"type": "string"}, "title": {"type": "string"}, "body": {"type": "string"}, "state": {"type": "string", "enum": ["open", "draft", "closed", "merged"]}, "headRefName": {"type": "string"}, "baseRefName": {"type": "string"}, "headRefOid": {"type": "string"}, "baseRefOid": {"type": "string"}, "mergeable": {"type": "string", "enum": ["MERGEABLE", "CONFLICTING", "UNKNOWN"]}, "checksStatus": {"type": "string", "enum": ["neutral", "pending", "success", "failure"]}, "reviewDecision": {"type": "string"}, "mergeStateStatus": {"type": "string"}, "autoMergeRequest": {}, "stack": {}, "mergeMethods": {}, "headRepositoryOwner": {"type": "object", "properties": {"login": {"type": "string"}}}, "headRepository": {"type": "object", "properties": {"name": {"type": "string"}, "owner": {"type": "object", "properties": {"login": {"type": "string"}}}}}}, "required": ["provider", "number", "url", "title", "body", "state", "headRefName", "baseRefName", "headRefOid", "baseRefOid", "mergeable", "checksStatus", "reviewDecision", "mergeStateStatus", "autoMergeRequest", "stack", "mergeMethods"]}
+          },
+          "required": ["eligible", "defaultBase", "head", "title", "body", "blockers"]
+        }
       },
       {
         "id": "create",
         "description": "Create one GitHub pull request after revalidating all creation blockers.",
-        "params": {"type": "object", "properties": {"worktree": {"type": "string"}, "base": {"type": "string"}, "head": {"type": "string"}, "title": {"type": "string"}, "body": {"type": "string"}, "draft": {"type": "boolean"}, "useTemplate": {"type": "boolean"}}, "required": ["base", "title"]},
-        "result": {"type": "object", "properties": {"number": {"type": "integer"}, "url": {"type": "string"}, "existing": {"type": "boolean"}}
+        "params": {"type": "object", "properties": {"worktree": {"type": "string"}, "base": {"type": "string"}, "head": {"type": "string"}, "title": {"type": "string"}, "body": {"type": "string"}, "draft": {"type": "boolean"}, "useTemplate": {"type": "boolean"}}, "required": ["title"]},
+        "result": {"type": "object", "properties": {"number": {"type": "integer"}, "url": {"type": "string"}, "existing": {"type": "boolean"}}}
       },
       {
         "id": "createStacked",
         "description": "Create a GitHub stacked pull request and register it with the stack API.",
-        "params": {"type": "object", "properties": {"worktree": {"type": "string"}, "base": {"type": "string"}, "head": {"type": "string"}, "title": {"type": "string"}, "body": {"type": "string"}, "draft": {"type": "boolean"}, "useTemplate": {"type": "boolean"}, "parentNumber": {"type": "integer", "minimum": 1}}, "required": ["base", "title", "parentNumber"]},
-        "result": {"type": "object", "properties": {"number": {"type": "integer"}, "url": {"type": "string"}, "existing": {"type": "boolean"}, "stackId": {"type": "integer"}}
+        "params": {"type": "object", "properties": {"worktree": {"type": "string"}, "base": {"type": "string"}, "head": {"type": "string"}, "title": {"type": "string"}, "body": {"type": "string"}, "draft": {"type": "boolean"}, "useTemplate": {"type": "boolean"}, "parentNumber": {"type": "integer", "minimum": 1}}, "required": ["title", "parentNumber"]},
+        "result": {"type": "object", "properties": {"number": {"type": "integer"}, "url": {"type": "string"}, "existing": {"type": "boolean"}, "stacked": {"type": "boolean", "description": "True when the pull request is registered in the stack."}}, "required": ["number", "url", "stacked"]}
       },
       {
         "id": "merge",
         "description": "Merge one pull request with a fresh head/protection check and one shared execution path.",
         "destructive": true,
         "confirm": "Merge GitHub pull request #{number}?",
-        "params": {"type": "object", "properties": {"worktree": {"type": "string"}, "number": {"type": "integer", "minimum": 1}, "expectedHead": {"type": "string", "pattern": "^(?:[a-fA-F0-9]{40}|[a-fA-F0-9]{64})$"}, "method": {"type": "string", "enum": ["squash", "merge", "rebase"]}, "action": {"type": "string", "enum": ["direct", "queue"]}}, "required": ["number", "expectedHead", "method", "action"]},
+        "params": {"type": "object", "properties": {"worktree": {"type": "string"}, "number": {"type": "integer", "minimum": 1}, "expectedHead": {"type": "string", "description": "Must be a 40- or 64-character hexadecimal commit SHA; validated by the handler."}, "method": {"type": "string", "enum": ["squash", "merge", "rebase"]}, "action": {"type": "string", "enum": ["direct", "queue"]}}, "required": ["number", "expectedHead", "method", "action"]},
         "result": {"type": "object", "properties": {"state": {"type": "string", "enum": ["merged", "enqueued", "pending"]}, "number": {"type": "integer"}, "head": {"type": "string"}, "operationId": {"type": "string"}}, "required": ["state", "number", "head"]}
       },
       {
         "id": "autoMerge",
         "description": "Enable or disable GitHub auto-merge for a pull request.",
         "params": {"type": "object", "properties": {"worktree": {"type": "string"}, "number": {"type": "integer", "minimum": 1}, "action": {"type": "string", "enum": ["enable", "disable"]}, "expectedHead": {"type": "string"}, "method": {"type": "string", "enum": ["squash", "merge", "rebase"]}}, "required": ["number", "action"]},
-        "result": {"type": "object", "properties": {"number": {"type": "integer"}, "enabled": {"type": "boolean"}, "state": {"type": "string"}}
+        "result": {"type": "object", "properties": {"number": {"type": "integer"}, "enabled": {"type": "boolean"}, "state": {"type": "string"}}}
       },
       {
         "id": "updateReview",
         "description": "Edit, close, reopen, or mark a GitHub pull request ready for review.",
         "params": {"type": "object", "properties": {"worktree": {"type": "string"}, "number": {"type": "integer", "minimum": 1}, "action": {"type": "string", "enum": ["edit", "close", "reopen", "ready"]}, "title": {"type": "string"}, "body": {"type": "string"}}, "required": ["number", "action"]},
-        "result": {"type": "object", "properties": {"number": {"type": "integer"}, "updated": {"type": "boolean"}, "state": {"type": "string"}}
+        "result": {"type": "object", "properties": {"number": {"type": "integer"}, "updated": {"type": "boolean"}, "state": {"type": "string"}}}
       },
       {
         "id": "reviewers",
         "description": "Add or remove GitHub pull-request reviewers.",
-        "params": {"type": "object", "properties": {"worktree": {"type": "string"}, "number": {"type": "integer", "minimum": 1}, "action": {"type": "string", "enum": ["add", "remove"]}, "logins": {"type": "array", "items": {"type": "string"}, "minItems": 1}}, "required": ["number", "action", "logins"]},
-        "result": {"type": "object", "properties": {"number": {"type": "integer"}, "reviewers": {"type": "array", "items": {"type": "string"}}, "updated": {"type": "boolean"}}
+        "params": {"type": "object", "properties": {"worktree": {"type": "string"}, "number": {"type": "integer", "minimum": 1}, "action": {"type": "string", "enum": ["add", "remove"]}, "logins": {"type": "array", "description": "Provide at least one valid GitHub username; the handler rejects an empty list.", "items": {"type": "string"}}}, "required": ["number", "action", "logins"]},
+        "result": {"type": "object", "properties": {"number": {"type": "integer"}, "reviewers": {"type": "array", "items": {"type": "string"}}, "updated": {"type": "boolean"}}}
       },
       {
         "id": "checks",
@@ -125,7 +166,7 @@
         "id": "checkDetails",
         "description": "Read check annotations, jobs, and bounded failed-job log tails.",
         "readOnly": true,
-        "params": {"type": "object", "properties": {"worktree": {"type": "string"}, "number": {"type": "integer", "minimum": 1}, "prRepo": {"type": "object", "properties": {"host": {"type": "string"}, "owner": {"type": "string"}, "repo": {"type": "string"}}, "required": ["host", "owner", "repo"]}, "checkRunId": {"type": "integer", "minimum": 1}, "workflowRunId": {"type": "integer", "minimum": 1}, "jobName": {"type": "string"}}, "required": ["number", "checkRunId"]},
+        "params": {"type": "object", "properties": {"worktree": {"type": "string"}, "number": {"type": "integer", "minimum": 1}, "prRepo": {"type": "object", "properties": {"host": {"type": "string"}, "owner": {"type": "string"}, "repo": {"type": "string"}}, "required": ["host", "owner", "repo"]}, "checkRunId": {"type": "integer", "minimum": 1}, "workflowRunId": {"type": "integer", "minimum": 1}, "jobName": {"type": "string"}, "noCache": {"type": "boolean"}}, "required": ["number", "checkRunId"]},
         "result": {"type": "object", "properties": {"check": {"type": "object"}, "annotations": {"type": "array", "items": {"type": "object"}}, "jobs": {"type": "array", "items": {"type": "object"}}, "logTails": {"type": "array", "items": {"type": "object", "properties": {"jobId": {"type": "integer"}, "jobName": {"type": "string"}, "tail": {"type": "string"}}, "required": ["jobId", "jobName", "tail"]}}, "partialFailures": {"type": "array", "items": {"type": "string"}}, "truncated": {"type": "boolean"}}, "required": ["check", "annotations", "jobs", "logTails", "partialFailures", "truncated"]}
       },
       {
@@ -139,13 +180,13 @@
         "description": "Read issue comments, reviews, review comments, and review threads for a pull request.",
         "readOnly": true,
         "params": {"type": "object", "properties": {"worktree": {"type": "string"}, "number": {"type": "integer", "minimum": 1}, "prRepo": {"type": "object", "properties": {"host": {"type": "string"}, "owner": {"type": "string"}, "repo": {"type": "string"}}, "required": ["host", "owner", "repo"]}, "noCache": {"type": "boolean"}}, "required": ["number"]},
-        "result": {"type": "object", "properties": {"number": {"type": "integer"}, "comments": {"type": "array", "items": {"type": "object"}}, "partial": {"type": "boolean"}, "partialFailures": {"type": "array", "items": {"type": "string"}}}, "required": ["number", "comments", "partial", "partialFailures"]}
+        "result": {"type": "object", "properties": {"number": {"type": "integer"}, "comments": {"type": "array", "description": "Normalized comments. id/threadId/reactionSubjectId/kind identify targets for reviewComment.replyToId, resolveThread.threadId, and reaction.subjectId.", "items": {"type": "object", "properties": {"kind": {"type": "string", "enum": ["issue_comment", "review", "review_comment"]}, "id": {"description": "Numeric or string comment identity; review_comment IDs are numeric and can be used as reviewComment.replyToId."}, "author": {"description": "Author login or null."}, "body": {"type": "string"}, "createdAt": {"description": "Timestamp string or null."}, "state": {"description": "Review state string or null."}, "path": {"description": "File path or null."}, "line": {"description": "Line number or null."}, "startLine": {"description": "Range start line or null."}, "threadId": {"description": "Thread ID string or null; use a non-null value as resolveThread.threadId."}, "isResolved": {"description": "Boolean or null."}, "isOutdated": {"description": "Boolean or null."}, "reactionSubjectId": {"description": "Reaction subject ID string or null; use a non-null value as reaction.subjectId."}, "reactions": {"type": "array", "items": {"type": "object", "properties": {"content": {"type": "string"}, "count": {"type": "integer"}, "viewerHasReacted": {"type": "boolean"}}, "required": ["content", "count", "viewerHasReacted"]}}}, "required": ["kind", "id", "author", "body", "createdAt", "state", "path", "line", "startLine", "threadId", "isResolved", "isOutdated", "reactionSubjectId", "reactions"]}}, "partial": {"type": "boolean"}, "partialFailures": {"type": "array", "items": {"type": "string"}}}, "required": ["number", "comments", "partial", "partialFailures"]}
       },
       {
         "id": "reviewComment",
         "description": "Add a current-head inline or range review comment, or reply to a review comment.",
         "params": {"type": "object", "properties": {"worktree": {"type": "string"}, "number": {"type": "integer", "minimum": 1}, "prRepo": {"type": "object", "properties": {"host": {"type": "string"}, "owner": {"type": "string"}, "repo": {"type": "string"}}, "required": ["host", "owner", "repo"]}, "action": {"type": "string", "enum": ["inline", "reply"]}, "body": {"type": "string"}, "headSha": {"type": "string"}, "path": {"type": "string"}, "line": {"type": "integer", "minimum": 1}, "startLine": {"type": "integer", "minimum": 1}, "replyToId": {"type": "integer", "minimum": 1}}, "required": ["number", "action", "body"]},
-        "result": {"type": "object", "properties": {"number": {"type": "integer"}, "action": {"type": "string", "enum": ["inline", "reply"]}, "comment": {"type": "object", "properties": {"id": {"type": "integer"}, "path": {"type": "string"}, "line": {"type": "integer"}, "startLine": {"type": "integer"}, "body": {"type": "string"}}}}, "required": ["number", "action", "comment"]}
+        "result": {"type": "object", "properties": {"number": {"type": "integer"}, "action": {"type": "string", "enum": ["inline", "reply"]}, "comment": {"type": "object", "properties": {"id": {"type": "integer"}, "path": {"description": "File path or null for a reply without a file location."}, "line": {"description": "Line number or null when the reply has no line coordinate."}, "startLine": {"description": "Range start line or null when the reply has no range start."}, "body": {"type": "string"}}, "required": ["id", "path", "line", "startLine", "body"]}}, "required": ["number", "action", "comment"]}
       },
       {
         "id": "reaction",
@@ -169,88 +210,88 @@
         "id": "files",
         "description": "List changed files and bounded patch coordinates for a pull request.",
         "readOnly": true,
-        "params": {"type": "object", "properties": {"worktree": {"type": "string"}, "number": {"type": "integer", "minimum": 1}, "prRepo": {"type": "object", "properties": {"host": {"type": "string"}, "owner": {"type": "string"}, "repo": {"type": "string"}}, "required": ["host", "owner", "repo"]}, "limit": {"type": "integer", "minimum": 1, "maximum": 300}}, "required": ["number"]},
-        "result": {"type": "object", "properties": {"number": {"type": "integer"}, "files": {"type": "array", "items": {"type": "object"}}, "totalCount": {}, "truncated": {"type": "boolean"}, "filesUnavailable": {"type": "boolean"}, "partialFailures": {"type": "array", "items": {"type": "string"}}}, "required": ["number", "files", "truncated", "filesUnavailable", "partialFailures"]}
+        "params": {"type": "object", "properties": {"worktree": {"type": "string"}, "number": {"type": "integer", "minimum": 1}, "prRepo": {"type": "object", "properties": {"host": {"type": "string"}, "owner": {"type": "string"}, "repo": {"type": "string"}}, "required": ["host", "owner", "repo"]}, "noCache": {"type": "boolean"}}, "required": ["number"]},
+        "result": {"type": "object", "properties": {"number": {"type": "integer"}, "files": {"type": "array", "description": "Changed files, internally paged to a fixed cap. Each path can be used with fileViewed.path or fileContents.path; coordinates can supply reviewComment.path and line.", "items": {"type": "object", "properties": {"path": {"type": "string"}, "status": {"type": "string"}, "additions": {"type": "integer"}, "deletions": {"type": "integer"}, "changes": {"type": "integer"}, "patch": {"description": "Patch text or null when unavailable."}, "isBinary": {"type": "boolean"}, "patchUnavailable": {"type": "boolean"}, "viewed": {"description": "Whether viewed, or null when unavailable."}, "coordinates": {"type": "array", "items": {"type": "object", "properties": {"line": {"type": "integer"}, "side": {"type": "string", "enum": ["LEFT", "RIGHT"]}}, "required": ["line", "side"]}}}, "required": ["path", "status", "additions", "deletions", "changes", "patch", "isBinary", "patchUnavailable", "viewed", "coordinates"]}}, "totalCount": {"description": "Total changed-file count, or null if unavailable."}, "truncated": {"type": "boolean"}, "filesUnavailable": {"type": "boolean"}, "partialFailures": {"type": "array", "items": {"type": "string"}}}, "required": ["number", "files", "truncated", "filesUnavailable", "partialFailures"]}
       },
       {
         "id": "fileContents",
         "description": "Read a raw file at the pull request's base or head commit with binary and size status.",
         "readOnly": true,
-        "params": {"type": "object", "properties": {"worktree": {"type": "string"}, "number": {"type": "integer", "minimum": 1}, "prRepo": {"type": "object", "properties": {"host": {"type": "string"}, "owner": {"type": "string"}, "repo": {"type": "string"}}, "required": ["host", "owner", "repo"]}, "path": {"type": "string"}, "side": {"type": "string", "enum": ["base", "head"]}}, "required": ["number", "path", "side"]},
-        "result": {"type": "object", "properties": {"number": {"type": "integer"}, "path": {"type": "string"}, "side": {"type": "string", "enum": ["base", "head"]}, "sha": {"type": "string"}, "content": {}, "binary": {"type": "boolean"}, "tooLarge": {"type": "boolean"}, "unavailable": {"type": "boolean"}}, "required": ["number", "path", "side", "sha", "binary", "tooLarge", "unavailable"]}
+        "params": {"type": "object", "properties": {"worktree": {"type": "string"}, "number": {"type": "integer", "minimum": 1}, "prRepo": {"type": "object", "properties": {"host": {"type": "string"}, "owner": {"type": "string"}, "repo": {"type": "string"}}, "required": ["host", "owner", "repo"]}, "path": {"type": "string"}, "side": {"type": "string", "enum": ["base", "head"]}, "noCache": {"type": "boolean"}}, "required": ["number", "path", "side"]},
+        "result": {"type": "object", "properties": {"number": {"type": "integer"}, "path": {"type": "string"}, "side": {"type": "string", "enum": ["base", "head"]}, "sha": {"type": "string"}, "content": {"description": "Raw text content or null when binary, too large, or unavailable."}, "binary": {"type": "boolean"}, "tooLarge": {"type": "boolean"}, "unavailable": {"type": "boolean"}}, "required": ["number", "path", "side", "sha", "binary", "tooLarge", "unavailable"]}
       },
       {
         "id": "listWorkItems",
-        "description": "List GitHub issues and pull requests with stable pagination and issue-source fallback metadata.",
+        "description": "List GitHub issues and pull requests with stable client pagination and issue-source fallback metadata.",
         "readOnly": true,
-        "params": {"type": "object", "properties": {"worktree": {"type": "string"}, "limit": {"type": "integer", "minimum": 1, "maximum": 100}, "page": {"type": "integer", "minimum": 1}, "query": {"type": "string", "maxLength": 8192}, "noCache": {"type": "boolean"}}},
-        "result": {"type": "object", "properties": {"items": {"type": "array", "items": {"type": "object", "properties": {"stateReason": {"type": "string", "enum": ["completed", "not_planned", "unknown"]}, "duplicateOf": {"type": "integer"}, "issueType": {"type": "object", "properties": {"id": {"type": "string"}, "name": {"type": "string"}}}}}}, "page": {"type": "integer"}, "limit": {"type": "integer"}, "totalCount": {}, "hasNextPage": {"type": "boolean"}, "issueSourceFellBack": {"type": "boolean"}, "sources": {"type": "array", "items": {"type": "string"}}, "errors": {"type": "array", "items": {"type": "string"}}, "partial": {"type": "boolean"}}, "required": ["items", "page", "limit", "hasNextPage", "issueSourceFellBack", "sources"]}
+        "params": {"type": "object", "properties": {"worktree": {"type": "string"}, "limit": {"type": "integer", "minimum": 1, "maximum": 100}, "page": {"type": "integer", "minimum": 1}, "query": {"type": "string", "description": "Optional search query, limited to 8192 UTF-8 bytes by the handler."}, "noCache": {"type": "boolean"}}},
+        "result": {"type": "object", "properties": {"items": {"type": "array", "items": {"type": "object", "properties": {"kind": {"type": "string", "enum": ["issue", "pullRequest"]}, "number": {"type": "integer"}, "title": {"type": "string"}, "body": {"type": "string"}, "state": {"type": "string", "enum": ["open", "closed", "merged", "draft", "unknown"]}, "url": {"type": "string"}, "createdAt": {"description": "Timestamp string or null."}, "updatedAt": {"description": "Timestamp string or null."}, "author": {"description": "Author login or null."}, "labels": {"type": "array", "items": {"type": "string"}}, "assignees": {"type": "array", "items": {"type": "string"}}, "isDraft": {"type": "boolean"}, "headRefName": {"type": "string"}, "baseRefName": {"type": "string"}, "headRefOid": {"type": "string"}, "baseRefOid": {"type": "string"}, "additions": {"type": "integer"}, "deletions": {"type": "integer"}, "changedFiles": {"type": "integer"}, "issueType": {"type": "object", "properties": {"id": {"type": "string"}, "name": {"type": "string"}}, "required": ["id", "name"]}, "stateReason": {"type": "string", "enum": ["completed", "not_planned", "unknown"]}, "duplicateOf": {"type": "integer"}, "mergeStateStatus": {"type": "string"}, "reviewDecision": {"type": "string"}, "partial": {"type": "boolean"}}, "required": ["kind", "number", "title", "body", "state", "url", "createdAt", "updatedAt", "author", "labels", "assignees", "isDraft"]}}, "page": {"type": "integer"}, "limit": {"type": "integer"}, "totalCount": {"description": "Combined total count, or null when one or both sources cannot provide an exact count."}, "hasNextPage": {"type": "boolean"}, "truncated": {"type": "boolean"}, "issueSourceFellBack": {"type": "boolean"}, "sources": {"type": "object", "properties": {"issues": {"description": "Source name origin/upstream/configured, or null if issue search failed."}, "prs": {"description": "Source name origin/upstream/configured, or null if pull-request search failed."}, "originCandidate": {"type": "string"}, "upstreamCandidate": {"description": "Repository identity {host, owner, repo}, or null when no upstream candidate is configured.", "properties": {"host": {"type": "string"}, "owner": {"type": "string"}, "repo": {"type": "string"}}}}, "required": ["issues", "prs", "originCandidate", "upstreamCandidate"]}, "errors": {"type": "object", "description": "Present only when a source failed; keys are issues and/or prs.", "properties": {"issues": {"type": "object", "properties": {"reason": {"type": "string"}, "message": {"type": "string"}}, "required": ["reason", "message"]}, "prs": {"type": "object", "properties": {"reason": {"type": "string"}, "message": {"type": "string"}}, "required": ["reason", "message"]}}}, "partial": {"type": "boolean"}}, "required": ["items", "page", "limit", "totalCount", "hasNextPage", "truncated", "issueSourceFellBack", "sources", "partial"]}
       },
       {
         "id": "countWorkItems",
         "description": "Count matching GitHub issues and pull requests with the configured issue source.",
         "readOnly": true,
-        "params": {"type": "object", "properties": {"worktree": {"type": "string"}, "query": {"type": "string", "maxLength": 8192}}},
-        "result": {"type": "object", "properties": {"count": {"type": "integer"}}, "required": ["count"]}
+        "params": {"type": "object", "properties": {"worktree": {"type": "string"}, "query": {"type": "string", "description": "Optional search query, limited to 8192 UTF-8 bytes by the handler."}}},
+        "result": {"type": "object", "properties": {"count": {"type": "integer", "description": "Combined count or subtotal when partial is true."}, "partial": {"type": "boolean"}, "partialFailures": {"type": "array", "description": "Failed source counts; a failed source contributes zero to count.", "items": {"type": "object", "properties": {"source": {"type": "string", "enum": ["issues", "prs"]}, "reason": {"type": "string"}, "message": {"type": "string"}}, "required": ["source", "reason", "message"]}}, "issueSourceFellBack": {"type": "boolean"}}, "required": ["count", "partial", "partialFailures", "issueSourceFellBack"]}
       },
       {
         "id": "workItem",
         "description": "Read one GitHub issue or pull request, rejecting configured-reference mismatches.",
         "readOnly": true,
-        "params": {"type": "object", "properties": {"worktree": {"type": "string"}, "number": {"type": "integer", "minimum": 1}, "kind": {"type": "string", "enum": ["issue", "pullRequest"]}, "reference": {"type": "string", "maxLength": 8192}}},
-        "result": {"type": "object", "properties": {"number": {"type": "integer"}, "kind": {"type": "string", "enum": ["issue", "pullRequest"]}, "title": {"type": "string"}, "body": {"type": "string"}, "state": {"type": "string"}, "stateReason": {"type": "string", "enum": ["completed", "not_planned", "unknown"]}, "duplicateOf": {"type": "integer"}, "url": {"type": "string"}, "repository": {"type": "object"}, "issueType": {"type": "object", "properties": {"id": {"type": "string"}, "name": {"type": "string"}}}}
+        "params": {"type": "object", "properties": {"worktree": {"type": "string"}, "number": {"type": "integer", "minimum": 1}, "kind": {"type": "string", "enum": ["issue", "pullRequest"]}, "reference": {"type": "string", "description": "GitHub work-item URL validated by the handler and limited to 2048 UTF-8 bytes."}}},
+        "result": {"description": "Nullable normalized work-item record; null means the requested issue or pull request was not found.", "properties": {"kind": {"type": "string", "enum": ["issue", "pullRequest"]}, "number": {"type": "integer"}, "title": {"type": "string"}, "body": {"type": "string"}, "state": {"type": "string", "enum": ["open", "closed", "merged", "draft", "unknown"]}, "url": {"type": "string"}, "createdAt": {"description": "Timestamp string or null."}, "updatedAt": {"description": "Timestamp string or null."}, "author": {"description": "Author login or null."}, "labels": {"type": "array", "items": {"type": "string"}}, "assignees": {"type": "array", "items": {"type": "string"}}, "isDraft": {"type": "boolean"}, "headRefName": {"type": "string"}, "baseRefName": {"type": "string"}, "headRefOid": {"type": "string"}, "baseRefOid": {"type": "string"}, "additions": {"type": "integer"}, "deletions": {"type": "integer"}, "changedFiles": {"type": "integer"}, "issueType": {"type": "object", "properties": {"id": {"type": "string"}, "name": {"type": "string"}}, "required": ["id", "name"]}, "stateReason": {"type": "string", "enum": ["completed", "not_planned", "unknown"]}, "duplicateOf": {"type": "integer"}, "mergeStateStatus": {"type": "string"}, "reviewDecision": {"type": "string"}, "partial": {"type": "boolean"}}, "required": ["kind", "number", "title", "body", "state", "url", "createdAt", "updatedAt", "author", "labels", "assignees", "isDraft"]}
       },
       {
         "id": "workItemDetails",
         "description": "Read bounded issue or pull-request participants, timeline, and linked review details.",
         "readOnly": true,
-        "params": {"type": "object", "properties": {"worktree": {"type": "string"}, "number": {"type": "integer", "minimum": 1}, "kind": {"type": "string", "enum": ["issue", "pullRequest"]}, "reference": {"type": "string", "maxLength": 8192}, "page": {"type": "integer", "minimum": 1}, "limit": {"type": "integer", "minimum": 1, "maximum": 100}}},
-        "result": {"type": "object", "properties": {"item": {"type": "object", "properties": {"stateReason": {"type": "string", "enum": ["completed", "not_planned", "unknown"]}, "duplicateOf": {"type": "integer"}, "issueType": {"type": "object", "properties": {"id": {"type": "string"}, "name": {"type": "string"}}}}}, "participants": {"type": "array", "items": {"type": "object"}}, "timeline": {"type": "array", "items": {"type": "object"}}, "partialFailures": {"type": "array", "items": {"type": "string"}}, "truncated": {"type": "boolean"}}, "required": ["item", "participants", "timeline", "partialFailures", "truncated"]}
+        "params": {"type": "object", "properties": {"worktree": {"type": "string"}, "number": {"type": "integer", "minimum": 1}, "kind": {"type": "string", "enum": ["issue", "pullRequest"]}, "reference": {"type": "string", "description": "GitHub work-item URL validated by the handler and limited to 2048 UTF-8 bytes."}}},
+        "result": {"description": "Nullable bounded detail result; null means the requested work item was not found. A present result contains the normalized item and any available files, comments, participants, timeline, checks, and partial-read metadata.", "properties": {"item": {"type": "object", "description": "Normalized work-item record.", "properties": {"kind": {"type": "string", "enum": ["issue", "pullRequest"]}, "number": {"type": "integer"}, "title": {"type": "string"}, "body": {"type": "string"}, "state": {"type": "string", "enum": ["open", "closed", "merged", "draft", "unknown"]}, "url": {"type": "string"}, "createdAt": {"description": "Timestamp string or null."}, "updatedAt": {"description": "Timestamp string or null."}, "author": {"description": "Author login or null."}, "labels": {"type": "array", "items": {"type": "string"}}, "assignees": {"type": "array", "items": {"type": "string"}}, "isDraft": {"type": "boolean"}, "headRefName": {"type": "string"}, "baseRefName": {"type": "string"}, "headRefOid": {"type": "string"}, "baseRefOid": {"type": "string"}, "additions": {"type": "integer"}, "deletions": {"type": "integer"}, "changedFiles": {"type": "integer"}, "issueType": {"type": "object", "properties": {"id": {"type": "string"}, "name": {"type": "string"}}, "required": ["id", "name"]}, "stateReason": {"type": "string", "enum": ["completed", "not_planned", "unknown"]}, "duplicateOf": {"type": "integer"}, "mergeStateStatus": {"type": "string"}, "reviewDecision": {"type": "string"}, "partial": {"type": "boolean"}}, "required": ["kind", "number", "title", "body", "state", "url", "createdAt", "updatedAt", "author", "labels", "assignees", "isDraft"]}, "files": {"type": "array", "items": {"type": "object", "description": "Normalized changed-file details; see files.result for path, coordinates, and status fields."}}, "comments": {"type": "array", "items": {"type": "object", "description": "Normalized comment details; see comments.result for identity and nullable coordinate fields."}}, "participants": {"type": "array", "items": {"type": "object", "properties": {"login": {"type": "string"}, "name": {"type": "string"}, "url": {"type": "string"}}}}, "timeline": {"type": "array", "items": {"type": "object"}}, "checks": {"type": "array", "items": {"type": "object"}}, "partialFailures": {"type": "array", "items": {"type": "string"}}, "filesUnavailable": {"type": "boolean"}, "truncated": {"type": "boolean"}}, "required": ["item", "participants", "timeline", "partialFailures", "truncated"]}
       },
       {
         "id": "createIssue",
         "description": "Create a GitHub issue with explicit configured repository identity.",
-        "params": {"type": "object", "properties": {"worktree": {"type": "string"}, "title": {"type": "string", "minLength": 1}, "body": {"type": "string", "maxLength": 65536}, "labels": {"type": "array", "items": {"type": "string"}}, "assignees": {"type": "array", "items": {"type": "string"}}}, "required": ["title"]},
-        "result": {"type": "object", "properties": {"number": {"type": "integer"}, "url": {"type": "string"}, "title": {"type": "string"}, "state": {"type": "string"}}
+        "params": {"type": "object", "properties": {"worktree": {"type": "string"}, "title": {"type": "string", "description": "Required non-empty title, limited to 256 UTF-8 bytes by the handler."}, "body": {"type": "string", "description": "Optional issue body, limited to 1048576 UTF-8 bytes by the handler."}, "labels": {"type": "array", "items": {"type": "string"}}, "assignees": {"type": "array", "items": {"type": "string"}}}, "required": ["title"]},
+        "result": {"type": "object", "description": "Normalized created issue record. If GitHub created the issue but its requested body could not be saved, bodySaveWarning and partial are returned with completedSteps.", "properties": {"kind": {"type": "string", "enum": ["issue"]}, "number": {"type": "integer"}, "title": {"type": "string"}, "body": {"type": "string"}, "state": {"type": "string", "enum": ["open", "closed", "unknown"]}, "url": {"type": "string"}, "createdAt": {"description": "Timestamp string or null."}, "updatedAt": {"description": "Timestamp string or null."}, "author": {"description": "Author login or null."}, "labels": {"type": "array", "items": {"type": "string"}}, "assignees": {"type": "array", "items": {"type": "string"}}, "isDraft": {"type": "boolean"}, "issueType": {"type": "object", "properties": {"id": {"type": "string"}, "name": {"type": "string"}}, "required": ["id", "name"]}, "stateReason": {"type": "string", "enum": ["completed", "not_planned", "unknown"]}, "duplicateOf": {"type": "integer"}, "partial": {"type": "boolean"}, "bodySaveWarning": {"type": "string"}, "completedSteps": {"type": "array", "items": {"type": "string"}}}, "required": ["kind", "number", "title", "body", "state", "url", "createdAt", "updatedAt", "author", "labels", "assignees", "isDraft"]}
       },
       {
         "id": "updateIssue",
         "description": "Update issue fields, state, labels, assignees, or duplicate relationship.",
-        "params": {"type": "object", "properties": {"worktree": {"type": "string"}, "number": {"type": "integer", "minimum": 1}, "title": {"type": "string"}, "body": {"type": "string", "maxLength": 65536}, "state": {"type": "string", "enum": ["open", "closed"]}, "stateReason": {"type": "string", "enum": ["completed", "not_planned"]}, "duplicateOf": {"type": "integer", "minimum": 1}, "addLabels": {"type": "array", "items": {"type": "string"}}, "removeLabels": {"type": "array", "items": {"type": "string"}}, "addAssignees": {"type": "array", "items": {"type": "string"}}, "removeAssignees": {"type": "array", "items": {"type": "string"}}}, "required": ["number"]},
-        "result": {"type": "object", "properties": {"number": {"type": "integer"}, "updated": {"type": "boolean"}, "warning": {"type": "string"}}
+        "params": {"type": "object", "properties": {"worktree": {"type": "string"}, "number": {"type": "integer", "minimum": 1}, "title": {"type": "string"}, "body": {"type": "string", "description": "Optional issue body, limited to 1048576 UTF-8 bytes by the handler."}, "state": {"type": "string", "enum": ["open", "closed"]}, "stateReason": {"type": "string", "enum": ["completed", "not_planned"]}, "duplicateOf": {"type": "integer", "minimum": 1}, "addLabels": {"type": "array", "items": {"type": "string"}}, "removeLabels": {"type": "array", "items": {"type": "string"}}, "addAssignees": {"type": "array", "items": {"type": "string"}}, "removeAssignees": {"type": "array", "items": {"type": "string"}}}, "required": ["number"]},
+        "result": {"type": "object", "description": "Normalized issue record returned after the requested mutation and a fresh read.", "properties": {"kind": {"type": "string", "enum": ["issue"]}, "number": {"type": "integer"}, "title": {"type": "string"}, "body": {"type": "string"}, "state": {"type": "string", "enum": ["open", "closed", "unknown"]}, "url": {"type": "string"}, "createdAt": {"description": "Timestamp string or null."}, "updatedAt": {"description": "Timestamp string or null."}, "author": {"description": "Author login or null."}, "labels": {"type": "array", "items": {"type": "string"}}, "assignees": {"type": "array", "items": {"type": "string"}}, "isDraft": {"type": "boolean"}, "issueType": {"type": "object", "properties": {"id": {"type": "string"}, "name": {"type": "string"}}, "required": ["id", "name"]}, "stateReason": {"type": "string", "enum": ["completed", "not_planned", "unknown"]}, "duplicateOf": {"type": "integer"}, "partial": {"type": "boolean"}}, "required": ["kind", "number", "title", "body", "state", "url", "createdAt", "updatedAt", "author", "labels", "assignees", "isDraft"]}
       },
       {
         "id": "issueComment",
         "description": "Add a comment to a GitHub issue.",
-        "params": {"type": "object", "properties": {"worktree": {"type": "string"}, "number": {"type": "integer", "minimum": 1}, "body": {"type": "string", "minLength": 1, "maxLength": 65536}}, "required": ["number", "body"]},
-        "result": {"type": "object", "properties": {"number": {"type": "integer"}, "comment": {"type": "object"}, "created": {"type": "boolean"}}
+        "params": {"type": "object", "properties": {"worktree": {"type": "string"}, "number": {"type": "integer", "minimum": 1}, "body": {"type": "string", "description": "Required non-empty comment body, limited to 65536 UTF-8 bytes by the handler."}}, "required": ["number", "body"]},
+        "result": {"type": "object", "properties": {"id": {"type": "integer"}, "issueNumber": {"type": "integer"}, "body": {"type": "string"}, "url": {"description": "Comment URL or null."}, "createdAt": {"description": "Creation timestamp or null."}, "author": {"description": "Author login or null."}}, "required": ["id", "issueNumber", "body", "url", "createdAt", "author"]}
       },
       {
         "id": "labels",
         "description": "List GitHub labels available for the configured repository.",
         "readOnly": true,
-        "params": {"type": "object", "properties": {"worktree": {"type": "string"}, "query": {"type": "string", "maxLength": 8192}, "limit": {"type": "integer", "minimum": 1, "maximum": 100}}},
-        "result": {"type": "object", "properties": {"items": {"type": "array", "items": {"type": "object"}}, "hasNextPage": {"type": "boolean"}, "truncated": {"type": "boolean"}}, "required": ["items", "hasNextPage", "truncated"]}
+        "params": {"type": "object", "properties": {"worktree": {"type": "string"}, "query": {"type": "string", "description": "Optional filter, trimmed and limited to 256 characters by the handler."}}},
+        "result": {"type": "object", "properties": {"labels": {"type": "array", "items": {"type": "string"}}, "totalCount": {"type": "integer"}, "truncated": {"type": "boolean", "description": "Always false because all upstream pages are loaded to the fixed cap."}}, "required": ["labels", "totalCount", "truncated"]}
       },
       {
         "id": "assignees",
         "description": "List GitHub users assignable to the configured repository.",
         "readOnly": true,
-        "params": {"type": "object", "properties": {"worktree": {"type": "string"}, "query": {"type": "string", "maxLength": 8192}, "limit": {"type": "integer", "minimum": 1, "maximum": 100}}},
-        "result": {"type": "object", "properties": {"items": {"type": "array", "items": {"type": "object"}}, "hasNextPage": {"type": "boolean"}, "truncated": {"type": "boolean"}}, "required": ["items", "hasNextPage", "truncated"]}
+        "params": {"type": "object", "properties": {"worktree": {"type": "string"}, "query": {"type": "string", "description": "Optional filter, trimmed and limited to 256 characters by the handler."}}},
+        "result": {"type": "object", "properties": {"assignees": {"type": "array", "items": {"type": "object", "properties": {"login": {"type": "string"}, "avatarUrl": {"description": "Avatar URL or null."}}, "required": ["login", "avatarUrl"]}}, "totalCount": {"type": "integer"}, "truncated": {"type": "boolean", "description": "Always false because all upstream pages are loaded to the fixed cap."}}, "required": ["assignees", "totalCount", "truncated"]}
       },
       {
         "id": "projects",
         "description": "Discover accessible GitHub Projects v2 projects with partial organization failures explicit.",
         "readOnly": true,
-        "params": {"type": "object", "properties": {"worktree": {"type": "string"}, "host": {"type": "string"}, "limit": {"type": "integer", "minimum": 1, "maximum": 100}}},
-        "result": {"type": "object", "properties": {"projects": {"type": "array", "items": {"type": "object"}}, "partialFailures": {"type": "array", "items": {"type": "string"}}, "truncated": {"type": "boolean"}}, "required": ["projects", "partialFailures", "truncated"]}
+        "params": {"type": "object", "properties": {"worktree": {"type": "string"}, "host": {"type": "string"}}},
+        "result": {"type": "object", "properties": {"projects": {"type": "array", "items": {"type": "object"}}, "partialFailures": {"type": "array", "description": "Organization discovery failures.", "items": {"type": "object", "properties": {"owner": {"type": "string"}, "reason": {"type": "string"}, "message": {"type": "string"}}, "required": ["owner", "reason", "message"]}}, "truncated": {"type": "boolean"}}, "required": ["projects", "partialFailures", "truncated"]}
       },
       {
         "id": "projectRef",
         "description": "Resolve a configured GitHub Projects v2 URL or owner/reference into a project identity.",
         "readOnly": true,
-        "params": {"type": "object", "properties": {"worktree": {"type": "string"}, "input": {"type": "string", "maxLength": 8192}, "host": {"type": "string"}}, "required": ["input"]},
+        "params": {"type": "object", "properties": {"worktree": {"type": "string"}, "input": {"type": "string", "description": "Project reference limited to 2048 UTF-8 bytes by the handler."}, "host": {"type": "string"}}, "required": ["input"]},
         "result": {"type": "object", "properties": {"id": {"type": "string"}, "number": {"type": "integer"}, "owner": {"type": "string"}, "ownerType": {"type": "string", "enum": ["user", "organization"]}, "url": {"type": "string"}}, "required": ["id", "number", "owner", "ownerType", "url"]}
       },
       {
@@ -262,10 +303,10 @@
       },
       {
         "id": "projectTable",
-        "description": "Read a bounded project view table, board, or roadmap with pagination and layout metadata.",
+        "description": "Read a fixed-cap project view table, board, or roadmap with layout metadata; upstream pages are followed internally.",
         "readOnly": true,
-        "params": {"type": "object", "properties": {"worktree": {"type": "string"}, "owner": {"type": "string"}, "ownerType": {"type": "string", "enum": ["user", "organization"]}, "projectNumber": {"type": "integer", "minimum": 1}, "viewId": {"type": "string"}, "viewNumber": {"type": "integer", "minimum": 1}, "viewName": {"type": "string"}, "queryOverride": {"type": "string", "maxLength": 8192}, "host": {"type": "string"}, "limit": {"type": "integer", "minimum": 1, "maximum": 500}, "page": {"type": "integer", "minimum": 1}}, "required": ["owner", "ownerType", "projectNumber"]},
-        "result": {"type": "object", "properties": {"project": {"type": "object"}, "view": {"type": "object"}, "layout": {"type": "string"}, "items": {"type": "array", "items": {"type": "object"}}, "fields": {"type": "array", "items": {"type": "object"}}, "page": {"type": "integer"}, "limit": {"type": "integer"}, "hasNextPage": {"type": "boolean"}, "totalCount": {}, "truncated": {"type": "boolean"}, "parentFieldDropped": {"type": "boolean"}, "partialFailures": {"type": "array", "items": {"type": "string"}}, "boardColumns": {"type": "array", "items": {"type": "object"}}, "roadmap": {"type": "object"}}, "required": ["items", "layout", "truncated"]}
+        "params": {"type": "object", "properties": {"worktree": {"type": "string"}, "owner": {"type": "string"}, "ownerType": {"type": "string", "enum": ["user", "organization"]}, "projectNumber": {"type": "integer", "minimum": 1}, "viewId": {"type": "string"}, "viewNumber": {"type": "integer", "minimum": 1}, "viewName": {"type": "string"}, "queryOverride": {"type": "string", "description": "Optional project filter limited to 8192 UTF-8 bytes by the handler."}, "host": {"type": "string"}}, "required": ["owner", "ownerType", "projectNumber"]},
+        "result": {"type": "object", "properties": {"project": {"type": "object"}, "view": {"type": "object"}, "layout": {"type": "string"}, "items": {"type": "array", "items": {"type": "object"}}, "fields": {"type": "array", "items": {"type": "object"}}, "totalCount": {"description": "Total item count, or null if unavailable."}, "truncated": {"type": "boolean"}, "parentFieldDropped": {"type": "boolean"}, "boardColumns": {"type": "array", "items": {"type": "object"}}, "roadmap": {"type": "object"}}, "required": ["project", "view", "items", "fields", "layout", "totalCount", "truncated", "parentFieldDropped"]}
       },
       {
         "id": "projectField",
@@ -276,36 +317,36 @@
       {
         "id": "projectItemMutation",
         "description": "Edit an issue or pull request, comment, or issue type from a GitHub Project.",
-        "params": {"type": "object", "properties": {"worktree": {"type": "string"}, "action": {"type": "string", "enum": ["editIssue", "editReview", "addComment", "updateComment", "deleteComment", "updateIssueType"]}, "projectId": {"type": "string"}, "itemId": {"type": "string"}, "number": {"type": "integer", "minimum": 1}, "kind": {"type": "string", "enum": ["issue", "pullRequest"]}, "body": {"type": "string", "maxLength": 65536}, "commentId": {"type": "integer", "minimum": 1}, "title": {"type": "string"}, "state": {"type": "string", "enum": ["open", "closed"]}, "stateReason": {"type": "string", "enum": ["completed", "not_planned"]}, "labels": {"type": "array", "items": {"type": "string"}}, "assignees": {"type": "array", "items": {"type": "string"}}, "issueTypeId": {"type": "string"}, "issueTypeName": {"type": "string"}, "host": {"type": "string"}}, "required": ["action"]},
-        "result": {"type": "object", "properties": {"action": {"type": "string"}, "host": {"type": "string"}, "updated": {"type": "boolean"}, "id": {"type": "string"}, "number": {"type": "integer"}, "kind": {"type": "string", "enum": ["issue", "pullRequest"]}, "url": {"type": "string"}, "changed": {"type": "boolean"}, "issueTypes": {"type": "array", "items": {"type": "object"}}}
+        "params": {"type": "object", "properties": {"worktree": {"type": "string"}, "action": {"type": "string", "enum": ["editIssue", "editReview", "addComment", "updateComment", "deleteComment", "updateIssueType"]}, "projectId": {"type": "string"}, "itemId": {"type": "string"}, "number": {"type": "integer", "minimum": 1}, "kind": {"type": "string", "enum": ["issue", "pullRequest"]}, "body": {"type": "string", "description": "Required for addComment and updateComment, optional for editIssue and editReview, and disallowed for other actions; limited to 65536 UTF-8 bytes by the handler."}, "commentId": {"type": "integer", "minimum": 1}, "title": {"type": "string"}, "state": {"type": "string", "enum": ["open", "closed"]}, "stateReason": {"type": "string", "enum": ["completed", "not_planned"]}, "labels": {"type": "array", "items": {"type": "string"}}, "assignees": {"type": "array", "items": {"type": "string"}}, "issueTypeId": {"type": "string"}, "issueTypeName": {"type": "string"}, "host": {"type": "string"}}, "required": ["action"]},
+        "result": {"type": "object", "properties": {"action": {"type": "string", "enum": ["editIssue", "editReview", "addComment", "updateComment", "deleteComment", "updateIssueType"]}, "number": {"type": "integer"}, "kind": {"type": "string", "enum": ["issue", "pullRequest"]}, "url": {"type": "string"}, "changed": {"type": "boolean"}, "commentId": {"type": "integer", "description": "Numeric comment ID returned by addComment/updateComment/deleteComment; pass it to commentId for updateComment or deleteComment."}, "body": {"type": "string", "description": "Comment body returned for addComment."}, "issueTypes": {"type": "array", "items": {"type": "object", "properties": {"id": {"type": "string"}, "name": {"type": "string"}, "description": {"description": "Description string or null."}, "enabled": {"type": "boolean"}}, "required": ["id", "name", "description", "enabled"]}}, "issueType": {"description": "Updated issue type object or null when GitHub returns no issue type.", "properties": {"id": {"type": "string"}, "name": {"type": "string"}}}}, "required": ["action", "number", "kind", "url", "changed"]}
       },
       {
         "id": "refresh",
         "description": "Run a direct GitHub pull-request refresh for the supplied candidate.",
         "connection": true,
         "params": {"type": "object", "properties": {"candidate": {"type": "object", "properties": {"worktree": {"type": "string"}, "branch": {"type": "string"}, "number": {"type": "integer", "minimum": 1}, "headOid": {"type": "string"}, "active": {"type": "boolean"}}, "required": ["worktree"]}, "reason": {"type": "string", "enum": ["visible", "active", "post-push", "manual", "swr"]}, "priority": {"type": "integer"}}, "required": ["candidate", "reason"]},
-        "result": {"type": "object", "properties": {"kind": {"type": "string", "enum": ["found", "no-review", "unavailable"]}, "review": {"type": "object"}, "reason": {"type": "string"}, "fetchedAt": {"type": "number"}}
+        "result": {"type": "object", "description": "Lookup results and scheduling outcomes. queued may include sequence/dueAt; skipped includes skippedReason; paused includes pausedUntil/skippedReason.", "properties": {"kind": {"type": "string", "enum": ["found", "no-review", "unavailable", "queued", "skipped", "paused"]}, "review": {"type": "object", "description": "Normalized GitHub pull request returned for kind found.", "properties": {"provider": {"type": "string", "enum": ["github"]}, "number": {"type": "integer"}, "url": {"type": "string"}, "title": {"type": "string"}, "body": {"type": "string"}, "state": {"type": "string", "enum": ["open", "draft", "closed", "merged"]}, "headRefName": {"type": "string"}, "baseRefName": {"type": "string"}, "headRefOid": {"type": "string"}, "baseRefOid": {"type": "string"}, "mergeable": {"type": "string", "enum": ["MERGEABLE", "CONFLICTING", "UNKNOWN"]}, "checksStatus": {"type": "string", "enum": ["neutral", "pending", "success", "failure"]}, "reviewDecision": {"type": "string"}, "mergeStateStatus": {"type": "string"}, "autoMergeRequest": {}, "stack": {}, "mergeMethods": {}, "headRepositoryOwner": {"type": "object", "properties": {"login": {"type": "string"}}}, "headRepository": {"type": "object", "properties": {"name": {"type": "string"}, "owner": {"type": "object", "properties": {"login": {"type": "string"}}}}}}, "required": ["provider", "number", "url", "title", "body", "state", "headRefName", "baseRefName", "headRefOid", "baseRefOid", "mergeable", "checksStatus", "reviewDecision", "mergeStateStatus", "autoMergeRequest", "stack", "mergeMethods"]}, "reason": {"type": "string"}, "message": {"type": "string"}, "fetchedAt": {"type": "number"}, "retryDisabledUntil": {"type": "number"}, "nextAutoRetryAt": {"type": "number"}, "skippedReason": {"type": "string", "enum": ["capacity", "rate-limit"]}, "pausedUntil": {"type": "number"}, "sequence": {"type": "integer"}, "dueAt": {"type": "number"}}, "required": ["kind"]}
       },
       {
         "id": "enqueueRefresh",
         "description": "Enqueue a validated GitHub pull-request refresh candidate.",
         "connection": true,
         "params": {"type": "object", "properties": {"candidate": {"type": "object", "properties": {"worktree": {"type": "string"}, "branch": {"type": "string"}, "number": {"type": "integer", "minimum": 1}, "headOid": {"type": "string"}, "active": {"type": "boolean"}}, "required": ["worktree"]}, "reason": {"type": "string", "enum": ["visible", "active", "post-push", "manual", "swr"]}, "priority": {"type": "integer"}}, "required": ["candidate", "reason"]},
-        "result": {"type": "object", "properties": {"kind": {"type": "string", "enum": ["queued", "skipped"]}, "skippedReason": {"type": "string"}}, "required": ["kind"]}
+        "result": {"type": "object", "properties": {"kind": {"type": "string", "enum": ["queued", "skipped"]}, "skippedReason": {"type": "string", "enum": ["capacity", "validation-denied", "validation-backoff"]}}, "required": ["kind"]}
       },
       {
         "id": "visibleRefreshCandidates",
         "description": "Replace the calling connection's visible/active GitHub pull-request candidate set.",
         "connection": true,
-        "params": {"type": "object", "properties": {"generation": {"type": "integer", "minimum": 0}, "candidates": {"type": "array", "maxItems": 1000, "items": {"type": "object", "properties": {"worktree": {"type": "string"}, "branch": {"type": "string"}, "number": {"type": "integer", "minimum": 1}, "headOid": {"type": "string"}, "active": {"type": "boolean"}}, "required": ["worktree"]}}}, "required": ["generation", "candidates"]},
+        "params": {"type": "object", "properties": {"generation": {"type": "integer", "minimum": 0}, "candidates": {"type": "array", "description": "At most 1000 candidates; the connection handler enforces this limit.", "items": {"type": "object", "properties": {"worktree": {"type": "string"}, "branch": {"type": "string"}, "number": {"type": "integer", "minimum": 1}, "headOid": {"type": "string"}, "active": {"type": "boolean"}}, "required": ["worktree"]}}}, "required": ["generation", "candidates"]},
         "result": {"type": "object", "properties": {"accepted": {"type": "boolean"}, "generation": {"type": "integer"}, "candidates": {"type": "integer"}}, "required": ["accepted", "generation", "candidates"]}
       },
       {
         "id": "refreshState",
-        "description": "Report bounded background refresh queue state for the selected worktree.",
+        "description": "Report bounded GitHub refresh queue state across active connections.",
         "connection": true,
         "readOnly": true,
-        "params": {"type": "object", "properties": {"worktree": {"type": "string"}}},
+        "params": {"type": "object", "properties": {}},
         "result": {"type": "object", "properties": {"queued": {"type": "integer"}, "inFlight": {"type": "integer"}, "visibleCandidates": {"type": "integer"}, "budgets": {"type": "object", "properties": {"backgroundStarts": {"type": "integer"}, "activeStarts": {"type": "integer"}}}, "owners": {"type": "integer"}}, "required": ["queued", "inFlight", "visibleCandidates", "budgets", "owners"]}
       }
     ],
@@ -317,8 +358,8 @@
       },
       {
         "id": "refresh",
-        "description": "A GitHub pull-request refresh was queued, paused, skipped, or completed.",
-        "data": {"type": "object", "properties": {"worktreeId": {"type": "string"}, "repoId": {"type": "string"}, "sequence": {"type": "integer"}, "status": {"type": "string"}, "reason": {"type": "string"}, "outcome": {"type": "object"}, "pausedUntil": {"type": "number"}}, "required": ["worktreeId", "repoId", "sequence"]}
+        "description": "A GitHub pull-request refresh event correlated by monotonic sequence, aliases, and registered worktree/repository identity where resolvable.",
+        "data": {"type": "object", "description": "Resolved candidates carry registered IDs; IDs are null only for validation-denied candidates that cannot be resolved.", "properties": {"sequence": {"type": "integer"}, "reason": {"type": "string", "enum": ["visible", "active", "post-push", "manual", "swr"]}, "aliases": {"type": "array", "items": {"type": "string"}}, "worktreeId": {"description": "Registered worktree ID, or null only when candidate validation is denied before resolution."}, "repoId": {"description": "Registered repository ID, or null only when candidate validation is denied before resolution."}, "status": {"type": "string", "enum": ["queued", "in-flight", "paused", "skipped"]}, "skippedReason": {"type": "string", "enum": ["fresh", "not-git", "bare", "archived", "disconnected", "remote", "rate-limit", "capacity"]}, "pausedUntil": {"type": "number"}, "requestStartedAt": {"type": "number"}, "outcome": {"type": "object", "description": "Completed lookup envelope.", "properties": {"kind": {"type": "string", "enum": ["found", "no-review", "unavailable"]}, "review": {"type": "object", "description": "Normalized GitHub pull request.", "properties": {"provider": {"type": "string", "enum": ["github"]}, "number": {"type": "integer"}, "url": {"type": "string"}, "title": {"type": "string"}, "body": {"type": "string"}, "state": {"type": "string", "enum": ["open", "draft", "closed", "merged"]}, "headRefName": {"type": "string"}, "baseRefName": {"type": "string"}, "headRefOid": {"type": "string"}, "baseRefOid": {"type": "string"}, "mergeable": {"type": "string", "enum": ["MERGEABLE", "CONFLICTING", "UNKNOWN"]}, "checksStatus": {"type": "string", "enum": ["neutral", "pending", "success", "failure"]}, "reviewDecision": {"type": "string"}, "mergeStateStatus": {"type": "string"}, "autoMergeRequest": {}, "stack": {}, "mergeMethods": {}, "headRepositoryOwner": {"type": "object", "properties": {"login": {"type": "string"}}}, "headRepository": {"type": "object", "properties": {"name": {"type": "string"}, "owner": {"type": "object", "properties": {"login": {"type": "string"}}}}}}, "required": ["provider", "number", "url", "title", "body", "state", "headRefName", "baseRefName", "headRefOid", "baseRefOid", "mergeable", "checksStatus", "reviewDecision", "mergeStateStatus", "autoMergeRequest", "stack", "mergeMethods"]}, "reason": {"type": "string"}, "message": {"type": "string"}, "fetchedAt": {"type": "number"}, "retryDisabledUntil": {"type": "number"}, "nextAutoRetryAt": {"type": "number"}}, "required": ["kind", "fetchedAt"]}}, "required": ["sequence", "reason", "aliases", "worktreeId", "repoId"]}
       }
     ],
     "cli-command": [

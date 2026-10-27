@@ -133,7 +133,7 @@ export function readNoCache(env: HostingEnv, params: Record<string, unknown>): b
 }
 
 export function validateFilePath(env: HostingEnv, value: unknown): string {
-  if (typeof value !== 'string' || value.length === 0 || new TextEncoder().encode(value).byteLength > 4096) {
+  if (typeof value !== 'string' || value.length === 0 || Buffer.byteLength(value, 'utf8') > 4096) {
     throw env.invalid('invalid_input', 'A repository-relative file path is required.');
   }
   const segments = value.split('/');

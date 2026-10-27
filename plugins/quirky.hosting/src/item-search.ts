@@ -3,6 +3,7 @@ import {
   array,
   buildSearchQuery,
   ensureOutputBound,
+  graphqlSearch,
   identityKey,
   isRecord,
   mapWorkItem,
@@ -11,6 +12,7 @@ import {
   pullRequestRepositories,
   record,
   safeErrorReason,
+  utf8Length,
   sameIdentity,
   scopeForRepository,
   validateSearchRepo,
@@ -390,7 +392,7 @@ async function countSource(
 export async function countWorkItems(env: HostingEnv, params: Record<string, unknown>, caller: ItemCaller): Promise<Record<string, unknown>> {
   const query = typeof params.query === 'string' ? params.query : ''
   if (typeof params.query !== 'undefined' && typeof params.query !== 'string') throw env.invalid('validation_error', 'query must be a string.')
-  if (new TextEncoder().encode(query).byteLength > 8192) throw env.invalid('validation_error', 'query exceeds the 8192-byte limit.')
+  if (utf8Length(query) > 8192) throw env.invalid('validation_error', 'query exceeds the 8192-byte limit.')
   const scope = await env.resolve(params, caller)
   const safeQuery = validateSearchRepo(env, query, [scope.origin, scope.issueRepository, ...scope.candidates])
   const [issues, prs] = await Promise.allSettled([

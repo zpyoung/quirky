@@ -283,8 +283,8 @@ async function loadRawFile(
     }
     throw env.invalid('file_contents_unavailable', 'Could not load the requested pull request file contents.');
   }
-  const sample = new TextEncoder().encode(content).subarray(0, 2048);
-  if (sample.includes(0)) {
+  const nulIndex = content.slice(0, 2048).indexOf('\0');
+  if (nulIndex >= 0 && Buffer.byteLength(content.slice(0, nulIndex), 'utf8') < 2048) {
     return { number: context.number, path, side, sha, content: null, binary: true, tooLarge: false, unavailable: false };
   }
   return { number: context.number, path, side, sha, content, binary: false, tooLarge: false, unavailable: false };

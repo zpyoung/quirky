@@ -1,5 +1,5 @@
 import type { Handler, HostingEnv, Scope } from './env'
-import { isRecord, nonEmptyString, parseBranch, parseOid, parsePositiveInteger, parseIdentity, sameIdentity, type IdentityValue } from './pr-data'
+import { isRecord, nonEmptyString, parseBranch, parseOid, parsePositiveInteger, parseIdentity, sameIdentity, providerReason, type IdentityValue } from './pr-data'
 
 const LOOKUP_FIELDS = [
   'id', 'number', 'title', 'body', 'state', 'url', 'isDraft', 'updatedAt', 'mergeable', 'reviewDecision', 'mergeStateStatus',
@@ -15,6 +15,29 @@ const ABSENT_TTL = 15 * 60_000
 const MERGED_TTL = 6 * 60 * 60_000
 const CACHE_CAPACITY = 500
 
+const PROVIDER_FAILURE_MESSAGES: Record<string, string> = {
+  not_found: 'The GitHub pull request was not found in the configured repository.',
+  repo_unavailable: 'The GitHub repository is unavailable or cannot be resolved.',
+  repository_unavailable: 'The GitHub repository is unavailable or inaccessible.',
+  rate_limited: 'GitHub rate limits prevent this pull request lookup.',
+  auth_required: 'GitHub authentication is unavailable. Check your gh login.',
+  not_authenticated: 'GitHub authentication is unavailable. Check your gh login.',
+  permission_denied: 'GitHub did not allow access to this pull request.',
+  network_error: 'GitHub is unreachable right now. Check your network and try again.',
+  gh_unavailable: 'GitHub CLI is unavailable.',
+  server_error: 'GitHub is temporarily unavailable.',
+  timeout: 'The GitHub request timed out.',
+  output_limit: 'The GitHub response exceeded the configured output limit.',
+  cancelled: 'The GitHub request was cancelled.',
+  validation_error: 'GitHub rejected the requested operation.',
+  schema_drift: 'GitHub returned an unsupported API schema.',
+  scope_missing: 'The authenticated GitHub account lacks the required API scopes.',
+  body_too_long: 'GitHub rejected the request because its body is too long.',
+  already_exists: 'A matching GitHub item already exists.',
+  head_changed: 'The pull request head changed. Refresh and review the new commit before trying again.',
+  upstream_error: 'The GitHub request failed.',
+  upstream_unavailable: 'GitHub pull request lookup is unavailable.'
+}
 export type ReviewState = 'open' | 'draft' | 'closed' | 'merged'
 export type CheckState = 'neutral' | 'pending' | 'success' | 'failure'
 export type Review = {
@@ -56,7 +79,7 @@ export type PRRead = { scope: Scope; repository: IdentityValue; raw: Record<stri
 
 type CachedLookup = { expiresAt: number; value: Lookup }
 export type PRLookup = {
-  forBranch(params: Record<string, unknown>, caller: Parameters<Handler>[1]): Promise<Lookup>
+  forBranch(params: Record<string, unknown>, caller: Parameters<Handler>[1], options?: { noCache?: boolean }): Promise<Lookup>
   review(params: Record<string, unknown>, caller: Parameters<Handler>[1]): Promise<Lookup>
   readFresh(params: Record<string, unknown>, caller: Parameters<Handler>[1]): Promise<PRRead | null>
   invalidate(scope: Scope, data?: Record<string, unknown>): void
@@ -87,8 +110,9 @@ function selectRepositories(env: HostingEnv, scope: Scope, supplied: unknown): I
   const candidates = identityCandidates(scope)
   if (supplied === undefined) return candidates
   const requested = parseIdentity(supplied)
-  if (!requested || !candidates.some((candidate) => sameIdentity(candidate, requested))) {
-    inputError(env, 'The pull request repository must match a configured GitHub remote.')
+  if (!requested) inputError(env, 'prRepo must identify a configured GitHub repository.')
+  if (!candidates.some((candidate) => sameIdentity(candidate, requested))) {
+    throw env.invalid('repository_mismatch', 'The requested pull request repository is not configured for this worktree.')
   }
   return candidates.filter((candidate) => sameIdentity(candidate, requested))
 }
@@ -99,10 +123,10 @@ function parseArray(value: unknown): unknown[] {
 
 function stateOf(raw: Record<string, unknown>): ReviewState | undefined {
   const state = typeof raw.state === 'string' ? raw.state.toUpperCase() : ''
+  if (state === 'MERGED' || raw.merged === true) return 'merged'
+  if (state === 'CLOSED') return 'closed'
   if (raw.isDraft === true || raw.draft === true || state === 'DRAFT') return 'draft'
   if (state === 'OPEN') return 'open'
-  if (state === 'CLOSED') return 'closed'
-  if (state === 'MERGED' || raw.merged === true) return 'merged'
   return undefined
 }
 
@@ -173,42 +197,16 @@ function reviewFromRaw(raw: Record<string, unknown>, repository: IdentityValue, 
 }
 
 function errorFields(error: unknown): { message: string; reason?: string; retryDisabledUntil?: number; nextAutoRetryAt?: number } {
-  const message = error instanceof Error ? error.message : ''
-  let reason: string | undefined
+  const reportedReason = providerReason(error)
+  const reason = reportedReason && Object.hasOwn(PROVIDER_FAILURE_MESSAGES, reportedReason) ? reportedReason : 'upstream_unavailable'
   let retryDisabledUntil: number | undefined
   let nextAutoRetryAt: number | undefined
   if (isRecord(error) && isRecord(error.data)) {
-    const reportedReason = error.data.reason
-    if (typeof reportedReason === 'string' && [
-      'not_found', 'repo_unavailable', 'rate_limited', 'auth_required', 'permission_denied',
-      'network_error', 'gh_unavailable', 'server_error', 'upstream_unavailable'
-    ].includes(reportedReason)) reason = reportedReason
     if (typeof error.data.retryDisabledUntil === 'number' && Number.isFinite(error.data.retryDisabledUntil)) retryDisabledUntil = error.data.retryDisabledUntil
     if (typeof error.data.nextAutoRetryAt === 'number' && Number.isFinite(error.data.nextAutoRetryAt)) nextAutoRetryAt = error.data.nextAutoRetryAt
   }
-  const lower = message.toLowerCase()
-  if (!reason) {
-    if (/404|not found|could not resolve to a repository/.test(lower)) reason = 'not_found'
-    else if (/rate limit|429|retry-after/.test(lower)) reason = 'rate_limited'
-    else if (/authentication|not logged|bad credentials|401/.test(lower)) reason = 'auth_required'
-    else if (/permission|403|resource not accessible/.test(lower)) reason = 'permission_denied'
-    else if (/network|timed out|timeout|dns|connection reset|econn/.test(lower)) reason = 'network_error'
-    else if (/enoent|command not found/.test(lower)) reason = 'gh_unavailable'
-    else reason = 'upstream_unavailable'
-  }
-  const safeMessages: Record<string, string> = {
-    not_found: 'The GitHub pull request was not found in the configured repository.',
-    repo_unavailable: 'The GitHub repository is unavailable or cannot be resolved.',
-    rate_limited: 'GitHub rate limits prevent this pull request lookup.',
-    auth_required: 'GitHub authentication is unavailable. Check your gh login.',
-    permission_denied: 'GitHub did not allow access to this pull request.',
-    network_error: 'GitHub is unreachable right now. Check your network and try again.',
-    gh_unavailable: 'GitHub CLI is unavailable.',
-    server_error: 'GitHub is temporarily unavailable.',
-    upstream_unavailable: 'GitHub pull request lookup is unavailable.'
-  }
   return {
-    message: safeMessages[reason] ?? safeMessages.upstream_unavailable!,
+    message: PROVIDER_FAILURE_MESSAGES[reason] ?? PROVIDER_FAILURE_MESSAGES.upstream_unavailable!,
     reason,
     ...(retryDisabledUntil !== undefined ? { retryDisabledUntil } : {}),
     ...(nextAutoRetryAt !== undefined ? { nextAutoRetryAt } : {})
@@ -281,7 +279,7 @@ function normalizeRestPull(raw: Record<string, unknown>): Record<string, unknown
   const headRefOid = head ? parseOid(head.sha) : undefined
   const baseRefOid = base ? parseOid(base.sha) : undefined
   const url = nonEmptyString(raw.url) ?? nonEmptyString(raw.html_url)
-  if (!headRefName || !baseRefName || !headRefOid || !baseRefOid || !url) return undefined
+  if (!head || !base || !headRefName || !baseRefName || !headRefOid || !baseRefOid || !url) return undefined
   const state = typeof raw.state === 'string' ? raw.state.toUpperCase() : ''
   const mergeStateStatus = typeof raw.mergeStateStatus === 'string'
     ? raw.mergeStateStatus
@@ -486,12 +484,13 @@ function cacheTtl(result: Lookup, active: boolean): number {
 
 export function createPRLookup(env: HostingEnv): PRLookup {
   const resultCache = new Map<string, CachedLookup>()
+  let cacheGeneration = 0
 
   const invalidate = (scope: Scope, data?: Record<string, unknown>) => {
+    cacheGeneration += 1
     resultCache.clear()
     env.changed(scope, data)
   }
-
   const resolveExact = async (scope: Scope, repositories: IdentityValue[], number: number, fresh = false): Promise<PRRead | null> => {
     let firstError: unknown
     for (const repository of repositories) {
@@ -581,7 +580,11 @@ export function createPRLookup(env: HostingEnv): PRLookup {
     return { kind: 'no-review', fetchedAt }
   }
 
-  const forBranch = async (params: Record<string, unknown>, caller: Parameters<Handler>[1]): Promise<Lookup> => {
+  const forBranch = async (
+    params: Record<string, unknown>,
+    caller: Parameters<Handler>[1],
+    options?: { noCache?: boolean }
+  ): Promise<Lookup> => {
     const scope = await env.resolve(params, caller)
     const branch = params.branch === '' || params.branch === undefined ? undefined : parseBranch(params.branch)
     if (params.branch !== undefined && params.branch !== '' && !branch) inputError(env, 'branch must be a valid branch name.')
@@ -596,12 +599,16 @@ export function createPRLookup(env: HostingEnv): PRLookup {
     const rawKey = `pr-lookup:${scope.worktree.repoId}:${scope.origin.host}/${scope.origin.owner}/${scope.origin.repo}:${branch ?? ''}:${number ?? ''}:${fallback ?? ''}:${headOid ?? ''}:${supplied}`
     const key = env.cacheKey(scope, rawKey)
     const active = params.active === true
+    if (options?.noCache === true) return lookupFresh(normalizedParams, caller)
     const cached = resultCache.get(key)
     if (cached && cached.expiresAt > Date.now()) return cached.value
     if (cached) resultCache.delete(key)
+    const generation = cacheGeneration
     const value = await env.cache(key, 60_000, () => lookupFresh(normalizedParams, caller))
-    resultCache.set(key, { expiresAt: Date.now() + cacheTtl(value, active), value })
-    if (resultCache.size > CACHE_CAPACITY) resultCache.delete(resultCache.keys().next().value!)
+    if (generation === cacheGeneration) {
+      resultCache.set(key, { expiresAt: Date.now() + cacheTtl(value, active), value })
+      if (resultCache.size > CACHE_CAPACITY) resultCache.delete(resultCache.keys().next().value!)
+    }
     return value
   }
 

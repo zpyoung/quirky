@@ -6,6 +6,7 @@ import {
   errorReason,
   uncertainMutation,
   graphqlHasErrors,
+  nonnegativeInteger,
   positiveInteger,
   readNoCache,
   resolveDetailContext,
@@ -347,8 +348,7 @@ function makeChecksResult(number: number, headSha: string | null, checks: CheckR
 
 function checkVerdict(check: CheckRecord): 'failure' | 'pending' | 'success' | 'neutral' | 'unknown' {
   const conclusion = check.conclusion;
-  if (conclusion !== null && ['failure', 'error', 'startup_failure', 'timed_out', 'cancelled'].includes(conclusion)) return 'failure';
-  if (conclusion === 'action_required') return 'pending';
+  if (conclusion !== null && ['failure', 'error', 'startup_failure', 'timed_out', 'cancelled', 'action_required'].includes(conclusion)) return 'failure';
   if (conclusion === 'success' || conclusion === 'skipped') return 'success';
   if (['pending', 'queued', 'in_progress', 'action_required', 'expected', 'requested', 'waiting'].includes(check.status)) return 'pending';
   if (check.status === 'success') return 'success';
@@ -535,16 +535,15 @@ function sliceLogTail(value: string): { text: string; truncated: boolean } {
   if (earlierLines.length > 0) sections.push('… earlier errors …', ...earlierLines);
   sections.push(...lines.slice(tailStart));
   let result = sections.join('\n');
-  const encoder = new TextEncoder();
   let truncated = tailStart > 0;
-  while (encoder.encode(result).byteLength > 16 * 1024) {
+  while (Buffer.byteLength(result, 'utf8') > 16 * 1024) {
     truncated = true;
     const linesToTrim = result.split('\n');
     if (linesToTrim.length <= 1) {
-      const bytes = encoder.encode(result);
+      const bytes = Buffer.from(result, 'utf8');
       let start = Math.max(0, bytes.byteLength - 16 * 1024);
       while (start < bytes.byteLength && (bytes[start] & 0xc0) === 0x80) start += 1;
-      result = new TextDecoder().decode(bytes.subarray(start));
+      result = bytes.subarray(start).toString('utf8');
       break;
     }
     const markerIndex = linesToTrim.indexOf('… earlier errors …');

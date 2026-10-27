@@ -87,6 +87,8 @@ function isProjectErrorReason(value: string): boolean {
     case 'not_found':
     case 'validation_error':
     case 'schema_drift':
+    case 'body_too_long':
+    case 'already_exists':
     case 'too_large':
     case 'unsupported_layout':
     case 'unknown':
@@ -107,6 +109,8 @@ function safePartialFailure(error: unknown, host: string, owner: string): Record
     not_found: 'The organization project was not found.',
     validation_error: 'GitHub rejected the project request.',
     schema_drift: 'This GitHub host returned an unsupported Projects schema.',
+    body_too_long: 'GitHub rejected the requested body because it is too long.',
+    already_exists: 'The requested GitHub object already exists.',
     too_large: 'The organization project list exceeded the supported size.',
     unsupported_layout: 'The organization project uses an unsupported layout.',
     unknown: 'This organization could not be listed.'
@@ -116,7 +120,7 @@ function safePartialFailure(error: unknown, host: string, owner: string): Record
 
 async function projectDiscovery(env: HostingEnv, params: Record<string, unknown>, caller: ProjectCaller): Promise<Record<string, unknown>> {
   const scope = await env.resolve(params, caller)
-  const { host, identity } = resolveProjectHost(env, scope, params.host)
+  const { host, identity } = await resolveProjectHost(env, scope, params.host)
   const key = env.cacheKey(scope, `projects:discovery:${host}`)
   return env.cache(key, 60_000, async () => {
     const first = await projectGraphql(env, scope, identity, DISCOVERY_QUERY, { cursor: null, orgCursor: null }, true)
@@ -180,8 +184,8 @@ async function projectDiscovery(env: HostingEnv, params: Record<string, unknown>
 
 async function resolveProject(env: HostingEnv, params: Record<string, unknown>, caller: ProjectCaller): Promise<Record<string, unknown>> {
   const scope = await env.resolve(params, caller)
-  const reference = parseProjectReference(env, scope, params.input, params.host)
-  const { identity } = resolveProjectHost(env, scope, reference.host)
+  const reference = await parseProjectReference(env, scope, params.input, params.host)
+  const { identity } = await resolveProjectHost(env, scope, reference.host)
   const key = env.cacheKey(scope, `project-ref:${reference.host}:${reference.owner.toLowerCase()}:${reference.number}:${reference.ownerType ?? 'auto'}:${reference.view ?? ''}`)
   return env.cache(key, 300_000, async () => {
     const query = OWNER_PROJECT_QUERY
@@ -286,7 +290,7 @@ async function projectViews(env: HostingEnv, params: Record<string, unknown>, ca
   if (!kind) throw env.invalid('validation_error', 'ownerType must be organization or user.')
   const projectNumber = positiveParam(env, params, 'projectNumber') ?? 0
   const scope = await env.resolve(params, caller)
-  const { host, identity } = resolveProjectHost(env, scope, params.host)
+  const { host, identity } = await resolveProjectHost(env, scope, params.host)
   const key = env.cacheKey(scope, `project-views:${host}:${kind}:${ownerValue.toLowerCase()}:${projectNumber}`)
   const result = await env.cache(key, 60_000, () => loadProjectViews(env, scope, identity, ownerValue, kind, projectNumber))
   const output = { views: result.views, truncated: result.truncated, parentFieldDropped: result.parentFieldDropped }

@@ -1,12 +1,12 @@
 # GitHub hosting implementation contracts
 
-Status: Draft for required joint Codex adversarial review. Logic: [logic.md](logic.md).
+Status: Joint Codex spec review completed; implementation acceptance files and the isolated real CLI smoke verified. Full integration gates and the final cross-family review remain. Logic: [logic.md](logic.md).
 
 ## Architecture
 
 Implements [conceptual model](logic.md#conceptual-model) with new `plugins/quirky.hosting/`, following `plugins/quirky.git/main.ts:10-14` and public `PluginContext` in `packages/protocol/src/plugins.ts:49-80`. The static manifest declares methods, CLI commands and events. `main.ts` assembles independent operation tables over one environment. No daemon-kernel GitHub code, direct imports of another plugin or extra service process.
 
-Internal modules: `src/runtime.ts` owns execution/auth/budget; `src/env.ts` owns selection/identity/configuration/invalidation; `src/refresh.ts` owns branch refresh/cache/scheduling; `src/pr.ts` owns PR lookup/create/stack/merge/state; `src/details.ts` owns checks/comments/files/review mutations; `src/work-items.ts` owns issues/search/Projects. Focused helper files may be added inside each declared task scope. Tests live under the same plugin and use daemon API, isolated gh executable fixtures, real temp git repositories and fresh QUIRKY_HOME.
+`src/runtime.ts` provides account/configuration methods; `src/runtime-runner.ts` owns process admission, authentication, retries and budgets. `src/env.ts` owns selection, identity and generation-safe caches, with parsing in `auth-inventory.ts` and `identity-remote.ts`. PR entrypoints compose `pr-review.ts`, `pr-create.ts` and `pr-mutations.ts`; `refresh.ts` owns connection-scoped scheduling. Detail entrypoints compose check, comment and file helpers; work-item entrypoints compose `item-*` and `project-*` helpers. Tests live under the plugin and use real daemon API/CLI calls, isolated gh executables, temporary git repositories and fresh QUIRKY_HOME.
 
 ## Code references
 
@@ -30,7 +30,17 @@ Implements [locked decisions](logic.md#decisions-locked).
 ```ts
 type Handler = (params: Record<string, unknown>, caller: PluginCaller) => unknown;
 type Identity = { host: string; owner: string; repo: string };
-type Scope = { worktree: Worktree; origin: Identity; repository: Identity; binding?: { host: string; user: string } };
+type IssueSourcePreference = 'auto' | 'origin' | 'upstream';
+type HostingConfiguration = { issueSourcePreference: IssueSourcePreference; account: { host: string; user: string } | null };
+type Scope = {
+  worktree: Worktree; origin: Identity; repository: Identity;
+  binding?: { host: string; user: string }; candidates: Identity[];
+  issueRepository: Identity; issueSourcePreference: IssueSourcePreference;
+  issueSourceFellBack: boolean;
+};
+type AuthAccount = { host: string; user: string; source: 'keyring' | 'env'; active: boolean; scopes: string[] };
+type Budget = { limit: number; remaining: number; resetAt: number };
+type RateLimitSnapshot = { core: Budget; search: Budget; graphql: Budget; fetchedAt: number };
 type RunOptions = { idempotent?: boolean; timeoutMs?: number; maxBytes?: number; input?: string; ambient?: boolean; signal?: AbortSignal; projectHost?: string };
 type HostingEnv = {
   context: PluginContext;
@@ -41,13 +51,22 @@ type HostingEnv = {
   graphql(scope: Scope, query: string, variables?: Record<string, unknown>, options?: RunOptions): Promise<unknown>;
   git(scope: Scope, args: string[]): Promise<string>;
   changed(scope: Scope, data?: Record<string, unknown>): void;
+  invalidate(scope: Scope): void;
   invalid(reason: string, message: string): Error;
   cache<T>(key: string, ttlMs: number, load: () => Promise<T>): Promise<T>;
+  cacheKey(scope: Scope, key: string): string;
+  authAccounts(scope: Scope, force?: boolean): Promise<AuthAccount[]>;
+  validateBinding(scope: Scope, binding: { host: string; user: string }): Promise<void>;
+  rateLimit(scope: Scope, force?: boolean): Promise<RateLimitSnapshot>;
+  configuration(worktree: Worktree): HostingConfiguration;
+  saveConfiguration(worktree: Worktree, config: HostingConfiguration): void;
+  onDispose(callback: () => void): void;
+  dispose(): Promise<void>;
 };
 ```
 All external JSON/RPC/configuration enters as unknown and is validated with existing JSON-schema support or narrow runtime record/field guards before use. No bare any or unchecked external-input assertions. Shared data guards may live in src/data.ts owned by the runtime component.
 
-Tables are `runtimeMethods(env)`, `prMethods(env)`, `detailMethods(env)`, `workItemMethods(env)`, `refreshMethods(env, prHandlers)`, returning Record<string, Handler>. Factories `createEnv(context): HostingEnv` and optional `dispose()` lifecycle cleanup. Runtime setup may add a dispose member without changing consumer signatures. All REST paths are relative to the resolved repository's host, never full arbitrary URLs; helper `repos/<owner>/<repo>/...` is built from validated identity. GraphQL variables are arguments, not string interpolation of input. `rest` serializes fields to JSON on stdin and explicitly supplies method, including GET; graphql reads query or mutation to choose retryability. Normalized errors have fixed safe message and `data.reason`, optionally retryDisabledUntil and nextAutoRetryAt. Avoid logs of token-bearing argv/stdout/env.
+Tables are `runtimeMethods(env)`, `prMethods(env)`, `detailMethods(env)`, `workItemMethods(env)` and `refreshMethods(env, prHandlers)`, returning Record<string, Handler>. `createEnv(context)` returns the shared environment; `main.ts` awaits `dispose()` on deactivation, after registered refresh cleanup callbacks run. All REST paths are relative to the trusted host, never arbitrary URLs. Repository paths come from validated configured identities or authenticated Projects metadata under the explicit project-host rule below. GraphQL variables are arguments, not interpolated input. `rest` writes JSON fields to stdin with an explicit method; GraphQL retryability distinguishes query from mutation. Errors expose fixed safe copy and `data.reason`, with retry timing when applicable. Never log token-bearing argv, stdout or environment.
 
 Method ownership and fixed API names:
 - Runtime: `repository`, `diagnoseAuth`, `viewer`, `rateLimit`, `accounts`, `configure`, `configuration`.
@@ -112,7 +131,7 @@ Implements [locked decisions](logic.md#decisions-locked). Always pin trusted hos
 
 ## Cross-cutting
 
-Implements [data flow](logic.md#data-flow). One plugin-owned store holds account selection and issue preference; no migration of existing user state needed. Token caches remain memory-only, scoped by host/account and env execution hash. Four active processes, bounded queue/caches and teardown cancellation bound resources. Process-group handling is macOS-tested; Linux/Windows gaps get explicit deferred-platform decisions. Emit `quirky.hosting/changed` and `quirky.hosting/refresh` with repository/worktree identity, safe reason/outcome and monotonic sequence; callers never need stderr. Deactivation clears timers and terminates owned children; disabling methods prevents future registry calls.
+Implements [data flow](logic.md#data-flow). One plugin-owned store holds account selection and issue preference; existing user data needs no migration. Tokens remain memory-only, scoped by host/account and execution environment. Four active processes, bounded caches/refresh queues and teardown cancellation control resources. Process-group handling is macOS-tested; Linux/Windows gaps have deferred-platform decisions. Changed events carry registered identity and mutation metadata. Refresh events additionally expose aliases, safe outcomes and monotonic sequence, with explicit null identities for unresolved denials. Deactivation clears owned timers/subscriptions and awaits child termination; disabled methods remain unreachable through the registry.
 
 ## Testing strategy
 

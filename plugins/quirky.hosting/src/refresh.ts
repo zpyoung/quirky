@@ -8,6 +8,8 @@ type ResolvedCandidate = { candidate: RefreshCandidate; scope: Scope; key: strin
 type Owner = { generation: number; candidates: Map<string, ResolvedCandidate>; removeClose: () => void }
 type RefreshEvent = {
   sequence: number
+  worktreeId: string | null
+  repoId: string | null
   reason: RefreshReason
   aliases: string[]
   status?: 'queued' | 'in-flight' | 'paused' | 'skipped'
@@ -102,6 +104,7 @@ function candidateKey(scope: Scope, candidate: RefreshCandidate): string {
 }
 
 function ownerKey(caller: Parameters<Handler>[1]): string | undefined {
+  if (caller.role === 'plugin') return undefined
   return caller.connection ? String(caller.connection.id) : undefined
 }
 
@@ -217,9 +220,10 @@ export function refreshMethods(env: HostingEnv, prHandlers: Record<string, Handl
   let disposed = false
   let timer: ReturnType<typeof setTimeout> | undefined
 
-  const emit = (event: Omit<RefreshEvent, 'sequence'>): void => {
+  const emit = (event: Omit<RefreshEvent, 'sequence' | 'worktreeId' | 'repoId'>, scope?: Scope): void => {
+    if (disposed) return
     sequence += 1
-    env.context.emit('quirky.hosting/refresh', { sequence, ...event })
+    env.context.emit('refresh', { sequence, worktreeId: scope?.worktree.id ?? null, repoId: scope?.worktree.repoId ?? null, ...event })
   }
 
   const unregisterOwner = (id: string): void => {
@@ -236,7 +240,7 @@ export function refreshMethods(env: HostingEnv, prHandlers: Record<string, Handl
         const entry = entries.get(key)
         if (entry?.reason === 'visible') {
           entries.delete(key)
-          emit({ reason: entry.reason, aliases: [...entry.aliases], status: 'skipped', skippedReason: 'disconnected' })
+          emit({ reason: entry.reason, aliases: [...entry.aliases], status: 'skipped', skippedReason: 'disconnected' }, entry.scope)
         }
       }
     }
@@ -247,6 +251,7 @@ export function refreshMethods(env: HostingEnv, prHandlers: Record<string, Handl
   }
 
   const registerOwner = (caller: Parameters<Handler>[1]): string => {
+    if (caller.role === 'plugin') return inputError(env, 'This refresh method requires an authenticated client connection.')
     const connection = caller.connection
     if (!connection) return inputError(env, 'This refresh method requires an authenticated client connection.')
     const id = String(connection.id)
@@ -315,20 +320,20 @@ export function refreshMethods(env: HostingEnv, prHandlers: Record<string, Handl
     const currentRetry = retry.get(resolved.key)
     if (currentRetry?.retryDisabledUntil && currentRetry.retryDisabledUntil > Date.now()) {
       const pausedUntil = currentRetry.retryDisabledUntil
-      emit({ reason, aliases: [resolved.candidate.worktree], status: 'paused', skippedReason: 'rate-limit', pausedUntil })
+      emit({ reason, aliases: [resolved.candidate.worktree], status: 'paused', skippedReason: 'rate-limit', pausedUntil }, resolved.scope)
       return { kind: 'paused', pausedUntil, skippedReason: 'rate-limit' }
     }
     const last = outcomes.get(resolved.key)
     const retryAfter = last ? retryUntil(last.outcome) : undefined
     if (retryAfter !== undefined && retryAfter > Date.now()) {
-      emit({ reason, aliases: [resolved.candidate.worktree], status: 'paused', skippedReason: 'rate-limit', pausedUntil: retryAfter })
+      emit({ reason, aliases: [resolved.candidate.worktree], status: 'paused', skippedReason: 'rate-limit', pausedUntil: retryAfter }, resolved.scope)
       return { kind: 'paused', pausedUntil: retryAfter, skippedReason: 'rate-limit' }
     }
     const requestStartedAt = Date.now()
     cooldown.set(resolved.key, requestStartedAt + REFRESH_COOLDOWN_MS)
     pruneBounded(cooldown)
     const cacheGeneration = env.cacheKey(resolved.scope, `refresh-generation:${resolved.key}`)
-    emit({ reason, aliases: [resolved.candidate.worktree], status: 'in-flight', requestStartedAt })
+    emit({ reason, aliases: [resolved.candidate.worktree], status: 'in-flight', requestStartedAt }, resolved.scope)
     let outcome: Lookup
     try {
       outcome = await callPR(resolved, caller)
@@ -337,7 +342,7 @@ export function refreshMethods(env: HostingEnv, prHandlers: Record<string, Handl
     }
     if (disposed) return { kind: 'completed', outcome, stale: true }
     if (cacheGeneration !== env.cacheKey(resolved.scope, `refresh-generation:${resolved.key}`)) {
-      emit({ reason, aliases: [resolved.candidate.worktree], outcome })
+      emit({ reason, aliases: [resolved.candidate.worktree], outcome }, resolved.scope)
       return { kind: 'completed', outcome, stale: true }
     }
     const fetchedAt = Date.now()
@@ -350,7 +355,7 @@ export function refreshMethods(env: HostingEnv, prHandlers: Record<string, Handl
       followUp.bypassFreshness = true
       followUp.dueAt = Math.max(followUp.dueAt, fetchedAt + PENDING_MERGEABILITY_DELAY_MS)
     }
-    emit({ reason, aliases: [resolved.candidate.worktree], outcome })
+    emit({ reason, aliases: [resolved.candidate.worktree], outcome }, resolved.scope)
     return { kind: 'completed', outcome, stale: false }
   }
 
@@ -382,13 +387,13 @@ export function refreshMethods(env: HostingEnv, prHandlers: Record<string, Handl
     if (!existing) {
       const entry = makeEntry(resolved, reason, priority, owner)
       if (entries.size >= MAX_TRACKED) {
-        emit({ reason, aliases: [...entry.aliases], status: 'skipped', skippedReason: 'capacity' })
+        emit({ reason, aliases: [...entry.aliases], status: 'skipped', skippedReason: 'capacity' }, entry.scope)
         return entry
       }
       entries.set(entry.key, entry)
       const wait = entryDelay(entry, Date.now())
       if (wait >= 1_000 && wait <= 5_000 && !isBackground(reason, entry.bypassBackgroundBudget) && !isActiveRequest(reason, entry.candidate, priority)) {
-        emit({ reason, aliases: [...entry.aliases], status: 'queued' })
+        emit({ reason, aliases: [...entry.aliases], status: 'queued' }, entry.scope)
       }
       schedule()
       return entry
@@ -473,13 +478,13 @@ export function refreshMethods(env: HostingEnv, prHandlers: Record<string, Handl
     for (const entry of due) {
       if (entry.reason === 'visible' && entry.owners.size === 0 && (candidateOwners.get(entry.key)?.size ?? 0) === 0) {
         entries.delete(entry.key)
-        emit({ reason: entry.reason, aliases: [...entry.aliases], status: 'skipped', skippedReason: 'fresh' })
+        emit({ reason: entry.reason, aliases: [...entry.aliases], status: 'skipped', skippedReason: 'fresh' }, entry.scope)
         continue
       }
       const delay = entryDelay(entry, now)
       if (!Number.isFinite(delay)) {
         entries.delete(entry.key)
-        emit({ reason: entry.reason, aliases: [...entry.aliases], status: 'skipped', skippedReason: 'fresh' })
+        emit({ reason: entry.reason, aliases: [...entry.aliases], status: 'skipped', skippedReason: 'fresh' }, entry.scope)
         continue
       }
       if (delay === 0) return { entry }
@@ -530,7 +535,7 @@ export function refreshMethods(env: HostingEnv, prHandlers: Record<string, Handl
           const result = await directRefresh(resolved, { role: 'plugin', pluginId: 'quirky.hosting' }, entry.reason)
           if (disposed) continue
           if (entry.reason === 'visible' && (candidateOwners.get(entry.key)?.size ?? 0) === 0) {
-            emit({ reason: entry.reason, aliases: [...entry.aliases], status: 'skipped', skippedReason: 'disconnected' })
+            emit({ reason: entry.reason, aliases: [...entry.aliases], status: 'skipped', skippedReason: 'disconnected' }, entry.scope)
             continue
           }
           if (result.kind === 'paused') {
@@ -643,7 +648,7 @@ export function refreshMethods(env: HostingEnv, prHandlers: Record<string, Handl
         const queued = entries.get(key)
         if (queued?.reason === 'visible') {
           entries.delete(key)
-          emit({ reason: queued.reason, aliases: [...queued.aliases], status: 'skipped', skippedReason: 'fresh' })
+          emit({ reason: queued.reason, aliases: [...queued.aliases], status: 'skipped', skippedReason: 'fresh' }, queued.scope)
         }
       }
     }
@@ -656,7 +661,7 @@ export function refreshMethods(env: HostingEnv, prHandlers: Record<string, Handl
       const freshnessProbe = makeEntry(candidate, 'visible', 40, ownerId)
       const freshUntil = freshnessTime(freshnessProbe)
       if (freshUntil === Number.POSITIVE_INFINITY) {
-        emit({ reason: 'visible', aliases: [candidate.candidate.worktree], status: 'skipped', skippedReason: 'fresh' })
+        emit({ reason: 'visible', aliases: [candidate.candidate.worktree], status: 'skipped', skippedReason: 'fresh' }, candidate.scope)
         continue
       }
       const entry = queue(candidate, 'visible', 40, ownerId)
@@ -702,22 +707,16 @@ export function refreshMethods(env: HostingEnv, prHandlers: Record<string, Handl
     return result.kind === 'completed' ? result.outcome : result
   }
 
-  const refreshState: Handler = async (params, caller) => {
+  const refreshState: Handler = async (_params, caller) => {
     const owner = registerOwner(caller)
-    let scope: Scope | undefined
-    if (params.worktree !== undefined) scope = await env.resolve({ worktree: params.worktree }, caller)
-    const key = scope ? budgetKey(scope) : undefined
     const now = Date.now()
     let backgroundCount = 0
     let activeCount = 0
-    if (key) {
-      backgroundCount = purgeHistory(backgroundStarts, key, BACKGROUND_WINDOW_MS, now).length
-      activeCount = purgeHistory(activeStarts, `${owner}|${key}`, ACTIVE_WINDOW_MS, now).length
-    } else {
-      for (const budget of backgroundStarts.keys()) backgroundCount += purgeHistory(backgroundStarts, budget, BACKGROUND_WINDOW_MS, now).length
-      for (const activeKey of activeStarts.keys()) {
-        if (activeKey.startsWith(`${owner}|`)) activeCount += purgeHistory(activeStarts, activeKey, ACTIVE_WINDOW_MS, now).length
-      }
+    for (const budget of backgroundStarts.keys()) {
+      backgroundCount += purgeHistory(backgroundStarts, budget, BACKGROUND_WINDOW_MS, now).length
+    }
+    for (const activeKey of activeStarts.keys()) {
+      if (activeKey.startsWith(`${owner}|`)) activeCount += purgeHistory(activeStarts, activeKey, ACTIVE_WINDOW_MS, now).length
     }
     return {
       queued: entries.size,

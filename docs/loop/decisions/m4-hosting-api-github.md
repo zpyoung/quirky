@@ -154,5 +154,154 @@
 - **Revisit if:** a scope needs changes owned by another component; route through parent before editing.
 - **Source:** assumed — autonomous
 
+## D15: Preserve tooling-generated Serena state outside feature commits
+- **Question:** how to handle unowned paths found at the implementation barrier?
+- **Options:** commit tool configuration with the feature; delete it; preserve it separately and keep source scopes disjoint.
+- **Chose:** preserved the main tree's generated .serena directory and each component's project.local.yml in five path-limited git stashes named lane11-serena-integration/runtime/pr/details/items. No source file was stashed, and no tooling configuration was accepted into the feature.
+- **Why:** the audit found no cross-component source writes; generated editor/tool state is not a hosting artifact. Preservation avoids discarding local state or widening the implementation scope.
+- **Evidence:** barrier git path lists and stash command output; generated files contained Serena default configuration comments.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** the project elects to version Serena configuration separately.
+- **Source:** assumed — autonomous
+
+## D16: Repair integration roots rather than weakening scenarios
+- **Question:** what caused the first two gates to fail?
+- **Options:** disable scenarios; adjust expected errors to the current behavior; repair malformed fixtures, manifest and missing code bindings.
+- **Chose:** repaired fixture object syntax, canonicalized temporary root paths before worktree comparison, and restored missing imports/declarations/validated parsers. Kept stateful read-after-write assertions and all acceptance cases.
+- **Why:** initial targeted run was 1 pass/41 fail; shared setup compared /var paths with canonical /private/var paths. After that fix the runtime run was 1 pass/13 fail because plugin.list proved quirky.hosting invalid due malformed JSON result schemas. Typecheck then identified 120 semantic diagnostics, primarily missing bindings. These are implementation defects, not grounds to change acceptance.
+- **Evidence:** actual first and second gate output; temporary-directory realpath probe; plugin discovery diagnostic; /tmp/hosting-lane11-discovery.ts; notes file records artifact IDs.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** subsequent gates expose a different cause.
+- **Source:** assumed — autonomous
+
+## D17: Projects item mutations do not require local remote membership
+- **Question:** does D5's broad remote-match rule accidentally narrow Projects v2 parity?
+- **Options:** restrict every repository target to local remotes; distinguish pasted work-item lookups from authenticated project-item repositories.
+- **Chose:** the distinction. Pasted workItem references and prRepo overrides remain local-remote checked. Projects validates its trusted host, authenticated project/item association, syntactic content-repository slugs and comment ownership, then mutates that content repository with ambient auth even when it is not configured locally. Amended and committed logic/tech before changing code.
+- **Why:** original by-slug Projects mutations accept project rows from any repository on the selected authenticated host. D5 overgeneralized a restriction specific to workItemByOwnerRepo; preserving that generalization would silently drop an in-scope flow.
+- **Evidence:** original Orca src/renderer/src/store/github/project-row-actions.ts:34-143; src/main/github/project-view/internals.ts:34-42,53-101; mutations.ts:15-49; pull-request-mutation.ts:6-47; issue-comment-mutations.ts:31-111; feature doc:306,314-321; ProjectParityScout findings.
+- **Reversibility:** medium
+- **Confidence:** high
+- **Revisit if:** GitHub permits an item URL to name a host different from its authenticated project host.
+- **Source:** supersedes m4-hosting-api-github D5 (Projects only); locked by hosting-api.md
+
+## D18: Make public discovery describe actual results and supported inputs
+- **Question:** how to resolve the plugin validator's ten groups of schema/producer mismatches?
+- **Options:** change working handlers to fictional envelopes; grow the schema language; correct declarations within the existing subset.
+- **Chose:** corrected lookup envelopes, scheduling outcomes, named collections, partial metadata, nullable fields, mutation identifiers and detail coordinates. Exposed implemented noCache inputs. Removed ignored client page/limit declarations from fixed-cap reads; listWorkItems retains real client pagination.
+- **Why:** the original feature pages upstream internally for fixed-cap details and project tables. Invented flags were not a requirement and falsely promised response-size control. Agents need comment/thread/project identifiers and partial warnings to chain real actions safely.
+- **Evidence:** HostingPluginValidation report; quirky-plugin.json; actual handler return models; committed tech clarification104cca1; daemon discovery accepted the corrected manifest.
+- **Reversibility:** medium
+- **Confidence:** high
+- **Revisit if:** a genuine consumer needs client pagination beyond the original fixed-cap contract.
+- **Source:** locked by hosting-api.md; locked by docs/loop/decisions/m0-scripting.md
+
+## D19: Authorize Projects routes explicitly without weakening ordinary remote checks
+- **Question:** how can source-verified cross-repository Projects actions pass the common transport guard?
+- **Options:** waive remote checks for every ambient request; add an internal project-host route with its own trust conditions.
+- **Chose:** internal RunOptions.projectHost, never a public parameter. It requires ambient auth, exact target-host equality and github.com or local gh inventory membership. Ordinary unmarked calls retain configured-remote validation. Ambient cache/budget identity ignores a repository binding.
+- **Why:** Projects content can be in another repository or an authenticated GHES host without a local remote; ambient auth alone is not authorization to send credentials to arbitrary hosts.
+- **Evidence:** committed tech contract94d09bb; runtime-runner.ts, project-ref.ts and project-mutations.ts; GH31 same-host, foreign-host, GHES and ambient-versus-bound fixtures.
+- **Reversibility:** medium
+- **Confidence:** high
+- **Revisit if:** another provider needs the same explicit host-authorization boundary.
+- **Source:** locked by hosting-api.md; supersedes m4-hosting-api-github D5 (Projects transport only)
+
+## D20: Accept correctly encoded repository-relative filenames
+- **Question:** why did a changed filename containing spaces and Unicode fail through the API?
+- **Options:** reject such names; allow valid percent encoding while retaining decoded traversal checks.
+- **Chose:** allow percent encoding in the runner's relative endpoint grammar; keep absolute-URL, option, control and decoded dot-segment protections.
+- **Why:** contents paths are segment-encoded by the file adapter. Rejecting percent signs blocked normal Git filenames, not dangerous endpoints.
+- **Evidence:** API regression failed with file_contents_unavailable before the change and passed afterward for src/café notes.txt; test/details.test.ts.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** a decoded path can escape the selected repository endpoint.
+- **Source:** locked by hosting-api.md
+
+## D21: Preserve provider lifecycle semantics instead of fixture mistakes
+- **Question:** which source and fixture interpretations govern closed/draft PRs, creation recovery and reaction ownership?
+- **Options:** weaken response validation or change expected outcomes to whatever is returned; follow the documented provider model.
+- **Chose:** coherent fixture number/URL/ID identities; merged/closed precedence over draft; reopening preserves draft until Ready. Creation uses a fresh lookup, and ambiguous recovery requires exactly one raw candidate before validation. action_required conclusions are failures. IssueComment ownership uses its pullRequest association.
+- **Why:** these are consumer-visible transitions and safety checks. A malformed fixture is not grounds to accept mismatched PR URLs, filter ambiguity into certainty, or confuse an issue with a pull request.
+- **Evidence:** hosting-api.md:118,193-199,264,276-284,297; official GitHub GraphQL IssueComment.pullRequest field at https://docs.github.com/en/graphql/reference/issues#issuecomment; PR and detail API regressions.
+- **Reversibility:** medium
+- **Confidence:** high
+- **Revisit if:** GitHub changes its state or ownership schema.
+- **Source:** locked by hosting-api.md
+
+## D22: Write fake-upstream JSON state as atomic snapshots
+- **Question:** how should concurrent fixture reads observe changing state files?
+- **Options:** truncate/write directly and tolerate parse failures; use same-directory PID-specific temporary files plus rename.
+- **Chose:** atomic replacement in parent and executable-fixture state writers. Malformed state is a fixture failure, not an empty synthetic provider response. Append-only invocation/activity logs are unchanged.
+- **Why:** concurrent readers must see the old or new complete snapshot; a partial JSON file can fabricate lookup or ownership failures unrelated to the application.
+- **Evidence:** /tmp/hosting-lane11-json-race.ts; Bun1.4/macOS temporary-file probe with2,000 writes alternating4KiB/64KiB payloads:
+
+| Snapshot replacement | Malformed reads out of10,000 |
+|---|---:|
+| Truncate and write |197|
+| Temporary file and rename |0|
+
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** concurrent state mutations need transactional merging rather than complete-snapshot replacement.
+- **Source:** assumed — autonomous
+
+## D23: Bound integration scenarios independently from subprocess deadline assertions
+- **Question:** what execution bound fits multi-RPC tests that start real daemons and gh fixture processes?
+- **Options:** retain Bun's default5-second whole-test deadline; use finite native20-second per-test bounds without changing application deadlines.
+- **Chose:** native per-test20-second bounds for hosting API/CLI integration workflows, never a global timeout change. The one-second child deadline, PID termination and recovery assertions remain unchanged. Run local files serially, with full suites only through the remote runner.
+- **Why:** an isolated PR scenario completed correctly in3.62 seconds, while resource contention and multi-call transitions triggered default teardown during valid work. The tests assert outcomes, not a5-second total-flow latency SLA.
+- **Evidence:** isolated PR probe; serial/runtime and combined gate logs; test/*.test.ts native deadlines.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** a scenario stalls beyond its explicit bound or a real latency acceptance criterion is added.
+- **Source:** assumed — autonomous
+
+## D24: Keep assertions from mutating retained observations
+- **Question:** why did an array's length disappear after a successful nested matcher?
+- **Options:** alter production arrays; remove assertions; inspect observations before asymmetric matchers or match a clone.
+- **Chose:** keep all semantic assertions, ordering count/coordinate checks before destructive matchers and cloning retained event payloads where needed. Mutation-denial checks distinguish GraphQL POST queries from provider writes.
+- **Why:** the isolated Bun1.4 probe changed the actual nested array into an asymmetric matcher object. Production data was correct; blanket HTTP POST counts also mistook queries for mutations.
+- **Evidence:** actual assertion-sequence probe printed checks:{} after toMatchObject, then failed checks.length; subsequent isolated detail file passed17 tests with preserved assertions.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** the test framework changes matcher mutation behavior.
+- **Source:** assumed — autonomous
+
+## D25: Parse standard decorated gh authentication output
+- **Question:** does the inventory parser handle the CLI output real users receive?
+- **Options:** require bare fixture headers; normalize standard markers, indentation and ANSI controls before strict account parsing.
+- **Chose:** normalize success/field markers and ANSI controls; keep failed-login exclusion and host/user validation. Added GHES API regressions for decorated and colored env/keyring accounts.
+- **Why:** the end-to-end formatted-output probe failed as unsupported_provider even though the supplied account was authenticated. Bare synthetic headers had hidden a product bug affecting GHES, bindings and creation.
+- **Evidence:** original Orca src/main/github/auth-diagnose.ts:22-90 and auth-diagnose.test.ts:10-70; /tmp/hosting-lane11-auth-format.ts failed before and returned the correct host/user/active/scopes after; no real keyring or GH configuration was accessed.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** gh changes its account-status format.
+- **Source:** locked by hosting-api.md
+
+## D26: Verify the actual CLI contract with isolated upstream state
+- **Question:** how to smoke the feature without changing a real GitHub repository or shared login?
+- **Options:** method-only tests; real remote mutation; real quirky CLI and daemon against an isolated gh executable.
+- **Chose:** the real generated CLI over the daemon socket, with temporary HOME/QUIRKY_HOME and fixture upstream. Exercised identity, PR read, confirmation refusal, stale-head refusal with yes, guarded merge and merged-state readback.
+- **Why:** this proves the shipped client surface and safety path without touching real state. CLI JSON error codes remain normalized strings, not raw numeric RPC codes; the smoke assertion was corrected to that existing contract rather than changing the CLI.
+- **Evidence:** successful /tmp/hosting-lane11-cli-smoke.ts output; confirmation conflict, head_changed, merged response and subsequent review.state=merged; plugins/README.md documents the exercised surface and live catalog.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** CLI discovery, error normalization or destructive authorization changes.
+- **Source:** locked by docs/roadmap.md; locked by docs/loop/decisions/m0-scripting.md
+
+## D27: Advance only after every targeted acceptance file passes
+- **Question:** is the implementation ready for roadmap catch-up and final review?
+- **Options:** rely on partial component reports; require all targeted API/CLI files plus the actual CLI smoke.
+- **Chose:** required the complete serial single-file chain. All115 tests passed across PRs, refresh, details, work items, runtime/auth, generated CLI and public connection-close behavior. Typecheck and the guarded CLI/readback smoke also passed.
+- **Why:** intermediate gates exposed real product and fixture defects; successful worker reports alone were not evidence. Local files run serially to avoid competing typecheck work; the full suite remains remote-only.
+- **Evidence:** final serial output;28 PR,5 refresh,17 detail,33 work-item,29 runtime,2 CLI and1 connection-close tests, all zero failures; the command chain exited0.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** catch-up, full-suite or final-review findings change the tree.
+- **Source:** locked by docs/loop/LOOP.md
+
 ## Progress
-Step 4 done: logic and tech specs authored and jointly reviewed with Codex promote/refute. F1/F2 accepted and specified. Next: commit refinements, stage missing-method behavior proof, dispatch four isolated implementation components, integrate at barrier, and run all acceptance/gates before final review.
+Step5 acceptance gate passed: all115 targeted tests, typecheck, decorated-gh authentication probe and real CLI guarded-merge/readback smoke. Documentation is updated. Next: commit the verified repair batch, merge build/roadmap and read incoming decisions, run required remote/full gates, complete the one final cross-family review and accepted-finding fix batch, then land.

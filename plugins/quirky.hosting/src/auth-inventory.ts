@@ -1,3 +1,4 @@
+import { stripVTControlCharacters } from 'node:util'
 export type AuthAccount = {
   host: string
   user: string
@@ -9,7 +10,19 @@ export type AuthAccount = {
 const ENV_TOKEN_SOURCES = new Set(['GH_TOKEN', 'GITHUB_TOKEN', 'GH_ENTERPRISE_TOKEN', 'GITHUB_ENTERPRISE_TOKEN'])
 
 export function parseAuthInventory(output: string): AuthAccount[] {
-  const sections = output.split(/(?=^Logged in to )/m).filter((section) => /^Logged in to /m.test(section))
+  const normalizedOutput = stripVTControlCharacters(output)
+    .split(/\r?\n/)
+    .map((line) => {
+      const unindented = line.trimStart()
+      if (unindented.startsWith('✓')) {
+        return unindented.replace(/^✓[ \t]*(?=Logged in to )/, '')
+      }
+      return unindented.replace(/^-[ \t]*(?=(?:Active account|Token scopes):)/, '')
+    })
+    .join('\n')
+  const sections = normalizedOutput
+    .split(/(?=^[^\n]*Logged in to )/m)
+    .filter((section) => /^Logged in to /m.test(section))
   const accounts: AuthAccount[] = []
   for (const section of sections) {
     const header = /^Logged in to\s+(\S+)\s+account\s+(\S+)\s+\(([^)]+)\)/m.exec(section)

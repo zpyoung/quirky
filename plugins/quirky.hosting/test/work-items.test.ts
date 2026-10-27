@@ -7,7 +7,7 @@ afterEach(async () => {
 })
 
 const ghFixture = String.raw`
-import { readFileSync, writeFileSync } from 'node:fs'
+import { readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 
 const fixtureDir = process.env.QUIRKY_TEST_FIXTURE_DIR
@@ -49,7 +49,11 @@ const calls = Array.isArray(state.calls) ? state.calls : []
 const call = { args, method, query, variables, input: requestBody, endpoint }
 calls.push(call)
 state.calls = calls
-const save = () => writeFileSync(statePath, JSON.stringify(state))
+const save = () => {
+  const temporaryStatePath = statePath + '.' + process.pid + '.tmp'
+  writeFileSync(temporaryStatePath, JSON.stringify(state))
+  renameSync(temporaryStatePath, statePath)
+}
 const emit = (value) => {
   save()
   process.stdout.write(JSON.stringify(value))
@@ -63,7 +67,22 @@ const fail = (message) => {
 save()
 
 if (args.includes('auth') && args.includes('status')) {
-  process.stdout.write('Logged in to github.com account hosting-fixture (keyring)\nActive account: true\nToken scopes: repo, project, read:org\n')
+  process.stdout.write(typeof state.authStatus === 'string'
+    ? state.authStatus
+    : 'Logged in to github.com account hosting-fixture (keyring)\nActive account: true\nToken scopes: repo, project, read:org\n')
+  process.exit(0)
+}
+
+if (args.includes('auth') && args.includes('token')) {
+  if (args.includes('--help')) {
+    process.stdout.write('gh auth token [--user USER] [--hostname HOST]')
+    process.exit(0)
+  }
+  const userIndex = args.indexOf('--user')
+  const user = userIndex >= 0 ? args[userIndex + 1] : ''
+  const token = isObject(state.authTokens) ? state.authTokens[user] : undefined
+  if (typeof token !== 'string') fail('not logged in')
+  process.stdout.write(token)
   process.exit(0)
 }
 
@@ -89,6 +108,12 @@ function matchesRoute(entry, candidate) {
   return pathLike
     ? String(candidate.endpoint ?? '').includes(description.needle)
     : Array.isArray(candidate.args) && candidate.args.join(' ').includes(description.needle)
+}
+function matchesGraphqlField(source, field) {
+  const withoutComments = source.replace(/#[^\n\r]*/g, '')
+  const withoutStrings = withoutComments.replace(/"(?:\\.|[^"\\])*"/g, '""')
+  if (!/^[_A-Za-z][_0-9A-Za-z]*$/.test(field)) return false
+  return new RegExp('(?:^|[\\s{])(?:[A-Za-z_][A-Za-z0-9_]*\\s*:\\s*)?' + field + '\\s*(?=[({])').test(withoutStrings)
 }
 const responses = Array.isArray(state.responses) ? state.responses : []
 const rule = responses.find((entry) => {
@@ -431,12 +456,16 @@ function dynamicGraphql() {
 if (command.includes('api') && command.includes('graphql')) {
   const dynamic = dynamicGraphql()
   if (dynamic.handled) emit(dynamic.value)
-  const graphRules = Array.isArray(state.graphql) ? state.graphql : []
+  const tokenRules = isObject(state.graphqlByToken) ? state.graphqlByToken[process.env.GH_TOKEN ?? ''] : undefined
+  const graphRules = Array.isArray(tokenRules) ? tokenRules : Array.isArray(state.graphql) ? state.graphql : []
   const sameQueryCalls = calls.filter((entry) => entry && entry.query === query).length
   const variableText = JSON.stringify(variables)
   const graphRule = graphRules.find((entry) =>
-    entry && typeof entry.when === 'string' && query.includes(entry.when) &&
-    (entry.whenArgs === undefined || command.includes(entry.whenArgs) || variableText.includes(entry.whenArgs)) &&
+    entry && typeof entry.when === 'string' &&
+    (entry.when.startsWith('field:')
+      ? matchesGraphqlField(query, entry.when.slice('field:'.length))
+      : query.includes(entry.when)) &&
+    (entry.whenArgs === undefined || command.includes(entry.whenArgs) || variableText.includes(entry.whenArgs) || query.includes(entry.whenArgs)) &&
     (entry.nth === undefined || entry.nth === sameQueryCalls)
   )
   if (graphRule && typeof graphRule.error === 'string') fail(graphRule.error)
@@ -528,7 +557,7 @@ test('GH27: a removed upstream resolves to origin and marks the issue source fal
   expect(result.issueSourceFellBack).toBe(true)
   expect(object(result.sources).issues).toBe('origin')
   expect(object(result.sources).prs).toBe('origin')
-})
+}, 20_000)
 test('GH27: upstream issue read failures remain partial and never switch repositories', async () => {
   const h = await hosting({
     graphql: [
@@ -556,7 +585,7 @@ test('GH27: upstream issue read failures remain partial and never switch reposit
   const graphSearches = calls.filter((call) => typeof call.query === 'string' && call.query.includes('WorkItemSearch'))
   expect(graphSearches.length).toBeGreaterThanOrEqual(2)
   expect(graphSearches.every((call) => JSON.stringify(call.variables).includes('upstream-owner/upstream-repo'))).toBe(true)
-})
+}, 20_000)
 
 test('GH27: failed GitHub.com GraphQL search falls back to REST search on the same repository', async () => {
   const h = await hosting({
@@ -575,7 +604,40 @@ test('GH27: failed GitHub.com GraphQL search falls back to REST search on the sa
   expect(items.map((item) => item.number)).toEqual([9])
   expect(result.partial).toBe(false)
   expect(object(result.sources).issues).toBe('origin')
-})
+}, 20_000)
+
+test('GH27: malformed GraphQL search response falls back to same-repository REST search', async () => {
+  const h = await hosting({
+    graphql: [
+      {
+        when: 'search(type: ISSUE',
+        whenArgs: 'test-owner/test-repo is:issue',
+        body: { data: { search: { pageInfo: { hasNextPage: false }, nodes: [] } } }
+      },
+      {
+        when: 'search(type: ISSUE',
+        whenArgs: 'test-owner/test-repo is:pr',
+        body: { data: { search: { issueCount: 0, pageInfo: { hasNextPage: false }, nodes: [] } } }
+      }
+    ],
+    responses: [
+      {
+        when: 'search/issues?q=',
+        method: 'GET',
+        body: {
+          total_count: 1,
+          items: [{ number: 11, title: 'REST result', state: 'open', html_url: 'https://github.com/test-owner/test-repo/issues/11' }]
+        }
+      },
+      { when: 'pr list', body: [] }
+    ]
+  })
+
+  const result = object(await h.call('listWorkItems', { query: 'is:open', page: 1, limit: 10 }))
+  expect(list(result.items).map((item) => object(item).number)).toEqual([11])
+  expect(object(result.sources).issues).toBe('origin')
+  expect(result.partial).toBe(false)
+}, 20_000)
 test('GH27: malformed REST search JSON remains unavailable rather than becoming an empty result', async () => {
   const h = await hosting({
     graphql: [
@@ -593,7 +655,7 @@ test('GH27: malformed REST search JSON remains unavailable rather than becoming 
   expect(object(result.errors).issues).toBeDefined()
   expect(object(result.sources).issues).toBeNull()
   expect(list(result.items)).toEqual([])
-})
+}, 20_000)
 test('GH27: origin preference affects issues while pull requests still prefer upstream', async () => {
   const h = await hosting({
     graphql: [
@@ -612,23 +674,35 @@ test('GH27: origin preference affects issues while pull requests still prefer up
   expect(object(result.sources).prs).toBe('upstream')
   expect(result.issueSourceFellBack).toBe(false)
   expect(list(result.items).map((item) => object(item).number)).toContain(20)
-})
+}, 20_000)
 
 test('GH27: search offset cap rejects before an upstream request and count exposes a numeric total', async () => {
   const h = await hosting({ graphql: [
-    { when: 'search(type: ISSUE', whenArgs: 'is:issue', body: { data: { search: { issueCount: 23, pageInfo: { hasNextPage: false }, nodes: [] }, rateLimit: { cost: 1 } } } },
-    { when: 'search(type: ISSUE', whenArgs: 'is:pr', body: { data: { search: { issueCount: 0, pageInfo: { hasNextPage: false }, nodes: [] }, rateLimit: { cost: 1 } } } }
+    { when: 'search(type: ISSUE', whenArgs: 'repo:test-owner/test-repo is:issue is:issue sort:updated-desc', body: { data: { search: { issueCount: 23, pageInfo: { hasNextPage: false }, nodes: [] }, rateLimit: { cost: 1 } } } },
+    { when: 'search(type: ISSUE', whenArgs: 'repo:test-owner/test-repo is:pr is:issue sort:updated-desc', body: { data: { search: { issueCount: 0, pageInfo: { hasNextPage: false }, nodes: [] }, rateLimit: { cost: 1 } } } }
   ] })
   const before = h.invocations().length
 
   await expectReason(h.call('listWorkItems', { query: 'is:issue', page: 11, limit: 100 }), 'too_large')
   expect(h.invocations()).toHaveLength(before)
   expect(object(await h.call('countWorkItems', { query: 'is:issue' })).count).toBe(23)
-})
+}, 20_000)
 
 test('GH27: a failed source remains partial while the successful source is returned', async () => {
   const h = await hosting({
-    graphql: [{ when: 'search(type: ISSUE', body: { data: { search: { issueCount: 1, pageInfo: { hasNextPage: false }, nodes: [{ __typename: 'Issue', number: 5, title: 'available', state: 'OPEN' }] }, rateLimit: { cost: 1 } } }],
+    graphql: [{
+      when: 'search(type: ISSUE',
+      body: {
+        data: {
+          search: {
+            issueCount: 1,
+            pageInfo: { hasNextPage: false },
+            nodes: [{ __typename: 'Issue', number: 5, title: 'available', state: 'OPEN' }]
+          },
+          rateLimit: { cost: 1 }
+        }
+      }
+    }],
     responses: [{ when: 'pr list', error: 'HTTP 503: server error' }]
   })
 
@@ -636,7 +710,7 @@ test('GH27: a failed source remains partial while the successful source is retur
   expect(list(result.items).map((item) => object(item).number)).toContain(5)
   expect(object(result.errors).prs).toBeDefined()
   expect(result.partial).toBe(true)
-})
+}, 20_000)
 
 test('GH28: an issue endpoint response marked as a PR is hydrated as a PR, not an issue', async () => {
   const h = await hosting({
@@ -649,7 +723,7 @@ test('GH28: an issue endpoint response marked as a PR is hydrated as a PR, not a
   const item = object(await h.call('workItem', { number: 17 }))
   expect(item.kind).toBe('pullRequest')
   expect(item.number).toBe(17)
-})
+}, 20_000)
 
 test('GH29: configured work-item references resolve and foreign pasted references fail closed', async () => {
   const h = await hosting({ responses: [{ when: 'repos/test-owner/test-repo/issues/9', body: { number: 9, title: 'configured', state: 'open' } }] })
@@ -658,11 +732,32 @@ test('GH29: configured work-item references resolve and foreign pasted reference
   const before = h.invocations().length
   await expectReason(h.call('workItem', { reference: 'https://evil.example/other/repo/issues/9' }), 'validation_error')
   expect(h.invocations()).toHaveLength(before)
-})
+}, 20_000)
 
 test('GH29: issue details include participants and timeline pages, with explicit partial availability', async () => {
   const h = await hosting({
-    graphql: [{ when: 'issue(number:', body: { data: { repository: { issue: { number: 9, body: 'description', participants: { nodes: [{ login: 'author' }, { login: 'commenter' }], pageInfo: { hasNextPage: false } }, assignees: { nodes: [{ login: 'assignee' }] }, comments: { nodes: [{ id: 'c1', body: 'comment' }], pageInfo: { hasNextPage: false } } } } } }],
+    graphql: [{
+      when: 'issue(number:',
+      body: {
+        data: {
+          repository: {
+            issue: {
+              number: 9,
+              body: 'description',
+              participants: {
+                nodes: [{ login: 'author' }, { login: 'commenter' }],
+                pageInfo: { hasNextPage: false }
+              },
+              assignees: { nodes: [{ login: 'assignee' }] },
+              comments: {
+                nodes: [{ id: 'c1', body: 'comment' }],
+                pageInfo: { hasNextPage: false }
+              }
+            }
+          }
+        }
+      }
+    }],
     responses: [
       { when: 'issues/9/timeline', body: [{ event: 'closed', created_at: '2026-10-01T00:00:00Z' }] },
       { when: 'repos/test-owner/test-repo/issues/9', body: { number: 9, title: 'details', state: 'open', body: 'description' } }
@@ -674,7 +769,7 @@ test('GH29: issue details include participants and timeline pages, with explicit
   expect(list(details.timeline)).toHaveLength(1)
   expect(details.partialFailures).toEqual([])
   expect(details.truncated).toBe(false)
-})
+}, 20_000)
 test('GH29: failed detail sources return partial availability instead of empty success', async () => {
   const h = await hosting({
     graphql: [{ when: 'issue(number:', error: 'HTTP 503: server error' }],
@@ -689,7 +784,7 @@ test('GH29: failed detail sources return partial availability instead of empty s
   expect(list(details.partialFailures).length).toBeGreaterThanOrEqual(2)
   expect(details.timeline).toEqual([])
   expect(details.truncated).toBe(false)
-})
+}, 20_000)
 
 test('GH28: an oversized issue body falls back to an empty body and exposes the confirmed partial create', async () => {
   const h = await hosting({
@@ -709,7 +804,7 @@ test('GH28: an oversized issue body falls back to an empty body and exposes the 
   expect(persisted.body).toBe('')
   expect(persisted.labels).toEqual(['bug'])
   expect(persisted.assignees).toEqual(['fixture'])
-})
+}, 20_000)
 
 test('GH28: issue update and comment writes are visible in subsequent work-item reads', async () => {
   const h = await hosting({
@@ -754,7 +849,7 @@ test('GH28: issue update and comment writes are visible in subsequent work-item 
   expect(item.labels).toEqual(['bug'])
   expect(item.assignees).toEqual(['maintainer'])
   expect(list(details.comments).map((comment) => object(comment).body)).toEqual(['Acknowledged'])
-})
+}, 20_000)
 test('GH28: updateIssue reports confirmed state changes when a later content edit fails', async () => {
   const h = await hosting({
     resources: {
@@ -774,7 +869,7 @@ test('GH28: updateIssue reports confirmed state changes when a later content edi
   expect(data.completedSteps).toEqual(['state'])
   expect(item.state).toBe('closed')
   expect(item.title).toBe('old')
-})
+}, 20_000)
 test('GH28: labels and assignable users paginate from the configured issue repository', async () => {
   const firstLabels = Array.from({ length: 100 }, (_, index) => ({ name: `label-${index}` }))
   const h = await hosting({
@@ -789,15 +884,65 @@ test('GH28: labels and assignable users paginate from the configured issue repos
   const assignees = object(await h.call('assignees', { query: 'main' }))
   expect(labels.labels).toEqual(['bug'])
   expect(list(assignees.assignees).map((user) => object(user).login)).toEqual(['maintainer'])
-})
+}, 20_000)
 
 test('GH30: project discovery paginates the viewer and keeps good organizations when one organization fails', async () => {
   const h = await hosting({
     graphql: [
-      { when: 'viewer { login projectsV2', body: { data: { viewer: { login: 'fixture', projectsV2: { nodes: [{ id: 'p1', number: 1, title: 'Mine' }], pageInfo: { endCursor: 'v1', hasNextPage: true }, totalCount: 21 }, organizations: { nodes: [{ login: 'broken' }, { login: 'good' }], pageInfo: { endCursor: 'o1', hasNextPage: false } } } } } },
-      { when: 'projectsV2(first: 20, after: $cursor)', body: { data: { viewer: { projectsV2: { nodes: [{ id: 'p2', number: 2, title: 'Mine two' }], pageInfo: { endCursor: null, hasNextPage: false }, totalCount: 2 } } } } },
-      { when: 'organization(login: $login)', nth: 1, error: 'HTTP 403: Resource not accessible by integration' },
-      { when: 'organization(login: $login)', nth: 2, body: { data: { organization: { login: 'good', projectsV2: { nodes: [{ id: 'pg', number: 3, title: 'Org project' }], pageInfo: { hasNextPage: false }, totalCount: 1 } } } }
+      {
+        when: 'viewer { login projectsV2',
+        body: {
+          data: {
+            viewer: {
+              login: 'fixture',
+              projectsV2: {
+                nodes: [{ id: 'p1', number: 1, title: 'Mine' }],
+                pageInfo: { endCursor: 'v1', hasNextPage: true },
+                totalCount: 21
+              },
+              organizations: {
+                nodes: [{ login: 'broken' }, { login: 'good' }],
+                pageInfo: { endCursor: 'o1', hasNextPage: false }
+              }
+            }
+          }
+        }
+      },
+      {
+        when: 'projectsV2(first: 20, after: $cursor)',
+        body: {
+          data: {
+            viewer: {
+              projectsV2: {
+                nodes: [{ id: 'p2', number: 2, title: 'Mine two' }],
+                pageInfo: { endCursor: null, hasNextPage: false },
+                totalCount: 2
+              }
+            }
+          }
+        }
+      },
+      {
+        when: 'organization(login: $login)',
+        nth: 1,
+        error: 'HTTP 403: Resource not accessible by integration'
+      },
+      {
+        when: 'organization(login: $login)',
+        nth: 2,
+        body: {
+          data: {
+            organization: {
+              login: 'good',
+              projectsV2: {
+                nodes: [{ id: 'pg', number: 3, title: 'Org project' }],
+                pageInfo: { hasNextPage: false },
+                totalCount: 1
+              }
+            }
+          }
+        }
+      }
     ]
   })
 
@@ -805,7 +950,7 @@ test('GH30: project discovery paginates the viewer and keeps good organizations 
   expect(list(projects.projects).map((project) => object(project).number)).toEqual([1, 2, 3])
   expect(list(projects.partialFailures)).toHaveLength(1)
   expect(projects.truncated).toBe(false)
-})
+}, 20_000)
 
 test('GH30: project references accept only a configured, exact GitHub project URL or owner/number', async () => {
   const h = await hosting({
@@ -819,27 +964,113 @@ test('GH30: project references accept only a configured, exact GitHub project UR
   const before = h.invocations().length
   await expectReason(h.call('projectRef', { input: 'https://attacker@evil.example/orgs/test-owner/projects/4' }), 'validation_error')
   expect(h.invocations()).toHaveLength(before)
-})
+}, 20_000)
 
 test('GH30: project views retry optional schema fields and preserve supported layouts', async () => {
   const h = await hosting({
     graphql: [
-      { when: 'verticalGroupByFields', error: 'Field verticalGroupByFields not found on ProjectV2View' },
-      { when: 'views(first: 20)', body: { data: { organization: { projectV2: { views: { nodes: [{ id: 'view-table', number: 1, name: 'Table', layout: 'TABLE' }, { id: 'view-roadmap', number: 2, name: 'Roadmap', layout: 'ROADMAP' }], pageInfo: { hasNextPage: false } } } } } }
+      {
+        when: 'verticalGroupByFields',
+        error: 'Field verticalGroupByFields not found on ProjectV2View'
+      },
+      {
+        when: 'field:views',
+        body: {
+          data: {
+            organization: {
+              projectV2: {
+                views: {
+                  nodes: [
+                    { id: 'view-table', number: 1, name: 'Table', layout: 'TABLE' },
+                    { id: 'view-roadmap', number: 2, name: 'Roadmap', layout: 'ROADMAP' }
+                  ],
+                  pageInfo: { hasNextPage: false }
+                }
+              }
+            }
+          }
+        }
+      }
     ]
   })
 
   const result = object(await h.call('projectViews', { owner: 'test-owner', ownerType: 'organization', projectNumber: 4 }))
   expect(list(result.views).map((view) => object(view).layout)).toEqual(['TABLE', 'ROADMAP'])
   expect(result.parentFieldDropped).toBe(false)
-})
+}, 20_000)
 
 test('GH30: project table follows item cursors and returns typed rows', async () => {
   const h = await hosting({
     graphql: [
-      { when: 'views(first: 20', body: { data: { organization: { projectV2: { id: 'PVT_4', number: 4, views: { nodes: [{ id: 'v-table', number: 1, name: 'Table', layout: 'TABLE', fields: { nodes: [] } }], pageInfo: { hasNextPage: false } } } } } },
-      { when: 'items(first: 100', nth: 1, body: { data: { organization: { projectV2: { id: 'PVT_4', number: 4, items: { nodes: [{ id: 'item-1', fieldValues: { nodes: [] }, content: { __typename: 'Issue', number: 31, title: 'Row one', state: 'OPEN' } }], pageInfo: { endCursor: 'item-cursor', hasNextPage: true }, totalCount: 2 } } } } },
-      { when: 'items(first: 100', nth: 2, body: { data: { organization: { projectV2: { id: 'PVT_4', number: 4, items: { nodes: [{ id: 'item-2', fieldValues: { nodes: [] }, content: { __typename: 'PullRequest', number: 32, title: 'Row two', state: 'OPEN' } }], pageInfo: { endCursor: null, hasNextPage: false }, totalCount: 2 } } } } }
+      {
+        when: 'field:views',
+        body: {
+          data: {
+            organization: {
+              projectV2: {
+                id: 'PVT_4',
+                number: 4,
+                views: {
+                  nodes: [{
+                    id: 'v-table',
+                    number: 1,
+                    name: 'Table',
+                    layout: 'TABLE',
+                    fields: { nodes: [] }
+                  }],
+                  pageInfo: { hasNextPage: false }
+                }
+              }
+            }
+          }
+        }
+      },
+      {
+        when: 'items(first: 100',
+        nth: 1,
+        body: {
+          data: {
+            organization: {
+              projectV2: {
+                id: 'PVT_4',
+                number: 4,
+                items: {
+                  nodes: [{
+                    id: 'item-1',
+                    fieldValues: { nodes: [] },
+                    content: { __typename: 'Issue', number: 31, title: 'Row one', state: 'OPEN' }
+                  }],
+                  pageInfo: { endCursor: 'item-cursor', hasNextPage: true },
+                  totalCount: 2
+                }
+              }
+            }
+          }
+        }
+      },
+      {
+        when: 'items(first: 100',
+        nth: 2,
+        body: {
+          data: {
+            organization: {
+              projectV2: {
+                id: 'PVT_4',
+                number: 4,
+                items: {
+                  nodes: [{
+                    id: 'item-2',
+                    fieldValues: { nodes: [] },
+                    content: { __typename: 'PullRequest', number: 32, title: 'Row two', state: 'OPEN' }
+                  }],
+                  pageInfo: { endCursor: null, hasNextPage: false },
+                  totalCount: 2
+                }
+              }
+            }
+          }
+        }
+      }
     ]
   })
 
@@ -850,25 +1081,109 @@ test('GH30: project table follows item cursors and returns typed rows', async ()
   expect(object(rows[1].content).kind).toBe('pullRequest')
   expect(table.layout).toBe('TABLE')
   expect(table.truncated).toBe(false)
-})
+}, 20_000)
+
+test('GH30: project table uses its saved filter unless queryOverride is supplied', async () => {
+  const h = await hosting({
+    graphql: [
+      {
+        when: 'field:views',
+        body: {
+          data: {
+            organization: {
+              projectV2: {
+                id: 'PVT_4',
+                number: 4,
+                views: {
+                  nodes: [{ id: 'v-table', number: 1, name: 'Filtered', layout: 'TABLE', filter: 'is:open', fields: { nodes: [] } }],
+                  pageInfo: { hasNextPage: false }
+                }
+              }
+            }
+          }
+        }
+      },
+      {
+        when: 'items(first: 100',
+        body: {
+          data: {
+            organization: {
+              projectV2: {
+                id: 'PVT_4',
+                number: 4,
+                items: { nodes: [], pageInfo: { hasNextPage: false }, totalCount: 0 }
+              }
+            }
+          }
+        }
+      }
+    ]
+  })
+
+  await h.call('projectTable', { owner: 'test-owner', ownerType: 'organization', projectNumber: 4 })
+  await h.call('projectTable', { owner: 'test-owner', ownerType: 'organization', projectNumber: 4, queryOverride: 'is:closed' })
+  const itemCalls = list(object(h.readState()).calls).map(object).filter((call) =>
+    typeof call.query === 'string' && call.query.includes('ProjectItems')
+  )
+  expect(itemCalls.map((call) => object(call.variables).query)).toEqual(['is:open', 'is:closed'])
+}, 20_000)
 test('GH30: project table retries once without the optional issue parent field', async () => {
   const h = await hosting({
     graphql: [
-      { when: 'views(first: 20', body: { data: { organization: { projectV2: { id: 'PVT_4', views: { nodes: [{ id: 'v-table', number: 1, name: 'Table', layout: 'TABLE' }], pageInfo: { hasNextPage: false } } } } } },
-      { when: 'items(first: 100', whenArgs: 'parent { number title url }', error: 'Field parent not found on Issue' },
-      { when: 'items(first: 100', body: { data: { organization: { projectV2: { id: 'PVT_4', items: { nodes: [{ id: 'item-1', fieldValues: { nodes: [] }, content: { __typename: 'Issue', number: 31, title: 'Row one' } }], pageInfo: { hasNextPage: false }, totalCount: 1 } } } } }
+      {
+        when: 'field:views',
+        body: {
+          data: {
+            organization: {
+              projectV2: {
+                id: 'PVT_4',
+                views: {
+                  nodes: [{ id: 'v-table', number: 1, name: 'Table', layout: 'TABLE' }],
+                  pageInfo: { hasNextPage: false }
+                }
+              }
+            }
+          }
+        }
+      },
+      {
+        when: 'items(first: 100',
+        whenArgs: 'parent { number title url }',
+        error: 'Field parent not found on Issue'
+      },
+      {
+        when: 'items(first: 100',
+        body: {
+          data: {
+            organization: {
+              projectV2: {
+                id: 'PVT_4',
+                items: {
+                  nodes: [{
+                    id: 'item-1',
+                    fieldValues: { nodes: [] },
+                    content: { __typename: 'Issue', number: 31, title: 'Row one' }
+                  }],
+                  pageInfo: { hasNextPage: false },
+                  totalCount: 1
+                }
+              }
+            }
+          }
+        }
+      }
     ]
   })
 
   const table = object(await h.call('projectTable', { owner: 'test-owner', ownerType: 'organization', projectNumber: 4 }))
   expect(list(table.items)).toHaveLength(1)
   expect(table.parentFieldDropped).toBe(true)
-})
+}, 20_000)
 test('GH30: board and roadmap views render and unknown layouts fail explicitly', async () => {
   const h = await hosting({
     graphql: [
       {
-        when: 'views(first: 20',
+        when: 'field:views',
         body: {
           data: {
             organization: {
@@ -886,7 +1201,23 @@ test('GH30: board and roadmap views render and unknown layouts fail explicitly',
           }
         }
       },
-      { when: 'items(first: 100', body: { data: { organization: { projectV2: { id: 'PVT_4', items: { nodes: [], pageInfo: { hasNextPage: false }, totalCount: 0 } } } } }
+      {
+        when: 'items(first: 100',
+        body: {
+          data: {
+            organization: {
+              projectV2: {
+                id: 'PVT_4',
+                items: {
+                  nodes: [],
+                  pageInfo: { hasNextPage: false },
+                  totalCount: 0
+                }
+              }
+            }
+          }
+        }
+      }
     ]
   })
 
@@ -897,7 +1228,7 @@ test('GH30: board and roadmap views render and unknown layouts fail explicitly',
   expect(roadmap.layout).toBe('ROADMAP')
   expect(list(object(roadmap.roadmap).dateFields)).toHaveLength(1)
   await expectReason(h.call('projectTable', { owner: 'test-owner', ownerType: 'organization', projectNumber: 4, viewName: 'Custom' }), 'unsupported_layout')
-})
+}, 20_000)
 
 test('GH31: project fields set and clear are visible in a subsequent project table read', async () => {
   const h = await hosting({
@@ -936,7 +1267,7 @@ test('GH31: project fields set and clear are visible in a subsequent project tab
   await h.call('projectField', { projectId: 'PVT_4', itemId: 'PVTI_7', fieldId: 'PVTF_2', clear: true })
   const afterClear = object(await h.call('projectTable', { owner: 'test-owner', ownerType: 'organization', projectNumber: 4 }))
   expect(list(object(list(afterClear.items)[0]).fieldValues)).toEqual([])
-})
+}, 20_000)
 
 test('GH31: project item actions persist issue, review, comment, and issue-type edits', async () => {
   const issueKey = 'test-owner/test-repo/31'
@@ -1010,7 +1341,196 @@ test('GH31: project item actions persist issue, review, comment, and issue-type 
   await h.call('projectItemMutation', { ...issue, action: 'updateIssueType', issueTypeName: 'Bug' })
   const typedDetails = object(await h.call('workItemDetails', { number: 31, kind: 'issue' }))
   expect(object(object(typedDetails.item).issueType).name).toBe('Bug')
-})
+}, 20_000)
+
+test('GH31: project item mutations target unconfigured repositories on the trusted host', async () => {
+  const issueKey = 'remote-owner/remote-repo/41'
+  const url = 'https://github.com/remote-owner/remote-repo/issues/41'
+  const comments = [{
+    id: 91,
+    body: 'original comment',
+    issue_url: 'https://api.github.com/repos/remote-owner/remote-repo/issues/41',
+    html_url: 'https://github.com/remote-owner/remote-repo/issues/41#issuecomment-91',
+    created_at: '2026-10-01T00:00:00Z',
+    user: { login: 'reporter' }
+  }]
+  const h = await hosting({
+    resources: {
+      issues: {
+        [issueKey]: {
+          number: 41,
+          nodeId: 'REMOTE_ISSUE_41',
+          owner: 'test-owner',
+          title: 'original issue',
+          body: 'original issue body',
+          state: 'open',
+          url,
+          labels: [],
+          assignees: [],
+          user: { login: 'reporter' }
+        }
+      },
+      comments: { [issueKey]: comments },
+      projectItems: {
+        'PVT_4/PVTI_REMOTE_ISSUE': {
+          id: 'PVTI_REMOTE_ISSUE',
+          projectId: 'PVT_4',
+          projectNumber: 4,
+          owner: 'test-owner',
+          ownerType: 'Organization',
+          kind: 'issue',
+          number: 41,
+          title: 'original issue',
+          url
+        }
+      },
+      issueTypes: { 'test-owner': [{ id: 'IT_REMOTE', name: 'Enhancement', isEnabled: true }] }
+    }
+  })
+  const issue = { projectId: 'PVT_4', itemId: 'PVTI_REMOTE_ISSUE', number: 41, kind: 'issue' }
+
+  await h.call('projectItemMutation', { ...issue, action: 'editIssue', title: 'triaged remote issue', body: 'updated body', state: 'closed' })
+  await h.call('projectItemMutation', { ...issue, action: 'addComment', body: 'new remote comment' })
+  await h.call('projectItemMutation', { ...issue, action: 'updateComment', commentId: 91, body: 'updated remote comment' })
+  await h.call('projectItemMutation', { ...issue, action: 'updateIssueType', issueTypeName: 'Enhancement' })
+
+  const resources = object(h.readState()).resources
+  const updatedIssue = object(object(resources).issues)
+  const storedIssue = object(updatedIssue[issueKey])
+  expect([storedIssue.title, storedIssue.body, storedIssue.state]).toEqual(['triaged remote issue', 'updated body', 'closed'])
+  expect(object(storedIssue.issueType).name).toBe('Enhancement')
+  const storedComments = object(object(resources).comments)
+  expect(list(storedComments[issueKey]).map((comment) => object(comment).body)).toEqual(['updated remote comment', 'new remote comment'])
+  const restCalls = list(object(h.readState()).calls).map(object).filter((call) =>
+    typeof call.endpoint === 'string' && call.endpoint.startsWith('repos/')
+  )
+  expect(restCalls.length).toBeGreaterThan(0)
+  expect(restCalls.every((call) => String(call.endpoint).includes('remote-owner/remote-repo'))).toBe(true)
+}, 20_000)
+
+test('GH31: project item mutation rejects a foreign-host content URL before REST access', async () => {
+  const h = await hosting({
+    resources: {
+      projectItems: {
+        'PVT_4/PVTI_FOREIGN_ISSUE': {
+          id: 'PVTI_FOREIGN_ISSUE',
+          projectId: 'PVT_4',
+          projectNumber: 4,
+          owner: 'test-owner',
+          ownerType: 'Organization',
+          kind: 'issue',
+          number: 41,
+          title: 'foreign issue',
+          url: 'https://foreign.example/remote-owner/remote-repo/issues/41'
+        }
+      }
+    }
+  })
+
+  await expectReason(h.call('projectItemMutation', {
+    projectId: 'PVT_4',
+    itemId: 'PVTI_FOREIGN_ISSUE',
+    action: 'editIssue',
+    title: 'must not be sent'
+  }), 'validation_error')
+  const restCalls = list(object(h.readState()).calls).map(object).filter((call) =>
+    typeof call.endpoint === 'string' && call.endpoint.startsWith('repos/')
+  )
+  expect(restCalls).toEqual([])
+}, 20_000)
+
+test('GH31: project discovery uses an authenticated GHES host without requiring its repository remote', async () => {
+  const h = await hosting({
+    authStatus: 'Logged in to github.com account hosting-fixture (keyring)\nActive account: true\nToken scopes: repo, project, read:org\nLogged in to enterprise.example account enterprise-fixture (keyring)\nActive account: true\nToken scopes: repo, project, read:org\n',
+    graphql: [{
+      when: 'ProjectDiscovery',
+      body: {
+        data: {
+          viewer: {
+            login: 'enterprise-fixture',
+            projectsV2: { nodes: [], pageInfo: { hasNextPage: false }, totalCount: 0 },
+            organizations: { nodes: [], pageInfo: { hasNextPage: false } }
+          }
+        }
+      }
+    }]
+  })
+
+  const result = object(await h.call('projects', { host: 'enterprise.example' }))
+  expect(result.projects).toEqual([])
+  const calls = h.invocations()
+  expect(calls.some(({ args }) => {
+    const hostnameIndex = args.indexOf('--hostname')
+    return args.includes('graphql') && hostnameIndex >= 0 && args[hostnameIndex + 1] === 'enterprise.example'
+  })).toBe(true)
+  expect(calls.filter(({ args }) => args.includes('auth') && args.includes('status'))
+    .every(({ args }) => !args.includes('enterprise.example'))).toBe(true)
+}, 20_000)
+
+test('GH31: project discovery rejects an untrusted GHES host before API access', async () => {
+  const h = await hosting()
+
+  await expectReason(h.call('projects', { host: 'untrusted.example' }), 'auth_required')
+  const calls = h.invocations()
+  expect(calls.some(({ args }) => args.includes('graphql'))).toBe(false)
+  expect(calls.some(({ args }) => {
+    const hostnameIndex = args.indexOf('--hostname')
+    return hostnameIndex >= 0 && args[hostnameIndex + 1] === 'untrusted.example'
+  })).toBe(false)
+}, 20_000)
+
+test('GH31: Projects ignore a configured repository account binding and use ambient project data', async () => {
+  const h = await hosting({
+    authStatus: 'Logged in to github.com account ambient-fixture (GH_TOKEN)\nActive account: true\nToken scopes: repo, project, read:org\nLogged in to github.com account bound-fixture (keyring)\nActive account: false\nToken scopes: repo, project, read:org\n',
+    authTokens: { 'bound-fixture': 'bound-user-token' },
+    graphqlByToken: {
+      'fixture-ambient-token': [{
+        when: 'ProjectDiscovery',
+        body: {
+          data: {
+            viewer: {
+              login: 'ambient-fixture',
+              projectsV2: {
+                nodes: [{ id: 'AMBIENT_PVT', number: 17, title: 'Ambient board' }],
+                pageInfo: { hasNextPage: false },
+                totalCount: 1
+              },
+              organizations: { nodes: [], pageInfo: { hasNextPage: false } }
+            }
+          }
+        }
+      }],
+      'bound-user-token': [{
+        when: 'ProjectDiscovery',
+        body: {
+          data: {
+            viewer: {
+              login: 'bound-fixture',
+              projectsV2: {
+                nodes: [{ id: 'BOUND_PVT', number: 18, title: 'Bound board' }],
+                pageInfo: { hasNextPage: false },
+                totalCount: 1
+              },
+              organizations: { nodes: [], pageInfo: { hasNextPage: false } }
+            }
+          }
+        }
+      }]
+    }
+  })
+
+  await h.call('configure', { account: { host: 'github.com', user: 'bound-fixture' } })
+  const result = object(await h.call('projects', {}))
+  expect(list(result.projects).map((project) => object(project).title)).toEqual(['Ambient board'])
+
+  const invocations = h.invocations()
+  expect(invocations.some(({ args }) =>
+    args[0] === 'auth' && args[1] === 'token' && args.includes('--user') && args[args.indexOf('--user') + 1] === 'bound-fixture'
+  )).toBe(true)
+  const graphCall = invocations.find(({ args }) => args.includes('graphql'))
+  expect(graphCall?.env.GH_TOKEN).toBe('fixture-ambient-token')
+  expect(graphCall?.env.GH_TOKEN).not.toBe('bound-user-token')
+}, 20_000)
 
 test('GH31: project auth, scope, and schema errors remain distinct', async () => {
   const h = await hosting({
@@ -1018,7 +1538,7 @@ test('GH31: project auth, scope, and schema errors remain distinct', async () =>
       { when: 'viewer { login projectsV2', nth: 1, error: 'HTTP 401: authentication required' },
       { when: 'viewer { login projectsV2', nth: 2, error: 'HTTP 403: Resource not accessible by integration; missing project scope' },
       { when: 'verticalGroupByFields', error: 'Field verticalGroupByFields not found' },
-      { when: 'views(first: 20', error: 'Field views not found on ProjectV2' }
+      { when: 'field:views', error: 'Field views not found on ProjectV2' }
     ]
   })
 
@@ -1026,13 +1546,43 @@ test('GH31: project auth, scope, and schema errors remain distinct', async () =>
   await expectReason(h.call('projects', {}), 'auth_required')
   await expectReason(h.call('projects', {}), 'scope_missing')
   await expectReason(h.call('projectViews', { owner: 'test-owner', ownerType: 'organization', projectNumber: 4 }), 'schema_drift')
-})
+}, 20_000)
 
 test('GH31: project table refuses a collection beyond its 500-item bound with the total count', async () => {
   const h = await hosting({
     graphql: [
-      { when: 'views(first: 20', body: { data: { organization: { projectV2: { views: { nodes: [{ id: 'v-table', number: 1, name: 'Table', layout: 'TABLE' }], pageInfo: { hasNextPage: false } } } } } },
-      { when: 'items(first: 100', body: { data: { organization: { projectV2: { id: 'PVT_4', items: { nodes: [], pageInfo: { hasNextPage: true }, totalCount: 501 } } } } } }
+      {
+        when: 'field:views',
+        body: {
+          data: {
+            organization: {
+              projectV2: {
+                views: {
+                  nodes: [{ id: 'v-table', number: 1, name: 'Table', layout: 'TABLE' }],
+                  pageInfo: { hasNextPage: false }
+                }
+              }
+            }
+          }
+        }
+      },
+      {
+        when: 'items(first: 100',
+        body: {
+          data: {
+            organization: {
+              projectV2: {
+                id: 'PVT_4',
+                items: {
+                  nodes: [],
+                  pageInfo: { hasNextPage: true },
+                  totalCount: 501
+                }
+              }
+            }
+          }
+        }
+      }
     ]
   })
 
@@ -1044,14 +1594,39 @@ test('GH31: project table refuses a collection beyond its 500-item bound with th
     expect(object(details.data).reason).toBe('too_large')
     expect(object(details.data).totalCount).toBe(501)
   }
-})
+}, 20_000)
 test('GH30: a malformed Projects item connection is not treated as an empty table', async () => {
   const h = await hosting({
     graphql: [
-      { when: 'views(first: 20', body: { data: { organization: { projectV2: { views: { nodes: [{ id: 'v-table', number: 1, name: 'Table', layout: 'TABLE' }], pageInfo: { hasNextPage: false } } } } } },
-      { when: 'items(first: 100', body: { data: { organization: { projectV2: { id: 'PVT_4' } } } } }
+      {
+        when: 'field:views',
+        body: {
+          data: {
+            organization: {
+              projectV2: {
+                views: {
+                  nodes: [{ id: 'v-table', number: 1, name: 'Table', layout: 'TABLE' }],
+                  pageInfo: { hasNextPage: false }
+                }
+              }
+            }
+          }
+        }
+      },
+      {
+        when: 'items(first: 100',
+        body: {
+          data: {
+            organization: {
+              projectV2: {
+                id: 'PVT_4'
+              }
+            }
+          }
+        }
+      }
     ]
   })
 
   await expectReason(h.call('projectTable', { owner: 'test-owner', ownerType: 'organization', projectNumber: 4 }), 'schema_drift')
-})
+}, 20_000)
