@@ -62,9 +62,12 @@ export type ServiceOptions = {
   /** How long a delivered banner silences its worktree. */
   cooldownMs?: number
   now?: () => number
+  /** How long a call to another plugin may take before it is given up on. */
+  lookupTimeoutMs?: number
 }
 
 export const BELL_HOLD_MS = 250
+export const LOOKUP_TIMEOUT_MS = 2000
 const PROGRAM_TEXT_MAX = 256
 const SETTING_PREFIX = 'setting:quirky.notifications/'
 
@@ -108,6 +111,7 @@ export function badgeLabel(count: number): string {
 export class NotificationsService {
   private readonly cooldown: Cooldown
   private readonly bellHoldMs: number
+  private readonly lookupTimeoutMs: number
   private tail: Promise<void> = Promise.resolve()
   private syncQueued = false
   private lastStatus: string | null = null
@@ -121,6 +125,7 @@ export class NotificationsService {
     options: ServiceOptions = {}
   ) {
     this.bellHoldMs = options.bellHoldMs ?? BELL_HOLD_MS
+    this.lookupTimeoutMs = options.lookupTimeoutMs ?? LOOKUP_TIMEOUT_MS
     this.cooldown = new Cooldown({
       ...(options.cooldownMs === undefined ? {} : { windowMs: options.cooldownMs }),
       ...(options.now === undefined ? {} : { now: options.now })
@@ -275,9 +280,22 @@ export class NotificationsService {
     })
   }
 
+  /** A call to another plugin that gives up after the lookup timeout, so one silent handler cannot hold the queue. */
+  private async bounded(method: string, params: Record<string, unknown>): Promise<unknown> {
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const timeout = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => reject(new Error(`${method} did not answer within ${this.lookupTimeoutMs}ms`)), this.lookupTimeoutMs)
+    })
+    try {
+      return await Promise.race([this.context.call(method, params), timeout])
+    } finally {
+      clearTimeout(timer)
+    }
+  }
+
   private async lookup<T>(method: string, params: Record<string, unknown> = {}): Promise<T | undefined> {
     try {
-      return (await this.context.call(method, params)) as T
+      return (await this.bounded(method, params)) as T
     } catch (error) {
       if (!isMissing(error)) this.context.log(`${method} failed: ${errorText(error)}`)
       return undefined
@@ -300,7 +318,7 @@ export class NotificationsService {
 
   private async hasDesktopClient(): Promise<boolean> {
     const status = await this.lookup<{ clients: { role: string }[] }>('status.get')
-    return status?.clients.some((client) => client.role === 'desktop') ?? false
+    return status?.clients.some((client) => client.role === 'desktop') ?? true
   }
 
   private async listWorktrees(): Promise<Worktree[]> {
@@ -315,7 +333,7 @@ export class NotificationsService {
 
   private async setSessionUnread(sessionId: string, unread: Marker | null): Promise<void> {
     try {
-      await this.context.call('quirky.session/setUnread', { session: sessionId, unread })
+      await this.bounded('quirky.session/setUnread', { session: sessionId, unread })
     } catch (error) {
       if (!isMissing(error)) this.context.log(`could not mark session ${sessionId}: ${errorText(error)}`)
     }
@@ -329,7 +347,7 @@ export class NotificationsService {
     const key = this.ownKey(worktreeId, unread)
     this.ownWrites.set(key, (this.ownWrites.get(key) ?? 0) + 1)
     try {
-      await this.context.call('quirky.worktree/set', { worktree: `id:${worktreeId}`, unread })
+      await this.bounded('quirky.worktree/set', { worktree: `id:${worktreeId}`, unread })
     } catch (error) {
       this.consumeOwn(worktreeId, unread)
       if (!isMissing(error)) this.context.log(`could not mark worktree ${worktreeId}: ${errorText(error)}`)
