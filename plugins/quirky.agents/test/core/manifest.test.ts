@@ -408,7 +408,8 @@ describe('quirky.agents launchOptions data', () => {
     const block = rawBlock('codex')
     expect(block.model).toEqual({
       flag: ['-m', '{value}'],
-      conflicts: [{ flags: ['-m', '--model'] }, { flags: ['-c', '--config'], valuePrefix: 'model=' }]
+      conflicts: [{ flags: ['-m', '--model'] }, { flags: ['-c', '--config'], valuePrefix: 'model=' }],
+      structured: 'model'
     })
     expect(block.options).toEqual([
       {
@@ -419,7 +420,8 @@ describe('quirky.agents launchOptions data', () => {
           ['minimal', 'Minimal'], ['low', 'Low'], ['medium', 'Medium'], ['high', 'High'], ['xhigh', 'Extra high'], ['max', 'Max'], ['ultra', 'Ultra']
         ),
         flag: ['-c', 'model_reasoning_effort={value}'],
-        conflicts: [{ flags: ['--reasoning-effort'] }, { flags: ['-c', '--config'], valuePrefix: 'model_reasoning_effort=' }]
+        conflicts: [{ flags: ['--reasoning-effort'] }, { flags: ['-c', '--config'], valuePrefix: 'model_reasoning_effort=' }],
+        structured: 'effort'
       }
     ])
     const upTo = (ceiling: string) => CODEX_EFFORT.slice(0, CODEX_EFFORT.indexOf(ceiling) + 1)
@@ -432,7 +434,7 @@ describe('quirky.agents launchOptions data', () => {
     ])
     expect(block.unlisted).toBe('accept')
     expect(block.unlistedOptions).toEqual([{ id: 'effort' }])
-    expect(block.model.structured).toBeUndefined()
+    expect(block.model.structured).toBe('model')
     expect(block.valueFlags).toBeUndefined()
   })
 
@@ -558,16 +560,15 @@ describe('quirky.agents launchOptions data', () => {
     expect(opencode.unlistedOptions).toBeUndefined()
   })
 
-  test('structured keys exist only on claude\'s model and effort, and composition only on cursor', () => {
+  test('cursor remains the only launch option composer', () => {
     for (const id of LAUNCH_AGENTS) {
       const block = rawBlock(id)
-      const keys = [block.model.structured, ...(block.options ?? []).map((option) => option.structured)].filter((key) => key !== undefined)
-      expect({ id, keys }).toEqual({ id, keys: id === 'claude' ? ['model', 'effort'] : [] })
       expect({ id, composeModel: block.composeModel }).toEqual({ id, composeModel: id === 'cursor' ? 'cursor' : undefined })
       expect({ id, composed: (block.options ?? []).filter((option) => option.composed).length }).toEqual({ id, composed: id === 'cursor' ? 3 : 0 })
       expect({ id, valueFlags: block.valueFlags !== undefined }).toEqual({ id, valueFlags: id === 'claude' || id === 'cursor' })
     }
   })
+
 
   test('every flagged option and the model flag carry exactly one {value} item', () => {
     for (const id of LAUNCH_AGENTS) {

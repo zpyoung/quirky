@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import type { AskEnvelope } from '@quirky/protocol'
 import { makeTempHome } from '../../../packages/daemon/test/helpers'
 import { v1AsksMigration } from '../v1-import'
-import { askQueueMigration } from '../store-migrations'
+import { askOwnershipMigration, askQueueMigration } from '../store-migrations'
 import { cleanupAll, connectAs, memoryStore, spec, startAsk, stopKeepingHome } from './support'
 
 afterEach(cleanupAll)
@@ -152,5 +152,23 @@ describe('migration 2', () => {
 
     await client.callAny('quirky.ask/answer', { askId: 'ask_a', answers: {}, skipped: ['env', 'why'] })
     expect(await queue()).toEqual([['ask_b', 5, false]])
+  })
+})
+
+describe('migration 3', () => {
+  test('adds nullable private plugin ownership without assigning owners to existing asks', () => {
+    const home = makeTempHome('qa-')
+    writeV1Home(home)
+    const store = memoryStore()
+    v1AsksMigration(home)(store)
+    askQueueMigration(store)
+    askOwnershipMigration(store)
+
+    expect(store.all<{ id: string; owner_plugin_id: string | null }>('SELECT id, owner_plugin_id FROM asks ORDER BY id')).toEqual([
+      { id: 'ask_done', owner_plugin_id: null },
+      { id: 'ask_pending', owner_plugin_id: null }
+    ])
+    store.run('UPDATE asks SET owner_plugin_id = ? WHERE id = ?', 'quirky.ask-owner', 'ask_pending')
+    expect(store.get<{ owner_plugin_id: string }>('SELECT owner_plugin_id FROM asks WHERE id = ?', 'ask_pending')).toEqual({ owner_plugin_id: 'quirky.ask-owner' })
   })
 })
