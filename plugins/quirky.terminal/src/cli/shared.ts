@@ -51,14 +51,20 @@ export function showWorkspace(ctx: CliContext, result: unknown): void {
 
 /**
  * The pane a command targets. A pane ID is used as given; any other value is a session ID and is
- * resolved to its pane. Without a value, the pane showing `$QUIRKY_SESSION_ID`.
+ * resolved to its pane. Without a value, the pane showing `$QUIRKY_SESSION_ID`. `workspace` is set
+ * only when resolving a session, and names the workspace that holds the pane.
  */
-export async function paneIdOf(explicit: string | undefined, ctx: CliContext): Promise<string> {
-  if (explicit !== undefined && PANE_ID.test(explicit)) return explicit
+export async function resolvePane(explicit: string | undefined, ctx: CliContext): Promise<{ pane: string; workspace?: string }> {
+  if (explicit !== undefined && PANE_ID.test(explicit)) return { pane: explicit }
   const session = explicit ?? ctx.env.QUIRKY_SESSION_ID
   if (!session) throw ctx.usage('no pane; pass <pane> or set QUIRKY_SESSION_ID')
-  const found = (await ctx.call('quirky.terminal/paneOf', { session })) as { pane: string }
-  return found.pane
+  const found = (await ctx.call('quirky.terminal/paneOf', { session })) as { pane: string; workspace: string }
+  return { pane: found.pane, workspace: found.workspace }
+}
+
+/** The pane ID a command targets; see {@link resolvePane}. */
+export async function paneIdOf(explicit: string | undefined, ctx: CliContext): Promise<string> {
+  return (await resolvePane(explicit, ctx)).pane
 }
 
 /** The `workspace` param for `--worktree W`; `--workspace` is accepted where a command declares it. */
