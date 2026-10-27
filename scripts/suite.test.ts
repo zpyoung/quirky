@@ -118,9 +118,9 @@ test('a completed test run stops detached subprocess trees left by a test', asyn
   }
 }, 15_000)
 
-test('usableSlots leaves half the slots to a land while one runs', () => {
+test('usableSlots leaves all but one slot to a land while one runs', () => {
   expect(usableSlots(6, false, false)).toBe(6)
-  expect(usableSlots(6, false, true)).toBe(3)
+  expect(usableSlots(6, false, true)).toBe(1)
   expect(usableSlots(6, true, true)).toBe(6)
   expect(usableSlots(1, false, true)).toBe(1)
 })

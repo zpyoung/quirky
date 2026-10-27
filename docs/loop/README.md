@@ -48,7 +48,7 @@ back to this Mac.
   for those commands on the PATH. The stubs never reach a real account.
 - **macOS-only tests** are listed in `scripts/test-on-macos.txt` and run on this Mac alongside.
 - **Order and sharing:** test files start slowest first, by the times logged on the host in
-  `~/test-slots/durations.log`. A land's run gets every slot, and other runs get half while it
+  `~/test-slots/durations.log`. A land's run gets every slot, and other runs share one while it
   goes, because the land holds the queue lock. One land also takes in up to three other items
   whose lanes are waiting to land, so a single run verifies them all.
 - **Flaky files:** a failing test file is rerun once on its own. One that then passes is logged to
