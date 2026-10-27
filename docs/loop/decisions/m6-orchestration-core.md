@@ -154,5 +154,22 @@
 - **Revisit if:** another platform is authorized
 - **Source:** deferred: platform
 
+## D15: Contract preparation is inert and keeps source-level recovery combinations
+- **Question:** shared-contract review before the early-item checkpoint
+- **Options:** activate placeholder methods now; commit inert types and explicit API/CLI normalization boundaries
+- **Chose:** type-only domain/request/result/CAS/receipt contracts in plugins/quirky.orchestration/src/contracts.ts. Public rows use camelCase and resolved mailbox unions; the manifest-declared CLI adapter must preserve the documented string-address/JSON/CSV flags and long-wait/resume behavior. Low-level dispatch has no public retry flag; internal admission retains retry lineage for the later worker-start slice. No redundant store facade: reuse PluginStore.
+- **Why:** no runtime feature can ship while the early dependency gate is false. Parent review strengthened caller evidence to require independent runtime process/lease attestation (live lookup alone is insufficient), added canonical Run/Dispatch senders, raw-vs-structured payload exclusivity, report rejection reasons, ask target/format, and durable acknowledgement even with non-consuming peek/history.
+- **Evidence:** queue.ts deps returned ready:false, pending m5-structured-runner; contracts.ts; orchestration.md:291-307,427-435,477-488,530-554. LSP references attempted for changed public contracts: no language server available; there are no runtime consumers in this preparation.
+- **Reversibility:** medium
+- **Confidence:** high
+- **Revisit if:** dependency integration exposes a conflicting public identity/send contract
+- **Source:** assumed — autonomous
+
+## Early preparation verification
+- `bun run typecheck`: exit0 on the final contracts, no diagnostics.
+- Actual Bun import of contracts.ts: `CONTRACT_MODULE_INERT_OK`; the module exports no runtime values. No daemon, model, process, real user state or placeholder contribution was started/installed.
+- All preparation subagents and the dependency query completed. No background work remains from this iteration.
+- No runtime acceptance claim: AC1–AC13, cross-family review, UI pointer dogfood and queue-controlled landing remain gated on implementation after dependency readiness.
+
 ## Progress
-Step3/4 complete: standard gray areas resolved, combined logic specification written and self-reviewed. Early-item dependency gate is being queried with queue.ts deps. Next: finish/commit shared contract types; if deps remain not ready, end this early preparation iteration as LOOP.md:79-83 requires. Next iteration resumes this same held item, checks deps, merges build/roadmap when ready, then implements the three specified slices. No runtime implementation or passing product behavior is claimed. No reviewer pairing has been frozen yet; preflight when implementation becomes actionable.
+Early preparation complete through steps3/4 and shared type contracts; no runtime implementation/activation is installed. `queue.ts deps m6-orchestration-core` returned `ready:false`, pending `m5-structured-runner`, so LOOP.md:79-83 requires ending after the committed preparation. Next iteration: resume this held item, read this log and logic.md, run deps again. If still false, retain the checkpoint; if true, merge build/roadmap and read incoming decisions, then implement all three specified slices. Resolve the public runtime attestation and idempotent safe-send seams before trusting worker identity/pointer outcomes. No product tests/dogfood/final review/landing has occurred. Reviewer pairing is not frozen; probe and record it when implementation becomes actionable.

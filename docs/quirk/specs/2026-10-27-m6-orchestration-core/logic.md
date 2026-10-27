@@ -1,7 +1,9 @@
 # Orchestration core, mailbox, questions and gates
 
+Reader: the next lane-1 implementer — Decision: whether dependencies permit implementation, then which contracts and acceptance flows to build.
+
 ## Status & amendments
-Status: autonomously approved design under LOOP.md; early-item contracts preparation, implementation waits for dependency readiness. Night mode combines technical decisions here; no separate tech.md.
+Status: autonomously approved design under LOOP.md; early-item spec and inert contracts prepared, implementation waits for dependency readiness. Night mode combines technical decisions here; no separate tech.md.
 
 **Amendments:** 2026-10-27 — initial combined specification, self-reviewed against the selected feature-doc sections.
 
@@ -103,6 +105,8 @@ Run, Task, Dispatch, Worker, Message, Delivery, QuestionThread, Gate and Mutatio
 2. Mail routing, delivery/check waits, question/reply/gates, with API-driven FIFO/fencing/resume/concurrency tests, against committed shared core ports.
 3. Manifest/CLI integration and idle-pointer scheduling through public session/structured APIs, with real daemon/CLI and pointer restart safety scenarios.
 At most three implementers. Shared contract changes are owned by the integration parent and committed before implementers. Do not edit shared files concurrently. Tests cover plausible consumer-visible boundaries, not copied schemas/text snapshots.
+
+The CLI adapter preserves source flags while normalizing them to the type contracts: string addresses become mailbox/group discriminants, CSV/JSON arrays become arrays, and `--id`/`--task`/`--run` map to explicit typed identity fields. Its module is declared by the manifest and remains visible in the public schema catalog. Preserve raw-payload versus structured-flag exclusivity; acknowledgement remains a durable mutation even when the following read is peek/history.
 
 ### Fences and execution rules
 Never change docs/loop/LOOP.md, scripts/build-loop/, queue.json or DECISIONS.md manually; never work on main or the integration worktree. Do not change m1 stable identity, background-structured-only architecture, revocation order or shared provider launch snapshots. Always inspect available public runtime identity/send APIs before implementing pointer/authority glue. Questions are autonomously answered in the decision log; conflicts with locked decisions stop the affected item, not silently weaken guarantees.
