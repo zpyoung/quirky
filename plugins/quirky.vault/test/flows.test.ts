@@ -258,7 +258,7 @@ describe('vault public acceptance flows', () => {
       userRecord(roleSession, '/tmp/vault-flow-alpha', longUserText, base),
       assistantRecord(roleSession, '/tmp/vault-flow-alpha', [
         { type: 'text', text: 'assistantrolemarker' },
-        { type: 'tool_use', id: 'terminal-tool', name: 'resolveTerminalPath', input: { path: '/tmp/terminal path' } }
+        { type: 'tool_use', id: 'terminal-tool', name: 'resolveTerminalPath', input: { path: '/tmp/terminal path vaulttoolonlyquasar' } }
       ], base + 1_000),
       userRecord(roleSession, '/tmp/vault-flow-alpha', [
         { type: 'text', text: 'tool result was returned to the user' },
@@ -297,7 +297,10 @@ describe('vault public acceptance flows', () => {
     const toolHit = results(await fresh('resolveTerminalPath', { scope: 'all' })).hits[0]
     expect(toolHit?.sessionId).toBe(roleSession)
     expect(toolHit?.evidence?.role).toBe('tool')
-    expect(results(await fresh('resolveTerminalPath', { scope: 'conversation' })).hits.length).toBe(0)
+    const uniqueToolHit = results(await fresh('vaulttoolonlyquasar', { scope: 'all' })).hits[0]
+    expect(uniqueToolHit?.sessionId).toBe(roleSession)
+    expect(uniqueToolHit?.evidence?.role).toBe('tool')
+    expect(results(await fresh('vaulttoolonlyquasar', { scope: 'conversation' })).hits.length).toBe(0)
     expect(results(await fresh('toolcaponlymarker', { scope: 'all' })).hits.length).toBe(0)
 
     const safeEvidence = results(await fresh('evidenceword')).hits[0]?.evidence?.snippet ?? ''
@@ -334,7 +337,7 @@ describe('vault public acceptance flows', () => {
     if (unknown.kind === 'unavailable') expect(unknown.reason).toBe('scope-unknown')
   })
 
-  test('public cursor pages are deterministic and reject stale query/filter/source generations', async () => {
+  test('public cursor pages are deterministic and distinguish malformed query/filter cursors from stale source generations', async () => {
     const vault = await start()
     const base = Date.UTC(2026, 9, 1, 14, 0, 0)
     const paths = new Map<string, string>()
@@ -366,12 +369,12 @@ describe('vault public acceptance flows', () => {
     const wrongQuery = await vault.call<SearchResponse>('search', {
       query: 'differentpagequery', limit: 2, cursor: firstCursor, filters
     })
-    expect(wrongQuery.kind).toBe('stale-cursor')
+    expect(wrongQuery.kind).toBe('malformed-cursor')
     const wrongFilters = await vault.call<SearchResponse>('search', {
       query, limit: 2, cursor: firstCursor,
       filters: { agents: ['claude'], scopePaths: ['/tmp/vault-pages'], sort: 'newest' }
     })
-    expect(wrongFilters.kind).toBe('stale-cursor')
+    expect(wrongFilters.kind).toBe('malformed-cursor')
 
     const changedId = 'flow-page-4'
     const changedPath = paths.get(changedId)

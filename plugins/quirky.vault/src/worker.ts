@@ -13,7 +13,22 @@ import type {
   WorkerResponse
 } from './types'
 
-const pendingLists = new Map<string, AbortController>()
+type SharedList = {
+  key: string
+  controller: AbortController
+  callers: Set<ListCaller>
+  promise: Promise<unknown>
+}
+type ListCaller = {
+  token: string
+  scan: SharedList
+  resolve(value: unknown): void
+  reject(error: unknown): void
+  active: boolean
+}
+
+const pendingLists = new Map<string, ListCaller>()
+const sharedLists = new Map<string, SharedList>()
 let scanner: VaultScanner | undefined
 let search: VaultSearch | undefined
 let initializing: Promise<void> | undefined
@@ -49,19 +64,80 @@ function required<T>(value: T | undefined, name: string): T {
   return value
 }
 
+function listKey(dataDir: string, request: ListRequest): string {
+  // A request token identifies one caller, not the scan shared by equivalent callers.
+  return JSON.stringify([
+    dataDir,
+    request.agents ?? null,
+    request.scopePaths ?? null,
+    request.limit ?? null,
+    request.unlimited ?? null,
+    request.force ?? null,
+    request.sort ?? null,
+    request.hideEmpty ?? null
+  ])
+}
+
+function settleListCaller(caller: ListCaller, finish: () => void): void {
+  if (!caller.active) return
+  caller.active = false
+  caller.scan.callers.delete(caller)
+  if (pendingLists.get(caller.token) === caller) pendingLists.delete(caller.token)
+  finish()
+}
+
+function cancelList(token: string): boolean {
+  const caller = pendingLists.get(token)
+  if (!caller) return false
+  settleListCaller(caller, () => caller.reject(new Error('Scan cancelled')))
+  if (caller.scan.callers.size === 0) {
+    if (sharedLists.get(caller.scan.key) === caller.scan) sharedLists.delete(caller.scan.key)
+    caller.scan.controller.abort()
+  }
+  return true
+}
+
+function joinList(scan: SharedList, token: string): Promise<unknown> {
+  const { promise, resolve, reject } = Promise.withResolvers<unknown>()
+  const caller: ListCaller = { token, scan, resolve, reject, active: true }
+  scan.callers.add(caller)
+  pendingLists.set(token, caller)
+  scan.promise.then(
+    (result) => settleListCaller(caller, () => resolve(result)),
+    (error: unknown) => settleListCaller(caller, () => reject(error))
+  )
+  return promise
+}
+
+function listForCall(scanner: VaultScanner, dataDir: string, request: ListRequest, token: string): Promise<unknown> {
+  const key = listKey(dataDir, request)
+  let scan = sharedLists.get(key)
+  if (!scan) {
+    const controller = new AbortController()
+    const promise = Promise.resolve().then(() => scanner.list(request, controller.signal))
+    scan = { key, controller, callers: new Set(), promise }
+    sharedLists.set(key, scan)
+    const startedScan = scan
+    void promise.then(
+      () => { if (sharedLists.get(key) === startedScan) sharedLists.delete(key) },
+      () => { if (sharedLists.get(key) === startedScan) sharedLists.delete(key) }
+    )
+  }
+  return joinList(scan, token)
+}
+
 async function handle(request: WorkerRequest): Promise<unknown> {
   const args = request.args
   if (request.op === 'cancelList') {
     const token = args.requestToken
     if (typeof token !== 'string') return { cancelled: false }
-    const controller = pendingLists.get(token)
-    controller?.abort()
-    return { cancelled: controller !== undefined }
+    return { cancelled: cancelList(token) }
   }
   if (request.op === 'close') {
     closed = true
-    for (const controller of pendingLists.values()) controller.abort()
+    for (const scan of sharedLists.values()) scan.controller.abort()
     pendingLists.clear()
+    sharedLists.clear()
     await search?.close()
     await scanner?.close()
     return { closed: true }
@@ -78,13 +154,7 @@ async function handle(request: WorkerRequest): Promise<unknown> {
     case 'list': {
       const listRequest = args.request as ListRequest
       const token = listRequest.requestToken ?? String(request.id)
-      const controller = new AbortController()
-      pendingLists.set(token, controller)
-      try {
-        return await activeScanner.list(listRequest, controller.signal)
-      } finally {
-        if (pendingLists.get(token) === controller) pendingLists.delete(token)
-      }
+      return listForCall(activeScanner, dataDir, listRequest, token)
     }
     case 'get':
       return activeScanner.get(String(args.id))
