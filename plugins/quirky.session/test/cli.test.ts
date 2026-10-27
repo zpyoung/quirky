@@ -48,9 +48,9 @@ describe('session list', () => {
     await run('list', ctx)
     expect(lines[0]).toBe(
       [
-        'ID              NAME  AGENT   KIND      STATUS   WORKTREE  TITLE',
-        `${main.id}        shell   terminal  running  wt_main   Shell`,
-        `${other.id}        claude  terminal  running  wt_other  Claude`
+        'ID              AGENT   KIND      STATUS   WORKTREE  TITLE',
+        `${main.id}  shell   terminal  running  wt_main   Shell`,
+        `${other.id}  claude  terminal  running  wt_other  Claude`
       ].join('\n')
     )
 
@@ -58,6 +58,18 @@ describe('session list', () => {
     await run('list', ctx, [], { worktree: 'name:other' })
     expect(lines[0]!.split('\n')).toHaveLength(2)
     expect(lines[0]).toContain(other.id)
+  })
+
+  test('shows the NAME column after ID only when a listed session is named, leaving unnamed cells empty', async () => {
+    const { ctx, lines } = testCliContext(client)
+    const unnamed = await createSession(client, { worktree: 'id:wt_main', agent: 'shell' })
+    const named = await createSession(client, { worktree: 'id:wt_other', agent: 'claude', name: 'reviewer' })
+    await run('list', ctx)
+    const [header, ...rows] = lines[0]!.split('\n')
+    expect(header!.split(/\s+/)).toEqual(['ID', 'NAME', 'AGENT', 'KIND', 'STATUS', 'WORKTREE', 'TITLE'])
+    expect(rows[0]!.split(/\s+/)).toEqual([unnamed.id, 'shell', 'terminal', 'running', 'wt_main', 'Shell'])
+    expect(rows[1]!.split(/\s+/).slice(0, 2)).toEqual([named.id, 'reviewer'])
+    expect(header!.indexOf('AGENT')).toBe(rows[0]!.indexOf('shell'))
   })
 
   test('--json prints the sessions', async () => {

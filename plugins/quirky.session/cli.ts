@@ -55,11 +55,12 @@ const named: CliModule['commands'] = {
   async list(args, ctx) {
     const worktree = args.flags.worktree as string | undefined
     const sessions = (await ctx.call('quirky.session/list', worktree ? { worktree } : {})) as Session[]
+    const showName = sessions.some((s) => s.name)
     ctx.out.result(sessions, () =>
       sessions.length
         ? ctx.format.table(
-            ['ID', 'NAME', 'AGENT', 'KIND', 'STATUS', 'WORKTREE', 'TITLE'],
-            sessions.map((s) => [s.id, s.name ?? '', s.agent, s.kind, s.status, s.worktreeId, s.title])
+            ['ID', ...(showName ? ['NAME'] : []), 'AGENT', 'KIND', 'STATUS', 'WORKTREE', 'TITLE'],
+            sessions.map((s) => [s.id, ...(showName ? [s.name ?? ''] : []), s.agent, s.kind, s.status, s.worktreeId, s.title])
           )
         : 'no sessions'
     )

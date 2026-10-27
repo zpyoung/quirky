@@ -47,6 +47,7 @@ if (process.argv.length === 3 && process.argv[2] === '--version') {
   process.stdout.write(behavior.version?.stdout ?? '0.0.0 (fake)')
   process.exit(behavior.version?.exitCode ?? 0)
 }
+let outboxOffset = existsSync(outboxPath) ? statSync(outboxPath).size : 0
 log({ type: 'start', argv: process.argv.slice(2), env, cwd: process.cwd(), pid: process.pid })
 
 let exited = false
@@ -66,7 +67,6 @@ process.stdin.on('data', (chunk: Buffer) => log({ type: 'input', b64: Buffer.fro
 process.stdin.resume()
 
 const OUTBOX_POLL_MS = 50
-let outboxOffset = existsSync(outboxPath) ? statSync(outboxPath).size : 0
 setInterval(() => {
   if (!existsSync(outboxPath)) return
   const size = statSync(outboxPath).size
