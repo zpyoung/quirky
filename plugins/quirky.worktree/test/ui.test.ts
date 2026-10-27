@@ -514,6 +514,7 @@ test('SC-44: groups, the Pinned section, the primary badge, nested children and 
       id: 'g1',
       name: 'services',
       collapsed: false,
+      worktrees: [expect.objectContaining({ id: 'w7', name: 'shared', kind: 'folder', depth: 0 })],
       projects: [
         {
           id: 'r1',

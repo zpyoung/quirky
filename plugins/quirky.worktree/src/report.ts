@@ -147,7 +147,7 @@ export type ProjectReport = { id: string; name: string; kind: 'git' | 'folder'; 
 /** What the sidebar section reports to `ui.state`. */
 export type WorktreesReport = {
   pinned: string[]
-  groups: { id: string; name: string; collapsed: boolean; projects: ProjectReport[] }[]
+  groups: { id: string; name: string; collapsed: boolean; worktrees: WorkspaceReport[]; projects: ProjectReport[] }[]
   projects: ProjectReport[]
   dialog: DialogState | null
   notices: NoticeReport[]
@@ -169,27 +169,28 @@ export type ReportInput = {
 export function buildReport(input: ReportInput): WorktreesReport {
   const { sessions, selectedId } = input
   const model = buildTreeModel(input.repos, input.groups, input.worktrees, input.pending)
+  const workspace = ({ worktree, depth }: TreeRow): WorkspaceReport => ({
+    id: worktree.id,
+    name: worktree.name,
+    branch: worktree.branch,
+    kind: worktree.kind,
+    primary: worktree.isMain,
+    status: sessions === null ? null : worktreeStatus(sessions, worktree.id),
+    workspaceStatus: worktree.status,
+    pinned: worktree.pinned,
+    unread: worktree.unread,
+    parentId: worktree.parentId,
+    depth,
+    pending: false,
+    removing: worktree.removing,
+    selected: worktree.id === selectedId
+  })
   const project = ({ repo, rows, pending }: ProjectNode): ProjectReport => ({
     id: repo.id,
     name: repoLabel(repo),
     kind: repo.kind,
     worktrees: [
-      ...rows.map(({ worktree, depth }) => ({
-        id: worktree.id,
-        name: worktree.name,
-        branch: worktree.branch,
-        kind: worktree.kind,
-        primary: worktree.isMain,
-        status: sessions === null ? null : worktreeStatus(sessions, worktree.id),
-        workspaceStatus: worktree.status,
-        pinned: worktree.pinned,
-        unread: worktree.unread,
-        parentId: worktree.parentId,
-        depth,
-        pending: false,
-        removing: worktree.removing,
-        selected: worktree.id === selectedId
-      })),
+      ...rows.map(workspace),
       ...pending.map((create) => ({
         id: `pending:${create.name}`,
         name: create.name,
@@ -210,10 +211,11 @@ export function buildReport(input: ReportInput): WorktreesReport {
   })
   return {
     pinned: model.pinned.map((w) => w.id),
-    groups: model.groups.map(({ group, projects }) => ({
+    groups: model.groups.map(({ group, projects, rows }) => ({
       id: group.id,
       name: group.name,
       collapsed: group.collapsed,
+      worktrees: rows.map(workspace),
       projects: projects.map(project)
     })),
     projects: model.projects.map(project),

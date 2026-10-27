@@ -547,9 +547,9 @@ Back-link: [SC-3](logic.md#projects), [SC-25](logic.md#create)–[SC-28](logic.m
   with the message. A `keptBranch` adds a section notice with Delete branch, which calls
   `deleteBranch` with `yes: true`.
 - Opening a worktree (row click) calls `set { unread: false }` when it is unread.
-- Report (`report.ts`): `{ pinned: string[], groups: { id, name, collapsed, projects: ProjectReport[] }[], projects: ProjectReport[] }`
+- Report (`report.ts`): `{ pinned: string[], groups: { id, name, collapsed, worktrees: WorkspaceReport[], projects: ProjectReport[] }[], projects: ProjectReport[] }`
   with `ProjectReport = { id, name, kind, worktrees: { id, name, branch, kind, primary, status, workspaceStatus, pinned, unread, parentId, depth, pending, removing, selected }[] }`;
-  workspaces in tree order with `depth`. Pending rows appear with `pending: true` and no `id`
+  workspaces in tree order with `depth`; a group's `worktrees` are the folder workspaces of the group itself (repoId `group:<id>`), shaped like a project's. Pending rows appear with `pending: true` and no `id`
   beyond `pending:<name>`.
 
 ## Data models
