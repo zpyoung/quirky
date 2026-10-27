@@ -4,11 +4,16 @@ import {
   type PluginCaller,
   type PluginContext,
   type PluginEvent,
+  type PtyFact,
+  type PtySessionInfo,
+  type PtySubscription,
   type Session
 } from '@quirky/protocol'
 
 const DEFAULT_ENTER_DELAY_MS = 300
 const DEFAULT_READ_LINES = 50
+const DEFAULT_KILL_POLL_MS = 100
+const KILL_POLLS = 65
 
 type Attachment = { connectionId: number; stream: ClientStream; sessionId: string }
 
@@ -26,6 +31,31 @@ function concat(chunks: Uint8Array[]): Uint8Array {
     at += chunk.length
   }
   return out
+}
+
+/** The plugin event a PTY host fact is reported as. */
+export function factEvent(sessionId: string, fact: PtyFact): { name: string; data: Record<string, unknown> } {
+  switch (fact.kind) {
+    case 'bell':
+      return { name: 'bell', data: { sessionId } }
+    case 'command-finished':
+      return { name: 'commandFinished', data: { sessionId, exitCode: fact.exitCode } }
+    case 'title':
+      return { name: 'title', data: { sessionId, title: fact.title } }
+    case 'cwd':
+      return { name: 'cwd', data: { sessionId, cwd: fact.cwd } }
+  }
+}
+
+/** The last two path segments of `cwd`, e.g. `/tmp/w/api` is `w/api`. */
+function workspaceLabel(cwd: string): string {
+  return cwd.split('/').filter(Boolean).slice(-2).join('/')
+}
+
+/** The pause between `list` polls while waiting for killed sessions to end; tests shorten it through the environment. */
+function killPollMs(): number {
+  const override = Number(process.env.QUIRKY_TEST_KILL_POLL_MS)
+  return process.env.QUIRKY_TEST_KILL_POLL_MS !== undefined && Number.isFinite(override) ? override : DEFAULT_KILL_POLL_MS
 }
 
 /** The paste-then-Enter delay; tests shorten it through the environment. */
@@ -56,10 +86,17 @@ export class TerminalService {
 
   attach = async (params: Record<string, unknown>, caller: PluginCaller) => {
     this.refuseWhenClosed()
-    const session = await this.requireTerminal(params.session as string)
+    let session = await this.requireTerminal(params.session as string)
     const connection = caller.role === 'plugin' ? undefined : caller.connection
     if (!connection) throw this.context.error('invalid-params', 'quirky.terminal/attach needs a client connection')
     this.refuseWhenClosed()
+    let restored = false
+    if (session.status === 'exited' && session.restorable) {
+      session = (await this.context.call('quirky.session/restore', { session: session.id })) as Session
+      restored = true
+      this.refuseWhenClosed()
+    }
+    const ended = session.status === 'exited'
     const stream = connection.openStream()
     const attachment: Attachment = { connectionId: connection.id, stream, sessionId: session.id }
     let open = true
@@ -68,9 +105,16 @@ export class TerminalService {
       this.drop(attachment)
     })
     try {
-      return await this.enqueue(session.id, () =>
-        this.subscribe(attachment, params.cols as number, params.rows as number, () => open)
+      const result = await this.enqueue(session.id, () =>
+        this.subscribe(attachment, {
+          cols: params.cols as number,
+          rows: params.rows as number,
+          historyLines: params.historyLines as number | undefined,
+          resize: !ended,
+          isOpen: () => open
+        })
       )
+      return { ...result, restored }
     } catch (error) {
       stream.close()
       throw error
@@ -87,7 +131,7 @@ export class TerminalService {
   }
 
   write = async (params: Record<string, unknown>): Promise<{ ok: true }> => {
-    const session = await this.requireTerminal(params.session as string)
+    const session = await this.requireWritable(params.session as string)
     this.input(session.id, encoder.encode(params.data as string))
     return { ok: true }
   }
@@ -100,7 +144,7 @@ export class TerminalService {
 
   /** Types `text` into a shell; pastes it into an agent, and presses Enter after a pause when asked. */
   send = async (params: Record<string, unknown>, caller: PluginCaller): Promise<{ ok: true }> => {
-    const session = await this.requireTerminal(this.sessionOf(params, caller))
+    const session = await this.requireWritable(this.sessionOf(params, caller))
     const text = params.text as string
     const enter = params.enter === true
     if (session.agent === 'shell') {
@@ -119,6 +163,59 @@ export class TerminalService {
     const session = await this.requireTerminal(this.sessionOf(params, caller))
     return this.context.pty.read(session.id, (params.lines as number | undefined) ?? DEFAULT_READ_LINES)
   }
+
+  snapshot = async (params: Record<string, unknown>) => {
+    const session = await this.requireTerminal(this.sessionOf(params, undefined))
+    return this.context.pty.snapshot(session.id)
+  }
+
+  history = async (params: Record<string, unknown>) => {
+    const session = await this.requireTerminal(this.sessionOf(params, undefined))
+    return this.context.pty.history(session.id, {
+      ...(params.lines === undefined ? {} : { lines: params.lines as number }),
+      ...(params.before === undefined ? {} : { before: params.before as string }),
+      ...(params.format === undefined ? {} : { format: params.format as 'text' | 'ansi' })
+    })
+  }
+
+  /** The running sessions of the PTY host, each with the worktree the session plugin files it under. */
+  sessions = async (): Promise<{ sessions: (PtySessionInfo & { worktreeId: string | null; workspace: string })[] }> => {
+    const [running, records] = await Promise.all([
+      this.context.pty.list(),
+      this.context.call('quirky.session/list', {}) as Promise<Session[]>
+    ])
+    const worktrees = new Map(records.map((record) => [record.id, record.worktreeId]))
+    return {
+      sessions: running
+        .filter((info) => info.state === 'running')
+        .map((info) => ({ ...info, worktreeId: worktrees.get(info.sessionId) ?? null, workspace: workspaceLabel(info.cwd) }))
+    }
+  }
+
+  kill = async (params: Record<string, unknown>): Promise<{ ok: true }> => {
+    const session = await this.requireTerminal(params.session as string)
+    await this.killSession(session.id)
+    return { ok: true }
+  }
+
+  /**
+   * Force-quits every running session and waits for the host to report them ended. A session
+   * still running when the wait runs out is counted as remaining.
+   */
+  killAll = async (): Promise<{ killedCount: number; remainingCount: number; killedSessionIds: string[] }> => {
+    const targets = (await this.context.pty.list()).filter((info) => info.state === 'running').map((info) => info.sessionId)
+    await Promise.all(targets.map((id) => this.killSession(id).catch((error) => this.context.log(`could not kill ${id}: ${messageOf(error)}`))))
+    let remaining = targets
+    for (let poll = 0; poll < KILL_POLLS && remaining.length > 0; poll++) {
+      await new Promise((resolve) => setTimeout(resolve, killPollMs()))
+      const running = new Set((await this.context.pty.list()).filter((info) => info.state === 'running').map((info) => info.sessionId))
+      remaining = targets.filter((id) => running.has(id))
+    }
+    const killedSessionIds = targets.filter((id) => !remaining.includes(id))
+    return { killedCount: killedSessionIds.length, remainingCount: remaining.length, killedSessionIds }
+  }
+
+  restartHost = (): Promise<{ pid: number }> => this.context.pty.restartHost()
 
   onData = (sessionId: string, bytes: Uint8Array): void => {
     const tap = this.taps.get(sessionId)
@@ -154,7 +251,7 @@ export class TerminalService {
       const hold: Uint8Array[] = []
       this.holds.set(sessionId, hold)
       try {
-        const { replay, offset } = await this.context.pty.subscribe(sessionId)
+        const { replay, offset } = await this.context.pty.subscribe(sessionId, { mode: 'raw' })
         const missed = offset - had
         if (missed > 0) {
           const bytes = base64ToBytes(replay)
@@ -187,9 +284,9 @@ export class TerminalService {
     for (const attachment of attachments) attachment.stream.send(bytes)
   }
 
-  private sessionOf(params: Record<string, unknown>, caller: PluginCaller): string {
+  private sessionOf(params: Record<string, unknown>, caller: PluginCaller | undefined): string {
     const explicit = params.session as string | undefined
-    const session = explicit ?? (caller.role === 'plugin' ? undefined : caller.sessionId)
+    const session = explicit ?? (caller === undefined || caller.role === 'plugin' ? undefined : caller.sessionId)
     if (!session) throw this.context.error('invalid-params', 'no session; pass session or call from inside a session')
     return session
   }
@@ -198,6 +295,22 @@ export class TerminalService {
     const session = (await this.context.call('quirky.session/get', { session: sessionId })) as Session
     if (session.kind !== 'terminal') throw this.context.error('invalid-params', `session ${sessionId} has no terminal`)
     return session
+  }
+
+  /** A terminal session that can take input; one that ended says whether `quirky session restore` can bring it back. */
+  private async requireWritable(sessionId: string): Promise<Session> {
+    const session = await this.requireTerminal(sessionId)
+    if (session.status !== 'exited') return session
+    throw this.context.error(
+      'conflict',
+      session.restorable
+        ? `session ${session.id} ended when the terminal host stopped; run quirky session restore ${session.id}`
+        : `session ${session.id} has exited`
+    )
+  }
+
+  private async killSession(sessionId: string): Promise<void> {
+    await this.context.pty.kill(sessionId, undefined, { reason: 'killed' })
   }
 
   private input(sessionId: string, bytes: Uint8Array): void {
@@ -215,18 +328,25 @@ export class TerminalService {
     return run
   }
 
-  private async subscribe(attachment: Attachment, cols: number, rows: number, isOpen: () => boolean) {
+  private async subscribe(
+    attachment: Attachment,
+    options: { cols: number; rows: number; historyLines: number | undefined; resize: boolean; isOpen: () => boolean }
+  ) {
     const { sessionId, stream } = attachment
+    const { isOpen } = options
     this.attaching.set(sessionId, (this.attaching.get(sessionId) ?? 0) + 1)
     try {
       this.refuseWhenClosed()
-      await this.context.pty.resize(sessionId, cols, rows).catch(() => {})
+      if (options.resize) await this.context.pty.resize(sessionId, options.cols, options.rows).catch(() => {})
       const start = this.received.get(sessionId)
       const tap: Tap = { chunks: [], total: 0 }
       this.taps.set(sessionId, tap)
-      let result: { replay: string; offset: number }
+      let result: PtySubscription
       try {
-        result = await this.context.pty.subscribe(sessionId)
+        result = await this.context.pty.subscribe(sessionId, {
+          mode: 'screen',
+          ...(options.historyLines === undefined ? {} : { historyLines: options.historyLines })
+        })
       } finally {
         this.taps.delete(sessionId)
       }
@@ -240,18 +360,22 @@ export class TerminalService {
       const after = end - result.offset
       this.received.set(sessionId, end)
       if (isOpen()) {
-        const set = this.bySession.get(sessionId) ?? new Set()
-        set.add(attachment)
-        this.bySession.set(sessionId, set)
         const streams = this.byConnection.get(attachment.connectionId) ?? new Map()
         streams.set(stream.streamId, attachment)
         this.byConnection.set(attachment.connectionId, streams)
-        if (after > 0) {
-          const all = concat(tap.chunks)
-          stream.send(all.subarray(all.length - after))
+        // an ended session's stream stays open for the pane but never carries output
+        if (result.live !== false) {
+          const set = this.bySession.get(sessionId) ?? new Set()
+          set.add(attachment)
+          this.bySession.set(sessionId, set)
+          if (after > 0) {
+            const all = concat(tap.chunks)
+            stream.send(all.subarray(all.length - after))
+          }
         }
       }
-      return { streamId: stream.streamId, replay: result.replay, offset: result.offset }
+      const { replay, offset, historyCursor, cols, rows, shellState, live } = result
+      return { streamId: stream.streamId, replay, offset, historyCursor, cols, rows, shellState, live }
     } catch (error) {
       throw new Error(messageOf(error))
     } finally {
