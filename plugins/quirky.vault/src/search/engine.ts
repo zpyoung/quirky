@@ -70,6 +70,7 @@ type SessionRow = {
   agent: string
   session_id: string
   file_path: string
+  candidate_path: string
   codex_home: string | null
   source_root: string
   title: string
@@ -82,7 +83,7 @@ type SessionRow = {
   content_hash: string | null
   content_hash_count: number
 }
-export type SearchSourceRecord = Pick<SessionRow, 'file_path' | 'source_root'>
+export type SearchSourceRecord = Pick<SessionRow, 'file_path' | 'candidate_path' | 'source_root'>
 
 type MatchRow = { rowid: number; score: number; session_row_id: number; role: VaultRole; ts: number | null }
 type SqlFilter = { conditions: string[]; values: (string | number)[] }
@@ -94,7 +95,7 @@ type SnippetPiece = { kind: 'text'; value: string } | { kind: 'mark'; value: str
 type Snippet = { text: string; truncated: boolean }
 
 const SESSION_COLUMNS = `s.id, s.vault_id, s.agent, s.session_id, s.file_path, s.codex_home,
-  f.root AS source_root, s.title, s.cwd, s.cwd_key, s.branch, s.created_at,
+  f.root AS source_root, f.path AS candidate_path, s.title, s.cwd, s.cwd_key, s.branch, s.created_at,
   s.updated_at, s.message_count, s.content_hash, s.content_hash_count`
 
 export function ensureQuerySchema(db: Database): void {

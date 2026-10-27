@@ -2,7 +2,7 @@ import type { Dirent } from 'node:fs'
 import { readdir } from 'node:fs/promises'
 import { basename, dirname, extname, join } from 'node:path'
 import { Database } from 'bun:sqlite'
-import type { VaultRole, VaultSession } from '../../types'
+import type { SourceCandidate, VaultRole, VaultSession } from '../../types'
 import {
   boundedText,
   createSessionBuilder,
@@ -38,18 +38,26 @@ const TEXT_BLOCK_TYPES: Record<string, true | undefined> = {
   reasoning: true
 }
 
-function sqliteLocation(context: ParserContext): { dbPath: string; sessionId: string } | null {
-  const metadata = context.candidate.metadata ?? {}
-  const separator = context.candidate.filePath.lastIndexOf('#')
+function sqliteLocation(candidate: SourceCandidate): { dbPath: string; sessionId: string } | null {
+  const metadata = candidate.metadata ?? {}
+  const candidatePath = candidate.filePath
+  const sessionId = string(candidate.sessionId) ?? string(metadata.sessionId)
+  const suffix = sessionId ? `#${sessionId}` : null
+  const suffixPosition = suffix && candidatePath.endsWith(suffix) ? candidatePath.length - suffix.length : -1
+  const separator = suffixPosition >= 0 ? suffixPosition : candidatePath.lastIndexOf('#')
   const dbPath =
     string(metadata.dbPath) ??
     string(metadata.databasePath) ??
-    (separator > 0 ? context.candidate.filePath.slice(0, separator) : null)
-  const sessionId =
-    string(context.candidate.sessionId) ??
-    string(metadata.sessionId) ??
-    (separator >= 0 ? context.candidate.filePath.slice(separator + 1) : null)
-  return dbPath && sessionId ? { dbPath, sessionId } : null
+    (separator > 0 ? candidatePath.slice(0, separator) : null)
+  const resolvedSessionId = sessionId ??
+    (separator >= 0 ? candidatePath.slice(separator + 1) : null)
+  return dbPath && resolvedSessionId ? { dbPath, sessionId: resolvedSessionId } : null
+}
+
+export function sqliteSourcePath(candidate: SourceCandidate): string {
+  const table = candidate.metadata?.sqliteTable
+  if (table !== 'session' && table !== 'session_v2') return candidate.filePath
+  return sqliteLocation(candidate)?.dbPath ?? candidate.filePath
 }
 
 function tableColumns(db: Database, table: TableName): Set<string> {
@@ -476,17 +484,21 @@ export async function parseSqlite(context: ParserContext): Promise<VaultSession 
   throwIfAborted(context.signal)
   const agent = context.candidate.agent
   if (agent !== 'opencode' && agent !== 'opencode2' && agent !== 'zcode') return null
-  if (agent === 'opencode' && !context.candidate.filePath.includes('#')) {
+  const sqliteTable = context.candidate.metadata?.sqliteTable
+  if (agent === 'opencode' && sqliteTable !== 'session') {
     return parseLegacyOpenCode(context)
   }
-  const location = sqliteLocation(context)
+  const location = sqliteLocation(context.candidate)
   if (!location) return null
   const db = new Database(location.dbPath, { readonly: true, create: false })
   try {
     db.exec('PRAGMA query_only = ON')
     throwIfAborted(context.signal)
-    if (agent === 'opencode2') return parseOpenCode2Sqlite(context, db, location.sessionId)
-    return parseOpenCodeSqlite(context, db, location.sessionId, agent)
+    const session = agent === 'opencode2'
+      ? parseOpenCode2Sqlite(context, db, location.sessionId)
+      : parseOpenCodeSqlite(context, db, location.sessionId, agent)
+    if (session) session.filePath = location.dbPath
+    return session
   } finally {
     db.close()
   }
