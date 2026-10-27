@@ -402,6 +402,15 @@ describe('SC-21: a blank name gets a generated name that is never reused (CLI)',
     expect(next.name).not.toBe(one.name)
   })
 
+  test('a generated name the collision walk suffixed is retired along with the one picked', async () => {
+    const { t, root } = await startApi()
+    const suggested = (await call(w!.client, 'quirky.worktree/suggestName', { repo: 'api' })) as { name: string }
+    mkdirSync(join(root, 'api', suggested.name), { recursive: true })
+    const made = await create({ repo: 'api' })
+    expect(made.worktree.name).toBe(`${suggested.name}-2`)
+    expect(retired(t.h.home)).toEqual([suggested.name, `${suggested.name}-2`].sort())
+  })
+
   test('a failed create still retires the generated name it picked', async () => {
     const { t } = await startApi()
     await setSetting(w!.client, 'branchPrefix', 'custom')

@@ -305,8 +305,11 @@ async function createGit(env: CreateEnv, repo: Repo, params: CreateParams, creat
 
   const typed = params.name?.trim() ?? ''
   let generated: string | null = null
+  let unavailable: ReadonlySet<string> = new Set()
+  let placed: string | null = null
   const retire = () => {
-    if (generated !== null) env.store.run('INSERT OR IGNORE INTO retired_names (repo_id, name) VALUES (?, ?)', repo.id, generated)
+    if (generated === null) return
+    for (const name of new Set([generated, placed ?? generated])) env.store.run('INSERT OR IGNORE INTO retired_names (repo_id, name) VALUES (?, ?)', repo.id, name)
   }
   try {
     const root = rootOf(env, repo, settings)
@@ -315,7 +318,8 @@ async function createGit(env: CreateEnv, repo: Repo, params: CreateParams, creat
     if (typed !== '') name = sanitize(env, typed)
     else if (existing !== null) name = sanitize(env, existing.branch)
     else {
-      generated = generateName(env, repo.id, await unavailableNames(env, repo))
+      unavailable = await unavailableNames(env, repo)
+      generated = generateName(env, repo.id, unavailable)
       name = generated
     }
     const folderOf = (candidate: string) => join(parentDir, candidate)
@@ -350,6 +354,10 @@ async function createGit(env: CreateEnv, repo: Repo, params: CreateParams, creat
         folderName = await walkCandidates(
           name,
           async (candidate) => {
+            if (generated !== null && unavailable.has(candidate)) {
+              lastTaken = 'path'
+              return true
+            }
             const candidateBranch = joinBranch(prefix, candidate)
             if (await git.localBranchExists(repo.path, candidateBranch)) {
               lastTaken = 'locally'
@@ -372,6 +380,7 @@ async function createGit(env: CreateEnv, repo: Repo, params: CreateParams, creat
       }
       branch = joinBranch(prefix, folderName)
     }
+    placed = folderName
     const folder = folderOf(folderName)
     if (!contains(resolveRealPath(root), resolveRealPath(folder))) throw reasoned(env, 'invalid-params', 'invalid-name', 'Invalid worktree name')
 
