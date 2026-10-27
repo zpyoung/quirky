@@ -201,8 +201,6 @@ export class SessionService {
       throw this.context.error('invalid-params', 'command is only allowed with agent shell')
     }
     const title = (params.title as string | undefined) ?? (agent === 'shell' ? 'Shell' : (await this.agentInfo(agent)).label)
-    const released = name === null ? [] : this.records.transaction(() => this.releaseName(name, null))
-    released.forEach((holder) => this.publish(holder))
     const session = { ...this.newRecord(worktree, 'terminal', agent, title), name }
     const launched = await this.start(session, worktree.repoId, params, prompt, async (additions) => {
       if (agent === 'shell') {
@@ -580,7 +578,9 @@ export class SessionService {
 
   /**
    * Inserts `session` as `starting`, runs the launch hooks, builds the launch with `build`, spawns
-   * it and records what it launched with. Any failure removes the record again.
+   * it and records what it launched with. Any failure removes the record again. A name the session
+   * carries is taken from exited holders in the insert's own transaction, and given back to them when
+   * the launch fails.
    */
   private async start(
     session: Session,
@@ -589,7 +589,13 @@ export class SessionService {
     prompt: string | undefined,
     build: (additions: { env: Record<string, string | null>; args: string[] }) => Promise<LaunchSpec>
   ): Promise<{ session: Session; paste: LaunchSpec['paste'] }> {
-    this.records.insert(session, repoId)
+    const name = session.name ?? null
+    const released = this.records.transaction(() => {
+      const holders = name === null ? [] : this.releaseName(name, null)
+      this.records.insert(session, repoId)
+      return holders
+    })
+    released.forEach((holder) => this.publish(holder))
     const closedWhileStarting = () =>
       this.context.error('conflict', `session ${session.id} was closed before its terminal started`)
     let spec!: LaunchSpec
@@ -624,7 +630,11 @@ export class SessionService {
         throw closedWhileStarting()
       }
     } catch (error) {
-      this.records.delete(session.id)
+      const restored = this.records.transaction(() => {
+        this.records.delete(session.id)
+        return released.flatMap((holder) => this.records.update(holder.id, { name }) ?? [])
+      })
+      restored.forEach((holder) => this.publish(holder))
       if (isRpcError(error)) throw error
       throw new Error(`could not start ${session.agent}: ${messageOf(error)}`)
     }
