@@ -369,5 +369,35 @@
 - **Confidence:** high
 - **Source:** assumed — autonomous
 
+## D37: Wave 2 landed; the gate passed with two unrelated files flaky under load
+- **Question:** whether wave 2 (built-in rules, script state and explain, send, waits) and the four checkpoint-1 fixes are accepted
+- **Options:** accept; rework
+- **Chose:** accept. Every task passed its acceptance in its own tree; the merged gate passed (`bun run test` 321 files on the remote host, scripts, typecheck). `packages/pty-host/test/host.test.ts` and `plugins/quirky.ask/test/core/spec.test.ts` failed only under load and passed alone. Implementer calls kept: send writes paste and Enter itself for an agent that both sends Enter with the paste and retries it, so the retry gets its own check; send waits one poll after a start before reporting the state; `--until` with `--output` is a usage error; an empty prompt is `invalid-params`.
+- **Why:** the calls follow D30 and D31's intent; the flaky files are outside this item and recovered on their own
+- **Evidence:** run journal; scratchpad gate-w2.log
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** assumed — autonomous
+
+## D38: Catching up with build/roadmap brought m1-notifications, m2-source-control-core and m3-terminal-dock; no decision conflicts
+- **Question:** LOOP.md step 5's catch-up merge and its decision logs
+- **Options:** merge before the final review; merge later
+- **Chose:** merged before wave 3 so the end-to-end tests run on the combined code. Ten files conflicted and keep both sides: the session record has both `unread` (theirs, store migration 6) and `name` (ours, now migration 7); agent-status keeps notifications' settled events and the OSC fold fix beside `because` and the scripting wiring. Read m1-notifications D1-D62 and m2-source-control-core D1-D56: notifications moved announcing to `quirky.notifications` fed by agent-status events (no effect on scripts); m2 D38 puts an error's `data` in the CLI's JSON error, which carries this item's reasons.
+- **Why:** LOOP.md step 5
+- **Evidence:** merge eeb6ed4; docs/loop/decisions/m1-notifications.md D5, D6, D31; docs/loop/decisions/m2-source-control-core.md D38
+- **Reversibility:** medium
+- **Confidence:** high
+- **Source:** assumed — autonomous
+
+## D39: Wave 2 checkpoint: accept all seven findings, which collapse to five defects
+- **Question:** how to rule on the Codex checkpoint review of wave 2 (three lenses, standard; 7 blocking, 1 suppressed)
+- **Options:** accept; reject
+- **Chose:** accept all: inspection judged with the row read before the screen sample, so an approval committed meanwhile could pass send's check (C1, S1, X1, HIGH); for Enter-with-paste delivery the start observer began after deliver returned (S2); explain's because line printed the newest evidence's age instead of the deciding event's (S3); a wait could overrun its timeout by a rule's quiet time (X2); a failed launch's rollback overwrote a concurrent rename (C3). Fixed by G1 and G2 while wave 3 writes the end-to-end tests.
+- **Why:** each came with a reproduction
+- **Evidence:** scratchpad cp2/{C,S,X}/gate.json
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** assumed — autonomous
+
 ## Progress
-Step 5 (build). Waves 1 and 2a (T4, T7) merged; wave 2b (T8 send, then T9 waits, beside checkpoint fixes FA-FD) running. Next: T9 in T8's tree, gate, checkpoint review of wave 2, wave 3 end-to-end tests (briefs in the iteration-12 scratchpad), catch-up merge, Final Round 1.
+Step 5 (build). Waves 1 and 2 merged, catch-up with build/roadmap merged (eeb6ed4). Running: G1/G2 (checkpoint-2 fixes) and wave 3 end-to-end tests T10-T13 (briefs in the iteration-12 scratchpad). Next: merge them, gate, Final Round 1 (deep, three lenses), one fix batch, gate, land.
