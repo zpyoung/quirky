@@ -3,7 +3,7 @@ import type { Stats } from 'node:fs'
 import { isAbsolute } from 'node:path'
 import { RpcErrorCode, type ContributionInfo, type PluginCaller, type PluginContext, type Session, type SessionLaunch } from '@quirky/protocol'
 import { decodePublicId, hostedLocal } from './hosts'
-import type { HostedSession, VaultSession } from './types'
+import type { DeleteTarget, HostedSession, VaultSession } from './types'
 import { WorkerRequestError, type VaultWorkerClient } from './worker-client'
 
 const TRASH_SCRIPT = `ObjC.import('Foundation');
@@ -105,7 +105,7 @@ export class VaultActions {
       await this.invalidate(source.sourceId)
       return { deleted: true, trashed: 0, alreadyMissing: true }
     }
-    const targets = await this.request<string[]>('deleteTargets', { id: source.sourceId })
+    const targets = await this.request<DeleteTarget[]>('deleteTargets', { id: source.sourceId })
     if (targets.length === 0) {
       await this.invalidate(source.sourceId)
       return { deleted: true, trashed: 0, alreadyMissing: true }
@@ -117,10 +117,10 @@ export class VaultActions {
     let trashed = 0
     let alreadyMissing = false
     for (const target of targets) {
-      if (!isAbsolute(target)) throw this.context.error('conflict', 'scanner returned a non-absolute Trash target')
+      if (!isAbsolute(target.path)) throw this.context.error('conflict', 'scanner returned a non-absolute Trash target')
       let metadata: Stats
       try {
-        metadata = lstatSync(target)
+        metadata = lstatSync(target.path)
       } catch (error) {
         if (isMissing(error)) {
           alreadyMissing = true
@@ -128,11 +128,11 @@ export class VaultActions {
         }
         return { deleted: false, trashed, alreadyMissing: false, reason: messageOf(error) }
       }
-      if (metadata.isSymbolicLink() || !metadata.isFile()) {
-        return { deleted: false, trashed, alreadyMissing: false, reason: 'scanner returned a symlink or non-file Trash target' }
+      if (metadata.isSymbolicLink() || (target.kind === 'file' ? !metadata.isFile() : !metadata.isDirectory())) {
+        return { deleted: false, trashed, alreadyMissing: false, reason: 'scanner returned a symlink or wrong-kind Trash target' }
       }
       try {
-        await trashWithFoundation(target)
+        await trashWithFoundation(target.path)
         trashed++
       } catch (error) {
         if (trashed > 0 || alreadyMissing) await this.invalidate(source.sourceId)

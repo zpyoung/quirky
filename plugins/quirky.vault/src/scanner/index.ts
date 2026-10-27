@@ -3,6 +3,7 @@ import { basename, dirname, extname, join, relative, resolve, sep } from 'node:p
 import { Database } from 'bun:sqlite'
 import { HISTORY_AGENTS } from '../agents'
 import type {
+  DeleteTarget,
   Discovery,
   ListRequest,
   ListResult,
@@ -248,7 +249,7 @@ async function candidateForSubagent(parent: SourceCandidate, filePath: string): 
   }
 }
 
-async function validateDeleteTarget(path: string, root: string, kind: 'file' | 'directory'): Promise<string> {
+async function validateDeleteTarget(path: string, root: string, kind: 'file' | 'directory'): Promise<DeleteTarget> {
   if (!isPathWithin(root, path) || resolve(path) === resolve(root)) throw new Error('invalid-path')
   let cursor = resolve(path)
   while (isPathWithin(root, cursor)) {
@@ -258,14 +259,14 @@ async function validateDeleteTarget(path: string, root: string, kind: 'file' | '
       if (cursor === resolve(path) && !(kind === 'file' ? info.isFile() : info.isDirectory())) throw new Error('invalid-path')
       const [real, realRoot] = await Promise.all([realpath(cursor), realpath(root)])
       if (!isPathWithin(realRoot, real)) throw new Error('invalid-path')
-      return path
+      return { path, kind }
     } catch (error) {
       if (errorCode(error) !== 'ENOENT' && errorCode(error) !== 'ENOTDIR') throw error
     }
     if (cursor === resolve(root)) break
     cursor = dirname(cursor)
   }
-  return path
+  return { path, kind }
 }
 
 
@@ -447,7 +448,7 @@ export function createScanner(options: ScannerOptions): VaultScanner {
       } else {
         targets.push({ path, root, kind: 'file' })
       }
-      const validated: string[] = []
+      const validated: DeleteTarget[] = []
       for (const target of targets) validated.push(await validateDeleteTarget(target.path, target.root, target.kind))
       return validated
     },
