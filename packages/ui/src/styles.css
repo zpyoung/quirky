@@ -144,14 +144,12 @@ textarea {
 
 .plugin-status-bar {
   flex: 0 0 auto;
-  min-height: 32px;
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 2px 8px;
+  padding: 0 8px;
   overflow-x: auto;
   background: var(--bg-raised);
-  border-bottom: 1px solid var(--border);
 }
 
 .plugin-status-bar .plugin-status-bar-slot {
