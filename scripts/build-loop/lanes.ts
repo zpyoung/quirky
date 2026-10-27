@@ -6,7 +6,7 @@
 import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { rebuild } from './decisions'
-import { load, next, QUEUE_FILE, save, setStatus, STATUSES, type Item, type Next, type Status } from './queue'
+import { load, next, pendingDeps, QUEUE_FILE, save, setStatus, STATUSES, type Item, type Next, type Status } from './queue'
 
 export type Repo = { integration: string; lock: string; lands: string }
 
@@ -102,6 +102,16 @@ export async function waitForWork(repo: Repo, lane: number, waitMs = 9 * 60_000,
   for (;;) {
     const result = await claim(repo, lane)
     if (result.kind !== 'busy' || Date.now() + pollMs > deadline) return result
+    await Bun.sleep(pollMs)
+  }
+}
+
+/** Waits up to `waitMs` for every dependency of `id` to be done; reports the ones still pending. */
+export async function waitForDeps(repo: Repo, id: string, waitMs = 9 * 60_000, pollMs = 30_000): Promise<{ ready: boolean; pending: string[] }> {
+  const deadline = Date.now() + waitMs
+  for (;;) {
+    const pending = pendingDeps(load(queuePath(repo)), id)
+    if (pending.length === 0 || Date.now() + pollMs > deadline) return { ready: pending.length === 0, pending }
     await Bun.sleep(pollMs)
   }
 }
@@ -202,10 +212,11 @@ export function requestLand(repo: Repo, id: string): string {
   return path
 }
 
-/** Other items waiting to land, oldest request first, skipping those that must land alone or whose branch has moved. */
+/** Other items waiting to land, early (critical-path) items then oldest first, skipping those that must land alone or whose branch has moved. */
 function waitingToLand(repo: Repo, items: Item[], id: string): string[] {
   if (!existsSync(repo.lands)) return []
   const inProgress = new Set(items.filter((item) => item.status === 'in-progress').map((item) => item.id))
+  const early = new Set(items.filter((item) => item.early).map((item) => item.id))
   const waiting: { id: string; since: number }[] = []
   for (const other of readdirSync(repo.lands)) {
     const path = join(repo.lands, other)
@@ -217,7 +228,8 @@ function waitingToLand(repo: Repo, items: Item[], id: string): string[] {
     if (other === id || request.solo || !inProgress.has(other)) continue
     if (request.head && request.head === branchHead(repo, other)) waiting.push({ id: other, since: statSync(path).mtimeMs })
   }
-  return waiting.sort((a, b) => a.since - b.since).map((entry) => entry.id)
+  const rank = (entry: { id: string; since: number }) => (early.has(entry.id) ? 0 : 1)
+  return waiting.sort((a, b) => rank(a) - rank(b) || a.since - b.since).map((entry) => entry.id)
 }
 
 function landAlone(repo: Repo, id: string): void {
@@ -358,6 +370,9 @@ export async function main(argv: string[]): Promise<number> {
       case 'block':
         await block(repo, rest[0], readFileSync(rest[1], 'utf8'))
         return 0
+      case 'deps':
+        console.log(JSON.stringify(await waitForDeps(repo, rest[0]), null, 2))
+        return 0
       case 'set':
         await set(repo, rest[0], rest[1] as Status)
         return 0
@@ -380,7 +395,7 @@ export async function main(argv: string[]): Promise<number> {
         return VERIFY.every((cmd) => run(cmd, repo.integration)) ? 0 : 1
       }
       default:
-        console.error('usage: queue.ts claim|wait --lane <n> | land <id> | merge <branch> | add <items.json> | block <id> <file> | set <id> <status> | status | check')
+        console.error('usage: queue.ts claim|wait --lane <n> | land <id> | merge <branch> | add <items.json> | block <id> <file> | deps <id> | set <id> <status> | status | check')
         return 2
     }
   } catch (error) {

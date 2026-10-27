@@ -12,6 +12,7 @@
  *   bun scripts/build-loop/queue.ts add <items.json>   add todo items, ahead of the parity sweep
  *   bun scripts/build-loop/queue.ts block <id> <file>  mark it blocked, with <file> as its BLOCKERS.md entry
  *   bun scripts/build-loop/queue.ts set <id> <status>
+ *   bun scripts/build-loop/queue.ts deps <id>          wait for an early item's dependencies to land, as JSON
  *   bun scripts/build-loop/queue.ts status             counts, and who holds what
  *   bun scripts/build-loop/queue.ts check              exit 0 only when every item is done and the suite is green
  */
@@ -24,6 +25,8 @@ export type Item = {
   id: string
   milestone: string
   kind?: 'gate'
+  /** On the critical path: claimable once each dependency is at least being implemented, see {@link next}. */
+  early?: boolean
   title: string
   docs: string[]
   deps: string[]
@@ -56,11 +59,26 @@ function depsOf(item: Item, items: Item[]): string[] {
   return items.filter((other) => !other.deps.includes('*')).map((other) => other.id)
 }
 
+/** Whether `dep` is done, or is in progress with its own dependencies done, so its implementation is under way. */
+function underway(dep: Item | undefined, byId: Map<string, Item>, items: Item[]): boolean {
+  if (dep?.status === 'done') return true
+  return dep?.status === 'in-progress' && depsOf(dep, items).every((id) => byId.get(id)?.status === 'done')
+}
+
+/** The dependencies of `id` that aren't done yet. */
+export function pendingDeps(items: Item[], id: string): string[] {
+  const byId = new Map(items.map((item) => [item.id, item]))
+  const item = byId.get(id)
+  if (!item) throw new Error(`unknown item "${id}"`)
+  return depsOf(item, items).filter((dep) => byId.get(dep)?.status !== 'done')
+}
+
 /**
  * Picks what `lane` works on. Its own in-progress item wins so a crashed iteration resumes it; a
  * waiting gate halts every lane; otherwise the first todo item, in file order, whose dependencies
- * are all done. When nothing is ready but other lanes hold work, the lane is `busy`, because their
- * items may unblock more.
+ * are all done. An `early` item may start sooner, once each dependency is under way, so its lane
+ * can write its specs while the dependency is built. When nothing is ready but other lanes hold
+ * work, the lane is `busy`, because their items may unblock more.
  */
 export function next(items: Item[], lane = 1): Next {
   const byId = new Map(items.map((item) => [item.id, item]))
@@ -70,7 +88,10 @@ export function next(items: Item[], lane = 1): Next {
   if (waiting) return { kind: 'waiting', item: waiting }
   const ready = items.find(
     (item) =>
-      item.status === 'todo' && depsOf(item, items).every((dep) => byId.get(dep)?.status === 'done')
+      item.status === 'todo' &&
+      depsOf(item, items).every((dep) =>
+        item.early ? underway(byId.get(dep), byId, items) : byId.get(dep)?.status === 'done'
+      )
   )
   if (ready) return { kind: 'item', item: ready }
   const running = items.filter((item) => item.status === 'in-progress')

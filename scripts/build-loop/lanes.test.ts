@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { add, block, claim, land, locate, merge, requestLand, withLock, type Repo } from './lanes'
+import { add, block, claim, land, locate, merge, requestLand, waitForDeps, withLock, type Repo } from './lanes'
 import { load, save, type Item } from './queue'
 
 const item = (id: string, deps: string[] = []): Item => ({ id, milestone: 'M1', title: id, docs: [], deps, status: 'todo' })
@@ -191,6 +191,20 @@ describe('batched land', () => {
     expect([statusOf('a'), statusOf('b')]).toEqual(['done', 'in-progress'])
   })
 
+  test('takes an early item into the batch ahead of older requests', async () => {
+    const items = queue()
+    save([...items, { ...item('d'), status: 'in-progress', lane: 3, early: true }], join(repo.integration, 'docs/loop/queue.json'))
+    git(repo.integration, 'commit', '-qam', 'early d')
+    branch('a', 'a.txt', 'a\n')
+    branch('b', 'b.txt', 'b\n')
+    branch('d', 'd.txt', 'd\n')
+    requestLand(repo, 'b')
+    await Bun.sleep(20)
+    requestLand(repo, 'd')
+    await land(repo, 'a', counted())
+    expect(git(repo.integration, 'log', '--format=%s', '-3')).toBe('chore(build): finish b\nchore(build): finish d\nchore(build): finish a')
+  })
+
   test('ignores a request whose process has died', async () => {
     branch('a', 'a.txt', 'a\n')
     branch('b', 'b.txt', 'b\n')
@@ -237,6 +251,14 @@ describe('add', () => {
     await expect(add(repo, [item('a')])).rejects.toThrow('already in the queue')
     await expect(add(repo, [item('z', ['nope'])])).rejects.toThrow('unknown "nope"')
   })
+})
+
+test('waitForDeps reports the dependencies still pending', async () => {
+  await claim(repo, 1)
+  expect(await waitForDeps(repo, 'c', 0)).toEqual({ ready: false, pending: ['a'] })
+  branch('a', 'a.txt', 'a\n')
+  await land(repo, 'a', [['true']])
+  expect(await waitForDeps(repo, 'c', 0)).toEqual({ ready: true, pending: [] })
 })
 
 describe('withLock', () => {

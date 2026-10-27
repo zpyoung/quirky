@@ -53,6 +53,32 @@ other lanes land while you work (step 5 brings them in). If your item's evidence
 wrong, record a new decision that names the old one, explain the conflict, and either work within
 it or block the item. Never silently diverge.
 
+## Night mode: everything in scope lands by 4am on 2026-10-28
+
+The user set this target, so until then these rules override the steps below wherever they differ.
+After 4am, `docs/loop/BLOCKERS.md` lists the deferred items to requeue.
+
+- **Three hours per item.** Run `queue.ts land` within three hours of claiming the item. At two and
+  a half hours, stop starting new flows and land what passes, deferring the rest as
+  [Blocking an item](#blocking-an-item) describes.
+- **No research swarms.** The feature doc, the roadmap and earlier decision logs are the research.
+  Brainstorm with the standard gray areas and answer them yourself.
+- **One spec.** Write `logic.md` with the tech decisions in a final section, and skip `tech.md` and
+  the separate spec review. Self-review it against the feature doc's flows.
+- **Contracts before implementers.** Commit the shared types, schemas and API signatures on
+  `build/<id>` first, then dispatch at most three implementers against them.
+- **Test once.** Implementers run only their own test files. Before landing, run
+  `bun scripts/suite.ts <dirs>` for the packages and plugins you changed, `bun test scripts` and
+  `bun run typecheck`, once. Never run the whole suite; the land does.
+- **Dogfood once,** at the end, only for the UI scenarios this item adds.
+- **Catch up once,** with `git merge build/roadmap`, just before landing.
+- **One final review round.** Fix only blocking findings; record the rest as open findings.
+- **Early items.** An item marked `"early": true` can be claimed while its dependencies are still
+  being built. Run `queue.ts deps <id>`. While it reports `"ready": false`, write the spec and
+  commit the contracts against the dependencies' specs on their `build/<dep>` branches, then end
+  the turn; your next iteration resumes the item. Once it reports `"ready": true`, merge
+  `build/roadmap` and implement.
+
 ## Each iteration
 
 1. **Orient.** `cd` to this worktree. If `git status` shows uncommitted work on `build/<id>`, a
