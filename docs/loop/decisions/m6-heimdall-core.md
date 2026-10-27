@@ -77,5 +77,27 @@
 - **Revisit if:** another platform is authorized
 - **Source:** deferred: platform
 
+## D8: Add scoped service coordinator authority without weakening worker identity
+- **Question:** confirmed missing prerequisite after the initial real-daemon smoke
+- **Options:** fabricate session evidence; defer worker adapter; add owner-scoped service methods
+- **Chose:** lane11 owns additive orchestration serviceRunCreate/Show, serviceWorkerStart, serviceCheck and serviceWorkerRelease after integrating lane1/lane9. Derive pluginId only from kernel PluginCaller, stable owner(pluginId,key), explicit Run on every call, separate service provenance/receipt namespace and null session coordinator. Ordinary methods remain session-authenticated. Worker launch/report/heartbeat/archive/close retain exact runtime attestation and custody. A schema-declared message-arrived event exposes only post-commit mailbox arrivals.
+- **Why:** both prerequisite lanes confirmed this public extension and reserved service modules/hub integration to lane11. Missing API is reachable implementation work, not permission to forge authority or silently omit the adapter.
+- **Evidence:** /tmp/quirky-lane11-orchestration-service-reply.md:23-35, lane1 confirmation; source contracts.ts RuntimeCallerEvidence and worker-integration.ts; services/contracts.ts
+- **Reversibility:** medium
+- **Confidence:** high
+- **Revisit if:** actual core/worker implementation cannot preserve scoped ownership with the public seam
+- **Source:** assumed — autonomous
+
+## D9: Confirm missing APIs through an actual isolated quirkyd process
+- **Question:** runtime evidence before implementing the feature
+- **Options:** infer absence from files; exercise daemon RPC
+- **Chose:** actual packages/daemon/src/main.ts process under createProcessScope, fresh QUIRKY_HOME and HOME; call Heimdall inspect and serviceRunCreate.
+- **Why:** both returned -32601 unknown method; daemon exited0 through owned cleanup. Hooks were written only beneath the temporary user HOME. This is missing-feature evidence, not a passing feature test.
+- **Evidence:** /tmp/quirky-heimdall-l11-before.ts; smoke output REAL_DAEMON_MISSING_KERNEL_AND_SERVICE_APIS_CONFIRMED and daemonExit0
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** final smoke fails to exercise the same actual process/API surface
+- **Source:** assumed — autonomous
+
 ## Progress
-Iteration4 claimed item and created branch. Source scoped requirements, roadmap/architecture and public-plugin bindings read. Merged early orchestration worker contracts; runtime dependency still being implemented. One combined spec plus shared type contracts ready for commit. Next: dispatch three disjoint components, integrate after all return; resolve service-coordinator public API with prerequisite lane, exercise AC1-11 through daemon API, run affected suite/scripts/typecheck once, await deps ready, catch up once, final cross-family review and queue land. No runtime acceptance claim yet.
+Iteration4: spec/contracts committed6764039; three disjoint implementation worktrees running, no checks/commits until their wave barrier. Worker dependency query returned ready:false pending m6-orchestration-workers after510s; independent implementation continues. Lanes1+9 approved service authority extension reserved to lane11, parent authored type contracts; actual core/worker runtime still pending. Missing feature/API smoke completed with isolated actual quirkyd and cleanup. Next: accept/audit components after all return, integrate dependency implementation and additive service APIs, exercise AC1-11 including real worker adapter, affected suite/scripts/typecheck, deps-ready/catch-up/final independent review/queue landing. No runtime feature acceptance claim.
