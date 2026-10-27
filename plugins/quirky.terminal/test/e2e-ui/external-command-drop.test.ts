@@ -53,7 +53,7 @@ function viewIdentity(report: ViewReport) {
     active: report.active,
     focusedPane: report.focusedPane,
     visibleSessions: report.visibleSessions,
-    tabs: report.tabs.map((tab) => tab.id),
+    tabs: report.tabs.map((tab) => tab.session),
     groups: report.layout ? groupsOf(report.layout).map((group) => ({ id: group.id, tabs: group.tabs.map((tab) => tab.id) })) : [],
     dialog: report.dialog
   }

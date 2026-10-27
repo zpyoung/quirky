@@ -363,5 +363,38 @@
 - **Revisit if:** A supported source needs a different explicit filesystem target kind.
 - **Source:** assumed — autonomous
 
+## D34: Land the core slice and queue explicit parity completion
+- **Question:** Does the original full-flow acceptance remain this item's landing requirement after the operator's deadline ruling?
+- **Options:** Keep expanding every advanced flow; land unverified parity silently; land the working core and name every unfinished flow in a dependent queue item and BLOCKERS.md.
+- **Chose:** The operator's third option. Core is public browse/resume, explicit consent, real transcript search and disable/clear without source loss. Fix blocking findings only. Preserve the original scenario catalog as the follow-up contract rather than claim all 24 scenarios passed.
+- **Why:** The user explicitly authorized this narrower landing, required the follow-up before land, selected scripts/typecheck/affected-package gates, and reserved the whole suite for queue.ts land.
+- **Evidence:** Operator note in this iteration; scope.test.ts's two unfinished positive fixtures at commit75445e6; the remaining three unknown-scope boundary tests stay active. The positive cases are removed from this landing, not marked passing or skipped.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** The dependent parity item finds a core flow cannot meet its documented contract.
+- **Source:** locked by the operator note in this conversation
+
+## D35: A command drag carries a window-local single-use capability
+- **Question:** May arbitrary external MIME data name a registered UI command?
+- **Options:** Parse raw command JSON; trust the MIME name; mint and consume an opaque capability in the trusted UI host.
+- **Chose:** One active window-local capability, immutable argument snapshot, issuer cancellation, consume-before-await, owner revocation and no legacy raw-JSON path. Target worktree/group remain validated by the terminal owner.
+- **Why:** The mounted-window negative probe actually opened a registered menu from forged external JSON before this fix. The positive drop, replay/target checks and host capability tests now pass.
+- **Evidence:** artifact165 failing-before; artifact197:132 pass,0 fail across host and positive/negative mounted-window drop files.
+- **Reversibility:** medium
+- **Confidence:** high
+- **Revisit if:** A future cross-window drag needs an authenticated transfer protocol.
+- **Source:** assumed — autonomous
+
+## D36: Tool results cannot also enter uncapped conversation text
+- **Question:** Why was a unique term beyond the disclosed 3,072-character tool limit searchable?
+- **Options:** Weaken the cap test; cap conversation text; exclude structured tool blocks from conversation extraction and retain their separate capped tool rows.
+- **Chose:** Reuse the existing text-block extractor for Claude/Qoder conversation text and CodeBuddy; only text/input_text/output_text blocks enter user/assistant rows. Tool-use/results still use the existing tool extraction path.
+- **Why:** The generic content extractor copied tool_result.content into a user row, bypassing both the role filter and tool cap. Long actual user messages must remain searchable, so truncating user text would hide the producer defect.
+- **Evidence:** artifact198 failing unique beyond-cap term; artifact205: all8 public flow tests pass after the extraction fix, with long user text, tool-only role filtering and cap assertions intact. Typecheck exits0 after migrating the remaining UI context fixtures.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** Another provider's mixed-content format contains structured tool blocks in its conversation extractor.
+- **Source:** assumed — autonomous
+
 ## Progress
 Step 6 integration: all repairs assembled; current typecheck passes. The strict all25 copied-command execution test passes, and Gemini metadata tests pass8cases/114assertions. Private APFS actions pass4/5: real file trash/repeat/owned-state work, directory target still fails as expected (D33 fix next). Remaining real API/CLI/UI/flow and progress tests, inherited-unlimited red/fix, packaged/actual web smoke, integration catchup and final cross-family review are still required. No landing/completion claim.

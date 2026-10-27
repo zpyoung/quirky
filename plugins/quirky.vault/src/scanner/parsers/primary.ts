@@ -220,9 +220,9 @@ function consumeClaudeRecord(state: ClaudeState, record: Record<string, unknown>
     }
     content = boundedText(text)
   }
-  const text = textFromContent(content)
+  const text = conversationText(content)
   if (record.type === 'user') {
-    const title = titleText(content)
+    const title = normalizeTitle(text)
     const meta = record.isMeta === true || injectedUserText(title)
     if (meta && title) state.metaTitle ??= title
     emitUser(builder, text, record.timestamp, !meta)
@@ -276,7 +276,7 @@ async function parseQoder(context: ParserContext): Promise<VaultSession> {
   })
 }
 
-function codeBuddyText(content: unknown): string | null {
+function conversationText(content: unknown): string | null {
   if (typeof content === 'string') return boundedText(content)
   if (!Array.isArray(content)) return null
   let text = ''
@@ -315,7 +315,7 @@ async function parseCodeBuddy(context: ParserContext): Promise<VaultSession> {
     if (record.type !== 'message') continue
 
     const role = string(record.role)
-    const text = codeBuddyText(record.content)
+    const text = conversationText(record.content)
     if (role === 'user') {
       const providerData = isRecord(record.providerData) ? record.providerData : null
       const meta = providerData?.skipRun === true || injectedUserText(text)
