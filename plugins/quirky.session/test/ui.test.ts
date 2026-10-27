@@ -1,10 +1,21 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, mock, test } from 'bun:test'
 import { act } from 'react'
 import { GlobalRegistrator } from '@happy-dom/global-registrator'
-import { bytesToBase64, RpcError, RpcErrorCode } from '@quirky/protocol'
+import { bytesToBase64, RpcError, RpcErrorCode, type QuirkyEvent } from '@quirky/protocol'
 import { resetSessionMemory } from '../src/window/model'
 import manifest from '../quirky-plugin.json'
-import { fakeContext, mountView, session, sessionHandlers, settle, WORKTREE, type FakeContext } from './ui-fake'
+import {
+  agentInfo,
+  agentListing,
+  attachResult,
+  fakeContext,
+  mountView,
+  session,
+  sessionHandlers,
+  settle,
+  WORKTREE,
+  type FakeContext
+} from './ui-fake'
 
 const VIEW = 'view:quirky.session/worktree'
 const shell1 = session({ id: 's1', title: 'Shell 1', createdAt: 1 })
@@ -243,8 +254,18 @@ describe('keeping tabs current', () => {
 })
 
 describe('new sessions', () => {
+  const menuLabels = (view: Awaited<ReturnType<typeof mountView>>) =>
+    [...view.element.querySelectorAll('[role="menuitem"]')].map((entry) => entry.textContent)
+
+  const openMenu = async (view: Awaited<ReturnType<typeof mountView>>) => {
+    await view.click(view.element.querySelector('[aria-label="New session"]')!)
+    await settle()
+    return () => [...view.element.querySelectorAll('[role="menuitem"]')].map((entry) => entry.textContent)
+  }
+
   const pickFromMenu = async (view: Awaited<ReturnType<typeof mountView>>, label: string) => {
     await view.click(view.element.querySelector('[aria-label="New session"]')!)
+    await settle()
     const item = [...view.element.querySelectorAll('[role="menuitem"]')].find((entry) => entry.textContent === label)!
     await view.click(item)
   }
@@ -285,6 +306,115 @@ describe('new sessions', () => {
     await view.click(start_)
     expect(fake.callsTo('quirky.structured/create')[0]!.params).toEqual({ worktree: WORKTREE.id, agent: 'claude', prompt: 'go' })
     expect(fake.opened.at(-1)).toEqual({ id: VIEW, input: { worktree: WORKTREE.id, session: 'bg' } })
+  })
+
+  test('SC-43: the menu lists Shell, the installed enabled agents, Claude (background) and Manage agents', async () => {
+    start([shell1])
+    const view = await open({ worktree: WORKTREE.id })
+    const labels = await openMenu(view)
+    expect(labels()).toEqual(['Shell', 'Claude', 'Codex', 'Goose', 'Claude (background)', 'Manage agents'])
+    expect(fake.callsTo('quirky.agents/list')).toHaveLength(1)
+  })
+
+  test('the default agent comes first, the rest keep listing order', async () => {
+    const listing = agentListing([agentInfo('claude', 'Claude'), agentInfo('codex', 'Codex'), agentInfo('goose', 'Goose')], 'goose')
+    start([shell1], { 'quirky.agents/list': () => listing })
+    const labels = await openMenu(await open({ worktree: WORKTREE.id }))
+    expect(labels()).toEqual(['Shell', 'Goose', 'Claude', 'Codex', 'Claude (background)', 'Manage agents'])
+  })
+
+  test('SC-41: disabled and undetected agents are not offered', async () => {
+    const listing = agentListing([
+      agentInfo('claude', 'Claude'),
+      agentInfo('codex', 'Codex', { enabled: false }),
+      agentInfo('goose', 'Goose', { installed: false }),
+      agentInfo('aider', 'Aider')
+    ])
+    start([shell1], { 'quirky.agents/list': () => listing })
+    const labels = await openMenu(await open({ worktree: WORKTREE.id }))
+    expect(labels()).toEqual(['Shell', 'Claude', 'Aider', 'Claude (background)', 'Manage agents'])
+  })
+
+  test('Claude (background) is hidden when Claude is disabled or missing', async () => {
+    for (const claudeOver of [{ enabled: false }, { installed: false }]) {
+      start([shell1], { 'quirky.agents/list': () => agentListing([agentInfo('claude', 'Claude', claudeOver), agentInfo('codex', 'Codex')]) })
+      const view = await open({ worktree: WORKTREE.id })
+      expect((await openMenu(view))()).toEqual(['Shell', 'Codex', 'Manage agents'])
+      await mounted?.unmount()
+      mounted = null
+      document.body.innerHTML = ''
+    }
+  })
+
+  test('the menu uses the catalog label for the prompt dialog title', async () => {
+    start([shell1], { 'quirky.session/create': () => session({ id: 'new' }) })
+    const view = await open({ worktree: WORKTREE.id })
+    await pickFromMenu(view, 'Goose')
+    expect(document.body.textContent).toContain('New Goose session')
+    await view.click([...document.querySelectorAll('button')].find((button) => button.textContent === 'Start')!)
+    expect(fake.callsTo('quirky.session/create')[0]!.params).toEqual({ worktree: WORKTREE.id, agent: 'goose' })
+  })
+
+  test('Manage agents opens the Agents view', async () => {
+    start([shell1])
+    const view = await open({ worktree: WORKTREE.id })
+    await pickFromMenu(view, 'Manage agents')
+    expect(fake.opened.at(-1)).toEqual({ id: 'view:quirky.agents/settings', input: undefined })
+    expect(view.element.querySelector('[role="menu"]')).toBeNull()
+  })
+
+  test('while the list loads the menu shows Shell and Manage agents only', async () => {
+    let release: (value: unknown) => void = () => {}
+    const pending = new Promise((resolve) => (release = resolve))
+    start([shell1], { 'quirky.agents/list': () => pending })
+    const view = await open({ worktree: WORKTREE.id })
+    const labels = await openMenu(view)
+    expect(labels()).toEqual(['Shell', 'Manage agents'])
+    release(agentListing([agentInfo('codex', 'Codex')]))
+    await settle()
+    expect(labels()).toEqual(['Shell', 'Codex', 'Manage agents'])
+  })
+
+  test('a failed list call leaves Shell and Manage agents', async () => {
+    start([shell1], { 'quirky.agents/list': () => Promise.reject(new Error('down')) })
+    const labels = await openMenu(await open({ worktree: WORKTREE.id }))
+    expect(labels()).toEqual(['Shell', 'Manage agents'])
+  })
+
+  test('the list is read again each time the menu opens', async () => {
+    let listing = agentListing([agentInfo('codex', 'Codex')])
+    start([shell1], { 'quirky.agents/list': () => listing })
+    const view = await open({ worktree: WORKTREE.id })
+    expect((await openMenu(view))()).toEqual(['Shell', 'Codex', 'Manage agents'])
+    await view.click(view.element.querySelector('[aria-label="New session"]')!)
+    listing = agentListing([agentInfo('goose', 'Goose')])
+    expect((await openMenu(view))()).toEqual(['Shell', 'Goose', 'Manage agents'])
+  })
+
+  test('an open menu reads the catalog again on quirky.agents/changed and setting.changed', async () => {
+    let listing = agentListing([agentInfo('codex', 'Codex'), agentInfo('goose', 'Goose')])
+    start([shell1], { 'quirky.agents/list': () => listing })
+    const view = await open({ worktree: WORKTREE.id })
+    expect((await openMenu(view))()).toEqual(['Shell', 'Codex', 'Goose', 'Manage agents'])
+    listing = agentListing([agentInfo('codex', 'Codex')])
+    await fake.emit({ type: 'quirky.agents/changed', data: {} } as QuirkyEvent)
+    await settle()
+    expect(menuLabels(view)).toEqual(['Shell', 'Codex', 'Manage agents'])
+    listing = agentListing([])
+    await fake.emit({ type: 'setting.changed', id: 'setting:quirky.agents/anything', value: true })
+    await settle()
+    expect(menuLabels(view)).toEqual(['Shell', 'Manage agents'])
+  })
+
+  test('a closed menu does not listen for catalog changes', async () => {
+    start([shell1])
+    const view = await open({ worktree: WORKTREE.id })
+    await openMenu(view)
+    await view.click(view.element.querySelector('[aria-label="New session"]')!)
+    const before = fake.callsTo('quirky.agents/list').length
+    await fake.emit({ type: 'quirky.agents/changed', data: {} } as QuirkyEvent)
+    await settle()
+    expect(fake.callsTo('quirky.agents/list')).toHaveLength(before)
   })
 
   test('a failed start is shown as a toast', async () => {
@@ -428,7 +558,7 @@ describe('terminal pane', () => {
   })
 
   test('replays the output recorded before the attach', async () => {
-    start([shell1], { 'quirky.terminal/attach': () => ({ streamId: 7, replay: bytesToBase64(text('old output')), offset: 10 }) })
+    start([shell1], { 'quirky.terminal/attach': () => attachResult({ replay: bytesToBase64(text('old output')), offset: 10 }) })
     await open({ worktree: WORKTREE.id })
     expect(writes).toEqual(['old output'])
   })
@@ -444,6 +574,71 @@ describe('terminal pane', () => {
 
   test('sends no input to an exited session', async () => {
     start([session({ id: 's1', status: 'exited', exitCode: 0 })])
+    await open({ worktree: WORKTREE.id })
+    await act(async () => terminals[0]!.input('ls'))
+    expect(fake.callsTo('quirky.terminal/write')).toEqual([])
+  })
+
+  test('asks the attach for as many history lines as the scrollback setting holds', async () => {
+    start([shell1], {}, { 'setting:quirky.terminal/scrollback': 4000 })
+    await open({ worktree: WORKTREE.id })
+    expect(fake.callsTo('quirky.terminal/attach')[0]!.params.historyLines).toBe(4000)
+    await mounted!.unmount()
+    mounted = null
+    start([shell1])
+    await open({ worktree: WORKTREE.id })
+    expect(fake.callsTo('quirky.terminal/attach')[0]!.params.historyLines).toBe(2000)
+  })
+
+  test('SC-17, SC-28: a session that turns exited and restorable while shown attaches once more', async () => {
+    start([shell1])
+    await open({ worktree: WORKTREE.id })
+    expect(fake.callsTo('quirky.terminal/attach')).toHaveLength(1)
+    const lost = { ...shell1, status: 'exited' as const, exitCause: 'host-lost' as const, restorable: true }
+    await fake.emit({ type: 'quirky.session/changed', data: { session: lost } })
+    await settle()
+    expect(fake.callsTo('quirky.terminal/attach')).toHaveLength(2)
+    expect(fake.callsTo('quirky.terminal/detach')).toHaveLength(1)
+    expect(terminals).toHaveLength(2)
+
+    await fake.emit({ type: 'quirky.session/changed', data: { session: { ...lost, title: 'renamed' } } })
+    await settle()
+    expect(fake.callsTo('quirky.terminal/attach')).toHaveLength(2)
+
+    await fake.emit({ type: 'quirky.session/changed', data: { session: { ...shell1, status: 'running' } } })
+    await fake.emit({ type: 'quirky.session/changed', data: { session: lost } })
+    await settle()
+    expect(fake.callsTo('quirky.terminal/attach')).toHaveLength(3)
+  })
+
+  test('SC-17: a pane opened on a lost session attaches once, since the attach restores it', async () => {
+    start([session({ id: 's1', status: 'exited', exitCause: 'host-lost', restorable: true })])
+    await open({ worktree: WORKTREE.id })
+    await settle()
+    expect(fake.callsTo('quirky.terminal/attach')).toHaveLength(1)
+  })
+
+  test('a session that exits for good keeps its pane and does not attach again', async () => {
+    start([shell1])
+    await open({ worktree: WORKTREE.id })
+    await fake.emit({ type: 'quirky.session/changed', data: { session: { ...shell1, status: 'exited', exitCode: 0, restorable: false } } })
+    await settle()
+    expect(fake.callsTo('quirky.terminal/attach')).toHaveLength(1)
+    expect(mounted!.element.querySelector('.exited-bar')).not.toBeNull()
+  })
+
+  test('SC-42: an attach that is not live writes the final screen and sends no typed input', async () => {
+    const ended = session({ id: 's1', status: 'exited', exitCode: 0 })
+    start([ended], { 'quirky.terminal/attach': () => attachResult({ replay: bytesToBase64(text('bye')), live: false }) })
+    await open({ worktree: WORKTREE.id })
+    expect(writes).toEqual(['bye'])
+    await act(async () => terminals[0]!.input('ls'))
+    expect(fake.callsTo('quirky.terminal/write')).toEqual([])
+    expect(mounted!.element.querySelector('.exited-bar')).not.toBeNull()
+  })
+
+  test('SC-42: a running session whose attach is not live stays read only', async () => {
+    start([shell1], { 'quirky.terminal/attach': () => attachResult({ replay: bytesToBase64(text('bye')), live: false }) })
     await open({ worktree: WORKTREE.id })
     await act(async () => terminals[0]!.input('ls'))
     expect(fake.callsTo('quirky.terminal/write')).toEqual([])

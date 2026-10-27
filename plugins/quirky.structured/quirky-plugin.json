@@ -5,22 +5,25 @@
   "description": "Background Claude sessions without a terminal: journaled messages and permission prompts as asks.",
   "main": "main.ts",
   "activation": "lazy",
-  "dependencies": ["quirky.session", "quirky.ask"],
+  "dependencies": ["quirky.session", "quirky.ask", "quirky.agents"],
   "contributes": {
     "method": [
       {
         "id": "create",
-        "description": "Starts a structured (no PTY) background agent session; only `claude` is supported.",
+        "description": "Starts a structured (no PTY) background agent session, optionally with a model and effort pick. Only the `claude` runner exists; extra arguments are refused.",
         "params": {
           "type": "object",
           "properties": {
             "worktree": { "type": "string", "description": "A worktree selector; defaults to the caller's worktree." },
-            "agent": {
-              "type": "string",
-              "enum": ["shell", "claude", "codex", "opencode", "gemini"],
-              "description": "The agent to run."
+            "agent": { "type": "string", "description": "The agent to run." },
+            "prompt": { "type": "string" },
+            "model": { "type": "string", "description": "A model ID from the agent's catalog, 1 to 128 characters." },
+            "options": {
+              "type": "object",
+              "additionalProperties": true,
+              "description": "Launch option picks by option ID, such as { \"effort\": \"high\" }: up to 16 entries, each a string or a boolean."
             },
-            "prompt": { "type": "string" }
+            "extraArgs": { "type": "string", "description": "Refused: a structured session has no command line." }
           },
           "required": ["agent", "prompt"]
         },
@@ -29,14 +32,17 @@
           "properties": {
             "id": { "type": "string" },
             "kind": { "type": "string", "enum": ["terminal", "structured"] },
-            "agent": { "type": "string", "enum": ["shell", "claude", "codex", "opencode", "gemini"], "description": "The agent to run." },
+            "agent": { "type": "string", "description": "The agent to run." },
             "worktreeId": { "type": "string" },
             "cwd": { "type": "string" },
             "title": { "type": "string" },
             "status": { "type": "string", "enum": ["starting", "running", "working", "waiting", "done", "exited"] },
             "createdAt": { "type": "number" },
             "lastActivityAt": { "type": "number" },
-            "exitCode": { "description": "The exit code, or null while the process is alive." }
+            "exitCode": { "description": "The exit code, or null while the process is alive." },
+            "exitSignal": { "description": "The signal that ended the process, or null." },
+            "exitCause": { "description": "Why the session ended (exited, killed, host-restart or host-lost), or null while it is alive." },
+            "restorable": { "type": "boolean", "description": "True when the session ended with the PTY host and can be restored." }
           },
           "required": ["id", "kind", "agent", "worktreeId", "cwd", "title", "status", "createdAt", "lastActivityAt", "exitCode"]
         }

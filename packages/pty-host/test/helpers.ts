@@ -1,8 +1,10 @@
-import { mkdtempSync, rmSync } from 'node:fs'
+import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { PtyClient } from '../src/client'
 import { startPtyServer, type PtyServer, type PtyServerOptions } from '../src/server'
+
+const ENTRY = new URL('../src/main.ts', import.meta.url).pathname
 
 const cleanups: Array<() => Promise<void> | void> = []
 
@@ -61,3 +63,37 @@ export function concat(parts: Uint8Array[]): Uint8Array {
 }
 
 export const text = (bytes: Uint8Array) => new TextDecoder().decode(bytes)
+
+/** Runs the real host entry on `home`; killed when the test ends. */
+export function startProcess(home: string) {
+  const proc = Bun.spawn([process.execPath, ENTRY], {
+    env: { ...process.env, QUIRKY_HOME: home },
+    stdout: 'pipe',
+    stderr: 'pipe'
+  })
+  onCleanup(() => {
+    proc.kill('SIGKILL')
+  })
+  return proc
+}
+
+/** Waits for the host on `home` to listen, then returns an authenticated client and the token. */
+export async function ready(home: string): Promise<{ client: PtyClient; token: string }> {
+  const token = await waitFor(
+    () => (existsSync(join(home, 'pty.sock')) && existsSync(join(home, 'pty.token')) ? readFileSync(join(home, 'pty.token'), 'utf8') : ''),
+    10000,
+    'host to listen'
+  )
+  for (let attempt = 0; ; attempt++) {
+    try {
+      const c = await PtyClient.connect(join(home, 'pty.sock'))
+      onCleanup(() => c.close())
+      await c.hello(token)
+      return { client: c, token }
+    } catch (error) {
+      if (attempt > 100) throw error
+      await Bun.sleep(50)
+    }
+  }
+}
+

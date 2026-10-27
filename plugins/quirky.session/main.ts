@@ -10,13 +10,19 @@ export async function activate(context: PluginContext): Promise<void> {
     list: sessions.list,
     get: sessions.get,
     create: sessions.create,
+    resume: sessions.resume,
+    setProviderSession: sessions.setProviderSession,
     register: sessions.register,
     close: sessions.close,
-    setStatus: sessions.setStatus
+    setStatus: sessions.setStatus,
+    restore: sessions.restore
   }
   for (const [name, handler] of Object.entries(methods)) context.provide(`method:${context.pluginId}/${name}`, handler)
 
-  context.pty.onExit((sessionId, exitCode) => void sessions.finish(sessionId, exitCode))
+  context.pty.onExit(
+    (sessionId, exitCode, { exitSignal, exitCause }) =>
+      void sessions.finish(sessionId, { exitCode, exitSignal, exitCause, restorable: exitCause === 'host-restart' })
+  )
   context.pty.onReconnect(() => void sessions.reconcile({ startup: false }))
   await sessions.reconcile({ startup: true })
 }

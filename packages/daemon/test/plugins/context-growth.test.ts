@@ -105,7 +105,7 @@ describe('context.pty', () => {
     const { pty } = s.harness
 
     expect(await s.call('acme.ctx/connected')).toBe(true)
-    expect(await s.call('acme.ctx/spawn', spawnArgs('p1'))).toEqual({ pid: expect.any(Number) })
+    expect(await s.call('acme.ctx/spawn', spawnArgs('p1'))).toEqual({ pid: expect.any(Number), restored: false, cwd: '/tmp', cols: 80, rows: 24 })
     const created = pty.requests.find((request) => request.type === 'create')
     expect(created).toMatchObject({ sessionId: 'p1', argv: ['sh'], cwd: '/tmp', env: { A: '1' }, cols: 80, rows: 24 })
 
@@ -178,6 +178,7 @@ describe('context.pty', () => {
     await s.call('acme.a/listen')
     await s.call('acme.b/listen')
     await s.call('acme.a/subscribe', spawnArgs('p1'))
+    await s.call('acme.b/subscribe', spawnArgs('p1'))
 
     pty.emit('p1', 'one')
     await waitFor(() => seen()['acme.a']?.data.length === 1 && seen()['acme.b']?.data.length === 1)

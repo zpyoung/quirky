@@ -76,7 +76,7 @@ describe('SC-20: v1 command lines run through the plugins', () => {
 
     const record = await ok(['session', 'new', '--agent', 'shell'])
     const sessionId = /^id: (\S+)$/m.exec(record)?.[1] as string
-    expect(record).toMatch(new RegExp(`^id: ${sessionId}\\nagent: shell\\nkind: terminal\\nstatus: running\\nworktree: wt_[0-9a-f]+\\n$`))
+    expect(record).toMatch(new RegExp(`^id: ${sessionId}\\nagent: shell\\nkind: terminal\\nstatus: running\\nworktree: wt_[0-9a-f]+\\nprompt: none\\n$`))
 
     const sessions = (await ok(['session', 'list'])).split('\n')
     expect(sessions[0]).toMatch(/^ID\s+AGENT\s+KIND\s+STATUS\s+WORKTREE\s+TITLE$/)
@@ -144,9 +144,9 @@ describe('SC-20: v1 command lines run through the plugins', () => {
 
   test('SC-20: usage errors keep v1 wording', async () => {
     await ok(['repo', 'add', apiDir])
-    const noAgent = await run(['session', 'new'])
-    expect(noAgent.code).toBe(2)
-    expect(noAgent.stderr).toContain('--agent')
+    const noPrompt = await run(['session', 'new', '--agent', 'claude', '--background'])
+    expect(noPrompt.code).toBe(2)
+    expect(noPrompt.stderr).toContain('--background requires --prompt')
     const noSession = await run(['term', 'read'])
     expect(noSession.code).toBe(2)
     expect(noSession.stderr).toContain('no session id; pass <sessionId> or set QUIRKY_SESSION_ID')

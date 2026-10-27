@@ -26,7 +26,7 @@
           "type": "object",
           "properties": {
             "worktree": { "type": "string" },
-            "agent": { "type": "string", "enum": ["shell", "claude", "codex", "opencode", "gemini"] }
+            "agent": { "type": "string" }
           },
           "required": ["agent"]
         }
@@ -42,6 +42,14 @@
             "title": { "type": "string" }
           },
           "required": ["agent", "kind", "title"]
+        }
+      },
+      {
+        "id": "restore",
+        "params": {
+          "type": "object",
+          "properties": { "session": { "type": "string" } },
+          "required": ["session"]
         }
       },
       {

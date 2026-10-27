@@ -30,7 +30,10 @@ const claudeSession: Session = {
   status: 'running',
   createdAt: 1,
   lastActivityAt: 1,
-  exitCode: null
+  exitCode: null,
+  exitSignal: null,
+  exitCause: null,
+  restorable: false
 }
 
 /** A directory of built-ins holding the real plugin and fakes of its dependencies. */

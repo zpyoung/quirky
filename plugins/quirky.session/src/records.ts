@@ -1,7 +1,18 @@
 import { Database } from 'bun:sqlite'
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
-import type { PluginStore, Session, SessionStatus, StoreMigration } from '@quirky/protocol'
+import type {
+  AgentKind,
+  ExitCause,
+  PluginStore,
+  PromptDeliveryState,
+  LaunchSettings,
+  Session,
+  SessionLaunch,
+  SessionProviderSession,
+  SessionStatus,
+  StoreMigration
+} from '@quirky/protocol'
 
 type Row = {
   id: string
@@ -14,6 +25,23 @@ type Row = {
   created_at: number
   last_activity_at: number
   exit_code: number | null
+  exit_signal: string | null
+  exit_cause: ExitCause | null
+  restorable: number
+  launch: string | null
+  provider_session: string | null
+  prompt_delivery: PromptDeliveryState | null
+  resumed_from: string | null
+  launch_settings: string | null
+}
+
+function parseJson<T>(text: string | null): T | null {
+  if (text === null) return null
+  try {
+    return JSON.parse(text) as T
+  } catch {
+    return null
+  }
 }
 
 const toSession = (row: Row): Session => ({
@@ -26,9 +54,20 @@ const toSession = (row: Row): Session => ({
   status: row.status,
   createdAt: row.created_at,
   lastActivityAt: row.last_activity_at,
-  exitCode: row.exit_code
+  exitCode: row.exit_code,
+  exitSignal: row.exit_signal,
+  exitCause: row.exit_cause,
+  restorable: row.restorable === 1,
+  launch: parseJson<SessionLaunch>(row.launch),
+  providerSession: parseJson<SessionProviderSession>(row.provider_session),
+  promptDelivery: row.prompt_delivery,
+  launchSettings: parseJson<LaunchSettings>(row.launch_settings),
+  resumedFrom: row.resumed_from
 })
 
+const jsonOrNull = (value: unknown) => (value === null || value === undefined ? null : JSON.stringify(value))
+
+/** The v1 column set, which is all that exists while migration 1 imports a v1 home. */
 const INSERT = `INSERT OR IGNORE INTO sessions (id, kind, agent, worktree_id, cwd, title, status, created_at, last_activity_at, exit_code, repo_id)
   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
 
@@ -80,6 +119,24 @@ export function sessionMigrations(home: string): StoreMigration[] {
         )
       `)
       importV1Sessions(store, home)
+    },
+    (store) => {
+      store.exec(`
+        ALTER TABLE sessions ADD COLUMN launch TEXT;
+        ALTER TABLE sessions ADD COLUMN provider_session TEXT;
+        ALTER TABLE sessions ADD COLUMN prompt_delivery TEXT;
+        ALTER TABLE sessions ADD COLUMN resumed_from TEXT
+      `)
+    },
+    (store) => {
+      store.exec('ALTER TABLE sessions ADD COLUMN launch_settings TEXT')
+    },
+    (store) => {
+      store.exec(`
+        ALTER TABLE sessions ADD COLUMN exit_signal TEXT;
+        ALTER TABLE sessions ADD COLUMN exit_cause TEXT;
+        ALTER TABLE sessions ADD COLUMN restorable INTEGER NOT NULL DEFAULT 0
+      `)
     }
   ]
 }
@@ -106,9 +163,16 @@ export class SessionRecords {
     return this.store.get('SELECT 1 FROM sessions WHERE worktree_id = ? LIMIT 1', worktreeId) !== null
   }
 
-  insert(session: Session, repoId: string): void {
+  /** The repo recorded for a session, which `Session` does not carry. */
+  repoIdOf(id: string): string | null {
+    return this.store.get<{ repo_id: string | null }>('SELECT repo_id FROM sessions WHERE id = ?', id)?.repo_id ?? null
+  }
+
+  insert(session: Session, repoId: string | null): void {
     this.store.run(
-      INSERT,
+      `INSERT OR IGNORE INTO sessions (id, kind, agent, worktree_id, cwd, title, status, created_at, last_activity_at, exit_code, repo_id,
+        launch, provider_session, prompt_delivery, resumed_from, launch_settings, exit_signal, exit_cause, restorable)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       session.id,
       session.kind,
       session.agent,
@@ -119,22 +183,67 @@ export class SessionRecords {
       session.createdAt,
       session.lastActivityAt,
       session.exitCode,
-      repoId
+      repoId,
+      jsonOrNull(session.launch),
+      jsonOrNull(session.providerSession),
+      session.promptDelivery ?? null,
+      session.resumedFrom ?? null,
+      jsonOrNull(session.launchSettings),
+      session.exitSignal,
+      session.exitCause,
+      session.restorable ? 1 : 0
     )
   }
 
-  update(id: string, fields: { status?: SessionStatus; lastActivityAt?: number; exitCode?: number | null }): Session | null {
-    const current = this.get(id)
-    if (!current) return null
-    const next = { ...current, ...fields }
-    this.store.run(
-      'UPDATE sessions SET status = ?, last_activity_at = ?, exit_code = ? WHERE id = ?',
-      next.status,
-      next.lastActivityAt,
-      next.exitCode,
-      id
-    )
-    return next
+  /**
+   * Changes only the fields given (an `undefined` field is left alone), so a write never reverts a
+   * column another call changed since the caller read the record. Returns the stored record.
+   */
+  update(
+    id: string,
+    fields: {
+      status?: SessionStatus
+      agent?: AgentKind
+      lastActivityAt?: number
+      exitCode?: number | null
+      exitSignal?: string | null
+      exitCause?: ExitCause | null
+      restorable?: boolean
+      launch?: SessionLaunch | null
+      providerSession?: SessionProviderSession | null
+      promptDelivery?: PromptDeliveryState | null
+      launchSettings?: LaunchSettings | null
+    }
+  ): Session | null {
+    const columns: [string, string | number | null][] = []
+    if (fields.status !== undefined) columns.push(['status', fields.status])
+    if (fields.agent !== undefined) columns.push(['agent', fields.agent])
+    if (fields.lastActivityAt !== undefined) columns.push(['last_activity_at', fields.lastActivityAt])
+    if (fields.exitCode !== undefined) columns.push(['exit_code', fields.exitCode])
+    if (fields.exitSignal !== undefined) columns.push(['exit_signal', fields.exitSignal])
+    if (fields.exitCause !== undefined) columns.push(['exit_cause', fields.exitCause])
+    if (fields.restorable !== undefined) columns.push(['restorable', fields.restorable ? 1 : 0])
+    if (fields.launch !== undefined) columns.push(['launch', jsonOrNull(fields.launch)])
+    if (fields.providerSession !== undefined) columns.push(['provider_session', jsonOrNull(fields.providerSession)])
+    if (fields.promptDelivery !== undefined) columns.push(['prompt_delivery', fields.promptDelivery])
+    if (fields.launchSettings !== undefined) columns.push(['launch_settings', jsonOrNull(fields.launchSettings)])
+    if (columns.length > 0) {
+      this.store.run(
+        `UPDATE sessions SET ${columns.map(([name]) => `${name} = ?`).join(', ')} WHERE id = ?`,
+        ...columns.map(([, value]) => value),
+        id
+      )
+    }
+    return this.get(id)
+  }
+
+  /** Marks every delivery still pending as not-delivered; returns the IDs changed. */
+  sweepPendingDeliveries(): string[] {
+    const ids = this.store
+      .all<{ id: string }>("SELECT id FROM sessions WHERE prompt_delivery = 'pending' ORDER BY created_at, rowid")
+      .map((row) => row.id)
+    this.store.run("UPDATE sessions SET prompt_delivery = 'not-delivered' WHERE prompt_delivery = 'pending'")
+    return ids
   }
 
   delete(id: string): void {

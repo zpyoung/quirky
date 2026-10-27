@@ -37,7 +37,10 @@ export class FakeWorld {
   readonly statusLog: { sessionId: string; status: SessionStatus }[] = []
   readonly resolveCalls: Record<string, unknown>[] = []
   readonly registerCalls: Record<string, unknown>[] = []
+  readonly resolveLaunchCalls: Record<string, unknown>[] = []
   readonly askCreateCalls: Record<string, unknown>[] = []
+  /** Replaces the fake `quirky.agents/resolveLaunch` answer; it may throw to refuse the pick. */
+  resolveLaunchOverride: ((params: any, context: PluginCtx) => unknown) | null = null
   readonly asks = new Map<string, Ask>()
   /** How long a fake `wait` holds before returning the ask still pending. */
   askWaitCapMs = 25
@@ -61,7 +64,10 @@ export class FakeWorld {
         status: 'starting',
         createdAt: now,
         lastActivityAt: now,
-        exitCode: null
+        exitCode: null,
+        exitSignal: null,
+        exitCause: null,
+        restorable: false
       }
       this.sessions.set(session.id, session)
       return session
@@ -83,6 +89,17 @@ export class FakeWorld {
     }
   }
 
+  readonly agents = {
+    resolveLaunch: (params: any, context: PluginCtx) => {
+      this.resolveLaunchCalls.push(params)
+      if (this.resolveLaunchOverride) return this.resolveLaunchOverride(params, context)
+      const structured: Record<string, string | boolean> = {}
+      if (params.model) structured.model = params.model
+      Object.assign(structured, params.options)
+      return { added: [], args: '', structured, shadowed: [], launchSettings: null }
+    }
+  }
+
   readonly ask = {
     create: (params: any) => {
       this.askCreateCalls.push(params)
@@ -93,7 +110,11 @@ export class FakeWorld {
         sessionId: params.session ?? null,
         worktreeId: params.worktree ?? null,
         createdAt: Date.now(),
-        envelope: { status: 'pending', askId: id, answers: {}, skipped: [] }
+        envelope: { status: 'pending', askId: id, answers: {}, skipped: [], summary: '' },
+        seq: 0,
+        queued: false,
+        partial: {},
+        expiresAt: null
       }
       this.asks.set(id, ask)
       return { askId: id }
@@ -139,7 +160,10 @@ export class FakeWorld {
       status: 'running',
       createdAt: 1,
       lastActivityAt: 1,
-      exitCode: null
+      exitCode: null,
+      exitSignal: null,
+      exitCause: null,
+      restorable: false
     }
     this.sessions.set(session.id, session)
     return session
@@ -153,7 +177,7 @@ export class FakeWorld {
   }
 
   private settle(ask: Ask, status: AskEnvelope['status'], answers: AskEnvelope['answers']): AskEnvelope {
-    ask.envelope = { status, askId: ask.id, answers, skipped: [] }
+    ask.envelope = { status, askId: ask.id, answers, skipped: [], summary: '' }
     for (const wake of this.waiters.get(ask.id) ?? []) wake()
     this.waiters.delete(ask.id)
     return ask.envelope

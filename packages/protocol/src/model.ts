@@ -1,5 +1,7 @@
 /** Domain types shared by the daemon, the PTY host, the UI, the CLI and the desktop shell. */
 
+import type { ExitCause } from './pty'
+
 export type Repo = {
   id: string
   /** The repository folder's basename. */
@@ -122,9 +124,32 @@ export type WorktreeRemoveResult = {
   sessionErrors?: string[]
 }
 
-export type AgentKind = 'shell' | 'claude' | 'codex' | 'opencode' | 'gemini'
+/** `shell` or a catalog agent ID; the daemon checks the ID against the agent catalog at launch. */
+export type AgentKind = string
 
-export const AGENT_KINDS: readonly AgentKind[] = ['shell', 'claude', 'codex', 'opencode', 'gemini']
+/** What a terminal session was launched with, replayed by resume. */
+export type SessionLaunch = { command: string; args: string; env: Record<string, string> }
+
+/** Where a launch setting came from: a pick, or extra arguments that set the same flag. */
+export type LaunchSettingSource = 'explicit' | 'extra-args'
+
+/**
+ * What a launch applied, kept with the session so history doesn't change when settings do.
+ * `options` holds the model under the key `model`; a value is absent when extra arguments set it.
+ */
+export type LaunchSettings = {
+  agent: string
+  options: Record<string, { value?: string | boolean; source: LaunchSettingSource }>
+  args?: { value: string; source: 'explicit' | 'inherited' }
+  /** "Claude · Opus · Effort: high", computed at launch. */
+  summary: string
+}
+
+/** The agent CLI's own session, which resume passes back to it. */
+export type SessionProviderSession = { id: string; transcriptPath: string | null }
+
+/** How a launch's first prompt reached the agent; null when it had none. */
+export type PromptDeliveryState = 'command-line' | 'pending' | 'pasted' | 'unconfirmed' | 'not-delivered'
 
 /**
  * Terminal sessions report `running`/`exited` from the process alone; agents with hooks also
@@ -145,6 +170,20 @@ export type Session = {
   createdAt: number
   lastActivityAt: number
   exitCode: number | null
+  /** The signal that ended the process, when one did; null while it is alive. */
+  exitSignal: string | null
+  /** Why the session ended; null while it is alive and for records from before causes were kept. */
+  exitCause: ExitCause | null
+  /** True when the PTY host still holds the session's history, so `restore` can start a shell in it. */
+  restorable: boolean
+  /** Null for shell sessions and sessions recorded before launches were kept. */
+  launch?: SessionLaunch | null
+  providerSession?: SessionProviderSession | null
+  promptDelivery?: PromptDeliveryState | null
+  /** Null for a launch with no picks and no arguments, and for sessions recorded before launch settings. */
+  launchSettings?: LaunchSettings | null
+  /** The session this one was resumed or forked from. */
+  resumedFrom?: string | null
 }
 
 export type GitFileStatus = {
@@ -177,20 +216,29 @@ export type GitDiff = {
   binary: boolean
 }
 
-export type AskOption = { value: string; label: string; description?: string }
+export type AskPreview = { format: 'markdown' | 'html'; content: string }
+
+export type AskOption = { value: string; label: string; description?: string; preview?: AskPreview }
+
+type AskQuestionCommon = { id: string; question: string; header?: string; required?: boolean }
 
 export type AskQuestion =
-  | { id: string; type: 'select'; question: string; header?: string; options: AskOption[] }
-  | { id: string; type: 'multiselect'; question: string; header?: string; options: AskOption[] }
-  | { id: string; type: 'text'; question: string; header?: string; multiline?: boolean }
-  | { id: string; type: 'confirm'; question: string; header?: string }
+  | (AskQuestionCommon & { type: 'select'; options: AskOption[]; default?: string })
+  | (AskQuestionCommon & { type: 'multiselect'; options: AskOption[]; default?: string[] })
+  | (AskQuestionCommon & { type: 'text'; multiline?: boolean; pattern?: string; format?: 'email' | 'url'; default?: string })
+  | (AskQuestionCommon & { type: 'number'; integer?: boolean; min?: number; max?: number; default?: number })
+  /** `default` is a calendar date, `YYYY-MM-DD`. */
+  | (AskQuestionCommon & { type: 'date'; default?: string })
+  | (AskQuestionCommon & { type: 'confirm'; default?: boolean })
 
 export type AskSpec = { title?: string; questions: AskQuestion[] }
 
+/** One question's answer; `source: 'default'` only ever comes from a deadline. */
 export type AskAnswer =
-  | { value: string; label?: string; source: 'option' | 'other' | 'input' }
-  | { values: string[]; labels: string[]; source: 'options' }
-  | { value: boolean; source: 'input' }
+  | { value: string; label?: string; note?: string; source: 'option' | 'other' | 'input' | 'default' }
+  | { values: string[]; labels: string[]; other?: string; source: 'options' | 'default' }
+  | { value: number; source: 'input' | 'default' }
+  | { value: boolean; source: 'input' | 'default' }
 
 export type AskStatus = 'pending' | 'answered' | 'partial' | 'declined' | 'timed_out'
 
@@ -199,7 +247,18 @@ export type AskEnvelope = {
   askId: string
   answers: Record<string, AskAnswer>
   skipped: string[]
+  /** One line per answered question, `<header or question>: <value>`; empty while pending and when declined. */
+  summary: string
 }
+
+/** What `quirky ask` prints when a `--chunk-ms` chunk ends before the ask does. */
+export type AskPendingEnvelope = { status: 'pending'; askId: string; instruction: string }
+
+/** One question's work in progress, as the window saves it. */
+export type AskPartialQuestionDraft = { selected?: string[]; other?: string; note?: string; draft?: string; confirm?: boolean }
+
+/** Drafts by question ID. */
+export type AskPartial = Record<string, AskPartialQuestionDraft>
 
 export type Ask = {
   id: string
@@ -208,6 +267,13 @@ export type Ask = {
   worktreeId: string | null
   createdAt: number
   envelope: AskEnvelope
+  /** The store-wide change counter's value at this ask's latest change. */
+  seq: number
+  /** Pending behind an earlier pending ask of the same session. */
+  queued: boolean
+  partial: AskPartial
+  /** Epoch ms after which the ask times out, or null for no deadline. */
+  expiresAt: number | null
 }
 
 export type StructuredRole = 'user' | 'assistant' | 'tool' | 'system' | 'result'
