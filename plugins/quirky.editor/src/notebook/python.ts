@@ -94,15 +94,10 @@ function addCandidate(
   source: PythonCandidate['source']
 ): void {
   if (!isAbsolute(path) || !existsSync(path) || !isExecutable(path)) return
-  let canonical: string
-  try {
-    canonical = realpathSync(path)
-  } catch {
-    return
-  }
-  if (seen.has(canonical)) return
-  seen.add(canonical)
-  candidates.push({ path: canonical, name, source })
+  const launcher = resolve(path)
+  if (seen.has(launcher)) return
+  seen.add(launcher)
+  candidates.push({ path: launcher, name, source })
 }
 
 export function discoverPythonCandidates(notebookDir: string, rootPath: string): PythonCandidate[] {
@@ -159,8 +154,9 @@ export async function describePython(path: string, source: PythonEnvironment['so
     throw new Error('Python returned an incomplete version description')
   }
   const canonical = isAbsolute(info.path) ? realpathSync(info.path) : info.path
+  const launcher = isAbsolute(executable) ? executable : info.path
   return {
-    path: canonical,
+    path: launcher,
     name: basename(canonical),
     version: info.version,
     source,

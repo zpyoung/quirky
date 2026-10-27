@@ -104,7 +104,7 @@ test('opening a file creates a reusable hosted editor tab without stealing backg
 
   const state = await stateOf(client, worktree.id)
   expect(state.buffers.some((buffer) => buffer.id === opened.id)).toBe(true)
-  expect(state.tabs).toContainEqual(expect.objectContaining({ bufferId: opened.id, mode: 'edit' }))
+  expect(state.tabs).toContainEqual(expect.objectContaining({ bufferId: opened.id, mode: 'preview' }))
 
   const reused = await call<EditorBuffer>(client, 'quirky.editor/open', {
     worktree: worktree.id,

@@ -115,6 +115,7 @@ export class KernelSession {
       this.#error = detail
       return { status: 'failed', detail, session: this }
     }
+    this.#child = child
     child.stdout?.setEncoding('utf8')
     child.stderr?.setEncoding('utf8')
     child.stdout?.on('data', (chunk: string) => {

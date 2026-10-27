@@ -48,9 +48,9 @@ const MAX_ACTIVE_TRANSFERS = 4
 const MAX_STAGED_TRANSFER_BYTES = 100 * 1024 * 1024
 const TRANSFER_IDLE_MS = 5 * 60 * 1000
 const VIEW_KEYS = new Set([
-  'selection', 'cursorLine', 'cursorColumn', 'scrollTop', 'scrollLeft', 'scroll', 'zoom', 'scale', 'page', 'position',
-  'wordWrap', 'showWhitespace', 'tocVisible', 'frontmatterVisible', 'collapsedFiles', 'search', 'find', 'sort', 'filter', 'mode',
-  'delimiter', 'viewer', 'focused', 'line', 'column', 'markdownAnchor', 'matchLength'
+'selection', 'cursorLine', 'cursorColumn', 'scrollTop', 'scrollLeft', 'scroll', 'zoom', 'scale', 'page', 'position',
+'wordWrap', 'showWhitespace', 'tocVisible', 'frontmatterVisible', 'collapsedFiles', 'search', 'find', 'sort', 'filter', 'mode',
+'delimiter', 'viewer', 'focused', 'line', 'column', 'markdownAnchor', 'markdownFrontmatterVisible', 'matchLength'
 ])
 
 type PrivateBuffer = BufferMetrics & {
@@ -67,6 +67,7 @@ type TabMapping = {
   tabId: string
   worktreeId: string
   bufferId: string
+  key: string
   mode: 'edit' | 'preview'
   inputMode: EditorMode
   group?: string
@@ -314,11 +315,24 @@ export class EditorDaemon {
     const buffer = state.buffer
     const mode = params.line !== undefined && buffer.kind === 'markdown' ? 'source' : (params.mode ?? buffer.mode)
     const terminalPreview = params.preview === true && params.pinned !== true && this.setting('editorPreviewTabsEnabled', true)
-    const keyValue = mode === 'preview' ? `preview:${buffer.id}` : buffer.id
-    if (params.group !== undefined) await this.syncTerminalWorkspace(worktree.id)
-    const reuse = params.group === undefined || this.tabsForBuffer(buffer.id).some((tab) =>
-      tab.group === params.group && (mode === 'preview' ? tab.inputMode === 'preview' : tab.inputMode !== 'preview')
+    if (params.group !== undefined || terminalPreview) await this.syncTerminalWorkspace(worktree.id)
+    const existingModeTab = this.tabsForBuffer(buffer.id).find((tab) =>
+      (params.group === undefined || tab.group === params.group) &&
+      (mode === 'preview' ? tab.inputMode === 'preview' : tab.inputMode !== 'preview')
     )
+    const defaultKey = mode === 'preview' ? `preview:${buffer.id}` : buffer.id
+    let keyValue = existingModeTab?.key ?? defaultKey
+    if (params.group !== undefined && existingModeTab === undefined &&
+      [...this.tabs.values()].some((tab) => tab.worktreeId === worktree.id && tab.key === keyValue)) {
+      keyValue = `editor:${buffer.id}:${params.group}`
+    }
+    const reuse = params.group === undefined || existingModeTab !== undefined
+    const replaceablePreview = terminalPreview && existingModeTab === undefined
+      ? [...this.tabs.values()].find((tab) =>
+        tab.worktreeId === worktree.id && tab.preview && !tab.pinned &&
+        (params.group === undefined || tab.group === params.group)
+      )
+      : undefined
     const focus = params.focus ?? caller.role === 'ui'
     const result = await this.context.call('quirky.terminal/openViewTab', {
       workspace: `id:${worktree.id}`,
@@ -328,7 +342,7 @@ export class EditorDaemon {
       input: { bufferId: buffer.id, mode },
       title: buffer.name,
       reuse,
-      ...(terminalPreview ? { replace: true } : {}),
+      ...(replaceablePreview === undefined ? {} : { replace: replaceablePreview.tabId }),
       activate: focus,
       closeCommand: EDITOR_CLOSE_COMMAND,
       closeMethod: EDITOR_CLOSE_METHOD,
@@ -475,6 +489,7 @@ export class EditorDaemon {
   }
 
   emit(): void {
+    if (this.disposed) return
     this.stateRevision++
     this.context.emit('changed', { revision: this.stateRevision })
   }
@@ -1010,6 +1025,7 @@ export class EditorDaemon {
 
 
   async onEvent(event: QuirkyEvent): Promise<void> {
+    if (this.disposed) return
     if (event.type === 'quirky.terminal/layout') {
       const worktreeId = (event.data as { workspace?: unknown } | undefined)?.workspace
       if (typeof worktreeId === 'string') await this.syncTerminalWorkspace(worktreeId).catch(() => undefined)
@@ -1131,6 +1147,10 @@ export class EditorDaemon {
     if (matchLength !== undefined && (typeof matchLength !== 'number' || !Number.isSafeInteger(matchLength) || matchLength < 0 || matchLength > MAX_TEXT_FILE_BYTES)) {
       throw this.context.error('invalid-params', `matchLength must be a bounded non-negative integer no greater than ${MAX_TEXT_FILE_BYTES}`)
     }
+    const markdownFrontmatterVisible = patch.markdownFrontmatterVisible
+    if (markdownFrontmatterVisible !== undefined && typeof markdownFrontmatterVisible !== 'boolean') {
+      throw this.context.error('invalid-params', 'markdownFrontmatterVisible must be a boolean')
+    }
     const presentation: Record<string, unknown> = { ...patch }
     delete presentation.mode
     const result = await this.bufferQueue.run([`buffer:${bufferId}`], async () => {
@@ -1173,7 +1193,7 @@ export class EditorDaemon {
       viewId: EDITOR_DOCUMENT_VIEW,
       changes: mappings.map((tab) => ({
         tab: tab.tabId,
-        key: bufferId,
+        key: tab.key,
         input: { bufferId, mode },
         title: state.buffer.name,
         preview: tab.preview
@@ -1195,7 +1215,7 @@ export class EditorDaemon {
     const workspace = await this.context.call('quirky.terminal/rekeyViewTabs', {
       workspace: `id:${target.worktreeId}`,
       viewId: EDITOR_DOCUMENT_VIEW,
-      changes: [{ tab: target.tabId, key: target.inputMode === 'preview' ? `preview:${bufferId}` : bufferId, input: { bufferId, mode: target.inputMode }, title: state.buffer.name, preview: false }]
+      changes: [{ tab: target.tabId, key: target.key, input: { bufferId, mode: target.inputMode }, title: state.buffer.name, preview: false }]
     }) as { workspace?: TerminalWorkspace }
     if (workspace.workspace !== undefined) this.syncWorkspaceValue(target.worktreeId, workspace.workspace)
     const current = this.requireState(bufferId)
@@ -1417,6 +1437,7 @@ export class EditorDaemon {
     const existing = this.changeTimers.get(key)
     if (existing !== undefined) clearTimeout(existing)
     const timer = setTimeout(() => {
+      if (this.disposed) return
       this.changeTimers.delete(key)
       if (path === null) {
         const buffers = [...this.buffers.values()].filter((state) => state.buffer.worktreeId === worktreeId)
@@ -1456,6 +1477,7 @@ export class EditorDaemon {
             tabId: tab.id,
             worktreeId,
             bufferId,
+            key: typeof tab.key === 'string' ? tab.key : '',
             mode: preview || inputMode === 'preview' ? 'preview' : 'edit',
             inputMode,
             ...(groupId === undefined ? {} : { group: groupId }),
@@ -1810,7 +1832,7 @@ export class EditorDaemon {
           viewId: EDITOR_DOCUMENT_VIEW,
           changes: mappings.map((tab) => ({
             tab: tab.tabId,
-            key: tab.inputMode === 'preview' ? `preview:${previous.id}` : previous.id,
+            key: tab.key,
             input: { bufferId: previous.id, mode: tab.inputMode },
             title: state.buffer.name,
             preview: tab.preview
@@ -2071,6 +2093,7 @@ export class EditorDaemon {
   }
 
   private persist(state: PrivateBuffer): void {
+    if (this.disposed) return
     saveBuffer(this.store, state.buffer, state.autosaveHold, {
       contentBytes: state.contentBytes,
       contentLength: state.contentLength,
@@ -2083,6 +2106,7 @@ export class EditorDaemon {
   }
 
   private updateError(state: PrivateBuffer, error: string): void {
+    if (this.disposed) return
     const latest = this.buffers.get(state.buffer.id)
     if (latest === undefined) return
     latest.buffer = { ...latest.buffer, error, revision: latest.buffer.revision + 1 }

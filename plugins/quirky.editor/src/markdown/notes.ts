@@ -2,6 +2,8 @@ import { randomUUID } from 'node:crypto'
 import type { EditorBuffer, EditorServices } from '../types'
 import type { PluginCaller, Session } from '@quirky/protocol'
 import { MARKDOWN_MAX_NOTE_BODY_BYTES, MARKDOWN_MAX_NOTES_SOURCE_BYTES, MARKDOWN_MAX_NOTE_SELECTION_BYTES, sourceLineAtOffset, splitFrontMatter, utf8Bytes } from './source'
+import { makeDiff } from '@sanity/diff-match-patch'
+import { serializeMarkdown } from './tiptap'
 
 export type MarkdownReviewNote = {
   id: string
@@ -113,6 +115,41 @@ export function formatMarkdownReviewNotes(notes: MarkdownReviewNote[], sourceByP
   return groups.join('\n\n')
 }
 
+function sourceOffsetsFromCanonical(source: string, canonical: string, offsets: [number, number]): [number, number] {
+  if (source === canonical) return offsets
+  const targets = [...new Set(offsets)].sort((left, right) => left - right)
+  const mapped = new Map<number, number>()
+  const diffs = makeDiff(canonical, source, { checkLines: true, timeout: 0.01 })
+  let targetIndex = 0
+  let canonicalOffset = 0
+  let sourceOffset = 0
+  for (const [operation, text] of diffs) {
+    if (operation === 1) {
+      sourceOffset += text.length
+      continue
+    }
+    if (operation === -1) {
+      while (targetIndex < targets.length && targets[targetIndex]! < canonicalOffset + text.length) {
+        mapped.set(targets[targetIndex]!, sourceOffset)
+        targetIndex += 1
+      }
+      canonicalOffset += text.length
+      continue
+    }
+    while (targetIndex < targets.length && targets[targetIndex]! < canonicalOffset + text.length) {
+      mapped.set(targets[targetIndex]!, sourceOffset + targets[targetIndex]! - canonicalOffset)
+      targetIndex += 1
+    }
+    canonicalOffset += text.length
+    sourceOffset += text.length
+  }
+  while (targetIndex < targets.length) {
+    mapped.set(targets[targetIndex]!, sourceOffset)
+    targetIndex += 1
+  }
+  return [mapped.get(offsets[0])!, mapped.get(offsets[1])!]
+}
+
 function selectedRange(host: EditorServices, buffer: EditorBuffer, value: unknown): { selectedText: string; startLine: number; endLine: number; lineNumber: number } {
   if (!value || typeof value !== 'object') throw host.context.error('invalid-params', 'selection with source offsets or rich text/line span is required.')
   const selection = value as Selection
@@ -124,10 +161,23 @@ function selectedRange(host: EditorServices, buffer: EditorBuffer, value: unknow
   let to: number
   let excerpt: string
   if (Number.isInteger(selection.from) && Number.isInteger(selection.to)) {
-    from = selection.from!
-    to = selection.to!
-    if (from < 0 || to <= from || to > selectedSource.length) throw host.context.error('invalid-params', 'Selection must be a non-empty source range inside the current Markdown document.')
-    excerpt = selectedSource.slice(from, to)
+    const selectedFrom = selection.from!
+    const selectedTo = selection.to!
+    if (rich) {
+      const canonical = serializeMarkdown(selectedSource)
+      if (canonical === null || selectedFrom < 0 || selectedTo <= selectedFrom || selectedTo > canonical.length) {
+        throw host.context.error('invalid-params', 'Selection must be a non-empty rich Markdown range inside the current document.')
+      }
+      const [sourceFrom, sourceTo] = sourceOffsetsFromCanonical(selectedSource, canonical, [selectedFrom, selectedTo])
+      from = sourceFrom
+      to = sourceTo
+      excerpt = canonical.slice(selectedFrom, selectedTo)
+    } else {
+      from = selectedFrom
+      to = selectedTo
+      if (from < 0 || to <= from || to > selectedSource.length) throw host.context.error('invalid-params', 'Selection must be a non-empty source range inside the current Markdown document.')
+      excerpt = selectedSource.slice(from, to)
+    }
   } else if (rich && typeof selection.text === 'string' && Number.isInteger(selection.startLine) && Number.isInteger(selection.endLine)) {
     const normalized = selectedSource.replace(/\r\n/g, '\n')
     const lines = normalized.split('\n')
