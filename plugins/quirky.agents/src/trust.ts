@@ -19,23 +19,24 @@ const INHERITS_FROM_ANCESTOR: ReadonlySet<TrustPreset> = new Set(['claude', 'cop
  * A folder that is a filesystem root, the home, or above the home is skipped for agents that
  * let a trusted folder cover everything below it.
  */
-export function writeTrust(preset: TrustPreset, folder: string, userHome: string): void {
-  if (INHERITS_FROM_ANCESTOR.has(preset) && coversHome(folder, userHome)) return
+export function writeTrust(preset: TrustPreset, folder: string, userHome: string, providerHome?: string): void {
+  const home = providerHome ?? userHome
+  if (INHERITS_FROM_ANCESTOR.has(preset) && coversHome(folder, home)) return
   switch (preset) {
     case 'claude':
-      return writeClaudeTrust(folder, userHome)
+      return writeClaudeTrust(folder, home)
     case 'cursor':
-      return writeCursorTrust(folder, userHome)
+      return writeCursorTrust(folder, home)
     case 'copilot':
-      return writeCopilotTrust(folder, userHome)
+      return writeCopilotTrust(folder, home)
     case 'codex':
-      return writeCodexTrust(folder, userHome)
+      return writeCodexTrust(folder, providerHome === undefined ? join(userHome, '.codex', 'config.toml') : join(providerHome, 'config.toml'))
     case 'antigravity':
-      return writeAntigravityTrust(folder, userHome)
+      return writeAntigravityTrust(folder, home)
     case 'qoder':
-      return writeQoderTrust(folder, userHome, '.qoder')
+      return writeQoderTrust(folder, home, '.qoder')
     case 'qoder-cn':
-      return writeQoderTrust(folder, userHome, '.qoder-cn')
+      return writeQoderTrust(folder, home, '.qoder-cn')
   }
 }
 
@@ -173,12 +174,11 @@ function writeQoderTrust(folder: string, home: string, configDir: '.qoder' | '.q
   writeJsonAtomic(path, { ...config, permissions: { ...permissions, trustDirectories: [...list, absolute] } })
 }
 
-function writeCodexTrust(folder: string, home: string): void {
+function writeCodexTrust(folder: string, configPath: string): void {
   // codex checks the start folder's own entry before its repo root, so the folder itself is enough
-  const path = join(home, '.codex', 'config.toml')
-  const existing = readText(path) ?? ''
-  const next = upsertProjectTrust(existing, canonicalize(folder), path)
-  if (next !== existing) writeFileAtomic(path, next)
+  const existing = readText(configPath) ?? ''
+  const next = upsertProjectTrust(existing, canonicalize(folder), configPath)
+  if (next !== existing) writeFileAtomic(configPath, next)
 }
 
 type TomlScan = { basic: boolean; literal: boolean; arrayDepth: number }

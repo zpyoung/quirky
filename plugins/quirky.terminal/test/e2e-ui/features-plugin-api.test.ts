@@ -7,6 +7,7 @@ import {
   focusTerminal,
   focusedSession,
   openWorktreeView,
+  splitPane,
   press,
   slotOf,
   startFeatures,
@@ -25,12 +26,13 @@ afterEach(async () => {
 })
 
 /** Writes a plugin with a manifest and a plain-JavaScript window module, and returns its directory. */
-function writePlugin(id: string, contributes: Record<string, unknown[]>, ui: string): string {
+function writePlugin(id: string, contributes: Record<string, unknown[]>, ui: string, overrides?: Record<string, unknown>[]): string {
   const root = mkdtempSync('/tmp/qp-')
   scratch.push(root)
   const dir = join(root, id)
   mkdirSync(dir)
-  writeFileSync(join(dir, 'quirky-plugin.json'), JSON.stringify({ id, name: id, version: '1.0.0', ui: 'ui.js', contributes }))
+  const manifest = { id, name: id, version: '1.0.0', ui: 'ui.js', contributes, ...(overrides === undefined ? {} : { overrides }) }
+  writeFileSync(join(dir, 'quirky-plugin.json'), JSON.stringify(manifest))
   writeFileSync(join(dir, 'ui.js'), ui)
   return dir
 }
@@ -122,6 +124,167 @@ test(
     await waitFor('the overlay to leave the window', () => (badge() === null ? true : undefined))
     await waitFor('the slot to leave the state', async () => (overlaySlot(await uiState(f)) === undefined ? true : undefined))
     expect(((JSON.parse(await h.ok(['ui', 'contributions', '--json'])) as UiModel).overlays).map((overlay) => overlay.id)).not.toContain(OVERLAY)
+  },
+  FEATURE_MS
+)
+
+const STATUS_EARLY = 'status-bar:test.status/early'
+const STATUS_LATE = 'status-bar:test.status/late'
+const STATUS_UI = `
+export function activate(context) {
+  for (const [id, label] of [['${STATUS_LATE}', 'late'], ['${STATUS_EARLY}', 'early']]) {
+    context.provide(id, (element, props) => {
+      const badge = document.createElement('span')
+      badge.dataset.testStatus = label
+      badge.textContent = label
+      element.append(badge)
+      props.report?.({ label })
+      return () => badge.remove()
+    })
+  }
+}
+`
+
+test(
+  'status-bar slots mount in deterministic order, report through ui.state and clean up when disabled',
+  async () => {
+    const f = await startFeatures({ window: false })
+    const { h } = f
+    const dir = writePlugin(
+      'test.status',
+      { 'status-bar': [{ id: 'late', title: 'Late', order: 20 }, { id: 'early', title: 'Early', order: 10 }] },
+      STATUS_UI
+    )
+    const installed = await install(f, dir)
+    expect(installed.code, installed.stderr).toBe(0)
+
+    const model = JSON.parse(await h.ok(['ui', 'contributions', '--json'])) as UiModel
+    expect(model.statusBars.map((entry) => [entry.id, entry.order])).toEqual([
+      [STATUS_EARLY, 10],
+      [STATUS_LATE, 20]
+    ])
+
+    await f.startWindow()
+    await waitFor('both status-bar contributions to mount', () => {
+      const nodes = [...document.querySelectorAll<HTMLElement>('.plugin-status-bar [data-test-status]')]
+      return nodes.length === 2 ? true : undefined
+    })
+    expect([...document.querySelectorAll<HTMLElement>('.plugin-status-bar [data-test-status]')].map((node) => node.dataset.testStatus)).toEqual([
+      'early',
+      'late'
+    ])
+    const state = await waitFor('the status-bar report', async () => {
+      const slot = slotOf(await uiState(f), STATUS_EARLY)
+      return slot?.report !== undefined ? slot : undefined
+    })
+    expect(state).toMatchObject({ kind: 'status-bar', plugin: 'test.status', shown: true, report: { label: 'early' } })
+
+    const disabled = await h.cli(['plugin', 'disable', 'test.status'])
+    expect(disabled.code, disabled.stderr).toBe(0)
+    await waitFor('status-bar mounts to be removed', () =>
+      document.querySelector('.plugin-status-bar [data-test-status]') === null ? true : undefined
+    )
+    await waitFor('status-bar state to be removed', async () => (slotOf(await uiState(f), STATUS_EARLY) === undefined ? true : undefined))
+  },
+  FEATURE_MS
+)
+
+const ACCESSORY_ID = 'terminal-accessory:test.accessory/account'
+const BASE_VIEW_ID = 'view:test.accessory/account'
+const OVERRIDE_VIEW_ID = 'view:test.override/account'
+
+const BASE_ACCESSORY_UI = `
+export function activate(context) {
+  context.provide('${BASE_VIEW_ID}', (element, props) => {
+    const badge = document.createElement('span')
+    badge.dataset.testAccessory = 'base'
+    badge.dataset.sessionId = props.input.sessionId
+    badge.dataset.paneId = props.input.paneId
+    badge.textContent = 'base account'
+    element.append(badge)
+    return () => badge.remove()
+  })
+}
+`
+
+const OVERRIDE_ACCESSORY_UI = `
+export function activate(context) {
+  context.provide('${OVERRIDE_VIEW_ID}', (element, props) => {
+    const badge = document.createElement('span')
+    badge.dataset.testAccessory = 'override'
+    badge.dataset.sessionId = props.input.sessionId
+    badge.dataset.paneId = props.input.paneId
+    badge.textContent = 'replacement account'
+    element.append(badge)
+    return () => badge.remove()
+  })
+}
+`
+
+test(
+  'terminal accessories mount per pane and refresh on override and disable',
+  async () => {
+    const f = await startFeatures({ window: false })
+    const { h } = f
+    const base = writePlugin(
+      'test.accessory',
+      {
+        view: [{ id: 'account', title: 'Base account view' }],
+        'terminal-accessory': [{ id: 'account', title: 'Account', order: 10, view: BASE_VIEW_ID }]
+      },
+      BASE_ACCESSORY_UI
+    )
+    const installed = await install(f, base)
+    expect(installed.code, installed.stderr).toBe(0)
+    await f.startWindow()
+    await openWorktreeView(f)
+    const baseReport = await viewReport(f, 'base accessory mounted', (report) =>
+      Object.values(report.mountedAccessories).some((ids) => ids.includes(ACCESSORY_ID))
+    )
+    const paneId = baseReport.focusedPane!
+    await splitPane(h, paneId, 'right')
+    const twoPanes = await viewReport(f, 'accessories mounted in both panes', (report) =>
+      report.panes.length === 2 &&
+      Object.values(report.mountedAccessories).filter((ids) => ids.includes(ACCESSORY_ID)).length === 2
+    )
+    expect(twoPanes.mountedAccessories[paneId]).toEqual([ACCESSORY_ID])
+    expect(document.querySelectorAll('[data-test-accessory="base"]')).toHaveLength(2)
+    for (const pane of twoPanes.panes) {
+      const badge = document.querySelector<HTMLElement>(`[data-pane="${pane.pane}"] [data-test-accessory="base"]`)
+      expect(badge?.dataset.paneId).toBe(pane.pane)
+      expect(badge?.dataset.sessionId).toBe(pane.session)
+    }
+
+    const replacement = writePlugin(
+      'test.override',
+      { view: [{ id: 'account', title: 'Replacement account view' }] },
+      OVERRIDE_ACCESSORY_UI,
+      [{ id: ACCESSORY_ID, title: 'Replacement', order: 5, view: OVERRIDE_VIEW_ID }]
+    )
+    const replaced = await install(f, replacement)
+    expect(replaced.code, replaced.stderr).toBe(0)
+    const overrideReport = await viewReport(f, 'replacement accessory mounted', (report) =>
+      report.panes.length === 2 && Object.values(report.mountedAccessories).filter((ids) => ids.includes(ACCESSORY_ID)).length === 2
+    )
+    await waitFor('replacement accessory views to appear', () => (document.querySelectorAll('[data-test-accessory="override"]').length === 2 ? true : undefined))
+    expect(document.querySelectorAll('[data-test-accessory="base"]')).toHaveLength(0)
+    expect(overrideReport.mountedAccessories[paneId]).toEqual([ACCESSORY_ID])
+
+    const overrideDisabled = await h.cli(['plugin', 'disable', 'test.override'])
+    expect(overrideDisabled.code, overrideDisabled.stderr).toBe(0)
+    await viewReport(f, 'base accessory restored', (report) =>
+      report.panes.length === 2 && Object.values(report.mountedAccessories).filter((ids) => ids.includes(ACCESSORY_ID)).length === 2
+    )
+    await waitFor('base accessory views to return', () => (document.querySelectorAll('[data-test-accessory="base"]').length === 2 ? true : undefined))
+    expect(document.querySelectorAll('[data-test-accessory="override"]')).toHaveLength(0)
+
+    const baseDisabled = await h.cli(['plugin', 'disable', 'test.accessory'])
+    expect(baseDisabled.code, baseDisabled.stderr).toBe(0)
+    const removed = await viewReport(f, 'accessory contribution removed', (report) =>
+      !Object.values(report.mountedAccessories).some((ids) => ids.includes(ACCESSORY_ID))
+    )
+    expect(removed.mountedAccessories[paneId]).toBeUndefined()
+    await waitFor('all accessory roots to be removed', () => (document.querySelector('[data-terminal-accessory]') === null ? true : undefined))
   },
   FEATURE_MS
 )
