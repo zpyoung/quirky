@@ -495,5 +495,16 @@
 - **Revisit if:** authoritative land identifies another concrete concurrent conflict or regression
 - **Source:** locked by LOOP failed-land recovery and imported decisions
 
+## D46: Fix the import-fence parser, not the valid slash-command data
+- **Question:** authoritative landing ran the full suite but its import fence classified command metadata as a module import
+- **Options:** rename/remove /import to appease the regex; weaken the fence; parse actual TypeScript module syntax
+- **Chose:** replace only the test scanner's comment-stripping/regex matching with the already-available TypeScript AST. Preserve public-path/dependency checks and cover import/export declarations, literal require/dynamic imports, import-equals and import-type nodes. Add regressions proving quoted command data/comments/JSX are not imports while genuine forbidden literal module forms remain fenced.
+- **Why:** pickers.ts:66 contains valid `{name:'import', description:...}` data. The regex invented specifier `, description: `; there is no private import. Changing the feature input would hide the scanner defect. No production parser dependency or runtime API changed.
+- **Evidence:** full landing515remote files:513initialpass/2fail plus2macOSpass; worktree create passed its isolated40-test rerun, while import fence failed again. After root repair, actual whole-plugin fence plus parser regressions4pass/6assertions and full typecheck passed. Original /import command remains unchanged.
+- **Reversibility:** easy
+- **Confidence:** high for syntax-aware policy checks and reproduced false positive
+- **Revisit if:** a genuine module form escapes the fence or valid source text is again misclassified
+- **Source:** assumed — autonomous (concrete authoritative landing blocker)
+
 ## Progress
-Approved core, dependent follow-up, final review and concrete conflict repairs are complete. Final browser focus/PONG smoke passed; latest merged source passes77remote+2macOS schema/CLI/terminal files, full typecheck and16-plugin packaged build. The two previous landing attempts stopped at concurrent merge conflicts, not full-suite verdicts. Original noncore flows/C1 remain explicitly open. Commit this resolved merge, detach and retry queue.ts land for authoritative integration validation; do not claim that result before it succeeds.
+Approved core, registered follow-up, final review and conflict repairs are complete. Latest runtime/schema/terminal checks, full typecheck,16-plugin build and actual keyboard-focus/PONG smoke pass. The full landing suite exposed a false-positive import-fence parser; that test-only root defect is repaired with positive/negative syntax regressions and actual whole-plugin scan proof. Original noncore flows/C1 remain open. Commit the narrow parser repair, detach and retry queue.ts land; do not claim authoritative full-suite/scripts/types success until that command succeeds.

@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test'
 import { builtinModules } from 'node:module'
 import { readdirSync, readFileSync, statSync } from 'node:fs'
 import { dirname, join, relative, resolve, sep } from 'node:path'
+import ts from 'typescript'
 
 const PLUGINS_ROOT = resolve(import.meta.dir, '..')
 const SKIPPED_DIRS = new Set(['test', 'node_modules', 'dist'])
@@ -23,18 +24,6 @@ function sourceFiles(dir: string): string[] {
   return files
 }
 
-/** Blanks comments but keeps newlines, so offsets still map to the right line. */
-function stripComments(source: string): string {
-  const blank = (text: string) => text.replace(/[^\n]/g, ' ')
-  return source.replace(/\/\*[\s\S]*?\*\//g, blank).replace(/(^|\s)\/\/[^\n]*/g, (_, lead: string) => lead + blank(_.slice(lead.length)))
-}
-
-const IMPORT_FORMS = [
-  /\bfrom\s*(['"])([^'"\n]+)\1/g,
-  /\bimport\s*(['"])([^'"\n]+)\1/g,
-  /\bimport\s*\(\s*(['"])([^'"\n]+)\1/g,
-  /\brequire\s*\(\s*(['"])([^'"\n]+)\1/g
-]
 
 /** The package a bare specifier names: `react/jsx-runtime` is `react`, `@xterm/xterm/css` is `@xterm/xterm`. */
 function packageOf(specifier: string): string {
@@ -53,12 +42,24 @@ function isRuntimeBuiltin(specifier: string): boolean {
  * built-ins, `@quirky/protocol`, nor in `declared`.
  */
 export function scanImports(source: string, file: string, pluginDir: string, declared: ReadonlySet<string>): ImportViolation[] {
-  const code = stripComments(source)
+  const syntax = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, false)
   const violations: ImportViolation[] = []
-  for (const form of IMPORT_FORMS) {
-    for (const match of code.matchAll(form)) {
-      const specifier = match[2]!
-      const line = code.slice(0, match.index).split('\n').length
+  const visit = (node: ts.Node): void => {
+    let literal: ts.Node | undefined
+    if (ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) {
+      literal = node.moduleSpecifier
+    } else if (ts.isImportEqualsDeclaration(node) && ts.isExternalModuleReference(node.moduleReference)) {
+      literal = node.moduleReference.expression
+    } else if (ts.isImportTypeNode(node) && ts.isLiteralTypeNode(node.argument)) {
+      literal = node.argument.literal
+    } else if (ts.isCallExpression(node) && (
+      node.expression.kind === ts.SyntaxKind.ImportKeyword || ts.isIdentifier(node.expression) && node.expression.text === 'require'
+    )) {
+      literal = node.arguments[0]
+    }
+    if (literal && ts.isStringLiteralLike(literal)) {
+      const specifier = literal.text
+      const line = syntax.getLineAndCharacterOfPosition(literal.getStart(syntax)).line + 1
       const flag = (reason: string) => violations.push({ file, line, specifier, reason })
       if (specifier.startsWith('.')) {
         const target = resolve(dirname(file), specifier)
@@ -69,7 +70,9 @@ export function scanImports(source: string, file: string, pluginDir: string, dec
         flag('package is not declared in the plugin package.json')
       }
     }
+    ts.forEachChild(node, visit)
   }
+  visit(syntax)
   return violations
 }
 
@@ -125,6 +128,37 @@ describe('import fence', () => {
       [7, '../../quirky.repo/main'],
       [8, 'lodash'],
       [10, '../../../packages/ui/src/y']
+    ])
+  })
+
+  test('command metadata, quoted code and comments are not module imports', () => {
+    const dir = join(PLUGINS_ROOT, 'quirky.sample')
+    const source = [
+      "const commands = [{ name: 'import', description: 'Import setup from Claude Code' }]",
+      'const quoted = "export * from \'private-package\'"',
+      "const template = `require('private-package')`",
+      'const view = <div title="import \'private-package\'">from \'private-package\'</div>',
+      "// import 'private-package'",
+      "/* require('private-package') */",
+      "import { local } from './local'"
+    ].join('\n')
+    expect(scanImports(source, join(dir, 'src', 'a.tsx'), dir, new Set())).toEqual([])
+  })
+
+  test('re-exports and TypeScript literal module forms remain fenced', () => {
+    const dir = join(PLUGINS_ROOT, 'quirky.sample')
+    // These are parser inputs, not module loads.
+    const source = [
+      "export { value } from '../../quirky.other/export'",
+      "import legacy = require('undeclared-package')",
+      "type Hidden = import('../../../packages/daemon/src/hidden').Hidden",
+      "const lazy = import(`../../quirky.other/template`)"
+    ].join('\n')
+    expect(scanImports(source, join(dir, 'src', 'a.ts'), dir, new Set()).map(({ line, specifier }) => [line, specifier])).toEqual([
+      [1, '../../quirky.other/export'],
+      [2, 'undeclared-package'],
+      [3, '../../../packages/daemon/src/hidden'],
+      [4, '../../quirky.other/template']
     ])
   })
 })
