@@ -17,6 +17,7 @@ files, not this one.
 | hard | medium | [m0-daemon-api D9](decisions/m0-daemon-api.md) | Each plugin gets one SQLite file and a data directory of its own | assumed — autonomous |
 | hard | medium | [m0-ui-api D6](decisions/m0-ui-api.md) | A slot gives the plugin one container element to mount into, and nothing else of the page | assumed — autonomous |
 | hard | medium | [m0-registry D4](decisions/m0-registry.md) | Contribution IDs are `<kind>:<pluginId>/<name>` | assumed — autonomous |
+| hard | medium | [m1-launch-settings D5](decisions/m1-launch-settings.md) | Approach: each agent's model and option catalog is a `launchOptions` data block on its `agent` contribution, resolved by code in `quirky.agents` | assumed — autonomous |
 | hard | medium | [m1-providers D5](decisions/m1-providers.md) | A new built-in plugin, `quirky.agents`, owns the catalog, detection, agent configuration and launch planning; `quirky.session` keeps records and spawning | supersedes m0-core D5 (narrows it) |
 | hard | medium | [m1-providers D6](decisions/m1-providers.md) | Each agent is an `agent` contribution in a manifest, so plugins can add, replace or disable agents as data | assumed — autonomous |
 | hard | medium | [m1-providers D36](decisions/m1-providers.md) | Approach: port Orca's pure launch code into `quirky.agents`, with the catalog as manifest data | assumed — autonomous |
@@ -52,6 +53,9 @@ files, not this one.
 | medium | medium | [m0-registry D8](decisions/m0-registry.md) | Override precedence is installed over built-in, then dependent over dependency, then a reported conflict | assumed — autonomous |
 | medium | medium | [m0-registry D10](decisions/m0-registry.md) | Enable and disable apply live, without a restart | assumed — autonomous |
 | medium | medium | [m0-registry D16](decisions/m0-registry.md) | The manifest is `quirky-plugin.json` in the plugin's directory | assumed — autonomous |
+| medium | medium | [m1-launch-settings D4](decisions/m1-launch-settings.md) | This item builds the catalog, its resolution into argv and structured options, the launch snapshot, the extra-arguments allowlist, and their use by session and structured launches | assumed — autonomous |
+| medium | medium | [m1-launch-settings D11](decisions/m1-launch-settings.md) | Precedence: per-launch extra arguments beat picks, and picks beat the agent's configured arguments; a beaten flag is removed, never repeated | assumed — autonomous |
+| medium | medium | [m1-launch-settings D21](decisions/m1-launch-settings.md) | API: `quirky.agents/options` lists an agent's catalog and `quirky.agents/resolveLaunch` previews a resolution | assumed — autonomous |
 | medium | medium | [m1-providers D8](decisions/m1-providers.md) | Two effective `agent` contributions with the same name: the built-in wins, then the lower plugin ID | assumed — autonomous |
 | medium | medium | [m1-providers D11](decisions/m1-providers.md) | Agents are still started by exec under the login shell, not typed into an interactive shell | assumed — autonomous |
 | medium | medium | [m1-providers D21](decisions/m1-providers.md) | Paste-after-ready follows Orca's renderer path: a per-agent ready signal, a deadline, then a blind paste reported as unconfirmed | assumed — autonomous |
@@ -81,6 +85,10 @@ files, not this one.
 | medium | high | [m0-registry D6](decisions/m0-registry.md) | A plugin's own contributions use short names, overrides use full IDs | assumed — autonomous |
 | medium | high | [m0-registry D9](decisions/m0-registry.md) | Disable works by plugin ID or contribution ID, before any code loads, and persists | locked by docs/roadmap.md (disable by ID); assumed — autonomous (cascade and persistence) |
 | medium | high | [m0-registry D11](decisions/m0-registry.md) | Plugins activate lazily on first use by default, or at startup when the manifest says so | locked by docs/roadmap.md (lazy); assumed — autonomous (trigger set) |
+| medium | high | [m1-launch-settings D8](decisions/m1-launch-settings.md) | A selection is `{model?, options?}`, with Orca's bounds | locked by research/orca-features/launch-settings.md |
+| medium | high | [m1-launch-settings D12](decisions/m1-launch-settings.md) | The snapshot comes from the same resolution as the command, so it can't misreport provenance | assumed — autonomous |
+| medium | high | [m1-launch-settings D16](decisions/m1-launch-settings.md) | A session stores its snapshot, and resume and fork replay the resolved arguments | assumed — autonomous |
+| medium | high | [m1-launch-settings D23](decisions/m1-launch-settings.md) | Windows shell quoting for picks and extras is not built | deferred: platform |
 | medium | high | [m1-providers D10](decisions/m1-providers.md) | `Session.agent` becomes any agent ID string, and the protocol version stays 2 | assumed — autonomous |
 | medium | high | [m1-providers D14](decisions/m1-providers.md) | Per-agent configuration lives in `quirky.agents`' store; the default agent and workspace trust are plain settings | assumed — autonomous |
 | medium | high | [m1-providers D20](decisions/m1-providers.md) | The prompt reaches the agent the way its entry says, using Orca's builders | locked by research/orca-features/providers.md |
@@ -118,6 +126,13 @@ files, not this one.
 | easy | medium | [m0-registry D24](decisions/m0-registry.md) | Built-in plugins live in a top-level `plugins/` directory, and packaging them waits for m0-port-v1 | assumed — autonomous |
 | easy | medium | [m0-registry D25](decisions/m0-registry.md) | Activation failures surface as Conflict errors, unknown IDs as NotFound | assumed — autonomous |
 | easy | medium | [m0-registry D30](decisions/m0-registry.md) | No closure review round on the specs | assumed — autonomous |
+| easy | medium | [m1-launch-settings D10](decisions/m1-launch-settings.md) | A model ID the catalog doesn't list is accepted when the agent declares options for unknown models or lists no models at all | assumed — autonomous |
+| easy | medium | [m1-launch-settings D17](decisions/m1-launch-settings.md) | Model discovery and retirement wait for the first item that saves picks | assumed — autonomous |
+| easy | medium | [m1-launch-settings D19](decisions/m1-launch-settings.md) | The catalog yields structured options, and `quirky.structured/create` uses them | assumed — autonomous |
+| easy | medium | [m1-launch-settings D20](decisions/m1-launch-settings.md) | No UI in this item, so no UI or native scenarios | locked by research/orca-features/launch-settings.md |
+| easy | medium | [m1-launch-settings D22](decisions/m1-launch-settings.md) | CLI: `--model`, `--effort`, repeatable `--option key=value` and `--extra-args=` on launch commands, plus `quirky agents options` and `quirky agents resolve` | assumed — autonomous |
+| easy | medium | [m1-launch-settings D25](decisions/m1-launch-settings.md) | A malformed `launchOptions` block makes the agent entry invalid, as any other malformed field does | supersedes m1-providers D7 (extends it to the new field) |
+| easy | medium | [m1-launch-settings D26](decisions/m1-launch-settings.md) | Skip Phase C deep research | assumed — autonomous |
 | easy | medium | [m1-providers D16](decisions/m1-providers.md) | Agent Permissions default to Yolo, as in Orca | locked by research/orca-features/providers.md |
 | easy | medium | [m1-providers D18](decisions/m1-providers.md) | Detection walks the login shell's PATH plus well-known install directories, with no subprocess per command | locked by research/orca-features/providers.md |
 | easy | medium | [m1-providers D23](decisions/m1-providers.md) | A draft prompt (left in the input, not submitted) uses a native flag where the agent has one, else paste without Enter | assumed — autonomous |
@@ -242,6 +257,26 @@ files, not this one.
 | easy | high | [m0-registry D32](decisions/m0-registry.md) | Wave 2 checkpoint findings: fix all four defects | assumed — autonomous |
 | easy | high | [m0-registry D33](decisions/m0-registry.md) | A long QUIRKY_HOME breaks the PTY host's socket; logged, not fixed here | deferred: platform |
 | easy | high | [m0-registry D34](decisions/m0-registry.md) | The final review loop closed after three rounds with no open finding | assumed — autonomous |
+| easy | high | [m1-launch-settings D1](decisions/m1-launch-settings.md) | Classify the item as Data, API, CLI and Integration work, and run research phases A and B | assumed — autonomous |
+| easy | high | [m1-launch-settings D2](decisions/m1-launch-settings.md) | Skip the visual companion and the adhd offer, and use the standard gray-area set | locked by docs/loop/LOOP.md |
+| easy | high | [m1-launch-settings D3](decisions/m1-launch-settings.md) | Select every gray area that matters: data-mapping, input-format, conflict-resolution, error-handling, output-format and flag-design | locked by docs/loop/LOOP.md |
+| easy | high | [m1-launch-settings D6](decisions/m1-launch-settings.md) | The catalog's agents, models, labels, descriptions and choice ceilings are Orca's | locked by research/orca-features/launch-settings.md |
+| easy | high | [m1-launch-settings D7](decisions/m1-launch-settings.md) | Claude's Fast mode is left out, and catalogs carry only options that change a launch | assumed — autonomous |
+| easy | high | [m1-launch-settings D9](decisions/m1-launch-settings.md) | An invalid selection is refused with Orca's messages, never clamped or dropped | locked by research/orca-features/launch-settings.md |
+| easy | high | [m1-launch-settings D13](decisions/m1-launch-settings.md) | A command override that already sets a flag a pick or extra needs fails the launch | locked by research/orca-features/launch-settings.md |
+| easy | high | [m1-launch-settings D14](decisions/m1-launch-settings.md) | Extra arguments use Orca's per-agent allowlist and checks | locked by research/orca-features/launch-settings.md |
+| easy | high | [m1-launch-settings D15](decisions/m1-launch-settings.md) | Picks and extras sit where configured arguments sit: before the arguments' `--` terminator | locked by research/orca-features/launch-settings.md |
+| easy | high | [m1-launch-settings D18](decisions/m1-launch-settings.md) | No capability flag; callers find the API through `api.describe` | assumed — autonomous |
+| easy | high | [m1-launch-settings D24](decisions/m1-launch-settings.md) | The doc's Orca defects become tests | locked by docs/loop/LOOP.md |
+| easy | high | [m1-launch-settings D27](decisions/m1-launch-settings.md) | Fast-track the remaining questions with the recommended defaults | locked by docs/loop/LOOP.md |
+| easy | high | [m1-launch-settings D28](decisions/m1-launch-settings.md) | One Codex adversarial review covers both specs and stands in for the tech-spec reviewer | locked by docs/loop/LOOP.md |
+| easy | high | [m1-launch-settings D29](decisions/m1-launch-settings.md) | Build with Claude subagents implementing and Codex reviewing | locked by docs/loop/LOOP.md |
+| easy | high | [m1-launch-settings D30](decisions/m1-launch-settings.md) | Spec review: eight findings accepted and fixed, 41 prepass findings dismissed | assumed — autonomous |
+| easy | high | [m1-launch-settings D31](decisions/m1-launch-settings.md) | Selection bounds are enforced in `validateSelection`, not in method schemas | assumed — autonomous |
+| easy | high | [m1-launch-settings D32](decisions/m1-launch-settings.md) | A structured launch for an agent other than claude keeps its existing refusal | assumed — autonomous |
+| easy | high | [m1-launch-settings D33](decisions/m1-launch-settings.md) | Checkpoint reviews: five findings accepted and fixed | assumed — autonomous |
+| easy | high | [m1-launch-settings D34](decisions/m1-launch-settings.md) | Final Round 1: correctness and spec lenses passed; one security finding fixed | locked by docs/loop/LOOP.md |
+| easy | high | [m1-launch-settings D35](decisions/m1-launch-settings.md) | No UI scenarios and no native-only scenarios, so the web pass and the native hand-off are skipped | locked by docs/loop/LOOP.md |
 | easy | high | [m1-providers D1](decisions/m1-providers.md) | Classify the item as Data, API, CLI, Visual and Integration work, and run every research phase | assumed — autonomous |
 | easy | high | [m1-providers D2](decisions/m1-providers.md) | Skip the visual companion and the adhd offer, use the standard gray-area set | locked by docs/loop/LOOP.md |
 | easy | high | [m1-providers D3](decisions/m1-providers.md) | Select every gray area that matters for m1-providers | assumed — autonomous |

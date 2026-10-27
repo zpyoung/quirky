@@ -100,8 +100,7 @@
       "deps": [
         "m1-providers"
       ],
-      "status": "in-progress",
-      "lane": 1
+      "status": "done"
     },
     {
       "id": "m1-agent-status",
