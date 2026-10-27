@@ -3,6 +3,7 @@ export const MAX_OUTPUT_BYTES = 4 * 1024 * 1024
 
 const KILL_GRACE_MS = 2000
 const DRAIN_GRACE_MS = 1000
+const GROUP_POLL_MS = 20
 const STDERR_END_BYTES = 16 * 1024
 
 export type OneShotRunInput = {
@@ -23,7 +24,7 @@ export type OneShotOutcome =
   | { kind: 'not-started'; error: string }
 
 export type OneShotRun = {
-  /** Settles once the process is gone; it never rejects. */
+  /** Settles once the process and everything in its group is gone; it never rejects. */
   done: Promise<OneShotOutcome>
   /** Ends the run with `reason`: SIGTERM to the process group, SIGKILL after two seconds. The first reason wins. */
   stop(reason: StopReason): void
@@ -41,6 +42,21 @@ function signalGroup(child: Child, signal: NodeJS.Signals): void {
       // already gone
     }
   }
+}
+
+function groupAlive(child: Child): boolean {
+  try {
+    process.kill(-child.pid, 0)
+    return true
+  } catch (error) {
+    // EPERM means the group exists but is not ours to signal, so it is still there
+    return (error as NodeJS.ErrnoException).code === 'EPERM'
+  }
+}
+
+/** Resolves once no member of the child's process group is left. */
+async function groupGone(child: Child): Promise<void> {
+  while (groupAlive(child)) await new Promise((resolve) => setTimeout(resolve, GROUP_POLL_MS))
 }
 
 /** Reads `stream` to its end, calling `onChunk` for each piece; resolves early when `onChunk` returns false. */
@@ -83,8 +99,8 @@ function collectEnds(): { push(chunk: Uint8Array): void; text(): string } {
 /**
  * Starts `argv` once as the leader of its own process group, feeds it `stdin`, and collects its
  * output. A run ends when the process exits, after `timeoutMs`, when stdout passes
- * `MAX_OUTPUT_BYTES`, or on `stop`; every group member is then killed, so nothing the agent
- * started outlives the run.
+ * `MAX_OUTPUT_BYTES`, or on `stop`; every group member is then killed, and a stopped run settles
+ * only once the whole group is gone, so nothing the agent started outlives the run or overlaps the next one.
  */
 export function startOneShot(input: OneShotRunInput): OneShotRun {
   let child: Child
@@ -98,12 +114,13 @@ export function startOneShot(input: OneShotRunInput): OneShotRun {
   const running = child
   let stopReason: StopReason | null = null
   let finished = false
-  
+  let killTimer: ReturnType<typeof setTimeout> | undefined
+
   const stop = (reason: StopReason): void => {
     if (stopReason || finished) return
     stopReason = reason
     signalGroup(running, 'SIGTERM')
-    setTimeout(() => signalGroup(running, 'SIGKILL'), KILL_GRACE_MS)
+    killTimer = setTimeout(() => signalGroup(running, 'SIGKILL'), KILL_GRACE_MS)
   }
   const timeout = setTimeout(() => stop('timeout'), input.timeoutMs)
 
@@ -145,7 +162,12 @@ export function startOneShot(input: OneShotRunInput): OneShotRun {
     await Promise.race([Promise.all([out, err, feed]), expired])
     clearTimeout(grace)
     finished = true
-    if (stopReason !== null) return { kind: stopReason }
+    if (stopReason !== null) {
+      // the leader can exit on SIGTERM while a descendant ignores it; the SIGKILL timer reaches that descendant
+      await groupGone(running)
+      clearTimeout(killTimer)
+      return { kind: stopReason }
+    }
     signalGroup(running, 'SIGKILL')
     return { kind: 'exited', code: running.exitCode, stdout: Buffer.concat(stdout).toString('utf8'), stderr: stderr.text() }
   })()
