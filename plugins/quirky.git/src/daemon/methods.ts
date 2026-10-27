@@ -1,3 +1,6 @@
+import { aiFix, aiFixPreview } from './ai-fix'
+import { cancelGenerate, generateCommitMessage } from './ai-generate'
+import { aiRecipe, setAiRecipe } from './ai-recipes'
 import type { DaemonEnv, Handler } from './env'
 import { commit } from './commit'
 import { branches, compare, setBase } from './compare'
@@ -53,7 +56,13 @@ export function methodTable(env: DaemonEnv): Record<string, Handler> {
     describeClearNotes: describeClearNotes(env),
     formatNotes: formatNotes(env),
     noteTargets: noteTargets(env),
-    sendNotes: sendNotes(env)
+    sendNotes: sendNotes(env),
+    generateCommitMessage: generateCommitMessage(env),
+    cancelGenerate: cancelGenerate(env),
+    aiFix: aiFix(env),
+    aiFixPreview: aiFixPreview(env),
+    aiRecipe: aiRecipe(env),
+    setAiRecipe: setAiRecipe(env)
   }
   return Object.fromEntries(
     Object.entries(table).map(([name, handler]) => [

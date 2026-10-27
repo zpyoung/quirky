@@ -2131,6 +2131,455 @@
             "delivery"
           ]
         }
+      },
+      {
+        "id": "generateCommitMessage",
+        "description": "Asks an AI agent for a commit message for the staged changes. The recipe's agent, template and arguments apply unless given here; the commit box is not touched. One run per worktree.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "worktree": {
+              "type": "string",
+              "description": "Worktree selector (id, name, branch, path: or current); defaults to the caller's worktree."
+            },
+            "agent": {
+              "type": "string",
+              "description": "An agent ID or custom (the ai-custom-command setting); default the commit message recipe's, else the default agent."
+            },
+            "template": {
+              "type": "string",
+              "description": "Command template for this run, with {basePrompt}, {branch}, {stagedFiles}, {stagedPatch} and {linkedIssue}."
+            },
+            "args": {
+              "type": "string",
+              "description": "Extra agent arguments for this run."
+            },
+            "requestId": {
+              "type": "string",
+              "description": "Names the run so the agents plugin can cancel it; generated when omitted."
+            }
+          }
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "message": {
+              "type": "string",
+              "description": "Subject, a blank line and the body; the subject alone when there is no body."
+            },
+            "subject": {
+              "type": "string",
+              "description": "First line, at most 72 characters, no trailing dot."
+            },
+            "body": {
+              "type": "string",
+              "description": "Everything after the first line, trimmed; empty when none."
+            },
+            "agent": {
+              "type": "string",
+              "description": "The agent that ran."
+            }
+          },
+          "required": [
+            "message",
+            "subject",
+            "body",
+            "agent"
+          ]
+        }
+      },
+      {
+        "id": "cancelGenerate",
+        "description": "Stops the worktree's running commit message generation and its agent process group.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "worktree": {
+              "type": "string",
+              "description": "Worktree selector (id, name, branch, path: or current); defaults to the caller's worktree."
+            }
+          }
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "cancelled": {
+              "type": "boolean",
+              "description": "False when no generation was running."
+            }
+          },
+          "required": [
+            "cancelled"
+          ]
+        }
+      },
+      {
+        "id": "aiFix",
+        "description": "Opens a new agent tab in the worktree with a prompt that asks the agent to fix the failed commit or push, or to resolve the conflicts. Agent, arguments and template override the action's recipe for this launch; save stores them as that scope's recipe.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "worktree": {
+              "type": "string",
+              "description": "Worktree selector (id, name, branch, path: or current); defaults to the caller's worktree."
+            },
+            "action": {
+              "type": "string",
+              "description": "fixCommitFailure, fixPushFailure or resolveConflicts."
+            },
+            "agent": {
+              "type": "string",
+              "description": "An installed, enabled agent; default the recipe's, else the default agent."
+            },
+            "template": {
+              "type": "string",
+              "description": "Command template for this launch; {basePrompt} stands for the built-in prompt."
+            },
+            "args": {
+              "type": "string",
+              "description": "Extra agent arguments, checked against the agent's allowlist."
+            },
+            "save": {
+              "type": "string",
+              "enum": [
+                "repo",
+                "global"
+              ],
+              "description": "Store what this launch used as the recipe of this repository or of all repositories."
+            }
+          },
+          "required": [
+            "action"
+          ]
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "session": {
+              "type": "string",
+              "description": "The new agent session."
+            },
+            "agent": {
+              "type": "string",
+              "description": "The agent started."
+            },
+            "prompt": {
+              "type": "string",
+              "description": "The first prompt it was given."
+            },
+            "saved": {
+              "type": "boolean",
+              "description": "Whether a recipe was written; false when save was not asked for or the recipe was already stored."
+            }
+          },
+          "required": [
+            "session",
+            "agent",
+            "prompt",
+            "saved"
+          ]
+        }
+      },
+      {
+        "id": "aiFixPreview",
+        "description": "The prompt aiFix would send for the action, rendered through the recipe in effect, and that recipe. Starts nothing.",
+        "readOnly": true,
+        "params": {
+          "type": "object",
+          "properties": {
+            "worktree": {
+              "type": "string",
+              "description": "Worktree selector (id, name, branch, path: or current); defaults to the caller's worktree."
+            },
+            "action": {
+              "type": "string",
+              "description": "fixCommitFailure, fixPushFailure or resolveConflicts."
+            }
+          },
+          "required": [
+            "action"
+          ]
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "prompt": {
+              "type": "string"
+            },
+            "recipe": {
+              "type": "object",
+              "properties": {
+                "action": {
+                  "type": "string"
+                },
+                "agent": {
+                  "description": "The agent ID, custom, or null when none is saved (the default agent runs)."
+                },
+                "args": {
+                  "type": "string",
+                  "description": "Extra arguments for the agent; empty when none are saved."
+                },
+                "template": {
+                  "type": "string",
+                  "description": "The command template; {basePrompt} unless saved."
+                },
+                "sources": {
+                  "type": "object",
+                  "properties": {
+                    "agent": {
+                      "type": "string",
+                      "enum": [
+                        "repo",
+                        "global",
+                        "default"
+                      ],
+                      "description": "Where the agent comes from."
+                    },
+                    "args": {
+                      "type": "string",
+                      "enum": [
+                        "repo",
+                        "global",
+                        "default"
+                      ],
+                      "description": "Where the arguments come from."
+                    },
+                    "template": {
+                      "type": "string",
+                      "enum": [
+                        "repo",
+                        "global",
+                        "default"
+                      ],
+                      "description": "Where the template comes from."
+                    }
+                  },
+                  "required": [
+                    "agent",
+                    "args",
+                    "template"
+                  ]
+                }
+              },
+              "required": [
+                "action",
+                "agent",
+                "args",
+                "template",
+                "sources"
+              ]
+            }
+          },
+          "required": [
+            "prompt",
+            "recipe"
+          ]
+        }
+      },
+      {
+        "id": "aiRecipe",
+        "description": "The recipe an AI action runs with in the worktree's repository: each field from the repository's saved recipe, else the global one, else the default, with where it came from.",
+        "readOnly": true,
+        "params": {
+          "type": "object",
+          "properties": {
+            "worktree": {
+              "type": "string",
+              "description": "Worktree selector (id, name, branch, path: or current); defaults to the caller's worktree."
+            },
+            "action": {
+              "type": "string",
+              "description": "CommitMessage, fixCommitFailure, fixPushFailure or resolveConflicts."
+            }
+          },
+          "required": [
+            "action"
+          ]
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "action": {
+              "type": "string"
+            },
+            "agent": {
+              "description": "The agent ID, custom, or null when none is saved (the default agent runs)."
+            },
+            "args": {
+              "type": "string",
+              "description": "Extra arguments for the agent; empty when none are saved."
+            },
+            "template": {
+              "type": "string",
+              "description": "The command template; {basePrompt} unless saved."
+            },
+            "sources": {
+              "type": "object",
+              "properties": {
+                "agent": {
+                  "type": "string",
+                  "enum": [
+                    "repo",
+                    "global",
+                    "default"
+                  ],
+                  "description": "Where the agent comes from."
+                },
+                "args": {
+                  "type": "string",
+                  "enum": [
+                    "repo",
+                    "global",
+                    "default"
+                  ],
+                  "description": "Where the arguments come from."
+                },
+                "template": {
+                  "type": "string",
+                  "enum": [
+                    "repo",
+                    "global",
+                    "default"
+                  ],
+                  "description": "Where the template comes from."
+                }
+              },
+              "required": [
+                "agent",
+                "args",
+                "template"
+              ]
+            }
+          },
+          "required": [
+            "action",
+            "agent",
+            "args",
+            "template",
+            "sources"
+          ]
+        }
+      },
+      {
+        "id": "setAiRecipe",
+        "description": "Saves fields of an AI action's recipe for this repository or for all repositories, or deletes the saved recipe with reset. Fields not given are left as they are; an empty agent or template clears it.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "worktree": {
+              "type": "string",
+              "description": "Worktree selector (id, name, branch, path: or current); defaults to the caller's worktree."
+            },
+            "action": {
+              "type": "string",
+              "description": "CommitMessage, fixCommitFailure, fixPushFailure or resolveConflicts."
+            },
+            "scope": {
+              "type": "string",
+              "enum": [
+                "repo",
+                "global"
+              ],
+              "description": "This worktree's repository, or all repositories."
+            },
+            "agent": {
+              "type": "string",
+              "description": "An agent ID or custom."
+            },
+            "args": {
+              "type": "string",
+              "description": "Extra agent arguments."
+            },
+            "template": {
+              "type": "string",
+              "description": "Command template; {basePrompt} stands for the built-in prompt."
+            },
+            "reset": {
+              "type": "boolean",
+              "description": "Delete the recipe saved at this scope."
+            }
+          },
+          "required": [
+            "action",
+            "scope"
+          ]
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "saved": {
+              "type": "boolean",
+              "description": "False when the recipe already held these values."
+            },
+            "recipe": {
+              "type": "object",
+              "properties": {
+                "action": {
+                  "type": "string"
+                },
+                "agent": {
+                  "description": "The agent ID, custom, or null when none is saved (the default agent runs)."
+                },
+                "args": {
+                  "type": "string",
+                  "description": "Extra arguments for the agent; empty when none are saved."
+                },
+                "template": {
+                  "type": "string",
+                  "description": "The command template; {basePrompt} unless saved."
+                },
+                "sources": {
+                  "type": "object",
+                  "properties": {
+                    "agent": {
+                      "type": "string",
+                      "enum": [
+                        "repo",
+                        "global",
+                        "default"
+                      ],
+                      "description": "Where the agent comes from."
+                    },
+                    "args": {
+                      "type": "string",
+                      "enum": [
+                        "repo",
+                        "global",
+                        "default"
+                      ],
+                      "description": "Where the arguments come from."
+                    },
+                    "template": {
+                      "type": "string",
+                      "enum": [
+                        "repo",
+                        "global",
+                        "default"
+                      ],
+                      "description": "Where the template comes from."
+                    }
+                  },
+                  "required": [
+                    "agent",
+                    "args",
+                    "template"
+                  ]
+                }
+              },
+              "required": [
+                "action",
+                "agent",
+                "args",
+                "template",
+                "sources"
+              ]
+            }
+          },
+          "required": [
+            "saved",
+            "recipe"
+          ]
+        }
       }
     ],
     "event": [
@@ -2161,6 +2610,21 @@
           },
           "required": [
             "worktreeId"
+          ]
+        }
+      },
+      {
+        "id": "aiChanged",
+        "description": "Saved AI recipes changed.",
+        "data": {
+          "type": "object",
+          "properties": {
+            "repoId": {
+              "description": "The repository whose recipes changed, or null for the global ones."
+            }
+          },
+          "required": [
+            "repoId"
           ]
         }
       }
@@ -2414,6 +2878,14 @@
             }
           }
         }
+      },
+      {
+        "id": "add-review-note",
+        "title": "Add Review Note"
+      },
+      {
+        "id": "send-review-notes",
+        "title": "Send Review Notes to Agent"
       }
     ],
     "keybinding": [
@@ -2431,6 +2903,11 @@
         "id": "previous-change",
         "key": "shift+f7",
         "command": "previous-change"
+      },
+      {
+        "id": "add-review-note",
+        "key": "mod+shift+a",
+        "command": "add-review-note"
       }
     ],
     "setting": [
@@ -2510,6 +2987,20 @@
           "hidden",
           "shown"
         ]
+      },
+      {
+        "id": "ai-enabled",
+        "type": "boolean",
+        "title": "Show Source Control AI actions",
+        "description": "Adds AI buttons that run the selected agent with the command template for that action.",
+        "default": true
+      },
+      {
+        "id": "ai-custom-command",
+        "type": "string",
+        "title": "Custom command",
+        "description": "Command line Quirky runs when a recipe uses Custom command.",
+        "default": ""
       }
     ]
   }
