@@ -14,8 +14,8 @@ export type NativeNotification = {
 
 /**
  * The native notification for a daemon event; only `notify` events addressed to the desktop
- * warrant one. The banner is silent exactly when the daemon chose a sound file to play instead
- * (`soundFile` set); System Default and an absent sound leave the banner's own sound on.
+ * warrant one. The banner keeps its own sound only for System Default (`sound.file` null); a
+ * chosen file is played separately and an absent `sound` means the daemon wants silence.
  */
 export function notificationFor(event: QuirkyEvent): NativeNotification | null {
   if (event.type !== 'notify' || event.desktop !== true) return null
@@ -23,7 +23,7 @@ export function notificationFor(event: QuirkyEvent): NativeNotification | null {
   return {
     title: event.title.trim() || APP_NAME,
     body: event.body,
-    silent: sound !== undefined && sound.file !== null,
+    silent: sound === undefined || sound.file !== null,
     soundFile: sound && typeof sound.file === 'string' ? sound.file : null,
     volume: sound?.volume ?? DEFAULT_VOLUME
   }
