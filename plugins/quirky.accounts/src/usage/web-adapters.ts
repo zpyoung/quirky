@@ -6,7 +6,7 @@ import { mapCursorUsage, mapGrokUsage, mapMiniMaxUsage, mapOpenCodeGoUsage, mapZ
 import { readStoredCredential, type CredentialRead } from './credentials'
 import { errorSnapshot, finiteNumber, parseRetryAfterMs, readJsonFile, record, responseFailure, responseJson } from './provider-utils'
 import type { ProviderRuntime } from './process'
-import type { ProviderSnapshot } from './types'
+import type { ProviderSnapshot, UsageFailureKind } from './types'
 import { homeDirectory } from './credentials'
 
 const MINIMAX_USAGE_PATH = '/v1/api/openplatform/coding_plan/remains'
@@ -19,7 +19,7 @@ const MINIMAX_HOSTS = ['platform.minimax.io', 'www.minimaxi.com']
 
 type KeychainPassword = (service: string, account: string) => Promise<CredentialRead>
 
-function safeProviderError(provider: 'opencode-go' | 'minimax' | 'grok' | 'cursor' | 'zcode', runtime: ProviderRuntime, message: string, kind: 'missing-credentials' | 'stale-token' | 'network' | 'server' | 'parse' | 'rate-limited' | 'no-subscription' | 'usage-unavailable' | 'keychain-unavailable', status: 'error' | 'unavailable' = 'error'): ProviderSnapshot {
+function safeProviderError(provider: 'opencode-go' | 'minimax' | 'grok' | 'cursor' | 'zcode', runtime: ProviderRuntime, message: string, kind: UsageFailureKind, status: 'error' | 'unavailable' = 'error'): ProviderSnapshot {
   return errorSnapshot(provider, runtime.now(), message, kind, status)
 }
 
@@ -167,9 +167,9 @@ function readOpenCodeCredentialDatabaseKey(): { key: string | null; unreadable: 
     try {
       database = new Database(path, { readonly: true, create: false })
       database.exec('PRAGMA query_only = ON; PRAGMA busy_timeout = 250')
-      const table = database.query<{ name: unknown }>(`SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'credential'`).get()
+      const table = database.query<{ name: unknown }, []>(`SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'credential'`).get()
       if (!table) continue
-      const rows = database.query<{ value: unknown }>(
+      const rows = database.query<{ value: unknown }, [string]>(
         'SELECT value FROM credential WHERE integration_id = ? ORDER BY active DESC, time_created DESC LIMIT 8'
       ).all('opencode-go')
       for (const row of rows) {
@@ -445,7 +445,7 @@ function cursorDesktopToken(path: string): { token: string | null; email: string
   try {
     database = new Database(path, { readonly: true, create: false })
     database.exec('PRAGMA busy_timeout = 250')
-    const rows = database.query<{ key: unknown; value: unknown }>('SELECT key, value FROM ItemTable WHERE key IN (?, ?, ?)').all(
+    const rows = database.query<{ key: unknown; value: unknown }, [string, string, string]>('SELECT key, value FROM ItemTable WHERE key IN (?, ?, ?)').all(
       'cursorAuth/accessToken',
       'cursorAuth/cachedEmail',
       'cursorAuth/stripeMembershipType'

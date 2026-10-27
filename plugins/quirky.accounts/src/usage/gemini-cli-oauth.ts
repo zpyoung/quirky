@@ -190,6 +190,7 @@ export async function refreshGeminiAccessToken(
   })
   if (!response.ok) return null
   const body = record(await response.json().catch(() => null))
+  if (!body) return null
   const token = typeof body?.access_token === 'string' ? body.access_token : ''
   if (!token) return null
   const expiresIn = typeof body.expires_in === 'number' && Number.isFinite(body.expires_in) ? body.expires_in : 0
