@@ -98,6 +98,9 @@
               },
               "resumedFrom": {
                 "description": "The session this one was resumed or forked from; null otherwise."
+              },
+              "agentStatus": {
+                "description": "The agent-status summary ({state, display, label, detail, progress, stateStartedAt, evidenceAt, restoredUnconfirmed}) the window draws; null or absent when no agent has reported one."
               }
             },
             "required": [
@@ -201,6 +204,9 @@
             },
             "resumedFrom": {
               "description": "The session this one was resumed or forked from; null otherwise."
+            },
+            "agentStatus": {
+              "description": "The agent-status summary ({state, display, label, detail, progress, stateStartedAt, evidenceAt, restoredUnconfirmed}) the window draws; null or absent when no agent has reported one."
             }
           },
           "required": [
@@ -336,6 +342,9 @@
             },
             "resumedFrom": {
               "description": "The session this one was resumed or forked from; null otherwise."
+            },
+            "agentStatus": {
+              "description": "The agent-status summary ({state, display, label, detail, progress, stateStartedAt, evidenceAt, restoredUnconfirmed}) the window draws; null or absent when no agent has reported one."
             }
           },
           "required": [
@@ -449,6 +458,9 @@
             },
             "resumedFrom": {
               "description": "The session this one was resumed or forked from; null otherwise."
+            },
+            "agentStatus": {
+              "description": "The agent-status summary ({state, display, label, detail, progress, stateStartedAt, evidenceAt, restoredUnconfirmed}) the window draws; null or absent when no agent has reported one."
             }
           },
           "required": [
@@ -559,6 +571,9 @@
             },
             "resumedFrom": {
               "description": "The session this one was resumed or forked from; null otherwise."
+            },
+            "agentStatus": {
+              "description": "The agent-status summary ({state, display, label, detail, progress, stateStartedAt, evidenceAt, restoredUnconfirmed}) the window draws; null or absent when no agent has reported one."
             }
           },
           "required": [
@@ -677,6 +692,9 @@
             },
             "resumedFrom": {
               "description": "The session this one was resumed or forked from; null otherwise."
+            },
+            "agentStatus": {
+              "description": "The agent-status summary ({state, display, label, detail, progress, stateStartedAt, evidenceAt, restoredUnconfirmed}) the window draws; null or absent when no agent has reported one."
             }
           },
           "required": [
@@ -778,6 +796,9 @@
             },
             "resumedFrom": {
               "description": "The session this one was resumed or forked from; null otherwise."
+            },
+            "agentStatus": {
+              "description": "The agent-status summary ({state, display, label, detail, progress, stateStartedAt, evidenceAt, restoredUnconfirmed}) the window draws; null or absent when no agent has reported one."
             }
           },
           "required": [
@@ -823,7 +844,7 @@
       },
       {
         "id": "setStatus",
-        "description": "Sets a session's status; `exitCode` is recorded with `exited`.",
+        "description": "Sets a session's status; `exitCode` is recorded with `exited`, and `agentStatus` carries the agent-status summary.",
         "params": {
           "type": "object",
           "properties": {
@@ -844,6 +865,9 @@
             },
             "exitCode": {
               "type": "integer"
+            },
+            "agentStatus": {
+              "description": "The agent-status summary to store, or null to clear it; omitted leaves it unchanged. Cleared when the session exits."
             }
           },
           "required": [
@@ -921,6 +945,9 @@
             },
             "resumedFrom": {
               "description": "The session this one was resumed or forked from; null otherwise."
+            },
+            "agentStatus": {
+              "description": "The agent-status summary ({state, display, label, detail, progress, stateStartedAt, evidenceAt, restoredUnconfirmed}) the window draws; null or absent when no agent has reported one."
             }
           },
           "required": [
@@ -1012,6 +1039,9 @@
                 },
                 "resumedFrom": {
                   "description": "The session this one was resumed or forked from; null otherwise."
+                },
+                "agentStatus": {
+                  "description": "The agent-status summary ({state, display, label, detail, progress, stateStartedAt, evidenceAt, restoredUnconfirmed}) the window draws; null or absent when no agent has reported one."
                 }
               },
               "required": [

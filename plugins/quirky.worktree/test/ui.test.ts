@@ -1,6 +1,6 @@
 import { GlobalRegistrator } from '@happy-dom/global-registrator'
-import { afterAll, beforeAll, beforeEach, expect, test } from 'bun:test'
-import type { QuirkyEvent, Repo, Session, UiLayout, UiPluginContext, Worktree } from '@quirky/protocol'
+import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'bun:test'
+import type { AgentDisplayState, AgentStatusSummary, QuirkyEvent, Repo, Session, UiLayout, UiPluginContext, Worktree } from '@quirky/protocol'
 import { RpcErrorCode } from '@quirky/protocol'
 
 const SLOT = 'sidebar-section:quirky.worktree/worktrees'
@@ -391,4 +391,117 @@ test('unmounting removes the listeners and the markup', async () => {
   await unmount()
   expect(h.listenerCount()).toBe(0)
   expect(host.innerHTML).toBe('')
+})
+
+describe('agent status glyphs', () => {
+  const MIN = 60_000
+  const summary = (display: AgentDisplayState, label: string, over: Partial<AgentStatusSummary> = {}): AgentStatusSummary => ({
+    state: display === 'done' || display === 'failed' || display === 'interrupted' ? 'done' : 'working',
+    display,
+    label,
+    detail: '',
+    progress: null,
+    stateStartedAt: Date.now(),
+    evidenceAt: Date.now(),
+    restoredUnconfirmed: false,
+    ...over
+  })
+  const withSummary = (id: string, display: AgentDisplayState, label: string, over: Partial<AgentStatusSummary> = {}): Session => ({
+    ...session(id, 'w2', 'working'),
+    agentStatus: summary(display, label, over)
+  })
+  const glyph = () => rowOf('fix-login', 'api').querySelector('.glyph') as HTMLElement | null
+
+  const states: [AgentDisplayState, string][] = [
+    ['working', 'Working'],
+    ['monitoring', 'Monitoring background tasks'],
+    ['waiting', 'Waiting for input'],
+    ['permission', 'Needs attention'],
+    ['blocked', 'Blocked'],
+    ['failed', 'Failed'],
+    ['interrupted', 'Interrupted'],
+    ['done', 'Done'],
+    ['unverifiable', 'No recent update'],
+    ['idle', 'Idle'],
+    ['unconfirmed', "Couldn't confirm"]
+  ]
+  for (const [display, label] of states) {
+    test(`${display} draws glyph-${display} with the label "${label}"`, async () => {
+      const h = setup()
+      h.world.sessions = [withSummary('s1', display, label)]
+      await h.mountInto(host)
+      expect(glyph()!.className).toBe(`glyph glyph-${display}`)
+      expect(glyph()!.getAttribute('title')).toBe(label)
+      expect(glyph()!.getAttribute('aria-label')).toBe(label)
+      expect(rowOf('fix-login', 'api').querySelector('.dot')).toBeNull()
+      expect(lastReport(h).repos[0].worktrees[1]).toMatchObject({ status: 'working', display, label })
+    })
+  }
+
+  test('SC-35: the card follows its most urgent session as they change', async () => {
+    const h = setup()
+    h.world.sessions = [withSummary('s1', 'waiting', 'Waiting for input'), withSummary('s2', 'working', 'Working')]
+    await h.mountInto(host)
+    expect(glyph()!.className).toBe('glyph glyph-waiting')
+    await h.emit({ type: 'quirky.session/changed', data: { session: withSummary('s1', 'done', 'Done') } })
+    expect(glyph()!.className).toBe('glyph glyph-working')
+    await h.emit({ type: 'quirky.session/changed', data: { session: withSummary('s2', 'done', 'Done') } })
+    expect(glyph()!.className).toBe('glyph glyph-done')
+    expect(lastReport(h).repos[0].worktrees[1].display).toBe('done')
+  })
+
+  test('a session with no summary keeps the coarse dot', async () => {
+    const h = setup()
+    await h.mountInto(host)
+    expect(glyph()).toBeNull()
+    expect(rowOf('fix-login', 'api').querySelector('.dot-working')).not.toBeNull()
+    expect(lastReport(h).repos[0].worktrees[1]).not.toHaveProperty('display')
+  })
+
+  test('SC-36: progress shows a ring on live states only', async () => {
+    const h = setup()
+    h.world.sessions = [withSummary('s1', 'working', 'Working', { progress: 60 })]
+    await h.mountInto(host)
+    expect(glyph()!.className).toBe('glyph glyph-working glyph-ring')
+    expect(glyph()!.style.getPropertyValue('--progress')).toBe('60%')
+    await h.emit({ type: 'quirky.session/changed', data: { session: withSummary('s1', 'done', 'Done', { progress: 100 }) } })
+    expect(glyph()!.className).toBe('glyph glyph-done')
+  })
+
+  test('an unfinished state with no evidence for 30 minutes decays, and a done one does not', async () => {
+    const h = setup()
+    h.world.sessions = [withSummary('s1', 'working', 'Working', { evidenceAt: Date.now() - 31 * MIN })]
+    await h.mountInto(host)
+    expect(glyph()!.className).toBe('glyph glyph-unverifiable')
+    expect(glyph()!.getAttribute('title')).toBe('No recent update')
+    await h.emit({ type: 'quirky.session/changed', data: { session: withSummary('s1', 'done', 'Done', { evidenceAt: Date.now() - 90 * MIN }) } })
+    expect(glyph()!.className).toBe('glyph glyph-done')
+  })
+
+  test('a one-minute tick shows decay and updates the report with no event', async () => {
+    const realNow = Date.now
+    const realSetInterval = globalThis.setInterval
+    const ticks: (() => void)[] = []
+    globalThis.setInterval = ((callback: () => void, ms?: number) => {
+      if (ms === MIN) {
+        ticks.push(callback)
+        return 0
+      }
+      return realSetInterval(callback, ms)
+    }) as typeof setInterval
+    try {
+      const t0 = realNow()
+      const h = setup()
+      h.world.sessions = [withSummary('s1', 'working', 'Working', { evidenceAt: t0 - 29 * MIN })]
+      await h.mountInto(host)
+      expect(glyph()!.className).toBe('glyph glyph-working')
+      Date.now = () => t0 + 2 * MIN
+      await act(async () => ticks.forEach((tick) => tick()))
+      expect(glyph()!.className).toBe('glyph glyph-unverifiable')
+      expect(lastReport(h).repos[0].worktrees[1].display).toBe('unverifiable')
+    } finally {
+      Date.now = realNow
+      globalThis.setInterval = realSetInterval
+    }
+  })
 })

@@ -4,12 +4,13 @@ import type { WorktreeSessions } from './model'
 import { NewSessionMenu } from './NewSessionMenu'
 import { PromptDialog, type NewSessionRequest } from './PromptDialog'
 import { displayStatus } from './status'
-import { StatusDot } from './StatusDot'
+import { StatusDot, useNow } from './StatusDot'
 
 type Props = { context: UiPluginContext; store: WorktreeSessions; sessions: Session[]; active: Session | null }
 
 export function SessionTabs({ context, store, sessions, active }: Props) {
   const [pending, setPending] = useState<NewSessionRequest | null>(null)
+  const now = useNow()
 
   const pick = (request: NewSessionRequest) => {
     if (request.agent === 'shell') void store.create('shell', '', false)
@@ -28,7 +29,12 @@ export function SessionTabs({ context, store, sessions, active }: Props) {
             onClick={() => store.open(session.id)}
             title={`${session.title} (${session.status})${index < 9 ? ` - Cmd+${index + 1}` : ''}`}
           >
-            <StatusDot status={displayStatus(session.status)} />
+            <StatusDot
+              status={displayStatus(session.status)}
+              summary={session.agentStatus}
+              now={now}
+              running={session.status !== 'exited'}
+            />
             <span className="tab-title">{session.title}</span>
             <button
               className="icon-button"
