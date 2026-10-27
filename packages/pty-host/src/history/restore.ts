@@ -11,11 +11,14 @@ const encoder = new TextEncoder()
 
 /**
  * Bytes that bring a screen rebuilt from a dead process's history back to a usable state: abort
- * any dangling sequence, leave the alternate screen, turn off mouse reporting, bracketed paste and
- * application cursor keys, show the cursor, reset attributes, then start a new line.
+ * any dangling sequence, leave the alternate screen without moving the cursor off the rebuilt
+ * output, turn off mouse reporting, bracketed paste and application cursor keys, show the cursor,
+ * reset attributes, then start a new line. The cursor is saved (`ESC 7`) just before `?1049l`
+ * because that restores the saved cursor, home when none was saved; `?1047l` would leave an
+ * alternate-screen program's cursor where the program put it instead of where it was on entry.
  */
 export const GROUND: Uint8Array = encoder.encode(
-  '\x18\x1b[?1049l\x1b[?1000l\x1b[?1002l\x1b[?1003l\x1b[?1006l\x1b[?2004l\x1b[?1l\x1b[?25h\x1b[0m\r\n'
+  '\x18\x1b7\x1b[?1049l\x1b[?1000l\x1b[?1002l\x1b[?1003l\x1b[?1006l\x1b[?2004l\x1b[?1l\x1b[?25h\x1b[0m\r\n'
 )
 
 export type RestoreSource = 'checkpoint+log' | 'log' | 'checkpoint' | 'none'

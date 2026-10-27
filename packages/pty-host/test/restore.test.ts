@@ -316,8 +316,39 @@ describe('GROUND', () => {
   test('leaves modes and attributes in a clean state', () => {
     const ground = new TextDecoder().decode(GROUND)
     expect(ground).toBe(
-      `\x18${ESC}[?1049l${ESC}[?1000l${ESC}[?1002l${ESC}[?1003l${ESC}[?1006l${ESC}[?2004l${ESC}[?1l${ESC}[?25h${ESC}[0m\r\n`
+      `\x18${ESC}7${ESC}[?1049l${ESC}[?1000l${ESC}[?1002l${ESC}[?1003l${ESC}[?1006l${ESC}[?2004l${ESC}[?1l${ESC}[?25h${ESC}[0m\r\n`
     )
+  })
+
+  test('keeps the cursor row of a screen that has scrolled, so a prompt redraw leaves the rows above', async () => {
+    const screen = track(new Screen({ cols: 40, rows: 20 }))
+    screen.write(Array.from({ length: 30 }, (_, i) => `line-${i}`).join('\r\n'))
+    await screen.settled()
+    expect(screen.snapshot().cursor).toEqual({ x: 7, y: 19 })
+
+    screen.write(GROUND)
+    await screen.settled()
+    expect(screen.snapshot().cursor).toEqual({ x: 0, y: 19 })
+
+    screen.write(`\r${ESC}[Jprompt> `)
+    await screen.settled()
+    const rows = screen.lines().map((line) => line.text)
+    expect(rows.slice(-20, -1)).toEqual(Array.from({ length: 19 }, (_, i) => `line-${11 + i}`))
+    expect(rows.at(-1)).toBe('prompt> ')
+  })
+
+  test('returns from the alternate screen to the cursor the program saved on entering it', async () => {
+    const screen = track(new Screen({ cols: 40, rows: 20 }))
+    screen.write(Array.from({ length: 30 }, (_, i) => `line-${i}`).join('\r\n'))
+    screen.write(`${ESC}[?1049hfull screen${ESC}[3;5H`)
+    await screen.settled()
+    expect(screen.isAlternate).toBe(true)
+
+    screen.write(GROUND)
+    await screen.settled()
+    expect(screen.isAlternate).toBe(false)
+    expect(screen.snapshot().cursor).toEqual({ x: 0, y: 19 })
+    expect(screen.lines().at(-2)!.text).toBe('line-29')
   })
 })
 
