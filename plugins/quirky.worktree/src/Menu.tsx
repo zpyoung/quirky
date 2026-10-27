@@ -120,17 +120,25 @@ export type WorkspaceMenuHandlers = {
   copy(text: string): void
   openDialog(dialog: DialogState): void
   openDeleteDialog(worktree: Worktree, descendants: number): void
+  setMembership(worktree: Worktree, group: ProjectGroup | null): void
+  moveProject(repo: Repo, group: ProjectGroup | null): void
 }
 
 /** The items of a workspace card's menu, in order. */
-export function workspaceMenu(worktree: Worktree, descendants: number, on: WorkspaceMenuHandlers): MenuItem[] {
+export function workspaceMenu(
+  worktree: Worktree,
+  descendants: number,
+  groups: ProjectGroup[],
+  repo: Repo | undefined,
+  on: WorkspaceMenuHandlers
+): MenuItem[] {
   const del: MenuItem = worktree.isMain
     ? { label: 'Delete', disabled: true, title: PRIMARY_DELETE_TIP }
     : {
         label: descendants > 0 ? `Delete with Descendants (${descendants})…` : 'Delete',
         onSelect: () => on.openDeleteDialog(worktree, descendants)
       }
-  return [
+  const items: MenuItem[] = [
     { label: 'Update…', onSelect: () => on.openDialog({ kind: 'update', worktreeId: worktree.id }) },
     {
       label: 'Move to Status',
@@ -153,6 +161,44 @@ export function workspaceMenu(worktree: Worktree, descendants: number, on: Works
       : { label: 'Set Parent Worktree…', onSelect: () => on.openDialog({ kind: 'parent', worktreeId: worktree.id }) },
     del
   ]
+  if (worktree.kind === 'git') {
+    items.push({
+      label: 'New group from worktree…',
+      onSelect: () => on.openDialog({
+        kind: 'group',
+        action: 'new-worktree',
+        worktreeId: worktree.id,
+        initialName: `${worktree.name} group`,
+        expectedInstanceId: worktree.instanceId,
+        expectedProjectGroupId: worktree.projectGroupId
+      })
+    })
+    if (groups.length > 0) {
+      items.push({
+        label: 'Add worktree to group',
+        submenu: groups.map((group) => ({
+          label: group.name,
+          disabled: group.id === worktree.projectGroupId,
+          current: group.id === worktree.projectGroupId,
+          onSelect: () => on.setMembership(worktree, group)
+        }))
+      })
+      if (worktree.projectGroupId !== null) {
+        items.push({ label: 'Remove worktree from group', onSelect: () => on.setMembership(worktree, null) })
+      }
+    }
+  }
+  if (repo && groups.length > 0) {
+    const targets: MenuItem[] = groups.map((group) => ({
+      label: group.name,
+      disabled: group.id === repo.groupId,
+      current: group.id === repo.groupId,
+      onSelect: () => on.moveProject(repo, group)
+    }))
+    if (repo.groupId !== null) targets.push({ label: 'No group', onSelect: () => on.moveProject(repo, null) })
+    items.push({ label: 'Move project to group', submenu: targets })
+  }
+  return items
 }
 
 export type ProjectMenuHandlers = {
