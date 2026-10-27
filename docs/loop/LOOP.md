@@ -1,8 +1,8 @@
 # Build loop instructions
 
 You are one iteration of one lane of an unattended Orca loop that builds Quirky from
-[docs/roadmap.md](../roadmap.md). Three lanes run at once, each an Orca loop in its own worktree,
-and your prompt names your lane number. They share one queue, `docs/loop/queue.json` on
+[docs/roadmap.md](../roadmap.md). Several lanes run at once, each an Orca loop in its own worktree,
+and your prompt names your lane number. Some lanes run Claude Code and some run omp. They share one queue, `docs/loop/queue.json` on
 `build/roadmap`, which only `scripts/build-loop/queue.ts` changes. Each iteration takes exactly one
 work item through brainstorming, a logic spec, a tech spec and subagent-driven development, then
 lands it on `build/roadmap`. Nobody is watching. Every choice you would normally ask the user
@@ -96,9 +96,13 @@ it or block the item. Never silently diverge.
      didn't as a decision.
    - **Commit** both specs before building.
 5. **Build.** Run `quirk:subagent-driven-development` against the specs.
-   - **Model pairing:** at its preflight, choose `claude-task + codex`, with Claude subagents
-     implementing and Codex reviewing. If Codex isn't reachable, take the skill's next
-     cross-family pair and record that as a decision.
+   - **Model pairing:** at its preflight, choose a pair whose reviewer is from a different model
+     family than the implementers, and record it as a decision.
+     - On a Claude Code lane, choose `claude-task + codex`: Claude subagents implement and Codex
+       reviews.
+     - On an omp lane, your own `task` subagents implement, on omp's OpenAI models, and `opus`
+       reviews through `pi-watch`.
+     - If that reviewer isn't reachable, take the skill's next cross-family pair.
    - **Its questions** are answered the same way as brainstorming's.
    - **Catch up before the final review.** Run `git merge build/roadmap` on `build/<id>`, resolve
      any conflicts, and rerun the tests. Read every decision log the merge brought in. Where one
@@ -114,7 +118,9 @@ it or block the item. Never silently diverge.
    - Every recorded Orca defect has a test showing Quirky doesn't have it.
    - The feature ships as a built-in plugin that uses only the public plugin API. Its plugin
      exposes the feature's API methods and CLI command group.
-   - `bun run test`, `bun test scripts` and `bun run typecheck` all pass.
+   - `bun run test`, `bun test scripts` and `bun run typecheck` all pass. Run the whole suite only
+     with `bun run test`: it runs the tests on the remote test host, so lanes don't compete for
+     this Mac. A single file runs here with `bun test <file>`.
    - **The UI scenarios pass when used like a user.** If the logic spec has scenarios a person sees
      in the UI, run `bun run build`, start `quirkyd` on a fresh temporary `QUIRKY_HOME`, and run
      `quirk:using-apps-like-a-user` with `--surface web --owner yours --unattended` against the
@@ -249,4 +255,4 @@ A gate item marks a milestone boundary where the user wants to review before the
    `bun scripts/build-loop/queue.ts merge build/<gate-id>`.
 2. Run `bun scripts/build-loop/queue.ts set <gate-id> waiting`.
 3. Print this on its own line and end the turn:
-   `LOOP_DECIDE: <milestone> is done. Review docs/loop/reviews/<milestone>.md, run bun scripts/build-loop/queue.ts set <gate-id> done, then resume all three lanes.`
+   `LOOP_DECIDE: <milestone> is done. Review docs/loop/reviews/<milestone>.md, run bun scripts/build-loop/queue.ts set <gate-id> done, then resume every lane.`

@@ -7,18 +7,20 @@
  *
  * When `<git common dir>/build-loop/remote-tests.json` names a host (`{"host": "user@box", "jobs": 4}`),
  * the run moves off this machine: the working tree is copied to a fresh folder there and each test
- * file runs in its own process, `jobs` at a time. Files listed in scripts/test-on-macos.txt still run
+ * file runs in its own process, `jobs` at a time, each holding one of `slots` machine-wide locks there
+ * so several runs at once share the host's cores (`slots` defaults to 8). Files listed in scripts/test-on-macos.txt still run
  * here, alongside. If the host can't be reached the whole run falls back to this machine.
  * `QUIRKY_TEST_LOCAL=1` skips the host.
  *
  *   bun scripts/suite.ts packages apps plugins
  */
-import { appendFileSync, existsSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
-import { tmpdir } from 'node:os'
+import { appendFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import { homedir, tmpdir } from 'node:os'
 import { isAbsolute, join } from 'node:path'
 
 export type SuiteResult = { ok: boolean; flaky: string[] }
-type Remote = { host: string; jobs?: number }
+type Remote = { host: string; jobs?: number; slots?: number }
+type Run = (cwd: string, args: string[]) => Promise<{ code: number; output: string }>
 
 const TEST_FILE = /[._](test|spec)\.[cm]?[jt]sx?$/
 const RESULT_PREFIX = 'suite-result '
@@ -98,13 +100,20 @@ export async function runSuite(cwd: string, args: string[], limit = 5): Promise<
 }
 
 /** Each file in its own `bun test` process, `jobs` at a time, printing only the failing ones. */
-export async function runFiles(cwd: string, files: string[], flags: string[], jobs: number, limit = 5): Promise<SuiteResult> {
+export async function runFiles(
+  cwd: string,
+  files: string[],
+  flags: string[],
+  jobs: number,
+  limit = 5,
+  run: Run = (dir, args) => bunTest(dir, args, false)
+): Promise<SuiteResult> {
   const failed: string[] = []
   const queue = [...files]
   let passed = 0
   const worker = async () => {
     for (let file = queue.shift(); file !== undefined; file = queue.shift()) {
-      const { code, output } = await bunTest(cwd, [...flags, asPath(file)], false)
+      const { code, output } = await run(cwd, [...flags, asPath(file)])
       if (code === 0) passed++
       else {
         failed.push(file)
@@ -115,6 +124,24 @@ export async function runFiles(cwd: string, files: string[], flags: string[], jo
   await Promise.all(Array.from({ length: Math.max(1, jobs) }, worker))
   console.log(`\n${files.length} test files: ${passed} passed, ${failed.length} failed`)
   return failed.length === 0 ? { ok: true, flaky: [] } : rerunAlone(cwd, failed.sort(), flags, limit)
+}
+
+/** `bun test` that first takes one of `slots` locks shared by every run on this machine. */
+function slotted(slots: number): Run {
+  const dir = join(homedir(), 'test-slots')
+  mkdirSync(dir, { recursive: true })
+  const BUSY = 75
+  return async (cwd, args) => {
+    for (;;) {
+      const start = Math.floor(Math.random() * slots)
+      for (let i = 0; i < slots; i++) {
+        const lock = join(dir, `${(start + i) % slots}.lock`)
+        const result = await exec(['flock', '-n', '-E', String(BUSY), lock, 'bun', 'test', ...args], cwd, false)
+        if (result.code !== BUSY) return result
+      }
+      await Bun.sleep(500)
+    }
+  }
 }
 
 /** The test files `bun test <args>` would run: tracked or untracked and not ignored, under any path argument. */
@@ -157,7 +184,7 @@ async function runRemote(cwd: string, remote: Remote, files: string[], flags: st
       return undefined
     }
     const quoted = flags.map((flag) => `'${flag.replaceAll("'", `'\\''`)}'`).join(' ')
-    const script = `export PATH="$HOME/.bun/bin:$PATH" && cd ${dir} && bun install --frozen-lockfile >/dev/null && bun scripts/suite.ts --worker --jobs ${remote.jobs ?? 4} ${quoted}`
+    const script = `export PATH="$HOME/.bun/bin:$PATH" && cd ${dir} && bun install --frozen-lockfile >/dev/null && bun scripts/suite.ts --worker --jobs ${remote.jobs ?? 4} --slots ${remote.slots ?? 8} ${quoted}`
     const run = await exec([...ssh, script], cwd, true, files.join('\n'))
     const line = run.output.split('\n').find((text) => text.startsWith(RESULT_PREFIX))
     return line ? (JSON.parse(line.slice(RESULT_PREFIX.length)) as SuiteResult) : undefined
@@ -170,10 +197,10 @@ async function runRemote(cwd: string, remote: Remote, files: string[], flags: st
 async function main(argv: string[]): Promise<boolean> {
   const cwd = process.cwd()
   if (argv[0] === '--worker') {
-    const jobs = Number(argv[argv.indexOf('--jobs') + 1])
-    const flags = argv.slice(3)
+    const value = (name: string) => Number(argv[argv.indexOf(name) + 1])
+    const flags = argv.slice(5)
     const files = (await new Response(Bun.stdin.stream()).text()).split('\n').filter(Boolean)
-    const result = await runFiles(cwd, files, flags, jobs)
+    const result = await runFiles(cwd, files, flags, value('--jobs'), 5, slotted(value('--slots')))
     console.log(`${RESULT_PREFIX}${JSON.stringify(result)}`)
     return result.ok
   }
