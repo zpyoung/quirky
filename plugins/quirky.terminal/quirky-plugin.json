@@ -13,6 +13,71 @@
   "dependencies": [
     "quirky.session"
   ],
+  "overrides": [
+    {
+      "id": "view:quirky.session/worktree",
+      "title": "Worktree"
+    },
+    {
+      "id": "command:quirky.session/new-shell",
+      "title": "New Terminal Tab"
+    },
+    {
+      "id": "command:quirky.session/close-session",
+      "title": "Close Pane or Tab"
+    },
+    {
+      "id": "command:quirky.session/select-tab",
+      "title": "Select tab",
+      "args": {
+        "type": "object",
+        "properties": {
+          "index": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "index"
+        ]
+      }
+    },
+    {
+      "id": "command:quirky.session/select-tab-1",
+      "title": "Select tab 1"
+    },
+    {
+      "id": "command:quirky.session/select-tab-2",
+      "title": "Select tab 2"
+    },
+    {
+      "id": "command:quirky.session/select-tab-3",
+      "title": "Select tab 3"
+    },
+    {
+      "id": "command:quirky.session/select-tab-4",
+      "title": "Select tab 4"
+    },
+    {
+      "id": "command:quirky.session/select-tab-5",
+      "title": "Select tab 5"
+    },
+    {
+      "id": "command:quirky.session/select-tab-6",
+      "title": "Select tab 6"
+    },
+    {
+      "id": "command:quirky.session/select-tab-7",
+      "title": "Select tab 7"
+    },
+    {
+      "id": "command:quirky.session/select-tab-8",
+      "title": "Select tab 8"
+    },
+    {
+      "id": "command:quirky.session/select-tab-9",
+      "title": "Select tab 9"
+    }
+  ],
   "contributes": {
     "method": [
       {
@@ -1443,18 +1508,23 @@
             "session": {
               "type": "string",
               "description": "The session shown by the pane, instead of `pane`."
+            },
+            "revision": {
+              "type": "integer",
+              "description": "Fails with a conflict naming the current revision when the workspace is at another one."
             }
           }
         },
         "result": {
           "type": "object",
           "properties": {
-            "ok": {
-              "type": "boolean"
+            "workspace": {
+              "type": "object",
+              "description": "The whole workspace, unchanged: clearing or resetting does not change the layout."
             }
           },
           "required": [
-            "ok"
+            "workspace"
           ]
         }
       },
@@ -1471,18 +1541,23 @@
             "session": {
               "type": "string",
               "description": "The session shown by the pane, instead of `pane`."
+            },
+            "revision": {
+              "type": "integer",
+              "description": "Fails with a conflict naming the current revision when the workspace is at another one."
             }
           }
         },
         "result": {
           "type": "object",
           "properties": {
-            "ok": {
-              "type": "boolean"
+            "workspace": {
+              "type": "object",
+              "description": "The whole workspace, unchanged: clearing or resetting does not change the layout."
             }
           },
           "required": [
-            "ok"
+            "workspace"
           ]
         }
       },
@@ -3236,12 +3311,560 @@
       {
         "id": "sessions",
         "title": "Terminal Sessions"
+      },
+      {
+        "id": "quick-commands",
+        "title": "Quick Commands"
       }
     ],
     "command": [
       {
         "id": "manage-sessions",
         "title": "Terminal: Manage Sessions"
+      },
+      {
+        "id": "copy",
+        "title": "Copy Terminal Selection",
+        "args": {
+          "type": "object",
+          "properties": {
+            "pane": {
+              "type": "string",
+              "description": "The pane ID; default: the focused pane."
+            }
+          }
+        }
+      },
+      {
+        "id": "select-all",
+        "title": "Select All Terminal Text",
+        "args": {
+          "type": "object",
+          "properties": {
+            "pane": {
+              "type": "string",
+              "description": "The pane ID; default: the focused pane."
+            }
+          }
+        }
+      },
+      {
+        "id": "paste",
+        "title": "Paste Into Terminal",
+        "args": {
+          "type": "object",
+          "properties": {
+            "text": {
+              "type": "string",
+              "description": "The text to paste; default: the clipboard."
+            },
+            "pane": {
+              "type": "string",
+              "description": "The pane ID; default: the focused pane."
+            }
+          }
+        }
+      },
+      {
+        "id": "search",
+        "title": "Search Active Pane",
+        "args": {
+          "type": "object",
+          "properties": {
+            "query": {
+              "type": "string"
+            },
+            "regex": {
+              "type": "boolean"
+            },
+            "caseSensitive": {
+              "type": "boolean"
+            }
+          }
+        }
+      },
+      {
+        "id": "search-next",
+        "title": "Find Next",
+        "args": {
+          "type": "object",
+          "properties": {
+            "pane": {
+              "type": "string",
+              "description": "The pane ID; default: the focused pane."
+            }
+          }
+        }
+      },
+      {
+        "id": "search-previous",
+        "title": "Find Previous",
+        "args": {
+          "type": "object",
+          "properties": {
+            "pane": {
+              "type": "string",
+              "description": "The pane ID; default: the focused pane."
+            }
+          }
+        }
+      },
+      {
+        "id": "search-close",
+        "title": "Close Search",
+        "args": {
+          "type": "object",
+          "properties": {
+            "pane": {
+              "type": "string",
+              "description": "The pane ID; default: the focused pane."
+            }
+          }
+        }
+      },
+      {
+        "id": "clear",
+        "title": "Clear Active Pane",
+        "args": {
+          "type": "object",
+          "properties": {
+            "pane": {
+              "type": "string",
+              "description": "The pane ID; default: the focused pane."
+            }
+          }
+        }
+      },
+      {
+        "id": "reset-terminal",
+        "title": "Reset Terminal",
+        "args": {
+          "type": "object",
+          "properties": {
+            "pane": {
+              "type": "string",
+              "description": "The pane ID; default: the focused pane."
+            }
+          }
+        }
+      },
+      {
+        "id": "focus-next-pane",
+        "title": "Focus Next Pane"
+      },
+      {
+        "id": "focus-previous-pane",
+        "title": "Focus Previous Pane"
+      },
+      {
+        "id": "toggle-expand-pane",
+        "title": "Expand / Collapse Pane",
+        "args": {
+          "type": "object",
+          "properties": {
+            "pane": {
+              "type": "string",
+              "description": "The pane ID; default: the focused pane."
+            }
+          }
+        }
+      },
+      {
+        "id": "equalize",
+        "title": "Equalize Pane Sizes",
+        "args": {
+          "type": "object",
+          "properties": {
+            "tab": {
+              "type": "string",
+              "description": "The tab ID; default: the focused tab."
+            }
+          }
+        }
+      },
+      {
+        "id": "set-pane-title",
+        "title": "Set Pane Title…",
+        "args": {
+          "type": "object",
+          "properties": {
+            "pane": {
+              "type": "string",
+              "description": "The pane ID; default: the focused pane."
+            }
+          }
+        }
+      },
+      {
+        "id": "clear-pane-title",
+        "title": "Clear Pane Title",
+        "args": {
+          "type": "object",
+          "properties": {
+            "pane": {
+              "type": "string",
+              "description": "The pane ID; default: the focused pane."
+            }
+          }
+        }
+      },
+      {
+        "id": "close-pane",
+        "title": "Close Active Pane",
+        "args": {
+          "type": "object",
+          "properties": {
+            "pane": {
+              "type": "string",
+              "description": "The pane ID; default: the focused pane."
+            }
+          }
+        }
+      },
+      {
+        "id": "split-right",
+        "title": "Split Terminal Right",
+        "args": {
+          "type": "object",
+          "properties": {
+            "pane": {
+              "type": "string",
+              "description": "The pane ID; default: the focused pane."
+            }
+          }
+        }
+      },
+      {
+        "id": "split-down",
+        "title": "Split Terminal Down",
+        "args": {
+          "type": "object",
+          "properties": {
+            "pane": {
+              "type": "string",
+              "description": "The pane ID; default: the focused pane."
+            }
+          }
+        }
+      },
+      {
+        "id": "zoom-in",
+        "title": "Zoom In",
+        "args": {
+          "type": "object",
+          "properties": {
+            "pane": {
+              "type": "string",
+              "description": "The pane ID; default: the focused pane."
+            }
+          }
+        }
+      },
+      {
+        "id": "zoom-out",
+        "title": "Zoom Out",
+        "args": {
+          "type": "object",
+          "properties": {
+            "pane": {
+              "type": "string",
+              "description": "The pane ID; default: the focused pane."
+            }
+          }
+        }
+      },
+      {
+        "id": "zoom-reset",
+        "title": "Reset Zoom",
+        "args": {
+          "type": "object",
+          "properties": {
+            "pane": {
+              "type": "string",
+              "description": "The pane ID; default: the focused pane."
+            }
+          }
+        }
+      },
+      {
+        "id": "rename-tab",
+        "title": "Rename Active Tab"
+      },
+      {
+        "id": "reopen-tab",
+        "title": "Reopen Closed Tab"
+      },
+      {
+        "id": "next-tab",
+        "title": "Next Tab"
+      },
+      {
+        "id": "previous-tab",
+        "title": "Previous Tab"
+      },
+      {
+        "id": "recent-tab",
+        "title": "Previous Recent Tab"
+      },
+      {
+        "id": "toggle-quick-commands",
+        "title": "Toggle Quick Commands Menu"
+      },
+      {
+        "id": "manage-quick-commands",
+        "title": "Manage Quick Commands"
+      },
+      {
+        "id": "open-menu",
+        "title": "Open Terminal Menu",
+        "args": {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "enum": [
+                "tab",
+                "pane",
+                "plus",
+                "quick-commands"
+              ],
+              "description": "Which menu to open."
+            },
+            "target": {
+              "type": "string",
+              "description": "The tab, pane or group ID the menu belongs to; default: the focused one."
+            }
+          },
+          "required": [
+            "kind"
+          ]
+        }
+      },
+      {
+        "id": "close-menu",
+        "title": "Close Terminal Menu"
+      },
+      {
+        "id": "toggle-floating",
+        "title": "Toggle Floating Terminal"
+      },
+      {
+        "id": "maximize-floating",
+        "title": "Maximize Floating Workspace"
+      },
+      {
+        "id": "minimize-floating",
+        "title": "Minimize Floating Workspace Panel"
+      }
+    ],
+    "overlay": [
+      {
+        "id": "floating",
+        "title": "Floating Workspace"
+      }
+    ],
+    "keybinding": [
+      {
+        "id": "copy",
+        "key": "mod+c",
+        "command": "copy",
+        "when": "terminalFocus"
+      },
+      {
+        "id": "select-all",
+        "key": "mod+a",
+        "command": "select-all",
+        "when": "terminalFocus"
+      },
+      {
+        "id": "paste",
+        "key": "mod+v",
+        "command": "paste",
+        "when": "terminalFocus"
+      },
+      {
+        "id": "search",
+        "key": "mod+f",
+        "command": "search",
+        "when": "terminalFocus"
+      },
+      {
+        "id": "search-next",
+        "key": "mod+g",
+        "command": "search-next",
+        "when": "terminalFocus"
+      },
+      {
+        "id": "search-previous",
+        "key": "mod+shift+g",
+        "command": "search-previous",
+        "when": "terminalFocus"
+      },
+      {
+        "id": "clear",
+        "key": "mod+k",
+        "command": "clear",
+        "when": "terminalFocus"
+      },
+      {
+        "id": "focus-next-pane",
+        "key": "mod+]",
+        "command": "focus-next-pane",
+        "when": "terminalFocus"
+      },
+      {
+        "id": "focus-previous-pane",
+        "key": "mod+[",
+        "command": "focus-previous-pane",
+        "when": "terminalFocus"
+      },
+      {
+        "id": "toggle-expand-pane",
+        "key": "mod+shift+enter",
+        "command": "toggle-expand-pane",
+        "when": "terminalFocus"
+      },
+      {
+        "id": "close-pane",
+        "key": "mod+w",
+        "command": "close-pane",
+        "when": "terminalFocus"
+      },
+      {
+        "id": "split-right",
+        "key": "mod+d",
+        "command": "split-right",
+        "when": "terminalFocus"
+      },
+      {
+        "id": "split-down",
+        "key": "mod+shift+d",
+        "command": "split-down",
+        "when": "terminalFocus"
+      },
+      {
+        "id": "zoom-in",
+        "key": "mod+=",
+        "command": "zoom-in",
+        "when": "terminalFocus"
+      },
+      {
+        "id": "zoom-in-shift",
+        "key": "mod+shift+=",
+        "command": "zoom-in",
+        "when": "terminalFocus"
+      },
+      {
+        "id": "zoom-out",
+        "key": "mod+-",
+        "command": "zoom-out",
+        "when": "terminalFocus"
+      },
+      {
+        "id": "zoom-reset",
+        "key": "mod+0",
+        "command": "zoom-reset",
+        "when": "terminalFocus"
+      },
+      {
+        "id": "rename-tab",
+        "key": "mod+r",
+        "command": "rename-tab"
+      },
+      {
+        "id": "reopen-tab",
+        "key": "mod+shift+t",
+        "command": "reopen-tab"
+      },
+      {
+        "id": "next-tab",
+        "key": "mod+alt+]",
+        "command": "next-tab"
+      },
+      {
+        "id": "previous-tab",
+        "key": "mod+alt+[",
+        "command": "previous-tab"
+      },
+      {
+        "id": "next-tab-shift",
+        "key": "mod+shift+]",
+        "command": "next-tab"
+      },
+      {
+        "id": "previous-tab-shift",
+        "key": "mod+shift+[",
+        "command": "previous-tab"
+      },
+      {
+        "id": "recent-tab",
+        "key": "ctrl+tab",
+        "command": "recent-tab"
+      },
+      {
+        "id": "next-tab-pagedown",
+        "key": "ctrl+pagedown",
+        "command": "next-tab"
+      },
+      {
+        "id": "previous-tab-pageup",
+        "key": "ctrl+pageup",
+        "command": "previous-tab"
+      },
+      {
+        "id": "ctrl-select-tab-1",
+        "key": "ctrl+1",
+        "command": "command:quirky.session/select-tab-1"
+      },
+      {
+        "id": "ctrl-select-tab-2",
+        "key": "ctrl+2",
+        "command": "command:quirky.session/select-tab-2"
+      },
+      {
+        "id": "ctrl-select-tab-3",
+        "key": "ctrl+3",
+        "command": "command:quirky.session/select-tab-3"
+      },
+      {
+        "id": "ctrl-select-tab-4",
+        "key": "ctrl+4",
+        "command": "command:quirky.session/select-tab-4"
+      },
+      {
+        "id": "ctrl-select-tab-5",
+        "key": "ctrl+5",
+        "command": "command:quirky.session/select-tab-5"
+      },
+      {
+        "id": "ctrl-select-tab-6",
+        "key": "ctrl+6",
+        "command": "command:quirky.session/select-tab-6"
+      },
+      {
+        "id": "ctrl-select-tab-7",
+        "key": "ctrl+7",
+        "command": "command:quirky.session/select-tab-7"
+      },
+      {
+        "id": "ctrl-select-tab-8",
+        "key": "ctrl+8",
+        "command": "command:quirky.session/select-tab-8"
+      },
+      {
+        "id": "ctrl-select-tab-9",
+        "key": "ctrl+9",
+        "command": "command:quirky.session/select-tab-9"
+      },
+      {
+        "id": "toggle-floating",
+        "key": "mod+alt+a",
+        "command": "toggle-floating"
+      },
+      {
+        "id": "maximize-floating",
+        "key": "mod+alt+shift+a",
+        "command": "maximize-floating"
       }
     ]
   }
