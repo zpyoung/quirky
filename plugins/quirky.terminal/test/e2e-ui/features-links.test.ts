@@ -1,12 +1,15 @@
 import { afterEach, expect, test } from 'bun:test'
 import { mkdirSync, realpathSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { mouse } from './support'
 import type { ILink } from '@xterm/xterm'
 import {
   FEATURE_MS,
   bufferLines,
   focusTerminal,
   focusedSession,
+  groupsOf,
+  layoutOf,
   linksOn,
   openedLinks,
   startFeatures,
@@ -28,7 +31,7 @@ async function withLinks() {
   const f = await startFeatures()
   const { h } = f
   mkdirSync(join(h.repo, 'src'))
-  writeFileSync(join(h.repo, 'src', 'app.ts'), 'export {}\n')
+  writeFileSync(join(h.repo, 'src', 'app.ts'), `${Array.from({ length: 12 }, (_, index) => `// line ${index + 1}`).join('\n')}\n`)
   const root = realpathSync(h.repo)
   const report = await viewReport(f, 'a mounted pane')
   const session = focusedSession(report)
@@ -42,7 +45,7 @@ async function withLinks() {
 const hint = () => document.querySelector('[data-pane-link-hint]')?.textContent ?? null
 const popover = () => document.querySelector('[data-pane-link-popover]')
 const popoverLabels = () => [...document.querySelectorAll('[data-pane-link-popover] button')].map((button) => button.textContent)
-const mouse = (init: MouseEventInit = {}) => new MouseEvent('mouseup', { bubbles: true, cancelable: true, button: 0, ...init })
+const editorOpenCalls = (f: Features) => f.calls.filter((call) => call.method === 'quirky.editor/open')
 
 async function linkAt(f: Features, session: string, row: number, startsWith: string): Promise<ILink> {
   const found = (await linksOn(f, session, row)).find((link) => link.text.startsWith(startsWith))
@@ -105,24 +108,24 @@ test(
     const buttonNamed = (label: string) => [...document.querySelectorAll<HTMLElement>('[data-pane-link-popover] button')].find((button) => button.textContent === label)!
 
     // a plain click offers the actions, and each does what it says
-    url.activate(mouse(), url.text)
+    url.activate(mouse('mouseup'), url.text)
     await waitFor('the URL popover', () => (popover() ? true : undefined))
     expect(popoverLabels()).toEqual(['Open', 'Copy Link'])
     expect(clicks()).toEqual([])
     buttonNamed('Open').click()
     await waitFor('the URL to be opened', () => (clicks().length === 1 ? true : undefined))
     expect(clicks()).toEqual([{ target: URL_TEXT, reveal: false }])
-    url.activate(mouse(), url.text)
+    url.activate(mouse('mouseup'), url.text)
     await waitFor('the popover again', () => (popover() ? true : undefined))
     buttonNamed('Copy Link').click()
     await waitFor('the link on the clipboard', () => (f.clipboard.writes.at(-1) === URL_TEXT ? true : undefined))
 
-    path.activate(mouse(), path.text)
+    path.activate(mouse('mouseup'), path.text)
     await waitFor('the file popover', () => (popover() ? true : undefined))
     expect(popoverLabels()).toEqual(['Open with Default App', 'Reveal in Finder', 'Copy Path'])
     buttonNamed('Reveal in Finder').click()
     await waitFor('the file to be revealed', () => (clicks().length === 2 ? true : undefined))
-    path.activate(mouse(), path.text)
+    path.activate(mouse('mouseup'), path.text)
     await waitFor('the popover again', () => (popover() ? true : undefined))
     buttonNamed('Copy Path').click()
     await waitFor('the path on the clipboard', () => (f.clipboard.writes.at(-1) === file ? true : undefined))
@@ -131,60 +134,127 @@ test(
       { target: file, reveal: true }
     ])
 
-    // Cmd-click opens, Shift-Cmd-click copies a URL and reveals a path
-    url.activate(mouse({ metaKey: true }), url.text)
-    path.activate(mouse({ metaKey: true }), path.text)
-    await waitFor('both Cmd-clicks to open', () => (clicks().length === 4 ? true : undefined))
+    // Cmd-click opens URLs; Shift-Cmd-click copies URLs and reveals paths.
+    url.activate(mouse('mouseup', { metaKey: true }), url.text)
+    await waitFor('the URL Cmd-click to open', () => (clicks().length === 3 ? true : undefined))
     const writes = f.clipboard.writes.length
-    url.activate(mouse({ metaKey: true, shiftKey: true }), url.text)
-    path.activate(mouse({ metaKey: true, shiftKey: true }), path.text)
-    await waitFor('the URL to be copied and the file revealed', () => (clicks().length === 5 && f.clipboard.writes.length === writes + 1 ? true : undefined))
+    url.activate(mouse('mouseup', { metaKey: true, shiftKey: true }), url.text)
+    path.activate(mouse('mouseup', { metaKey: true, shiftKey: true }), path.text)
+    await waitFor('the URL to be copied and the file revealed', () => (clicks().length === 4 && f.clipboard.writes.length === writes + 1 ? true : undefined))
     expect(clicks().slice(2)).toEqual([
       { target: URL_TEXT, reveal: false },
-      { target: file, reveal: false },
       { target: file, reveal: true }
     ])
     expect(f.clipboard.writes.at(-1)).toBe(URL_TEXT)
 
-    // a middle click follows its setting (open), and other clicks do nothing
-    url.activate(mouse({ button: 1 }), url.text)
-    path.activate(mouse({ button: 1 }), path.text)
-    await waitFor('the middle clicks to open', () => (clicks().length === 7 ? true : undefined))
-    expect(clicks().slice(5)).toEqual([
-      { target: URL_TEXT, reveal: false },
-      { target: file, reveal: false }
-    ])
-    url.activate(mouse({ altKey: true }), url.text)
-    url.activate(mouse({ button: 2 }), url.text)
-    path.activate(mouse({ altKey: true }), path.text)
-    await Bun.sleep(300)
-    expect(clicks()).toHaveLength(7)
+    // A middle click follows its setting, while other click combinations do nothing.
+    url.activate(mouse('mouseup', { button: 1 }), url.text)
+    await waitFor('the middle URL to open', () => (clicks().length === 5 ? true : undefined))
+    expect(clicks().slice(4)).toEqual([{ target: URL_TEXT, reveal: false }])
+    url.activate(mouse('mouseup', { altKey: true }), url.text)
+    url.activate(mouse('mouseup', { button: 2 }), url.text)
+    path.activate(mouse('mouseup', { altKey: true }), path.text)
+    expect(clicks()).toHaveLength(5)
     expect(popover()).toBeNull()
 
     // the plain click setting: Open opens, Leave to terminal does nothing
     await f.h.ok(['setting', 'set', 'setting:quirky.terminal/link-click', 'open'])
     await waitFor('the setting in the window', () => (settingNow(f, 'setting:quirky.terminal/link-click') === 'open' ? true : undefined))
-    await waitFor('a plain click to open', async () => {
-      url.activate(mouse(), url.text)
-      await Bun.sleep(100)
-      return clicks().length > 7 ? true : undefined
-    })
+    url.activate(mouse('mouseup'), url.text)
+    await waitFor('a plain click to open', () => (clicks().length > 5 ? true : undefined))
     await f.h.ok(['setting', 'set', 'setting:quirky.terminal/link-click', 'terminal'])
     await waitFor('the setting in the window', () => (settingNow(f, 'setting:quirky.terminal/link-click') === 'terminal' ? true : undefined))
-    await Bun.sleep(300)
     const before = clicks().length
-    url.activate(mouse(), url.text)
-    path.activate(mouse(), path.text)
-    await Bun.sleep(300)
+    url.activate(mouse('mouseup'), url.text)
+    path.activate(mouse('mouseup'), path.text)
     expect(clicks()).toHaveLength(before)
     expect(popover()).toBeNull()
 
-    // the CLI does what Open does
+    // CLI open-link keeps its explicit default-app behavior.
     const viaCli = await f.h.ok(['terminal', 'open-link', file])
     expect(viaCli).toBe(`opened ${file}\n`)
     expect(clicks().at(-1)).toEqual({ target: file, reveal: false })
     await f.h.ok(['terminal', 'open-link', file, '--reveal'])
     expect(clicks().at(-1)).toEqual({ target: file, reveal: true })
+  },
+  FEATURE_MS
+)
+
+
+test(
+  'SC-1: in-worktree path links open the file in the editor at the requested position',
+  async () => {
+    const { f, session, root, rowOf } = await withLinks()
+    const path = await linkAt(f, session, rowOf('src/app.ts:12:4'), 'src/app.ts')
+    path.activate(mouse('mouseup', { metaKey: true }), path.text)
+
+    const openCall = await waitFor('editor open API call', () => editorOpenCalls(f).at(-1))
+    expect(openCall.params).toMatchObject({ worktree: `id:${f.worktree}`, path: 'src/app.ts', line: 12, column: 4, focus: true })
+    expect(openedLinks(f)).toEqual([])
+
+    type EditorState = {
+      buffers: { id: string; relativePath: string; tabId: string | null }[]
+      tabs: { tabId: string; bufferId: string; mode: 'edit' | 'preview' }[]
+    }
+    const opened = await waitFor('editor buffer and tab state', async () => {
+      const state = await f.h.call<EditorState>('quirky.editor/state', { worktree: `id:${f.worktree}` })
+      const buffer = state.buffers.find((entry) => entry.relativePath === 'src/app.ts')
+      const mapping = buffer && state.tabs.find((entry) => entry.bufferId === buffer.id)
+      return buffer && mapping ? { buffer, mapping } : undefined
+    })
+    expect(opened.buffer.tabId).toBe(opened.mapping.tabId)
+    const workspace = await layoutOf(f.h, `id:${f.worktree}`)
+    const view = groupsOf(workspace).flatMap((group) => group.tabs).find((tab) => tab.id === opened.mapping.tabId)
+    expect(view).toMatchObject({ kind: 'view', viewId: 'view:quirky.editor/document', key: opened.buffer.id, input: { bufferId: opened.buffer.id } })
+    if (!view || !('kind' in view) || view.kind !== 'view') throw new Error('the editor view tab was not added to the terminal workspace')
+    const closeButton = document.querySelector(`[data-tab="${view.id}"] .qt-tab-close`) as HTMLButtonElement | null
+    if (!closeButton) throw new Error('the hosted view tab close control was not mounted')
+    closeButton.click()
+    const closeRequest = await waitFor('editor close command with the actual tab ID', () =>
+      f.calls.find((call) => call.method === 'quirky.editor/close' && call.params.tabId === view.id)
+    )
+    expect(closeRequest.params).toMatchObject({ bufferId: opened.buffer.id, tabId: view.id })
+    const guard = await waitFor('terminal close guard with the same tab ID', () =>
+      f.calls.find((call) => call.method === 'quirky.editor/canClose' && call.params.tabId === view.id)
+    )
+    expect(guard.params).toMatchObject({ bufferId: opened.buffer.id, tabId: view.id })
+    await waitFor('the hosted view tab to close', async () => {
+      const current = await layoutOf(f.h, `id:${f.worktree}`)
+      return groupsOf(current).some((group) => group.tabs.some((tab) => tab.id === view.id)) ? undefined : current
+    })
+  },
+  FEATURE_MS
+)
+
+test(
+  'SC-9: worktree-owned editor row drops paste an absolute shell-safe path only into their owner workspace',
+  async () => {
+    const { f, session, root } = await withLinks()
+    const path = join(root, 'src', 'a b.ts')
+    writeFileSync(path, 'export {}\n')
+    const mime = 'application/x-quirky-worktree-paths'
+    const writes = () => f.calls.filter((call) => call.method === 'quirky.terminal/write' && call.params.session === session)
+    const drop = (worktreeId: string, relativePath: string) => {
+      const dataTransfer = {
+        files: [],
+        types: [mime],
+        getData: (type: string) => type === mime ? JSON.stringify({ worktreeId, paths: [relativePath] }) : ''
+      }
+      const event = new Event('drop', { bubbles: true, cancelable: true })
+      Object.defineProperty(event, 'dataTransfer', { value: dataTransfer })
+      const element = termOf(f, session).element
+      if (!element) throw new Error('terminal element was not mounted')
+      element.dispatchEvent(event)
+    }
+
+    const before = writes().length
+    drop(f.worktree, 'src/a b.ts')
+    const pasted = await waitFor('the owner worktree path to reach the shell', () => writes().slice(before).find((call) => call.params.data === `'${path}'`))
+    expect(pasted.params.data).toBe(`'${path}'`)
+
+    const afterOwnedDrop = writes().length
+    drop('another-worktree', 'src/a b.ts')
+    expect(writes()).toHaveLength(afterOwnedDrop)
   },
   FEATURE_MS
 )

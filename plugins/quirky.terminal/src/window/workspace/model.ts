@@ -2,9 +2,10 @@ import type { AgentDisplayState, AgentStatusSummary, Session, SessionStatus, UiP
 import { displayTitle, recentOrder } from '../../layout/titles'
 import { findGroup, groupsInOrder, paneLeaves } from '../../layout/tree'
 import type { Rect } from '../../layout/tree'
-import type { Group, GroupNode, GroupSplit, PaneLeaf, Tab, Workspace } from '../../layout/types'
-import { DEFAULT_PANE_SETTINGS, readPaneSettings, type PaneSettings } from '../pane/settings'
+import { isTerminalTab } from '../../layout/types'
+import type { Group, GroupNode, GroupSplit, PaneLeaf, Tab, TerminalTab, Workspace } from '../../layout/types'
 import type { PaneReport } from '../pane/TerminalPaneView'
+import { DEFAULT_PANE_SETTINGS, readPaneSettings, type PaneSettings } from '../pane/settings'
 
 export const STRUCTURED_VIEW_ID = 'view:quirky.session/structured'
 
@@ -83,7 +84,7 @@ export function ringPercent(summary: AgentStatusSummary, display: AgentDisplaySt
 }
 
 export type TabLocation = { group: Group; tab: Tab }
-export type PaneLocation = TabLocation & { leaf: PaneLeaf }
+export type PaneLocation = { group: Group; tab: TerminalTab; leaf: PaneLeaf }
 
 export function locateTab(ws: Workspace, tabId: string): TabLocation | null {
   for (const group of groupsInOrder(ws.root)) {
@@ -96,6 +97,7 @@ export function locateTab(ws: Workspace, tabId: string): TabLocation | null {
 export function locatePane(ws: Workspace, paneId: string): PaneLocation | null {
   for (const group of groupsInOrder(ws.root)) {
     for (const tab of group.tabs) {
+      if (!isTerminalTab(tab)) continue
       const leaf = paneLeaves(tab.root).find((candidate) => candidate.id === paneId)
       if (leaf) return { group, tab, leaf }
     }
@@ -106,6 +108,7 @@ export function locatePane(ws: Workspace, paneId: string): PaneLocation | null {
 export function locateSession(ws: Workspace, sessionId: string): PaneLocation | null {
   for (const group of groupsInOrder(ws.root)) {
     for (const tab of group.tabs) {
+      if (!isTerminalTab(tab)) continue
       const leaf = paneLeaves(tab.root).find((candidate) => candidate.session === sessionId)
       if (leaf) return { group, tab, leaf }
     }
@@ -128,16 +131,19 @@ export function focusedTabOf(ws: Workspace): TabLocation | null {
 export function focusedPaneOf(ws: Workspace): PaneLocation | null {
   const at = focusedTabOf(ws)
   if (!at) return null
-  const leaf = paneLeaves(at.tab.root).find((candidate) => candidate.id === at.tab.activePane) ?? paneLeaves(at.tab.root)[0]
-  return leaf ? { ...at, leaf } : null
+  const tab = at.tab
+  if (!isTerminalTab(tab)) return null
+  const leaves = paneLeaves(tab.root)
+  const leaf = leaves.find((candidate) => candidate.id === tab.activePane) ?? leaves[0]
+  return leaf ? { ...at, tab, leaf } : null
 }
 
-/** The panes a window mounts: each group's active tab, or just the expanded pane of a tab that has one. */
+/** The panes a window mounts: each group's active terminal tab, or only its expanded pane. */
 export function mountedPanes(ws: Workspace): PaneLocation[] {
   const mounted: PaneLocation[] = []
   for (const group of groupsInOrder(ws.root)) {
     const tab = activeTabOf(group)
-    if (!tab) continue
+    if (!tab || !isTerminalTab(tab)) continue
     for (const leaf of paneLeaves(tab.root)) {
       if (tab.expandedPane === null || tab.expandedPane === leaf.id) mounted.push({ group, tab, leaf })
     }
@@ -162,6 +168,7 @@ export function tabsReport(ws: Workspace, sessions: Readonly<Record<string, Sess
   const rows: TabReport[] = []
   for (const group of groupsInOrder(ws.root)) {
     for (const tab of group.tabs) {
+      if (!isTerminalTab(tab)) continue
       for (const leaf of paneLeaves(tab.root)) {
         const session = sessions[leaf.session]
         rows.push({
