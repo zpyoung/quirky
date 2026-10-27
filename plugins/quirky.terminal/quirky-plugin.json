@@ -8,7 +8,7 @@
   "cliAliases": [
     "term"
   ],
-  "activation": "lazy",
+  "activation": "startup",
   "dependencies": [
     "quirky.session"
   ],
@@ -32,6 +32,12 @@
             "rows": {
               "type": "integer",
               "minimum": 1
+            },
+            "historyLines": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 10000,
+              "description": "Lines of scrollback to put in front of the screen in the replay."
             }
           },
           "required": [
@@ -52,12 +58,39 @@
             },
             "offset": {
               "type": "integer"
+            },
+            "historyCursor": {
+              "description": "Pass to `history` as `before` to page further back; null when there is nothing older."
+            },
+            "cols": {
+              "type": "integer"
+            },
+            "rows": {
+              "type": "integer"
+            },
+            "restored": {
+              "type": "boolean",
+              "description": "True when attach started a shell in a session that ended with the terminal host."
+            },
+            "shellState": {
+              "type": "string",
+              "description": "unsupported, pending, ready or timed_out."
+            },
+            "live": {
+              "type": "boolean",
+              "description": "False for an ended session: the replay is its final screen and the stream carries nothing."
             }
           },
           "required": [
             "streamId",
             "replay",
-            "offset"
+            "offset",
+            "historyCursor",
+            "cols",
+            "rows",
+            "restored",
+            "shellState",
+            "live"
           ]
         }
       },
@@ -233,6 +266,372 @@
             "alt"
           ]
         }
+      },
+      {
+        "id": "snapshot",
+        "description": "The visible screen as ANSI plus size, cursor, modes, cwd, title, shell state and output position.",
+        "readOnly": true,
+        "params": {
+          "type": "object",
+          "properties": {
+            "session": {
+              "type": "string",
+              "description": "The session ID."
+            }
+          },
+          "required": [
+            "session"
+          ]
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "ansi": {
+              "type": "string"
+            },
+            "cols": {
+              "type": "integer"
+            },
+            "rows": {
+              "type": "integer"
+            },
+            "cursor": {
+              "type": "object",
+              "properties": {
+                "x": {
+                  "type": "integer"
+                },
+                "y": {
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "x",
+                "y"
+              ]
+            },
+            "modes": {
+              "type": "object",
+              "properties": {
+                "alternateScreen": {
+                  "type": "boolean"
+                },
+                "bracketedPaste": {
+                  "type": "boolean"
+                },
+                "mouseTracking": {
+                  "type": "boolean"
+                },
+                "applicationCursor": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "alternateScreen",
+                "bracketedPaste",
+                "mouseTracking",
+                "applicationCursor"
+              ]
+            },
+            "cwd": {
+              "type": "string"
+            },
+            "title": {
+              "description": "The terminal title; null when none was set."
+            },
+            "shellState": {
+              "type": "string"
+            },
+            "offset": {
+              "type": "integer"
+            }
+          },
+          "required": [
+            "ansi",
+            "cols",
+            "rows",
+            "cursor",
+            "modes",
+            "cwd",
+            "title",
+            "shellState",
+            "offset"
+          ]
+        }
+      },
+      {
+        "id": "history",
+        "description": "A page of scrollback, oldest line first; works on ended sessions.",
+        "readOnly": true,
+        "params": {
+          "type": "object",
+          "properties": {
+            "session": {
+              "type": "string",
+              "description": "The session ID."
+            },
+            "lines": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 10000,
+              "description": "Page size in lines."
+            },
+            "before": {
+              "type": "string",
+              "description": "The cursor of the page to continue from, as returned by a previous call."
+            },
+            "format": {
+              "type": "string",
+              "enum": [
+                "text",
+                "ansi"
+              ],
+              "description": "text (default) or ansi with colours."
+            }
+          },
+          "required": [
+            "session"
+          ]
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "lines": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "cursor": {
+              "description": "Pass as `before` for the next older page; null at the start."
+            }
+          },
+          "required": [
+            "lines",
+            "cursor"
+          ]
+        }
+      },
+      {
+        "id": "sessions",
+        "description": "The running terminal sessions with their process, shell state, worktree and workspace label.",
+        "readOnly": true,
+        "params": {
+          "type": "object",
+          "properties": {}
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "sessions": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "sessionId": {
+                    "type": "string"
+                  },
+                  "state": {
+                    "type": "string"
+                  },
+                  "pid": {
+                    "type": "integer"
+                  },
+                  "alive": {
+                    "type": "boolean"
+                  },
+                  "cols": {
+                    "type": "integer"
+                  },
+                  "rows": {
+                    "type": "integer"
+                  },
+                  "cwd": {
+                    "type": "string"
+                  },
+                  "shellState": {
+                    "type": "string"
+                  },
+                  "worktreeId": {
+                    "description": "The owning worktree; null for a host session the session plugin does not know."
+                  },
+                  "workspace": {
+                    "type": "string",
+                    "description": "The last two segments of the cwd."
+                  }
+                },
+                "required": [
+                  "sessionId",
+                  "state",
+                  "pid",
+                  "cwd",
+                  "shellState",
+                  "worktreeId",
+                  "workspace"
+                ]
+              }
+            }
+          },
+          "required": [
+            "sessions"
+          ]
+        }
+      },
+      {
+        "id": "kill",
+        "description": "Force-quits a session's process group at once; its output stays readable and it is not restorable.",
+        "destructive": true,
+        "confirm": "Kill this session? Force-quits {session}. Any unsaved work in that pane is lost. This can't be undone.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "session": {
+              "type": "string",
+              "description": "The session ID."
+            }
+          },
+          "required": [
+            "session"
+          ]
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "ok": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "ok"
+          ]
+        }
+      },
+      {
+        "id": "killAll",
+        "description": "Force-quits every running terminal session and waits up to 6.5 s for them to end; the terminal host keeps running.",
+        "destructive": true,
+        "confirm": "Kill all terminal sessions?",
+        "params": {
+          "type": "object",
+          "properties": {}
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "killedCount": {
+              "type": "integer"
+            },
+            "remainingCount": {
+              "type": "integer"
+            },
+            "killedSessionIds": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          "required": [
+            "killedCount",
+            "remainingCount",
+            "killedSessionIds"
+          ]
+        }
+      },
+      {
+        "id": "restartHost",
+        "description": "Ends every session as restorable, replaces the terminal host and returns the new host's pid.",
+        "destructive": true,
+        "confirm": "Restart the terminal service? Open terminals and agents will restart.",
+        "params": {
+          "type": "object",
+          "properties": {}
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "pid": {
+              "type": "integer"
+            }
+          },
+          "required": [
+            "pid"
+          ]
+        }
+      }
+    ],
+    "event": [
+      {
+        "id": "bell",
+        "description": "A terminal rang its bell.",
+        "data": {
+          "type": "object",
+          "properties": {
+            "sessionId": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "sessionId"
+          ]
+        }
+      },
+      {
+        "id": "commandFinished",
+        "description": "A shell command finished.",
+        "data": {
+          "type": "object",
+          "properties": {
+            "sessionId": {
+              "type": "string"
+            },
+            "exitCode": {
+              "description": "The command's exit code; null when the shell did not report one."
+            }
+          },
+          "required": [
+            "sessionId",
+            "exitCode"
+          ]
+        }
+      },
+      {
+        "id": "title",
+        "description": "A terminal's title changed.",
+        "data": {
+          "type": "object",
+          "properties": {
+            "sessionId": {
+              "type": "string"
+            },
+            "title": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "sessionId",
+            "title"
+          ]
+        }
+      },
+      {
+        "id": "cwd",
+        "description": "A terminal's working directory changed.",
+        "data": {
+          "type": "object",
+          "properties": {
+            "sessionId": {
+              "type": "string"
+            },
+            "cwd": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "sessionId",
+            "cwd"
+          ]
+        }
       }
     ],
     "setting": [
@@ -289,6 +688,87 @@
         },
         "methods": [
           "quirky.terminal/send"
+        ]
+      },
+      {
+        "id": "snapshot",
+        "words": "snapshot",
+        "summary": "print the terminal screen as text (session defaults to $QUIRKY_SESSION_ID); --json returns the full snapshot",
+        "positionals": [
+          {
+            "name": "session",
+            "description": "the session (default: QUIRKY_SESSION_ID)"
+          }
+        ],
+        "methods": [
+          "quirky.terminal/snapshot"
+        ]
+      },
+      {
+        "id": "history",
+        "words": "history",
+        "summary": "print scrollback, oldest line first; the next page's cursor goes to stderr as `next: <cursor>`",
+        "positionals": [
+          {
+            "name": "session",
+            "description": "the session (default: QUIRKY_SESSION_ID)"
+          }
+        ],
+        "flags": {
+          "lines": {
+            "type": "integer",
+            "description": "page size in lines"
+          },
+          "before": {
+            "type": "string",
+            "description": "cursor of the page to continue from"
+          },
+          "ansi": {
+            "type": "boolean",
+            "description": "keep colours as ANSI"
+          }
+        },
+        "methods": [
+          "quirky.terminal/history"
+        ]
+      },
+      {
+        "id": "sessions",
+        "words": "sessions",
+        "summary": "list running terminal sessions",
+        "methods": [
+          "quirky.terminal/sessions"
+        ]
+      },
+      {
+        "id": "kill",
+        "words": "kill",
+        "summary": "force-quit a terminal session",
+        "positionals": [
+          {
+            "name": "session",
+            "description": "the session to kill",
+            "required": true
+          }
+        ],
+        "methods": [
+          "quirky.terminal/kill"
+        ]
+      },
+      {
+        "id": "kill-all",
+        "words": "kill-all",
+        "summary": "force-quit every running terminal session",
+        "methods": [
+          "quirky.terminal/killAll"
+        ]
+      },
+      {
+        "id": "restart-host",
+        "words": "restart-host",
+        "summary": "restart the terminal host; sessions end as restorable",
+        "methods": [
+          "quirky.terminal/restartHost"
         ]
       }
     ]
