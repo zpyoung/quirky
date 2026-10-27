@@ -1061,6 +1061,63 @@
         "m3-vault"
       ],
       "status": "todo"
+    },
+    {
+      "id": "fix-flaky-daemon-pty-client",
+      "milestone": "M1",
+      "title": "Fix packages/daemon/test/pty-client.test.ts 'retiring an older host gives up within the wait so a current host can take over': on a loaded test host (load ~35) it fails even alone, with silent.shutdowns() 2 instead of 1. Under load the client sends shutdown to the silent old host twice. Find out with quirk:systematic-debugging whether the client retries the retire (a real race: reconnecting to the old socket before the new host binds) or the test's expectation is too strict, reproduce under CPU load, and fix the code or the test",
+      "docs": [
+        "term-daemon.md"
+      ],
+      "deps": [],
+      "status": "todo"
+    },
+    {
+      "id": "m3-vault-consent-tip-completion",
+      "milestone": "M3",
+      "title": "Complete the ancillary SC-07 enable-search marks-related-tip-seen flow after the operator-authorized vault core landing: explicit consent persistence/search work, but no related tip-seen bookkeeping or tip-owner integration exists in the vault source. Final review X2 was suppressed on the incorrect premise that this requirement was invented; the approved logic criterion explicitly names it. Establish the real tip owner/state and prove enabling marks it seen without indexing before consent. This is not a core privacy blocker; see docs/loop/BLOCKERS.md m3-vault open review findings. All other unfinished parity flows are named by m3-vault-parity-completion.",
+      "docs": [
+        "ai-vault.md"
+      ],
+      "deps": [
+        "m3-vault"
+      ],
+      "status": "todo"
+    },
+    {
+      "id": "fix-bash53-shell-integration",
+      "milestone": "M1",
+      "title": "Bash 5.3 shell integration reports an extra exit code: packages/daemon/test/shell-path.test.ts 'bash shell integration > reports readiness once, each command exit code, the cwd, and keeps the exit status' expects finishedCodes [0, 1, 7, 0] but bash 5.3 (Ubuntu 26.04, Homebrew bash on macOS) gives [0, 1, 1, 7, 0]: the empty line reports the previous status again. Passes on bash 5.2. Make the bash wrapper skip reports for empty commands on 5.3 too, and run the test against bash 5.3 as well as 5.2 so both stay covered.",
+      "docs": [
+        "term-daemon.md"
+      ],
+      "deps": [],
+      "status": "todo"
+    },
+    {
+      "id": "followup-m3-session-info-parity-20261027",
+      "milestone": "M3",
+      "title": "Finish Session Info parity checks: native clipboard/denied-permission feedback, OS focus/scroll/flash and Finder reveal (headless-only evidence); audit narrow-width controls; investigate local one-shot SIGTERM timeout NA-29 (311ms versus >=2s, non-core).",
+      "docs": [
+        "session-info.md",
+        "source-control.md"
+      ],
+      "deps": [
+        "m3-session-info"
+      ],
+      "status": "todo"
+    },
+    {
+      "id": "m2-editor-complete-remaining-flows",
+      "milestone": "M2",
+      "title": "Complete editor follow-through: rich details/toggles and document-link insertion round trips (currently safe-rejected); true untitled creation/Save As and filesystem-permission UX (not delivered); Preview-to-Rich routing and own-write shared-draft warnings (observed UI defects); finish SC3-6 conflict/autosave/restart/mixed-close GUI, SC7-11 Explorer/file operations/copy/import/drag and advanced search GUI, SC13-15 rich controls/templates/PDF-export/review-note GUI, SC17-18 consented Python setup and kernel-output recovery, and SC19-22 full CSV/media/PDF/clipboard/rebound-shortcut/disable-remount acceptance (not completed under operator deadline). Exact evidence and boundaries: docs/loop/BLOCKERS.md, m2-editor open review findings. Excludes the operator-owned Finder open-in-place follow-up.",
+      "docs": [
+        "editor.md"
+      ],
+      "deps": [
+        "m2-editor"
+      ],
+      "status": "todo"
     }
   ]
 }
