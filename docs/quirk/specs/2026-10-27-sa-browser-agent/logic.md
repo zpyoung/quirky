@@ -1,9 +1,13 @@
 # Browser agent automation and cookie import
 
 ## Status & amendments
-Status: **Blocked before implementation** at the headless feasibility gate; not an implementation-ready or review-passing specification. Tech spec required (subsystem boundary and more than three files).
+Status: **Ready for implementation after bounded spec-review adjudication and exercised helper/dialog feasibility**. No implementation or permanent acceptance pass claimed. Tech spec required (subsystem boundary and more than three files). Actual Codex gate remains NEEDS_FIXES; material F1 is remedied by the dialog-control amendment/proof, and resolver/heading heuristics are adjudicated in D27 rather than rewritten to a passing gate.
 
-Amendments: 2026-10-27 — Initial unattended specification. No human approval claimed. Subsequent live helper validation found that the selected per-page-helper target binding is not supplied by ordinary `--cdp`/tab commands. The selected model below is preserved for review, not silently changed. See decisions D14–D17 in `docs/loop/decisions/sa-browser-agent.md` and the formal item blocker. The bounded Codex review also leaves public failure/import contracts unapproved; no implementation has been dispatched.
+Amendments: 2026-10-27 — Initial unattended specification halted on per-page-helper feasibility (D14–D17). On 2026-10-27 the user authorized one helper per profile (D19), replacing only helper/queue topology. The revised public failure/import contracts are explicit in tech.md; the required Codex promote/fresh-refute review completed and its confirmed F1 is addressed below. Restart/target identity remains positive and fail-closed, never order or page URL/title inference. All autonomous decisions and actual evidence are recorded in the item log.
+
+Recovery amendment, 2026-10-27 (D19): helper identity is scoped to one live helper epoch. If that epoch is lost, the triggering operation fails with `browser_tab_changed` and is never retried. Quirky tears down only its provably owned Chrome/helper process group, restarts the same durable profile on the next explicit browser operation, and recreates retained managed-page metadata through helper `tab new` using saved URLs and new helper-returned IDs. Public page IDs may remain stable, but prior DOM/history/transient input and refs do not survive reconstruction; credentials in the durable profile do. Reconstructed pages are never inferred from old target order, URL/title matches, or recycled tN values.
+
+Dialog-control amendment, 2026-10-27 (Codex F1): a pending dialog must be answerable while its triggering operation awaits completion. Normal helper selection and execution remain serialized; dialog accept/dismiss is an out-of-band control action on the exact already-bound page and its current pending dialog, never another helper tab selection. New pages are created blank and positively bound through trusted CDP debugger metadata before navigating caller content; no page URL/title/global marker or old helper ID is used as identity evidence. Unbound, stale, missing or closed dialogs fail rather than responding on whichever page is active.
 
 ## Conceptual model
 Agents drive Quirky-owned headless Chrome pages without opening or focusing a desktop browser. Pages belong to worktrees and persistent browser profiles. A snapshot describes the page accessibility tree and yields short-lived element references for subsequent interactions. A profile holds Chrome-managed authentication state; explicit cookie import can reuse supported source-browser logins without opening the source browser or modifying its files.
@@ -18,7 +22,7 @@ Not in this slice: visible system-webview pane, browser toolbar/settings UI, add
 ## Key decisions & rationale
 Choose owned Chrome plus pinned agent-browser for the existing snapshot/ref and command vocabulary, with direct CDP for profile-cookie identities and missing native operations. This reuses the upstream headless backend's proven boundary without its Electron proxy. A direct-CDP-only driver avoids a helper but requires reimplementing the full high-level command surface. A Playwright-only CDP driver supplies richer library operations but still needs the snapshot/ref/exec compatibility layer and has documented reduced fidelity over CDP. Neither alternative removes process ownership or cookie policy.
 
-Use one lazily started browser per profile and one helper session per page, always explicitly connected to that page's CDP target. No system profile is an automation destination. FIFO queues serialize operations per page; profile mutations coordinate with all pages using that profile. Closing/deleting cannot race commands into another page.
+Use one lazily started browser and one helper session per profile. The helper creates every managed page; Quirky retains the helper-returned tN mapped to its public page ID. One profile-wide FIFO lock atomically selects the retained tab and executes the complete operation, including multi-command actions and profile mutations. No system profile is an automation destination. Closing/deleting cancels relevant queued/in-flight work without retargeting another page. After helper restart, recover only from proven identity; never infer from enumeration order, URL or title, and fail closed if identity cannot be established.
 
 ## Decisions locked
 - API: existing daemon authentication, namespaced `quirky.browser` methods, structured result/error envelopes and existing CLI exit conventions; no new transport. Plugin API remains unstable until M7.
@@ -75,9 +79,9 @@ Screenshot/full-screenshot PNG/JPEG and PDF return actual decodable artifacts; f
 
 ### SC-07: Network, console and emulation
 Console/network honor requested limits. Capture start/stop yields real HAR records. Every requested interception pattern is installed, listed and removable, not just the first. Viewport scale/mobile, device/geolocation/offline/headers/credentials/media and dialog accept/dismiss affect real browser state.
-- Data before: page fetches two different endpoints and logs three messages.
-- Walkthrough: agent configures two interception patterns, queries logs with limit 1, records HAR, sets emulation and answers a dialog.
-- Data after: both patterns take effect, one log entry returned, HAR contains observed requests, browser state reflects the requested settings.
+- Data before: two managed pages; one fetches two endpoints and logs three messages.
+- Walkthrough: configure two interception patterns, query logs with limit 1, record HAR and set emulation. While eval awaits a prompt on one page, accept its exact pending dialog with Unicode text; while the other awaits confirm, dismiss it without responding on the first page.
+- Data after: both patterns take effect; one requested log entry is returned; HAR contains observed requests; emulation matches requested settings; prompt eval returns exact supplied text and dismissed confirm returns false without timeout or cross-page effects.
 
 ### SC-08: Cookie and web storage commands
 Cookie get/set/delete preserve domain/path/security attributes and scoped identities; local/session storage get/set/clear act on the current origin. They do not import unrelated browser storage.
@@ -92,7 +96,7 @@ Exec parses quoted arguments without a shell, preserves empty arguments, rejects
 - Data after: harmless result is real; override/lifecycle escape fails without modifying either other page.
 
 ### SC-10: Lifetime and failure
-Closing a page rejects queued work and cancels in-flight child work with page-closed semantics. Chrome/helper crash or idle expiry cannot launch an unrelated browser. Timeouts are bounded and commands after recoverable helper restart rebind the correct CDP target. Plugin disable/daemon shutdown closes all owned processes, connections and temporary files; restart preserves profiles without adopting an unrelated process.
+Closing a page rejects queued work and cancels in-flight child work with page-closed semantics. Chrome/helper crash or idle expiry cannot launch an unrelated browser. Timeouts are bounded; after helper restart, commands proceed only when their page identity is proven, otherwise return changed/closed semantics without mutating any candidate page. Plugin disable/daemon shutdown closes all owned processes, connections and temporary files; restart preserves profiles without adopting an unrelated process.
 - Data before: two queued operations and an owned browser.
 - Walkthrough: close during work, then restart daemon and disable plugin.
 - Data after: work rejects with structured error; durable profile remains; no owned process survives shutdown.
