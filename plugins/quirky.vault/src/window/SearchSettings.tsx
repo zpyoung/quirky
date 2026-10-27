@@ -188,7 +188,7 @@ function SearchSettings({ context, report, embedded = false }: SearchSettingsPro
     setState((current) => ({ ...current, busy: true, error: null }))
     try {
       if (state.status?.enabled) await context.call('quirky.vault/setSearchEnabled', { enabled: false, host: 'local' })
-      const result = await context.call('quirky.vault/clearSearchIndex', { yes: true, host: 'local' })
+      const result = await context.call('quirky.vault/clearSearchIndex', { yes: true })
       if (!result || typeof result !== 'object' || !('cleared' in result) || result.cleared !== true) {
         const reason = result && typeof result === 'object' && 'reason' in result && typeof result.reason === 'string' ? result.reason : 'The search data was not cleared.'
         throw new Error(reason)

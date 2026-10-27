@@ -8,6 +8,7 @@ import {
   runCommand,
   startFeatures,
   stopAll,
+  typeInto,
   until,
   waitFor,
   type Features
@@ -21,6 +22,7 @@ const SEARCH_SETTINGS_VIEW = 'view:quirky.vault/search-settings'
 
 type HistoryReport = {
   query: string
+  scope: 'workspace' | 'project' | 'all'
   selectedId: string | null
   visibleIds: string[]
   expandedIds: string[]
@@ -73,12 +75,6 @@ function writeClaudeSession(home: string, sessionId: string, assistantText: stri
   writeFileSync(join(root, `${sessionId}.jsonl`), `${records.map((record) => JSON.stringify(record)).join('\n')}\n`)
 }
 
-function setInput(input: HTMLInputElement, value: string): void {
-  input.focus()
-  Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, value)
-  input.dispatchEvent(new Event('input', { bubbles: true }))
-  input.dispatchEvent(new Event('keyup', { bubbles: true }))
-}
 
 async function makeFeatures(home: string): Promise<Features> {
   return startFeatures({ env: { QUIRKY_VAULT_SOURCE_HOME: home } })
@@ -92,6 +88,7 @@ test(
     try {
       writeClaudeSession(source, 'window-panel-session', 'The source contains a real preview turn.')
       f = await makeFeatures(source)
+      await f.h.call('quirky.vault/setView', { scope: 'all' })
       const listed = await f.h.call<PublicListResult>('quirky.vault/list', { unlimited: true })
       const session = listed.sessions.find((entry) => entry.sessionId === 'window-panel-session')!
       expect(session).toBeDefined()
@@ -100,7 +97,7 @@ test(
       expect('filePath' in session).toBe(false)
 
       await runCommand(f, 'command:quirky.vault/open', { agent: 'claude', sessionId: session.sessionId })
-      await reportOf<HistoryReport>(f, HISTORY_PANEL, 'the selected source', (report) => report.visibleIds.includes(session.id))
+      await reportOf<HistoryReport>(f, HISTORY_PANEL, 'the selected source in All scope', (report) => report.scope === 'all' && report.visibleIds.includes(session.id))
       const row = await until(f, () => f!.win.document.querySelector<HTMLElement>(`[data-vault-session-row="${session.id}"]`))
       row.click()
       await reportOf<HistoryReport>(f, HISTORY_PANEL, 'the selected row', (report) => report.selectedId === session.id)
@@ -122,13 +119,14 @@ test(
     const source = sourceHome()
     let f: Features | undefined
     try {
-      writeClaudeSession(source, 'window-search-session', 'Literal [[source-brackets]] and \uE0020; <img data-vault-spoof="yes"> vaultneedle.')
+      writeClaudeSession(source, 'window-search-session', 'Literal [[source-brackets]] and \uE0020; <img data-vault-spoof="yes"> vaultneedle')
       f = await makeFeatures(source)
+      await f.h.call('quirky.vault/setView', { scope: 'all' })
       await runCommand(f, 'command:quirky.vault/open')
       const input = await until(f, () => f!.win.document.querySelector<HTMLInputElement>('[data-vault-search]'))
-      setInput(input, 'vaultneedle')
+      await typeInto(input, 'vaultneedle')
       await until(f, () => f!.win.document.querySelector<HTMLButtonElement>('[data-vault-enable-search]'))
-      const titleOnly = await reportOf<HistoryReport>(f, HISTORY_PANEL, 'title-only results', (report) => report.query === 'vaultneedle' && !report.loading)
+      const titleOnly = await reportOf<HistoryReport>(f, HISTORY_PANEL, 'title-only results in All scope', (report) => report.scope === 'all' && report.query === 'vaultneedle' && !report.loading)
       expect(titleOnly.visibleIds).toHaveLength(0)
       expect((await statusOf(f)).enabled).toBe(false)
 
@@ -165,13 +163,15 @@ test(
 
       await f.h.call('quirky.vault/setSearchEnabled', { enabled: true })
       await waitFor('search to be enabled', async () => ((await statusOf(f!)).enabled ? true : undefined), 20_000)
-      await runCommand(f, 'command:quirky.vault/settings')
-      const advanced = await until(f, () => f!.win.document.querySelector<HTMLDetailsElement>('.qvh-settings-advanced'))
+      await reportOf<SettingsReport>(f, SEARCH_SETTINGS_VIEW, 'enabled search status', (report) => report.enabled)
+      const settings = await until(f, () => f!.win.document.querySelector<HTMLElement>('[data-vault-settings]'))
+      const advanced = await until(f, () => settings.querySelector<HTMLDetailsElement>('.qvh-settings-advanced'))
       if (!advanced.open) advanced.querySelector('summary')?.click()
-      const clear = await until(f, () => f!.win.document.querySelector<HTMLButtonElement>('[data-vault-clear-search]'))
+      const clear = await until(f, () => settings.querySelector<HTMLButtonElement>('[data-vault-clear-search]'))
       clear.click()
-      await until(f, () => f!.win.document.querySelector<HTMLElement>('[role="dialog"]'))
-      const confirm = await until(f, () => [...f!.win.document.querySelectorAll<HTMLButtonElement>('[role="dialog"] button')].find((button) => button.textContent?.trim() === 'Clear'))
+      const dialog = await until(f, () => f!.win.document.querySelector<HTMLElement>('[role="dialog"][aria-label="Clear search data on this computer?"]'))
+      const confirm = [...dialog.querySelectorAll<HTMLButtonElement>('button')].find((button) => button.textContent?.trim() === 'Clear')
+      if (!confirm) throw new Error('The clear-search confirmation did not contain its Clear button.')
       confirm.click()
       await waitFor('cleared search data and disabled policy', async () => (!(await statusOf(f!)).enabled ? true : undefined), 20_000)
     } finally {
