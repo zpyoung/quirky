@@ -1140,6 +1140,18 @@
       ],
       "deps": [],
       "status": "todo"
+    },
+    {
+      "id": "sa-browser-agent-extras",
+      "milestone": "Side A",
+      "title": "Complete deferred cookie import, profile management and advanced browser automation after the operator-authorized core cutover; recover the full-source snapshot and use explicit CLI file-input controls",
+      "docs": [
+        "browser.md"
+      ],
+      "deps": [
+        "sa-browser-agent"
+      ],
+      "status": "todo"
     }
   ]
 }
