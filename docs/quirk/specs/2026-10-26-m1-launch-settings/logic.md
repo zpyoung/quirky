@@ -4,7 +4,11 @@
 
 **Status:** Approved (headless build loop; decisions in [m1-launch-settings.md](../../../loop/decisions/m1-launch-settings.md)). Tech spec: requested.
 
-**Amendments:** none yet.
+**Amendments:**
+- 2026-10-26, tech-spec authoring: the launch CLI is `quirky session new` (with `--background` for
+  structured sessions), not `create`; `quirky session get <session>` is added as a declared command.
+  Extras that set the model shadow the whole pick (SC-15). Options carry no catalog default, since
+  defaults are never injected (SC-8).
 
 ## Conceptual model
 
@@ -25,8 +29,8 @@ and this item builds both for Quirky:
 
 The automation editor and the recipe rows that show these fields arrive with their own features
 (m5-automations, m2-source-control-notes-ai). This item gives them the catalog, the rules and the
-API, and uses them for the launches that exist today: `quirky session create`, `resume`, and
-`quirky structured create` ([D4](../../../loop/decisions/m1-launch-settings.md)).
+API, and uses them for the launches that exist today: terminal sessions (`quirky session new`,
+`resume`, fork) and structured sessions (`quirky session new --background`) ([D4](../../../loop/decisions/m1-launch-settings.md)).
 
 **The catalog is data on the agent.** m1-providers made each agent an `agent` contribution
 ([m1-providers D6](../../../loop/decisions/m1-providers.md)). Each one that supports launch
@@ -240,8 +244,10 @@ Each scenario's test drives Quirky through the `quirky` CLI or the daemon API un
       both or neither
     - **When** each is resolved for claude and for codex
     - **Then** for each option the snapshot marks `explicit` exactly when that pick's flag is in the
-      argv with the picked value, and `extra-args` exactly when the pick was made and the extras set
-      that flag. The argv never holds two model flags or two effort flags.
+      argv with the picked value, and `extra-args` exactly when the pick was made but not emitted
+      because the extras set that option's flag or the model flag (extras that set the model shadow
+      the whole pick, since options belong to the picked model). The argv never holds two model flags
+      or two effort flags.
 
 16. **SC-16: a command override that sets the model fails the launch** (API)
     - **Given** claude's command override is `claude --model sonnet`
@@ -277,20 +283,20 @@ Each scenario's test drives Quirky through the `quirky` CLI or the daemon API un
 
 18. **SC-18: a session starts with the picked model and effort, and shows what it used** (CLI)
     - **Given** the e2e harness with a fake `claude`
-    - **When** the agent runs `quirky session create --agent claude --model opus --effort high --prompt hi`
+    - **When** the agent runs `quirky session new --agent claude --model opus --effort high --prompt hi`
     - **Then** the fake claude's argv contains `--model opus --effort high` once each, before the
       prompt. `quirky session get <id> --json` shows `launchSettings` equal to SC-6's snapshot, and
       `quirky session get <id>` prints `Launch: Claude · Opus · Effort: high`.
     - **Data after:** **Session 1**: ✓ argv `… --model opus --effort high hi`; ✓ `launchSettings` stored
 
 19. **SC-19: extra arguments reach a session** (CLI)
-    - **When** the agent runs `quirky session create --agent claude --extra-args="--add-dir docs"`
+    - **When** the agent runs `quirky session new --agent claude --extra-args="--add-dir docs"`
     - **Then** the fake claude's argv contains `--add-dir docs`, and the session's snapshot has
       `args.source` `explicit` and no options
 
 20. **SC-20: an invalid pick creates no session** (CLI)
-    - **When** the agent runs `quirky session create --agent claude --model haiku --effort low`,
-      and `quirky session create --agent shell --model opus`
+    - **When** the agent runs `quirky session new --agent claude --model haiku --effort low`,
+      and `quirky session new --agent shell --model opus`
     - **Then** both exit non-zero (the first with SC-9's message, the second with "Agent shell does
       not support launch-time model selection."), and `quirky session list` shows no new session and
       no process was spawned
@@ -305,14 +311,14 @@ Each scenario's test drives Quirky through the `quirky` CLI or the daemon API un
     - **Data after:** **Session 2**: ✓ `-m gpt-5.5 -c model_reasoning_effort=low`; ✗ `gpt-5.4`; ✓ same `launchSettings`
 
 22. **SC-22: a session with no pick records no snapshot options** (CLI)
-    - **When** `quirky session create --agent claude` runs with claude on Manual
+    - **When** `quirky session new --agent claude` runs with claude on Manual
     - **Then** the session's `launchSettings` is null and `quirky session get` prints no `Launch:`
       line. Sessions recorded before this item have no `launchSettings` and still list and resume.
 
 ### Structured sessions
 
 23. **SC-23: a structured session gets the same pick as SDK options** (API, with the runner's fake query)
-    - **When** `quirky structured create --agent claude --model opus --effort high --prompt hi` runs
+    - **When** `quirky session new --background --agent claude --model opus --effort high --prompt hi` runs
     - **Then** the runner starts the Agent SDK query with `options.model` `opus` and
       `options.effort` `high`; with no pick, neither option is set
 

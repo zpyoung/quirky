@@ -221,7 +221,7 @@
 ## D22: CLI: `--model`, `--effort`, repeatable `--option key=value` and `--extra-args=` on launch commands, plus `quirky agents options` and `quirky agents resolve`
 - **Question:** flag-design
 - **Options:** Orca's `--model`/`--effort`/`--extra-agent-args`; a JSON blob flag
-- **Chose:** `quirky session create`, `quirky structured create` and `quirky agents resolve <agent>` take `--model <id>`, `--effort <level>` (shorthand for `--option effort=<level>`), repeatable `--option key=value` (`true`/`false` for booleans) and `--extra-args=<text>`. `quirky agents options <agent>` prints the catalog. `--json` prints the method result. The name is `--extra-args` because Quirky's agent commands already call configured arguments `args`.
+- **Chose:** `quirky session new` (terminal, and structured with `--background`) and `quirky agents resolve <agent>` take `--model <id>`, `--effort <level>` (shorthand for `--option effort=<level>`), repeatable `--option key=value` (`true`/`false` for booleans) and `--extra-args=<text>`. `quirky agents options <agent>` prints the catalog. `--json` prints the method result. The name is `--extra-args` because Quirky's agent commands already call configured arguments `args`.
 - **Why:** Orca's flag names where they exist; `--option` covers Cursor's booleans without a flag per option
 - **Evidence:** research/orca-features/launch-settings.md "Set it from the CLI"; plugins/quirky.agents/cli.ts
 - **Reversibility:** easy
