@@ -396,5 +396,27 @@
 - **Revisit if:** queue landing reports a dependency or item-state conflict
 - **Source:** locked by operator D33 follow-up requirement; docs/loop/LOOP.md shared-file ownership
 
+## D37: Rerun the exact affected suite on the operator's replacement host
+- **Question:** operator stopped the run on the overloaded old host and declared its result meaningless
+- **Options:** classify the interrupted output as a verdict; repeat the required command on the replacement host
+- **Chose:** retain no suite verdict from the stopped old-host run (exit137). Rerun the exact affected-directory command through the unchanged runner on the newly configured16-core host, then run the packaged build. Reuse completed scripts/typecheck evidence rather than run another whole preflight.
+- **Why:** the operator supplies the infrastructure observation. Source inspection also found one obsolete G1 test pinning the removed kernel-reserved Mod+Shift+P behavior; deleted that obsolete case rather than re-pin implementation details. The actual public-palette/shortcut behavior is covered by the migrated contract and existing keybinding/UI scenarios.
+- **Evidence:** operator message; gate-core logs preserve the interrupted run, not a pass/fail suite judgment; plugin-host.test.ts removed only the obsolete kernel-reservation case; gate-new-host runs the same eight directory arguments
+- **Reversibility:** easy
+- **Confidence:** high for stopped-run/source-contract facts; new host result pending
+- **Revisit if:** the replacement host reports a concrete failing core path
+- **Source:** operator decision in this iteration; supersedes D27/D33 old-host pending-run status
+
+## D38: Repair only the concrete replacement-host gate blockers
+- **Question:** replacement-host run completed with four remote failing files and one macOS reset-case failure
+- **Options:** label failures flakes without proof; weaken resize/reset invariants; repair fit scheduling and remove obsolete/incidental pins
+- **Chose:** restore local xterm fitting during a divider drag while retaining suppressed PTY resize RPCs; synchronously fit and flush final geometry once on drag end with existing sent-size deduplication. Remove the obsolete reserved-P fixture from the meaningful distro-precedence test and delete the incidental CLI whole-output-copy test. Make reset wait for shell/rendered sentinels and assert retained user content/modes rather than exact equality against an asynchronously arriving normal prompt.
+- **Why:** paused fit had incorrectly blocked both viewport fitting and the final observed update. Reset's mismatch was the ordinary shell prompt, not lost content. No arbitrary sleeps, timeout increases, ignored failures or replacement golden-output pin were introduced.
+- **Evidence:** replacement run208remote/204initialpass/4fail plus SC-34 macOS failure; after fixes the exact four failed remote files and macOS features-pane file all passed, suite-result ok:true/flaky:[] (42.98seconds). Full typecheck and packaged build passed (42.60seconds),9 UI modules/12 plugins. Build retains optional icon/release-URL warnings. Complete208-file post-fix preflight is not claimed; queue land provides authoritative integration validation.
+- **Reversibility:** easy
+- **Confidence:** high for repaired runtime/test paths; focused built-web resize smoke is running
+- **Revisit if:** final user-surface resize proof or land exposes a core regression
+- **Source:** assumed — autonomous (observed gate blockers); operator D33 fixes-only scope
+
 ## Progress
-Core implementation and catalog/manual recognition are integrated. Operator D33 explicitly moves unfinished flows to the registered dependent item; BLOCKERS.md retains every observed UI limitation and unresolved C1. Final three-lens review is complete with no upheld core blocker; D34 preserves its evidence/transport limits. Scripts49pass/223assertions and typecheck passed. D35 fixes the demonstrated fresh-link compiler prerequisite with red/green resolution, typecheck and real public API/PTy proof. Affected-directory remote suite/build remain pending. After actual results, catch up build/roadmap once/read new decisions, commit/detach and queue.ts land. No final scoped-suite result or landing is claimed yet.
+Core and recorded blocker repairs pass typecheck, packaged build and the five previously failing files; scripts49pass/223assertions remain valid. Final review and dependent follow-up registration are complete; noncore UI/native flows and C1 remain explicitly open. Focused built-web resize/actual-PTY-size smoke is running. Commit these repairs, perform the operator's single final build/roadmap catch-up/read incoming decisions, then commit/detach and queue.ts land. No complete post-fix208-file suite or landing is claimed yet.

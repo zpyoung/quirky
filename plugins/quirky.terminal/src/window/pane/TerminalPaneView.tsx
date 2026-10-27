@@ -530,11 +530,11 @@ export function TerminalPaneView(props: TerminalPaneProps) {
     let fitFrame = 0
     const doFit = () => {
       fitFrame = 0
-      if (disposed || draggingRef.current || screen.clientWidth <= 0 || screen.clientHeight <= 0) return
+      if (disposed || screen.clientWidth <= 0 || screen.clientHeight <= 0) return
       guarded(() => fit.fit(), undefined)
     }
     const scheduleFit = () => {
-      if (fitFrame || disposed || draggingRef.current) return
+      if (fitFrame || disposed) return
       fitFrame = requestAnimationFrame(doFit)
     }
     let observedWidth = screen.clientWidth
@@ -750,9 +750,16 @@ export function TerminalPaneView(props: TerminalPaneProps) {
 
   const wasDragging = useRef(dragging)
   useEffect(() => {
-    if (wasDragging.current && !dragging) runtime.current?.scheduleFit()
+    if (wasDragging.current && !dragging) {
+      const rt = runtime.current
+      const screen = screenRef.current
+      if (rt) {
+        if (screen && screen.clientWidth > 0 && screen.clientHeight > 0) guarded(() => rt.fit.fit(), undefined)
+        sendResize()
+      }
+    }
     wasDragging.current = dragging
-  }, [dragging])
+  }, [dragging, sendResize])
 
   const searchReport: PaneSearchReport | null = search
     ? {

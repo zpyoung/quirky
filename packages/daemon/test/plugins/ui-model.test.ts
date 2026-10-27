@@ -581,7 +581,6 @@ describe('keybindings', () => {
       chosenTheme: 'default',
       distroKeybindings: [
         { key: 'mod+z', command: 'command:a.p/go' },
-        { key: 'mod+shift+p', command: 'command:a.p/go' },
         { key: 'mod+a', command: 'command:a.p/ghost' },
         { key: 'mod+k', command: 'command:a.p/go' },
       ],
@@ -589,9 +588,8 @@ describe('keybindings', () => {
     })
     expect(model.keybindings.map((k) => [k.id, k.status])).toEqual([
       ['keybinding:night/k1', 'active'],
-      ['keybinding:night/k2', 'shadowed'],
-      ['keybinding:night/k3', 'unbound'],
-      ['keybinding:night/k4', 'active'],
+      ['keybinding:night/k2', 'unbound'],
+      ['keybinding:night/k3', 'active'],
       ['keybinding:a.p/j', 'active'],
       ['keybinding:a.p/k', 'shadowed'],
     ])

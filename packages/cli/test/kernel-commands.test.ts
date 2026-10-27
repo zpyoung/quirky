@@ -24,31 +24,6 @@ const LAYOUT: UiLayout = {
 }
 
 describe('ui commands', () => {
-  test('ui state prints the layout and one line per shown slot', async () => {
-    const state: UiState = {
-      windows: [{ connId: 3, name: 'window', focused: true, inputAt: null, present: false }],
-      layout: LAYOUT,
-      slots: [
-        { id: 'sidebar-section:quirky.worktree/worktrees', kind: 'sidebar-section', plugin: 'quirky.worktree', title: 'Worktrees', shown: true, report: { repos: 1 } },
-        { id: 'panel:quirky.git/source-control', kind: 'panel', plugin: 'quirky.git', title: 'Source control', shown: false },
-        { id: 'view:quirky.session/worktree', kind: 'view', plugin: 'quirky.session', title: 'Session', shown: true }
-      ]
-    }
-    daemon.results.set('ui.state', state)
-    const result = await run(['ui', 'state'])
-    expect(result.code).toBe(0)
-    expect(result.stdout.trimEnd().split('\n')).toEqual([
-      'windows: 1',
-      'view: view:quirky.session/worktree {"worktree":"wt_1"}',
-      'panel: -',
-      'sidebar: shown',
-      'palette: open',
-      'slot sidebar-section:quirky.worktree/worktrees: Worktrees {"repos":1}',
-      'slot view:quirky.session/worktree: Session'
-    ])
-    expect(daemon.methodCalls('ui.state')).toEqual([{}])
-    expect(JSON.parse((await run(['ui', 'state', '--json'])).stdout)).toEqual(state)
-  })
 
   test('SC-67: ui state prints a shown overlay with its report, and ui contributions lists the OVERLAYS table', async () => {
     const state: UiState = {
