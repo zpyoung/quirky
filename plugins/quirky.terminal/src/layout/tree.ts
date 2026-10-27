@@ -66,10 +66,17 @@ function sideSplit(side: GroupSide): { direction: SplitDirection; before: boolea
   return { direction: side === 'left' || side === 'right' ? 'right' : 'down', before: side === 'left' || side === 'up' }
 }
 
+/** Float slack so a share and its complement (`1 - 0.85`) both pass an inclusive bound. */
+const BOUND_SLACK = 1e-9
+const PANE_RATIO_FLOOR = 0.001
+
+/** Validates the ratio as supplied, then stores it rounded and, for pane splits, kept off the 0 and 1 endpoints. */
 function checkRatio(ratio: number, min: number, max: number, inclusive: boolean, message: string): TreeResult<number> {
+  const valid =
+    Number.isFinite(ratio) && (inclusive ? ratio >= min - BOUND_SLACK && ratio <= max + BOUND_SLACK : ratio > min && ratio < max)
+  if (!valid) return fail('invalid-params', message)
   const rounded = roundRatio(ratio)
-  const valid = Number.isFinite(ratio) && (inclusive ? rounded >= min && rounded <= max : rounded > min && rounded < max)
-  return valid ? ok(rounded) : fail('invalid-params', message)
+  return ok(inclusive ? Math.min(max, Math.max(min, rounded)) : Math.min(1 - PANE_RATIO_FLOOR, Math.max(PANE_RATIO_FLOOR, rounded)))
 }
 
 const checkPaneRatio = (ratio: number) => checkRatio(ratio, 0, 1, false, PANE_RATIO_MESSAGE)

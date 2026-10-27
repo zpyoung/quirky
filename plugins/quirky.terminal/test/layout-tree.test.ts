@@ -226,8 +226,14 @@ describe('pane ratios', () => {
     expect((unwrap(setPaneShare(tree, 'pane-3', 0.3)) as PaneSplit).ratio).toBe(0.7)
   })
 
-  test.each([0, 1, -0.2, 1.5, Number.NaN, Number.POSITIVE_INFINITY, 0.0004, 0.9996])('rejects %p as a pane ratio', (ratio) => {
+  test.each([0, 1, -0.2, 1.5, Number.NaN, Number.POSITIVE_INFINITY])('rejects %p as a pane ratio', (ratio) => {
     expect(setPaneRatio(tree, 'split-1', ratio)).toEqual({ ok: false, error: { kind: 'invalid-params', message: 'a pane divider stays between 0 and 1' } })
+  })
+
+  test('a ratio strictly between 0 and 1 is valid even when it rounds to an endpoint, and is stored as 0.001 or 0.999', () => {
+    expect((unwrap(setPaneRatio(tree, 'split-1', 0.0001)) as PaneSplit).ratio).toBe(0.001)
+    expect((unwrap(setPaneRatio(tree, 'split-1', 0.0004)) as PaneSplit).ratio).toBe(0.001)
+    expect((unwrap(setPaneRatio(tree, 'split-1', 0.9996)) as PaneSplit).ratio).toBe(0.999)
   })
 
   test('accepts the extremes the window will clamp when drawing', () => {
@@ -332,7 +338,7 @@ describe('group tree', () => {
   test('SC-47: group dividers stay between 0.15 and 0.85', () => {
     expect((unwrap(setGroupRatio(layout, 'split-1', 0.15)) as { ratio: number }).ratio).toBe(0.15)
     expect((unwrap(setGroupRatio(layout, 'split-1', 0.85)) as { ratio: number }).ratio).toBe(0.85)
-    for (const bad of [0.1, 0.9, 0.149, 0.851, 0, 1, Number.NaN]) {
+    for (const bad of [0.1, 0.9, 0.149, 0.1499, 0.8501, 0.851, 0, 1, Number.NaN]) {
       expect(setGroupRatio(layout, 'split-1', bad)).toEqual({ ok: false, error: { kind: 'invalid-params', message: 'a group divider stays between 0.15 and 0.85' } })
     }
   })

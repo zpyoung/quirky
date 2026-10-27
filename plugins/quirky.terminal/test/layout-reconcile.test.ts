@@ -1,5 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 import type { Session } from '@quirky/protocol'
+import { InputTracker } from '../src/input-tracker'
+import { LayoutService } from '../src/layout/service'
 import { emptyWorkspace, makeTab, appendTab, normalize, workspaceTabs } from '../src/layout/ops'
 import { reconcileWorkspace } from '../src/layout/reconcile'
 import { CounterIds, parseWorkspace } from '../src/layout/store'
@@ -254,5 +256,34 @@ describe('allocating ids', () => {
     const ids = new CounterIds(4)
     expect([ids.next('tab'), ids.next('pane'), ids.next('grp'), ids.next('split')]).toEqual(['tab-5', 'pane-6', 'grp-7', 'split-8'])
     expect(ids.value).toBe(8)
+  })
+})
+
+describe('the service commits a repair that is only normalization', () => {
+  test('a stored workspace with an unknown active group is saved repaired', async () => {
+    const stored = { ...withTabs('s'), activeGroup: 'grp-missing' }
+    const saved: Workspace[] = []
+    const store = {
+      loadWorkspaces: () => ({ workspaces: [stored], unreadable: [] }),
+      counter: () => 20,
+      floating: () => ({}),
+      save: (ws: Workspace) => void saved.push(ws)
+    }
+    const context = {
+      call: async () => [session('s', { worktreeId: 'wt' })],
+      log: () => {},
+      error: (_kind: string, message: string) => new Error(message),
+      emit: () => {}
+    }
+    const service = new LayoutService(context as never, store as never, new InputTracker())
+    service.requestReconcile()
+    await (service as unknown as { tail: Promise<unknown> }).tail
+    expect(saved).toHaveLength(1)
+    expect(saved[0]!.activeGroup).toBe(groupsInOrder(saved[0]!.root)[0]!.id)
+    expect(saved[0]!.revision).toBe(stored.revision + 1)
+
+    service.requestReconcile()
+    await (service as unknown as { tail: Promise<unknown> }).tail
+    expect(saved).toHaveLength(1)
   })
 })

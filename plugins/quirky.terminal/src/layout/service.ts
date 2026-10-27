@@ -180,6 +180,20 @@ export class LayoutService {
     })
   }
 
+  /** Records `commandId` as the last quick command of the group holding `paneId`; a pane that has since gone is ignored. */
+  rememberQuickCommand(paneId: string, commandId: string): Promise<void> {
+    return this.queued(() => {
+      for (const ws of this.workspaces.values()) {
+        const loc = ops.locatePane(ws, paneId)
+        if (!loc) continue
+        if (loc.group.lastQuickCommand === commandId) return
+        const ids = this.ids()
+        this.commit(ws, ops.setLastQuickCommand(ws, loc.group.id, commandId), ids)
+        return
+      }
+    })
+  }
+
   /** Starts a session and binds it as a new tab in one queue slot. */
   createTab(workspaceId: string, spec: NewTabSpec): Promise<{ workspace: Workspace; session: Session }> {
     return this.queued(() => this.addTab(workspaceId, spec))
@@ -336,15 +350,15 @@ export class LayoutService {
     await this.closeSessions([sessionId]).catch((error) => this.context.log(`could not close session ${sessionId}: ${messageOf(error)}`))
   }
 
-  /** What `reopenTab` needs to start the tab again: its titles, colour, directory and agent. */
+  /** What `reopenTab` needs to start the tab again: its titles, colour, agent and the directory its first pane's session started in. */
   private async closedRecord(tab: Tab): Promise<ClosedTab> {
-    const leaf = findPane(tab.root, tab.activePane) ?? paneLeaves(tab.root)[0]!
+    const leaf = paneLeaves(tab.root)[0]!
     const session = await this.session(leaf.session).catch(() => null)
     return {
       title: tab.customTitle,
       defaultTitle: tab.defaultTitle,
       color: tab.color,
-      cwd: session ? this.cwdOf(session) : '',
+      cwd: session?.cwd ?? '',
       agent: session?.agent ?? 'shell',
       closedAt: this.now()
     }
@@ -620,10 +634,12 @@ export class LayoutService {
     return this.edit(ws, params, () => ops.closeGroupOp(ws, groupId))
   }
 
-  private async ptyAction(params: Params, action: (session: string) => Promise<void>): Promise<{ ok: true }> {
-    const { loc } = this.paneTarget(params)
+  /** A terminal-only action: it leaves the layout untouched, so the revision doesn't move and no `layout` event fires. */
+  private async ptyAction(params: Params, action: (session: string) => Promise<void>): Promise<{ workspace: Workspace }> {
+    const { ws, loc } = this.paneTarget(params)
+    this.checkRevision(ws, params.revision)
     await action(loc.pane.session)
-    return { ok: true }
+    return { workspace: ws }
   }
 
   private paneOf(params: Params): { workspace: string; tab: string; pane: string } {
@@ -643,18 +659,38 @@ export class LayoutService {
     const targets = this.closeTargets(params)
     const running = new Map((await this.context.pty.list().catch(() => [])).map((info) => [info.sessionId, info]))
     let table: string | undefined
-    const ps = () => (table ??= defaultPs())
+    let psFailed = false
+    const ps = () => {
+      try {
+        return (table ??= defaultPs())
+      } catch (error) {
+        psFailed = true
+        throw error
+      }
+    }
     const lines: string[] = []
     for (const { tab, leaf } of targets) {
-      const session = await this.session(leaf.session).catch(() => null)
-      if (!session || session.status === 'exited') continue
+      const unknown = `Stop the session in ${displayTitle(tab)}?`
+      let session: Session
+      try {
+        session = await this.session(leaf.session)
+      } catch (error) {
+        if (!isNotFound(error)) lines.push(unknown)
+        continue
+      }
+      if (session.status === 'exited') continue
       if (session.agent !== 'shell') {
         lines.push(`Stop agent ${session.title}?`)
         continue
       }
       const info = running.get(session.id)
-      const child = info?.alive ? runningChildOf(info.pid, ps) : null
+      if (!info || (info.alive && typeof info.pid !== 'number')) {
+        lines.push(unknown)
+        continue
+      }
+      const child = info.alive ? runningChildOf(info.pid, ps) : null
       if (child) lines.push(`Stop ${child.command} in ${displayTitle(tab)}?`)
+      else if (psFailed) lines.push(unknown)
     }
     return lines.length > 0 ? lines.join('\n') : null
   }
@@ -740,7 +776,7 @@ export class LayoutService {
       [...this.workspaces.values()].filter((ws) => ws.id !== id).flatMap((ws) => ops.boundSessions(ws))
     )
     const result = reconcileWorkspace({ workspace: base, sessions, boundElsewhere, hasInput: (session) => this.inputs.has(session), ids, now: this.now() })
-    const changed = unreadable !== undefined || JSON.stringify(result.workspace) !== JSON.stringify(ops.normalize(base))
+    const changed = unreadable !== undefined || JSON.stringify(result.workspace) !== JSON.stringify(base)
     if (!changed) return
     this.commit(base, result.workspace, ids)
     this.context.log(

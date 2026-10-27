@@ -15,7 +15,7 @@ export async function activate(context: PluginContext): Promise<void> {
   const terminal = new TerminalService(context, inputs)
   const layoutStore = new LayoutStore(store)
   const layoutService = new LayoutService(context, layoutStore, inputs)
-  const quickCommands = new QuickCommandService(context, layoutStore, layoutService)
+  const quickCommands = new QuickCommandService(context, layoutStore, layoutService, inputs)
   service = terminal
   layout = layoutService
 
