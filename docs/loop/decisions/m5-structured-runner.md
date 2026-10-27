@@ -280,5 +280,16 @@ Implementation wave: T1 structured/session/catalog, T2 checks plugin, T3 ask own
 - **Confidence:** high
 - **Source:** locked by docs/loop/decisions/fix-ask-regex-budget-20261027.md
 
+## D27: Preserve the implemented item and block on the protected queue-order gate
+- **Question:** second queue land passed runtime verification but failed the queue's own dependency-order test
+- **Options:** edit protected queue/test paths; suppress the gate; retry unchanged; formally block with the completed source preserved
+- **Chose:** block at step7. No product flow is being deferred or stubbed: the complete core cannot be shipped through its mandatory integration gate until queue maintenance fixes the ordering.
+- **Why:** m6-objective-landing is at zero-based queue index56 and depends on m6-sitter-github at57. scripts/build-loop/queue.test.ts:82-87 requires every dependency earlier in the file. Both queue.json and loop scripts are protected; supported CLI operations add items or change status, not reorder existing items. Latest integration has no pending queue/loop repair. Do not bypass or weaken the check.
+- **Evidence:** second land:426remote files and2macOS files pass after window-projects' successful isolated rerun; then scripts48pass/1fail at queue.test.ts:85. Static queue query returns exactly the56->57 forward dependency. Current typecheck passes after catch-up. Latest integration9f15461fa22c0510b9e2ed0342cfe4553acf415a; updated LOOP.md and queue CLI read completely.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** authorized maintenance restores the queue's topological order and the scripts gate passes
+- **Source:** locked by docs/loop/LOOP.md
+
 ## Progress
-Implementation and review are complete; first land passed all runtime/script checks but exposed missing generated workspace links during integration typecheck. The equivalent public-source type mappings are implemented, tested without those links, built, committed and merged. New incoming decisions read and preserved. Commit this repair evidence, detach and retry queue.ts land m5-structured-runner; only its successful integration gate completes the item. No running smoke services or open accepted review findings.
+Blocked at step7's mandatory integration gate. Implementation, reviewed specs, native/CLI smokes, accepted close fix, public types/CLI schemas, consumer tests and docs are complete. The missing-workspace-link typecheck issue is repaired and verified without links; current typecheck passes. Latest land's only remaining failure is the protected queue's forward dependency m6-objective-landing -> m6-sitter-github. Preserve all commits on blocked/m5-structured-runner, detach and register the external blocker with queue.ts block. After authorized queue-order repair, restore that branch to build/m5-structured-runner, set the item todo through queue.ts, catch up/read decisions, run the required gates and land. No open accepted review findings or running jobs.
