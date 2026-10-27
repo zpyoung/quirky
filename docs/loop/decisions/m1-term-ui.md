@@ -468,5 +468,26 @@
 - **Revisit if:** upgrading a running Quirky must keep live shells
 - **Source:** assumed — autonomous
 
+## D47: Wave 1's kernel UI task got six test fakes added to its scope
+- **Question:** task A1 (kernel UI growth) returned BLOCKED: adding `overlays` to `UiModel` and `setContext`/`mountView` to `UiPluginContext` broke six test fakes and one pinned warning text outside its scope
+- **Options:** re-plan a follow-up task; widen A1's scope after checking no sibling touched the files
+- **Chose:** widen, after checking that none of the other three wave-1 tasks changed any of the six files (`packages/cli/test/fixtures/fake-daemon.ts`, `packages/ui/test/mock-daemon.ts`, `packages/daemon/test/plugins/ui-wiring.test.ts`, `plugins/quirky.agents/test/ui/fake.ts`, `plugins/quirky.git/test/ui.test.ts`, `plugins/quirky.session/test/ui-fake.ts`), then re-auditing and re-running acceptance (383 pass).
+- **Why:** the edits are mechanical type completions forced by the contract; every sibling had already returned, so no concurrent writer existed.
+- **Evidence:** run journal, wave 1
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** assumed — autonomous
+
+## D48: A `quirky.ask` CLI timing test fails only under full-suite load
+- **Question:** the wave 1 gate had one failure, `quirky ask command module > SC-28`, in a file this item doesn't touch
+- **Options:** treat as a regression; establish it as a flake
+- **Chose:** a load flake: the file passes 3 of 3 runs alone at the same tree.
+- **Why:** the test waits on a printed line with a short deadline, and the full suite runs four implementers' worth of processes on the machine.
+- **Evidence:** plugins/quirky.ask/test/cli.test.ts; gate w1 log
+- **Reversibility:** easy
+- **Confidence:** medium
+- **Revisit if:** it fails again in a gate with nothing else running
+- **Source:** assumed — autonomous
+
 ## Progress
-Specs reviewed and committed. Building with subagent-driven-development; run journal in the session scratchpad. Wave 1 (A1 kernel UI, A2 kernel daemon, A3 session, A4 terminal pure modules) dispatched from 0fc710b on branches sdd/termui/A1..A4. If this iteration stops early: check those branches/worktrees for uncommitted work, audit against tech.md, then continue with wave 2 (layout service + manifest; pane component).
+Wave 1 merged (1d73ea1, gate green apart from D48). Wave 2 (B1 layout service + manifest daemon entries; B2 pane component) dispatched from 1d73ea1 on sdd/termui/B1, B2. Next: checkpoint review over 0fc710b..wave-2 merge, then wave 3 (workspace view, quick-command window parts, CLI), wave 4 (wiring with overrides/keybindings/commands, floating overlay, scenario tests).
