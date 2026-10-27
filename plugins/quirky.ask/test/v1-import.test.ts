@@ -172,3 +172,4 @@ describe('migration 3', () => {
     expect(store.get<{ owner_plugin_id: string }>('SELECT owner_plugin_id FROM asks WHERE id = ?', 'ask_pending')).toEqual({ owner_plugin_id: 'quirky.ask-owner' })
   })
 })
+

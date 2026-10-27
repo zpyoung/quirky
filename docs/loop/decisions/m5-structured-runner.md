@@ -486,5 +486,93 @@ Implementation wave: T1 structured/session/catalog, T2 checks plugin, T3 ask own
 - **Revisit if:** merge-result tests show a concrete integration defect
 - **Source:** assumed — autonomous
 
+## D45: Reconcile a newer integration tip instead of discarding verified m5 work
+- **Question:** how to proceed when the next supported land conflicts after cc631cf passed verification
+- **Options:** stop on the conflict; discard m5 source to match the new integration tree; merge the new tip and preserve both intended features
+- **Chose:** merge the latest build/roadmap and reconcile its changes while retaining the verified m5 implementation/account composition. Trace incoming deletion provenance and all silent backouts before final verification.
+- **Why:** queue.ts land exited1 before merge-result tests (4.78seconds), naming a branch conflict. The next merge exposed deleted/modified m5 native files/specs plus structured-source and documentation conflicts. The incoming log's competing Progress is only the stale D34 infrastructure blocker, superseded by the operator's D35 instruction; it does not authorize dropping m5. New Session Info documentation must coexist with structured/checks/hosting guides. Automatic merges can silently remove unchanged m5 files too, so restoring only marker blocks would be incomplete.
+- **Evidence:** bg_29; subsequent git merge build/roadmap output; decision-log conflict had current D44-ready progress versus old D34-blocked progress; plugins/README.md interleaved Session Info with structured sections; missing checks/native transport files observed by StructuredMerge.
+- **Reversibility:** medium (cross-feature integration)
+- **Confidence:** high for the observed conflict; incoming deletion provenance still being traced
+- **Revisit if:** a new binding decision explicitly reverses the operator's requested m5 scope
+- **Source:** assumed — autonomous (operator-directed landing continuation)
+
+## D46: Restore the unlanded candidate removed by handoff's cleanup, not an obsolete feature design
+- **Question:** what the incoming native/check/spec deletions mean for the operator-requested m5 landing
+- **Options:** interpret the cleanup as a new design prohibition; retain shipped handoff changes while reintroducing m5 as its own item
+- **Chose:** restore m5-native/check/schema/test/spec surfaces from verified cc631cf while preserving incoming Session Info and account-source provenance.
+- **Why:** IncomingDecisionScout traced deletion to2aba9d9c4d19160376415f4e6e532d642bc7eb20, “fix(handoff): preserve shipped schema and exclude unlanded candidate.” This removed an unlanded m5 candidate from the handoff branch, not the requested m5 item. Latest integration still marks m5 in-progress lane12. Two merge bases explain why triple-dot history against9871d322 hid the backout while ab2c87db contained m5. Restore both explicit modify/delete conflicts and silent native transport/path/test/check removals; keep new accounts/sessionHome and handoff's recorded-source-home lookup, plus Session Info/public JSON-argument composition.
+- **Evidence:** Scout report HEADcc631cf/MERGE_HEAD1df36ca, bases9871d322/ab2c87db; cleanup commit2aba9d9c; docs/loop/decisions/m3-handoff.md D79/D80; incoming structured manifest explicitly reverted to Claude-only while the queue retains the m5 item.
+- **Reversibility:** medium (cross-feature merge composition)
+- **Confidence:** high
+- **Revisit if:** final source/gates reveal a genuine new incoming contract not preserved
+- **Source:** assumed — autonomous (operator-directed feature landing)
+
+## D47: Preserve the three new binding decision logs and their public contracts
+- **Question:** which incoming decisions arrived after the first integration verification
+- **Options:** treat the cleanup as authority to replace m5; compose all newly shipped contracts with the verified candidate
+- **Chose:** preserve the incoming handoff, Session Info and Git-flake decisions. Scout read all three new logs and the only changed existing log (m5's stale D34); no other decision file changed between9871d322 and the new integration tip.
+- **Why:** handoff D77–D84 requires recorded effective source-home lookup without account switching, explicit-unset provenance, bounded/contained transcript recovery, and both openSession/addTab/NewTabIds APIs. Session Info's finishing decisions preserve names/settings/metadata, cloned replay launch records, required Accounts preparation, visible focus/accessory contributions and immutable composable JSON arguments. The Git repair replaces event sleeps with ordered subscription-receipt barriers without weakening assertions. None prohibits m5's native/check features or its account-composition fix.
+- **Evidence:** docs/loop/decisions/m3-handoff.md D77–D84; docs/loop/decisions/m3-session-info.md D28–D36 and finishing records; docs/loop/decisions/fix-flaky-quirky-git-files-scenarios.md D1–D7; IncomingDecisionScout completed inventory.
+- **Reversibility:** medium (shared public launch/UI contracts)
+- **Confidence:** high
+- **Revisit if:** final combined tests expose an actual incompatible contract
+- **Source:** locked by docs/loop/decisions/m3-session-info.md
+
+## D48: Verify restoration at both the type and real consumer boundaries
+- **Question:** whether marker-free restored files alone prove complete m5 restoration
+- **Options:** trust the restoration report; require types and real default-catalog native execution
+- **Chose:** treat both observed failures as incomplete restoration and repair them without dropping assertions or launch picks.
+- **Why:** the first restored typecheck found20test-only diagnostics from missing startAsk/createAgent/provider-session fixture declarations; the owner restored those exact helpers from cc631cf. A standalone real CLI/native smoke then refused Codex model selection before spawn, proving that the incoming cleanup also removed the actual agent catalog's structured model/effort mapping. FakeWorld resolver tests do not exercise that catalog. Restore its verified mappings and keep a focused real CLI/catalog/native-process regression for AC5, rather than masking the failure by omitting model/effort. The broader remote run is an isolated snapshot of the pre-helper-correction tree and cannot establish final green by itself.
+- **Evidence:** bg_44/artifact://89 (20diagnostics,3testfiles); owner test-helper correction; bg_45 invalid-params “Agent codex does not support launch-time model selection.” bun install saved restored workspace metadata (185installs/190packages,46ms).
+- **Reversibility:** easy (restoration/coverage)
+- **Confidence:** high for reproduced omissions
+- **Revisit if:** focused real consumer regression or final combined verification fails
+- **Source:** assumed — autonomous
+
+## D49: Keep a real CLI/default-catalog/native-process regression for launch and resume
+- **Question:** how to prevent fake resolver/session fixtures from masking public contract backouts
+- **Options:** only restore data and rely on fake-plugin tests; exercise the default catalog, generated CLI and native app-server together
+- **Chose:** add one isolated native lifecycle scenario in cli-native.test.ts: create with model/effort, stop, public session resume, immediate send, and verify native thread/picks plus stored identity/snapshot.
+- **Why:** the first permanent scenario failed before catalog restoration with the exact unsupported-model error (bg_46,2.96seconds). Restoring Codex's model/effort structured mappings made creation pass. Extending the same flow then failed before registration-schema restoration with “params.cwd is not allowed” (bg_49,6.24seconds), then exposed resumedFrom=null after schema repair (bg_50,4.89seconds). The registration implementation accepted the parameters but ignored them. The corrected implementation validates/applies original cwd and source identity before SessionRecords.insert. The final complete real scenario passed35assertions in5.17seconds, and the full native approval/resume/check smoke passed.
+- **Evidence:** artifact://92 and artifact://97; bg_45/bg_46/bg_47/bg_49/bg_50/bg_53; plugins/quirky.agents/quirky-plugin.json; plugins/quirky.session/{quirky-plugin.json,src/sessions.ts}; plugins/quirky.structured/test/cli-native.test.ts. No paid model calls or real account state; all processes/homes are owned and cleaned.
+- **Reversibility:** easy (consumer regression and faithful restoration)
+- **Confidence:** high for observed launch/resume behavior
+- **Revisit if:** final remote or merge-result gate fails this lifecycle
+- **Source:** assumed — autonomous
+
+## D50: Restore fixture contracts and delete obsolete copies instead of repinning them
+- **Question:** how to handle old fixture declarations and catalog-copy assertions reintroduced by the cleanup merge
+- **Options:** weaken runtime validation or repin implementation copies; restore fixture APIs and retain behavior-level checks
+- **Chose:** restore fake session setProviderSession declaration and fake agent resolveLaunch implementation/declaration, retaining incoming prepareLaunch/prepareResume behavior. Delete two obsolete raw Codex catalog/structured-key copy tests and the structured method-name-list wiring test; remove their unused helper/import. Keep unsupported-agent validation using a genuinely unsupported provider and error codes, not Claude-only wording.
+- **Why:** older isolated snapshots failed on undeclared fake methods, obsolete Claude-only assumptions and raw object equality after adding real Codex support. No production alias, fake fallback or assertion suppression fixes those. The real CLI/native lifecycle now covers actual support/picks/resume, while meaningful existing API and provider tests remain. The corrected five-file local run passed ask36, structured27, Claude23, session-resume23 and agents-manifest20 tests.
+- **Evidence:** bg_51/artifact://100 (207/211files initially passed,4failed); bg_54/artifact://109 (all five corrected files pass,15.99seconds). LSP reference lookup was attempted for removed catalog-test import and reported no server; narrow fallback search confirmed its only use.
+- **Reversibility:** easy
+- **Confidence:** high for corrected fixture and consumer coverage
+- **Revisit if:** a behavior-level failure identifies a lost contract
+- **Source:** assumed — autonomous
+
+## D51: Preserve all historical snapshot failures and reconcile the actual Git index before committing
+- **Question:** whether working-tree restoration and later passing targeted tests justify claiming older full snapshots passed
+- **Options:** erase/relabel old failures; retain exact snapshot outcomes and stage every restored path explicitly
+- **Chose:** retain the failures and reverify the final source. Stage restored plugin directories, specs, docs and lockfile so no silent staged deletion survives the merge.
+- **Why:** the earlier500file snapshot had496pass/4fail from omitted test scaffolding; the next501file snapshot had old fixture/copy failures and a PTY host bulk-output timeout whose isolated32test rerun passed. Both full commands exited1 and remain failures. Later source/test corrections are independently verified, not retroactively attributed to those runs. Scout confirmed restored source was on disk but the merge index still contained deletions/unmerged entries; parent git add explicitly reconciled all m5 paths after restoration. Incoming handoff/Session Info contracts remain intact.
+- **Evidence:** bg_43/artifact://87 and bg_48/artifact://94; Scout restoration audit; parent git add of restored feature directories/specs/README/bun.lock/tsconfig and m5 decision log.
+- **Reversibility:** easy
+- **Confidence:** high for recorded outcomes and index operation
+- **Revisit if:** current final consumer or supported land verification fails
+- **Source:** assumed — autonomous
+
+## D52: Land the fully reconciled final source after consumer and smoke proof
+- **Question:** whether the second catch-up restoration is ready to retry the supported landing gate
+- **Options:** accept only disk restoration/typecheck; require final real consumer, native smoke, scripts and remote affected consumers
+- **Chose:** retry landing after all final checks passed. The corrected affected suite passed211files with no flakes in379.46seconds. The real CLI/default-catalog/native create+resume scenario passed35assertions; typecheck/frozen install, native approval/resume/immediate-send/shared-check smoke and scripts62tests/462assertions passed. Corrected ask/structured/Claude/session/agents files also passed locally (D50).
+- **Why:** these checks run the restored native/provider/account/session boundaries rather than trusting fake forwarding or old snapshot results. Source audit found no further lost m5 contract; parent staged restored paths to reverse the cleanup's index deletions while retaining incoming handoff/Session Info code. The external smoke script was removed after proof. Original feature final review and narrow account reconciliation review remain authoritative; no new discovery round or open accepted finding. A fresh full merge-result gate remains queue.ts land's responsibility.
+- **Evidence:** bg_55 suite-result {\"ok\":true,\"flaky\":[]}; bg_53/artifact://107; bg_54/artifact://109; source/provenance audit; explicit git add and successful external smoke removal.
+- **Reversibility:** easy
+- **Confidence:** high for final exercised integration
+- **Revisit if:** queue.ts land reports a conflict or failing merge-result check
+- **Source:** assumed — autonomous
+
 ## Progress
-Ready for step7 landing after operator-directed integration. All conflicts resolved, incoming decisions preserved, concrete Codex-account gap red/green verified, duplicate identical compiler paths removed, docs/specs updated. Final affected171files/no flakes, scripts62pass, typecheck and actual daemon/native/CLI smoke pass; narrow reconciliation review PASS and prior final review/fix retained. All owned work returned and throwaway scripts removed. Next: commit the merge and recorded source/docs, detach, run queue.ts land m5-structured-runner without an outer deadline, and wait for the supported merge-result verdict. No protected-path edits or open accepted review findings.
+Ready to retry step7: second catch-up complete, all restored files/specs kept and staged, incoming handoff/Session Info contracts preserved, real catalog/native launch+resume and account preparation covered, final211affected files/no flakes plus typecheck/scripts/native smoke pass. Old failed snapshots remain recorded; no claim they passed. All owned agents/jobs returned and external scaffolding removed. Next: commit the resolved latest merge and decision record, detach, queue.ts land m5-structured-runner without an outer deadline, and wait for its fresh full merge-result verdict.

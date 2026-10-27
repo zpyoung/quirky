@@ -1,6 +1,7 @@
 import type { Ask, AskEnvelope, Session, SessionStatus, Worktree } from '@quirky/protocol'
 
 const WORKTREE_DEFAULTS = {
+  kind: 'git',
   displayName: null,
   comment: '',
   status: 'in-progress',
@@ -36,7 +37,6 @@ export class FakeWorld {
     branch: 'main',
     head: 'abc123',
     isMain: true,
-    kind: 'git',
     name: 'main',
     ...WORKTREE_DEFAULTS
   }
@@ -87,7 +87,7 @@ export class FakeWorld {
       this.sessions.set(session.id, session)
       return session
     },
-    setProviderSession: (params: any, context: PluginCtx) => {
+    setProviderSession: (params: { session: string; id: string; transcriptPath?: string | null }, context: PluginCtx) => {
       const session = this.require(params.session, context)
       session.providerSession = { id: params.id, transcriptPath: params.transcriptPath ?? null }
       return session

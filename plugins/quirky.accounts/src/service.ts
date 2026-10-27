@@ -7,6 +7,7 @@ import type {
   AccountIdentity,
   AccountRecord,
   AccountSessionRecord,
+  SessionHomeResult,
   AccountState,
   AccountUiState,
   ConfigWarning,
@@ -202,6 +203,14 @@ export class AccountService {
     const pending = this.login.status(id)
     if (!pending) this.fail('not-found', 'The sign-in request was not found.')
     return pending
+  }
+
+  sessionHome(params: Record<string, unknown>): SessionHomeResult {
+    const sessionId = this.readNonempty(params.session, 'session')
+    const session = getSessionRecord(this.store, sessionId)
+    return session === null
+      ? { provider: null, home: null }
+      : { provider: session.provider, home: session.home }
   }
 
   async cancelLogin(params: Record<string, unknown>): Promise<PendingLogin> {

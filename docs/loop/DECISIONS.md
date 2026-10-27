@@ -34,6 +34,7 @@ files, not this one.
 | hard | high | [m0-scripting D24](decisions/m0-scripting.md) | Choose schemas declared in the manifest, a daemon catalog, and a CLI that builds plugin commands from it at run time | assumed — autonomous |
 | hard (metadata and external api) | high | [m2-sidebar-extras D7](decisions/m2-sidebar-extras.md) | Worktree membership stays separate from repo ownership and group-folder identity | locked by research/orca-features/sidebar-extras.md |
 | hard | high | [m2-source-control-core D5](decisions/m2-source-control-core.md) | Extend `quirky.git` in place, with every composite (sync, discard-all, stage-all) in the daemon | assumed — autonomous |
+| hard | high | [m3-handoff D5](decisions/m3-handoff.md) | A new built-in plugin, `quirky.handoff`, owns composition, launch and lineage in the daemon; the window is a thin view | assumed — autonomous |
 | hard | high | [m0-core D6](decisions/m0-core.md) | v1's methods are renamed to their plugin's namespace, with no aliases, and the protocol version goes to 2 | supersedes m0-daemon-api D5 |
 | hard | high | [m0-core D7](decisions/m0-core.md) | v1's events become the plugins' events | assumed — autonomous |
 | hard | high | [m0-core D31](decisions/m0-core.md) | Port v1 for real, growing the public plugin API, rather than facades or raw RPC primitives | locked by docs/roadmap.md (built-ins use only the public API); assumed — autonomous (the approach) |
@@ -65,6 +66,8 @@ files, not this one.
 | medium | medium | [m2-source-control-core D23](decisions/m2-source-control-core.md) | Diffs open in a `quirky.git/diff` view in the main area, and closing it returns to the worktree's sessions | assumed — autonomous |
 | medium | medium | [m2-source-control-core D25](decisions/m2-source-control-core.md) | Diffs render with `@codemirror/merge`, editable only for unstaged changes, saved with a disk precondition | locked by docs/architecture.md (CodeMirror); assumed — autonomous (the save method) |
 | medium | medium | [m2-source-control-core D27](decisions/m2-source-control-core.md) | The conflict review and conflict file views live in this plugin, without accept buttons | assumed — autonomous |
+| medium | medium | [m3-handoff D25](decisions/m3-handoff.md) | The transcript probe checks local files only: reported path, session id, earlier paths, then a Claude project scan | assumed — autonomous |
+| medium | medium | [m3-handoff D40](decisions/m3-handoff.md) | Badges show on session tabs through a generic session badge, and the jump focuses the other end | assumed — autonomous |
 | medium | medium | [m0-core D10](decisions/m0-core.md) | Repo and worktree selectors resolve in the daemon, with the caller's cwd and identity | assumed — autonomous |
 | medium | medium | [m0-core D20](decisions/m0-core.md) | Irreversible methods confirm through an ask unless the call passes `yes` | locked by docs/roadmap.md (ask unless `--yes`); assumed — autonomous (the protocol) |
 | medium | medium | [m0-core D22](decisions/m0-core.md) | Plugin slots report their own content as JSON | assumed — autonomous |
@@ -152,6 +155,14 @@ files, not this one.
 | medium | high | [m2-source-control-notes-ai D19](decisions/m2-source-control-notes-ai.md) | Recipes are stored by `quirky.git` per action, globally and per repository, and the repository one wins | assumed — autonomous |
 | medium | high | [m2-source-control-core D8](decisions/m2-source-control-core.md) | The status record grows additively, read from porcelain v2 | assumed — autonomous |
 | medium | high | [m2-source-control-core D20](decisions/m2-source-control-core.md) | The compare base is the worktree's base, else the project's, else the detected default, and Change Base Ref writes where the base came from | locked by research/orca-features/source-control.md |
+| medium | high | [m3-handoff D6](decisions/m3-handoff.md) | A source is a session; a live source is the agent running in a terminal session | assumed — autonomous |
+| medium | high | [m3-handoff D9](decisions/m3-handoff.md) | The pane menu gains a public contribution point other plugins use | locked by docs/roadmap.md |
+| medium | high | [m3-handoff D35](decisions/m3-handoff.md) | The brief is pasted after the agent's input is ready through `quirky.agents/deliver`, not passed on the command line | locked by handoff.md |
+| medium | high | [m3-handoff D37](decisions/m3-handoff.md) | Toasts gain a kind, persistence and action buttons in the shell | locked by docs/roadmap.md |
+| medium | high | [m3-handoff D38](decisions/m3-handoff.md) | Lineage is one record per handoff in the plugin's store, capped at 500 | locked by handoff.md |
+| medium | high | [m3-handoff D48](decisions/m3-handoff.md) | The scripting surface is the `quirky.handoff` methods and the `quirky handoff` command group | locked by docs/roadmap.md |
+| medium | high | [m3-handoff D72](decisions/m3-handoff.md) | Remove a transient landing candidate captured by catch-up | locked by docs/loop/LOOP.md |
+| medium | high | [m3-handoff D74](decisions/m3-handoff.md) | Preserve the shipped name migration and append handoff badges after it | locked by docs/loop/decisions/m1-agent-status-scripting.md |
 | medium | high | [m0-core D8](decisions/m0-core.md) | v1's CLI words stay, with `wt` and `term` as group aliases | assumed — autonomous |
 | medium | high | [m0-core D12](decisions/m0-core.md) | Notifications are a kernel service, and each plugin decides when to notify | locked by docs/architecture.md |
 | medium | high | [m0-core D13](decisions/m0-core.md) | v1's settings become plugin settings | supersedes m0-ui-api D18 |
@@ -261,6 +272,13 @@ files, not this one.
 | medium | high | [m1-term-daemon D24](decisions/m1-term-daemon.md) | History is rendered on read by replaying a bounded window of the log, not stored as rows | locked by docs/architecture.md |
 | medium | high | [m1-term-daemon D41](decisions/m1-term-daemon.md) | Catching up with build/roadmap (m1-providers) keeps both sides; the exit columns become migration 3 | assumed — autonomous |
 | medium | high | [m1-term-daemon D42](decisions/m1-term-daemon.md) | A second catch-up merged m1-launch-settings; the exit columns become migration 4 | assumed — autonomous |
+| medium | high | [m3-session-info D1](decisions/m3-session-info.md) | Build the local session inspection flows, not adjacent agent extras | locked by docs/roadmap.md |
+| medium | high | [m3-session-info D5](decisions/m3-session-info.md) | Statusline consent changes only future launch overlays | locked by docs/roadmap.md |
+| medium | high | [m3-session-info D6](decisions/m3-session-info.md) | Correlate every rich value to the active provider session | assumed — autonomous |
+| medium | high | [m3-session-info D7](decisions/m3-session-info.md) | Keep feature ownership in a new built-in plugin | locked by docs/roadmap.md |
+| medium | high | [m3-session-info D9](decisions/m3-session-info.md) | macOS local execution is the supported transport | deferred: platform |
+| medium | high | [m3-session-info D12](decisions/m3-session-info.md) | Accept the specification review's three implementation gaps | assumed — autonomous |
+| medium | high | [m3-session-info D27](decisions/m3-session-info.md) | Close supplemental final A1 with a real bounded-I/O fix | assumed — autonomous |
 | easy | low | [m1-agent-status D38](decisions/m1-agent-status.md) | mimo-code's plugin goes in its config dir's `plugins/`, not Orca's per-launch overlay | assumed — autonomous |
 | easy (redispatch if a substantive dependency emerges) | medium | [sa-browser-agent D13](decisions/sa-browser-agent.md) | Keep implementation in one component with focused internal modules | assumed — autonomous |
 | easy | medium | [m0-scripting D14](decisions/m0-scripting.md) | Generated commands print a generic text form, and `--json` prints the raw result | assumed — autonomous |
@@ -299,6 +317,20 @@ files, not this one.
 | easy | medium | [m2-source-control-core D60](decisions/m2-source-control-core.md) | Goals the tool could not fully drive are recorded, not failed | assumed — autonomous |
 | easy | medium | [m2-source-control-core D61](decisions/m2-source-control-core.md) | The file diff's changed-on-disk banner has no layout test | assumed — autonomous |
 | easy | medium | [m2-source-control-core D63](decisions/m2-source-control-core.md) | The second catch-up takes build/roadmap's test runner, which retires D55's three-process split | supersedes m2-source-control-core D55 |
+| easy | medium | [m3-handoff D4](decisions/m3-handoff.md) | In scope is every flow of handoff.md that works on one Mac with a terminal session; native chat, SSH and runtime hosts, the AI Vault row entry and the dashboard are out | assumed — autonomous |
+| easy | medium | [m3-handoff D7](decisions/m3-handoff.md) | A source can also be an archived session given by agent, provider session id and transcript path | assumed — autonomous |
+| easy | medium | [m3-handoff D14](decisions/m3-handoff.md) | The base branch blank means the source worktree's current branch, not the repo's default | assumed — autonomous |
+| easy | medium | [m3-handoff D19](decisions/m3-handoff.md) | Open editor tabs come from the editor plugin when it is running; without it the block is left out | assumed — autonomous |
+| easy | medium | [m3-handoff D21](decisions/m3-handoff.md) | The base block is Quirky's own continuation prompt with the parts Orca's delivered brief showed | assumed — autonomous |
+| easy | medium | [m3-handoff D24](decisions/m3-handoff.md) | The cost readout uses Orca's estimator | locked by handoff.md |
+| easy | medium | [m3-handoff D31](decisions/m3-handoff.md) | The secret scan runs on every preview, never blocks, and the host warning never shows | assumed — autonomous |
+| easy | medium | [m3-handoff D34](decisions/m3-handoff.md) | The new session opens as a tab in the source's tab group when the target is the source's worktree, else in the target's active group | assumed — autonomous |
+| easy | medium | [m3-handoff D36](decisions/m3-handoff.md) | The delivery outcome is delivered, not delivered or unobservable, with Orca's toasts and one automatic retry | locked by handoff.md |
+| easy | medium | [m3-handoff D42](decisions/m3-handoff.md) | Three built-in templates with Quirky-written bodies; Orca's catalog limits and normalization | locked by handoff.md |
+| easy | medium | [m3-handoff D54](decisions/m3-handoff.md) | Wave 1 choices the specs left open | assumed — autonomous |
+| easy | medium | [m3-handoff D55](decisions/m3-handoff.md) | Wave 1 gate: host.test.ts failed on the remote runner and passes alone | assumed — autonomous |
+| easy | medium | [m3-handoff D57](decisions/m3-handoff.md) | Wave 2 choices the specs left open | assumed — autonomous |
+| easy | medium | [m3-handoff D59](decisions/m3-handoff.md) | Wave 3 window choices | assumed — autonomous |
 | easy | medium | [m0-core D14](decisions/m0-core.md) | v1 data carries over on upgrade | assumed — autonomous |
 | easy | medium | [m0-core D25](decisions/m0-core.md) | Ask cards move into a Questions panel that opens itself | assumed — autonomous |
 | easy | medium | [m0-core D39](decisions/m0-core.md) | Build in five waves: a scaffold, kernel modules, plugins beside v1, the switch-over with the UI port, then scenario tests | assumed — autonomous |
@@ -497,6 +529,13 @@ files, not this one.
 | easy | high | [fix-flaky-quirky-worktree-window-projects D9](decisions/fix-flaky-quirky-worktree-window-projects.md) | Preserve operator ownership and catch up before final review | assumed — autonomous |
 | easy | high for exercised paths | [fix-flaky-quirky-worktree-window-projects D10](decisions/fix-flaky-quirky-worktree-window-projects.md) | Verify the affected plugin and required gates without changing shipped behavior | locked by docs/loop/LOOP.md |
 | easy | high for the confirmed timing race and existing fix; review used supplied evidence rather than independent tool execution. | [fix-flaky-quirky-worktree-window-projects D11](decisions/fix-flaky-quirky-worktree-window-projects.md) | Accept the final review and retain no duplicate implementation | assumed — autonomous |
+| easy (test/runtime repair only) | high | [fix-flaky-quirky-git-files-scenarios D1](decisions/fix-flaky-quirky-git-files-scenarios.md) | Diagnose the recorded load failure without expanding feature scope | locked by docs/loop/LOOP.md |
+| easy | high | [fix-flaky-quirky-git-files-scenarios D2](decisions/fix-flaky-quirky-git-files-scenarios.md) | Use a reachable cross-family reviewer | assumed — autonomous |
+| easy | high | [fix-flaky-quirky-git-files-scenarios D3](decisions/fix-flaky-quirky-git-files-scenarios.md) | Stop local load and use the shared test host | assumed — autonomous |
+| easy (test-only helper and synchronization) | high for the demonstrated race; medium for attribution to historical flakes | [fix-flaky-quirky-git-files-scenarios D4](decisions/fix-flaky-quirky-git-files-scenarios.md) | Establish subscriber receipt by ordered RPC, not elapsed time | assumed — autonomous |
+| easy | high | [fix-flaky-quirky-git-files-scenarios D5](decisions/fix-flaky-quirky-git-files-scenarios.md) | Preserve consumer assertions and use controlled latency as red/green evidence | assumed — autonomous |
+| easy | high | [fix-flaky-quirky-git-files-scenarios D6](decisions/fix-flaky-quirky-git-files-scenarios.md) | Verify the existing surface without adding UI or feature scope | assumed — autonomous |
+| easy | high for repair/verification; medium for exact attribution to original filename-only flake reports | [fix-flaky-quirky-git-files-scenarios D7](decisions/fix-flaky-quirky-git-files-scenarios.md) | Final verification and cross-family review clear the test-only repair | assumed — autonomous |
 | easy | high | [m2-source-control-notes-ai D1](decisions/m2-source-control-notes-ai.md) | Classify the item as Visual, API, CLI and Integration work, and run research phases A and B | assumed — autonomous |
 | easy | high | [m2-source-control-notes-ai D2](decisions/m2-source-control-notes-ai.md) | Skip the visual companion and the adhd offer, use the standard gray-area set | locked by docs/loop/LOOP.md |
 | easy | high | [m2-source-control-notes-ai D5](decisions/m2-source-control-notes-ai.md) | Select every gray area that matters for notes and AI actions | assumed — autonomous |
@@ -562,6 +601,65 @@ files, not this one.
 | easy | high | [m2-source-control-core D58](decisions/m2-source-control-core.md) | All seven Final Round 1 defects are closed by the fix batch, each with a test | assumed — autonomous |
 | easy | high | [m2-source-control-core D59](decisions/m2-source-control-core.md) | UI verification round 1: 18 goals pass, three app defects found and fixed on the branch | assumed — autonomous |
 | easy | high | [m2-source-control-core D62](decisions/m2-source-control-core.md) | The UI rerun passes SC-61, SC-45 and the conflict badge | assumed — autonomous |
+| easy | high | [m3-handoff D1](decisions/m3-handoff.md) | Classify the item as Visual, API, CLI and Integration work, and run research phases A and B | assumed — autonomous |
+| easy | high | [m3-handoff D2](decisions/m3-handoff.md) | Skip the visual companion and the adhd offer; use the standard gray-area set | locked by docs/loop/LOOP.md |
+| easy | high | [m3-handoff D3](decisions/m3-handoff.md) | Select every gray area that matters | locked by docs/loop/LOOP.md |
+| easy | high | [m3-handoff D8](decisions/m3-handoff.md) | The pane menu shows "Hand Off to Another Agent" only on panes whose session runs a catalog agent, right below Quick Commands | locked by handoff.md |
+| easy | high | [m3-handoff D10](decisions/m3-handoff.md) | No context, no dialog | locked by handoff.md |
+| easy | high | [m3-handoff D11](decisions/m3-handoff.md) | Orca's labels and messages are kept word for word, with "Orca" read as "Quirky" in the brief | locked by handoff.md |
+| easy | high | [m3-handoff D12](decisions/m3-handoff.md) | The worktree list is the source repo's worktrees plus folder workspaces that contain it, defaulting to the source's worktree | locked by handoff.md |
+| easy | high | [m3-handoff D13](decisions/m3-handoff.md) | "Create a new worktree" creates it at Start through `quirky.worktree/create`, only for git sources | locked by handoff.md |
+| easy | high | [m3-handoff D15](decisions/m3-handoff.md) | The agent list is the installed, enabled catalog agents; default order is draft, last used, source, default agent, first | locked by handoff.md |
+| easy | high | [m3-handoff D16](decisions/m3-handoff.md) | Relationship is Continues, Reviews or Branches from, recorded and shown, acting on nothing | locked by handoff.md |
+| easy | high | [m3-handoff D17](decisions/m3-handoff.md) | Session context is Focused by default; Full only when the transcript is usable; never remembered | locked by handoff.md |
+| easy | high | [m3-handoff D18](decisions/m3-handoff.md) | Include toggles are repo state (on), diff bodies (off, needs repo state, capped at 12,000), open editor tabs (on); remembered after a successful start | locked by handoff.md |
+| easy | high | [m3-handoff D20](decisions/m3-handoff.md) | The brief is base, repo state, open editor tabs, template, steering note, joined by blank lines, then the locked notice at send time | assumed — autonomous |
+| easy | high | [m3-handoff D22](decisions/m3-handoff.md) | Repo state reads `quirky.git/status` and `quirky.git/diff` for the source worktree, in Orca's line format | assumed — autonomous |
+| easy | high | [m3-handoff D23](decisions/m3-handoff.md) | The repo-state strip appears only when reading repo state actually failed | assumed — autonomous |
+| easy | high | [m3-handoff D26](decisions/m3-handoff.md) | Session roots are home-relative paths; Windows roots are not handled | deferred: platform |
+| easy | high | [m3-handoff D27](decisions/m3-handoff.md) | A bounded capture is the source terminal's last 800 history lines, escapes stripped, last 36,000 characters | locked by handoff.md |
+| easy | high | [m3-handoff D28](decisions/m3-handoff.md) | The busy strip appears while the source's agent status is working; "Wait for idle" recaptures on idle and never starts by itself | locked by handoff.md |
+| easy | high | [m3-handoff D29](decisions/m3-handoff.md) | Editing the preview detaches it; regenerate reattaches; changes while detached only mark it stale | locked by handoff.md |
+| easy | high | [m3-handoff D30](decisions/m3-handoff.md) | The preview editor is CodeMirror 6, plain text, line numbers, word wrap | locked by docs/architecture.md |
+| easy | high | [m3-handoff D32](decisions/m3-handoff.md) | Start is disabled under Orca's conditions | locked by handoff.md |
+| easy | high | [m3-handoff D33](decisions/m3-handoff.md) | An attached preview is recomposed at Start and refused if the source changed | locked by handoff.md |
+| easy | high | [m3-handoff D39](decisions/m3-handoff.md) | A lineage write failure never fails the handoff | locked by handoff.md |
+| easy | high | [m3-handoff D41](decisions/m3-handoff.md) | The badge's jump must work | assumed — autonomous |
+| easy | high | [m3-handoff D43](decisions/m3-handoff.md) | "New Template" in the dialog saves the steering note | locked by handoff.md |
+| easy | high | [m3-handoff D44](decisions/m3-handoff.md) | The Session handoff page is a view opened by a command and listed in Settings | locked by handoff.md |
+| easy | high | [m3-handoff D45](decisions/m3-handoff.md) | Last agent, include toggles and last template live in the plugin store, written after a successful start | assumed — autonomous |
+| easy | high | [m3-handoff D46](decisions/m3-handoff.md) | Drafts live in the daemon's memory, keyed by source, and Cancel and Escape both keep one | assumed — autonomous |
+| easy | high | [m3-handoff D47](decisions/m3-handoff.md) | Escape keeps the draft | assumed — autonomous |
+| easy | high | [m3-handoff D49](decisions/m3-handoff.md) | The source keeps running and is never written to | locked by handoff.md |
+| easy | high | [m3-handoff D50](decisions/m3-handoff.md) | No native-only scenarios | assumed — autonomous |
+| easy | high | [m3-handoff D51](decisions/m3-handoff.md) | Spec review: fix all four Codex findings | locked by docs/loop/LOOP.md |
+| easy | high | [m3-handoff D52](decisions/m3-handoff.md) | Build pairing is claude-task implementers with a codex reviewer | locked by docs/loop/LOOP.md |
+| easy | high | [m3-handoff D53](decisions/m3-handoff.md) | Wave 1 widened two tasks' scope to fixtures and a report model the contracts forced | assumed — autonomous |
+| easy | high | [m3-handoff D56](decisions/m3-handoff.md) | Wave 1 checkpoint: fix setBadge's envelope and the focused-window toast list; wave 2 started alongside | assumed — autonomous |
+| easy | high | [m3-handoff D58](decisions/m3-handoff.md) | Wave 2 checkpoint: six defects fixed | assumed — autonomous |
+| easy | high | [m3-handoff D60](decisions/m3-handoff.md) | Catch-up with build/roadmap merged cleanly and conflicts with no decision | assumed — autonomous |
+| easy | high | [m3-handoff D61](decisions/m3-handoff.md) | Final Round 1: four MEDIUM findings, all fixed in one batch | locked by docs/loop/LOOP.md |
+| easy | high | [m3-handoff D62](decisions/m3-handoff.md) | The terminal's ui-model test checks only its own overlays | assumed — autonomous |
+| easy | high | [m3-handoff D63](decisions/m3-handoff.md) | Complete the UI pass with a guarded continuation for draft scenarios | locked by docs/loop/LOOP.md |
+| easy | high | [m3-handoff D64](decisions/m3-handoff.md) | Reconcile the resumed item with the latest integration decisions | locked by docs/loop/LOOP.md |
+| easy | high | [m3-handoff D65](decisions/m3-handoff.md) | Do not classify a modal-blocked tab click as a broken lineage tab | assumed — autonomous |
+| easy | high | [m3-handoff D66](decisions/m3-handoff.md) | Correct the fake Codex fixture and prove SC-50 instead of waiving it | supersedes m3-handoff D63 |
+| easy | high | [m3-handoff D67](decisions/m3-handoff.md) | Wait for the required remote suite without an arbitrary outer deadline | assumed — autonomous |
+| easy | high | [m3-handoff D68](decisions/m3-handoff.md) | Use the operator's night-mode verification gate before landing | supersedes m3-handoff D67 |
+| easy | high | [m3-handoff D69](decisions/m3-handoff.md) | Rerun the unchanged affected-package gate on the replacement test host | assumed — autonomous |
+| easy | high for observed outcomes; low for an unestablished cause | [m3-handoff D70](decisions/m3-handoff.md) | Investigate the provider-startup timeout without inventing a fix | assumed — autonomous |
+| easy | high | [m3-handoff D71](decisions/m3-handoff.md) | The operator's night-mode gate passes with one explicitly reported suite flake | locked by docs/loop/LOOP.md |
+| easy | high for the independently reproduced missing prerequisite | [m3-handoff D73](decisions/m3-handoff.md) | Incoming evidence identifies the missing provider-fixture prerequisite | supersedes m3-handoff D70 |
+| easy | high | [m3-handoff D75](decisions/m3-handoff.md) | Review the new reconciliation with the available cross-family fallback | locked by docs/loop/LOOP.md |
+| easy | high | [m3-handoff D76](decisions/m3-handoff.md) | Reconciled source passes the final affected-consumer gate | locked by docs/loop/LOOP.md |
+| easy | high | [m3-handoff D77](decisions/m3-handoff.md) | Preserve landed account/hosting additions while reconciling handoff | locked by docs/loop/decisions/m3-accounts.md |
+| easy | high for the inspected data flow; runtime regression proof pending | [m3-handoff D78](decisions/m3-handoff.md) | Use recorded source-home provenance without weakening transcript validation | supersedes m3-handoff D25 (recorded source-home selection only; candidate order and containment remain) |
+| easy | high for recorded failures and environment; cause not yet established | [m3-handoff D79](decisions/m3-handoff.md) | Preserve local script-gate failures as failures while diagnosing host pressure | assumed — autonomous |
+| easy | high | [m3-handoff D80](decisions/m3-handoff.md) | Prove and fix the recorded-home gap through public daemon consumers | supersedes m3-handoff D78 (runtime proof and completed implementation) |
+| easy | high | [m3-handoff D81](decisions/m3-handoff.md) | Reject the review's null-home finding against the recorded-home contract | assumed — autonomous |
+| easy | high | [m3-handoff D82](decisions/m3-handoff.md) | Preserve the probe's safe candidate recovery and finish the runtime proof | locked by docs/quirk/specs/2026-10-27-m3-handoff/tech.md |
+| easy | high | [m3-handoff D83](decisions/m3-handoff.md) | Retain Session Info's existing-session opener and handoff's tab identifiers | locked by docs/loop/decisions/m3-session-info.md |
+| easy | high | [m3-handoff D84](decisions/m3-handoff.md) | Verify the named Session Info merge paths without restarting feature verification | locked by docs/loop/LOOP.md |
 | easy | high | [m0-core D1](decisions/m0-core.md) | Classify the item as an API, CLI, Organization and Visual design, and run every research phase | assumed — autonomous |
 | easy | high | [m0-core D2](decisions/m0-core.md) | Skip the visual companion and the adhd offer, use the standard gray-area set | locked by docs/loop/LOOP.md |
 | easy | high | [m0-core D3](decisions/m0-core.md) | Keep m0-core as one item with one pair of specs, built in waves | locked by docs/loop/queue.json |
@@ -1023,3 +1121,32 @@ files, not this one.
 | easy | high | [m1-term-daemon D45](decisions/m1-term-daemon.md) | The UI pass found that a restored pane lost its old output; GROUND no longer moves the cursor | assumed — autonomous |
 | easy | high | [m1-term-daemon D46](decisions/m1-term-daemon.md) | All UI scenarios passed in the web window, across three passes | assumed — autonomous |
 | easy | high | [m1-term-daemon D47](decisions/m1-term-daemon.md) | No native-only scenarios | assumed — autonomous |
+| easy | high | [m3-session-info D2](decisions/m3-session-info.md) | Use the existing right-column panel slot without a shortcut | locked by docs/loop/decisions/m0-ui-api.md |
+| easy | high | [m3-session-info D3](decisions/m3-session-info.md) | Keep view state in the daemon and default only Live activity open | locked by docs/roadmap.md |
+| easy | high | [m3-session-info D4](decisions/m3-session-info.md) | Show missing, waiting, refreshing, stale and error states honestly | locked by external session-info.md |
+| easy | high | [m3-session-info D8](decisions/m3-session-info.md) | Use schema-generated session-info commands and explicit failures | locked by docs/roadmap.md |
+| easy | high | [m3-session-info D10](decisions/m3-session-info.md) | Use omp task implementers and Gemini cross-family review | assumed — autonomous |
+| easy | high | [m3-session-info D11](decisions/m3-session-info.md) | Use markdown specs and unattended design approval | locked by docs/loop/LOOP.md |
+| easy | high | [m3-session-info D13](decisions/m3-session-info.md) | One wave with four disjoint implementation components | assumed — autonomous |
+| easy | high | [m3-session-info D14](decisions/m3-session-info.md) | Explicitly own missing integration primitives and scope corrections | assumed — autonomous |
+| easy | high | [m3-session-info D15](decisions/m3-session-info.md) | Validate linked components in a combined acceptance tree before committing | supersedes m3-session-info D13 |
+| easy | high | [m3-session-info D16](decisions/m3-session-info.md) | Repair root causes found by the first combined gate | assumed — autonomous |
+| easy | high | [m3-session-info D17](decisions/m3-session-info.md) | Preserve the launch-settings allowlist and report per-launch hook evidence | locked by docs/loop/decisions/m1-launch-settings.md |
+| easy | high | [m3-session-info D18](decisions/m3-session-info.md) | Use the registered terminal root and a shared cross-process throttle clock | assumed — autonomous |
+| easy | high | [m3-session-info D19](decisions/m3-session-info.md) | Honor the merged process-ownership rules and review only this item's delta | locked by docs/loop/decisions/fix-test-process-leaks.md |
+| easy | high | [m3-session-info D20](decisions/m3-session-info.md) | Pin the final review baseline to the merged integration tip | assumed — autonomous |
+| easy | high | [m3-session-info D21](decisions/m3-session-info.md) | Fix stale Usage recovery and distinguish short feedback from driver sampling | assumed — autonomous |
+| easy | high | [m3-session-info D22](decisions/m3-session-info.md) | Keep native-only effects in the nightly handoff | locked by docs/loop/LOOP.md |
+| easy | high | [m3-session-info D23](decisions/m3-session-info.md) | Preserve floating keyboard focus and remove incidental catalog snapshots | assumed — autonomous |
+| easy | high | [m3-session-info D24](decisions/m3-session-info.md) | Record the slow full-suite advisory without changing the shared runner | assumed — autonomous |
+| easy | high | [m3-session-info D25](decisions/m3-session-info.md) | Record repaired web flows and the remaining driver limitation | assumed — autonomous |
+| easy | high | [m3-session-info D26](decisions/m3-session-info.md) | Complete one deep review round with an explicit security fallback | assumed — autonomous |
+| easy | high | [m3-session-info D28](decisions/m3-session-info.md) | Verify Windows file-opening semantics during its platform work | deferred: platform |
+| easy | high | [m3-session-info D29](decisions/m3-session-info.md) | Finish only through queue land after post-fix gates | locked by docs/loop/LOOP.md |
+| easy | high | [m3-session-info D30](decisions/m3-session-info.md) | Accept the observed post-fix gates and hand off to queue land | locked by docs/loop/LOOP.md |
+| easy | high | [m3-session-info D31](decisions/m3-session-info.md) | Resolve the landing catch-up without dropping either API surface | assumed — autonomous |
+| easy | high | [m3-session-info D32](decisions/m3-session-info.md) | Follow the operator's core-only landing instruction | locked by operator instruction |
+| easy | high | [m3-session-info D33](decisions/m3-session-info.md) | Give the subprocess-harness test its teardown budget | assumed — autonomous |
+| easy | high | [m3-session-info D34](decisions/m3-session-info.md) | Replace invalidated overloaded-host evidence with the operator's rerun | locked by operator instruction |
+| easy | high | [m3-session-info D35](decisions/m3-session-info.md) | Resolve the actual landing conflict without dropping either core contract | assumed — autonomous, within LOOP.md step 7.3 |
+| easy | high | [m3-session-info D36](decisions/m3-session-info.md) | Preserve account preparation and visible focus through the next integration merge | assumed — autonomous, within LOOP.md step 7.3 |

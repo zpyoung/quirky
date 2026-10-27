@@ -11,6 +11,7 @@ function str(params: Record<string, unknown>, name: string): string | undefined 
   return typeof value === 'string' ? value : undefined
 }
 
+
 function logSafely(context: PluginContext, message: string): void {
   try {
     context.log(message)
@@ -53,7 +54,7 @@ async function openQuestionsPanel(context: PluginContext): Promise<void> {
       await context.call('ui.panel.open', { id: QUESTIONS_PANEL })
     }
   } catch (error) {
-    logSafely(context, `could not open the Questions panel: ${error instanceof Error ? error.message : String(error)}`)
+    context.log(`could not open the Questions panel: ${error instanceof Error ? error.message : String(error)}`)
   }
 }
 
@@ -87,6 +88,7 @@ export function activate(context: PluginContext): void {
 
   context.provide('method:quirky.ask/create', async (params: Record<string, unknown>, caller: PluginCaller) => {
     const client = caller.role === 'plugin' ? undefined : caller
+
     // Kernel confirmations also use role "plugin", but have no lifecycle-owned registry entry.
     let ownerPluginId: string | undefined
     if (caller.role === 'plugin') {

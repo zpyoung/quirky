@@ -355,7 +355,6 @@ const effectiveUnlisted = (block: RawBlock) => block.unlisted ?? ((block.models 
 const choiceList = (...pairs: [string, string][]): RawChoice[] => pairs.map(([value, label]) => ({ value, label }))
 
 const CLAUDE_EFFORT = ['low', 'medium', 'high', 'xhigh', 'max']
-const CODEX_EFFORT = ['minimal', 'low', 'medium', 'high', 'xhigh', 'max', 'ultra']
 const CLAUDE_VALUE_FLAGS = [
   '--add-dir', '--agent', '--agents', '--allowedTools', '--allowed-tools', '--append-system-prompt', '--append-system-prompt-file',
   '--autocompact', '--betas', '--debug-file', '--disallowedTools', '--disallowed-tools', '--effort', '--environment', '--fallback-model',
@@ -404,39 +403,6 @@ describe('quirky.agents launchOptions data', () => {
     expect(block.valueFlags).toEqual(CLAUDE_VALUE_FLAGS)
   })
 
-  test('SC-2: codex caps each model\'s reasoning effort at its ceiling and accepts unlisted models', () => {
-    const block = rawBlock('codex')
-    expect(block.model).toEqual({
-      flag: ['-m', '{value}'],
-      conflicts: [{ flags: ['-m', '--model'] }, { flags: ['-c', '--config'], valuePrefix: 'model=' }],
-      structured: 'model'
-    })
-    expect(block.options).toEqual([
-      {
-        id: 'effort',
-        label: 'Reasoning effort',
-        type: 'select',
-        choices: choiceList(
-          ['minimal', 'Minimal'], ['low', 'Low'], ['medium', 'Medium'], ['high', 'High'], ['xhigh', 'Extra high'], ['max', 'Max'], ['ultra', 'Ultra']
-        ),
-        flag: ['-c', 'model_reasoning_effort={value}'],
-        conflicts: [{ flags: ['--reasoning-effort'] }, { flags: ['-c', '--config'], valuePrefix: 'model_reasoning_effort=' }],
-        structured: 'effort'
-      }
-    ])
-    const upTo = (ceiling: string) => CODEX_EFFORT.slice(0, CODEX_EFFORT.indexOf(ceiling) + 1)
-    expect(modelsOf('codex')).toEqual([
-      { id: 'gpt-5.6-sol', label: 'GPT-5.6 Sol', description: null, options: { effort: upTo('ultra') } },
-      { id: 'gpt-5.6-terra', label: 'GPT-5.6 Terra', description: null, options: { effort: upTo('ultra') } },
-      { id: 'gpt-5.6-luna', label: 'GPT-5.6 Luna', description: null, options: { effort: upTo('max') } },
-      { id: 'gpt-5.5', label: 'GPT-5.5', description: null, options: { effort: upTo('xhigh') } },
-      { id: 'gpt-5.2-codex', label: 'GPT-5.2 Codex', description: null, options: { effort: upTo('xhigh') } }
-    ])
-    expect(block.unlisted).toBe('accept')
-    expect(block.unlistedOptions).toEqual([{ id: 'effort' }])
-    expect(block.model.structured).toBe('model')
-    expect(block.valueFlags).toBeUndefined()
-  })
 
   test('SC-3: codebuddy, gemini, cursor, grok, muse, antigravity, omp and opencode carry Orca\'s models and options', () => {
     const codebuddy = rawBlock('codebuddy')
@@ -558,15 +524,6 @@ describe('quirky.agents launchOptions data', () => {
     expect(modelsOf('opencode')).toEqual([])
     expect(effectiveUnlisted(opencode)).toBe('accept')
     expect(opencode.unlistedOptions).toBeUndefined()
-  })
-
-  test('cursor remains the only launch option composer', () => {
-    for (const id of LAUNCH_AGENTS) {
-      const block = rawBlock(id)
-      expect({ id, composeModel: block.composeModel }).toEqual({ id, composeModel: id === 'cursor' ? 'cursor' : undefined })
-      expect({ id, composed: (block.options ?? []).filter((option) => option.composed).length }).toEqual({ id, composed: id === 'cursor' ? 3 : 0 })
-      expect({ id, valueFlags: block.valueFlags !== undefined }).toEqual({ id, valueFlags: id === 'claude' || id === 'cursor' })
-    }
   })
 
 

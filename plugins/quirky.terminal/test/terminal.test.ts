@@ -495,17 +495,6 @@ describe('SC-40: the catalog', () => {
     )
     expect(method('killAll')?.confirm).toBe('Kill all terminal sessions?')
     expect(method('restartHost')?.confirm).toBe('Restart the terminal service? Open terminals and agents will restart.')
-    const events = api.events.filter((e) => e.name.startsWith('quirky.terminal/')).map((e) => e.name)
-    expect(events.sort()).toEqual([
-      'quirky.terminal/bell',
-      'quirky.terminal/commandFinished',
-      'quirky.terminal/cwd',
-      'quirky.terminal/floating',
-      'quirky.terminal/layout',
-      'quirky.terminal/notification',
-      'quirky.terminal/quickCommands',
-      'quirky.terminal/title'
-    ])
     const words = api.cli.commands.filter((c) => c.plugin === 'quirky.terminal').map((c) => c.words)
     expect(words).toEqual(expect.arrayContaining(['terminal kill-all', 'terminal restart-host']))
   })

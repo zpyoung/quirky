@@ -166,6 +166,23 @@
         "@types/react-dom": "^19.3.0",
       },
     },
+    "plugins/quirky.handoff": {
+      "name": "@quirky/plugin-handoff",
+      "version": "0.1.0",
+      "dependencies": {
+        "@codemirror/state": "^6.7.6",
+        "@codemirror/view": "^6.43.15",
+        "@quirky/protocol": "workspace:*",
+        "react": "19.2.0",
+        "react-dom": "19.2.0",
+      },
+      "devDependencies": {
+        "@happy-dom/global-registrator": "20.14.6",
+        "@quirky/git": "workspace:*",
+        "@types/react": "^19.3.0",
+        "@types/react-dom": "^19.3.0",
+      },
+    },
     "plugins/quirky.hosting": {
       "name": "@quirky/plugin-hosting",
       "version": "0.1.0",
@@ -204,6 +221,20 @@
         "@xterm/addon-fit": "0.10.0",
         "@xterm/addon-webgl": "0.18.0",
         "@xterm/xterm": "5.5.0",
+        "react": "19.2.0",
+        "react-dom": "19.2.0",
+      },
+      "devDependencies": {
+        "@happy-dom/global-registrator": "20.14.6",
+        "@types/react": "^19.3.0",
+        "@types/react-dom": "^19.3.0",
+      },
+    },
+    "plugins/quirky.session-info": {
+      "name": "@quirky/plugin-session-info",
+      "version": "0.1.0",
+      "dependencies": {
+        "@quirky/protocol": "workspace:*",
         "react": "19.2.0",
         "react-dom": "19.2.0",
       },
@@ -357,6 +388,8 @@
 
     "@quirky/plugin-git": ["@quirky/plugin-git@workspace:plugins/quirky.git"],
 
+    "@quirky/plugin-handoff": ["@quirky/plugin-handoff@workspace:plugins/quirky.handoff"],
+
     "@quirky/plugin-hosting": ["@quirky/plugin-hosting@workspace:plugins/quirky.hosting"],
 
     "@quirky/plugin-notifications": ["@quirky/plugin-notifications@workspace:plugins/quirky.notifications"],
@@ -364,6 +397,8 @@
     "@quirky/plugin-repo": ["@quirky/plugin-repo@workspace:plugins/quirky.repo"],
 
     "@quirky/plugin-session": ["@quirky/plugin-session@workspace:plugins/quirky.session"],
+
+    "@quirky/plugin-session-info": ["@quirky/plugin-session-info@workspace:plugins/quirky.session-info"],
 
     "@quirky/plugin-structured": ["@quirky/plugin-structured@workspace:plugins/quirky.structured"],
 

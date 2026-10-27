@@ -3,7 +3,7 @@ import { existsSync, readFileSync, mkdirSync, symlinkSync, writeFileSync } from 
 import { join } from 'node:path'
 import { RpcErrorCode } from '@quirky/protocol'
 import { commands } from '../cli'
-import type { AccountPrepareResult, AccountState, AccountSummary, ManagedProvider, PendingLogin } from '../src/types'
+import type { AccountPrepareResult, AccountState, AccountSummary, ManagedProvider, PendingLogin, SessionHomeResult } from '../src/types'
 import type { AccountsHarness } from './support/index'
 import { cleanupAll, defaultHome, startAccounts, testCli, waitForAsync } from './support/index'
 
@@ -92,6 +92,33 @@ describe('quirky.accounts lifecycle API and CLI', () => {
     await commands.list({ positionals: [], flags: {} }, cli.ctx)
     expect(cli.lines).toHaveLength(1)
     expect(cli.lines[0]).toMatchObject({ active: { claude: null, codex: null } })
+  })
+
+  test('session-home returns the prepared effective home through the RPC and CLI', async () => {
+    const h = await startAccounts()
+    const sessionId = 'prepared-source-home'
+    const home = join(h.userHome, 'custom-codex-home')
+    await call(h.client, 'quirky.accounts/prepare', {
+      agent: 'codex',
+      sessionId,
+      worktreeId: 'worktree-source-home',
+      cwd: h.userHome,
+      homeOverrides: {
+        claude: { value: null, source: 'absent' },
+        codex: { value: home, source: 'explicit' }
+      }
+    })
+
+    const expected: SessionHomeResult = { provider: 'codex', home }
+    expect(await call<SessionHomeResult>(h.client, 'quirky.accounts/sessionHome', { session: sessionId })).toEqual(expected)
+    expect(await call<SessionHomeResult>(h.client, 'quirky.accounts/sessionHome', { session: 'unknown-session' })).toEqual({
+      provider: null,
+      home: null
+    })
+
+    const cli = testCli(h.client)
+    await commands.sessionHome({ positionals: [], flags: { session: sessionId } }, cli.ctx)
+    expect(cli.lines).toEqual([expected])
   })
 
   test('Claude add remains unselected, duplicate identity is rejected, and default auth/config stay byte-identical', async () => {
@@ -275,6 +302,11 @@ describe('quirky.accounts lifecycle API and CLI', () => {
     await call(h.client, 'quirky.accounts/prepare', codexPrepareArgs(h, 'recorded-source-session'))
 
     const sourceHome = h.managedHome('codex', sourceId)
+
+    expect(await call<SessionHomeResult>(h.client, 'quirky.accounts/sessionHome', { session: 'recorded-source-session' })).toEqual({
+      provider: 'codex',
+      home: sourceHome
+    })
     const sourcePath = codexRolloutPath(sourceHome)
     const conversation = [
       JSON.stringify({ type: 'session_meta', payload: { id: CODEX_PROVIDER_SESSION_ID } }),
@@ -284,6 +316,10 @@ describe('quirky.accounts lifecycle API and CLI', () => {
     writeFileSync(sourcePath, conversation)
 
     await call(h.client, 'quirky.accounts/select', { provider: 'codex', accountId: targetId })
+    expect(await call<SessionHomeResult>(h.client, 'quirky.accounts/sessionHome', { session: 'recorded-source-session' })).toEqual({
+      provider: 'codex',
+      home: sourceHome
+    })
     const prepared = await call<AccountPrepareResult>(
       h.client,
       'quirky.accounts/prepare',

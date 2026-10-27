@@ -50,7 +50,13 @@ export function sendNotification(deps: NotifyDeps, n: PluginNotification): void 
     ...(n.open !== undefined ? { open: n.open } : {}),
     desktop,
     ...(n.sound !== undefined ? { sound: n.sound } : {}),
-    ...(n.toast !== undefined ? { toast: n.toast } : {})
+    ...(n.toast !== undefined ? { toast: n.toast } : {}),
+    ...(n.kind !== undefined ? { kind: n.kind } : {}),
+    ...(n.key !== undefined ? { key: n.key } : {}),
+    ...(n.persistent !== undefined ? { persistent: n.persistent } : {}),
+    ...(n.detail !== undefined ? { detail: n.detail } : {}),
+    ...(n.actions !== undefined ? { actions: n.actions } : {}),
+    ...(n.onDismiss !== undefined ? { onDismiss: n.onDismiss } : {})
   })
   if (!desktop || deps.hasDesktopClient()) return
   try {

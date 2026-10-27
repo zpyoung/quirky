@@ -63,7 +63,7 @@ function createInputStream(): InputStream {
 type Running = {
   query: ClaudeQuery
   input: InputStream
-  providerSessionId: string
+  claudeSessionId: string
   stopped: boolean
   ended: boolean
 }
@@ -177,16 +177,17 @@ class ClaudeRunner implements StructuredRunner {
     launchOptions: StructuredStartOptions,
     providerSessionId: string
   ): void {
+    const claudeSessionId = providerSessionId
     const input = createInputStream()
     if (prompt !== undefined) {
-      const first = userMessage(prompt, providerSessionId)
+      const first = userMessage(prompt, claudeSessionId)
       this.context.appendMessage({ sessionId: session.id, role: 'user', text: prompt, data: first })
       input.push(first)
     }
     this.context.setStatus(session.id, prompt === undefined ? 'running' : 'working')
     const run: Running = {
       input,
-      providerSessionId,
+      claudeSessionId,
       stopped: false,
       ended: false,
       query: query({
@@ -194,9 +195,7 @@ class ClaudeRunner implements StructuredRunner {
         options: {
           cwd: session.cwd,
           pathToClaudeCodeExecutable,
-          ...(launchOptions.providerSession === undefined
-            ? { sessionId: providerSessionId }
-            : { resume: providerSessionId }),
+          ...(launchOptions.providerSession === undefined ? { sessionId: claudeSessionId } : { resume: claudeSessionId }),
           permissionMode: 'default',
           canUseTool: this.canUseTool(session.id),
           ...(launchOptions.env !== undefined ? { env: environmentOf(launchOptions.env) } : {}),
@@ -212,7 +211,7 @@ class ClaudeRunner implements StructuredRunner {
   async send(sessionId: string, text: string): Promise<void> {
     const run = this.running.get(sessionId)
     if (!run || run.stopped || run.ended) throw new Error('session is not running')
-    const message = userMessage(text, run.providerSessionId)
+    const message = userMessage(text, run.claudeSessionId)
     this.context.appendMessage({ sessionId, role: 'user', text, data: message })
     this.context.setStatus(sessionId, 'working')
     run.input.push(message)
@@ -284,14 +283,14 @@ class ClaudeRunner implements StructuredRunner {
     let failure: Error | null = null
     try {
       for await (const msg of run.query) {
-        if (run.stopped || run.ended) break
+        if (run.stopped) break
         this.journal(sessionId, msg)
       }
     } catch (error) {
       failure = error instanceof Error ? error : new Error(String(error))
     }
     run.ended = true
-    if (run.stopped || this.running.get(sessionId) !== run) return
+    if (run.stopped) return
     this.running.delete(sessionId)
     if (failure) {
       this.context.appendMessage({ sessionId, role: 'system', text: `claude failed: ${failure.message}` })
@@ -332,19 +331,7 @@ class ClaudeRunner implements StructuredRunner {
         return
       case 'result':
         append('result', resultText(msg), msg)
-        const failed = msg.is_error === true || (typeof msg.subtype === 'string' && msg.subtype.startsWith('error'))
-        if (failed) {
-          const run = this.running.get(sessionId)
-          if (run) {
-            run.ended = true
-            run.input.end()
-            run.query.close()
-            this.running.delete(sessionId)
-          }
-          this.context.setStatus(sessionId, 'exited')
-        } else {
-          this.context.setStatus(sessionId, 'done')
-        }
+        this.context.setStatus(sessionId, 'done')
         return
       default:
         append('system', String(msg?.type ?? 'event'), msg)
