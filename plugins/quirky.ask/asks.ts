@@ -102,8 +102,9 @@ export class AskService {
   ) {}
 
   /**
-   * Stores a pending ask for a spec and arms its deadline. `checkCredentialText` is false for asks a
-   * plugin registers on the person's behalf, whose wording the plugin doesn't control.
+   * Stores a pending ask for a spec and arms its deadline. `created` always fires first, with the
+   * ask as stored; a deadline already passed resolves it afterwards. `checkCredentialText` is false
+   * for asks a plugin registers on the person's behalf, whose wording the plugin doesn't control.
    */
   create(
     specInput: unknown,
@@ -137,9 +138,9 @@ export class AskService {
       return next
     })
     this.armDeadline(id, expiresAt)
-    const ask = this.get(id)
-    this.hooks.created(ask, seq)
-    return ask
+    const row = this.store.get<AskRow>('SELECT * FROM asks WHERE id = ?', id)!
+    this.hooks.created(toAsk(row, this.isQueued(row)), seq)
+    return this.get(id)
   }
 
   /** The ask with its deadline applied; NotFound for an unknown ID. */

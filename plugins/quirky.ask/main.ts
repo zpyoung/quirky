@@ -47,7 +47,7 @@ export function activate(context: PluginContext): void {
     {
       created: (ask, seq) => {
         context.emit('created', { ask, seq })
-        if (!ask.queued) announce(context, ask)
+        if (!ask.queued && asks.get(ask.id).envelope.status === 'pending') announce(context, ask)
       },
       surfaced: (ask, seq) => {
         context.emit('surfaced', { ask, seq })
@@ -72,7 +72,7 @@ export function activate(context: PluginContext): void {
         checkCredentialText: caller.role !== 'plugin'
       }
     )
-    if (!ask.queued) await openQuestionsPanel(context)
+    if (!ask.queued && ask.envelope.status === 'pending') await openQuestionsPanel(context)
     return { askId: ask.id }
   })
   context.provide('method:quirky.ask/wait', (params: Record<string, unknown>) =>
