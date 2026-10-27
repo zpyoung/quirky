@@ -220,5 +220,27 @@
 - **Revisit if:** targeted remote checks still fail or protected queue ordering is repaired
 - **Source:** assumed — autonomous
 
+## D21: Resume the restored ledger item on the authorized queue repair
+- **Question:** which item, baseline and gates to use after the operator restored lane 3
+- **Options:** claim another item; resume the preserved implementation and complete its remaining gates
+- **Chose:** resume build/m5-ledger only, merge build/roadmap, and pin final-review integration baseline 0152c82cf691a1067fab693222033429de17eb55 before discovery. Preserve the original implementation baseline in the scratch journal as history.
+- **Why:** the operator fixed queue ordering in 4cf9720 and restored this item in-progress for lane 3. Catch-up imported only queue/blocker/index changes and the m5-structured-runner decision log; the complete incoming log was read and introduces no conflicting ledger source contract.
+- **Evidence:** operator note; merge 0a3afe166325d93a2f26db640122ff28da570b6d; docs/loop/decisions/m5-structured-runner.md D3–D13,D18–D27
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** integration adds a conflicting public plugin contract
+- **Source:** assumed — autonomous
+
+## D22: Verify affected roots and share one observed prepass across the three review lenses
+- **Question:** which checks cover the restored feature without repeating the whole landing suite
+- **Options:** whole suite in every lane; affected roots plus integration and boundary suites
+- **Chose:** scripts, typecheck and build, then remote suites for quirky.ledger, quirky.repo, quirky.worktree, the entire quirky.terminal plugin, plugins/test, packages/daemon, packages/ui, packages/cli and apps/desktop. Reuse that exact observed prepass for correctness/spec/security lenses.
+- **Why:** production cross-plugin relationships use the public API, not private static imports. The terminal plugin has an item-owned test change, so its whole suite is retained rather than narrowing to the one file. Host/CLI/window/bundling roots exercise discovery, generated commands and delivery. queue.ts land remains responsible for the whole repo suite.
+- **Evidence:** LedgerAffectedSurvey; docs/loop/LOOP.md:121-127; plugins/test/imports.test.ts; apps/desktop/test/bundle-plugins.test.ts
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** the final fix batch changes another root or shared core code
+- **Source:** locked by docs/loop/LOOP.md
+
 ## Progress
-Blocked at the mandatory scripts gate before final cross-family code review/landing. Implementation is preserved, not shipped. API tests: 25 pass; real CLI/import: 11 pass; local ledger window: 7 pass, worktree window: 18 pass, floating: 5 pass; latest typecheck and packaged build exited 0. The targeted remote run passed four files but exposed more window readiness races; those were corrected and the final isolated remote ledger window run passed with suite-result ok:true/flaky:[]. Scripts remain 54 pass/1 fail solely on protected queue order (D17). The cancelled whole suite has no final verdict. Web reports and exact partial/probe limits are D18-D19; focused detail/edit/triage and retention/attach/delete goals passed. All subagents returned; both smoke runtimes/homes and the cancelled remote run's exact process tree/copy were cleaned up; merged component worktrees/branches and throwaway diagnostics were removed. Resume only after authorized queue-order repair: restore blocked/m5-ledger to build/m5-ledger, requeue, merge current build/roadmap/read incoming decisions, run affected remote suites plus scripts/typecheck/build, then the required single Gemini three-lens final review/fix batch and queue.ts land. No final-review clearance or full-suite pass is claimed.
+Resumed on build/m5-ledger after the operator's authorized queue repair; integration catch-up complete and incoming runner decisions read. Prior implementation, API/CLI/window tests and built-web smoke evidence remain D14–D20. Next: rerun affected remote suites, scripts/typecheck/build; run the mandatory one Gemini three-lens final review and one accepted-finding fix batch; rerun checks/build, record all findings/remaining limitations, and land through queue.ts. Do not claim or begin another item. No current review clearance or fresh gate pass is claimed yet.

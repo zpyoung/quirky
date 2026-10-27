@@ -1,6 +1,6 @@
 # Project ledger implementation contracts
 
-Status: Implemented with targeted verification; not cleared for landing or final code review because the required scripts gate is blocked. Logic: [logic.md](logic.md). Complexity gate: explicit LOOP.md request, >3 source files and daemon/UI/CLI boundary.
+Status: Implementation resumed after the authorized queue repair; fresh affected gates and final code review pending. Logic: [logic.md](logic.md). Complexity gate: explicit LOOP.md request, >3 source files and daemon/UI/CLI boundary.
 
 ## Architecture
 
