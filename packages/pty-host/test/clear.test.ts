@@ -6,7 +6,7 @@ import { readCheckpoint } from '../src/history/checkpoint'
 import { readSegments } from '../src/history/log'
 import { MODE_RESET } from '../src/history/restore'
 import { type CreateParams, SessionManager, type SessionManagerOptions } from '../src/session'
-import { concat, onCleanup, runCleanups, tempHome, text, waitFor } from './helpers'
+import { concat, onCleanup, runCleanups, scopeForHome, tempHome, text, trackSessionProcesses, waitFor } from './helpers'
 
 afterEach(runCleanups)
 
@@ -23,7 +23,9 @@ function sh(script: string): string[] {
 }
 
 function newManager(options: Partial<SessionManagerOptions> = {}, home: string = tempHome()) {
+  const scope = scopeForHome(home)
   const manager = new SessionManager({ home, ...options })
+  trackSessionProcesses(manager, scope)
   onCleanup(() => manager.shutdown())
   return { manager, home }
 }

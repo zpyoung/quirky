@@ -88,3 +88,32 @@ test('macosOnly reads the first word of each line and skips comments and blanks'
   expect(macosOnly(join(dir, 'list.txt'))).toEqual(new Set(['pkg/a.test.ts', 'pkg/b.test.ts']))
   expect(macosOnly(join(dir, 'missing.txt'))).toEqual(new Set())
 })
+
+test('a completed test run stops detached subprocess trees left by a test', async () => {
+  const pidFile = join(dir, 'leftover.pid')
+  write('leftover.test.ts', `test('starts a detached worker', () => {
+    const child = Bun.spawn(['sleep', '60'], { detached: true, stdout: 'ignore', stderr: 'ignore' })
+    writeFileSync(${JSON.stringify(pidFile)}, String(child.pid))
+    writeFileSync((process.env.QUIRKY_HOME ?? ${JSON.stringify(dir)}) + '/pty.pid', String(child.pid))
+    expect(child.pid).toBeGreaterThan(0)
+  })`)
+  let pid: number | undefined
+  try {
+    const result = await runSuite(dir, ['pkg'])
+    pid = Number(await Bun.file(pidFile).text())
+    expect(result.ok).toBe(true)
+    const deadline = Date.now() + 5000
+    const alive = () => {
+      try { process.kill(pid!, 0); return true } catch { return false }
+    }
+    // Native process exit is observed by the OS; fake timers cannot drive it.
+    while (alive() && Date.now() < deadline) await Bun.sleep(25)
+    expect(alive()).toBe(false)
+  } finally {
+    pid ??= Number(await Bun.file(pidFile).text().catch(() => '0'))
+    if (pid) {
+      try { process.kill(-pid, 'SIGKILL') } catch {}
+      try { process.kill(pid, 'SIGKILL') } catch {}
+    }
+  }
+}, 15_000)

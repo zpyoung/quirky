@@ -17,6 +17,7 @@
 import { appendFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { homedir, tmpdir } from 'node:os'
 import { isAbsolute, join } from 'node:path'
+import { createProcessScope, type ProcessScope } from './test-support/process-scope'
 
 export type SuiteResult = { ok: boolean; flaky: string[] }
 type Remote = { host: string; jobs?: number; slots?: number }
@@ -38,13 +39,29 @@ async function tee(stream: ReadableStream<Uint8Array>, out: NodeJS.WriteStream |
   }
 }
 
-async function exec(cmd: string[], cwd: string, echo = true, stdin?: string): Promise<{ code: number; output: string }> {
-  const child = Bun.spawn(cmd, { cwd, stdin: stdin === undefined ? 'ignore' : new Blob([stdin]), stdout: 'pipe', stderr: 'pipe' })
-  const [out, err] = await Promise.all([tee(child.stdout, echo ? process.stdout : null), tee(child.stderr, echo ? process.stderr : null)])
-  return { code: await child.exited, output: out + err }
+async function exec(cmd: string[], cwd: string, echo = true, stdin?: string, scope: ProcessScope = createProcessScope()): Promise<{ code: number; output: string }> {
+  try {
+    const options = {
+      cwd,
+      env: { ...process.env, ...scope.env },
+      stdin: stdin === undefined ? 'ignore' as const : new Blob([stdin]),
+      stdout: 'pipe' as const,
+      stderr: 'pipe' as const
+    }
+    const child = scope.spawn(cmd, options)
+    const streams = Promise.all([tee(child.stdout, echo ? process.stdout : null), tee(child.stderr, echo ? process.stderr : null)])
+    const code = await child.exited
+    // A leaked child may still hold a pipe open. Reap the tree before waiting for EOF.
+    await scope.cleanup()
+    const [out, err] = await streams
+    return { code, output: out + err }
+  } finally {
+    await scope.cleanup()
+  }
 }
 
-const bunTest = (cwd: string, args: string[], echo = true) => exec(['bun', 'test', ...args], cwd, echo)
+const bunTest = (cwd: string, args: string[], echo = true) =>
+  exec(['bun', 'test', ...args], cwd, echo, undefined, createProcessScope())
 const asPath = (file: string) => (isAbsolute(file) ? file : `./${file}`)
 
 /** Files with a failing test in a junit report, and how many tests failed in all. */
@@ -136,7 +153,7 @@ function slotted(slots: number): Run {
       const start = Math.floor(Math.random() * slots)
       for (let i = 0; i < slots; i++) {
         const lock = join(dir, `${(start + i) % slots}.lock`)
-        const result = await exec(['flock', '-n', '-E', String(BUSY), lock, 'bun', 'test', ...args], cwd, false)
+        const result = await exec(['flock', '-n', '-E', String(BUSY), lock, 'bun', 'test', ...args], cwd, false, undefined, createProcessScope())
         if (result.code !== BUSY) return result
       }
       await Bun.sleep(500)
@@ -213,7 +230,10 @@ async function main(argv: string[]): Promise<boolean> {
   const there = files.filter((file) => !macos.has(file))
   console.log(`running ${there.length} test files on ${remote.host} and ${here.length} macOS-only files here`)
   const [away, local] = await Promise.all([runRemote(cwd, remote, there, flags), runFiles(cwd, here, flags, 1)])
-  if (away) return away.ok && local.ok
+  if (away) {
+    if (away.flaky.length > 0) recordFlakes(cwd, away.flaky)
+    return away.ok && local.ok
+  }
   console.error(`\n${remote.host} couldn't run the tests, so they run here instead`)
   return (await runFiles(cwd, there, flags, 1)).ok && local.ok
 }
