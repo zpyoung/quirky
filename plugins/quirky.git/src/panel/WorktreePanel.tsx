@@ -26,7 +26,7 @@ import { PopupMenu, type MenuEntry } from './Menu'
 import type { Notice } from './Notices'
 import { registerPanel } from './registry'
 import { toastFor, type RemoteAction } from './remote-messages'
-import { displayPaths, Rows, type ClickKind, type RowButton, type RowHandlers, type RowItem } from './Rows'
+import { displayPaths, Rows, type ClickKind, type Expansion, type RowButton, type RowHandlers, type RowItem } from './Rows'
 import { SectionFrame } from './SectionFrame'
 import {
   actionPaths,
@@ -86,6 +86,9 @@ export type PanelProps = {
   offered: Set<string>
 }
 
+/** What the panel knows of a dirty submodule row: whether it is open and what its last read returned. */
+type SubmoduleState = { open: boolean; entries: readonly GitStatusEntry[] | null; failed: boolean; signature: string }
+
 const asText = (value: unknown): string | null => (typeof value === 'string' && value !== '' ? value : null)
 
 const rowKey = (entry: GitStatusEntry): string => `${entry.area}:${entry.path}`
@@ -135,6 +138,7 @@ export function WorktreePanel({ context, worktree, report, notify, drafts, offer
   const [pushBlocked, setPushBlocked] = useState<Blocked | null>(null)
   const [dialog, setDialog] = useState<DialogState | null>(null)
   const [menu, setMenu] = useState<{ x: number; y: number; item: RowItem } | null>(null)
+  const [submodules, setSubmodules] = useState<Record<string, SubmoduleState>>({})
 
   const viewMode = settings.viewMode
   const filtering = applyFilter([], filter).state !== 'inactive'
@@ -258,7 +262,22 @@ export function WorktreePanel({ context, worktree, report, notify, drafts, offer
 
   const open = (input: Omit<DiffViewInput, 'worktree'>) => context.openView(DIFF_VIEW_ID, { worktree, ...input })
 
+  const toggleSubmodule = (item: RowItem) => {
+    const signature = JSON.stringify(item.entry?.submodule)
+    const current = submodules[item.path]
+    setSubmodules((prev) => ({ ...prev, [item.path]: { ...(prev[item.path] ?? { entries: null, signature, failed: false }), open: !current?.open } }))
+    if (current?.open || (current?.entries && current.signature === signature)) return
+    context
+      .call('quirky.git/submoduleStatus', { worktree, path: item.path })
+      .then((result) => {
+        const entries = (result as { entries: GitStatusEntry[] }).entries
+        setSubmodules((prev) => ({ ...prev, [item.path]: { open: prev[item.path]?.open ?? true, entries, signature, failed: false } }))
+      })
+      .catch(() => setSubmodules((prev) => ({ ...prev, [item.path]: { open: prev[item.path]?.open ?? true, entries: null, signature, failed: true } })))
+  }
+
   const openRow = (item: RowItem) => {
+    if (item.entry?.submodule) return toggleSubmodule(item)
     const area = item.entry?.area
     const oldPath = item.oldPath === undefined ? {} : { oldPath: item.oldPath }
     if (area === 'conflicts') return open({ mode: 'conflict-file', path: item.path })
@@ -399,7 +418,13 @@ export function WorktreePanel({ context, worktree, report, notify, drafts, offer
     },
     buttons: rowButtons,
     folderButtons,
-    dragText: (item) => absolute(item.path)
+    dragText: (item) => absolute(item.path),
+    expansion: (item): Expansion | null => {
+      if (!item.entry?.submodule) return null
+      const state = submodules[item.path]
+      return { open: state?.open ?? false, entries: state?.entries ?? null, failed: state?.failed ?? false }
+    },
+    toggleExpansion: toggleSubmodule
   }
 
   const copy = async (text: string) => {

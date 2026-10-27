@@ -21,6 +21,9 @@ export type RowButton = { label: string; glyph: string; run(): void; destructive
 
 export type ClickKind = 'plain' | 'mod' | 'shift'
 
+/** A submodule row's expansion: `entries` is null until the first read finishes, `failed` when it did not. */
+export type Expansion = { open: boolean; entries: readonly GitStatusEntry[] | null; failed: boolean }
+
 /** What a section's rows can do; the section decides, the rows only call. */
 export type RowHandlers = {
   click(item: RowItem, kind: ClickKind): void
@@ -28,6 +31,9 @@ export type RowHandlers = {
   buttons(item: RowItem): RowButton[]
   folderButtons(items: RowItem[]): RowButton[]
   dragText(item: RowItem): string
+  /** The expansion of a dirty submodule row; null for every other row. */
+  expansion?(item: RowItem): Expansion | null
+  toggleExpansion?(item: RowItem): void
 }
 
 type Props = {
@@ -121,36 +127,86 @@ function Trailing({ item }: { item: RowItem }) {
   )
 }
 
+function SubmoduleEntries({ expansion, depth, tree }: { expansion: Expansion; depth: number; tree: boolean }) {
+  const indent = tree ? { paddingLeft: (depth + 1) * 12 } : undefined
+  if (expansion.entries === null || expansion.entries.length === 0) {
+    const text = expansion.failed ? 'Could not load the submodule changes' : expansion.entries === null ? 'Loading…' : 'No changes inside'
+    return (
+      <li className="scm-sub-list" style={indent}>
+        <p className="scm-sub-note">{text}</p>
+      </li>
+    )
+  }
+  return (
+    <li className="scm-sub-list" style={indent}>
+      <ul className="scm-rows">
+        {expansion.entries.map((inside) => {
+          const { name, dir } = splitPath(inside.path)
+          return (
+            <li key={`${inside.area}:${inside.path}`} className="scm-row scm-sub-entry" title={inside.path}>
+              <span className="scm-row-main">
+                <span className={`scm-file-icon scm-status-${inside.status}`} aria-hidden="true" />
+                <span className="scm-row-text">
+                  <span className="scm-row-line">
+                    <span className="scm-row-name">{name}</span>
+                    {dir !== '' && <span className="scm-row-dir">{dir}</span>}
+                  </span>
+                </span>
+                <span className={`scm-letter scm-status-${inside.status}`}>{statusLetter(inside.status)}</span>
+              </span>
+            </li>
+          )
+        })}
+      </ul>
+    </li>
+  )
+}
+
 function FileRow({ item, depth, tree, selected, handlers }: { item: RowItem; depth: number; tree: boolean; selected: boolean; handlers: RowHandlers }) {
   const { name, dir } = splitPath(item.path)
   const hint = item.entry?.submodule ? 'Stage inside submodule' : item.entry?.conflict ? conflictLabel(item.entry.conflict.kind) : null
+  const expansion = handlers.expansion?.(item) ?? null
   const onDragStart = (event: DragEvent) => {
     event.dataTransfer?.setData('text/plain', handlers.dragText(item))
   }
   return (
-    <li
-      className={`scm-row${selected ? ' selected' : ''}`}
-      style={tree ? { paddingLeft: depth * 12 } : undefined}
-      draggable
-      onDragStart={onDragStart}
-      onContextMenu={(event) => {
-        event.preventDefault()
-        handlers.contextMenu(item, event.clientX, event.clientY)
-      }}
-    >
-      <button type="button" className="scm-row-main" title={item.path} aria-pressed={selected} onClick={(event) => handlers.click(item, clickKind(event))}>
-        <span className={`scm-file-icon scm-status-${item.status}`} aria-hidden="true" />
-        <span className="scm-row-text">
-          <span className="scm-row-line">
-            <span className="scm-row-name">{name}</span>
-            {!tree && dir !== '' && <span className="scm-row-dir">{dir}</span>}
+    <>
+      <li
+        className={`scm-row${selected ? ' selected' : ''}`}
+        style={tree ? { paddingLeft: depth * 12 } : undefined}
+        draggable
+        onDragStart={onDragStart}
+        onContextMenu={(event) => {
+          event.preventDefault()
+          handlers.contextMenu(item, event.clientX, event.clientY)
+        }}
+      >
+        {expansion && (
+          <button
+            type="button"
+            className="scm-row-chevron"
+            aria-label={`${expansion.open ? 'Collapse' : 'Expand'} ${item.path}`}
+            aria-expanded={expansion.open}
+            onClick={() => handlers.toggleExpansion?.(item)}
+          >
+            {expansion.open ? '▾' : '▸'}
+          </button>
+        )}
+        <button type="button" className="scm-row-main" title={item.path} aria-pressed={selected} onClick={(event) => handlers.click(item, clickKind(event))}>
+          <span className={`scm-file-icon scm-status-${item.status}`} aria-hidden="true" />
+          <span className="scm-row-text">
+            <span className="scm-row-line">
+              <span className="scm-row-name">{name}</span>
+              {!tree && dir !== '' && <span className="scm-row-dir">{dir}</span>}
+            </span>
+            {hint !== null && <span className="scm-row-sub">{hint}</span>}
           </span>
-          {hint !== null && <span className="scm-row-sub">{hint}</span>}
-        </span>
-        <Trailing item={item} />
-      </button>
-      <Buttons buttons={handlers.buttons(item)} subject={item.path} />
-    </li>
+          <Trailing item={item} />
+        </button>
+        <Buttons buttons={handlers.buttons(item)} subject={item.path} />
+      </li>
+      {expansion?.open && <SubmoduleEntries expansion={expansion} depth={depth} tree={tree} />}
+    </>
   )
 }
 

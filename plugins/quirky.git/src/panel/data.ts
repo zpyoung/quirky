@@ -67,12 +67,16 @@ export function useSettings(context: UiPluginContext): [PanelSettings, (mode: Vi
 
 const same = (a: unknown, b: unknown): boolean => JSON.stringify(a) === JSON.stringify(b)
 
+const MARKER_READS_AT_ONCE = 8
+
 /** Paths of unresolved conflicts whose working copy holds no conflict markers (or no file at all). */
 async function findMarkersGone(context: UiPluginContext, worktree: string, status: GitStatus): Promise<Set<string>> {
   const gone = new Set<string>()
-  const unresolved = status.entries.filter((e) => e.conflict?.state === 'unresolved' && !e.submodule).slice(0, 50)
-  await Promise.all(
-    unresolved.map(async (entry) => {
+  const unresolved = status.entries.filter((e) => e.conflict?.state === 'unresolved' && !e.submodule)
+  let next = 0
+  const worker = async () => {
+    while (next < unresolved.length) {
+      const entry = unresolved[next++]!
       try {
         const file = (await context.call('quirky.git/conflictFile', { worktree, path: entry.path, peek: true })) as { content: string | null }
         if (file.content === null || conflictBlocks(file.content).length === 0) gone.add(entry.path)
@@ -80,8 +84,9 @@ async function findMarkersGone(context: UiPluginContext, worktree: string, statu
         // binary or linked files have no text markers to wait for
         if (dataOf(error).reason === 'not-allowed') gone.add(entry.path)
       }
-    })
-  )
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(MARKER_READS_AT_ONCE, unresolved.length) }, worker))
   return gone
 }
 
