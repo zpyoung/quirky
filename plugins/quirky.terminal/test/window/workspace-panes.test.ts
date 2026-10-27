@@ -96,6 +96,15 @@ describe('SC-24: resizing a pane divider', () => {
     expect(callsTo(view.fake, 'resizeSplit')).toEqual([{ split: 'split-2', ratio: 0.5, revision: 5 }])
   })
 
+  test('a pane divider is a labelled separator oriented across its split', async () => {
+    const view = await mount()
+    const divider = view.q('[data-divider="split-2"]')!
+    expect(divider.getAttribute('role')).toBe('separator')
+    expect(divider.getAttribute('aria-label')).toBe('Resize panes')
+    expect(divider.getAttribute('aria-orientation')).toBe('vertical')
+    expect(view.q('[data-divider="split-3"]')!.getAttribute('aria-orientation')).toBe('horizontal')
+  })
+
   test('a stale revision refreshes the workspace and drops the preview', async () => {
     const view = await mount()
     view.daemon.fail('resizeSplit', RpcErrorCode.Conflict, 'workspace wt-main is at revision 7')

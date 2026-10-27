@@ -267,6 +267,13 @@ test('SC-67: the layer lets clicks through and sits below the dialogs', () => {
   expect(Number(/z-index:\s*(\d+)/.exec(rule)![1])).toBeLessThan(zOf('.overlay'))
 })
 
+test('a dialog taller than the window scrolls inside it, so its buttons stay reachable', () => {
+  const css = readFileSync(join(import.meta.dir, '..', 'src', 'styles.css'), 'utf8')
+  const rule = /\n\.dialog\s*\{([^}]*)\}/.exec(css)![1]
+  expect(rule).toContain('max-height: calc(100vh - 32px)')
+  expect(rule).toContain('overflow-y: auto')
+})
+
 test('SC-67: ui state lists the overlays with their reports, and a silent overlay is shown with an empty report', async () => {
   const env = await bootWindow(writeOverlayPlugin)
   await env.win.waitFor(async () => (await slotStates(env)).find((slot) => slot.id === HUD)?.report !== undefined)

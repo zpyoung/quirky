@@ -279,6 +279,7 @@ export function GroupTree({ controller, state, node }: Common & { node: GroupNod
           className={`qt-group-divider qt-group-divider-${divider.split.direction}`}
           role="separator"
           aria-orientation={divider.split.direction === 'right' ? 'vertical' : 'horizontal'}
+          aria-label="Resize groups"
           data-group-divider={divider.split.id}
           style={{ left: px(divider.x), top: px(divider.y), width: divider.split.direction === 'right' ? thickness : divider.width, height: divider.split.direction === 'right' ? divider.height : thickness }}
           onMouseDown={(event) => startDivider(divider, event)}

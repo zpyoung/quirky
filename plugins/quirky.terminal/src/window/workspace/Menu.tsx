@@ -68,6 +68,12 @@ export function MenuList({ items, label, onChoose, onClose, onBack, header, high
     if (autoFocus && !header) root.current?.focus()
   }, [autoFocus, header])
 
+  // the open submenu holds focus, so closing it hands focus back or this level stops hearing keys
+  const closeSubmenu = () => {
+    setOpen(-1)
+    root.current?.focus()
+  }
+
   const pick = (index: number) => {
     const item = items[index]
     if (!item || !isRow(item)) return
@@ -143,7 +149,8 @@ export function MenuList({ items, label, onChoose, onClose, onBack, header, high
               onMouseEnter={() => {
                 if (item.enabled === false) return
                 setHighlight(index)
-                setOpen(item.submenu ? index : -1)
+                if (item.submenu) setOpen(index)
+                else if (open >= 0) closeSubmenu()
               }}
               onClick={() => pick(index)}
             >
@@ -155,7 +162,7 @@ export function MenuList({ items, label, onChoose, onClose, onBack, header, high
             </button>
             {item.submenu && open === index ? (
               <div className="qt-submenu">
-                <MenuList items={item.submenu} label={item.label} onChoose={onChoose} onClose={onClose} onBack={() => setOpen(-1)} />
+                <MenuList items={item.submenu} label={item.label} onChoose={onChoose} onClose={onClose} onBack={closeSubmenu} />
               </div>
             ) : null}
           </div>

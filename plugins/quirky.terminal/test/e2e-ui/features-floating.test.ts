@@ -229,15 +229,13 @@ test(
     expect(mainGroup.tabs).toHaveLength(1)
     expect(mainGroup.activeTab).toBe(mainGroup.tabs[0]!.id)
 
-    // Cmd+W closes the focused tab there, and with none left it minimizes the panel
+    // Cmd+W closes the focused tab there, and closing the last one minimizes the panel
     await waitFor('focus in a floating terminal', () => (panel()!.contains(document.activeElement) && document.activeElement?.tagName === 'TEXTAREA' ? true : undefined))
     await press('mod+w')
     await waitFor('one floating tab left', async () => ((await floatingTabs(f)).length === 1 ? true : undefined))
     await waitFor('focus in the other terminal', () => (panel()!.contains(document.activeElement) && document.activeElement?.tagName === 'TEXTAREA' ? true : undefined))
     await press('mod+w')
     await waitFor('no floating tabs', async () => ((await floatingTabs(f)).length === 0 ? true : undefined))
-    expect(tabsOf(await layoutOf(h, f.worktree))).toHaveLength(1)
-    await press('mod+w')
     await waitFor('the panel to minimize', () => (panel() ? undefined : true))
     expect(await floatingState(f)).toMatchObject({ open: false })
     expect(tabsOf(await layoutOf(h, f.worktree))).toHaveLength(1)

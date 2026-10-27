@@ -344,6 +344,9 @@ export function PaneLayer({ controller, state, group, tab }: Props) {
         <div
           key={divider.split}
           className={`qt-divider qt-divider-${divider.direction}`}
+          role="separator"
+          aria-orientation={divider.direction === 'right' ? 'vertical' : 'horizontal'}
+          aria-label="Resize panes"
           data-divider={divider.split}
           style={{ left: divider.x, top: divider.y, width: divider.width, height: divider.height }}
           onMouseDown={(event) => startDivider(divider, event)}

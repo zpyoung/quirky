@@ -379,6 +379,19 @@ describe('menu behaviour', () => {
     expect(view.last().menu).toBeNull()
   })
 
+  test('Escape in a submenu hands focus back, so a second Escape closes the menu', async () => {
+    const view = await mount(threeTabs(false))
+    await contextMenu(view, '[data-tab="tab-c"]')
+    const menu = view.q('[role="menu"]')!
+    await key(menu, 'ArrowDown')
+    await key(menu, 'ArrowRight')
+    await key(view.q('.qt-submenu [role="menu"]')!, 'Escape')
+    expect(view.q('.qt-submenu')).toBeNull()
+    expect(document.activeElement).toBe(menu)
+    await key(document.activeElement!, 'Escape')
+    expect(view.last().menu).toBeNull()
+  })
+
   test('a click outside closes the menu', async () => {
     const view = await mount(threeTabs(false))
     await contextMenu(view, '[data-tab="tab-c"]')
