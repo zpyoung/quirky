@@ -748,5 +748,16 @@
 - **Revisit if:** quirky.agents adds per-agent launch options a create should carry
 - **Source:** assumed — autonomous
 
+## D69: Final Round 1: accept all eight findings, which collapse to seven defects, and fix them in one batch
+- **Question:** Final Round 1 adjudication (LOOP.md step 5, one final review round)
+- **Options:** accept; reject
+- **Chose:** accept X1 (CRITICAL: removing a workspace can unlink a symlink outside it through a `..` or symlinked shared-directory entry), X2 (CRITICAL: carried files and shared links follow a symlinked ancestor out of the new worktree), C1 and S1 as one defect (a suffixed generated name can be handed out again), C2 (Always trust loops when the create's base has a different setup than HEAD), C3 (a background fetch can move the base between the trust check and the checkout), S2 (a group's folder workspaces are missing from the ui state report), S3 (the window never offers the setup choice when only the chosen base asks for one)
+- **Why:** each came with code evidence and a reproduction, and the two critical ones break D26's rule that carried files stay inside the worktree and D40's rule that delete touches only what Quirky made
+- **Evidence:** scratchpad fr1/{C,S,X}/gate.json (gpt-6.1-sol, deep depth, range 5ab70cd..b43aa02)
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** never
+- **Source:** assumed — autonomous
+
 ## Progress
 Step 5 done through catch-up: W1-W4 merged on `build/m1-worktrees` with W2 and W3 checkpoints fixed; build/roadmap merged in (e11a136) and its agent change adopted (D68). Next: full gate, Final Round 1 over `98a5625..HEAD` with one fix batch, then verify (tests per SC, web UI scenarios on a temp QUIRKY_HOME) and land.
