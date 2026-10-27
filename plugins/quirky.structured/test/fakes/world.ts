@@ -20,7 +20,10 @@ export class FakeWorld {
   readonly statusLog: { sessionId: string; status: SessionStatus }[] = []
   readonly resolveCalls: Record<string, unknown>[] = []
   readonly registerCalls: Record<string, unknown>[] = []
+  readonly resolveLaunchCalls: Record<string, unknown>[] = []
   readonly askCreateCalls: Record<string, unknown>[] = []
+  /** Replaces the fake `quirky.agents/resolveLaunch` answer; it may throw to refuse the pick. */
+  resolveLaunchOverride: ((params: any, context: PluginCtx) => unknown) | null = null
   readonly asks = new Map<string, Ask>()
   /** How long a fake `wait` holds before returning the ask still pending. */
   askWaitCapMs = 25
@@ -63,6 +66,17 @@ export class FakeWorld {
       this.sessions.delete(params.session)
       this.emitRemoved(params.session)
       return { ok: true }
+    }
+  }
+
+  readonly agents = {
+    resolveLaunch: (params: any, context: PluginCtx) => {
+      this.resolveLaunchCalls.push(params)
+      if (this.resolveLaunchOverride) return this.resolveLaunchOverride(params, context)
+      const structured: Record<string, string | boolean> = {}
+      if (params.model) structured.model = params.model
+      Object.assign(structured, params.options)
+      return { added: [], args: '', structured, shadowed: [], launchSettings: null }
     }
   }
 

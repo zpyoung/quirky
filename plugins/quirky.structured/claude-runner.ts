@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import type { CanUseTool, Options, SDKUserMessage } from '@anthropic-ai/claude-agent-sdk'
 import type { AskEnvelope, Session } from '@quirky/protocol'
-import type { StructuredContext, StructuredRunner } from './runner'
+import type { StructuredContext, StructuredLaunchOptions, StructuredRunner } from './runner'
 
 export type ClaudeQueryParams = { prompt: AsyncIterable<SDKUserMessage>; options?: Options }
 
@@ -131,7 +131,7 @@ class ClaudeRunner implements StructuredRunner {
     private readonly deps: ClaudeRunnerDeps
   ) {}
 
-  async start(session: Session, prompt: string): Promise<void> {
+  async start(session: Session, prompt: string, launchOptions: StructuredLaunchOptions = {}): Promise<void> {
     if (session.agent !== 'claude') throw new Error('structured sessions support claude only')
     const startup = { stopped: false }
     this.starting.set(session.id, startup)
@@ -140,7 +140,7 @@ class ClaudeRunner implements StructuredRunner {
       if (startup.stopped) return
       const pathToClaudeCodeExecutable = await this.context.resolveClaudePath()
       if (startup.stopped) return
-      this.launch(session, prompt, query, pathToClaudeCodeExecutable)
+      this.launch(session, prompt, query, pathToClaudeCodeExecutable, launchOptions)
     } finally {
       if (this.starting.get(session.id) === startup) this.starting.delete(session.id)
     }
@@ -150,7 +150,8 @@ class ClaudeRunner implements StructuredRunner {
     session: Session,
     prompt: string,
     query: NonNullable<ClaudeRunnerDeps['query']>,
-    pathToClaudeCodeExecutable: string
+    pathToClaudeCodeExecutable: string,
+    launchOptions: StructuredLaunchOptions
   ): void {
     const claudeSessionId = randomUUID()
     const input = createInputStream()
@@ -170,7 +171,9 @@ class ClaudeRunner implements StructuredRunner {
           pathToClaudeCodeExecutable,
           sessionId: claudeSessionId,
           permissionMode: 'default',
-          canUseTool: this.canUseTool(session.id)
+          canUseTool: this.canUseTool(session.id),
+          ...(typeof launchOptions.model === 'string' ? { model: launchOptions.model } : {}),
+          ...(typeof launchOptions.effort === 'string' ? { effort: launchOptions.effort as Options['effort'] } : {})
         }
       })
     }
