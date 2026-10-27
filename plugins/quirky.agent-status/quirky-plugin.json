@@ -2,40 +2,128 @@
   "id": "quirky.agent-status",
   "name": "Agent status",
   "version": "0.1.0",
-  "description": "Turns agent hooks into session status and finish notifications.",
+  "description": "Turns agent hooks into a status row per session, the session's status and finish notifications.",
   "main": "main.ts",
   "activation": "startup",
-  "dependencies": ["quirky.session"],
+  "dependencies": [
+    "quirky.session"
+  ],
   "contributes": {
     "method": [
       {
         "id": "list",
-        "description": "Sessions that received an agent hook, with their status and the time of the last hook.",
+        "description": "Sessions that have an agent status row, with the row's summary.",
         "readOnly": true,
         "params": {
           "type": "object",
-          "properties": { "worktree": { "type": "string", "description": "Only sessions of this worktree." } }
+          "properties": {
+            "worktree": {
+              "type": "string",
+              "description": "Only sessions of this worktree."
+            }
+          }
         },
         "result": {
           "type": "array",
           "items": {
             "type": "object",
             "properties": {
-              "sessionId": { "type": "string" },
-              "agent": { "type": "string" },
-              "status": { "type": "string" },
-              "lastHookAt": { "type": "number" }
+              "state": {
+                "type": "string",
+                "enum": [
+                  "working",
+                  "waiting",
+                  "blocked",
+                  "done"
+                ]
+              },
+              "display": {
+                "type": "string",
+                "description": "What the window draws: working, monitoring, waiting, permission, blocked, failed, interrupted, done, unverifiable, idle or unconfirmed."
+              },
+              "label": {
+                "type": "string"
+              },
+              "detail": {
+                "type": "string",
+                "description": "One readable line; never a JSON object."
+              },
+              "progress": {
+                "description": "0 to 1, or null when the program reports none."
+              },
+              "stateStartedAt": {
+                "type": "number"
+              },
+              "evidenceAt": {
+                "type": "number"
+              },
+              "restoredUnconfirmed": {
+                "type": "boolean"
+              },
+              "sessionId": {
+                "type": "string"
+              },
+              "agent": {
+                "type": "string",
+                "description": "The hook source that owns the row, e.g. claude or qwen-code."
+              }
             },
-            "required": ["sessionId", "agent", "status", "lastHookAt"]
+            "required": [
+              "state",
+              "display",
+              "label",
+              "detail",
+              "stateStartedAt",
+              "evidenceAt",
+              "restoredUnconfirmed",
+              "sessionId",
+              "agent"
+            ]
           }
+        }
+      },
+      {
+        "id": "get",
+        "description": "A session's agent status row with its display state at a time, or null when it has none.",
+        "readOnly": true,
+        "params": {
+          "type": "object",
+          "properties": {
+            "session": {
+              "type": "string",
+              "description": "The session ID."
+            },
+            "at": {
+              "type": "number",
+              "description": "The time to compute the display at, in ms since the epoch; defaults to now."
+            }
+          },
+          "required": [
+            "session"
+          ]
+        },
+        "result": {
+          "description": "The whole row plus `display` and `label`, or null."
         }
       }
     ],
     "launch-hook": [
       {
         "id": "agent-hooks",
-        "description": "Points Claude at the hook settings file and Codex at the notify script.",
-        "agents": ["claude", "codex"]
+        "description": "Points Claude at the hook settings file for its version and Codex at the notify script.",
+        "agents": [
+          "claude",
+          "claude-agent-teams",
+          "codex"
+        ]
+      }
+    ],
+    "job": [
+      {
+        "id": "presence",
+        "description": "Ends the rows of agents whose process has exited without saying so.",
+        "interval": "10s",
+        "initialDelay": "10s"
       }
     ],
     "setting": [
@@ -44,6 +132,26 @@
         "type": "boolean",
         "title": "Notify when agents finish",
         "default": true
+      }
+    ],
+    "event": [
+      {
+        "id": "changed",
+        "description": "A session's agent status row changed or was removed.",
+        "data": {
+          "type": "object",
+          "properties": {
+            "sessionId": {
+              "type": "string"
+            },
+            "row": {
+              "description": "The row after the change, or null when the row was removed."
+            }
+          },
+          "required": [
+            "sessionId"
+          ]
+        }
       }
     ]
   }

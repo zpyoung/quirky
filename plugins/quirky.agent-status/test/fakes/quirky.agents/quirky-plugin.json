@@ -1,0 +1,13 @@
+{
+  "id": "quirky.agents",
+  "name": "Fake agents",
+  "version": "0.0.0",
+  "main": "main.ts",
+  "activation": "startup",
+  "contributes": {
+    "method": [
+      { "id": "setCommand", "params": { "type": "object", "properties": { "command": { "type": "string" } }, "required": ["command"] } },
+      { "id": "get", "readOnly": true, "params": { "type": "object", "properties": { "agent": { "type": "string" } }, "required": ["agent"] } }
+    ]
+  }
+}
