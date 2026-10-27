@@ -18,6 +18,9 @@ const LAYOUT_KEY = 'layout'
 const MAX_JSON_LENGTH = 64 * 1024
 const COMMAND_TIMEOUT_MS = 30_000
 const FOCUS_TARGETS = ['sidebar', 'view', 'panel'] as const
+const PANEL_WIDTH_MIN = 220
+const PANEL_WIDTH_MAX = 4096
+const ACTIVITY_BAR_POSITIONS = ['top', 'side'] as const
 
 const DEFAULT_LAYOUT: UiLayout = { view: null, panel: null, sidebar: true, focus: null }
 
@@ -57,10 +60,28 @@ function jsonLength(value: unknown): number {
   return JSON.stringify(value)?.length ?? 0
 }
 
+function isPanelWidth(value: unknown): value is number {
+  return typeof value === 'number' && Number.isInteger(value) && value >= PANEL_WIDTH_MIN && value <= PANEL_WIDTH_MAX
+}
+
 function readStored(value: unknown): UiLayout {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) return { ...DEFAULT_LAYOUT }
   const stored = value as Record<string, unknown>
   const view = stored.view as { id?: unknown; input?: unknown } | null | undefined
+  const storedWidths = stored.panelWidths
+  const panelWidths: Record<string, number> = {}
+  let hasPanelWidths = false
+  if (typeof storedWidths === 'object' && storedWidths !== null && !Array.isArray(storedWidths)) {
+    const widths = storedWidths as Record<string, unknown>
+    for (const id in widths) {
+      if (!Object.hasOwn(widths, id)) continue
+      const width = widths[id]
+      if (parseContributionId(id)?.kind !== 'panel' || !isPanelWidth(width)) continue
+      panelWidths[id] = width
+      hasPanelWidths = true
+    }
+  }
+  const activityBarPosition = ACTIVITY_BAR_POSITIONS.find((position) => position === stored.activityBarPosition)
   return {
     view:
       view && typeof view === 'object' && typeof view.id === 'string'
@@ -68,7 +89,9 @@ function readStored(value: unknown): UiLayout {
         : null,
     panel: typeof stored.panel === 'string' ? stored.panel : null,
     sidebar: typeof stored.sidebar === 'boolean' ? stored.sidebar : true,
-    focus: FOCUS_TARGETS.find((target) => target === stored.focus) ?? null
+    focus: FOCUS_TARGETS.find((target) => target === stored.focus) ?? null,
+    ...(hasPanelWidths ? { panelWidths } : {}),
+    ...(activityBarPosition ? { activityBarPosition } : {})
   }
 }
 
@@ -132,6 +155,26 @@ export class LayoutService {
   openPanel(id: string): UiLayout {
     this.requireSlot(id, 'panel')
     return this.change((layout) => ({ ...layout, panel: id }))
+  }
+
+  /** Configures the desired width for an effective panel and/or the global activity-bar position. */
+  configurePanel(id: string, width?: number, activityBarPosition?: 'top' | 'side'): UiLayout {
+    if (typeof id !== 'string' || id.length === 0) throw invalidParams('id must be a non-empty string')
+    if (width === undefined && activityBarPosition === undefined) {
+      throw invalidParams('width or activityBarPosition must be provided')
+    }
+    if (width !== undefined && !isPanelWidth(width)) {
+      throw invalidParams(`width must be an integer from ${PANEL_WIDTH_MIN} to ${PANEL_WIDTH_MAX}`)
+    }
+    if (activityBarPosition !== undefined && !ACTIVITY_BAR_POSITIONS.includes(activityBarPosition)) {
+      throw invalidParams('activityBarPosition must be top or side')
+    }
+    this.requireSlot(id, 'panel')
+    return this.change((layout) => ({
+      ...layout,
+      ...(width === undefined ? {} : { panelWidths: { ...layout.panelWidths, [id]: width } }),
+      ...(activityBarPosition === undefined ? {} : { activityBarPosition })
+    }))
   }
 
   closePanel(): UiLayout {

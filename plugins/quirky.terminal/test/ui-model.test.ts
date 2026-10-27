@@ -6,9 +6,10 @@ import { createFakeGit, useTestGit } from '../../../packages/git/src/testing'
 import { builtinsDir, startHarness, makeTempHome, type Harness } from '../../../packages/daemon/test/helpers'
 import manifest from '../quirky-plugin.json'
 import { groupsInOrder, paneLeaves } from '../src/layout/tree'
-import type { PaneLeaf, Tab, Workspace } from '../src/layout/types'
+import { isTerminalTab } from '../src/layout/types'
+import type { PaneLeaf, TerminalTab, Workspace } from '../src/layout/types'
 
-const findGroupTabs = (workspace: Workspace): Tab[] => groupsInOrder(workspace.root).flatMap((group) => group.tabs)
+const findGroupTabs = (workspace: Workspace): TerminalTab[] => groupsInOrder(workspace.root).flatMap((group) => group.tabs.filter(isTerminalTab))
 
 let h: Harness
 let client: QuirkyClient

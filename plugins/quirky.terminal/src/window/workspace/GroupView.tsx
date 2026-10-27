@@ -2,7 +2,7 @@ import { useRef, type DragEvent, type MouseEvent as ReactMouseEvent } from 'reac
 import { displayTitle } from '../../layout/titles'
 import { dropZone, paneLeaves, roundRatio } from '../../layout/tree'
 import type { DropZone } from '../../layout/tree'
-import { GROUP_RATIO_MAX, GROUP_RATIO_MIN, TAB_COLOR_HEX } from '../../layout/types'
+import { isTerminalTab, isViewTab } from '../../layout/types'
 import type { Group, GroupNode, Tab } from '../../layout/types'
 import { CollapseIcon, CloseIcon, PinIcon } from './icons'
 import type { ControllerState, WorkspaceController } from './controller'
@@ -17,8 +17,8 @@ type Common = { controller: WorkspaceController; state: ControllerState }
 function TabItem({ controller, state, group, tab, index, others, now }: Common & { group: Group; tab: Tab; index: number; others: Tab[]; now: number }) {
   const ws = state.workspace!
   const selected = group.activeTab === tab.id
-  const leaves = paneLeaves(tab.root)
-  const lead = leaves.find((leaf) => leaf.id === tab.activePane) ?? leaves[0]
+  const leaves = isTerminalTab(tab) ? paneLeaves(tab.root) : []
+  const lead = isTerminalTab(tab) ? leaves.find((leaf) => leaf.id === tab.activePane) ?? leaves[0] : undefined
   const session = lead ? state.sessions[lead.session] : undefined
   const title = displayTitle(tab)
   const renaming = state.rename?.kind === 'tab' && state.rename.id === tab.id
@@ -51,7 +51,7 @@ function TabItem({ controller, state, group, tab, index, others, now }: Common &
         event.preventDefault()
         void controller.closeTab(tab.id)
       }}
-      onDoubleClick={() => controller.renameTab(tab.id)}
+      onDoubleClick={() => isViewTab(tab) && tab.preview ? void controller.promoteViewTab(tab.id) : controller.renameTab(tab.id)}
       onContextMenu={(event) => {
         event.preventDefault()
         controller.openMenu('tab', tab.id, { x: event.clientX, y: event.clientY })
@@ -75,13 +75,13 @@ function TabItem({ controller, state, group, tab, index, others, now }: Common &
         void controller.dropTab({ kind: 'strip', group: group.id, index: indexFor(event) })
       }}
     >
-      <StatusGlyph session={session} now={now} />
+      {isTerminalTab(tab) ? <StatusGlyph session={session} now={now} /> : null}
       {renaming ? (
         <InlineField label="Tab title" initial={displayTitle(tab)} className="qt-rename" onCommit={(value) => void controller.commitRename(value)} onCancel={() => controller.cancelRename()} />
       ) : (
         <span className="qt-tab-title">{title}</span>
       )}
-      {tab.expandedPane !== null ? (
+      {isTerminalTab(tab) && tab.expandedPane !== null ? (
         <button
           type="button"
           className="qt-icon qt-collapse"

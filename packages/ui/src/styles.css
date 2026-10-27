@@ -130,22 +130,93 @@ textarea {
 }
 
 .layout {
+  --sidebar-width: 240px;
   flex: 1;
   min-height: 0;
   display: grid;
-  grid-template-columns: 240px minmax(0, 1fr);
+  grid-template-columns: var(--sidebar-width) minmax(0, 1fr);
+  grid-template-areas: 'sidebar main';
 }
 
 .layout.with-panel {
-  grid-template-columns: 240px minmax(0, 1fr) minmax(360px, 50%);
+  grid-template-columns:
+    var(--sidebar-width) minmax(0, 1fr) minmax(var(--panel-min-width), var(--panel-width));
+  grid-template-areas: 'sidebar main panel';
 }
 
-.layout.no-sidebar {
-  grid-template-columns: 44px minmax(0, 1fr);
+.layout > .sidebar {
+  grid-area: sidebar;
 }
 
-.layout.no-sidebar.with-panel {
-  grid-template-columns: 44px minmax(0, 1fr) minmax(360px, 50%);
+.layout > .main {
+  grid-area: main;
+}
+
+.layout > .plugin-panel {
+  grid-area: panel;
+}
+
+.layout.activity-top {
+  grid-template-rows: 36px minmax(0, 1fr);
+}
+
+.layout.activity-top:not(.with-panel) {
+  grid-template-areas: 'activity activity' 'sidebar main';
+}
+
+.layout.activity-top.with-panel {
+  grid-template-areas: 'activity activity activity' 'sidebar main panel';
+}
+
+.layout.activity-side {
+  grid-template-columns: var(--activity-width) var(--sidebar-width) minmax(0, 1fr);
+  grid-template-areas: 'activity sidebar main';
+}
+
+.layout.activity-side.with-panel {
+  grid-template-columns:
+    var(--activity-width) var(--sidebar-width) minmax(0, 1fr) minmax(var(--panel-min-width), var(--panel-width));
+  grid-template-areas: 'activity sidebar main panel';
+}
+
+.panel-activity-bar {
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  background: var(--bg-raised);
+}
+
+.panel-activity-bar-top {
+  grid-area: activity;
+  height: 36px;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 8px;
+  overflow-x: auto;
+  border-bottom: 1px solid var(--border);
+}
+
+.panel-activity-bar-side {
+  grid-area: activity;
+  width: var(--activity-width);
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 3px;
+  overflow-y: auto;
+  border-right: 1px solid var(--border);
+}
+
+.panel-activity-bar button {
+  flex: none;
+}
+
+.panel-activity-bar-side .panel-toggle-vertical {
+  width: 32px;
+  min-height: 34px;
+  padding: 6px 4px;
+  writing-mode: vertical-rl;
+  white-space: nowrap;
 }
 
 [data-region]:focus {
@@ -1034,6 +1105,39 @@ textarea {
 
 .main-body > .plugin-slot {
   flex: 1;
+}
+
+.layout > .plugin-panel {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  border-left: 1px solid var(--border);
+}
+
+.panel-resize-handle {
+  position: absolute;
+  z-index: 2;
+  top: 0;
+  bottom: 0;
+  left: -4px;
+  width: 8px;
+  background: var(--accent);
+  opacity: 0;
+  cursor: col-resize;
+  touch-action: none;
+}
+
+.panel-resize-handle:hover,
+.panel-resize-handle:focus-visible {
+  opacity: 0.24;
+}
+
+.panel-resize-handle[aria-disabled='true'] {
+  cursor: default;
+}
+
+.panel-resize-handle[aria-disabled='true']:hover {
+  opacity: 0;
 }
 
 .palette-list {

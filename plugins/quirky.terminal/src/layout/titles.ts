@@ -1,4 +1,4 @@
-import type { Tab } from './types'
+import type { Tab, TerminalTab, ViewTab } from './types'
 
 const DEFAULT_TITLE = /^Terminal (\d+)$/
 
@@ -15,7 +15,8 @@ export function nextTerminalTitle(existingTitles: readonly string[]): string {
 }
 
 /** What a tab's label reads: its custom title, else the shell's live title, else its default. */
-export function displayTitle(tab: Pick<Tab, 'customTitle' | 'liveTitle' | 'defaultTitle'>): string {
+export function displayTitle(tab: Tab | Pick<TerminalTab, 'customTitle' | 'liveTitle' | 'defaultTitle'> | Pick<ViewTab, 'title'>): string {
+  if (('kind' in tab && tab.kind === 'view') || ('title' in tab)) return tab.title
   if (tab.customTitle && tab.customTitle.trim()) return tab.customTitle
   if (tab.liveTitle && tab.liveTitle.trim()) return tab.liveTitle
   return tab.defaultTitle

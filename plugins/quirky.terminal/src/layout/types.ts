@@ -29,7 +29,9 @@ export type PaneLeaf = { kind: 'pane'; id: string; session: string; title: strin
 export type PaneSplit = { kind: 'split'; id: string; direction: SplitDirection; ratio: number; first: PaneNode; second: PaneNode }
 export type PaneNode = PaneLeaf | PaneSplit
 
-export type Tab = {
+export type TerminalTab = {
+  /** Older terminal rows intentionally omit this discriminator. */
+  kind?: never
   id: string
   defaultTitle: string
   customTitle: string | null
@@ -42,6 +44,28 @@ export type Tab = {
   expandedPane: string | null
   createdAt: string
 }
+
+/** A public hosted view in the existing workspace strip, with no pane or session. */
+export type ViewTab = {
+  kind: 'view'
+  id: string
+  viewId: string
+  key: string
+  input?: Record<string, unknown>
+  title: string
+  color: TabColor
+  pinned: boolean
+  preview: boolean
+  closeCommand?: string
+  closeMethod?: string
+  closeParams?: Record<string, unknown>
+  createdAt: string
+}
+
+export type Tab = TerminalTab | ViewTab
+
+export const isViewTab = (tab: Tab): tab is ViewTab => tab.kind === 'view'
+export const isTerminalTab = (tab: Tab): tab is TerminalTab => !isViewTab(tab)
 
 export type Group = {
   kind: 'group'

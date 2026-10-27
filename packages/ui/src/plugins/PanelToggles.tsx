@@ -1,7 +1,7 @@
 import { usePluginHost, usePluginState } from '../context'
 
-/** One header button per plugin panel; the open panel's button is pressed, and a panel's count shows beside its title. */
-export function PanelToggles() {
+/** One activity control per panel; the open panel's button is pressed and badges show beside its title. */
+export function PanelToggles({ vertical = false }: { vertical?: boolean }) {
   const host = usePluginHost()
   const { model, layout, badges } = usePluginState()
   return (
@@ -11,7 +11,9 @@ export function PanelToggles() {
         return (
           <button
             key={panel.id}
-            className={layout.panel === panel.id ? 'active' : ''}
+            className={`panel-toggle${vertical ? ' panel-toggle-vertical' : ''}${layout.panel === panel.id ? ' active' : ''}`}
+            aria-label={panel.title}
+            title={panel.title}
             aria-pressed={layout.panel === panel.id}
             onClick={() => host.togglePanel(panel.id)}
           >

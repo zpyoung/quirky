@@ -2,10 +2,11 @@ import { describe, expect, test } from 'bun:test'
 import type { Session } from '@quirky/protocol'
 import { InputTracker } from '../src/input-tracker'
 import { LayoutService } from '../src/layout/service'
-import { emptyWorkspace, makeTab, appendTab, normalize, workspaceTabs } from '../src/layout/ops'
+import { emptyWorkspace, makeTab, appendTab, normalize, workspaceTabs as allWorkspaceTabs } from '../src/layout/ops'
 import { reconcileWorkspace } from '../src/layout/reconcile'
 import { CounterIds, parseWorkspace } from '../src/layout/store'
 import { groupsInOrder, paneLeaves, splitPane } from '../src/layout/tree'
+import { isTerminalTab } from '../src/layout/types'
 import type { Workspace } from '../src/layout/types'
 
 const NOW = '2026-10-27T00:00:00.000Z'
@@ -61,6 +62,8 @@ function withTabsFrom(start: number, ...sessionIds: string[]): Workspace {
   return ws
 }
 
+
+const workspaceTabs = (ws: Workspace) => allWorkspaceTabs(ws).filter(isTerminalTab)
 const sessionsOf = (ws: Workspace) => workspaceTabs(ws).flatMap((tab) => paneLeaves(tab.root).map((leaf) => leaf.session))
 
 describe('adopting sessions', () => {
@@ -225,7 +228,10 @@ describe('repairing a loaded workspace', () => {
     expect(fixed.activeGroup).toBe(repaired!.id)
     expect(repaired!.activeTab).toBe(group!.tabs[1]!.id)
     expect(repaired!.recent).toEqual([group!.tabs[1]!.id])
-    for (const tab of repaired!.tabs) expect([tab.activePane, tab.expandedPane]).toEqual([paneLeaves(tab.root)[0]!.id, null])
+    for (const tab of repaired!.tabs) {
+      if (!isTerminalTab(tab)) throw new Error(`expected terminal tab ${tab.id}`)
+      expect([tab.activePane, tab.expandedPane]).toEqual([paneLeaves(tab.root)[0]!.id, null])
+    }
   })
 })
 

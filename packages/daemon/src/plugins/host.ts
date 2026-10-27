@@ -19,7 +19,18 @@ import { computeRegistry, type Registry, type RegistryPlugin } from './registry'
 
 type ExtensionMembers = Pick<
   PluginContext,
-  'dataDir' | 'emit' | 'subscribe' | 'call' | 'openStore' | 'getSetting' | 'error' | 'home' | 'pty' | 'notify' | 'launch'
+  | 'dataDir'
+  | 'emit'
+  | 'subscribe'
+  | 'call'
+  | 'openStore'
+  | 'getSetting'
+  | 'error'
+  | 'home'
+  | 'pty'
+  | 'notify'
+  | 'launch'
+  | 'createFileResource'
 >
 
 /** The daemon-side half of a plugin's context, created and torn down per activation attempt. */
@@ -33,7 +44,7 @@ export type ContextExtension = {
     isRevoked: () => boolean
   ): ExtensionMembers
   /** Runs once per attempt that called `create`, after the module's `deactivate` settles. */
-  revoke(pluginId: string): void
+  revoke(pluginId: string): void | Promise<void>
 }
 
 export type PluginHostOptions = {
@@ -443,11 +454,11 @@ export class PluginHost {
       runtime.module = undefined
       if (disabledMidway) {
         if (imported.module) await this.callDeactivate(id, imported.module, runtime)
-        this.revokeExtension(id, attempt)
+        await this.revokeExtension(id, attempt)
         this.setState(runtime, 'inactive')
         throw conflict(`${id} was disabled during activation`)
       }
-      this.revokeExtension(id, attempt)
+      await this.revokeExtension(id, attempt)
       runtime.error = messageOf(error)
       this.options.log(`plugin ${id} failed to activate: ${runtime.error}`)
       this.setState(runtime, 'failed')
@@ -534,6 +545,7 @@ export class PluginHost {
       home: '',
       pty: unavailableObject<PluginContext['pty']>('pty'),
       launch: unavailableObject<PluginContext['launch']>('launch'),
+      createFileResource: unavailable('createFileResource'),
       notify: unavailable('notify'),
       emit: () => {
         throw new Error(`${id}: context.emit is not available`)
@@ -661,14 +673,14 @@ export class PluginHost {
     runtime.module = undefined
     runtime.state = 'inactive'
     if (module) await this.callDeactivate(id, module, runtime)
-    if (attempt) this.revokeExtension(id, attempt)
+    if (attempt) await this.revokeExtension(id, attempt)
   }
 
-  private revokeExtension(id: string, attempt: Attempt): void {
+  private async revokeExtension(id: string, attempt: Attempt): Promise<void> {
     if (!attempt.extensionLive) return
     attempt.extensionLive = false
     try {
-      this.options.extension?.revoke(id)
+      await this.options.extension?.revoke(id)
     } catch (error) {
       this.options.log(`plugin ${id}: revoke failed: ${messageOf(error)}`)
     }

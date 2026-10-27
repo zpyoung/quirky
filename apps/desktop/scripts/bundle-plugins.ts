@@ -32,14 +32,32 @@ function copyUi(pluginId: string, pluginDir: string, outPluginDir: string, ui: s
   if (!existsSync(from)) {
     throw new Error(`plugin ${pluginId}: ${ui} is missing; run \`bun run build\` to produce the plugin UI modules`)
   }
-  mkdirSync(dirname(join(outPluginDir, ui)), { recursive: true })
-  cpSync(from, join(outPluginDir, ui))
+  const relativeDirectory = dirname(ui)
+  if (relativeDirectory === '.') {
+    mkdirSync(dirname(join(outPluginDir, ui)), { recursive: true })
+    cpSync(from, join(outPluginDir, ui))
+    return
+  }
+  const sourceDirectory = join(pluginDir, relativeDirectory)
+  const outputDirectory = join(outPluginDir, relativeDirectory)
+  mkdirSync(dirname(outputDirectory), { recursive: true })
+  cpSync(sourceDirectory, outputDirectory, { recursive: true })
+}
+
+function copyNotebookBridge(pluginDir: string, outPluginDir: string): void {
+  const relativePath = 'src/notebook/kernel-bridge.py'
+  const from = join(pluginDir, relativePath)
+  if (!existsSync(from)) return
+  const to = join(outPluginDir, relativePath)
+  mkdirSync(dirname(to), { recursive: true })
+  cpSync(from, to)
 }
 
 /**
  * Writes a self-contained copy of every plugin under `srcDir` into `outDir`, replacing whatever
  * was there. Each copy holds the rewritten manifest, `main` and `cli` bundled to `.js` with their
- * dependencies inlined, and the built UI module; sources, `test/` and `node_modules/` stay behind.
+ * dependencies inlined, and the generated UI asset tree; other sources, `test/` and `node_modules/` stay behind.
+ * The plugin-local runtime bridge `src/notebook/kernel-bridge.py` is copied verbatim when present.
  * A manifest that names a UI module which has not been built fails the whole bundle. Returns the
  * bundled plugin IDs.
  */
@@ -61,6 +79,7 @@ export async function bundlePlugins(srcDir: string, outDir: string): Promise<str
     if (manifest.main) manifest.main = await bundleEntry(id, pluginDir, outPluginDir, manifest.main)
     if (manifest.cli) manifest.cli = await bundleEntry(id, pluginDir, outPluginDir, manifest.cli)
     if (manifest.ui) copyUi(id, pluginDir, outPluginDir, manifest.ui)
+    copyNotebookBridge(pluginDir, outPluginDir)
 
     writeFileSync(join(outPluginDir, MANIFEST), `${JSON.stringify(manifest, null, 2)}\n`)
     bundled.push(id)

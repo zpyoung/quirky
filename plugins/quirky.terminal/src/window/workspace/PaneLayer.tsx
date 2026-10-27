@@ -1,11 +1,11 @@
 import { useEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react'
 import { paneLeaves, paneRects, roundRatio } from '../../layout/tree'
 import type { DividerRect, PaneRect } from '../../layout/tree'
-import type { Edge, Group, PaneLeaf, PaneNode, Tab } from '../../layout/types'
+import type { Edge, Group, PaneLeaf, PaneNode, Tab, TerminalTab, ViewTab } from '../../layout/types'
 import { TerminalPaneView } from '../pane/TerminalPaneView'
 import { CollapseIcon, CloseIcon, ExpandIcon, GripIcon } from './icons'
 import type { ControllerState, PaneDropTarget, WorkspaceController } from './controller'
-import { STRUCTURED_VIEW_ID, byPaneId, px } from './model'
+import { isViewTab } from '../../layout/types'
 import { useBoxSize } from './useBoxSize'
 
 /** The narrowest a pane may be drawn or dragged to, unless its pair is smaller. */
@@ -83,6 +83,30 @@ function StructuredHost({ controller, session }: { controller: WorkspaceControll
     <div className="qt-structured">
       <div ref={host} className="qt-structured-body" />
       {failed ? <p className="qt-muted">The structured session view is not available.</p> : null}
+    </div>
+  )
+}
+
+function HostedViewLayer({ controller, tab }: { controller: WorkspaceController; tab: ViewTab }) {
+  const host = useRef<HTMLDivElement>(null)
+  const [failure, setFailure] = useState<string | null>(null)
+  const inputKey = JSON.stringify(tab.input ?? {})
+  useEffect(() => {
+    const element = host.current
+    if (!element) return
+    setFailure(null)
+    try {
+      return controller.context.mountView(tab.viewId, element, { ...(tab.input ?? {}), tabId: tab.id })
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      controller.context.log(`could not mount ${tab.viewId} in tab ${tab.id}: ${message}`)
+      setFailure(message)
+    }
+  }, [controller, tab.id, tab.viewId, inputKey])
+  return (
+    <div className="qt-structured qt-hosted-view" data-hosted-view={tab.id}>
+      <div ref={host} className="qt-structured-body" />
+      {failure ? <p className="qt-muted qt-pad">{failure}</p> : null}
     </div>
   )
 }
@@ -198,7 +222,7 @@ function halfOf(rect: PaneRect, edge: Edge): { left: number; top: number; width:
  * its ID and absolutely positioned from rectangles computed off the pane tree, so a split, close
  * or move changes rectangles and never re-parents a terminal.
  */
-export function PaneLayer({ controller, state, group, tab }: Props) {
+function TerminalPaneLayer({ controller, state, group, tab }: Props & { tab: TerminalTab }) {
   const container = useRef<HTMLDivElement>(null)
   const size = useBoxSize(container)
   const { settings, sessions, cwds, workspace } = state
@@ -324,6 +348,7 @@ export function PaneLayer({ controller, state, group, tab }: Props) {
                 ref={(handle) => controller.registerHandle(leaf.id, handle)}
                 context={controller.context}
                 sessionId={leaf.session}
+                workspaceId={workspace?.id}
                 cwd={cwds[leaf.session] ?? session.cwd ?? ''}
                 settings={settings}
                 active={focused}
@@ -356,4 +381,8 @@ export function PaneLayer({ controller, state, group, tab }: Props) {
       {preview ? <div className="qt-drop-preview" data-drop-preview style={preview} /> : null}
     </div>
   )
+}
+
+export function PaneLayer(props: Props) {
+  return isViewTab(props.tab) ? <HostedViewLayer controller={props.controller} tab={props.tab} /> : <TerminalPaneLayer {...props} tab={props.tab} />
 }

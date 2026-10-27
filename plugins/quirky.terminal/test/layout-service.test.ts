@@ -10,7 +10,8 @@ import { InputTracker } from '../src/input-tracker'
 import { LayoutService } from '../src/layout/service'
 import { appendTab, emptyWorkspace, makeTab } from '../src/layout/ops'
 import { sequentialIds, groupsInOrder, paneLeaves } from '../src/layout/tree'
-import type { FloatingState, Group, PaneLeaf, Tab, Workspace } from '../src/layout/types'
+import { isTerminalTab } from '../src/layout/types'
+import type { FloatingState, Group, PaneLeaf, TerminalTab, Workspace } from '../src/layout/types'
 import { sessionCreates } from './fakes/quirky.session/main'
 import { call, createSession, restartDaemon, startPluginHarness, TERMINAL_PLUGINS, type PluginSet } from './support'
 
@@ -32,9 +33,9 @@ afterEach(async () => {
 
 const api = (method: string, params: Record<string, unknown> = {}, c: QuirkyClient = client) => call<any>(c, `quirky.terminal/${method}`, params)
 const layoutOf = async (workspace = WT, c: QuirkyClient = client) => (await api('workspace', { workspace }, c)).workspace as Workspace
-const tabsOf = (ws: Workspace): Tab[] => groupsInOrder(ws.root).flatMap((group) => group.tabs)
+const tabsOf = (ws: Workspace): TerminalTab[] => groupsInOrder(ws.root).flatMap((group) => group.tabs.filter(isTerminalTab))
 const groupsOf = (ws: Workspace): Group[] => groupsInOrder(ws.root)
-const panesOf = (tab: Tab): PaneLeaf[] => paneLeaves(tab.root)
+const panesOf = (tab: TerminalTab): PaneLeaf[] => paneLeaves(tab.root)
 const titles = (ws: Workspace) => tabsOf(ws).map((tab) => tab.customTitle ?? tab.defaultTitle)
 const tabNamed = (ws: Workspace, title: string) => tabsOf(ws).find((tab) => (tab.customTitle ?? tab.defaultTitle) === title)!
 const newTab = async (params: Record<string, unknown> = {}) => (await api('newTab', { workspace: WT, ...params })).workspace as Workspace
@@ -452,7 +453,7 @@ describe('closed tabs', () => {
 })
 
 describe('panes', () => {
-  async function tabWithPanes(count: number): Promise<{ ws: Workspace; tab: Tab }> {
+  async function tabWithPanes(count: number): Promise<{ ws: Workspace; tab: TerminalTab }> {
     let ws = await newTab()
     for (let i = 1; i < count; i++) {
       ws = (await api('splitPane', { pane: lastTab(ws).activePane, direction: 'right' })).workspace
@@ -675,7 +676,7 @@ describe('clearPane and resetPane revision precondition', () => {
       pty: { clear: async (s: string) => void reached.push(s), resetModes: async (s: string) => void reached.push(s) }
     }
     const service = new LayoutService(context as never, store as never, new InputTracker())
-    const pane = paneLeaves(groupsInOrder(ws.root)[0]!.tabs[0]!.root)[0]!
+    const pane = panesOf(tabsOf(ws)[0]!)[0]!
     for (const method of ['clearPane', 'resetPane']) {
       const refused = (await Promise.resolve(service.methods[method]!({ pane: pane.id, revision: ws.revision + 5 }, {} as never)).catch((e: unknown) => e)) as { kind?: string }
       expect(refused.kind).toBe('conflict')

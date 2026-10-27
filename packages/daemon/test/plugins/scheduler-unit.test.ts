@@ -487,6 +487,9 @@ describe('failed activation', () => {
     const extension: ContextExtension = {
       create: () => ({
         dataDir: root,
+        createFileResource: async () => {
+          throw new Error('unused')
+        },
         home: root,
         pty: {} as never,
         notify: () => undefined,

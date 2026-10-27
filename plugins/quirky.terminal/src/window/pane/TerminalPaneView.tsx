@@ -8,11 +8,11 @@ import { Unicode11Addon } from '@xterm/addon-unicode11'
 import { ClipboardAddon, type IBase64, type IClipboardProvider } from '@xterm/addon-clipboard'
 import { RpcError, RpcErrorCode, base64ToBytes, type UiPluginContext } from '@quirky/protocol'
 import { shellEscapePaths } from '../../shell-escape'
-import { pathsFromDrop } from './drop'
+import { pathsFromDrop, readWorktreePathsDrop, resolveWorktreeDropPaths, WORKTREE_PATHS_MIME } from './drop'
 import { trackKittyFlags } from './kitty'
 import { PathChecker, createFileLinkProvider } from './link-provider'
 import { LinkPopover, type PopoverItem } from './LinkPopover'
-import { decideLinkClick, type LinkKind } from './links'
+import { decideLinkClick, relativeWithinRoot, type LinkKind } from './links'
 import { resolveKeyAction } from './keys'
 import { createOsc52Base64, createOsc52Provider, createOsc52QueryGuard } from './osc52'
 import { planPaste, runPaste } from './paste'
@@ -67,8 +67,9 @@ export type TerminalPaneHandle = {
 export type TerminalPaneProps = {
   context: UiPluginContext
   sessionId: string
+  /** The owning worktree ID, or `floating` when this pane has no worktree owner. */
+  workspaceId?: string
   /** The directory relative file links are joined onto. */
-  cwd: string
   settings: PaneSettings
   /** Whether this is the focused pane of its tab; the pane takes keyboard focus when it becomes active. */
   active: boolean
@@ -327,6 +328,40 @@ export function TerminalPaneView(props: TerminalPaneProps) {
         .call('quirky.terminal/openExternal', reveal ? { target, reveal: true } : { target })
         .catch((error: unknown) => context.toast('Could not open link', messageOf(error)))
     }
+    const openPathTarget = async (target: string, line: number | null, column: number | null) => {
+      const workspaceId = latest.current.workspaceId
+      if (!workspaceId || workspaceId === 'floating') {
+        openTarget(target, false)
+        return
+      }
+      const ownerId = workspaceId.replace(/^id:/, '')
+      const worktreeSelector = `id:${ownerId}`
+      let root: string
+      try {
+        const resolved = (await context.call('quirky.worktree/resolve', { selector: worktreeSelector })) as { path?: unknown }
+        if (typeof resolved.path !== 'string') throw new Error('the worktree did not return a root path')
+        root = resolved.path
+      } catch (error) {
+        context.toast('Could not resolve the worktree for this file link', messageOf(error))
+        return
+      }
+      const path = relativeWithinRoot(root, target)
+      if (path === null) {
+        openTarget(target, false)
+        return
+      }
+      try {
+        await context.call('quirky.editor/open', {
+          worktree: worktreeSelector,
+          path,
+          ...(line === null ? {} : { line }),
+          ...(column === null ? {} : { column }),
+          focus: true
+        })
+      } catch (error) {
+        context.toast('Could not open file in editor', messageOf(error))
+      }
+    }
     const showPopover = (kind: LinkKind, target: string, event: MouseEvent) => {
       const items: PopoverItem[] =
         kind === 'url'
@@ -341,14 +376,16 @@ export function TerminalPaneView(props: TerminalPaneProps) {
             ]
       setPopover({ x: event.clientX, y: event.clientY, items })
     }
-    const activateLink = (kind: LinkKind, target: string, event: MouseEvent) => {
+    const activateLink = (kind: LinkKind, target: string, event: MouseEvent, line: number | null = null, column: number | null = null) => {
       if (term.hasSelection()) return
       const action = decideLinkClick(kind, event, latest.current.settings)
       if (action === 'none') return
       event.preventDefault()
       if (action === 'popover') showPopover(kind, target, event)
-      else if (action === 'open') openTarget(target, false)
-      else if (action === 'reveal') openTarget(target, true)
+      else if (action === 'open') {
+        if (kind === 'path') void openPathTarget(target, line, column)
+        else openTarget(target, false)
+      } else if (action === 'reveal') openTarget(target, true)
       else copyText(target)
     }
     const activateUri = (event: MouseEvent, uri: string) => {
@@ -376,7 +413,7 @@ export function TerminalPaneView(props: TerminalPaneProps) {
       createFileLinkProvider(term, checker, {
         cwd: () => latest.current.cwd,
         hover: setHint,
-        activate: (event, link) => activateLink('path', link.path, event)
+        activate: (event, link) => activateLink('path', link.path, event, link.line, link.column)
       })
     )
 
@@ -490,12 +527,42 @@ export function TerminalPaneView(props: TerminalPaneProps) {
     }
     const onDragOver = (event: DragEvent) => {
       const types = Array.from(event.dataTransfer?.types ?? [])
-      if (!types.includes('Files') && !types.includes('text/uri-list')) return
+      if (!types.includes('Files') && !types.includes('text/uri-list') && !types.includes(WORKTREE_PATHS_MIME)) return
       event.preventDefault()
     }
     const onDrop = (event: DragEvent) => {
-      if (!event.dataTransfer) return
-      const paths = pathsFromDrop(event.dataTransfer)
+      const transfer = event.dataTransfer
+      if (!transfer) return
+      const worktreeDrop = readWorktreePathsDrop(transfer)
+      if (worktreeDrop.kind !== 'absent') {
+        event.preventDefault()
+        event.stopPropagation()
+        if (worktreeDrop.kind === 'invalid') {
+          context.toast('Could not use dropped files', 'The editor row drag payload is invalid.')
+          return
+        }
+        const workspaceId = latest.current.workspaceId?.replace(/^id:/, '')
+        if (!workspaceId || workspaceId === 'floating' || worktreeDrop.worktreeId !== workspaceId) {
+          context.toast('Could not use dropped files', 'The dragged files belong to a different worktree.')
+          return
+        }
+        void (async () => {
+          try {
+            const resolved = (await context.call('quirky.worktree/resolve', { selector: `id:${workspaceId}` })) as { path?: unknown }
+            if (typeof resolved.path !== 'string') throw new Error('the worktree did not return a root path')
+            const paths = resolveWorktreeDropPaths(resolved.path, worktreeDrop.paths)
+            if (!paths) {
+              context.toast('Could not use dropped files', 'The dragged path escapes its worktree.')
+              return
+            }
+            sendInput(shellEscapePaths(paths))
+          } catch (error) {
+            context.toast('Could not use dropped files', messageOf(error))
+          }
+        })()
+        return
+      }
+      const paths = pathsFromDrop(transfer)
       if (paths.length === 0) return
       event.preventDefault()
       event.stopPropagation()
