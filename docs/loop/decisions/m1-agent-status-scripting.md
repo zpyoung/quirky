@@ -449,5 +449,15 @@
 - **Confidence:** high
 - **Source:** assumed — autonomous
 
+## D45: A later land failed on a quirky.worktree test race; this branch carries that plugin's own fix
+- **Question:** LOOP.md step 7.3 after `queue.ts land` reported `bun run test` failing on the merge result
+- **Options:** cherry-pick the upstream fix; write a new fix; retry unchanged
+- **Chose:** cherry-picked fce1b6a ("wait for the sidebar report after moving a project into a group") onto this branch after merging build/roadmap. The failure was `plugins/quirky.worktree/test/window-projects.test.ts` SC-10, which read the window report before it caught up with the DOM; it failed alone too, so a plain retry would not help. The same fix already exists on build-loop/faster-lands and build/m5-structured-runner but not yet on build/roadmap; git drops the duplicate when those land.
+- **Why:** the test is outside this item, but LOOP.md says to fix a failed land on the item branch, and reusing the existing fix avoids a second version of it
+- **Evidence:** the file passes alone after the cherry-pick (18 pass)
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** assumed — autonomous
+
 ## Progress
 Step 7 (land). Build, Final Round 1, its fix batch and the final gate are done (head 2d20a80 plus this note). No UI or native scenarios (D25). If this iteration stopped before landing: run `bun install`, the gate (`bun run test && bun test scripts && bun run typecheck`), commit, `git switch --detach`, check `pgrep -fl "queue.ts land"` is empty, then `bun scripts/build-loop/queue.ts land m1-agent-status-scripting`.
