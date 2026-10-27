@@ -258,8 +258,7 @@
       "title": "Fix required remote suite: plugins/quirky.ask/test/core/spec.test.ts accepts unanchored a*a*a*b with a 200-character nonmatching default but validation takes 103-118 ms and violates its 100 ms budget even in isolated runs; investigate bounded regex validation without suppressing the assertion or changing matching semantics",
       "docs": [],
       "deps": [],
-      "status": "in-progress",
-      "lane": 7
+      "status": "done"
     },
     {
       "id": "fix-sc31-first-shell-race",

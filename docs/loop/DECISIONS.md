@@ -392,6 +392,13 @@ files, not this one.
 | easy | high | [m2-sidebar-extras D22](decisions/m2-sidebar-extras.md) | Do not advance past the red required W1 suite gate | locked by docs/loop/LOOP.md (verification); assumed — autonomous (repair routing) |
 | easy | high | [m2-sidebar-extras D23](decisions/m2-sidebar-extras.md) | Keep measured passing checks separate from the failing full suite | locked by docs/loop/LOOP.md |
 | easy | high for exercised behavior; no claim on unexercised save/reopen | [m2-sidebar-extras D24](decisions/m2-sidebar-extras.md) | Smoke the completed W1 paths without calling them full sidebar-extras parity | assumed — autonomous |
+| easy | high | [fix-ask-regex-budget-20261027 D1](decisions/fix-ask-regex-budget-20261027.md) | Repair the bounded matcher without relaxing the existing budget | assumed — autonomous |
+| easy | high | [fix-ask-regex-budget-20261027 D2](decisions/fix-ask-regex-budget-20261027.md) | Use OpenAI implementers and the reachable Gemini reviewer | assumed — autonomous |
+| easy | high | [fix-ask-regex-budget-20261027 D3](decisions/fix-ask-regex-budget-20261027.md) | Add a sound required-literal preflight, not a replacement regex engine | supersedes m2-ask-parity D32 |
+| easy | high | [fix-ask-regex-budget-20261027 D4](decisions/fix-ask-regex-budget-20261027.md) | Preserve JavaScript empty-class parsing and test behavior rather than wiring | assumed — autonomous |
+| easy | high | [fix-ask-regex-budget-20261027 D5](decisions/fix-ask-regex-budget-20261027.md) | Retain the merged SC-31 repair and verify the shared pure matcher without a new UI scenario | assumed — autonomous |
+| easy | high for observed results; no claim that the report race is fixed | [fix-ask-regex-budget-20261027 D6](decisions/fix-ask-regex-budget-20261027.md) | Keep the runner's isolated-retry policy and report its observed race | locked by scripts/suite.ts |
+| easy | high for the exercised scope, not a completeness guarantee | [fix-ask-regex-budget-20261027 D7](decisions/fix-ask-regex-budget-20261027.md) | Accept the standard independent final review and land through the queue | locked by docs/loop/LOOP.md |
 | easy | high | [m2-source-control-notes-ai D1](decisions/m2-source-control-notes-ai.md) | Classify the item as Visual, API, CLI and Integration work, and run research phases A and B | assumed — autonomous |
 | easy | high | [m2-source-control-notes-ai D2](decisions/m2-source-control-notes-ai.md) | Skip the visual companion and the adhd offer, use the standard gray-area set | locked by docs/loop/LOOP.md |
 | easy | high | [m2-source-control-notes-ai D5](decisions/m2-source-control-notes-ai.md) | Select every gray area that matters for notes and AI actions | assumed — autonomous |
