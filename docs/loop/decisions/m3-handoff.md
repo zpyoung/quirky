@@ -843,5 +843,25 @@ Candidate cleanup: reversed only `38a4f23`'s contribution, retaining the incomin
 
 Documentation: amended logic SC-25 and the dated amendment log first, then documented the public provenance query and root-selection contract in its sibling tech spec. Removed the throwaway smoke script after its cleanup completed. The read-only manifest metadata matches existing Accounts query conventions.
 
+## D83: Retain Session Info's existing-session opener and handoff's tab identifiers
+- **Question:** how to resolve the third landing's two conflicts with the newly landed Session Info feature
+- **Options:** take one side; keep the additive imports and both terminal lifecycle contracts
+- **Chose:** keep both `SessionLaunch` and actionable-toast type imports in the public plugin contract. Keep Session Info's complete `openSession` method and preserve handoff's `addTab` return type with `NewTabIds`. Read incoming Session Info D1–D36 and Git test-synchronization decisions; neither changes handoff's conditional destination-group rule or `activate:false`.
+- **Why:** opening/focusing an existing running session must not create another process, while handoff must still receive the new tab/pane identifiers without stealing source focus. Session Info's active-xterm focus rule remains intact; the incoming Git receipt barrier is test-only.
+- **Evidence:** conflict blocks in `packages/protocol/src/plugins.ts` and `plugins/quirky.terminal/src/layout/service.ts`; stable integration finish `1c73fb1`; incoming `m3-session-info.md` D23 and `fix-flaky-quirky-git-files-scenarios.md` D4–D7
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** locked by docs/loop/decisions/m3-session-info.md
+
+## D84: Verify the named Session Info merge paths without restarting feature verification
+- **Question:** which checks cover the two named additive conflicts before retrying landing
+- **Options:** restart every feature/UI flow; verify the public protocol, existing-session opening, background new-tab creation and handoff launch/probe consumers, plus the global gates
+- **Chose:** targeted remote verification passes all 16 files with no flakes: protocol tests, terminal layout service/reconciliation/background activation, and handoff start/transcript tests. Scripts pass 62 tests, typecheck exits 0, and the packaged UI/desktop build exits 0 with 14 bundled plugins.
+- **Why:** only the public type imports and method-boundary conflict needed resolution; incoming `openSession` behavior and handoff's identifier return contract both remain. Earlier affected-package, regression, smoke and UI evidence still covers the unchanged feature paths.
+- **Evidence:** targeted `suite-result {"ok":true,"flaky":[]}`; `bun test scripts && bun run typecheck && bun run build` exit 0
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** locked by docs/loop/LOOP.md
+
 ## Progress
-The account/hosting catch-up is reconciled and committed (`1e95ddb`); both UI contribution kinds and session helper sets remain. The recorded-home compatibility fix is implemented after RED proof and passes all 34 account/handoff files, with managed/custom/unset roots, immutable source-home selection and containment covered (D80). Its scoped review's sole null-home finding is rejected with producer/runtime evidence (D81). Standalone API/CLI-module/probe smoke passes, including safe recovery and outsider refusal; temporary resources/script are removed (D82). Earlier additive affected suite passes 293 remote plus 2 macOS-only files; isolated scripts 62 pass; final typecheck and packaged build pass. Specs are amended; eleven handoff UI goals pass with only SC-40's documented hover-tool limitation. Next: commit this completed integration fix, detach and retry `queue.ts land m3-handoff`; no further feature flows or pre-land whole-suite run. Do not start another item.
+The completed account-home fix is committed as `0d5df53`. Third landing's two conflicts with stable landed Session Info are resolved additively and incoming decisions reconciled (D83). Targeted protocol/terminal/handoff lifecycle verification passes all 16 files with no flakes; scripts 62 pass, global typecheck and packaged build pass (D84). All previous account-home RED/GREEN, real daemon/API/CLI-module smoke, migration upgrade smoke and guarded UI evidence remains applicable; no temporary resources remain. Next: commit this verified merge resolution, detach and retry `queue.ts land m3-handoff`. Do not start another item.

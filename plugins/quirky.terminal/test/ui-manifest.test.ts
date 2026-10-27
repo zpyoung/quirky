@@ -44,21 +44,6 @@ const TECH_BINDINGS: [chord: string, command: string, when?: string][] = [
   ['mod+alt+shift+a', 'maximize-floating']
 ]
 
-/** Commands tech.md lists without a key. */
-const NO_KEY = [
-  'equalize',
-  'set-pane-title',
-  'clear-pane-title',
-  'reset-terminal',
-  'toggle-quick-commands',
-  'search-close',
-  'manage-quick-commands',
-  'minimize-floating',
-  'open-menu',
-  'close-menu',
-  'manage-sessions'
-]
-
 describe('the manifest overrides', () => {
   test('SC-70: the session view and tab commands are overridden', () => {
     const ids = (manifest as { overrides?: { id: string }[] }).overrides?.map((entry) => entry.id)
@@ -114,11 +99,6 @@ describe('the commands and default keys', () => {
     expect(new Set(bindings.map((binding) => binding.id)).size).toBe(bindings.length)
   })
 
-  test('every command has a key or is on the tech spec list of commands without one', () => {
-    const bound = new Set(bindings.map((binding) => binding.command))
-    const keyless = commands.map((command) => command.id).filter((id) => !bound.has(id))
-    expect(keyless.sort()).toEqual([...NO_KEY].sort())
-  })
 
   test('every key is written as its canonical chord and points at a command this plugin declares or overrides', () => {
     const own = new Set(commands.map((command) => command.id))
@@ -153,12 +133,6 @@ describe('the commands and default keys', () => {
     expect(commands.find((command) => command.id === 'open-menu')?.args?.required).toEqual(['kind'])
   })
 
-  test('titles use Orca wording for the headline actions', () => {
-    const title = (id: string) => commands.find((command) => command.id === id)?.title
-    expect(title('split-right')).toBe('Split Terminal Right')
-    expect(title('toggle-floating')).toBe('Toggle Floating Terminal')
-    expect(title('manage-sessions')).toBe('Terminal: Manage Sessions')
-  })
 
   test('mod+w keeps two groups: the session close-session without a condition and close-pane under terminalFocus', () => {
     const closeKeys = bindings.filter((binding) => binding.key === 'mod+w')

@@ -261,6 +261,13 @@ files, not this one.
 | medium | high | [m1-term-daemon D24](decisions/m1-term-daemon.md) | History is rendered on read by replaying a bounded window of the log, not stored as rows | locked by docs/architecture.md |
 | medium | high | [m1-term-daemon D41](decisions/m1-term-daemon.md) | Catching up with build/roadmap (m1-providers) keeps both sides; the exit columns become migration 3 | assumed — autonomous |
 | medium | high | [m1-term-daemon D42](decisions/m1-term-daemon.md) | A second catch-up merged m1-launch-settings; the exit columns become migration 4 | assumed — autonomous |
+| medium | high | [m3-session-info D1](decisions/m3-session-info.md) | Build the local session inspection flows, not adjacent agent extras | locked by docs/roadmap.md |
+| medium | high | [m3-session-info D5](decisions/m3-session-info.md) | Statusline consent changes only future launch overlays | locked by docs/roadmap.md |
+| medium | high | [m3-session-info D6](decisions/m3-session-info.md) | Correlate every rich value to the active provider session | assumed — autonomous |
+| medium | high | [m3-session-info D7](decisions/m3-session-info.md) | Keep feature ownership in a new built-in plugin | locked by docs/roadmap.md |
+| medium | high | [m3-session-info D9](decisions/m3-session-info.md) | macOS local execution is the supported transport | deferred: platform |
+| medium | high | [m3-session-info D12](decisions/m3-session-info.md) | Accept the specification review's three implementation gaps | assumed — autonomous |
+| medium | high | [m3-session-info D27](decisions/m3-session-info.md) | Close supplemental final A1 with a real bounded-I/O fix | assumed — autonomous |
 | easy | low | [m1-agent-status D38](decisions/m1-agent-status.md) | mimo-code's plugin goes in its config dir's `plugins/`, not Orca's per-launch overlay | assumed — autonomous |
 | easy (redispatch if a substantive dependency emerges) | medium | [sa-browser-agent D13](decisions/sa-browser-agent.md) | Keep implementation in one component with focused internal modules | assumed — autonomous |
 | easy | medium | [m0-scripting D14](decisions/m0-scripting.md) | Generated commands print a generic text form, and `--json` prints the raw result | assumed — autonomous |
@@ -497,6 +504,13 @@ files, not this one.
 | easy | high | [fix-flaky-quirky-worktree-window-projects D9](decisions/fix-flaky-quirky-worktree-window-projects.md) | Preserve operator ownership and catch up before final review | assumed — autonomous |
 | easy | high for exercised paths | [fix-flaky-quirky-worktree-window-projects D10](decisions/fix-flaky-quirky-worktree-window-projects.md) | Verify the affected plugin and required gates without changing shipped behavior | locked by docs/loop/LOOP.md |
 | easy | high for the confirmed timing race and existing fix; review used supplied evidence rather than independent tool execution. | [fix-flaky-quirky-worktree-window-projects D11](decisions/fix-flaky-quirky-worktree-window-projects.md) | Accept the final review and retain no duplicate implementation | assumed — autonomous |
+| easy (test/runtime repair only) | high | [fix-flaky-quirky-git-files-scenarios D1](decisions/fix-flaky-quirky-git-files-scenarios.md) | Diagnose the recorded load failure without expanding feature scope | locked by docs/loop/LOOP.md |
+| easy | high | [fix-flaky-quirky-git-files-scenarios D2](decisions/fix-flaky-quirky-git-files-scenarios.md) | Use a reachable cross-family reviewer | assumed — autonomous |
+| easy | high | [fix-flaky-quirky-git-files-scenarios D3](decisions/fix-flaky-quirky-git-files-scenarios.md) | Stop local load and use the shared test host | assumed — autonomous |
+| easy (test-only helper and synchronization) | high for the demonstrated race; medium for attribution to historical flakes | [fix-flaky-quirky-git-files-scenarios D4](decisions/fix-flaky-quirky-git-files-scenarios.md) | Establish subscriber receipt by ordered RPC, not elapsed time | assumed — autonomous |
+| easy | high | [fix-flaky-quirky-git-files-scenarios D5](decisions/fix-flaky-quirky-git-files-scenarios.md) | Preserve consumer assertions and use controlled latency as red/green evidence | assumed — autonomous |
+| easy | high | [fix-flaky-quirky-git-files-scenarios D6](decisions/fix-flaky-quirky-git-files-scenarios.md) | Verify the existing surface without adding UI or feature scope | assumed — autonomous |
+| easy | high for repair/verification; medium for exact attribution to original filename-only flake reports | [fix-flaky-quirky-git-files-scenarios D7](decisions/fix-flaky-quirky-git-files-scenarios.md) | Final verification and cross-family review clear the test-only repair | assumed — autonomous |
 | easy | high | [m2-source-control-notes-ai D1](decisions/m2-source-control-notes-ai.md) | Classify the item as Visual, API, CLI and Integration work, and run research phases A and B | assumed — autonomous |
 | easy | high | [m2-source-control-notes-ai D2](decisions/m2-source-control-notes-ai.md) | Skip the visual companion and the adhd offer, use the standard gray-area set | locked by docs/loop/LOOP.md |
 | easy | high | [m2-source-control-notes-ai D5](decisions/m2-source-control-notes-ai.md) | Select every gray area that matters for notes and AI actions | assumed — autonomous |
@@ -1023,3 +1037,32 @@ files, not this one.
 | easy | high | [m1-term-daemon D45](decisions/m1-term-daemon.md) | The UI pass found that a restored pane lost its old output; GROUND no longer moves the cursor | assumed — autonomous |
 | easy | high | [m1-term-daemon D46](decisions/m1-term-daemon.md) | All UI scenarios passed in the web window, across three passes | assumed — autonomous |
 | easy | high | [m1-term-daemon D47](decisions/m1-term-daemon.md) | No native-only scenarios | assumed — autonomous |
+| easy | high | [m3-session-info D2](decisions/m3-session-info.md) | Use the existing right-column panel slot without a shortcut | locked by docs/loop/decisions/m0-ui-api.md |
+| easy | high | [m3-session-info D3](decisions/m3-session-info.md) | Keep view state in the daemon and default only Live activity open | locked by docs/roadmap.md |
+| easy | high | [m3-session-info D4](decisions/m3-session-info.md) | Show missing, waiting, refreshing, stale and error states honestly | locked by external session-info.md |
+| easy | high | [m3-session-info D8](decisions/m3-session-info.md) | Use schema-generated session-info commands and explicit failures | locked by docs/roadmap.md |
+| easy | high | [m3-session-info D10](decisions/m3-session-info.md) | Use omp task implementers and Gemini cross-family review | assumed — autonomous |
+| easy | high | [m3-session-info D11](decisions/m3-session-info.md) | Use markdown specs and unattended design approval | locked by docs/loop/LOOP.md |
+| easy | high | [m3-session-info D13](decisions/m3-session-info.md) | One wave with four disjoint implementation components | assumed — autonomous |
+| easy | high | [m3-session-info D14](decisions/m3-session-info.md) | Explicitly own missing integration primitives and scope corrections | assumed — autonomous |
+| easy | high | [m3-session-info D15](decisions/m3-session-info.md) | Validate linked components in a combined acceptance tree before committing | supersedes m3-session-info D13 |
+| easy | high | [m3-session-info D16](decisions/m3-session-info.md) | Repair root causes found by the first combined gate | assumed — autonomous |
+| easy | high | [m3-session-info D17](decisions/m3-session-info.md) | Preserve the launch-settings allowlist and report per-launch hook evidence | locked by docs/loop/decisions/m1-launch-settings.md |
+| easy | high | [m3-session-info D18](decisions/m3-session-info.md) | Use the registered terminal root and a shared cross-process throttle clock | assumed — autonomous |
+| easy | high | [m3-session-info D19](decisions/m3-session-info.md) | Honor the merged process-ownership rules and review only this item's delta | locked by docs/loop/decisions/fix-test-process-leaks.md |
+| easy | high | [m3-session-info D20](decisions/m3-session-info.md) | Pin the final review baseline to the merged integration tip | assumed — autonomous |
+| easy | high | [m3-session-info D21](decisions/m3-session-info.md) | Fix stale Usage recovery and distinguish short feedback from driver sampling | assumed — autonomous |
+| easy | high | [m3-session-info D22](decisions/m3-session-info.md) | Keep native-only effects in the nightly handoff | locked by docs/loop/LOOP.md |
+| easy | high | [m3-session-info D23](decisions/m3-session-info.md) | Preserve floating keyboard focus and remove incidental catalog snapshots | assumed — autonomous |
+| easy | high | [m3-session-info D24](decisions/m3-session-info.md) | Record the slow full-suite advisory without changing the shared runner | assumed — autonomous |
+| easy | high | [m3-session-info D25](decisions/m3-session-info.md) | Record repaired web flows and the remaining driver limitation | assumed — autonomous |
+| easy | high | [m3-session-info D26](decisions/m3-session-info.md) | Complete one deep review round with an explicit security fallback | assumed — autonomous |
+| easy | high | [m3-session-info D28](decisions/m3-session-info.md) | Verify Windows file-opening semantics during its platform work | deferred: platform |
+| easy | high | [m3-session-info D29](decisions/m3-session-info.md) | Finish only through queue land after post-fix gates | locked by docs/loop/LOOP.md |
+| easy | high | [m3-session-info D30](decisions/m3-session-info.md) | Accept the observed post-fix gates and hand off to queue land | locked by docs/loop/LOOP.md |
+| easy | high | [m3-session-info D31](decisions/m3-session-info.md) | Resolve the landing catch-up without dropping either API surface | assumed — autonomous |
+| easy | high | [m3-session-info D32](decisions/m3-session-info.md) | Follow the operator's core-only landing instruction | locked by operator instruction |
+| easy | high | [m3-session-info D33](decisions/m3-session-info.md) | Give the subprocess-harness test its teardown budget | assumed — autonomous |
+| easy | high | [m3-session-info D34](decisions/m3-session-info.md) | Replace invalidated overloaded-host evidence with the operator's rerun | locked by operator instruction |
+| easy | high | [m3-session-info D35](decisions/m3-session-info.md) | Resolve the actual landing conflict without dropping either core contract | assumed — autonomous, within LOOP.md step 7.3 |
+| easy | high | [m3-session-info D36](decisions/m3-session-info.md) | Preserve account preparation and visible focus through the next integration merge | assumed — autonomous, within LOOP.md step 7.3 |

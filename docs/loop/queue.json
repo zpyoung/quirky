@@ -329,8 +329,7 @@
         "source-control.md"
       ],
       "deps": [],
-      "status": "in-progress",
-      "lane": 10
+      "status": "done"
     },
     {
       "id": "fix-test-cost",
@@ -340,7 +339,8 @@
         "term-daemon.md"
       ],
       "deps": [],
-      "status": "todo"
+      "status": "in-progress",
+      "lane": 10
     },
     {
       "id": "m1-agent-status-scripting",
@@ -393,8 +393,7 @@
       "deps": [
         "m1-agent-status"
       ],
-      "status": "in-progress",
-      "lane": 6
+      "status": "done"
     },
     {
       "id": "m3-terminal-dock",
@@ -1139,6 +1138,18 @@
         "term-daemon.md"
       ],
       "deps": [],
+      "status": "todo"
+    },
+    {
+      "id": "sa-browser-agent-extras",
+      "milestone": "Side A",
+      "title": "Complete deferred cookie import, profile management and advanced browser automation after the operator-authorized core cutover; recover the full-source snapshot and use explicit CLI file-input controls",
+      "docs": [
+        "browser.md"
+      ],
+      "deps": [
+        "sa-browser-agent"
+      ],
       "status": "todo"
     }
   ]
