@@ -286,6 +286,13 @@
         "@types/react-dom": "^19.3.0"
       }
     },
+    "plugins/quirky.palette": {
+      "name": "@quirky/plugin-palette",
+      "version": "0.1.0",
+      "dependencies": {
+        "@quirky/protocol": "workspace:*",
+      },
+    },
     "plugins/quirky.repo": {
       "name": "@quirky/plugin-repo",
       "version": "0.1.0",
@@ -353,6 +360,21 @@
         "@types/react": "^19.3.0",
         "@types/react-dom": "^19.3.0"
       }
+    },
+    "plugins/quirky.terminal-dock": {
+      "name": "@quirky/plugin-terminal-dock",
+      "version": "0.1.0",
+      "dependencies": {
+        "@quirky/protocol": "workspace:*",
+        "react": "19.2.0",
+        "react-dom": "19.2.0",
+      },
+      "devDependencies": {
+        "@happy-dom/global-registrator": "20.14.6",
+        "@quirky/git": "workspace:*",
+        "@types/react": "^19.3.0",
+        "@types/react-dom": "^19.3.0",
+      },
     },
     "plugins/quirky.worktree": {
       "name": "@quirky/plugin-worktree",
@@ -577,6 +599,8 @@
 
     "@quirky/plugin-notifications": ["@quirky/plugin-notifications@workspace:plugins/quirky.notifications"],
 
+    "@quirky/plugin-palette": ["@quirky/plugin-palette@workspace:plugins/quirky.palette"],
+
     "@quirky/plugin-repo": ["@quirky/plugin-repo@workspace:plugins/quirky.repo"],
 
     "@quirky/plugin-session": ["@quirky/plugin-session@workspace:plugins/quirky.session"],
@@ -586,6 +610,8 @@
     "@quirky/plugin-structured": ["@quirky/plugin-structured@workspace:plugins/quirky.structured"],
 
     "@quirky/plugin-terminal": ["@quirky/plugin-terminal@workspace:plugins/quirky.terminal"],
+
+    "@quirky/plugin-terminal-dock": ["@quirky/plugin-terminal-dock@workspace:plugins/quirky.terminal-dock"],
 
     "@quirky/plugin-worktree": ["@quirky/plugin-worktree@workspace:plugins/quirky.worktree"],
 

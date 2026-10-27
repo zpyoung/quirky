@@ -197,7 +197,8 @@ const uiLayout = object(
     sidebar: boolean(),
     focus: { description: "'sidebar', 'view', 'panel' or null." },
     panelWidths: { type: 'object', additionalProperties: true, description: 'Desired width by panel ID.' },
-    activityBarPosition: { type: 'string', enum: ['top', 'side'], description: 'Global panel activity-bar position.' }
+    activityBarPosition: { type: 'string', enum: ['top', 'side'], description: 'Global panel activity-bar position.' },
+    palette: { type: 'boolean', description: 'Whether the command palette is open; absent means closed.' }
   },
   ['view', 'panel', 'sidebar', 'focus']
 )
@@ -416,6 +417,11 @@ export const KERNEL_METHOD_SCHEMAS = {
     readOnly: true,
     params: noParams,
     result: uiState
+  },
+  'ui.palette.set': {
+    description: 'Opens or closes the shared command palette; omitting `open` toggles its current state.',
+    params: object({ open: { type: 'boolean', description: 'True opens, false closes; omitted toggles.' } }),
+    result: uiLayout
   },
   'ui.view.open': {
     description: 'Opens view `id` with `input` (JSON up to 64 KiB); `id` must be an effective view.',

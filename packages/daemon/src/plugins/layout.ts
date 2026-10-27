@@ -110,7 +110,8 @@ function readStored(value: unknown): UiLayout {
     sidebar: typeof stored.sidebar === 'boolean' ? stored.sidebar : true,
     focus: FOCUS_TARGETS.find((target) => target === stored.focus) ?? null,
     ...(hasPanelWidths ? { panelWidths } : {}),
-    ...(activityBarPosition ? { activityBarPosition } : {})
+    ...(activityBarPosition ? { activityBarPosition } : {}),
+    ...(stored.palette === true ? { palette: true } : {})
   }
 }
 
@@ -217,6 +218,17 @@ export class LayoutService {
       sidebar: visible,
       focus: !visible && layout.focus === 'sidebar' ? null : layout.focus
     }))
+  }
+
+  /** Sets the shared palette state atomically; omitting `open` toggles its current value. */
+  setPalette(open?: boolean): UiLayout {
+    return this.change((layout) => {
+      const shouldOpen = open === undefined ? layout.palette !== true : open
+      if (shouldOpen) return { ...layout, palette: true }
+      const closed = { ...layout }
+      delete closed.palette
+      return closed
+    })
   }
 
   /** Moves focus to the sidebar, the view or the panel. InvalidParams for any other target. */

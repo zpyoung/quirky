@@ -145,10 +145,10 @@ function PanelColumn({
 export function App() {
   const state = useAppState()
   const { model, layout } = usePluginState()
-  const [paletteOpen, setPaletteOpen] = useState(false)
+  const host = usePluginHost()
   const [viewportWidth, setViewportWidth] = useState(() => window.innerWidth)
   const [panelWidthOverride, setPanelWidthOverride] = useState<{ id: string; width: number; base: number | undefined } | null>(null)
-  useShortcuts(() => setPaletteOpen((open) => !open))
+  useShortcuts()
   useThemeVariables()
 
   useEffect(() => {
@@ -238,7 +238,7 @@ export function App() {
         </div>
       )}
       <OverlayLayer />
-      {paletteOpen && <CommandPalette onClose={() => setPaletteOpen(false)} />}
+      {layout.palette === true && <CommandPalette onClose={() => host.setPalette(false)} />}
       <Toasts />
       <ConfirmHost />
     </div>

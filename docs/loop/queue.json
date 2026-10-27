@@ -258,8 +258,9 @@
       "deps": [
         "m6-orchestration-core"
       ],
-      "status": "todo",
-      "early": true
+      "status": "in-progress",
+      "early": true,
+      "lane": 9
     },
     {
       "id": "m6-heimdall-core",
@@ -318,8 +319,7 @@
         "term-daemon.md"
       ],
       "deps": [],
-      "status": "in-progress",
-      "lane": 11
+      "status": "done"
     },
     {
       "id": "fix-flaky-quirky-git-files-scenarios",
@@ -407,8 +407,7 @@
         "m1-agent-status",
         "m1-providers"
       ],
-      "status": "in-progress",
-      "lane": 9
+      "status": "done"
     },
     {
       "id": "m3-handoff",
@@ -511,7 +510,9 @@
         "m4-hosting-api-github",
         "m4-hosting-ui-tasks"
       ],
-      "status": "todo"
+      "status": "in-progress",
+      "early": true,
+      "lane": 5
     },
     {
       "id": "m4-hosting-ui-gitlab",
@@ -565,7 +566,8 @@
         "m4-hosting-api-github",
         "m2-sidebar-extras"
       ],
-      "status": "todo"
+      "status": "todo",
+      "early": true
     },
     {
       "id": "sa-browser-agent",
@@ -601,7 +603,8 @@
       "deps": [
         "sa-browser-pane"
       ],
-      "status": "todo"
+      "status": "todo",
+      "early": true
     },
     {
       "id": "sa-browser-design-mode",
@@ -613,7 +616,8 @@
       "deps": [
         "sa-browser-pane"
       ],
-      "status": "todo"
+      "status": "todo",
+      "early": true
     },
     {
       "id": "m5-automations-core",
@@ -626,7 +630,8 @@
         "m5-structured-runner",
         "m1-worktrees"
       ],
-      "status": "todo"
+      "status": "todo",
+      "early": true
     },
     {
       "id": "m5-automations-dispatch",
@@ -638,7 +643,8 @@
       "deps": [
         "m5-automations-core"
       ],
-      "status": "todo"
+      "status": "todo",
+      "early": true
     },
     {
       "id": "m5-automations-ui",
@@ -650,7 +656,8 @@
       "deps": [
         "m5-automations-core"
       ],
-      "status": "todo"
+      "status": "todo",
+      "early": true
     },
     {
       "id": "m5-loops-core",
@@ -662,7 +669,8 @@
       "deps": [
         "m5-structured-runner"
       ],
-      "status": "todo"
+      "status": "todo",
+      "early": true
     },
     {
       "id": "m5-loops-presets",
@@ -674,7 +682,8 @@
       "deps": [
         "m5-loops-core"
       ],
-      "status": "todo"
+      "status": "todo",
+      "early": true
     },
     {
       "id": "m5-loops-ui",
@@ -687,7 +696,8 @@
         "m5-loops-core",
         "m5-loops-presets"
       ],
-      "status": "todo"
+      "status": "todo",
+      "early": true
     },
     {
       "id": "m5-ledger",
@@ -711,7 +721,8 @@
       "deps": [
         "m6-orchestration-workers"
       ],
-      "status": "todo"
+      "status": "todo",
+      "early": true
     },
     {
       "id": "m6-objective-plan",
@@ -819,7 +830,8 @@
       "deps": [
         "sb-mobile-daemon"
       ],
-      "status": "todo"
+      "status": "todo",
+      "early": true
     },
     {
       "id": "sb-mobile-app-panels",
@@ -831,7 +843,8 @@
       "deps": [
         "sb-mobile-app"
       ],
-      "status": "todo"
+      "status": "todo",
+      "early": true
     },
     {
       "id": "m4-editor-drop-open-in-place",
@@ -843,7 +856,8 @@
       "deps": [
         "m2-editor"
       ],
-      "status": "todo"
+      "status": "todo",
+      "early": true
     },
     {
       "id": "m3-accounts-remaining-flows",
@@ -1023,7 +1037,8 @@
         "m7-sweep-browser-mobile",
         "m7-sweep-orchestration"
       ],
-      "status": "todo"
+      "status": "todo",
+      "early": true
     },
     {
       "id": "m4-hosting-api-github-parity",
@@ -1047,7 +1062,8 @@
       "deps": [
         "m3-terminal-dock"
       ],
-      "status": "todo"
+      "status": "todo",
+      "early": true
     },
     {
       "id": "m3-vault-parity-completion",
@@ -1059,7 +1075,8 @@
       "deps": [
         "m3-vault"
       ],
-      "status": "todo"
+      "status": "todo",
+      "early": true
     },
     {
       "id": "fix-flaky-daemon-pty-client",
@@ -1081,7 +1098,8 @@
       "deps": [
         "m3-vault"
       ],
-      "status": "todo"
+      "status": "todo",
+      "early": true
     },
     {
       "id": "fix-bash53-shell-integration",
@@ -1116,7 +1134,8 @@
       "deps": [
         "m2-editor"
       ],
-      "status": "todo"
+      "status": "todo",
+      "early": true
     },
     {
       "id": "m3-accounts-overflow-verification",
@@ -1162,7 +1181,8 @@
       "deps": [
         "m2-sidebar-extras"
       ],
-      "status": "todo"
+      "status": "todo",
+      "early": true
     },
     {
       "id": "fix-flaky-quirky-worktree-create",
@@ -1182,6 +1202,45 @@
         "term-ui.md"
       ],
       "deps": [],
+      "status": "todo"
+    },
+    {
+      "id": "fix-flaky-pty-host-clear",
+      "milestone": "M1",
+      "title": "Fix the flaky packages/pty-host/test/clear.test.ts: it failed 3 times in full-suite runs today (15:28, 22:47, 23:11 UTC). Find out with quirk:systematic-debugging whether a wait is too short under load or the clear races with output, reproduce it under CPU load on the test host, and fix the code or the test",
+      "docs": [
+        "term-daemon.md"
+      ],
+      "deps": [],
+      "status": "todo"
+    },
+    {
+      "id": "m4-hosting-ui-review-provider-parity",
+      "milestone": "M4",
+      "title": "Complete deferred GitLab/Bitbucket/Gitea/Azure Checks, creation composer and integration settings from hosting-ui.md sections10–12 when their currently blocked canonical provider APIs are available; preserve MR labels, no-draft Bitbucket and provider auth/settings contracts rather than fake success",
+      "docs": [
+        "hosting-ui.md"
+      ],
+      "deps": [
+        "m4-hosting-ui-reviews",
+        "m4-hosting-api-gitlab",
+        "m4-hosting-api-bitbucket-gitea-azure"
+      ],
+      "status": "todo"
+    },
+    {
+      "id": "m4-hosting-ui-review-browser-routing",
+      "milestone": "M4",
+      "title": "Complete review and stack-link in-app browser routing plus Shift+Cmd destination inversion after the public human browser pane and Link Routing setting land; current review links support the canonical system opener and explicitly refuse unavailable in-app delivery",
+      "docs": [
+        "hosting-ui.md",
+        "browser.md"
+      ],
+      "deps": [
+        "m4-hosting-ui-reviews",
+        "sa-browser-pane",
+        "sa-browser-profiles-settings"
+      ],
       "status": "todo"
     }
   ]

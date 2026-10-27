@@ -95,6 +95,8 @@ export type Methods = {
 
   /** The layout, the connected windows and what each slot reports. */
   'ui.state': { params: Record<string, never>; result: UiState }
+  /** Opens or closes the shared command palette; omitted `open` toggles its current state. */
+  'ui.palette.set': { params: { open?: boolean }; result: UiLayout }
   'ui.view.open': { params: { id: string; input?: unknown }; result: UiLayout }
   'ui.view.close': { params: Record<string, never>; result: UiLayout }
   'ui.panel.open': { params: { id: string }; result: UiLayout }
