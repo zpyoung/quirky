@@ -1,0 +1,500 @@
+{
+  "id": "quirky.terminal-dock",
+  "name": "Terminal Dock",
+  "version": "0.1.0",
+  "description": "A pane-scoped composer for recognized terminal agents, with acknowledged serialized sends and durable draft recovery.",
+  "main": "main.ts",
+  "ui": "dist/ui.js",
+  "cli": "cli.ts",
+  "cliAliases": ["dock"],
+  "activation": "startup",
+  "dependencies": [
+    "quirky.terminal",
+    "quirky.session",
+    "quirky.agents",
+    "quirky.agent-status"
+  ],
+  "contributes": {
+    "setting": [
+      {
+        "id": "enabled",
+        "type": "boolean",
+        "title": "Enable Terminal Dock",
+        "description": "Show the independent composer below supported terminal-agent panes.",
+        "default": false
+      },
+      {
+        "id": "autoOpen",
+        "type": "boolean",
+        "title": "Automatically open supported docks (Experimental)",
+        "description": "Open the dock for newly recognized supported agent sessions. Existing manual choices are preserved.",
+        "default": true
+      }
+    ],
+    "method": [
+      {
+        "id": "get",
+        "description": "Read the canonical state for a live terminal pane or session. When both selectors are supplied they must identify the same binding.",
+        "readOnly": true,
+        "params": {
+          "type": "object",
+          "properties": {
+            "pane": { "type": "string" },
+            "session": { "type": "string" }
+          },
+          "additionalProperties": false
+        },
+        "result": {
+          "type": "object",
+          "description": "DockState including request/mount state, revision, draft, attachments, queued sends, question, options and disabled reason.",
+          "properties": {
+            "pane": { "type": "string" },
+            "session": { "type": "string" },
+            "tab": { "type": "string" },
+            "revision": { "type": "integer" },
+            "enabled": { "type": "boolean" },
+            "supported": { "type": "boolean" },
+            "agent": {},
+            "docked": { "type": "boolean" },
+            "userUndocked": { "type": "boolean" },
+            "gutterRows": { "type": "integer" },
+            "mounted": { "type": "boolean" },
+            "passthrough": { "type": "boolean" },
+            "draft": { "type": "string" },
+            "attachments": { "type": "array", "items": { "type": "object" } },
+            "disabledReason": {},
+            "activeSend": {},
+            "queuedSends": { "type": "array", "items": { "type": "object" } },
+            "question": {},
+            "options": { "type": "object" },
+            "notice": {}
+          },
+          "required": ["pane", "session", "tab", "revision", "enabled", "supported", "agent", "docked", "userUndocked", "gutterRows", "mounted", "passthrough", "draft", "attachments", "disabledReason", "activeSend", "queuedSends", "question", "options", "notice"]
+        }
+      },
+      {
+        "id": "list",
+        "description": "List live pane dock states without exposing terminal prompt contents in logs.",
+        "readOnly": true,
+        "params": { "type": "object", "properties": {}, "additionalProperties": false },
+        "result": {
+          "type": "object",
+          "properties": { "panes": { "type": "array", "items": { "type": "object" } } },
+          "required": ["panes"]
+        }
+      },
+      {
+        "id": "set",
+        "description": "Set pane preferences or replace its draft/attachment selection. Replacements, including empty values, require the current revision.",
+        "connection": true,
+        "params": {
+          "type": "object",
+          "properties": {
+            "pane": { "type": "string" },
+            "revision": { "type": "integer", "minimum": 0 },
+            "docked": { "type": "boolean" },
+            "gutterRows": { "type": "integer", "minimum": 3, "maximum": 15 },
+            "passthrough": { "type": "boolean" },
+            "draft": { "type": "string" },
+            "attachments": { "type": "array", "items": { "type": "string" } }
+          },
+          "required": ["pane"],
+          "additionalProperties": false
+        },
+        "result": { "type": "object", "description": "DockState" }
+      },
+      {
+        "id": "report",
+        "description": "Report one window connection's mounted dock host, focus and terminal transport state.",
+        "connection": true,
+        "params": {
+          "type": "object",
+          "properties": {
+            "pane": { "type": "string" },
+            "mounted": { "type": "boolean" },
+            "focused": { "type": "boolean" },
+            "transport": { "type": "string", "enum": ["connected", "connecting", "reconnecting", "disconnected", "offline"] }
+          },
+          "required": ["pane", "mounted"],
+          "additionalProperties": false
+        },
+        "result": { "type": "object", "description": "DockState" }
+      },
+      {
+        "id": "history",
+        "description": "Read prompt history or navigate it while preserving the pre-browse draft.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "pane": { "type": "string" },
+            "direction": { "type": "string", "enum": ["previous", "next"] }
+          },
+          "required": ["pane"],
+          "additionalProperties": false
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "entries": { "type": "array", "items": { "type": "string" } },
+            "state": { "type": "object", "description": "DockState" }
+          },
+          "required": ["entries", "state"]
+        }
+      },
+      {
+        "id": "pick",
+        "description": "Read agent-appropriate slash-command/skill or workspace-file picker results without changing the draft.",
+        "readOnly": true,
+        "params": {
+          "type": "object",
+          "properties": {
+            "pane": { "type": "string" },
+            "kind": { "type": "string", "enum": ["slash", "file"] },
+            "query": { "type": "string" }
+          },
+          "required": ["pane", "kind"],
+          "additionalProperties": false
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "items": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": { "type": "string" },
+                  "label": { "type": "string" },
+                  "insert": { "type": "string" },
+                  "kind": { "type": "string", "enum": ["command", "skill", "file"] },
+                  "detail": { "type": "string" }
+                },
+                "required": ["id", "label", "insert", "kind"]
+              }
+            },
+            "truncated": { "type": "boolean" }
+          },
+          "required": ["items", "truncated"]
+        }
+      },
+      {
+        "id": "attach",
+        "description": "Attach a readable caller-owned file or acquire uploaded bytes into plugin storage.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "pane": { "type": "string" },
+            "path": { "type": "string" },
+            "name": { "type": "string" },
+            "mime": { "type": "string" },
+            "base64": { "type": "string" }
+          },
+          "required": ["pane"],
+          "additionalProperties": false
+        },
+        "result": { "type": "object", "description": "DockState" }
+      },
+      {
+        "id": "removeAttachment",
+        "description": "Remove only the requested attachment chip; caller-owned files are never deleted.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "pane": { "type": "string" },
+            "attachment": { "type": "string" }
+          },
+          "required": ["pane", "attachment"],
+          "additionalProperties": false
+        },
+        "result": { "type": "object", "description": "DockState" }
+      },
+      {
+        "id": "send",
+        "description": "Queue one acknowledged PTY prompt submission. Text omitted snapshots the current draft and attachments at the required revision.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "pane": { "type": "string" },
+            "id": { "type": "string" },
+            "revision": { "type": "integer", "minimum": 0 },
+            "text": { "type": "string" }
+          },
+          "required": ["pane"],
+          "additionalProperties": false
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "id": { "type": "string" },
+            "outcome": { "type": "string", "enum": ["observed-cleared", "unobservable", "may-not-have-sent", "refused", "cancelled"] },
+            "accepted": { "type": "boolean" },
+            "reason": { "type": "string" }
+          },
+          "required": ["id", "outcome", "accepted"]
+        }
+      },
+      {
+        "id": "cancel",
+        "description": "Cancel one identified send or all sends for this pane, optionally interrupting the running agent through terminal input.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "pane": { "type": "string" },
+            "send": { "type": "string" },
+            "interrupt": { "type": "boolean" }
+          },
+          "required": ["pane"],
+          "additionalProperties": false
+        },
+        "result": { "type": "object", "description": "DockState" }
+      },
+      {
+        "id": "interaction",
+        "description": "Read/update a pending question card or answer its current provider request after revalidation.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "pane": { "type": "string" },
+            "request": { "type": "string" },
+            "action": { "type": "string", "enum": ["answer", "collapse", "expand", "dismiss"] },
+            "answers": { "type": "array", "items": { "type": "array", "items": { "type": "string" } } }
+          },
+          "required": ["pane", "request", "action"],
+          "additionalProperties": false
+        },
+        "result": { "type": "object", "description": "DockState" }
+      },
+      {
+        "id": "options",
+        "description": "Read this session's reported options or request a supported session-only model, effort or permission change.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "pane": { "type": "string" },
+            "kind": { "type": "string", "enum": ["model", "effort", "permission"] },
+            "value": { "type": "string" }
+          },
+          "required": ["pane"],
+          "additionalProperties": false
+        },
+        "result": { "type": "object", "description": "DockState" }
+      },
+      {
+        "id": "driver",
+        "description": "Set, inspect or release a bounded foreign input-driver lease for this pane.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "pane": { "type": "string" },
+            "owner": { "type": "string" },
+            "ttlMs": { "type": "integer", "minimum": 1, "maximum": 300000 }
+          },
+          "required": ["pane"],
+          "additionalProperties": false
+        },
+        "result": { "type": "object", "description": "DockState" }
+      }
+    ],
+    "event": [
+      {
+        "id": "changed",
+        "description": "The canonical dock state for one pane changed.",
+        "data": {
+          "type": "object",
+          "properties": {
+            "pane": { "type": "string" },
+            "state": { "type": "object", "description": "DockState" }
+          },
+          "required": ["pane", "state"]
+        }
+      }
+    ],
+    "view": [
+      {
+        "id": "composer",
+        "title": "Terminal Dock Composer",
+        "description": "An independent composer hosted below a supported terminal pane."
+      },
+      {
+        "id": "settings",
+        "title": "Terminal Dock Settings",
+        "description": "Terminal Dock feature and experimental auto-open settings."
+      }
+    ],
+    "command": [
+      {
+        "id": "toggle",
+        "title": "Toggle Terminal Dock",
+        "description": "Open or close the active supported pane's dock.",
+        "args": {
+          "type": "object",
+          "properties": { "pane": { "type": "string" } },
+          "additionalProperties": false
+        }
+      },
+      {
+        "id": "passthrough",
+        "title": "Toggle Terminal Dock Passthrough",
+        "description": "Move keyboard ownership between the composer and terminal.",
+        "args": {
+          "type": "object",
+          "properties": { "pane": { "type": "string" } },
+          "additionalProperties": false
+        }
+      },
+      {
+        "id": "focus",
+        "title": "Focus Terminal Dock Composer",
+        "description": "Focus the active pane's dock composer.",
+        "args": {
+          "type": "object",
+          "properties": { "pane": { "type": "string" } },
+          "additionalProperties": false
+        }
+      },
+      {
+        "id": "resize",
+        "title": "Resize Terminal Dock",
+        "description": "Set the dock gutter row count.",
+        "args": {
+          "type": "object",
+          "properties": {
+            "pane": { "type": "string" },
+            "gutterRows": { "type": "integer", "minimum": 3, "maximum": 15 }
+          },
+          "required": ["gutterRows"],
+          "additionalProperties": false
+        }
+      },
+      {
+        "id": "draft",
+        "title": "Set Terminal Dock Draft",
+        "description": "Replace a pane's revisioned draft.",
+        "args": {
+          "type": "object",
+          "properties": {
+            "pane": { "type": "string" },
+            "text": { "type": "string" },
+            "revision": { "type": "integer", "minimum": 0 }
+          },
+          "required": ["text"],
+          "additionalProperties": false
+        }
+      },
+      {
+        "id": "send",
+        "title": "Send Terminal Dock Draft",
+        "description": "Submit the pane's current draft through the acknowledged send queue.",
+        "args": {
+          "type": "object",
+          "properties": {
+            "pane": { "type": "string" },
+            "id": { "type": "string" },
+            "revision": { "type": "integer", "minimum": 0 },
+            "text": { "type": "string" }
+          },
+          "additionalProperties": false
+        }
+      },
+      {
+        "id": "cancel",
+        "title": "Cancel Terminal Dock Send",
+        "description": "Cancel queued or active dock sends.",
+        "args": {
+          "type": "object",
+          "properties": {
+            "pane": { "type": "string" },
+            "send": { "type": "string" },
+            "interrupt": { "type": "boolean" }
+          },
+          "additionalProperties": false
+        }
+      },
+      {
+        "id": "history",
+        "title": "Navigate Terminal Dock History",
+        "description": "Browse pane-scoped prompt history.",
+        "args": {
+          "type": "object",
+          "properties": {
+            "pane": { "type": "string" },
+            "direction": { "type": "string", "enum": ["previous", "next"] }
+          },
+          "additionalProperties": false
+        }
+      },
+      {
+        "id": "interaction",
+        "title": "Handle Terminal Dock Question",
+        "description": "Collapse, dismiss or answer the current provider question.",
+        "args": {
+          "type": "object",
+          "properties": {
+            "pane": { "type": "string" },
+            "request": { "type": "string" },
+            "action": { "type": "string", "enum": ["answer", "collapse", "expand", "dismiss"] },
+            "answers": { "type": "array", "items": { "type": "array", "items": { "type": "string" } } }
+          },
+          "required": ["request", "action"],
+          "additionalProperties": false
+        }
+      },
+      {
+        "id": "options",
+        "title": "Change Terminal Dock Session Option",
+        "description": "Read or change a supported session-only option.",
+        "args": {
+          "type": "object",
+          "properties": {
+            "pane": { "type": "string" },
+            "kind": { "type": "string", "enum": ["model", "effort", "permission"] },
+            "value": { "type": "string" }
+          },
+          "additionalProperties": false
+        }
+      },
+      {
+        "id": "settings",
+        "title": "Open Terminal Dock Settings",
+        "description": "Open Terminal Dock settings."
+      }
+    ],
+    "keybinding": [
+      {
+        "id": "toggle",
+        "key": "mod+shift+k",
+        "command": "command:quirky.terminal-dock/toggle",
+        "description": "Toggle the active supported terminal dock.",
+        "when": "terminalDockEligible && (terminalFocus || terminalDockFocus)"
+      },
+      {
+        "id": "passthrough",
+        "key": "mod+shift+p",
+        "command": "command:quirky.terminal-dock/passthrough",
+        "description": "Toggle local terminal keyboard passthrough while the dock is mounted.",
+        "when": "terminalDockMounted && (terminalFocus || terminalDockFocus)"
+      }
+    ],
+    "cli-command": [
+      { "id": "get", "summary": "read a pane's or session's canonical dock state", "method": "quirky.terminal-dock/get" },
+      { "id": "list", "summary": "list live dock pane states", "method": "quirky.terminal-dock/list" },
+      { "id": "set", "summary": "set dock preferences or revisioned draft state", "method": "quirky.terminal-dock/set" },
+      { "id": "report", "summary": "report a connection's dock mount, focus and transport state", "method": "quirky.terminal-dock/report" },
+      { "id": "history", "summary": "read or browse pane-scoped prompt history", "method": "quirky.terminal-dock/history" },
+      { "id": "pick", "summary": "query slash/skill or workspace-file picker results", "method": "quirky.terminal-dock/pick" },
+      { "id": "attach", "summary": "attach a readable file or upload bytes", "method": "quirky.terminal-dock/attach" },
+      { "id": "remove-attachment", "summary": "remove one attachment chip", "method": "quirky.terminal-dock/removeAttachment" },
+      { "id": "send", "summary": "submit a prompt through the serialized acknowledged PTY queue", "method": "quirky.terminal-dock/send" },
+      { "id": "cancel", "summary": "cancel a selected or current pane send", "method": "quirky.terminal-dock/cancel" },
+      { "id": "interaction", "summary": "read, dismiss or answer a pending provider question", "method": "quirky.terminal-dock/interaction" },
+      { "id": "options", "summary": "read or change a session-only option", "method": "quirky.terminal-dock/options" },
+      { "id": "driver", "summary": "inspect, acquire or release a foreign driver lease", "method": "quirky.terminal-dock/driver" },
+      {
+        "id": "toggle",
+        "summary": "toggle a pane's remembered dock request",
+        "flags": { "pane": { "type": "string", "description": "the pane to toggle" } },
+        "methods": ["quirky.terminal-dock/get", "quirky.terminal-dock/set"]
+      }
+    ]
+  }
+}
