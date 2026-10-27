@@ -47,7 +47,10 @@ export class FakeWorld {
         status: 'starting',
         createdAt: now,
         lastActivityAt: now,
-        exitCode: null
+        exitCode: null,
+        exitSignal: null,
+        exitCause: null,
+        restorable: false
       }
       this.sessions.set(session.id, session)
       return session
@@ -90,7 +93,11 @@ export class FakeWorld {
         sessionId: params.session ?? null,
         worktreeId: params.worktree ?? null,
         createdAt: Date.now(),
-        envelope: { status: 'pending', askId: id, answers: {}, skipped: [] }
+        envelope: { status: 'pending', askId: id, answers: {}, skipped: [], summary: '' },
+        seq: 0,
+        queued: false,
+        partial: {},
+        expiresAt: null
       }
       this.asks.set(id, ask)
       return { askId: id }
@@ -136,7 +143,10 @@ export class FakeWorld {
       status: 'running',
       createdAt: 1,
       lastActivityAt: 1,
-      exitCode: null
+      exitCode: null,
+      exitSignal: null,
+      exitCause: null,
+      restorable: false
     }
     this.sessions.set(session.id, session)
     return session
@@ -150,7 +160,7 @@ export class FakeWorld {
   }
 
   private settle(ask: Ask, status: AskEnvelope['status'], answers: AskEnvelope['answers']): AskEnvelope {
-    ask.envelope = { status, askId: ask.id, answers, skipped: [] }
+    ask.envelope = { status, askId: ask.id, answers, skipped: [], summary: '' }
     for (const wake of this.waiters.get(ask.id) ?? []) wake()
     this.waiters.delete(ask.id)
     return ask.envelope

@@ -14,7 +14,7 @@ export function activate(context: UiPluginContext): void {
   context.provide(PANEL_ID, (element: HTMLElement, props: { report?(state: unknown): void }) => {
     const root = createRoot(element)
     root.render(<AskCards store={asks} context={context} />)
-    const sendReport = () => props.report?.(reportOf(asks.get()))
+    const sendReport = () => props.report?.(reportOf(asks))
     sendReport()
     const unsubscribe = asks.subscribe(sendReport)
     return () => {

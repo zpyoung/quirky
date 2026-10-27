@@ -31,7 +31,11 @@ const selectAsk = (id: string, title: string | undefined, createdAt: number): As
   sessionId: null,
   worktreeId: null,
   createdAt,
-  envelope: { status: 'pending', askId: id, answers: {}, skipped: [] }
+  envelope: { status: 'pending', askId: id, answers: {}, skipped: [], summary: '' },
+  seq: 0,
+  queued: false,
+  partial: {},
+  expiresAt: null
 })
 
 type Fake = ReturnType<typeof fakeContext>
@@ -46,6 +50,7 @@ function fakeContext(initial: Ask[]) {
   const connection = new Set<(status: 'connected' | 'reconnecting') => void>()
   let failWith: string | null = null
   let listGate: Promise<void> | null = null
+  let listFailure: string | null = null
 
   const context = {
     pluginId: 'quirky.ask',
@@ -53,12 +58,14 @@ function fakeContext(initial: Ask[]) {
     provide: (id: string, implementation: unknown) => void provided.set(id, implementation),
     async call(method: string, params?: Record<string, unknown>) {
       calls.push({ method, params })
-      if (failWith && method !== 'quirky.ask/list') throw new Error(failWith)
+      if (failWith && method !== 'quirky.ask/list' && method !== 'quirky.ask/updatePartial') throw new Error(failWith)
       if (method === 'quirky.ask/list') {
+        if (listFailure) throw new Error(listFailure)
         const snapshot = asks
         if (listGate) await listGate
         return snapshot
       }
+      if (method === 'quirky.ask/updatePartial') return { ok: true }
       if (method === 'quirky.ask/answer' || method === 'quirky.ask/cancel') {
         asks = asks.filter((ask) => ask.id !== params?.askId)
         return { status: 'answered', askId: params?.askId, answers: {}, skipped: [] }
@@ -93,6 +100,7 @@ function fakeContext(initial: Ask[]) {
         release()
       }
     },
+    failLists: (message: string | null) => void (listFailure = message),
     failAnswers: (message: string | null) => void (failWith = message),
     add(ask: Ask) {
       asks = [...asks, ask]
@@ -139,10 +147,52 @@ async function mount(fake: Fake) {
   return { element, reports }
 }
 
-const created = (ask: Ask): QuirkyEvent => ({ type: 'quirky.ask/created', data: { ask } })
-const resolved = (askId: string): QuirkyEvent => ({
+let nextSeq = 1000
+const created = (ask: Ask, seq = nextSeq++): QuirkyEvent => ({ type: 'quirky.ask/created', data: { ask, seq } })
+const surfaced = (ask: Ask, seq = nextSeq++): QuirkyEvent => ({ type: 'quirky.ask/surfaced', data: { ask, seq } })
+const resolved = (askId: string, seq = nextSeq++): QuirkyEvent => ({
   type: 'quirky.ask/resolved',
-  data: { askId, envelope: { status: 'answered', askId, answers: {}, skipped: [] } }
+  data: { askId, envelope: { status: 'answered', askId, answers: {}, skipped: [], summary: '' }, seq }
+})
+
+const wait = (ms: number) =>
+  act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, ms))
+  })
+
+const click = (element: Element) =>
+  act(async () => {
+    ;(element as HTMLElement).click()
+  })
+
+const buttonIn = (root: ParentNode, text: string) =>
+  [...root.querySelectorAll('button')].find((candidate) => candidate.textContent === text) as HTMLButtonElement
+
+const fieldsetOf = (root: ParentNode, questionId: string) => root.querySelector(`fieldset[data-question="${questionId}"]`) as HTMLFieldSetElement
+
+/** Sets a field's value the way a user's typing does, so React sees the change. */
+const type = (field: HTMLInputElement | HTMLTextAreaElement, value: string) =>
+  act(async () => {
+    const prototype = field instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype
+    Object.getOwnPropertyDescriptor(prototype, 'value')!.set!.call(field, value)
+    field.dispatchEvent(new Event('input', { bubbles: true }))
+  })
+
+const withOwnAnswer = (root: ParentNode) => root.querySelector('input[placeholder="Add your own answer"]') as HTMLInputElement
+
+const deployAsk = (id = 'ask_d', overrides: Partial<Ask> = {}): Ask => ({
+  ...selectAsk(id, 'Deploy?', 1),
+  spec: {
+    title: 'Deploy?',
+    questions: [
+      { id: 'env', type: 'select', question: 'Which environment?', required: true, options: [{ value: 'prod', label: 'Prod' }, { value: 'dev', label: 'Dev' }] },
+      { id: 'replicas', type: 'number', question: 'How many replicas?', integer: true, min: 1, max: 10 },
+      { id: 'ship', type: 'date', header: 'Ship', question: 'Ship date?' },
+      { id: 'go', type: 'confirm', question: 'Go?' },
+      { id: 'email', type: 'text', question: 'Who to notify?', format: 'email' }
+    ]
+  },
+  ...overrides
 })
 
 describe('the Questions panel module', () => {
@@ -210,16 +260,13 @@ describe('the Questions panel module', () => {
       pending: [
         { askId: 'ask_1', title: 'Ask 1', questions: 1 },
         { askId: 'ask_2', title: 'Ask 2', questions: 1 }
-      ]
+      ],
+      queued: 0
     })
 
     const first = element.querySelector('.ask-card')!
-    await act(async () => {
-      ;(first.querySelector('input[type=radio]') as HTMLInputElement).click()
-    })
-    await act(async () => {
-      ;([...first.querySelectorAll('button')].find((b) => b.textContent === 'Submit') as HTMLButtonElement).click()
-    })
+    await click(buttonIn(first, 'Prod'))
+    await click(buttonIn(first, 'Submit'))
     await settled()
 
     const answer = fake.calls.find((call) => call.method === 'quirky.ask/answer')!
@@ -230,7 +277,7 @@ describe('the Questions panel module', () => {
     })
     await fake.emit(resolved('ask_1'))
 
-    expect(reports.at(-1)).toEqual({ pending: [{ askId: 'ask_2', title: 'Ask 2', questions: 1 }] })
+    expect(reports.at(-1)).toEqual({ pending: [{ askId: 'ask_2', title: 'Ask 2', questions: 1 }], queued: 0 })
     expect(element.querySelectorAll('.ask-card')).toHaveLength(1)
     expect(fake.badges.at(-1)).toBe(1)
   })
@@ -247,7 +294,7 @@ describe('the Questions panel module', () => {
 
     expect(fake.calls.some((call) => call.method === 'quirky.ask/cancel' && call.params?.askId === 'ask_1')).toBe(true)
     expect(element.querySelectorAll('.ask-card')).toHaveLength(0)
-    expect(reports.at(-1)).toEqual({ pending: [] })
+    expect(reports.at(-1)).toEqual({ pending: [], queued: 0 })
     expect(fake.badges.at(-1)).toBeNull()
   })
 
@@ -274,15 +321,372 @@ describe('the Questions panel module', () => {
       sessionId: null,
       worktreeId: null,
       createdAt: 1,
-      envelope: { status: 'pending', askId: 'ask_9', answers: {}, skipped: [] }
+      envelope: { status: 'pending', askId: 'ask_9', answers: {}, skipped: [], summary: '' },
+      seq: 0,
+      queued: false,
+      partial: {},
+      expiresAt: null
     }
     const fake = fakeContext([ask])
     await activated(fake)
     const { element } = await mount(fake)
 
-    const legend = element.querySelector('legend') as HTMLElement
-    expect(legend.textContent).toBe(listing)
-    expect(legend.style.whiteSpace).toBe('pre-wrap')
+    const text = element.querySelector('legend [data-question-text]') as HTMLElement
+    expect(text.textContent).toBe(listing)
+    expect(text.style.whiteSpace).toBe('pre-wrap')
+  })
+
+  test('SC-6: free text on a select is a note beside a pick, or the answer itself', async () => {
+    const ask: Ask = {
+      ...selectAsk('ask_f', 'Stack', 1),
+      spec: {
+        questions: [
+          { id: 'framework', type: 'select', question: 'Framework?', options: [{ value: 'react', label: 'React' }, { value: 'vue', label: 'Vue' }] },
+          {
+            id: 'features',
+            type: 'multiselect',
+            question: 'Features?',
+            options: [{ value: 'auth', label: 'Auth' }, { value: 'search', label: 'Search' }, { value: 'billing', label: 'Billing' }]
+          }
+        ]
+      }
+    }
+    const fake = fakeContext([ask])
+    await activated(fake)
+    const { element } = await mount(fake)
+    const framework = fieldsetOf(element, 'framework')
+    const features = fieldsetOf(element, 'features')
+
+    await click(buttonIn(framework, 'Vue'))
+    await type(withOwnAnswer(framework), 'small bundle size')
+    await click(buttonIn(features, 'Search'))
+    await click(buttonIn(features, 'Auth'))
+    await type(withOwnAnswer(features), 'Exports')
+    await click(buttonIn(element, 'Submit'))
+    await settled()
+
+    expect(fake.calls.find((call) => call.method === 'quirky.ask/answer')?.params).toEqual({
+      askId: 'ask_f',
+      answers: {
+        framework: { value: 'vue', label: 'Vue', note: 'small bundle size', source: 'option' },
+        features: { values: ['auth', 'search'], labels: ['Auth', 'Search'], other: 'Exports', source: 'options' }
+      },
+      skipped: []
+    })
+  })
+
+  test('SC-6: with nothing picked, the typed text is the select answer', async () => {
+    const ask: Ask = {
+      ...selectAsk('ask_g', 'Stack', 1),
+      spec: { questions: [{ id: 'framework', type: 'select', question: 'Framework?', options: [{ value: 'react', label: 'React' }] }] }
+    }
+    const fake = fakeContext([ask])
+    await activated(fake)
+    const { element } = await mount(fake)
+
+    await type(withOwnAnswer(element), 'Svelte')
+    await click(buttonIn(element, 'Submit'))
+    await settled()
+
+    expect(fake.calls.find((call) => call.method === 'quirky.ask/answer')?.params).toEqual({
+      askId: 'ask_g',
+      answers: { framework: { value: 'Svelte', source: 'other' } },
+      skipped: []
+    })
+  })
+
+  test('SC-13: a saved draft comes back in the card, and typing saves once, 500 ms after the last change', async () => {
+    const ask = deployAsk('ask_d', { partial: { replicas: { draft: '3' }, env: { selected: ['dev'], note: 'eu only' } } })
+    const fake = fakeContext([ask])
+    await activated(fake)
+    const { element } = await mount(fake)
+
+    const replicas = fieldsetOf(element, 'replicas').querySelector('input') as HTMLInputElement
+    expect(replicas.value).toBe('3')
+    expect(buttonIn(fieldsetOf(element, 'env'), 'Dev').getAttribute('aria-pressed')).toBe('true')
+    expect(withOwnAnswer(fieldsetOf(element, 'env')).value).toBe('eu only')
+    expect(fake.calls.filter((call) => call.method === 'quirky.ask/updatePartial')).toHaveLength(0)
+
+    await type(replicas, '4')
+    await wait(200)
+    await type(replicas, '45')
+    await wait(200)
+    await type(replicas, '5')
+    await wait(300)
+    expect(fake.calls.filter((call) => call.method === 'quirky.ask/updatePartial')).toHaveLength(0)
+
+    await wait(300)
+    const saves = fake.calls.filter((call) => call.method === 'quirky.ask/updatePartial')
+    expect(saves).toHaveLength(1)
+    expect(saves[0]!.params).toEqual({ askId: 'ask_d', partial: { env: { selected: ['dev'], note: 'eu only' }, replicas: { draft: '5' } } })
+  }, 10000)
+
+  test('a multiselect draft keeps its free text as other, and a pending save is dropped when the card goes', async () => {
+    const ask: Ask = {
+      ...selectAsk('ask_m', 'Stack', 1),
+      spec: { questions: [{ id: 'features', type: 'multiselect', question: 'Features?', options: [{ value: 'auth', label: 'Auth' }] }] }
+    }
+    const fake = fakeContext([ask])
+    await activated(fake)
+    const { element } = await mount(fake)
+
+    await click(buttonIn(element, 'Auth'))
+    await type(withOwnAnswer(element), 'Exports')
+    await wait(650)
+    expect(fake.calls.find((call) => call.method === 'quirky.ask/updatePartial')?.params).toEqual({
+      askId: 'ask_m',
+      partial: { features: { selected: ['auth'], other: 'Exports' } }
+    })
+
+    const before = fake.calls.length
+    await type(withOwnAnswer(element), 'Exports and more')
+    await act(async () => {
+      for (const cleanup of mounts.splice(0)) cleanup()
+    })
+    await wait(650)
+    expect(fake.calls.slice(before).filter((call) => call.method === 'quirky.ask/updatePartial')).toHaveLength(0)
+  }, 10000)
+
+  test('SC-14: a queued ask shows no card, and the badge and report count it apart', async () => {
+    const head = selectAsk('ask_a', 'A', 1)
+    const waiting: Ask = { ...selectAsk('ask_b', 'B', 2), queued: true, seq: 2 }
+    const fake = fakeContext([head, waiting])
+    await activated(fake)
+    const { element, reports } = await mount(fake)
+
+    expect([...element.querySelectorAll('.ask-card h3')].map((node) => node.textContent)).toEqual(['A'])
+    expect(fake.badges.at(-1)).toBe(1)
+    expect(reports.at(-1)).toEqual({ pending: [{ askId: 'ask_a', title: 'A', questions: 1 }], queued: 1 })
+  })
+
+  test('SC-15: a surfaced event with a higher seq shows the card of the promoted ask', async () => {
+    const head = { ...selectAsk('ask_a', 'A', 1), seq: 1 }
+    const waiting: Ask = { ...selectAsk('ask_b', 'B', 2), queued: true, seq: 2 }
+    const fake = fakeContext([head, waiting])
+    await activated(fake)
+    const { element, reports } = await mount(fake)
+
+    const promoted: Ask = { ...waiting, queued: false, seq: 4 }
+    fake.drop('ask_a')
+    fake.drop('ask_b')
+    fake.add(promoted)
+    await fake.emit(resolved('ask_a', 3))
+    await fake.emit(surfaced(promoted, 4))
+
+    expect([...element.querySelectorAll('.ask-card h3')].map((node) => node.textContent)).toEqual(['B'])
+    expect(fake.badges.at(-1)).toBe(1)
+    expect(reports.at(-1)).toEqual({ pending: [{ askId: 'ask_b', title: 'B', questions: 1 }], queued: 0 })
+  })
+
+  test('SC-16: an event at or below the watermark triggers nothing; a higher one refetches', async () => {
+    const fake = fakeContext([{ ...selectAsk('ask_a', 'A', 1), seq: 7 }])
+    await activated(fake)
+    const lists = () => fake.calls.filter((call) => call.method === 'quirky.ask/list').length
+    const before = lists()
+
+    const late = { ...selectAsk('ask_b', 'B', 2), seq: 5 }
+    fake.add(late)
+    await fake.emit(surfaced(late, 5))
+    await fake.emit(created(late, 7))
+    expect(lists()).toBe(before)
+    expect(fake.badges.at(-1)).toBe(1)
+
+    await fake.emit(surfaced(late, 8))
+    expect(lists()).toBe(before + 1)
+    expect(fake.badges.at(-1)).toBe(2)
+  })
+
+  test('SC-16: a failed refetch leaves the watermark, so the same event retries', async () => {
+    const fake = fakeContext([{ ...selectAsk('ask_a', 'A', 1), seq: 1 }])
+    await activated(fake)
+    const lists = () => fake.calls.filter((call) => call.method === 'quirky.ask/list').length
+    const before = lists()
+
+    const next = { ...selectAsk('ask_b', 'B', 2), seq: 2 }
+    fake.add(next)
+    fake.failLists('temporary RPC failure')
+    await fake.emit(created(next, 2))
+    expect(lists()).toBe(before + 1)
+    expect(fake.badges.at(-1)).toBe(1)
+
+    fake.failLists(null)
+    await fake.emit(created(next, 2))
+    expect(lists()).toBe(before + 2)
+    expect(fake.badges.at(-1)).toBe(2)
+
+    await fake.emit(created(next, 2))
+    expect(lists()).toBe(before + 2)
+  })
+
+  test('SC-16: an older refetch still applies when the newer one failed', async () => {
+    const fake = fakeContext([{ ...selectAsk('ask_a', 'A', 1), seq: 1 }])
+    await activated(fake)
+
+    const release = fake.holdLists()
+    const next = { ...selectAsk('ask_b', 'B', 2), seq: 2 }
+    fake.add(next)
+    await fake.emit(created(next, 2))
+    fake.failLists('temporary RPC failure')
+    await fake.emit(resolved('ask_x', 3))
+    fake.failLists(null)
+    release()
+    await settled()
+    expect(fake.badges.at(-1)).toBe(2)
+
+    const lists = () => fake.calls.filter((call) => call.method === 'quirky.ask/list').length
+    const before = lists()
+    await fake.emit(resolved('ask_x', 3))
+    expect(lists()).toBe(before + 1)
+  })
+
+  test('SC-21: the card shows each type with its controls', async () => {
+    const fake = fakeContext([deployAsk()])
+    await activated(fake)
+    const { element } = await mount(fake)
+
+    const env = fieldsetOf(element, 'env')
+    expect([...env.querySelectorAll('button')].map((b) => b.textContent)).toEqual(['Prod', 'Dev'])
+    expect(withOwnAnswer(env)).not.toBeNull()
+    expect(env.textContent).not.toContain('(optional)')
+
+    const replicas = fieldsetOf(element, 'replicas')
+    const number = replicas.querySelector('input') as HTMLInputElement
+    expect([number.type, number.getAttribute('step'), number.getAttribute('min'), number.getAttribute('max')]).toEqual(['number', '1', '1', '10'])
+    expect(replicas.textContent).toContain('(optional)')
+
+    const ship = fieldsetOf(element, 'ship')
+    const shipLegend = ship.querySelector('legend') as HTMLElement
+    expect([...shipLegend.children].map((child) => child.textContent)).toEqual(['Ship', 'Ship date?'])
+    expect(shipLegend.children[0]?.tagName).toBe('STRONG')
+    expect(shipLegend.textContent).toBe('ShipShip date?')
+    expect((ship.querySelector('input') as HTMLInputElement).type).toBe('date')
+
+    expect([...fieldsetOf(element, 'go').querySelectorAll('button')].map((b) => b.textContent)).toEqual(['Yes', 'No'])
+
+    const unpressedStyle = buttonIn(env, 'Prod').getAttribute('style')
+    await click(buttonIn(env, 'Prod'))
+    expect(buttonIn(env, 'Prod').getAttribute('aria-pressed')).toBe('true')
+    expect(buttonIn(env, 'Prod').getAttribute('style')).not.toBe(unpressedStyle)
+    expect(buttonIn(env, 'Prod').style.background).toContain('var(--accent)')
+    expect(buttonIn(env, 'Dev').style.background).not.toContain('var(--accent)')
+    await click(buttonIn(env, 'Dev'))
+    expect(buttonIn(env, 'Prod').getAttribute('aria-pressed')).toBe('false')
+    await click(buttonIn(env, 'Dev'))
+    expect(buttonIn(env, 'Dev').getAttribute('aria-pressed')).toBe('false')
+  })
+
+  test('number questions without integer step by any', async () => {
+    const ask: Ask = { ...selectAsk('ask_n', 'N', 1), spec: { questions: [{ id: 'ratio', type: 'number', question: 'Ratio?' }] } }
+    const fake = fakeContext([ask])
+    await activated(fake)
+    const { element } = await mount(fake)
+
+    const number = element.querySelector('input') as HTMLInputElement
+    expect(number.getAttribute('step')).toBe('any')
+    expect(number.hasAttribute('min')).toBe(false)
+    expect(number.hasAttribute('max')).toBe(false)
+  })
+
+  test('a multiline text question is a textarea', async () => {
+    const ask: Ask = { ...selectAsk('ask_t', 'T', 1), spec: { questions: [{ id: 'why', type: 'text', question: 'Why?', multiline: true }] } }
+    const fake = fakeContext([ask])
+    await activated(fake)
+    const { element } = await mount(fake)
+    await type(element.querySelector('textarea') as HTMLTextAreaElement, 'because')
+    await click(buttonIn(element, 'Submit'))
+    await settled()
+
+    expect(fake.calls.find((call) => call.method === 'quirky.ask/answer')?.params?.answers).toEqual({ why: { value: 'because', source: 'input' } })
+  })
+
+  test('SC-22: submit checks every question, shows the messages and sends nothing until they are fixed', async () => {
+    const fake = fakeContext([deployAsk()])
+    await activated(fake)
+    const { element } = await mount(fake)
+    const answers = () => fake.calls.filter((call) => call.method === 'quirky.ask/answer')
+
+    await type(fieldsetOf(element, 'replicas').querySelector('input') as HTMLInputElement, '12')
+    await type(fieldsetOf(element, 'email').querySelector('input') as HTMLInputElement, 'not-an-email')
+    await click(buttonIn(element, 'Submit'))
+
+    expect(answers()).toHaveLength(0)
+    expect(fieldsetOf(element, 'env').textContent).toContain('This question is required.')
+    expect(fieldsetOf(element, 'replicas').textContent).toContain('Enter a number of at most 10.')
+    expect(fieldsetOf(element, 'email').textContent).toContain('Enter a valid email address.')
+
+    const replicas = fieldsetOf(element, 'replicas').querySelector('input') as HTMLInputElement
+    await type(replicas, '2.5')
+    await click(buttonIn(element, 'Submit'))
+    expect(fieldsetOf(element, 'replicas').textContent).toContain('Enter a whole number.')
+
+    await type(replicas, '0')
+    await click(buttonIn(element, 'Submit'))
+    expect(fieldsetOf(element, 'replicas').textContent).toContain('Enter a number of at least 1.')
+    expect(answers()).toHaveLength(0)
+
+    await type(replicas, '2')
+    await type(fieldsetOf(element, 'email').querySelector('input') as HTMLInputElement, 'a@b.co')
+    await click(buttonIn(fieldsetOf(element, 'env'), 'Prod'))
+    await click(buttonIn(element, 'Submit'))
+    await settled()
+
+    expect(answers()).toHaveLength(1)
+    expect(answers()[0]!.params).toEqual({
+      askId: 'ask_d',
+      answers: {
+        env: { value: 'prod', label: 'Prod', source: 'option' },
+        replicas: { value: 2, source: 'input' },
+        email: { value: 'a@b.co', source: 'input' }
+      },
+      skipped: ['ship', 'go']
+    })
+    expect(element.querySelectorAll('.ask-card')).toHaveLength(0)
+  })
+
+  test('SC-23: an option preview shows as plain text behind a toggle', async () => {
+    const content = '**JSX** <script>x()</script>'
+    const ask: Ask = {
+      ...selectAsk('ask_p', 'P', 1),
+      spec: {
+        questions: [
+          {
+            id: 'framework',
+            type: 'select',
+            question: 'Framework?',
+            options: [{ value: 'react', label: 'React', preview: { format: 'markdown', content } }, { value: 'vue', label: 'Vue' }]
+          }
+        ]
+      }
+    }
+    const fake = fakeContext([ask])
+    await activated(fake)
+    const { element } = await mount(fake)
+    expect(element.textContent).not.toContain('JSX')
+
+    await click(buttonIn(element, 'Show preview'))
+
+    const pre = element.querySelector('pre') as HTMLPreElement
+    expect(pre.textContent).toBe(content)
+    expect(pre.children).toHaveLength(0)
+    expect(element.querySelector('script')).toBeNull()
+    expect(element.querySelector('strong')).toBeNull()
+    expect(buttonIn(element, 'Hide preview')).toBeDefined()
+
+    await click(buttonIn(element, 'Hide preview'))
+    expect(element.querySelector('pre')).toBeNull()
+  })
+
+  test('SC-24: a resolved event removes the card and clears the badge', async () => {
+    const fake = fakeContext([selectAsk('ask_1', 'Short', 1)])
+    await activated(fake)
+    const { element } = await mount(fake)
+    expect(element.querySelectorAll('.ask-card')).toHaveLength(1)
+
+    fake.drop('ask_1')
+    await fake.emit(resolved('ask_1'))
+
+    expect(element.querySelectorAll('.ask-card')).toHaveLength(0)
+    expect(fake.badges.at(-1)).toBeNull()
   })
 
   test('refreshes on reconnect and stops listening on deactivate', async () => {

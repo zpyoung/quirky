@@ -99,13 +99,18 @@ export function seedPtySession(h: Harness, sessionId: string, output = ''): void
   h.pty.sessions.set(sessionId, {
     info: {
       sessionId,
+      state: 'running',
       pid: 4999,
       alive: true,
       exitCode: null,
+      exitSignal: null,
+      exitCause: null,
       cols: 80,
       rows: 24,
       argv: ['/bin/zsh', '-l'],
       cwd: '/fake/alpha',
+      title: null,
+      shellState: 'unsupported',
       createdAt: 1,
       offset: buffer.length
     },

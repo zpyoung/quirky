@@ -14,10 +14,13 @@ export type FakeBehavior = {
   steps?: { afterMs: number; write: string }[]
   exitAfterMs?: number
   exitCode?: number
+  /** Answers a bare `--version` with `stdout` (default `0.0.0 (fake)`) and exits with `exitCode` (default 0) at once. */
+  version?: { stdout?: string; exitCode?: number }
 }
 
 export type FakeEvent =
   | { type: 'start'; argv: string[]; env: Record<string, string>; cwd: string; pid: number; at: number }
+  | { type: 'version'; argv: string[]; at: number }
   | { type: 'input'; b64: string; at: number }
   | { type: 'exit'; at: number }
 

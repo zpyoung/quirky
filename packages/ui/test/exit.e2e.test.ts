@@ -177,13 +177,13 @@ test('SC-29: a second pending ask stays listed after the first is answered, and 
   await stateWhere((state) => questionsReport(state)?.pending.length === 2)
   const [one, two] = await pendingAsks()
 
-  await agent.callAny('quirky.ask/answer', { askId: one!.id, answers: { go: { value: 'yes', source: 'input' } } })
+  await agent.callAny('quirky.ask/answer', { askId: one!.id, answers: { go: { value: true, source: 'input' } } })
   const remaining = await stateWhere((state) => questionsReport(state)?.pending.length === 1)
   expect(questionsReport(remaining)?.pending[0]?.askId).toBe(two!.id)
   expect((await pendingAsks()).map((ask) => ask.id)).toEqual([two!.id])
   await win.waitFor(() => win.host.getState().badges[QUESTIONS] === 1)
 
-  await agent.callAny('quirky.ask/answer', { askId: two!.id, answers: { go: { value: 'yes', source: 'input' } } })
+  await agent.callAny('quirky.ask/answer', { askId: two!.id, answers: { go: { value: true, source: 'input' } } })
   await win.waitFor(() => second.lines.length === 2)
   expect(JSON.parse(second.lines[0]!)).toEqual({ status: 'registered', askId: two!.id })
   expect(JSON.parse(second.lines[1]!)).toMatchObject({ status: 'answered', askId: two!.id })

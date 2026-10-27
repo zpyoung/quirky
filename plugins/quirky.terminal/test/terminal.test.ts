@@ -1,8 +1,18 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
-import { base64ToBytes, QuirkyClient, RpcErrorCode, type ApiDescription, type PluginInfo, type Session } from '@quirky/protocol'
+import {
+  base64ToBytes,
+  QuirkyClient,
+  RpcErrorCode,
+  type ApiDescription,
+  type PluginInfo,
+  type PluginEvent,
+  type PtyRequest,
+  type QuirkyEvent,
+  type Session
+} from '@quirky/protocol'
 import { rpcUrl } from '@quirky/protocol/node'
 import { waitFor, type Harness } from '../../../packages/daemon/test/helpers'
-import { call, code, createSession, startPluginHarness, TERMINAL_PLUGINS } from './support'
+import { call, code, createSession, startPluginHarness, TERMINAL_PLUGINS, type PluginSet } from './support'
 
 let h: Harness
 let client: QuirkyClient
@@ -273,11 +283,336 @@ describe('the CLI catalog', () => {
     const api = (await call(client, 'api.describe', {})) as ApiDescription
     expect(api.cli.groups.find((g) => g.plugin === 'quirky.terminal')).toEqual({ plugin: 'quirky.terminal', words: 'terminal', aliases: ['term'] })
     const own = api.cli.commands.filter((c) => c.plugin === 'quirky.terminal')
-    expect(own.map((c) => c.words).sort()).toEqual(['terminal read', 'terminal send'])
+    expect(own.map((c) => c.words).sort()).toEqual([
+      'terminal history',
+      'terminal kill',
+      'terminal kill-all',
+      'terminal read',
+      'terminal restart-host',
+      'terminal send',
+      'terminal sessions',
+      'terminal snapshot'
+    ])
     expect(own.find((c) => c.words === 'terminal read')!.aliasWords).toEqual(['term read'])
     const names = api.methods.map((m) => m.name)
     for (const name of ['attach', 'detach', 'write', 'resize', 'send', 'read']) expect(names).toContain(`quirky.terminal/${name}`)
     expect(api.methods.find((m) => m.name === 'quirky.terminal/attach')).toMatchObject({ connection: true })
     expect(api.methods.find((m) => m.name === 'quirky.terminal/read')).toMatchObject({ readOnly: true })
+  })
+})
+
+type Attached = {
+  streamId: number
+  replay: string
+  offset: number
+  historyCursor: string | null
+  cols: number
+  rows: number
+  restored: boolean
+  shellState: string
+  live: boolean
+}
+const attachFull = (c: QuirkyClient, session: string, extra: Record<string, unknown> = {}) =>
+  call<Attached>(c, 'quirky.terminal/attach', { session, cols: 80, rows: 24, ...extra })
+const requestsOf = <T extends PtyRequest['type']>(type: T) =>
+  h.pty.requests.filter((r): r is Extract<PtyRequest, { type: T }> => r.type === type)
+const recordOf = (id: string) => call<Session>(client, 'quirky.session/get', { session: id })
+const untilEnded = async (id: string) => {
+  for (let i = 0; i < 100; i++) {
+    if ((await recordOf(id)).status === 'exited') return
+    await Bun.sleep(20)
+  }
+  throw new Error(`${id} never ended`)
+}
+const failure = async (promise: Promise<unknown>) => {
+  try {
+    await promise
+  } catch (error) {
+    return error as Error & { code?: number; data?: unknown }
+  }
+  throw new Error('expected a failure')
+}
+
+describe('attach with restore and replay options', () => {
+  test('subscribes in screen mode with the caller historyLines and returns the host fields', async () => {
+    const attached = await attachFull(client, shell.id, { historyLines: 500 })
+    expect(requestsOf('subscribe').at(-1)).toMatchObject({ sessionId: shell.id, mode: 'screen', historyLines: 500 })
+    expect(attached).toMatchObject({ historyCursor: null, cols: 80, rows: 24, restored: false, shellState: 'unsupported', live: true })
+  })
+
+  test('a restorable session is restored first, once, and the attach says so', async () => {
+    h.pty.exit(shell.id, null, { exitCause: 'host-restart' })
+    await untilEnded(shell.id)
+    expect(await recordOf(shell.id)).toMatchObject({ status: 'exited', restorable: true })
+
+    const attached = await attachFull(client, shell.id)
+    expect(attached).toMatchObject({ restored: true, live: true })
+    expect(requestsOf('create').filter((r) => r.restore === true && r.sessionId === shell.id)).toHaveLength(1)
+    expect(await recordOf(shell.id)).toMatchObject({ status: 'running', agent: 'shell', restorable: false })
+
+    await attachFull(client, shell.id)
+    expect(requestsOf('create').filter((r) => r.restore === true)).toHaveLength(1)
+  })
+
+  test('SC-42: an ended session that cannot be restored gives its replay, live false and a silent stream', async () => {
+    h.pty.emit(shell.id, 'bye\r\n')
+    h.pty.exit(shell.id, 0)
+    await untilEnded(shell.id)
+
+    const attached = await attachFull(client, shell.id)
+    expect(attached).toMatchObject({ restored: false, live: false })
+    expect(text(base64ToBytes(attached.replay))).toBe('bye\r\n')
+    expect(requestsOf('create').some((r) => r.restore === true)).toBe(false)
+
+    const received: string[] = []
+    client.onTerminalOutput(attached.streamId, (bytes) => received.push(text(bytes)))
+    h.pty.emit(shell.id, 'ghost')
+    await Bun.sleep(60)
+    expect(received).toEqual([])
+    await call(client, 'quirky.terminal/detach', { streamId: attached.streamId })
+  })
+
+  test('a reconnect fills the gap from a raw subscription', async () => {
+    const attached = await attachFull(client, shell.id)
+    client.onTerminalOutput(attached.streamId, () => {})
+    h.pty.dropConnections()
+    h.pty.emit(shell.id, 'b')
+    await waitFor(() => requestsOf('subscribe').length >= 2, 5000)
+    expect(requestsOf('subscribe').at(-1)).toMatchObject({ mode: 'raw' })
+  })
+})
+
+describe('SC-22: writing to an ended session', () => {
+  test('write and send fail with a conflict that says how to proceed', async () => {
+    const restorable = await createSession(client, { worktree: 'id:wt_main', agent: 'shell' })
+    h.pty.exit(restorable.id, null, { exitCause: 'host-restart' })
+    h.pty.exit(shell.id, 0)
+    await untilEnded(restorable.id)
+    await untilEnded(shell.id)
+
+    const stopped = `session ${restorable.id} ended when the terminal host stopped; run quirky session restore ${restorable.id}`
+    for (const [method, params] of [
+      ['write', { data: 'ls\r' }],
+      ['send', { text: 'ls', enter: true }]
+    ] as const) {
+      expect(await failure(call(client, `quirky.terminal/${method}`, { session: restorable.id, ...params }))).toMatchObject({
+        code: RpcErrorCode.Conflict,
+        message: stopped
+      })
+      expect(await failure(call(client, `quirky.terminal/${method}`, { session: shell.id, ...params }))).toMatchObject({
+        code: RpcErrorCode.Conflict,
+        message: `session ${shell.id} has exited`
+      })
+    }
+    expect(h.pty.inputs).toEqual([])
+  })
+
+  test('read, snapshot and history still answer for an ended session', async () => {
+    h.pty.exit(shell.id, 0)
+    await untilEnded(shell.id)
+    expect(await call(client, 'quirky.terminal/read', { session: shell.id })).toMatchObject({ lines: expect.any(Array) })
+    expect(await call(client, 'quirky.terminal/snapshot', { session: shell.id })).toMatchObject({ cols: 80 })
+    expect(await call(client, 'quirky.terminal/history', { session: shell.id })).toEqual({ lines: [], cursor: null })
+  })
+})
+
+describe('snapshot and history', () => {
+  test('snapshot returns the host snapshot', async () => {
+    const snapshot = {
+      ansi: '\x1b[1mprompt$ \x1b[0m',
+      cols: 100,
+      rows: 30,
+      cursor: { x: 8, y: 0 },
+      modes: { alternateScreen: false, bracketedPaste: true, mouseTracking: false, applicationCursor: false },
+      cwd: '/tmp/w/api/src',
+      title: 'build',
+      shellState: 'ready' as const,
+      offset: 42
+    }
+    h.pty.setSnapshotResult(snapshot)
+    expect(await call(client, 'quirky.terminal/snapshot', { session: shell.id })).toEqual(snapshot)
+    expect(requestsOf('snapshot').at(-1)).toMatchObject({ sessionId: shell.id })
+  })
+
+  test('history passes lines, before and format through', async () => {
+    h.pty.setHistoryResult({ lines: ['h-1', 'h-2'], cursor: 'c1' })
+    expect(await call(client, 'quirky.terminal/history', { session: shell.id, lines: 300, before: 'c0', format: 'ansi' })).toEqual({
+      lines: ['h-1', 'h-2'],
+      cursor: 'c1'
+    })
+    expect(requestsOf('history').at(-1)).toMatchObject({ sessionId: shell.id, lines: 300, before: 'c0', format: 'ansi' })
+    await call(client, 'quirky.terminal/history', { session: shell.id })
+    const bare = requestsOf('history').at(-1)!
+    expect(bare.lines).toBeUndefined()
+    expect(bare.before).toBeUndefined()
+  })
+
+  test('both refuse an unknown session and out-of-range lines', async () => {
+    expect(await code(call(client, 'quirky.terminal/snapshot', { session: 's_nope' }))).toBe(RpcErrorCode.NotFound)
+    expect(await code(call(client, 'quirky.terminal/history', { session: 's_nope' }))).toBe(RpcErrorCode.NotFound)
+    expect(await code(call(client, 'quirky.terminal/history', { session: shell.id, lines: 10001 }))).toBe(RpcErrorCode.InvalidParams)
+  })
+})
+
+describe('sessions', () => {
+  test('lists running sessions with their worktree and a two-segment workspace label', async () => {
+    h.pty.exit(claude.id, 0)
+    const { sessions } = await call<{ sessions: Record<string, unknown>[] }>(client, 'quirky.terminal/sessions', {})
+    expect(sessions).toHaveLength(1)
+    expect(sessions[0]).toMatchObject({
+      sessionId: shell.id,
+      state: 'running',
+      shellState: 'unsupported',
+      cwd: '/fake/alpha',
+      worktreeId: 'wt_main',
+      workspace: 'fake/alpha'
+    })
+    expect(typeof sessions[0]!.pid).toBe('number')
+  })
+
+  test('a host session the session plugin does not know has no worktree', async () => {
+    await call(client, 'quirky.session/close', { session: claude.id })
+    h.pty.sessions.set('s_orphan', { ...h.pty.sessions.get(shell.id)!, info: { ...h.pty.sessions.get(shell.id)!.info, sessionId: 's_orphan', cwd: '/solo' } })
+    const { sessions } = await call<{ sessions: { sessionId: string; worktreeId: string | null; workspace: string }[] }>(
+      client,
+      'quirky.terminal/sessions',
+      {}
+    )
+    expect(sessions.find((s) => s.sessionId === 's_orphan')).toMatchObject({ worktreeId: null, workspace: 'solo' })
+  })
+})
+
+describe('SC-40: the catalog', () => {
+  test('lists the new methods, events and CLI commands with their flags', async () => {
+    const api = (await call(client, 'api.describe', {})) as ApiDescription
+    const method = (name: string) => api.methods.find((m) => m.name === `quirky.terminal/${name}`)
+    for (const name of ['snapshot', 'history', 'sessions']) expect(method(name)).toMatchObject({ readOnly: true })
+    for (const name of ['kill', 'killAll', 'restartHost']) expect(method(name)).toMatchObject({ destructive: true })
+    expect(method('kill')?.confirm).toBe(
+      "Kill this session? Force-quits {session}. Any unsaved work in that pane is lost. This can't be undone."
+    )
+    expect(method('killAll')?.confirm).toBe('Kill all terminal sessions?')
+    expect(method('restartHost')?.confirm).toBe('Restart the terminal service? Open terminals and agents will restart.')
+    const events = api.events.filter((e) => e.name.startsWith('quirky.terminal/')).map((e) => e.name)
+    expect(events.sort()).toEqual(['quirky.terminal/bell', 'quirky.terminal/commandFinished', 'quirky.terminal/cwd', 'quirky.terminal/title'])
+    const words = api.cli.commands.filter((c) => c.plugin === 'quirky.terminal').map((c) => c.words)
+    expect(words).toEqual(expect.arrayContaining(['terminal kill-all', 'terminal restart-host']))
+  })
+
+  test('the plugin is active before anything calls it', async () => {
+    const plugins = await call<PluginInfo[]>(client, 'plugin.list', {})
+    expect(plugins.find((p) => p.id === 'quirky.terminal')).toMatchObject({ state: 'active' })
+  })
+})
+
+describe('SC-30 to SC-33: facts become events', () => {
+  test('each fact kind is emitted under its event name with the session id', async () => {
+    const { client: watcher, events } = await h.connectWithEvents('ui')
+    expect(watcher).toBeDefined()
+    h.pty.fact(shell.id, { kind: 'bell' })
+    h.pty.fact(shell.id, { kind: 'command-finished', exitCode: 7 })
+    h.pty.fact(shell.id, { kind: 'command-finished', exitCode: null })
+    h.pty.fact(shell.id, { kind: 'title', title: 'build' })
+    h.pty.fact(shell.id, { kind: 'cwd', cwd: '/tmp/w/api/src' })
+    const ours = () => events.filter((e: QuirkyEvent) => e.type.startsWith('quirky.terminal/'))
+    await waitFor(() => ours().length === 5)
+    expect(ours().map((e) => [e.type, (e as PluginEvent).data])).toEqual([
+      ['quirky.terminal/bell', { sessionId: shell.id }],
+      ['quirky.terminal/commandFinished', { sessionId: shell.id, exitCode: 7 }],
+      ['quirky.terminal/commandFinished', { sessionId: shell.id, exitCode: null }],
+      ['quirky.terminal/title', { sessionId: shell.id, title: 'build' }],
+      ['quirky.terminal/cwd', { sessionId: shell.id, cwd: '/tmp/w/api/src' }]
+    ])
+  })
+})
+
+describe('SC-23: kill', () => {
+  let confirming: Harness
+  let asker: QuirkyClient
+  let target: Session
+  beforeEach(async () => {
+    const set: PluginSet = { ...TERMINAL_PLUGINS, real: [...TERMINAL_PLUGINS.real, 'quirky.ask'] }
+    confirming = await startPluginHarness(set)
+    asker = await confirming.connect('cli')
+    target = await createSession(asker, { worktree: 'id:wt_main', agent: 'shell' })
+  })
+  afterEach(async () => {
+    await confirming.cleanup()
+  })
+
+  test('without yes it asks first and kills nothing; with yes it kills with the reason killed', async () => {
+    const asked = await failure(call(asker, 'quirky.terminal/kill', { session: target.id }))
+    expect(asked.code).toBe(RpcErrorCode.ConfirmationRequired)
+    expect((asked.data as { action: string }).action).toBe(
+      `Kill this session? Force-quits ${target.id}. Any unsaved work in that pane is lost. This can't be undone.`
+    )
+    expect(confirming.pty.requests.some((r) => r.type === 'kill')).toBe(false)
+
+    expect(await call(asker, 'quirky.terminal/kill', { session: target.id, yes: true })).toEqual({ ok: true })
+    const sent = confirming.pty.requests.filter((r) => r.type === 'kill')
+    expect(sent).toHaveLength(1)
+    expect(sent[0]).toMatchObject({ sessionId: target.id, reason: 'killed' })
+    expect((sent[0] as { signal?: string }).signal).toBeUndefined()
+  })
+
+  test('an unknown session is NotFound', async () => {
+    expect(await code(call(asker, 'quirky.terminal/kill', { session: 's_nope', yes: true }))).toBe(RpcErrorCode.NotFound)
+  })
+
+  test('SC-24: kill all kills every running session and reports the counts without asking again', async () => {
+    const second = await createSession(asker, { worktree: 'id:wt_main', agent: 'shell' })
+    const ended = await createSession(asker, { worktree: 'id:wt_main', agent: 'shell' })
+    confirming.pty.exit(ended.id, 0)
+
+    const pending = call<{ killedCount: number; remainingCount: number; killedSessionIds: string[] }>(asker, 'quirky.terminal/killAll', {
+      yes: true
+    })
+    await waitFor(() => confirming.pty.requests.filter((r) => r.type === 'kill').length === 2)
+    confirming.pty.exit(target.id, 137, { exitSignal: 'SIGKILL', exitCause: 'killed' })
+    confirming.pty.exit(second.id, 137, { exitSignal: 'SIGKILL', exitCause: 'killed' })
+    const result = await pending
+    expect(result.killedCount).toBe(2)
+    expect(result.remainingCount).toBe(0)
+    expect([...result.killedSessionIds].sort()).toEqual([target.id, second.id].sort())
+    expect(confirming.pty.requests.filter((r) => r.type === 'kill').every((r) => (r as { reason?: string }).reason === 'killed')).toBe(true)
+  })
+
+  test('kill all with nothing running returns zero', async () => {
+    confirming.pty.exit(target.id, 0)
+    expect(await call(asker, 'quirky.terminal/killAll', { yes: true })).toEqual({
+      killedCount: 0,
+      remainingCount: 0,
+      killedSessionIds: []
+    })
+  })
+
+  test('a session that survives the wait is counted as remaining', async () => {
+    process.env.QUIRKY_TEST_KILL_POLL_MS = '2'
+    try {
+      expect(await call(asker, 'quirky.terminal/killAll', { yes: true })).toEqual({
+        killedCount: 0,
+        remainingCount: 1,
+        killedSessionIds: []
+      })
+      const lists = confirming.pty.requests.filter((r) => r.type === 'list').length
+      expect(lists).toBeGreaterThanOrEqual(65)
+    } finally {
+      delete process.env.QUIRKY_TEST_KILL_POLL_MS
+    }
+  })
+
+  test('SC-25: restart host replaces the host and returns its pid', async () => {
+    const pending = call<{ pid: number }>(asker, 'quirky.terminal/restartHost', { yes: true })
+    await waitFor(() => confirming.pty.requests.some((r) => r.type === 'shutdown'))
+    confirming.pty.dropConnections()
+    expect(await pending).toEqual({ pid: expect.any(Number) })
+    expect(confirming.pty.requests.filter((r) => r.type === 'shutdown')).toHaveLength(1)
+  })
+
+  test('restart host asks first without yes', async () => {
+    const asked = await failure(call(asker, 'quirky.terminal/restartHost', {}))
+    expect(asked.code).toBe(RpcErrorCode.ConfirmationRequired)
+    expect((asked.data as { action: string }).action).toBe('Restart the terminal service? Open terminals and agents will restart.')
+    expect(confirming.pty.requests.some((r) => r.type === 'shutdown')).toBe(false)
   })
 })

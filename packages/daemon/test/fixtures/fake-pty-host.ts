@@ -6,13 +6,18 @@ import { mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import type { Socket } from 'bun'
 import {
+  PTY_PROTOCOL_VERSION,
   PtyFrameDecoder,
   base64ToBytes,
   bytesToBase64,
   encodePtyData,
   encodePtyJson,
+  type ExitCause,
+  type PtyFact,
+  type PtyHistoryPage,
   type PtyRequest,
-  type PtySessionInfo
+  type PtySessionInfo,
+  type PtySnapshot
 } from '@quirky/protocol'
 import { socketPath as resolveSocketPath } from '@quirky/protocol/node'
 
@@ -32,15 +37,30 @@ export type FakePtyHost = {
   requests: PtyRequest[]
   inputs: { sessionId: string; text: string }[]
   emit(sessionId: string, data: string | Uint8Array): void
-  exit(sessionId: string, exitCode: number | null): void
+  exit(
+    sessionId: string,
+    exitCode: number | null,
+    extra?: { exitSignal?: string | null; exitCause?: ExitCause }
+  ): void
+  /** Sends a fact event for `sessionId` to every connection. */
+  fact(sessionId: string, fact: PtyFact): void
   dropConnections(): void
   setReadResult(result: { lines: string[]; cols: number; rows: number; alt: boolean }): void
+  setSnapshotResult(result: PtySnapshot): void
+  setHistoryResult(result: PtyHistoryPage): void
   /** Makes every request of `type` fail with `error`; `null` clears it. */
   failRequests(type: PtyRequest['type'], error: string | null): void
   stop(): void
 }
 
-export function startFakePtyHost(home: string, options: { onShutdown?: () => void } = {}): FakePtyHost {
+export type FakePtyHostOptions = {
+  onShutdown?: () => void
+  /** The protocol version the host speaks; a hello for any other version is rejected like the real host does. */
+  version?: number
+}
+
+export function startFakePtyHost(home: string, options: FakePtyHostOptions = {}): FakePtyHost {
+  const version = options.version ?? PTY_PROTOCOL_VERSION
   mkdirSync(home, { recursive: true })
   const socketPath = resolveSocketPath(home, 'pty.sock')
   const token = crypto.randomUUID()
@@ -52,6 +72,18 @@ export function startFakePtyHost(home: string, options: { onShutdown?: () => voi
   const inputs: { sessionId: string; text: string }[] = []
   const connections = new Set<Socket<ConnState>>()
   let readResult = { lines: ['hello from the screen'], cols: 80, rows: 24, alt: false }
+  let snapshotResult: PtySnapshot = {
+    ansi: 'hello from the screen',
+    cols: 80,
+    rows: 24,
+    cursor: { x: 0, y: 0 },
+    modes: { alternateScreen: false, bracketedPaste: false, mouseTracking: false, applicationCursor: false },
+    cwd: '/fake/alpha',
+    title: null,
+    shellState: 'unsupported',
+    offset: 0
+  }
+  let historyResult: PtyHistoryPage = { lines: [], cursor: null }
   let nextPid = 4000
   const failures = new Map<PtyRequest['type'], string>()
 
@@ -69,26 +101,36 @@ export function startFakePtyHost(home: string, options: { onShutdown?: () => voi
         socket.end()
         return
       }
+      if (request.version !== version) {
+        fail(socket, request.id, `unsupported protocol version ${request.version}, host speaks ${version}`)
+        socket.end()
+        return
+      }
       socket.data.authed = true
-      reply(socket, request.id, { version: 1, pid: process.pid })
+      reply(socket, request.id, { version, pid: process.pid })
       return
     }
     const injected = failures.get(request.type)
     if (injected !== undefined) return fail(socket, request.id, injected)
     switch (request.type) {
       case 'hello':
-        reply(socket, request.id, { version: 1, pid: process.pid })
+        reply(socket, request.id, { version, pid: process.pid })
         return
       case 'create': {
         const info: PtySessionInfo = {
           sessionId: request.sessionId,
+          state: 'running',
           pid: nextPid++,
           alive: true,
           exitCode: null,
+          exitSignal: null,
+          exitCause: null,
           cols: request.cols,
           rows: request.rows,
           argv: request.argv,
           cwd: request.cwd,
+          title: null,
+          shellState: request.shellReady ? 'pending' : 'unsupported',
           createdAt: Date.now(),
           offset: 0
         }
@@ -98,7 +140,13 @@ export function startFakePtyHost(home: string, options: { onShutdown?: () => voi
           buffer: [],
           subscribers: new Set()
         })
-        reply(socket, request.id, { pid: info.pid })
+        reply(socket, request.id, {
+          pid: info.pid,
+          restored: false,
+          cwd: request.cwd,
+          cols: request.cols,
+          rows: request.rows
+        })
         return
       }
       case 'resize': {
@@ -131,7 +179,12 @@ export function startFakePtyHost(home: string, options: { onShutdown?: () => voi
         session.subscribers.add(socket)
         reply(socket, request.id, {
           replay: bytesToBase64(Uint8Array.from(session.buffer)),
-          offset: session.buffer.length
+          offset: session.buffer.length,
+          historyCursor: null,
+          cols: session.info.cols,
+          rows: session.info.rows,
+          shellState: session.info.shellState,
+          live: session.info.alive
         })
         return
       }
@@ -141,6 +194,12 @@ export function startFakePtyHost(home: string, options: { onShutdown?: () => voi
         return
       case 'read':
         reply(socket, request.id, readResult)
+        return
+      case 'snapshot':
+        reply(socket, request.id, snapshotResult)
+        return
+      case 'history':
+        reply(socket, request.id, historyResult)
         return
       case 'shutdown':
         reply(socket, request.id, {})
@@ -185,21 +244,35 @@ export function startFakePtyHost(home: string, options: { onShutdown?: () => voi
       for (const byte of bytes) session.buffer.push(byte)
       for (const subscriber of session.subscribers) subscriber.write(encodePtyData(sessionId, bytes))
     },
-    exit(sessionId, exitCode) {
+    exit(sessionId, exitCode, extra = {}) {
+      const exitSignal = extra.exitSignal ?? null
+      const exitCause = extra.exitCause ?? 'exited'
       const session = sessions.get(sessionId)
       if (session) {
         session.info.alive = false
+        session.info.state = 'exited'
         session.info.exitCode = exitCode
+        session.info.exitSignal = exitSignal
+        session.info.exitCause = exitCause
       }
       for (const socket of connections) {
-        socket.write(encodePtyJson({ type: 'exit', sessionId, exitCode }))
+        socket.write(encodePtyJson({ type: 'exit', sessionId, exitCode, exitSignal, exitCause }))
       }
+    },
+    fact(sessionId, fact) {
+      for (const socket of connections) socket.write(encodePtyJson({ type: 'fact', sessionId, fact }))
     },
     dropConnections() {
       for (const socket of [...connections]) socket.end()
     },
     setReadResult(result) {
       readResult = result
+    },
+    setSnapshotResult(result) {
+      snapshotResult = result
+    },
+    setHistoryResult(result) {
+      historyResult = result
     },
     failRequests(type, error) {
       if (error === null) failures.delete(type)

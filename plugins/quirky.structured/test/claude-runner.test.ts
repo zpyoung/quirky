@@ -40,7 +40,8 @@ function envelope(status: AskEnvelope['status'], decision?: string): AskEnvelope
     status,
     askId: 'a_1',
     answers: decision ? { decision: { value: decision, source: 'option' } } : {},
-    skipped: decision ? [] : ['decision']
+    skipped: decision ? [] : ['decision'],
+    summary: ''
   }
 }
 
@@ -65,7 +66,10 @@ beforeEach(() => {
     status: 'starting',
     createdAt: 1,
     lastActivityAt: 1,
-    exitCode: null
+    exitCode: null,
+    exitSignal: null,
+    exitCause: null,
+    restorable: false
   }
   runner = createClaudeRunner(makeContext(), {
     query: (params: ClaudeQueryParams) => {
