@@ -19,6 +19,7 @@ export function activate(context: PluginContext): void {
     inactiveUsage: (params) => accounts.inactiveUsage(params),
     beginLogin: (params) => accounts.beginLogin(params),
     loginStatus: (params) => accounts.loginStatus(params),
+    sessionHome: (params) => accounts.sessionHome(params),
     cancelLogin: (params) => accounts.cancelLogin(params),
     select: (params) => accounts.select(params),
     remove: (params) => accounts.remove(params),

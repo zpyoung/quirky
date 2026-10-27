@@ -97,6 +97,7 @@ describe('the built-ins as the window sees them', () => {
       'panel:quirky.terminal/quick-commands',
       'panel:quirky.terminal/sessions'
     ])
+
     const provides = model.modules['quirky.terminal']!.provides
     expect(provides).toEqual(
       expect.arrayContaining([
