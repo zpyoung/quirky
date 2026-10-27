@@ -211,5 +211,60 @@ Reader: autonomous builders and later operator review — Decision: preserve the
 - **Revisit if:** a real semantic dependency or unowned caller requires an explicit re-plan
 - **Source:** assumed — autonomous
 
+## D20: Preserve accepted W1 components and repair only observed integration defects
+- **Question:** which implementation and fixture changes can be accepted after tests-first preparation
+- **Options:** accept worker reports; audit HEAD/scope and exercise real acceptance
+- **Chose:** audited both isolated component trees and the integration tree before any component commit. Canonical component c849e21 and public UI component 18b5103 merged at 4d87155. Canonical tests went from 13 expected missing-feature failures to 15 passing assertions-driven tests. Public UI tests went from 5 expected missing-feature failures to 5 passing real-daemon/mounted-window tests. Parent restored a missing store import, repaired the test-only groupCreate return barrier and its missing path import, migrated the orphan WorktreeRow factory, and fixed TypeScript-only test typing/SQLite binding issues. Deleted obsolete exact warning wording and exact command-list assertions instead of repinning them.
+- **Why:** the original race fixture observed a group-created event without holding the async assignment boundary; production CAS correctly rejected its later stale write. The repaired fixture pauses the real repo handler after creation, changes state, then releases it. Worker reports alone did not establish correctness.
+- **Evidence:** /tmp/quirky-sidebar-lane5-journal.json and *-audit.json; artifact://68 (UI red), artifact://73 (canonical red), artifact://83 and artifact://85 (diagnosis), artifact://91 (15 pass/97 assertions); public UI targeted run 5 pass/43 assertions
+- **Reversibility:** medium
+- **Confidence:** high
+- **Revisit if:** W1 checkpoint review finds another defect; no checkpoint review has run yet
+- **Source:** assumed — autonomous
+
+## D21: Preserve notification unread semantics when catching up
+- **Question:** integration catch-up conflicts and newly binding decisions
+- **Options:** take either side of SetEnv; combine membership services with the notifications unread event contract
+- **Chose:** merge build/roadmap at 7ce182f. Read imported m1-notifications and fix-sc31-first-shell-race decision logs. Combine SetEnv resolveRepo/groups/call/identitySource with changed(data) carrying optional unread. Preserve the automatically merged unread emission and notification/UI presence changes. Install caught-up package links with bun install --frozen-lockfile --ignore-scripts.
+- **Why:** notifications D46 requires explicit unread:false even when the prior marker was already clear; dropping that field would break Mark Read. No imported decision changes the four-addition sidebar scope.
+- **Evidence:** docs/loop/decisions/m1-notifications.md D35,D45,D46; fix-sc31-first-shell-race D6 and line 69 diagnosis; plugins/quirky.worktree/src/daemon/set.ts changed emission; merge 7ce182f
+- **Reversibility:** medium
+- **Confidence:** high
+- **Revisit if:** resumed catch-up brings another conflicting contract
+- **Source:** locked by docs/loop/decisions/m1-notifications.md
+
+## D22: Do not advance past the red required W1 suite gate
+- **Question:** whether to start W2 or review despite independent required-suite failures
+- **Options:** bypass or weaken failures; repair unrelated features inside this item; queue the independent repair and formally block at the gate
+- **Chose:** formal block at LOOP.md step 5 / W1 gate, before checkpoint review and W2. First required full remote run failed on PTY child-output capture, cold-restore query output, ask regex timing, a stale worktree report, and two incidental assertions this item had invalidated. Fixed the two owned assertions and own type migrations. An isolated remote run of ask/spec, worktree/window-projects and PTY/manager passed the latter two but reproducibly failed ask's accepted unanchored a*a*a*b pattern at 116-118 ms against its 100 ms budget. Queue repair item fix-ask-regex-budget-20261027 was added through queue.ts; lane 7 owns fix-test-process-leaks and received the PTY evidence via one accepted terminal message, not a human ask. No private branch cherry-pick, suite exclusion, timeout relaxation or regex semantics change.
+- **Why:** the SDD gate forbids reviewers over a red suite or advancing a successor wave. A repeated isolated regex failure is not a load flake. Unrelated regex redesign and a concurrent owner's PTY work are not silently absorbed into the sidebar scope. The required full suite has not passed, so this item cannot land.
+- **Evidence:** artifact://94 (full suite exit 1, 436.53 seconds); isolated remote command bun scripts/suite.ts plugins/quirky.ask/test/core/spec.test.ts plugins/quirky.worktree/test/window-projects.test.ts packages/pty-host/test/manager.test.ts exited 1 with suite-result ok:false/flaky:[]; docs/loop/decisions/fix-sc31-first-shell-race.md D6 and diagnosis; queue.ts add /tmp/quirky-lane5-ask-regex-fix.json exited 0
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** the independent repairs land and the required gate passes
+- **Source:** locked by docs/loop/LOOP.md (verification); assumed — autonomous (repair routing)
+
+## D23: Keep measured passing checks separate from the failing full suite
+- **Question:** what verification can honestly be claimed on the preserved implementation
+- **Options:** call the branch green from targeted tests; record each exercised check and remaining gate
+- **Chose:** after repairs, four targeted files passed 50 tests/273 assertions; bun run typecheck exited 0 and bun run build exited 0 (packaged macOS app). The scripts suite passed 41 tests/187 assertions before typecheck exposed missing caught-up links and owned typing issues. No full-suite pass, checkpoint review, W2, final review or complete sidebar acceptance is claimed. Build warnings are the missing optional icon source and unset release base URL. The full-suite run exceeded 300 seconds; record the slow-suite advisory without mutating test-runner configuration (Bun runner, not pytest).
+- **Why:** separate checks do not substitute for the mandatory full-suite gate.
+- **Evidence:** artifact://107 (50 pass, clean typecheck/build); artifact://102 (scripts pass, prior diagnostic output); artifact://94 (failed full suite)
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** any resumed source change invalidates this evidence
+- **Source:** locked by docs/loop/LOOP.md
+
+## D24: Smoke the completed W1 paths without calling them full sidebar-extras parity
+- **Question:** runtime/visual proof before preserving a blocked item
+- **Options:** rely on tests; exercise real CLI plus the built web UI in an isolated home
+- **Chose:** real daemon/CLI smoke created a Git worktree, guarded-created a group, made a child group, moved membership, and deleted the parent subtree; repo/path/instance and filesystem survived, membership became null. A disposable installed plugin exercised the new public activity-item and categorized-setting surfaces. Guarded web run 20261027T143936-c1dd: activity-slot pass (closed-panel item opens right Source Control panel while retaining header toggle); categorized-setting tool-limited partial (Appearance > Window & Sidebar and checkbox toggle visible; Save below viewport, Control+End/Meta+End NO_EFFECT). One visibility finding, no gates, no test overrides, nothing left open. Headless tests separately prove saved-value persistence. Managed browser also opened/visually inspected/closed. Daemon stopped; owned PTY PID no longer existed; temporary HOME/QUIRKY_HOME and fixture plugin were deleted.
+- **Why:** real runtime output proves the changed W1 paths, while the partial and missing W2 prevent any full-feature completion claim.
+- **Evidence:** /tmp/quirky-sidebar-lane5-w1-smoke.json; .quirk/using-apps-like-a-user/runs/20261027T143936-c1dd/report.md and obs-1..7; smoke service exit; cleanup verification
+- **Reversibility:** easy
+- **Confidence:** high for exercised behavior; no claim on unexercised Save/reopen
+- **Revisit if:** the guarded driver gains ref-aware scrolling or W2 changes these surfaces
+- **Source:** assumed — autonomous
+
 ## Progress
-Step 4 in progress. Completed Phase A, Phase B and technical source surveys; all agents returned. Design presented and accepted autonomously; logic.md authored, tech.md next. Specs must undergo Codex adversarial review and be committed before code. Worktree branch build/m2-sidebar-extras; inherited untracked .serena/ remains untouched. No application behavior, tests, builds or completion claimed.
+Blocked at LOOP.md step 5, W1 mandatory suite gate; do not land. Both reviewed specs and W1 canonical/public-UI implementation are preserved. W2 presentation plugin and worktree-renderer integration were not started, so the four-feature item is not complete. All agents and finite/background commands have returned; smoke processes and browsers were stopped and temporary homes removed. Required prerequisite: repair fix-ask-regex-budget-20261027 and lane-7 PTY gate, restore this preserved branch to build/m2-sidebar-extras, merge current integration/read new decisions, install links, run the required gate; only then run the W1 three-lens Gemini checkpoint and proceed with W2. The resumable journal/plan/audits are in /tmp/quirky-sidebar-lane5-*; an exact W2 JSON seam draft is /tmp/quirky-sidebar-lane5-w2-api-contract.md and must be incorporated into tech.md before worker dispatch. Inherited .serena/ remains untouched/uncommitted.

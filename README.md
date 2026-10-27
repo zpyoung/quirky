@@ -32,7 +32,31 @@ Inside any Quirky terminal, the `quirky` command is on PATH: try `quirky status`
 - **`apps/desktop`:** the Electrobun window.
 - **`prototypes/`:** stack experiments, such as the native Swift shell.
 
-`bun test` runs every package's tests.
+Run the full package, app and plugin suite with `bun run test` (the remote test-host runner).
+Run script tests with `bun test scripts` and static checks with `bun run typecheck`.
+For a single local test file, use `bun test <file>`.
+
+### Public plugin UI and grouping APIs
+
+UI plugins can declare an `activity-item` contribution beside the right sidebar. It mounts even
+when no panel is open and uses the ordinary module, override, report and cleanup lifecycle.
+`quirky ui contributions --json` exposes `activityItems`; `quirky ui state --json` exposes each
+mounted item's report. Existing main-header panel toggles and right-column panel placement remain.
+
+Setting declarations can provide optional `category` and `section` strings. The generic Settings
+dialog groups these declarations by category and section; uncategorized settings retain their
+plugin grouping.
+
+Git worktrees expose separate display membership (`projectGroupId`), monotonic activity
+(`lastActivityAt`) and filesystem-instance identity (`instanceId`). `quirky wt create-group
+<worktree> <name>` creates a group and assigns only that worktree with stale-assignment protection.
+`quirky wt set <worktree> --project-group <group-id>` moves it; `--no-project-group` clears it.
+These operations do not change its repository, path or lineage.
+
+Project groups expose `parentId`. `quirky repo group create <name> --parent <group>` and
+`quirky repo group set-parent <group> --parent <parent>` manage hierarchy; `--no-parent` clears it.
+Deleting a group deletes its group subtree and releases loose worktree memberships without
+deleting their Git worktrees or metadata.
 
 ## Docs
 

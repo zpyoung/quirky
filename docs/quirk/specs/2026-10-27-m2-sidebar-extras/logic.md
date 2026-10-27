@@ -151,6 +151,6 @@ Only [tech-spec] questions remain: exact method/schema names, client keys, activ
 
 ## Status & amendments
 
-Status: Accepted autonomously after the mandatory Codex spec review; confirmed findings amended. Tech spec required by LOOP.md and cross-subsystem/file-count complexity.
+Status: Specs accepted autonomously after the mandatory Codex review; execution blocked at the W1 required-suite gate. W2 and full sidebar-extras acceptance are not complete; see the item decision log.
 
 **Amendments:** 2026-10-27 — correct SC-03 fixture sequence; define unknown-liveness retention/reporting and zero-birthtime replacement protection; restore remembered pre-Live window and Git-card project move. Rename the purpose heading for deterministic coverage. Review/adjudication evidence is in the item decision log.

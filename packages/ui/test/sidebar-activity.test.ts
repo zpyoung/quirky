@@ -107,7 +107,7 @@ test('activity items mount outside closed panels, swap owners, clean up on disab
   await win.waitFor(async () => (await readUiState(env)).layout.panel === SOURCE_CONTROL_PANEL)
   await win.waitFor(() => win.document.querySelector(`[data-region="panel"] [data-plugin-slot="${SOURCE_CONTROL_PANEL}"]`))
   const firstPanel = win.document.querySelector('[data-region="panel"]')!
-  const layout = win.document.querySelector('.layout')!
+  const layout = win.document.querySelector<HTMLElement>('.layout')!
   expect(firstPanel.tagName).toBe('ASIDE')
   expect(firstPanel.parentElement).toBe(layout)
   expect(layout.lastElementChild).toBe(firstPanel)

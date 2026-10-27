@@ -58,7 +58,7 @@ describe('canonical repository group hierarchy', () => {
 
     const beforeRejectedWrites = await groups(client)
     const missing = await failure(call(client, 'quirky.repo/groupCreate', { name: 'Missing parent', parent: 'id:grp_missing_parent' }))
-    expect([RpcErrorCode.NotFound, RpcErrorCode.InvalidParams]).toContain(missing.code)
+    expect(missing.code === RpcErrorCode.NotFound || missing.code === RpcErrorCode.InvalidParams).toBe(true)
     const self = await failure(call(client, 'quirky.repo/groupSetParent', { group: root.id, parent: root.id }))
     expect(self.code).toBe(RpcErrorCode.InvalidParams)
     const cycle = await failure(call(client, 'quirky.repo/groupSetParent', { group: root.id, parent: child.id }))
@@ -84,11 +84,11 @@ describe('canonical repository group hierarchy', () => {
     // Seed only persisted corruption; assertions below observe the daemon's public groupList result.
     const db = new Database(join(t.h.home, 'plugin-data', 'quirky.repo', 'store.db'))
     try {
-      db.run('UPDATE groups SET parent_id = ? WHERE id = ?', second.id, first.id)
-      db.run('UPDATE groups SET parent_id = ? WHERE id = ?', third.id, second.id)
-      db.run('UPDATE groups SET parent_id = ? WHERE id = ?', first.id, third.id)
-      db.run('UPDATE groups SET parent_id = ? WHERE id = ?', 'grp_missing_persisted', missing.id)
-      db.run('UPDATE groups SET parent_id = ? WHERE id = ?', self.id, self.id)
+      db.run('UPDATE groups SET parent_id = ? WHERE id = ?', [second.id, first.id])
+      db.run('UPDATE groups SET parent_id = ? WHERE id = ?', [third.id, second.id])
+      db.run('UPDATE groups SET parent_id = ? WHERE id = ?', [first.id, third.id])
+      db.run('UPDATE groups SET parent_id = ? WHERE id = ?', ['grp_missing_persisted', missing.id])
+      db.run('UPDATE groups SET parent_id = ? WHERE id = ?', [self.id, self.id])
     } finally {
       db.close()
     }

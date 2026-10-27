@@ -1,6 +1,6 @@
 # Sidebar extras technical specification
 
-Status: Accepted autonomously after mandatory Codex promote/refute review; confirmed findings incorporated. Logic: [logic.md](logic.md). Complexity: crosses daemon metadata, UI contribution API, presentation plugin and renderer; both specs required by LOOP.md.
+Status: Specs accepted after mandatory Codex promote/refute review; execution blocked at the W1 required-suite gate. Logic: [logic.md](logic.md). W2 is not implemented. See the item decision log for exact verification, blocker and resume procedure.
 
 ## Architecture
 
