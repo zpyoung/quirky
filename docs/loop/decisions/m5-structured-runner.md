@@ -259,5 +259,26 @@ Implementation wave: T1 structured/session/catalog, T2 checks plugin, T3 ask own
 - `bun run test`: exit0;425remote files plus2macOS-only files. Initial remote result423pass/2fail; isolated reruns passed pty-client.test.ts (9tests) and window-projects.test.ts (18tests). Final suite-result ok:true with these two flaky paths. No exclusions or test weakening.
 - Targeted/native proof and Final Round1 outcomes are recorded above. No UI/native scenarios added, and no open accepted review findings.
 
+## D25: Resolve public workspace types directly rather than requiring generated plugin links
+- **Question:** the first queue land passed426remote files,2macOS files and49script tests, then integration typecheck could not resolve the new checks plugin's protocol imports
+- **Options:** edit the protected queue to install dependencies; install during every typecheck; map the public workspace source entries explicitly
+- **Chose:** root tsconfig paths for exactly the two existing public package exports: @quirky/protocol -> packages/protocol/src/index.ts and @quirky/protocol/node -> packages/protocol/src/node/index.ts. No private wildcard mapping, type suppression, runtime fallback or per-plugin special case. Preserve package exports and every consumer import.
+- **Why:** the source graph is present in every worktree, but queue merge verification does not regenerate per-plugin node_modules links. These mappings select the same public modules as package.json and fully typecheck them without installer side effects. Do not modify the integration worktree or protected loop.
+- **Evidence:** failed land output:426remote+2mac files pass without retries,49scripts pass, only3 missing-module TypeScript errors; lanes.ts mergeVerified verify sequence has no install; package exports lines7–8. Isolated fresh worktree with checks/node_modules removed: typecheck exit0, checks16pass, packaged build exit0. Commit3470472; scope audit changed only tsconfig.json.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** protocol public exports change; keep source mappings aligned with them
+- **Source:** assumed — autonomous
+
+## D26: Preserve the final catch-up's regex semantics and browser feasibility block
+- **Question:** failed-land catch-up brought fix-ask-regex-budget-20261027 and sa-browser-agent decision logs
+- **Options:** alter their contracts; preserve them and verify compatibility
+- **Chose:** read both complete logs. Retain sound mandatory-literal prefilter plus original JavaScript regex semantics, unchanged100ms budget and runner retry policy. Browser agent remains blocked before implementation on target binding; no browser code or helper is introduced here. Neither changes creating-plugin ask ownership or the structured/check API.
+- **Why:** these are independent contracts. The regex owner changed only matching predicates; the browser entry records no implementation. The caught-up merge introduced no source conflict. No new final discovery round is needed for the compiler's equivalent public-entry mapping.
+- **Evidence:** fix-ask-regex-budget-20261027 D1–D7; sa-browser-agent D1–D18 and Progress; catch-up integration979b524dd2de7e3204d2fa30e14045ddf83a3f8c
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** locked by docs/loop/decisions/fix-ask-regex-budget-20261027.md
+
 ## Progress
-Verified and ready to land. Final code, specs, public method schemas, generated CLI surface, consumer tests and user docs are complete. All agents/check jobs returned and smoke processes/homes were cleaned. Commit this final evidence, detach and run queue.ts land m5-structured-runner; its integration gate must pass before the queue marks the item done. Then end this iteration without claiming another item.
+Implementation and review are complete; first land passed all runtime/script checks but exposed missing generated workspace links during integration typecheck. The equivalent public-source type mappings are implemented, tested without those links, built, committed and merged. New incoming decisions read and preserved. Commit this repair evidence, detach and retry queue.ts land m5-structured-runner; only its successful integration gate completes the item. No running smoke services or open accepted review findings.
