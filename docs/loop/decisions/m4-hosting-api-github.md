@@ -380,5 +380,27 @@
 - **Revisit if:** a documented source-supported field is still missing from actual rows.
 - **Source:** locked by hosting-api.md
 
+## D35: Return the human-facing URL from REST work items
+- **Question:** which URL should the shared mapper expose when REST supplies both url and html_url?
+- **Options:** prefer the API endpoint; prefer html_url, retaining url for CLI/GraphQL records.
+- **Chose:** prefer nonempty html_url before url and the existing canonical fallback.
+- **Why:** the real REST record's url is an API resource, not the issue page. Shared list/detail/mutation consumers need the same human-facing link as CLI/GraphQL data.
+- **Evidence:** owned-run project smoke returned https://api.github.com/repos/test-owner/test-repo/issues/9 instead of the supplied https://github.com/test-owner/test-repo/issues/9 and failed its assertion; shared mapWorkItem consumers were swept before the change.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** GitHub changes its REST link fields.
+- **Source:** locked by hosting-api.md work-item contract
+
+## D36: Match the async merge envelope and queue request contract
+- **Question:** do the passing fake async responses match the original provider protocol?
+- **Options:** retain top-level id and an unconditional merge_method; use details.uuid and action-specific fields.
+- **Chose:** parse details.uuid, omit merge_method for merge_queue, retain it for direct_merge, and distinguish malformed/terminal poll output from a transport failure.
+- **Why:** the original parser and request builder specify these shapes. A realistic queue fixture refused the current request and the API returned unknown_completion instead of polling to enqueued. An invalid terminal response must not be silently polled until reported pending.
+- **Evidence:** hosting-api.md:277; original github-pr-stack-async-merge.ts:13-18,44-55,82-89,116-141; MergeWireParityScout; parent GH24 realistic pending-queue regression failed before repair.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** GitHub changes the documented async response envelope.
+- **Source:** locked by hosting-api.md
+
 ## Progress
 Step5 catch-up completed. The original115 targeted tests, typecheck and isolated CLI smoke passed; the post-catch-up smoke also passed under owned-run. Before final gates, fix newly confirmed provider-wire and conditional-consent defects with failing-before/passing-after API regressions. Verify GraphQL queries against the authoritative schema rather than trusting synthetic fixtures. Then run required full gates, the one final cross-family review and accepted-finding fix batch, and land.
