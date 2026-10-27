@@ -277,5 +277,16 @@ Reader: autonomous builders and later operator review — Decision: preserve the
 - **Revisit if:** fresh gate or checkpoint reveals an integration defect
 - **Source:** locked by docs/loop/LOOP.md
 
+## D26: Migrate the caught-up window-presence fixture instead of weakening the UI contract
+- **Question:** why the resumed W1 full-suite gate failed and which scope owns the repair
+- **Options:** make activityItems optional at runtime; migrate the incomplete test fixture
+- **Chose:** a sequential scoped wave-gate fixer adds the missing `activityItems: []` to `window-presence.test.ts` and preserves every assertion. No production fallback or test exclusion. The orchestrator audited unchanged HEAD and the single-path diff, then ran the file and typecheck.
+- **Why:** all 427 other remote files passed. Both failures and their automatic isolated rerun reached `model.activityItems.map` with an incomplete test-only UiModel. The existing layout fixture already initializes that required array. The narrow repair passed 18 tests / 40 assertions and typecheck exited 0.
+- **Evidence:** artifact://15; packages/daemon/test/plugins/window-presence.test.ts:32; packages/daemon/test/plugins/layout.test.ts:520; FixWindowFactory scope audit; `bun test packages/daemon/test/plugins/window-presence.test.ts && bun run typecheck`
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** the repaired required full-suite gate fails elsewhere
+- **Source:** assumed — autonomous
+
 ## Progress
 Blocked at LOOP.md step 5, W1 mandatory suite gate; do not land. Both reviewed specs and W1 canonical/public-UI implementation are preserved. W2 presentation plugin and worktree-renderer integration were not started, so the four-feature item is not complete. All agents and finite/background commands have returned; smoke processes and browsers were stopped and temporary homes removed. Required prerequisite: repair fix-ask-regex-budget-20261027 and lane-7 PTY gate, restore this preserved branch to build/m2-sidebar-extras, merge current integration/read new decisions, install links, run the required gate; only then run the W1 three-lens Gemini checkpoint and proceed with W2. The resumable journal/plan/audits are in /tmp/quirky-sidebar-lane5-*; an exact W2 JSON seam draft is /tmp/quirky-sidebar-lane5-w2-api-contract.md and must be incorporated into tech.md before worker dispatch. Inherited .serena/ remains untouched/uncommitted.
