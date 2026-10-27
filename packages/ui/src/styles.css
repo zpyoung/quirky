@@ -2856,6 +2856,8 @@ select {
 
 .scm-ai-hint {
   font-size: 11px;
+}
+
 .notif-page {
   flex: 1;
   min-height: 0;
