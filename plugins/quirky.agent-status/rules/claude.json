@@ -1,0 +1,29 @@
+{
+  "agent": "claude",
+  "description": "Claude Code detection rules. Its hooks report approvals and questions, so these rules read only the title.",
+  "rules": [
+    {
+      "id": "rest-title",
+      "why": "Claude Code prefixes its title with ✳ at rest, but the glyph can stay up while a turn still paints, so the screen must also be quiet.",
+      "state": "idle",
+      "region": "title",
+      "all": [
+        {
+          "regex": "^✳"
+        }
+      ],
+      "quietMs": 1000
+    },
+    {
+      "id": "working-title",
+      "why": "Claude Code animates a braille or quarter-circle spinner frame in its title while a turn runs.",
+      "state": "working",
+      "region": "title",
+      "all": [
+        {
+          "regex": "[⠀-⣿◐-◓]"
+        }
+      ]
+    }
+  ]
+}

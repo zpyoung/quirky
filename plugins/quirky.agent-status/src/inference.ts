@@ -1,3 +1,4 @@
+import { becauseOf } from './apply'
 import { foldLead } from './fold'
 import { readableDetail, STALE_AFTER_MS } from './model'
 import type { AgentRow } from './types'
@@ -52,7 +53,7 @@ export const sameBaseline = (row: AgentRow, baseline: Baseline) =>
   row.prompt === baseline.prompt && row.evidenceAt === baseline.evidenceAt && row.stateStartedAt === baseline.stateStartedAt
 
 /** The row once its lead's turn is cancelled: children keep their work, and the fold decides what shows. */
-export function interrupted(row: AgentRow, at: number): AgentRow {
+export function interrupted(row: AgentRow, at: number, intent: InterruptIntent): AgentRow {
   const next: AgentRow = { ...row, lead: { ...row.lead, state: 'done', stateStartedAt: at } }
   const folded = foldLead('done', next.children, false)
   next.state = folded.state
@@ -65,6 +66,7 @@ export function interrupted(row: AgentRow, at: number): AgentRow {
   delete next.stashedState
   next.source = 'inference'
   next.evidenceAt = at
+  next.because = becauseOf('inference', `${intent === 'ctrl-c' ? 'Ctrl+C' : 'Esc'} settled with no hook → interrupted`, at)
   next.detail = readableDetail(next)
   return next
 }
@@ -87,6 +89,7 @@ export function answered(row: AgentRow, at: number): AgentRow {
   delete next.stashedState
   next.source = 'inference'
   next.evidenceAt = at
+  next.because = becauseOf('inference', `Enter answered the question → ${next.state}`, at)
   next.detail = readableDetail(next)
   return next
 }

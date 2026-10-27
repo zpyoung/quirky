@@ -60,6 +60,18 @@ describe('session list', () => {
     expect(lines[0]).toContain(other.id)
   })
 
+  test('shows the NAME column after ID only when a listed session is named, leaving unnamed cells empty', async () => {
+    const { ctx, lines } = testCliContext(client)
+    const unnamed = await createSession(client, { worktree: 'id:wt_main', agent: 'shell' })
+    const named = await createSession(client, { worktree: 'id:wt_other', agent: 'claude', name: 'reviewer' })
+    await run('list', ctx)
+    const [header, ...rows] = lines[0]!.split('\n')
+    expect(header!.split(/\s+/)).toEqual(['ID', 'NAME', 'AGENT', 'KIND', 'STATUS', 'WORKTREE', 'TITLE'])
+    expect(rows[0]!.split(/\s+/)).toEqual([unnamed.id, 'shell', 'terminal', 'running', 'wt_main', 'Shell'])
+    expect(rows[1]!.split(/\s+/).slice(0, 2)).toEqual([named.id, 'reviewer'])
+    expect(header!.indexOf('AGENT')).toBe(rows[0]!.indexOf('shell'))
+  })
+
   test('--json prints the sessions', async () => {
     const created = await createSession(client, { worktree: 'id:wt_main', agent: 'shell' })
     const { ctx, lines } = testCliContext(client, { json: true })
@@ -274,6 +286,112 @@ describe('session close', () => {
   })
 })
 
+describe('session names', () => {
+  test('SC-32: new --name starts a named session that list and get show, and close takes the name', async () => {
+    const { ctx, lines } = testCliContext(client)
+    await run('new', ctx, [], { agent: 'shell', worktree: 'id:wt_main', name: 'Reviewer' })
+    const [session] = await call<Session[]>(client, 'quirky.session/list')
+    expect(session).toMatchObject({ name: 'reviewer' })
+    expect(lines[0]).toBe(
+      `id: ${session!.id}\nname: reviewer\nagent: shell\nkind: terminal\nstatus: running\nworktree: wt_main\nprompt: none`
+    )
+
+    lines.length = 0
+    await run('list', ctx)
+    expect(lines[0]).toBe(
+      [
+        'ID              NAME      AGENT  KIND      STATUS   WORKTREE  TITLE',
+        `${session!.id}  reviewer  shell  terminal  running  wt_main   Shell`
+      ].join('\n')
+    )
+
+    lines.length = 0
+    await run('get', ctx, ['reviewer'])
+    expect(lines[0]).toContain('name: reviewer')
+
+    lines.length = 0
+    await run('close', ctx, ['reviewer'])
+    expect(lines).toEqual(['closed reviewer'])
+    expect(await call(client, 'quirky.session/list')).toEqual([])
+  })
+
+  test('new --name with a name a running session holds fails and starts nothing', async () => {
+    await createSession(client, { worktree: 'id:wt_main', agent: 'shell', name: 'reviewer' })
+    const { ctx } = testCliContext(client)
+    const error = await failure(run('new', ctx, [], { agent: 'shell', worktree: 'id:wt_main', name: 'reviewer' }))
+    expect(error.message).toContain('reviewer')
+    expect(await call<Session[]>(client, 'quirky.session/list')).toHaveLength(1)
+  })
+
+  test('new --name does not apply to --background', async () => {
+    const { ctx } = testCliContext(client)
+    const error = await failure(run('new', ctx, [], { agent: 'claude', prompt: 'p', background: true, name: 'x' }))
+    expect(error).toMatchObject({ kind: 'usage', message: '--name does not apply to --background' })
+  })
+
+  test('SC-33: name sets the name, prints the updated record, and --clear removes it', async () => {
+    const session = await createSession(client, { worktree: 'id:wt_main', agent: 'shell' })
+    const { ctx, lines } = testCliContext(client)
+    await run('name', ctx, [session.id, 'Builder'])
+    expect(lines[0]).toBe(
+      `id: ${session.id}\nname: builder\nagent: shell\nkind: terminal\nstatus: running\nworktree: wt_main`
+    )
+    expect((await call<Session>(client, 'quirky.session/get', { session: 'builder' })).id).toBe(session.id)
+
+    lines.length = 0
+    await run('name', ctx, ['builder'], { clear: true })
+    expect(lines[0]).toBe(`id: ${session.id}\nagent: shell\nkind: terminal\nstatus: running\nworktree: wt_main`)
+    expect((await call<Session>(client, 'quirky.session/get', { session: session.id })).name).toBeNull()
+  })
+
+  test('name prints the session with --json', async () => {
+    const session = await createSession(client, { worktree: 'id:wt_main', agent: 'shell' })
+    const { ctx, lines } = testCliContext(client, { json: true })
+    await run('name', ctx, [session.id, 'builder'])
+    expect(JSON.parse(lines[0]!)).toMatchObject({ id: session.id, name: 'builder' })
+  })
+
+  test('name needs a session, and exactly one of a name and --clear', async () => {
+    const session = await createSession(client, { worktree: 'id:wt_main', agent: 'shell' })
+    const { ctx } = testCliContext(client)
+    expect(await failure(run('name', ctx))).toMatchObject({ kind: 'usage', message: 'missing <session>' })
+    expect(await failure(run('name', ctx, [session.id]))).toMatchObject({ kind: 'usage' })
+    expect(await failure(run('name', ctx, [session.id, 'x'], { clear: true }))).toMatchObject({ kind: 'usage' })
+    expect((await call<Session>(client, 'quirky.session/get', { session: session.id })).name).toBeNull()
+  })
+
+  test('SC-34: a refused name fails with the rule it broke', async () => {
+    const session = await createSession(client, { worktree: 'id:wt_main', agent: 'shell' })
+    const { ctx } = testCliContext(client)
+    const error = await failure(run('name', ctx, [session.id, 's_reviewer']))
+    expect(error.message).toContain("can't start with 's_'")
+  })
+
+  test('the real CLI names, finds and clears a session by name, and rejects a bad name', async () => {
+    const session = await createSession(client, { worktree: 'id:wt_main', agent: 'shell' })
+    const named = await runCli(['session', 'name', session.id, 'Builder', '--json'], { home: h.home })
+    expect(named.code).toBe(0)
+    expect(JSON.parse(named.stdout)).toMatchObject({ id: session.id, name: 'builder' })
+
+    const found = await runCli(['session', 'get', 'builder', '--json'], { home: h.home })
+    expect(JSON.parse(found.stdout)).toMatchObject({ id: session.id })
+
+    const bad = await runCli(['session', 'name', 'builder', 'has space'], { home: h.home })
+    expect(bad.code).not.toBe(0)
+    expect(bad.stderr).toContain('letters, digits')
+
+    const neither = await runCli(['session', 'name', 'builder'], { home: h.home })
+    expect(neither.code).toBe(2)
+
+    const cleared = await runCli(['session', 'name', 'builder', '--clear', '--json'], { home: h.home })
+    expect(JSON.parse(cleared.stdout)).toMatchObject({ id: session.id, name: null })
+
+    const created = await runCli(['session', 'new', '--agent', 'shell', '--worktree', 'id:wt_main', '--name', 'Fresh', '--json'], { home: h.home })
+    expect(created.code).toBe(0)
+    expect(JSON.parse(created.stdout)).toMatchObject({ name: 'fresh' })
+  })
+})
+
 describe('session restore', () => {
   test('restores a session lost with the host and prints the line', async () => {
     const session = await createSession(client, { worktree: 'id:wt_main', agent: 'shell' })
@@ -322,6 +440,7 @@ describe('the CLI catalog', () => {
       'session close',
       'session get',
       'session list',
+      'session name',
       'session new',
       'session restore',
       'session resume',
@@ -330,7 +449,7 @@ describe('the CLI catalog', () => {
     expect(own.every((c) => c.module?.endsWith('/quirky.session/cli.ts'))).toBe(true)
     expect(own.find((c) => c.words === 'session new')!.methods).toEqual(['quirky.session/create', 'quirky.structured/create'])
     const names = api.methods.map((m) => m.name)
-    for (const name of ['list', 'get', 'create', 'resume', 'setProviderSession', 'register', 'close', 'setStatus', 'restore']) expect(names).toContain(`quirky.session/${name}`)
+    for (const name of ['list', 'get', 'create', 'resume', 'setName', 'setProviderSession', 'register', 'close', 'setStatus', 'restore']) expect(names).toContain(`quirky.session/${name}`)
     expect(own.find((c) => c.words === 'session resume')!.methods).toEqual(['quirky.session/resume'])
     expect(own.find((c) => c.words === 'session set-provider-session')!.methods).toEqual(['quirky.session/setProviderSession'])
     expect(own.find((c) => c.words === 'session new')!.flags.map((f) => f.name).sort()).toEqual([
@@ -341,6 +460,7 @@ describe('the CLI catalog', () => {
       'effort',
       'extra-args',
       'model',
+      'name',
       'option',
       'prompt',
       'wait',

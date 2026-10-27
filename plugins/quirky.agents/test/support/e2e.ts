@@ -1,4 +1,4 @@
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, unlinkSync, writeFileSync } from 'node:fs'
+import { appendFileSync, chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, unlinkSync, writeFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { QuirkyClient } from '@quirky/protocol'
 import { createProcessScope, type ProcessScope } from '../../../../scripts/test-support/process-scope'
@@ -51,6 +51,8 @@ export type E2E = {
   addFake(name: string, behavior?: FakeBehavior | true): void
   removeFake(name: string): void
   fakeLog(name: string): FakeEvent[]
+  /** Makes the running fake `name` write `text` to its terminal, as if the agent had printed it. */
+  print(name: string, text: string): void
   /** Resolves with the log once `predicate` holds for it; rejects after `timeoutMs`. */
   waitForFakeLog(name: string, predicate: (events: FakeEvent[]) => boolean, timeoutMs: number): Promise<FakeEvent[]>
   call(method: string, params?: Record<string, unknown>): Promise<unknown>
@@ -155,12 +157,14 @@ export async function startAgentsE2E(options: StartOptions = {}): Promise<E2E> {
       writeFileSync(path, `#!${process.execPath}\nimport ${JSON.stringify(FAKE_AGENT)}\n`)
       chmodSync(path, 0o755)
       rmSync(logPath(name), { force: true })
+      rmSync(`${path}.outbox`, { force: true })
       if (behavior === true) rmSync(`${path}.json`, { force: true })
       else writeFileSync(`${path}.json`, JSON.stringify(behavior))
     }
     const removeFake = (name: string) => {
       unlinkSync(join(fakebin, name))
       rmSync(join(fakebin, `${name}.json`), { force: true })
+      rmSync(join(fakebin, `${name}.outbox`), { force: true })
     }
     const fakeLog = (name: string): FakeEvent[] => {
       const path = logPath(name)
@@ -222,6 +226,7 @@ export async function startAgentsE2E(options: StartOptions = {}): Promise<E2E> {
       addFake,
       removeFake,
       fakeLog,
+      print: (name, text) => appendFileSync(`${join(fakebin, name)}.outbox`, text),
       async waitForFakeLog(name, predicate, timeoutMs) {
         return waitUntil(() => {
           const events = fakeLog(name)

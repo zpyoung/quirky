@@ -28,6 +28,7 @@ const session: Session = {
   },
   resumedFrom: 's_old',
   agentStatus: null,
+  name: null,
   unread: null
 }
 
@@ -41,6 +42,38 @@ const summary: AgentStatusSummary = {
   evidenceAt: 6,
   restoredUnconfirmed: false
 }
+
+describe('session store migration 7', () => {
+  test('a row written before it reads with a null name', () => {
+    const store = memoryStore(6)
+    store.run(
+      "INSERT INTO sessions (id, kind, agent, worktree_id, cwd, title, status, created_at, last_activity_at, exit_code, repo_id) VALUES ('s_old', 'terminal', 'claude', 'wt', '/work', 'Claude', 'running', 1, 1, NULL, 'repo')"
+    )
+    migrateStore(store, 6)
+    expect(new SessionRecords(store).get('s_old')?.name).toBeNull()
+  })
+
+  test('the name round-trips through insert and update, and null clears it', () => {
+    const records = new SessionRecords(memoryStore())
+    records.insert({ ...session, name: 'builder' }, 'repo')
+    expect(records.get('s_new')?.name).toBe('builder')
+
+    records.update('s_new', { status: 'working' })
+    expect(records.get('s_new')?.name).toBe('builder')
+
+    expect(records.update('s_new', { name: 'reviewer' })?.name).toBe('reviewer')
+    expect(records.update('s_new', { name: null })?.name).toBeNull()
+  })
+
+  test('byName finds every record holding the name, in any status', () => {
+    const records = new SessionRecords(memoryStore())
+    records.insert({ ...session, id: 's_a', createdAt: 1, status: 'exited', name: 'reviewer' }, 'repo')
+    records.insert({ ...session, id: 's_b', createdAt: 2, name: 'reviewer' }, 'repo')
+    records.insert({ ...session, id: 's_c', createdAt: 3, name: 'other' }, 'repo')
+    expect(records.byName('reviewer').map((s) => s.id)).toEqual(['s_a', 's_b'])
+    expect(records.byName('nobody')).toEqual([])
+  })
+})
 
 describe('session store migration 5', () => {
   test('a row written before it reads with a null agent status', () => {
@@ -125,6 +158,7 @@ describe('session store migration 2', () => {
       launchSettings: null,
       resumedFrom: null,
       agentStatus: null,
+      name: null,
       unread: null
     })
     expect(records.update('s_old', { status: 'exited', exitCode: 0 })).toMatchObject({ status: 'exited', launch: null })
@@ -142,7 +176,7 @@ describe('session store migration 2', () => {
 
   test('a session recorded without the new fields stores them as null', () => {
     const records = new SessionRecords(memoryStore())
-    const { launch, providerSession, promptDelivery, launchSettings, resumedFrom, agentStatus, ...bare } = session
+    const { launch, providerSession, promptDelivery, launchSettings, resumedFrom, agentStatus, name, ...bare } = session
     records.insert(bare, 'repo')
     expect(records.get('s_new')).toMatchObject({
       launch: null,
