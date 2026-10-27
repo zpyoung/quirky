@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, test } from 'bun:test'
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { discover, macosOnly, runFiles, runSuite } from './suite'
@@ -67,6 +67,50 @@ test('runFiles with more failing files than the limit fails without a rerun', as
   flaky('a.test.ts')
   flaky('b.test.ts')
   expect(await runFiles(dir, ['pkg/a.test.ts', 'pkg/b.test.ts'], [], 2, 1)).toEqual({ ok: false, flaky: [] })
+})
+
+test('actual bun test processes get isolated homes and clean them up', async () => {
+  const report = join(dir, 'home.json')
+  const parentHome = process.env.HOME ?? null
+  const parentQuirkyHome = process.env.QUIRKY_HOME ?? null
+  write('home.test.ts', `import { Database } from 'bun:sqlite'
+test('has an isolated home', () => {
+  const home = process.env.HOME
+  const quirkyHome = process.env.QUIRKY_HOME
+  expect(home).toBeTruthy()
+  expect(quirkyHome).toBeTruthy()
+  expect(home).not.toBe(${JSON.stringify(parentHome)})
+  expect(quirkyHome).not.toBe(${JSON.stringify(parentQuirkyHome)})
+  expect(home).not.toBe(quirkyHome)
+  expect(existsSync(home!)).toBe(true)
+  expect(existsSync(quirkyHome!)).toBe(true)
+  const db = new Database(quirkyHome! + '/quirky.db', { readonly: true })
+  try {
+    const setting = db.query('SELECT value FROM setting_values WHERE id = ?').get('setting:quirky.agent-status/hooks') as { value: string } | null
+    expect(setting && JSON.parse(setting.value)).toBe(false)
+  } finally {
+    db.close()
+  }
+  writeFileSync(${JSON.stringify(report)}, JSON.stringify({ home, quirkyHome }))
+})`)
+
+  expect(await runSuite(dir, ['pkg'])).toEqual({ ok: true, flaky: [] })
+  const first = JSON.parse(readFileSync(report, 'utf8')) as { home: string; quirkyHome: string }
+  expect(first.home).not.toBe(parentHome)
+  expect(first.quirkyHome).not.toBe(parentQuirkyHome)
+  expect(existsSync(first.home)).toBe(false)
+  expect(existsSync(first.quirkyHome)).toBe(false)
+  expect(process.env.HOME ?? null).toBe(parentHome)
+  expect(process.env.QUIRKY_HOME ?? null).toBe(parentQuirkyHome)
+
+  expect(await runFiles(dir, ['pkg/home.test.ts'], [], 1)).toEqual({ ok: true, flaky: [] })
+  const second = JSON.parse(readFileSync(report, 'utf8')) as { home: string; quirkyHome: string }
+  expect(second.home).not.toBe(first.home)
+  expect(second.quirkyHome).not.toBe(first.quirkyHome)
+  expect(existsSync(second.home)).toBe(false)
+  expect(existsSync(second.quirkyHome)).toBe(false)
+  expect(process.env.HOME ?? null).toBe(parentHome)
+  expect(process.env.QUIRKY_HOME ?? null).toBe(parentQuirkyHome)
 })
 
 test('discover lists the tracked and untracked test files under the given paths, as bun would', () => {

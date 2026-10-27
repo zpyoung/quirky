@@ -273,6 +273,65 @@ describe('editor core through the daemon API', () => {
     expect(reopened?.path).toBe(join(t.root, 'README.md'))
     expect(readFileSync(join(t.root, 'README.md'), 'utf8')).toBe('# before\n')
   })
+  test('keeps a dirty edit guarded when its terminal tab is marked replaceable', async () => {
+    const t = await boot()
+    await write(t, 'guard.ts', 'before\n')
+    const edit = await open(t, 'guard.ts', { mode: 'source' })
+    const dirty = await t.call<EditorBuffer>('quirky.editor/draft', {
+      bufferId: edit.id,
+      content: 'after\n',
+      expectedRevision: edit.contentRevision
+    })
+    await t.call('quirky.terminal/rekeyViewTabs', {
+      workspace: `id:${t.worktreeId}`,
+      viewId: 'view:quirky.editor/document',
+      changes: [{ tab: edit.openedTabId, key: dirty.id, input: { bufferId: dirty.id, mode: 'source' }, preview: true }]
+    })
+    const refreshed = await open(t, 'guard.ts', { mode: 'source', preview: true })
+    expect(refreshed.openedTabId).toBe(edit.openedTabId)
+
+    expect(await t.call<boolean>('quirky.editor/canClose', { bufferId: dirty.id, tabId: edit.openedTabId })).toBe(false)
+    expect(await t.call<{ closed: boolean; needsDecision?: boolean }>('quirky.editor/close', {
+      bufferId: dirty.id,
+      tabId: edit.openedTabId
+    })).toMatchObject({ closed: false, needsDecision: true })
+    expect((await state(t)).tabs).toHaveLength(1)
+  })
+
+  test('retains an API-created dirty draft after closing its only rendered Markdown preview', async () => {
+    const t = await boot()
+    await write(t, 'README.md', '# before\n')
+    const preview = await open(t, 'README.md', { mode: 'preview' })
+    const dirty = await t.call<EditorBuffer>('quirky.editor/draft', {
+      bufferId: preview.id,
+      content: '# API draft\n',
+      expectedRevision: preview.contentRevision
+    })
+
+    expect((await t.call<{ closed: boolean }>('quirky.editor/close', {
+      bufferId: dirty.id,
+      tabId: preview.openedTabId
+    })).closed).toBe(true)
+    let retained = (await state(t)).buffers.find((buffer) => buffer.id === dirty.id)
+    expect(retained?.dirty).toBe(true)
+    expect(await readText(t, dirty.id, 'draft', retained!.contentRevision, retained!.draftLength!)).toBe('# API draft\n')
+
+    const edit = await open(t, 'README.md', { mode: 'source' })
+    expect(edit.id).toBe(dirty.id)
+    expect(await t.call<boolean>('quirky.editor/canClose', { bufferId: dirty.id, tabId: edit.openedTabId })).toBe(false)
+    expect(await t.call<{ closed: boolean; needsDecision?: boolean }>('quirky.editor/close', {
+      bufferId: dirty.id,
+      tabId: edit.openedTabId
+    })).toMatchObject({ closed: false, needsDecision: true })
+    expect((await t.call<{ closed: boolean }>('quirky.editor/close', {
+      bufferId: dirty.id,
+      tabId: edit.openedTabId,
+      choice: 'discard'
+    })).closed).toBe(true)
+    retained = (await state(t)).buffers.find((buffer) => buffer.id === dirty.id)
+    expect(retained).toBeUndefined()
+  })
+
 
   test('SC-4: dirty drafts and autosave holds survive daemon restart; autosave never clears a newer draft snapshot', async () => {
     const t = await boot()

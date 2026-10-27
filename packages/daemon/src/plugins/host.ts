@@ -131,7 +131,7 @@ export class PluginHost {
   private activationOrder: string[] = []
   /** Why each disabled plugin is off, as of the last recompute. */
   private disabledSets = { user: new Set<string>(), distro: new Set<string>(), safeMode: new Set<string>() }
-  /** Plugins whose directory is being swapped; they can't activate until the rescan that follows. */
+  /** Plugins being replaced or released; activation stays blocked for that lifecycle transition. */
   private readonly replacing = new Set<string>()
   /**
    * Bumped when a plugin is released. Bun caches a module by its path, helpers included, so an
@@ -650,14 +650,24 @@ export class PluginHost {
         }
       }
     }
-    await Promise.allSettled([...released].map((id) => this.runtimes.get(id)?.inflight))
-    for (const id of [...this.activationOrder].reverse()) {
-      if (released.has(id)) await this.deactivate(id)
-    }
+    const addedToReplacing: string[] = []
     for (const id of released) {
-      this.runtimes.delete(id)
-      this.generations.set(id, (this.generations.get(id) ?? 0) + 1)
-      this.removeLink(id)
+      if (this.replacing.has(id)) continue
+      this.replacing.add(id)
+      addedToReplacing.push(id)
+    }
+    try {
+      await Promise.allSettled([...released].map((id) => this.runtimes.get(id)?.inflight))
+      for (const id of [...this.activationOrder].reverse()) {
+        if (released.has(id)) await this.deactivate(id)
+      }
+      for (const id of released) {
+        this.runtimes.delete(id)
+        this.generations.set(id, (this.generations.get(id) ?? 0) + 1)
+        this.removeLink(id)
+      }
+    } finally {
+      for (const id of addedToReplacing) this.replacing.delete(id)
     }
   }
 

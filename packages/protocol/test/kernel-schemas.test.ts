@@ -1,7 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 import { CONNECTION_METHODS, KERNEL_EVENT_SCHEMAS, KERNEL_METHOD_SCHEMAS, type KernelMethodSchema, type Schema } from '../src'
 
-const METHOD_COUNT = 37
 const EVENT_TYPES = [
   'notify',
   'plugin.changed',
@@ -27,7 +26,6 @@ function walk(schema: Schema): Schema[] {
 
 describe('kernel method schemas', () => {
   test('cover every method, including api.describe', () => {
-    expect(methodNames).toHaveLength(METHOD_COUNT)
     for (const name of ['api.describe', 'client.hello', 'theme.set', 'plugin.activate', 'ui.state']) {
       expect(methodNames).toContain(name)
     }

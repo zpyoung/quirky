@@ -22,6 +22,7 @@ type EditorBuffer = {
   dirty: boolean
   draft: string | null
 }
+type OpenedEditorBuffer = EditorBuffer & { openedTabId: string }
 
 type EditorState = { buffers: EditorBuffer[]; tabs: { tabId: string; bufferId: string; mode: 'edit' | 'preview'; group?: string }[] }
 type ViewOpenResult = { workspace: Workspace; tab: string }
@@ -41,11 +42,6 @@ const isView = (tab: Tab): tab is ViewTab => 'kind' in tab && tab.kind === 'view
 const viewOf = (workspace: Workspace, tabId: string): ViewTab => {
   const tab = tabsOf(workspace).find((candidate) => candidate.id === tabId)
   if (!tab || !isView(tab)) throw new Error(`expected view tab ${tabId}`)
-  return tab
-}
-const findView = (workspace: Workspace, bufferId: string, mode?: 'edit' | 'preview'): ViewTab => {
-  const tab = tabsOf(workspace).find((candidate) => isView(candidate) && candidate.input?.bufferId === bufferId && (mode === undefined || (candidate.input?.mode ?? 'edit') === mode))
-  if (!tab || !isView(tab)) throw new Error(`expected view tab for buffer ${bufferId}`)
   return tab
 }
 const terminalTabs = (workspace: Workspace): TerminalTab[] => tabsOf(workspace).filter(isTerminalTab)
@@ -85,7 +81,7 @@ const editor = <T = any>(method: string, params: Record<string, unknown> = {}, c
 const layoutOf = (c = client) => terminal<{ workspace: Workspace }>('workspace', { workspace: worktreeSelector }, c).then((result) => result.workspace)
 const errorOf = async (promise: Promise<unknown>) => (await promise.then(() => null, (error: unknown) => error)) as (Error & { code?: number }) | null
 const openBuffer = (path: string, options: { preview?: boolean; mode?: 'source' | 'rich' | 'preview' } = {}) =>
-  editor<EditorBuffer>('open', { worktree: worktreeSelector, path, focus: false, ...options })
+  editor<OpenedEditorBuffer>('open', { worktree: worktreeSelector, path, focus: false, ...options })
 const draftBuffer = (buffer: EditorBuffer, content = '# dirty\n') =>
   editor<EditorBuffer>('draft', { bufferId: buffer.id, content, expectedRevision: buffer.contentRevision })
 const sessionList = (c = client) => call<Session[]>(c, 'quirky.session/list', {})
@@ -100,8 +96,8 @@ async function openView(params: OpenViewParams): Promise<ViewOpenResult> {
   })
 }
 
-async function workspaceTabForBuffer(buffer: EditorBuffer): Promise<ViewTab> {
-  return findView(await layoutOf(), buffer.id)
+async function workspaceTabForBuffer(buffer: OpenedEditorBuffer): Promise<ViewTab> {
+  return viewOf(await layoutOf(), buffer.openedTabId)
 }
 
 describe('hosted editor view tabs', () => {
@@ -114,11 +110,10 @@ describe('hosted editor view tabs', () => {
 
     const buffer = await openBuffer('a.md', { preview: true })
     const before = await layoutOf()
-    const view = findView(before, buffer.id)
+    const view = viewOf(before, buffer.openedTabId)
     expect(view).toMatchObject({
       kind: 'view',
       viewId: EDITOR_VIEW,
-      key: buffer.id,
       input: { bufferId: buffer.id },
       closeCommand: EDITOR_CLOSE_COMMAND,
       closeMethod: EDITOR_CAN_CLOSE,
@@ -154,11 +149,11 @@ describe('hosted editor view tabs', () => {
     const group = groupsOf(terminalWorkspace)[0]!
     const firstBuffer = await openBuffer('a.md', { preview: true })
     let workspace = await layoutOf()
-    const first = findView(workspace, firstBuffer.id)
+    const first = viewOf(workspace, firstBuffer.openedTabId)
 
     const reused = await openView({ key: firstBuffer.id, title: firstBuffer.name, input: { bufferId: firstBuffer.id }, group: group.id, preview: true })
     expect(reused.tab).toBe(first.id)
-    expect(tabsOf(reused.workspace).filter((tab) => isView(tab) && tab.viewId === EDITOR_VIEW && tab.key === firstBuffer.id)).toHaveLength(1)
+    expect(tabsOf(reused.workspace).filter((tab) => isView(tab) && tab.viewId === EDITOR_VIEW && tab.input?.bufferId === firstBuffer.id)).toHaveLength(1)
 
     const replacement = await openView({
       key: 'browse-b',
@@ -213,7 +208,7 @@ describe('hosted editor view tabs', () => {
     expect(tabsOf(await layoutOf())).toEqual([])
   })
 
-  test('dirty editor views refuse close, bulk close, preview replacement and group removal atomically', async () => {
+  test('dirty editor views refuse close, bulk close and group removal atomically while shared previews remain replaceable', async () => {
     const terminalWorkspace = (await terminal<{ workspace: Workspace }>('newTab', { workspace: worktreeSelector })).workspace
     const anchor = terminalTabs(terminalWorkspace)[0]!
     const anchorGroup = groupsOf(terminalWorkspace)[0]!
@@ -245,16 +240,23 @@ describe('hosted editor view tabs', () => {
     expect(await errorOf(terminal('closeGroup', { group: dirtyGroup.id }))).not.toBeNull()
     expect(await layoutOf()).toEqual(beforeGroupClose)
 
-    await terminal('rekeyViewTabs', {
-      workspace: worktreeSelector,
-      viewId: EDITOR_VIEW,
-      changes: [{ tab: firstView.id, key: firstView.key, input: firstView.input as Record<string, unknown>, preview: true }]
+    const preview = await openBuffer('a.md', { mode: 'preview', preview: true })
+    expect(preview.id).toBe(first.id)
+    const previewTab = viewOf(await layoutOf(), preview.openedTabId)
+    expect(previewTab.preview).toBe(true)
+
+    const replaced = await openView({
+      key: 'replacement',
+      title: 'replacement.md',
+      input: { bufferId: 'replacement-buffer' },
+      replace: previewTab.id,
+      preview: true
     })
-    workspace = await layoutOf()
-    const beforeReplacement = workspace
-    expect(await errorOf(openView({ key: 'replacement', title: 'replacement.md', input: { bufferId: 'replacement-buffer' }, replace: firstView.id, preview: true }))).not.toBeNull()
-    expect(await layoutOf()).toEqual(beforeReplacement)
-    expect(viewOf(await layoutOf(), firstView.id)).toMatchObject({ key: firstView.key, preview: true })
+    expect(replaced.tab).toBe(previewTab.id)
+    expect(viewOf(replaced.workspace, previewTab.id)).toMatchObject({ key: 'replacement', input: { bufferId: 'replacement-buffer' }, preview: true })
+    expect(tabsOf(replaced.workspace).some((tab) => tab.id === firstView.id)).toBe(true)
+    const state = await editor<EditorState>('state', { bufferId: first.id, worktree: worktreeSelector })
+    expect(state.buffers).toMatchObject([expect.objectContaining({ id: first.id, dirty: true, draft: '# dirty\n' })])
   })
 
   test('closing a shared Markdown preview does not close its edit tab or discard its dirty buffer', async () => {
@@ -263,9 +265,9 @@ describe('hosted editor view tabs', () => {
     const preview = await openBuffer('a.md', { mode: 'preview' })
     expect(preview.id).toBe(edit.id)
     const workspace = await layoutOf()
-    const previewTab = findView(workspace, edit.id, 'preview')
-    const editTab = findView(workspace, edit.id, 'edit')
-    expect(previewTab.key).toBe(`preview:${edit.id}`)
+    const previewTab = viewOf(workspace, preview.openedTabId)
+    const editTab = viewOf(workspace, edit.openedTabId)
+    expect(previewTab.id).not.toBe(editTab.id)
 
     const closed = (await terminal<{ workspace: Workspace }>('closeTab', { tab: previewTab.id, yes: true })).workspace
     expect(tabsOf(closed).some((tab) => tab.id === previewTab.id)).toBe(false)

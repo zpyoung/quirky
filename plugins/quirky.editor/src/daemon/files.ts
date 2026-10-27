@@ -1,5 +1,5 @@
 import { constants } from 'node:fs'
-import { lstat, open, realpath, stat, type FileHandle } from 'node:fs/promises'
+import { copyFile, cp, link, lstat, open, realpath, rename, rm, stat, unlink, type FileHandle } from 'node:fs/promises'
 import { extname } from 'node:path'
 import { createHash } from 'node:crypto'
 import type { EditorKind } from '../types'
@@ -190,4 +190,30 @@ export async function statRegular(path: string): Promise<Awaited<ReturnType<type
 
 function noFollowFlag(): number {
   return constants.O_NOFOLLOW ?? 0
+}
+export async function movePathWithoutOverwrite(source: string, destination: string): Promise<void> {
+  const info = await lstat(source)
+  if (info.isFile() && !info.isSymbolicLink()) {
+    try {
+      await link(source, destination)
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException | null)?.code === 'EEXIST') throw error
+      await copyFile(source, destination, constants.COPYFILE_EXCL)
+    }
+    await unlink(source)
+    return
+  }
+  try {
+    await rename(source, destination)
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException | null)?.code !== 'EXDEV') throw error
+    await cp(source, destination, {
+      recursive: true,
+      force: false,
+      errorOnExist: true,
+      dereference: false,
+      verbatimSymlinks: true
+    })
+    await rm(source, { recursive: true, force: false })
+  }
 }

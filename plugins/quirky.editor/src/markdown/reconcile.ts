@@ -27,7 +27,22 @@ export function reconcileSerializedMarkdown({
   if (Math.max(originalSource.length, baseCanonical.length, edited.length) > RECONCILE_MAX_CODE_UNITS) return null
 
   const eol = detectDominantEol(originalSource)
-  const base = restoreEol(toLf(baseCanonical), eol)
+  const originalLf = toLf(originalSource)
+  const baseLf = toLf(baseCanonical)
+  const sourceContent = stripTrailingNewlines(originalLf)
+  if (
+    sourceContent === stripTrailingNewlines(baseLf) &&
+    restoreEol(originalLf, eol) === originalSource
+  ) {
+    const sourceSuffix = originalLf.slice(sourceContent.length)
+    const candidate = restoreEol(`${stripTrailingNewlines(toLf(edited))}${sourceSuffix}`, eol)
+    const roundTripped = roundTrip(candidate)
+    if (roundTripped !== null && normalizeForSafety(roundTripped) === normalizeForSafety(edited)) {
+      return { text: candidate, preserved: true }
+    }
+  }
+
+  const base = restoreEol(baseLf, eol)
   const replacement = restoreEol(toLf(edited), eol)
   if (hasRepeatedHalfMatchSeed(base, replacement)) return null
 

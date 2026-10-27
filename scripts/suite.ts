@@ -17,6 +17,7 @@
 import { appendFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { homedir, tmpdir } from 'node:os'
 import { isAbsolute, join } from 'node:path'
+import { Store } from '../packages/daemon/src/store'
 
 export type SuiteResult = { ok: boolean; flaky: string[] }
 type Remote = { host: string; jobs?: number; slots?: number }
@@ -38,13 +39,39 @@ async function tee(stream: ReadableStream<Uint8Array>, out: NodeJS.WriteStream |
   }
 }
 
-async function exec(cmd: string[], cwd: string, echo = true, stdin?: string): Promise<{ code: number; output: string }> {
-  const child = Bun.spawn(cmd, { cwd, stdin: stdin === undefined ? 'ignore' : new Blob([stdin]), stdout: 'pipe', stderr: 'pipe' })
+async function exec(
+  cmd: string[],
+  cwd: string,
+  echo = true,
+  stdin?: string,
+  env: NodeJS.ProcessEnv = process.env
+): Promise<{ code: number; output: string }> {
+  const child = Bun.spawn(cmd, { cwd, env, stdin: stdin === undefined ? 'ignore' : new Blob([stdin]), stdout: 'pipe', stderr: 'pipe' })
   const [out, err] = await Promise.all([tee(child.stdout, echo ? process.stdout : null), tee(child.stderr, echo ? process.stderr : null)])
   return { code: await child.exited, output: out + err }
 }
 
-const bunTest = (cwd: string, args: string[], echo = true) => exec(['bun', 'test', ...args], cwd, echo)
+async function withTestHome<T>(run: (env: NodeJS.ProcessEnv) => Promise<T>): Promise<T> {
+  const scratch = mkdtempSync(join(tmpdir(), 'suite-home-'))
+  try {
+    const home = join(scratch, 'home')
+    const quirkyHome = join(scratch, 'quirky')
+    mkdirSync(home)
+    mkdirSync(quirkyHome)
+    const store = new Store(join(quirkyHome, 'quirky.db'))
+    try {
+      store.setSettingValue('setting:quirky.agent-status/hooks', false)
+    } finally {
+      store.close()
+    }
+    return await run({ ...process.env, HOME: home, QUIRKY_HOME: quirkyHome })
+  } finally {
+    rmSync(scratch, { recursive: true, force: true })
+  }
+}
+
+const bunTest = (cwd: string, args: string[], echo = true) =>
+  withTestHome((env) => exec(['bun', 'test', ...args], cwd, echo, undefined, env))
 const asPath = (file: string) => (isAbsolute(file) ? file : `./${file}`)
 
 /** Files with a failing test in a junit report, and how many tests failed in all. */
@@ -136,7 +163,7 @@ function slotted(slots: number): Run {
       const start = Math.floor(Math.random() * slots)
       for (let i = 0; i < slots; i++) {
         const lock = join(dir, `${(start + i) % slots}.lock`)
-        const result = await exec(['flock', '-n', '-E', String(BUSY), lock, 'bun', 'test', ...args], cwd, false)
+        const result = await withTestHome((env) => exec(['flock', '-n', '-E', String(BUSY), lock, 'bun', 'test', ...args], cwd, false, undefined, env))
         if (result.code !== BUSY) return result
       }
       await Bun.sleep(500)

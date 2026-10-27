@@ -264,7 +264,18 @@
 - **Revisit if:** a scope audit finds an unowned change
 - **Source:** supersedes m2-editor D18
 
+## D25: Prioritize blocking core flows and land under the operator deadline
+- **Question:** Which remaining work gates this landing after the operator's latest user decision?
+- **Options:** finish the original exhaustive acceptance plan first; land without checks; fix core-flow blockers, record remaining findings and queue a dependent completion item
+- **Chose:** fix only blocking findings, verify the affected package suites plus scripts tests and typecheck, run core browser smoke, catch up with build/roadmap once and land. The land operation runs the whole suite. Before landing, add a dependent follow-up naming every unfinished flow and its reason; append open findings to BLOCKERS.md. Do not duplicate the operator-owned SC-9 open-in-place item.
+- **Why:** the user explicitly prioritized landing this item within the next hour so the build can land by 4am, and authorized unfinished flows to move to a named follow-up.
+- **Evidence:** latest operator note in this conversation; schema/command integration checkpoint f684af5; integrated typecheck passes; runtime suites identify concrete blockers now assigned to four disjoint owners
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** a core data-safety flow cannot pass its affected tests
+- **Source:** user ruling 2026-10-27 (via operator)
+
 ## Progress
-Step 5: all six component snapshots and five audited compiler repairs are committed on build/m2-editor; combined typecheck passes. Resource/geometry API, CLI and browser smoke are verified; 98 primitive terminal tests pass. The first combined core run has 22 registration failures caused by unsupported manifest schemas (D23), not a passing runtime claim. Two isolated repair owners are adapting the manifest/guards and completing official API/CLI/window commands, focus lifetime and Finder-import routing. Next: integrate those audited deltas, run every acceptance and UI scenario, catch up with build/roadmap and read incoming decisions, perform the cross-family final review/fix batch, and land. Do not run queue block or add a follow-up over SC-9.
+Step 5/6: all implementation, declared commands, schema compatibility and consumer acceptance cases are checkpointed on build/m2-editor through f684af5. Integrated typecheck passes. Resource/geometry API/CLI/web proof and guarded editor save pass. Runtime acceptance exposed preview replacement/disposal, Markdown mapping, notebook schema/interpreter and CSV parser blockers; four isolated owners are fixing only these. Next under D25: integrate those fixes, run affected suites/scripts/typecheck and core web smoke, record open findings and exact unfinished flows in a dependent queue item, catch up once, commit and land. Do not run a separate whole suite before land.
 
 Last SC-9 point: Finder drops import copies under D19, including in-worktree sources. Native SC-9 stays pending for the nightly run. Open-in-place is owned by the operator's `m4-editor-drop-open-in-place`, not an m2-editor blocker.

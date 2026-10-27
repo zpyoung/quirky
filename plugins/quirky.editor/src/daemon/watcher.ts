@@ -26,7 +26,7 @@ export class EditorWatcher {
     try {
       const watcher = watch(root, { recursive: true }, (_event, filename) => {
         if (this.disposed) return
-        if (filename === null) {
+        if (filename === null || filename === undefined) {
           this.callbacks.change(worktreeId, null)
           return
         }

@@ -254,8 +254,8 @@ test('explorer, quick open and contents search return scriptable results for a w
     worktree: worktree.id,
     action: 'list'
   })
-  expect(tree.entries.some((entry) => entry.path === 'README.md')).toBe(true)
-  expect(tree.entries.some((entry) => entry.path === 'src' && entry.isDirectory)).toBe(true)
+  expect(tree.entries.some((entry) => entry.path === join(worktree.path, 'README.md'))).toBe(true)
+  expect(tree.entries.some((entry) => entry.path === join(worktree.path, 'src') && entry.isDirectory)).toBe(true)
 
   const quick = await call<{ results: { path: string; name: string }[] }>(client, 'quirky.editor/quickOpen', {
     worktree: worktree.id,

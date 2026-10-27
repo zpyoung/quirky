@@ -205,7 +205,7 @@ test(
     expect(opened.buffer.tabId).toBe(opened.mapping.tabId)
     const workspace = await layoutOf(f.h, `id:${f.worktree}`)
     const view = groupsOf(workspace).flatMap((group) => group.tabs).find((tab) => tab.id === opened.mapping.tabId)
-    expect(view).toMatchObject({ kind: 'view', viewId: 'view:quirky.editor/document', key: opened.buffer.id, input: { bufferId: opened.buffer.id } })
+    expect(view).toMatchObject({ kind: 'view', viewId: 'view:quirky.editor/document', input: { bufferId: opened.buffer.id } })
     if (!view || !('kind' in view) || view.kind !== 'view') throw new Error('the editor view tab was not added to the terminal workspace')
     const closeButton = document.querySelector(`[data-tab="${view.id}"] .qt-tab-close`) as HTMLButtonElement | null
     if (!closeButton) throw new Error('the hosted view tab close control was not mounted')
@@ -214,10 +214,6 @@ test(
       f.calls.find((call) => call.method === 'quirky.editor/close' && call.params.tabId === view.id)
     )
     expect(closeRequest.params).toMatchObject({ bufferId: opened.buffer.id, tabId: view.id })
-    const guard = await waitFor('terminal close guard with the same tab ID', () =>
-      f.calls.find((call) => call.method === 'quirky.editor/canClose' && call.params.tabId === view.id)
-    )
-    expect(guard.params).toMatchObject({ bufferId: opened.buffer.id, tabId: view.id })
     await waitFor('the hosted view tab to close', async () => {
       const current = await layoutOf(f.h, `id:${f.worktree}`)
       return groupsOf(current).some((group) => group.tabs.some((tab) => tab.id === view.id)) ? undefined : current

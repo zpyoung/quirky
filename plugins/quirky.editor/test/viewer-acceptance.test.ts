@@ -3,7 +3,7 @@ import { Buffer } from 'node:buffer'
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { RpcErrorCode, type QuirkyClient } from '@quirky/protocol'
-import { builtinsDir, makeHomeWithoutAutoHooks, startHarness, waitFor, waitForAsync, type Harness } from '../../../packages/daemon/test/helpers'
+import { builtinsDir, makeHomeWithoutAutoHooks, startHarness, waitFor, type Harness } from '../../../packages/daemon/test/helpers'
 
 setDefaultTimeout(120_000)
 
@@ -28,6 +28,11 @@ function record(value: unknown, label = 'API result'): ApiRecord {
 function records(value: unknown, label = 'API result list'): ApiRecord[] {
   if (!Array.isArray(value)) throw new Error(`${label} must be an array`)
   return value.map((entry, index) => record(entry, `${label}[${index}]`))
+}
+function stateBuffer(state: ApiRecord, bufferId: string): ApiRecord {
+  const buffer = records(state.buffers, 'editor buffers').find((entry) => entry.id === bufferId)
+  if (buffer === undefined) throw new Error(`Editor state did not include buffer ${bufferId}.`)
+  return buffer
 }
 
 function requiredString(value: ApiRecord, key: string): string {
@@ -365,14 +370,25 @@ describe('viewer and notebook API acceptance', () => {
     expect(safeResponse.status).toBe(200)
     expect([...new Uint8Array(await safeResponse.arrayBuffer())]).toEqual([...safeBytes])
 
+    const priorState = record(await world.call('state', { bufferId: recover.bufferId }), 'editor state')
+    const priorBuffer = stateBuffer(priorState, recover.bufferId)
+    expect(priorBuffer).toMatchObject({ readOnly: true, external: null })
+    expect(priorBuffer).not.toHaveProperty('content')
     const correctedBytes = safeBytes
     writeFileSync(join(world.root, 'recover.png'), correctedBytes)
-    await waitForAsync(async () => {
-      const state = record(await world.call('state', { bufferId: recover.bufferId }), 'editor state')
-      return records(state.buffers, 'editor buffers')[0]!.external === 'changed'
-    }, 10_000)
-    await world.call('view', { bufferId: recover.bufferId, action: 'reload' })
+    const revealed = record(await world.call('view', { bufferId: recover.bufferId, action: 'reveal' }), 'revealed image buffer')
+    expect(revealed.id).toBe(recover.bufferId)
+    expect(revealed.external).toBe(null)
+    expect(Number(revealed.contentRevision)).toBeGreaterThan(Number(priorBuffer.contentRevision))
+    const reloaded = record(await world.call('view', { bufferId: recover.bufferId, action: 'reload' }), 'reloaded image buffer')
+    expect(reloaded.id).toBe(recover.bufferId)
+    expect(reloaded.external).toBe(null)
 
+    const recoveredState = record(await world.call('state', { bufferId: recover.bufferId }), 'editor state')
+    const recoveredBuffer = stateBuffer(recoveredState, recover.bufferId)
+    expect(recoveredBuffer).toMatchObject({ readOnly: true, external: null })
+    expect(recoveredBuffer).not.toHaveProperty('content')
+    expect(recoveredBuffer).not.toHaveProperty('diskContent')
     const recovered = record(await viewer(world, recover.bufferId, 'metadata'), 'recovered image metadata')
     expect(recovered).toMatchObject({ width: 1, height: 1, bytes: correctedBytes.byteLength, previewable: true })
     const recoveredResource = record(await viewer(world, recover.bufferId, 'media'), 'recovered image resource')

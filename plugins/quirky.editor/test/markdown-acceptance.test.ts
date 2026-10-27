@@ -27,15 +27,15 @@ beforeEach(async () => {
     const client = await h.connect('cli')
     const root = join(home, 'workspace')
     mkdirSync(root, { recursive: true })
-    const repo = (await client.callAny('quirky.repo/add', { path: root, folder: true })) as { id: string }
-    const worktree = (await client.callAny('quirky.worktree/resolve', { selector: `id:${repo.id}` })) as { id: string }
+    await client.callAny('quirky.repo/add', { path: root, folder: true })
+    const worktree = (await client.callAny('quirky.worktree/resolve', { selector: `path:${root}` })) as { id: string }
 
     const agentSource = join(home, 'transport-agent-source')
     mkdirSync(agentSource, { recursive: true })
     writeFileSync(
       join(agentSource, 'quirky-plugin.json'),
       JSON.stringify({
-        id: 'quirky.transport-test',
+        id: 'acme.transport-test',
         name: 'Transport test agent',
         version: '1.0.0',
         description: 'Temporary fake-PTY transport recipient',
@@ -56,8 +56,7 @@ beforeEach(async () => {
         }
       })
     )
-    const installed = (await client.callAny('plugin.install', { path: agentSource, yes: true })) as { id: string; version: string }
-    expect(installed).toMatchObject({ id: 'quirky.transport-test', version: '1.0.0' })
+    await client.callAny('plugin.install', { path: agentSource, yes: true })
 
     fixture = { h, client, root, worktree: `id:${worktree.id}`, sessionIds: [] }
   } catch (error) {

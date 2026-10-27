@@ -1,5 +1,5 @@
 import { constants } from 'node:fs'
-import { copyFile, cp, lstat, mkdir, open as openFile, readFile, readdir, realpath, rename, rm, rmdir, stat, symlink, unlink, writeFile } from 'node:fs/promises'
+import { copyFile, lstat, mkdir, open as openFile, readFile, readdir, realpath, rename, rm, rmdir, stat, symlink, unlink, writeFile } from 'node:fs/promises'
 import { basename, dirname, extname, join, relative, resolve as resolvePath, sep } from 'node:path'
 import { homedir } from 'node:os'
 import { randomUUID } from 'node:crypto'
@@ -26,7 +26,7 @@ import { WorktreePaths, type ResolvedWorktree } from './paths'
 import { ContentsSearch } from './search'
 import { ExplorerService } from './explorer'
 import { FileInventory, normalizeRipgrepPath, parseQuickOpenTarget, QUICK_OPEN_MAX_ENTRIES, QUICK_OPEN_MAX_RESULTS, QUICK_OPEN_QUERY_MAX_BYTES } from './inventory'
-import { MAX_READ_BYTES, MAX_TEXT_FILE_BYTES, guardedWrite, hashText, readByteRange, readSnapshot, type FileSnapshot } from './files'
+import { MAX_READ_BYTES, MAX_TEXT_FILE_BYTES, guardedWrite, hashText, movePathWithoutOverwrite, readByteRange, readSnapshot, type FileSnapshot } from './files'
 import { KeyedQueue } from './queue'
 
 export const EDITOR_DOCUMENT_VIEW = 'view:quirky.editor/document'
@@ -48,8 +48,8 @@ const MAX_ACTIVE_TRANSFERS = 4
 const MAX_STAGED_TRANSFER_BYTES = 100 * 1024 * 1024
 const TRANSFER_IDLE_MS = 5 * 60 * 1000
 const VIEW_KEYS = new Set([
-'selection', 'cursorLine', 'cursorColumn', 'scrollTop', 'scrollLeft', 'scroll', 'zoom', 'scale', 'page', 'position',
-'wordWrap', 'showWhitespace', 'tocVisible', 'frontmatterVisible', 'collapsedFiles', 'search', 'find', 'sort', 'filter', 'mode',
+'selection', 'cursor', 'cursorLine', 'cursorColumn', 'scrollTop', 'scrollLeft', 'scroll', 'zoom', 'scale', 'page', 'position',
+'wordWrap', 'showWhitespace', 'tocVisible', 'markdownTocVisible', 'frontmatterVisible', 'collapsedFiles', 'search', 'find', 'sort', 'filter', 'mode',
 'delimiter', 'viewer', 'focused', 'line', 'column', 'markdownAnchor', 'markdownFrontmatterVisible', 'matchLength'
 ])
 
@@ -559,9 +559,9 @@ export class EditorDaemon {
       mapping = this.tabs.get(tabId)
     }
     if (mapping === undefined || mapping.bufferId !== params.bufferId) return { closed: true }
-    const preview = mapping.mode === 'preview' || mapping.inputMode === 'preview'
+    const renderedPreview = mapping.mode === 'preview'
     const remainingEditTabs = this.editTabsForBuffer(params.bufferId).filter((tab) => tab.tabId !== tabId)
-    const lastEdit = !preview && remainingEditTabs.length === 0
+    const lastEdit = !renderedPreview && remainingEditTabs.length === 0
     const dirty = state.buffer.dirty && lastEdit
     if (dirty && params.choice === undefined) {
       this.closeRequests.set(tabId, { bufferId: params.bufferId, tabId, dirty: true })
@@ -585,16 +585,16 @@ export class EditorDaemon {
     const closed = await this.closeTerminalTab(state.buffer.worktreeId, tabId)
     if (!closed) return { closed: false }
     this.closeRequests.delete(tabId)
-    if (!preview && mapping.inputMode !== 'preview' && !state.buffer.untitled) {
+    if (!renderedPreview && !state.buffer.untitled) {
       this.recentlyClosed.unshift({ worktreeId: state.buffer.worktreeId, path: state.buffer.relativePath, mode: state.buffer.mode, closedAt: Date.now() })
       while (this.recentlyClosed.length > RECENTLY_CLOSED_LIMIT) this.recentlyClosed.pop()
     }
-    if (!preview && lastEdit) {
+    if (!renderedPreview && lastEdit) {
       await this.quiesce(state)
       for (const listener of this.closeListeners) listener(params.bufferId)
     }
     const remaining = [...this.tabs.values()].some((tab) => tab.bufferId === params.bufferId)
-    if (!remaining) this.removeBuffer(params.bufferId)
+    if (!remaining && !state.buffer.dirty) this.removeBuffer(params.bufferId)
     else {
       const current = this.buffers.get(params.bufferId)
       if (current !== undefined) {
@@ -614,7 +614,7 @@ export class EditorDaemon {
     if (tabId === undefined) return !state.buffer.dirty
     const mapping = this.tabs.get(tabId)
     if (mapping === undefined || mapping.bufferId !== params.bufferId) return false
-    if (mapping.mode === 'preview' || mapping.inputMode === 'preview') return true
+    if (mapping.mode === 'preview') return true
     const otherEditTabs = this.editTabsForBuffer(params.bufferId).filter((tab) => tab.tabId !== tabId)
     return otherEditTabs.length > 0 || !state.buffer.dirty
   }
@@ -1143,6 +1143,24 @@ export class EditorDaemon {
         throw this.context.error('invalid-params', `${field} must be a positive integer`)
       }
     }
+
+    const cursor = patch.cursor
+    if (cursor !== undefined) {
+      if (cursor === null || typeof cursor !== 'object' || Array.isArray(cursor)) {
+        throw this.context.error('invalid-params', 'cursor must be an object')
+      }
+      const cursorValue = cursor as Record<string, unknown>
+      const invalidCursorField = Object.keys(cursorValue).find((field) => field !== 'line' && field !== 'column')
+      if (invalidCursorField !== undefined) {
+        throw this.context.error('invalid-params', `cursor.${invalidCursorField} is not allowed`)
+      }
+      for (const field of ['line', 'column'] as const) {
+        const position = cursorValue[field]
+        if (typeof position !== 'number' || !Number.isSafeInteger(position) || position < 1) {
+          throw this.context.error('invalid-params', `cursor.${field} must be a positive integer`)
+        }
+      }
+    }
     const matchLength = patch.matchLength
     if (matchLength !== undefined && (typeof matchLength !== 'number' || !Number.isSafeInteger(matchLength) || matchLength < 0 || matchLength > MAX_TEXT_FILE_BYTES)) {
       throw this.context.error('invalid-params', `matchLength must be a bounded non-negative integer no greater than ${MAX_TEXT_FILE_BYTES}`)
@@ -1150,6 +1168,11 @@ export class EditorDaemon {
     const markdownFrontmatterVisible = patch.markdownFrontmatterVisible
     if (markdownFrontmatterVisible !== undefined && typeof markdownFrontmatterVisible !== 'boolean') {
       throw this.context.error('invalid-params', 'markdownFrontmatterVisible must be a boolean')
+    }
+
+    const markdownTocVisible = patch.markdownTocVisible
+    if (markdownTocVisible !== undefined && typeof markdownTocVisible !== 'boolean') {
+      throw this.context.error('invalid-params', 'markdownTocVisible must be a boolean')
     }
     const presentation: Record<string, unknown> = { ...patch }
     delete presentation.mode
@@ -1478,7 +1501,7 @@ export class EditorDaemon {
             worktreeId,
             bufferId,
             key: typeof tab.key === 'string' ? tab.key : '',
-            mode: preview || inputMode === 'preview' ? 'preview' : 'edit',
+            mode: inputMode === 'preview' ? 'preview' : 'edit',
             inputMode,
             ...(groupId === undefined ? {} : { group: groupId }),
             preview,
@@ -1802,13 +1825,7 @@ export class EditorDaemon {
     let destination = join(trash, name)
     let suffix = 1
     while (await this.exists(destination)) destination = join(trash, `${name} ${suffix++}`)
-    try {
-      await rename(source, destination)
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException | null)?.code !== 'EXDEV') throw error
-      await cp(source, destination, { recursive: true, force: false, errorOnExist: true, dereference: false, verbatimSymlinks: true })
-      await rm(source, { recursive: true, force: false })
-    }
+    await movePathWithoutOverwrite(source, destination)
     return destination
   }
 
@@ -1941,7 +1958,7 @@ export class EditorDaemon {
       const snapshot = await this.tryReadSnapshot(operation.trashedPath)
       if (snapshot === null || snapshot.hash !== operation.hash) throw this.context.error('conflict', 'Cannot undo delete because the trashed file changed or is missing.')
       await mkdir(dirname(destination.path), { recursive: true })
-      await rename(operation.trashedPath, destination.path)
+      await movePathWithoutOverwrite(operation.trashedPath, destination.path)
       return operation
     }
     const snapshot = await this.tryReadSnapshot(destination.path)

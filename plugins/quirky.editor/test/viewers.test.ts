@@ -3,7 +3,7 @@ import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { Buffer } from 'node:buffer'
 import { join } from 'node:path'
 import type { QuirkyClient } from '@quirky/protocol'
-import { builtinsDir, makeHomeWithoutAutoHooks, startHarness, waitForAsync, type Harness } from '../../../packages/daemon/test/helpers'
+import { builtinsDir, makeHomeWithoutAutoHooks, startHarness, type Harness } from '../../../packages/daemon/test/helpers'
 
 setDefaultTimeout(60_000)
 
@@ -29,6 +29,11 @@ function record(value: unknown, label = 'API result'): ApiRecord {
 function records(value: unknown, label = 'API result list'): ApiRecord[] {
   if (!Array.isArray(value)) throw new Error(`${label} must be an array`)
   return value.map((entry, index) => record(entry, `${label}[${index}]`))
+}
+function stateBuffer(state: ApiRecord, bufferId: string): ApiRecord {
+  const buffer = records(state.buffers, 'editor buffers').find((entry) => entry.id === bufferId)
+  if (buffer === undefined) throw new Error(`Editor state did not include buffer ${bufferId}.`)
+  return buffer
 }
 
 function requiredString(value: ApiRecord, key: string): string {
@@ -175,7 +180,7 @@ describe('viewer API behavior', () => {
       ['Zoë', 'plain', '1']
     ])
     await world.call('view', { bufferId, action: 'update', patch: { mode: 'source' } })
-    expect(records(record(await world.call('state', { bufferId }), 'editor state').buffers, 'editor buffers')[0]!.mode).toBe('source')
+    expect(stateBuffer(record(await world.call('state', { bufferId }), 'editor state'), bufferId).mode).toBe('source')
     await world.call('view', { bufferId, action: 'update', patch: { mode: 'rich' } })
 
 
@@ -208,12 +213,12 @@ describe('viewer API behavior', () => {
     const world = await start({ 'limit.csv': source })
     const { bufferId } = await world.open('limit.csv')
     const before = record(await world.call('state', { bufferId }), 'editor state')
-    expect(records(before.buffers, 'editor buffers')[0]!.dirty).toBe(false)
+    expect(stateBuffer(before, bufferId).dirty).toBe(false)
 
     const refused = await failure(viewer(world, bufferId, 'edit', { row: 1, column: 0, value: 'b'.repeat(1_048_573) }))
     expect(refused.message).toMatch(/1 MiB/i)
     const after = record(await world.call('state', { bufferId }), 'editor state')
-    expect(records(after.buffers, 'editor buffers')[0]!.dirty).toBe(false)
+    expect(stateBuffer(after, bufferId).dirty).toBe(false)
   })
 
   test('SC-19: a >=1 MiB CSV pages bounded quoted records without loading file content into the editor buffer', async () => {
@@ -235,7 +240,7 @@ describe('viewer API behavior', () => {
     expect(page.readOnly).toBe(true)
     expect(await failure(viewer(world, bufferId, 'edit', { row: 1, column: 0, value: 'no draft' }))).toMatchObject({ code: expect.any(Number) })
     const state = record(await world.call('state', { bufferId }), 'editor state')
-    expect(records(state.buffers, 'editor buffers')[0]!.dirty).toBe(false)
+    expect(stateBuffer(state, bufferId).dirty).toBe(false)
   })
 
   test('SC-19: oversized records and too many columns fail visibly rather than being truncated or looping', async () => {
@@ -249,20 +254,33 @@ describe('viewer API behavior', () => {
     expect((await failure(viewer(world, columnBuffer.bufferId, 'page', { page: 0 }))).message).toMatch(/4096|column/i)
   })
 
-  test('SC-19: changed large CSV requires core reload, then pages the new bytes', async () => {
-    const world = await start({ 'changed.csv': `h\n${Array.from({ length: 30_000 }, (_, index) => `${index},old`).join('\n')}\n` })
+  test('SC-19: changed read-only CSV refresh and reload pages the new bytes', async () => {
+    const originalSource = `h\n${Array.from({ length: 120_000 }, (_, index) => `${index},old`).join('\n')}\n`
+    const world = await start({ 'changed.csv': originalSource })
     const { bufferId } = await world.open('changed.csv')
+    const initialState = record(await world.call('state', { bufferId }), 'editor state')
+    const initialBuffer = stateBuffer(initialState, bufferId)
+    expect(initialBuffer).toMatchObject({ readOnly: true, dirty: false })
+    expect(initialBuffer).not.toHaveProperty('content')
     const originalPage = record(await viewer(world, bufferId, 'page', { page: 0 }))
     expect(originalPage.changedOnDisk).toBe(false)
 
-    writeFileSync(join(world.root, 'changed.csv'), `h\n${Array.from({ length: 30_000 }, (_, index) => `${index},new`).join('\n')}\n`)
-    await waitForAsync(async () => {
-      const state = record(await world.call('state', { bufferId }), 'editor state')
-      return records(state.buffers, 'editor buffers')[0]!.external === 'changed'
-    }, 10_000)
-    const stalePage = record(await viewer(world, bufferId, 'page', { page: 0 }))
-    expect(stalePage.changedOnDisk).toBe(true)
-    await world.call('view', { bufferId, action: 'reload' })
+    const changedSource = `h\n${Array.from({ length: 120_000 }, (_, index) => `${index},new`).join('\n')}\n`
+    writeFileSync(join(world.root, 'changed.csv'), changedSource)
+    const revealed = record(await world.call('view', { bufferId, action: 'reveal' }), 'revealed editor buffer')
+    expect(revealed.id).toBe(bufferId)
+    expect(revealed.external).toBe(null)
+    expect(Number(revealed.contentRevision)).toBeGreaterThan(Number(initialBuffer.contentRevision))
+
+    const reloaded = record(await world.call('view', { bufferId, action: 'reload' }), 'reloaded editor buffer')
+    expect(reloaded.id).toBe(bufferId)
+    expect(reloaded.external).toBe(null)
+    const refreshedState = record(await world.call('state', { bufferId }), 'editor state')
+    const refreshedBuffer = stateBuffer(refreshedState, bufferId)
+    expect(refreshedBuffer).toMatchObject({ readOnly: true, dirty: false, external: null })
+    expect(refreshedBuffer).not.toHaveProperty('content')
+    expect(refreshedBuffer).not.toHaveProperty('diskContent')
+
     const refreshed = record(await viewer(world, bufferId, 'page', { page: 0 }))
     expect(refreshed.changedOnDisk).toBe(false)
     expect(records(refreshed.rows, 'reloaded CSV rows')[1]!.cells).toEqual(['0', 'new'])
@@ -285,7 +303,7 @@ describe('viewer API behavior', () => {
     await viewer(world, safe.bufferId, 'zoom', { scale: 8 })
     await viewer(world, safe.bufferId, 'position', { page: 1, offset: 120 })
     const state = record(await world.call('state', { bufferId: safe.bufferId }), 'editor state')
-    const buffer = records(state.buffers, 'editor buffers')[0]!
+    const buffer = stateBuffer(state, safe.bufferId)
     expect(buffer.view).toMatchObject({ viewer: { zoom: 8, page: 1, offset: 120 } })
 
     const unsafe = await world.open('unsafe.png')
@@ -322,7 +340,7 @@ describe('viewer API behavior', () => {
     await viewer(world, pdfBuffer.bufferId, 'position', { page: 2, offset: 240 })
     await viewer(world, pdfBuffer.bufferId, 'find', { query: 'Catalog' })
     const pdfState = record(await world.call('state', { bufferId: pdfBuffer.bufferId }), 'editor state')
-    expect(records(pdfState.buffers, 'editor buffers')[0]!.view).toMatchObject({ viewer: { zoom: 5, page: 2, offset: 240, query: 'Catalog' } })
+    expect(stateBuffer(pdfState, pdfBuffer.bufferId).view).toMatchObject({ viewer: { zoom: 5, page: 2, offset: 240, query: 'Catalog' } })
 
     const mermaid = await world.open('flow.mmd')
     const diagram = record(await viewer(world, mermaid.bufferId, 'metadata'))

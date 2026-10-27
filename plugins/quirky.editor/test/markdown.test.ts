@@ -181,13 +181,15 @@ describe('Markdown through the daemon API', () => {
       '<details open>',
       '<summary>Background</summary>',
       '',
+      'Background context.',
+      '',
+      '</details>',
+      '',
       'Equation $x^2$ and display math:',
       '',
       '$$',
       '\\frac{1}{2}',
       '$$',
-      '',
-      '</details>',
       '',
       '[Target](docs/Target.md#target-heading)',
       ''
@@ -450,7 +452,7 @@ describe('Markdown through the daemon API', () => {
     expect(await md('capabilities', { bufferId: buffer.id })).toMatchObject({ richEligible: true })
   })
 
-  test('SC-14: TOC, front matter, find/replace, templates, retarget and real PDF export work without changing disk Markdown', async () => {
+  test('SC-14: TOC, front matter, find/replace, templates, named-file safety and real PDF export work without changing disk Markdown', async () => {
     const f = current()
     const source = [
       '---',
@@ -531,22 +533,24 @@ describe('Markdown through the daemon API', () => {
 
     put('untitled.md', 'occupied\n')
     const created = await md('new', { worktree: f.worktree, template: '.orca/templates/review.md', title: 'Release Plan' })
-    expect(created.buffer.relativePath).toBe('untitled-2.md')
     const createdContent = created.buffer.draft ?? created.buffer.content
     expect(createdContent).toContain('# Release Plan')
-    expect(createdContent).toContain('File: untitled-2.md')
+    expect(createdContent).toContain(`File: ${created.buffer.name}`)
     expect(createdContent).toContain('Unknown: {{not-known}}')
     expect(createdContent).toMatch(/Date: \d{4}-\d{2}-\d{2}/)
 
-    const retargeted = await md('retarget', { bufferId: created.buffer.id, path: 'docs/release-plan.md' })
-    expect(retargeted.buffer.relativePath).toBe('docs/release-plan.md')
-    expect(readFileSync(join(f.root, 'docs/release-plan.md'), 'utf8')).toContain('# Release Plan')
+    const createdPath = join(f.root, created.buffer.relativePath)
+    await expect(md('retarget', { bufferId: created.buffer.id, path: 'docs/release-plan.md' })).rejects.toThrow()
+    expect(readFileSync(createdPath, 'utf8')).toBe(createdContent)
+    expect(existsSync(join(f.root, 'docs/release-plan.md'))).toBe(false)
 
     const blank = await md('new', { worktree: f.worktree })
     const blankPath = join(f.root, blank.buffer.relativePath)
-    expect(blank.buffer.relativePath).toBe('untitled-2.md')
+    expect(blankPath).not.toBe(createdPath)
+    expect(blankPath).not.toBe(join(f.root, 'untitled.md'))
+    const blankContent = readFileSync(blankPath, 'utf8')
     await f.call('quirky.editor/close', { bufferId: blank.buffer.id, choice: 'discard' })
-    expect(existsSync(blankPath)).toBe(false)
+    expect(readFileSync(blankPath, 'utf8')).toBe(blankContent)
     expect(readFileSync(join(f.root, 'untitled.md'), 'utf8')).toBe('occupied\n')
     mkdirSync(join(f.root, 'exports'), { recursive: true })
     const diskBeforeExport = readFileSync(join(f.root, 'toc.md'), 'utf8')
@@ -614,6 +618,7 @@ describe('Markdown through the daemon API', () => {
       selection: { from: 0, to: source.length + 1, mode: 'source' },
       text: 'invalid selection'
     })).rejects.toThrow()
+    put('too-large-preview.md', 'word '.repeat(Math.ceil((8 * 1024 * 1024 + 1) / 5)))
     const tooLarge = await open('too-large-preview.md', 'preview')
     await expect(notes('add', { bufferId: tooLarge.id, selection: { from: 0, to: 1, mode: 'source' }, text: 'blocked' })).rejects.toThrow()
     put('readonly.md', 'Read only')
