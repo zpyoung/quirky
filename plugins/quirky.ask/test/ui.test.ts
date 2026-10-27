@@ -331,9 +331,9 @@ describe('the Questions panel module', () => {
     await activated(fake)
     const { element } = await mount(fake)
 
-    const legend = element.querySelector('legend') as HTMLElement
-    expect(legend.textContent).toBe(listing)
-    expect(legend.style.whiteSpace).toBe('pre-wrap')
+    const text = element.querySelector('legend [data-question-text]') as HTMLElement
+    expect(text.textContent).toBe(listing)
+    expect(text.style.whiteSpace).toBe('pre-wrap')
   })
 
   test('SC-6: free text on a select is a note beside a pick, or the answer itself', async () => {
@@ -555,14 +555,20 @@ describe('the Questions panel module', () => {
     expect(replicas.textContent).toContain('(optional)')
 
     const ship = fieldsetOf(element, 'ship')
-    expect(ship.querySelector('strong')?.textContent).toBe('Ship')
-    expect(ship.querySelector('legend')?.textContent).toBe('Ship date?')
+    const shipLegend = ship.querySelector('legend') as HTMLElement
+    expect([...shipLegend.children].map((child) => child.textContent)).toEqual(['Ship', 'Ship date?'])
+    expect(shipLegend.children[0]?.tagName).toBe('STRONG')
+    expect(shipLegend.textContent).toBe('ShipShip date?')
     expect((ship.querySelector('input') as HTMLInputElement).type).toBe('date')
 
     expect([...fieldsetOf(element, 'go').querySelectorAll('button')].map((b) => b.textContent)).toEqual(['Yes', 'No'])
 
+    const unpressedStyle = buttonIn(env, 'Prod').getAttribute('style')
     await click(buttonIn(env, 'Prod'))
     expect(buttonIn(env, 'Prod').getAttribute('aria-pressed')).toBe('true')
+    expect(buttonIn(env, 'Prod').getAttribute('style')).not.toBe(unpressedStyle)
+    expect(buttonIn(env, 'Prod').style.background).toContain('var(--accent)')
+    expect(buttonIn(env, 'Dev').style.background).not.toContain('var(--accent)')
     await click(buttonIn(env, 'Dev'))
     expect(buttonIn(env, 'Prod').getAttribute('aria-pressed')).toBe('false')
     await click(buttonIn(env, 'Dev'))

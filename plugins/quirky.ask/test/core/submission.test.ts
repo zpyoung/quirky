@@ -185,6 +185,13 @@ describe('buildSubmission messages', () => {
     expect(message(pattern, { text: 'abc' })).toBeUndefined()
   })
 
+  test('text over 200 characters is refused when a pattern applies, as the daemon does', () => {
+    const pattern: AskQuestion = { id: 'q', type: 'text', question: 'Q', pattern: '^a+$' }
+    expect(message(pattern, { text: 'a'.repeat(200) })).toBeUndefined()
+    expect(message(pattern, { text: 'a'.repeat(201) })).toBe("Doesn't match the expected format.")
+    expect(message({ id: 'q', type: 'text', question: 'Q' }, { text: 'a'.repeat(201) })).toBeUndefined()
+  })
+
   test('an unparseable pattern never blocks a submit', () => {
     expect(message({ id: 'q', type: 'text', question: 'Q', pattern: '(' }, { text: 'abc' })).toBeUndefined()
   })
