@@ -144,7 +144,7 @@ export async function createWorkspace(
         context.toast('Could not create worktree', messageOf(error))
         return null
       }
-      const data = (error as { data?: { repo?: unknown; script?: unknown; changed?: unknown } }).data ?? {}
+      const data = (error as { data?: { repo?: unknown; script?: unknown; changed?: unknown; ref?: unknown } }).data ?? {}
       const choice = await hooks.askTrust({
         repoId: typeof data.repo === 'string' ? data.repo : String(fields.repo),
         script: typeof data.script === 'string' ? data.script : '',
@@ -155,7 +155,7 @@ export async function createWorkspace(
       else if (choice === 'skip') attempt = { ...fields, setup: 'skip' }
       else {
         try {
-          await context.call('quirky.repo/trustHooks', { repo: String(fields.repo), kind: 'setup' })
+          await context.call('quirky.repo/trustHooks', { repo: String(fields.repo), kind: 'setup', ...(typeof data.ref === 'string' ? { ref: data.ref } : {}) })
         } catch (trustError) {
           context.toast('Could not trust setup', messageOf(trustError))
           return null

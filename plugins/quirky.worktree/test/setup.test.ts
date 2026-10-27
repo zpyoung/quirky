@@ -223,6 +223,25 @@ describe('SC-32: the hooks gate reads the file at the branch that is checked out
   })
 })
 
+describe('SC-32: trusting from the error covers the commit the create read', () => {
+  test('hooks-untrusted names the ref, and trusting at that ref lets the same create through', async () => {
+    const { dir } = await startApi('none', { files: { 'a.txt': 'one\n' } })
+    git(dir, 'checkout', '-q', '-b', 'topic')
+    commitFiles(dir, { 'quirky.yaml': 'scripts:\n  setup: touch topic.txt\n' })
+    git(dir, 'checkout', '-q', 'main')
+
+    const refused = await failure(create({ branch: 'topic', setup: 'run' }))
+    expect(refused.data).toMatchObject({ reason: 'hooks-untrusted' })
+    const ref = (refused.data as { ref: string }).ref
+    expect(ref).toBeTruthy()
+    expect(refused.message).toContain(`--ref ${ref}`)
+
+    await call(w!.client, 'quirky.repo/trustHooks', { repo: 'api', kind: 'setup', ref })
+    const made = await create({ branch: 'topic', setup: 'run' })
+    expect(made.setup).toMatchObject({ ran: 'daemon', exitCode: 0 })
+  })
+})
+
 describe('setup in a folder workspace', () => {
   test('a folder project with a local setup script runs it in a Setup terminal at the folder', async () => {
     w = await startWorld('real')

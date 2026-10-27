@@ -1,5 +1,5 @@
 import { gitApi } from '@quirky/git'
-import type { ProjectSettings, RepoDetails } from '@quirky/protocol'
+import type { ProjectSettings, Repo, RepoDetails } from '@quirky/protocol'
 import type { Env } from './env'
 import { effectiveHooks, hashScript, readHooksFile, sharedScripts, type TrustedHashes } from './hooks'
 import { settingsFromJson, settingsToJson, toRepo, type HookKind, type RepoRow } from './store'
@@ -42,20 +42,22 @@ export async function details(env: Env, selector: string, ref = DEFAULT_REF): Pr
 export const show = (env: Env, params: { repo: string }): Promise<RepoDetails> => details(env, params.repo)
 
 /**
- * The hooks of a project as read at `ref`. A `ref` that starts with `-` or names no commit is
- * refused before git sees it, so it can never be read as a git option.
+ * The commit a caller-supplied `ref` names, or undefined for none. A `ref` that starts with `-` or
+ * names no commit is refused before git sees it, so it can never be read as a git option.
  */
+async function checkedRef(env: Env, repo: Repo, ref: string | undefined): Promise<string | undefined> {
+  if (ref === undefined) return undefined
+  if (ref.startsWith('-')) throw env.fail('invalid-params', `invalid ref ${ref}`, { reason: 'invalid-ref', ref })
+  if (repo.kind !== 'git') return ref
+  const commit = await gitApi().resolveCommit(repo.path, ref)
+  if (commit === null) throw env.fail('invalid-params', `unknown ref ${ref}`, { reason: 'unknown-ref', ref })
+  return commit
+}
+
+/** The hooks of a project as read at `ref` (default `HEAD`). */
 export async function hooks(env: Env, params: { repo: string; ref?: string }) {
   const repo = env.resolve(params.repo)
-  let ref = params.ref
-  if (ref !== undefined) {
-    if (ref.startsWith('-')) throw env.fail('invalid-params', `invalid ref ${ref}`, { reason: 'invalid-ref', ref })
-    if (repo.kind === 'git') {
-      const commit = await gitApi().resolveCommit(repo.path, ref)
-      if (commit === null) throw env.fail('invalid-params', `unknown ref ${ref}`, { reason: 'unknown-ref', ref })
-      ref = commit
-    }
-  }
+  const ref = await checkedRef(env, repo, params.ref)
   return (await details(env, repo.id, ref)).hooks
 }
 
@@ -79,10 +81,11 @@ export async function set(env: Env, params: SetParams): Promise<RepoDetails> {
   return details(env, repo.id)
 }
 
-/** Approves the shared scripts now at `HEAD`, so setup and archive may run them. */
-export async function trustHooks(env: Env, params: { repo: string; kind?: 'setup' | 'archive' | 'all' }): Promise<RepoDetails> {
+/** Approves the shared scripts now at `ref` (default `HEAD`), so setup and archive may run them. */
+export async function trustHooks(env: Env, params: { repo: string; kind?: 'setup' | 'archive' | 'all'; ref?: string }): Promise<RepoDetails> {
   const repo = env.resolve(params.repo)
-  const scripts = sharedScripts(repo.kind === 'git' ? await readHooksFile(repo.path, DEFAULT_REF) : null)
+  const ref = (await checkedRef(env, repo, params.ref)) ?? DEFAULT_REF
+  const scripts = sharedScripts(repo.kind === 'git' ? await readHooksFile(repo.path, ref) : null)
   const kinds: HookKind[] = params.kind === 'setup' || params.kind === 'archive' ? [params.kind] : ['setup', 'archive']
   env.store.transaction(() => {
     for (const kind of kinds) {

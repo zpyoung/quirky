@@ -137,7 +137,7 @@ error with `data.reason` set:
 | reason | kind | data |
 |---|---|---|
 | `setup-decision-required` | conflict | `{ repo }` |
-| `hooks-untrusted` | conflict | `{ repo, kind: 'setup'\|'archive', source, script, hash, changed: boolean }` |
+| `hooks-untrusted` | conflict | `{ repo, kind: 'setup'\|'archive', source, script, hash, changed: boolean, ref? }` (`ref`: the commit a create read the script at; absent for archive) |
 | `no-base` | conflict | `{}` |
 | `base-unreachable` | conflict | `{ ref, remote }` |
 | `no-commits` | conflict | `{ repo }` |
@@ -187,8 +187,8 @@ All take a repo selector `repo` where named. `readOnly` methods are marked (R).
   an empty string clears a string field; enums are validated by schema.
 - `hooks({ repo, ref? }) → EffectiveHooks` (R): the hooks file read at `ref` (default: the repo's
   `HEAD`), merged with local scripts by the command-source policy, with trust per script.
-- `trustHooks({ repo, kind? = 'all' }) → RepoDetails`: stores the current shared scripts' hashes
-  (read at `HEAD`).
+- `trustHooks({ repo, kind? = 'all', ref? }) → RepoDetails`: stores the current shared scripts' hashes
+  as read at `ref` (default `HEAD`), validated like `hooks`' `ref`.
 - `groupList() → ProjectGroup[]` (R); `groupCreate({ name, parentPath? })`; `groupRename({ group, name })`;
   `groupDelete({ group }) → { ok }`; `groupAdd({ group, repo })`; `groupRemove({ group, repo })`;
   `groupCollapse({ group, collapsed? = true })`. Group selectors are an ID or an exact name;
@@ -498,7 +498,7 @@ Back-link: [SC-14](logic.md#create), [SC-40](logic.md#metadata), [SC-61](logic.m
   `create <name> [--location P]`, `scan <path> [--max-depth N] [--max-repos N]`,
   `import <path> [--group N] [--max-depth N] [--max-repos N]`, `show <repo>`,
   `set <repo> [--display-name] [--default-base] [--worktree-location] [--setup-policy ask|run-by-default|skip-by-default] [--agent-startup start-immediately|wait-for-setup] [--command-source shared-only|local-only|run-both] [--setup-script] [--archive-script]`,
-  `trust-hooks <repo> [--kind setup|archive|all]`,
+  `trust-hooks <repo> [--kind setup|archive|all] [--ref <ref>]`,
   `group list|create <name> [--parent-path P]|rename <group> <name>|delete <group>|add <group> <repo>|remove <group> <repo>|collapse <group> [--expand]`
   (cli-command `words` such as `"group create"`).
 
@@ -534,7 +534,7 @@ Back-link: [SC-3](logic.md#projects), [SC-25](logic.md#create)–[SC-28](logic.m
   `openView(SESSION_VIEW, { worktree })`, else toast "Created <name>"; show `baseFallback` in a
   "Workspace created from a local base" dialog with Got it. A `hooks-untrusted` error opens the
   trust dialog; Run hooks retries with `trustSetup: true`, Always trust calls `quirky.repo/trustHooks`
-  then retries, Don't run retries with `setup: 'skip'`.
+  with the error's `ref` then retries, Don't run retries with `setup: 'skip'`.
 - The setup choice shows when `quirky.repo/hooks` for the project reports a setup script and the
   policy is ask; Create is disabled until chosen; the source badge is `quirky.yaml`, `orca.yaml`,
   `local settings`, or the joined form for run-both.

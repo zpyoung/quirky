@@ -182,7 +182,8 @@ const named: CliModule['commands'] = {
   async 'trust-hooks'(args, ctx) {
     const [repo] = args.positionals as [string]
     const kind = typeof args.flags.kind === 'string' ? args.flags.kind : 'all'
-    const details = (await ctx.call('quirky.repo/trustHooks', { repo, kind })) as RepoDetails
+    const ref = typeof args.flags.ref === 'string' ? args.flags.ref : undefined
+    const details = (await ctx.call('quirky.repo/trustHooks', { repo, kind, ...(ref !== undefined ? { ref } : {}) })) as RepoDetails
     ctx.out.result(details, () => {
       const trusted = (['setup', 'archive'] as const).filter((k) => (kind === 'all' || kind === k) && details.hooks[k]?.shared?.trusted)
       return trusted.length ? `trusted ${trusted.join(', ')} hooks of ${repo}` : `no shared hooks to trust in ${repo}`

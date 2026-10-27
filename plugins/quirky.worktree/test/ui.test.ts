@@ -869,7 +869,8 @@ const untrusted = (changed = false) =>
     repo: 'r1',
     kind: 'setup',
     script: 'touch ran.txt',
-    changed
+    changed,
+    ref: 'abc123'
   })
 
 async function submitNamed(h: ReturnType<typeof setup>, name: string) {
@@ -903,7 +904,7 @@ test('SC-33: an untrusted script asks, and each answer retries the create its ow
       { repo: 'r1', name: 'trusted', createdBy: 'window' },
       { repo: 'r1', name: 'trusted', createdBy: 'window', ...extra }
     ])
-    expect(h.callsTo('quirky.repo/trustHooks')).toEqual(label === 'Always trust' ? [{ repo: 'r1', kind: 'setup' }] : [])
+    expect(h.callsTo('quirky.repo/trustHooks')).toEqual(label === 'Always trust' ? [{ repo: 'r1', kind: 'setup', ref: 'abc123' }] : [])
     expect(h.opened).toEqual([{ id: SESSION_VIEW, input: { worktree: 'w9' } }])
     expect(dialogTitles()).toEqual([])
   }

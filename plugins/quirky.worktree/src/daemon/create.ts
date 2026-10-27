@@ -178,7 +178,7 @@ async function findBranch(env: CreateEnv, repo: Repo, input: string): Promise<Br
 type SetupDecision = 'run' | 'skip' | 'none'
 
 /** Whether setup runs for this create, refusing an undecided "ask" project and an untrusted shared script. */
-function decideSetup(env: CreateEnv, repo: Repo, settings: ProjectSettings, hooks: EffectiveHooks, params: CreateParams): SetupDecision {
+function decideSetup(env: CreateEnv, repo: Repo, settings: ProjectSettings, hooks: EffectiveHooks, params: CreateParams, hooksRef?: string): SetupDecision {
   const setup = hooks.setup
   if (!setup) return 'none'
   const choice = params.setup ?? 'inherit'
@@ -196,8 +196,8 @@ function decideSetup(env: CreateEnv, repo: Repo, settings: ProjectSettings, hook
       env,
       'conflict',
       'hooks-untrusted',
-      `${lead}:\n${shared.text}\nPass --trust-setup to run it once, or run: quirky repo trust-hooks ${labelOf(repo)}`,
-      { repo: repo.id, kind: 'setup', source: file, script: shared.text, hash: shared.hash, changed: shared.changed }
+      `${lead}:\n${shared.text}\nPass --trust-setup to run it once, or run: quirky repo trust-hooks ${labelOf(repo)}${hooksRef !== undefined ? ` --ref ${hooksRef}` : ''}`,
+      { repo: repo.id, kind: 'setup', source: file, script: shared.text, hash: shared.hash, changed: shared.changed, ...(hooksRef !== undefined ? { ref: hooksRef } : {}) }
     )
   }
   return decision
@@ -301,7 +301,7 @@ async function createGit(env: CreateEnv, repo: Repo, params: CreateParams, creat
 
   const hooksRef = existing?.fullRef ?? base!.fullRef
   const hooks = (await env.call('quirky.repo/hooks', { repo: repo.id, ref: hooksRef })) as EffectiveHooks
-  const decision = decideSetup(env, repo, settings, hooks, params)
+  const decision = decideSetup(env, repo, settings, hooks, params, hooksRef)
 
   const typed = params.name?.trim() ?? ''
   let generated: string | null = null
