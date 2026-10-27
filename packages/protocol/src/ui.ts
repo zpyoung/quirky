@@ -171,12 +171,13 @@ export type UiModel = {
   modules: Record<string, { url: string; provides: string[] }>
 }
 
-/** Which view and panel are open, whether the sidebar shows, and where focus is; owned by the daemon. */
+/** The daemon-owned window layout; `palette` is absent when the command palette is closed. */
 export type UiLayout = {
   view: { id: string; input?: unknown } | null
   panel: string | null
   sidebar: boolean
-  focus: 'sidebar' | 'view' | 'panel' | null
+  focus: 'sidebar' | 'view' | 'panel' | null,
+  palette?: boolean
 }
 
 /** A connected window (a client with role `ui`). */
@@ -266,6 +267,8 @@ export type UiPluginContext = {
   openView(id: string, input?: unknown): void
   closeView(): void
   togglePanel(id: string, open?: boolean): void
+  /** Opens or closes the command palette; omitting `open` toggles the daemon-owned state. */
+  setPalette(open?: boolean): void
   getLayout(): UiLayout
   /** Listens to layout changes; the returned function unsubscribes. */
   onLayout(listener: (layout: UiLayout) => void): () => void
@@ -301,8 +304,6 @@ export type UiPluginModule = {
 /** Platform whose chord conventions apply: on `darwin`, `cmd` means `mod` and `metaKey` is `mod`. */
 export const CHORD_PLATFORM: string = 'darwin'
 
-/** Chords the window keeps for itself: the command palette. */
-export const RESERVED_CHORDS: readonly string[] = ['mod+shift+p']
 
 const MODIFIER_ORDER = ['mod', 'ctrl', 'alt', 'shift'] as const
 type Modifier = (typeof MODIFIER_ORDER)[number]

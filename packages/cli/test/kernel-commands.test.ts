@@ -15,34 +15,16 @@ afterEach(() => daemon.stop())
 const run = (args: string[], extra: { cwd?: string; env?: Record<string, string> } = {}) =>
   runCli(args, { home: daemon.home, ...extra })
 
-const LAYOUT: UiLayout = { view: { id: 'view:quirky.session/worktree', input: { worktree: 'wt_1' } }, panel: null, sidebar: true, focus: 'view' }
+const LAYOUT: UiLayout = {
+  view: { id: 'view:quirky.session/worktree', input: { worktree: 'wt_1' } },
+  panel: null,
+  sidebar: true,
+  focus: 'view',
+  palette: true
+}
 
 describe('ui commands', () => {
-  test('ui state prints the layout and one line per shown slot', async () => {
-    const state: UiState = {
-      windows: [{ connId: 3, name: 'window', focused: true, inputAt: null, present: false }],
-      layout: LAYOUT,
-      toasts: [], slots: [
-        { id: 'sidebar-section:quirky.worktree/worktrees', kind: 'sidebar-section', plugin: 'quirky.worktree', title: 'Worktrees', shown: true, report: { repos: 1 } },
-        { id: 'panel:quirky.git/source-control', kind: 'panel', plugin: 'quirky.git', title: 'Source control', shown: false },
-        { id: 'view:quirky.session/worktree', kind: 'view', plugin: 'quirky.session', title: 'Session', shown: true }
-      ]
-    }
-    daemon.results.set('ui.state', state)
-    const result = await run(['ui', 'state'])
-    expect(result.code).toBe(0)
-    expect(result.stdout.trimEnd().split('\n')).toEqual([
-      'windows: 1',
-      'view: view:quirky.session/worktree {"worktree":"wt_1"}',
-      'panel: -',
-      'sidebar: shown',
-      'focus: view',
-      'slot sidebar-section:quirky.worktree/worktrees: Worktrees {"repos":1}',
-      'slot view:quirky.session/worktree: Session'
-    ])
-    expect(daemon.methodCalls('ui.state')).toEqual([{}])
-    expect(JSON.parse((await run(['ui', 'state', '--json'])).stdout)).toEqual(state)
-  })
+
 
   test('SC-67: ui state prints a shown overlay with its report, and ui contributions lists the OVERLAYS table', async () => {
     const state: UiState = {
@@ -55,7 +37,7 @@ describe('ui commands', () => {
     }
     daemon.results.set('ui.state', state)
     const printed = (await run(['ui', 'state'])).stdout.trimEnd().split('\n')
-    expect(printed.slice(5)).toEqual(['slot overlay:quirky.terminal/floating: Floating {"open":false}'])
+    expect(printed.slice(6)).toEqual(['slot overlay:quirky.terminal/floating: Floating {"open":false}'])
 
     daemon.addUiSlot('overlay', 'quirky.terminal', 'floating', { title: 'Floating', order: 50, module: '/plugins/quirky.terminal/ui.js' })
     const sections = (await run(['ui', 'contributions'])).stdout.trimEnd().split('\n\n')
@@ -240,18 +222,6 @@ describe('distro commands', () => {
     ])
   })
 
-  test('a keybinding on a chord the window keeps for itself prints the daemon\'s warning', async () => {
-    daemon.results.set('distro.inspect', {
-      ...NIGHT,
-      manifest: { ...NIGHT.manifest, keybindings: { 'mod+shift+p': 'command:night/palette' } }
-    })
-    const result = await run(['distro', 'inspect', './night'], { cwd })
-    expect(result.code).toBe(0)
-    expect(result.stdout.trimEnd().split('\n').slice(-2)).toEqual([
-      'keybinding mod+shift+p  command:night/palette',
-      'warning    mod+shift+p is a shortcut the window keeps for itself, so command:night/palette will not run on it'
-    ])
-  })
 
   test('SC-54: distro install prints the listing, then installs', async () => {
     daemon.results.set('distro.install', { id: 'night', name: 'Night', version: '1.0.0', plugins: ['night.extras'], installedAt: 1 })

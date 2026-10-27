@@ -17,11 +17,13 @@ import {
   type PtyHistoryPage,
   type PtyRequest,
   type PtySessionInfo,
-  type PtySnapshot
+  type PtySnapshot,
+  type PtyWriteErrorCode
 } from '@quirky/protocol'
 import { socketPath as resolveSocketPath } from '@quirky/protocol/node'
 
 type ConnState = { decoder: PtyFrameDecoder; authed: boolean }
+type AcceptedWriteHandler = (sessionId: string, bytes: Uint8Array) => void | Promise<void>
 
 export type FakeSession = {
   info: PtySessionInfo
@@ -45,6 +47,7 @@ export type FakePtyHost = {
   /** Sends a fact event for `sessionId` to every connection. */
   fact(sessionId: string, fact: PtyFact): void
   dropConnections(): void
+  setWriteAcceptedHandler(handler: AcceptedWriteHandler | null): void
   setReadResult(result: { lines: string[]; cols: number; rows: number; alt: boolean }): void
   setSnapshotResult(result: PtySnapshot): void
   setHistoryResult(result: PtyHistoryPage): void
@@ -85,13 +88,26 @@ export function startFakePtyHost(home: string, options: FakePtyHostOptions = {})
   }
   let historyResult: PtyHistoryPage = { lines: [], cursor: null }
   let nextPid = 4000
+  let writeAcceptedHandler: AcceptedWriteHandler | undefined
   const failures = new Map<PtyRequest['type'], string>()
 
   function reply(socket: Socket<ConnState>, id: number, result: unknown) {
     socket.write(encodePtyJson({ id, ok: true, result }))
   }
-  function fail(socket: Socket<ConnState>, id: number, error: string) {
-    socket.write(encodePtyJson({ id, ok: false, error }))
+  function fail(socket: Socket<ConnState>, id: number, error: unknown) {
+    const message = error instanceof Error ? error.message : String(error)
+    if (error && typeof error === 'object' && 'code' in error && 'acceptedBytes' in error) {
+      const code = error.code
+      const acceptedBytes = error.acceptedBytes
+      if (
+        (code === 'PTY_WRITE_REJECTED' || code === 'PTY_WRITE_UNCERTAIN') &&
+        (acceptedBytes === null || (typeof acceptedBytes === 'number' && Number.isSafeInteger(acceptedBytes) && acceptedBytes >= 0))
+      ) {
+        socket.write(encodePtyJson({ id, ok: false, error: message, code: code as PtyWriteErrorCode, acceptedBytes }))
+        return
+      }
+    }
+    socket.write(encodePtyJson({ id, ok: false, error: message }))
   }
 
   function handle(socket: Socket<ConnState>, request: PtyRequest) {
@@ -111,7 +127,13 @@ export function startFakePtyHost(home: string, options: FakePtyHostOptions = {})
       return
     }
     const injected = failures.get(request.type)
-    if (injected !== undefined) return fail(socket, request.id, injected)
+    if (injected !== undefined) {
+      const error =
+        request.type === 'writeAccepted'
+          ? Object.assign(new Error(injected), { code: 'PTY_WRITE_REJECTED', acceptedBytes: 0 })
+          : injected
+      return fail(socket, request.id, error)
+    }
     switch (request.type) {
       case 'hello':
         reply(socket, request.id, { version, pid: process.pid })
@@ -147,6 +169,36 @@ export function startFakePtyHost(home: string, options: FakePtyHostOptions = {})
           cols: request.cols,
           rows: request.rows
         })
+        return
+      }
+      case 'writeAccepted': {
+        const session = sessions.get(request.sessionId)
+        if (!session?.info.alive) {
+          return fail(
+            socket,
+            request.id,
+            Object.assign(new Error(`no live session: ${request.sessionId}`), {
+              code: 'PTY_WRITE_REJECTED',
+              acceptedBytes: 0
+            })
+          )
+        }
+        const bytes = base64ToBytes(request.bytes)
+        void (async () => {
+          try {
+            await writeAcceptedHandler?.(request.sessionId, bytes)
+            if (!session.info.alive) {
+              throw Object.assign(new Error(`session exited before delivery: ${request.sessionId}`), {
+                code: 'PTY_WRITE_REJECTED',
+                acceptedBytes: 0
+              })
+            }
+            inputs.push({ sessionId: request.sessionId, text: new TextDecoder().decode(bytes) })
+            reply(socket, request.id, {})
+          } catch (error) {
+            fail(socket, request.id, error)
+          }
+        })()
         return
       }
       case 'resize': {
@@ -278,6 +330,9 @@ export function startFakePtyHost(home: string, options: FakePtyHostOptions = {})
     },
     setHistoryResult(result) {
       historyResult = result
+    },
+    setWriteAcceptedHandler(handler) {
+      writeAcceptedHandler = handler ?? undefined
     },
     failRequests(type, error) {
       if (error === null) failures.delete(type)
