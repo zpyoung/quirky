@@ -111,11 +111,13 @@ AgentRow {
   prompt: string (≤200, one line); toolName?: string (≤60); toolInput?: string (≤160)
   lastAssistantMessage?: string (≤8000); question?: string (≤16000, JSON of the ask input)
   model?: string (≤120); detail: string        // readable, never a JSON object (SC-32)
-  lead: { providerSession: string|null; agentPid: number|null; agentStart: string|null; ended: boolean }
+  lead: { providerSession: string|null; agentPid: number|null; agentStart: string|null; ended: boolean
+          state: AgentState; stateStartedAt: number }   // the lead's own state before the fold
   children: { id: string; kind: 'agent'|'shell'|'cron'; state: 'working'|'waiting'|'done' }[] (≤64)
   heldPermission?: { toolUseId: string|null; toolName: string; input: string; childId: string|null }
   stashedState?: AgentState                    // lead state saved while a child asks
-  stateStartedAt: number; evidenceAt: number; turnStartedAt: number|null
+  stateStartedAt: number; evidenceAt: number; turnStartedAt: number|null   // state = fold(lead.state, children)
+  lastHookAt: number|null                      // evidence time of the last hook or replay; OSC precedence reads it
   source: 'hook'|'replay'|'title'|'program-status'|'inference'
   restoredUnconfirmed?: boolean
   programStatus?: { state: string; kind?: string; progress?: number; msg?: string; app?: string } // facet
@@ -139,7 +141,14 @@ pure, used by the plugin and copied into both window plugins (the windows can't 
 code; the copies share a test table). Rules ([logic table](logic.md#conceptual-model)):
 `restoredUnconfirmed` and not done → unconfirmed; not done and `now - evidenceAt > 30 min` →
 unverifiable if `sessionRunning` else idle, detail `No update in <N>m`; source title/program-status
-with a needs-user signal and no hook → permission; else by state/outcome/mode. Done never decays.
+with a needs-user signal and no hook → permission only for source `title`; OSC 7501 blocked with
+kind permission/question is state waiting and displays waiting (SC-22); else by
+state/outcome/mode. Done never decays.
+
+`CONTRACT:` the windows don't re-derive from a row. `windowDisplay(summary, now, sessionRunning)`
+returns `summary.display` and `summary.label`, except that when `summary.state` is not done and
+`now - summary.evidenceAt > 30 min` it returns unverifiable ("No recent update") or idle by
+`sessionRunning`. The copies in the two window plugins share one test table.
 
 `CONTRACT:` coarse status: working|monitoring → `working`; waiting|blocked|permission → `waiting`;
 done|failed|interrupted → `done`; no row → `running` (or untouched when the session already exited).
@@ -198,13 +207,20 @@ rollout reads, D15).
 ### Identity rules
 
 `CONTRACT:` ([D11](../../../loop/decisions/m1-agent-status.md)). A row's lead is
-`{agent, providerSession}` from its first accepted event. An event is foreign, and ignored, when
-the row is fresh (`displayOf` not unverifiable/idle/unconfirmed), not `lead.ended`, and either
+`{agent, providerSession}` from its first accepted event. Before deciding, the lead's liveness is
+checked synchronously when it has a PID (`process.kill(pid, 0)` plus the `lstart` match, as
+[Presence](#presence)); a dead lead sets `lead.ended`. An event is foreign, and ignored, when
+`lead.ended` is false, the row is fresh (`displayOf` not unverifiable/idle/unconfirmed), and either
 (a) its source differs from `row.agent` (qwen-code and claude are different kinds; openclaude and
-claude too), or (b) both have provider sessions and they differ — except a SessionStart whose
-`source` is `clear` or `resume` (Claude, Codex `resume`/`clear`, qoder family `clear`/`resume`),
-which moves the lead. `lead.ended` is set by `endsProcess`, the presence probe, or session exit;
-an ended or stale row is replaced by the next event's agent as a new row.
+claude too) **and the row's state is not done** — a done row of another kind yields to the new
+agent, so a finished agent that exited without SessionEnd never blocks the next one; or (b) both
+have provider sessions and they differ, whatever the state — except a SessionStart whose `source`
+is `clear` or `resume` (Claude, Codex `resume`/`clear`, qoder family `clear`/`resume`), which moves
+the lead. (b) is the helper rule of SC-13: it holds only while the lead's process lives, which is
+why the liveness check runs first. `lead.ended` is set by `endsProcess`, the liveness check, the
+presence job, or session exit; an ended, stale or yielding row is replaced by the next event's
+agent as a new row. A same-kind event with a new provider session and no known lead PID (an agent
+whose hooks carry no PID) is accepted only when the row is done.
 
 ### Shim contract
 
@@ -230,7 +246,9 @@ an ended or stale row is replaced by the next event's agent as a new row.
    payload carries no event name (Copilot, Antigravity, Cursor).
 6. Always `exit 0`.
 
-`CONFIG:` spool: append one line `<source> <pid> <pstart-base64> <payload-base64>` to
+`CONFIG:` spool: append one line `<source> <pid> <pstart-base64> <event> <payload-base64>` to
+(empty fields written as `-`; `<event>` is `QUIRKY_HOOK_EVENT`, so a replayed Cursor, Copilot or
+Antigravity payload is normalized exactly as live) to
 `$QUIRKY_HOME/hook-spool/<session>.jsonl` (dir 0700, file 0600) unless the payload's event is a
 tool event (`REGEX:` `"(hook_event_name|hookEventName)"[[:space:]]*:[[:space:]]*"(PreToolUse|PostToolUse|PostToolUseFailure)"`),
 or the file exceeds 5,242,880 bytes. Drain (`src/spool.ts`) at activation before subscribing: skip
@@ -356,8 +374,9 @@ replace-on-report, subtree `clear`, ≤256 records LRU, `endProgram()` on a `pro
 (`ORCA/src/shared/program-status/records.ts`). Root projection: working → working; blocked with
 kind permission/question → waiting, other → blocked; done → done success; error → done failure;
 idle → done; no root → remove the program-status row. Precedence ([D22](../../../loop/decisions/m1-agent-status.md)):
-apply the projection only when there is no hook row, the hooks setting is off, or the last hook
-evidence is older than `HOOK_SILENCE_MS = 120_000` and the projection differs from the row's state.
+apply the projection only when the row has no `lastHookAt`, the hooks setting is off, or
+`now - lastHookAt > HOOK_SILENCE_MS` (`120_000`, scaled) and the projection differs from the row's
+state. Title and OSC evidence never update `lastHookAt`.
 
 `CONFIG:` host reply bytes: `ESC ] 7501 ; ? : states=idle,working,done,blocked,error : kinds=permission,question,auth ESC \`
 (no spaces), written whenever a `?` body is seen on a live session, through the barrier.
@@ -375,14 +394,14 @@ working, permission → waiting with display permission, idle → done.
 `CONTRACT:` from `onInput`: a write equal to `\x03` is ctrl-c, `\x1b` alone is plain-escape, a
 write containing `\r` is Enter. Interrupt: record the baseline (prompt, evidenceAt,
 stateStartedAt) and after `SETTLE_MS = 500` (scaled) apply done+interrupted+cancellation only if
-unchanged, working, lead working, not restored, `now - evidenceAt ≤ 30 min`, and the agent rules of
+unchanged, `state` working, `lead.state` working (not only children), not restored, `now - evidenceAt ≤ 30 min`, and the agent rules of
 `ORCA/src/shared/agent-interrupt-intent.ts` allow it (double-Escape agents need a second Esc while
 `turnStartedAt` is unchanged). Question answered: Claude row waiting with `question` set, Enter →
 restore the stashed state, else working.
 
 ### Presence
 
-`CONFIG:` job `presence`, interval `10s`, initialDelay `10s`. For each row not done and not ended
+`CONFIG:` job `presence`, interval `10s`, initialDelay `10s`. For each row, done or not, not ended,
 with `lead.agentPid`: `process.kill(pid, 0)` fails, or `ps -o lstart=` (UTC) no longer equals
 `lead.agentStart` → mark `lead.ended`, delete the row, coarse status `running`. Session exit
 (`quirky.session/changed` with status exited, or `removed`) deletes the row.
@@ -470,8 +489,14 @@ without `agentStatus` rank by their coarse status as today.
 | Window | `plugins/quirky.session/test/ui.test.ts`, `plugins/quirky.worktree/test/ui.test.ts` | glyph classes and labels per display state; worktree priority; progress ring |
 | UI pass | `quirk:using-apps-like-a-user` | SC-34..SC-37 |
 
-The acceptance bar is every SC in the logic spec mapped to at least one named test, and the full
-gate green.
+The acceptance bar is every SC in the logic spec mapped to at least one named test **that drives
+Quirky the way the scenario says**: an "(API)" scenario posts hooks to the daemon's HTTP hook
+endpoint (or injects PTY facts / input through the daemon) and reads results through
+`quirky.agent-status/*` and `quirky.session/*` methods on a client; a "(CLI)" scenario runs the
+`quirky` CLI against a daemon. That includes every SC-8 row (one hook-endpoint test per agent row,
+beside the normalizer unit tests) and SC-24..SC-29 (through `quirky agent-status hooks …` against a
+daemon whose `HOME` is a temporary dir). Unit tests of normalizers and installers are extra, never a
+substitute. The full gate must be green.
 
 ## Orca map
 

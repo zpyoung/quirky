@@ -5,6 +5,14 @@
 **Status:** Approved (headless build loop; decisions in [m1-agent-status.md](../../../loop/decisions/m1-agent-status.md)). Tech spec: requested.
 
 **Amendments:**
+- 2026-10-26, Codex spec review: the row keeps the lead's own state beside the folded one, so
+  interrupt inference and the fold can tell a working lead from a finished one held open by
+  children; a finished agent of one kind that exits without SessionEnd no longer blocks a different
+  agent in the same session (SC-15 gains that case), and the helper rule (SC-13) checks the lead's
+  process before ignoring an event; the spool keeps the event name for agents whose payload lacks
+  one; "Needs attention" comes from titles only, and an OSC 7501 permission or question reads
+  "Waiting for input" (SC-22); every API and CLI scenario's test drives the daemon, not just a unit
+  harness.
 - 2026-10-26, tech-spec authoring: the hooks switch is the Settings dialog's checkbox, whose
   description is hover text (SC-37); an OpenCode-family interrupt needs a second Esc in the same
   turn, not within 500 ms (SC-20).
@@ -44,7 +52,7 @@ states, each with Orca's glyph and label ([D4](../../../loop/decisions/m1-agent-
 | working | state working | Working | spinner |
 | monitoring | working, only background shells or crons live | Monitoring background tasks | activity icon |
 | waiting | state waiting | Waiting for input | amber question icon |
-| permission | the title or OSC says it needs the user, no hook row | Needs attention | amber question icon |
+| permission | the terminal title says it needs the user, no hook row | Needs attention | amber question icon |
 | blocked | state blocked | Blocked | red dot |
 | failed | done with outcome failure | Failed | red dot |
 | interrupted | done, interrupted or outcome cancellation | Interrupted | muted dot |
@@ -91,9 +99,9 @@ order.
 
 **Then it applies it, in order:**
 
-1. **Identity.** An event from a different agent kind than the session's live row, or from a
+1. **Identity.** An event from a different agent kind than the session's unfinished row, or from a
    different provider session than the lead, is a nested agent and is ignored while the row is
-   fresh and the lead's process lives. A SessionStart with source `clear` or `resume` moves the lead
+   fresh and the lead's process lives (checked right then when its process is known). A SessionStart with source `clear` or `resume` moves the lead
    to its new provider session ([D11](../../../loop/decisions/m1-agent-status.md)).
 2. **Provider capture.** A new lead ID or transcript path is stored on the session with
    `quirky.session/setProviderSession` ([D12](../../../loop/decisions/m1-agent-status.md)).
@@ -305,8 +313,8 @@ are relative to the first event.
 15. **SC-15: a different agent nested in a fresh row is ignored** (API)
     - **Given** a working claude row
     - **When** gemini hooks post BeforeAgent for the same session
-    - **Then** the row stays a working claude row; once the claude row is done and its process has
-      exited, a gemini event takes the row
+    - **Then** the row stays a working claude row; once the claude row is done, a gemini event takes
+      the row, even when the claude process exited without a SessionEnd or still runs
 
 ### Freshness, restart and process lifetime
 

@@ -435,5 +435,25 @@
 - **Confidence:** high
 - **Source:** locked by docs/loop/LOOP.md
 
+## D43: Spec review: fix all five Codex findings; reject the pre-pass's reference and heading findings
+- **Question:** what to do with the adversarial review of both specs (LOOP.md step 4)
+- **Options:** fix each confirmed finding; record why not
+- **Chose:** one `quirk:adversarial-review` run (range e849505^..62863ff restricted to the spec directory with `--diff-file`, profile spec-design, depth deep, reviewer codex gpt-6.1-sol, independence full; per-file pre-passes as ground truth, as m1-term-daemon D32 did). Gate NEEDS_FIXES, 5 findings (2 HIGH, 3 MEDIUM), 1 suppressed, none contested. Fixed: (F1) the row keeps `lead.state` beside the folded state, and inference checks the lead; (F2) a done row of another kind yields, and the helper rule checks the lead's process synchronously; the presence job probes done rows too; (F3) the spool keeps the event name; (F4) "Needs attention" is title-only, OSC permission/question reads waiting; (F6) every API/CLI scenario's test drives the daemon. F5 (the window lacks row fields) was refuted, but the window's decay rule is now its own contract (`windowDisplay`). Also: OSC precedence reads a new `lastHookAt`. The pre-pass's unresolved references name planned files, Orca paths and home config paths, and its missing headings are not in the writing-specs rubrics; rejected.
+- **Why:** LOOP.md: fix every confirmed finding or record why not
+- **Evidence:** review bundle in the session scratchpad (ar1/gate.json, ar1/manifest.json); logic.md amendments
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** locked by docs/loop/LOOP.md
+
+## D44: Build with Claude subagents implementing and Codex reviewing
+- **Question:** subagent-driven-development's preflight card (backend pairing, dirty tree, environment)
+- **Options:** verified pairs: claude-task + codex, claude-task + gemini, claude-task + terra; opus and sonnet failed `pi-watch --check`
+- **Chose:** claude-task + codex (IMPLEMENTER claude-task, AUTHOR_FAMILY anthropic, REVIEWER_ALIAS codex). Tree clean. Full suite `bun run test && bun test scripts && bun run typecheck`.
+- **Why:** LOOP.md step 5 names this pairing; codex resolved
+- **Evidence:** docs/loop/LOOP.md step 5; pi-watch --check (codex, gemini, terra, flash ok; opus, sonnet not available)
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** locked by docs/loop/LOOP.md
+
 ## Progress
-Step 4: logic and tech specs written. Next: commit, run one adversarial review of both with Codex, fix findings, commit, then step 5 (SDD).
+Step 5 (build) starting: specs reviewed and fixed. Next: decompose into waves (W1 contracts and leaf units, W2 agent-status integration and the session summary/dots, W3 end-to-end scenarios) and dispatch W1.
