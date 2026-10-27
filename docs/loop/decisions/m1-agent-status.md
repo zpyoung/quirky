@@ -527,6 +527,37 @@
 - **Revisit if:** a W2 fix changes an interface W3 builds on
 - **Source:** assumed — autonomous
 
+## D52: W2 checkpoint: accept all eleven findings, which collapse to six defects
+- **Question:** adjudicating the W2 checkpoint review (three lenses C/S/X, standard depth, codex gpt-6.1-sol, independence full, 1 suppressed; target 6c67ce0..c99d239)
+- **Options:** accept or reject each
+- **Chose:** accept all: a Claude subagent's approved tool never released the permission hold (C1, HIGH); a same-kind successor kept a dead predecessor's pid, so presence deleted the live row (C2); hydration dropped an expired row but left the surviving session's summary and status (C3/S2); provider capture skipped accepted hooks that changed no row, such as jcode session_start (S4); Hermes's YAML editor unquoted flow-list entries, missed a quoted `plugins:` key and edited malformed YAML (C4/X1/X4, S3); Kimi install broke a config holding `hooks = []` and the TOML scan accepted unparseable files (X2 HIGH, X3, S3). Four parallel fixers closed them, each with a regression test seen failing first; the TOML and YAML editors now validate with `Bun.TOML.parse` / `Bun.YAML.parse` before editing and check the edited result means the original plus or minus only Quirky's entries. Fixer choices: identity now probes a pid-carrying lead's liveness on every same-kind event (one `kill(pid, 0)`, plus `ps` when the start time is known); a Kimi `hooks` key that `[[hooks]]` can't extend is an error, file untouched (Orca has no handling for it).
+- **Why:** each reproduced with the reviewer's command
+- **Evidence:** review bundle in the session scratchpad (rev-w2/*-gate.json); merges 617a28d, 97645c1, 4dab9f1, c5bd9f2
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** assumed — autonomous
+
+## D53: Setup while the switch is off is refused with the `conflict` error kind
+- **Question:** tech.md names `failed-precondition` for `hooksSetup` while the `hooks` setting is off; the plugin API's `PluginErrorKind` has only `invalid-params`, `not-found` and `conflict` (W3 implementer)
+- **Options:** add a `failed-precondition` kind to the protocol, daemon and CLI; use `conflict` with the specified message
+- **Chose:** `conflict` (RPC -32009) with "Agent status hooks are turned off"
+- **Why:** the scenario (SC-27) asserts the message, not the code; widening the error kinds touches the protocol and the CLI for one call site
+- **Evidence:** packages/protocol PluginErrorKind; plugins/quirky.agent-status/src/hooks.ts
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** a script needs to tell "turned off" apart from other conflicts
+- **Source:** assumed — autonomous
+
+## D54: W3 landed; hooks setup's remaining choices
+- **Question:** the W3 barrier and the implementer's choices the spec left open
+- **Options:** accept; send back
+- **Chose:** accept. The registry is `JSON_INSTALLERS` then `OTHER_INSTALLERS` (28 agents, Claude absent). An agent `quirky.agents/list` omits or reports not installed is `cli_not_found`; installed but disabled is `agent_disabled`; a failed list call is logged and every agent reads as not detected. `hooksStatus` shows `hooks_disabled` for every agent while the switch is off without asking the installers. `hooksRemove` works with the switch on or off and ignores detection. Any installer error, not only a parse error, becomes `error` with its message. An unknown agent is refused before the switch check. Setup, remove, the activation install and the setting listener run one at a time through one queue. The CLI prints paths under `$HOME` as `~/…`, all `changed` lines first, then one line per agent. The plugin doesn't declare a dependency on quirky.agents, so it still loads without it. The startup install writes into the e2e homes of other items' tests, so `plugins/quirky.agents/test/e2e/trust.e2e.test.ts` (SC-36 with the setting off) now checks only the trust marker inside `.cursor` rather than the whole directory, which hook setup creates.
+- **Why:** the barrier and the full gate passed (4453 pass, scripts 30, typecheck clean); the trust test's intent (no trust record) is unchanged
+- **Evidence:** merge e485b41; commit 71410b4
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** assumed — autonomous
+
 ## Progress
 Step 5 (build), between waves. RUN_BASE 13deb24 (specs fixed). W1 and its checkpoint fixes (D46, D47) and W2 (D48) are merged; HEAD c99d239, full gate green (4419 pass, scripts 30, typecheck clean). Backend: claude-task implementers (Agent, sonnet, effort high) + codex reviewer (D44).
 
