@@ -417,8 +417,7 @@
       "deps": [
         "m1-worktrees"
       ],
-      "status": "in-progress",
-      "lane": 5
+      "status": "blocked"
     },
     {
       "id": "sa-browser-ui",

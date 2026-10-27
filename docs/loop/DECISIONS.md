@@ -23,6 +23,8 @@ files, not this one.
 | hard | medium | [m1-providers D5](decisions/m1-providers.md) | A new built-in plugin, `quirky.agents`, owns the catalog, detection, agent configuration and launch planning; `quirky.session` keeps records and spawning | supersedes m0-core D5 (narrows it) |
 | hard | medium | [m1-providers D6](decisions/m1-providers.md) | Each agent is an `agent` contribution in a manifest, so plugins can add, replace or disable agents as data | assumed — autonomous |
 | hard | medium | [m1-providers D36](decisions/m1-providers.md) | Approach: port Orca's pure launch code into `quirky.agents`, with the catalog as manifest data | assumed — autonomous |
+| hard (target safety and command semantics) | high | [sa-browser-agent D4](decisions/sa-browser-agent.md) | Keep page targeting scoped and snapshot references ephemeral | locked by docs/architecture.md |
+| hard (authentication-state mutation) | high | [sa-browser-agent D6](decisions/sa-browser-agent.md) | Import cookies with transactional domain-scoped replacement and explicit warnings | locked by docs/architecture.md |
 | hard | high | [m0-scripting D4](decisions/m0-scripting.md) | Schemas are a flat subset of JSON Schema | assumed — autonomous |
 | hard | high | [m0-scripting D24](decisions/m0-scripting.md) | Choose schemas declared in the manifest, a daemon catalog, and a CLI that builds plugin commands from it at run time | assumed — autonomous |
 | hard (metadata and external api) | high | [m2-sidebar-extras D7](decisions/m2-sidebar-extras.md) | Worktree membership stays separate from repo ownership and group-folder identity | locked by research/orca-features/sidebar-extras.md |
@@ -43,6 +45,7 @@ files, not this one.
 | hard | high | [m0-registry D23](decisions/m0-registry.md) | Choose declarative contributions with lazily loaded code | assumed — autonomous |
 | hard | high | [m1-term-ui D7](decisions/m1-term-ui.md) | Layout lives in the daemon; the window renders it and changes it only through methods | locked by docs/roadmap.md |
 | hard | high | [m1-providers D9](decisions/m1-providers.md) | Agent IDs, labels and table values are Orca's | locked by docs/architecture.md |
+| medium (internal driver; public behavior unchanged) | medium | [sa-browser-agent D11](decisions/sa-browser-agent.md) | Reuse agent-browser over explicitly owned CDP targets | assumed — autonomous |
 | medium | medium | [m0-scripting D6](decisions/m0-scripting.md) | The daemon validates every call's params against the method's schema, and leaves results and event data unchecked | assumed — autonomous |
 | medium | medium | [m0-scripting D29](decisions/m0-scripting.md) | Tech-spec mechanisms: one shared validator in protocol, validation in the dispatcher, declarative command specs, a JSON-mode pre-scan | assumed — autonomous |
 | medium | medium | [m2-source-control-notes-ai D4](decisions/m2-source-control-notes-ai.md) | Markdown notes and Changes mode stay with m2-editor; the Notes shelf lists diff notes | assumed — autonomous |
@@ -105,6 +108,12 @@ files, not this one.
 | medium | medium | [m1-term-daemon D10](decisions/m1-term-daemon.md) | Cold restore starts a shell, lazily on attach or on an explicit restore | locked by term-daemon.md |
 | medium | medium | [m1-term-daemon D17](decisions/m1-term-daemon.md) | The PTY protocol goes to 2; an older host is retired on upgrade, a newer one is refused | assumed — autonomous |
 | medium | medium | [m1-term-daemon D31](decisions/m1-term-daemon.md) | Tech-spec mechanisms: the host renders history windows through a scratch emulator, composes the attach replay by overlaying the live snapshot, and the wrappers report through hooks | assumed — autonomous |
+| medium (changes acceptance coverage and successor contracts) | high | [sa-browser-agent D1](decisions/sa-browser-agent.md) | Build the queue item's automation and cookie-import slice | locked by docs/loop/queue.json |
+| medium (consumer-visible names and schemas) | high | [sa-browser-agent D3](decisions/sa-browser-agent.md) | Use the existing authenticated plugin RPC and namespaced browser CLI | locked by docs/roadmap.md |
+| medium (profile model and import semantics) | high | [sa-browser-agent D5](decisions/sa-browser-agent.md) | Discover browsers only on explicit import discovery and isolate destination profiles | locked by docs/architecture.md |
+| medium (lifetime and error contracts) | high | [sa-browser-agent D7](decisions/sa-browser-agent.md) | Time out commands and close owned processes, without speculative retry behavior | assumed — autonomous |
+| medium (acceptance boundary) | high | [sa-browser-agent D8](decisions/sa-browser-agent.md) | Keep browser scope within the local backend and record other-platform work | locked by docs/roadmap.md |
+| medium (observable import job api) | high | [sa-browser-agent D12](decisions/sa-browser-agent.md) | Explicit imports use tracked one-shot daemon operations, not recurring scheduler jobs | assumed — autonomous |
 | medium | high | [m0-scripting D5](decisions/m0-scripting.md) | Methods declare `params` and `result`, events declare `data`, UI commands declare `args` | assumed — autonomous |
 | medium | high | [m0-scripting D7](decisions/m0-scripting.md) | Kernel methods and events get schemas too, in one table checked against the protocol types | assumed — autonomous |
 | medium | high | [m0-scripting D9](decisions/m0-scripting.md) | One command table drives parsing, validation, help, suggestions and the catalog | locked by research/orca-features/cli.md |
@@ -195,6 +204,7 @@ files, not this one.
 | medium | high | [m1-term-daemon D41](decisions/m1-term-daemon.md) | Catching up with build/roadmap (m1-providers) keeps both sides; the exit columns become migration 3 | assumed — autonomous |
 | medium | high | [m1-term-daemon D42](decisions/m1-term-daemon.md) | A second catch-up merged m1-launch-settings; the exit columns become migration 4 | assumed — autonomous |
 | easy | low | [m1-agent-status D38](decisions/m1-agent-status.md) | mimo-code's plugin goes in its config dir's `plugins/`, not Orca's per-launch overlay | assumed — autonomous |
+| easy (redispatch if a substantive dependency emerges) | medium | [sa-browser-agent D13](decisions/sa-browser-agent.md) | Keep implementation in one component with focused internal modules | assumed — autonomous |
 | easy | medium | [m0-scripting D14](decisions/m0-scripting.md) | Generated commands print a generic text form, and `--json` prints the raw result | assumed — autonomous |
 | easy | medium | [m0-scripting D19](decisions/m0-scripting.md) | The agent skill is generated from the live catalog and shown or installed through `quirky skill` | assumed — autonomous |
 | easy | medium | [m0-scripting D27](decisions/m0-scripting.md) | No closure review round on the logic spec | assumed — autonomous |
@@ -357,6 +367,14 @@ files, not this one.
 | easy | medium | [m1-term-daemon D44](decisions/m1-term-daemon.md) | The fix batch closed every Final Round 1 finding; two fixer notes are accepted as limits | assumed — autonomous |
 | easy | medium | [m1-term-daemon D48](decisions/m1-term-daemon.md) | The e2e harness kills what it started even when a run dies; a daemon lock test leaks fake hosts | assumed — autonomous |
 | easy | medium | [m1-term-daemon D49](decisions/m1-term-daemon.md) | The first land failed in the integration tree; the new package links were copied in by hand, as m1-providers D51 did | assumed — autonomous |
+| easy (documentation and later amendments) | high | [sa-browser-agent D2](decisions/sa-browser-agent.md) | Answer workflow questions autonomously without a visual companion | locked by docs/loop/LOOP.md |
+| easy (additional platform implementations) | high | [sa-browser-agent D9](decisions/sa-browser-agent.md) | Build and exercise macOS only with portable primitives where cheap | deferred: platform |
+| easy (next execution run) | high | [sa-browser-agent D10](decisions/sa-browser-agent.md) | Pair omp implementation tasks with Gemini after Opus preflight failure | assumed — autonomous |
+| easy (no implementation or permanent test was written) | high for the observed helper behavior; medium for the proposed replacement until its identity/recovery scenarios are exercised | [sa-browser-agent D14](decisions/sa-browser-agent.md) | Halt the per-page-helper design at the headless feasibility gate | locked by docs/loop/LOOP.md |
+| easy (corrected evidence record) | high | [sa-browser-agent D15](decisions/sa-browser-agent.md) | Prefer runtime evidence over the scout's unsupported-endpoint inference | assumed — autonomous |
+| easy | high for the exercised process scope/cleanup path | [sa-browser-agent D16](decisions/sa-browser-agent.md) | Isolate the browser investigation and remove its executable scaffold | locked by docs/loop/LOOP.md |
+| easy (no implementation exists) | high | [sa-browser-agent D17](decisions/sa-browser-agent.md) | Preserve the failed spec review and its unapproved contracts with the block | assumed — autonomous |
+| easy | high | [sa-browser-agent D18](decisions/sa-browser-agent.md) | Keep the loop's exact verification commands instead of the reviewer's broader reading | locked by docs/loop/LOOP.md |
 | easy | high | [m0-scripting D1](decisions/m0-scripting.md) | Classify the item as a CLI and API design, and run both research phases | assumed — autonomous |
 | easy | high | [m0-scripting D2](decisions/m0-scripting.md) | Skip the visual companion and the adhd offer, use the standard gray-area set | locked by docs/loop/LOOP.md |
 | easy | high | [m0-scripting D3](decisions/m0-scripting.md) | Select every gray area that matters for the scripting surface | assumed — autonomous |
