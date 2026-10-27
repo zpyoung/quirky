@@ -242,5 +242,27 @@
 - **Revisit if:** the final fix batch changes another root or shared core code
 - **Source:** locked by docs/loop/LOOP.md
 
+## D23: Preserve interrupted-host evidence and select working process-local tool paths
+- **Question:** how to distinguish verification environment failures from ledger defects during resumed gates
+- **Options:** alter protected tests or global runtimes; diagnose and keep source unchanged while selecting installed tools
+- **Chose:** retain the failed script-fixture attempt and its successful isolated runs (13 and 19 tests), the subsequent 55/55 scripts pass, and the broken Homebrew Node loader evidence. Use installed NVM Node 24.19.0 plus Bun/Hutch paths only in verification subprocess environments. Treat the operator-stopped old-host run as interrupted and non-meaningful; rerun the same affected-suite command on the operator-updated host.
+- **Why:** NVM Node and unchanged typecheck passed; no dylib shim, package-script rewrite, install or global configuration change is needed. The old host's exit137 is not a product verdict. The new host produced a meaningful 209-file result: 207 passed, two failures repeated alone, plus two local macOS-only files passed.
+- **Evidence:** /tmp/quirky-m5-ledger-final-SEErbk/prepass*.json; artifact://382; newhost-check.stdout.log and newhost-check.stderr.log; operator host-switch note
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** installed runtime/tool paths change
+- **Source:** assumed — autonomous
+
+## D24: Correct the import-fence parser instead of rewriting ordinary ledger strings
+- **Question:** how to repair the two meaningful new-host gate failures before review discovery
+- **Options:** whitelist ledger or restyle import action strings; re-pin the old menu list; fix the scanner and remove the incidental snapshot
+- **Chose:** replace comment/import regexes with TypeScript AST import detection, preserving static/type/side-effect/re-export/dynamic/require/import-equals/import-type boundary checks and adding string/comment false-positive regressions. Delete the obsolete exact project-menu snapshot/wiring test; keep the real daemon/window project/group/settings flows.
+- **Why:** the regex mistook literal import action values for undeclared module names. No production import crossed the boundary. The new parser's positive test caught an import-type wrapper omission before the parent corrected it. Targeted verification now passes import fence 3 tests, worktree component UI 58 tests and typecheck. No protected files or production strings were changed to evade the gate.
+- **Evidence:** plugins/test/imports.test.ts; plugins/quirky.worktree/test/ui.test.ts; /tmp/quirky-m5-ledger-final-SEErbk/newhost-check.{stdout,stderr}.log; parent targeted check output
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** new syntactic import forms are introduced
+- **Source:** assumed — autonomous
+
 ## Progress
-Resumed on build/m5-ledger after the operator's authorized queue repair; integration catch-up complete and incoming runner decisions read. Prior implementation, API/CLI/window tests and built-web smoke evidence remain D14–D20. Next: rerun affected remote suites, scripts/typecheck/build; run the mandatory one Gemini three-lens final review and one accepted-finding fix batch; rerun checks/build, record all findings/remaining limitations, and land through queue.ts. Do not claim or begin another item. No current review clearance or fresh gate pass is claimed yet.
+Operator queue repair and integration catch-up are complete. Meaningful new-host affected coverage ran 209 files (207 passed, two repeated failures) and two local macOS-only files passed. Those owned failures are corrected under D24; targeted fence/UI/type checks pass. Prior UI smoke evidence remains D18–D19 because no product UI behavior changed. Next: commit the gate fixes, mint a fresh resolved artifact for the new feature HEAD with the same pinned integration baseline, rerun the complete affected gate on the new host, then fan the mandatory deep Gemini C/S/X final review and apply one accepted-finding fix batch. Rerun checks/build and land this item only through queue.ts. Discovery has not begun and no current complete gate or final-review clearance is claimed.
