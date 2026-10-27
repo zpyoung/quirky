@@ -17,20 +17,16 @@
           "type": "object",
           "properties": {
             "worktree": { "type": "string" },
-            "path": { "type": "string", "minLength": 1, "description": "Worktree-relative path; an authorized absolute path is also accepted." },
+            "path": { "type": "string", "description": "Required non-empty worktree-relative path; an authorized absolute path is also accepted." },
             "preview": { "type": "boolean", "description": "Open as the replaceable Explorer preview tab." },
             "pinned": { "type": "boolean" },
             "focus": { "type": "boolean", "description": "Focus the new tab; defaults false for API callers." },
             "mode": { "type": "string", "enum": ["source", "rich", "preview"] },
-            "group": { "type": "string", "minLength": 1 },
+            "group": { "type": "string", "description": "Non-empty terminal tab group when supplied." },
             "line": { "type": "integer", "minimum": 1 },
             "column": { "type": "integer", "minimum": 1 },
-            "matchLength": { "type": "integer", "minimum": 0, "maximum": 52428800, "description": "UTF-16 selection length for a search match; requires line and column." }
+            "matchLength": { "type": "integer", "minimum": 0, "maximum": 52428800, "description": "UTF-16 selection length, at most 52,428,800 code units; supplying it requires both line and column." }
           },
-          "oneOf": [
-            { "not": { "required": ["matchLength"] } },
-            { "required": ["matchLength", "line", "column"] }
-          ],
           "required": ["path"],
           "additionalProperties": false
         },
@@ -42,25 +38,25 @@
             "path": { "type": "string" }, "relativePath": { "type": "string" }, "name": { "type": "string" },
             "kind": { "type": "string", "enum": ["text", "markdown", "notebook", "csv", "image", "pdf", "audio", "video", "mermaid", "binary"] },
             "content": { "type": "string", "description": "Optional inline UTF-8 text within the aggregate 256 KiB content budget." },
-            "draft": { "type": ["string", "null"], "description": "Null when clean; omitted when a non-null draft is lazy." },
-            "baseline": { "type": ["string", "null"] },
+            "draft": { "description": "Draft text when present, or null when clean; a non-null draft may be omitted when it is lazy." },
+            "baseline": { "description": "Saved-content baseline hash, or null when no saved baseline is available." },
             "size": { "type": "integer", "minimum": 0 },
             "readOnly": { "type": "boolean" }, "dirty": { "type": "boolean" },
-            "external": { "type": ["string", "null"], "enum": ["changed", "deleted", null] },
-            "diskContent": { "type": ["string", "null"], "description": "Optional inline disk comparison text within the aggregate content budget." },
-            "diskSignature": { "type": ["string", "null"] },
-            "diskContentLength": { "type": ["integer", "null"], "minimum": 0 },
-            "diskContentBytes": { "type": ["integer", "null"], "minimum": 0 },
+            "external": { "description": "External disk state: 'changed', 'deleted', or null when there is no external change." },
+            "diskContent": { "description": "Optional inline disk comparison text within the aggregate 256 KiB content budget, or null when unavailable." },
+            "diskSignature": { "description": "Disk content signature, or null when no comparison signature is available." },
+            "diskContentLength": { "description": "Nonnegative disk-content length when present, or null when no disk comparison is available." },
+            "diskContentBytes": { "description": "Nonnegative disk-content byte count when present, or null when no disk comparison is available." },
             "contentLength": { "type": "integer", "minimum": 0, "description": "UTF-16 code-unit length." },
-            "draftLength": { "type": ["integer", "null"], "minimum": 0, "description": "Null when no draft exists." },
+            "draftLength": { "description": "Nonnegative draft length when present, or null when there is no draft." },
             "contentBytes": { "type": "integer", "minimum": 0, "description": "UTF-8 byte length." },
-            "draftBytes": { "type": ["integer", "null"], "minimum": 0 },
+            "draftBytes": { "description": "Nonnegative draft UTF-8 byte count when present, or null when there is no draft." },
             "mode": { "type": "string", "enum": ["source", "rich", "preview"] },
-            "tabId": { "type": ["string", "null"] }, "preview": { "type": "boolean" }, "pinned": { "type": "boolean" },
+            "tabId": { "description": "Stable terminal tab ID, or null when no editor tab is mapped." }, "preview": { "type": "boolean" }, "pinned": { "type": "boolean" },
             "untitled": { "type": "boolean" }, "revision": { "type": "integer", "minimum": 0 },
             "contentRevision": { "type": "integer", "minimum": 0 },
             "view": { "type": "object", "additionalProperties": true },
-            "error": { "type": ["string", "null"] }
+            "error": { "description": "Error message, or null when this buffer has no error." }
           },
           "required": ["id", "worktreeId", "root", "path", "relativePath", "name", "kind", "baseline", "size", "readOnly", "dirty", "external", "diskSignature", "diskContentLength", "diskContentBytes", "contentLength", "draftLength", "contentBytes", "draftBytes", "mode", "tabId", "openedTabId", "preview", "pinned", "untitled", "revision", "contentRevision", "view", "error"],
           "additionalProperties": false
@@ -82,18 +78,18 @@
                   "id": { "type": "string" }, "worktreeId": { "type": "string" }, "root": { "type": "string" },
                   "path": { "type": "string" }, "relativePath": { "type": "string" }, "name": { "type": "string" },
                   "kind": { "type": "string", "enum": ["text", "markdown", "notebook", "csv", "image", "pdf", "audio", "video", "mermaid", "binary"] },
-                  "baseline": { "type": ["string", "null"] }, "size": { "type": "integer", "minimum": 0 },
+                  "baseline": { "description": "Saved-content baseline hash, or null when no saved baseline is available." }, "size": { "type": "integer", "minimum": 0 },
                   "contentLength": { "type": "integer", "minimum": 0 }, "contentBytes": { "type": "integer", "minimum": 0 },
-                  "draftLength": { "type": ["integer", "null"], "minimum": 0 }, "draftBytes": { "type": ["integer", "null"], "minimum": 0 },
-                  "diskContentLength": { "type": ["integer", "null"], "minimum": 0 }, "diskContentBytes": { "type": ["integer", "null"], "minimum": 0 },
-                  "diskSignature": { "type": ["string", "null"] },
+                  "draftLength": { "description": "Nonnegative draft length when present, or null when there is no draft." }, "draftBytes": { "description": "Nonnegative draft UTF-8 byte count when present, or null when there is no draft." },
+                  "diskContentLength": { "description": "Nonnegative disk-content length when present, or null when no disk comparison is available." }, "diskContentBytes": { "description": "Nonnegative disk-content byte count when present, or null when no disk comparison is available." },
+                  "diskSignature": { "description": "Disk content signature, or null when no comparison signature is available." },
                   "readOnly": { "type": "boolean" }, "dirty": { "type": "boolean" },
-                  "external": { "type": ["string", "null"], "enum": ["changed", "deleted", null] },
+                  "external": { "description": "External disk state: 'changed', 'deleted', or null when there is no external change." },
                   "mode": { "type": "string", "enum": ["source", "rich", "preview"] },
-                  "tabId": { "type": ["string", "null"] }, "preview": { "type": "boolean" }, "pinned": { "type": "boolean" },
+                  "tabId": { "description": "Stable terminal tab ID, or null when no editor tab is mapped." }, "preview": { "type": "boolean" }, "pinned": { "type": "boolean" },
                   "untitled": { "type": "boolean" }, "revision": { "type": "integer", "minimum": 0 },
                   "contentRevision": { "type": "integer", "minimum": 0 },
-                  "view": { "type": "object", "additionalProperties": true }, "error": { "type": ["string", "null"] }
+                  "view": { "type": "object", "additionalProperties": true }, "error": { "description": "Error message, or null when this buffer has no error." }
                 },
                 "required": ["id", "worktreeId", "root", "path", "relativePath", "name", "kind", "baseline", "size", "contentLength", "contentBytes", "draftLength", "draftBytes", "diskContentLength", "diskContentBytes", "diskSignature", "readOnly", "dirty", "external", "mode", "tabId", "preview", "pinned", "untitled", "revision", "contentRevision", "view", "error"],
                 "additionalProperties": false
@@ -115,40 +111,7 @@
               "additionalProperties": false
             },
             "search": {
-              "oneOf": [
-                { "type": "null" },
-                {
-                  "type": "object",
-                  "properties": {
-                    "worktreeId": { "type": "string" }, "query": { "type": "string" }, "loading": { "type": "boolean" },
-                    "error": { "type": ["string", "null"] },
-                    "files": {
-                      "type": "array",
-                      "items": {
-                        "type": "object",
-                        "properties": {
-                          "path": { "type": "string" }, "relativePath": { "type": "string" },
-                          "matches": {
-                            "type": "array",
-                            "items": {
-                              "type": "object",
-                              "properties": { "line": { "type": "integer", "minimum": 1 }, "column": { "type": "integer", "minimum": 1 }, "displayColumn": { "type": "integer", "minimum": 1 }, "matchLength": { "type": "integer", "minimum": 0 }, "displayMatchLength": { "type": "integer", "minimum": 0 }, "lineContent": { "type": "string" } },
-                              "required": ["line", "column", "matchLength", "lineContent"],
-                              "additionalProperties": false
-                            }
-                          },
-                          "matchCount": { "type": "integer", "minimum": 0 }
-                        },
-                        "required": ["path", "relativePath", "matches"],
-                        "additionalProperties": false
-                      }
-                    },
-                    "totalMatches": { "type": "integer", "minimum": 0 }, "truncated": { "type": "boolean" }, "requestId": { "type": ["string", "null"] }
-                  },
-                  "required": ["worktreeId", "query", "loading", "error", "files", "totalMatches", "truncated", "requestId"],
-                  "additionalProperties": false
-                }
-              ]
+              "description": "Either null when no contents search state is active, or an object with worktreeId (string), query (string), loading (boolean), error (string or null), files (array of {path:string, relativePath:string, matches:array of {line:integer >= 1, column:integer >= 1, matchLength:integer >= 0, lineContent:string, and optional displayColumn:integer >= 1 and displayMatchLength:integer >= 0}, and optional matchCount:nonnegative integer}), totalMatches (nonnegative integer), truncated (boolean), and requestId (string or null)."
             },
             "quickOpenHistory": {
               "type": "array",
@@ -166,7 +129,7 @@
       {
         "id": "draft",
         "description": "CAS-update a shared editable buffer draft using its content revision.",
-        "params": { "type": "object", "properties": { "bufferId": { "type": "string" }, "content": { "type": "string" }, "expectedRevision": { "type": "integer", "minimum": 0 } }, "required": ["bufferId", "content", "expectedRevision"], "additionalProperties": false },
+        "params": { "type": "object", "properties": { "bufferId": { "type": "string" }, "content": { "type": "string", "description": "Required UTF-8 draft text; the service rejects drafts larger than 50 MiB." }, "expectedRevision": { "type": "integer", "minimum": 0 } }, "required": ["bufferId", "content", "expectedRevision"], "additionalProperties": false },
         "result": {
           "type": "object",
           "properties": {
@@ -174,19 +137,19 @@
             "path": { "type": "string" }, "relativePath": { "type": "string" }, "name": { "type": "string" },
             "kind": { "type": "string", "enum": ["text", "markdown", "notebook", "csv", "image", "pdf", "audio", "video", "mermaid", "binary"] },
             "content": { "type": "string", "description": "Optional inline text within the aggregate 256 KiB content budget." },
-            "draft": { "type": ["string", "null"], "description": "Null when clean; omitted when a non-null draft is lazy." },
-            "baseline": { "type": ["string", "null"] }, "size": { "type": "integer", "minimum": 0 },
+            "draft": { "description": "Draft text when present, or null when clean; a non-null draft may be omitted when it is lazy." },
+            "baseline": { "description": "Saved-content baseline hash, or null when no saved baseline is available." }, "size": { "type": "integer", "minimum": 0 },
             "readOnly": { "type": "boolean" }, "dirty": { "type": "boolean" },
-            "external": { "type": ["string", "null"], "enum": ["changed", "deleted", null] },
-            "diskContent": { "type": ["string", "null"], "description": "Optional inline disk comparison text." },
-            "diskSignature": { "type": ["string", "null"] },
-            "diskContentLength": { "type": ["integer", "null"], "minimum": 0 }, "diskContentBytes": { "type": ["integer", "null"], "minimum": 0 },
-            "contentLength": { "type": "integer", "minimum": 0 }, "draftLength": { "type": ["integer", "null"], "minimum": 0 },
-            "contentBytes": { "type": "integer", "minimum": 0 }, "draftBytes": { "type": ["integer", "null"], "minimum": 0 },
-            "mode": { "type": "string", "enum": ["source", "rich", "preview"] }, "tabId": { "type": ["string", "null"] },
+            "external": { "description": "External disk state: 'changed', 'deleted', or null when there is no external change." },
+            "diskContent": { "description": "Optional inline disk comparison text, or null when unavailable." },
+            "diskSignature": { "description": "Disk content signature, or null when no comparison signature is available." },
+            "diskContentLength": { "description": "Nonnegative disk-content length when present, or null when no disk comparison is available." }, "diskContentBytes": { "description": "Nonnegative disk-content byte count when present, or null when no disk comparison is available." },
+            "contentLength": { "type": "integer", "minimum": 0 }, "draftLength": { "description": "Nonnegative draft length when present, or null when there is no draft." },
+            "contentBytes": { "type": "integer", "minimum": 0 }, "draftBytes": { "description": "Nonnegative draft UTF-8 byte count when present, or null when there is no draft." },
+            "mode": { "type": "string", "enum": ["source", "rich", "preview"] }, "tabId": { "description": "Stable terminal tab ID, or null when no editor tab is mapped." },
             "preview": { "type": "boolean" }, "pinned": { "type": "boolean" }, "untitled": { "type": "boolean" },
             "revision": { "type": "integer", "minimum": 0 }, "contentRevision": { "type": "integer", "minimum": 0 },
-            "view": { "type": "object", "additionalProperties": true }, "error": { "type": ["string", "null"] }
+            "view": { "type": "object", "additionalProperties": true }, "error": { "description": "Error message, or null when this buffer has no error." }
           },
           "required": ["id", "worktreeId", "root", "path", "relativePath", "name", "kind", "baseline", "size", "readOnly", "dirty", "external", "diskSignature", "diskContentLength", "diskContentBytes", "contentLength", "draftLength", "contentBytes", "draftBytes", "mode", "tabId", "preview", "pinned", "untitled", "revision", "contentRevision", "view", "error"],
           "additionalProperties": false
@@ -203,19 +166,19 @@
             "path": { "type": "string" }, "relativePath": { "type": "string" }, "name": { "type": "string" },
             "kind": { "type": "string", "enum": ["text", "markdown", "notebook", "csv", "image", "pdf", "audio", "video", "mermaid", "binary"] },
             "content": { "type": "string", "description": "Optional inline text within the aggregate 256 KiB content budget." },
-            "draft": { "type": ["string", "null"], "description": "Null when clean; omitted when a non-null draft is lazy." },
-            "baseline": { "type": ["string", "null"] }, "size": { "type": "integer", "minimum": 0 },
+            "draft": { "description": "Draft text when present, or null when clean; a non-null draft may be omitted when it is lazy." },
+            "baseline": { "description": "Saved-content baseline hash, or null when no saved baseline is available." }, "size": { "type": "integer", "minimum": 0 },
             "readOnly": { "type": "boolean" }, "dirty": { "type": "boolean" },
-            "external": { "type": ["string", "null"], "enum": ["changed", "deleted", null] },
-            "diskContent": { "type": ["string", "null"], "description": "Optional inline disk comparison text." },
-            "diskSignature": { "type": ["string", "null"] },
-            "diskContentLength": { "type": ["integer", "null"], "minimum": 0 }, "diskContentBytes": { "type": ["integer", "null"], "minimum": 0 },
-            "contentLength": { "type": "integer", "minimum": 0 }, "draftLength": { "type": ["integer", "null"], "minimum": 0 },
-            "contentBytes": { "type": "integer", "minimum": 0 }, "draftBytes": { "type": ["integer", "null"], "minimum": 0 },
-            "mode": { "type": "string", "enum": ["source", "rich", "preview"] }, "tabId": { "type": ["string", "null"] },
+            "external": { "description": "External disk state: 'changed', 'deleted', or null when there is no external change." },
+            "diskContent": { "description": "Optional inline disk comparison text, or null when unavailable." },
+            "diskSignature": { "description": "Disk content signature, or null when no comparison signature is available." },
+            "diskContentLength": { "description": "Nonnegative disk-content length when present, or null when no disk comparison is available." }, "diskContentBytes": { "description": "Nonnegative disk-content byte count when present, or null when no disk comparison is available." },
+            "contentLength": { "type": "integer", "minimum": 0 }, "draftLength": { "description": "Nonnegative draft length when present, or null when there is no draft." },
+            "contentBytes": { "type": "integer", "minimum": 0 }, "draftBytes": { "description": "Nonnegative draft UTF-8 byte count when present, or null when there is no draft." },
+            "mode": { "type": "string", "enum": ["source", "rich", "preview"] }, "tabId": { "description": "Stable terminal tab ID, or null when no editor tab is mapped." },
             "preview": { "type": "boolean" }, "pinned": { "type": "boolean" }, "untitled": { "type": "boolean" },
             "revision": { "type": "integer", "minimum": 0 }, "contentRevision": { "type": "integer", "minimum": 0 },
-            "view": { "type": "object", "additionalProperties": true }, "error": { "type": ["string", "null"] }
+            "view": { "type": "object", "additionalProperties": true }, "error": { "description": "Error message, or null when this buffer has no error." }
           },
           "required": ["id", "worktreeId", "root", "path", "relativePath", "name", "kind", "baseline", "size", "readOnly", "dirty", "external", "diskSignature", "diskContentLength", "diskContentBytes", "contentLength", "draftLength", "contentBytes", "draftBytes", "mode", "tabId", "preview", "pinned", "untitled", "revision", "contentRevision", "view", "error"],
           "additionalProperties": false
@@ -239,30 +202,7 @@
         "description": "Reopen the most recently closed eligible edit tab, or return null when the stack is empty.",
         "params": { "type": "object", "properties": { "worktree": { "type": "string" }, "focus": { "type": "boolean" } }, "additionalProperties": false },
         "result": {
-          "oneOf": [
-            {
-              "type": "object",
-              "properties": {
-                "id": { "type": "string" }, "worktreeId": { "type": "string" }, "root": { "type": "string" },
-                "path": { "type": "string" }, "relativePath": { "type": "string" }, "name": { "type": "string" },
-                "kind": { "type": "string", "enum": ["text", "markdown", "notebook", "csv", "image", "pdf", "audio", "video", "mermaid", "binary"] },
-                "content": { "type": "string" }, "draft": { "type": ["string", "null"] }, "baseline": { "type": ["string", "null"] },
-                "size": { "type": "integer", "minimum": 0 }, "readOnly": { "type": "boolean" }, "dirty": { "type": "boolean" },
-                "external": { "type": ["string", "null"], "enum": ["changed", "deleted", null] },
-                "diskContent": { "type": ["string", "null"] }, "diskSignature": { "type": ["string", "null"] },
-                "diskContentLength": { "type": ["integer", "null"], "minimum": 0 }, "diskContentBytes": { "type": ["integer", "null"], "minimum": 0 },
-                "contentLength": { "type": "integer", "minimum": 0 }, "draftLength": { "type": ["integer", "null"], "minimum": 0 },
-                "contentBytes": { "type": "integer", "minimum": 0 }, "draftBytes": { "type": ["integer", "null"], "minimum": 0 },
-                "mode": { "type": "string", "enum": ["source", "rich", "preview"] }, "tabId": { "type": ["string", "null"] },
-                "preview": { "type": "boolean" }, "pinned": { "type": "boolean" }, "untitled": { "type": "boolean" },
-                "revision": { "type": "integer", "minimum": 0 }, "contentRevision": { "type": "integer", "minimum": 0 },
-                "view": { "type": "object", "additionalProperties": true }, "error": { "type": ["string", "null"] }
-              },
-              "required": ["id", "worktreeId", "root", "path", "relativePath", "name", "kind", "baseline", "size", "readOnly", "dirty", "external", "diskSignature", "diskContentLength", "diskContentBytes", "contentLength", "draftLength", "contentBytes", "draftBytes", "mode", "tabId", "preview", "pinned", "untitled", "revision", "contentRevision", "view", "error"],
-              "additionalProperties": false
-            },
-            { "type": "null" }
-          ]
+          "description": "Either null when no eligible recently closed edit tab exists, or an editor-buffer snapshot with id/worktreeId/root/path/relativePath/name, kind, content, nullable draft and baseline, size/contentLength/contentBytes, nullable draftLength/draftBytes, readOnly/dirty, nullable external/diskContent/diskSignature/diskContentLength/diskContentBytes, mode/tabId, preview/pinned/untitled, revision/contentRevision, view and nullable error. kind is text, markdown, notebook, csv, image, pdf, audio, video, mermaid or binary; mode is source, rich or preview."
         }
       },
       {
@@ -272,7 +212,7 @@
           "type": "object",
           "properties": {
             "bufferId": { "type": "string" },
-            "action": { "type": "string", "enum": ["update", "reload", "keep", "undoReload", "compare", "promote", "pin", "reveal"] },
+            "action": { "type": "string", "enum": ["update", "reload", "keep", "undoReload", "compare", "promote", "pin", "reveal"], "description": "Optional; defaults to update. update applies patch/preview state; promote, pin, reveal, compare, reload, keep and undoReload select their named operation and need no patch." },
             "tabId": { "type": "string" },
             "patch": {
               "type": "object",
@@ -280,20 +220,20 @@
                 "selection": { "type": "object", "properties": { "from": { "type": "integer", "minimum": 0 }, "to": { "type": "integer", "minimum": 0 }, "anchor": { "type": "integer", "minimum": 0 }, "head": { "type": "integer", "minimum": 0 }, "empty": { "type": "boolean" } }, "additionalProperties": false },
                 "cursorLine": { "type": "integer", "minimum": 1 }, "cursorColumn": { "type": "integer", "minimum": 1 },
                 "scrollTop": { "type": "number", "minimum": 0 }, "scrollLeft": { "type": "number", "minimum": 0 },
-                "scroll": { "type": ["number", "object"], "minimum": 0, "additionalProperties": true },
+                "scroll": { "description": "Either a nonnegative numeric scroll position or a viewer-specific structured scroll-state object." },
                 "zoom": { "type": "number", "minimum": 0.25, "maximum": 8 }, "scale": { "type": "number", "minimum": 0.25, "maximum": 8 },
                 "page": { "type": "integer", "minimum": 1 }, "position": { "type": "object", "additionalProperties": true },
                 "wordWrap": { "type": "boolean" }, "showWhitespace": { "type": "boolean" },
                 "tocVisible": { "type": "boolean" }, "frontmatterVisible": { "type": "boolean" },
                 "collapsedFiles": { "type": "array", "items": { "type": "string" } },
-                "search": { "type": ["string", "object"], "additionalProperties": true },
-                "find": { "type": ["string", "object"], "additionalProperties": true },
-                "sort": { "type": ["string", "object"], "additionalProperties": true },
-                "filter": { "type": ["string", "object"], "additionalProperties": true },
+                "search": { "description": "Search state as a string or viewer-specific object." },
+                "find": { "description": "Find state as a string or viewer-specific object." },
+                "sort": { "description": "Sort state as a string or viewer-specific object." },
+                "filter": { "description": "Filter state as a string or viewer-specific object." },
                 "mode": { "type": "string", "enum": ["source", "rich"], "description": "Preview is a separate tab and cannot be set through a buffer mode patch." },
                 "delimiter": { "type": "string" }, "viewer": { "type": "object", "additionalProperties": true },
                 "focused": { "type": "boolean" }, "line": { "type": "integer", "minimum": 1 }, "column": { "type": "integer", "minimum": 1 },
-                "markdownAnchor": { "type": ["string", "null"], "maxLength": 512, "description": "Safe Markdown heading fragment for this tab; empty string or null clears it." },
+                "markdownAnchor": { "description": "Safe Markdown heading fragment of at most 512 UTF-8 bytes, or null; empty string and null clear it." },
                 "matchLength": { "type": "integer", "minimum": 0, "maximum": 52428800, "description": "UTF-16 search-match selection length." }
               },
               "additionalProperties": false
@@ -310,19 +250,19 @@
             "path": { "type": "string" }, "relativePath": { "type": "string" }, "name": { "type": "string" },
             "kind": { "type": "string", "enum": ["text", "markdown", "notebook", "csv", "image", "pdf", "audio", "video", "mermaid", "binary"] },
             "content": { "type": "string", "description": "Optional inline text within the aggregate 256 KiB content budget." },
-            "draft": { "type": ["string", "null"], "description": "Null when clean; omitted when a non-null draft is lazy." },
-            "baseline": { "type": ["string", "null"] }, "size": { "type": "integer", "minimum": 0 },
+            "draft": { "description": "Draft text when present, or null when clean; a non-null draft may be omitted when it is lazy." },
+            "baseline": { "description": "Saved-content baseline hash, or null when no saved baseline is available." }, "size": { "type": "integer", "minimum": 0 },
             "readOnly": { "type": "boolean" }, "dirty": { "type": "boolean" },
-            "external": { "type": ["string", "null"], "enum": ["changed", "deleted", null] },
-            "diskContent": { "type": ["string", "null"], "description": "Optional inline disk comparison text." },
-            "diskSignature": { "type": ["string", "null"] },
-            "diskContentLength": { "type": ["integer", "null"], "minimum": 0 }, "diskContentBytes": { "type": ["integer", "null"], "minimum": 0 },
-            "contentLength": { "type": "integer", "minimum": 0 }, "draftLength": { "type": ["integer", "null"], "minimum": 0 },
-            "contentBytes": { "type": "integer", "minimum": 0 }, "draftBytes": { "type": ["integer", "null"], "minimum": 0 },
-            "mode": { "type": "string", "enum": ["source", "rich", "preview"] }, "tabId": { "type": ["string", "null"] },
+            "external": { "description": "External disk state: 'changed', 'deleted', or null when there is no external change." },
+            "diskContent": { "description": "Optional inline disk comparison text, or null when unavailable." },
+            "diskSignature": { "description": "Disk content signature, or null when no comparison signature is available." },
+            "diskContentLength": { "description": "Nonnegative disk-content length when present, or null when no disk comparison is available." }, "diskContentBytes": { "description": "Nonnegative disk-content byte count when present, or null when no disk comparison is available." },
+            "contentLength": { "type": "integer", "minimum": 0 }, "draftLength": { "description": "Nonnegative draft length when present, or null when there is no draft." },
+            "contentBytes": { "type": "integer", "minimum": 0 }, "draftBytes": { "description": "Nonnegative draft UTF-8 byte count when present, or null when there is no draft." },
+            "mode": { "type": "string", "enum": ["source", "rich", "preview"] }, "tabId": { "description": "Stable terminal tab ID, or null when no editor tab is mapped." },
             "preview": { "type": "boolean" }, "pinned": { "type": "boolean" }, "untitled": { "type": "boolean" },
             "revision": { "type": "integer", "minimum": 0 }, "contentRevision": { "type": "integer", "minimum": 0 },
-            "view": { "type": "object", "additionalProperties": true }, "error": { "type": ["string", "null"] }
+            "view": { "type": "object", "additionalProperties": true }, "error": { "description": "Error message, or null when this buffer has no error." }
           },
           "required": ["id", "worktreeId", "root", "path", "relativePath", "name", "kind", "baseline", "size", "readOnly", "dirty", "external", "diskSignature", "diskContentLength", "diskContentBytes", "contentLength", "draftLength", "contentBytes", "draftBytes", "mode", "tabId", "preview", "pinned", "untitled", "revision", "contentRevision", "view", "error"],
           "additionalProperties": false
@@ -331,7 +271,7 @@
       {
         "id": "explorer",
         "description": "List and refresh authorized directory entries, filter the inventory, reveal paths and update per-worktree preferences.",
-        "params": { "type": "object", "properties": { "worktree": { "type": "string" }, "action": { "type": "string", "enum": ["list", "refresh", "reveal", "filter", "preferences"] }, "path": { "type": "string" }, "query": { "type": "string" }, "showDotfiles": { "type": "boolean" }, "showIgnored": { "type": "boolean" }, "followSymlinkedDirectories": { "type": "boolean" }, "expanded": { "type": "array", "items": { "type": "string" } }, "displayRoot": { "type": "string" } }, "required": ["action"], "additionalProperties": false },
+        "params": { "type": "object", "properties": { "worktree": { "type": "string" }, "action": { "type": "string", "enum": ["list", "refresh", "reveal", "filter", "preferences"], "description": "reveal uses path when supplied; filter uses query; preferences accepts showDotfiles, displayRoot and expanded. list/refresh accept an optional directory path." }, "path": { "type": "string", "description": "Directory to list/refresh or path to reveal; required to reveal a specific path." }, "query": { "type": "string", "description": "Filter query, limited by the service to 2,048 UTF-8 bytes." }, "showDotfiles": { "type": "boolean" }, "showIgnored": { "type": "boolean" }, "expanded": { "type": "array", "items": { "type": "string", "description": "Worktree path to expand; the service retains only authorized directories." } }, "displayRoot": { "type": "string" } }, "required": ["action"], "additionalProperties": false },
         "result": { "type": "object", "properties": { "root": { "type": "string" }, "entries": { "type": "array", "items": { "type": "object", "properties": { "path": { "type": "string" }, "name": { "type": "string" }, "isDirectory": { "type": "boolean" }, "isSymlink": { "type": "boolean" }, "ignored": { "type": "boolean" }, "error": { "type": "string" } }, "required": ["path", "name", "isDirectory", "isSymlink"] } }, "truncated": { "type": "boolean" }, "showDotfiles": { "type": "boolean" }, "showIgnored": { "type": "boolean" }, "followSymlinkedDirectories": { "type": "boolean" } }, "required": ["root", "entries", "showDotfiles", "showIgnored", "followSymlinkedDirectories"], "additionalProperties": false }
       },
       {
@@ -341,18 +281,18 @@
           "type": "object",
           "properties": {
             "worktree": { "type": "string" },
-            "action": { "type": "string", "enum": ["createFile", "createFolder", "rename", "move", "duplicate", "delete", "import"] },
-            "path": { "type": "string", "minLength": 1 }, "newPath": { "type": "string", "minLength": 1 },
-            "content": { "type": "string" },
-            "sourcePaths": { "type": "array", "maxItems": 256, "items": { "type": "string", "minLength": 1 } },
+            "action": { "type": "string", "enum": ["createFile", "createFolder", "rename", "move", "duplicate", "delete", "import"], "description": "rename/move require newPath. import requires at least one sourcePaths or files entry; every imported source is copied into the destination with a collision-safe name, even when it is already inside the worktree." },
+            "path": { "type": "string", "description": "Required destination/source worktree path; non-empty." }, "newPath": { "type": "string", "description": "Required non-empty destination for rename and move." },
+            "content": { "type": "string", "description": "Optional initial UTF-8 file content; createFile is limited to 50 MiB." },
+            "sourcePaths": { "type": "array", "description": "Import source paths; sourcePaths and files together accept at most 256 files, 256 KiB of path/name metadata, and 50 MiB of file data. Sources are copied, including same-worktree sources, using collision-safe destination names.", "items": { "type": "string", "description": "Non-empty source file or directory path to copy into the destination." } },
             "files": {
               "type": "array",
-              "maxItems": 256,
+              "description": "Inline import files; at most 256 entries across sourcePaths and files, 256 KiB of metadata and 50 MiB of total file data.",
               "items": {
                 "type": "object",
                 "properties": {
-                  "name": { "type": "string", "minLength": 1 },
-                  "data": { "type": "string", "maxLength": 69905068, "pattern": "^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$" }
+                  "name": { "type": "string", "description": "Required safe, non-empty filename without path separators." },
+                  "data": { "type": "string", "description": "Canonical Base64-encoded file bytes, at most 69,905,068 characters for a 50 MiB file; the service validates encoding and enforces the 50 MiB per-file and aggregate import byte limits." }
                 },
                 "required": ["name", "data"],
                 "additionalProperties": false
@@ -366,29 +306,9 @@
         "result": {
           "type": "object",
           "properties": {
-            "path": { "type": "string", "minLength": 1 },
-            "buffer": {
-              "type": "object",
-              "properties": {
-                "id": { "type": "string" }, "worktreeId": { "type": "string" }, "root": { "type": "string" },
-                "path": { "type": "string" }, "relativePath": { "type": "string" }, "name": { "type": "string" },
-                "kind": { "type": "string", "enum": ["text", "markdown", "notebook", "csv", "image", "pdf", "audio", "video", "mermaid", "binary"] },
-                "content": { "type": "string" }, "draft": { "type": ["string", "null"] }, "baseline": { "type": ["string", "null"] },
-                "size": { "type": "integer", "minimum": 0 }, "readOnly": { "type": "boolean" }, "dirty": { "type": "boolean" },
-                "external": { "type": ["string", "null"], "enum": ["changed", "deleted", null] },
-                "diskContent": { "type": ["string", "null"] }, "diskSignature": { "type": ["string", "null"] },
-                "diskContentLength": { "type": ["integer", "null"], "minimum": 0 }, "diskContentBytes": { "type": ["integer", "null"], "minimum": 0 },
-                "contentLength": { "type": "integer", "minimum": 0 }, "draftLength": { "type": ["integer", "null"], "minimum": 0 },
-                "contentBytes": { "type": "integer", "minimum": 0 }, "draftBytes": { "type": ["integer", "null"], "minimum": 0 },
-                "mode": { "type": "string", "enum": ["source", "rich", "preview"] }, "tabId": { "type": ["string", "null"] },
-                "preview": { "type": "boolean" }, "pinned": { "type": "boolean" }, "untitled": { "type": "boolean" },
-                "revision": { "type": "integer", "minimum": 0 }, "contentRevision": { "type": "integer", "minimum": 0 },
-                "view": { "type": "object", "additionalProperties": true }, "error": { "type": ["string", "null"] }
-              },
-              "required": ["id", "worktreeId", "root", "path", "relativePath", "name", "kind", "baseline", "size", "readOnly", "dirty", "external", "diskSignature", "diskContentLength", "diskContentBytes", "contentLength", "draftLength", "contentBytes", "draftBytes", "mode", "tabId", "preview", "pinned", "untitled", "revision", "contentRevision", "view", "error"],
-              "additionalProperties": false
-            },
-            "paths": { "type": "array", "items": { "type": "string", "minLength": 1 } }
+            "path": { "type": "string", "description": "Created, moved, duplicated, deleted, or import destination worktree path." },
+            "buffer": { "type": "object", "description": "Optional complete editor buffer snapshot; its fields and nullable values match the buffer snapshot documented on open's result.", "additionalProperties": true },
+            "paths": { "type": "array", "description": "Paths created by an import; non-empty for import results.", "items": { "type": "string" } }
           },
           "required": ["path"],
           "additionalProperties": false
@@ -403,13 +323,13 @@
       {
         "id": "quickOpen",
         "description": "Search the bounded rg file inventory, rank fuzzy matches and manage worktree-scoped recents.",
-        "params": { "type": "object", "properties": { "worktree": { "type": "string" }, "action": { "type": "string", "enum": ["search", "record", "history", "clearHistory"] }, "query": { "type": "string" }, "path": { "type": "string" }, "limit": { "type": "integer", "minimum": 1, "maximum": 50 } }, "required": ["action"], "additionalProperties": false },
+        "params": { "type": "object", "properties": { "worktree": { "type": "string" }, "action": { "type": "string", "enum": ["search", "record", "history", "clearHistory"], "description": "record requires path; search accepts query (empty is allowed); history and clearHistory need no further fields." }, "query": { "type": "string", "description": "Optional fuzzy path query, limited to 2,048 UTF-8 bytes by the service." }, "path": { "type": "string", "description": "Required for record; the path must resolve to a file, not a directory." }, "limit": { "type": "integer", "minimum": 1, "maximum": 50 } }, "required": ["action"], "additionalProperties": false },
         "result": { "type": "object", "properties": { "results": { "type": "array", "items": { "type": "object", "properties": { "path": { "type": "string" }, "name": { "type": "string" }, "score": { "type": "number" }, "line": { "type": "integer", "minimum": 1 }, "column": { "type": "integer", "minimum": 1 } }, "required": ["path", "name", "score"] } }, "truncated": { "type": "boolean" }, "history": { "type": "array", "items": { "type": "string" } } }, "required": ["results", "truncated", "history"], "additionalProperties": false }
       },
       {
         "id": "search",
         "description": "Run, cancel or inspect a bounded contents search in an authorized worktree.",
-        "params": { "type": "object", "properties": { "worktree": { "type": "string" }, "action": { "type": "string", "enum": ["run", "cancel", "state"] }, "query": { "type": "string" }, "caseSensitive": { "type": "boolean" }, "wholeWord": { "type": "boolean" }, "useRegex": { "type": "boolean" }, "includePattern": { "type": "string" }, "excludePattern": { "type": "string" }, "requestId": { "type": "string" }, "maxResults": { "type": "integer", "minimum": 1, "maximum": 2000 } }, "required": ["action"], "additionalProperties": false },
+        "params": { "type": "object", "properties": { "worktree": { "type": "string" }, "action": { "type": "string", "enum": ["run", "cancel", "state"], "description": "run starts or replaces the worktree search; cancel and state operate on that worktree's current search and need no query or requestId." }, "query": { "type": "string", "description": "Optional search query; empty query produces an empty result. Query, includePattern and excludePattern are each limited to 8,192 UTF-8 bytes." }, "caseSensitive": { "type": "boolean" }, "wholeWord": { "type": "boolean" }, "useRegex": { "type": "boolean" }, "includePattern": { "type": "string", "description": "Optional include glob, limited to 8,192 UTF-8 bytes." }, "excludePattern": { "type": "string", "description": "Optional exclude glob, limited to 8,192 UTF-8 bytes." }, "requestId": { "type": "string", "description": "Optional caller-chosen ID for a run; the service creates one when omitted." }, "maxResults": { "type": "integer", "minimum": 1, "maximum": 2000 } }, "required": ["action"], "additionalProperties": false },
         "result": {
           "type": "object",
           "properties": {
@@ -439,8 +359,8 @@
               }
             },
             "totalMatches": { "type": "integer", "minimum": 0 }, "truncated": { "type": "boolean" },
-            "loading": { "type": "boolean" }, "error": { "type": ["string", "null"] },
-            "requestId": { "type": ["string", "null"] }
+            "loading": { "type": "boolean" }, "error": { "description": "Error message, or null when there is no search error." },
+            "requestId": { "description": "Active search request ID, or null when no request is active." }
           },
           "required": ["files", "totalMatches", "truncated", "loading", "error", "requestId"],
           "additionalProperties": false
@@ -454,295 +374,175 @@
           "type": "object",
           "properties": {
             "bufferId": { "type": "string" },
-            "action": { "type": "string", "enum": ["buffer", "bytes", "text"] },
-            "offset": { "type": "integer", "minimum": 0 },
-            "length": { "type": "integer", "minimum": 0, "maximum": 1048576 },
-            "kind": { "type": "string", "enum": ["content", "draft", "disk"] },
-            "contentRevision": { "type": "integer", "minimum": 0 },
-            "diskSignature": { "type": "string" }
+            "action": { "type": "string", "enum": ["buffer", "bytes", "text"], "description": "buffer needs only bufferId/action. bytes accepts optional offset/length (defaults to 0/1 MiB). text requires kind, offset and contentRevision; kind=disk additionally requires the current diskSignature." },
+            "offset": { "type": "integer", "minimum": 0, "description": "Byte offset for bytes or UTF-16 code-unit offset for text; text requires this value and bytes defaults it to 0." },
+            "length": { "type": "integer", "minimum": 0, "maximum": 1048576, "description": "Bytes reads accept up to 1 MiB; text reads accept up to 65,536 UTF-16 code units. Omitted values default to the action's maximum." },
+            "kind": { "type": "string", "enum": ["content", "draft", "disk"], "description": "Required for text reads; disk reads also require diskSignature." },
+            "contentRevision": { "type": "integer", "minimum": 0, "description": "Required for text reads and must match the buffer's current content revision." },
+            "diskSignature": { "type": "string", "description": "Required for kind=disk text reads and must match the current disk comparison signature." }
           },
-          "oneOf": [
-            { "properties": { "action": { "const": "buffer" } }, "required": ["bufferId", "action"] },
-            { "properties": { "action": { "const": "bytes" }, "length": { "type": "integer", "maximum": 1048576 } }, "required": ["bufferId", "action"] },
-            { "properties": { "action": { "const": "text" }, "kind": { "enum": ["content", "draft"] }, "length": { "type": "integer", "maximum": 65536 } }, "required": ["bufferId", "action", "kind", "offset", "contentRevision"] },
-            { "properties": { "action": { "const": "text" }, "kind": { "const": "disk" }, "length": { "type": "integer", "maximum": 65536 } }, "required": ["bufferId", "action", "kind", "offset", "contentRevision", "diskSignature"] }
-          ],
           "required": ["bufferId", "action"],
           "additionalProperties": false
         },
         "result": {
-          "oneOf": [
-            {
-              "type": "object",
-              "properties": {
-                "buffer": {
-                  "type": "object",
-                  "properties": {
-                    "id": { "type": "string" }, "worktreeId": { "type": "string" }, "root": { "type": "string" },
-                    "path": { "type": "string" }, "relativePath": { "type": "string" }, "name": { "type": "string" },
-                    "kind": { "type": "string", "enum": ["text", "markdown", "notebook", "csv", "image", "pdf", "audio", "video", "mermaid", "binary"] },
-                    "content": { "type": "string" }, "draft": { "type": ["string", "null"] }, "baseline": { "type": ["string", "null"] },
-                    "size": { "type": "integer", "minimum": 0 }, "readOnly": { "type": "boolean" }, "dirty": { "type": "boolean" },
-                    "external": { "type": ["string", "null"], "enum": ["changed", "deleted", null] },
-                    "diskContent": { "type": ["string", "null"] }, "diskSignature": { "type": ["string", "null"] },
-                    "diskContentLength": { "type": ["integer", "null"], "minimum": 0 }, "diskContentBytes": { "type": ["integer", "null"], "minimum": 0 },
-                    "contentLength": { "type": "integer", "minimum": 0 }, "draftLength": { "type": ["integer", "null"], "minimum": 0 },
-                    "contentBytes": { "type": "integer", "minimum": 0 }, "draftBytes": { "type": ["integer", "null"], "minimum": 0 },
-                    "mode": { "type": "string", "enum": ["source", "rich", "preview"] }, "tabId": { "type": ["string", "null"] },
-                    "preview": { "type": "boolean" }, "pinned": { "type": "boolean" }, "untitled": { "type": "boolean" },
-                    "revision": { "type": "integer", "minimum": 0 }, "contentRevision": { "type": "integer", "minimum": 0 },
-                    "view": { "type": "object", "additionalProperties": true }, "error": { "type": ["string", "null"] }
-                  },
-                  "required": ["id", "worktreeId", "root", "path", "relativePath", "name", "kind", "baseline", "size", "readOnly", "dirty", "external", "diskSignature", "diskContentLength", "diskContentBytes", "contentLength", "draftLength", "contentBytes", "draftBytes", "mode", "tabId", "preview", "pinned", "untitled", "revision", "contentRevision", "view", "error"],
-                  "additionalProperties": false
-                },
-                "eof": { "const": true }, "size": { "type": "integer", "minimum": 0 }
-              },
-              "required": ["buffer", "eof", "size"],
-              "additionalProperties": false
-            },
-            {
-              "type": "object",
-              "properties": { "data": { "type": "string", "description": "Base64-encoded bytes for a bounded on-disk range." }, "eof": { "type": "boolean" }, "size": { "type": "integer", "minimum": 0 } },
-              "required": ["data", "eof", "size"],
-              "additionalProperties": false
-            },
-            {
-              "type": "object",
-              "properties": { "text": { "type": "string" }, "offset": { "type": "integer", "minimum": 0 }, "nextOffset": { "type": "integer", "minimum": 0 }, "eof": { "type": "boolean" }, "contentRevision": { "type": "integer", "minimum": 0 }, "diskSignature": { "type": "string" } },
-              "required": ["text", "offset", "nextOffset", "eof", "contentRevision"],
-              "additionalProperties": false
-            }
-          ]
+          "type": "object",
+          "description": "Action-dependent result union: buffer returns a complete editor-buffer snapshot with eof=true and size; bytes returns Base64 data/eof/size; text returns a UTF-16 text chunk with offset/nextOffset/eof/contentRevision and diskSignature only for kind=disk. Text chunks are at most 65,536 code units and byte reads at most 1 MiB.",
+          "properties": {
+            "buffer": { "type": "object", "description": "Complete editor-buffer snapshot documented on open's result.", "additionalProperties": true },
+            "data": { "type": "string", "description": "Base64-encoded bytes for a bounded on-disk range." },
+            "text": { "type": "string" },
+            "offset": { "type": "integer", "minimum": 0, "description": "UTF-16 code-unit offset for text results." },
+            "nextOffset": { "type": "integer", "minimum": 0, "description": "Next UTF-16 code-unit offset for text results." },
+            "eof": { "type": "boolean", "description": "Always true for buffer results; otherwise indicates whether the selected range reached end-of-file/text." },
+            "size": { "type": "integer", "minimum": 0 },
+            "contentRevision": { "type": "integer", "minimum": 0, "description": "Present on text results." },
+            "diskSignature": { "type": "string", "description": "Present on kind=disk text results." }
+          },
+          "additionalProperties": false
         }
       },
       {
         "id": "transfer",
-        "description": "Stage and commit bounded draft, create-file or import uploads.",
+        "description": "Stage and commit bounded draft, create-file or import uploads. The service allows at most four active transfers and 100 MiB of total staging; idle transfers expire after five minutes.",
         "params": {
           "type": "object",
           "properties": {
-            "action": { "type": "string", "enum": ["begin", "chunk", "commit", "cancel", "state"] },
-            "kind": { "type": "string", "enum": ["draft", "createFile", "import"] },
+            "action": { "type": "string", "enum": ["begin", "chunk", "commit", "cancel", "state"], "description": "begin requires kind and totalBytes; kind=draft additionally requires bufferId and expectedRevision, kind=createFile requires path, and kind=import requires path and name. chunk requires transferId, offset and data. commit/cancel/state require transferId." },
+            "kind": { "type": "string", "enum": ["draft", "createFile", "import"], "description": "Required for begin; selects the draft, create-file or import transfer branch." },
             "bufferId": { "type": "string" }, "expectedRevision": { "type": "integer", "minimum": 0 },
-            "worktree": { "type": "string" }, "path": { "type": "string", "minLength": 1 },
-            "name": { "type": "string", "minLength": 1 },
-            "totalBytes": { "type": "integer", "minimum": 0, "maximum": 52428800 },
+            "worktree": { "type": "string" }, "path": { "type": "string", "description": "Required for createFile/import begin; import path must be a destination directory." },
+            "name": { "type": "string", "description": "Required non-empty safe filename for import begin." },
+            "totalBytes": { "type": "integer", "minimum": 0, "maximum": 52428800, "description": "Required on begin; total upload size, at most 50 MiB." },
             "transferId": { "type": "string" },
             "offset": { "type": "integer", "minimum": 0 },
-            "data": { "type": "string", "maxLength": 87384, "pattern": "^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$" }
+            "data": { "type": "string", "description": "Required for chunk; canonical Base64 encoding of 1–65,536 bytes (at most 87,384 Base64 characters), checked by the service." }
           },
-          "oneOf": [
-            { "properties": { "action": { "const": "begin" }, "kind": { "const": "draft" } }, "required": ["action", "kind", "bufferId", "expectedRevision", "totalBytes"] },
-            { "properties": { "action": { "const": "begin" }, "kind": { "const": "createFile" } }, "required": ["action", "kind", "path", "totalBytes"] },
-            { "properties": { "action": { "const": "begin" }, "kind": { "const": "import" } }, "required": ["action", "kind", "path", "name", "totalBytes"] },
-            { "properties": { "action": { "const": "chunk" } }, "required": ["action", "transferId", "offset", "data"] },
-            { "properties": { "action": { "enum": ["commit", "cancel", "state"] } }, "required": ["action", "transferId"] }
-          ],
           "required": ["action"],
           "additionalProperties": false
         },
         "result": {
-          "oneOf": [
-            {
-              "type": "object",
-              "properties": { "transferId": { "type": "string" }, "offset": { "const": 0 }, "maxChunkBytes": { "const": 65536 } },
-              "required": ["transferId", "offset", "maxChunkBytes"],
-              "additionalProperties": false
-            },
-            {
-              "type": "object",
-              "properties": { "transferId": { "type": "string" }, "offset": { "type": "integer", "minimum": 0 }, "nextOffset": { "type": "integer", "minimum": 0 } },
-              "required": ["transferId", "offset", "nextOffset"],
-              "additionalProperties": false
-            },
-            {
-              "type": "object",
-              "properties": { "transferId": { "type": "string" }, "cancelled": { "type": "boolean" } },
-              "required": ["transferId", "cancelled"],
-              "additionalProperties": false
-            },
-            {
-              "type": "object",
-              "properties": {
-                "transferId": { "type": "string" }, "kind": { "type": "string", "enum": ["draft", "createFile", "import"] },
-                "offset": { "type": "integer", "minimum": 0 }, "totalBytes": { "type": "integer", "minimum": 0, "maximum": 52428800 },
-                "expiresAt": { "type": "integer", "minimum": 0 }, "progress": { "type": "number", "minimum": 0, "maximum": 1 }
-              },
-              "required": ["transferId", "kind", "offset", "totalBytes", "expiresAt", "progress"],
-              "additionalProperties": false
-            },
-            {
-              "type": "object",
-              "properties": {
-                "id": { "type": "string" }, "worktreeId": { "type": "string" }, "root": { "type": "string" },
-                "path": { "type": "string" }, "relativePath": { "type": "string" }, "name": { "type": "string" },
-                "kind": { "type": "string", "enum": ["text", "markdown", "notebook", "csv", "image", "pdf", "audio", "video", "mermaid", "binary"] },
-                "content": { "type": "string" }, "draft": { "type": ["string", "null"] }, "baseline": { "type": ["string", "null"] },
-                "size": { "type": "integer", "minimum": 0 }, "readOnly": { "type": "boolean" }, "dirty": { "type": "boolean" },
-                "external": { "type": ["string", "null"], "enum": ["changed", "deleted", null] },
-                "diskContent": { "type": ["string", "null"] }, "diskSignature": { "type": ["string", "null"] },
-                "diskContentLength": { "type": ["integer", "null"], "minimum": 0 }, "diskContentBytes": { "type": ["integer", "null"], "minimum": 0 },
-                "contentLength": { "type": "integer", "minimum": 0 }, "draftLength": { "type": ["integer", "null"], "minimum": 0 },
-                "contentBytes": { "type": "integer", "minimum": 0 }, "draftBytes": { "type": ["integer", "null"], "minimum": 0 },
-                "mode": { "type": "string", "enum": ["source", "rich", "preview"] }, "tabId": { "type": ["string", "null"] },
-                "preview": { "type": "boolean" }, "pinned": { "type": "boolean" }, "untitled": { "type": "boolean" },
-                "revision": { "type": "integer", "minimum": 0 }, "contentRevision": { "type": "integer", "minimum": 0 },
-                "view": { "type": "object", "additionalProperties": true }, "error": { "type": ["string", "null"] }
-              },
-              "required": ["id", "worktreeId", "root", "path", "relativePath", "name", "kind", "baseline", "size", "readOnly", "dirty", "external", "diskSignature", "diskContentLength", "diskContentBytes", "contentLength", "draftLength", "contentBytes", "draftBytes", "mode", "tabId", "preview", "pinned", "untitled", "revision", "contentRevision", "view", "error"],
-              "additionalProperties": false
-            },
-            {
-              "type": "object",
-              "properties": { "path": { "type": "string", "minLength": 1 } },
-              "required": ["path"],
-              "additionalProperties": false
-            },
-            {
-              "type": "object",
-              "properties": { "path": { "type": "string", "minLength": 1 }, "paths": { "type": "array", "minItems": 1, "items": { "type": "string", "minLength": 1 } } },
-              "required": ["path", "paths"],
-              "additionalProperties": false
-            }
-          ]
+          "type": "object",
+          "description": "Action-dependent result union. begin returns transferId, offset:0 and maxChunkBytes:65,536; chunk returns transferId/offset/nextOffset; cancel returns transferId/cancelled; state returns transferId/kind/offset/totalBytes/expiresAt/progress. commit returns a complete editor-buffer snapshot for draft, {path} for createFile, or {path,paths} for import.",
+          "properties": {
+            "transferId": { "type": "string" },
+            "offset": { "type": "integer", "minimum": 0, "description": "Zero on begin; current staged-byte offset on other transfer results." },
+            "maxChunkBytes": { "type": "integer", "enum": [65536], "description": "Fixed maximum decoded chunk size in bytes." },
+            "nextOffset": { "type": "integer", "minimum": 0 },
+            "cancelled": { "type": "boolean", "description": "Whether the transfer was cancelled." },
+            "kind": { "type": "string", "enum": ["draft", "createFile", "import", "text", "markdown", "notebook", "csv", "image", "pdf", "audio", "video", "mermaid", "binary"], "description": "Transfer kind for state results; file kind when commit returns a buffer snapshot." },
+            "totalBytes": { "type": "integer", "minimum": 0, "maximum": 52428800 },
+            "expiresAt": { "type": "integer", "minimum": 0 },
+            "progress": { "type": "number", "minimum": 0, "maximum": 1 },
+            "path": { "type": "string", "description": "Created-file path, import destination, or buffer path for a draft commit." },
+            "paths": { "type": "array", "items": { "type": "string" }, "description": "Imported paths for an import commit." }
+          },
+          "additionalProperties": true
         }
       },
       {
         "id": "markdown",
         "description": "Source-preserving Markdown capabilities, edits, links, templates, search, TOC and export.",
-        "params": { "type": "object", "properties": { "bufferId": { "type": "string" }, "expectedRevision": { "type": "integer", "minimum": 0 }, "action": { "type": "string", "enum": ["capabilities", "format", "insert", "apply", "links", "documents", "toc", "frontmatter", "search", "replace", "templates", "new", "retarget", "importImage", "exportPdf"] }, "query": { "type": "string" }, "text": { "type": "string" }, "format": { "type": "string" }, "target": { "type": "string" }, "path": { "type": "string" }, "title": { "type": "string" }, "template": { "type": "string" }, "selection": { "type": "object", "properties": { "from": { "type": "integer", "minimum": 0 }, "to": { "type": "integer", "minimum": 0 }, "text": { "type": "string" } }, "additionalProperties": false }, "startLine": { "type": "integer", "minimum": 1 }, "endLine": { "type": "integer", "minimum": 1 }, "lineNumber": { "type": "integer", "minimum": 1 }, "noteId": { "type": "string" }, "agentId": { "type": "string" }, "replaceAll": { "type": "boolean" } }, "required": ["action"], "additionalProperties": false },
+        "params": {
+          "type": "object",
+          "properties": {
+            "bufferId": { "type": "string", "description": "Required for every action except new and templates." },
+            "expectedRevision": { "type": "integer", "minimum": 0, "description": "Required for apply, format, insert, replace, link edit/remove and importImage operations that write content." },
+            "worktree": { "type": "string", "description": "Optional worktree selector for new and templates." },
+            "action": { "type": "string", "enum": ["capabilities", "format", "insert", "apply", "links", "documents", "toc", "frontmatter", "search", "replace", "templates", "new", "retarget", "importImage", "exportPdf"], "description": "apply requires expectedRevision and text. format requires expectedRevision, format and selection; insert requires expectedRevision and format, with selection optional. links uses operation; edit/remove require selection and expectedRevision, and all link operations except remove require target. search requires query; replace requires expectedRevision, non-empty query (at most 2 KiB UTF-8) and text. retarget requires an untitled buffer and a worktree-relative Markdown path. importImage requires expectedRevision and either name+data, an authorized path, or the native chooser; exportPdf requires rich/preview mode and source at most 600 KiB UTF-8, with an optional destination path. new/templates use worktree and optional title/template/query; other buffer actions require bufferId." },
+            "query": { "type": "string", "description": "Search, template or document query. replace and documents queries are limited to 2 KiB UTF-8; replace also requires a non-empty query." },
+            "text": { "type": "string", "description": "Required by apply and replace; resulting rich apply/format/insert content is limited to 1 MiB UTF-8. Also supplies optional replacement text, code or image alt text for relevant formats." },
+            "format": { "type": "string", "enum": ["body", "heading1", "heading2", "heading3", "heading4", "heading5", "bold", "italic", "strike", "inlineCode", "bulletList", "orderedList", "taskList", "quote", "link", "image", "codeBlock", "divider", "table", "details", "collapsibleHeading", "mermaid", "inlineMath", "blockMath", "emoji", "documentLink", "tableRowAbove", "tableRowBelow", "tableRowDelete", "tableColumnLeft", "tableColumnRight", "tableColumnDelete", "tableDelete", "codeLanguage", "indentCode", "outdentCode", "copyCode"], "description": "Required for format/insert; insert accepts the insertion formats only, and the service rejects unsupported action/format combinations." },
+            "target": { "type": "string", "description": "Required for link operations other than remove and for link/image/document-link formats; interpreted as an authorized Markdown target." },
+            "path": { "type": "string", "description": "Required for retarget; optional authorized image source or PDF destination for importImage/exportPdf." },
+            "title": { "type": "string", "description": "Optional new-document title; the service uses at most 256 characters." },
+            "template": { "type": "string", "description": "Optional worktree-relative Markdown template for new; template paths are at most 64 KiB UTF-8 and expanded content is at most 256 KiB." },
+            "selection": { "type": "object", "description": "Markdown body offsets; required for format, link edit/remove and optional for insert/image insertion.", "properties": { "from": { "type": "integer", "minimum": 0 }, "to": { "type": "integer", "minimum": 0 } }, "required": ["from", "to"], "additionalProperties": false },
+            "matchCase": { "type": "boolean" },
+            "wholeWord": { "type": "boolean" },
+            "all": { "type": "boolean", "description": "For replace, replace all matches when true." },
+            "openAnyway": { "type": "boolean", "description": "For supported rich edits, allows source documents up to 1 MiB UTF-8 instead of the normal 600 KiB eligibility limit; committed rich text remains capped at 1 MiB." },
+            "includeCanonical": { "type": "boolean", "description": "Include canonical Markdown text in capabilities when available." },
+            "includePreview": { "type": "boolean", "description": "Include a sanitized preview when capabilities report one available." },
+            "visible": { "type": "boolean", "description": "Set TOC or frontmatter visibility for toc/frontmatter actions." },
+            "releaseImages": { "type": "boolean", "description": "For capabilities, release previously created Markdown image resources when true." },
+            "operation": { "type": "string", "enum": ["open", "copy", "edit", "remove", "resolve"], "description": "Optional links operation; edit/remove require selection and a current revision, while open/copy/resolve resolve the target." },
+            "language": { "type": "string", "description": "Optional code-block language label; when used it is limited to 32 letters, digits, underscore, plus or hyphen characters." },
+            "name": { "type": "string", "description": "Required safe single filename when importImage supplies inline data." },
+            "data": { "type": "string", "description": "Canonical Base64 image data for importImage, limited to 12 MiB of Base64 characters; larger images use transfer." }
+          },
+          "required": ["action"],
+          "additionalProperties": false
+        },
         "result": {
-          "anyOf": [
-            {
-              "type": "object",
-              "properties": {
-                "id": { "type": "string" }, "worktreeId": { "type": "string" }, "root": { "type": "string" },
-                "path": { "type": "string" }, "relativePath": { "type": "string" }, "name": { "type": "string" },
-                "kind": { "type": "string", "enum": ["text", "markdown", "notebook", "csv", "image", "pdf", "audio", "video", "mermaid", "binary"] },
-                "content": { "type": "string" }, "draft": { "type": ["string", "null"] }, "baseline": { "type": ["string", "null"] },
-                "size": { "type": "integer", "minimum": 0 }, "readOnly": { "type": "boolean" }, "dirty": { "type": "boolean" },
-                "external": { "type": ["string", "null"], "enum": ["changed", "deleted", null] },
-                "diskContent": { "type": ["string", "null"] }, "diskSignature": { "type": ["string", "null"] },
-                "diskContentLength": { "type": ["integer", "null"], "minimum": 0 }, "diskContentBytes": { "type": ["integer", "null"], "minimum": 0 },
-                "contentLength": { "type": "integer", "minimum": 0 }, "draftLength": { "type": ["integer", "null"], "minimum": 0 },
-                "contentBytes": { "type": "integer", "minimum": 0 }, "draftBytes": { "type": ["integer", "null"], "minimum": 0 },
-                "mode": { "type": "string", "enum": ["source", "rich", "preview"] }, "tabId": { "type": ["string", "null"] },
-                "preview": { "type": "boolean" }, "pinned": { "type": "boolean" }, "untitled": { "type": "boolean" },
-                "revision": { "type": "integer", "minimum": 0 }, "contentRevision": { "type": "integer", "minimum": 0 },
-                "view": { "type": "object", "additionalProperties": true }, "error": { "type": ["string", "null"] }
-              },
-              "required": ["id", "worktreeId", "root", "path", "relativePath", "name", "kind", "baseline", "size", "readOnly", "dirty", "external", "diskSignature", "diskContentLength", "diskContentBytes", "contentLength", "draftLength", "contentBytes", "draftBytes", "mode", "tabId", "preview", "pinned", "untitled", "revision", "contentRevision", "view", "error"],
-              "additionalProperties": false
-            },
-            {
-              "type": "object",
-              "properties": {
-                "buffer": {
-                  "type": "object",
-                  "properties": {
-                    "id": { "type": "string" }, "worktreeId": { "type": "string" }, "root": { "type": "string" },
-                    "path": { "type": "string" }, "relativePath": { "type": "string" }, "name": { "type": "string" },
-                    "kind": { "type": "string", "enum": ["text", "markdown", "notebook", "csv", "image", "pdf", "audio", "video", "mermaid", "binary"] },
-                    "content": { "type": "string" }, "draft": { "type": ["string", "null"] }, "baseline": { "type": ["string", "null"] },
-                    "size": { "type": "integer", "minimum": 0 }, "readOnly": { "type": "boolean" }, "dirty": { "type": "boolean" },
-                    "external": { "type": ["string", "null"], "enum": ["changed", "deleted", null] },
-                    "diskContent": { "type": ["string", "null"] }, "diskSignature": { "type": ["string", "null"] },
-                    "diskContentLength": { "type": ["integer", "null"], "minimum": 0 }, "diskContentBytes": { "type": ["integer", "null"], "minimum": 0 },
-                    "contentLength": { "type": "integer", "minimum": 0 }, "draftLength": { "type": ["integer", "null"], "minimum": 0 },
-                    "contentBytes": { "type": "integer", "minimum": 0 }, "draftBytes": { "type": ["integer", "null"], "minimum": 0 },
-                    "mode": { "type": "string", "enum": ["source", "rich", "preview"] }, "tabId": { "type": ["string", "null"] },
-                    "preview": { "type": "boolean" }, "pinned": { "type": "boolean" }, "untitled": { "type": "boolean" },
-                    "revision": { "type": "integer", "minimum": 0 }, "contentRevision": { "type": "integer", "minimum": 0 },
-                    "view": { "type": "object", "additionalProperties": true }, "error": { "type": ["string", "null"] }
-                  },
-                  "required": ["id", "worktreeId", "root", "path", "relativePath", "name", "kind", "baseline", "size", "readOnly", "dirty", "external", "diskSignature", "diskContentLength", "diskContentBytes", "contentLength", "draftLength", "contentBytes", "draftBytes", "mode", "tabId", "preview", "pinned", "untitled", "revision", "contentRevision", "view", "error"],
-                  "additionalProperties": false
-                },
-                "bufferId": { "type": "string" }, "changed": { "type": "boolean" }, "sourcePreserved": { "type": "boolean" },
-                "canonicalText": { "type": "string" }, "previewHtml": { "type": "string" }, "imageUrls": { "type": "array", "items": { "type": "string" } },
-                "richEligible": { "type": "boolean" }, "richReason": { "type": ["string", "null"] },
-                "richLimitBytes": { "type": "integer", "minimum": 0 }, "openAnywayLimitBytes": { "type": "integer", "minimum": 0 },
-                "openAnywayAvailable": { "type": "boolean" }, "previewAvailable": { "type": "boolean" },
-                "previewReason": { "type": ["string", "null"] }, "previewLimitBytes": { "type": "integer", "minimum": 0 },
-                "byteLength": { "type": "integer", "minimum": 0 },
-                "frontMatter": { "type": ["object", "null"], "properties": { "text": { "type": "string" }, "startLine": { "type": ["integer", "null"] }, "endLine": { "type": ["integer", "null"] }, "lineCount": { "type": "integer", "minimum": 0 }, "visible": { "type": "boolean" }, "readOnly": { "type": "boolean" } }, "additionalProperties": true },
-                "released": { "type": "boolean" }, "text": { "type": "string" }, "contentRevision": { "type": "integer", "minimum": 0 },
-                "target": { "type": "string" }, "href": { "type": ["string", "null"] }, "safe": { "type": "boolean" },
-                "resolved": { "type": ["string", "null"] }, "ambiguous": { "type": "boolean" }, "kind": { "type": "string", "enum": ["unsafe", "anchor", "external", "document", "file"] },
-                "anchor": { "type": ["string", "null"] },
-                "matches": { "type": "array", "items": { "type": "object", "properties": { "from": { "type": "integer", "minimum": 0 }, "to": { "type": "integer", "minimum": 0 }, "line": { "type": "integer", "minimum": 1 }, "column": { "type": "integer", "minimum": 1 }, "text": { "type": "string" }, "preserved": { "type": "boolean" }, "relativePath": { "type": "string" }, "name": { "type": "string" }, "title": { "type": "string" } }, "additionalProperties": true } },
-                "missing": { "type": "boolean" }, "documents": { "type": "array", "items": { "type": "object", "properties": { "relativePath": { "type": "string" }, "name": { "type": "string" }, "title": { "type": "string" } }, "additionalProperties": false } },
-                "headings": { "type": "array", "items": { "type": "object", "properties": { "level": { "type": "integer" }, "text": { "type": "string" }, "id": { "type": "string" }, "line": { "type": "integer" }, "from": { "type": "integer" }, "to": { "type": "integer" } }, "additionalProperties": false } },
-                "count": { "type": "integer", "minimum": 0 }, "visible": { "type": "boolean" },
-                "total": { "type": "integer", "minimum": 0 }, "truncated": { "type": "boolean" },
-                "activeIndex": { "type": "integer", "minimum": 0 }, "line": { "type": "integer", "minimum": 1 },
-                "query": { "type": "string" }, "replacements": { "type": "integer", "minimum": 0 }, "path": { "type": "string" },
-                "template": { "type": ["string", "null"] }, "templateCreated": { "type": "boolean" },
-                "relativePath": { "type": "string" }, "mimeType": { "type": "string" }, "size": { "type": "integer", "minimum": 0 },
-                "inserted": { "type": "boolean" }, "valid": { "type": "boolean" }, "cancelled": { "type": "boolean" }
-              },
-              "additionalProperties": true
-            }
-          ]
+          "description": "Action-dependent object union. new returns {buffer: full editor-buffer snapshot, path, template:string|null, templateCreated}; expanded templates are limited to 256 KiB. templates returns up to 100 {relativePath,name,title} entries plus total/truncated. capabilities returns bufferId/mode, rich and preview eligibility/reasons/byte limits (600 KiB rich, 1 MiB openAnyway, 8 MiB preview), optional canonicalText and sanitized preview data, and frontMatter either null or {text,startLine,endLine,lineCount,visible}; releaseImages returns {bufferId,released:true}. apply/format/insert edits return a buffer snapshot with change/source-preservation fields; format=copyCode returns {text,contentRevision}. links resolution returns {target,href:string|null,safe,resolved:string|null,ambiguous,kind,anchor:string|null,missing?}; link edits return an edit result. documents returns up to 20,000 {relativePath,name,title} entries with an 8 MiB aggregate path budget, total and truncated. toc returns {headings,count,visible}; frontmatter returns {visible,text,startLine/endLine nullable,readOnly}. search returns {query,matches,total,truncated,activeIndex} with at most 10,000 matches; replace returns {replacements,changed,buffer} and source-preservation data when changed. retarget returns {buffer,path}. importImage returns {buffer,relativePath,mimeType,size,inserted} or {cancelled:true}; exportPdf returns exported path/details with valid:true,cancelled:false or {cancelled:true}. Nested buffers are full editor-buffer snapshots documented on open's result."
         }
       },
       {
         "id": "notes",
         "description": "Persist, format, copy and send Markdown review notes.",
-        "params": { "type": "object", "properties": { "bufferId": { "type": "string" }, "action": { "type": "string", "enum": ["list", "add", "edit", "delete", "copy", "send"] }, "noteId": { "type": "string" }, "text": { "type": "string" }, "body": { "type": "string" }, "selectedText": { "type": "string" }, "startLine": { "type": "integer", "minimum": 1 }, "endLine": { "type": "integer", "minimum": 1 }, "lineNumber": { "type": "integer", "minimum": 1 }, "agentId": { "type": "string" }, "target": { "type": "string" } }, "required": ["action"], "additionalProperties": false },
+        "params": {
+          "type": "object",
+          "properties": {
+            "bufferId": { "type": "string", "description": "Required Markdown buffer; review notes are limited to Markdown buffers whose source is at most 8 MiB." },
+            "action": { "type": "string", "enum": ["list", "add", "edit", "delete", "copy", "send"], "description": "add requires selection and text; edit requires noteId and text; delete requires noteId. copy/send optionally accept noteIds. send accepts target existing with sessionId or target new with agent; an omitted target or missing associated field returns delivery:not-delivered with an error." },
+            "noteId": { "type": "string", "description": "Required for edit/delete." },
+            "text": { "type": "string", "description": "Required for add/edit; non-empty after trimming and limited to 16 KiB UTF-8." },
+            "selection": { "type": "object", "description": "Required for add. Use non-empty from/to offsets; mode=source addresses the full source, while the default/rich mode addresses the Markdown body after frontmatter. Rich mode may instead supply text with startLine/endLine. The selected excerpt is limited to 32 KiB UTF-8.", "properties": { "from": { "type": "integer", "minimum": 0 }, "to": { "type": "integer", "minimum": 0 }, "text": { "type": "string" }, "startLine": { "type": "integer", "minimum": 1 }, "endLine": { "type": "integer", "minimum": 1 }, "mode": { "type": "string", "enum": ["source", "rich"] } }, "additionalProperties": false },
+            "noteIds": { "type": "array", "description": "Optional subset of note IDs for copy/send; omitted selects all available notes.", "items": { "type": "string" } },
+            "target": { "type": "string", "enum": ["existing", "new"], "description": "Optional for send; existing requires sessionId and new requires agent. Omission returns a not-delivered result." },
+            "sessionId": { "type": "string", "description": "Required when sending to target existing." },
+            "agent": { "type": "string", "description": "Required when sending to target new; optional when target existing to verify session ownership." }
+          },
+          "required": ["bufferId", "action"],
+          "additionalProperties": false
+        },
         "result": {
-          "anyOf": [
-            {
+          "type": "object",
+          "description": "Action-dependent result union. list returns notes/count; add/edit return note; delete returns deleted/noteId; copy returns text/count/noteIds; send returns delivery/deletedNoteIds/retainedNoteIds and optional sessionId/error.",
+          "properties": {
+            "notes": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": { "type": "string" }, "bufferId": { "type": "string" }, "worktreeId": { "type": "string" },
+                  "filePath": { "type": "string" }, "source": { "type": "string", "enum": ["markdown"] },
+                  "selectedText": { "type": "string" }, "startLine": { "type": "integer", "minimum": 1 },
+                  "endLine": { "type": "integer", "minimum": 1 }, "lineNumber": { "type": "integer", "minimum": 1 },
+                  "body": { "type": "string" }, "createdAt": { "type": "integer", "minimum": 0 },
+                  "updatedAt": { "type": "integer", "minimum": 0 }, "sentAt": { "type": "integer", "minimum": 0 },
+                  "side": { "type": "string", "enum": ["modified"] }
+                },
+                "required": ["id", "bufferId", "worktreeId", "filePath", "source", "lineNumber", "body", "createdAt", "side"],
+                "additionalProperties": false
+              }
+            },
+            "note": {
               "type": "object",
               "properties": {
                 "id": { "type": "string" }, "bufferId": { "type": "string" }, "worktreeId": { "type": "string" },
-                "filePath": { "type": "string" }, "source": { "const": "markdown" },
+                "filePath": { "type": "string" }, "source": { "type": "string", "enum": ["markdown"] },
                 "selectedText": { "type": "string" }, "startLine": { "type": "integer", "minimum": 1 },
                 "endLine": { "type": "integer", "minimum": 1 }, "lineNumber": { "type": "integer", "minimum": 1 },
                 "body": { "type": "string" }, "createdAt": { "type": "integer", "minimum": 0 },
                 "updatedAt": { "type": "integer", "minimum": 0 }, "sentAt": { "type": "integer", "minimum": 0 },
-                "side": { "const": "modified" }
+                "side": { "type": "string", "enum": ["modified"] }
               },
               "required": ["id", "bufferId", "worktreeId", "filePath", "source", "lineNumber", "body", "createdAt", "side"],
               "additionalProperties": false
             },
-            {
-              "type": "object",
-              "properties": { "notes": { "type": "array", "items": { "type": "object", "properties": { "id": { "type": "string" }, "bufferId": { "type": "string" }, "worktreeId": { "type": "string" }, "filePath": { "type": "string" }, "source": { "const": "markdown" }, "selectedText": { "type": "string" }, "startLine": { "type": "integer", "minimum": 1 }, "endLine": { "type": "integer", "minimum": 1 }, "lineNumber": { "type": "integer", "minimum": 1 }, "body": { "type": "string" }, "createdAt": { "type": "integer", "minimum": 0 }, "updatedAt": { "type": "integer", "minimum": 0 }, "sentAt": { "type": "integer", "minimum": 0 }, "side": { "const": "modified" } }, "required": ["id", "bufferId", "worktreeId", "filePath", "source", "lineNumber", "body", "createdAt", "side"], "additionalProperties": false } }, "count": { "type": "integer", "minimum": 0 } },
-              "required": ["notes", "count"],
-              "additionalProperties": false
-            },
-            {
-              "type": "object",
-              "properties": { "note": { "type": "object", "properties": { "id": { "type": "string" }, "bufferId": { "type": "string" }, "worktreeId": { "type": "string" }, "filePath": { "type": "string" }, "source": { "const": "markdown" }, "selectedText": { "type": "string" }, "startLine": { "type": "integer", "minimum": 1 }, "endLine": { "type": "integer", "minimum": 1 }, "lineNumber": { "type": "integer", "minimum": 1 }, "body": { "type": "string" }, "createdAt": { "type": "integer", "minimum": 0 }, "updatedAt": { "type": "integer", "minimum": 0 }, "sentAt": { "type": "integer", "minimum": 0 }, "side": { "const": "modified" } }, "required": ["id", "bufferId", "worktreeId", "filePath", "source", "lineNumber", "body", "createdAt", "side"], "additionalProperties": false } },
-              "required": ["note"],
-              "additionalProperties": false
-            },
-            {
-              "type": "object",
-              "properties": { "deleted": { "const": true }, "noteId": { "type": "string" } },
-              "required": ["deleted", "noteId"],
-              "additionalProperties": false
-            },
-            {
-              "type": "object",
-              "properties": { "text": { "type": "string" }, "count": { "type": "integer", "minimum": 0 }, "noteIds": { "type": "array", "items": { "type": "string" } } },
-              "required": ["text", "count", "noteIds"],
-              "additionalProperties": false
-            },
-            {
-              "type": "object",
-              "properties": {
-                "delivery": { "type": "string", "enum": ["pasted", "unconfirmed", "not-delivered", "command-line"] },
-                "deletedNoteIds": { "type": "array", "items": { "type": "string" } },
-                "retainedNoteIds": { "type": "array", "items": { "type": "string" } },
-                "sessionId": { "type": "string" }, "error": { "type": "string" }
-              },
-              "required": ["delivery", "deletedNoteIds", "retainedNoteIds"],
-              "additionalProperties": false
-            }
-          ]
+            "count": { "type": "integer", "minimum": 0 },
+            "deleted": { "type": "boolean", "description": "Always true for a successful delete action." },
+            "noteId": { "type": "string" },
+            "text": { "type": "string" },
+            "noteIds": { "type": "array", "items": { "type": "string" } },
+            "delivery": { "type": "string", "enum": ["pasted", "unconfirmed", "not-delivered", "command-line"] },
+            "deletedNoteIds": { "type": "array", "items": { "type": "string" } },
+            "retainedNoteIds": { "type": "array", "items": { "type": "string" } },
+            "sessionId": { "type": "string" },
+            "error": { "type": "string" }
+          },
+          "additionalProperties": false
         }
       },
       {
@@ -755,13 +555,13 @@
           "type": "object",
           "properties": {
             "bufferId": { "type": "string" },
-            "action": { "type": "string", "enum": ["parse", "edit", "insert", "move", "delete", "type", "clear", "save", "environments", "describe", "select", "trust", "install", "venv", "start", "run", "runAll", "interrupt", "restart", "shutdown", "state"] },
-            "index": { "type": "integer", "minimum": 0 }, "position": { "type": "integer", "minimum": 0 },
-            "direction": { "type": "string", "enum": ["up", "down", "above", "below"] },
+            "action": { "type": "string", "enum": ["parse", "edit", "insert", "move", "delete", "type", "clear", "save", "environments", "describe", "select", "trust", "install", "venv", "start", "run", "runAll", "interrupt", "restart", "shutdown", "state"], "description": "All actions require bufferId. parse uses paging fields. edit/delete/type/move/run require index; edit also requires source, insert requires index/position/cellType, move uses direction, and clear's index is optional. describe requires path or python; select accepts an interpreter path/python or browse; environments accepts runWorkspaceInterpreters; trust accepts granted. install/venv use conditional setup confirmation. run requires index; runAll does not; mode controls run advancement." },
+            "index": { "type": "integer", "minimum": 0, "description": "Required for edit/insert/move/delete/type/run; optional for clear." }, "position": { "type": "string", "enum": ["above", "below"], "description": "Required for insert." },
+            "direction": { "type": "string", "enum": ["up", "down"], "description": "Required for move." },
             "cellType": { "type": "string", "enum": ["code", "markdown", "raw"] }, "source": { "type": "string" },
             "offset": { "type": "integer", "minimum": 0 }, "limit": { "type": "integer", "minimum": 1, "maximum": 16 },
             "sourceOffset": { "type": "integer", "minimum": 0 }, "sourceLength": { "type": "integer", "minimum": 0, "maximum": 65536 },
-            "outputOffset": { "type": "integer", "minimum": 0 }, "outputLimit": { "type": "integer", "minimum": 0, "maximum": 8 },
+            "outputOffset": { "type": "integer", "minimum": 0 }, "outputLimit": { "type": "integer", "minimum": 1, "maximum": 8, "description": "For parse, output page size; service requires at least 1 and caps at 8." },
             "path": { "type": "string" }, "python": { "type": "string" }, "runWorkspaceInterpreters": { "type": "boolean" },
             "yes": { "type": "boolean", "description": "Explicit CLI approval consumed by the dispatcher before this handler." },
             "mode": { "type": "string", "enum": ["inPlace", "advance", "all"] },
@@ -772,220 +572,36 @@
           "additionalProperties": false
         },
         "result": {
-          "anyOf": [
-            {
-              "type": "object",
-              "properties": {
-                "valid": { "type": "boolean" }, "error": { "type": ["string", "null"] },
-                "language": { "type": ["string", "null"] }, "nbformat": { "type": ["integer", "null"], "minimum": 0 },
-                "nbformat_minor": { "type": ["integer", "null"], "minimum": 0 },
-                "metadata": {
-                  "anyOf": [
-                    { "type": "object", "additionalProperties": true },
-                    { "type": "object", "properties": { "truncated": { "const": true }, "byteLength": { "type": "integer", "minimum": 0 } }, "required": ["truncated", "byteLength"], "additionalProperties": false }
-                  ]
-                },
-                "cellCount": { "type": "integer", "minimum": 0 }, "contentRevision": { "type": "integer", "minimum": 0 },
-                "offset": { "type": "integer", "minimum": 0 }, "limit": { "type": "integer", "minimum": 1, "maximum": 16 },
-                "cells": {
-                  "type": "array",
-                  "items": {
-                    "type": "object",
-                    "properties": {
-                      "cell_type": { "type": "string", "enum": ["code", "markdown", "raw"] },
-                      "id": { "type": "string" },
-                      "metadata": {
-                        "anyOf": [
-                          { "type": "object", "additionalProperties": true },
-                          { "type": "object", "properties": { "truncated": { "const": true }, "byteLength": { "type": "integer", "minimum": 0 } }, "required": ["truncated", "byteLength"], "additionalProperties": false }
-                        ]
-                      },
-                      "source": { "type": "string" }, "sourceOffset": { "type": "integer", "minimum": 0 },
-                      "sourceTotalLength": { "type": "integer", "minimum": 0 }, "sourceNextOffset": { "type": ["integer", "null"], "minimum": 0 },
-                      "sourceTruncated": { "type": "boolean" },
-                      "outputs": {
-                        "type": "array",
-                        "items": {
-                          "anyOf": [
-                            {
-                              "type": "object",
-                              "properties": {
-                                "output_type": { "type": "string", "enum": ["stream", "display_data", "execute_result", "error"] },
-                                "name": { "type": "string" }, "text": { "type": ["string", "array"] },
-                                "data": { "type": "object", "additionalProperties": true },
-                                "metadata": { "type": "object", "additionalProperties": true },
-                                "execution_count": { "type": ["integer", "null"] },
-                                "ename": { "type": "string" }, "evalue": { "type": "string" },
-                                "traceback": { "type": "array", "items": { "type": "string" } }
-                              },
-                              "additionalProperties": true
-                            },
-                            { "type": "object", "properties": { "truncated": { "const": true }, "byteLength": { "type": "integer", "minimum": 0 } }, "required": ["truncated", "byteLength"], "additionalProperties": false }
-                          ]
-                        }
-                      },
-                      "outputCount": { "type": "integer", "minimum": 0 }, "outputOffset": { "type": "integer", "minimum": 0 },
-                      "outputNextOffset": { "type": ["integer", "null"], "minimum": 0 }, "outputsTruncated": { "type": "boolean" },
-                      "execution_count": { "type": ["integer", "null"] }
-                    },
-                    "required": ["cell_type", "metadata", "source", "sourceOffset", "sourceTotalLength", "sourceNextOffset", "sourceTruncated", "outputs", "outputCount", "outputOffset", "outputNextOffset", "outputsTruncated"],
-                    "additionalProperties": false
-                  }
-                },
-                "nextOffset": { "type": ["integer", "null"], "minimum": 0 }, "eof": { "type": "boolean" }
-              },
-              "required": ["valid", "error", "language", "nbformat", "nbformat_minor", "metadata", "cellCount", "contentRevision", "offset", "limit", "cells", "nextOffset", "eof"],
-              "additionalProperties": false
-            },
-            {
-              "type": "object",
-              "properties": {
-                "bufferId": { "type": "string" }, "valid": { "type": "boolean" }, "cellCount": { "type": "integer", "minimum": 0 },
-                "language": { "type": ["string", "null"] }, "error": { "type": ["string", "null"] },
-                "contentRevision": { "type": "integer", "minimum": 0 }, "trusted": { "type": "boolean" },
-                "selectedPython": { "type": ["string", "null"] }, "busy": { "type": "boolean" },
-                "executionCount": { "type": ["integer", "null"] }, "interruptStalled": { "type": "boolean" },
-                "kernel": {
-                  "type": "object",
-                  "properties": {
-                    "status": { "type": "string" }, "pid": { "type": "integer", "minimum": 0 },
-                    "stderr": { "type": "string" }, "error": { "type": ["string", "null"] },
-                    "executionCount": { "type": ["integer", "null"] }, "busy": { "type": "boolean" }
-                  },
-                  "required": ["status", "stderr", "error", "executionCount", "busy"],
-                  "additionalProperties": false
-                }
-              },
-              "required": ["bufferId", "valid", "cellCount", "language", "error", "contentRevision", "trusted", "selectedPython", "busy", "executionCount", "interruptStalled", "kernel"],
-              "additionalProperties": false
-            },
-            {
-              "type": "object",
-              "properties": {
-                "status": { "type": "string" }, "completed": { "type": "integer", "minimum": 0 }, "cancelled": { "type": "boolean" },
-                "executionCount": { "type": ["integer", "null"] }, "stderr": { "type": "string" },
-                "externallyManaged": { "type": "boolean" }, "outputCount": { "type": "integer", "minimum": 0 },
-                "nextIndex": { "type": "integer", "minimum": 0 }
-              },
-              "required": ["status", "completed", "cancelled", "executionCount"],
-              "additionalProperties": false
-            },
-            {
-              "type": "object",
-              "properties": {
-                "id": { "type": "string" }, "worktreeId": { "type": "string" }, "root": { "type": "string" },
-                "path": { "type": "string" }, "relativePath": { "type": "string" }, "name": { "type": "string" },
-                "kind": { "type": "string", "enum": ["text", "markdown", "notebook", "csv", "image", "pdf", "audio", "video", "mermaid", "binary"] },
-                "content": { "type": "string" }, "draft": { "type": ["string", "null"] }, "baseline": { "type": ["string", "null"] },
-                "size": { "type": "integer", "minimum": 0 }, "readOnly": { "type": "boolean" }, "dirty": { "type": "boolean" },
-                "external": { "type": ["string", "null"], "enum": ["changed", "deleted", null] },
-                "diskContent": { "type": ["string", "null"] }, "diskSignature": { "type": ["string", "null"] },
-                "diskContentLength": { "type": ["integer", "null"], "minimum": 0 }, "diskContentBytes": { "type": ["integer", "null"], "minimum": 0 },
-                "contentLength": { "type": "integer", "minimum": 0 }, "draftLength": { "type": ["integer", "null"], "minimum": 0 },
-                "contentBytes": { "type": "integer", "minimum": 0 }, "draftBytes": { "type": ["integer", "null"], "minimum": 0 },
-                "mode": { "type": "string", "enum": ["source", "rich", "preview"] }, "tabId": { "type": ["string", "null"] },
-                "preview": { "type": "boolean" }, "pinned": { "type": "boolean" }, "untitled": { "type": "boolean" },
-                "revision": { "type": "integer", "minimum": 0 }, "contentRevision": { "type": "integer", "minimum": 0 },
-                "view": { "type": "object", "additionalProperties": true }, "error": { "type": ["string", "null"] }
-              },
-              "required": ["id", "worktreeId", "root", "path", "relativePath", "name", "kind", "baseline", "size", "readOnly", "dirty", "external", "diskSignature", "diskContentLength", "diskContentBytes", "contentLength", "draftLength", "contentBytes", "draftBytes", "mode", "tabId", "preview", "pinned", "untitled", "revision", "contentRevision", "view", "error"],
-              "additionalProperties": false
-            },
-            {
-              "type": "object",
-              "properties": {
-                "selectedPython": { "type": ["string", "null"] }, "python": { "type": "string" }, "path": { "type": "string" },
-                "version": { "type": "string" }, "available": { "type": "boolean" }, "ipykernel": { "type": "boolean" },
-                "installed": { "type": "boolean" }, "venv": { "type": "string" }, "trusted": { "type": "boolean" },
-                "interpreters": { "type": "array", "items": { "type": "object", "properties": { "path": { "type": "string" }, "python": { "type": "string" }, "version": { "type": "string" }, "available": { "type": "boolean" }, "ipykernel": { "type": "boolean" } }, "additionalProperties": true } },
-                "error": { "type": ["string", "null"] }
-              },
-              "additionalProperties": true
-            }
-          ]
+          "description": "Action-dependent object union. parse returns a paged notebook document {valid,error:string|null,language:string|null,nbformat:integer|null,nbformat_minor:integer|null,metadata,cellCount,contentRevision,offset,limit,cells,nextOffset:integer|null,eof}; invalid documents instead return {valid:false,error,language,cellCount,contentRevision,rawSource,rawSourceLength,rawSourceOffset,rawSourceNextOffset:integer|null,rawSourceTruncated}. Each parsed cell contains cell_type,id?,metadata,source,sourceOffset,sourceTotalLength,sourceNextOffset:integer|null,sourceTruncated,outputs,outputCount,outputOffset,outputNextOffset:integer|null,outputsTruncated and execution_count?; metadata and output entries are arbitrary objects or {truncated:true,byteLength}, and output text may be a string or string array. state returns {bufferId,valid,cellCount,language:string|null,error:string|null,contentRevision,trusted,selectedPython,busy,executionCount:integer|null,interruptStalled,kernel:{status,pid?,stderr,error:string|null,executionCount:integer|null,busy}}. Cell edits return the parse page; save returns a full editor-buffer snapshot. environments returns {environments:[interpreter descriptors],probed}; describe returns {environment}; select returns {selected:true,environment,trusted,language} or {cancelled:true,selected:interpreter|null}; trust returns {trusted}. install returns {status:installed,environment,command} or {status:venv-required,error}; venv returns {status:created,path,environment,command}; start returns {status:ready,python,pid}, {status:failed,error}, or {status:missing-ipykernel,externallyManaged}. run/runAll return {status:ok|error|dead|missing-ipykernel|failed,completed:nonnegative integer,cancelled:nonnegative integer,executionCount:integer|null}; run may also include outputCount and nextIndex (when mode=advance), and either action may include stderr/externallyManaged. interrupt returns {interrupted,stalled}; restart returns {status:stopped,trusted:false,outputsKept:true,queueCancelled:true}; shutdown returns {status:stopped,trusted:boolean}."
         }
       },
       {
         "id": "viewer",
-        "description": "Read and edit bounded CSV data and control file viewer state using ranged reads.",
+        "description": "Read and edit CSV data and control file-viewer state using ranged reads. File previews are limited to 50 MiB; CSVs at least 1 MiB use read-only paged mode.",
         "params": {
           "type": "object",
           "properties": {
             "bufferId": { "type": "string" },
-            "action": { "type": "string", "enum": ["metadata", "page", "edit", "sort", "filter", "insertRow", "deleteRow", "insertColumn", "deleteColumn", "delimiter", "copy", "paste", "save", "zoom", "find", "position", "media"] },
+            "action": { "type": "string", "enum": ["metadata", "page", "edit", "sort", "filter", "insertRow", "deleteRow", "insertColumn", "deleteColumn", "delimiter", "copy", "paste", "save", "zoom", "find", "position", "media"], "description": "edit requires row/column/value; insertRow accepts optional index/count; deleteRow requires row or index; insertColumn/deleteColumn require index; delimiter requires one non-quote, non-line-break character; paste requires row/column/text. sort requires column or index and order; filter/find accept query; zoom requires scale; position requires page or offset. page, metadata, save and media need no additional fields." },
             "row": { "type": "integer", "minimum": 0 }, "column": { "type": "integer", "minimum": 0 },
-            "index": { "type": "integer", "minimum": 0 }, "count": { "type": "integer", "minimum": 0 },
-            "value": { "type": "string" }, "text": { "type": "string" }, "query": { "type": "string" },
-            "delimiter": { "type": "string" }, "order": { "type": "string", "enum": ["asc", "desc"] },
-            "scale": { "type": "number", "minimum": 0.25, "maximum": 8 },
-            "page": { "type": "integer", "minimum": 1 }, "offset": { "type": "integer", "minimum": 0 },
-            "length": { "type": "integer", "minimum": 0, "maximum": 1048576 }
+            "index": { "type": "integer", "minimum": 0 }, "count": { "type": "integer", "minimum": 0, "description": "Optional CSV page row count; service clamps it to 1–100 rows." },
+            "value": { "type": "string", "description": "CSV cell value or optional inserted header value." }, "text": { "type": "string", "description": "Paste text; UTF-8 payload must remain below 1 MiB." }, "query": { "type": "string", "description": "Filter/find query, limited to 8,192 characters by the service." },
+            "delimiter": { "type": "string", "description": "For delimiter action, exactly one character other than quote or a line break." }, "order": { "type": "string", "enum": ["asc", "desc"] },
+            "scale": { "type": "number", "minimum": 0.25, "maximum": 8, "description": "Required for zoom; service clamps PDF to 0.25–5 and other viewers to 0.25–8." },
+            "page": { "type": "integer", "minimum": 0, "description": "Optional page number; CSV pages are zero-based, PDF pages are one-based." }, "offset": { "type": "integer", "minimum": 0 }
           },
           "required": ["bufferId", "action"],
           "additionalProperties": false
         },
         "result": {
-          "anyOf": [
-            {
-              "type": "object",
-              "properties": {
-                "id": { "type": "string" }, "worktreeId": { "type": "string" }, "root": { "type": "string" },
-                "path": { "type": "string" }, "relativePath": { "type": "string" }, "name": { "type": "string" },
-                "kind": { "type": "string", "enum": ["text", "markdown", "notebook", "csv", "image", "pdf", "audio", "video", "mermaid", "binary"] },
-                "content": { "type": "string" }, "draft": { "type": ["string", "null"] }, "baseline": { "type": ["string", "null"] },
-                "size": { "type": "integer", "minimum": 0 }, "readOnly": { "type": "boolean" }, "dirty": { "type": "boolean" },
-                "external": { "type": ["string", "null"], "enum": ["changed", "deleted", null] },
-                "diskContent": { "type": ["string", "null"] }, "diskSignature": { "type": ["string", "null"] },
-                "diskContentLength": { "type": ["integer", "null"], "minimum": 0 }, "diskContentBytes": { "type": ["integer", "null"], "minimum": 0 },
-                "contentLength": { "type": "integer", "minimum": 0 }, "draftLength": { "type": ["integer", "null"], "minimum": 0 },
-                "contentBytes": { "type": "integer", "minimum": 0 }, "draftBytes": { "type": ["integer", "null"], "minimum": 0 },
-                "mode": { "type": "string", "enum": ["source", "rich", "preview"] }, "tabId": { "type": ["string", "null"] },
-                "preview": { "type": "boolean" }, "pinned": { "type": "boolean" }, "untitled": { "type": "boolean" },
-                "revision": { "type": "integer", "minimum": 0 }, "contentRevision": { "type": "integer", "minimum": 0 },
-                "view": { "type": "object", "additionalProperties": true }, "error": { "type": ["string", "null"] }
-              },
-              "required": ["id", "worktreeId", "root", "path", "relativePath", "name", "kind", "baseline", "size", "readOnly", "dirty", "external", "diskSignature", "diskContentLength", "diskContentBytes", "contentLength", "draftLength", "contentBytes", "draftBytes", "mode", "tabId", "preview", "pinned", "untitled", "revision", "contentRevision", "view", "error"],
-              "additionalProperties": false
-            },
-            {
-              "type": "object",
-              "properties": {
-                "page": { "type": "integer", "minimum": 1 },
-                "rows": { "type": "array", "items": { "type": "object", "properties": { "index": { "type": "integer", "minimum": 0 }, "cells": { "type": "array", "items": { "type": "string" } } }, "required": ["index", "cells"], "additionalProperties": false } },
-                "offset": { "type": "integer", "minimum": 0 }, "nextPage": { "type": ["integer", "null"], "minimum": 1 },
-                "totalRows": { "type": "integer", "minimum": 0 }, "delimiter": { "type": "string" },
-                "readOnly": { "type": "boolean" }, "changedOnDisk": { "type": "boolean" },
-                "limits": { "type": "object", "additionalProperties": true }
-              },
-              "required": ["page", "rows", "offset", "nextPage", "readOnly", "changedOnDisk"],
-              "additionalProperties": false
-            },
-            {
-              "type": "object",
-              "properties": {
-                "url": { "type": "string" }, "contentType": { "type": "string" }, "size": { "type": "integer", "minimum": 0 },
-                "acceptsRanges": { "const": true }, "error": { "type": "string" }, "changed": { "type": "boolean" }
-              },
-              "required": ["url", "contentType", "size", "acceptsRanges"],
-              "additionalProperties": false
-            },
-            {
-              "type": "object",
-              "properties": {
-                "format": { "type": "string" }, "paged": { "type": "boolean" }, "readOnly": { "type": "boolean" },
-                "rows": { "type": "integer", "minimum": 0 }, "columns": { "type": "integer", "minimum": 0 },
-                "delimiter": { "type": "string" }, "limits": { "type": "object", "additionalProperties": true },
-                "sourceAvailable": { "type": "boolean" }, "sourceLength": { "type": "integer", "minimum": 0 },
-                "width": { "type": "integer", "minimum": 0 }, "height": { "type": "integer", "minimum": 0 },
-                "size": { "type": "integer", "minimum": 0 }, "contentType": { "type": "string" }, "pageCount": { "type": "integer", "minimum": 0 },
-                "zoom": { "type": "number" }, "view": { "type": "object", "additionalProperties": true },
-                "query": { "type": "string" }, "position": { "type": "object", "additionalProperties": true },
-                "text": { "type": "string" }, "selection": { "type": "object", "additionalProperties": true },
-                "metadata": { "type": "object", "additionalProperties": true }
-              },
-              "additionalProperties": true
-            }
-          ]
+          "type": "object",
+          "description": "Action-dependent result union. save returns a full editor-buffer snapshot. metadata returns kind-specific viewer metadata: CSV, image, PDF/audio/video, Mermaid, binary or unsupported-file shapes. CSV mutations return CSV metadata; sort returns viewer state; filter returns {filter,paged,readOnly,view}. page returns a CSV page {page,rows:[{index,cells}],offset,nextPage:integer|null,totalRows?,delimiter?,readOnly,changedOnDisk,limits?}, PDF page position/contentType/readOnly, or image metadata; a changed CSV page can include an empty rows array and message. media returns {url,contentType,size,acceptsRanges:true}, or {changedOnDisk:true,error,size}. copy returns {text,rows}; zoom returns {zoom,minimum,maximum,view}; find returns {query,matches,truncated?,view}; position returns {position}. PDF zoom may be a number or the string page-width.",
+          "properties": {
+            "acceptsRanges": { "type": "boolean", "description": "Always true for successful media resource results." },
+            "zoom": { "description": "Numeric zoom level or the PDF metadata string page-width." },
+            "nextPage": { "description": "Next CSV page number or null when there is no next page." }
+          },
+          "additionalProperties": true
         }
       }
       ,
@@ -996,14 +612,14 @@
         "params": {
           "type": "object",
           "properties": {
-            "bufferId": { "type": "string" },
-            "action": { "type": "string", "enum": ["parse", "edit", "insert", "move", "delete", "type", "clear", "save", "environments", "describe", "select", "trust", "install", "venv", "start", "run", "runAll", "interrupt", "restart", "shutdown", "state"] },
+            "bufferId": { "type": "string", "description": "Required for install/venv confirmation; ignored for other actions." },
+            "action": { "type": "string", "enum": ["parse", "edit", "insert", "move", "delete", "type", "clear", "save", "environments", "describe", "select", "trust", "install", "venv", "start", "run", "runAll", "interrupt", "restart", "shutdown", "state"], "description": "install/venv require bufferId and return confirmation text; all other actions return null without resolving a buffer." },
             "path": { "type": "string" }, "python": { "type": "string" }
           },
-          "required": ["bufferId", "action"],
+          "required": ["action"],
           "additionalProperties": false
         },
-        "result": { "type": ["string", "null"], "description": "Confirmation text only for install and venv; null for every other notebook action." }
+        "result": { "description": "Confirmation text for install and venv; null for every other notebook action." }
       }
     ],
     "event": [

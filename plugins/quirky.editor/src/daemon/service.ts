@@ -665,7 +665,8 @@ export class EditorDaemon {
     } else {
       throw this.context.error('invalid-params', 'text reads require kind content, draft, or disk')
     }
-    const offset = params.offset ?? 0
+    if (params.offset === undefined) throw this.context.error('invalid-params', 'text reads require offset')
+    const offset = params.offset
     const length = params.length ?? MAX_TEXT_CHUNK_LENGTH
     if (!Number.isSafeInteger(offset) || offset < 0 || offset > text.length) throw this.context.error('invalid-params', 'text offset is outside the selected text')
     if (!Number.isSafeInteger(length) || length < 0 || length > MAX_TEXT_CHUNK_LENGTH) {

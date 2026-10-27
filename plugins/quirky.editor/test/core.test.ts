@@ -21,13 +21,16 @@ type CoreTestHarness = {
   cleanup(): Promise<void>
 }
 type JsonSchemaNode = {
-  type?: string | string[]
+  type?: string
+  description?: string
   enum?: unknown[]
-  const?: unknown
-  properties?: Record<string, JsonSchemaNode>
   items?: JsonSchemaNode
-  oneOf?: JsonSchemaNode[]
-  anyOf?: JsonSchemaNode[]
+  properties?: Record<string, JsonSchemaNode>
+  required?: string[]
+  additionalProperties?: boolean
+  minimum?: number
+  maximum?: number
+  default?: unknown
 }
 type ApiDescription = {
   methods: { name: string; params: JsonSchemaNode; result: JsonSchemaNode }[]
@@ -168,6 +171,19 @@ describe('editor core through the daemon API', () => {
     expect(saved.draft).toBeNull()
     expect(saved.dirty).toBe(false)
   })
+
+  test('requires an explicit offset for text reads', async () => {
+    const t = await boot()
+    await write(t, 'offset.txt', 'content\n')
+    const buffer = await open(t, 'offset.txt')
+    await expect(t.call('quirky.editor/read', {
+      bufferId: buffer.id,
+      action: 'text',
+      kind: 'content',
+      contentRevision: buffer.contentRevision
+    })).rejects.toThrow(/offset/)
+  })
+
   test('preserves a leading UTF-8 BOM through open and guarded save', async () => {
     const t = await boot()
     const original = '\uFEFFconst answer = 1;\n'
@@ -615,7 +631,8 @@ describe('editor core through the daemon API', () => {
     expect(openSchema?.params.properties?.matchLength?.type).toBe('integer')
     expect(openSchema?.result.properties?.openedTabId?.type).toBe('string')
     const viewPatchSchema = methods.get('quirky.editor/view')?.params.properties?.patch
-    expect(viewPatchSchema?.properties?.markdownAnchor?.type).toEqual(['string', 'null'])
+    expect(viewPatchSchema?.properties?.markdownAnchor?.type).toBeUndefined()
+    expect(viewPatchSchema?.properties?.markdownAnchor?.description).toContain('512 UTF-8 bytes')
     expect(viewPatchSchema?.properties?.matchLength?.type).toBe('integer')
     const notebookSchema = methods.get('quirky.editor/notebook')?.params
     expect(notebookSchema?.properties?.browse?.type).toBe('boolean')
