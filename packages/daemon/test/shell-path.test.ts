@@ -201,7 +201,7 @@ describe.each([
         proc.terminal.write(`${line}\r`)
         await waitFor(() => prompts() > before, 10000)
       },
-      awaitFirstPrompt: () => waitFor(() => prompts() >= 1, 10000),
+      awaitShellReady: () => waitFor(() => out.includes(`${ESC}]777;quirky-shell-ready${BEL}`), 10000),
       finishedCodes: () => [...out.matchAll(new RegExp(`${ESC}\\]133;D;(\\d+)${BEL}`, 'g'))].map((m) => Number(m[1]))
     }
   }
@@ -230,6 +230,7 @@ claude() {
     )
     const session = startInteractive(init, { QK_TEST_POINTER: pointer })
     await session.awaitFirstPrompt()
+    await session.awaitShellReady()
 
     const ready = session.output().indexOf(`${ESC}]777;quirky-shell-ready${BEL}`)
     const sourced = session.output().indexOf('account-init-sourced')

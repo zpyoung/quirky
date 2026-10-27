@@ -119,6 +119,18 @@ function putGeminiCredentialFixture(root: string, expiry: number): { path: strin
   return { path, bytes }
 }
 
+function cursorDirectories(home: string): { cli: string; ide: string } {
+  if (process.platform === 'darwin') {
+    return { cli: join(home, '.cursor'), ide: join(home, 'Library', 'Application Support', 'Cursor') }
+  }
+  if (process.platform === 'win32') {
+    const root = process.env.APPDATA?.trim() || join(home, 'AppData', 'Roaming')
+    return { cli: join(root, 'Cursor'), ide: join(root, 'Cursor') }
+  }
+  const root = process.env.XDG_CONFIG_HOME?.trim() || join(home, '.config')
+  return { cli: join(root, 'cursor'), ide: join(root, 'Cursor') }
+}
+
 function cursorJwt(expirySeconds: number): string {
   const payload = Buffer.from(JSON.stringify({ sub: 'auth0|cursor-fixture', exp: expirySeconds })).toString('base64url')
   return `header.${payload}.signature`
@@ -439,7 +451,7 @@ describe('UsageService', () => {
 
   test('falls through a denied Cursor Keychain read to the working CLI credential', async () => {
     const root = fixtureRoot()
-    const cursorDir = join(root, 'home', '.cursor')
+    const cursorDir = cursorDirectories(join(root, 'home')).cli
     mkdirSync(cursorDir, { recursive: true, mode: 0o700 })
     const token = cursorJwt(Math.floor((Date.now() + 60 * 60_000) / 1000))
     writeFileSync(join(cursorDir, 'auth.json'), JSON.stringify({ accessToken: token }), { mode: 0o600 })
@@ -460,8 +472,9 @@ describe('UsageService', () => {
   test('falls through an expired Cursor CLI token to the read-only IDE SQLite credential', async () => {
     const root = fixtureRoot()
     const home = join(root, 'home')
-    const cursorDir = join(home, '.cursor')
-    const databasePath = join(home, 'Library', 'Application Support', 'Cursor', 'User', 'globalStorage', 'state.vscdb')
+    const { cli, ide } = cursorDirectories(home)
+    const cursorDir = cli
+    const databasePath = join(ide, 'User', 'globalStorage', 'state.vscdb')
     mkdirSync(cursorDir, { recursive: true, mode: 0o700 })
     mkdirSync(dirname(databasePath), { recursive: true, mode: 0o700 })
     writeFileSync(join(cursorDir, 'auth.json'), JSON.stringify({ accessToken: cursorJwt(Math.floor((Date.now() - 60_000) / 1000)) }), { mode: 0o600 })
