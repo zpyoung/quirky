@@ -396,5 +396,25 @@
 - **Confidence:** high
 - **Source:** assumed — autonomous
 
+## D40: W4's end-to-end suite found that killing a session left its background jobs running; the kill now reaches every descendant
+- **Question:** T13's SC-23 scenario failed because `kill --yes` signalled only the shell's process group, and zsh runs `sleep 7777 &` in a group of its own
+- **Options:** signal the shell's group only (today); signal every process on the session's terminal; snapshot the shell's descendants from the process table, then signal the group and each descendant
+- **Chose:** the snapshot, taken before any signal so jobs are still found by parent before they're reparented. It applies to a requested kill and to `forget` of a live session. A plain `kill` with a chosen signal and host shutdown still signal the group only. If `ps` can't run, the kill falls back to the group.
+- **Why:** macOS has no portable way to list a terminal's processes without `ps` either, and the parent walk works the same on Linux. Shutdown's SIGHUP already reaches jobs through the shell.
+- **Evidence:** packages/pty-host/src/descendants.ts; packages/pty-host/src/session.ts signalTree; manager.test.ts "a kill with a reason also ends background jobs"; e2e.test.ts SC-23
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** assumed — autonomous
+
+## D41: Catching up with build/roadmap (m1-providers) keeps both sides; the exit columns become migration 3
+- **Question:** nine files conflicted with m1-providers: the session record, its store, the session service and manifest, the PTY plugin API and four tests
+- **Options:** —
+- **Chose:** both sides everywhere. m1-providers already landed its launch columns as migration 2, so this item's exit columns (`exit_signal`, `exit_cause`, `restorable`) move to migration 3, with a migration test. Its v1 import statement stays as m1-providers wrote it, since it's the same frozen v1 column set. `records.update` takes `agent` again, which restore needs. A restored session also clears `launch`, because it now runs a shell. The PTY API keeps m1-providers' per-plugin subscription holds (its D39) and passes this item's subscribe options, facts, snapshot, history, kill reason and host restart through. Every session-record schema in the manifest gets the exit fields, and `restore` returns the same shape as `get`.
+- **Why:** a landed migration can't be renumbered, and both items' contracts are tested
+- **Evidence:** merge commit c00293f; plugins/quirky.session/test/records.test.ts "session store migration 3"; full gate 2981 pass, scripts 30 pass, typecheck clean. Read docs/loop/decisions/m1-providers.md: its D11 (agents start by exec), D27 (cold-restore resume left out) and D51 (a new workspace package needs `node_modules` links in the integration tree) affect this item. D51 matters at land, because quirky.terminal gained a `react` dependency.
+- **Reversibility:** medium
+- **Confidence:** high
+- **Source:** assumed — autonomous
+
 ## Progress
-Step 5: W1-W3 merged, checkpoint-reviewed and fixed (D36-D39). Next: W4 (T12 panel and pane UI, T13 end-to-end scenarios), then Final Round 1 over the run, one fix batch, then step 6 verification.
+Step 5: W1-W4 merged; W1-W3 checkpoint-reviewed and fixed (D36-D39); the SC-23 kill defect fixed (D40); caught up with build/roadmap (D41). Next: Final Round 1 over the run, one fix batch, then step 6 verification.
