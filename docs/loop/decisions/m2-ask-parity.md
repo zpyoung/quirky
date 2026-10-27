@@ -214,5 +214,67 @@
 - **Confidence:** high
 - **Source:** locked by docs/loop/LOOP.md
 
+## D22: A `deadlines` job wakes the plugin after a restart
+- **Question:** spec review F1 (HIGH): `quirky.ask` activates lazily, so after a daemon restart no deadline fires and no `resolved` event goes out until something calls the plugin; the desktop badge listens only to events
+- **Options:** accept the gap (stored state is right on every read); make the plugin activate at startup; a scheduler `job` whose first run activates it
+- **Chose:** a `job` `deadlines` (interval 60s, initial delay 1s) whose handler sweeps overdue asks. Its first run activates the plugin about a second after the daemon starts, which re-arms every timer.
+- **Why:** subscribers that never call (the dock badge) would otherwise show a timed-out ask as pending indefinitely; a job uses the public plugin API and the kernel's scheduler, where an activation flag would change the plugin's lazy contract for every daemon
+- **Evidence:** packages/daemon/src/plugins/scheduler.ts:281-290 (a run resolves the implementation, activating the plugin); plugins/quirky.ask/quirky-plugin.json `"activation": "lazy"`
+- **Reversibility:** easy
+- **Confidence:** medium
+- **Revisit if:** keeping `quirky.ask` active in every daemon shows up in the memory budget
+- **Source:** assumed — autonomous
+
+## D23: Overdue asks are resolved before anything else touches them, and never surface
+- **Question:** spec review F5, F6 (MEDIUM): at startup an overdue head's resolution would promote and announce an overdue queued ask; a cancel on an overdue ask whose timer hadn't fired would store `declined`
+- **Options:** n/a
+- **Chose:** a sweep resolves every overdue ask first without promoting or notifying, then promotes each affected session's lowest remaining pending ask; promotion skips (times out) an overdue ask; every method that reads or changes an ask, `cancel` included, first applies a passed deadline
+- **Why:** the deadline is the earliest event, so it wins; Orca's timeout is the stored outcome
+- **Evidence:** research/orca-features/ask.md "Registry lifecycle"
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** assumed — autonomous
+
+## D24: A multiselect's free text is saved as `other` whether or not options are picked
+- **Question:** spec review F4 (HIGH): Orca's draft serializer saves free text as `note` when anything is picked, but its timeout builder reads multiselect free text only from `other`, so the text is lost at a timeout
+- **Options:** port Orca as is (keep the loss); save multiselect free text as `other` always
+- **Chose:** `other` for multiselect always; `note` only for select
+- **Why:** the answer shape for multiselect has `other`, not `note`; this is an Orca inconsistency, not a requirement
+- **Evidence:** Orca src/renderer/src/components/fork-ask-question-tool/ask-question-draft.ts:27-42; src/main/fork-ask-question-tool/ask-registry-timeout-answers.ts:110-123
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** assumed — autonomous
+
+## D25: The version probe runs the configured command as quoted words
+- **Question:** spec review F3 (HIGH): the probe interpolated the configured command into a shell string
+- **Options:** n/a
+- **Chose:** tokenize the command, single-quote each token, append `--version`, run through `context.launch.commandArgv`
+- **Why:** the launch itself runs the command as literal tokens (m1-launch-settings' injection-safety contract); the probe must not run anything the launch wouldn't
+- **Evidence:** plugins/quirky.agents/src/core/shell.ts; docs/loop/decisions/m1-launch-settings.md
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** assumed — autonomous
+
+## D26: The suppression hook reads the current configuration, even for a resume
+- **Question:** spec review F2 (MEDIUM): a resumed session replays its saved arguments, which the hook can't see, so a flag present only in the saved arguments could be added twice
+- **Options:** pass the launch record to hooks (a kernel API change); accept the edge
+- **Chose:** accept it. Hook args aren't recorded, so a resume gets the pairs exactly once unless the user's own saved arguments carried one of the two flags and the current configuration no longer does.
+- **Why:** the hook input has no launch record, and widening the kernel's hook contract for this edge is out of proportion; a doubled `--disallowedTools AskUserQuestion` is harmless
+- **Evidence:** packages/protocol/src/plugins.ts:197-209; plugins/quirky.agents/src/core/plan.ts:436-443
+- **Reversibility:** easy
+- **Confidence:** medium
+- **Revisit if:** a user reports a doubled system prompt on resume
+- **Source:** assumed — autonomous
+
+## D27: Spec review: answer refusals use Orca's text; the prepass reference and heading checks are dismissed
+- **Question:** the rest of the Codex spec review (F7 LOW, F9 HIGH, F10-F30 MEDIUM)
+- **Options:** n/a
+- **Chose:** F7 accepted: number refusals use Orca's `value is outside the question domain`. F9 (no Purpose/Overview heading) dismissed: the logic-spec rubric's sections are the ones the spec has. F10-F30 dismissed: they are CLI commands, method names, example values and a research link outside the worktree, which the prepass reads as paths or commands.
+- **Why:** the doc is the requirement for messages; the dismissed ones are mechanical false positives
+- **Evidence:** /private/tmp review output sr1 (gate.json)
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** assumed — autonomous
+
 ## Progress
-Brainstorming done (D1-D21). Next: write logic.md, then tech.md, then the Codex spec review.
+Specs written and reviewed (D1-D27). Building with subagent-driven-development; journal in the session scratchpad. Wave 1 (core modules A1-A4) done in worktrees.

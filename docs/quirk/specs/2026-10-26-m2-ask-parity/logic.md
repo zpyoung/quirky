@@ -4,7 +4,12 @@
 
 **Status:** Approved (headless build loop; decisions in [m2-ask-parity.md](../../../loop/decisions/m2-ask-parity.md)). Tech spec: requested.
 
-**Amendments:** none yet.
+**Amendments:**
+- 2026-10-26, Codex spec review ([D22-D26](../../../loop/decisions/m2-ask-parity.md)): a deadline that
+  passed while the daemon was down resolves within about a second of the daemon starting, with no
+  client call (SC-9); an overdue ask is never surfaced, and cancelling one returns `timed_out`
+  (SC-18, SC-19); a multiselect's free text survives a timeout when options are also picked (SC-8);
+  answer refusals use Orca's messages (SC-5).
 
 ## Conceptual model
 
@@ -193,12 +198,16 @@ The examples share one spec, `deploy`, unless they say otherwise:
      and exits 0. The unparseable `abc` is skipped, not coerced. `list` shows the stored status
      `timed_out`, and a `resolved` event carries it.
    - **Data after:** **color** ✓ default; **note** ✓ draft; **size** ✗ skipped; **agree** ✓ default
+   - A multiselect whose draft has picks and free text (the window saves both, as `selected` and
+     `other`) times out as `{values, labels, other, source: "options"}`, keeping the free text.
 
 9. **SC-9: a deadline survives a daemon restart** (API)
    - **Given** two asks created with `timeoutMs` 1000 and 4000, and the daemon stopped right after
    - **When** the daemon starts again 2 s later, on the same home, and a client calls `wait` on each
    - **Then** the first returns `timed_out` at once; the second is still pending and returns
-     `timed_out` about 4 s after it was created, not 4 s after the restart.
+     `timed_out` about 4 s after it was created, not 4 s after the restart. A client that only
+     subscribes to events after the restart, calling nothing, receives the first ask's
+     `resolved` event (`timed_out`) within about 2 s of the daemon starting.
 
 10. **SC-10: `quirky ask wait --timeout-ms` times the ask out with the same rules** (CLI)
     - **Given** `deploy` pending with no deadline
@@ -263,7 +272,10 @@ The examples share one spec, `deploy`, unless they say otherwise:
     - **Given** `s1` with A surfaced and B queued, B created with `timeoutMs: 800`
     - **When** 800 ms pass
     - **Then** B is `timed_out` while still queued, A is still pending and surfaced, and no
-      `surfaced` event is emitted. Cancelling a queued ask C likewise declines only C.
+      `surfaced` event is emitted. Cancelling a queued ask C likewise declines only C. If A and B
+      are both overdue when the daemon starts, both end `timed_out` and B is never surfaced or
+      announced. Cancelling an ask whose deadline has passed but whose timer hasn't fired returns
+      `timed_out`, not `declined`.
 
 19. **SC-19: `seq` keeps rising across restarts and the queue order survives** (API)
     - **Given** `s1` with A surfaced and B, C queued, and the highest `seq` 3

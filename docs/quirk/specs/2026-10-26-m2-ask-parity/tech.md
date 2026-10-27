@@ -44,7 +44,7 @@ plugin, the desktop shell, the CLI link) read them.
 | `plugins/quirky.ask/store-migrations.ts` (new) | the second store migration | [Deadlines and defaults](logic.md#deadlines-and-defaults) |
 | `plugins/quirky.ask/main.ts` | `create` passes `timeoutMs` and `checkCredentialText`; new methods `updatePartial`, `expire`; events on surfacing; the launch hook | SC-4, SC-14, SC-15, SC-25 |
 | `plugins/quirky.ask/suppression.ts` (new) | `ClaudeVersionGate`, `suppressionHook` | SC-25, SC-26 |
-| `plugins/quirky.ask/quirky-plugin.json` | method, event, launch-hook and CLI flag declarations | all |
+| `plugins/quirky.ask/quirky-plugin.json` | method, event, launch-hook, `deadlines` job and CLI flag declarations | all |
 | `plugins/quirky.ask/cli.ts`, `cli-spec.ts` | `--chunk-ms`; server-side deadline; `wait --timeout-ms` through `expire`; shared validator and Orca's JSON message | SC-2, SC-8, SC-10, SC-20 |
 | `plugins/quirky.ask/src/store.ts` | watermark, surfaced filter, report with `queued` | SC-14, SC-15, SC-16 |
 | `plugins/quirky.ask/src/AskCard.tsx`, `QuestionField.tsx`, `AskCards.tsx` | Orca's controls, messages, drafts with debounce, plain-text preview | SC-21, SC-22, SC-23, SC-24 |
@@ -193,8 +193,9 @@ parseDateAnswerValue(raw: string): string | null
 - Accepts `source: 'input'` for text/number/date/confirm and v1's select `{value, source: 'option'}`
   without `label`. Rebuilds `label` (select), `labels` (multiselect) and `source` from the spec, so
   stored values are authoritative. `source: 'default'` from a caller is refused.
-- `message` names the question ID, e.g. `answers.replicas: value must be at least 1`; the exact
-  wording is ORCA's where ORCA has one.
+- `message` is ORCA's wording with the field path in front, e.g. a number outside min/max or a
+  fraction for an integer question is `answers.replicas: value is outside the question domain`
+  (ORCA's text for that case); every problem is reported, joined with `; `.
 - `buildSummary` is ORCA's `buildResultSummary` (`ask-answer-value-parsing.ts:40-59`): one line per
   answered question in spec order, joined with `\n`.
 
@@ -225,6 +226,9 @@ buildSubmission(spec, drafts)
 
 - ORCA's `ask-question-draft.ts` and `build-ask-submission.ts:20-150`, with the messages listed in
   [D18](../../../loop/decisions/m2-ask-parity.md). Multiselect values in spec order.
+- One difference from ORCA ([D24](../../../loop/decisions/m2-ask-parity.md)): a multiselect's free
+  text is always saved as `other` and read back from `other`, picks or not, because the timeout
+  builder and the answer read multiselect free text only from `other`. `note` is for select only.
 
 ### Claude flags (`src/core/claude-flags.ts`) — [SC-25](logic.md#claude-sessions-use-quirky-ask), SC-26
 
@@ -256,9 +260,15 @@ suppressionHook(context: PluginContext, gate: ClaudeVersionGate): LaunchHook
 - `allows`: a passing verdict is cached per command for the plugin's life; a failing one (below the
   floor, no version found, a non-zero exit, a 3000 ms timeout) is cached for 30 minutes and then
   probed again. Concurrent calls share one probe.
-- The probe runs `context.launch.commandArgv("<command> --version")` with
-  `context.launch.env({ sessionId, worktreeId, agent: "claude" })` from the hook input, reads stdout,
-  and kills the process on timeout. It never throws.
+- The probe tokenizes `command` with the same shell-word split, single-quotes every token (a `'`
+  inside becomes `'\''`), appends `--version`, and runs that string through
+  `context.launch.commandArgv` with `context.launch.env({ sessionId, worktreeId, agent: "claude" })`
+  from the hook input. So the configured command is only ever executed as literal words, as the
+  launch itself executes it ([D25](../../../loop/decisions/m2-ask-parity.md)). It reads stdout and
+  kills the process on timeout. It never throws.
+- The hook reads the current configuration, not a resumed session's saved arguments; a resumed
+  session whose saved arguments already carry one of the flags while the current configuration
+  doesn't can get it twice ([D26](../../../loop/decisions/m2-ask-parity.md)).
 - The hook never throws: any failure returns `{}` (fail open), so a launch is never blocked by it.
 
 ### `AskService` (`asks.ts`) — [The queue and `seq`](logic.md#the-queue-and-seq), [Deadlines](logic.md#deadlines-and-defaults), [Drafts](logic.md#drafts)
@@ -275,6 +285,7 @@ updatePartial(askId, partial: unknown): { ok: boolean }
 wait(askId, timeoutMs?): Promise<AskEnvelope>
 list(pendingOnly): Ask[]
 start(): void      // arms deadlines; resolves overdue asks; call once after construction
+sweep(): void      // resolves overdue asks, then promotes; the deadlines job calls it
 shutdown(): void
 ```
 
@@ -290,9 +301,19 @@ shutdown(): void
   calls `created`, then `surfaced` if not queued.
 - **Deadlines.** A timer per pending ask with `expires_at`; delays above 2147483647 ms re-arm in
   steps. On fire, a still-pending ask resolves `timed_out` with `buildTimeoutResult(spec, partial)`.
-  `start()` arms every pending row and resolves overdue ones (oldest `created_seq` first). `wait`,
-  `answer`, `updatePartial` and `list` first resolve the asks they touch whose deadline has passed,
-  so a late timer never lets a stale ask be answered.
+  `start()` and `sweep()` first resolve every overdue pending ask (oldest `created_seq` first)
+  without promoting or notifying, then promote each session whose head was resolved to its lowest
+  remaining pending ask, so an overdue queued ask is never surfaced or announced. Promotion in
+  general skips an ask whose deadline has passed and times it out instead. Every method that reads
+  or changes an ask (`wait`, `answer`, `cancel`, `expire`, `updatePartial`, `list`) first resolves
+  the asks it touches whose deadline has passed, so a late timer never lets an overdue ask be
+  answered, drafted or declined: cancelling an overdue ask returns `timed_out`
+  ([D23](../../../loop/decisions/m2-ask-parity.md)).
+- **Waking after a restart.** The manifest declares a `job` `deadlines` (interval `1m`, initial delay
+  `1s`; check the duration syntax against `packages/daemon/src/plugins/kinds.ts:219-227`) whose
+  handler calls `sweep()`. Running the job activates the lazy plugin, so a deadline that passed while
+  the daemon was down resolves, and emits `resolved`, within about a second of the daemon starting,
+  even if no client calls `quirky.ask` ([D22](../../../loop/decisions/m2-ask-parity.md)).
 - **expire.** A pending ask resolves exactly as at its deadline; a finished one returns its envelope.
 - **answer.** NotFound for an unknown ask, Conflict for a finished one (as today), InvalidParams for
   a refused submission (ask unchanged). Status `partial` when `skipped` is non-empty.
