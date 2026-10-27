@@ -147,6 +147,10 @@
                       "mode",
                       "hasAuto"
                     ]
+                  },
+                  "canGenerate": {
+                    "type": "boolean",
+                    "description": "Whether the agent has a one-shot shape, so generate can run it."
                   }
                 },
                 "required": [
@@ -168,7 +172,8 @@
                   "env",
                   "envOverridden",
                   "showEnv",
-                  "permissions"
+                  "permissions",
+                  "canGenerate"
                 ]
               }
             },
@@ -1655,7 +1660,7 @@
       },
       {
         "id": "deliver",
-        "description": "Pastes a prompt into a running agent once it is ready; resolves when the delivery has settled.",
+        "description": "Pastes a prompt into a running agent once it is ready; resolves when the delivery has settled. The text is sent as one bracketed paste: line breaks become CR, ESC becomes ␛, and the whole is wrapped in ESC[200~ … ESC[201~.",
         "params": {
           "type": "object",
           "properties": {
@@ -1671,6 +1676,10 @@
             },
             "submit": {
               "type": "boolean"
+            },
+            "ready": {
+              "type": "boolean",
+              "description": "the agent already shows its input; paste without waiting for a ready signal"
             }
           },
           "required": [
@@ -1694,6 +1703,147 @@
           },
           "required": [
             "delivery"
+          ]
+        }
+      },
+      {
+        "id": "submitPlan",
+        "description": "How deliver would submit a prompt to an agent: whether Enter rides with the paste, the delay before a separate Enter, and the retry delay.",
+        "readOnly": true,
+        "params": {
+          "type": "object",
+          "properties": {
+            "agent": {
+              "type": "string",
+              "description": "The agent ID."
+            },
+            "text": {
+              "type": "string",
+              "description": "The prompt the delay is computed for."
+            }
+          },
+          "required": [
+            "agent",
+            "text"
+          ]
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "enterWithPaste": {
+              "type": "boolean",
+              "description": "Enter is written in the same write as the paste."
+            },
+            "delayMs": {
+              "type": "number",
+              "description": "Milliseconds between the paste and a separate Enter."
+            },
+            "retryMs": {
+              "description": "Milliseconds after the first Enter before a second one, or null when there is none."
+            }
+          },
+          "required": [
+            "enterWithPaste",
+            "delayMs",
+            "retryMs"
+          ]
+        }
+      },
+      {
+        "id": "generate",
+        "description": "Runs an agent (or a custom command) once, non-interactively, and returns what it printed. The prompt goes to the agent's stdin or argv by its one-shot shape; the run is limited to 60 seconds and 4 MiB of output.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "agent": {
+              "type": "string",
+              "description": "An agent ID with a one-shot shape, or custom to run args as the whole command line."
+            },
+            "prompt": {
+              "type": "string"
+            },
+            "args": {
+              "type": "string",
+              "description": "CLI arguments merged into the agent's one-shot arguments; a flag the agent takes once replaces Quirky's own. For custom, the command line, where {prompt} stands for the prompt (else it goes to stdin)."
+            },
+            "cwd": {
+              "type": "string",
+              "description": "The folder to run in; an existing absolute directory. Defaults to the worktree path."
+            },
+            "worktree": {
+              "type": "string",
+              "description": "The worktree whose path is the default cwd; defaults to the caller's."
+            },
+            "timeoutMs": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 60000,
+              "description": "How long the run may take; defaults to 60000."
+            },
+            "requestId": {
+              "type": "string",
+              "description": "A caller-chosen ID that cancelGenerate can name while the run is in flight."
+            }
+          },
+          "required": [
+            "agent",
+            "prompt"
+          ]
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "text": {
+              "type": "string",
+              "description": "The agent's stdout, ANSI-stripped and decoded per its output format; not trimmed."
+            },
+            "agent": {
+              "type": "string"
+            },
+            "command": {
+              "type": "string",
+              "description": "The executable that ran."
+            },
+            "args": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "Its arguments, prompt included for argv delivery."
+            }
+          },
+          "required": [
+            "text",
+            "agent",
+            "command",
+            "args"
+          ]
+        }
+      },
+      {
+        "id": "cancelGenerate",
+        "description": "Stops the generate run with this requestId: its whole process group is killed and the run fails with reason cancelled.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "requestId": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "requestId"
+          ]
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "cancelled": {
+              "type": "boolean",
+              "description": "False when no run with this requestId is in flight."
+            }
+          },
+          "required": [
+            "cancelled"
           ]
         }
       }
@@ -1889,6 +2039,57 @@
             ],
             "placeholder": "--model opus --effort high --add-dir docs"
           }
+        },
+        "oneShot": {
+          "args": [
+            "-p",
+            "--output-format",
+            "text",
+            "--model",
+            "{model}",
+            "--permission-mode",
+            "plan",
+            {
+              "when": "thinking",
+              "args": [
+                "--effort",
+                "{thinking}"
+              ]
+            },
+            "--strict-mcp-config",
+            "--settings",
+            "{\"disableAllHooks\":true}"
+          ],
+          "prompt": "stdin",
+          "singletonOptions": [
+            [
+              "--model"
+            ],
+            [
+              "--effort"
+            ],
+            [
+              "--settings"
+            ]
+          ],
+          "models": [
+            {
+              "id": "haiku",
+              "label": "Haiku"
+            },
+            {
+              "id": "sonnet",
+              "label": "Sonnet",
+              "thinking": "low"
+            },
+            {
+              "id": "opus",
+              "label": "Opus",
+              "thinking": "low"
+            }
+          ],
+          "defaultModel": "sonnet",
+          "background": "claude"
         }
       },
       {
@@ -2111,6 +2312,69 @@
             ],
             "placeholder": "-m model-id -c model_reasoning_effort=high"
           }
+        },
+        "oneShot": {
+          "args": [
+            "exec",
+            "--ephemeral",
+            "--skip-git-repo-check",
+            "-s",
+            "read-only",
+            "--model",
+            "{model}",
+            {
+              "when": "thinking",
+              "args": [
+                "-c",
+                "model_reasoning_effort={thinking}"
+              ]
+            }
+          ],
+          "prompt": "stdin",
+          "singletonOptions": [
+            [
+              "--model",
+              "-m"
+            ]
+          ],
+          "models": [
+            {
+              "id": "gpt-5.6-terra",
+              "label": "GPT-5.6 Terra",
+              "thinking": "low"
+            },
+            {
+              "id": "gpt-5.5",
+              "label": "GPT-5.5",
+              "thinking": "low"
+            },
+            {
+              "id": "gpt-5.4",
+              "label": "GPT-5.4",
+              "thinking": "low"
+            },
+            {
+              "id": "gpt-5.4-mini",
+              "label": "GPT-5.4 Mini",
+              "thinking": "low"
+            },
+            {
+              "id": "gpt-5.3-codex",
+              "label": "GPT-5.3 Codex",
+              "thinking": "low"
+            },
+            {
+              "id": "gpt-5.3-codex-spark",
+              "label": "GPT-5.3 Codex Spark",
+              "thinking": "low"
+            },
+            {
+              "id": "gpt-5.2",
+              "label": "GPT-5.2",
+              "thinking": "low"
+            }
+          ],
+          "defaultModel": "gpt-5.6-terra"
         }
       },
       {
@@ -2260,7 +2524,101 @@
           "--resume={id}"
         ],
         "trust": "copilot",
-        "homepage": "https://docs.github.com/en/copilot/how-tos/set-up/install-copilot-cli"
+        "homepage": "https://docs.github.com/en/copilot/how-tos/set-up/install-copilot-cli",
+        "oneShot": {
+          "args": [
+            "--prompt",
+            "{prompt}",
+            "--silent",
+            "--stream",
+            "off",
+            "--no-custom-instructions",
+            "--model",
+            "{model}",
+            {
+              "when": "thinking",
+              "args": [
+                "--effort",
+                "{thinking}"
+              ]
+            }
+          ],
+          "prompt": "argv",
+          "models": [
+            {
+              "id": "auto",
+              "label": "Auto"
+            },
+            {
+              "id": "claude-haiku-4.5",
+              "label": "Claude Haiku 4.5"
+            },
+            {
+              "id": "claude-sonnet-4.5",
+              "label": "Claude Sonnet 4.5"
+            },
+            {
+              "id": "claude-sonnet-4.6",
+              "label": "Claude Sonnet 4.6"
+            },
+            {
+              "id": "claude-opus-4.5",
+              "label": "Claude Opus 4.5"
+            },
+            {
+              "id": "claude-opus-4.6",
+              "label": "Claude Opus 4.6"
+            },
+            {
+              "id": "claude-opus-4.6-fast",
+              "label": "Claude Opus 4.6 Fast"
+            },
+            {
+              "id": "claude-opus-4.7",
+              "label": "Claude Opus 4.7"
+            },
+            {
+              "id": "gpt-4.1",
+              "label": "GPT-4.1"
+            },
+            {
+              "id": "gpt-5-mini",
+              "label": "GPT-5 Mini",
+              "thinking": "low"
+            },
+            {
+              "id": "gpt-5.2",
+              "label": "GPT-5.2",
+              "thinking": "low"
+            },
+            {
+              "id": "gpt-5.2-codex",
+              "label": "GPT-5.2 Codex",
+              "thinking": "low"
+            },
+            {
+              "id": "gpt-5.3-codex",
+              "label": "GPT-5.3 Codex",
+              "thinking": "low"
+            },
+            {
+              "id": "gpt-5.4",
+              "label": "GPT-5.4",
+              "thinking": "low"
+            },
+            {
+              "id": "gpt-5.4-mini",
+              "label": "GPT-5.4 Mini",
+              "thinking": "low"
+            },
+            {
+              "id": "gpt-5.5",
+              "label": "GPT-5.5",
+              "thinking": "low"
+            }
+          ],
+          "defaultModel": "gpt-5.4"
+        }
       },
       {
         "id": "opencode2",
@@ -2309,6 +2667,58 @@
             ]
           },
           "models": []
+        },
+        "oneShot": {
+          "args": [
+            "run",
+            {
+              "when": "model",
+              "args": [
+                "--model",
+                "{model}"
+              ]
+            },
+            "--agent",
+            "build",
+            "--format",
+            "json",
+            {
+              "when": "thinking",
+              "args": [
+                "--variant",
+                "{thinking}"
+              ]
+            }
+          ],
+          "prompt": "stdin",
+          "output": "opencode-json",
+          "singletonOptions": [
+            [
+              "--model",
+              "-m"
+            ],
+            [
+              "--agent"
+            ],
+            [
+              "--format"
+            ],
+            [
+              "--variant"
+            ]
+          ],
+          "models": [
+            {
+              "id": "default",
+              "label": "Config default"
+            },
+            {
+              "id": "opencode/gpt-5.4-mini",
+              "label": "OpenCode GPT 5.4 Mini",
+              "thinking": "low"
+            }
+          ],
+          "defaultModel": "default"
         }
       },
       {
@@ -2420,6 +2830,51 @@
               "id": "effort"
             }
           ]
+        },
+        "oneShot": {
+          "command": "muse",
+          "args": [
+            "exec",
+            "--no-session-log",
+            "--approval-mode",
+            "never",
+            "--disable-sandbox",
+            "--disable-shell",
+            "--disable-write",
+            "--disable-web-tools",
+            {
+              "when": "model",
+              "args": [
+                "--model",
+                "{model}"
+              ]
+            },
+            {
+              "when": "thinking",
+              "args": [
+                "--reasoning-effort",
+                "{thinking}"
+              ]
+            },
+            "--",
+            "{prompt}"
+          ],
+          "prompt": "argv",
+          "singletonOptions": [
+            [
+              "--model"
+            ],
+            [
+              "--reasoning-effort"
+            ]
+          ],
+          "models": [
+            {
+              "id": "default",
+              "label": "Config default"
+            }
+          ],
+          "defaultModel": "default"
         }
       },
       {
@@ -2440,7 +2895,28 @@
           "{id}"
         ],
         "readySignal": "dsh-composer-prompt",
-        "homepage": "https://deepseek-harness.github.io/deepseek-harness/"
+        "homepage": "https://deepseek-harness.github.io/deepseek-harness/",
+        "oneShot": {
+          "command": "dsh",
+          "args": [
+            "--profile",
+            "headless",
+            "-"
+          ],
+          "prompt": "stdin",
+          "singletonOptions": [
+            [
+              "--profile"
+            ]
+          ],
+          "models": [
+            {
+              "id": "default",
+              "label": "Config default"
+            }
+          ],
+          "defaultModel": "default"
+        }
       },
       {
         "id": "qoder",
@@ -2504,6 +2980,39 @@
         "homepage": "https://pi.dev",
         "windows": {
           "shiftEnterEncoding": "csi-u"
+        },
+        "oneShot": {
+          "args": [
+            "--print",
+            "--no-session",
+            "--no-tools",
+            "--no-skills",
+            "--no-context-files",
+            "--mode",
+            "text",
+            {
+              "when": "model",
+              "args": [
+                "--model",
+                "{model}"
+              ]
+            },
+            {
+              "when": "thinking",
+              "args": [
+                "--thinking",
+                "{thinking}"
+              ]
+            }
+          ],
+          "prompt": "stdin",
+          "models": [
+            {
+              "id": "default",
+              "label": "Config default"
+            }
+          ],
+          "defaultModel": "default"
         }
       },
       {
@@ -2546,6 +3055,48 @@
             ],
             "placeholder": "--model model-id"
           }
+        },
+        "oneShot": {
+          "args": [
+            "--print",
+            "--no-session",
+            "--no-tools",
+            "--no-extensions",
+            "--no-skills",
+            "--no-rules",
+            "--mode",
+            "text",
+            {
+              "when": "model",
+              "args": [
+                "--model",
+                "{model}"
+              ]
+            },
+            {
+              "when": "thinking",
+              "args": [
+                "--thinking",
+                "{thinking}"
+              ]
+            }
+          ],
+          "prompt": "stdin",
+          "singletonOptions": [
+            [
+              "--model"
+            ],
+            [
+              "--thinking"
+            ]
+          ],
+          "models": [
+            {
+              "id": "default",
+              "label": "Config default"
+            }
+          ],
+          "defaultModel": "default"
         }
       },
       {
@@ -2678,6 +3229,42 @@
               "id": "effort"
             }
           ]
+        },
+        "oneShot": {
+          "args": [
+            "--print={prompt}",
+            "--sandbox",
+            {
+              "when": "model",
+              "args": [
+                "--model",
+                "{model}"
+              ]
+            },
+            {
+              "when": "thinking",
+              "args": [
+                "--effort",
+                "{thinking}"
+              ]
+            }
+          ],
+          "prompt": "argv",
+          "singletonOptions": [
+            [
+              "--model"
+            ],
+            [
+              "--effort"
+            ]
+          ],
+          "models": [
+            {
+              "id": "default",
+              "label": "Config default"
+            }
+          ],
+          "defaultModel": "default"
         }
       },
       {
@@ -2704,7 +3291,51 @@
         "detect": "amp",
         "prompt": "stdin-after-start",
         "yolo": "--dangerously-allow-all",
-        "homepage": "https://ampcode.com/manual#install"
+        "homepage": "https://ampcode.com/manual#install",
+        "oneShot": {
+          "args": [
+            "--execute",
+            "--no-notifications",
+            "--no-ide",
+            "--no-jetbrains",
+            "--mode",
+            "{model}",
+            {
+              "when": "thinking",
+              "args": [
+                "--effort",
+                "{thinking}"
+              ]
+            }
+          ],
+          "prompt": "stdin",
+          "singletonOptions": [
+            [
+              "--mode"
+            ]
+          ],
+          "models": [
+            {
+              "id": "smart",
+              "label": "Smart"
+            },
+            {
+              "id": "rush",
+              "label": "Rush"
+            },
+            {
+              "id": "large",
+              "label": "Large",
+              "thinking": "low"
+            },
+            {
+              "id": "deep",
+              "label": "Deep",
+              "thinking": "low"
+            }
+          ],
+          "defaultModel": "smart"
+        }
       },
       {
         "id": "kilo",
@@ -2911,6 +3542,27 @@
             ],
             "placeholder": "-m model-id"
           }
+        },
+        "oneShot": {
+          "args": [
+            "--print",
+            "--mode",
+            "ask",
+            "--trust",
+            "--output-format",
+            "text",
+            "--model",
+            "{model}",
+            "{prompt}"
+          ],
+          "prompt": "argv",
+          "models": [
+            {
+              "id": "auto",
+              "label": "Auto"
+            }
+          ],
+          "defaultModel": "auto"
         }
       },
       {
@@ -2942,7 +3594,46 @@
           "--session",
           "{id}"
         ],
-        "homepage": "https://www.kimi.com/code/docs/en/kimi-code-cli/getting-started.html"
+        "homepage": "https://www.kimi.com/code/docs/en/kimi-code-cli/getting-started.html",
+        "oneShot": {
+          "args": [
+            "--prompt",
+            "{prompt}",
+            "--quiet",
+            {
+              "when": "model",
+              "args": [
+                "--model",
+                "{model}"
+              ]
+            },
+            {
+              "when": "thinking=on",
+              "args": [
+                "--thinking"
+              ]
+            },
+            {
+              "when": "thinking=off",
+              "args": [
+                "--no-thinking"
+              ]
+            }
+          ],
+          "prompt": "argv",
+          "models": [
+            {
+              "id": "default",
+              "label": "Config default"
+            },
+            {
+              "id": "kimi-code/kimi-for-coding",
+              "label": "Kimi K2.6",
+              "thinking": "on"
+            }
+          ],
+          "defaultModel": "default"
+        }
       },
       {
         "id": "mistral-vibe",
@@ -3158,7 +3849,39 @@
           "--resume",
           "{id}"
         ],
-        "homepage": "https://github.com/1jehuang/jcode"
+        "homepage": "https://github.com/1jehuang/jcode",
+        "oneShot": {
+          "args": [
+            "--no-update",
+            "--quiet",
+            "--no-selfdev",
+            "--tool-profile",
+            "none",
+            {
+              "when": "model",
+              "args": [
+                "--model",
+                "{model}"
+              ]
+            },
+            "run",
+            "--json",
+            "{prompt}"
+          ],
+          "prompt": "argv",
+          "singletonOptions": [
+            [
+              "--model"
+            ]
+          ],
+          "models": [
+            {
+              "id": "default",
+              "label": "Config default"
+            }
+          ],
+          "defaultModel": "default"
+        }
       }
     ],
     "setting": [

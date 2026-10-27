@@ -5,12 +5,14 @@ import {
   TRUST_PRESETS,
   type AgentEntry,
   type LaunchCatalog,
+  type OneShotSpec,
   type PromptMode,
   type ReadySignal,
   type SubmitSignal,
   type TrustPreset
 } from './types'
 import { parseLaunchOptions } from './launch-options'
+import { parseOneShot } from './one-shot-spec'
 
 export type EntryResult = { ok: true; entry: AgentEntry } | { ok: false; error: string }
 
@@ -47,7 +49,8 @@ const KNOWN_FIELDS = new Set([
   'homepage',
   'install',
   'windows',
-  'launchOptions'
+  'launchOptions',
+  'oneShot'
 ])
 
 class Invalid extends Error {}
@@ -119,7 +122,17 @@ function parse(plugin: string, id: string, data: Record<string, unknown>): Agent
     trust: oneOf<TrustPreset>(data, 'trust', TRUST_PRESETS) ?? null,
     homepage: link(data, 'homepage'),
     install: link(data, 'install'),
-    launchOptions: data.launchOptions === undefined ? null : launchOptions(data.launchOptions)
+    launchOptions: data.launchOptions === undefined ? null : launchOptions(data.launchOptions),
+    oneShot: data.oneShot === undefined ? null : oneShot(data.oneShot)
+  }
+}
+
+function oneShot(value: unknown): OneShotSpec {
+  try {
+    return parseOneShot(value)
+  } catch (error) {
+    if (error instanceof Error) return fail(error.message)
+    throw error
   }
 }
 

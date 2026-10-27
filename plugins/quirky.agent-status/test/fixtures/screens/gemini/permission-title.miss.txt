@@ -1,0 +1,2 @@
+title: ◇ gemini
+ Action required: allow shell command `rm -rf build`?

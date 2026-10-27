@@ -269,6 +269,19 @@ describe('validateAskSpec: pattern safety', () => {
       const result = validate(specOf(textQuestion({ pattern, default: `${'a'.repeat(199)}c` })))
       expect(performance.now() - start).toBeLessThan(100)
       expect(result.ok).toBe(false)
+      if (pattern === 'a*a*a*b') {
+        if (result.ok) throw new Error('the default should not match')
+        expect(result.errors).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({
+              path: 'questions[0].default',
+              message: 'default does not match pattern'
+            })
+          ])
+        )
+        expect(result.errors.some((error) => error.path === 'questions[0].pattern')).toBe(false)
+        expect(validate(specOf(textQuestion({ pattern }))).ok).toBe(true)
+      }
     }
   )
 

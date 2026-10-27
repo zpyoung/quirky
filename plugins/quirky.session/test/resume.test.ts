@@ -237,6 +237,14 @@ describe('SC-31: resume replays the launch record, in the original folder', () =
     expect(spawnedArgv(resumed.id)).toContain('--settings')
   })
 
+  test('a resumed session starts without the name of the session it came from, which keeps it', async () => {
+    const old = await start('claude', { name: 'reviewer' })
+    await setProviderSession({ session: 'reviewer', id: 'abc' })
+    const resumed = await resume({ session: 'reviewer' })
+    expect(resumed).toMatchObject({ resumedFrom: old.id, name: null })
+    expect(await call<Session>(client, 'quirky.session/get', { session: old.id })).toMatchObject({ name: 'reviewer' })
+  })
+
   test('a resumed session emits changed and shows up in the list', async () => {
     const first = await start('claude')
     const resumed = await resume({ session: first.id, providerSession: 'abc' })

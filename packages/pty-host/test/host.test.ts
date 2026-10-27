@@ -425,10 +425,10 @@ describe('resize, kill and exit', () => {
     const out = collect(client, 'k')
     const seen = events(client)
     await client.request('create', createParams('k', sh('sleep 100 & echo child=$!; wait')))
-    await client.request('subscribe', { sessionId: 'k' })
-    const childPid = Number(
-      (await waitFor(() => /child=(\d+)/.exec(text(out.all())), 5000, 'child pid'))[1]
-    )
+    const sub = await client.request('subscribe', { sessionId: 'k' })
+    // the shell can print before the subscription starts, and that output comes back in the replay
+    const output = () => text(concat([base64ToBytes(sub.replay), out.all()]))
+    const childPid = Number((await waitFor(() => /child=(\d+)/.exec(output()), 5000, 'child pid'))[1])
     await client.request('kill', { sessionId: 'k' })
     await waitFor(() => seen.length > 0, 5000, 'exit event')
     await waitFor(

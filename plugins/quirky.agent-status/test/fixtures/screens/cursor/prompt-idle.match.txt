@@ -1,0 +1,8 @@
+title: Cursor Agent
+ ⬢ Cursor Agent
+
+ → add a test for the parser
+
+ Added the test.
+
+ → Plan, search, build anything

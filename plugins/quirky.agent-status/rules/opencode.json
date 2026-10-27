@@ -1,0 +1,36 @@
+{
+  "agent": "opencode",
+  "description": "OpenCode detection rules, from its own `OC | <session>` title.",
+  "rules": [
+    {
+      "id": "working-title",
+      "why": "OpenCode's own title (`OC | <session>`, after an optional wrapper label or status glyph) carries a braille spinner frame while a turn runs, as the dot's title classifier reads it.",
+      "state": "working",
+      "region": "title",
+      "all": [
+        {
+          "regex": "^\\s*(?:(?![▣⠀-⣿])[^|]+? \\| )?(?:[▣⠀-⣿] )?OC \\|[ \\t]+\\S"
+        },
+        {
+          "regex": "[⠀-⣿◐-◓]"
+        }
+      ]
+    },
+    {
+      "id": "rest-title",
+      "why": "OpenCode's own title (`OC | <session>`) without a spinner frame is its rest title, which it owns, so a hookless pane can still be read at rest.",
+      "state": "idle",
+      "region": "title",
+      "all": [
+        {
+          "regex": "^\\s*(?:(?![▣⠀-⣿])[^|]+? \\| )?(?:[▣⠀-⣿] )?OC \\|[ \\t]+\\S"
+        }
+      ],
+      "none": [
+        {
+          "regex": "[⠀-⣿◐-◓]"
+        }
+      ]
+    }
+  ]
+}

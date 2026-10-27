@@ -8,15 +8,18 @@
  * When `<git common dir>/build-loop/remote-tests.json` names a host (`{"host": "user@box", "jobs": 4}`),
  * the run moves off this machine: the working tree is copied to a fresh folder there and each test
  * file runs in its own process, `jobs` at a time, each holding one of `slots` machine-wide locks there
- * so several runs at once share the host's cores (`slots` defaults to 8). Files listed in scripts/test-on-macos.txt still run
+ * so several runs at once share the host's cores (`slots` defaults to 8). A run from the integration
+ * worktree is a land, which holds the queue lock while it runs, so it can use every slot while other
+ * runs keep to half of them. Files listed in scripts/test-on-macos.txt still run
  * here, alongside. If the host can't be reached the whole run falls back to this machine.
  * `QUIRKY_TEST_LOCAL=1` skips the host.
  *
  *   bun scripts/suite.ts packages apps plugins
  */
-import { appendFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import { appendFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { homedir, tmpdir } from 'node:os'
-import { isAbsolute, join } from 'node:path'
+import { basename, dirname, isAbsolute, join } from 'node:path'
+import { createProcessScope, type ProcessScope } from './test-support/process-scope'
 
 export type SuiteResult = { ok: boolean; flaky: string[] }
 type Remote = { host: string; jobs?: number; slots?: number }
@@ -38,13 +41,29 @@ async function tee(stream: ReadableStream<Uint8Array>, out: NodeJS.WriteStream |
   }
 }
 
-async function exec(cmd: string[], cwd: string, echo = true, stdin?: string): Promise<{ code: number; output: string }> {
-  const child = Bun.spawn(cmd, { cwd, stdin: stdin === undefined ? 'ignore' : new Blob([stdin]), stdout: 'pipe', stderr: 'pipe' })
-  const [out, err] = await Promise.all([tee(child.stdout, echo ? process.stdout : null), tee(child.stderr, echo ? process.stderr : null)])
-  return { code: await child.exited, output: out + err }
+async function exec(cmd: string[], cwd: string, echo = true, stdin?: string, scope: ProcessScope = createProcessScope()): Promise<{ code: number; output: string }> {
+  try {
+    const options = {
+      cwd,
+      env: { ...process.env, ...scope.env },
+      stdin: stdin === undefined ? 'ignore' as const : new Blob([stdin]),
+      stdout: 'pipe' as const,
+      stderr: 'pipe' as const
+    }
+    const child = scope.spawn(cmd, options)
+    const streams = Promise.all([tee(child.stdout, echo ? process.stdout : null), tee(child.stderr, echo ? process.stderr : null)])
+    const code = await child.exited
+    // A leaked child may still hold a pipe open. Reap the tree before waiting for EOF.
+    await scope.cleanup()
+    const [out, err] = await streams
+    return { code, output: out + err }
+  } finally {
+    await scope.cleanup()
+  }
 }
 
-const bunTest = (cwd: string, args: string[], echo = true) => exec(['bun', 'test', ...args], cwd, echo)
+const bunTest = (cwd: string, args: string[], echo = true) =>
+  exec(['bun', 'test', ...args], cwd, echo, undefined, createProcessScope())
 const asPath = (file: string) => (isAbsolute(file) ? file : `./${file}`)
 
 /** Files with a failing test in a junit report, and how many tests failed in all. */
@@ -126,17 +145,49 @@ export async function runFiles(
   return failed.length === 0 ? { ok: true, flaky: [] } : rerunAlone(cwd, failed.sort(), flags, limit)
 }
 
+/** How many of the host's slots a run may take: all of them, or half while a land runs and this isn't it. */
+export function usableSlots(slots: number, priority: boolean, landRunning: boolean): number {
+  return priority || !landRunning ? slots : Math.max(1, Math.floor(slots / 2))
+}
+
+function alive(pid: number): boolean {
+  try {
+    process.kill(pid, 0)
+    return true
+  } catch {
+    return false
+  }
+}
+
+/** Whether a land's run is going on this machine; markers left by dead runs are removed. */
+function landRunning(dir: string): boolean {
+  let running = false
+  for (const name of readdirSync(dir)) {
+    const pid = /^land-(\d+)$/.exec(name)?.[1]
+    if (!pid) continue
+    if (alive(Number(pid))) running = true
+    else rmSync(join(dir, name), { force: true })
+  }
+  return running
+}
+
 /** `bun test` that first takes one of `slots` locks shared by every run on this machine. */
-function slotted(slots: number): Run {
+function slotted(slots: number, priority: boolean): Run {
   const dir = join(homedir(), 'test-slots')
   mkdirSync(dir, { recursive: true })
+  if (priority) {
+    const marker = join(dir, `land-${process.pid}`)
+    writeFileSync(marker, '')
+    process.on('exit', () => rmSync(marker, { force: true }))
+  }
   const BUSY = 75
   return async (cwd, args) => {
     for (;;) {
-      const start = Math.floor(Math.random() * slots)
-      for (let i = 0; i < slots; i++) {
-        const lock = join(dir, `${(start + i) % slots}.lock`)
-        const result = await exec(['flock', '-n', '-E', String(BUSY), lock, 'bun', 'test', ...args], cwd, false)
+      const usable = usableSlots(slots, priority, !priority && landRunning(dir))
+      const start = Math.floor(Math.random() * usable)
+      for (let i = 0; i < usable; i++) {
+        const lock = join(dir, `${(start + i) % usable}.lock`)
+        const result = await exec(['flock', '-n', '-E', String(BUSY), lock, 'bun', 'test', ...args], cwd, false, undefined, createProcessScope())
         if (result.code !== BUSY) return result
       }
       await Bun.sleep(500)
@@ -169,7 +220,7 @@ function remoteConfig(cwd: string): Remote | undefined {
 }
 
 /** Runs `files` on the host; undefined when the host or the copy failed, as opposed to a test. */
-async function runRemote(cwd: string, remote: Remote, files: string[], flags: string[]): Promise<SuiteResult | undefined> {
+async function runRemote(cwd: string, remote: Remote, files: string[], flags: string[], land: boolean): Promise<SuiteResult | undefined> {
   const ssh = ['ssh', '-o', 'BatchMode=yes', '-o', 'ConnectTimeout=15', remote.host]
   const dir = `runs/${Date.now()}-${process.pid}`
   const scratch = mkdtempSync(join(tmpdir(), 'suite-remote-'))
@@ -184,7 +235,7 @@ async function runRemote(cwd: string, remote: Remote, files: string[], flags: st
       return undefined
     }
     const quoted = flags.map((flag) => `'${flag.replaceAll("'", `'\\''`)}'`).join(' ')
-    const script = `export PATH="$HOME/.bun/bin:$PATH" && cd ${dir} && bun install --frozen-lockfile >/dev/null && bun scripts/suite.ts --worker --jobs ${remote.jobs ?? 4} --slots ${remote.slots ?? 8} ${quoted}`
+    const script = `export PATH="$HOME/.bun/bin:$PATH" && cd ${dir} && bun install --frozen-lockfile >/dev/null && bun scripts/suite.ts --worker --jobs ${land ? (remote.slots ?? 8) : (remote.jobs ?? 4)} --slots ${remote.slots ?? 8} --land ${land ? 1 : 0} ${quoted}`
     const run = await exec([...ssh, script], cwd, true, files.join('\n'))
     const line = run.output.split('\n').find((text) => text.startsWith(RESULT_PREFIX))
     return line ? (JSON.parse(line.slice(RESULT_PREFIX.length)) as SuiteResult) : undefined
@@ -198,9 +249,9 @@ async function main(argv: string[]): Promise<boolean> {
   const cwd = process.cwd()
   if (argv[0] === '--worker') {
     const value = (name: string) => Number(argv[argv.indexOf(name) + 1])
-    const flags = argv.slice(5)
+    const flags = argv.slice(7)
     const files = (await new Response(Bun.stdin.stream()).text()).split('\n').filter(Boolean)
-    const result = await runFiles(cwd, files, flags, value('--jobs'), 5, slotted(value('--slots')))
+    const result = await runFiles(cwd, files, flags, value('--jobs'), 5, slotted(value('--slots'), value('--land') === 1))
     console.log(`${RESULT_PREFIX}${JSON.stringify(result)}`)
     return result.ok
   }
@@ -212,8 +263,12 @@ async function main(argv: string[]): Promise<boolean> {
   const here = files.filter((file) => macos.has(file))
   const there = files.filter((file) => !macos.has(file))
   console.log(`running ${there.length} test files on ${remote.host} and ${here.length} macOS-only files here`)
-  const [away, local] = await Promise.all([runRemote(cwd, remote, there, flags), runFiles(cwd, here, flags, 1)])
-  if (away) return away.ok && local.ok
+  const land = basename(cwd) === 'integration' && basename(dirname(cwd)) === 'build-loop'
+  const [away, local] = await Promise.all([runRemote(cwd, remote, there, flags, land), runFiles(cwd, here, flags, 1)])
+  if (away) {
+    if (away.flaky.length > 0) recordFlakes(cwd, away.flaky)
+    return away.ok && local.ok
+  }
   console.error(`\n${remote.host} couldn't run the tests, so they run here instead`)
   return (await runFiles(cwd, there, flags, 1)).ok && local.ok
 }

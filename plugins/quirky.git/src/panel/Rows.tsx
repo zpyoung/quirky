@@ -14,6 +14,8 @@ export type RowItem = {
   removed?: number | null
   /** The status entry behind an uncommitted row; absent for compare rows. */
   entry?: GitStatusEntry
+  /** How many notes the path carries; absent or 0 shows no icon. */
+  notes?: number
 }
 
 /** A hover button of a row or folder. */
@@ -104,26 +106,43 @@ function Counts({ item }: { item: RowItem }) {
   )
 }
 
+function NoteCount({ count }: { count: number | undefined }) {
+  if (count === undefined || count === 0) return null
+  const title = `${count} ${count === 1 ? 'note' : 'notes'}`
+  return (
+    <span className="scm-note-count" title={title}>
+      <svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true" focusable="false">
+        <path d="M2.5 3h11v7.5H7L4 13v-2.5H2.5z" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" />
+      </svg>
+      {count}
+    </span>
+  )
+}
+
 function Trailing({ item }: { item: RowItem }) {
   const conflict = item.entry?.conflict
   if (conflict) {
     const unresolved = conflict.state === 'unresolved'
     const text = unresolved ? 'Unresolved' : 'Resolved locally'
     return (
-      <span
-        className={`scm-badge ${unresolved ? 'scm-badge-unresolved' : 'scm-badge-resolved'}`}
-        aria-label={`${text} conflict (${conflictLabel(conflict.kind)})`}
-        title={unresolved ? undefined : 'Local session state derived from a conflict you opened here.'}
-      >
-        <span className="scm-badge-icon" aria-hidden="true">
-          {unresolved ? '⚠' : '✓'}
+      <>
+        <NoteCount count={item.notes} />
+        <span
+          className={`scm-badge ${unresolved ? 'scm-badge-unresolved' : 'scm-badge-resolved'}`}
+          aria-label={`${text} conflict (${conflictLabel(conflict.kind)})`}
+          title={unresolved ? undefined : 'Local session state derived from a conflict you opened here.'}
+        >
+          <span className="scm-badge-icon" aria-hidden="true">
+            {unresolved ? '⚠' : '✓'}
+          </span>
+          <span className="scm-badge-text">{text}</span>
         </span>
-        <span className="scm-badge-text">{text}</span>
-      </span>
+      </>
     )
   }
   return (
     <>
+      <NoteCount count={item.notes} />
       <Counts item={item} />
       <span className={`scm-letter scm-status-${item.status}`}>{statusLetter(item.status)}</span>
     </>

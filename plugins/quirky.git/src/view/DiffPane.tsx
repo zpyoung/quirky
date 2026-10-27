@@ -1,5 +1,8 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { GitDiff, UiPluginContext } from '@quirky/protocol'
+import type { NotesBinding } from '../notes/binding'
+import { markComposerUsed, registerComposer, type NoteComposer } from '../notes/composers'
+import type { Note } from '../notes/useNotes'
 import { messageOf, reasonOf } from './data'
 import { BinaryNotice, ImagePanes, TooLargeNotice } from './Fallbacks'
 import { tooLargeFor, type TooLarge } from './limits'
@@ -29,6 +32,8 @@ export type PaneHandle = {
 export type PaneProps = {
   context: UiPluginContext
   worktree: string
+  /** The path notes are filed under. */
+  path: string
   diff: GitDiff
   editable: boolean
   settings: DiffSettings
@@ -41,6 +46,8 @@ export type PaneProps = {
   /** Refetch the diff and replace this pane with it, dropping the draft. */
   onReload(): Promise<void>
   onFocus?(): void
+  /** Draws and takes notes on the modified side of a text diff; image, binary and too-large diffs never use it. */
+  notes?: NotesBinding
 }
 
 const STALE_TEXT = {
@@ -83,7 +90,9 @@ export function DiffPane(props: PaneProps) {
   return <TextPane {...props} />
 }
 
-function TextPane({ context, worktree, diff, editable, settings, variant, onState, bind, onSaved, onReload, onFocus }: PaneProps) {
+const NO_NOTES: readonly Note[] = []
+
+function TextPane({ context, worktree, path, diff, editable, settings, variant, onState, bind, onSaved, onReload, onFocus, notes }: PaneProps) {
   const hostRef = useRef<HTMLDivElement>(null)
   const mergeRef = useRef<MergeHandle | null>(null)
   const base = useRef<{ text: string; hash: string | null | undefined }>({ text: diff.modified, hash: diff.modifiedHash })
@@ -97,6 +106,13 @@ function TextPane({ context, worktree, diff, editable, settings, variant, onStat
   const [overflow, setOverflow] = useState<TooLarge | null>(null)
   const latest = useRef({ onFocus })
   latest.current = { onFocus }
+  const binding = useRef(notes)
+  binding.current = notes
+  const withNotes = notes !== undefined
+  const fileNotes = useMemo(() => (notes ? notes.notes.filter((n) => n.path === path) : NO_NOTES), [notes?.notes, path])
+  const model = useMemo(() => ({ saved: fileNotes, draft: notes?.draft ?? null }), [fileNotes, notes?.draft])
+  const modelRef = useRef(model)
+  modelRef.current = model
 
   const measure = () => {
     const merge = mergeRef.current
@@ -165,17 +181,52 @@ function TextPane({ context, worktree, diff, editable, settings, variant, onStat
         timer.current = setTimeout(recount, RECOUNT_MS)
       },
       onUpdate: measure,
-      onFocus: () => latest.current.onFocus?.()
+      onFocus: () => latest.current.onFocus?.(),
+      ...(withNotes
+        ? {
+            notes: {
+              initial: modelRef.current,
+              mountCard: (element, card, remeasure) => binding.current!.mountCard(path, element, card, remeasure),
+              onRange: (range) => binding.current?.openDraft(range)
+            }
+          }
+        : {})
     })
     carried.current = null
     mergeRef.current = handle
     measure()
+
+    const composer: NoteComposer = {
+      openFromSelection() {
+        const owner = binding.current
+        if (!owner || owner.draft) return false
+        owner.openDraft(handle.selectionRange())
+        return true
+      }
+    }
+    const unregister = withNotes ? registerComposer(composer) : undefined
+    const used = () => markComposerUsed(composer)
+    host.addEventListener('focusin', used)
+    host.addEventListener('pointerdown', used)
     return () => {
+      host.removeEventListener('focusin', used)
+      host.removeEventListener('pointerdown', used)
+      unregister?.()
       carried.current = editable && dirtyRef.current ? handle.getModified() : null
       mergeRef.current = null
       handle.destroy()
     }
-  }, [showEditor, editable, settings.sideBySide, settings.wrap, settings.showWhitespace, settings.collapseUnchanged])
+  }, [showEditor, editable, withNotes, path, settings.sideBySide, settings.wrap, settings.showWhitespace, settings.collapseUnchanged])
+
+  useEffect(() => {
+    mergeRef.current?.setNotes(model)
+  }, [model])
+
+  const revealId = notes?.reveal
+  useEffect(() => {
+    if (!revealId || !fileNotes.some((n) => n.id === revealId)) return
+    if (mergeRef.current?.revealNote(revealId)) binding.current?.revealed()
+  }, [revealId, fileNotes, showEditor])
 
   useEffect(
     () => () => {

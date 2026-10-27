@@ -1,5 +1,6 @@
 import type { AskAnswer, AskOption, AskQuestion, AskSpec } from '@quirky/protocol'
 import { FORMAT_PATTERNS, isPlainObject, isValidIsoDate, nonBlank } from './values'
+import { matchesPattern } from './pattern'
 
 type TextQuestion = Extract<AskQuestion, { type: 'text' }>
 type NumberQuestion = Extract<AskQuestion, { type: 'number' }>
@@ -19,7 +20,7 @@ export function parseTextAnswerValue(question: TextQuestion, raw: string): strin
     } catch {
       return null
     }
-    if (!regex.test(raw)) return null
+    if (!matchesPattern(regex, raw)) return null
   }
   if (question.format && !FORMAT_PATTERNS[question.format].test(raw)) return null
   return raw

@@ -4,23 +4,47 @@ import { join } from 'node:path'
 import { spawnPty } from '../../pty-host/src/pty-process'
 import { buildSessionEnv, commandArgv, installIntegrationFiles, shellArgv } from '../src/launch'
 import { makeTempHome, waitFor } from './helpers'
+import { createProcessScope, type ProcessScope } from '../../../scripts/test-support/process-scope'
 
 let root: string
 let userHome: string
 let quirkyHome: string
+let scope: ProcessScope
 
-const started: { kill(): void }[] = []
+const started: { pid: number; kill(): void }[] = []
 
 beforeEach(() => {
   root = makeTempHome('qd-shell-')
   userHome = join(root, 'user')
   quirkyHome = join(root, 'q')
+  scope = createProcessScope(quirkyHome)
   mkdirSync(userHome, { recursive: true })
   installIntegrationFiles(quirkyHome, '/opt/quirky/cli/main.ts')
 })
-afterEach(() => {
-  for (const proc of started.splice(0)) proc.kill()
-  rmSync(root, { recursive: true, force: true })
+afterEach(async () => {
+  let failed = false
+  let firstError: unknown
+  for (const proc of started.splice(0)) {
+    try {
+      proc.kill()
+    } catch (error) {
+      if (!failed) firstError = error
+      failed = true
+    }
+  }
+  try {
+    await scope.cleanup()
+  } catch (error) {
+    if (!failed) firstError = error
+    failed = true
+  }
+  try {
+    rmSync(root, { recursive: true, force: true })
+  } catch (error) {
+    if (!failed) firstError = error
+    failed = true
+  }
+  if (failed) throw firstError
 })
 
 const RESET_PATH = 'export PATH=/usr/bin:/bin:/usr/sbin:/sbin'
@@ -50,7 +74,7 @@ function sessionEnv(
 }
 
 async function run(argv: string[], env: Record<string, string>) {
-  const proc = Bun.spawn(argv, { env, cwd: root, stdin: 'ignore', stdout: 'pipe', stderr: 'pipe' })
+  const proc = scope.spawn(argv, { env, cwd: root, stdin: 'ignore', stdout: 'pipe', stderr: 'pipe' })
   const [stdout, stderr] = await Promise.all([new Response(proc.stdout).text(), new Response(proc.stderr).text()])
   await proc.exited
   return { stdout: stdout.trim(), stderr }
@@ -180,7 +204,7 @@ describe.each([
     let out = ''
     const decoder = new TextDecoder()
     const proc = spawnPty(shellArgv(quirkyHome, shell), {
-      env: sessionEnv(shell, 'shell', extra, shellInit),
+      env: { ...sessionEnv(shell, 'shell', extra, shellInit), ...scope.env },
       cwd: root,
       cols: 100,
       rows: 30,
@@ -189,6 +213,7 @@ describe.each([
       },
       onClose: () => {}
     })
+    scope.track(proc.pid)
     started.push(proc)
     const count = (marker: string) => out.split(marker).length - 1
     const prompts = () => count(`${ESC}]133;A${BEL}`)
