@@ -485,5 +485,32 @@
 - **Confidence:** high
 - **Source:** assumed — autonomous
 
+## D48: W2 landed as three components plus two follow-ups; the summary's progress is a percentage
+- **Question:** the W2 wave-end barrier and its gate
+- **Options:** accept; stop on a violation
+- **Chose:** accept: the agent-status core (T7a then T7b in one tree: apply/identity/store/service, list and get, the launch hook with `--settings` for claude and claude-agent-teams, titles and OSC 7501, interrupt and question inference, the presence job, spool replay), the TOML/YAML/plugin-file installers (T5b), and the session summary with the tab and worktree glyphs (T8, then T8b) all passed scope and acceptance (595, 84, 761 tests). T8 had read `progress` as 0-1 because the protocol comment said so; it is a 0-100 percentage from OSC 7501, so T8b and a wave-gate fixer corrected the window code and the comment. The gate then needed two scoped fixes outside any task: `plugins/quirky.agents/test/e2e/compat.e2e.test.ts` asserted the old `claude-settings.json` name (the wave-gate fixer case), and the import-fence test flagged the generated Amp plugin's `from '@ampcode/plugin'` text, now built from a constant. Gate at c99d239: 4419 pass, scripts 30, typecheck clean. Implementer choices carried forward: a row with no `lastHookAt` (title or OSC only) yields to the first hook; hook freshness for titles is 30 minutes since `lastHookAt`; unchanged titles refresh evidence at most once a minute; spool replays use the file's mtime; presence deletes the row directly; opencode and opencode2 share one plugin directory and each file reports only for its own binary; pi and omp share one generated extension that reports as omp inside Oh My Pi; Hermes's config edits carry the original line in a trailing comment so remove restores it.
+- **Why:** the barrier and the gate passed
+- **Evidence:** merges up to 95cc98d; commits e6d0638, c99d239
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** assumed — autonomous
+
+## D49: The PTY host memory test is a load flake, not a regression
+- **Question:** the post-W1-fix gate failed `packages/pty-host/test/memory.test.ts` (RSS grew 100.7 MiB against a bound of 100) while three implementers ran
+- **Options:** treat as a regression and investigate; establish a flake by isolated reproduction
+- **Chose:** flake: on the same machine load it failed on the item's base 13deb24 too, and passed on HEAD when rerun alone; the W2 gate passed it
+- **Why:** the bound has no margin under concurrent load, and nothing in this item touches the host's buffering
+- **Evidence:** session journal; gate logs gate-w1f (fail) and gate-w2b (pass)
+- **Reversibility:** easy
+- **Confidence:** medium
+- **Revisit if:** it fails on an idle machine
+- **Source:** assumed — autonomous
+
 ## Progress
-Step 5 (build): W1 and its checkpoint fixes merged at 6c67ce0. W2 batch 1 dispatched (T7a agent-status core, T5b remaining installers, T8 session summary and dots); T7b (fallbacks, inference, presence, spool) follows T7a in the same tree. Then W2 checkpoint, W3 (registry, hooks CLI, setting), W4 (end-to-end).
+Step 5 (build), between waves. RUN_BASE 13deb24 (specs fixed). W1 and its checkpoint fixes (D46, D47) and W2 (D48) are merged; HEAD c99d239, full gate green (4419 pass, scripts 30, typecheck clean). Backend: claude-task implementers (Agent, sonnet, effort high) + codex reviewer (D44).
+
+Next iteration, in order:
+1. **W2 checkpoint review**: three lenses (C correctness, S spec compliance, X security/failure modes), depth standard, profile code-diff, reviewer codex, target `6c67ce0..c99d239` (W2_BASE was 6c67ce0). Criteria = the W2 task contracts: T7a (normalize/index, store migration 2, identity, apply, service wiring, list/get, launch hook, hydration, fakes), T7b (titles and OSC 7501 fallbacks with hook precedence, interrupt and question inference, presence job, spool drain, time scale), T5b (kimi, jcode, dsh, hermes, amp, opencode family, pi family installers and generated sources), T8 (session migration 5, setStatus agentStatus, glyphs and labels, worktree priority, progress 0-100), plus tech.md sections they cite. Reuse the gate: build a ReusedCheckInput (tree_hash = HEAD^{tree}, clean_tree true, one check with command `bun run test && bun test scripts && bun run typecheck`). Adjudicate, fix with parallel scoped fixers, gate again.
+2. **W3** (one component, plugins/quirky.agent-status): `src/install/registry.ts` listing `JSON_INSTALLERS` (other-json.ts) + `OTHER_INSTALLERS` (other-installers.ts); methods `hooksStatus`, `hooksSetup {agent?}`, `hooksRemove {agent?}` with schemas; `cli.ts` + `cli-command` entries `hooks-status`/`hooks-setup`/`hooks-remove` (words `hooks status|setup|remove`, positional agent); setting `hooks` (boolean, default true, title "Agent status hooks", description per D26); on `setting.changed` off → remove all, on → install detected+enabled (`quirky.agents/list` installed && enabled); install at activation when on, never remove at start; setup refuses with "Agent status hooks are turned off" while off; status values per D25; the InstallEnv home is `$HOME` with the test guard. Tests through the daemon API and CLI.
+3. **W3 checkpoint** (standard, codex), then **W4**: end-to-end CLI scenarios on a real daemon subprocess with temp HOME and QUIRKY_HOME (pattern: plugins/quirky.agents/test/support/e2e.ts `startAgentsE2E`, fake agents): SC-12 (resume uses captured id), SC-19 (real fake-agent pid killed), SC-24..SC-29 via `quirky agent-status hooks …`, SC-27 (setting off/restart/on), SC-28 (fake claude versions), SC-29, SC-33 (`list --json`, `get --json`).
+4. Catch up with build/roadmap (`git merge build/roadmap`; lane 3's m1-worktrees and lane 1's m1-term-ui may touch quirky.session/quirky.worktree; renumber session migration 5 if another item took it, D36), then **Final Round 1** (deep, three lenses, RUN_BASE..HEAD) and one fix batch, then step 6 (UI pass for SC-34..SC-37 with using-apps-like-a-user; native scenarios: none expected) and step 7 (land).
