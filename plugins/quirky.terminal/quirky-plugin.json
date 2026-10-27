@@ -4,6 +4,7 @@
   "version": "0.1.0",
   "description": "Terminal input and output for sessions that run in a PTY.",
   "main": "main.ts",
+  "ui": "dist/ui.js",
   "cli": "cli.ts",
   "cliAliases": [
     "term"
@@ -771,6 +772,18 @@
         "methods": [
           "quirky.terminal/restartHost"
         ]
+      }
+    ],
+    "panel": [
+      {
+        "id": "sessions",
+        "title": "Terminal Sessions"
+      }
+    ],
+    "command": [
+      {
+        "id": "manage-sessions",
+        "title": "Terminal: Manage Sessions"
       }
     ]
   }
