@@ -34,6 +34,7 @@ export async function activate(context: PluginContext): Promise<void> {
     prepareLaunch: created.prepareLaunch,
     prepareResume: created.prepareResume,
     deliver: created.deliver,
+    submitPlan: created.submitPlan,
     generate: created.generate,
     cancelGenerate: created.cancelGenerate
   }
