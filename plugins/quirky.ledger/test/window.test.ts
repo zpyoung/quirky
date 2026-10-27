@@ -192,7 +192,10 @@ test('SC-14: Open Ledger and real owner menus route to the same attached and det
   const world = await boot()
   await createBug(world, 'Project menu entry')
   await world.agent.callAny('ui.command.run', { id: OPEN })
-  const chooser = await world.win.waitFor(() => document.querySelector<HTMLElement>('.ledger-chooser'))
+  const chooser = await world.win.waitFor(() => {
+    const element = document.querySelector<HTMLElement>('.ledger-chooser')
+    return element?.querySelector('.ledger-chooser-row') ? element : undefined
+  })
   expect(chooser.textContent).toContain('Open ledger')
   expect(chooser.textContent).toContain(`${world.repo.name}, Project · 1 entry`)
   expect((await uiState(world.agent)).slots.find((slot) => slot.id === LEDGER_VIEW)?.report).toMatchObject({ view: 'chooser' })
@@ -316,7 +319,10 @@ test('SC-16: long-history detail actions change state and revert through the pub
   await openOwnerCommand(world)
   const row = await world.win.waitFor(() => document.querySelector<HTMLElement>(`.ledger-entry-row[data-entry-id="${id}"]`))
   await click(row.querySelector('button[aria-label^="Show details"]')!)
-  const detail = await world.win.waitFor(() => dialogNamed(`Ledger entry ${id}`))
+  const detail = await world.win.waitFor(() => {
+    const dialog = dialogNamed(`Ledger entry ${id}`)
+    return dialog?.querySelector('.ledger-detail-actions') ? dialog : undefined
+  })
   expect(detail.textContent).toContain('Full history')
   expect(detail.textContent).toContain('Before')
   expect(detail.textContent).toContain('After')
@@ -330,9 +336,17 @@ test('SC-16: long-history detail actions change state and revert through the pub
   expect(button(footer, 'Close')).toBeDefined()
   await click(button(footer, 'Resolved')!)
   await world.win.waitFor(async () => (await request(world, { operation: 'show', target: { owner: owner(world) }, id })).entry?.state === 'resolved')
-  const updatedDetail = await world.win.waitFor(() => dialogNamed(`Ledger entry ${id}`))
-  await setSelect(field<HTMLSelectElement>(updatedDetail, 'Revert to revision')!, '1')
-  await click(button(updatedDetail, 'Revert')!)
+  const revertSelect = await world.win.waitFor(() => {
+    const dialog = dialogNamed(`Ledger entry ${id}`)
+    const select = dialog && field<HTMLSelectElement>(dialog, 'Revert to revision')
+    return dialog?.textContent?.includes(`Revision ${revision + 1} · sequence`) && select && !select.disabled ? select : undefined
+  })
+  await setSelect(revertSelect, '1')
+  await click(await world.win.waitFor(() => {
+    const dialog = dialogNamed(`Ledger entry ${id}`)
+    const action = dialog && button(dialog, 'Revert')
+    return action && !action.disabled ? action : undefined
+  }))
   await world.win.waitFor(async () => {
     const reverted = await request(world, { operation: 'show', target: { owner: owner(world) }, id })
     return reverted.entry?.state === 'open' && reverted.entry?.content.description === 'A reproducible failure.'
@@ -408,7 +422,11 @@ test('SC-17 and SC-11: project settings and owner-removal previews retain ledger
 
   await projectMenu(world)
   await chooseMenu(world, 'Remove Project…')
-  const remove = await world.win.waitFor(() => dialogNamed('Remove Project'))
+  const remove = await world.win.waitFor(() => {
+    const dialog = dialogNamed('Remove Project')
+    const action = dialog && button(dialog, 'Remove')
+    return action && !action.disabled ? dialog : undefined
+  })
   expect(remove.textContent).toContain('Ledger records retained: 1 entry across 1 ledger')
   const entry = updated.entries[0]
   await request(world, {
@@ -440,9 +458,15 @@ test('SC-17 and SC-11: project settings and owner-removal previews retain ledger
   expect(detachedRow.textContent).toContain('Detached project ledger · 1 entry')
   await click(button(detachedRow, 'Open')!)
   const detachedPage = await world.win.waitFor(() => document.querySelector<HTMLElement>('.ledger-page'))
-  const attachOwner = field<HTMLSelectElement>(detachedPage, 'Attach ledger to owner')!
+  const attachOwner = await world.win.waitFor(() => {
+    const select = field<HTMLSelectElement>(detachedPage, 'Attach ledger to owner')
+    return select && [...select.options].some((option) => option.value === `project:${replacement.id}`) ? select : undefined
+  })
   await setSelect(attachOwner, `project:${replacement.id}`)
-  await click(button(detachedPage, 'Attach')!)
+  await click(await world.win.waitFor(() => {
+    const action = button(detachedPage, 'Attach')
+    return action && !action.disabled ? action : undefined
+  }))
   const attachConfirm = await world.win.waitFor(() => dialogNamed('Confirm ledger attachment'))
   expect(attachConfirm.textContent).toContain('ledger revision')
   await click(button(attachConfirm, 'Confirm')!)
@@ -473,7 +497,11 @@ test('SC-11 and SC-14: group menu opens its ledger and deleting a group reports 
   await world.win.waitFor(() => document.querySelector('.ledger-page h1')?.textContent === group.name)
   await groupMenu(world, group.name)
   await chooseMenu(world, 'Delete Group…')
-  const dialog = await world.win.waitFor(() => dialogNamed('Delete Group'))
+  const dialog = await world.win.waitFor(() => {
+    const current = dialogNamed('Delete Group')
+    const action = current && button(current, 'Delete Group')
+    return action && !action.disabled ? current : undefined
+  })
   expect(dialog.textContent).toContain('Ledger records retained: 1 entry across 1 ledger')
   await click(button(dialog, 'Delete Group')!)
   await world.win.waitFor(async () => !(await world.agent.callAny('quirky.repo/groupList', {}) as ProjectGroup[]).some((item) => item.id === group.id))
@@ -485,7 +513,7 @@ test('SC-11 and SC-14: group menu opens its ledger and deleting a group reports 
   expect(detachedRow.textContent).toContain('Detached group ledger · 1 entry')
   await click(button(detachedRow, 'Open')!)
   const detachedPage = await world.win.waitFor(() => document.querySelector<HTMLElement>('.ledger-page'))
-  await click(button(detachedPage, 'Delete ledger')!)
+  await click(await world.win.waitFor(() => button(detachedPage, 'Delete ledger')))
   const confirm = await world.win.waitFor(() => dialogNamed('Confirm ledger deletion'))
   expect(confirm.textContent).toContain('Permanently delete this ledger, every entry body, and all history?')
   await click(button(confirm, 'Confirm')!)

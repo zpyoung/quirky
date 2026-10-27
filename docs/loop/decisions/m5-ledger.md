@@ -176,5 +176,49 @@
 - **Revisit if:** direct CLI/API scenario tests fail
 - **Source:** assumed — autonomous
 
+## D17: Do not rewrite protected queue infrastructure to clear the scripts gate
+- **Question:** Can this lane safely repair the required scripts failure after integration catch-up (verification)?
+- **Options:** edit shared queue ordering directly; add or set a queue item; block until the protected prerequisite is repaired
+- **Chose:** do not edit protected files; finish reachable smoke/cleanup and block if the integration queue remains invalid
+- **Why:** bun test scripts exited 1 with 54 pass/1 fail at queue.test.ts:85. Queue item m6-objective-landing precedes its already-declared dependency m6-sitter-github. A read-only scout found the same single violation on build/roadmap and no existing queue.ts operation that reorders existing items; add rejects duplicate ids and set/block only change status. The required correction is to move m6-sitter-github before m6-objective-landing through authorized loop maintenance, not silently weaken the test.
+- **Evidence:** docs/loop/queue.json:700-725; scripts/build-loop/queue.test.ts:82-85; scripts/build-loop/queue.ts:7-16; scripts gate artifact://114; LedgerQueueGateScout output
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** build/roadmap supplies a supported queue-order repair
+- **Source:** locked by docs/loop/LOOP.md
+
+## D18: Treat an unchanged fast refresh as a visual-probe limitation, not a proved dead request
+- **Question:** Is the first web smoke's Refresh NO_EFFECT a confirmed application defect (verification)?
+- **Options:** add gratuitous refresh animation; claim pass; preserve the observed limitation and continue missing scenarios
+- **Chose:** preserve the partial visual result without changing the intentionally delayed spinner; run focused continuations for unfinished scenarios
+- **Why:** both clicks used unchanged backend data, with no console/network failures. The specified spinner appears only after 200ms, so identical fast refresh can legitimately yield no screenshot change. The initial worker stopped at its tool request-count cutoff, not a main-session user decision; unexercised goals are not passed.
+- **Evidence:** .quirk/using-apps-like-a-user/runs/20261027T182959-3362/report.json; obs-21.png; source spinner guard in plugins/quirky.ledger/src/ui/LedgerApp.tsx; worker handoff
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** a refresh fails to display changed data or produces an actual request error
+- **Source:** assumed — autonomous
+
+## D19: Preserve separate visual outcomes and the constrained-viewport footer proof
+- **Question:** What did the built-web smoke actually prove (verification)?
+- **Options:** collapse partial runs into a claimed full pass; keep exact run-level outcomes and focused completion evidence
+- **Chose:** keep all reports; the focused detail/edit/triage run passed 3 goals and the separate-runtime retention run passed 7 goals; initial chooser/navigation passed and initial forms created all five types
+- **Why:** real 1280x720 screenshots show the long-history body scrolled with its action footer visible, followed by resolved revision 17 and reverted revision 18. Focused evidence also covers external-host validation, captured-revision edit, triage approval, immutable confirmations, settings Save/Saved, retained owner removal, attachment, per-entry/bulk/ledger deletion. The initial unchanged-data refresh remains a partial visual-probe limitation under D18, not a fabricated pass. The supported driver has no viewport-size option, so no 1452x1050 run is claimed.
+- **Evidence:** .quirk/using-apps-like-a-user/runs/20261027T182959-3362/report.json; runs/20261027T185253-f04a/report.json and obs-10.png; runs/20261027T185557-5bee/report.json and obs-24.png
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** visual controls become unreachable or a real request fails
+- **Source:** assumed — autonomous
+
+## D20: Fix asynchronous test readiness, retain the red infrastructure gate, and stop superseded verification
+- **Question:** How to handle remote failures and the caught-up loop's verification policy (verification)?
+- **Options:** weaken assertions or extend arbitrary waits; await consumer-visible ready states and preserve every unresolved gate
+- **Chose:** await loaded chooser/detail/attachment controls and enabled removal-confirmation buttons, preserving data/revision assertions; remove incidental immediate floating-button and copy assertions. Do not change protected queue/test infrastructure. Cancel the already-started whole suite and use targeted remote verification after reading the updated LOOP.md.
+- **Why:** captured failures showed Loading entry, Checking retained ledger records, missing not-yet-rendered selectors and an early floating button. Local corrected runs passed ledger window 7, worktree window 18 and floating 5, followed by typecheck. The cancelled whole-suite run has no final verdict; its exact owned remote copy/process tree was terminated and removed. Final review must not start on a red mandatory scripts gate.
+- **Evidence:** cancelled proc://bg_14 output; local artifact://362; targeted remote bg_41 output; scripts/suite.ts process ownership; cleanup of /home/quirkyci/runs/1793125374884-31860; docs/loop/LOOP.md:121-127
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** targeted remote checks still fail or protected queue ordering is repaired
+- **Source:** assumed — autonomous
+
 ## Progress
-Implementation integrated from audited daemon/UI component worktrees. Parent restored out-of-scope repo CLI edits before initial integration; a later explicitly scoped repair added the required snapshot forwarding. Generated .serena scaffolding removed. Targeted checks: ledger API 25 pass, real CLI/import 11 pass, window 7 pass; typecheck and production build exited 0. Parent then deferred nested ledger React-root cleanup until after shell commit to fix observed lifecycle warnings. Next: commit integration repairs; merge build/roadmap and read all incoming decisions; run complete remote suite/scripts/typecheck/build; actual built-web smoke; one Gemini three-lens final review/fix batch; update evidence/docs and land m5-ledger. All implementation/repair workers have returned.
+Blocked at the mandatory scripts gate before final cross-family code review/landing. Implementation is preserved, not shipped. API tests: 25 pass; real CLI/import: 11 pass; local ledger window: 7 pass, worktree window: 18 pass, floating: 5 pass; latest typecheck and packaged build exited 0. The targeted remote run passed four files but exposed more window readiness races; those were corrected and the final isolated remote ledger window run passed with suite-result ok:true/flaky:[]. Scripts remain 54 pass/1 fail solely on protected queue order (D17). The cancelled whole suite has no final verdict. Web reports and exact partial/probe limits are D18-D19; focused detail/edit/triage and retention/attach/delete goals passed. All subagents returned; both smoke runtimes/homes and the cancelled remote run's exact process tree/copy were cleaned up; merged component worktrees/branches and throwaway diagnostics were removed. Resume only after authorized queue-order repair: restore blocked/m5-ledger to build/m5-ledger, requeue, merge current build/roadmap/read incoming decisions, run affected remote suites plus scripts/typecheck/build, then the required single Gemini three-lens final review/fix batch and queue.ts land. No final-review clearance or full-suite pass is claimed.

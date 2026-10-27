@@ -1,6 +1,6 @@
 # Project ledger implementation contracts
 
-Status: Reviewed in one Codex promote/refute pass; confirmed corrections applied. Logic: [logic.md](logic.md). Complexity gate: explicit LOOP.md request, >3 source files and daemon/UI/CLI boundary.
+Status: Implemented with targeted verification; not cleared for landing or final code review because the required scripts gate is blocked. Logic: [logic.md](logic.md). Complexity gate: explicit LOOP.md request, >3 source files and daemon/UI/CLI boundary.
 
 ## Architecture
 
@@ -136,7 +136,7 @@ Implements all [acceptance scenarios](logic.md#behavior--acceptance-scenarios).
 - `plugins/quirky.ledger/test/import-cli.test.ts`: real daemon plus spawned CLI SC-02/08/09; all types/legacy formats, idempotency/conflicts/tombstones/equivalence collisions, malformed imports/partial success exit, unchanged source bytes, positional ids and targeting.
 - `plugins/quirky.ledger/test/window.test.ts`: real daemon and headless window; API-routed commands and DOM assertions for SC-13–17, owner menus/settings/retention, stale responses and footer/action availability. No source-text assertions or forwarding mocks.
 - Existing worktree/repo tests remain behaviorally valid; update impacted contracts, never re-pin incidental wording tests.
-- Orchestrator acceptance commands: `bun test plugins/quirky.ledger/test/ledger.test.ts`, `bun test plugins/quirky.ledger/test/import-cli.test.ts`, `bun test plugins/quirky.ledger/test/window.test.ts`, then `bun run test`, `bun test scripts`, `bun run typecheck`, `bun run build`.
+- Orchestrator acceptance commands: `bun test plugins/quirky.ledger/test/ledger.test.ts`, `bun test plugins/quirky.ledger/test/import-cli.test.ts`, `bun test plugins/quirky.ledger/test/window.test.ts`, then affected package/app/plugin suites via `bun scripts/suite.ts <dir> ...`, `bun test scripts`, `bun run typecheck`, `bun run build`. Current LOOP.md reserves the whole `bun run test` suite for queue.ts land unless shared core code changes.
 - Built web smoke: fresh owned QUIRKY_HOME, UI URL from daemonUrl, using-apps-like-a-user `--surface web --owner yours --unattended`, goals SC-13–17 including clipped-footer regression; clean up every owned process and temp home. Tool-caused blocked/partial is recorded with report, never claimed as passing.
 
 ## Non-goals

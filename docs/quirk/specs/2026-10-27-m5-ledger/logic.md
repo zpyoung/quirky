@@ -4,7 +4,7 @@ Reader: feature reviewer — Decision: whether the complete ledger behavior matc
 
 ## Status & amendments
 
-Status: Autonomous design approved under docs/loop/LOOP.md; Tech spec: requested. One Codex promote/refute review completed; confirmed findings corrected and prepass false positives recorded in the decision log.
+Status: Autonomous design approved; Tech spec: requested. Codex spec review completed and confirmed corrections applied. Implementation and targeted verification exist, but the item is not cleared for landing: the required scripts gate fails on protected shared queue ordering; final cross-family code review has not run. See [m5-ledger decisions](../../../loop/decisions/m5-ledger.md).
 
 Amendments: 2026-10-27 — specify stable identity equivalence/stickiness and plugin-scoped runtime/profile labels after Codex review; clarify that only standard dispatcher confirmation or explicit yes authorizes irreversible calls.
 
