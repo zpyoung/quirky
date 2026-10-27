@@ -1203,6 +1203,24 @@ describe('session names', () => {
     expect((await sessionOf(first.id)).name).toBeNull()
   })
 
+  test('SC-35: a launch that fails leaves the exited holder named; a successful one moves the name', async () => {
+    const holder = await createSession(client, { worktree: 'id:wt_main', agent: 'shell', name: 'reviewer' })
+    await exitAndWait(holder.id)
+
+    fakeAgents().disabled.add('claude')
+    const failed = await failureOf(createSession(client, { worktree: 'id:wt_main', agent: 'claude', name: 'reviewer' }))
+    expect(failed).not.toBeNull()
+    expect(await sessionOf(holder.id)).toMatchObject({ status: 'exited', name: 'reviewer' })
+    expect((await call<Session[]>(client, 'quirky.session/list')).map((s) => s.id)).toEqual([holder.id])
+    expect((await sessionOf('reviewer')).id).toBe(holder.id)
+    expect(changedSessions().at(-1)).toMatchObject({ id: holder.id, name: 'reviewer' })
+
+    fakeAgents().disabled.delete('claude')
+    const next = await createSession(client, { worktree: 'id:wt_main', agent: 'claude', name: 'reviewer' })
+    expect(next.name).toBe('reviewer')
+    expect((await sessionOf(holder.id)).name).toBeNull()
+  })
+
   test('SC-37: names survive a daemon restart', async () => {
     const session = await createSession(client, { worktree: 'id:wt_main', agent: 'shell', name: 'reviewer' })
     const again = await restartDaemon(h)
