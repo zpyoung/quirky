@@ -389,6 +389,17 @@
             "repo": {
               "type": "string",
               "description": "A repo selector: id:, name: or path:, or a bare ID or name."
+            },
+            "expectedLedgers": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "ledgerId": { "type": "string" },
+                  "revision": { "type": "integer", "minimum": 0 }
+                },
+                "required": ["ledgerId", "revision"]
+              }
             }
           },
           "required": [
@@ -1284,6 +1295,17 @@
             "group": {
               "type": "string",
               "description": "A group ID or exact name."
+            },
+            "expectedLedgers": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "ledgerId": { "type": "string" },
+                  "revision": { "type": "integer", "minimum": 0 }
+                },
+                "required": ["ledgerId", "revision"]
+              }
             }
           },
           "required": [
@@ -1557,6 +1579,12 @@
             "required": true
           }
         ],
+        "flags": {
+          "expected-ledgers": {
+            "type": "json",
+            "description": "Expected ledger ID/revision snapshots from removal-preview."
+          }
+        },
         "methods": [
           "quirky.repo/remove"
         ]
@@ -1853,6 +1881,12 @@
             "required": true
           }
         ],
+        "flags": {
+          "expected-ledgers": {
+            "type": "json",
+            "description": "Expected ledger ID/revision snapshots from removal-preview."
+          }
+        },
         "methods": [
           "quirky.repo/groupDelete"
         ]

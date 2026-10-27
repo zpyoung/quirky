@@ -262,11 +262,20 @@ export function Tree({
       x,
       y,
       label: `Actions for ${repoLabel(repo)}`,
-      items: projectMenu(repo, groups, { openDialog, moveToGroup: moveProject })
+      items: projectMenu(repo, groups, {
+        openDialog,
+        openLedger: () => context.openView('view:quirky.ledger/ledger', { target: { owner: { tier: 'project', id: repo.id } } }),
+        moveToGroup: moveProject
+      })
     })
 
   const openGroupMenu = (group: ProjectGroup, x: number, y: number) =>
-    setMenu({ x, y, label: `Actions for group ${group.name}`, items: groupMenu(group, openDialog) })
+    setMenu({
+      x,
+      y,
+      label: `Actions for group ${group.name}`,
+      items: groupMenu(group, openDialog, () => context.openView('view:quirky.ledger/ledger', { target: { owner: { tier: 'group', id: group.id } } }))
+    })
 
   const rows = (list: TreeRow[]) =>
     list

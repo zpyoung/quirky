@@ -538,6 +538,25 @@ test('SC-44: a group header collapses its projects through groupCollapse', async
   expect(h.callsTo('quirky.repo/groupCollapse')[1]).toEqual({ group: 'g1', collapsed: false })
 })
 
+test('project menu opens its ledger and moves projects through the shared action', async () => {
+  const h = setup()
+  h.world.groups = [group('g1', 'services', ['r1'])]
+  await h.mountInto(host)
+
+  const actions = projectSection('api').querySelector('.project-menu')!
+  await click(actions)
+  await click(itemNamed('Open ledger'))
+  expect(h.opened).toEqual([{
+    id: 'view:quirky.ledger/ledger',
+    input: { target: { owner: { tier: 'project', id: 'r1' } } }
+  }])
+
+  await click(actions)
+  await click(itemNamed('Move to Group'))
+  await click(itemNamed('services'))
+  expect(h.callsTo('quirky.repo/groupAdd')).toEqual([{ group: 'g1', repo: 'r1' }])
+})
+
 test('SC-43: the card menu opens and closes on Escape and outside click', async () => {
   const h = setup()
   await h.mountInto(host)
@@ -641,20 +660,6 @@ test('Update and Set Parent open their dialogs and the report names them', async
   expect(lastReport(h).dialog).toEqual({ kind: 'parent', worktreeId: 'w2' })
 })
 
-test('the project header menu has Project Settings, group items and Remove Project', async () => {
-  const h = setup()
-  h.world.groups = [group('g1', 'services', [])]
-  await h.mountInto(host)
-  await click(projectSection('api').querySelector('.project-menu')!)
-  expect(itemLabels()).toEqual(['Project Settings…', 'New Group from Project…', 'Move to Group', 'Remove Project…'])
-  await click(itemNamed('Move to Group'))
-  expect(itemLabels().slice(3, 4)).toEqual(['services'])
-  await click(itemNamed('services'))
-  expect(h.callsTo('quirky.repo/groupAdd')).toEqual([{ group: 'g1', repo: 'r1' }])
-  await contextMenu(projectSection('api').querySelector('.repo-header')!)
-  await click(itemNamed('Project Settings…'))
-  expect(lastReport(h).dialog).toEqual({ kind: 'project-settings', repoId: 'r1' })
-})
 
 test('SC-47: Delete asks in the window and passes force and yes with no ask card', async () => {
   const h = setup()

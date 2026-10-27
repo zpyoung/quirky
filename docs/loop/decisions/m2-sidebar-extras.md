@@ -376,5 +376,27 @@ Reader: autonomous builders and later operator review — Decision: preserve the
 - **Revisit if:** the queue's unmodified full merged gate fails
 - **Source:** assumed — autonomous
 
+## D35: Repair the landing conflict without dropping ledger retention safety
+- **Question:** what to do when queue.ts land rejected a newer integration conflict after the planned catch-up
+- **Options:** abandon the core; drop incoming ledger checks; perform the corrective merge required by LOOP.md step 7.3
+- **Chose:** corrective merge only. Group deletion remains subtree-aware and now awaits the incoming ledger-retention guard over all subtree IDs before mutation. UI and CLI previews derive matching subtree IDs and revision snapshots through public groupList; preview errors fail closed. Keep incoming Open Ledger actions, retention notices, terminal-dock styles and accessory behavior. The remaining old ledger-window readiness predicate now uses the enabled delete action rather than its former dialog title.
+- **Why:** choosing either side wholesale would discard either child membership cleanup or retention revision safety. The first landing attempt stopped on conflicts, not test failures. Updated ledger/dock/browser decision logs introduced no locked conflict. The corrective affected run passed 61 of 62 files; the remaining ledger-window failure was its old title predicate, now removed. Its focused verification is pending.
+- **Evidence:** bg_24 landing conflict; MergeLedgerGroups, MergeLedgerSidebar and ReadLandingDecisions; post-merge typecheck exit 0; bg_25 affected output; actual CLI smoke exit 0 with groupAssigned/groupReleased/childGroupDeleted true and temporary home removed
+- **Reversibility:** medium (retention guard and public deletion semantics)
+- **Confidence:** high for exercised core behavior; queue verification is still required
+- **Revisit if:** the focused consumer check or full merged landing gate fails
+- **Source:** locked by docs/loop/LOOP.md step 7.3; assumed — autonomous (additive merge)
+
+## D36: Verify the corrective merge and retry the normal landing gate
+- **Question:** whether the ledger-aware correction is ready for another landing attempt
+- **Options:** bypass retention coverage; keep correcting incidental title pins; verify the affected consumer and retry
+- **Chose:** the focused ledger window file passed remotely without retry; script tests passed 62/0 with 464 assertions under isolated Git configuration, and typecheck exited 0. Combined with the preceding 61 passing affected files, the corrective scope is verified. Retry the unmodified queue landing command with a private Git defaults file containing the same observed author identity, so temporary test repositories can still override their own identities locally.
+- **Why:** this preserves both retention behavior and fixture independence without modifying protected loop code, deadlines, verification commands or user Git configuration. The real CLI smoke additionally proved child-group deletion and membership release after the guard integration.
+- **Evidence:** artifact://118; bg_26 exit 0; actual `git var` identities; /tmp/quirky-sidebar-lane7.APp4Co/smoke.json; private landing.gitconfig
+- **Reversibility:** easy
+- **Confidence:** high for exercised correction; full merged landing verification is pending
+- **Revisit if:** the normal queue gate fails or integration advances with another conflict
+- **Source:** assumed — autonomous
+
 ## Progress
-Core affected files, script tests and final typecheck pass (D33–D34). The one catch-up is resolved, runtime smoke passed, and the queued follow-up owns exhaustive parity and skipped review/dogfood. Next: commit the resolved catch-up and documentation, detach, run queue.ts land m2-sidebar-extras and wait for its full merged gate. All implementation workers, browser tabs and smoke processes have returned. Inherited .serena/ and test-migrated.test.ts remain untouched/uncommitted.
+Corrective ledger merge verified: all affected files have passing observations, focused ledger window passes without retry, scripts pass 62/0 and typecheck passes. The real CLI subtree-deletion smoke also passes and removed its home. Next: commit the corrective merge, detach and retry queue.ts land m2-sidebar-extras with isolated Git defaults preserving the observed author identity. No final review/dogfood campaign was started; exhaustive parity remains in m2-sidebar-extras-followup. All workers and runtime resources have returned; inherited .serena/ and test-migrated.test.ts remain untouched/uncommitted.

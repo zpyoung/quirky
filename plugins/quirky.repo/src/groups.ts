@@ -1,5 +1,6 @@
 import type { ProjectGroup } from '@quirky/protocol'
 import type { Env } from './env'
+import { guardLedgerRemoval } from './projects'
 
 const randomId = (): string => crypto.randomUUID().replaceAll('-', '').slice(0, 12)
 
@@ -90,21 +91,31 @@ export function groupRename(env: Env, params: { group: string; name: string }): 
   return load(env, group.id)
 }
 
-export function groupDelete(env: Env, params: { group: string }): { ok: true } {
-  const root = env.resolveGroup(params.group)
-  const all = env.groups()
-  const removed = new Set([root.id])
-  const pending = [root.id]
+export function groupSubtreeIds(groups: readonly ProjectGroup[], rootId: string): string[] {
+  const removed = new Set([rootId])
+  const pending = [rootId]
   while (pending.length > 0) {
     const parentId = pending.pop()!
-    for (const group of all) {
+    for (const group of groups) {
       if (group.parentId === parentId && !removed.has(group.id)) {
         removed.add(group.id)
         pending.push(group.id)
       }
     }
   }
-  const ids = [...removed]
+  return [...removed]
+}
+
+export async function groupDelete(
+  env: Env,
+  params: { group: string; expectedLedgers?: { ledgerId: string; revision: number }[] }
+): Promise<{ ok: true }> {
+  const root = env.resolveGroup(params.group)
+  const ids = groupSubtreeIds(env.groups(), root.id)
+  await guardLedgerRemoval(env.context, {
+    groupIds: ids,
+    ...(params.expectedLedgers !== undefined ? { expectedLedgers: params.expectedLedgers } : {})
+  })
   const deletedAt = Date.now()
   env.store.transaction(() => {
     for (const id of ids) {

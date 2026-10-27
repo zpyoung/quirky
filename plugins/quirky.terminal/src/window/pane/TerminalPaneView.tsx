@@ -73,6 +73,8 @@ export type TerminalPaneProps = {
   settings: PaneSettings
   /** Whether this is the focused pane of its tab; the pane takes keyboard focus when it becomes active. */
   active: boolean
+  /** The terminal must not reclaim focus while the embedded dock owns keyboard input. */
+  suppressAutoFocus?: boolean
   /** False once the process has exited, so keystrokes are not sent to a dead session. */
   interactive: boolean
   /** True while a divider or panel drag is resizing the pane; the shell is told the final size once the drag ends. */
@@ -166,7 +168,7 @@ let focusOwner: object | null = null
  * addon for OSC 52. The workspace keys it by pane ID so a layout change never remounts it.
  */
 export function TerminalPaneView(props: TerminalPaneProps) {
-  const { context, sessionId, settings, active, dragging, themeSource, ref } = props
+  const { context, sessionId, settings, active, dragging, suppressAutoFocus, themeSource, ref } = props
   const hostRef = useRef<HTMLDivElement>(null)
   const screenRef = useRef<HTMLDivElement>(null)
   const searchInputRef = useRef<HTMLInputElement>(null)
@@ -234,11 +236,13 @@ export function TerminalPaneView(props: TerminalPaneProps) {
 
   const closeSearch = () => {
     applySearch(null)
-    runtime.current?.term.focus()
+    if (!latest.current.suppressAutoFocus) runtime.current?.term.focus()
   }
 
   useImperativeHandle(ref, () => ({
-    focus: () => runtime.current?.term.focus(),
+    focus: () => {
+      if (!latest.current.suppressAutoFocus) runtime.current?.term.focus()
+    },
     scrollToBottom: () => runtime.current?.term.scrollToBottom(),
     copy: () => runtime.current?.copy() ?? '',
     selectAll: () => runtime.current?.term.selectAll(),
@@ -488,7 +492,7 @@ export function TerminalPaneView(props: TerminalPaneProps) {
         .catch(() => {})
     }
     const onMouseEnter = () => {
-      if (latest.current.settings['focus-follows-mouse'] && !draggingRef.current) term.focus()
+      if (latest.current.settings['focus-follows-mouse'] && !latest.current.suppressAutoFocus && !draggingRef.current) term.focus()
     }
     const onDragOver = (event: DragEvent) => {
       const types = Array.from(event.dataTransfer?.types ?? [])
@@ -535,7 +539,17 @@ export function TerminalPaneView(props: TerminalPaneProps) {
       if (fitFrame || disposed) return
       fitFrame = requestAnimationFrame(doFit)
     }
-    const observer = new ResizeObserver(scheduleFit)
+    let observedWidth = screen.clientWidth
+    let observedHeight = screen.clientHeight
+    const onScreenResize = () => {
+      const width = screen.clientWidth
+      const height = screen.clientHeight
+      if (width === observedWidth && height === observedHeight) return
+      observedWidth = width
+      observedHeight = height
+      scheduleFit()
+    }
+    const observer = new ResizeObserver(onScreenResize)
     observer.observe(screen)
 
     const reportSize = () => setView((now) => (now.cols === term.cols && now.rows === term.rows ? now : { ...now, cols: term.cols, rows: term.rows }))
@@ -640,7 +654,7 @@ export function TerminalPaneView(props: TerminalPaneProps) {
       if (event.type === 'theme.changed') applyTheme()
     })
 
-    if (latest.current.active) term.focus()
+    if (latest.current.active && !latest.current.suppressAutoFocus) term.focus()
 
     return () => {
       disposed = true
@@ -733,12 +747,19 @@ export function TerminalPaneView(props: TerminalPaneProps) {
   }, [settings['allow-osc52']])
 
   useEffect(() => {
-    if (active) runtime.current?.term.focus()
-  }, [active])
+    if (active && !suppressAutoFocus) runtime.current?.term.focus()
+  }, [active, suppressAutoFocus])
 
   const wasDragging = useRef(dragging)
   useEffect(() => {
-    if (wasDragging.current && !dragging) sendResize()
+    if (wasDragging.current && !dragging) {
+      const rt = runtime.current
+      const screen = screenRef.current
+      if (rt) {
+        if (screen && screen.clientWidth > 0 && screen.clientHeight > 0) guarded(() => rt.fit.fit(), undefined)
+        sendResize()
+      }
+    }
     wasDragging.current = dragging
   }, [dragging, sendResize])
 

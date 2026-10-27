@@ -1,5 +1,6 @@
 import { resolve } from 'node:path'
-import type { CliArgs, CliContext, CliModule, HookScript, ProjectGroup, Repo, RepoDetails } from '@quirky/protocol'
+import { RpcErrorCode, type CliArgs, type CliContext, type CliModule, type HookScript, type ProjectGroup, type Repo, type RepoDetails } from '@quirky/protocol'
+import { groupSubtreeIds } from './src/groups'
 
 type ScanResult = { repos: { path: string; name: string }[]; truncated: boolean }
 type ImportResult = {
@@ -116,7 +117,7 @@ const named: CliModule['commands'] = {
 
   async rm(args, ctx) {
     const [repo] = args.positionals as [string]
-    const result = await ctx.call('quirky.repo/remove', { repo })
+    const result = await ctx.call('quirky.repo/remove', { repo, ...flagParams(args, { 'expected-ledgers': 'expectedLedgers' }) })
     ctx.out.result(result, () => `removed ${repo}`)
   },
 
@@ -233,7 +234,43 @@ const named: CliModule['commands'] = {
 
   async 'group-delete'(args, ctx) {
     const [group] = args.positionals as [string]
-    const result = await ctx.call('quirky.repo/groupDelete', { group })
+    const groups = (await ctx.call('quirky.repo/groupList')) as ProjectGroup[]
+    const idMatch = groups.find((entry) => entry.id === group)
+    const nameMatches = idMatch ? [] : groups.filter((entry) => entry.name === group)
+    const root = idMatch ?? nameMatches[0]
+    if (!root) throw ctx.fail(`no group matches ${group}; use its ID or exact name`)
+    if (nameMatches.length > 1) throw ctx.fail(`${group} matches ${nameMatches.length} groups: ${nameMatches.map((entry) => entry.id).join(', ')}`)
+
+    const expectedLedgerParams = flagParams(args, { 'expected-ledgers': 'expectedLedgers' })
+    let expectedLedgers: { ledgerId: string; revision: number }[] | undefined
+    try {
+      const preview = await ctx.call('quirky.ledger/removal-preview', {
+        removal: {
+          groupIds: groupSubtreeIds(groups, root.id),
+          ...(expectedLedgerParams.expectedLedgers !== undefined ? { expectedLedgers: expectedLedgerParams.expectedLedgers } : {})
+        }
+      })
+      const previewObject = typeof preview === 'object' && preview !== null ? (preview as { removalPreview?: unknown }) : undefined
+      if (!previewObject || !Array.isArray(previewObject.removalPreview)) {
+        throw ctx.fail('ledger removal preview did not return snapshots')
+      }
+      const snapshots: { ledgerId: string; revision: number }[] = []
+      for (const snapshot of previewObject.removalPreview) {
+        if (typeof snapshot !== 'object' || snapshot === null) throw ctx.fail('ledger removal preview returned invalid snapshots')
+        const { ledgerId, revision } = snapshot as { ledgerId?: unknown; revision?: unknown }
+        if (typeof ledgerId !== 'string' || ledgerId.trim() === '' || typeof revision !== 'number' || !Number.isInteger(revision) || revision < 0) {
+          throw ctx.fail('ledger removal preview returned invalid snapshots')
+        }
+        snapshots.push({ ledgerId, revision })
+      }
+      expectedLedgers = snapshots
+    } catch (error) {
+      if ((error as { code?: unknown } | null)?.code !== RpcErrorCode.MethodNotFound) throw error
+    }
+    const result = await ctx.call('quirky.repo/groupDelete', {
+      group: root.id,
+      ...(expectedLedgers !== undefined ? { expectedLedgers } : {})
+    })
     ctx.out.result(result, () => `deleted group ${group}`)
   },
 

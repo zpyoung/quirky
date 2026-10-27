@@ -220,5 +220,138 @@
 - **Revisit if:** targeted remote checks still fail or protected queue ordering is repaired
 - **Source:** assumed — autonomous
 
+## D21: Resume the restored ledger item on the authorized queue repair
+- **Question:** which item, baseline and gates to use after the operator restored lane 3
+- **Options:** claim another item; resume the preserved implementation and complete its remaining gates
+- **Chose:** resume build/m5-ledger only, merge build/roadmap, and pin final-review integration baseline 0152c82cf691a1067fab693222033429de17eb55 before discovery. Preserve the original implementation baseline in the scratch journal as history.
+- **Why:** the operator fixed queue ordering in 4cf9720 and restored this item in-progress for lane 3. Catch-up imported only queue/blocker/index changes and the m5-structured-runner decision log; the complete incoming log was read and introduces no conflicting ledger source contract.
+- **Evidence:** operator note; merge 0a3afe166325d93a2f26db640122ff28da570b6d; docs/loop/decisions/m5-structured-runner.md D3–D13,D18–D27
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** integration adds a conflicting public plugin contract
+- **Source:** assumed — autonomous
+
+## D22: Verify affected roots and share one observed prepass across the three review lenses
+- **Question:** which checks cover the restored feature without repeating the whole landing suite
+- **Options:** whole suite in every lane; affected roots plus integration and boundary suites
+- **Chose:** scripts, typecheck and build, then remote suites for quirky.ledger, quirky.repo, quirky.worktree, the entire quirky.terminal plugin, plugins/test, packages/daemon, packages/ui, packages/cli and apps/desktop. Reuse that exact observed prepass for correctness/spec/security lenses.
+- **Why:** production cross-plugin relationships use the public API, not private static imports. The terminal plugin has an item-owned test change, so its whole suite is retained rather than narrowing to the one file. Host/CLI/window/bundling roots exercise discovery, generated commands and delivery. queue.ts land remains responsible for the whole repo suite.
+- **Evidence:** LedgerAffectedSurvey; docs/loop/LOOP.md:121-127; plugins/test/imports.test.ts; apps/desktop/test/bundle-plugins.test.ts
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** the final fix batch changes another root or shared core code
+- **Source:** locked by docs/loop/LOOP.md
+
+## D23: Preserve interrupted-host evidence and select working process-local tool paths
+- **Question:** how to distinguish verification environment failures from ledger defects during resumed gates
+- **Options:** alter protected tests or global runtimes; diagnose and keep source unchanged while selecting installed tools
+- **Chose:** retain the failed script-fixture attempt and its successful isolated runs (13 and 19 tests), the subsequent 55/55 scripts pass, and the broken Homebrew Node loader evidence. Use installed NVM Node 24.19.0 plus Bun/Hutch paths only in verification subprocess environments. Treat the operator-stopped old-host run as interrupted and non-meaningful; rerun the same affected-suite command on the operator-updated host.
+- **Why:** NVM Node and unchanged typecheck passed; no dylib shim, package-script rewrite, install or global configuration change is needed. The old host's exit137 is not a product verdict. The new host produced a meaningful 209-file result: 207 passed, two failures repeated alone, plus two local macOS-only files passed.
+- **Evidence:** /tmp/quirky-m5-ledger-final-SEErbk/prepass*.json; artifact://382; newhost-check.stdout.log and newhost-check.stderr.log; operator host-switch note
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** installed runtime/tool paths change
+- **Source:** assumed — autonomous
+
+## D24: Correct the import-fence parser instead of rewriting ordinary ledger strings
+- **Question:** how to repair the two meaningful new-host gate failures before review discovery
+- **Options:** whitelist ledger or restyle import action strings; re-pin the old menu list; fix the scanner and remove the incidental snapshot
+- **Chose:** replace comment/import regexes with TypeScript AST import detection, preserving static/type/side-effect/re-export/dynamic/require/import-equals/import-type boundary checks and adding string/comment false-positive regressions. Delete the obsolete exact project-menu snapshot/wiring test; keep the real daemon/window project/group/settings flows.
+- **Why:** the regex mistook literal import action values for undeclared module names. No production import crossed the boundary. The new parser's positive test caught an import-type wrapper omission before the parent corrected it. Targeted verification now passes import fence 3 tests, worktree component UI 58 tests and typecheck. No protected files or production strings were changed to evade the gate.
+- **Evidence:** plugins/test/imports.test.ts; plugins/quirky.worktree/test/ui.test.ts; /tmp/quirky-m5-ledger-final-SEErbk/newhost-check.{stdout,stderr}.log; parent targeted check output
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** new syntactic import forms are introduced
+- **Source:** assumed — autonomous
+
+## D25: Preserve imported source identity through automatic owner recovery
+- **Question:** whether unchanged legacy sources remain one observation after removing and re-adding their project
+- **Options:** accept duplicate entries under regenerated repo IDs; carry the existing project-equivalence semantics through automatic recovery
+- **Chose:** reuse source equivalence and canonical-anchor collision guards in the same transaction as automatic project reattachment, with an API/CLI regression for both live imports and tombstones
+- **Why:** a real isolated API smoke retained the same ledger UUID but created bug-2 beside bug-1 when the unchanged BUGS.md was imported after re-add. Automatic recovery updated the owner repo ID without recording source equivalence; canonical import matching uses that equivalence. The published idempotency/retention contract applies across this ordinary owner lifecycle, not only explicit attachment.
+- **Evidence:** env NODE_ENV=test bun /tmp/quirky-ledger-recovery-import-smoke.ts exited1 with SOURCE_IDENTITY_REPLAY_FAIL, same ledger 91b6c03d-2bbc-4b2a-a6c5-833634fcc58d and entry ids bug-1/bug-2; plugins/quirky.ledger/src/daemon/engine.ts performReconciliation/canonicalAnchorMatches
+- **Reversibility:** medium
+- **Confidence:** high
+- **Revisit if:** source equivalence would collapse distinct canonical anchors
+- **Source:** locked by external research/orca-features/ledger.md
+
+## D26: Diagnose the shell guardian failure without inventing a shell fix
+- **Question:** whether the remaining remote shell-path failure demonstrates a ledger or shell-wrapper regression
+- **Options:** suppress the test or extend its deadlines; add temporary boundary tracing and require a normal final gate
+- **Chose:** inspect test/guardian lifecycle, run narrowed zsh integration and the complete shell-path file with temporary bootstrap/snapshot tracing, then remove the tracing scaffold. Both instrumented runs passed remotely with ok:true/flaky:[]; no shell, guardian, timeout or protected-code change is justified by that evidence.
+- **Why:** the earlier complete file failed during hooks, followed by empty-stderr guardian-start errors. The read-only scout could not establish a product root cause. Instrumented success is additional evidence, not proof of the cause or a substitute for the next uninstrumented affected gate.
+- **Evidence:** /tmp/quirky-m5-ledger-final-c18bf29/newhost-check.{stdout,stderr}.log; LedgerShellGateScout; narrowed remote diagnostic exit0 in 11.02s; full-file diagnostic exit0 in 16.64s
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** the normal gate still fails, in which case preserve diagnostics and continue root investigation
+- **Source:** assumed — autonomous
+
+## D27: Preserve the latest integration contracts and reuse its one import scanner
+- **Question:** how to resolve the pre-review integration conflicts without losing either lane's work
+- **Options:** retain competing scanner implementations or drop one workspace; keep the canonical incoming scanner and additive workspace records
+- **Chose:** keep integration's TypeScript AST scanner, retaining both lanes' regression cases and removing the duplicate TypeScript import. Preserve both hosting and ledger workspace/package entries in bun.lock. Frozen-lock installation and all five fence tests pass. Pin final discovery baseline 7908a04424c755c712c673d0474c6d255b81a220, replacing D21's earlier pre-discovery baseline.
+- **Why:** both scanner designs enforce the same import boundary; one incoming implementation avoids a second convention. The complete new m1-agent-status-scripting, m3-vault, m4-hosting-api-github, m5-structured-runner and ledger logs were read by LedgerNewDecisionSurvey. Their public-API/auth/worker/source-identity contracts do not conflict with ledger ownership: vault indexing remains its own lazy Worker, hosting owns host authorization, session naming/resume methods remain additive, and ledger retains its own store/provenance/import semantics.
+- **Evidence:** merge from 7908a044; bun.lock and plugins/test/imports.test.ts conflict resolutions; frozen-lock install exit0 and fence5pass; incoming vault D9,D11,D12,D15,D19,D29,D38,D44,D45; agent-status-scripting D20–D22,D38; hosting D5–D6,D8,D13,D19; runner D29
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** a new public owner API contract conflicts with ledger callers
+- **Source:** supersedes m5-ledger D21 (final-review baseline only, before discovery)
+
+## D28: Accept the observed complete gate with its isolated shell-path rerun disclosed
+- **Question:** what verification supports final discovery and what caveats remain
+- **Options:** claim a flake-free run; preserve exact aggregate and isolated outcomes
+- **Chose:** use the real bound prepass on 4b7739a: affected suite accepted 218 remote files, both macOS-only files passed, scripts62pass/0fail, typecheck and packaged build exit0. Record shell-path as the one initial failure that passed its isolated15-test rerun.
+- **Why:** the runner's existing retry policy returned ok:true with the flaky path; no deadline, exclusion, shell behavior or guardian policy was changed. Duration547000ms warrants a runner-cost advisory, not a harness change in this item: investigate remote slot contention and per-worker browser-context reuse where isolation permits. pytest-xdist does not apply to this Bun repository.
+- **Evidence:** /tmp/quirky-m5-ledger-final-4b7739a/prepass.newhost.json and newhost-check.*; tree ac6f48c21c8579330cb652bafa877b7a333ff896; artifact hash3fbe75955a1c1bbe756210bd759680da153e708e0beac17545a3329e524014b2; raw audit archived in .orca/loops/omp-until-done-90f3c2ab/m5-ledger-review-4b7739a.tar.gz
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** the queue-owned full merge verification fails
+- **Source:** assumed — autonomous
+
+## D29: Close XR1 despite its malformed first review packet, with one scoped fix batch
+- **Question:** which Final Round1 findings are accepted and what closure evidence is required
+- **Options:** ignore the malformed packet; treat its HIGH claim as proved normal-path impact; independently reproduce and calibrate the real edge
+- **Chose:** all valid C/S/X deep Gemini gates PASS with zero findings/advisories/limitations/contested/excluded/unreviewed paths. Accept the first X packet's unadmitted alias-root candidate independently as XR1 MEDIUM, not HIGH; fix only that blocking edge in one OpenAI/omp batch. No second model round, as LOOP.md requires.
+- **Why:** the first X promote omitted required stage/disposition and was never refuted or gated; its valid fresh retry returned no claims, so PASS did not adjudicate that candidate. The parent's fresh owned filesystem smoke proved relative/absolute-alias in-root evidence returned null, while canonical absolute paths and escape blocking already worked. Post-fix smoke resolves all valid forms, returns true/false for present/missing files, and still rejects existing/missing-leaf escapes. Boundary tests4pass/15assertions, ledger API25pass, typecheck and packaged build pass.
+- **Evidence:** lenses/C,S,X gate.json/manifest.json and raw stages in the archived audit; original X promote.stdout.raw; /tmp/quirky-ledger-evidence-root-smoke.ts failing-before/passing-after; plugins/quirky.ledger/test/evidence-paths.test.ts; post-fix artifact://470
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** a real caller can cross the canonical-root boundary or valid alias evidence disappears
+- **Source:** assumed — autonomous
+
+## D30: Preserve reviewer write violations as an operational limitation
+- **Question:** whether the pi reviewers obeyed the read-only Bash grant
+- **Options:** conceal generated files; mistake them for product edits; retain ownership evidence and remove only proven review artifacts
+- **Chose:** retain raw traces and clean the known review-generated root diff copies/reproduction script and scratch paths. Parent freeze audit confirmed HEAD4b7739a with no tracked/index or untracked source change before the accepted fix batch.
+- **Why:** C used shell redirects to create nineteen root diff copies; X wrote a helper reproduction script and fixed-name temporary fixtures despite the prompt-only read-only rule. No implementation code was patched by reviewers, but prior contents of overwritten fixed-name scratch targets were not recorded. The machine PASS fields do not capture this operational constraint violation; no stronger write-enforcement claim is made.
+- **Evidence:** archived lenses/C/promote.stderr.log and lenses/X/promote.stderr.log; coordinator cleanup reports; parent source-freeze audit
+- **Reversibility:** medium
+- **Confidence:** high
+- **Revisit if:** review execution needs a tool-enforced read-only filesystem boundary
+- **Source:** assumed — autonomous
+
+## D31: Finish this item through queue-controlled integration without new flows or review rounds
+- **Question:** finishing-a-development-branch choice under the caught-up night-mode loop rules
+- **Options:** queue-controlled local landing; manual integration, push or PR; another discovery round
+- **Chose:** commit the verified XR1 batch and final evidence, catch up once immediately before landing, detach, and call queue.ts land m5-ledger. No push, main checkout, new flows, research swarm or second review round. Preserve D18-D19's actual built-web outcomes rather than invent a new refresh-probe pass.
+- **Why:** current LOOP.md explicitly chooses this integration path, one final round/blocking fix batch and queue-owned full verification. The post-review change is a filesystem evidence predicate; public schemas, UI rendering and caller signatures are unchanged. Its actual filesystem smoke plus regression/API tests and build verify the changed path.
+- **Evidence:** docs/loop/LOOP.md:56-78,139-165,171-181; D18-D19,D28-D30; post-fix runtime and build output
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** the final catch-up introduces a conflicting contract or queue-owned verification fails
+- **Source:** locked by docs/loop/LOOP.md
+
+## D32: Keep only the ledger patch when catching up with the restored integration history
+- **Question:** how to reconcile the final catch-up when current integration is not descended from the prior review baseline
+- **Options:** carry every historical snapshot in the restored branch; preserve the independently identified ledger patch against current integration
+- **Chose:** merge current build/roadmap at 1df36ca1c71e3f18951ccc093de23da53b1d243f. All fourteen conflicted files have no ledger-owned changes relative to review baseline7908a044, so select their exact incoming snapshots. Select incoming snapshots or absences for the additional84 unowned historical carryovers, rather than resurrecting old full-Vault Worker/settings/resume/drop code and tests. Preserve the full45-path ledger patch. Regenerate bun.lock from current integration plus the ledger workspace; its net dependency change is the ledger workspace and alias only.
+- **Why:** the restored branch includes a divergent historical integration snapshot, not just this item's changes. Canonical incoming ownership takes precedence outside the ledger patch; this does not narrow any ledger behavior. The final net path audit reports45 changed paths and zero outside the ledger patch. Frozen-lock installation and post-resolution typecheck both pass.
+- **Incoming decisions:** LedgerLandingDecisionSurvey read the six present incoming logs for both flaky-test fixes, accounts, handoff, session-info and hosting; the parent confirmed each working copy equals its committed MERGE_HEAD snapshot. The old vault log is absent incoming. The fixes govern test synchronization/reuse; the other features retain their own account/provider/session, handoff, inspection/resume and GitHub/auth contracts. None changes ledger's actor provenance, owner reconciliation, source equivalence, replay-safe imports or evidence containment. Current openView/mountView/getSetting and slot report contracts remain compatible; no ledger caller migration is required.
+- **Evidence:** merge metadata ORIG_HEAD744e08d/MERGE_HEAD1df36ca1; ownership diff against7908a044; final net-path audit45/0; canonical decision-log equality check; bun install and bun run typecheck exit0 after resolution
+- **Reversibility:** easy — prior snapshots remain in committed history
+- **Confidence:** high
+- **Revisit if:** the queue-owned merge gate finds an actual conflicting caller contract
+- **Source:** locked by docs/loop/LOOP.md; supersedes D27's integration snapshot selection, not its frozen review evidence
+
 ## Progress
-Blocked at the mandatory scripts gate before final cross-family code review/landing. Implementation is preserved, not shipped. API tests: 25 pass; real CLI/import: 11 pass; local ledger window: 7 pass, worktree window: 18 pass, floating: 5 pass; latest typecheck and packaged build exited 0. The targeted remote run passed four files but exposed more window readiness races; those were corrected and the final isolated remote ledger window run passed with suite-result ok:true/flaky:[]. Scripts remain 54 pass/1 fail solely on protected queue order (D17). The cancelled whole suite has no final verdict. Web reports and exact partial/probe limits are D18-D19; focused detail/edit/triage and retention/attach/delete goals passed. All subagents returned; both smoke runtimes/homes and the cancelled remote run's exact process tree/copy were cleaned up; merged component worktrees/branches and throwaway diagnostics were removed. Resume only after authorized queue-order repair: restore blocked/m5-ledger to build/m5-ledger, requeue, merge current build/roadmap/read incoming decisions, run affected remote suites plus scripts/typecheck/build, then the required single Gemini three-lens final review/fix batch and queue.ts land. No final-review clearance or full-suite pass is claimed.
+Implementation, final Round1, the single XR1 fix batch and final catch-up are complete. Valid C/S/X deep Gemini gates passed; the independently confirmed raw XR1 edge passed its filesystem smoke, four boundary tests,25 API tests, typecheck and packaged build. D18-D19 retain exact UI probe limits; D30 retains review-runner write limitations. Pre-review affected gate D28 passed with one isolated shell-path rerun. D32 preserves only the full ledger patch against current integration and records the post-resolution typecheck. Next: commit this merge, detach and queue.ts land m5-ledger. The queue-owned full merge gate remains the integration authority; this checkpoint is not a landed-item claim.

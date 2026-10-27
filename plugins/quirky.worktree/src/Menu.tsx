@@ -203,6 +203,7 @@ export function workspaceMenu(
 
 export type ProjectMenuHandlers = {
   openDialog(dialog: DialogState): void
+  openLedger(): void
   /** Moves the project into `group`, or out of its group with null. */
   moveToGroup(repo: Repo, group: ProjectGroup | null): void
 }
@@ -215,6 +216,7 @@ export function projectMenu(repo: Repo, groups: ProjectGroup[], on: ProjectMenuH
     ...(repo.groupId !== null ? [{ label: 'No group', onSelect: () => on.moveToGroup(repo, null) }] : [])
   ]
   return [
+    ...(repo.kind === 'git' ? [{ label: 'Open ledger', onSelect: on.openLedger }] : []),
     { label: 'Project Settings…', onSelect: () => on.openDialog({ kind: 'project-settings', repoId: repo.id }) },
     { label: 'New Group from Project…', onSelect: () => on.openDialog({ kind: 'group', action: 'new', repoId: repo.id }) },
     ...(targets.length > 0 ? [{ label: 'Move to Group', submenu: targets }] : []),
@@ -223,8 +225,9 @@ export function projectMenu(repo: Repo, groups: ProjectGroup[], on: ProjectMenuH
 }
 
 /** The items of a group header's menu. */
-export function groupMenu(group: ProjectGroup, openDialog: (dialog: DialogState) => void): MenuItem[] {
+export function groupMenu(group: ProjectGroup, openDialog: (dialog: DialogState) => void, openLedger: () => void): MenuItem[] {
   return [
+    { label: 'Open ledger', onSelect: openLedger },
     { label: 'Rename…', onSelect: () => openDialog({ kind: 'group', action: 'rename', groupId: group.id }) },
     { label: 'Delete Group…', onSelect: () => openDialog({ kind: 'group', action: 'delete', groupId: group.id }) }
   ]

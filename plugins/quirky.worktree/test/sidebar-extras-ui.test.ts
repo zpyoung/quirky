@@ -60,6 +60,8 @@ type TestWorld = {
   logs: string[]
   extrasDisabled: boolean
   extrasFailure: Error | null
+  ledgerPreview: { ledgerId: string; revision: number; entryCount: number }[] | null
+  ledgerPreviewFailure: Error | null
 }
 type UiHarness = {
   world: TestWorld
@@ -216,6 +218,8 @@ function setup(
     live: { 'w-main': false, 'w-feature': false, 'w-child': false, 'w-independent': null, 'w-other': true, 'w-notes': false },
     extrasDisabled: options.disabled ?? false,
     extrasFailure: options.failure ?? null,
+    ledgerPreview: null,
+    ledgerPreviewFailure: null,
     calls: [],
     logs: []
   }
@@ -299,6 +303,10 @@ function setup(
           return [...world.repos]
         case 'quirky.repo/groupList':
           return [...world.groups]
+        case 'quirky.ledger/request':
+          if (world.ledgerPreviewFailure) throw world.ledgerPreviewFailure
+          if (world.ledgerPreview === null) throw new RpcLike('method not found', RpcErrorCode.MethodNotFound)
+          return { removalPreview: [...world.ledgerPreview] }
         case 'quirky.worktree/list':
           return [...world.worktrees]
         case 'quirky.session/list':
@@ -611,7 +619,7 @@ test('SC-05: cancelling group deletion preserves its subtree; confirming release
   await openDelete()
   const dialog = document.querySelector<HTMLElement>('[role="dialog"]')
   expect(dialog?.textContent).toContain('Delete the group Team')
-  expect(dialog?.textContent).toMatch(/Ledger records retained|No affected ledgers/)
+  expect(dialog?.querySelector('[role="alert"]')).toBeNull()
   expect(lastReport(h).dialog).toEqual({ kind: 'group', action: 'delete', groupId: 'g-team' })
   await h.click([...dialog!.querySelectorAll<HTMLButtonElement>('button')].find((button) => button.textContent?.trim() === 'Cancel')!)
   expect(h.world.groups.map((item) => item.id)).toContain('g-child')
@@ -619,8 +627,10 @@ test('SC-05: cancelling group deletion preserves its subtree; confirming release
 
   await openDelete()
   const confirm = [...document.querySelectorAll<HTMLButtonElement>('[role="dialog"] button')].find((button) => button.textContent?.trim() === 'Delete Group')
+  expect(confirm?.disabled).toBe(false)
   expect(confirm).toBeDefined()
   await h.click(confirm!)
+  expect(h.calls.filter((call) => call.method === 'quirky.repo/groupDelete').at(-1)?.params).toEqual({ group: 'g-team' })
   expect(h.world.groups.map((item) => item.id)).not.toContain('g-team')
   expect(h.world.groups.map((item) => item.id)).not.toContain('g-child')
   expect(h.world.worktrees.find((item) => item.id === 'w-feature')?.projectGroupId).toBeNull()
@@ -628,6 +638,39 @@ test('SC-05: cancelling group deletion preserves its subtree; confirming release
   expect(sectionForGroup('Team')).toBeUndefined()
   expect(card('feature')?.closest('section.repo')).toBe(sectionForRepo('api'))
   expect(card('independent')?.closest('section.repo')).toBe(sectionForRepo('api'))
+})
+
+test('group deletion retries ledger preview failures and sends subtree snapshots', async () => {
+  const h = setup()
+  await h.mount()
+  h.world.groups.push(group('g-grandchild', 'Grandchild', { order: 4, parentId: 'g-child' }))
+  h.world.ledgerPreviewFailure = new Error('ledger backend unavailable')
+
+  const team = sectionForGroup('Team')!
+  await h.click(buttons(team).find((button) => button.textContent?.trim() === '⋯')!)
+  await h.click(menuItems().find((item) => /delete group/i.test(item.textContent ?? ''))!)
+
+  const dialog = document.querySelector<HTMLElement>('[role="dialog"]')!
+  const confirm = [...dialog.querySelectorAll<HTMLButtonElement>('button')].find((button) => button.textContent?.trim() === 'Delete Group')!
+  expect(dialog.querySelector('[role="alert"]')?.textContent).toContain('ledger backend unavailable')
+  expect(confirm.disabled).toBe(true)
+
+  const scope = { operation: 'removal-preview', removal: { groupIds: ['g-team', 'g-child', 'g-grandchild'] } }
+  expect(h.calls.filter((call) => call.method === 'quirky.ledger/request').map((call) => call.params)).toEqual([scope])
+
+  h.world.ledgerPreviewFailure = null
+  h.world.ledgerPreview = [{ ledgerId: 'ledger-team', revision: 7, entryCount: 3 }]
+  await h.click([...dialog.querySelectorAll<HTMLButtonElement>('button')].find((button) => button.textContent?.trim() === 'Retry')!)
+  expect(dialog.textContent).toContain('3 entries across 1 ledger')
+  expect(confirm.disabled).toBe(false)
+  await h.click(confirm)
+
+  expect(h.calls.filter((call) => call.method === 'quirky.ledger/request').map((call) => call.params)).toEqual([scope, scope])
+  expect(h.calls.filter((call) => call.method === 'quirky.repo/groupDelete').at(-1)?.params).toEqual({
+    group: 'g-team',
+    expectedLedgers: [{ ledgerId: 'ledger-team', revision: 7 }]
+  })
+  expect(h.world.groups.map((item) => item.id)).not.toContain('g-grandchild')
 })
 test('SC-01: new group creation is guarded by the selected Git worktree identity', async () => {
   const h = setup()
