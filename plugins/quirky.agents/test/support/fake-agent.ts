@@ -4,15 +4,16 @@ import { appendFileSync, existsSync, readFileSync } from 'node:fs'
  * A stand-in for an agent CLI in end-to-end tests. A launcher script in the fake bin dir imports
  * this file; behavior comes from `<launcher>.json` and every event is appended to
  * `<launcher>.log.jsonl`, both next to the launcher. Step `afterMs` delays are relative to the
- * previous step, and `exitAfterMs` counts from process start. Started with exactly `--version` and a
- * `version` behavior, it prints that text and exits at once.
+ * previous step, and `exitAfterMs` counts from process start. Started with exactly `--version` it logs
+ * a `version` event instead of `start`, prints the `version` behavior's text (default `0.0.0 (fake)`)
+ * and exits at once, so a version probe never looks like a launch.
  */
 type Behavior = {
   raw?: boolean
   steps?: { afterMs: number; write: string }[]
   exitAfterMs?: number
   exitCode?: number
-  version?: { stdout: string; exitCode?: number }
+  version?: { stdout?: string; exitCode?: number }
 }
 
 const LOGGED_ENV = [
@@ -39,6 +40,11 @@ for (const name of LOGGED_ENV) {
   const value = process.env[name]
   if (value !== undefined) env[name] = value
 }
+if (process.argv.length === 3 && process.argv[2] === '--version') {
+  log({ type: 'version', argv: process.argv.slice(2) })
+  process.stdout.write(behavior.version?.stdout ?? '0.0.0 (fake)')
+  process.exit(behavior.version?.exitCode ?? 0)
+}
 log({ type: 'start', argv: process.argv.slice(2), env, cwd: process.cwd(), pid: process.pid })
 
 let exited = false
@@ -48,10 +54,6 @@ function finish(code: number): never {
     log({ type: 'exit' })
   }
   process.exit(code)
-}
-if (behavior.version && process.argv.length === 3 && process.argv[2] === '--version') {
-  process.stdout.write(behavior.version.stdout)
-  finish(behavior.version.exitCode ?? 0)
 }
 process.on('SIGTERM', () => finish(143))
 process.on('SIGHUP', () => finish(129))
