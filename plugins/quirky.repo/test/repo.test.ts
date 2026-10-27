@@ -1,8 +1,11 @@
 import { afterEach, describe, expect, test } from 'bun:test'
+import { mkdirSync, realpathSync, rmSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { RpcError, RpcErrorCode, type QuirkyClient, type QuirkyEvent, type Repo } from '@quirky/protocol'
+import { makeTempDir } from '../../../packages/daemon/test/plugins/fixtures'
 import { waitFor } from '../../../packages/daemon/test/helpers'
+import { fakeRegistrations } from '../../quirky.worktree/test/fixtures/fake-git'
 import { startPluginHarness, type PluginHarness } from './harness'
 
 let t: PluginHarness | undefined
@@ -26,6 +29,21 @@ async function failure(promise: Promise<unknown>): Promise<{ code: number; messa
     return { code: rpc.code, message: rpc.message, data: rpc.data }
   }
   throw new Error('expected the call to fail')
+}
+
+/** A real directory called `name` registered as a repo in the fake git, so its worktrees can be listed. */
+function realRepo(git: NonNullable<PluginHarness['git']>, parent: string, name: string): string {
+  const dir = join(parent, name)
+  mkdirSync(dir, { recursive: true })
+  git.addRepo(dir)
+  return dir
+}
+
+/** Points new worktrees at a temp root so creating one never writes outside the test's directories. */
+async function useTempWorktreesRoot(client: QuirkyClient): Promise<string> {
+  const root = realpathSync(makeTempDir('qr-'))
+  await call(client, 'setting.set', { id: 'setting:quirky.worktree/worktreesRoot', value: root })
+  return root
 }
 
 const call = (client: QuirkyClient, method: string, params: Record<string, unknown> = {}) => client.callAny(method, params)
@@ -136,13 +154,17 @@ describe('SC-10: repo selectors', () => {
 describe('remove closes the repo sessions', () => {
   async function seeded() {
     const started = await start()
-    started.t.git!.addRepo('/fake/beta')
-    const alpha = (await call(started.client, 'quirky.repo/add', { path: '/fake/alpha' })) as Repo
-    const beta = (await call(started.client, 'quirky.repo/add', { path: '/fake/beta' })) as Repo
+    fakeRegistrations(started.t.git!)
+    await useTempWorktreesRoot(started.client)
+    const parent = realpathSync(makeTempDir('qr-'))
+    const alphaDir = realRepo(started.t.git!, parent, 'alpha')
+    const betaDir = realRepo(started.t.git!, parent, 'beta')
+    const alpha = (await call(started.client, 'quirky.repo/add', { path: alphaDir })) as Repo
+    const beta = (await call(started.client, 'quirky.repo/add', { path: betaDir })) as Repo
     const worktrees = async (repo: Repo) => (await call(started.client, 'quirky.worktree/list', { repo: repo.id })) as { id: string }[]
     const [alphaMain] = await worktrees(alpha)
     const [betaMain] = await worktrees(beta)
-    const extra = (await call(started.client, 'quirky.worktree/create', { repo: alpha.id, name: 'extra' })) as { id: string }
+    const extra = ((await call(started.client, 'quirky.worktree/create', { repo: alpha.id, name: 'extra' })) as { worktree: { id: string } }).worktree
     const closing = [
       await call(started.client, 'quirky.session/create', { worktree: alphaMain!.id, agent: 'shell' }),
       await call(started.client, 'quirky.session/create', { worktree: extra.id, agent: 'shell' })
@@ -161,7 +183,7 @@ describe('remove closes the repo sessions', () => {
 
   test('sessions still close when git can no longer list the repo worktrees', async () => {
     const { t, client, alpha, closing, staying } = await seeded()
-    t.git!.worktreesByRepo.delete('/fake/alpha')
+    t.git!.worktreesByRepo.delete(alpha.path)
     await call(client, 'quirky.repo/remove', { repo: alpha.id })
     expect(t.sessions.sessions.map((s) => s.id)).toEqual([staying.id])
     expect([...t.sessions.closed].sort()).toEqual(closing.map((s) => s.id).sort())
@@ -169,12 +191,14 @@ describe('remove closes the repo sessions', () => {
 
   test('a same-named repo keeps its sessions', async () => {
     const { t, client } = await start()
-    t.git!.addRepo('/fake/one/app')
-    t.git!.addRepo('/fake/two/app')
-    const one = (await call(client, 'quirky.repo/add', { path: '/fake/one/app' })) as Repo
-    const two = (await call(client, 'quirky.repo/add', { path: '/fake/two/app' })) as Repo
+    fakeRegistrations(t.git!)
+    await useTempWorktreesRoot(client)
+    const parent = realpathSync(makeTempDir('qr-'))
+    const one = (await call(client, 'quirky.repo/add', { path: realRepo(t.git!, join(parent, 'one'), 'app') })) as Repo
+    const two = (await call(client, 'quirky.repo/add', { path: realRepo(t.git!, join(parent, 'two'), 'app') })) as Repo
     const mainOf = async (repo: Repo) => ((await call(client, 'quirky.worktree/list', { repo: repo.id })) as { id: string }[])[0]!
-    const featureOf = async (repo: Repo) => (await call(client, 'quirky.worktree/create', { repo: repo.id, name: 'feature' })) as { id: string }
+    const featureOf = async (repo: Repo) =>
+      ((await call(client, 'quirky.worktree/create', { repo: repo.id, name: 'feature' })) as { worktree: { id: string } }).worktree
     const closing = [
       await call(client, 'quirky.session/create', { worktree: (await mainOf(one)).id, agent: 'shell' }),
       await call(client, 'quirky.session/create', { worktree: (await featureOf(one)).id, agent: 'shell' })
@@ -191,12 +215,16 @@ describe('remove closes the repo sessions', () => {
 
   test('a session in an externally created worktree closes with its repo after the directory is gone', async () => {
     const { t, client } = await start()
-    const alpha = (await call(client, 'quirky.repo/add', { path: '/fake/alpha' })) as Repo
-    t.git!.worktreesByRepo.get('/fake/alpha')!.push({ path: '/fake/elsewhere/hand-made', branch: 'hand-made', head: 'c'.repeat(40), isMain: false, locked: null })
+    const parent = realpathSync(makeTempDir('qr-'))
+    const alpha = (await call(client, 'quirky.repo/add', { path: realRepo(t.git!, parent, 'alpha') })) as Repo
+    const handMade = join(parent, 'elsewhere', 'hand-made')
+    mkdirSync(handMade, { recursive: true })
+    t.git!.worktreesByRepo.get(alpha.path)!.push({ path: handMade, branch: 'hand-made', head: 'c'.repeat(40), isMain: false, locked: null })
     const listed = (await call(client, 'quirky.worktree/list', { repo: alpha.id })) as { id: string; name: string }[]
     const external = listed.find((w) => w.name === 'hand-made')!
     const session = (await call(client, 'quirky.session/create', { worktree: external.id, agent: 'shell' })) as { id: string }
-    t.git!.worktreesByRepo.delete('/fake/alpha')
+    t.git!.worktreesByRepo.delete(alpha.path)
+    rmSync(handMade, { recursive: true, force: true })
 
     await call(client, 'quirky.repo/remove', { repo: alpha.id })
     expect(t.sessions.closed).toEqual([session.id])

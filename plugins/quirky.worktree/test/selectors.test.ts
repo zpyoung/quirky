@@ -1,9 +1,10 @@
 import { afterEach, describe, expect, test } from 'bun:test'
 import { mkdirSync, realpathSync } from 'node:fs'
 import { join } from 'node:path'
-import { RpcError, RpcErrorCode, type QuirkyClient, type Repo, type Worktree } from '@quirky/protocol'
+import { RpcError, RpcErrorCode, type QuirkyClient, type Repo, type Worktree, type WorktreeCreateResult } from '@quirky/protocol'
 import { makeTempDir } from '../../../packages/daemon/test/plugins/fixtures'
 import { startPluginHarness, type PluginHarness } from '../../quirky.repo/test/harness'
+import { addFakeRepo, fakeRegistrations } from './fixtures/fake-git'
 
 let t: PluginHarness | undefined
 afterEach(async () => {
@@ -28,12 +29,13 @@ async function apiRepo() {
   t = await startPluginHarness()
   const root = realpathSync(makeTempDir('qs-'))
   await call(t.client, 'setting.set', { id: 'setting:quirky.worktree/worktreesRoot', value: root })
-  t.git!.addRepo('/fake/api')
-  const repo = (await call(t.client, 'quirky.repo/add', { path: '/fake/api' })) as Repo
-  const fixLogin = (await call(t.client, 'quirky.worktree/create', { repo: repo.id, name: 'fix-login' })) as Worktree
+  fakeRegistrations(t.git!)
+  const apiDir = addFakeRepo(t.git!, 'api')
+  const repo = (await call(t.client, 'quirky.repo/add', { path: apiDir })) as Repo
+  const fixLogin = ((await call(t.client, 'quirky.worktree/create', { repo: repo.id, name: 'fix-login' })) as WorktreeCreateResult).worktree
   mkdirSync(join(fixLogin.path, 'src'), { recursive: true })
   const [main] = (await call(t.client, 'quirky.worktree/list', { repo: repo.id })) as Worktree[]
-  return { t, root, repo, main: main!, fixLogin }
+  return { t, root, repo, apiDir, main: main!, fixLogin }
 }
 
 describe('SC-7: a worktree selector resolves by each form', () => {
@@ -62,11 +64,21 @@ describe('SC-7: a worktree selector resolves by each form', () => {
   })
 
   test('a bare name falls through to a branch when no worktree has that name', async () => {
-    const { t, repo } = await apiRepo()
-    t.git!.worktreesByRepo.get('/fake/api')!.push({ path: '/fake/api-odd', branch: 'feat/odd', head: 'c'.repeat(40), isMain: false, locked: null })
-    const odd = ((await call(t.client, 'quirky.worktree/list', { repo: repo.id })) as Worktree[]).find((w) => w.path === '/fake/api-odd')!
-    expect(odd.name).toBe('feat/odd')
+    const { t, repo, apiDir } = await apiRepo()
+    const oddPath = `${apiDir}-odd`
+    mkdirSync(oddPath)
+    t.git!.worktreesByRepo.get(apiDir)!.push({ path: oddPath, branch: 'feat/odd', head: 'c'.repeat(40), isMain: false, locked: null })
+    const odd = ((await call(t.client, 'quirky.worktree/list', { repo: repo.id })) as Worktree[]).find((w) => w.path === oddPath)!
+    // D8: a non-primary worktree is named for its folder, so the branch is reachable only through the branch fallback
+    expect(odd.name).toBe('api-odd')
     expect(((await call(t.client, 'quirky.worktree/resolve', { selector: 'feat/odd' })) as Worktree).id).toBe(odd.id)
+  })
+
+  test('a display name does not hide the folder name: name: and bare names match both', async () => {
+    const { t, fixLogin } = await apiRepo()
+    await call(t.client, 'quirky.worktree/set', { worktree: fixLogin.id, displayName: 'Login fix' })
+    const resolve = async (selector: string) => ((await call(t.client, 'quirky.worktree/resolve', { selector })) as Worktree).id
+    for (const selector of ['name:fix-login', 'fix-login', 'name:Login fix', 'Login fix']) expect(await resolve(selector)).toBe(fixLogin.id)
   })
 
   test('current with neither a cwd nor a session worktree is NotFound', async () => {
@@ -97,8 +109,7 @@ describe('SC-8: current prefers the session worktree over the cwd', () => {
 describe('SC-9: no match and several matches', () => {
   test('no match names the selector and the forms; a shared name lists both as id selectors', async () => {
     const { t, main } = await apiRepo()
-    t.git!.addRepo('/fake/web')
-    const web = (await call(t.client, 'quirky.repo/add', { path: '/fake/web' })) as Repo
+    const web = (await call(t.client, 'quirky.repo/add', { path: addFakeRepo(t.git!, 'web') })) as Repo
     const [webMain] = (await call(t.client, 'quirky.worktree/list', { repo: web.id })) as Worktree[]
 
     const none = await failure(call(t.client, 'quirky.worktree/resolve', { selector: 'name:nope' }))
@@ -123,13 +134,13 @@ describe('SC-9: no match and several matches', () => {
 
 describe('SC-10: repo selectors', () => {
   test('create takes name:, path: and a plain ID; an unknown name is NotFound', async () => {
-    const { t, repo } = await apiRepo()
+    const { t, repo, apiDir } = await apiRepo()
     for (const [selector, name] of [
       ['name:api', 'feature-x'],
-      ['path:/fake/api', 'feature-y'],
+      [`path:${apiDir}`, 'feature-y'],
       [repo.id, 'feature-z']
     ] as const) {
-      const created = (await call(t.client, 'quirky.worktree/create', { repo: selector, name })) as Worktree
+      const created = ((await call(t.client, 'quirky.worktree/create', { repo: selector, name })) as WorktreeCreateResult).worktree
       expect(created).toMatchObject({ repoId: repo.id, name })
     }
     const missing = await failure(call(t.client, 'quirky.worktree/create', { repo: 'name:nope', name: 'x' }))

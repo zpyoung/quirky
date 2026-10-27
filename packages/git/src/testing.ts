@@ -1,3 +1,4 @@
+import { existsSync, mkdirSync } from 'node:fs'
 import { basename } from 'node:path'
 import type { GitDiff, GitStatus } from '@quirky/protocol'
 import * as realGit from './index'
@@ -35,8 +36,15 @@ export function createFakeGit(): FakeGit {
       if (!list) throw new realGit.GitError('not a git repository', 'fatal', 128)
       return list.map((w) => ({ ...w }))
     },
+    async listRegistrations(repoPath) {
+      record('listRegistrations', repoPath)
+      const list = worktreesByRepo.get(repoPath)
+      if (!list) throw new realGit.GitError('not a git repository', 'fatal', 128)
+      return list.map((w) => ({ ...w, locked: null, prunable: false, exists: existsSync(w.path) }))
+    },
     async addWorktree(repoPath, path, branch, baseRef) {
       record('addWorktree', repoPath, path, branch, baseRef)
+      mkdirSync(path, { recursive: true })
       worktreesByRepo.get(repoPath)?.push({ path, branch, head: 'b'.repeat(40), isMain: false, locked: null })
     },
     async removeWorktree(repoPath, path, force) {

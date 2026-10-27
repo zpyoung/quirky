@@ -1,9 +1,10 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 import { mkdirSync, mkdtempSync, realpathSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
-import type { Repo, Session, Worktree } from '@quirky/protocol'
+import type { Repo, Session, Worktree, WorktreeCreateResult } from '@quirky/protocol'
 import { createFakeGit, useTestGit, type FakeGit } from '@quirky/git/testing'
 import { startHarness, waitFor, type Harness } from '../../daemon/test/helpers'
+import { fakeRegistrations } from '../../../plugins/quirky.worktree/test/fixtures/fake-git'
 import { runCli } from './fixtures/fake-daemon'
 
 const BUILTIN_PLUGINS = join(import.meta.dir, '../../../plugins')
@@ -21,6 +22,7 @@ beforeEach(async () => {
   worktreesRoot = join(scratch, 'trees')
   mkdirSync(apiDir)
   git = createFakeGit()
+  fakeRegistrations(git)
   git.addRepo(apiDir)
   useTestGit(git)
   h = await startHarness({ builtinPluginsDir: BUILTIN_PLUGINS })
@@ -61,12 +63,12 @@ describe('SC-20: v1 command lines run through the plugins', () => {
 
     const created = await ok(['wt', 'create', 'api', 'feature-x', '--base', 'main'])
     expect(created).toMatch(
-      new RegExp(`^id: wt_[0-9a-f]+\\nname: feature-x\\nbranch: feature-x\\npath: ${join(worktreesRoot, 'api', 'feature-x')}\\n$`)
+      new RegExp(`^id: wt_[0-9a-f]+\\nname: feature-x\\nbranch: feature-x\\npath: ${join(worktreesRoot, 'api', 'feature-x')}\\n`)
     )
-    expect(git.calls.find((call) => call.fn === 'addWorktree')?.args[3]).toBe('main')
+    expect(git.calls.find((call) => call.fn === 'addWorktree')?.args[3]).toBe('refs/heads/main')
 
     const worktrees = (await ok(['wt', 'list', '--repo', 'api'])).split('\n')
-    expect(worktrees[0]).toMatch(/^ID\s+NAME\s+BRANCH\s+PATH$/)
+    expect(worktrees[0]).toMatch(/^ID\s+NAME\s+BRANCH\s+STATUS\s+PATH$/)
     expect(worktrees.slice(1, 3).map((line) => line.split(/\s+/).slice(1, 3))).toEqual([
       ['main', 'main'],
       ['feature-x', 'feature-x']
@@ -98,7 +100,7 @@ describe('SC-20: v1 command lines run through the plugins', () => {
     expect(repo).toMatchObject({ name: 'api', path: apiDir })
     expect(await json<Repo[]>(['repo', 'list'])).toEqual([repo])
 
-    const worktree = await json<Worktree>(['wt', 'create', 'api', 'feature-x', '--base', 'main'])
+    const { worktree } = await json<WorktreeCreateResult>(['wt', 'create', 'api', 'feature-x', '--base', 'main'])
     expect(worktree).toMatchObject({ repoId: repo.id, name: 'feature-x', branch: 'feature-x', isMain: false })
     const listed = await json<Worktree[]>(['wt', 'list', '--repo', 'api'])
     expect(listed.map((wt) => wt.name)).toEqual(['main', 'feature-x'])
@@ -115,7 +117,7 @@ describe('SC-20: v1 command lines run through the plugins', () => {
       alt: false
     })
     expect(await json<object>(['session', 'close', session.id])).toEqual({ ok: true })
-    expect(await json<object>(['wt', 'rm', 'feature-x', '--yes'])).toEqual({ ok: true })
+    expect(await json<object>(['wt', 'rm', 'feature-x', '--yes'])).toEqual({ ok: true, removed: [worktree.id] })
     expect(await json<object>(['repo', 'rm', 'api'])).toEqual({ ok: true })
     expect(await json<Repo[]>(['repo', 'list'])).toEqual([])
   })
@@ -134,9 +136,9 @@ describe('SC-20: v1 command lines run through the plugins', () => {
       const listed = await json<Worktree[]>(['wt', 'list', '--repo', selector])
       expect(listed.map((wt) => wt.id)).toContain(main.id)
     }
-    const created = await json<Worktree>(['wt', 'create', repo.id, 'by-id'])
+    const { worktree: created } = await json<WorktreeCreateResult>(['wt', 'create', repo.id, 'by-id'])
     expect(created.repoId).toBe(repo.id)
-    expect(await ok(['wt', 'rm', created.id, '--yes'])).toBe(`removed ${created.id}\n`)
+    expect(await ok(['wt', 'rm', created.id, '--yes'])).toBe(`removed ${created.name}\n`)
     expect(await ok(['repo', 'rm', repo.id])).toBe(`removed ${repo.id}\n`)
   })
 

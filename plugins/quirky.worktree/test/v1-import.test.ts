@@ -2,9 +2,10 @@ import { Database } from 'bun:sqlite'
 import { afterEach, describe, expect, test } from 'bun:test'
 import { realpathSync } from 'node:fs'
 import { join } from 'node:path'
-import type { QuirkyClient, Repo, Worktree } from '@quirky/protocol'
+import type { QuirkyClient, Repo, WorktreeCreateResult } from '@quirky/protocol'
 import { makeTempHome } from '../../../packages/daemon/test/helpers'
 import { startPluginHarness, type PluginHarness } from '../../quirky.repo/test/harness'
+import { fakeRegistrations } from './fixtures/fake-git'
 
 let t: PluginHarness | undefined
 afterEach(async () => {
@@ -37,6 +38,7 @@ describe('SC-26: a v1 home carries over', () => {
     const root = join(realpathSync(makeTempHome('qw-')), 'v1-root')
     writeV1Home(home, root)
     t = await startPluginHarness({ home })
+    fakeRegistrations(t.git!)
     t.git!.addRepo('/fake/api')
 
     const repos = (await call(t.client, 'quirky.repo/list')) as Repo[]
@@ -58,7 +60,7 @@ describe('SC-26: a v1 home carries over', () => {
 
     const setting = (await call(t.client, 'setting.get', { id: 'setting:quirky.worktree/worktreesRoot' })) as { value: string }
     expect(setting.value).toBe(root)
-    const created = (await call(t.client, 'quirky.worktree/create', { repo: 'repo_v1api', name: 'feature' })) as Worktree
+    const created = ((await call(t.client, 'quirky.worktree/create', { repo: 'repo_v1api', name: 'feature' })) as WorktreeCreateResult).worktree
     expect(created.path.startsWith(root)).toBe(true)
   })
 
