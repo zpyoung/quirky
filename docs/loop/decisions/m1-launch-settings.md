@@ -340,5 +340,25 @@
 - **Confidence:** high
 - **Source:** assumed — autonomous
 
+## D34: Final Round 1: correctness and spec lenses passed; one security finding fixed
+- **Question:** what to do with Final Round 1 (deep, three Codex lenses over ce1b401..4cc8e6e without docs)
+- **Options:** fix; dismiss
+- **Chose:** correctness PASS, spec compliance PASS; security X1 accepted and fixed: `quirky.session/register` stored a caller's `launchSettings` without checking its shape, and `quirky session get` then threw on it. `register` now refuses a malformed snapshot and stores a checked copy, and the CLI prints launch rows only for string values. Per LOOP.md, one fix batch then a rebuild and test run replace Final Rounds 2–5.
+- **Why:** a reproduced crash from an API caller's input
+- **Evidence:** /private/tmp/claude-502/-Users-zpyoung-orca-workspaces-quirky-build-roadmap/0dae7158-2102-4966-acd5-0f7bd686e990/scratchpad/fr1/X/gate.json
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** locked by docs/loop/LOOP.md
+
+## D35: No UI scenarios and no native-only scenarios, so the web pass and the native hand-off are skipped
+- **Question:** LOOP.md step 6, the UI and native verification
+- **Options:** run `quirk:using-apps-like-a-user`; skip
+- **Chose:** skip both. The logic spec has no scenario a person sees in the UI (D20); every scenario runs through the CLI or the daemon API. No `docs/loop/native/m1-launch-settings.json` is written.
+- **Why:** LOOP.md: items with no UI scenarios skip the web pass; there is nothing only the real window can show
+- **Evidence:** docs/quirk/specs/2026-10-26-m1-launch-settings/logic.md "Behavior & scenarios"; D20
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** locked by docs/loop/LOOP.md
+
 ## Progress
 All four waves merged (b69fa1d), checkpoint fixes F1 merged, F2 in flight. Next: merge F2, catch up with build/roadmap, Final Round 1 plus one fix batch, verify (no UI scenarios, no native scenarios), land.
