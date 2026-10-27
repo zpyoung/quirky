@@ -715,5 +715,16 @@
 - **Revisit if:** a W3 fix changes a method contract the window calls
 - **Source:** assumed — autonomous
 
+## D66: W3 checkpoint: accept all seven findings, which collapse to five defects
+- **Question:** W3 checkpoint adjudication (subagent-driven-development step 9)
+- **Options:** accept; reject
+- **Chose:** accept X2 (CRITICAL: Force on an orphan deletes whatever folder now sits at the path, without the recorded birth-time check), S1 and C1 as one defect (HIGH: removing with descendants skips the primary-checkout refusal), C2 and X3 as one defect (a timed-out hook's group SIGKILL is cancelled when the parent shell exits first), S2 (a group folder workspace never inherits the caller as parent), S3 (folder workspaces don't match their folder name as a selector; several sharing a folder stay an ambiguity error)
+- **Why:** each came with a reproduction, and X2 is exactly the "never delete a folder Quirky can't show it created" rule of D40
+- **Evidence:** scratchpad cp3/{C,S,X}/gate.json (gpt-6.1-sol, standard depth, independence full)
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** never
+- **Source:** assumed — autonomous
+
 ## Progress
 Step 5: W1-W3 merged on `build/m1-worktrees` (W2 checkpoint fixed). W3 checkpoint review running (scratchpad cp3); W4 chain running in scratch worktree `sdd/m1wt/w4-t9` (T9a dispatched, then T9b dialogs, T9c project/group/delete dialogs). If stopped early: rerun the W3 checkpoint on `12b47d9..722c08a`, redo W4 from tech.md "Window" if its worktree is gone, then catch up with build/roadmap, Final Round 1, verify, land.
