@@ -119,7 +119,7 @@
 ## D12: The snapshot comes from the same resolution as the command, so it can't misreport provenance
 - **Question:** output-format: Orca's open question, where the snapshot uses raw-args-win rules while the launch lets the pick win
 - **Options:** compute the snapshot separately (Orca); return it from the one resolution that builds argv
-- **Chose:** one resolution returns the argv, the structured options and the snapshot. The snapshot records each pick as `explicit` with its value, or `raw_args` without a value when extras set it; and the effective arguments with source `explicit` (extras present) or `inherited`. It is null when there are neither picks nor arguments.
+- **Chose:** one resolution returns the argv, the structured options and the snapshot. The snapshot records each pick as `explicit` with its value, or `extra-args` without a value when extras set it (Orca's `raw_args`, renamed to Quirky's kebab-case values and to say which raw arguments); and the effective arguments with source `explicit` (extras present) or `inherited`. It is null when there are neither picks nor arguments.
 - **Why:** the doc flags the two code paths as possibly disagreeing; one path makes the test "the snapshot matches the command" hold by construction
 - **Evidence:** research/orca-features/launch-settings.md "Run snapshot", "Open questions" first bullet
 - **Reversibility:** medium
@@ -241,7 +241,7 @@
 ## D24: The doc's Orca defects become tests
 - **Question:** which recorded Orca defects this item must prove absent
 - **Options:** —
-- **Chose:** (1) the snapshot can report a pick as `raw_args` while the launch used the pick: test that the snapshot and the argv agree in every precedence case; (2) a structured Effort pick plus a raw `--effort` in extras is accepted without saying which applies: test that one `--effort` reaches argv and the result names effort as set by the extras; (3) effort without a model is silently ignored in saved data: refused (D9); (4) a pick plus a configured model flag emits two model flags (Orca PR #25382, found by Phase A research): test exactly one. The automation detail page hiding model and effort, and the run history row arriving late, belong to m5-automations and are named in the spec's non-goals.
+- **Chose:** (1) the snapshot can report a pick as set by raw arguments while the launch used the pick: test that the snapshot and the argv agree in every precedence case; (2) a structured Effort pick plus a raw `--effort` in extras is accepted without saying which applies: test that one `--effort` reaches argv and the result names effort as set by the extras; (3) effort without a model is silently ignored in saved data: refused (D9); (4) a pick plus a configured model flag emits two model flags (Orca PR #25382, found by Phase A research): test exactly one. The automation detail page hiding model and effort, and the run history row arriving late, belong to m5-automations and are named in the spec's non-goals.
 - **Why:** LOOP.md step 4 asks a test per recorded defect
 - **Evidence:** research/orca-features/launch-settings.md "Open questions", "Add raw arguments" step 2, "Edge cases"; https://github.com/stablyai/orca/pull/25382
 - **Reversibility:** easy
