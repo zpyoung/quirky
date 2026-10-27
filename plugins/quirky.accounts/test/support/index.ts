@@ -133,7 +133,7 @@ async function restoreProviderFetch(): Promise<void> {
   savedFetch = null
 }
 
-const fakeProvider = String.raw`#!/usr/bin/env node
+const fakeProvider = String.raw`#!${process.execPath}
 const { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } = require('node:fs')
 const { join } = require('node:path')
 const { spawnSync } = require('node:child_process')

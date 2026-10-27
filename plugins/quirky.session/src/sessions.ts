@@ -411,11 +411,12 @@ export class SessionService {
     const accountPrepare = await this.accountPreparationAvailable()
     const userEnv = old.launch?.env ?? {}
     const launched = await this.start(session, this.records.repoIdOf(old.id), params, undefined, async (additions) => {
+      const accountResume =
+        old.agent === 'claude' || old.agent === 'codex'
+          ? { sourceSessionId: old.id, providerSession }
+          : undefined
       const prepared = accountPrepare
-        ? await this.prepareAccount(session, old.agent, old.cwd, userEnv, additions.env, {
-            sourceSessionId: old.id,
-            providerSession
-          })
+        ? await this.prepareAccount(session, old.agent, old.cwd, userEnv, additions.env, accountResume)
         : null
       const preparedProviderSession =
         prepared?.resumeTranscriptPath === undefined

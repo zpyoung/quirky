@@ -324,6 +324,31 @@ describe('quirky.accounts lifecycle API and CLI', () => {
     expect(existsSync(join(injectedHome, 'sessions'))).toBe(false)
     expect(readFileSync(sourcePath, 'utf8')).toBe(conversation)
   })
+  test('Codex resume passes an unchanged System default native transcript through', async () => {
+    const h = await startAccounts()
+    const sourceSessionId = 'native-default-source'
+    const fixtureDir = join(h.userHome, 'provider-fixtures')
+    const transcriptPath = join(fixtureDir, 'native-thread.transcript')
+    const transcript = 'native Codex transcript fixture\n'
+    mkdirSync(fixtureDir, { recursive: true })
+    writeFileSync(transcriptPath, transcript)
+
+    await call(h.client, 'quirky.accounts/prepare', codexPrepareArgs(h, sourceSessionId))
+    const prepared = await call<AccountPrepareResult>(
+      h.client,
+      'quirky.accounts/prepare',
+      codexPrepareArgs(h, 'native-default-resume', {
+        sourceSessionId,
+        providerSession: { id: 'thread-1', transcriptPath }
+      })
+    )
+
+    expect(prepared.account).toMatchObject({ id: null, source: 'default' })
+    expect(prepared.resumeTranscriptPath).toBe(transcriptPath)
+    expect(readFileSync(transcriptPath, 'utf8')).toBe(transcript)
+    expect(existsSync(join(defaultHome(h.home, 'codex'), 'sessions'))).toBe(false)
+  })
+
 
   test('Codex resume continues from the prepared target after the original profile is removed', async () => {
     const h = await startAccounts()

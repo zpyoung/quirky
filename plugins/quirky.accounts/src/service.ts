@@ -405,7 +405,7 @@ export class AccountService {
         const identity = this.readIdentitySafely(provider, home, provider === 'claude')
         const account = this.identityFor(provider, null, identity.email ?? 'System default', 'default')
         const resumeTranscriptPath = provider === 'codex' && input.resume
-          ? await this.bridgeCodexResume(input.resume, home, null)
+          ? await this.prepareCodexResume(input.resume, home, null)
           : undefined
         this.saveSessionIdentity(input, account, home)
         return {
@@ -435,7 +435,7 @@ export class AccountService {
       const identity = this.readIdentitySafely(provider, home, provider === 'claude')
       const account = this.identityFor(provider, null, identity.email ?? 'System default', 'default')
       const resumeTranscriptPath = provider === 'codex' && input.resume
-        ? await this.bridgeCodexResume(input.resume, home, null)
+        ? await this.prepareCodexResume(input.resume, home, null)
         : undefined
       this.saveSessionIdentity(input, account, home)
       const env = override.source === 'injected' ? { [this.homeVariable(provider)]: null } : {}
@@ -461,7 +461,7 @@ export class AccountService {
       this.fail('conflict', `Sign in to the selected ${provider} account again before launching it.`)
     }
     const resumeTranscriptPath = provider === 'codex' && input.resume
-      ? await this.bridgeCodexResume(input.resume, home, selectedId)
+      ? await this.prepareCodexResume(input.resume, home, selectedId)
       : undefined
     if (provider === 'codex') this.syncCodexConfigWarning(account.id)
     const accountIdentity = this.identityFor(provider, account.id, account.label, 'managed')
@@ -1071,6 +1071,30 @@ export class AccountService {
     return { sourceSessionId, providerSession: { id, transcriptPath } }
   }
 
+  private async prepareCodexResume(
+    resume: CodexResumeMetadata,
+    targetHome: string,
+    targetAccountId: string | null
+  ): Promise<string | undefined> {
+    const source = getSessionRecord(this.store, resume.sourceSessionId)
+    if (source) {
+      if (source.provider !== 'codex' || source.agent !== 'codex') {
+        this.fail('conflict', 'The recorded source session is not a Codex session.')
+      }
+      if (isAbsolute(source.home) && resolve(source.home) === resolve(targetHome)) {
+        return this.passThroughCodexResumePath(resume)
+      }
+    } else if (targetAccountId === null) {
+      return this.passThroughCodexResumePath(resume)
+    }
+    return this.bridgeCodexResume(resume, targetHome, targetAccountId)
+  }
+
+  private passThroughCodexResumePath(resume: CodexResumeMetadata): string | undefined {
+    const transcriptPath = resume.providerSession.transcriptPath
+    return transcriptPath !== null && isAbsolute(transcriptPath) ? transcriptPath : undefined
+  }
+
   private async bridgeCodexResume(
     resume: CodexResumeMetadata,
     targetHome: string,
@@ -1102,7 +1126,6 @@ export class AccountService {
 
   private codexResumeSourceHomes(sourceSessionId: string): string[] {
     const source = getSessionRecord(this.store, sourceSessionId)
-    const systemHomes = this.codexSystemHomes()
     if (source) {
       if (source.provider !== 'codex' || source.agent !== 'codex') {
         this.fail('conflict', 'The recorded source session is not a Codex session.')
@@ -1126,15 +1149,7 @@ export class AccountService {
       this.fail('conflict', 'The recorded Codex source home is not a trusted System default or managed account.')
     }
 
-    const homes = [...systemHomes]
-    for (const account of listAccountRecords(this.store, 'codex')) {
-      try {
-        homes.push(this.profiles.ensureOwned('codex', account.id))
-      } catch {
-        // An unavailable profile is not a trusted source candidate.
-      }
-    }
-    return homes
+    this.fail('conflict', 'The recorded Codex source session is unavailable; no fallback source was used.')
   }
 
   private codexSystemHomes(): string[] {
