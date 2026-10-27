@@ -2,7 +2,7 @@ import { afterEach, beforeEach, expect, test } from 'bun:test'
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { runSuite } from './suite'
+import { discover, macosOnly, runFiles, runSuite } from './suite'
 
 let dir: string
 
@@ -49,4 +49,42 @@ test('more failing files than the limit fail the run without a rerun', async () 
   flaky('a.test.ts')
   flaky('b.test.ts')
   expect(await runSuite(dir, ['pkg'], 1)).toEqual({ ok: false, flaky: [] })
+})
+
+test('runFiles runs each file in its own process and reports one that passes alone as flaky', async () => {
+  passing('a.test.ts')
+  flaky('b.test.ts')
+  expect(await runFiles(dir, ['pkg/a.test.ts', 'pkg/b.test.ts'], [], 2)).toEqual({ ok: true, flaky: ['pkg/b.test.ts'] })
+})
+
+test('runFiles fails on a file that fails again, including one that fails to load', async () => {
+  passing('a.test.ts')
+  write('b.test.ts', `throw new Error('load')`)
+  expect(await runFiles(dir, ['pkg/a.test.ts', 'pkg/b.test.ts'], [], 2)).toEqual({ ok: false, flaky: [] })
+})
+
+test('runFiles with more failing files than the limit fails without a rerun', async () => {
+  flaky('a.test.ts')
+  flaky('b.test.ts')
+  expect(await runFiles(dir, ['pkg/a.test.ts', 'pkg/b.test.ts'], [], 2, 1)).toEqual({ ok: false, flaky: [] })
+})
+
+test('discover lists the tracked and untracked test files under the given paths, as bun would', () => {
+  Bun.spawnSync(['git', 'init', '-q'], { cwd: dir })
+  passing('a.test.ts')
+  write('b.spec.tsx', '')
+  write('helper.ts', '')
+  mkdirSync(join(dir, 'other'))
+  writeFileSync(join(dir, 'other/c.test.ts'), '')
+  writeFileSync(join(dir, '.gitignore'), 'ignored/\n')
+  mkdirSync(join(dir, 'ignored'))
+  writeFileSync(join(dir, 'ignored/d.test.ts'), '')
+  expect(discover(dir, ['pkg', '--timeout=1'])).toEqual(['pkg/a.test.ts', 'pkg/b.spec.tsx'])
+  expect(discover(dir, [])).toEqual(['other/c.test.ts', 'pkg/a.test.ts', 'pkg/b.spec.tsx'])
+})
+
+test('macosOnly reads the first word of each line and skips comments and blanks', () => {
+  writeFileSync(join(dir, 'list.txt'), '# why\n\npkg/a.test.ts  needs zsh\npkg/b.test.ts\n')
+  expect(macosOnly(join(dir, 'list.txt'))).toEqual(new Set(['pkg/a.test.ts', 'pkg/b.test.ts']))
+  expect(macosOnly(join(dir, 'missing.txt'))).toEqual(new Set())
 })
