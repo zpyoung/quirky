@@ -1135,6 +1135,18 @@
                 "down"
               ]
             },
+            "title": {
+              "type": "string",
+              "description": "Optional title for the new shell session."
+            },
+            "command": {
+              "type": "string",
+              "description": "Optional trusted shell command to start in the new pane."
+            },
+            "activate": {
+              "type": "boolean",
+              "description": "Whether to focus the new pane (default true); false preserves existing pane and workspace focus."
+            },
             "revision": {
               "type": "integer",
               "description": "Fails with a conflict naming the current revision when the workspace is at another one."
@@ -1150,10 +1162,20 @@
             "workspace": {
               "type": "object",
               "description": "The whole workspace after the change, with its new revision."
+            },
+            "session": {
+              "type": "string",
+              "description": "The ID of the newly created shell session."
+            },
+            "pane": {
+              "type": "string",
+              "description": "The ID of its newly bound pane."
             }
           },
           "required": [
-            "workspace"
+            "workspace",
+            "session",
+            "pane"
           ]
         }
       },

@@ -217,7 +217,7 @@ export function CreateDialog({ context, repos, worktrees, repoId, onRepoChange, 
       return
     }
     if (!primary) {
-      setSearch({ repoId, primaryId: primary?.id ?? '', query: query.trim(), status: 'error', items: [], errors: [], error: 'GitHub search needs a primary Git worktree.' })
+      setSearch({ repoId, primaryId: '', query: query.trim(), status: 'error', items: [], errors: [], error: 'GitHub search needs a primary Git worktree.' })
       return
     }
     const ticket = ++searchRequest.current
