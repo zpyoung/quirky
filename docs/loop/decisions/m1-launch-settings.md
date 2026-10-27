@@ -330,5 +330,15 @@
 - **Revisit if:** m5-structured-runner adds a Codex runner
 - **Source:** assumed — autonomous
 
+## D33: Checkpoint reviews: five findings accepted and fixed
+- **Question:** what to do with the two checkpoint reviews (waves 1–2, and wave 3 with its fix batch)
+- **Options:** fix; dismiss
+- **Chose:** fixed all: a model ID of `--` split the command around hook arguments (models starting with `-` are refused, and the hook-argument position honours value flags); `unlistedOptions` with `unlisted: "refuse"` was accepted when empty; a command override wrapped in `env --` hid its model flag from the conflict check; the text form of `quirky agents options` dropped model descriptions; a model or option value with NUL or control characters was accepted and failed only at spawn
+- **Why:** each was a reproduced defect against the contract
+- **Evidence:** scratchpad cp1/ and cp2/ gate.json under /private/tmp/claude-502/-Users-zpyoung-orca-workspaces-quirky-build-roadmap/0dae7158-2102-4966-acd5-0f7bd686e990/scratchpad
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** assumed — autonomous
+
 ## Progress
-Waves 1 and 2 merged (a8f76aa), gate green. Wave 3 (quirky.agents service, methods, CLI) and the checkpoint review of waves 1–2 in flight. Then wave 4 (e2e tests), catch-up merge of build/roadmap, Final Round 1, verify, land.
+All four waves merged (b69fa1d), checkpoint fixes F1 merged, F2 in flight. Next: merge F2, catch up with build/roadmap, Final Round 1 plus one fix batch, verify (no UI scenarios, no native scenarios), land.

@@ -19,6 +19,9 @@
 - 2026-10-26, build ([D32](../../../loop/decisions/m1-launch-settings.md)): a structured launch for an
   agent other than claude keeps the existing "structured sessions support only the claude agent"
   refusal; the structured-key refusal of SC-24 is tested at the resolution level.
+- 2026-10-26, build: `quirky session get` and `new` print the snapshot as a `launch` row in the
+  CLI's record format (`launch  Claude · Opus · Effort: high`), so "`Launch:` line" in SC-18 and
+  SC-22 means that row.
 
 ## Conceptual model
 
