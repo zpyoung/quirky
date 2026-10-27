@@ -386,6 +386,27 @@ describe('deadlines', () => {
     ])
     expect((cli.lines[0] as { status: string }).status).toBe('pending')
   })
+
+  test('the earlier limit wins even when a failed call carries the clock past both', async () => {
+    let clock = 0
+    const calls: string[] = []
+    const cli = await cliFor({}, { now: () => clock, sleep: async (ms) => { clock += ms } })
+    cli.ctx.call = async (method) => {
+      calls.push(method)
+      if (method === 'quirky.ask/wait') throw new Error('connection lost')
+      return { status: 'timed_out', askId: 'ask_x', answers: {}, skipped: [], summary: '' }
+    }
+    await run(cli, 'wait', { id: 'ask_x', 'chunk-ms': 100, 'timeout-ms': 200 })
+    expect(calls).toEqual(['quirky.ask/wait'])
+    expect(cli.lines).toEqual([{ status: 'pending', askId: 'ask_x', instruction: 'quirky ask wait --id ask_x' }])
+
+    calls.length = 0
+    cli.lines.length = 0
+    clock = 0
+    await run(cli, 'wait', { id: 'ask_x', 'chunk-ms': 300, 'timeout-ms': 200 })
+    expect(calls).toEqual(['quirky.ask/wait', 'quirky.ask/expire'])
+    expect((cli.lines[0] as AskEnvelope).status).toBe('timed_out')
+  })
 })
 
 describe('--chunk-ms', () => {
