@@ -7,6 +7,7 @@ import { Sidebar } from './components/Sidebar'
 import { Toasts } from './components/Toasts'
 import { useAppState, usePluginState } from './context'
 import { CommandPalette } from './plugins/CommandPalette'
+import { OverlayLayer } from './plugins/OverlayLayer'
 import { PluginSlot } from './plugins/PluginSlot'
 import { useRegion } from './plugins/useRegion'
 import { useThemeVariables } from './plugins/useThemeVariables'
@@ -50,6 +51,7 @@ export function App() {
         <MainArea />
         {panel !== null && <PanelColumn id={panel} />}
       </div>
+      <OverlayLayer />
       {paletteOpen && <CommandPalette onClose={() => setPaletteOpen(false)} />}
       <Toasts />
       <ConfirmHost />

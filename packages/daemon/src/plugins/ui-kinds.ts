@@ -4,6 +4,7 @@ import {
   isContributionName,
   parseChord,
   parseContributionId,
+  parseWhen,
   THEME_COLOR_RE,
   THEME_TOKENS,
   UI_KINDS,
@@ -16,14 +17,15 @@ const ALLOWED_FIELDS: Record<string, readonly string[]> = {
   'sidebar-section': ['title', 'description', 'order'],
   panel: ['title', 'description', 'order'],
   view: ['title', 'description'],
+  overlay: ['title', 'description', 'order'],
   command: ['title', 'description', 'args'],
-  keybinding: ['key', 'command', 'description'],
+  keybinding: ['key', 'command', 'description', 'when'],
   setting: ['type', 'default', 'title', 'description', 'minimum', 'maximum', 'values'],
   theme: ['title', 'appearance', 'colors', 'description'],
 }
 
 const SETTING_TYPES = ['boolean', 'number', 'string', 'enum'] as const
-const TITLE_REQUIRED = new Set(['sidebar-section', 'panel', 'setting', 'theme'])
+const TITLE_REQUIRED = new Set(['sidebar-section', 'panel', 'overlay', 'setting', 'theme'])
 
 function isNonEmptyString(value: unknown): value is string {
   return typeof value === 'string' && value !== ''
@@ -58,6 +60,14 @@ function checkKeybinding(label: string, entry: Entry, errors: string[]): void {
   else if (typeof command !== 'string') errors.push(`${label}: command must be a string`)
   else if (!isContributionName(command) && parseContributionId(command)?.kind !== 'command') {
     errors.push(`${label}: command must be a command name or a full command ID`)
+  }
+
+  if (entry.when !== undefined) {
+    if (typeof entry.when !== 'string') errors.push(`${label}: when must be a string`)
+    else {
+      const when = parseWhen(entry.when)
+      if (!when.ok) errors.push(`${label}: when is invalid: ${when.error}`)
+    }
   }
 }
 
@@ -136,14 +146,14 @@ function checkTheme(label: string, entry: Entry, errors: string[]): void {
   }
 }
 
-/** True for the seven kinds the UI plugin API adds, the ones `checkUiKindEntry` validates. */
+/** True for the eight kinds the UI plugin API adds, the ones `checkUiKindEntry` validates. */
 export function isUiKind(kind: string): boolean {
   return (UI_KINDS as readonly string[]).includes(kind)
 }
 
 /**
  * Checks the fields of a contribution of one of the UI kinds (`sidebar-section`, `panel`, `view`,
- * `command`, `keybinding`, `setting`, `theme`) and appends one message per problem to `errors`.
+ * `overlay`, `command`, `keybinding`, `setting`, `theme`) and appends one message per problem to `errors`.
  * `label` prefixes every message, as for `checkKindEntry`.
  */
 export function checkUiKindEntry(kind: string, label: string, entry: Entry, errors: string[]): void {

@@ -61,7 +61,9 @@ export function fakeContext(handlers: Record<string, Handler> = {}) {
     toast(title, body) {
       toasts.push({ title, body })
     },
-    setPanelBadge() {}
+    setPanelBadge() {},
+    setContext() {},
+    mountView: () => () => {}
   }
 
   return {
