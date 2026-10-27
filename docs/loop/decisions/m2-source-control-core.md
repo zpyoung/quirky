@@ -473,5 +473,49 @@
 - **Revisit if:** another lane lands the same fix; the merge keeps one
 - **Source:** assumed — autonomous
 
+## D44: Build with Claude subagents implementing and Codex reviewing
+- **Question:** subagent-driven-development's preflight backend pairing
+- **Options:** claude-task + codex; claude-task + gemini; pi-codex + opus; same-family pairs
+- **Chose:** claude-task + codex. `pi-watch --check` verified codex (`openai-codex/gpt-6.1-sol`) and gemini; the tree was clean on `build/m2-source-control-core`; the suite commands are `bun run test`, `bun test scripts`, `bun run typecheck`. At the start typecheck was clean, `bun test scripts` passed 30, and `bun run test` had 19 environmental failures fixed by D43.
+- **Why:** LOOP.md names this pairing, and the skill marks it recommended
+- **Evidence:** docs/loop/LOOP.md step 5; scratchpad journal.md
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** Codex becomes unreachable mid-run
+- **Source:** locked by docs/loop/LOOP.md
+
+## D45: A type and runner scaffold lands before the first wave
+- **Question:** how six parallel tasks share the new types and the git runner without editing the same files
+- **Options:** a first wave that only adds types; the orchestrator commits the scaffold
+- **Chose:** the orchestrator committed the protocol types of tech.md's Data models (`GitStatus`, `GitDiff` and the new types, plus `GitStatusSummary`/`GitDiffPair` for v1's porcelain-v1 functions), the runner options (`input`, `readOnly`, `network` with batch-mode ssh and empty askpass, `env`), and stub modules re-exported from `packages/git/src/index.ts`, then fenced all three
+- **Why:** the types are the contract every task builds on, copied from the reviewed tech spec, and a one-task wave for them would cost a whole round; v1's `status`/`diff` keep their v1 shapes under the subset names, so nothing else changed
+- **Evidence:** commit `feat(git): source control types and the network-safe git runner`; tech.md Data models
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** a task needs a type changed; it returns BLOCKED and the scaffold is amended
+- **Source:** assumed — autonomous
+
+## D46: Build in three waves: git primitives and pure modules, then the daemon, panel and view, then integration
+- **Question:** subagent-driven-development's decomposition into waves
+- **Options:** one task per layer; waves by dependency with disjoint file scopes
+- **Chose:** W1 six parallel tasks: status and upstream (T1), remote operations and error classification (T2), staging, discard, conflicts and huge folders (T3), compare, history, diffs and save (T4), the three kernel growths (T5), the window's pure decision modules (T6). W2: the daemon methods, manifest and scenario tests as one chain (T7a, T7b), the panel (T8) and the diff view with the commands (T9) in parallel. W3: the integration task that wires CSS for the views, runs the window scenarios and closes gaps. Each task writes the tests of its area.
+- **Why:** the daemon calls every primitive and the window calls every method, so they wait for W1; the daemon's manifest and main module are shared, so its two halves chain; the panel and the view touch different files
+- **Evidence:** tech.md Architecture; scratchpad journal.md
+- **Reversibility:** easy
+- **Confidence:** medium
+- **Revisit if:** a chain runs out of room in one iteration
+- **Source:** assumed — autonomous
+
+## D47: Skip W1's checkpoint review
+- **Question:** the checkpoint review after a non-final wave
+- **Options:** run it; skip it for a wave of primitives and pure modules
+- **Chose:** skip W1's; W2 gets one
+- **Why:** W1 is git wrappers and pure functions, each unit-tested against real git, and W2's checkpoint and the final round both cover it again; m1-worktrees D60 and m0-scripting D33 did the same
+- **Evidence:** docs/loop/decisions/m1-worktrees.md D60
+- **Reversibility:** easy
+- **Confidence:** medium
+- **Revisit if:** the final round finds defects in W1's code
+- **Source:** assumed — autonomous
+
 ## Progress
-Specs written, reviewed (D42) and committed. Next: build with quirk:subagent-driven-development (claude-task + codex).
+Specs written, reviewed (D42) and committed. Building (D44–D47): scaffold committed; W1 (T1–T6) dispatched in worktrees under the session scratchpad. If this iteration stops, the next one restarts W1's unfinished tasks from build/m2-source-control-core's tip (the worktrees are lost with the scratchpad), then W2 (daemon T7, panel T8, view T9), W3 integration, final round, verify, land.
