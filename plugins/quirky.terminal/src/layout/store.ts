@@ -34,7 +34,7 @@ function isPaneNode(value: unknown, depth = 0): value is PaneNode {
     const exitOk =
       exit === null ||
       (isRecord(exit) && (exit.code === null || typeof exit.code === 'number') && (exit.signal === null || typeof exit.signal === 'string'))
-    return isString(value.session) && isNullableString(value.title) && exitOk
+    return isString(value.session) && isNullableString(value.title) && exitOk && (value.typed === undefined || typeof value.typed === 'boolean')
   }
   return (
     value.kind === 'split' &&

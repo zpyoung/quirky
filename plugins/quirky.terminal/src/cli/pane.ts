@@ -65,9 +65,9 @@ async function movePane(args: CliArgs, ctx: CliContext): Promise<void> {
 }
 
 /** Looks for `paneId` in the given workspace selectors in turn; null when none holds it. */
-async function locatePane(ctx: CliContext, paneId: string, selectors: (string | undefined)[]) {
+async function locatePane(ctx: CliContext, paneId: string, selectors: string[]) {
   for (const selector of selectors) {
-    const { workspace } = (await call(ctx, 'workspace', selector === undefined ? {} : { workspace: selector })) as { workspace: Workspace }
+    const { workspace } = (await call(ctx, 'workspace', { workspace: selector })) as { workspace: Workspace }
     for (const group of groupsInOrder(workspace.root)) {
       for (const tab of group.tabs) {
         const pane = findPane(tab.root, paneId)
@@ -84,8 +84,8 @@ async function locatePane(ctx: CliContext, paneId: string, selectors: (string | 
 async function getPane(args: CliArgs, ctx: CliContext): Promise<void> {
   atMost(args, ctx, 1)
   const { pane, workspace } = await resolvePane(args.positionals[0], ctx)
-  const scope = workspaceParam(args, ctx).workspace ?? workspace
-  const found = await locatePane(ctx, pane, scope === undefined ? [undefined, 'floating'] : [scope])
+  const scope = workspaceParam(args, ctx).workspace ?? workspace ?? ((await call(ctx, 'paneOf', { pane })) as { workspace: string }).workspace
+  const found = await locatePane(ctx, pane, [scope])
   if (!found) throw ctx.fail(`no pane ${pane}`)
   ctx.out.result(found, () =>
     ctx.format.record([

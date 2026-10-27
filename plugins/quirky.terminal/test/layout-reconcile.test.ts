@@ -300,3 +300,138 @@ describe('the service commits a repair that is only normalization', () => {
     expect(saved).toHaveLength(1)
   })
 })
+
+describe('driving input and terminal facts across restarts and reconnects', () => {
+  const stored = (ws: Workspace) => ({
+    loadWorkspaces: () => ({ workspaces: [ws], unreadable: [] }),
+    counter: () => 20,
+    floating: () => ({}),
+    save: () => {}
+  })
+  const settled = (service: LayoutService) => (service as unknown as { tail: Promise<unknown> }).tail
+
+  function serviceFor(ws: Workspace, sessions: Session[], inputs = new InputTracker(), saved: Workspace[] = []) {
+    const context = {
+      call: async () => sessions,
+      log: () => {},
+      error: (_kind: string, message: string) => new Error(message),
+      emit: () => {}
+    }
+    const store = { ...stored(ws), save: (next: Workspace) => void saved.push(next) }
+    return new LayoutService(context as never, store as never, inputs)
+  }
+
+  test('a stored typed pane keeps its input record, so a lone shell exiting 0 after a restart closes', async () => {
+    const closed: string[] = []
+    const base = withTabs('s')
+    const [leaf] = paneLeaves(workspaceTabs(base)[0]!.root)
+    const typed = { ...base, root: { ...(base.root as { tabs: unknown[] }), tabs: [{ ...workspaceTabs(base)[0]!, root: { ...leaf!, typed: true as const } }] } } as unknown as Workspace
+    const context = {
+      call: async (method: string, params: { session?: string }) => {
+        if (method.endsWith('/list')) return [ended('s', 0, { worktreeId: 'wt' })]
+        closed.push(params.session!)
+        return {}
+      },
+      log: () => {},
+      error: (_kind: string, message: string) => new Error(message),
+      emit: () => {}
+    }
+    const service = new LayoutService(context as never, stored(typed) as never, new InputTracker())
+    service.requestReconcile()
+    await settled(service)
+    expect(closed).toEqual(['s'])
+    expect(workspaceTabs((service as unknown as { workspaces: Map<string, Workspace> }).workspaces.get('wt')!)).toHaveLength(0)
+  })
+
+  test('the first input to a bound session is stored on its pane without a new revision, once', async () => {
+    const ws = withTabs('s')
+    const saved: Workspace[] = []
+    const inputs = new InputTracker()
+    const service = serviceFor(ws, [session('s', { worktreeId: 'wt' })], inputs, saved)
+    inputs.mark('s')
+    inputs.mark('s')
+    await settled(service)
+    expect(saved).toHaveLength(1)
+    expect(saved[0]!.revision).toBe(ws.revision)
+    expect(paneLeaves(workspaceTabs(saved[0]!)[0]!.root)[0]).toMatchObject({ session: 's', typed: true })
+  })
+
+  test('input that arrived before the pane existed is stored by the next reconciliation', async () => {
+    const saved: Workspace[] = []
+    const inputs = new InputTracker()
+    inputs.mark('s')
+    const service = serviceFor(withTabs('s'), [session('s', { worktreeId: 'wt' })], inputs, saved)
+    service.requestReconcile()
+    await settled(service)
+    expect(paneLeaves(workspaceTabs(saved.at(-1)!)[0]!.root)[0]).toMatchObject({ typed: true })
+  })
+
+  test('after a reconnect a split starts in the directory the PTY host now reports', async () => {
+    const ws = withTabs('s1')
+    const spawned: (string | undefined)[] = []
+    let hostCwd = '/old'
+    const context = {
+      log: () => {},
+      emit: () => {},
+      getSetting: () => undefined,
+      error: (_kind: string, message: string) => new Error(message),
+      pty: { list: async () => [{ sessionId: 's1', cwd: hostCwd, title: '' }] },
+      call: async (method: string, params: { cwd?: string }) => {
+        if (method.endsWith('/create')) {
+          spawned.push(params.cwd)
+          return session('s2', { worktreeId: 'wt' })
+        }
+        if (method.endsWith('/get')) return session('s1', { worktreeId: 'wt', cwd: '/start' })
+        return [session('s1', { worktreeId: 'wt' })]
+      }
+    }
+    const service = new LayoutService(context as never, stored(ws) as never, new InputTracker())
+    service.start()
+    await settled(service)
+    hostCwd = '/new'
+    service.onReconnect()
+    await settled(service)
+    const pane = paneLeaves(workspaceTabs(ws)[0]!.root)[0]!
+    await service.methods.splitPane!({ pane: pane.id, direction: 'right' }, {} as never)
+    expect(spawned).toEqual(['/new'])
+  })
+
+  test('a cwd fact that arrives while the host list is in flight is not overwritten by the older list', async () => {
+    const ws = withTabs('s1')
+    const spawned: (string | undefined)[] = []
+    let release!: () => void
+    const gate = new Promise<void>((resolve) => (release = resolve))
+    let listing!: () => void
+    const listed = new Promise<void>((resolve) => (listing = resolve))
+    const context = {
+      log: () => {},
+      emit: () => {},
+      getSetting: () => undefined,
+      error: (_kind: string, message: string) => new Error(message),
+      pty: {
+        list: async () => {
+          listing()
+          await gate
+          return [{ sessionId: 's1', cwd: '/stale', title: '' }]
+        }
+      },
+      call: async (method: string, params: { cwd?: string }) => {
+        if (method.endsWith('/create')) {
+          spawned.push(params.cwd)
+          return session('s2', { worktreeId: 'wt' })
+        }
+        if (method.endsWith('/get')) return session('s1', { worktreeId: 'wt', cwd: '/start' })
+        return [session('s1', { worktreeId: 'wt' })]
+      }
+    }
+    const service = new LayoutService(context as never, stored(ws) as never, new InputTracker())
+    service.onReconnect()
+    await listed
+    service.onFact('s1', { kind: 'cwd', cwd: '/live' } as never)
+    release()
+    await settled(service)
+    const pane = paneLeaves(workspaceTabs(ws)[0]!.root)[0]!
+    await service.methods.splitPane!({ pane: pane.id, direction: 'right' }, {} as never)
+    expect(spawned).toEqual(['/live'])
+  })
+})

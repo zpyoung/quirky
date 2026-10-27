@@ -24,7 +24,8 @@ export const FLOATING_WORKSPACE = 'floating'
 /** How a pane's process ended, kept while the pane stays to show its output. */
 export type PaneExit = { code: number | null; signal: string | null }
 
-export type PaneLeaf = { kind: 'pane'; id: string; session: string; title: string | null; exit: PaneExit | null }
+/** `typed` is set once the pane's session has received driving input, so the exit rule survives a daemon restart. */
+export type PaneLeaf = { kind: 'pane'; id: string; session: string; title: string | null; exit: PaneExit | null; typed?: true }
 export type PaneSplit = { kind: 'split'; id: string; direction: SplitDirection; ratio: number; first: PaneNode; second: PaneNode }
 export type PaneNode = PaneLeaf | PaneSplit
 
