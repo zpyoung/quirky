@@ -169,13 +169,19 @@ lock covers `push`, `forcePush`, `pull`, `fastForward`, `fetch`, `sync`, `rebase
 
 ### Staging and discard
 - `stage {paths?, scope?: 'all' | 'tracked'}`: exactly one of `paths` (non-empty) or `scope`.
-  Paths are refused (`not-stageable`) if any is an unresolved conflict
-  ("Resolve the conflict before staging <path>") or a submodule root ("Stage inside submodule").
+  Paths are refused (`not-stageable`) if any is a submodule root ("Stage inside submodule") or an
+  unresolved conflict whose working file still holds a conflict marker line (`^<<<<<<< `,
+  `^=======$`, `^>>>>>>> ` or `^||||||| `, checked with `conflictBlocks` from
+  `QG/src/view/conflict-markers.ts`; message "Resolve the conflict markers in <path> before staging
+  it."). An unresolved conflict with no markers is staged with `add`; one whose working file is
+  missing is staged as a deletion (`rm --cached --quiet -- :(literal)<p>`). Binary conflicts with
+  no text markers stage as they are.
   Paths go as NUL-joined `:(literal)<p>` on stdin to `add --pathspec-from-file=- --pathspec-file-nul`.
   Scope as Orca's `S/git-stage-worktree-scope.ts` (`add --all -- .` / `add --update -- .`, or the
   per-file path when unmerged paths exist), excluding shared symlinks.
-- `unstage {paths}` as v1 (`restore --staged`, `rm --cached` on an unborn HEAD); a renamed entry's
-  `oldPath` is added by the caller (the window) — the daemon unstages exactly what it is given.
+- `unstage {paths}` as v1 (`restore --staged`, `rm --cached` on an unborn HEAD). The daemon reads
+  the staged entries first and adds the `oldPath` of every staged rename whose new path was given,
+  so every caller resets both sides (SC-12).
 - `discard {paths?, area?: 'staged' | 'unstaged' | 'untracked'}`, destructive, `describe:
   describeDiscard`: exactly one of `paths` or `area`. Every path is checked to resolve inside the
   worktree (`outside-worktree`), and refused when an unresolved or resolved-locally conflict or a
@@ -262,8 +268,9 @@ detached HEAD (`detached`, "Check out a branch first.").
 ### Compare, base and history
 - `effectiveBase(worktree)`: `Worktree.baseRef` (source `worktree`) ?? `RepoDetails.settings.defaultBase`
   (`project`) ?? `detectDefaultBase(repoPath)` (`detected`) ?? none. With setting
-  `compareBase = 'branch-upstream'` and an upstream, compare uses the upstream (`upstream`);
-  `rebaseFromBase` never does.
+  `compareBase = 'branch-upstream'`, compare uses the worktree's own `baseRef` when it has one, else
+  the upstream when there is one (`upstream`), else the project and detected bases as above
+  (Orca's `use-base-refs.ts`); `rebaseFromBase` never uses the upstream.
 - `compare {base?}` → `GitCompare` ([Data models](#data-models)): `rev-parse --verify --quiet
   --end-of-options <base>^{commit}` (missing → `invalid-base`, message per logic SC-48); unborn
   HEAD → `unborn-head`; `merge-base <baseOid> <headOid>` empty → `no-merge-base`; counts
@@ -344,8 +351,15 @@ detached HEAD (`detached`, "Check out a branch first.").
 - Badge: `setPanelBadge('panel:quirky.git/source-control', count, title)` with count = entries
   (minus resolved-locally duplicates), title `Source Control — 1 uncommitted change` /
   `— N uncommitted changes` / `— N+ uncommitted changes` when capped; `null` when 0.
+- Notices (`QG/src/panel/Notices.tsx`, the pattern of `plugins/quirky.worktree/src/Notices.tsx`,
+  because `context.toast` carries no actions or ids): a list keyed by id at the bottom of the
+  panel; showing a notice with an existing id replaces it. Row failures use id
+  `source-control-entry-mutation` with a Retry button for 10,000 ms (then only Dismiss), and gain
+  " in <worktree>" and lose Retry when the panel has moved to another worktree; bulk failures use
+  id `source-control-bulk`. Plain outcome messages (remote toasts of `remote-messages.ts`, "Abort
+  merge failed") use `context.toast`.
 - Huge-folder offer: once per worktree id per window session, on the first capped status, if
-  `hugeFolders` returns any, toast with an "Add to .gitignore" action for the first.
+  `hugeFolders` returns any, a notice with an "Add to .gitignore" button for the first.
 - `report(state)`: `{worktree, branch, base, ahead, behind, operation, busy, capped, sections:
   [{id, count}], primary: {label, enabled, title}, selection: string[], filter, viewMode,
   historyOpen}` (≤ 64 KiB; sections list counts, not rows).
@@ -364,8 +378,15 @@ detached HEAD (`detached`, "Check out a branch first.").
   `oneDark`.
 - Single file: scroll to the first chunk on first load; "Previous change"/"Next change" and
   F7/Shift+F7 (`command:quirky.git/next-change` / `previous-change`, which act on the active view
-  through a module-level registry) use `goToNextChunk`/`goToPreviousChunk`; disabled with no
-  chunks. Editable only for source `unstaged` (and untracked); saves pass `expected` =
+  through a module-level registry; every view command does the same and fails with "No diff view
+  is open." when none is) use `goToNextChunk`/`goToPreviousChunk`; disabled with no chunks.
+  Editable diffs get Revert Block: `revertControls: 'a-to-b'` on the side-by-side `MergeView`, and
+  `mergeControls` showing only the reject (revert) button in the inline view; `revert-change`
+  reverts the chunk holding the cursor (the current change). Reverting edits the buffer only.
+- Live render limit: editable views recount after each document change (debounced 300 ms); once
+  the draft passes 6,000,000 combined characters or 120,000 lines a side, the editor is replaced by
+  the large-diff fallback plus "This draft crossed the safe display limit, but it can still be
+  saved." and a Save button, holding the draft in memory until saved or closed. Editable only for source `unstaged` (and untracked); saves pass `expected` =
   `modifiedHash` of the last load; `changed-on-disk` shows the banner of SC-61; Overwrite saves
   without `expected`; Reload reloads.
 - Combined: entries from status (area filter, unresolved conflicts excluded with the notice),
@@ -385,7 +406,8 @@ detached HEAD (`detached`, "Check out a branch first.").
   Mod+S saves with `expected` = the read hash.
 - Close: reopens `view:quirky.session/worktree` with `{worktree}`.
 - `report(state)`: `{mode, source, path, area, commit, changes: number, currentChange: number |
-  null, dirty: boolean, sections?: number, loadedSections?: number}`.
+  null, dirty: boolean, stale: boolean, tooLarge: boolean, sections?: number, loadedSections?:
+  string[], collapsed?: boolean, conflicts?: number, currentConflict?: number | null}`.
 
 ### Commands, keybindings, settings
 `CONFIG:` manifest contributions (ids short; full ids `command:quirky.git/<id>`, `setting:quirky.git/<id>`):
@@ -393,12 +415,17 @@ detached HEAD (`detached`, "Check out a branch first.").
 | kind | id | details |
 |---|---|---|
 | command | `show` | "Show Source Control"; opens the panel |
-| command | `open-diff` | args `{path, source?, area?, commit?, oldPath?, worktree?}` |
+| command | `open-diff` | args `{path, source?, area?, commit?, oldPath?, worktree?}`; `source: 'conflict'` opens the conflict file view |
 | command | `open-changes` | args `{area?, worktree?}` (View all) |
 | command | `open-branch-changes` | args `{worktree?}` |
 | command | `open-commit` | args `{commit, worktree?}` |
 | command | `review-conflicts` | args `{worktree?}` |
 | command | `next-change`, `previous-change` | "Go to Next Change", "Go to Previous Change" |
+| command | `next-conflict`, `previous-conflict` | conflict file view's Next / Previous conflict |
+| command | `revert-change` | reverts the current change in an editable diff (Revert Block) |
+| command | `save`, `reload-from-disk`, `overwrite` | the open view's save and stale-banner buttons |
+| command | `collapse-all` | args `{collapsed?}` (toggles without args) |
+| command | `load-diff` | args `{path}` — a combined section's "Load diff" |
 | command | `refresh-compare` | "Refresh branch compare" |
 | command | `set-filter` | args `{query}` (`''` closes) |
 | command | `select` | args `{paths}` |
@@ -493,9 +520,14 @@ do (`QG/quirky-plugin.json` `branch`, `upstream`).
 
 ## Cross-cutting
 
-- **Security:** credentials stripped from every remote error; `ignoreFolder` is allowlisted;
-  `save`, `discard`, `reveal`, `conflictFile` and `diff` check paths stay inside the worktree
-  (resolve symlinks in the parent directory).
+- **Security:** credentials stripped from every remote error; `ignoreFolder` is allowlisted.
+  Path containment (`QG/src/daemon/paths.ts` `containedPath(worktreePath, rel)`), used by `save`,
+  `discard`, `reveal`, `conflictFile`, `diff` and `submoduleStatus`: reject absolute paths and any
+  `..` segment after normalising; `realpath` the parent directory and require it inside the
+  worktree's `realpath` (`outside-worktree`); then `lstat` the leaf. Working-tree reads never follow
+  a leaf symlink: `diff` returns the link's target text (what git stores for a symlink), and `save`
+  and `conflictFile` refuse a symlink leaf (`not-allowed`). `discard` hands paths to git, which
+  doesn't follow leaf links (SC-67).
 - **Observability:** `context.log` one line per remote op: `<op> <worktreeId> ok|<reason> <ms>`.
 - **Migration:** none; no store tables are added (the lock and opened set are in memory and reset
   on restart).

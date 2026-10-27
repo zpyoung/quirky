@@ -4,7 +4,8 @@
 
 **Status:** Approved (headless build loop; decisions in [m2-source-control-core.md](../../../loop/decisions/m2-source-control-core.md)). Tech spec: requested; authored as [tech.md](tech.md) (gate: requested, crosses the git package, the plugin's daemon half and its window half).
 
-**Amendments:** none yet.
+**Amendments:**
+- 2026-10-27, before build: Codex adversarial review ([D42](../../../loop/decisions/m2-source-control-core.md)). Staging an unresolved conflict is allowed once its markers are gone, and that is what clears git's unmerged record (SC-13, SC-41); the daemon unstages a rename's old path itself (SC-12); a worktree's own base wins over "Branch upstream" (SC-49); actionable messages are panel notices (SC-24, SC-59); editable diffs have Revert Block (SC-61) and a saveable fallback once a draft crosses the limits (SC-63); view controls have commands (SC-64); symlinks never lead outside the worktree (SC-67).
 
 ## Conceptual model
 
@@ -191,12 +192,12 @@ a scenario says otherwise, so `--worktree` defaults to it.
 12. **SC-12: rows, sections and renames stage and unstage** (CLI)
     - **Given** SC-1's changes
     - **When** the agent runs `quirky git stage --paths math.ts --paths notes.txt`, then `quirky git unstage --paths new.ts`
-    - **Then** `math.ts` and `notes.txt` are staged; unstaging the rename resets both `new.ts` and `old.ts`, so `old.ts` shows deleted and `new.ts` untracked; each call emits `quirky.git/changed` once
+    - **Then** `math.ts` and `notes.txt` are staged; unstaging the rename resets both `new.ts` and `old.ts` (the daemon adds the old path itself, whoever calls), so `old.ts` shows deleted and `new.ts` untracked; each call emits `quirky.git/changed` once
 
-13. **SC-13: staging follows Orca's eligibility** (API)
-    - **Given** a merge with `a.ts` unresolved, `d.ts` resolved locally (SC-41), and submodule `vendor/lib`
-    - **When** an API client stages `a.ts`, then `d.ts`, then `vendor/lib`
-    - **Then** `a.ts` is refused with "Resolve the conflict before staging a.ts" because staging would erase the unmerged record; `d.ts` stages, which is how a resolution is finalised; `vendor/lib` is refused as in SC-7
+13. **SC-13: staging a conflict marks it resolved, but only once its markers are gone** (API)
+    - **Given** a merge with `a.ts` unresolved and still holding conflict markers, `b.ts` unresolved with its markers edited away, `c.ts` deleted by them and deleted from disk by the person, and submodule `vendor/lib`
+    - **When** an API client stages `a.ts`, then `b.ts`, then `c.ts`, then `vendor/lib`
+    - **Then** `a.ts` is refused with reason `not-stageable` and "Resolve the conflict markers in a.ts before staging it." because staging would erase git's unmerged record with markers still in the file; `b.ts` stages, which is how a resolution is finalised, and git stops listing it as unmerged; `c.ts` is staged as a deletion; `vendor/lib` is refused as in SC-7. Orca refuses to stage any unresolved conflict, so a conflict resolved by hand in its editor can't be finalised from the panel.
 
 14. **SC-14: row and section buttons follow eligibility** (UI)
     - **Given** the panel with SC-1's changes plus a deleted tracked file `gone.ts`
@@ -272,10 +273,10 @@ a scenario says otherwise, so `--worktree` defaults to it.
       | staged section | Discard all staged changes? | This will unstage and revert all staged changes. Staged new files will be deleted. This cannot be undone. | Discard all |
       | changes section | Discard all unstaged changes? | This will revert all unstaged changes. This cannot be undone. | Discard all |
 
-24. **SC-24: discard and stage failures are toasted once, with Retry** (UI)
+24. **SC-24: discard and stage failures show one notice, with Retry** (UI)
     - **Given** a row whose discard fails (the file is locked read-only in a read-only folder)
     - **When** the person discards it twice, then a bulk discard of three files where two fail
-    - **Then** one toast "Failed to discard “math.ts”" with the message and a Retry action (shown for 10 seconds), reused rather than stacked; the bulk case toasts "Failed to discard 2 file(s)" with the first message and up to three paths
+    - **Then** one notice "Failed to discard “math.ts”" with the message and a Retry button (shown for 10 seconds, then the notice stays with only Dismiss), replaced rather than stacked on the second failure; the bulk case shows "Failed to discard 2 file(s)" with the first message and up to three paths. Notices sit at the bottom of the panel, because the window's toasts carry no actions ([D41](../../../loop/decisions/m2-source-control-core.md)); a notice for a worktree the person has left gains " in <worktree>" and loses Retry.
 
 ### Committing
 
@@ -400,13 +401,13 @@ a scenario says otherwise, so `--worktree` defaults to it.
 41. **SC-41: a pull that stops on conflicts leads to Continue** (CLI, UI, Orca defect)
     - **Given** **feat** and **peer** both changed line 3 of `math.ts`; **peer** pushed
     - **When** the person clicks Sync; then opens `math.ts` from the Conflicts section, edits the markers away and saves with Cmd+S; then clicks Stage on it; then clicks "Continue merge"
-    - **Then** the sync ends with the toast "Pull stopped with merge conflicts. Resolve them in Source Control, then continue the merge."; the commit box is replaced by "Merge conflicts: 1 unresolved" with Review conflicts and Abort merge; after the save git no longer lists `math.ts` as unmerged, so it shows "Resolved locally" with its check badge; once staged, the card becomes "Merge in progress" with "Continue merge", which commits the merge without opening an editor; the panel then offers Push. In Orca the commit box stays hidden during the merge and nothing continues it, so the person has to leave for a terminal. `quirky git continue` does the same from the CLI.
+    - **Then** the sync ends with the toast "Pull stopped with merge conflicts. Resolve them in Source Control, then continue the merge."; the commit box is replaced by "Merge conflicts: 1 unresolved" with Review conflicts and Abort merge; after the save `math.ts` is still unresolved (git keeps its unmerged record until it is staged) but its Stage button is now enabled because no markers remain (SC-13); once staged, git no longer lists it as unmerged, so it shows "Resolved locally" with its check badge, and the card becomes "Merge in progress" with "Continue merge", which commits the merge without opening an editor; the panel then offers Push. In Orca a hand-resolved conflict can't be staged from the panel, the commit box stays hidden during the merge and nothing continues it, so the person has to leave for a terminal. `quirky git continue` does the same from the CLI.
     - **Data before:** **feat**: 1 ahead, 1 behind; **math.ts**: both changed line 3
     - **Walkthrough:**
       1. Sync: fetch, pull → conflict; operation merge; `math.ts` unresolved, both_modified
       2. The person opens `math.ts` → recorded as opened
-      3. Save without markers → `math.ts` resolved locally (git shows it as changed)
-      4. Stage → 0 unresolved; Continue merge → merge commit
+      3. Save without markers → `math.ts` still unresolved; Stage enabled
+      4. Stage → `math.ts` resolved locally; 0 unresolved; Continue merge → merge commit
     - **Data after:** **feat**: ✓ 2 ahead, 0 behind; ✓ operation none; **math.ts**: ✓ resolved
 
 42. **SC-42: a rebase continues commit by commit** (CLI)
@@ -448,8 +449,8 @@ a scenario says otherwise, so `--worktree` defaults to it.
 
 49. **SC-49: which base the compare uses** (API)
     - **Given** four worktrees: **w1** created with base `origin/release`; **w2** with no base in a project whose default base is `origin/develop`; **w3** with neither, in a repo whose `origin/HEAD` is `origin/main`; **w4** like **w3** with upstream `origin/zoe/w4`
-    - **When** an API client compares each, then sets Default Compare Base to "Branch upstream" and compares **w4** again
-    - **Then** **w1** uses `origin/release`, **w2** `origin/develop`, **w3** and **w4** `origin/main`; with the setting, **w4** compares against `origin/zoe/w4`. Rebase from base always uses the base, never the upstream.
+    - **When** an API client compares each, then sets Default Compare Base to "Branch upstream" and compares **w1** (which also has upstream `origin/zoe/w1`) and **w4** again
+    - **Then** **w1** uses `origin/release`, **w2** `origin/develop`, **w3** and **w4** `origin/main`; with the setting, **w1** still uses its own base `origin/release` (a worktree's own base always wins, as in Orca) and **w4** compares against `origin/zoe/w4`. Rebase from base always uses the base, never the upstream.
 
 50. **SC-50: Change Base Ref writes where the base came from** (CLI, UI)
     - **Given** **w1** and **w2** of SC-49, and local branches `main` and `release`, remote branches `origin/main` and `origin/release`
@@ -508,7 +509,7 @@ a scenario says otherwise, so `--worktree` defaults to it.
 59. **SC-59: huge folders can be ignored** (CLI, UI)
     - **Given** the state of SC-58, where 1,400 of the untracked files are under `node_modules`
     - **When** the person sees the panel, and clicks "Add to .gitignore"
-    - **Then** once per worktree the panel toasts `This repository has too many active changes. Add "node_modules" to .gitignore?`; the click appends `node_modules/` to `.gitignore`; `quirky git ignoreFolder --folder ../etc` is refused, since only `node_modules`, `.next`, `dist`, `build`, `target` and `vendor` are allowed
+    - **Then** once per worktree the panel shows a notice `This repository has too many active changes. Add "node_modules" to .gitignore?`; the click appends `node_modules/` to `.gitignore`; `quirky git ignoreFolder --folder ../etc` is refused, since only `node_modules`, `.next`, `dist`, `build`, `target` and `vendor` are allowed
 
 60. **SC-60: the single-file diff view** (UI)
     - **Given** `math.ts` changed in two places far apart
@@ -518,7 +519,7 @@ a scenario says otherwise, so `--worktree` defaults to it.
 61. **SC-61: unstaged diffs are editable and save safely** (UI)
     - **Given** the unstaged diff of `math.ts` open, and the staged diff of `README.md`
     - **When** the person edits `math.ts`'s right side and presses Cmd+S; then edits again while an agent rewrites `math.ts` in a terminal, and presses Cmd+S
-    - **Then** the first save writes the file; the second shows "This file changed on disk since your edits. Use the banner to compare, reload, or overwrite." with Reload from Disk and Overwrite; Overwrite writes the person's text, Reload discards it. The staged, branch and commit diffs are read-only. `quirky git save --path math.ts --content … --expected <hash>` behaves the same way.
+    - **Then** the first save writes the file; the second shows "This file changed on disk since your edits. Use the banner to compare, reload, or overwrite." with Reload from Disk and Overwrite; Overwrite writes the person's text, Reload discards it. Each change in an editable diff has a Revert Block control in the gutter that puts that block back to the left side's text in the editor, unsaved until Cmd+S; `quirky ui run command:quirky.git/revert-change` reverts the current change the same way. The staged, branch and commit diffs are read-only and have no revert control. `quirky git save --path math.ts --content … --expected <hash>` behaves the same way.
 
 62. **SC-62: View all opens a combined diff** (UI)
     - **Given** 8 changed files, one of them with 12,000 changed lines and one an unresolved conflict
@@ -528,14 +529,14 @@ a scenario says otherwise, so `--worktree` defaults to it.
 63. **SC-63: big and binary diffs show a fallback** (UI)
     - **Given** the files of SC-56
     - **When** the person opens each diff
-    - **Then** `big.txt` shows "This diff is too large to display safely." with "Original lines", "Modified lines", "Characters", the reason and "Limits: 120,000 lines per side · 6,000,000 combined characters"; `logo.png` shows "Original" and "Modified" image panes ("No preview" for a missing side); `blob.bin` shows "Binary file changed" and "Text diff is unavailable for this file."
+    - **Then** `big.txt` shows "This diff is too large to display safely." with "Original lines", "Modified lines", "Characters", the reason and "Limits: 120,000 lines per side · 6,000,000 combined characters"; `logo.png` shows "Original" and "Modified" image panes ("No preview" for a missing side); `blob.bin` shows "Binary file changed" and "Text diff is unavailable for this file." When an edit or paste in an editable diff pushes it past either limit, the editor is replaced by the same fallback with "This draft crossed the safe display limit, but it can still be saved." and a Save button that saves the draft as Cmd+S would; the draft is kept until saved or the view closes.
 
 ### Commands and scripting
 
 64. **SC-64: every window action is a command** (CLI)
     - **Given** a window connected to the daemon
-    - **When** the agent runs `quirky ui run quirky.git.show`, `quirky ui run quirky.git.open-diff --args '{"path":"math.ts","source":"unstaged"}'`, `quirky ui run quirky.git.next-change`, `quirky ui run quirky.git.open-changes --args '{"area":"unstaged"}'` and `quirky ui run quirky.git.review-conflicts`, reading `quirky ui state` after each
-    - **Then** each does what its button does: the panel opens, the diff view opens on `math.ts`, the view reports the second change as current, the combined diff opens, and the conflict review opens; Mod+Shift+G runs the first and F7 the third
+    - **When** the agent runs `quirky ui run command:quirky.git/show`, `quirky ui run command:quirky.git/open-diff --args '{"path":"math.ts","source":"unstaged"}'`, `quirky ui run command:quirky.git/next-change`, `quirky ui run command:quirky.git/open-changes --args '{"area":"unstaged"}'`, `quirky ui run command:quirky.git/collapse-all --args '{"collapsed":true}'`, `quirky ui run command:quirky.git/load-diff --args '{"path":"big.txt"}'`, `quirky ui run command:quirky.git/review-conflicts`, `quirky ui run command:quirky.git/open-diff --args '{"path":"a.ts","source":"conflict"}'` and `quirky ui run command:quirky.git/next-conflict`, reading `quirky ui state` after each
+    - **Then** each does what its button does: the panel opens, the diff view opens on `math.ts`, the view reports the second change as current, the combined diff opens, its sections report collapsed, `big.txt`'s section reports loaded, the conflict review opens, the conflict file view opens on `a.ts`, and it reports conflict 2 as current; Mod+Shift+G runs the first and F7 the third. The view's other controls have commands too: `previous-change`, `previous-conflict`, `revert-change`, `save`, `reload-from-disk` and `overwrite` act on the open view as their buttons do, and the panel's `set-filter`, `select`, `toggle-history` and `refresh-compare` as theirs do. Settings-backed toggles (side by side, wrap, whitespace, file tree, view mode) are changed with `quirky setting set`.
 
 65. **SC-65: the panel and views report what they show** (CLI)
     - **Given** the panel of SC-8 with `math.ts`'s diff open and one row selected
@@ -547,13 +548,18 @@ a scenario says otherwise, so `--worktree` defaults to it.
     - **When** the agent runs `quirky api --json`
     - **Then** `quirky.git` lists `status`, `diff`, `stage`, `unstage`, `discard`, `describeDiscard`, `commit`, `push`, `forcePush`, `describeForcePush`, `pull`, `fastForward`, `fetch`, `sync`, `rebaseFromBase`, `continue`, `abort`, `describeAbort`, `compare`, `setBase`, `branches`, `history`, `commitFiles`, `conflictFile`, `save`, `submoduleStatus`, `hugeFolders`, `ignoreFolder` and `reveal`, each with params and result schemas, with `discard`, `forcePush` and `abort` destructive; `quirky git --help` lists the same as commands
 
+67. **SC-67: paths never escape the worktree, even through a symlink** (API)
+    - **Given** **feat** with a committed symlink `link.txt` pointing at `/tmp/s/secret.txt` outside the worktree, and a symlinked folder `out` pointing at `/tmp/s`
+    - **When** an API client calls `quirky.git/diff` unstaged for `link.txt`, `quirky.git/conflictFile` for `link.txt`, `quirky.git/save` for `link.txt` and for `out/x.txt`, and `quirky.git/discard` for `out/x.txt`
+    - **Then** the diff shows the link's target text (`/tmp/s/secret.txt`) as git stores it, never the secret's content; `conflictFile` and `save` on `link.txt` are refused with reason `not-allowed` because it is a symlink; every call on `out/x.txt` is refused with reason `outside-worktree`; nothing outside the worktree is read or written
+
 ### Orca defects
 
 Each Orca defect recorded in source-control.md for this slice has a test showing Quirky doesn't
 have it ([D33](../../../loop/decisions/m2-source-control-core.md)):
 
 - **Shift-click and Cmd-click can't select.** SC-15.
-- **A stopped merge or rebase can't be finished in the panel.** SC-41, SC-42, SC-46.
+- **A stopped merge or rebase can't be finished in the panel.** Hand-resolved conflicts can't be staged and nothing continues the operation: SC-13, SC-41, SC-42, SC-46.
 - **Branch and commit diff errors look like empty diffs.** SC-57.
 
 ## Scope & non-goals

@@ -212,7 +212,7 @@
 ## D20: The compare base is the worktree's base, else the project's, else the detected default, and Change Base Ref writes where the base came from
 - **Question:** data-mapping for the base ref (branch compare)
 - **Options:** store a separate compare base in `quirky.git`; reuse the worktree's `baseRef` and the project's `defaultBase`
-- **Chose:** reuse them, as Orca does: the effective base is the worktree's `baseRef`, else `quirky.repo`'s `defaultBase`, else `detectDefaultBase`. With the "Default Compare Base" setting on "Branch upstream" the compare uses the upstream when there is one. Change Base Ref writes the worktree's `baseRef` when the worktree has one and the project's `defaultBase` otherwise; Use Primary clears it. `quirky.worktree/set` grows a `baseRef` param for this.
+- **Chose:** reuse them, as Orca does: the effective base is the worktree's `baseRef`, else `quirky.repo`'s `defaultBase`, else `detectDefaultBase`. With the "Default Compare Base" setting on "Branch upstream" the compare uses the worktree's own base when it has one, else the upstream (amended by D42; first written as "the upstream when there is one", which contradicted Orca). Change Base Ref writes the worktree's `baseRef` when the worktree has one and the project's `defaultBase` otherwise; Use Primary clears it. `quirky.worktree/set` grows a `baseRef` param for this.
 - **Why:** one base drives compare, rebase and the M4 PR target, and m1-worktrees already records it at create
 - **Evidence:** source-control.md "Branch compare"; plugins/quirky.worktree/src/daemon/set.ts; plugins/quirky.repo/src/settings.ts
 - **Reversibility:** medium
@@ -440,5 +440,38 @@
 - **Revisit if:** never
 - **Source:** locked by docs/loop/LOOP.md
 
+## D41: Actionable messages are notices in the panel, not toasts
+- **Question:** how Retry, Dismiss and "Add to .gitignore" are shown, since `context.toast` takes only a title and body (spec review F7)
+- **Options:** grow the toast API with ids, actions and durations; a notice list inside the panel, as `quirky.worktree` does
+- **Chose:** panel notices keyed by id (a new one with the same id replaces the old), with Retry for 10 s on row failures; plain outcome messages stay toasts
+- **Why:** m1-worktrees already solved the same gap this way, so the window shows one pattern, and the shell's toast API stays as it is
+- **Evidence:** plugins/quirky.worktree/src/Notices.tsx ("Notices with actions, shown inside the section because plugin toasts carry none"); packages/protocol/src/ui.ts toast
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** the shell grows actionable toasts
+- **Source:** assumed — autonomous
+
+## D42: Spec review: fix all six standing findings and both gate-dropped gaps, keep Sync's leased force push
+- **Question:** what to do with the adversarial review's findings (LOOP.md step 4)
+- **Options:** fix the standing ones; also act on refuted or suppressed ones
+- **Chose:** NEEDS_FIXES with six standing after a Gemini tiebreak on one contested finding (2 HIGH, 4 MEDIUM), one refuted, two dropped by the evidence gate. Fixed: F1 saving a file never clears git's unmerged record, so staging an unresolved conflict is allowed once its markers are gone, and a missing file stages as a deletion (SC-13, SC-41; Orca's refusal to stage any conflict joins the dead-end defect); F2 the daemon adds a rename's old path on unstage (SC-12); F3 view controls get commands (`collapse-all`, `load-diff`, `next-conflict`, `previous-conflict`, `revert-change`, `save`, `reload-from-disk`, `overwrite`) and SC-64 drives them; F4 working-tree reads never follow a leaf symlink and saves refuse one (SC-67); F6 a worktree's own base wins under "Branch upstream" (D20 amended); F7 notices (D41). The two dropped gaps were real and cheap, so both were added: Revert Block on editable diffs (SC-61) and the saveable fallback when a draft crosses the limits (SC-63). F5 (Sync force-pushes without a yes) was refuted and stays: Sync force-pushes only when every behind commit is patch-equivalent, under a lease on the commit it just read, so no remote content is lost, while `forcePush` can drop real commits and confirms.
+- **Why:** every standing finding named a flow that would fail or two readings with different outcomes
+- **Evidence:** scratchpad ar1/gate.json and manifest.json (reviewer gpt-6.1-sol, independence full, depth deep, profile spec-design; tiebreak gemini-3.1-pro-preview); logic.md amendments 2026-10-27
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** the build finds a fix contradicts git's behaviour
+- **Source:** assumed — autonomous
+
+## D43: The terminal e2e helper reads `ps` with a 64 MiB buffer
+- **Question:** 19 terminal-host tests failed on `build/roadmap` before this item's work, with `spawnSync ps ENOBUFS`, and `queue.ts land` needs the suite green
+- **Options:** leave it to another lane; fix the test helper here
+- **Chose:** fix it here, in its own commit: `plugins/quirky.terminal/test/e2e-support.ts` passes `maxBuffer` to `execFileSync('ps', …)`
+- **Why:** the default 1 MiB buffer overflows when the machine runs many long command lines (three loop lanes and their agents), and the fix is one option on a test helper; `bun test plugins/quirky.terminal/test` went from 19 failures to 99 passing
+- **Evidence:** scratchpad baseline-test.txt (`error: spawnSync ps ENOBUFS`); plugins/quirky.terminal/test/e2e-support.ts processTable
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** another lane lands the same fix; the merge keeps one
+- **Source:** assumed — autonomous
+
 ## Progress
-Brainstorming done (D1–D36). Next: write docs/quirk/specs/2026-10-27-m2-source-control-core/logic.md and tech.md, run one Codex adversarial review over both, commit, then build.
+Specs written, reviewed (D42) and committed. Next: build with quirk:subagent-driven-development (claude-task + codex).
