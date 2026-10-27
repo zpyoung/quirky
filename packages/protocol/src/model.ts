@@ -23,9 +23,17 @@ export type Worktree = {
   name: string
 }
 
-export type AgentKind = 'shell' | 'claude' | 'codex' | 'opencode' | 'gemini'
+/** `shell` or a catalog agent ID; the daemon checks the ID against the agent catalog at launch. */
+export type AgentKind = string
 
-export const AGENT_KINDS: readonly AgentKind[] = ['shell', 'claude', 'codex', 'opencode', 'gemini']
+/** What a terminal session was launched with, replayed by resume. */
+export type SessionLaunch = { command: string; args: string; env: Record<string, string> }
+
+/** The agent CLI's own session, which resume passes back to it. */
+export type SessionProviderSession = { id: string; transcriptPath: string | null }
+
+/** How a launch's first prompt reached the agent; null when it had none. */
+export type PromptDeliveryState = 'command-line' | 'pending' | 'pasted' | 'unconfirmed' | 'not-delivered'
 
 /**
  * Terminal sessions report `running`/`exited` from the process alone; agents with hooks also
@@ -52,6 +60,12 @@ export type Session = {
   exitCause: ExitCause | null
   /** True when the PTY host still holds the session's history, so `restore` can start a shell in it. */
   restorable: boolean
+  /** Null for shell sessions and sessions recorded before launches were kept. */
+  launch?: SessionLaunch | null
+  providerSession?: SessionProviderSession | null
+  promptDelivery?: PromptDeliveryState | null
+  /** The session this one was resumed or forked from. */
+  resumedFrom?: string | null
 }
 
 export type GitFileStatus = {

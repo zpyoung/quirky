@@ -88,8 +88,7 @@
       "deps": [
         "gate-m0"
       ],
-      "status": "in-progress",
-      "lane": 1
+      "status": "done"
     },
     {
       "id": "m1-launch-settings",
@@ -101,7 +100,8 @@
       "deps": [
         "m1-providers"
       ],
-      "status": "todo"
+      "status": "in-progress",
+      "lane": 1
     },
     {
       "id": "m1-agent-status",
@@ -138,7 +138,8 @@
       "deps": [
         "gate-m0"
       ],
-      "status": "todo"
+      "status": "in-progress",
+      "lane": 3
     },
     {
       "id": "m1-term-ui",

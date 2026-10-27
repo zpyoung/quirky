@@ -10,6 +10,8 @@ export async function activate(context: PluginContext): Promise<void> {
     list: sessions.list,
     get: sessions.get,
     create: sessions.create,
+    resume: sessions.resume,
+    setProviderSession: sessions.setProviderSession,
     register: sessions.register,
     close: sessions.close,
     setStatus: sessions.setStatus,

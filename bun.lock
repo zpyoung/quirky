@@ -93,6 +93,20 @@
         "@quirky/protocol": "workspace:*",
       },
     },
+    "plugins/quirky.agents": {
+      "name": "@quirky/plugin-agents",
+      "version": "0.1.0",
+      "dependencies": {
+        "@quirky/protocol": "workspace:*",
+        "react": "19.2.0",
+        "react-dom": "19.2.0",
+      },
+      "devDependencies": {
+        "@happy-dom/global-registrator": "20.14.6",
+        "@types/react": "^19.3.0",
+        "@types/react-dom": "^19.3.0",
+      },
+    },
     "plugins/quirky.ask": {
       "name": "@quirky/plugin-ask",
       "version": "0.1.0",
@@ -282,6 +296,8 @@
     "@quirky/git": ["@quirky/git@workspace:packages/git"],
 
     "@quirky/plugin-agent-status": ["@quirky/plugin-agent-status@workspace:plugins/quirky.agent-status"],
+
+    "@quirky/plugin-agents": ["@quirky/plugin-agents@workspace:plugins/quirky.agents"],
 
     "@quirky/plugin-ask": ["@quirky/plugin-ask@workspace:plugins/quirky.ask"],
 

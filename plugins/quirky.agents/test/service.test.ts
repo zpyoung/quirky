@@ -1,0 +1,818 @@
+import { afterEach, describe, expect, test } from 'bun:test'
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
+import { join } from 'node:path'
+import { RpcErrorCode, type QuirkyClient, type QuirkyEvent } from '@quirky/protocol'
+import { startHarness, waitFor, type Harness } from '../../../packages/daemon/test/helpers'
+import { writePlugin } from '../../../packages/daemon/test/plugins/fixtures'
+import { AUTO_PICK_ORDER } from '../src/core/catalog'
+
+const PLUGIN_DIR = join(import.meta.dir, '..')
+const ENV_NAMES = ['HOME', 'QUIRKY_AGENT_SEARCH_DIRS', 'QUIRKY_TEST_AGENT_TIME_SCALE'] as const
+const saved = Object.fromEntries(ENV_NAMES.map((name) => [name, process.env[name]]))
+
+const fixtures: Fixture[] = []
+
+type Manifest = { id: string } & Record<string, unknown>
+
+type Options = {
+  /** Fake executables placed on the login shell's PATH. */
+  installed?: string[]
+  /** Installed plugins, written before the daemon starts. */
+  plugins?: Manifest[]
+  /** Adds a stand-in for `quirky.session` that can spawn a PTY session and announce its removal. */
+  fakeSession?: boolean
+  timeScale?: number
+  /** Leaves workspace trust on; off by default so a launch writes no trust record. */
+  trust?: boolean
+}
+
+type Fixture = {
+  h: Harness
+  client: QuirkyClient
+  events: QuirkyEvent[]
+  logs: string[]
+  /** The temporary HOME the daemon sees. */
+  userHome: string
+  bin: string
+  call(method: string, params?: Record<string, unknown>): Promise<any>
+  changes(): number
+  install(...names: string[]): void
+  setLoginPath(dirs: string[]): void
+}
+
+function makeExecutable(dir: string, name: string): void {
+  mkdirSync(dir, { recursive: true })
+  writeFileSync(join(dir, name), '#!/bin/sh\nexit 0\n')
+  chmodSync(join(dir, name), 0o755)
+}
+
+const FAKE_SESSION_MAIN = `export async function activate(context: any) {
+  context.provide('method:quirky.session/spawn', async (params: any) => {
+    await context.pty.spawn(params.sessionId, { argv: ['/bin/true'], cwd: '/tmp', env: {}, cols: 80, rows: 24 })
+    return { ok: true }
+  })
+  context.provide('method:quirky.session/remove', (params: any) => {
+    context.emit('removed', { sessionId: params.sessionId })
+    return { ok: true }
+  })
+}
+`
+
+async function start(options: Options = {}): Promise<Fixture> {
+  const home = mkdtempSync('/tmp/qag-s-')
+  const userHome = join(home, 'user')
+  const bin = join(home, 'bin')
+  mkdirSync(userHome, { recursive: true })
+  mkdirSync(bin, { recursive: true })
+  for (const name of options.installed ?? []) makeExecutable(bin, name)
+
+  const pathFile = join(home, 'login-path')
+  writeFileSync(pathFile, bin)
+  const shell = join(home, 'login-shell')
+  writeFileSync(shell, `#!/bin/sh\ncat ${pathFile}\n`)
+  chmodSync(shell, 0o755)
+
+  const builtin = join(home, 'builtin')
+  mkdirSync(builtin)
+  symlinkSync(PLUGIN_DIR, join(builtin, 'quirky.agents'))
+  if (options.fakeSession) {
+    const manifest = {
+      id: 'quirky.session',
+      name: 'Session (test fake)',
+      version: '0.0.0',
+      main: 'main.ts',
+      contributes: {
+        method: [
+          { id: 'spawn', params: { type: 'object', properties: { sessionId: { type: 'string' } }, required: ['sessionId'] } },
+          { id: 'remove', params: { type: 'object', properties: { sessionId: { type: 'string' } }, required: ['sessionId'] } }
+        ],
+        event: [{ id: 'removed' }]
+      }
+    }
+    writePlugin(builtin, manifest, { 'main.ts': FAKE_SESSION_MAIN })
+  }
+  for (const manifest of options.plugins ?? []) {
+    writePlugin(join(home, 'plugins'), { name: manifest.id, version: '1.0.0', ...manifest })
+  }
+
+  process.env.HOME = userHome
+  process.env.QUIRKY_AGENT_SEARCH_DIRS = ''
+  if (options.timeScale === undefined) delete process.env.QUIRKY_TEST_AGENT_TIME_SCALE
+  else process.env.QUIRKY_TEST_AGENT_TIME_SCALE = String(options.timeScale)
+
+  const logs: string[] = []
+  const h = await startHarness({ home, shell, builtinPluginsDir: builtin, log: (line) => logs.push(line) })
+  if (options.trust !== true) {
+    const setup = await h.connect('cli')
+    await setup.callAny('setting.set', { id: 'setting:quirky.agents/workspace-trust', value: false })
+  }
+  const { client, events } = await h.connectWithEvents('ui')
+  const fixture: Fixture = {
+    h,
+    client,
+    events,
+    logs,
+    userHome,
+    bin,
+    call: (method, params = {}) => client.callAny(method, params),
+    changes: () => events.filter((event) => event.type === 'quirky.agents/changed').length,
+    install: (...names) => names.forEach((name) => makeExecutable(bin, name)),
+    setLoginPath: (dirs) => writeFileSync(pathFile, dirs.join(':'))
+  }
+  fixtures.push(fixture)
+  return fixture
+}
+
+afterEach(async () => {
+  for (const fixture of fixtures.splice(0)) await fixture.h.cleanup()
+  for (const name of ENV_NAMES) {
+    if (saved[name] === undefined) delete process.env[name]
+    else process.env[name] = saved[name]
+  }
+})
+
+const A = (method: string) => `quirky.agents/${method}`
+
+/** The RPC error a call rejects with. */
+async function failure(promise: Promise<unknown>): Promise<{ code: number; message: string }> {
+  try {
+    await promise
+  } catch (error) {
+    return error as { code: number; message: string }
+  }
+  throw new Error('expected the call to fail')
+}
+
+const find = (listing: { agents: any[] }, id: string) => listing.agents.find((agent) => agent.id === id)
+
+const settle = () => Bun.sleep(150)
+
+const agentManifest = (id: string, entries: Record<string, unknown>[], extra: Record<string, unknown> = {}): Manifest => ({
+  id,
+  contributes: { agent: entries },
+  ...extra
+})
+
+describe('catalog and listing', () => {
+  test('SC-1: lists the 45 built-in agents in auto-pick order with what each can do', async () => {
+    const t = await start({ installed: ['claude', 'codex'], trust: true })
+    const listing = await t.call(A('list'))
+
+    expect(listing.defaultAgent).toBe('auto')
+    expect(listing.workspaceTrust).toBe(true)
+    expect(listing.permissions.summary).toBe('yolo')
+    expect(listing).not.toHaveProperty('problems')
+    expect(listing.agents.map((agent: any) => agent.id)).toEqual([...AUTO_PICK_ORDER])
+    expect(listing.agents.every((agent: any) => agent.plugin === 'quirky.agents' && agent.enabled && !agent.isDefault)).toBe(true)
+    expect(listing.agents.filter((agent: any) => agent.installed).map((agent: any) => agent.id)).toEqual(['claude', 'claude-agent-teams', 'codex'])
+
+    expect(find(listing, 'claude')).toMatchObject({
+      label: 'Claude',
+      installed: true,
+      promptMode: 'argv',
+      resumable: true,
+      canFork: true,
+      command: 'claude',
+      commandOverridden: false,
+      args: '--dangerously-skip-permissions',
+      argsOverridden: false,
+      permissions: { mode: 'yolo', hasAuto: true }
+    })
+    expect(find(listing, 'claude').homepage).toBe('https://code.claude.com/docs')
+    expect(find(listing, 'aider')).toMatchObject({ installed: false, promptMode: 'stdin-after-start', resumable: false })
+    expect(find(listing, 'opencode').permissions.mode).toBeNull()
+    expect(find(listing, 'goose')).toMatchObject({ showEnv: true, env: { GOOSE_MODE: 'auto' } })
+  })
+
+  test('SC-1: get returns one agent and refuses an unknown one', async () => {
+    const t = await start({ installed: ['codex'] })
+    expect(await t.call(A('get'), { agent: 'codex' })).toMatchObject({ id: 'codex', installed: true, label: 'Codex' })
+    const error = await failure(t.call(A('get'), { agent: 'nope' }))
+    expect(error).toMatchObject({ code: RpcErrorCode.NotFound, message: 'unknown agent: nope' })
+  })
+
+  test('SC-2: a plugin adds an agent that is listed and planned', async () => {
+    const t = await start({
+      installed: ['acme-bot'],
+      plugins: [agentManifest('acme.agents', [{ id: 'acme-bot', label: 'Acme Bot', detect: 'acme-bot', prompt: 'flag-prompt', yolo: '--yes' }])]
+    })
+    const listing = await t.call(A('list'))
+    expect(listing.agents).toHaveLength(46)
+    expect(listing.agents.at(-1)).toMatchObject({ id: 'acme-bot', plugin: 'acme.agents', installed: true, promptMode: 'flag-prompt' })
+
+    const plan = await t.call(A('plan'), { agent: 'acme-bot', prompt: 'fix it' })
+    expect(plan.command).toBe("acme-bot --yes --prompt 'fix it'")
+    expect(plan.promptDelivery).toBe('command-line')
+    const launch = await t.call(A('prepareLaunch'), { agent: 'acme-bot', cwd: t.userHome, prompt: 'fix it', hookArgs: [], hookEnv: {} })
+    expect(launch.command).toBe("acme-bot --yes --prompt 'fix it'")
+  })
+
+  test('SC-3: a plugin replaces one built-in agent and removes another', async () => {
+    const t = await start({
+      installed: ['codex'],
+      plugins: [
+        {
+          id: 'acme.override',
+          overrides: [
+            { id: 'agent:quirky.agents/codex', label: 'Codex', detect: 'codex', launch: 'codex --profile acme', prompt: 'argv', yolo: '--yolo-acme' }
+          ]
+        },
+        { id: 'acme.trim', disables: ['agent:quirky.agents/aider'] }
+      ]
+    })
+    const listing = await t.call(A('list'))
+    expect(listing.agents).toHaveLength(44)
+    expect(find(listing, 'aider')).toBeUndefined()
+    expect(find(listing, 'codex')).toMatchObject({ plugin: 'acme.override', command: 'codex --profile acme' })
+    expect(listing.agents.findIndex((agent: any) => agent.id === 'codex')).toBe(3)
+    const plan = await t.call(A('plan'), { agent: 'codex' })
+    expect(plan.command).toBe('codex --profile acme --yolo-acme')
+    expect(await failure(t.call(A('get'), { agent: 'aider' }))).toMatchObject({ code: RpcErrorCode.NotFound })
+  })
+
+  test('SC-4: a malformed or duplicate entry is left out and reported with all', async () => {
+    const t = await start({
+      plugins: [
+        agentManifest('acme.bad', [{ id: 'broken', label: 'Broken', prompt: 'argv' }]),
+        agentManifest('acme.dupe', [{ id: 'claude', label: 'Claude Two', detect: 'claude', prompt: 'argv' }])
+      ]
+    })
+    const plain = await t.call(A('list'))
+    expect(plain.agents).toHaveLength(45)
+    expect(find(plain, 'claude').plugin).toBe('quirky.agents')
+    expect(plain).not.toHaveProperty('problems')
+
+    const all = await t.call(A('list'), { all: true })
+    expect(all.agents).toHaveLength(45)
+    expect(all.problems).toEqual([
+      { plugin: 'acme.bad', id: 'broken', status: 'invalid', error: 'detect command is required' },
+      {
+        plugin: 'acme.dupe',
+        id: 'claude',
+        status: 'conflict',
+        error: 'agent claude is already provided by quirky.agents; use overrides to replace a built-in agent'
+      }
+    ])
+    expect(t.logs.some((line) => line.includes('skipped agent acme.bad/broken: detect command is required'))).toBe(true)
+  })
+
+  test('a catalog change announces changed and rebuilds the listing', async () => {
+    const t = await start({
+      installed: ['acme-bot'],
+      plugins: [agentManifest('acme.agents', [{ id: 'acme-bot', label: 'Acme Bot', detect: 'acme-bot', prompt: 'argv' }])]
+    })
+    expect(find(await t.call(A('list')), 'acme-bot')).toBeDefined()
+    const before = t.changes()
+
+    await t.call('plugin.disable', { id: 'acme.agents' })
+    await waitFor(() => t.changes() > before)
+    expect(find(await t.call(A('list')), 'acme-bot')).toBeUndefined()
+
+    await t.call('plugin.enable', { id: 'acme.agents' })
+    await waitFor(() => t.changes() > before + 1)
+    expect(find(await t.call(A('list')), 'acme-bot')).toMatchObject({ installed: true })
+  })
+})
+
+describe('detection', () => {
+  test('SC-5: installed agents come from the login shell PATH and the search directories, and nothing runs', async () => {
+    const t = await start({ installed: ['claude'] })
+    const extra = join(t.h.home, 'install-dir')
+    makeExecutable(extra, 'qwen')
+    makeExecutable(extra, 'kimi-code')
+    const ranMarker = join(t.h.home, 'ran')
+    writeFileSync(join(extra, 'qwen'), `#!/bin/sh\ntouch ${ranMarker}\n`)
+    process.env.QUIRKY_AGENT_SEARCH_DIRS = extra
+
+    const listing = await t.call(A('refresh'))
+    expect(listing.agents.filter((agent: any) => agent.installed).map((agent: any) => agent.id)).toEqual([
+      'claude',
+      'claude-agent-teams',
+      'kimi',
+      'qwen-code'
+    ])
+    expect(existsSync(ranMarker)).toBe(false)
+  })
+
+  test('SC-7: list keeps its answer until refresh, which re-detects and announces changed', async () => {
+    const t = await start({ installed: ['claude'] })
+    expect(find(await t.call(A('list')), 'gemini').installed).toBe(false)
+
+    t.install('gemini')
+    expect(find(await t.call(A('list')), 'gemini').installed).toBe(false)
+
+    const before = t.changes()
+    const refreshed = await t.call(A('refresh'))
+    expect(find(refreshed, 'gemini').installed).toBe(true)
+    await waitFor(() => t.changes() > before)
+    expect(find(await t.call(A('list')), 'gemini').installed).toBe(true)
+  })
+
+  test('SC-7: refresh reads the login shell PATH again', async () => {
+    const t = await start({ installed: ['claude'] })
+    const second = join(t.h.home, 'second-bin')
+    makeExecutable(second, 'amp')
+    expect(find(await t.call(A('list')), 'amp').installed).toBe(false)
+
+    t.setLoginPath([t.bin, second])
+    expect(find(await t.call(A('refresh')), 'amp').installed).toBe(true)
+  })
+
+  test('an agent found only outside the login PATH launches by its absolute path', async () => {
+    const t = await start({ installed: ['claude'] })
+    const extra = join(t.h.home, 'install-dir')
+    makeExecutable(extra, 'gemini')
+    process.env.QUIRKY_AGENT_SEARCH_DIRS = extra
+    await t.call(A('refresh'))
+
+    const launch = await t.call(A('prepareLaunch'), { agent: 'gemini', cwd: t.userHome, hookArgs: [], hookEnv: {} })
+    expect(launch.command.startsWith(`${join(extra, 'gemini')} `) || launch.command.startsWith(`'${join(extra, 'gemini')}' `)).toBe(true)
+    expect(launch.record.command).toBe('gemini')
+    const plain = await t.call(A('prepareLaunch'), { agent: 'claude', cwd: t.userHome, hookArgs: [], hookEnv: {} })
+    expect(plain.command.startsWith('claude ')).toBe(true)
+  })
+})
+
+describe('choosing the agent', () => {
+  test('SC-8: the default, then auto-pick order, then a shell', async () => {
+    const t = await start({ installed: ['codex', 'gemini'] })
+    const pick = async (params: Record<string, unknown> = {}) => (await t.call(A('pick'), params)).agent
+
+    expect(await pick()).toBe('codex')
+
+    await t.call(A('setDefault'), { agent: 'gemini' })
+    expect(await pick()).toBe('gemini')
+
+    await t.call(A('setDefault'), { agent: 'claude' })
+    expect(await pick()).toBe('codex')
+
+    await t.call(A('setDefault'), { agent: 'shell' })
+    expect(await pick()).toBe('shell')
+
+    await t.call(A('setDefault'), { agent: 'auto' })
+    await t.call(A('setEnabled'), { agent: 'codex', enabled: false })
+    expect(await pick()).toBe('gemini')
+    expect(await pick({ preferred: 'codex' })).toBe('gemini')
+    expect(await pick({ preferred: 'gemini' })).toBe('gemini')
+  })
+
+  test('SC-8: an unusable preferred agent falls back to the stored default, then to auto-pick order', async () => {
+    const t = await start({ installed: ['codex', 'gemini'] })
+    const pick = async (params: Record<string, unknown> = {}) => (await t.call(A('pick'), params)).agent
+    await t.call(A('setDefault'), { agent: 'gemini' })
+    expect(await pick({ preferred: 'claude' })).toBe('gemini')
+    expect(await pick({ preferred: 'no-such-agent' })).toBe('gemini')
+    await t.call(A('setEnabled'), { agent: 'codex', enabled: false })
+    expect(await pick({ preferred: 'codex' })).toBe('gemini')
+    await t.call(A('setDefault'), { agent: 'auto' })
+    expect(await pick({ preferred: 'claude' })).toBe('gemini')
+  })
+
+  test('SC-8: with nothing installed a launch gets a shell', async () => {
+    const t = await start()
+    expect((await t.call(A('pick'))).agent).toBe('shell')
+  })
+
+  test('SC-9: the agent tab treats a shell default as auto and refuses when nothing fits', async () => {
+    const t = await start({ installed: ['codex'] })
+    await t.call(A('setDefault'), { agent: 'shell' })
+    expect((await t.call(A('pick'), { forAgentTab: true })).agent).toBe('codex')
+
+    await t.call(A('setEnabled'), { agent: 'codex', enabled: false })
+    expect(await failure(t.call(A('pick'), { forAgentTab: true }))).toMatchObject({
+      code: RpcErrorCode.Conflict,
+      message: 'No installed agent is enabled.'
+    })
+  })
+
+  test('SC-10: disabling an agent hides it, resets the default and refuses a launch by name', async () => {
+    const t = await start({ installed: ['claude', 'codex'] })
+    await t.call(A('setDefault'), { agent: 'claude' })
+    expect((await t.call(A('list'))).defaultAgent).toBe('claude')
+    const before = t.changes()
+
+    const disabled = await t.call(A('setEnabled'), { agent: 'claude', enabled: false })
+    expect(disabled).toMatchObject({ id: 'claude', enabled: false, isDefault: false })
+    const listing = await t.call(A('list'))
+    expect(listing.defaultAgent).toBe('auto')
+    expect(find(listing, 'claude').enabled).toBe(false)
+    expect((await t.call(A('pick'))).agent).toBe('claude-agent-teams')
+    await settle()
+    expect(t.changes()).toBe(before + 1)
+
+    const refusal = await failure(t.call(A('prepareLaunch'), { agent: 'claude', cwd: t.userHome, hookArgs: [], hookEnv: {} }))
+    expect(refusal).toMatchObject({ code: RpcErrorCode.InvalidParams, message: 'agent claude is disabled' })
+
+    await t.call(A('setEnabled'), { agent: 'claude', enabled: true })
+    const restored = await t.call(A('list'))
+    expect(find(restored, 'claude').enabled).toBe(true)
+    expect(restored.defaultAgent).toBe('auto')
+  })
+
+  test('SC-10: disabling an already-disabled default resets the default, and setDefault refuses a disabled agent', async () => {
+    const t = await start({ installed: ['claude', 'codex'] })
+    await t.call(A('setEnabled'), { agent: 'claude', enabled: false })
+    const refusal = await failure(t.call(A('setDefault'), { agent: 'claude' }))
+    expect(refusal).toMatchObject({ code: RpcErrorCode.InvalidParams, message: 'agent claude is disabled' })
+
+    await t.call('setting.set', { id: 'setting:quirky.agents/default-agent', value: 'claude' })
+    await waitFor(() => t.changes() >= 2)
+    expect((await t.call(A('list'))).defaultAgent).toBe('claude')
+    const before = t.changes()
+
+    await t.call(A('setEnabled'), { agent: 'claude', enabled: false })
+    expect((await t.call(A('list'))).defaultAgent).toBe('auto')
+    await waitFor(() => t.changes() > before)
+  })
+
+  test('setDefault refuses an unknown agent, and a repeat or a no-op change announces nothing', async () => {
+    const t = await start({ installed: ['codex'] })
+    expect(await failure(t.call(A('setDefault'), { agent: 'nope' }))).toMatchObject({
+      code: RpcErrorCode.InvalidParams,
+      message: 'unknown agent: nope'
+    })
+
+    await t.call(A('setDefault'), { agent: 'codex' })
+    await settle()
+    const settled = t.changes()
+    expect(settled).toBe(1)
+
+    await t.call(A('setDefault'), { agent: 'codex' })
+    await t.call(A('setEnabled'), { agent: 'codex', enabled: true })
+    await settle()
+    expect(t.changes()).toBe(settled)
+  })
+
+  test('a stored default that names an agent outside the catalog reads as auto', async () => {
+    const t = await start({
+      installed: ['acme-bot'],
+      plugins: [agentManifest('acme.agents', [{ id: 'acme-bot', label: 'Acme Bot', detect: 'acme-bot', prompt: 'argv' }])]
+    })
+    await t.call(A('setDefault'), { agent: 'acme-bot' })
+    expect((await t.call(A('list'))).defaultAgent).toBe('acme-bot')
+
+    const before = t.changes()
+    await t.call('plugin.disable', { id: 'acme.agents' })
+    await waitFor(() => t.changes() > before)
+    const listing = await t.call(A('list'))
+    expect(listing.defaultAgent).toBe('auto')
+    expect((await t.call(A('pick'))).agent).toBe('shell')
+  })
+
+  test('changing a setting from outside announces changed once', async () => {
+    const t = await start({ installed: ['codex'], trust: true })
+    await t.call('setting.set', { id: 'setting:quirky.agents/workspace-trust', value: false })
+    await waitFor(() => t.changes() === 1)
+    expect((await t.call(A('list'))).workspaceTrust).toBe(false)
+    await settle()
+    expect(t.changes()).toBe(1)
+  })
+})
+
+describe('configuration', () => {
+  test('SC-11: a command override replaces the whole command and clearing it restores the default', async () => {
+    const t = await start({ installed: ['claude'] })
+    const info = await t.call(A('configure'), { agent: 'claude', command: 'my-claude' })
+    expect(info).toMatchObject({ command: 'my-claude', commandOverridden: true })
+    expect((await t.call(A('plan'), { agent: 'claude' })).command.startsWith('my-claude ')).toBe(true)
+
+    const cleared = await t.call(A('configure'), { agent: 'claude', command: 'claude' })
+    expect(cleared).toMatchObject({ command: 'claude', commandOverridden: false })
+    expect((await t.call(A('plan'), { agent: 'claude' })).command.startsWith('claude ')).toBe(true)
+    expect(await t.call(A('get'), { agent: 'claude' })).toMatchObject({ commandOverridden: false })
+
+    await t.call(A('configure'), { agent: 'claude', command: 'my-claude' })
+    const reset = await t.call(A('configure'), { agent: 'claude', reset: ['command'] })
+    expect(reset).toMatchObject({ command: 'claude', commandOverridden: false })
+
+    await t.call(A('configure'), { agent: 'claude', command: 'my-claude' })
+    expect(await t.call(A('configure'), { agent: 'claude', command: '' })).toMatchObject({ commandOverridden: false })
+  })
+
+  test('SC-11: a command that does not tokenize is refused and stores nothing', async () => {
+    const t = await start()
+    const error = await failure(t.call(A('configure'), { agent: 'claude', command: 'my-claude "x' }))
+    expect(error.code).toBe(RpcErrorCode.InvalidParams)
+    expect(error.message.startsWith('Agent command override is invalid: ')).toBe(true)
+    expect(await t.call(A('get'), { agent: 'claude' })).toMatchObject({ commandOverridden: false })
+  })
+
+  test('SC-12: arguments are stored as given and an unbalanced quote is refused', async () => {
+    const t = await start({ installed: ['claude'] })
+    const text = `--model "haiku 5" $(touch /tmp/pwned) ; rm -rf x`
+    const info = await t.call(A('configure'), { agent: 'claude', args: text })
+    expect(info).toMatchObject({ args: text, argsOverridden: true, permissions: { mode: 'custom' } })
+    expect((await t.call(A('plan'), { agent: 'claude' })).command).toBe(
+      "claude --model 'haiku 5' '$(touch' '/tmp/pwned)' ';' rm -rf x"
+    )
+
+    const error = await failure(t.call(A('configure'), { agent: 'claude', args: '--model "haiku' }))
+    expect(error).toMatchObject({ code: RpcErrorCode.InvalidParams, message: 'CLI arguments are invalid: unterminated quote' })
+    expect((await t.call(A('get'), { agent: 'claude' })).args).toBe(text)
+  })
+
+  test('SC-13: an agent environment comes from its default or the saved override', async () => {
+    const t = await start({ installed: ['goose', 'codex'] })
+    const goose = await t.call(A('prepareLaunch'), { agent: 'goose', cwd: t.userHome, hookArgs: [], hookEnv: {} })
+    expect(goose.env).toEqual({ GOOSE_MODE: 'auto' })
+
+    const info = await t.call(A('configure'), { agent: 'codex', env: { CODEX_HOME: '/tmp/ch' } })
+    expect(info).toMatchObject({ env: { CODEX_HOME: '/tmp/ch' }, envOverridden: true })
+    const codex = await t.call(A('prepareLaunch'), { agent: 'codex', cwd: t.userHome, hookArgs: [], hookEnv: { FROM_HOOK: '1', CODEX_HOME: null } })
+    expect(codex.env).toEqual({ CODEX_HOME: null, FROM_HOOK: '1' })
+    expect(codex.record.env).toEqual({ CODEX_HOME: '/tmp/ch' })
+
+    const plain = await t.call(A('prepareLaunch'), { agent: 'codex', cwd: t.userHome, hookArgs: [], hookEnv: {} })
+    expect(plain.env).toEqual({ CODEX_HOME: '/tmp/ch' })
+  })
+
+  test('SC-13: a reserved environment name is refused when saved', async () => {
+    const t = await start()
+    for (const name of ['PATH', 'ZDOTDIR', 'QUIRKY_HOME']) {
+      const error = await failure(t.call(A('configure'), { agent: 'codex', env: { [name]: 'x' } }))
+      expect(error.code).toBe(RpcErrorCode.InvalidParams)
+      expect(error.message).toContain(name)
+    }
+    expect(await t.call(A('get'), { agent: 'codex' })).toMatchObject({ envOverridden: false })
+  })
+
+  test('configure refuses an unknown agent and a call that changes nothing announces nothing', async () => {
+    const t = await start()
+    expect(await failure(t.call(A('configure'), { agent: 'nope', args: '' }))).toMatchObject({ code: RpcErrorCode.NotFound })
+
+    await t.call(A('configure'), { agent: 'codex', args: '--model x' })
+    await settle()
+    const settled = t.changes()
+    expect(settled).toBe(1)
+    await t.call(A('configure'), { agent: 'codex', args: '--model x' })
+    await t.call(A('configure'), { agent: 'codex', reset: ['env'] })
+    await settle()
+    expect(t.changes()).toBe(settled)
+
+    const reset = await t.call(A('configure'), { agent: 'codex', reset: ['args'] })
+    expect(reset).toMatchObject({ argsOverridden: false, args: '--dangerously-bypass-approvals-and-sandbox' })
+  })
+
+  test('an empty arguments text is Manual and keeps the key', async () => {
+    const t = await start()
+    const info = await t.call(A('configure'), { agent: 'codex', args: '' })
+    expect(info).toMatchObject({ args: '', argsOverridden: true, permissions: { mode: 'manual' } })
+    expect((await t.call(A('plan'), { agent: 'codex' })).command).toBe('codex')
+  })
+})
+
+describe('permission modes', () => {
+  test('SC-14: untouched arguments mean Yolo', async () => {
+    const t = await start()
+    const commands: Record<string, string> = {
+      claude: 'claude --dangerously-skip-permissions',
+      codex: 'codex --dangerously-bypass-approvals-and-sandbox',
+      gemini: 'gemini --yolo',
+      aider: 'aider --yes-always',
+      devin: 'devin --permission-mode bypass --respect-workspace-trust false',
+      goose: 'goose',
+      opencode: 'opencode'
+    }
+    for (const [agent, command] of Object.entries(commands)) {
+      expect((await t.call(A('plan'), { agent })).command).toBe(command)
+    }
+    expect((await t.call(A('plan'), { agent: 'goose' })).env).toEqual({ GOOSE_MODE: 'auto' })
+  })
+
+  test('SC-15: bulk modes change only preset agents, and Auto only those that have it', async () => {
+    const t = await start()
+    await t.call(A('configure'), { agent: 'claude', args: '--model haiku' })
+    await settle()
+
+    const auto = await t.call(A('setPermissions'), { mode: 'auto' })
+    expect(auto.summary).toBe('auto')
+    expect(auto.changed.sort()).toEqual(['claude-agent-teams', 'codex'])
+    let listing = await t.call(A('list'))
+    expect(find(listing, 'codex').args).toBe('--approve-for-me')
+    expect(find(listing, 'claude-agent-teams').args).toBe('--permission-mode auto')
+    expect(find(listing, 'claude').args).toBe('--model haiku')
+    expect(find(listing, 'gemini').args).toBe('--yolo')
+    expect(listing.permissions.summary).toBe('auto')
+
+    const manual = await t.call(A('setPermissions'), { mode: 'manual' })
+    expect(manual.summary).toBe('manual')
+    expect(manual.changed).toContain('goose')
+    expect(manual.changed).not.toContain('claude')
+    listing = await t.call(A('list'))
+    expect(find(listing, 'codex')).toMatchObject({ args: '', argsOverridden: true })
+    expect(find(listing, 'gemini').args).toBe('')
+    expect(find(listing, 'goose')).toMatchObject({ env: {}, envOverridden: true })
+    expect(find(listing, 'claude').args).toBe('--model haiku')
+    expect(listing.permissions.summary).toBe('manual')
+
+    await settle()
+    const settled = t.changes()
+    const again = await t.call(A('setPermissions'), { mode: 'manual' })
+    expect(again).toEqual({ summary: 'manual', changed: [] })
+    await settle()
+    expect(t.changes()).toBe(settled)
+  })
+
+  test('SC-15: a mix of preset modes reads as mixed', async () => {
+    const t = await start()
+    await t.call(A('setPermissions'), { mode: 'manual', agent: 'codex' })
+    expect((await t.call(A('list'))).permissions.summary).toBe('mixed')
+  })
+
+  test('SC-16: per-agent modes, custom rows and errors', async () => {
+    const t = await start()
+    await t.call(A('configure'), { agent: 'claude', args: '--model haiku' })
+
+    const refused = async (params: Record<string, unknown>) => failure(t.call(A('setPermissions'), params))
+    expect(await refused({ mode: 'yolo', agent: 'claude' })).toMatchObject({
+      code: RpcErrorCode.InvalidParams,
+      message: 'claude has custom arguments; pass --replace-custom to replace them'
+    })
+    expect(await refused({ mode: 'auto', agent: 'gemini' })).toMatchObject({
+      code: RpcErrorCode.InvalidParams,
+      message: 'gemini has no Auto mode'
+    })
+    expect(await refused({ mode: 'yolo', agent: 'opencode' })).toMatchObject({
+      code: RpcErrorCode.InvalidParams,
+      message: 'opencode has no permission modes'
+    })
+    expect(await refused({ mode: 'yolo', agent: 'nope' })).toMatchObject({
+      code: RpcErrorCode.NotFound,
+      message: 'unknown agent: nope'
+    })
+
+    const replaced = await t.call(A('setPermissions'), { mode: 'yolo', agent: 'claude', replaceCustom: true })
+    expect(replaced.changed).toEqual(['claude'])
+    expect((await t.call(A('get'), { agent: 'claude' })).args).toBe('--dangerously-skip-permissions')
+  })
+
+  test('SC-17: opencode never receives the Claude bypass flag', async () => {
+    const t = await start()
+    await t.call(A('configure'), { agent: 'opencode', args: '--dangerously-skip-permissions --model x' })
+    expect((await t.call(A('plan'), { agent: 'opencode' })).command).toBe('opencode --model x')
+  })
+})
+
+describe('plans', () => {
+  test('SC-29: plan shows a launch without a session or a trust record', async () => {
+    const t = await start({ installed: ['grok', 'claude'] })
+    const folder = realpathSync(mkdtempSync('/tmp/qag-wt-'))
+    try {
+      const grok = await t.call(A('plan'), { agent: 'grok', prompt: 'help', cwd: folder })
+      expect(grok.command).toBe("grok --permission-mode bypassPermissions -- 'help'")
+      expect(grok.promptDelivery).toBe('command-line')
+      expect(grok.paste).toBeNull()
+
+      await t.call(A('plan'), { agent: 'claude', cwd: folder })
+      expect(existsSync(join(t.userHome, '.claude.json'))).toBe(false)
+      expect(t.h.pty.sessions.size).toBe(0)
+      expect(t.h.pty.requests.filter((request) => request.type === 'create')).toEqual([])
+    } finally {
+      rmSync(folder, { recursive: true, force: true })
+    }
+  })
+
+  test('plan refuses a prompt with a NUL and an unknown agent, and a draft uses the native flag', async () => {
+    const t = await start()
+    expect(await failure(t.call(A('plan'), { agent: 'codex', prompt: 'a\0b' }))).toMatchObject({ code: RpcErrorCode.InvalidParams })
+    expect(await failure(t.call(A('plan'), { agent: 'nope' }))).toMatchObject({ code: RpcErrorCode.NotFound, message: 'unknown agent: nope' })
+
+    const draft = await t.call(A('plan'), { agent: 'claude', prompt: 'hello', submitPrompt: false })
+    expect(draft.command).toBe("claude --dangerously-skip-permissions --prefill 'hello'")
+    const pasted = await t.call(A('plan'), { agent: 'aider', prompt: 'hello' })
+    expect(pasted).toMatchObject({ promptDelivery: 'pending', paste: { text: 'hello', submit: true } })
+  })
+
+  test('prepareLaunch orders the command as saved args, hook args, then the prompt', async () => {
+    const t = await start()
+    const launch = await t.call(A('prepareLaunch'), {
+      agent: 'claude',
+      cwd: t.userHome,
+      prompt: 'go',
+      hookArgs: ['--settings', '/tmp/s.json'],
+      hookEnv: {}
+    })
+    expect(launch.command).toBe("claude --dangerously-skip-permissions --settings /tmp/s.json 'go'")
+    expect(launch.record).toEqual({ command: 'claude', args: '--dangerously-skip-permissions', env: {} })
+    expect(await failure(t.call(A('prepareLaunch'), { agent: 'nope', cwd: '/', hookArgs: [], hookEnv: {} }))).toMatchObject({
+      code: RpcErrorCode.NotFound
+    })
+    expect(await failure(t.call(A('prepareLaunch'), { agent: 'claude', cwd: '/', prompt: 'a\0', hookArgs: [], hookEnv: {} }))).toMatchObject({
+      code: RpcErrorCode.InvalidParams
+    })
+  })
+
+  test('prepareResume replays the launch record and resolves the executable again', async () => {
+    const t = await start({ installed: ['codex'] })
+    const record = { command: 'codex', args: '--model x', env: { CODEX_HOME: '/tmp/ch' } }
+    const resume = await t.call(A('prepareResume'), {
+      agent: 'codex',
+      cwd: t.userHome,
+      record,
+      providerSession: { id: '0199a-thread', transcriptPath: null },
+      fork: false,
+      hookArgs: [],
+      hookEnv: { A: '1' }
+    })
+    expect(resume.command).toBe('codex --model x resume 0199a-thread')
+    expect(resume.env).toEqual({ CODEX_HOME: '/tmp/ch', A: '1' })
+    expect(resume.record).toEqual(record)
+
+    const bare = await t.call(A('prepareResume'), {
+      agent: 'codex',
+      cwd: t.userHome,
+      record: null,
+      providerSession: { id: 'abc' },
+      fork: false,
+      hookArgs: [],
+      hookEnv: {}
+    })
+    expect(bare.command).toBe('codex resume abc')
+    expect(bare.record).toEqual({ command: 'codex', args: '', env: {} })
+
+    expect(
+      await failure(
+        t.call(A('prepareResume'), { agent: 'aider', cwd: '/', record: null, providerSession: { id: 'x' }, fork: false, hookArgs: [], hookEnv: {} })
+      )
+    ).toMatchObject({ code: RpcErrorCode.InvalidParams, message: "aider can't resume sessions" })
+  })
+})
+
+describe('workspace trust', () => {
+  test('SC-36: prepareLaunch pre-writes the trust record into the user home when the setting is on', async () => {
+    const t = await start({ installed: ['claude', 'copilot', 'codex'], trust: true })
+    const folder = realpathSync(mkdtempSync('/tmp/qag-wt-'))
+    try {
+      writeFileSync(join(t.userHome, '.claude.json'), JSON.stringify({ theme: 'dark' }))
+      await t.call(A('prepareLaunch'), { agent: 'claude', cwd: folder, hookArgs: [], hookEnv: {} })
+      const claude = JSON.parse(readFileSync(join(t.userHome, '.claude.json'), 'utf8'))
+      expect(claude.theme).toBe('dark')
+      expect(claude.projects[folder].hasTrustDialogAccepted).toBe(true)
+
+      await t.call(A('prepareLaunch'), { agent: 'copilot', cwd: folder, hookArgs: [], hookEnv: {} })
+      const copilot = JSON.parse(readFileSync(join(t.userHome, '.copilot', 'config.json'), 'utf8'))
+      expect(copilot.trustedFolders).toContain(folder)
+
+      await t.call('setting.set', { id: 'setting:quirky.agents/workspace-trust', value: false })
+      await t.call(A('prepareLaunch'), { agent: 'codex', cwd: folder, hookArgs: [], hookEnv: {} })
+      expect(existsSync(join(t.userHome, '.codex'))).toBe(false)
+    } finally {
+      rmSync(folder, { recursive: true, force: true })
+    }
+  })
+
+  test('SC-36: an agent without a trust preset writes nothing', async () => {
+    const t = await start({ trust: true })
+    await t.call(A('prepareLaunch'), { agent: 'aider', cwd: t.userHome, hookArgs: [], hookEnv: {} })
+    expect(readdirSync(t.userHome)).toEqual([])
+  })
+
+  test('SC-36: a failed trust write is logged and the launch goes on', async () => {
+    const t = await start({ installed: ['claude'], trust: true })
+    const folder = realpathSync(mkdtempSync('/tmp/qag-wt-'))
+    try {
+      mkdirSync(join(t.userHome, '.claude.json'))
+      const launch = await t.call(A('prepareLaunch'), { agent: 'claude', cwd: folder, hookArgs: [], hookEnv: {} })
+      expect(launch.command.startsWith('claude')).toBe(true)
+      expect(t.logs.some((line) => line.includes('trust for claude failed: '))).toBe(true)
+    } finally {
+      rmSync(folder, { recursive: true, force: true })
+    }
+  })
+})
+
+describe('delivery', () => {
+  const PASTE_ON = '\x1b[?2004h'
+  const CURSOR = '\x1b[?25h'
+  const cursorAgent = (extra: Record<string, unknown> = {}) =>
+    agentManifest('acme.agents', [
+      { id: 'acme-bot', label: 'Acme Bot', detect: 'acme-bot', prompt: 'stdin-after-start', readySignal: 'render-cursor-after-bracketed-paste', ...extra }
+    ])
+
+  test('deliver pastes once the agent signals ready, then submits', async () => {
+    const t = await start({ fakeSession: true, timeScale: 0.05, plugins: [cursorAgent()] })
+    await t.call('quirky.session/spawn', { sessionId: 's1' })
+    const result = t.call(A('deliver'), { sessionId: 's1', agent: 'acme-bot', text: 'a\r\nb', submit: true })
+    await Bun.sleep(100)
+    t.h.pty.emit('s1', PASTE_ON + CURSOR)
+    expect(await result).toEqual({ delivery: 'pasted' })
+    expect(t.h.pty.inputs.map((input) => input.text)).toEqual(['\x1b[200~a\rb\x1b[201~', '\r'])
+  })
+
+  test('deliver gives up when the session is removed first', async () => {
+    const t = await start({ fakeSession: true, timeScale: 0.05, plugins: [cursorAgent()] })
+    await t.call('quirky.session/spawn', { sessionId: 's2' })
+    const result = t.call(A('deliver'), { sessionId: 's2', agent: 'acme-bot', text: 'hi', submit: true })
+    await Bun.sleep(100)
+    await t.call('quirky.session/remove', { sessionId: 's2' })
+    expect(await result).toEqual({ delivery: 'not-delivered' })
+    expect(t.h.pty.inputs).toEqual([])
+  })
+
+  test('deliver refuses an unknown agent', async () => {
+    const t = await start()
+    expect(await failure(t.call(A('deliver'), { sessionId: 's', agent: 'nope', text: 'x', submit: true }))).toMatchObject({
+      code: RpcErrorCode.NotFound
+    })
+  })
+})

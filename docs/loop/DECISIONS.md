@@ -17,6 +17,9 @@ files, not this one.
 | hard | medium | [m0-daemon-api D9](decisions/m0-daemon-api.md) | Each plugin gets one SQLite file and a data directory of its own | assumed — autonomous |
 | hard | medium | [m0-ui-api D6](decisions/m0-ui-api.md) | A slot gives the plugin one container element to mount into, and nothing else of the page | assumed — autonomous |
 | hard | medium | [m0-registry D4](decisions/m0-registry.md) | Contribution IDs are `<kind>:<pluginId>/<name>` | assumed — autonomous |
+| hard | medium | [m1-providers D5](decisions/m1-providers.md) | A new built-in plugin, `quirky.agents`, owns the catalog, detection, agent configuration and launch planning; `quirky.session` keeps records and spawning | supersedes m0-core D5 (narrows it) |
+| hard | medium | [m1-providers D6](decisions/m1-providers.md) | Each agent is an `agent` contribution in a manifest, so plugins can add, replace or disable agents as data | assumed — autonomous |
+| hard | medium | [m1-providers D36](decisions/m1-providers.md) | Approach: port Orca's pure launch code into `quirky.agents`, with the catalog as manifest data | assumed — autonomous |
 | hard | high | [m0-scripting D4](decisions/m0-scripting.md) | Schemas are a flat subset of JSON Schema | assumed — autonomous |
 | hard | high | [m0-scripting D24](decisions/m0-scripting.md) | Choose schemas declared in the manifest, a daemon catalog, and a CLI that builds plugin commands from it at run time | assumed — autonomous |
 | hard | high | [m0-core D6](decisions/m0-core.md) | v1's methods are renamed to their plugin's namespace, with no aliases, and the protocol version goes to 2 | supersedes m0-daemon-api D5 |
@@ -28,6 +31,7 @@ files, not this one.
 | hard | high | [m0-ui-api D29](decisions/m0-ui-api.md) | Choose declared slots with lazily imported modules that mount into host elements | assumed — autonomous |
 | hard | high | [m0-registry D12](decisions/m0-registry.md) | Every contribution is declared in the manifest, and code can only provide declared ones | assumed — autonomous |
 | hard | high | [m0-registry D23](decisions/m0-registry.md) | Choose declarative contributions with lazily loaded code | assumed — autonomous |
+| hard | high | [m1-providers D9](decisions/m1-providers.md) | Agent IDs, labels and table values are Orca's | locked by docs/architecture.md |
 | medium | medium | [m0-scripting D6](decisions/m0-scripting.md) | The daemon validates every call's params against the method's schema, and leaves results and event data unchecked | assumed — autonomous |
 | medium | medium | [m0-scripting D29](decisions/m0-scripting.md) | Tech-spec mechanisms: one shared validator in protocol, validation in the dispatcher, declarative command specs, a JSON-mode pre-scan | assumed — autonomous |
 | medium | medium | [m0-core D10](decisions/m0-core.md) | Repo and worktree selectors resolve in the daemon, with the caller's cwd and identity | assumed — autonomous |
@@ -48,6 +52,11 @@ files, not this one.
 | medium | medium | [m0-registry D8](decisions/m0-registry.md) | Override precedence is installed over built-in, then dependent over dependency, then a reported conflict | assumed — autonomous |
 | medium | medium | [m0-registry D10](decisions/m0-registry.md) | Enable and disable apply live, without a restart | assumed — autonomous |
 | medium | medium | [m0-registry D16](decisions/m0-registry.md) | The manifest is `quirky-plugin.json` in the plugin's directory | assumed — autonomous |
+| medium | medium | [m1-providers D8](decisions/m1-providers.md) | Two effective `agent` contributions with the same name: the built-in wins, then the lower plugin ID | assumed — autonomous |
+| medium | medium | [m1-providers D11](decisions/m1-providers.md) | Agents are still started by exec under the login shell, not typed into an interactive shell | assumed — autonomous |
+| medium | medium | [m1-providers D21](decisions/m1-providers.md) | Paste-after-ready follows Orca's renderer path: a per-agent ready signal, a deadline, then a blind paste reported as unconfirmed | assumed — autonomous |
+| medium | medium | [m1-providers D25](decisions/m1-providers.md) | Resume starts a new session in the original session's folder, from a recorded or given provider session | assumed — autonomous |
+| medium | medium | [m1-providers D40](decisions/m1-providers.md) | Session and agents talk through four `quirky.agents` methods, and `deliver` settles before it returns | assumed — autonomous |
 | medium | high | [m0-scripting D5](decisions/m0-scripting.md) | Methods declare `params` and `result`, events declare `data`, UI commands declare `args` | assumed — autonomous |
 | medium | high | [m0-scripting D7](decisions/m0-scripting.md) | Kernel methods and events get schemas too, in one table checked against the protocol types | assumed — autonomous |
 | medium | high | [m0-scripting D9](decisions/m0-scripting.md) | One command table drives parsing, validation, help, suggestions and the catalog | locked by research/orca-features/cli.md |
@@ -72,6 +81,11 @@ files, not this one.
 | medium | high | [m0-registry D6](decisions/m0-registry.md) | A plugin's own contributions use short names, overrides use full IDs | assumed — autonomous |
 | medium | high | [m0-registry D9](decisions/m0-registry.md) | Disable works by plugin ID or contribution ID, before any code loads, and persists | locked by docs/roadmap.md (disable by ID); assumed — autonomous (cascade and persistence) |
 | medium | high | [m0-registry D11](decisions/m0-registry.md) | Plugins activate lazily on first use by default, or at startup when the manifest says so | locked by docs/roadmap.md (lazy); assumed — autonomous (trigger set) |
+| medium | high | [m1-providers D10](decisions/m1-providers.md) | `Session.agent` becomes any agent ID string, and the protocol version stays 2 | assumed — autonomous |
+| medium | high | [m1-providers D14](decisions/m1-providers.md) | Per-agent configuration lives in `quirky.agents`' store; the default agent and workspace trust are plain settings | assumed — autonomous |
+| medium | high | [m1-providers D20](decisions/m1-providers.md) | The prompt reaches the agent the way its entry says, using Orca's builders | locked by research/orca-features/providers.md |
+| medium | high | [m1-providers D22](decisions/m1-providers.md) | The launch result says how the prompt was delivered, on the session record, and `--wait` blocks for it | assumed — autonomous |
+| medium | high | [m1-providers D24](decisions/m1-providers.md) | A launch records its command, arguments and environment, and resume replays only those | locked by research/orca-features/providers.md |
 | easy | medium | [m0-scripting D14](decisions/m0-scripting.md) | Generated commands print a generic text form, and `--json` prints the raw result | assumed — autonomous |
 | easy | medium | [m0-scripting D19](decisions/m0-scripting.md) | The agent skill is generated from the live catalog and shown or installed through `quirky skill` | assumed — autonomous |
 | easy | medium | [m0-scripting D27](decisions/m0-scripting.md) | No closure review round on the logic spec | assumed — autonomous |
@@ -104,6 +118,19 @@ files, not this one.
 | easy | medium | [m0-registry D24](decisions/m0-registry.md) | Built-in plugins live in a top-level `plugins/` directory, and packaging them waits for m0-port-v1 | assumed — autonomous |
 | easy | medium | [m0-registry D25](decisions/m0-registry.md) | Activation failures surface as Conflict errors, unknown IDs as NotFound | assumed — autonomous |
 | easy | medium | [m0-registry D30](decisions/m0-registry.md) | No closure review round on the specs | assumed — autonomous |
+| easy | medium | [m1-providers D16](decisions/m1-providers.md) | Agent Permissions default to Yolo, as in Orca | locked by research/orca-features/providers.md |
+| easy | medium | [m1-providers D18](decisions/m1-providers.md) | Detection walks the login shell's PATH plus well-known install directories, with no subprocess per command | locked by research/orca-features/providers.md |
+| easy | medium | [m1-providers D23](decisions/m1-providers.md) | A draft prompt (left in the input, not submitted) uses a native flag where the agent has one, else paste without Enter | assumed — autonomous |
+| easy | medium | [m1-providers D27](decisions/m1-providers.md) | Cold-restore resume is left to a later item | assumed — autonomous |
+| easy | medium | [m1-providers D29](decisions/m1-providers.md) | `claude-agent-teams` runs Claude with in-process teammates | assumed — autonomous |
+| easy | medium | [m1-providers D31](decisions/m1-providers.md) | Empty and error states of the Agents view | assumed — autonomous |
+| easy | medium | [m1-providers D32](decisions/m1-providers.md) | The new-session menu lists Shell, then installed enabled agents in auto-pick order, then "Manage agents" | locked by research/orca-features/providers.md |
+| easy | medium | [m1-providers D33](decisions/m1-providers.md) | "New agent tab" is Mod+Alt+T, and each agent gets a "New <Agent> tab" command with no chord | locked by research/orca-features/providers.md |
+| easy | medium | [m1-providers D34](decisions/m1-providers.md) | CLI group `quirky agents`, generated from `quirky.agents` methods, plus session resume commands | assumed — autonomous |
+| easy | medium | [m1-providers D41](decisions/m1-providers.md) | Tests control detection and timing with two environment knobs and a fake login shell | assumed — autonomous |
+| easy | medium | [m1-providers D46](decisions/m1-providers.md) | Wave 1 implementation choices accepted as built | assumed — autonomous |
+| easy | medium | [m1-providers D48](decisions/m1-providers.md) | Review rounds: what was accepted, rejected and fixed | assumed — autonomous |
+| easy | medium | [m1-providers D51](decisions/m1-providers.md) | The integration tree got the new package's dependency links by hand before landing | assumed — autonomous |
 | easy | high | [m0-scripting D1](decisions/m0-scripting.md) | Classify the item as a CLI and API design, and run both research phases | assumed — autonomous |
 | easy | high | [m0-scripting D2](decisions/m0-scripting.md) | Skip the visual companion and the adhd offer, use the standard gray-area set | locked by docs/loop/LOOP.md |
 | easy | high | [m0-scripting D3](decisions/m0-scripting.md) | Select every gray area that matters for the scripting surface | assumed — autonomous |
@@ -215,3 +242,27 @@ files, not this one.
 | easy | high | [m0-registry D32](decisions/m0-registry.md) | Wave 2 checkpoint findings: fix all four defects | assumed — autonomous |
 | easy | high | [m0-registry D33](decisions/m0-registry.md) | A long QUIRKY_HOME breaks the PTY host's socket; logged, not fixed here | deferred: platform |
 | easy | high | [m0-registry D34](decisions/m0-registry.md) | The final review loop closed after three rounds with no open finding | assumed — autonomous |
+| easy | high | [m1-providers D1](decisions/m1-providers.md) | Classify the item as Data, API, CLI, Visual and Integration work, and run every research phase | assumed — autonomous |
+| easy | high | [m1-providers D2](decisions/m1-providers.md) | Skip the visual companion and the adhd offer, use the standard gray-area set | locked by docs/loop/LOOP.md |
+| easy | high | [m1-providers D3](decisions/m1-providers.md) | Select every gray area that matters for m1-providers | assumed — autonomous |
+| easy | high | [m1-providers D4](decisions/m1-providers.md) | The item stays one item with one pair of specs | locked by docs/loop/queue.json |
+| easy | high | [m1-providers D7](decisions/m1-providers.md) | `quirky.agents` validates agent entries itself and skips a malformed one with a diagnostic | assumed — autonomous |
+| easy | high | [m1-providers D12](decisions/m1-providers.md) | Arguments are tokenized shell-style and each token re-quoted, so the user's text never runs as shell syntax | locked by research/orca-features/providers.md |
+| easy | high | [m1-providers D13](decisions/m1-providers.md) | PowerShell and cmd quoting, WSL detection and Windows key encodings are not built | deferred: platform |
+| easy | high | [m1-providers D15](decisions/m1-providers.md) | An agent the user disables stays in the catalog and is hidden from pickers; an agent a plugin or distro disables leaves the catalog | locked by research/orca-features/providers.md |
+| easy | high | [m1-providers D17](decisions/m1-providers.md) | Permission modes follow Orca's rules, and changing them is idempotent | locked by research/orca-features/providers.md |
+| easy | high | [m1-providers D19](decisions/m1-providers.md) | Choosing the agent: an explicit agent, else the default, else Orca's auto-pick order | locked by research/orca-features/providers.md |
+| easy | high | [m1-providers D26](decisions/m1-providers.md) | This item stores the provider session; capturing it from hooks is m1-agent-status | locked by docs/roadmap.md |
+| easy | high | [m1-providers D28](decisions/m1-providers.md) | Workspace trust is pre-written for claude, cursor, copilot, codex, antigravity, qoder and qoder-cn, in the daemon user's home | locked by research/orca-features/providers.md |
+| easy | high | [m1-providers D30](decisions/m1-providers.md) | Settings > Agents becomes an Agents view in the main area, opened from a command | locked by research/orca-features/providers.md |
+| easy | high | [m1-providers D35](decisions/m1-providers.md) | Model and effort options, the ask-question flags, structured launch, accounts and the other host switches are out of scope | locked by docs/loop/queue.json |
+| easy | high | [m1-providers D37](decisions/m1-providers.md) | Skip Phase C deep research | assumed — autonomous |
+| easy | high | [m1-providers D38](decisions/m1-providers.md) | Fast-track the remaining questions with the recommended defaults | locked by docs/loop/LOOP.md |
+| easy | high | [m1-providers D39](decisions/m1-providers.md) | The kernel's PTY subscriptions become reference-counted per plugin | assumed — autonomous |
+| easy | high | [m1-providers D42](decisions/m1-providers.md) | One Codex adversarial review covers both specs and stands in for the tech-spec reviewer | locked by docs/loop/LOOP.md |
+| easy | high | [m1-providers D43](decisions/m1-providers.md) | An agent found only in an install directory launches by its absolute path | assumed — autonomous |
+| easy | high | [m1-providers D44](decisions/m1-providers.md) | Spec review findings dismissed | assumed — autonomous |
+| easy | high | [m1-providers D45](decisions/m1-providers.md) | Build with Claude subagents implementing and Codex reviewing | locked by docs/loop/LOOP.md |
+| easy | high | [m1-providers D47](decisions/m1-providers.md) | Trust writes skip the real home in test runs, after one test run wrote to it | assumed — autonomous |
+| easy | high | [m1-providers D49](decisions/m1-providers.md) | The UI scenarios passed in the web window; one visual defect was fixed | assumed — autonomous |
+| easy | high | [m1-providers D50](decisions/m1-providers.md) | No native-only scenarios | assumed — autonomous |

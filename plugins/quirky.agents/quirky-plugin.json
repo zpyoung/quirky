@@ -1,0 +1,2398 @@
+{
+  "id": "quirky.agents",
+  "name": "Agents",
+  "version": "0.1.0",
+  "description": "The catalog of agent CLIs Quirky can launch, with their detection, launch and resume data.",
+  "main": "main.ts",
+  "ui": "dist/ui.js",
+  "cli": "cli.ts",
+  "activation": "startup",
+  "dependencies": [],
+  "contributes": {
+    "method": [
+      {
+        "id": "list",
+        "description": "The agents Quirky can launch, with detection, saved configuration and the permission summary.",
+        "readOnly": true,
+        "params": {
+          "type": "object",
+          "properties": {
+            "all": {
+              "type": "boolean",
+              "description": "Also report declarations left out of the catalog."
+            }
+          }
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "defaultAgent": {
+              "type": "string",
+              "description": "auto, shell or an agent ID."
+            },
+            "workspaceTrust": {
+              "type": "boolean"
+            },
+            "permissions": {
+              "type": "object",
+              "properties": {
+                "summary": {
+                  "type": "string",
+                  "enum": [
+                    "manual",
+                    "auto",
+                    "yolo",
+                    "mixed"
+                  ]
+                },
+                "nonAuto": {
+                  "type": "string",
+                  "enum": [
+                    "manual",
+                    "yolo",
+                    "mixed"
+                  ],
+                  "description": "The combined mode of the preset agents that have no Auto mode."
+                }
+              },
+              "required": [
+                "summary",
+                "nonAuto"
+              ]
+            },
+            "agents": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "label": {
+                    "type": "string"
+                  },
+                  "plugin": {
+                    "type": "string",
+                    "description": "The plugin whose declaration is in effect."
+                  },
+                  "installed": {
+                    "type": "boolean",
+                    "description": "Whether detection found the agent's commands."
+                  },
+                  "enabled": {
+                    "type": "boolean"
+                  },
+                  "isDefault": {
+                    "type": "boolean"
+                  },
+                  "promptMode": {
+                    "type": "string",
+                    "enum": [
+                      "argv",
+                      "flag-prompt",
+                      "flag-prompt-interactive",
+                      "flag-interactive",
+                      "hermes-query",
+                      "stdin-after-start"
+                    ]
+                  },
+                  "resumable": {
+                    "type": "boolean"
+                  },
+                  "canFork": {
+                    "type": "boolean"
+                  },
+                  "homepage": {
+                    "description": "A link, or null."
+                  },
+                  "install": {
+                    "description": "A link, or null."
+                  },
+                  "command": {
+                    "type": "string",
+                    "description": "The command that starts the agent: the saved override, else the catalog's."
+                  },
+                  "commandOverridden": {
+                    "type": "boolean"
+                  },
+                  "args": {
+                    "type": "string",
+                    "description": "The arguments a launch uses: the saved text, else the Yolo default."
+                  },
+                  "argsOverridden": {
+                    "type": "boolean"
+                  },
+                  "env": {
+                    "type": "object",
+                    "additionalProperties": true,
+                    "description": "The permission environment a launch adds: the saved override, else the Yolo default."
+                  },
+                  "envOverridden": {
+                    "type": "boolean"
+                  },
+                  "showEnv": {
+                    "type": "boolean"
+                  },
+                  "permissions": {
+                    "type": "object",
+                    "properties": {
+                      "mode": {
+                        "description": "manual, auto, yolo or custom; null when the agent has no permission control."
+                      },
+                      "hasAuto": {
+                        "type": "boolean"
+                      }
+                    },
+                    "required": [
+                      "mode",
+                      "hasAuto"
+                    ]
+                  }
+                },
+                "required": [
+                  "id",
+                  "label",
+                  "plugin",
+                  "installed",
+                  "enabled",
+                  "isDefault",
+                  "promptMode",
+                  "resumable",
+                  "canFork",
+                  "homepage",
+                  "install",
+                  "command",
+                  "commandOverridden",
+                  "args",
+                  "argsOverridden",
+                  "env",
+                  "envOverridden",
+                  "showEnv",
+                  "permissions"
+                ]
+              }
+            },
+            "problems": {
+              "type": "array",
+              "description": "Declarations left out of the catalog; only with all.",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "plugin": {
+                    "type": "string"
+                  },
+                  "id": {
+                    "type": "string"
+                  },
+                  "status": {
+                    "type": "string",
+                    "enum": [
+                      "invalid",
+                      "conflict"
+                    ]
+                  },
+                  "error": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "plugin",
+                  "id",
+                  "status",
+                  "error"
+                ]
+              }
+            }
+          },
+          "required": [
+            "defaultAgent",
+            "workspaceTrust",
+            "permissions",
+            "agents"
+          ]
+        }
+      },
+      {
+        "id": "get",
+        "description": "One agent by ID.",
+        "readOnly": true,
+        "params": {
+          "type": "object",
+          "properties": {
+            "agent": {
+              "type": "string",
+              "description": "The agent ID."
+            }
+          },
+          "required": [
+            "agent"
+          ]
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "label": {
+              "type": "string"
+            },
+            "plugin": {
+              "type": "string",
+              "description": "The plugin whose declaration is in effect."
+            },
+            "installed": {
+              "type": "boolean",
+              "description": "Whether detection found the agent's commands."
+            },
+            "enabled": {
+              "type": "boolean"
+            },
+            "isDefault": {
+              "type": "boolean"
+            },
+            "promptMode": {
+              "type": "string",
+              "enum": [
+                "argv",
+                "flag-prompt",
+                "flag-prompt-interactive",
+                "flag-interactive",
+                "hermes-query",
+                "stdin-after-start"
+              ]
+            },
+            "resumable": {
+              "type": "boolean"
+            },
+            "canFork": {
+              "type": "boolean"
+            },
+            "homepage": {
+              "description": "A link, or null."
+            },
+            "install": {
+              "description": "A link, or null."
+            },
+            "command": {
+              "type": "string",
+              "description": "The command that starts the agent: the saved override, else the catalog's."
+            },
+            "commandOverridden": {
+              "type": "boolean"
+            },
+            "args": {
+              "type": "string",
+              "description": "The arguments a launch uses: the saved text, else the Yolo default."
+            },
+            "argsOverridden": {
+              "type": "boolean"
+            },
+            "env": {
+              "type": "object",
+              "additionalProperties": true,
+              "description": "The permission environment a launch adds: the saved override, else the Yolo default."
+            },
+            "envOverridden": {
+              "type": "boolean"
+            },
+            "showEnv": {
+              "type": "boolean"
+            },
+            "permissions": {
+              "type": "object",
+              "properties": {
+                "mode": {
+                  "description": "manual, auto, yolo or custom; null when the agent has no permission control."
+                },
+                "hasAuto": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "mode",
+                "hasAuto"
+              ]
+            }
+          },
+          "required": [
+            "id",
+            "label",
+            "plugin",
+            "installed",
+            "enabled",
+            "isDefault",
+            "promptMode",
+            "resumable",
+            "canFork",
+            "homepage",
+            "install",
+            "command",
+            "commandOverridden",
+            "args",
+            "argsOverridden",
+            "env",
+            "envOverridden",
+            "showEnv",
+            "permissions"
+          ]
+        }
+      },
+      {
+        "id": "refresh",
+        "description": "Re-reads the login shell's PATH, detects installed agents again and announces the change.",
+        "params": {
+          "type": "object",
+          "properties": {}
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "defaultAgent": {
+              "type": "string",
+              "description": "auto, shell or an agent ID."
+            },
+            "workspaceTrust": {
+              "type": "boolean"
+            },
+            "permissions": {
+              "type": "object",
+              "properties": {
+                "summary": {
+                  "type": "string",
+                  "enum": [
+                    "manual",
+                    "auto",
+                    "yolo",
+                    "mixed"
+                  ]
+                },
+                "nonAuto": {
+                  "type": "string",
+                  "enum": [
+                    "manual",
+                    "yolo",
+                    "mixed"
+                  ],
+                  "description": "The combined mode of the preset agents that have no Auto mode."
+                }
+              },
+              "required": [
+                "summary",
+                "nonAuto"
+              ]
+            },
+            "agents": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "label": {
+                    "type": "string"
+                  },
+                  "plugin": {
+                    "type": "string",
+                    "description": "The plugin whose declaration is in effect."
+                  },
+                  "installed": {
+                    "type": "boolean",
+                    "description": "Whether detection found the agent's commands."
+                  },
+                  "enabled": {
+                    "type": "boolean"
+                  },
+                  "isDefault": {
+                    "type": "boolean"
+                  },
+                  "promptMode": {
+                    "type": "string",
+                    "enum": [
+                      "argv",
+                      "flag-prompt",
+                      "flag-prompt-interactive",
+                      "flag-interactive",
+                      "hermes-query",
+                      "stdin-after-start"
+                    ]
+                  },
+                  "resumable": {
+                    "type": "boolean"
+                  },
+                  "canFork": {
+                    "type": "boolean"
+                  },
+                  "homepage": {
+                    "description": "A link, or null."
+                  },
+                  "install": {
+                    "description": "A link, or null."
+                  },
+                  "command": {
+                    "type": "string",
+                    "description": "The command that starts the agent: the saved override, else the catalog's."
+                  },
+                  "commandOverridden": {
+                    "type": "boolean"
+                  },
+                  "args": {
+                    "type": "string",
+                    "description": "The arguments a launch uses: the saved text, else the Yolo default."
+                  },
+                  "argsOverridden": {
+                    "type": "boolean"
+                  },
+                  "env": {
+                    "type": "object",
+                    "additionalProperties": true,
+                    "description": "The permission environment a launch adds: the saved override, else the Yolo default."
+                  },
+                  "envOverridden": {
+                    "type": "boolean"
+                  },
+                  "showEnv": {
+                    "type": "boolean"
+                  },
+                  "permissions": {
+                    "type": "object",
+                    "properties": {
+                      "mode": {
+                        "description": "manual, auto, yolo or custom; null when the agent has no permission control."
+                      },
+                      "hasAuto": {
+                        "type": "boolean"
+                      }
+                    },
+                    "required": [
+                      "mode",
+                      "hasAuto"
+                    ]
+                  }
+                },
+                "required": [
+                  "id",
+                  "label",
+                  "plugin",
+                  "installed",
+                  "enabled",
+                  "isDefault",
+                  "promptMode",
+                  "resumable",
+                  "canFork",
+                  "homepage",
+                  "install",
+                  "command",
+                  "commandOverridden",
+                  "args",
+                  "argsOverridden",
+                  "env",
+                  "envOverridden",
+                  "showEnv",
+                  "permissions"
+                ]
+              }
+            },
+            "problems": {
+              "type": "array",
+              "description": "Declarations left out of the catalog; only with all.",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "plugin": {
+                    "type": "string"
+                  },
+                  "id": {
+                    "type": "string"
+                  },
+                  "status": {
+                    "type": "string",
+                    "enum": [
+                      "invalid",
+                      "conflict"
+                    ]
+                  },
+                  "error": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "plugin",
+                  "id",
+                  "status",
+                  "error"
+                ]
+              }
+            }
+          },
+          "required": [
+            "defaultAgent",
+            "workspaceTrust",
+            "permissions",
+            "agents"
+          ]
+        }
+      },
+      {
+        "id": "setEnabled",
+        "description": "Switches an agent on or off. Disabling the default agent resets the default to auto.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "agent": {
+              "type": "string",
+              "description": "The agent ID."
+            },
+            "enabled": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "agent",
+            "enabled"
+          ]
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "label": {
+              "type": "string"
+            },
+            "plugin": {
+              "type": "string",
+              "description": "The plugin whose declaration is in effect."
+            },
+            "installed": {
+              "type": "boolean",
+              "description": "Whether detection found the agent's commands."
+            },
+            "enabled": {
+              "type": "boolean"
+            },
+            "isDefault": {
+              "type": "boolean"
+            },
+            "promptMode": {
+              "type": "string",
+              "enum": [
+                "argv",
+                "flag-prompt",
+                "flag-prompt-interactive",
+                "flag-interactive",
+                "hermes-query",
+                "stdin-after-start"
+              ]
+            },
+            "resumable": {
+              "type": "boolean"
+            },
+            "canFork": {
+              "type": "boolean"
+            },
+            "homepage": {
+              "description": "A link, or null."
+            },
+            "install": {
+              "description": "A link, or null."
+            },
+            "command": {
+              "type": "string",
+              "description": "The command that starts the agent: the saved override, else the catalog's."
+            },
+            "commandOverridden": {
+              "type": "boolean"
+            },
+            "args": {
+              "type": "string",
+              "description": "The arguments a launch uses: the saved text, else the Yolo default."
+            },
+            "argsOverridden": {
+              "type": "boolean"
+            },
+            "env": {
+              "type": "object",
+              "additionalProperties": true,
+              "description": "The permission environment a launch adds: the saved override, else the Yolo default."
+            },
+            "envOverridden": {
+              "type": "boolean"
+            },
+            "showEnv": {
+              "type": "boolean"
+            },
+            "permissions": {
+              "type": "object",
+              "properties": {
+                "mode": {
+                  "description": "manual, auto, yolo or custom; null when the agent has no permission control."
+                },
+                "hasAuto": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "mode",
+                "hasAuto"
+              ]
+            }
+          },
+          "required": [
+            "id",
+            "label",
+            "plugin",
+            "installed",
+            "enabled",
+            "isDefault",
+            "promptMode",
+            "resumable",
+            "canFork",
+            "homepage",
+            "install",
+            "command",
+            "commandOverridden",
+            "args",
+            "argsOverridden",
+            "env",
+            "envOverridden",
+            "showEnv",
+            "permissions"
+          ]
+        }
+      },
+      {
+        "id": "setDefault",
+        "description": "Sets the agent a launch without one starts: auto, shell or an agent ID.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "agent": {
+              "type": "string",
+              "description": "auto, shell or an agent ID."
+            }
+          },
+          "required": [
+            "agent"
+          ]
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "defaultAgent": {
+              "type": "string",
+              "description": "auto, shell or an agent ID."
+            },
+            "workspaceTrust": {
+              "type": "boolean"
+            },
+            "permissions": {
+              "type": "object",
+              "properties": {
+                "summary": {
+                  "type": "string",
+                  "enum": [
+                    "manual",
+                    "auto",
+                    "yolo",
+                    "mixed"
+                  ]
+                },
+                "nonAuto": {
+                  "type": "string",
+                  "enum": [
+                    "manual",
+                    "yolo",
+                    "mixed"
+                  ],
+                  "description": "The combined mode of the preset agents that have no Auto mode."
+                }
+              },
+              "required": [
+                "summary",
+                "nonAuto"
+              ]
+            },
+            "agents": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "label": {
+                    "type": "string"
+                  },
+                  "plugin": {
+                    "type": "string",
+                    "description": "The plugin whose declaration is in effect."
+                  },
+                  "installed": {
+                    "type": "boolean",
+                    "description": "Whether detection found the agent's commands."
+                  },
+                  "enabled": {
+                    "type": "boolean"
+                  },
+                  "isDefault": {
+                    "type": "boolean"
+                  },
+                  "promptMode": {
+                    "type": "string",
+                    "enum": [
+                      "argv",
+                      "flag-prompt",
+                      "flag-prompt-interactive",
+                      "flag-interactive",
+                      "hermes-query",
+                      "stdin-after-start"
+                    ]
+                  },
+                  "resumable": {
+                    "type": "boolean"
+                  },
+                  "canFork": {
+                    "type": "boolean"
+                  },
+                  "homepage": {
+                    "description": "A link, or null."
+                  },
+                  "install": {
+                    "description": "A link, or null."
+                  },
+                  "command": {
+                    "type": "string",
+                    "description": "The command that starts the agent: the saved override, else the catalog's."
+                  },
+                  "commandOverridden": {
+                    "type": "boolean"
+                  },
+                  "args": {
+                    "type": "string",
+                    "description": "The arguments a launch uses: the saved text, else the Yolo default."
+                  },
+                  "argsOverridden": {
+                    "type": "boolean"
+                  },
+                  "env": {
+                    "type": "object",
+                    "additionalProperties": true,
+                    "description": "The permission environment a launch adds: the saved override, else the Yolo default."
+                  },
+                  "envOverridden": {
+                    "type": "boolean"
+                  },
+                  "showEnv": {
+                    "type": "boolean"
+                  },
+                  "permissions": {
+                    "type": "object",
+                    "properties": {
+                      "mode": {
+                        "description": "manual, auto, yolo or custom; null when the agent has no permission control."
+                      },
+                      "hasAuto": {
+                        "type": "boolean"
+                      }
+                    },
+                    "required": [
+                      "mode",
+                      "hasAuto"
+                    ]
+                  }
+                },
+                "required": [
+                  "id",
+                  "label",
+                  "plugin",
+                  "installed",
+                  "enabled",
+                  "isDefault",
+                  "promptMode",
+                  "resumable",
+                  "canFork",
+                  "homepage",
+                  "install",
+                  "command",
+                  "commandOverridden",
+                  "args",
+                  "argsOverridden",
+                  "env",
+                  "envOverridden",
+                  "showEnv",
+                  "permissions"
+                ]
+              }
+            },
+            "problems": {
+              "type": "array",
+              "description": "Declarations left out of the catalog; only with all.",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "plugin": {
+                    "type": "string"
+                  },
+                  "id": {
+                    "type": "string"
+                  },
+                  "status": {
+                    "type": "string",
+                    "enum": [
+                      "invalid",
+                      "conflict"
+                    ]
+                  },
+                  "error": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "plugin",
+                  "id",
+                  "status",
+                  "error"
+                ]
+              }
+            }
+          },
+          "required": [
+            "defaultAgent",
+            "workspaceTrust",
+            "permissions",
+            "agents"
+          ]
+        }
+      },
+      {
+        "id": "configure",
+        "description": "Saves an agent's command, arguments or environment, or removes those overrides.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "agent": {
+              "type": "string",
+              "description": "The agent ID."
+            },
+            "command": {
+              "type": "string",
+              "description": "Replaces the whole command; the catalog command or an empty value removes the override."
+            },
+            "args": {
+              "type": "string",
+              "description": "The arguments text; empty means Manual."
+            },
+            "env": {
+              "type": "object",
+              "additionalProperties": true,
+              "description": "Replaces the environment override."
+            },
+            "reset": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "command",
+                  "args",
+                  "env"
+                ]
+              },
+              "description": "Overrides to remove."
+            }
+          },
+          "required": [
+            "agent"
+          ]
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "label": {
+              "type": "string"
+            },
+            "plugin": {
+              "type": "string",
+              "description": "The plugin whose declaration is in effect."
+            },
+            "installed": {
+              "type": "boolean",
+              "description": "Whether detection found the agent's commands."
+            },
+            "enabled": {
+              "type": "boolean"
+            },
+            "isDefault": {
+              "type": "boolean"
+            },
+            "promptMode": {
+              "type": "string",
+              "enum": [
+                "argv",
+                "flag-prompt",
+                "flag-prompt-interactive",
+                "flag-interactive",
+                "hermes-query",
+                "stdin-after-start"
+              ]
+            },
+            "resumable": {
+              "type": "boolean"
+            },
+            "canFork": {
+              "type": "boolean"
+            },
+            "homepage": {
+              "description": "A link, or null."
+            },
+            "install": {
+              "description": "A link, or null."
+            },
+            "command": {
+              "type": "string",
+              "description": "The command that starts the agent: the saved override, else the catalog's."
+            },
+            "commandOverridden": {
+              "type": "boolean"
+            },
+            "args": {
+              "type": "string",
+              "description": "The arguments a launch uses: the saved text, else the Yolo default."
+            },
+            "argsOverridden": {
+              "type": "boolean"
+            },
+            "env": {
+              "type": "object",
+              "additionalProperties": true,
+              "description": "The permission environment a launch adds: the saved override, else the Yolo default."
+            },
+            "envOverridden": {
+              "type": "boolean"
+            },
+            "showEnv": {
+              "type": "boolean"
+            },
+            "permissions": {
+              "type": "object",
+              "properties": {
+                "mode": {
+                  "description": "manual, auto, yolo or custom; null when the agent has no permission control."
+                },
+                "hasAuto": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "mode",
+                "hasAuto"
+              ]
+            }
+          },
+          "required": [
+            "id",
+            "label",
+            "plugin",
+            "installed",
+            "enabled",
+            "isDefault",
+            "promptMode",
+            "resumable",
+            "canFork",
+            "homepage",
+            "install",
+            "command",
+            "commandOverridden",
+            "args",
+            "argsOverridden",
+            "env",
+            "envOverridden",
+            "showEnv",
+            "permissions"
+          ]
+        }
+      },
+      {
+        "id": "setPermissions",
+        "description": "Sets the permission mode of one agent or of every agent that has one.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "mode": {
+              "type": "string",
+              "enum": [
+                "manual",
+                "auto",
+                "yolo"
+              ]
+            },
+            "agent": {
+              "type": "string",
+              "description": "Only this agent."
+            },
+            "replaceCustom": {
+              "type": "boolean",
+              "description": "Replace custom arguments on a single agent."
+            }
+          },
+          "required": [
+            "mode"
+          ]
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "summary": {
+              "type": "string",
+              "enum": [
+                "manual",
+                "auto",
+                "yolo",
+                "mixed"
+              ]
+            },
+            "changed": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "Agents whose stored arguments or environment changed."
+            }
+          },
+          "required": [
+            "summary",
+            "changed"
+          ]
+        }
+      },
+      {
+        "id": "plan",
+        "description": "Shows the launch of an agent without starting it: no session, no trust record, no hooks.",
+        "readOnly": true,
+        "params": {
+          "type": "object",
+          "properties": {
+            "agent": {
+              "type": "string",
+              "description": "The agent ID."
+            },
+            "prompt": {
+              "type": "string"
+            },
+            "submitPrompt": {
+              "type": "boolean",
+              "description": "False leaves the prompt as a draft."
+            },
+            "cwd": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "agent"
+          ]
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "agent": {
+              "type": "string"
+            },
+            "command": {
+              "type": "string",
+              "description": "The command string the launch shell execs."
+            },
+            "env": {
+              "type": "object",
+              "additionalProperties": true,
+              "description": "Environment to apply; a null value removes the variable."
+            },
+            "record": {
+              "type": "object",
+              "properties": {
+                "command": {
+                  "type": "string"
+                },
+                "args": {
+                  "type": "string"
+                },
+                "env": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "description": "Environment names and values."
+                }
+              },
+              "required": [
+                "command",
+                "args",
+                "env"
+              ]
+            },
+            "promptDelivery": {
+              "description": "null without a prompt, command-line when it rides the command, pending when it is pasted."
+            },
+            "paste": {
+              "description": "{ text, submit } to paste after start, or null."
+            }
+          },
+          "required": [
+            "agent",
+            "command",
+            "env",
+            "record",
+            "promptDelivery",
+            "paste"
+          ]
+        }
+      },
+      {
+        "id": "pick",
+        "description": "Chooses the agent a launch without one starts.",
+        "readOnly": true,
+        "params": {
+          "type": "object",
+          "properties": {
+            "preferred": {
+              "type": "string",
+              "description": "Tried before the default agent."
+            },
+            "forAgentTab": {
+              "type": "boolean",
+              "description": "Never answer shell; fail when no agent is usable."
+            }
+          }
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "agent": {
+              "type": "string",
+              "description": "An agent ID, or shell."
+            }
+          },
+          "required": [
+            "agent"
+          ]
+        }
+      },
+      {
+        "id": "prepareLaunch",
+        "description": "Plans a launch for quirky.session to spawn and writes the folder's trust record when workspace trust is on.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "agent": {
+              "type": "string",
+              "description": "The agent ID."
+            },
+            "cwd": {
+              "type": "string"
+            },
+            "prompt": {
+              "type": "string"
+            },
+            "submitPrompt": {
+              "type": "boolean"
+            },
+            "hookArgs": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "Extra arguments from launch hooks."
+            },
+            "hookEnv": {
+              "type": "object",
+              "additionalProperties": true,
+              "description": "Environment additions from launch hooks; a null value removes the variable."
+            }
+          },
+          "required": [
+            "agent",
+            "cwd",
+            "hookArgs",
+            "hookEnv"
+          ]
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "agent": {
+              "type": "string"
+            },
+            "command": {
+              "type": "string",
+              "description": "The command string the launch shell execs."
+            },
+            "env": {
+              "type": "object",
+              "additionalProperties": true,
+              "description": "Environment to apply; a null value removes the variable."
+            },
+            "record": {
+              "type": "object",
+              "properties": {
+                "command": {
+                  "type": "string"
+                },
+                "args": {
+                  "type": "string"
+                },
+                "env": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "description": "Environment names and values."
+                }
+              },
+              "required": [
+                "command",
+                "args",
+                "env"
+              ]
+            },
+            "promptDelivery": {
+              "description": "null without a prompt, command-line when it rides the command, pending when it is pasted."
+            },
+            "paste": {
+              "description": "{ text, submit } to paste after start, or null."
+            }
+          },
+          "required": [
+            "agent",
+            "command",
+            "env",
+            "record",
+            "promptDelivery",
+            "paste"
+          ]
+        }
+      },
+      {
+        "id": "prepareResume",
+        "description": "Plans a resume or fork from a launch record.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "agent": {
+              "type": "string",
+              "description": "The agent ID."
+            },
+            "cwd": {
+              "type": "string"
+            },
+            "record": {
+              "description": "What the session launched with: { command, args, env }, or null.",
+              "properties": {
+                "command": {
+                  "type": "string"
+                },
+                "args": {
+                  "type": "string"
+                },
+                "env": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "description": "Environment names and values."
+                }
+              },
+              "required": [
+                "command",
+                "args",
+                "env"
+              ]
+            },
+            "providerSession": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "transcriptPath": {
+                  "description": "A path, or null."
+                }
+              },
+              "required": [
+                "id"
+              ]
+            },
+            "fork": {
+              "type": "boolean"
+            },
+            "hookArgs": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "Extra arguments from launch hooks."
+            },
+            "hookEnv": {
+              "type": "object",
+              "additionalProperties": true,
+              "description": "Environment additions from launch hooks; a null value removes the variable."
+            }
+          },
+          "required": [
+            "agent",
+            "cwd",
+            "record",
+            "providerSession",
+            "fork",
+            "hookArgs",
+            "hookEnv"
+          ]
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "command": {
+              "type": "string"
+            },
+            "env": {
+              "type": "object",
+              "additionalProperties": true,
+              "description": "Environment to apply; a null value removes the variable."
+            },
+            "record": {
+              "type": "object",
+              "properties": {
+                "command": {
+                  "type": "string"
+                },
+                "args": {
+                  "type": "string"
+                },
+                "env": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "description": "Environment names and values."
+                }
+              },
+              "required": [
+                "command",
+                "args",
+                "env"
+              ]
+            }
+          },
+          "required": [
+            "command",
+            "env",
+            "record"
+          ]
+        }
+      },
+      {
+        "id": "deliver",
+        "description": "Pastes a prompt into a running agent once it is ready; resolves when the delivery has settled.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "sessionId": {
+              "type": "string"
+            },
+            "agent": {
+              "type": "string",
+              "description": "The agent ID."
+            },
+            "text": {
+              "type": "string"
+            },
+            "submit": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "sessionId",
+            "agent",
+            "text",
+            "submit"
+          ]
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "delivery": {
+              "type": "string",
+              "enum": [
+                "pasted",
+                "unconfirmed",
+                "not-delivered"
+              ]
+            }
+          },
+          "required": [
+            "delivery"
+          ]
+        }
+      }
+    ],
+    "event": [
+      {
+        "id": "changed",
+        "description": "The catalog, detection, an agent's configuration or a setting changed in a way that alters list.",
+        "data": {
+          "type": "object"
+        }
+      }
+    ],
+    "agent": [
+      {
+        "id": "claude",
+        "label": "Claude",
+        "detect": "claude",
+        "prompt": "argv",
+        "draftFlag": "--prefill",
+        "yolo": "--dangerously-skip-permissions",
+        "auto": "--permission-mode auto",
+        "resume": [
+          "--resume",
+          "{id}"
+        ],
+        "fork": [
+          "--resume",
+          "{id}",
+          "--fork-session"
+        ],
+        "resumeStyle": "claude-splice",
+        "trust": "claude",
+        "homepage": "https://code.claude.com/docs"
+      },
+      {
+        "id": "claude-agent-teams",
+        "label": "Claude Agent Teams",
+        "detect": "claude",
+        "launch": "claude --teammate-mode in-process",
+        "process": "claude",
+        "env": {
+          "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1"
+        },
+        "prompt": "stdin-after-start",
+        "yolo": "--dangerously-skip-permissions",
+        "auto": "--permission-mode auto",
+        "trust": "claude",
+        "homepage": "https://code.claude.com/docs/en/agent-teams"
+      },
+      {
+        "id": "openclaude",
+        "label": "OpenClaude",
+        "detect": "openclaude",
+        "prompt": "argv",
+        "draftFlag": "--prefill",
+        "yolo": "--dangerously-skip-permissions",
+        "homepage": "https://openclaude.gitlawb.com/"
+      },
+      {
+        "id": "codex",
+        "label": "Codex",
+        "detect": "codex",
+        "prompt": "argv",
+        "yolo": "--dangerously-bypass-approvals-and-sandbox",
+        "auto": "--approve-for-me",
+        "resume": [
+          "resume",
+          "{id}"
+        ],
+        "fork": [
+          "fork",
+          "{id}"
+        ],
+        "readySignal": "codex-composer-prompt",
+        "readyTimeoutMs": 20000,
+        "blindPaste": false,
+        "submitRetryMs": 1200,
+        "trust": "codex",
+        "homepage": "https://github.com/openai/codex",
+        "windows": {
+          "inputRecordPasteNewline": "alt-enter"
+        }
+      },
+      {
+        "id": "grok",
+        "label": "Grok",
+        "detect": "grok",
+        "prompt": "argv",
+        "promptSeparator": "--",
+        "yolo": "--permission-mode bypassPermissions",
+        "resume": [
+          "--resume",
+          "{id}"
+        ],
+        "fork": [
+          "--resume",
+          "{id}",
+          "--fork-session"
+        ],
+        "readySignal": "grok-composer-prompt",
+        "homepage": "https://x.ai/cli",
+        "windows": {
+          "ctrlEnterEncoding": "csi-u"
+        }
+      },
+      {
+        "id": "copilot",
+        "label": "GitHub Copilot",
+        "detect": "copilot",
+        "prompt": "flag-interactive",
+        "yolo": "--yolo",
+        "resume": [
+          "--resume={id}"
+        ],
+        "trust": "copilot",
+        "homepage": "https://docs.github.com/en/copilot/how-tos/set-up/install-copilot-cli"
+      },
+      {
+        "id": "opencode2",
+        "label": "OpenCode 2",
+        "detect": "opencode2",
+        "launch": "opencode2 --standalone",
+        "prompt": "flag-prompt",
+        "resume": [
+          "--session",
+          "{id}"
+        ],
+        "readySignal": "render-cursor-after-bracketed-paste",
+        "submitSignal": "opencode-agent-row",
+        "readyTimeoutMs": 20000,
+        "homepage": "https://opencode.ai/v2/docs/"
+      },
+      {
+        "id": "opencode",
+        "label": "OpenCode",
+        "detect": "opencode",
+        "prompt": "flag-prompt",
+        "stripArgs": [
+          "--dangerously-skip-permissions"
+        ],
+        "resume": [
+          "--session",
+          "{id}"
+        ],
+        "readySignal": "render-cursor-after-bracketed-paste",
+        "submitSignal": "opencode-agent-row",
+        "readyTimeoutMs": 20000,
+        "homepage": "https://opencode.ai/docs/cli/"
+      },
+      {
+        "id": "mimo-code",
+        "label": "MiMo Code",
+        "detect": "mimo",
+        "prompt": "flag-prompt",
+        "resume": [
+          "--session",
+          "{id}"
+        ],
+        "readySignal": "render-cursor-after-bracketed-paste",
+        "homepage": "https://mimo.xiaomi.com/coder"
+      },
+      {
+        "id": "ante",
+        "label": "Ante",
+        "detect": "ante",
+        "prompt": "stdin-after-start",
+        "yolo": "--yolo",
+        "homepage": "https://github.com/AntigmaLabs/ante-preview"
+      },
+      {
+        "id": "trae",
+        "label": "Trae",
+        "detect": "traecli",
+        "prompt": "argv",
+        "promptSeparator": "--",
+        "yolo": "--yolo",
+        "homepage": "https://docs.trae.cn/cli_get-started-with-trae-cli"
+      },
+      {
+        "id": "muse",
+        "label": "Muse",
+        "detect": "muse",
+        "launch": "muse --trust-workspace",
+        "prompt": "stdin-after-start",
+        "yolo": "--yolo",
+        "resume": [
+          "resume",
+          "{id}"
+        ],
+        "homepage": "https://dev.meta.ai/docs/muse-code"
+      },
+      {
+        "id": "dsh",
+        "label": "DeepSeek Harness",
+        "detect": "dsh-tui",
+        "detectAliases": [
+          "dst"
+        ],
+        "detectRequires": [
+          "dsh"
+        ],
+        "launch": "dsh-tui .",
+        "process": "dsh",
+        "prompt": "stdin-after-start",
+        "resume": [
+          "--resume",
+          "{id}"
+        ],
+        "readySignal": "dsh-composer-prompt",
+        "homepage": "https://deepseek-harness.github.io/deepseek-harness/"
+      },
+      {
+        "id": "qoder",
+        "label": "Qoder CLI",
+        "detect": "qodercli",
+        "detectAliases": [
+          "qoder"
+        ],
+        "prompt": "flag-prompt-interactive",
+        "yolo": "--dangerously-skip-permissions",
+        "resume": [
+          "--resume",
+          "{id}"
+        ],
+        "trust": "qoder",
+        "homepage": "https://docs.qoder.com/cli/overview"
+      },
+      {
+        "id": "qoder-cn",
+        "label": "Qoder CLI China",
+        "detect": "qoderclicn",
+        "detectAliases": [
+          "qodercn"
+        ],
+        "prompt": "flag-prompt-interactive",
+        "yolo": "--dangerously-skip-permissions",
+        "resume": [
+          "--resume",
+          "{id}"
+        ],
+        "trust": "qoder-cn",
+        "homepage": "https://docs.qoder.cn/cli/overview"
+      },
+      {
+        "id": "zcode",
+        "label": "ZCode",
+        "detect": "zcode",
+        "process": "zcode-cli",
+        "prompt": "stdin-after-start",
+        "yolo": "--mode yolo",
+        "resume": [
+          "--resume",
+          "{id}"
+        ],
+        "readySignal": "zcode-composer-prompt",
+        "homepage": "https://zcode.z.ai/en/docs"
+      },
+      {
+        "id": "pi",
+        "label": "Pi",
+        "detect": "pi",
+        "prompt": "argv",
+        "resume": [
+          "--session",
+          "{transcript}"
+        ],
+        "fork": [
+          "--fork",
+          "{transcript}"
+        ],
+        "homepage": "https://pi.dev",
+        "windows": {
+          "shiftEnterEncoding": "csi-u"
+        }
+      },
+      {
+        "id": "omp",
+        "label": "OMP",
+        "detect": "omp",
+        "prompt": "argv",
+        "resume": [
+          "--resume",
+          "{transcriptOrId}"
+        ],
+        "enterWithPaste": true,
+        "homepage": "https://omp.sh",
+        "windows": {
+          "shiftEnterEncoding": "csi-u"
+        }
+      },
+      {
+        "id": "prime-agent",
+        "label": "Prime Agent",
+        "detect": "prime-agent",
+        "prompt": "argv",
+        "promptSeparator": "--",
+        "resume": [
+          "--resume",
+          "{transcript}"
+        ],
+        "homepage": "https://github.com/PrimeIntellect-ai/prime-agent",
+        "windows": {
+          "shiftEnterEncoding": "csi-u"
+        }
+      },
+      {
+        "id": "gemini",
+        "label": "Gemini",
+        "detect": "gemini",
+        "prompt": "flag-prompt-interactive",
+        "yolo": "--yolo",
+        "resume": [
+          "--resume",
+          "{id}"
+        ],
+        "homepage": "https://github.com/google-gemini/gemini-cli"
+      },
+      {
+        "id": "antigravity",
+        "label": "Antigravity",
+        "detect": "agy",
+        "prompt": "flag-prompt-interactive",
+        "yolo": "--dangerously-skip-permissions",
+        "resume": [
+          "--conversation",
+          "{id}"
+        ],
+        "lineSettleMs": 45,
+        "trust": "antigravity",
+        "homepage": "https://antigravity.google/docs/cli-overview"
+      },
+      {
+        "id": "aider",
+        "label": "Aider",
+        "detect": "aider",
+        "prompt": "stdin-after-start",
+        "yolo": "--yes-always",
+        "homepage": "https://aider.chat/docs/"
+      },
+      {
+        "id": "goose",
+        "label": "Goose",
+        "detect": "goose",
+        "prompt": "stdin-after-start",
+        "yoloEnv": {
+          "GOOSE_MODE": "auto"
+        },
+        "homepage": "https://block.github.io/goose/docs/quickstart/"
+      },
+      {
+        "id": "amp",
+        "label": "Amp",
+        "detect": "amp",
+        "prompt": "stdin-after-start",
+        "yolo": "--dangerously-allow-all",
+        "homepage": "https://ampcode.com/manual#install"
+      },
+      {
+        "id": "kilo",
+        "label": "Kilocode",
+        "detect": "kilo",
+        "prompt": "stdin-after-start",
+        "stripArgs": [
+          "--dangerously-skip-permissions"
+        ],
+        "homepage": "https://kilo.ai/docs/cli"
+      },
+      {
+        "id": "kiro",
+        "label": "Kiro",
+        "detect": "kiro-cli",
+        "launch": "kiro-cli chat --tui",
+        "prompt": "stdin-after-start",
+        "yolo": "--trust-all-tools",
+        "resume": [
+          "--resume-id",
+          "{id}"
+        ],
+        "homepage": "https://kiro.dev/docs/cli/"
+      },
+      {
+        "id": "crush",
+        "label": "Charm",
+        "detect": "crush",
+        "prompt": "stdin-after-start",
+        "yolo": "--yolo",
+        "homepage": "https://github.com/charmbracelet/crush"
+      },
+      {
+        "id": "aug",
+        "label": "Auggie",
+        "detect": "auggie",
+        "prompt": "stdin-after-start",
+        "homepage": "https://docs.augmentcode.com/cli/overview"
+      },
+      {
+        "id": "autohand",
+        "label": "Autohand Code",
+        "detect": "autohand",
+        "prompt": "stdin-after-start",
+        "yolo": "--unrestricted",
+        "homepage": "https://github.com/autohandai/code-cli"
+      },
+      {
+        "id": "cline",
+        "label": "Cline",
+        "detect": "cline",
+        "prompt": "stdin-after-start",
+        "yolo": "--auto-approve true",
+        "homepage": "https://docs.cline.bot/cline-cli/overview"
+      },
+      {
+        "id": "codebuff",
+        "label": "Codebuff",
+        "detect": "codebuff",
+        "prompt": "stdin-after-start",
+        "homepage": "https://www.codebuff.com/docs/help/quick-start"
+      },
+      {
+        "id": "freebuff",
+        "label": "Freebuff",
+        "detect": "freebuff",
+        "prompt": "stdin-after-start",
+        "homepage": "https://freebuff.com/cli"
+      },
+      {
+        "id": "command-code",
+        "label": "Command Code",
+        "detect": "command-code",
+        "launch": "command-code --trust",
+        "prompt": "argv",
+        "yolo": "--yolo",
+        "homepage": "https://commandcode.ai/docs/quickstart"
+      },
+      {
+        "id": "continue",
+        "label": "Continue",
+        "detect": "cn",
+        "prompt": "stdin-after-start",
+        "yolo": "--allow \"*\"",
+        "homepage": "https://docs.continue.dev/guides/cli"
+      },
+      {
+        "id": "cursor",
+        "label": "Cursor",
+        "detect": "cursor-agent",
+        "prompt": "argv",
+        "yolo": "--yolo",
+        "resume": [
+          "--resume",
+          "{id}"
+        ],
+        "trust": "cursor",
+        "homepage": "https://cursor.com/cli"
+      },
+      {
+        "id": "droid",
+        "label": "Droid",
+        "detect": "droid",
+        "prompt": "argv",
+        "yolo": "--auto high",
+        "resume": [
+          "--resume",
+          "{id}"
+        ],
+        "homepage": "https://docs.factory.ai/cli/getting-started/quickstart",
+        "windows": {
+          "shiftEnterEncoding": "csi-u",
+          "ctrlEnterEncoding": "csi-u"
+        }
+      },
+      {
+        "id": "kimi",
+        "label": "Kimi",
+        "detect": "kimi",
+        "detectAliases": [
+          "kimi-code"
+        ],
+        "prompt": "stdin-after-start",
+        "yolo": "--yolo",
+        "resume": [
+          "--session",
+          "{id}"
+        ],
+        "homepage": "https://www.kimi.com/code/docs/en/kimi-code-cli/getting-started.html"
+      },
+      {
+        "id": "mistral-vibe",
+        "label": "Mistral Vibe",
+        "detect": "vibe",
+        "detectAliases": [
+          "mistral-vibe"
+        ],
+        "prompt": "stdin-after-start",
+        "yolo": "--agent auto-approve",
+        "homepage": "https://github.com/mistralai/mistral-vibe"
+      },
+      {
+        "id": "qwen-code",
+        "label": "Qwen Code",
+        "detect": "qwen",
+        "prompt": "stdin-after-start",
+        "yolo": "--approval-mode yolo",
+        "resume": [
+          "--resume",
+          "{id}"
+        ],
+        "submitRetryMs": 1200,
+        "homepage": "https://github.com/QwenLM/qwen-code"
+      },
+      {
+        "id": "rovo",
+        "label": "Rovo Dev",
+        "detect": "acli",
+        "launch": "acli rovodev run",
+        "prompt": "stdin-after-start",
+        "yolo": "--yolo",
+        "homepage": "https://support.atlassian.com/rovo/docs/install-and-run-rovo-dev-cli-on-your-device/"
+      },
+      {
+        "id": "hermes",
+        "label": "Hermes",
+        "detect": "hermes",
+        "launch": "hermes --tui",
+        "prompt": "hermes-query",
+        "yolo": "--yolo",
+        "homepage": "https://hermes-agent.nousresearch.com/docs/"
+      },
+      {
+        "id": "devin",
+        "label": "Devin",
+        "detect": "devin",
+        "prompt": "stdin-after-start",
+        "yolo": "--permission-mode bypass --respect-workspace-trust false",
+        "resume": [
+          "--resume",
+          "{id}"
+        ],
+        "homepage": "https://devin.ai/cli"
+      },
+      {
+        "id": "openclaw",
+        "label": "OpenClaw",
+        "detect": "openclaw",
+        "prompt": "stdin-after-start",
+        "homepage": "https://github.com/openclaw/openclaw"
+      },
+      {
+        "id": "codebuddy",
+        "label": "CodeBuddy",
+        "detect": "codebuddy",
+        "detectAliases": [
+          "cbc"
+        ],
+        "prompt": "argv",
+        "yolo": "--dangerously-skip-permissions",
+        "resume": [
+          "--resume",
+          "{id}"
+        ],
+        "homepage": "https://www.codebuddy.ai/cli"
+      },
+      {
+        "id": "jcode",
+        "label": "Jcode",
+        "detect": "jcode",
+        "prompt": "stdin-after-start",
+        "resume": [
+          "--resume",
+          "{id}"
+        ],
+        "homepage": "https://github.com/1jehuang/jcode"
+      }
+    ],
+    "setting": [
+      {
+        "id": "default-agent",
+        "type": "string",
+        "title": "Default agent",
+        "description": "The agent a new session starts when none is named: \"auto\" picks the first installed agent, \"shell\" opens a plain shell, or give an agent ID.",
+        "default": "auto"
+      },
+      {
+        "id": "workspace-trust",
+        "type": "boolean",
+        "title": "Trust the folder when Quirky starts an agent",
+        "description": "Pre-write the trust record an agent would otherwise ask about on first launch in a folder.",
+        "default": true
+      }
+    ],
+    "view": [
+      {
+        "id": "settings",
+        "title": "Agents"
+      }
+    ],
+    "command": [
+      {
+        "id": "open-settings",
+        "title": "Open agent settings"
+      },
+      {
+        "id": "new-agent-tab",
+        "title": "New agent tab (default agent)"
+      },
+      {
+        "id": "new-claude-tab",
+        "title": "New Claude tab"
+      },
+      {
+        "id": "new-claude-agent-teams-tab",
+        "title": "New Claude Agent Teams tab"
+      },
+      {
+        "id": "new-openclaude-tab",
+        "title": "New OpenClaude tab"
+      },
+      {
+        "id": "new-codex-tab",
+        "title": "New Codex tab"
+      },
+      {
+        "id": "new-grok-tab",
+        "title": "New Grok tab"
+      },
+      {
+        "id": "new-copilot-tab",
+        "title": "New GitHub Copilot tab"
+      },
+      {
+        "id": "new-opencode2-tab",
+        "title": "New OpenCode 2 tab"
+      },
+      {
+        "id": "new-opencode-tab",
+        "title": "New OpenCode tab"
+      },
+      {
+        "id": "new-mimo-code-tab",
+        "title": "New MiMo Code tab"
+      },
+      {
+        "id": "new-ante-tab",
+        "title": "New Ante tab"
+      },
+      {
+        "id": "new-trae-tab",
+        "title": "New Trae tab"
+      },
+      {
+        "id": "new-muse-tab",
+        "title": "New Muse tab"
+      },
+      {
+        "id": "new-dsh-tab",
+        "title": "New DeepSeek Harness tab"
+      },
+      {
+        "id": "new-qoder-tab",
+        "title": "New Qoder CLI tab"
+      },
+      {
+        "id": "new-qoder-cn-tab",
+        "title": "New Qoder CLI China tab"
+      },
+      {
+        "id": "new-zcode-tab",
+        "title": "New ZCode tab"
+      },
+      {
+        "id": "new-pi-tab",
+        "title": "New Pi tab"
+      },
+      {
+        "id": "new-omp-tab",
+        "title": "New OMP tab"
+      },
+      {
+        "id": "new-prime-agent-tab",
+        "title": "New Prime Agent tab"
+      },
+      {
+        "id": "new-gemini-tab",
+        "title": "New Gemini tab"
+      },
+      {
+        "id": "new-antigravity-tab",
+        "title": "New Antigravity tab"
+      },
+      {
+        "id": "new-aider-tab",
+        "title": "New Aider tab"
+      },
+      {
+        "id": "new-goose-tab",
+        "title": "New Goose tab"
+      },
+      {
+        "id": "new-amp-tab",
+        "title": "New Amp tab"
+      },
+      {
+        "id": "new-kilo-tab",
+        "title": "New Kilocode tab"
+      },
+      {
+        "id": "new-kiro-tab",
+        "title": "New Kiro tab"
+      },
+      {
+        "id": "new-crush-tab",
+        "title": "New Charm tab"
+      },
+      {
+        "id": "new-aug-tab",
+        "title": "New Auggie tab"
+      },
+      {
+        "id": "new-autohand-tab",
+        "title": "New Autohand Code tab"
+      },
+      {
+        "id": "new-cline-tab",
+        "title": "New Cline tab"
+      },
+      {
+        "id": "new-codebuff-tab",
+        "title": "New Codebuff tab"
+      },
+      {
+        "id": "new-freebuff-tab",
+        "title": "New Freebuff tab"
+      },
+      {
+        "id": "new-command-code-tab",
+        "title": "New Command Code tab"
+      },
+      {
+        "id": "new-continue-tab",
+        "title": "New Continue tab"
+      },
+      {
+        "id": "new-cursor-tab",
+        "title": "New Cursor tab"
+      },
+      {
+        "id": "new-droid-tab",
+        "title": "New Droid tab"
+      },
+      {
+        "id": "new-kimi-tab",
+        "title": "New Kimi tab"
+      },
+      {
+        "id": "new-mistral-vibe-tab",
+        "title": "New Mistral Vibe tab"
+      },
+      {
+        "id": "new-qwen-code-tab",
+        "title": "New Qwen Code tab"
+      },
+      {
+        "id": "new-rovo-tab",
+        "title": "New Rovo Dev tab"
+      },
+      {
+        "id": "new-hermes-tab",
+        "title": "New Hermes tab"
+      },
+      {
+        "id": "new-devin-tab",
+        "title": "New Devin tab"
+      },
+      {
+        "id": "new-openclaw-tab",
+        "title": "New OpenClaw tab"
+      },
+      {
+        "id": "new-codebuddy-tab",
+        "title": "New CodeBuddy tab"
+      },
+      {
+        "id": "new-jcode-tab",
+        "title": "New Jcode tab"
+      }
+    ],
+    "keybinding": [
+      {
+        "id": "new-agent-tab",
+        "key": "mod+alt+t",
+        "command": "new-agent-tab"
+      }
+    ],
+    "cli-command": [
+      {
+        "id": "list",
+        "words": "list",
+        "summary": "list the agents Quirky can launch, with what each can do",
+        "flags": {
+          "all": {
+            "type": "boolean",
+            "description": "also report declarations left out of the catalog"
+          }
+        },
+        "methods": [
+          "quirky.agents/list"
+        ]
+      },
+      {
+        "id": "get",
+        "words": "get",
+        "summary": "show one agent with its saved configuration",
+        "positionals": [
+          {
+            "name": "agent",
+            "description": "the agent ID",
+            "required": true
+          }
+        ],
+        "methods": [
+          "quirky.agents/get"
+        ]
+      },
+      {
+        "id": "refresh",
+        "words": "refresh",
+        "summary": "detect installed agents again",
+        "methods": [
+          "quirky.agents/refresh"
+        ]
+      },
+      {
+        "id": "enable",
+        "words": "enable",
+        "summary": "let an agent be picked and launched",
+        "positionals": [
+          {
+            "name": "agent",
+            "description": "the agent ID",
+            "required": true
+          }
+        ],
+        "methods": [
+          "quirky.agents/setEnabled"
+        ]
+      },
+      {
+        "id": "disable",
+        "words": "disable",
+        "summary": "hide an agent and refuse to launch it",
+        "positionals": [
+          {
+            "name": "agent",
+            "description": "the agent ID",
+            "required": true
+          }
+        ],
+        "methods": [
+          "quirky.agents/setEnabled"
+        ]
+      },
+      {
+        "id": "default",
+        "words": "default",
+        "summary": "set the agent a new session starts (auto, shell or an agent ID)",
+        "positionals": [
+          {
+            "name": "agent",
+            "description": "auto, shell or an agent ID",
+            "required": true
+          }
+        ],
+        "methods": [
+          "quirky.agents/setDefault"
+        ]
+      },
+      {
+        "id": "configure",
+        "words": "configure",
+        "summary": "override an agent's command, arguments or environment",
+        "positionals": [
+          {
+            "name": "agent",
+            "description": "the agent ID",
+            "required": true
+          }
+        ],
+        "flags": {
+          "command": {
+            "type": "string",
+            "description": "replace the whole command; the catalog command or an empty value removes the override"
+          },
+          "args": {
+            "type": "string",
+            "description": "the arguments text; empty means Manual"
+          },
+          "env": {
+            "type": "string",
+            "repeatable": true,
+            "description": "an environment override as KEY=VALUE; replaces the saved environment"
+          },
+          "reset": {
+            "type": "string",
+            "repeatable": true,
+            "enum": [
+              "command",
+              "args",
+              "env"
+            ],
+            "description": "remove this override"
+          }
+        },
+        "methods": [
+          "quirky.agents/configure"
+        ]
+      },
+      {
+        "id": "permissions",
+        "words": "permissions",
+        "summary": "set the permission mode of every preset agent, or of one",
+        "positionals": [
+          {
+            "name": "mode",
+            "description": "manual, auto or yolo",
+            "required": true
+          }
+        ],
+        "flags": {
+          "agent": {
+            "type": "string",
+            "description": "change only this agent"
+          },
+          "replace-custom": {
+            "type": "boolean",
+            "description": "replace custom arguments on a single agent"
+          }
+        },
+        "methods": [
+          "quirky.agents/setPermissions"
+        ]
+      },
+      {
+        "id": "plan",
+        "words": "plan",
+        "summary": "show the launch for an agent without starting it",
+        "positionals": [
+          {
+            "name": "agent",
+            "description": "the agent ID",
+            "required": true
+          }
+        ],
+        "flags": {
+          "prompt": {
+            "type": "string",
+            "description": "the initial prompt"
+          },
+          "draft": {
+            "type": "boolean",
+            "description": "leave the prompt in the input without submitting it"
+          }
+        },
+        "methods": [
+          "quirky.agents/plan"
+        ]
+      }
+    ]
+  }
+}

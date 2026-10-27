@@ -1,15 +1,18 @@
+import { existsSync } from 'node:fs'
 import {
   RpcErrorCode,
   type AgentKind,
   type ExitCause,
   type PluginCaller,
   type PluginContext,
+  type PromptDeliveryState,
   type PtySessionInfo,
   type Session,
+  type SessionLaunch,
+  type SessionProviderSession,
   type SessionStatus,
   type Worktree
 } from '@quirky/protocol'
-import { AGENT_TITLES, agentCommand } from './agents'
 import type { SessionRecords } from './records'
 
 const isNotFound = (error: unknown) => (error as { code?: unknown } | null)?.code === RpcErrorCode.NotFound
@@ -34,6 +37,40 @@ function exitFields(details: SessionExit) {
     restorable: details.restorable ?? false,
     lastActivityAt: Date.now()
   }
+}
+
+const MAX_PROVIDER_SESSION_ID = 512
+const CONTROL_CHARACTERS = /[\u0000-\u001f\u007f-\u009f]/
+
+/** The rule an agent CLI's session ID breaks, or null when it is fine to store and pass back. */
+export function providerSessionIdProblem(id: string): string | null {
+  if (id === '') return "provider session id can't be empty"
+  if (id.length > MAX_PROVIDER_SESSION_ID) return `provider session id can't be longer than ${MAX_PROVIDER_SESSION_ID} characters`
+  if (id.startsWith('-')) return "provider session id can't start with '-'"
+  if (CONTROL_CHARACTERS.test(id)) return "provider session id can't contain control characters"
+  return null
+}
+
+/** What `quirky.agents/prepareLaunch` returns (see plugins/quirky.agents/src/core/types.ts). */
+type LaunchPlan = {
+  command: string
+  env: Record<string, string | null>
+  record: SessionLaunch
+  promptDelivery: 'command-line' | 'pending' | null
+  paste: { text: string; submit: boolean } | null
+}
+
+/** What `quirky.agents/get` returns that sessions use. */
+type AgentInfo = { label: string; resumable: boolean; canFork: boolean }
+
+/** How a spawned process is started: the shell, or a command from `quirky.agents`. */
+type LaunchSpec = {
+  argv: string[]
+  envPatch: Record<string, string | null>
+  launch: SessionLaunch | null
+  promptDelivery: PromptDeliveryState | null
+  paste: LaunchPlan['paste']
+  providerSession: SessionProviderSession | null
 }
 
 /** The caller's cwd and worktree, which selectors such as `current` resolve against. */
@@ -66,55 +103,107 @@ export class SessionService {
   /**
    * Starts a terminal session. The record exists (as `starting`) while launch hooks run, so a
    * close during that window wins: the terminal is never spawned and the call fails. A process
-   * that exits before the spawn call returns leaves the session exited, not running.
+   * that exits before the spawn call returns leaves the session exited, not running. A prompt
+   * the agent takes by paste is delivered after the call returns, unless `waitForPrompt` is set.
    */
   create = async (params: Record<string, unknown>, caller: PluginCaller): Promise<Session> => {
     const worktree = await this.resolveWorktree(params.worktree, caller)
-    const agent = params.agent as AgentKind
+    const agent = (params.agent as string | undefined) ?? (await this.pickAgent())
     const prompt = params.prompt as string | undefined
-    const session = this.newRecord(worktree, 'terminal', agent, AGENT_TITLES[agent])
-    this.records.insert(session, worktree.repoId)
-    const closedWhileStarting = () =>
-      this.context.error('conflict', `session ${session.id} was closed before its terminal started`)
-    try {
-      const additions = await this.context.launch.hooks({
-        sessionId: session.id,
-        worktreeId: worktree.id,
-        repoId: worktree.repoId,
-        cwd: worktree.path,
-        agent,
-        ...(prompt === undefined ? {} : { prompt })
-      })
-      if (!this.records.get(session.id)) throw closedWhileStarting()
-      await this.context.pty.spawn(session.id, {
-        argv:
-          agent === 'shell'
-            ? this.context.launch.shellArgv()
-            : this.context.launch.commandArgv(agentCommand(agent, prompt, additions.args)),
-        cwd: worktree.path,
-        // a null in the patch removes the name; launch.env applies it though its type says string
-        env: this.context.launch.env({
-          sessionId: session.id,
-          worktreeId: worktree.id,
-          agent,
-          envPatch: additions.env as Record<string, string>
-        }),
-        cols: (params.cols as number | undefined) ?? 80,
-        rows: (params.rows as number | undefined) ?? 24,
-        shellReady: agent === 'shell' && this.context.launch.shellReady()
-      })
-      if (!this.records.get(session.id)) {
-        await this.context.pty.forget(session.id).catch(() => {})
-        throw closedWhileStarting()
+    const submitPrompt = (params.submitPrompt as boolean | undefined) ?? true
+    const title = agent === 'shell' ? 'Shell' : (await this.agentInfo(agent)).label
+    const session = this.newRecord(worktree, 'terminal', agent, title)
+    const launched = await this.start(session, worktree.repoId, params, prompt, async (additions) => {
+      if (agent === 'shell') {
+        return {
+          argv: this.context.launch.shellArgv(),
+          envPatch: additions.env,
+          launch: null,
+          promptDelivery: null,
+          paste: null,
+          providerSession: null
+        }
       }
-    } catch (error) {
-      this.records.delete(session.id)
-      if (isRpcError(error)) throw error
-      throw new Error(`could not start ${agent}: ${messageOf(error)}`)
+      const plan = (await this.context.call('quirky.agents/prepareLaunch', {
+        agent,
+        cwd: worktree.path,
+        ...(prompt === undefined ? {} : { prompt }),
+        submitPrompt,
+        hookArgs: additions.args,
+        hookEnv: additions.env
+      })) as LaunchPlan
+      return {
+        argv: this.context.launch.commandArgv(plan.command),
+        envPatch: plan.env,
+        launch: plan.record,
+        promptDelivery: plan.promptDelivery,
+        paste: plan.paste,
+        providerSession: null
+      }
+    })
+    return this.deliverAfterLaunch(launched, params.waitForPrompt === true)
+  }
+
+  /**
+   * Starts a new terminal session that resumes an agent session in the old session's folder,
+   * replaying the old launch record. The old record is untouched.
+   */
+  resume = async (params: Record<string, unknown>): Promise<Session> => {
+    const old = this.require(params.session as string)
+    if (old.kind !== 'terminal') throw this.context.error('conflict', `session ${old.id} is not a terminal session`)
+    if (old.agent === 'shell') throw this.context.error('conflict', `session ${old.id} is a shell, not an agent`)
+    const info = await this.agentInfo(old.agent)
+    if (!info.resumable) throw this.context.error('conflict', `${old.agent} can't resume sessions`)
+    const fork = params.fork === true
+    if (fork && !info.canFork) throw this.context.error('conflict', `${old.agent} can't fork from Quirky yet`)
+    const given = params.providerSession as string | undefined
+    const id = given ?? old.providerSession?.id
+    if (id === undefined) {
+      throw this.context.error('conflict', `session ${old.id} has no provider session; pass --provider-session`)
     }
-    const launched = this.records.get(session.id) as Session
-    if (launched.status !== 'starting') return launched
-    return this.publish(this.records.update(session.id, { status: 'running' }) as Session)
+    if (!existsSync(old.cwd)) throw this.context.error('conflict', `the session's folder ${old.cwd} no longer exists`)
+    const problem = providerSessionIdProblem(id)
+    if (problem) throw this.context.error('invalid-params', problem)
+    const transcriptPath =
+      (params.transcriptPath as string | undefined) ?? (given === undefined ? (old.providerSession?.transcriptPath ?? null) : null)
+    const providerSession = { id, transcriptPath }
+
+    const session = {
+      ...this.newRecord({ id: old.worktreeId, path: old.cwd }, 'terminal', old.agent, info.label),
+      resumedFrom: old.id
+    }
+    const launched = await this.start(session, this.records.repoIdOf(old.id), params, undefined, async (additions) => {
+      const resumed = (await this.context.call('quirky.agents/prepareResume', {
+        agent: old.agent,
+        cwd: old.cwd,
+        record: old.launch ?? null,
+        providerSession,
+        fork,
+        hookArgs: additions.args,
+        hookEnv: additions.env
+      })) as { command: string; env: Record<string, string | null>; record: SessionLaunch }
+      return {
+        argv: this.context.launch.commandArgv(resumed.command),
+        envPatch: resumed.env,
+        launch: resumed.record,
+        promptDelivery: null,
+        paste: null,
+        providerSession: fork ? null : providerSession
+      }
+    })
+    return this.deliverAfterLaunch(launched, false)
+  }
+
+  /** Stores the agent CLI's own session ID (and transcript path) so a later resume can pass it back. */
+  setProviderSession = (params: Record<string, unknown>): Session => {
+    const session = this.require(params.session as string)
+    const id = params.id as string
+    const problem = providerSessionIdProblem(id)
+    if (problem) throw this.context.error('invalid-params', problem)
+    const updated = this.records.update(session.id, {
+      providerSession: { id, transcriptPath: (params.transcriptPath as string | undefined) ?? null }
+    }) as Session
+    return this.publish(updated)
   }
 
   /** Records a session that runs without a terminal; its owner reports progress through `setStatus`. */
@@ -179,6 +268,7 @@ export class SessionService {
    */
   async reconcile(options: { startup: boolean }): Promise<void> {
     if (options.startup) {
+      for (const id of this.records.sweepPendingDeliveries()) this.publish(this.require(id))
       for (const session of this.records.list()) if (session.kind === 'structured') this.finish(session.id, { exitCode: null })
     }
     let live: Map<string, PtySessionInfo>
@@ -254,10 +344,11 @@ export class SessionService {
       const restored = this.records.update(
         session.id,
         earlyExit
-          ? { ...exitFields(earlyExit), agent: 'shell' }
+          ? { ...exitFields(earlyExit), agent: 'shell', launch: null }
           : {
               status: 'running',
               agent: 'shell',
+              launch: null,
               exitCode: null,
               exitSignal: null,
               exitCause: null,
@@ -286,22 +377,26 @@ export class SessionService {
     return session
   }
 
-  private newRecord(worktree: Worktree, kind: Session['kind'], agent: AgentKind, baseTitle: string): Session {
+  private newRecord(target: { id: string; path: string }, kind: Session['kind'], agent: AgentKind, baseTitle: string): Session {
     const now = Date.now()
     return {
       id: `s_${crypto.randomUUID().replaceAll('-', '').slice(0, 12)}`,
       kind,
       agent,
-      worktreeId: worktree.id,
-      cwd: worktree.path,
-      title: this.titleFor(worktree.id, baseTitle),
+      worktreeId: target.id,
+      cwd: target.path,
+      title: this.titleFor(target.id, baseTitle),
       status: 'starting',
       createdAt: now,
       lastActivityAt: now,
       exitCode: null,
       exitSignal: null,
       exitCause: null,
-      restorable: false
+      restorable: false,
+      launch: null,
+      providerSession: null,
+      promptDelivery: null,
+      resumedFrom: null
     }
   }
 
@@ -311,6 +406,108 @@ export class SessionService {
       const title = n === 1 ? base : `${base} ${n}`
       if (!taken.has(title)) return title
     }
+  }
+
+  private async pickAgent(): Promise<string> {
+    return ((await this.context.call('quirky.agents/pick', {})) as { agent: string }).agent
+  }
+
+  private async agentInfo(agent: string): Promise<AgentInfo> {
+    return (await this.context.call('quirky.agents/get', { agent })) as AgentInfo
+  }
+
+  /**
+   * Inserts `session` as `starting`, runs the launch hooks, builds the launch with `build`, spawns
+   * it and records what it launched with. Any failure removes the record again.
+   */
+  private async start(
+    session: Session,
+    repoId: string | null,
+    params: Record<string, unknown>,
+    prompt: string | undefined,
+    build: (additions: { env: Record<string, string | null>; args: string[] }) => Promise<LaunchSpec>
+  ): Promise<{ session: Session; paste: LaunchSpec['paste'] }> {
+    this.records.insert(session, repoId)
+    const closedWhileStarting = () =>
+      this.context.error('conflict', `session ${session.id} was closed before its terminal started`)
+    let spec!: LaunchSpec
+    try {
+      const additions = await this.context.launch.hooks({
+        sessionId: session.id,
+        worktreeId: session.worktreeId,
+        repoId: repoId ?? '',
+        cwd: session.cwd,
+        agent: session.agent,
+        ...(prompt === undefined ? {} : { prompt })
+      })
+      if (!this.records.get(session.id)) throw closedWhileStarting()
+      spec = await build(additions)
+      if (!this.records.get(session.id)) throw closedWhileStarting()
+      await this.context.pty.spawn(session.id, {
+        argv: spec.argv,
+        cwd: session.cwd,
+        // a null in the patch removes the name; launch.env applies it though its type says string
+        env: this.context.launch.env({
+          sessionId: session.id,
+          worktreeId: session.worktreeId,
+          agent: session.agent,
+          envPatch: spec.envPatch as Record<string, string>
+        }),
+        cols: (params.cols as number | undefined) ?? 80,
+        rows: (params.rows as number | undefined) ?? 24,
+        shellReady: session.agent === 'shell' && this.context.launch.shellReady()
+      })
+      if (!this.records.get(session.id)) {
+        await this.context.pty.forget(session.id).catch(() => {})
+        throw closedWhileStarting()
+      }
+    } catch (error) {
+      this.records.delete(session.id)
+      if (isRpcError(error)) throw error
+      throw new Error(`could not start ${session.agent}: ${messageOf(error)}`)
+    }
+    const current = this.records.get(session.id) as Session
+    // a provider session saved during spawn is newer than the one the launch started with
+    const keepsSaved = current.providerSession !== null || spec.providerSession === null
+    const stored = {
+      launch: spec.launch,
+      promptDelivery: spec.promptDelivery,
+      ...(keepsSaved ? {} : { providerSession: spec.providerSession })
+    }
+    if (current.status === 'exited') {
+      const promptDelivery = spec.promptDelivery === 'pending' ? 'not-delivered' : spec.promptDelivery
+      return { session: this.records.update(session.id, { ...stored, promptDelivery }) as Session, paste: null }
+    }
+    if (current.status !== 'starting') return { session: this.records.update(session.id, stored) as Session, paste: spec.paste }
+    const running = this.records.update(session.id, { ...stored, status: 'running' }) as Session
+    return { session: this.publish(running), paste: spec.paste }
+  }
+
+  /** Starts the paste of a launch's prompt; with `wait`, returns the session once that settles. */
+  private async deliverAfterLaunch(launched: { session: Session; paste: LaunchSpec['paste'] }, wait: boolean): Promise<Session> {
+    if (!launched.paste) return launched.session
+    const settled = this.deliver(launched.session, launched.paste)
+    if (!wait) return launched.session
+    return (await settled) ?? launched.session
+  }
+
+  /** Asks `quirky.agents` to paste the prompt, then records the outcome; never rejects. */
+  private async deliver(session: Session, paste: NonNullable<LaunchSpec['paste']>): Promise<Session | null> {
+    let outcome: PromptDeliveryState
+    try {
+      const result = (await this.context.call('quirky.agents/deliver', {
+        sessionId: session.id,
+        agent: session.agent,
+        text: paste.text,
+        submit: paste.submit
+      })) as { delivery: PromptDeliveryState }
+      outcome = result.delivery
+    } catch (error) {
+      this.context.log(`prompt delivery to ${session.agent} session ${session.id} failed: ${messageOf(error)}`)
+      outcome = 'not-delivered'
+    }
+    if (!this.records.get(session.id)) return null
+    return this.publish(this.records.update(session.id, { promptDelivery: outcome }) as Session)
   }
 
   private async resolveWorktree(selector: unknown, caller: PluginCaller): Promise<Worktree> {

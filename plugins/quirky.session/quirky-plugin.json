@@ -8,7 +8,8 @@
   "cli": "cli.ts",
   "activation": "startup",
   "dependencies": [
-    "quirky.worktree"
+    "quirky.worktree",
+    "quirky.agents"
   ],
   "contributes": {
     "method": [
@@ -42,14 +43,7 @@
               },
               "agent": {
                 "type": "string",
-                "enum": [
-                  "shell",
-                  "claude",
-                  "codex",
-                  "opencode",
-                  "gemini"
-                ],
-                "description": "The agent to run."
+                "description": "`shell` or the ID of the agent the session runs."
               },
               "worktreeId": {
                 "type": "string"
@@ -89,6 +83,18 @@
               "restorable": {
                 "type": "boolean",
                 "description": "True when the session ended with the PTY host and can be restored."
+              },
+              "launch": {
+                "description": "What the session launched with ({command, args, env}); null for a shell or a session recorded before launches were kept."
+              },
+              "providerSession": {
+                "description": "The agent CLI's own session ({id, transcriptPath}) that resume passes back; null until one is stored."
+              },
+              "promptDelivery": {
+                "description": "How the first prompt reached the agent: null (no prompt), command-line, pending, pasted, unconfirmed or not-delivered."
+              },
+              "resumedFrom": {
+                "description": "The session this one was resumed or forked from; null otherwise."
               }
             },
             "required": [
@@ -137,14 +143,7 @@
             },
             "agent": {
               "type": "string",
-              "enum": [
-                "shell",
-                "claude",
-                "codex",
-                "opencode",
-                "gemini"
-              ],
-              "description": "The agent to run."
+              "description": "`shell` or the ID of the agent the session runs."
             },
             "worktreeId": {
               "type": "string"
@@ -184,6 +183,18 @@
             "restorable": {
               "type": "boolean",
               "description": "True when the session ended with the PTY host and can be restored."
+            },
+            "launch": {
+              "description": "What the session launched with ({command, args, env}); null for a shell or a session recorded before launches were kept."
+            },
+            "providerSession": {
+              "description": "The agent CLI's own session ({id, transcriptPath}) that resume passes back; null until one is stored."
+            },
+            "promptDelivery": {
+              "description": "How the first prompt reached the agent: null (no prompt), command-line, pending, pasted, unconfirmed or not-delivered."
+            },
+            "resumedFrom": {
+              "description": "The session this one was resumed or forked from; null otherwise."
             }
           },
           "required": [
@@ -202,7 +213,7 @@
       },
       {
         "id": "create",
-        "description": "Starts a terminal session; `prompt` is passed to agents that accept an initial prompt.",
+        "description": "Starts a terminal session. `agent` defaults to the default agent (else the first installed one, else a shell). `prompt` reaches the agent the way that agent takes it; `promptDelivery` on the result says how. A prompt pasted after start settles later and emits `changed`, unless `waitForPrompt` is set.",
         "params": {
           "type": "object",
           "properties": {
@@ -212,17 +223,19 @@
             },
             "agent": {
               "type": "string",
-              "enum": [
-                "shell",
-                "claude",
-                "codex",
-                "opencode",
-                "gemini"
-              ],
-              "description": "The agent to run."
+              "description": "`shell` or an agent ID; default: the default agent."
             },
             "prompt": {
-              "type": "string"
+              "type": "string",
+              "description": "The first prompt for the agent."
+            },
+            "submitPrompt": {
+              "type": "boolean",
+              "description": "With false the prompt is left in the agent's input without Enter; default true."
+            },
+            "waitForPrompt": {
+              "type": "boolean",
+              "description": "Return only after a pasted prompt has settled; default false."
             },
             "cols": {
               "type": "integer",
@@ -232,10 +245,7 @@
               "type": "integer",
               "minimum": 1
             }
-          },
-          "required": [
-            "agent"
-          ]
+          }
         },
         "result": {
           "type": "object",
@@ -252,14 +262,7 @@
             },
             "agent": {
               "type": "string",
-              "enum": [
-                "shell",
-                "claude",
-                "codex",
-                "opencode",
-                "gemini"
-              ],
-              "description": "The agent to run."
+              "description": "`shell` or the ID of the agent the session runs."
             },
             "worktreeId": {
               "type": "string"
@@ -299,6 +302,235 @@
             "restorable": {
               "type": "boolean",
               "description": "True when the session ended with the PTY host and can be restored."
+            },
+            "launch": {
+              "description": "What the session launched with ({command, args, env}); null for a shell or a session recorded before launches were kept."
+            },
+            "providerSession": {
+              "description": "The agent CLI's own session ({id, transcriptPath}) that resume passes back; null until one is stored."
+            },
+            "promptDelivery": {
+              "description": "How the first prompt reached the agent: null (no prompt), command-line, pending, pasted, unconfirmed or not-delivered."
+            },
+            "resumedFrom": {
+              "description": "The session this one was resumed or forked from; null otherwise."
+            }
+          },
+          "required": [
+            "id",
+            "kind",
+            "agent",
+            "worktreeId",
+            "cwd",
+            "title",
+            "status",
+            "createdAt",
+            "lastActivityAt",
+            "exitCode"
+          ]
+        }
+      },
+      {
+        "id": "resume",
+        "description": "Starts a new terminal session that resumes an agent session in its original folder with the launch it recorded; `fork` opens a copy for agents that fork by argument. The old session is untouched.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "session": {
+              "type": "string",
+              "description": "The session to resume."
+            },
+            "providerSession": {
+              "type": "string",
+              "description": "The agent CLI's session ID; default: the one stored on the session."
+            },
+            "transcriptPath": {
+              "type": "string",
+              "description": "The transcript file, for agents that resume from one."
+            },
+            "fork": {
+              "type": "boolean",
+              "description": "Open a copy of the session instead of continuing it."
+            }
+          },
+          "required": [
+            "session"
+          ]
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "kind": {
+              "type": "string",
+              "enum": [
+                "terminal",
+                "structured"
+              ]
+            },
+            "agent": {
+              "type": "string",
+              "description": "`shell` or the ID of the agent the session runs."
+            },
+            "worktreeId": {
+              "type": "string"
+            },
+            "cwd": {
+              "type": "string"
+            },
+            "title": {
+              "type": "string"
+            },
+            "status": {
+              "type": "string",
+              "enum": [
+                "starting",
+                "running",
+                "working",
+                "waiting",
+                "done",
+                "exited"
+              ]
+            },
+            "createdAt": {
+              "type": "number"
+            },
+            "lastActivityAt": {
+              "type": "number"
+            },
+            "exitCode": {
+              "description": "The exit code, or null while the process is alive."
+            },
+            "exitSignal": {
+              "description": "The signal that ended the process, or null."
+            },
+            "exitCause": {
+              "description": "Why the session ended (exited, killed, host-restart or host-lost), or null while it is alive."
+            },
+            "restorable": {
+              "type": "boolean",
+              "description": "True when the session ended with the PTY host and can be restored."
+            },
+            "launch": {
+              "description": "What the session launched with ({command, args, env}); null for a shell or a session recorded before launches were kept."
+            },
+            "providerSession": {
+              "description": "The agent CLI's own session ({id, transcriptPath}) that resume passes back; null until one is stored."
+            },
+            "promptDelivery": {
+              "description": "How the first prompt reached the agent: null (no prompt), command-line, pending, pasted, unconfirmed or not-delivered."
+            },
+            "resumedFrom": {
+              "description": "The session this one was resumed or forked from; null otherwise."
+            }
+          },
+          "required": [
+            "id",
+            "kind",
+            "agent",
+            "worktreeId",
+            "cwd",
+            "title",
+            "status",
+            "createdAt",
+            "lastActivityAt",
+            "exitCode"
+          ]
+        }
+      },
+      {
+        "id": "setProviderSession",
+        "description": "Stores the agent CLI's own session ID (and transcript path) on a session so it can be resumed.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "session": {
+              "type": "string",
+              "description": "The session ID."
+            },
+            "id": {
+              "type": "string",
+              "description": "The agent CLI's session ID: 1 to 512 characters, no leading `-`, no control characters."
+            },
+            "transcriptPath": {
+              "type": "string",
+              "description": "The transcript file, for agents that resume from one."
+            }
+          },
+          "required": [
+            "session",
+            "id"
+          ]
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "kind": {
+              "type": "string",
+              "enum": [
+                "terminal",
+                "structured"
+              ]
+            },
+            "agent": {
+              "type": "string",
+              "description": "`shell` or the ID of the agent the session runs."
+            },
+            "worktreeId": {
+              "type": "string"
+            },
+            "cwd": {
+              "type": "string"
+            },
+            "title": {
+              "type": "string"
+            },
+            "status": {
+              "type": "string",
+              "enum": [
+                "starting",
+                "running",
+                "working",
+                "waiting",
+                "done",
+                "exited"
+              ]
+            },
+            "createdAt": {
+              "type": "number"
+            },
+            "lastActivityAt": {
+              "type": "number"
+            },
+            "exitCode": {
+              "description": "The exit code, or null while the process is alive."
+            },
+            "exitSignal": {
+              "description": "The signal that ended the process, or null."
+            },
+            "exitCause": {
+              "description": "Why the session ended (exited, killed, host-restart or host-lost), or null while it is alive."
+            },
+            "restorable": {
+              "type": "boolean",
+              "description": "True when the session ended with the PTY host and can be restored."
+            },
+            "launch": {
+              "description": "What the session launched with ({command, args, env}); null for a shell or a session recorded before launches were kept."
+            },
+            "providerSession": {
+              "description": "The agent CLI's own session ({id, transcriptPath}) that resume passes back; null until one is stored."
+            },
+            "promptDelivery": {
+              "description": "How the first prompt reached the agent: null (no prompt), command-line, pending, pasted, unconfirmed or not-delivered."
+            },
+            "resumedFrom": {
+              "description": "The session this one was resumed or forked from; null otherwise."
             }
           },
           "required": [
@@ -327,14 +559,7 @@
             },
             "agent": {
               "type": "string",
-              "enum": [
-                "shell",
-                "claude",
-                "codex",
-                "opencode",
-                "gemini"
-              ],
-              "description": "The agent to run."
+              "description": "`shell` or the ID of the agent the session runs."
             },
             "kind": {
               "type": "string",
@@ -367,14 +592,7 @@
             },
             "agent": {
               "type": "string",
-              "enum": [
-                "shell",
-                "claude",
-                "codex",
-                "opencode",
-                "gemini"
-              ],
-              "description": "The agent to run."
+              "description": "`shell` or the ID of the agent the session runs."
             },
             "worktreeId": {
               "type": "string"
@@ -414,6 +632,116 @@
             "restorable": {
               "type": "boolean",
               "description": "True when the session ended with the PTY host and can be restored."
+            },
+            "launch": {
+              "description": "What the session launched with ({command, args, env}); null for a shell or a session recorded before launches were kept."
+            },
+            "providerSession": {
+              "description": "The agent CLI's own session ({id, transcriptPath}) that resume passes back; null until one is stored."
+            },
+            "promptDelivery": {
+              "description": "How the first prompt reached the agent: null (no prompt), command-line, pending, pasted, unconfirmed or not-delivered."
+            },
+            "resumedFrom": {
+              "description": "The session this one was resumed or forked from; null otherwise."
+            }
+          },
+          "required": [
+            "id",
+            "kind",
+            "agent",
+            "worktreeId",
+            "cwd",
+            "title",
+            "status",
+            "createdAt",
+            "lastActivityAt",
+            "exitCode"
+          ]
+        }
+      },
+      {
+        "id": "restore",
+        "description": "Starts a shell in a session that ended with the PTY host and can be restored; a running session is returned unchanged.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "session": {
+              "type": "string",
+              "description": "The session ID."
+            }
+          },
+          "required": [
+            "session"
+          ]
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "kind": {
+              "type": "string",
+              "enum": [
+                "terminal",
+                "structured"
+              ]
+            },
+            "agent": {
+              "type": "string",
+              "description": "`shell` or the ID of the agent the session runs."
+            },
+            "worktreeId": {
+              "type": "string"
+            },
+            "cwd": {
+              "type": "string"
+            },
+            "title": {
+              "type": "string"
+            },
+            "status": {
+              "type": "string",
+              "enum": [
+                "starting",
+                "running",
+                "working",
+                "waiting",
+                "done",
+                "exited"
+              ]
+            },
+            "createdAt": {
+              "type": "number"
+            },
+            "lastActivityAt": {
+              "type": "number"
+            },
+            "exitCode": {
+              "description": "The exit code, or null while the process is alive."
+            },
+            "exitSignal": {
+              "description": "The signal that ended the process, or null."
+            },
+            "exitCause": {
+              "description": "Why the session ended (exited, killed, host-restart or host-lost), or null while it is alive."
+            },
+            "restorable": {
+              "type": "boolean",
+              "description": "True when the session ended with the PTY host and can be restored."
+            },
+            "launch": {
+              "description": "What the session launched with ({command, args, env}); null for a shell or a session recorded before launches were kept."
+            },
+            "providerSession": {
+              "description": "The agent CLI's own session ({id, transcriptPath}) that resume passes back; null until one is stored."
+            },
+            "promptDelivery": {
+              "description": "How the first prompt reached the agent: null (no prompt), command-line, pending, pasted, unconfirmed or not-delivered."
+            },
+            "resumedFrom": {
+              "description": "The session this one was resumed or forked from; null otherwise."
             }
           },
           "required": [
@@ -502,14 +830,7 @@
             },
             "agent": {
               "type": "string",
-              "enum": [
-                "shell",
-                "claude",
-                "codex",
-                "opencode",
-                "gemini"
-              ],
-              "description": "The agent to run."
+              "description": "`shell` or the ID of the agent the session runs."
             },
             "worktreeId": {
               "type": "string"
@@ -549,99 +870,18 @@
             "restorable": {
               "type": "boolean",
               "description": "True when the session ended with the PTY host and can be restored."
-            }
-          },
-          "required": [
-            "id",
-            "kind",
-            "agent",
-            "worktreeId",
-            "cwd",
-            "title",
-            "status",
-            "createdAt",
-            "lastActivityAt",
-            "exitCode"
-          ]
-        }
-      },
-      {
-        "id": "restore",
-        "description": "Starts a shell in a session that ended with the PTY host and can be restored; a running session is returned unchanged.",
-        "params": {
-          "type": "object",
-          "properties": {
-            "session": {
-              "type": "string",
-              "description": "The session ID."
-            }
-          },
-          "required": [
-            "session"
-          ]
-        },
-        "result": {
-          "type": "object",
-          "properties": {
-            "id": {
-              "type": "string"
             },
-            "kind": {
-              "type": "string",
-              "enum": [
-                "terminal",
-                "structured"
-              ]
+            "launch": {
+              "description": "What the session launched with ({command, args, env}); null for a shell or a session recorded before launches were kept."
             },
-            "agent": {
-              "type": "string",
-              "enum": [
-                "shell",
-                "claude",
-                "codex",
-                "opencode",
-                "gemini"
-              ],
-              "description": "The agent to run."
+            "providerSession": {
+              "description": "The agent CLI's own session ({id, transcriptPath}) that resume passes back; null until one is stored."
             },
-            "worktreeId": {
-              "type": "string"
+            "promptDelivery": {
+              "description": "How the first prompt reached the agent: null (no prompt), command-line, pending, pasted, unconfirmed or not-delivered."
             },
-            "cwd": {
-              "type": "string"
-            },
-            "title": {
-              "type": "string"
-            },
-            "status": {
-              "type": "string",
-              "enum": [
-                "starting",
-                "running",
-                "working",
-                "waiting",
-                "done",
-                "exited"
-              ]
-            },
-            "createdAt": {
-              "type": "number"
-            },
-            "lastActivityAt": {
-              "type": "number"
-            },
-            "exitCode": {
-              "description": "The exit code, or null while the process is alive."
-            },
-            "exitSignal": {
-              "description": "The signal that ended the process, or null."
-            },
-            "exitCause": {
-              "description": "Why the session ended (exited, killed, host-restart or host-lost), or null while it is alive."
-            },
-            "restorable": {
-              "type": "boolean",
-              "description": "True when the session ended with the PTY host and can be restored."
+            "resumedFrom": {
+              "description": "The session this one was resumed or forked from; null otherwise."
             }
           },
           "required": [
@@ -681,14 +921,7 @@
                 },
                 "agent": {
                   "type": "string",
-                  "enum": [
-                    "shell",
-                    "claude",
-                    "codex",
-                    "opencode",
-                    "gemini"
-                  ],
-                  "description": "The agent to run."
+                  "description": "`shell` or the ID of the agent the session runs."
                 },
                 "worktreeId": {
                   "type": "string"
@@ -728,6 +961,18 @@
                 "restorable": {
                   "type": "boolean",
                   "description": "True when the session ended with the PTY host and can be restored."
+                },
+                "launch": {
+                  "description": "What the session launched with ({command, args, env}); null for a shell or a session recorded before launches were kept."
+                },
+                "providerSession": {
+                  "description": "The agent CLI's own session ({id, transcriptPath}) that resume passes back; null until one is stored."
+                },
+                "promptDelivery": {
+                  "description": "How the first prompt reached the agent: null (no prompt), command-line, pending, pasted, unconfirmed or not-delivered."
+                },
+                "resumedFrom": {
+                  "description": "The session this one was resumed or forked from; null otherwise."
                 }
               },
               "required": [
@@ -907,12 +1152,11 @@
       {
         "id": "new",
         "words": "new",
-        "summary": "start a session (shell, claude, codex, opencode, gemini); --background runs a structured session",
+        "summary": "start a session (any agent from `quirky agents list`, or shell); --background runs a structured session",
         "flags": {
           "agent": {
             "type": "string",
-            "description": "agent kind to start",
-            "required": true
+            "description": "agent ID to start (default: the default agent)"
           },
           "worktree": {
             "type": "string",
@@ -925,6 +1169,14 @@
           "background": {
             "type": "boolean",
             "description": "run a structured session; needs --prompt"
+          },
+          "wait": {
+            "type": "boolean",
+            "description": "wait until the prompt is delivered and print the outcome"
+          },
+          "draft": {
+            "type": "boolean",
+            "description": "leave the prompt in the agent's input without submitting it"
           }
         },
         "methods": [
@@ -933,18 +1185,60 @@
         ]
       },
       {
-        "id": "close",
-        "words": "close",
-        "summary": "close a session and forget it",
+        "id": "resume",
+        "words": "resume",
+        "summary": "resume an agent session in its original folder; --fork opens a copy",
         "positionals": [
           {
             "name": "session",
-            "description": "the session to close",
+            "description": "the session to resume",
             "required": true
           }
         ],
+        "flags": {
+          "provider-session": {
+            "type": "string",
+            "description": "the agent CLI's session ID (default: the one stored on the session)"
+          },
+          "transcript": {
+            "type": "string",
+            "description": "transcript file, for agents that resume from one",
+            "param": "transcriptPath"
+          },
+          "fork": {
+            "type": "boolean",
+            "description": "open a copy of the session instead of continuing it"
+          }
+        },
         "methods": [
-          "quirky.session/close"
+          "quirky.session/resume"
+        ]
+      },
+      {
+        "id": "set-provider-session",
+        "words": "set-provider-session",
+        "summary": "store the agent CLI's own session ID on a session so it can be resumed",
+        "positionals": [
+          {
+            "name": "session",
+            "description": "the session",
+            "required": true
+          },
+          {
+            "name": "id",
+            "description": "the agent CLI's session ID",
+            "required": true
+          }
+        ],
+        "flags": {
+          "transcript": {
+            "type": "string",
+            "description": "transcript file, for agents that resume from one",
+            "param": "transcriptPath"
+          }
+        },
+        "methods": [
+          "quirky.session/setProviderSession"
         ]
       },
       {
@@ -962,6 +1256,21 @@
         "methods": [
           "quirky.session/get",
           "quirky.session/restore"
+        ]
+      },
+      {
+        "id": "close",
+        "words": "close",
+        "summary": "close a session and forget it",
+        "positionals": [
+          {
+            "name": "session",
+            "description": "the session to close",
+            "required": true
+          }
+        ],
+        "methods": [
+          "quirky.session/close"
         ]
       }
     ]

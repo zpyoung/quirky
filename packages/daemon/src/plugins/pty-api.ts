@@ -19,6 +19,8 @@ type Fanout = {
   exit: Set<{ pluginId: string; listener: ExitListener }>
   fact: Set<{ pluginId: string; listener: FactListener }>
   reconnect: Set<{ pluginId: string; listener: ReconnectListener }>
+  /** Plugins holding a host subscription per session; the host subscription ends when the last holder lets go. */
+  holds: Map<string, Set<string>>
   log: (message: string) => void
 }
 
@@ -27,7 +29,14 @@ const fanouts = new WeakMap<PtyClient, Fanout>()
 function fanoutFor(pty: PtyClient, log: (message: string) => void): Fanout {
   const existing = fanouts.get(pty)
   if (existing) return existing
-  const fanout: Fanout = { data: new Set(), exit: new Set(), fact: new Set(), reconnect: new Set(), log }
+  const fanout: Fanout = {
+    data: new Set(),
+    exit: new Set(),
+    fact: new Set(),
+    reconnect: new Set(),
+    holds: new Map(),
+    log
+  }
   const run = (pluginId: string, call: () => unknown) => {
     try {
       const result = call()
@@ -55,6 +64,10 @@ function fanoutFor(pty: PtyClient, log: (message: string) => void): Fanout {
 /**
  * Builds `context.pty` for one plugin over the shared PTY client. After `revoke` the plugin's
  * listeners are gone and every member throws, so a stale handle cannot reach the host.
+ *
+ * Host subscriptions are shared by all plugins on the client: `subscribe` marks this plugin as
+ * holding the session (repeats do not stack), and `unsubscribe` or `revoke` reach the host only
+ * once no plugin holds it.
  */
 export function createPtyApi(
   pty: PtyClient,
@@ -63,6 +76,7 @@ export function createPtyApi(
 ): { api: PluginPty; revoke(): void } {
   const fanout = fanoutFor(pty, log)
   const removers = new Set<() => void>()
+  const attempts = new Map<string, { inflight: number; succeeded: boolean }>()
   let revoked = false
 
   const live = () => {
@@ -77,6 +91,14 @@ export function createPtyApi(
     }
     removers.add(remove)
     return remove
+  }
+
+  const release = (sessionId: string): boolean => {
+    const holders = fanout.holds.get(sessionId)
+    holders?.delete(pluginId)
+    if (holders && holders.size > 0) return false
+    fanout.holds.delete(sessionId)
+    return true
   }
 
   const api: PluginPty = {
@@ -117,11 +139,28 @@ export function createPtyApi(
     },
     async subscribe(sessionId, options) {
       live()
-      return pty.request('subscribe', {
-        sessionId,
-        ...(options?.mode === undefined ? {} : { mode: options.mode }),
-        ...(options?.historyLines === undefined ? {} : { historyLines: options.historyLines })
-      })
+      const holders = fanout.holds.get(sessionId) ?? new Set<string>()
+      holders.add(pluginId)
+      fanout.holds.set(sessionId, holders)
+      const attempt = attempts.get(sessionId) ?? { inflight: 0, succeeded: false }
+      attempts.set(sessionId, attempt)
+      attempt.inflight += 1
+      try {
+        const result = await pty.request('subscribe', {
+          sessionId,
+          ...(options?.mode === undefined ? {} : { mode: options.mode }),
+          ...(options?.historyLines === undefined ? {} : { historyLines: options.historyLines })
+        })
+        attempt.succeeded = true
+        return result
+      } catch (error) {
+        // only the last failing attempt may roll the hold back, and only if no attempt succeeded
+        if (attempt.inflight === 1 && !attempt.succeeded && attempts.get(sessionId) === attempt) release(sessionId)
+        throw error
+      } finally {
+        attempt.inflight -= 1
+        if (attempt.inflight === 0 && !attempt.succeeded && attempts.get(sessionId) === attempt) attempts.delete(sessionId)
+      }
     },
     async snapshot(sessionId) {
       live()
@@ -137,7 +176,8 @@ export function createPtyApi(
     },
     async unsubscribe(sessionId) {
       live()
-      await pty.request('unsubscribe', { sessionId })
+      attempts.delete(sessionId)
+      if (release(sessionId)) await pty.request('unsubscribe', { sessionId })
     },
     onData: (listener) => listen(fanout.data, { pluginId, listener }),
     onExit: (listener) => listen(fanout.exit, { pluginId, listener }),
@@ -149,7 +189,12 @@ export function createPtyApi(
     api,
     revoke() {
       revoked = true
+      attempts.clear()
       for (const remove of [...removers]) remove()
+      for (const [sessionId, holders] of [...fanout.holds]) {
+        if (!holders.has(pluginId) || !release(sessionId)) continue
+        pty.request('unsubscribe', { sessionId }).catch(() => {})
+      }
     }
   }
 }

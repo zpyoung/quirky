@@ -10,6 +10,14 @@ export const WORKTREES: Worktree[] = [
 
 const contains = (parent: string, child: string) => child === parent || child.startsWith(`${parent}/`)
 
+/** The fixed worktrees, plus `wt_real` when a test points `QUIRKY_TEST_REAL_WORKTREE` at a directory that exists. */
+const worktrees = (): Worktree[] => {
+  const real = process.env.QUIRKY_TEST_REAL_WORKTREE
+  return real
+    ? [...WORKTREES, { id: 'wt_real', repoId: 'repo_alpha', path: real, branch: 'real', head, isMain: false, name: 'real' }]
+    : WORKTREES
+}
+
 // ids listed here stop resolving, as a worktree whose directory was deleted does
 const vanished = () => (process.env.QUIRKY_TEST_VANISHED_WORKTREES ?? '').split(',')
 
@@ -18,7 +26,7 @@ export function activate(context: PluginContext): void {
   context.provide('method:quirky.worktree/resolve', (params: Record<string, unknown>) => {
     const selector = params.selector as string
     const matches = (predicate: (worktree: Worktree) => boolean) =>
-      WORKTREES.filter((w) => !vanished().includes(w.id) && predicate(w))
+      worktrees().filter((w) => !vanished().includes(w.id) && predicate(w))
     let found: Worktree[]
     if (selector === 'current' || selector === 'active') {
       const byId = matches((w) => w.id === params.worktreeId)
