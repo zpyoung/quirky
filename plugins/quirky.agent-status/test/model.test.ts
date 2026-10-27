@@ -264,6 +264,26 @@ describe('readableDetail', () => {
     }
   })
 
+  test('never yields JSON object text longer than the detail cap', () => {
+    const long = JSON.stringify({ result: 'x'.repeat(CAPS.detail * 2) })
+    const rows = [
+      row({ state: 'done', prompt: 'human prompt', lastAssistantMessage: long }),
+      row({ state: 'done', prompt: 'human prompt', programStatus: { state: 'done', msg: long } }),
+      row({ state: 'working', prompt: 'human prompt', programStatus: { state: 'working', msg: long } }),
+      row({ prompt: long }),
+    ]
+    expect(readableDetail(rows[0]!)).toBe('human prompt')
+    expect(readableDetail(rows[1]!)).toBe('human prompt')
+    expect(readableDetail(rows[2]!)).toBe('human prompt')
+    expect(readableDetail(rows[3]!)).toBe('')
+  })
+
+  test('displayOf drops a stored detail that is capped JSON object text', () => {
+    const long = JSON.stringify({ result: 'x'.repeat(CAPS.detail * 2) }).slice(0, CAPS.detail)
+    const shown = displayOf(row({ state: 'working', detail: long, prompt: 'human prompt' }), 0, true)
+    expect(shown.detail).toBe('human prompt')
+  })
+
   test('is capped to a line', () => {
     expect(readableDetail(row({ prompt: 'p'.repeat(500) }))).toHaveLength(CAPS.detail)
   })
