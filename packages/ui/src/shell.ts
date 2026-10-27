@@ -1,7 +1,9 @@
 import { confirmForPlugin } from './components/ConfirmHost'
+import { dismissToastByKey } from './components/Toasts'
 import { Connection } from './connection'
 import type { AppContextValue } from './context'
 import { WindowPluginHost, type HostDeps } from './plugins/host'
+import { reportedToasts } from './lib/state'
 import { Store } from './store'
 
 /** Window focus as the browser reports it. */
@@ -60,12 +62,25 @@ export function createShell(options: ShellOptions): AppContextValue {
     onConnection: (listener) => connection.onStatus(listener),
     importModule: options.importModule,
     confirm: confirmForPlugin,
-    toast: (title, body, kind) => store.dispatch({ type: 'toast', toast: { kind, title, body } }),
+    toast: (title, body, kind, toastOptions) =>
+      store.dispatch({ type: 'toast', toast: { ...toastOptions, kind, title, body } }),
+    dismissToast: (key) => dismissToastByKey({ store, plugins }, key),
     log: options.log,
     windowFocus: options.windowFocus,
     windowActivity: options.windowActivity
   })
+  const reportToasts = () => {
+    connection.callAny('ui.shell.report', { toasts: reportedToasts(store.getState().toasts) }).catch(() => undefined)
+  }
+  let reportedFrom = store.getState().toasts
+  store.subscribe(() => {
+    const { toasts } = store.getState()
+    if (toasts === reportedFrom) return
+    reportedFrom = toasts
+    reportToasts()
+  })
   connection.onConnected(() => {
+    if (store.getState().toasts.length > 0) reportToasts()
     plugins.connected().catch((error) => options.log(`plugin refresh failed: ${error}`))
   })
   return { store, connection, plugins }

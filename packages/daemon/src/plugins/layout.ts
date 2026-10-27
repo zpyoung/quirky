@@ -8,6 +8,7 @@ import {
   type UiModel,
   type UiSlotState,
   type UiState,
+  type UiToastState,
   type UiWindowInfo
 } from '@quirky/protocol'
 import { conflict, invalidParams, notFound } from '../errors'
@@ -18,6 +19,7 @@ import type { PluginHost } from './host'
 const LAYOUT_KEY = 'layout'
 const MAX_JSON_LENGTH = 64 * 1024
 const COMMAND_TIMEOUT_MS = 30_000
+const TOAST_DISMISS = 'ui.toast.dismiss'
 const FOCUS_TARGETS = ['sidebar', 'view', 'panel'] as const
 
 const DEFAULT_LAYOUT: UiLayout = { view: null, panel: null, sidebar: true, focus: null }
@@ -40,6 +42,8 @@ export type LayoutServiceOptions = {
 }
 
 type Report = { state: unknown; order: number }
+
+type ToastReport = { toasts: UiToastState[]; order: number }
 
 type PendingCommand = {
   conn: ClientConn
@@ -94,6 +98,7 @@ function readStored(value: unknown): UiLayout {
  */
 export class LayoutService {
   private readonly reports = new Map<string, Map<number, Report>>()
+  private readonly toastReports = new Map<number, ToastReport>()
   private readonly pending = new Map<string, PendingCommand>()
   private reportCounter = 0
   private lastFocusedAt = 0
@@ -111,7 +116,8 @@ export class LayoutService {
   /**
    * The effective layout, the connected windows, and every slot of the UI model with what it shows
    * and reports. An overlay is shown while a window has reported for it, unless the latest report
-   * is an object whose boolean `shown` says otherwise.
+   * is an object whose boolean `shown` says otherwise. `toasts` is the focused window's list, else
+   * the list reported last.
    */
   state(): UiState {
     const layout = this.layout()
@@ -134,7 +140,7 @@ export class LayoutService {
         ...(report ? { report: report.state } : {})
       }
     })
-    return { windows, layout, slots }
+    return { windows, layout, slots, toasts: this.toastsOf(focusedConn)?.toasts ?? [] }
   }
 
   /**
@@ -238,16 +244,31 @@ export class LayoutService {
     if (problem !== null) return Promise.reject(invalidParams(problem))
     const target = this.targetWindow()
     if (!target) return Promise.reject(conflict('no Quirky window is open'))
+    return this.route(target, id, args)
+  }
 
-    const requestId = crypto.randomUUID()
-    return new Promise((resolve, reject) => {
-      const timer = setTimeout(
-        () => this.settle(requestId, (pending) => pending.reject(unanswered())),
-        this.options.commandTimeoutMs ?? COMMAND_TIMEOUT_MS
-      )
-      this.pending.set(requestId, { conn: target, resolve, reject, timer })
-      this.options.sendTo(target, { type: 'ui.command.request', requestId, id, args: args ?? {} })
-    })
+  /**
+   * Keeps the toasts a window shows, replacing its earlier list. InvalidParams for a connection
+   * that is not a window, a list that is not an array or one over 64 KiB of JSON.
+   */
+  reportToasts(conn: ClientConn, toasts: unknown): void {
+    this.requireWindow(conn)
+    if (!Array.isArray(toasts)) throw invalidParams('toasts must be an array')
+    if (jsonLength(toasts) > MAX_JSON_LENGTH) throw invalidParams('toasts are over 64 KiB')
+    this.toastReports.set(conn.id, { toasts: toasts as UiToastState[], order: ++this.reportCounter })
+  }
+
+  /**
+   * Dismisses the toast with `key` in the window whose toasts `ui.state` lists, which runs its
+   * onDismiss command. Conflict when no window is open, the window disconnects or stays silent;
+   * NotFound when that window shows no toast with `key`.
+   */
+  async dismissToast(key: string): Promise<void> {
+    if (!this.targetWindow()) throw conflict('no Quirky window is open')
+    const shown = this.toastsOf(this.focusedConn()?.id)
+    const target = shown ? this.openWindows().find((conn) => conn.id === shown.connId) : undefined
+    if (!shown || !target || !shown.toasts.some((toast) => toast.key === key)) throw notFound(`no toast ${key}`)
+    await this.route(target, TOAST_DISMISS, { key })
   }
 
   /** Completes a routed command. Ignored unless it comes from the window the command went to. */
@@ -270,10 +291,23 @@ export class LayoutService {
       if (bySlot.size === 0) this.reports.delete(slot)
       if (existed) this.options.broadcast({ type: 'ui.report.changed', slot, connId: conn.id })
     }
+    this.toastReports.delete(conn.id)
     for (const [requestId, pending] of this.pending) {
       if (pending.conn === conn) this.settle(requestId, (settled) => settled.reject(unanswered()))
     }
     if (conn.role === 'ui') this.announceWindows()
+  }
+
+  private route(target: ClientConn, id: string, args: unknown): Promise<{ result: unknown }> {
+    const requestId = crypto.randomUUID()
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(
+        () => this.settle(requestId, (pending) => pending.reject(unanswered())),
+        this.options.commandTimeoutMs ?? COMMAND_TIMEOUT_MS
+      )
+      this.pending.set(requestId, { conn: target, resolve, reject, timer })
+      this.options.sendTo(target, { type: 'ui.command.request', requestId, id, args: args ?? {} })
+    })
   }
 
   private settle(requestId: string, finish: (pending: PendingCommand) => void): void {
@@ -327,6 +361,16 @@ export class LayoutService {
     const focused = open.filter((conn) => conn.focusedAt !== undefined)
     if (focused.length > 0) return focused.reduce((best, conn) => (conn.focusedAt! > best.focusedAt! ? conn : best))
     return open[open.length - 1]
+  }
+
+  private toastsOf(focusedConn: number | undefined): { connId: number; toasts: UiToastState[] } | undefined {
+    const own = focusedConn !== undefined ? this.toastReports.get(focusedConn) : undefined
+    if (own) return { connId: focusedConn!, toasts: own.toasts }
+    let latest: { connId: number; toasts: UiToastState[]; order: number } | undefined
+    for (const [connId, report] of this.toastReports) {
+      if (!latest || report.order > latest.order) latest = { connId, ...report }
+    }
+    return latest
   }
 
   private reportFor(slot: string, focusedConn: number | undefined): Report | undefined {

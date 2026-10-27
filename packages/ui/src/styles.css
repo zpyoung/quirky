@@ -896,6 +896,14 @@ textarea {
   border-left-color: var(--danger);
 }
 
+.toast-success {
+  border-left-color: var(--green);
+}
+
+.toast-warning {
+  border-left-color: var(--amber);
+}
+
 .toast-title {
   font-weight: 600;
 }
@@ -903,6 +911,18 @@ textarea {
 .toast-body {
   color: var(--muted);
   overflow-wrap: anywhere;
+}
+
+.toast-detail {
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+.toast-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
 }
 
 .toast .icon-button {

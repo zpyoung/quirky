@@ -136,7 +136,8 @@ describe('layout state', () => {
         { id: LIST, kind: 'sidebar-section', plugin: NOTES, title: 'Notes', shown: true },
         { id: OUTLINE, kind: 'panel', plugin: NOTES, title: 'Outline', shown: false },
         { id: PAGE, kind: 'view', plugin: NOTES, title: 'Page', shown: false }
-      ])
+      ]),
+      toasts: []
     })
 
     const window = await openWindow(harness, 'main window')

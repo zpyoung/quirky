@@ -21,7 +21,7 @@ describe('ui commands', () => {
     const state: UiState = {
       windows: [{ connId: 3, name: 'window', focused: true, inputAt: null, present: false }],
       layout: LAYOUT,
-      slots: [
+      toasts: [], slots: [
         { id: 'sidebar-section:quirky.worktree/worktrees', kind: 'sidebar-section', plugin: 'quirky.worktree', title: 'Worktrees', shown: true, report: { repos: 1 } },
         { id: 'panel:quirky.git/source-control', kind: 'panel', plugin: 'quirky.git', title: 'Source control', shown: false },
         { id: 'view:quirky.session/worktree', kind: 'view', plugin: 'quirky.session', title: 'Session', shown: true }
@@ -47,7 +47,7 @@ describe('ui commands', () => {
     const state: UiState = {
       windows: [{ connId: 3, name: 'window', focused: true, inputAt: null, present: false }],
       layout: LAYOUT,
-      slots: [
+      toasts: [], slots: [
         { id: 'overlay:quirky.terminal/floating', kind: 'overlay', plugin: 'quirky.terminal', title: 'Floating', shown: true, report: { open: false } },
         { id: 'overlay:acme.hud/hud', kind: 'overlay', plugin: 'acme.hud', title: 'Hud', shown: false }
       ]
