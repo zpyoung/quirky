@@ -682,5 +682,16 @@
 - **Revisit if:** a person finds losing the review on opening another file confusing; then the review could stay as a pinned view
 - **Source:** assumed — autonomous
 
+## D63: The second catch-up takes build/roadmap's test runner, which retires D55's three-process split
+- **Question:** the first `queue.ts land` stopped on conflicts with build/roadmap (m1-term-ui landed): `package.json`'s test script, `UiPluginContext` and the window host, two test files
+- **Options:** keep D55's three `bun test` processes; take roadmap's `bun scripts/suite.ts packages apps plugins`; run suite.ts three times with D55's ignore patterns
+- **Chose:** roadmap's single suite.ts line. `UiPluginContext` keeps both sides: this item's `setPanelBadge` tooltip argument and m1-term-ui's `setContext` and `mountView`; the quirky.git test fakes gained the two new members. `plugins/quirky.git/test/ui.test.ts` keeps this item's version, whose helpers moved to test/ui/panel-support.ts. The terminal e2e helper takes roadmap's larger `ps` buffer.
+- **Why:** with the remote host configured, suite.ts runs every test file in its own process, so D55's descriptor ceiling can't be reached; and its remote discovery ignores `--path-ignore-patterns`, so running it three times would run the quirky.git files two or three times over. This supersedes D55 for the remote path.
+- **Evidence:** scripts/suite.ts (`runFiles`, `discover`); `.git/build-loop/remote-tests.json`; merge commit 380b565; docs/loop/decisions/m1-term-ui.md D47, D58
+- **Reversibility:** easy
+- **Confidence:** medium
+- **Revisit if:** the remote host is unreachable and the local fallback (`runSuite`, one process) fails with `EBADF ... posix_spawn` in plugins/quirky.git; then split the local fallback as D55 did
+- **Source:** supersedes m2-source-control-core D55
+
 ## Progress
-UI verification done (D59 to D62) and its fixes committed. Next: land with `git switch --detach` and `bun scripts/build-loop/queue.ts land m2-source-control-core`. If land fails, merge build/roadmap into the branch, fix what it names, rerun the tests and land again.
+UI verification done (D59 to D62). Second catch-up merged (D63). Next: gate on the merged branch, then land with `git switch --detach` and `bun scripts/build-loop/queue.ts land m2-source-control-core`. If land fails, merge build/roadmap into the branch, fix what it names, rerun the tests and land again.
