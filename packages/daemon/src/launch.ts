@@ -170,18 +170,15 @@ case "$src" in
 esac
 [ -z "$answer" ] || printf '%s\\n' "$answer"
 if [ -z "$QUIRKY_SESSION_ID" ] || [ -n "$CLAUDE_JOB_DIR" ]; then
-  case "$src" in
-    codex|grok|antigravity) ;;
-    *) [ -t 0 ] || { command -p cat || cat; } >/dev/null ;;
-  esac
   exit 0
 fi
 case "$src" in
   codex)
-    payload=""
     if [ "$#" -gt 1 ]; then
       for last; do :; done
       payload="$last"
+    else
+      payload="$({ command -p cat || cat; })"
     fi ;;
   grok|antigravity)
     { command -v python3 || command -p -v python3; } >/dev/null 2>&1 || exit 0
