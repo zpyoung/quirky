@@ -116,8 +116,8 @@ function isEditableControl(element: Element): boolean {
 /** The MIME type identifies a host-minted one-use token; dragover checks only its presence. */
 export const COMMAND_DROP_MIME = 'application/x-quirky-command'
 
-export function hasCommandDrop(transfer: DataTransfer | null): transfer is DataTransfer {
-  return transfer !== null && Array.from(transfer.types).includes(COMMAND_DROP_MIME)
+export function hasCommandDrop(transfer: DataTransfer | null | undefined): transfer is DataTransfer {
+  return transfer !== null && transfer !== undefined && Array.from(transfer.types).includes(COMMAND_DROP_MIME)
 }
 
 /** Writes to the clipboard; the failure case is the caller's to report. */
