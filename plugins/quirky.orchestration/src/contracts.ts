@@ -139,7 +139,8 @@ export interface DispatchRow {
   taskId: TaskId
   contractVersion: ContractVersion
   status: DispatchStatus
-  assigneeSessionId: SessionId
+  /** Null only while a supervised start is durably reserved before session creation. */
+  assigneeSessionId: SessionId | null
   creatorSessionId: SessionId | null
   creatorDispatchId: DispatchId | null
   retryOfDispatchId: DispatchId | null
@@ -285,6 +286,17 @@ export interface AcceptedAskCheckpoint {
   timeoutMs: number
 }
 
+/** Durable supervised acceptance before any process/workspace launch effect. */
+export interface AcceptedWorkerCheckpoint {
+  state: 'accepted'
+  accepted: true
+  runId: RunId
+  taskId: TaskId
+  dispatchId: DispatchId
+}
+
+export type MutationCheckpoint = AcceptedAskCheckpoint | AcceptedWorkerCheckpoint
+
 export type MutatingOrchestrationMethod =
   | 'runCreate'
   | 'runUse'
@@ -297,6 +309,11 @@ export type MutatingOrchestrationMethod =
   | 'ask'
   | 'gateCreate'
   | 'gateResolve'
+  | 'workerStart'
+  | 'workerStop'
+  | 'workerAbandon'
+  | 'workerRelease'
+  | 'workerRetain'
   | 'reset'
 
 /** Public receipt projection intentionally omits caller fingerprints and payload hashes. */
@@ -304,7 +321,7 @@ export interface MutationReceiptRow {
   requestId: UUID
   method: MutatingOrchestrationMethod
   state: StoredMutationState
-  checkpoint?: AcceptedAskCheckpoint
+  checkpoint?: MutationCheckpoint
   result?: JsonValue
   createdAt: UtcTimestamp
   updatedAt: UtcTimestamp
