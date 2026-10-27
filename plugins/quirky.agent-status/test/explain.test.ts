@@ -153,10 +153,11 @@ describe('SC-4: explain names title, OSC 7501 and inferred evidence', () => {
     expect(await rig.explain()).toMatchObject({
       state: 'blocked',
       kind: 'approval',
-      decidedBy: 'row',
+      decidedBy: 'rule',
       row: { source: 'title', because: { source: 'title' } }
     })
     expect((await rig.explain()).row!.because!.rule).toContain('✋ gemini')
+    expect((await rig.explain()).row!.because!.rule).toContain('permission')
   })
 
   test('(b) an OSC 7501 report of a blocked permission', async () => {
