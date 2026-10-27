@@ -587,5 +587,15 @@
 - **Confidence:** high
 - **Source:** assumed — autonomous
 
+## D59: Wave 3 window choices
+- **Question:** calls the window implementer made where the spec was silent
+- **Options:** as listed
+- **Chose:** the `set` command's field names are `worktree`, `create`, `createName`, `createBase`, `agent`, `relationship`, `context`, `repoState`, `diffBodies`, `openEditorTabs`, `template`, `templateName`, `note`; the report's `disabled` lists `start:<reason>` and `control:<name>` entries; the dialog opens only after `prepare` answers, so "Detecting Agents on the target host…" is unit-tested but never seen in the window; edit and remove show on every settings row; Escape (capture phase) first closes an open worktree list and does nothing while a start runs; `template-add`/`template-edit` take optional `name`, `body`, `save` so a script can save without typing; the preview editor has no undo history (only `@codemirror/state` and `@codemirror/view` were briefed), left for the final review.
+- **Why:** each keeps the logic spec's observable behavior scriptable
+- **Evidence:** plugins/quirky.handoff/src/window
+- **Reversibility:** easy
+- **Confidence:** medium
+- **Source:** assumed — autonomous
+
 ## Progress
-Waves 1 and 2 merged (kernel growth, core, probe, daemon service with start/delivery/lineage/CLI); wave 1 checkpoint fixed (D56). Next: wave 2 gate and checkpoint, wave 3 W (window: overlay dialog, settings view, commands, menu-item; brief re-derivable from tech.md W1), catch-up merge with build/roadmap, Final Round 1, UI pass, land.
+All three waves merged with both checkpoints fixed (D56, D58). Next: catch-up merge with build/roadmap (LOOP.md step 5) and its tests, Final Round 1 (three lenses, deep) with one fix batch, UI pass with quirk:using-apps-like-a-user (SC-1, 3, 21, 24, 33, 36, 40, 50, 53, 54, 58, 59), then land.
