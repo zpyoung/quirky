@@ -24,7 +24,7 @@ export type GroupRow = {
   created_at: number
 }
 
-export type HookKind = 'setup' | 'archive'
+export type HookKind = 'setup' | 'archive' | 'issue'
 
 /** What a project has when nothing has been set; the store keeps only the differences. */
 export const DEFAULT_SETTINGS: ProjectSettings = {
@@ -34,6 +34,7 @@ export const DEFAULT_SETTINGS: ProjectSettings = {
   agentStartup: null,
   commandSource: null,
   setupScript: '',
+  issueCommand: '',
   archiveScript: ''
 }
 

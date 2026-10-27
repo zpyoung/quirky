@@ -465,7 +465,7 @@
       },
       {
         "id": "show",
-        "description": "A project with its settings and effective hooks (the shared file at HEAD merged with the local scripts).",
+        "description": "A project with its settings and effective hooks (the shared file at HEAD merged with local setup, archive and issue-command scripts).",
         "readOnly": true,
         "params": {
           "type": "object",
@@ -543,7 +543,7 @@
                   "description": "start-immediately or wait-for-setup; null when unset."
                 },
                 "commandSource": {
-                  "description": "shared-only, local-only or run-both; null when unset."
+                  "description": "shared-only, local-only or run-both for setup, archive and issue-command scripts; null when unset."
                 },
                 "setupScript": {
                   "type": "string",
@@ -552,6 +552,10 @@
                 "archiveScript": {
                   "type": "string",
                   "description": "The local archive script."
+                },
+                "issueCommand": {
+                  "type": "string",
+                  "description": "The local issue command; empty when unset."
                 }
               },
               "required": [
@@ -571,6 +575,9 @@
                 },
                 "archive": {
                   "description": "The effective archive script as { text, source, badge, shared }, or null."
+                },
+                "issueCommand": {
+                  "description": "The effective issue command as { text, source, badge, shared }, or null."
                 },
                 "agentStartup": {
                   "type": "string",
@@ -660,6 +667,10 @@
             "archiveScript": {
               "type": "string",
               "description": "Local archive script."
+            },
+            "issueCommand": {
+              "type": "string",
+              "description": "Local issue-command script; an empty string clears it."
             }
           },
           "required": [
@@ -730,7 +741,7 @@
                   "description": "start-immediately or wait-for-setup; null when unset."
                 },
                 "commandSource": {
-                  "description": "shared-only, local-only or run-both; null when unset."
+                  "description": "shared-only, local-only or run-both for setup, archive and issue-command scripts; null when unset."
                 },
                 "setupScript": {
                   "type": "string",
@@ -739,6 +750,10 @@
                 "archiveScript": {
                   "type": "string",
                   "description": "The local archive script."
+                },
+                "issueCommand": {
+                  "type": "string",
+                  "description": "The local issue command; empty when unset."
                 }
               },
               "required": [
@@ -758,6 +773,9 @@
                 },
                 "archive": {
                   "description": "The effective archive script as { text, source, badge, shared }, or null."
+                },
+                "issueCommand": {
+                  "description": "The effective issue command as { text, source, badge, shared }, or null."
                 },
                 "agentStartup": {
                   "type": "string",
@@ -795,7 +813,7 @@
       },
       {
         "id": "hooks",
-        "description": "The setup and archive hooks of a project: the hooks file read at `ref` merged with the local scripts by the command-source policy, with trust per shared script.",
+        "description": "The setup, archive and issue-command hooks of a project: the hooks file read at `ref` merged with local scripts by the command-source policy, with trust per shared script.",
         "readOnly": true,
         "params": {
           "type": "object",
@@ -824,6 +842,9 @@
             },
             "archive": {
               "description": "The effective archive script as { text, source, badge, shared }, or null."
+            },
+            "issueCommand": {
+              "description": "The effective issue command as { text, source, badge, shared }, or null."
             },
             "agentStartup": {
               "type": "string",
@@ -854,7 +875,7 @@
       },
       {
         "id": "trustHooks",
-        "description": "Approves the shared setup and archive scripts now at a ref (default HEAD), so they may run.",
+        "description": "Approves the shared setup, archive, and issue-command scripts now at a ref (default HEAD), so they may run.",
         "params": {
           "type": "object",
           "properties": {
@@ -868,6 +889,7 @@
               "enum": [
                 "setup",
                 "archive",
+                "issue",
                 "all"
               ]
             },
@@ -944,7 +966,7 @@
                   "description": "start-immediately or wait-for-setup; null when unset."
                 },
                 "commandSource": {
-                  "description": "shared-only, local-only or run-both; null when unset."
+                  "description": "shared-only, local-only or run-both for setup, archive and issue-command scripts; null when unset."
                 },
                 "setupScript": {
                   "type": "string",
@@ -953,6 +975,10 @@
                 "archiveScript": {
                   "type": "string",
                   "description": "The local archive script."
+                },
+                "issueCommand": {
+                  "type": "string",
+                  "description": "The local issue command; empty when unset."
                 }
               },
               "required": [
@@ -972,6 +998,9 @@
                 },
                 "archive": {
                   "description": "The effective archive script as { text, source, badge, shared }, or null."
+                },
+                "issueCommand": {
+                  "description": "The effective issue command as { text, source, badge, shared }, or null."
                 },
                 "agentStartup": {
                   "type": "string",
@@ -1607,7 +1636,7 @@
           },
           "command-source": {
             "type": "string",
-            "description": "which setup and archive scripts run (empty returns to inherited)",
+            "description": "which setup, archive and issue-command scripts run (empty returns to inherited)",
             "enum": [
               "shared-only",
               "local-only",
@@ -1622,6 +1651,10 @@
           "archive-script": {
             "type": "string",
             "description": "local archive script (empty clears)"
+          },
+          "issue-command": {
+            "type": "string",
+            "description": "local issue-command script (empty clears)"
           }
         },
         "methods": [
@@ -1641,10 +1674,11 @@
         "flags": {
           "kind": {
             "type": "string",
-            "description": "which scripts to trust (default all)",
+            "description": "which scripts to trust, including the issue command (default all)",
             "enum": [
               "setup",
               "archive",
+              "issue",
               "all"
             ]
           },

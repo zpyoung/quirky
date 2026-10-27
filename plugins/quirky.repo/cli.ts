@@ -56,8 +56,10 @@ function detailsRecord(ctx: CliContext, { repo, settings, hooks }: RepoDetails):
     ['command source', settings.commandSource ?? '-'],
     ['setup script', settings.setupScript ? oneLine(settings.setupScript) : '-'],
     ['archive script', settings.archiveScript ? oneLine(settings.archiveScript) : '-'],
+    ['issue command script', settings.issueCommand ? oneLine(settings.issueCommand) : '-'],
     ['hooks file', hooks.file ?? '-'],
     ['setup', hookLine(hooks.setup)],
+    ['issue command', hookLine(hooks.issueCommand ?? null)],
     ['archive', hookLine(hooks.archive)],
     ['effective agent startup', hooks.agentStartup ?? '-'],
     ['shared directories', hooks.sharedDirectories.join(', ') || '-']
@@ -94,7 +96,8 @@ const SET_FLAGS = {
   'agent-startup': 'agentStartup',
   'command-source': 'commandSource',
   'setup-script': 'setupScript',
-  'archive-script': 'archiveScript'
+  'archive-script': 'archiveScript',
+  'issue-command': 'issueCommand'
 }
 
 const named: CliModule['commands'] = {
@@ -185,7 +188,7 @@ const named: CliModule['commands'] = {
     const ref = typeof args.flags.ref === 'string' ? args.flags.ref : undefined
     const details = (await ctx.call('quirky.repo/trustHooks', { repo, kind, ...(ref !== undefined ? { ref } : {}) })) as RepoDetails
     ctx.out.result(details, () => {
-      const trusted = (['setup', 'archive'] as const).filter((k) => (kind === 'all' || kind === k) && details.hooks[k]?.shared?.trusted)
+      const trusted = (['setup', 'archive', 'issue'] as const).filter((k) => (kind === 'all' || kind === k) && details.hooks[k]?.shared?.trusted)
       return trusted.length ? `trusted ${trusted.join(', ')} hooks of ${repo}` : `no shared hooks to trust in ${repo}`
     })
   },
