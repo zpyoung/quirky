@@ -58,6 +58,38 @@ export async function deactivate() {
 `
 }
 
+function rescanSource(marker: string, deactivateGate?: string): string {
+  return `
+import { appendFileSync, existsSync } from 'node:fs'
+const record = (line: string) => appendFileSync(${JSON.stringify(marker)}, line + '\\n')
+type CounterStore = {
+  run(sql: string): unknown
+  get<T>(sql: string): T | null
+}
+type CounterContext = {
+  openStore(migrations: string[]): CounterStore
+  subscribe(listener: (event: { type: string }) => void): unknown
+  provide(id: string, implementation: unknown): void
+}
+let counter: CounterStore
+
+export function activate(context: CounterContext) {
+  counter = context.openStore([
+    'CREATE TABLE counter (n INTEGER NOT NULL)',
+    'INSERT INTO counter (n) VALUES (0)'
+  ])
+  counter.run('UPDATE counter SET n = n + 1')
+  context.subscribe((event: { type: string }) => record('event ' + event.type))
+  context.provide('method:acme.all/counter', () => counter.get<{ n: number }>('SELECT n FROM counter'))
+}
+
+export async function deactivate() {
+  record('deactivate')
+  ${deactivateGate === undefined ? '' : `while (!existsSync(${JSON.stringify(deactivateGate)})) await Bun.sleep(5)`}
+}
+`
+}
+
 describe('plugin lifecycle', () => {
   test('SC-27: deactivation revokes everything the context handed out', async () => {
     const home = makeTempHome()
@@ -122,14 +154,14 @@ describe('plugin lifecycle', () => {
       version,
       main: 'main.ts',
       activation: 'startup',
-      contributes: { method: [{ id: 'probe' }], event: [{ id: 'ping' }], job: [{ id: 'long', interval: '1h' }] }
+      contributes: { method: [{ id: 'counter' }], event: [{ id: 'ping' }] }
     })
     const lines = () => readMarker(marker)
-    writePlugin(pluginsDir, manifest('1.0.0'), { 'main.ts': allSource(marker, gate, gate) })
+    writePlugin(pluginsDir, manifest('1.0.0'), { 'main.ts': rescanSource(marker, gate) })
     h = await startHarness({ home, builtinPluginsDir: null })
     const client = await h.connect()
 
-    writePlugin(pluginsDir, manifest('2.0.0'), { 'main.ts': allSource(marker, gate) })
+    writePlugin(pluginsDir, manifest('2.0.0'), { 'main.ts': rescanSource(marker) })
     const rescanning = h.daemon.plugins.rescan()
     try {
       await waitFor(() => lines().includes('deactivate'))
@@ -143,11 +175,6 @@ describe('plugin lifecycle', () => {
     const eventsBefore = lines().filter((line) => line === 'event ui.state.changed').length
     await client.call('ui.sidebar.set', { visible: false })
     await waitFor(() => lines().filter((line) => line === 'event ui.state.changed').length > eventsBefore)
-    expect(await client.callAny('acme.all/probe', {})).toEqual({
-      emit: 'no error',
-      call: 'no error',
-      openStore: 'no error',
-      store: 'no error'
-    })
+    expect(await client.callAny('acme.all/counter', {})).toEqual({ n: 2 })
   })
 })

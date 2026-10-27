@@ -125,8 +125,9 @@ describe('editor core through the daemon API', () => {
     expect(again.openedTabId).toBe(b.openedTabId)
     expect(a.id).not.toBe(b.id)
     expect(again.id).toBe(b.id)
-    expect(currentState.tabs.filter((tab) => tab.mode === 'preview')).toHaveLength(1)
-    expect(currentState.tabs[0]?.bufferId).toBe(b.id)
+    expect(currentState.tabs.map(({ tabId, bufferId, mode }) => ({ tabId, bufferId, mode }))).toEqual([
+      { tabId: b.openedTabId, bufferId: b.id, mode: 'edit' }
+    ])
     expect(b.preview).toBe(true)
     const otherRoot = mkdtempSync(join(tmpdir(), 'quirky-editor-second-repo-'))
     try {

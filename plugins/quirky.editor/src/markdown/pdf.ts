@@ -10,12 +10,15 @@ const MAX_PROCESS_OUTPUT = 8192
 
 export type ProcessResult = { code: number | null; signal: NodeJS.Signals | null; stdout: string; stderr: string }
 
-export async function runProcess(
+type ManagedProcessResult = { result: ProcessResult; outputComplete: boolean; shutdownRequested: boolean }
+
+async function runProcessWithCompletion(
   command: string,
   args: string[],
-  options: { timeoutMs: number; home?: string }
-): Promise<ProcessResult> {
-  const { promise, resolve, reject } = Promise.withResolvers<ProcessResult>()
+  options: { timeoutMs: number; home?: string },
+  isComplete?: () => boolean
+): Promise<ManagedProcessResult> {
+  const { promise, resolve, reject } = Promise.withResolvers<ManagedProcessResult>()
   const child = spawn(command, args, {
     stdio: ['ignore', 'pipe', 'pipe'],
     windowsHide: true,
@@ -24,26 +27,64 @@ export async function runProcess(
   let stdout = ''
   let stderr = ''
   let timedOut = false
+  let outputComplete = false
+  let shutdownRequested = false
+  let processError: Error | null = null
   child.stdout?.on('data', (chunk: Buffer | string) => { stdout = (stdout + chunk.toString()).slice(-MAX_PROCESS_OUTPUT) })
   child.stderr?.on('data', (chunk: Buffer | string) => { stderr = (stderr + chunk.toString()).slice(-MAX_PROCESS_OUTPUT) })
   const timer = setTimeout(() => {
     timedOut = true
     child.kill('SIGKILL')
   }, options.timeoutMs)
-  child.once('error', (error) => {
+  const pollForCompletion = () => {
+    if (!isComplete || outputComplete || child.exitCode !== null || child.signalCode !== null || !isComplete()) return
+    outputComplete = true
+    shutdownRequested = child.kill('SIGTERM')
+  }
+  const completionPoller = isComplete === undefined ? undefined : setInterval(pollForCompletion, 50)
+  const cleanup = () => {
     clearTimeout(timer)
-    reject(error)
-  })
+    clearInterval(completionPoller)
+  }
+  child.once('error', (error) => { processError = error })
   child.once('close', (code, signal) => {
-    clearTimeout(timer)
+    cleanup()
+    if (processError) {
+      reject(processError)
+      return
+    }
     if (timedOut) {
       reject(new Error(`Process timed out after ${options.timeoutMs} ms.`))
       return
     }
-    resolve({ code, signal, stdout, stderr })
+    resolve({ result: { code, signal, stdout, stderr }, outputComplete, shutdownRequested })
   })
+  pollForCompletion()
   return promise
 }
+
+export async function runProcess(
+  command: string,
+  args: string[],
+  options: { timeoutMs: number; home?: string }
+): Promise<ProcessResult> {
+  return (await runProcessWithCompletion(command, args, options)).result
+}
+
+function isCompletePdfArtifact(path: string): boolean {
+  try {
+    assertPdfArtifact(path)
+    return true
+  } catch {
+    return false
+  }
+}
+
+function pdfProcessFailure(result: ProcessResult): Error {
+  const detail = result.stderr || result.stdout || `exit code ${result.code}${result.signal ? `, signal ${result.signal}` : ''}`
+  return new Error(`Chrome PDF export failed: ${detail}`)
+}
+
 
 function htmlEscape(value: string): string {
   return value.replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char]!)
@@ -135,7 +176,7 @@ export async function exportPdfWithChrome(input: {
   let stagedPdf: string | null = null
   try {
     writeFileSync(documentPath, makePdfHtml(input.title, input.html), { encoding: 'utf8', mode: 0o600 })
-    const result = await runProcess(chrome, [
+    const { result, outputComplete, shutdownRequested } = await runProcessWithCompletion(chrome, [
       '--headless=new',
       '--disable-gpu',
       '--disable-extensions',
@@ -148,8 +189,9 @@ export async function exportPdfWithChrome(input: {
       `--print-to-pdf=${renderedPdf}`,
       '--print-to-pdf-no-header',
       fileUrl(documentPath)
-    ], { timeoutMs: PDF_TIMEOUT_MS, home: temp })
-    if (result.code !== 0) throw new Error(`Chrome PDF export failed: ${result.stderr || result.stdout || `exit code ${result.code}`}`)
+    ], { timeoutMs: PDF_TIMEOUT_MS, home: temp }, () => isCompletePdfArtifact(renderedPdf))
+    // A handled SIGTERM can become a watchdog exit; the validated artifact predates our owned shutdown.
+    if (result.code !== 0 && !(outputComplete && shutdownRequested)) throw pdfProcessFailure(result)
     assertPdfArtifact(renderedPdf)
     if (existsSync(input.outputPath) && !input.replaceExisting) throw new Error('PDF destination already exists.')
     stagedPdf = join(dirname(input.outputPath), `.${basename(input.outputPath)}.${randomUUID()}.tmp`)

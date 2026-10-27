@@ -256,7 +256,10 @@ describe('hosted editor view tabs', () => {
     expect(viewOf(replaced.workspace, previewTab.id)).toMatchObject({ key: 'replacement', input: { bufferId: 'replacement-buffer' }, preview: true })
     expect(tabsOf(replaced.workspace).some((tab) => tab.id === firstView.id)).toBe(true)
     const state = await editor<EditorState>('state', { bufferId: first.id, worktree: worktreeSelector })
-    expect(state.buffers).toMatchObject([expect.objectContaining({ id: first.id, dirty: true, draft: '# dirty\n' })])
+    expect(state.buffers.find((buffer) => buffer.id === first.id)).toMatchObject({ dirty: true })
+    expect(await editor('read', { bufferId: first.id, action: 'buffer' })).toMatchObject({
+      buffer: { id: first.id, draft: '# dirty\n' }
+    })
   })
 
   test('closing a shared Markdown preview does not close its edit tab or discard its dirty buffer', async () => {
@@ -273,6 +276,9 @@ describe('hosted editor view tabs', () => {
     expect(tabsOf(closed).some((tab) => tab.id === previewTab.id)).toBe(false)
     expect(tabsOf(closed).some((tab) => tab.id === editTab.id)).toBe(true)
     const state = await editor<EditorState>('state', { bufferId: edit.id, worktree: worktreeSelector })
-    expect(state.buffers).toMatchObject([expect.objectContaining({ id: edit.id, dirty: true, draft: '# dirty\n' })])
+    expect(state.buffers.find((buffer) => buffer.id === edit.id)).toMatchObject({ dirty: true })
+    expect(await editor('read', { bufferId: edit.id, action: 'buffer' })).toMatchObject({
+      buffer: { id: edit.id, draft: '# dirty\n' }
+    })
   })
 })

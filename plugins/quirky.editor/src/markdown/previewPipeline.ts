@@ -10,7 +10,7 @@ const MARKDOWN_SANITIZE_SCHEMA = {
   tagNames: [...new Set([...(defaultSchema.tagNames ?? []), 'details', 'summary'])],
   attributes: {
     ...defaultSchema.attributes,
-    code: [['className', /^language-./, 'math-inline', 'math-display']],
+    code: [['className', /^(?:language-[\w.+-]+|math-inline|math-display)$/]],
     details: ['open']
   },
   protocols: {
@@ -62,7 +62,20 @@ function rehypeStripUntrustedPresentation() {
     visitPreviewNodes(tree, (node) => {
       if (node.type !== 'element') return
       if (node.data?.[MARKDOWN_CLASS_MARKER] !== true && node.properties) {
-        delete node.properties.className
+        const className = node.properties.className
+        const classNames = Array.isArray(className)
+          ? className
+          : typeof className === 'string' ? className.split(/\s+/) : []
+        // Preserve only code-language and KaTeX token classes if raw-HTML parsing drops provenance.
+        if (node.tagName === 'code') {
+          const safeClasses = classNames.filter((name) =>
+            typeof name === 'string' && /^(?:language-[\w.+-]+|math-inline|math-display)$/.test(name)
+          )
+          if (safeClasses.length > 0) node.properties.className = safeClasses
+          else delete node.properties.className
+        } else {
+          delete node.properties.className
+        }
         delete node.properties.style
       }
       if (node.data && MARKDOWN_CLASS_MARKER in node.data) {

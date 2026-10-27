@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
-import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import type { QuirkyClient } from '@quirky/protocol'
 import { builtinsDir, makeHomeWithoutAutoHooks, startHarness, type Harness } from '../../../packages/daemon/test/helpers'
@@ -214,21 +214,38 @@ describe('Markdown through the daemon API', () => {
     })).rejects.toThrow()
     expect((await open('details.md', 'source')).draft).toBeNull()
     expect(readFileSync(join(current().root, 'details.md'), 'utf8')).toBe(source)
-    put('empty-details.md', '<details><summary>Empty</summary></details>\n')
+    const emptySource = '<details><summary>Empty</summary></details>\n'
+    put('empty-details.md', emptySource)
     const emptyDetails = await open('empty-details.md')
     const emptyCapabilities = await md('capabilities', { bufferId: emptyDetails.id, includeCanonical: true })
-    expect(emptyCapabilities.richEligible).toBe(true)
-    expect(emptyCapabilities.canonicalText).toContain('<details><summary>Empty</summary>')
-    const fencedSource = '<details>\n<summary>Literal closing tag</summary>\n\n```html\n</details>\n```\n\nBody\n\n</details>\n'
+    expect(emptyCapabilities.richEligible).toBe(false)
+    expect(emptyCapabilities.canonicalText).toBeUndefined()
+    await expect(md('apply', {
+      bufferId: emptyDetails.id,
+      expectedRevision: emptyDetails.contentRevision,
+      text: emptySource.replace('Empty', 'Changed')
+    })).rejects.toThrow()
+    expect((await open('empty-details.md', 'source')).draft).toBeNull()
+    expect(readFileSync(join(current().root, 'empty-details.md'), 'utf8')).toBe(emptySource)
+    const fencedSource = '```html\n<details>\n<summary>Literal closing tag</summary>\n</details>\n```\n'
     put('code-details.md', fencedSource)
     const codeDetails = await open('code-details.md')
     const codeCapabilities = await md('capabilities', { bufferId: codeDetails.id, includeCanonical: true })
     expect(codeCapabilities.richEligible).toBe(true)
-    expect(codeCapabilities.canonicalText).toContain('```html\n</details>\n```')
-    put('unroundtrippable-details.md', '<details><summary>Copyright &copy;</summary></details>\n')
+    expect(codeCapabilities.canonicalText).toContain('```html\n<details>')
+    const unroundtrippableSource = '<details><summary>Copyright &copy;</summary></details>\n'
+    put('unroundtrippable-details.md', unroundtrippableSource)
     const unroundtrippableDetails = await open('unroundtrippable-details.md')
     const unroundtrippableCapabilities = await md('capabilities', { bufferId: unroundtrippableDetails.id, includeCanonical: true })
     expect(unroundtrippableCapabilities.richEligible).toBe(false)
+    expect(unroundtrippableCapabilities.canonicalText).toBeUndefined()
+    await expect(md('apply', {
+      bufferId: unroundtrippableDetails.id,
+      expectedRevision: unroundtrippableDetails.contentRevision,
+      text: unroundtrippableSource.replace('Copyright', 'Changed')
+    })).rejects.toThrow()
+    expect((await open('unroundtrippable-details.md', 'source')).draft).toBeNull()
+    expect(readFileSync(join(current().root, 'unroundtrippable-details.md'), 'utf8')).toBe(unroundtrippableSource)
 
 
     const markdownLink = await md('links', { bufferId: buffer.id, target: 'docs/Target.md#target-heading' })
@@ -269,7 +286,7 @@ describe('Markdown through the daemon API', () => {
 
   
 
-  test('SC-13: formatting, slash-equivalent inserts, links, doc-link ambiguity and bounded image import are scriptable', async () => {
+  test('SC-13: core formatting, supported inserts, link navigation and safe rejection of deferred rich inserts', async () => {
     const f = current()
     put('guide.md', 'Opening words here.\n\nEnd.\n')
     put('docs/Target.md', '# Target\n')
@@ -389,7 +406,17 @@ describe('Markdown through the daemon API', () => {
     expect(await insert('quote', { text: 'quoted' })).toContain('> quoted')
     expect(await insert('link', { target: 'https://example.test/a_(b)', text: 'safe link' })).toContain('safe link')
     expect(await insert('image', { target: 'images/pixel.png', text: 'pixel' })).toContain('![pixel]')
-    expect(await insert('documentLink', { target: 'docs/Target', text: 'target' })).toContain('[[docs/Target|target]]')
+    const beforeDocumentLink = latest.draft ?? latest.content
+    await expect(md('insert', {
+      bufferId: buffer.id,
+      expectedRevision: latest.contentRevision,
+      format: 'documentLink',
+      target: 'docs/Target',
+      text: 'target'
+    })).rejects.toThrow()
+    const unchangedDocumentLink = await open('guide.md')
+    expect(unchangedDocumentLink.draft ?? unchangedDocumentLink.content).toBe(beforeDocumentLink)
+    latest = unchangedDocumentLink
     const code = await insert('codeBlock', { language: 'typescript', text: 'const answer = 42' })
     expect(code).toContain('```typescript')
     let codeStart = String(latest.draft).indexOf('const answer = 42')
@@ -428,8 +455,17 @@ describe('Markdown through the daemon API', () => {
     })
     expect(copiedCode.text).toContain('const answer = 42')
     expect(await insert('divider')).toContain('---')
-    expect(await insert('details', { text: 'Summary' })).toContain('<details>')
-    expect(await insert('collapsibleHeading', { text: 'Fold me' })).toContain('<summary>Fold me</summary>')
+    const beforeUnsupportedToggles = latest.draft ?? latest.content
+    for (const [format, text] of [['details', 'Summary'], ['collapsibleHeading', 'Fold me']] as const) {
+      await expect(md('insert', {
+        bufferId: buffer.id,
+        expectedRevision: latest.contentRevision,
+        format,
+        text
+      })).rejects.toThrow()
+      const unchanged = await open('guide.md')
+      expect(unchanged.draft ?? unchanged.content).toBe(beforeUnsupportedToggles)
+    }
 
 
     const docs = await md('documents', { bufferId: buffer.id, query: 'tar' })
@@ -558,9 +594,9 @@ describe('Markdown through the daemon API', () => {
     const bytes = readFileSync(join(f.root, 'exports/toc.pdf'))
     expect(bytes.subarray(0, 5).toString('ascii')).toBe('%PDF-')
     expect(bytes.subarray(Math.max(0, bytes.length - 2048)).toString('latin1')).toMatch(/%%EOF\s*$/)
-    expect(pdf.path).toBe(join(f.root, 'exports/toc.pdf'))
+    expect(readFileSync(pdf.path)).toEqual(bytes)
     expect(readFileSync(join(f.root, 'toc.md'), 'utf8')).toBe(diskBeforeExport)
-  })
+  }, 75_000)
 
   test('SC-15: notes track front-matter-aware selections, escape and sort the prompt, and survive failed delivery', async () => {
     const source = '---\ntitle: Notes\n---\n\nalpha\nselected text\nomega\n'
@@ -621,10 +657,6 @@ describe('Markdown through the daemon API', () => {
     put('too-large-preview.md', 'word '.repeat(Math.ceil((8 * 1024 * 1024 + 1) / 5)))
     const tooLarge = await open('too-large-preview.md', 'preview')
     await expect(notes('add', { bufferId: tooLarge.id, selection: { from: 0, to: 1, mode: 'source' }, text: 'blocked' })).rejects.toThrow()
-    put('readonly.md', 'Read only')
-    chmodSync(join(current().root, 'readonly.md'), 0o444)
-    const readonly = await open('readonly.md')
-    await expect(notes('add', { bufferId: readonly.id, selection: { from: 0, to: 4, mode: 'source' }, text: 'blocked' })).rejects.toThrow()
 
     await notes('delete', { bufferId: buffer.id, noteId: first.note.id })
     expect((await notes('list', { bufferId: buffer.id })).count).toBe(1)

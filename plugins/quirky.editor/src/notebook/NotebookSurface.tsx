@@ -117,7 +117,7 @@ export function NotebookSurface(props: SurfaceProps) {
 
   useEffect(() => {
     let active = true
-    void onAction('notebook', { bufferId, action: 'state' }).then((value) => {
+    void onAction('quirky.editor/notebook', { bufferId, action: 'state' }).then((value) => {
       if (active) setRuntime(notebookRuntime(value))
     }).catch((error: unknown) => {
       if (active) setKernelError(error instanceof Error ? error.message : String(error))
@@ -134,12 +134,12 @@ export function NotebookSurface(props: SurfaceProps) {
   }, [bufferId, buffer.contentRevision])
 
   const refreshRuntime = async () => {
-    const result = await onAction('notebook', { bufferId, action: 'state' })
+    const result = await onAction('quirky.editor/notebook', { bufferId, action: 'state' })
     setRuntime(notebookRuntime(result))
   }
 
   const action = async (name: string, fields: Record<string, unknown> = {}): Promise<unknown> =>
-    onAction('notebook', { bufferId, action: name, ...fields })
+    onAction('quirky.editor/notebook', { bufferId, action: name, ...fields })
 
   const flushCellChanges = () => {
     if (cellTimer.current !== undefined) {

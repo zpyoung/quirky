@@ -275,7 +275,62 @@
 - **Revisit if:** a core data-safety flow cannot pass its affected tests
 - **Source:** user ruling 2026-10-27 (via operator)
 
+## D26: Publish the supported core contract and queue exact completion work
+- **Question:** Which incomplete flows remain after the deadline-authorized core cutover?
+- **Options:** claim the original matrix passed; leave known unsupported actions advertised; publish the supported boundary and queue the exact remaining work
+- **Chose:** queue `m2-editor-complete-remaining-flows` in M2, depending on `m2-editor`, with the implementation gaps, observed UI defects and unfinished acceptance variants listed in BLOCKERS.md. Keep named Markdown creation; do not publish retarget/Save As or details/collapsible-heading/custom-document-link formats until their rich round trips exist. Keep safe Source fallback/rejection and unchanged drafts.
+- **Why:** the public creation path does not create untitled buffers, and the unsupported rich constructs fail serialization or cannot preserve their semantics. The user explicitly authorized these named flows and the exhaustive GUI matrix to move to a dependent item. Core formatting, tables, math, ordinary links, note delivery and viewer primitives remain implemented.
+- **Evidence:** Markdown RPC stage trace; source capability checks; current manifest; `docs/loop/BLOCKERS.md` m2-editor section; successful `queue.ts add` of the dependent item
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** the dependent item supplies the missing real paths and end-to-end proof
+- **Source:** user ruling 2026-10-27 (via operator)
+
+## D27: Use actual runtime evidence to close core integration failures
+- **Question:** Which evidence, rather than compilation or declarations, gates the core implementation?
+- **Options:** rely on typecheck and model review; exercise APIs, real kernels, CLI and browser surfaces
+- **Chose:** real daemon/CLI acceptance, disposable Python kernels, and like-a-user web runs. Fix observed cursor/TOC presentation schema mismatch, canonical viewer/notebook RPC names, deferred React event reads and passive image source-mode gating. Preserve failed reports and collect fresh post-fix visual proof instead of rewriting their verdicts.
+- **Why:** API-only tests did not execute the renderer callback boundary. Browser evidence exposed failures that the compiled source and method schemas alone could not prove.
+- **Evidence:** runs `20261027T195525-588b`, `20261027T204701-c6c5` and `20261027T210143-c4f5` under the wavecheck ignored .quirk directory; source save/reopen, dirty-close choices, commands, rich/source/preview, CSV persistence, image zoom and PDF rendering were observed. Real-kernel edge and selective-note-delivery API files passed.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** final integration or native evidence contradicts a core result
+- **Source:** assumed — autonomous
+
+## D28: Record the single cross-family review and its fix batch precisely
+- **Question:** What did the final review establish, and what did runtime verification add?
+- **Options:** treat a model PASS as full acceptance; retain exact snapshot, stage results and later fix evidence
+- **Chose:** one C/S/X round at explicit standard depth with Gemini, full family independence against OpenAI implementers, then one combined runtime/finding fix batch and rechecks. No extra review rounds. Formal gates passed for snapshot 6fa3ebd; they do not certify later fixes or the entire acceptance matrix.
+- **Why:** Opus/Sonnet were unavailable at preflight. X's external-import claim was independently refuted against the authenticated caller-selected import contract. S's cleanup-race claim was gate-suppressed for an inexact quote, but independent source investigation confirmed a rescan release race; activation is now blocked during stale teardown, with a real store-counter/subscription regression.
+- **Evidence:** /tmp/m2-editor-final-review-slL2EP/{report,resolve,prepass,model,gate-C,gate-S,gate-X}.json; all gates PASS, suppressed counts C=0/S=1/X=1; artifact aee21f5709ed1ad7955b6c69bdabc395b7858a176ba4b665da40454e780f68b6; repaired lifecycle/core/UI/hosted-tab failed-file rerun passed
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** the final land check exposes a remaining integration defect
+- **Source:** assumed — autonomous
+
+## D29: Isolate every actual test child without changing transport or parent state
+- **Question:** How can remote/local acceptance avoid real HOME writes and verify delete recovery safely?
+- **Options:** mutate process.env; add feature-specific test shims; isolate each bun test child and retain real filesystem behavior
+- **Chose:** the suite runner creates temporary HOME/QUIRKY_HOME values, seeds hooks off and cleans up in finally for local and slotted test processes. SSH transport and machine-wide slot locks retain their existing environment. Delete undo/redo uses the same no-overwrite cross-device move primitive as trash moves.
+- **Why:** a temporary harness home alone does not change homedir-based integration writes; the earlier remote undo failure also exposed an EXDEV path. No global environment mutation or real-trash cleanup by guessed ownership is used.
+- **Evidence:** scripts/suite.ts and its real-child isolation regression; core delete/history acceptance; D22 and the earlier affected-package failure log
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** another test subprocess bypasses this runner or a recovered path fails identity checks
+- **Source:** assumed — autonomous
+
+## D30: Own renderer completion rather than depend on Chrome teardown status
+- **Question:** What marks successful Markdown PDF export when Chrome finishes the file but its macOS shutdown watchdog exits abnormally?
+- **Options:** accept partial files; depend only on child exit zero; validate complete output before explicitly stopping the owned renderer
+- **Chose:** bounded header/tail validation observes a real `%PDF-` artifact ending in `%%EOF`, then requests shutdown of that exact child and awaits close. Spawn failures, timeouts and incomplete output still fail. Revalidate before staging/copying to the authorized destination. A handled shutdown may translate its exit status; it is not the render-completion signal.
+- **Why:** the real renderer wrote approximately 70 KiB of valid PDF before the teardown watchdog failed. Waiting solely for exit zero reported a failed export after rendering had completed. No fabricated bytes or fallback renderer is used.
+- **Evidence:** remaining-gates.log and pdf-ready.log; `plugins/quirky.editor/src/markdown/pdf.ts`; the consumer test reads the selected destination and returned canonical path and checks PDF signature/EOF without requiring a particular `/var` versus `/private/var` spelling
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** validated output is incomplete or owned renderer cleanup exceeds its bound
+- **Source:** assumed — autonomous
+
 ## Progress
-Step 5/6: all implementation, declared commands, schema compatibility and consumer acceptance cases are checkpointed on build/m2-editor through f684af5. Integrated typecheck passes. Resource/geometry API/CLI/web proof and guarded editor save pass. Runtime acceptance exposed preview replacement/disposal, Markdown mapping, notebook schema/interpreter and CSV parser blockers; four isolated owners are fixing only these. Next under D25: integrate those fixes, run affected suites/scripts/typecheck and core web smoke, record open findings and exact unfinished flows in a dependent queue item, catch up once, commit and land. Do not run a separate whole suite before land.
+Step 6 complete for the D25 core boundary: scripts tests and typecheck pass; the affected-suite run reached 182/187 passing files, all four repaired lifecycle/core/UI/hosted-tab files passed on rerun, and the final six-case Markdown file now passes with real PDF bytes and canonical destination access. Real-kernel edge and note-delivery files pass. Fresh browser runs prove saved source, CSV persistence, image rendering/zoom and PDF viewing; prior reports and the open UI findings remain intact. All owned browser sessions and the smoke daemon/shell are stopped. The dependent completion item is queued. Next: commit, catch up with build/roadmap once and read incoming decisions, then detach and queue land; land runs the whole suite.
 
 Last SC-9 point: Finder drops import copies under D19, including in-worktree sources. Native SC-9 stays pending for the nightly run. Open-in-place is owned by the operator's `m4-editor-drop-open-in-place`, not an m2-editor blocker.

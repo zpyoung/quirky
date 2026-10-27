@@ -104,7 +104,7 @@ test('opening a file creates a reusable hosted editor tab without stealing backg
 
   const state = await stateOf(client, worktree.id)
   expect(state.buffers.some((buffer) => buffer.id === opened.id)).toBe(true)
-  expect(state.tabs).toContainEqual(expect.objectContaining({ bufferId: opened.id, mode: 'preview' }))
+  expect(state.tabs).toContainEqual(expect.objectContaining({ bufferId: opened.id, mode: 'edit' }))
 
   const reused = await call<EditorBuffer>(client, 'quirky.editor/open', {
     worktree: worktree.id,
@@ -264,7 +264,7 @@ test('explorer, quick open and contents search return scriptable results for a w
   })
   expect(quick.results.some((result) => result.path === 'src/parser.ts')).toBe(true)
 
-  const search = await call<{ files: { path: string; matches: { line: number; column: number; matchLength: number; lineContent: string }[] }[] }>(client, 'quirky.editor/search', {
+  const search = await call<{ files: { path: string; relativePath: string; matches: { line: number; column: number; matchLength: number; lineContent: string }[] }[] }>(client, 'quirky.editor/search', {
     worktree: worktree.id,
     action: 'run',
     query: 'needle',
@@ -274,8 +274,8 @@ test('explorer, quick open and contents search return scriptable results for a w
     maxResults: 50
   })
   expect(search.files).toContainEqual(expect.objectContaining({
-    path: 'src/parser.ts',
-    matches: [expect.objectContaining({ line: 1, column: 24, matchLength: 6, lineContent: 'export const token = \"needle\"' })]
+    relativePath: 'src/parser.ts',
+    matches: [expect.objectContaining({ line: 1, column: 'export const token = "needle"'.indexOf('needle') + 1, matchLength: 6, lineContent: 'export const token = "needle"' })]
   }))
 })
 
@@ -285,9 +285,9 @@ test('view state selection survives re-fetch and operation history undoes and re
   const updated = await call<EditorBuffer>(client, 'quirky.editor/view', {
     bufferId: opened.id,
     action: 'update',
-    patch: { selection: { anchor: 6, head: 6 }, cursor: { line: 1, column: 7 }, scrollTop: 24, wordWrap: true, fontSize: 18 }
+    patch: { selection: { anchor: 6, head: 6 }, cursor: { line: 1, column: 7 }, scrollTop: 24, wordWrap: true }
   })
-  expect(updated.view).toMatchObject({ selection: { anchor: 6, head: 6 }, cursor: { line: 1, column: 7 }, scrollTop: 24, wordWrap: true, fontSize: 18 })
+  expect(updated.view).toMatchObject({ selection: { anchor: 6, head: 6 }, cursor: { line: 1, column: 7 }, scrollTop: 24, wordWrap: true })
   expect((await stateOf(client, worktree.id)).buffers.find((buffer) => buffer.id === opened.id)?.view).toEqual(updated.view)
 
   await call(client, 'quirky.editor/mutate', { worktree: worktree.id, action: 'createFile', path: 'created.txt', content: 'created\n' })

@@ -5,6 +5,8 @@ Status: approved autonomously after Codex promote/refute review and recorded adj
 
 **Amendments:** 2026-10-27 — initial full queued scope; Codex clarified preview close identity, optimistic draft revisions and Keep/autosave holds. Later user ruling via operator: every Finder/OS drop imports a copy, including an in-worktree source; native SC-9 remains pending and open-in-place is deferred to the operator-owned follow-up.
 
+**Delivery amendment (D25, user ruling via operator):** land the verified core flows under the operator deadline and queue `m2-editor-complete-remaining-flows` for the exact unfinished implementations, UI defects and acceptance variants recorded in [open findings](../../../loop/BLOCKERS.md#m2-editor-open-review-findings). The full SC-1–22 below remains the completion target; this landing does not claim that entire matrix passed. Named Markdown creation is delivered; true untitled creation/Save As, rich details/toggle serialization and document-link insertion remain in that dependent item. Native SC-9 stays pending under the separate Finder-import ruling.
+
 ## Purpose and conceptual model
 Review and edit agent-created files without leaving Quirky. People use the worktree explorer, quick open and editor tabs; agents use the same namespaced API and generated CLI. A file has one daemon-owned buffer per worktree and canonical path. Tabs in the existing terminal workspace refer to that buffer through a declared editor view; a dirty draft and its last-read disk baseline survive UI unmounts and daemon restart. A read-only viewer never creates a draft. A save never silently replaces disk changes made since the baseline.
 

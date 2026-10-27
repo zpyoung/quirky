@@ -63,7 +63,7 @@ function isCsv(buffer: SurfaceProps['buffer']): boolean {
 
 
 async function call(props: SurfaceProps, action: string, fields: Record<string, unknown> = {}): Promise<unknown> {
-  return props.onAction('viewer', { bufferId: props.buffer.id, action, ...fields })
+  return props.onAction('quirky.editor/viewer', { bufferId: props.buffer.id, action, ...fields })
 }
 
 function SourceText({ props, value, label }: { props: SurfaceProps; value: string; label: string }) {
@@ -238,7 +238,7 @@ function CsvSurface({ props, sourceMode }: { props: SurfaceProps; sourceMode: bo
   const reload = async () => {
     setLoading(true)
     try {
-      await props.onAction('view', { bufferId: buffer.id, action: 'reload' })
+      await props.onAction('quirky.editor/view', { bufferId: buffer.id, action: 'reload' })
       setPage(0)
       setChanged(false)
       await refresh(0)
@@ -278,8 +278,8 @@ function CsvSurface({ props, sourceMode }: { props: SurfaceProps; sourceMode: bo
         </select>
         <label>Filter rows <input ref={filterInput} aria-label="Filter rows" value={filter} onChange={(event) => void changeFilter(event.currentTarget.value)} /></label>
         <textarea aria-label="Paste CSV cells" value={pasteText} onChange={(event) => setPasteText(event.currentTarget.value)} placeholder="Paste CSV or tab-separated cells" />
-        <label>Paste row <input type="number" min="0" value={pasteAt.row} onChange={(event) => setPasteAt((old) => ({ ...old, row: Number(event.currentTarget.value) }))} /></label>
-        <label>Paste column <input type="number" min="0" value={pasteAt.column} onChange={(event) => setPasteAt((old) => ({ ...old, column: Number(event.currentTarget.value) }))} /></label>
+        <label>Paste row <input type="number" min="0" value={pasteAt.row} onChange={(event) => { const value = Number(event.currentTarget.value); setPasteAt((old) => ({ ...old, row: value })) }} /></label>
+        <label>Paste column <input type="number" min="0" value={pasteAt.column} onChange={(event) => { const value = Number(event.currentTarget.value); setPasteAt((old) => ({ ...old, column: value })) }} /></label>
         <button type="button" onClick={() => void paste()} disabled={loading}>Paste</button>
       </>}
     </header>
@@ -298,7 +298,7 @@ function CsvSurface({ props, sourceMode }: { props: SurfaceProps; sourceMode: bo
             {readOnly ? <span>{cell}</span> : <input
               aria-label={`Row ${row.index + 1}, column ${column + 1}`}
               value={cellDrafts[`${row.index}:${column}`] ?? cell}
-              onChange={(event) => setCellDrafts((old) => ({ ...old, [`${row.index}:${column}`]: event.currentTarget.value }))}
+              onChange={(event) => { const value = event.currentTarget.value; setCellDrafts((old) => ({ ...old, [`${row.index}:${column}`]: value })) }}
               onBlur={(event) => {
                 const value = event.currentTarget.value
                 if (value !== cell) void call(props, 'edit', { row: row.index, column, value }).then(() => {
@@ -500,7 +500,7 @@ function PdfViewer({ props, url, error, retry }: { props: SurfaceProps; url: str
   const changeScale = useCallback(async (next: number | 'page-width') => {
     if (!pdf) throw new Error('PDF preview is not ready to zoom.')
     if (typeof next === 'number') await call(props, 'zoom', { scale: next })
-    else await props.onAction('view', {
+    else await props.onAction('quirky.editor/view', {
       bufferId: props.buffer.id,
       action: 'update',
       patch: { viewer: { ...object(props.buffer.view.viewer), zoom: 'page-width' } }
@@ -607,13 +607,13 @@ function MermaidViewer({ props, sourceMode }: { props: SurfaceProps; sourceMode:
 
 export function ViewerSurface(props: SurfaceProps) {
   const { buffer, onView } = props
-  const sourceMode = buffer.mode === 'source'
+  const canToggleSource = buffer.kind === 'csv' || buffer.kind === 'mermaid'
+  const sourceMode = canToggleSource && buffer.mode === 'source'
   const [metadata, setMetadata] = useState<ViewerMetadata>({})
   const [url, setUrl] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [retryKey, setRetryKey] = useState(0)
-  const canToggleSource = buffer.kind === 'csv' || buffer.kind === 'mermaid'
 
   const refresh = async () => {
     setLoading(true)
@@ -657,7 +657,7 @@ export function ViewerSurface(props: SurfaceProps) {
   const reload = async () => {
     setLoading(true)
     try {
-      await props.onAction('view', { bufferId: buffer.id, action: 'reload' })
+      await props.onAction('quirky.editor/view', { bufferId: buffer.id, action: 'reload' })
       setError(null)
       setRetryKey((value) => value + 1)
     } catch (cause) {

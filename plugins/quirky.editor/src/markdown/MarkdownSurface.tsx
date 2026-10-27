@@ -1324,7 +1324,7 @@ function RichSurface({ props }: { props: SurfaceProps }): React.JSX.Element {
 
       {tocOpen && <aside aria-label="Table of Contents" style={{ borderBottom: '1px solid var(--quirky-border, #7774)', padding: 8, maxHeight: '30vh', overflow: 'auto' }}>
         <strong>Table of Contents</strong>
-        <div>{[1, 2, 3, 4, 5].map((level) => <label key={level} style={{ marginRight: 8 }}><input type="checkbox" checked={tocLevels.has(level)} aria-label={`Show H${level}`} onChange={(event) => setTocLevels((current) => { const next = new Set(current); if (event.currentTarget.checked) next.add(level); else next.delete(level); return next })} />H{level}</label>)}
+        <div>{[1, 2, 3, 4, 5].map((level) => <label key={level} style={{ marginRight: 8 }}><input type="checkbox" checked={tocLevels.has(level)} aria-label={`Show H${level}`} onChange={(event) => { const checked = event.currentTarget.checked; setTocLevels((current) => { const next = new Set(current); if (checked) next.add(level); else next.delete(level); return next }) }} />H{level}</label>)}
           {[1, 2, 3, 4, 5].map((level) => <button key={`collapse-${level}`} type="button" style={buttonStyle} onClick={() => setTocLevels(new Set([1, 2, 3, 4, 5].filter((candidate) => candidate <= level)))}>Collapse to H{level}</button>)}
           <button type="button" style={buttonStyle} onClick={() => setTocLevels(new Set([1, 2, 3, 4, 5]))}>Expand all</button>
         </div>

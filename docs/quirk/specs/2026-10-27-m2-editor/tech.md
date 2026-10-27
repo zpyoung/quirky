@@ -23,7 +23,7 @@ rekeyViewTabs({
 
 Reuse identity is workspace + `viewId` + `key`; `tab` is the stable terminal tab ID, whether created, reused, or replaced. `replace` names an existing unpinned view tab already marked `preview`; a refusal from its close guard leaves it intact. `rekeyViewTabs` may also change each tab's `preview` flag and rejects duplicate keys within that view. It preserves tab IDs.
 
-Editor `mode: 'preview'` is a separate Markdown preview surface keyed `preview:<bufferId>`. It is distinct from `preview: true`, which marks a replaceable terminal preview tab when the setting permits and the tab is not pinned. The returned `openedTabId` identifies the tab used by that particular `open` call. `EditorBuffer.tabId` is the buffer's primary edit-tab summary; callers must use `openedTabId` when they need to address a separately opened preview tab. API `open` defaults `focus` to false; a UI caller defaults it to true.
+Editor `mode: 'preview'` is a separate read-only Markdown preview surface. It is distinct from `preview: true`, which marks a replaceable editable browsing tab. Generated keys also distinguish explicit groups and are opaque to consumers. Use `openedTabId` for the actual tab returned by each `open`; `EditorBuffer.tabId` is only the primary edit-tab summary. Dirty editable browsing tabs stay close-guarded, and closing a sole neutral preview retains any API-created dirty buffer. API `open` defaults `focus` to false; a UI caller defaults it to true.
 
 ## Editor data and text access
 
@@ -63,11 +63,11 @@ The browser build emits split plugin UI modules and copies the PDF.js worker plu
 
 ## Markdown rich-mode boundary
 
-Lossless rich round-tripping of `<details>` together with KaTeX is stability-rejected and deferred under D25; do not claim full rich support for that combination. Use the safe Source path for edits. Sanitized preview, math, and links remain within the core contract.
+Lossless rich serialization of actual `<details>` content (including empty details) and details/collapsible-heading inserts is deferred under D25. These use Source fallback or safe rejection without changing the draft; fenced HTML examples remain ordinary editable code. Custom document-link insertion also remains a follow-through round trip. Sanitized preview, math, ordinary rich formatting and relative-link navigation remain in the core contract.
 
 ## Advanced-flow follow-up
 
-Successful confirmation-mediated notebook install/venv and exhaustive advanced UI/native acceptance remain unverified follow-up, not delivered-contract claims. Declared methods or packaged assets alone do not prove those flows.
+True untitled-buffer creation/Save As is not delivered; `new` creates named Markdown files and `retarget` is not a published action. Filesystem mode-bit/ACL UX, successful confirmation-mediated notebook install/venv, the observed Preview-to-Rich and own-write warning defects, and the exhaustive advanced GUI matrix are assigned to `m2-editor-complete-remaining-flows`. Exact reasons and evidence are in the [open findings](../../../loop/BLOCKERS.md#m2-editor-open-review-findings); declared methods or packaged assets alone do not prove those flows.
 
 ## Manifest validation and gate
 

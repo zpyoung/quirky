@@ -1,3 +1,5 @@
+import type { Editor } from '@tiptap/core'
+import { createHeadlessMarkdownEditor } from './tiptap'
 export const RICH_MARKDOWN_MAX_BYTES = 600 * 1024
 export const RICH_MARKDOWN_OVERRIDE_MAX_BYTES = 1024 * 1024
 export const MARKDOWN_PREVIEW_MAX_BYTES = 8 * 1024 * 1024
@@ -14,7 +16,6 @@ export const MARKDOWN_MAX_IMAGE_PIXELS = 32 * 1024 * 1024
 export const MARKDOWN_MAX_NOTE_BODY_BYTES = 16 * 1024
 export const MARKDOWN_MAX_NOTE_SELECTION_BYTES = 32 * 1024
 export const MARKDOWN_MAX_NOTES_SOURCE_BYTES = MARKDOWN_PREVIEW_MAX_BYTES
-const SAFE_DETAILS_TAGS: Record<string, true> = { p: true }
 
 export type FrontMatter = { prefix: string; body: string; lineCount: number }
 
@@ -175,6 +176,22 @@ function withoutCode(text: string): string {
   return output.join('\n')
 }
 
+function hasMarkdownToggleNode(markdown: string): boolean | null {
+  let editor: Editor | null = null
+  try {
+    editor = createHeadlessMarkdownEditor(markdown)
+    let found = false
+    editor.state.doc.descendants((node) => {
+      if (node.type.name === 'markdownToggle') found = true
+    })
+    return found
+  } catch {
+    return null
+  } finally {
+    editor?.destroy()
+  }
+}
+
 export type RichEligibility = { eligible: boolean; reason: string | null; bytes: number; openAnywayAvailable: boolean }
 
 export function richEligibility(
@@ -195,25 +212,6 @@ export function richEligibility(
   if (/^\s*\[[^\]\r\n]+\]:\s*\S+/m.test(outsideCode)) {
     return { eligible: false, reason: 'Editable only in source mode because this file contains reference-style links.', bytes, openAnywayAvailable }
   }
-  let unsafeDetails = false
-
-  const outsideDetails = outsideCode.replace(/<details(?:\s+open)?\s*>([\s\S]*?)<\/details>/gi, (_match, content: string) => {
-    const summary = /^<summary>([^<>]*)<\/summary>(?:\s*)/i.exec(content)
-    if (!summary || /<!--|-->/i.test(content)) unsafeDetails = true
-    if (summary && /&(?:#(?:x[\da-f]+|\d+)|[a-z][a-z\d]+);/i.test(summary[1]!.replace(/&(?:amp|lt|gt|quot|#39);/g, ''))) {
-      unsafeDetails = true
-    }
-    const body = content.slice(summary?.[0].length ?? 0)
-    for (const tag of body.matchAll(/<\/?([a-z][\w.:-]*)\b([^>]*)>/gi)) {
-      const name = tag[1]!.toLowerCase()
-      const attributes = tag[2]!.replace(/\/\s*$/, '').trim()
-      if (name === 'details' || name === 'summary' || !Object.prototype.hasOwnProperty.call(SAFE_DETAILS_TAGS, name) || attributes !== '') unsafeDetails = true
-    }
-    return ''
-  })
-  if (unsafeDetails || /<\/?[A-Za-z][\w.:-]*(?:\s[^<>]*)?\/?>|<!--[\s\S]*?-->/.test(outsideDetails)) {
-    return { eligible: false, reason: 'Editable only in source mode because this file contains HTML or JSX.', bytes, openAnywayAvailable }
-  }
   if (bytes > RICH_MARKDOWN_MAX_BYTES && !(openAnyway && openAnywayAvailable)) {
     return {
       eligible: false,
@@ -221,6 +219,16 @@ export function richEligibility(
       bytes,
       openAnywayAvailable
     }
+  }
+  if (/<details(?:\s|>)/i.test(outsideCode)) {
+    const hasDetails = hasMarkdownToggleNode(body)
+    if (hasDetails === null) {
+      return { eligible: false, reason: 'This Markdown could not be parsed safely. Open source mode to edit it.', bytes, openAnywayAvailable }
+    }
+    if (hasDetails) return { eligible: false, reason: 'Editable only in source mode because this file contains HTML or JSX.', bytes, openAnywayAvailable }
+  }
+  if (/<\/?[A-Za-z][\w.:-]*(?:\s[^<>]*)?\/?>|<!--[\s\S]*?-->/.test(outsideCode)) {
+    return { eligible: false, reason: 'Editable only in source mode because this file contains HTML or JSX.', bytes, openAnywayAvailable }
   }
   return { eligible: true, reason: null, bytes, openAnywayAvailable }
 }
