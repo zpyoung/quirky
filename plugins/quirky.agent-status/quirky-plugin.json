@@ -1014,12 +1014,6 @@
     ],
     "setting": [
       {
-        "id": "notifications",
-        "type": "boolean",
-        "title": "Notify when agents finish",
-        "default": true
-      },
-      {
         "id": "hooks",
         "type": "boolean",
         "title": "Agent status hooks",
@@ -1044,6 +1038,27 @@
           "required": [
             "sessionId"
           ]
+        }
+      },
+      {
+        "id": "settled",
+        "description": "A session's agent settled into done, waiting or blocked: a real change of state, never a replay or a session boundary.",
+        "data": {
+          "type": "object",
+          "properties": {
+            "sessionId": { "type": "string" },
+            "worktreeId": { "type": "string" },
+            "agent": { "type": "string", "description": "The session's agent id." },
+            "state": { "type": "string", "enum": ["done", "waiting", "blocked"] },
+            "outcome": { "description": "success, cancellation or failure for a finished turn; null when the row carries none." },
+            "interrupted": { "type": "boolean" },
+            "prompt": { "description": "The turn's prompt, or null when there is none." },
+            "toolName": { "description": "The tool the row is on or waits on, or null." },
+            "toolInput": { "description": "That tool's input as one readable line, or null." },
+            "lastAssistantMessage": { "description": "The agent's last message, or null." },
+            "at": { "type": "number", "description": "When the row settled, in ms since the epoch." }
+          },
+          "required": ["sessionId", "worktreeId", "agent", "state", "interrupted", "at"]
         }
       }
     ],

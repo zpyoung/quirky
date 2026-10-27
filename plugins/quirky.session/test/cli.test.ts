@@ -501,6 +501,15 @@ describe('the CLI catalog', () => {
     expect(JSON.parse(result.stdout)).toEqual(session)
   })
 
+  test('session get shows the unread reason when one is set', async () => {
+    const session = await createSession(client, { worktree: 'id:wt_main', agent: 'shell' })
+    const plain = await runCli(['session', 'get', session.id], { home: h.home })
+    expect(plain.stdout).not.toContain('unread')
+    await call(client, 'quirky.session/setUnread', { session: session.id, unread: 'bell' })
+    const marked = await runCli(['session', 'get', session.id], { home: h.home })
+    expect(marked.stdout).toContain('unread: bell')
+  })
+
   test('SC-20: the launch flags run through the real CLI, and a shell with a pick is refused', async () => {
     const refused = await runCli(['session', 'new', '--agent', 'shell', '--worktree', 'id:wt_main', '--model', 'opus', '--option', 'a=b'], {
       home: h.home

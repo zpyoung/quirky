@@ -114,12 +114,19 @@ function questionText(question: string | undefined): string {
   return ''
 }
 
+/** The tool a row is on, or a waiting row is held on, with its input as one readable line; null for what is absent. */
+export function toolOf(row: AgentRow): { name: string | null; input: string | null } {
+  const held = row.state === 'waiting' ? row.heldPermission : undefined
+  return {
+    name: (row.toolName ?? held?.toolName) || null,
+    input: summarizeToolInput(row.toolInput ?? held?.input) || null
+  }
+}
+
 function toolText(row: AgentRow): string {
-  const held = row.heldPermission
-  const name = row.toolName ?? (row.state === 'waiting' ? held?.toolName : undefined)
+  const { name, input } = toolOf(row)
   if (!name) return ''
-  const summary = summarizeToolInput(row.toolInput ?? (row.state === 'waiting' ? held?.input : undefined))
-  return summary ? `${name}: ${summary}` : name
+  return input ? `${name}: ${input}` : name
 }
 
 /**

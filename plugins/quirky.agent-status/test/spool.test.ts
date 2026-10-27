@@ -35,7 +35,7 @@ function homeWith(sessions: string[], files: Record<string, string[]>): { home: 
 }
 
 describe('SC-18: a hook while the daemon is down is replayed at start', () => {
-  test('a spooled turn gives a done row without a notification, and the file is deleted', async () => {
+  test('a spooled turn gives a done row without a settled event, and the file is deleted', async () => {
     const { home, spool } = homeWith(['s1'], {
       's1.jsonl': [line('claude', claude('UserPromptSubmit', { prompt: 'go' })), line('claude', claude('Stop', { last_assistant_message: 'finished' }))]
     })
@@ -45,13 +45,14 @@ describe('SC-18: a hook while the daemon is down is replayed at start', () => {
     expect((await rig.session()).status).toBe('done')
     expect(readdirSync(spool)).toEqual([])
     await rig.settle()
-    expect(rig.h.notifications).toEqual([])
+    expect(rig.settles()).toEqual([])
     expect(rig.notifies()).toEqual([])
 
     await rig.hook('claude', { hook_event_name: 'UserPromptSubmit', prompt: 'next' })
     await rig.hook('claude', { hook_event_name: 'Stop', last_assistant_message: 'again' })
-    await rig.waitForNotifies(1)
-    expect(rig.h.notifications).toHaveLength(1)
+    await rig.waitForSettles(1)
+    expect(rig.settles()).toMatchObject([{ state: 'done', lastAssistantMessage: 'again' }])
+    expect(rig.notifies()).toEqual([])
   })
 
   test('a record carries its process identity and event name', async () => {

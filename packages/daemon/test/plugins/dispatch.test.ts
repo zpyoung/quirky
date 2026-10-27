@@ -47,7 +47,8 @@ function setup() {
     'client.hello': () => ({ ok: true }),
     'events.subscribe': () => ({ ok: true }),
     'ui.report': () => ({ ok: true }),
-    'ui.window.focused': () => ({ ok: true })
+    'ui.window.focused': () => ({ ok: true }),
+    'ui.window.activity': () => ({ ok: true })
   } as unknown as Handlers
   const dispatcher = new Dispatcher(handlers, host, (message) => logs.push(message))
   const conn = (overrides: Partial<ClientConn> = {}): ClientConn => ({
@@ -109,7 +110,8 @@ describe('Dispatcher', () => {
     ['client.hello', { role: 'cli', protocolVersion: 1 }],
     ['events.subscribe', {}],
     ['ui.report', { slot: 'view:acme.tools/main', state: null }],
-    ['ui.window.focused', { focused: true }]
+    ['ui.window.focused', { focused: true }],
+    ['ui.window.activity', {}]
   ]
   test.each(connectionCalls)(
     '%s is refused from a plugin',

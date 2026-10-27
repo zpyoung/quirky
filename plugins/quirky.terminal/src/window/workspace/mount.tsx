@@ -33,7 +33,7 @@ export function mountWorkspace(
 
   if (!floating && worktree === null) {
     root.render(<p className="muted pad qt-muted qt-pad">Pick a worktree to see its sessions.</p>)
-    props.report?.({ worktree: null, tabs: [], active: null })
+    props.report?.({ worktree: null, tabs: [], active: null, visibleSessions: [] })
     return () => root.unmount()
   }
 

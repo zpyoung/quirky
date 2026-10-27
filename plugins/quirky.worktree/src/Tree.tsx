@@ -3,7 +3,7 @@ import type { ProjectGroup, Repo, Session, UiPluginContext, Worktree } from '@qu
 import { changeGroup, copyText, SESSION_VIEW, setWorktree } from './actions'
 import { ContextMenu, groupMenu, projectMenu, STATUS_LABELS, workspaceMenu, type MenuItem } from './Menu'
 import { repoLabel, type DialogState, type GroupNode, type ProjectNode, type TreeModel, type TreeRow } from './report'
-import { StatusDot } from './StatusDot'
+import { StatusDot, UnreadBell } from './StatusDot'
 import { worktreeGlyph } from './status'
 
 export type TreeProps = {
@@ -52,11 +52,10 @@ function WorktreeCard({ context, worktree, depth, childCount, collapsed, session
       }}
     >
       <button className="worktree-main" onClick={open} title={worktree.path}>
-        <StatusDot glyph={sessions === null ? null : worktreeGlyph(sessions, worktree.id, now)} />
-        <span className="worktree-name">{worktree.name}</span>
+        {worktree.unread ? <UnreadBell /> : <StatusDot glyph={sessions === null ? null : worktreeGlyph(sessions, worktree.id, now)} />}
+        <span className={worktree.unread ? 'worktree-name worktree-name-unread' : 'worktree-name'}>{worktree.name}</span>
         {worktree.isMain && <span className="tag tag-primary">primary</span>}
         {worktree.status !== 'in-progress' && <span className="tag tag-status">{STATUS_LABELS[worktree.status]}</span>}
-        {worktree.unread && <span className="unread-mark" role="img" aria-label="unread" />}
         {worktree.removing && <span className="tag tag-state">Deleting…</span>}
       </button>
       {childCount > 0 && (

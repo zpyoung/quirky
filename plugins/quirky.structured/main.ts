@@ -20,9 +20,8 @@ import type {
 } from './runner'
 
 const CLAUDE_TITLE = 'Claude'
-const NOTIFICATIONS_SETTING = 'setting:quirky.agent-status/notifications'
 
-type LiveSession = { title: string; worktreeId: string; worktreeName: string; status: SessionStatus }
+type LiveSession = { worktreeId: string; status: SessionStatus; lastAssistantMessage: string | null }
 
 /** Tests replace the Claude runner by publishing a factory here before the daemon starts. */
 function testRunnerFactory(): StructuredRunnerFactory | undefined {
@@ -43,16 +42,10 @@ export function activate(context: PluginContext): void {
 
   const appendMessage = (msg: NewStructuredMessage) => {
     const message = journal.append({ ...msg, at: msg.at ?? Date.now() })
+    const entry = live.get(msg.sessionId)
+    if (entry && msg.role === 'assistant') entry.lastAssistantMessage = msg.text
     context.emit('message', { message })
     return message
-  }
-
-  const notifyEnabled = (): boolean => {
-    try {
-      return context.getSetting(NOTIFICATIONS_SETTING) !== false
-    } catch {
-      return true
-    }
   }
 
   const setStatus = (sessionId: string, status: SessionStatus): void => {
@@ -68,13 +61,13 @@ export function activate(context: PluginContext): void {
       )
     )
     if (!changed || (status !== 'done' && status !== 'waiting')) return
-    context.notify({
-      title: entry.worktreeName,
-      body: status === 'done' ? `${entry.title} finished` : `${entry.title} needs input`,
+    context.emit('settled', {
       sessionId,
       worktreeId: entry.worktreeId,
-      open: { view: 'view:quirky.session/worktree', input: { worktree: entry.worktreeId, session: sessionId } },
-      desktop: notifyEnabled()
+      agent: 'claude',
+      state: status,
+      lastAssistantMessage: entry.lastAssistantMessage,
+      at: Date.now()
     })
   }
 
@@ -164,7 +157,7 @@ export function activate(context: PluginContext): void {
       title,
       ...(resolution?.launchSettings ? { launchSettings: resolution.launchSettings } : {})
     })) as Session
-    live.set(registered.id, { title, worktreeId: worktree.id, worktreeName: worktree.name, status: registered.status })
+    live.set(registered.id, { worktreeId: worktree.id, status: registered.status, lastAssistantMessage: null })
     runner.start({ ...registered, cwd: worktree.path }, params.prompt as string, resolution?.structured ?? {}).catch((error: Error) => {
       appendMessage({ sessionId: registered.id, role: 'system', text: `could not start: ${error.message}` })
       setStatus(registered.id, 'exited')

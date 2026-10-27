@@ -36,6 +36,7 @@ type Row = {
   launch_settings: string | null
   agent_status: string | null
   name: string | null
+  unread: Session['unread']
 }
 
 function parseJson<T>(text: string | null): T | null {
@@ -67,7 +68,8 @@ const toSession = (row: Row): Session => ({
   launchSettings: parseJson<LaunchSettings>(row.launch_settings),
   resumedFrom: row.resumed_from,
   agentStatus: parseJson<AgentStatusSummary>(row.agent_status),
-  name: row.name
+  name: row.name,
+  unread: row.unread
 })
 
 const jsonOrNull = (value: unknown) => (value === null || value === undefined ? null : JSON.stringify(value))
@@ -145,6 +147,9 @@ export function sessionMigrations(home: string): StoreMigration[] {
     },
     (store) => {
       store.exec('ALTER TABLE sessions ADD COLUMN agent_status TEXT')
+    },
+    (store) => {
+      store.exec('ALTER TABLE sessions ADD COLUMN unread TEXT')
     },
     (store) => {
       store.exec('ALTER TABLE sessions ADD COLUMN name TEXT')
@@ -238,6 +243,7 @@ export class SessionRecords {
       launchSettings?: LaunchSettings | null
       agentStatus?: AgentStatusSummary | null
       name?: string | null
+      unread?: Session['unread']
     }
   ): Session | null {
     const columns: [string, string | number | null][] = []
@@ -254,6 +260,7 @@ export class SessionRecords {
     if (fields.launchSettings !== undefined) columns.push(['launch_settings', jsonOrNull(fields.launchSettings)])
     if (fields.agentStatus !== undefined) columns.push(['agent_status', jsonOrNull(fields.agentStatus)])
     if (fields.name !== undefined) columns.push(['name', fields.name])
+    if (fields.unread !== undefined) columns.push(['unread', fields.unread])
     if (columns.length > 0) {
       this.store.run(
         `UPDATE sessions SET ${columns.map(([name]) => `${name} = ?`).join(', ')} WHERE id = ?`,

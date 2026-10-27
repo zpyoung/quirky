@@ -44,6 +44,20 @@ export type WaitReply = {
 
 export type OutputReply = { status: 'matched'; line: string; match: string; groups: string[]; at: number } | { status: 'pending'; at: number }
 
+export type SettledData = {
+  sessionId: string
+  worktreeId: string
+  agent: string
+  state: 'done' | 'waiting' | 'blocked'
+  outcome: 'success' | 'cancellation' | 'failure' | null
+  interrupted: boolean
+  prompt: string | null
+  toolName: string | null
+  toolInput: string | null
+  lastAssistantMessage: string | null
+  at: number
+}
+
 export type StoredView = AgentRow & { display: string; label: string }
 export type HookOptions = { session?: string; pid?: number; pstart?: string; event?: string }
 
@@ -329,10 +343,14 @@ export class Rig {
 
   list = async (params: Record<string, unknown> = {}) => (await this.client.callAny('quirky.agent-status/list', params)) as Record<string, unknown>[]
 
+  /** The `notify` events sent so far; the plugin sends none. */
   notifies = () => this.events.filter((e) => e.type === 'notify')
 
-  waitForNotifies(count: number) {
-    return waitFor(() => this.notifies().length >= count)
+  /** The data of every `settled` event so far, oldest first. */
+  settles = () => this.events.filter((e) => e.type === 'quirky.agent-status/settled').map((e) => (e as { data: SettledData }).data)
+
+  waitForSettles(count: number) {
+    return waitFor(() => this.settles().length >= count)
   }
 
   /** Points the fake `quirky.agents` at an executable that prints `output` for `--version`. */

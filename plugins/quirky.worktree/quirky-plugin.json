@@ -446,6 +446,9 @@
             "noParent": {
               "type": "boolean",
               "description": "Clears the parent."
+            },
+            "baseRef": {
+              "description": "The worktree's own base ref (compare and rebase target); an empty string or null clears it."
             }
           },
           "required": [
@@ -991,6 +994,10 @@
             },
             "worktreeId": {
               "type": "string"
+            },
+            "unread": {
+              "type": "boolean",
+              "description": "Present only when the change was a set that asked for unread; the value it asked for, even when the stored value did not change."
             }
           },
           "required": [

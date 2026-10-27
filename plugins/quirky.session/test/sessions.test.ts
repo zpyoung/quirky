@@ -615,6 +615,50 @@ describe('quirky.session/setStatus', () => {
   })
 })
 
+describe('quirky.session/setUnread', () => {
+  test('stores the reason, returns the session, and emits changed only when the value changes', async () => {
+    const session = await createSession(client, { worktree: 'id:wt_main', agent: 'claude' })
+    expect(session.unread ?? null).toBeNull()
+    await waitFor(() => changedTo('running'))
+    const count = () => eventsOf('quirky.session/changed').length
+    const before = count()
+
+    const marked = await call<Session>(client, 'quirky.session/setUnread', { session: session.id, unread: 'agent' })
+    expect(marked.unread).toBe('agent')
+    await waitFor(() => count() === before + 1 || undefined)
+    expect((eventsOf('quirky.session/changed').at(-1) as unknown as { data: { session: Session } }).data.session.unread).toBe('agent')
+
+    await call(client, 'quirky.session/setUnread', { session: session.id, unread: 'agent' })
+    await Bun.sleep(40)
+    expect(count()).toBe(before + 1)
+
+    await call(client, 'quirky.session/setUnread', { session: session.id, unread: 'bell' })
+    await waitFor(() => count() === before + 2 || undefined)
+    expect(await call(client, 'quirky.session/get', { session: session.id })).toMatchObject({ unread: 'bell' })
+
+    const cleared = await call<Session>(client, 'quirky.session/setUnread', { session: session.id, unread: null })
+    expect(cleared.unread).toBeNull()
+    await waitFor(() => count() === before + 3 || undefined)
+
+    await call(client, 'quirky.session/setUnread', { session: session.id, unread: null })
+    await Bun.sleep(40)
+    expect(count()).toBe(before + 3)
+  })
+
+  test('an unknown session is NotFound and a bad reason is InvalidParams', async () => {
+    expect(await code(call(client, 'quirky.session/setUnread', { session: 's_nope', unread: 'agent' }))).toBe(RpcErrorCode.NotFound)
+    const session = await createSession(client, { worktree: 'id:wt_main', agent: 'claude' })
+    expect(await code(call(client, 'quirky.session/setUnread', { session: session.id, unread: 'loud' }))).toBe(RpcErrorCode.InvalidParams)
+  })
+
+  test('a status update leaves the reason alone', async () => {
+    const session = await createSession(client, { worktree: 'id:wt_main', agent: 'claude' })
+    await call(client, 'quirky.session/setUnread', { session: session.id, unread: 'notification' })
+    const after = await call<Session>(client, 'quirky.session/setStatus', { session: session.id, status: 'working' })
+    expect(after.unread).toBe('notification')
+  })
+})
+
 describe('quirky.session/list', () => {
   test('lists all sessions, or those of one worktree selector', async () => {
     const main = await createSession(client, { worktree: 'id:wt_main', agent: 'shell' })
@@ -727,7 +771,8 @@ describe('the session store migration', () => {
         launchSettings: null,
         resumedFrom: null,
         agentStatus: null,
-        name: null
+        name: null,
+        unread: null
       }
     ])
   })
