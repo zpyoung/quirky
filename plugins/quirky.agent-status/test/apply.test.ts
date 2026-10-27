@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 import { applyEvent, type ApplyEvent } from '../src/apply'
 import { decideIdentity, type IdentityEvent } from '../src/identity'
+import { normalize } from '../src/normalize'
 import type { AgentRow, Normalized } from '../src/types'
 
 const base: ApplyEvent = { sessionId: 's1', source: 'claude', at: 1000, replay: false }
@@ -238,6 +239,40 @@ describe('Claude permission hold', () => {
     expect(ended.heldPermission).toBeUndefined()
   })
 
+  describe("a subagent's approval, from the hook payloads", () => {
+    const playPayloads = (payloads: Record<string, unknown>[]) => {
+      const cache = new Map<string, unknown>()
+      let row: AgentRow | null = null
+      return payloads.map((payload, index) => {
+        row = applyEvent(row, normalize('claude', payload, undefined, cache)!, { ...base, at: 1000 + index * 1000 }).row
+        return row!
+      })
+    }
+    const childHooks = [
+      { hook_event_name: 'UserPromptSubmit', prompt: 'go' },
+      { hook_event_name: 'SubagentStart', agent_id: 'a1' },
+      { hook_event_name: 'PermissionRequest', agent_id: 'a1', tool_name: 'Bash', tool_input: { command: 'ls' } }
+    ]
+
+    test('the approved tool resuming releases the hold and the child works again', () => {
+      const rows = playPayloads([...childHooks, { hook_event_name: 'PreToolUse', agent_id: 'a1', tool_name: 'Bash', tool_input: { command: 'ls' }, tool_use_id: 't1' }])
+      expect(rows[2]).toMatchObject({ state: 'waiting', heldPermission: { childId: 'a1', toolName: 'Bash', input: 'ls' } })
+      expect(rows[3]).toMatchObject({ state: 'working', children: [{ id: 'a1', state: 'working' }] })
+      expect(rows[3]!.heldPermission).toBeUndefined()
+    })
+
+    test('another tool of the child leaves the wait alone, and the approved tool then ends it', () => {
+      const rows = playPayloads([
+        ...childHooks,
+        { hook_event_name: 'PreToolUse', agent_id: 'a1', tool_name: 'Read', tool_input: { file_path: 'a.ts' }, tool_use_id: 't2' },
+        { hook_event_name: 'PostToolUse', agent_id: 'a1', tool_name: 'Bash', tool_input: { command: 'ls' }, tool_use_id: 't1' }
+      ])
+      expect(rows[3]).toMatchObject({ state: 'waiting', children: [{ id: 'a1', state: 'waiting' }] })
+      expect(rows[4]).toMatchObject({ state: 'working', children: [{ id: 'a1', state: 'working' }] })
+      expect(rows[4]!.heldPermission).toBeUndefined()
+    })
+  })
+
   test('a question tool is never held', () => {
     const asked: Partial<Normalized> = {
       ...permission('AskUserQuestion', ''),
@@ -406,10 +441,15 @@ describe('identity', () => {
     expect(decideIdentity(null, ev(), NOW, alive)).toBe('accept')
   })
 
-  test('the lead\'s own events are accepted without probing its process', () => {
+  test('the lead\'s own events are accepted while its process lives', () => {
     probes.length = 0
     expect(decideIdentity(lead(), ev(), NOW, spy(true))).toBe('accept')
-    expect(probes).toEqual([])
+    expect(probes).toEqual([[10, 'x']])
+  })
+
+  test('a successor of the same kind replaces a lead whose process is gone, whatever its provider session', () => {
+    expect(decideIdentity(lead(), ev({ providerSession: null }), NOW, dead)).toBe('replace')
+    expect(decideIdentity(lead({ state: 'done' }), ev({ providerSession: 'abc' }), NOW, dead)).toBe('replace')
   })
 
   test('another provider session of the same kind is nested while the lead lives and replaces it once it is gone', () => {

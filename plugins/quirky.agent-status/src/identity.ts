@@ -43,11 +43,13 @@ export function processAlive(pid: number, start: string | null): boolean {
  * or from a different provider session of the same kind, is a nested agent (a helper the lead
  * started) and is ignored while the row is fresh and the lead's process lives. A finished row of
  * another kind yields to the new agent, and a `clear`/`resume` SessionStart moves the lead.
- * The lead's process is probed only when the answer depends on it.
+ * A lead whose process is gone yields to any event, so a successor never inherits its pid.
  */
 export function decideIdentity(row: AgentRow | null, event: IdentityEvent, now: number, isAlive: IsAlive): IdentityVerdict {
   if (!row) return 'accept'
   if (row.lead.ended) return 'replace'
+  // a successor can speak with no foreign provider session, so a dead lead is found before the event is judged
+  if (row.lead.agentPid !== null && !isAlive(row.lead.agentPid, row.lead.agentStart)) return 'replace'
 
   const sameKind = event.source === row.agent
   if (!sameKind) {
@@ -63,6 +65,5 @@ export function decideIdentity(row: AgentRow | null, event: IdentityEvent, now: 
 
   const display = displayOf(row, now, true).display
   if (display === 'unverifiable' || display === 'idle' || display === 'unconfirmed') return 'replace'
-  if (row.lead.agentPid !== null && !isAlive(row.lead.agentPid, row.lead.agentStart)) return 'replace'
   return 'ignore'
 }
