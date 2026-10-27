@@ -80,7 +80,6 @@ export async function deliverySound(opts: {
   const { sound, customSoundPath, volume, pluginDir } = opts
   if (sound === 'system') return { sound: { file: null, volume } }
   if (sound !== 'custom') return { sound: { file: builtinSoundFile(pluginDir, sound), volume } }
-  if (!customSoundPath) return { problem: 'no custom file chosen' }
   const check = await checkCustomSound(customSoundPath)
   if (!check.ok) return { problem: check.reason }
   return { sound: { file: customSoundPath, volume } }

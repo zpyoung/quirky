@@ -100,7 +100,7 @@ describe('deliverySound', () => {
 
   test('custom with no path', async () => {
     expect(await deliverySound({ sound: 'custom', customSoundPath: '', volume: 80, pluginDir: '/p' })).toEqual({
-      problem: 'no custom file chosen',
+      problem: 'must be an absolute path',
     })
   })
 })

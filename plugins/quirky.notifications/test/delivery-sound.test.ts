@@ -162,7 +162,7 @@ describe('preview', () => {
     rig = await Rig.start()
     expect(await preview({})).toEqual({ played: false, reason: 'System Default has no preview' })
     expect(await preview({ sound: 'system' })).toEqual({ played: false, reason: 'System Default has no preview' })
-    expect(await preview({ sound: 'custom' })).toEqual({ played: false, reason: 'no custom file chosen' })
+    expect(await preview({ sound: 'custom' })).toEqual({ played: false, reason: 'must be an absolute path' })
     await expect(preview({ sound: 'kazoo' })).rejects.toThrow()
     await expect(preview({ sound: 'bong', volume: 120 })).rejects.toThrow()
   })
