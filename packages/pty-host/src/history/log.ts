@@ -24,6 +24,7 @@ const RECORD_HEAD_BYTES = 5
 const KIND_OUTPUT = 0x01
 const KIND_RESIZE = 0x02
 const KIND_RESTORE = 0x03
+const KIND_CLEAR = 0x04
 
 const CURRENT_NAME = 'output.log'
 const PREVIOUS_NAME = 'output.1.log'
@@ -39,7 +40,7 @@ export type HistoryLogOptions = {
 }
 
 export type LogRecord = {
-  kind: 'output' | 'resize' | 'restore'
+  kind: 'output' | 'resize' | 'restore' | 'clear'
   /** Absolute output position where the record starts. */
   offset: number
   bytes?: Uint8Array
@@ -124,6 +125,8 @@ function scanSegment(data: Uint8Array): Scan {
       records.push({ kind: 'resize', offset, cols, rows })
     } else if (kind === KIND_RESTORE) {
       records.push({ kind: 'restore', offset })
+    } else if (kind === KIND_CLEAR) {
+      records.push({ kind: 'clear', offset })
     } else {
       return { ok: false }
     }
@@ -160,7 +163,7 @@ export function readSegments(dir: string): { segments: LogSegment[]; unreadable:
 
 /** One record of an indexed segment; `at` is where its payload starts in the file. */
 export type IndexedRecord = {
-  kind: 'output' | 'resize' | 'restore'
+  kind: 'output' | 'resize' | 'restore' | 'clear'
   /** Absolute output position where the record starts. */
   offset: number
   /** Payload bytes; for output this is the span of output positions it covers. */
@@ -234,6 +237,8 @@ function indexSegment(fd: number, path: string): IndexedSegment | null {
       records.push({ kind: 'resize', offset, length, at, cols: payload.readUInt16LE(0), rows: payload.readUInt16LE(2) })
     } else if (kind === KIND_RESTORE) {
       records.push({ kind: 'restore', offset, length, at })
+    } else if (kind === KIND_CLEAR) {
+      records.push({ kind: 'clear', offset, length, at })
     } else {
       return null
     }
@@ -296,6 +301,18 @@ function closeQuietly(fd: number): void {
   } catch {
     // already closed
   }
+}
+
+/**
+ * Output position of the newest `clear` record in `segments`, or null when none was recorded.
+ * Output before it is no longer part of what the session shows.
+ */
+export function newestClearOffset(segments: ReadonlyArray<{ records: ReadonlyArray<{ kind: string; offset: number }> }>): number | null {
+  for (let s = segments.length - 1; s >= 0; s--) {
+    const { records } = segments[s]
+    for (let r = records.length - 1; r >= 0; r--) if (records[r].kind === 'clear') return records[r].offset
+  }
+  return null
 }
 
 /** Absolute output position of the first retained byte, or 0 when nothing is readable. */
@@ -415,6 +432,16 @@ export class HistoryLog {
   /** Marks where a restored incarnation begins. */
   appendRestore(): void {
     if (this.write(encodeRecord(KIND_RESTORE, new Uint8Array(0)))) this.rotateIfFull()
+  }
+
+  /** Marks that everything before the current output position was cleared from the session's screen and history. */
+  appendClear(): void {
+    if (this.write(encodeRecord(KIND_CLEAR, new Uint8Array(0)))) this.rotateIfFull()
+  }
+
+  /** False once the log has been closed or has failed; appends are then no-ops. */
+  get isOpen(): boolean {
+    return this.fd !== null
   }
 
   close(): void {

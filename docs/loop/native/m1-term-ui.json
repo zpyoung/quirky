@@ -1,0 +1,46 @@
+{
+  "item": "m1-term-ui",
+  "spec": "docs/quirk/specs/2026-10-26-m1-term-ui/logic.md",
+  "scenarios": [
+    {
+      "id": "SC-38",
+      "title": "Dropping files from Finder onto a pane types their shell-escaped paths at the cursor without Enter",
+      "status": "pending",
+      "lastRun": null,
+      "report": null,
+      "summary": null
+    },
+    {
+      "id": "SC-37",
+      "title": "Text copied in another macOS app pastes into a pane with ⌘V, bracketed only when the program asked for it",
+      "status": "pending",
+      "lastRun": null,
+      "report": null,
+      "summary": null
+    },
+    {
+      "id": "SC-41",
+      "title": "⌘-clicking a URL in a pane opens it in the system browser, and Reveal in Finder on a file link shows it in Finder",
+      "status": "pending",
+      "lastRun": null,
+      "report": null,
+      "summary": null
+    },
+    {
+      "id": "SC-61",
+      "title": "In the desktop window, ⌘R renames the tab and never reloads the webview; under Terminal first ⌘T reaches the terminal and opens no tab",
+      "status": "pending",
+      "lastRun": null,
+      "report": null,
+      "summary": null
+    },
+    {
+      "id": "SC-75",
+      "title": "In the desktop window, visible panes render with WebGL (at most 12 contexts) and the memory probe at the typical-day workload stays within budget",
+      "status": "pending",
+      "lastRun": null,
+      "report": null,
+      "summary": null
+    }
+  ]
+}

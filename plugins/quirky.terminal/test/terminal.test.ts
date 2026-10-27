@@ -283,7 +283,8 @@ describe('the CLI catalog', () => {
     const api = (await call(client, 'api.describe', {})) as ApiDescription
     expect(api.cli.groups.find((g) => g.plugin === 'quirky.terminal')).toEqual({ plugin: 'quirky.terminal', words: 'terminal', aliases: ['term'] })
     const own = api.cli.commands.filter((c) => c.plugin === 'quirky.terminal')
-    expect(own.map((c) => c.words).sort()).toEqual([
+    // the layout, tab, pane, group, quick-command and floating words are pinned in cli-layout.test.ts
+    expect(own.map((c) => c.words)).toEqual(expect.arrayContaining([
       'terminal history',
       'terminal kill',
       'terminal kill-all',
@@ -291,8 +292,9 @@ describe('the CLI catalog', () => {
       'terminal restart-host',
       'terminal send',
       'terminal sessions',
-      'terminal snapshot'
-    ])
+      'terminal snapshot',
+      'terminal layout'
+    ]))
     expect(own.find((c) => c.words === 'terminal read')!.aliasWords).toEqual(['term read'])
     const names = api.methods.map((m) => m.name)
     for (const name of ['attach', 'detach', 'write', 'resize', 'send', 'read']) expect(names).toContain(`quirky.terminal/${name}`)
@@ -494,7 +496,15 @@ describe('SC-40: the catalog', () => {
     expect(method('killAll')?.confirm).toBe('Kill all terminal sessions?')
     expect(method('restartHost')?.confirm).toBe('Restart the terminal service? Open terminals and agents will restart.')
     const events = api.events.filter((e) => e.name.startsWith('quirky.terminal/')).map((e) => e.name)
-    expect(events.sort()).toEqual(['quirky.terminal/bell', 'quirky.terminal/commandFinished', 'quirky.terminal/cwd', 'quirky.terminal/title'])
+    expect(events.sort()).toEqual([
+      'quirky.terminal/bell',
+      'quirky.terminal/commandFinished',
+      'quirky.terminal/cwd',
+      'quirky.terminal/floating',
+      'quirky.terminal/layout',
+      'quirky.terminal/quickCommands',
+      'quirky.terminal/title'
+    ])
     const words = api.cli.commands.filter((c) => c.plugin === 'quirky.terminal').map((c) => c.words)
     expect(words).toEqual(expect.arrayContaining(['terminal kill-all', 'terminal restart-host']))
   })
@@ -514,7 +524,8 @@ describe('SC-30 to SC-33: facts become events', () => {
     h.pty.fact(shell.id, { kind: 'command-finished', exitCode: null })
     h.pty.fact(shell.id, { kind: 'title', title: 'build' })
     h.pty.fact(shell.id, { kind: 'cwd', cwd: '/tmp/w/api/src' })
-    const ours = () => events.filter((e: QuirkyEvent) => e.type.startsWith('quirky.terminal/'))
+    const facts = ['bell', 'commandFinished', 'title', 'cwd'].map((name) => `quirky.terminal/${name}`)
+    const ours = () => events.filter((e: QuirkyEvent) => facts.includes(e.type))
     await waitFor(() => ours().length === 5)
     expect(ours().map((e) => [e.type, (e as PluginEvent).data])).toEqual([
       ['quirky.terminal/bell', { sessionId: shell.id }],

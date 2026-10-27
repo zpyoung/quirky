@@ -375,3 +375,38 @@ describe('SessionService.register launch settings', () => {
     expect(records.get(result.id)?.launchSettings).toBeNull()
   })
 })
+
+describe('SessionService.create start folder', () => {
+  const worktreeCalls = (calls: { method: string }[]) => calls.filter((c) => c.method === 'quirky.worktree/resolve')
+
+  test('a floating session starts in cwd with no repository and never asks quirky.worktree', async () => {
+    const { service, records, calls } = launchContext(() => {})
+    const dir = tmpdir()
+
+    const result = await service.create({ worktree: 'floating', agent: 'shell', cwd: dir }, caller)
+
+    expect(result).toMatchObject({ worktreeId: 'floating', cwd: dir, title: 'Shell' })
+    expect(records.repoIdOf(result.id)).toBeNull()
+    expect(worktreeCalls(calls)).toEqual([])
+  })
+
+  test('a bad cwd is refused before any worktree or agent is asked', async () => {
+    const { service, records, calls } = launchContext(() => {})
+
+    await expect(service.create({ worktree: 'id:wt', agent: 'claude', cwd: 'relative' }, caller)).rejects.toThrow(
+      'invalid-params: cwd must be an existing directory'
+    )
+
+    expect(calls).toEqual([])
+    expect(records.list()).toEqual([])
+  })
+
+  test('a plugin caller has no worktree identity, so current is the worktree service\'s to resolve', async () => {
+    const { service, calls } = launchContext(() => {})
+
+    const result = await service.create({ agent: 'shell' }, { role: 'plugin', pluginId: 'quirky.terminal' } as PluginCaller)
+
+    expect(result.worktreeId).toBe('wt')
+    expect(worktreeCalls(calls)).toHaveLength(1)
+  })
+})

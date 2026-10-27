@@ -48,7 +48,7 @@ export function isAlive(pid: number): boolean {
 type ProcessRow = { pid: number; ppid: number; command: string }
 
 function processTable(): ProcessRow[] {
-  const out = execFileSync('ps', ['-axo', 'pid=,ppid=,command='], { encoding: 'utf8' })
+  const out = execFileSync('ps', ['-axo', 'pid=,ppid=,command='], { encoding: 'utf8', maxBuffer: 256 * 1024 * 1024 })
   return out
     .split('\n')
     .map((line) => /^\s*(\d+)\s+(\d+)\s+(.*)$/.exec(line))

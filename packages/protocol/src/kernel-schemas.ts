@@ -135,19 +135,32 @@ const themeList = object(
   },
   ['chosen', 'active', 'themes']
 )
+const uiKeybinding = object(
+  {
+    id: string(),
+    plugin: string(),
+    key: string('The canonical chord.'),
+    command: string(),
+    status: { type: 'string', enum: ['active', 'shadowed', 'unbound'] },
+    shadowedBy: string('The winning keybinding ID, or `kernel` for a reserved chord.'),
+    when: string('The canonical `when` condition; absent when the binding is unconditional.')
+  },
+  ['id', 'plugin', 'key', 'command', 'status']
+)
 const uiModel = object(
   {
     sidebarSections: listOf({ type: 'object' }),
     panels: listOf({ type: 'object' }),
     views: listOf({ type: 'object' }),
+    overlays: listOf({ type: 'object' }),
     commands: listOf({ type: 'object' }),
-    keybindings: listOf({ type: 'object' }),
+    keybindings: listOf(uiKeybinding, 'Registry precedence order: distro bindings first, then plugin bindings.'),
     settings: listOf({ type: 'object' }),
     themes: listOf({ type: 'object' }),
     theme: object({ chosen: string(), active: string() }, ['chosen', 'active']),
     modules: { type: 'object', additionalProperties: true }
   },
-  ['sidebarSections', 'panels', 'views', 'commands', 'keybindings', 'settings', 'themes', 'theme', 'modules']
+  ['sidebarSections', 'panels', 'views', 'overlays', 'commands', 'keybindings', 'settings', 'themes', 'theme', 'modules']
 )
 const apiDescription = object(
   {

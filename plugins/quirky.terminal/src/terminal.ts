@@ -9,6 +9,7 @@ import {
   type PtySubscription,
   type Session
 } from '@quirky/protocol'
+import { InputTracker } from './input-tracker'
 
 const DEFAULT_ENTER_DELAY_MS = 300
 const DEFAULT_READ_LINES = 50
@@ -86,7 +87,10 @@ export class TerminalService {
   private readonly forgotten = new Set<string>()
   private closed = false
 
-  constructor(private readonly context: PluginContext) {}
+  constructor(
+    private readonly context: PluginContext,
+    private readonly inputs: InputTracker = new InputTracker()
+  ) {}
 
   attach = async (params: Record<string, unknown>, caller: PluginCaller) => {
     this.refuseWhenClosed()
@@ -134,8 +138,10 @@ export class TerminalService {
     return { ok: true }
   }
 
+  /** Types raw input; the session then counts as touched for the layout's exit rule. */
   write = async (params: Record<string, unknown>): Promise<{ ok: true }> => {
     const session = await this.requireWritable(params.session as string)
+    this.inputs.mark(session.id)
     this.input(session.id, encoder.encode(params.data as string))
     return { ok: true }
   }

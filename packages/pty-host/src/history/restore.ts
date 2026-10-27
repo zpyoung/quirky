@@ -2,12 +2,20 @@ import { statSync } from 'node:fs'
 import { OutputScanner } from '../scanner'
 import type { Screen } from '../screen'
 import { type Checkpoint, readCheckpoint, writeCheckpoint as writeCheckpointFile } from './checkpoint'
-import { readSegments } from './log'
+import { newestClearOffset, readSegments } from './log'
 
 const HISTORY_NOTE = '[history could not be read]\r\n'
 const MAX_CWD_CANDIDATES = 256
 
 const encoder = new TextEncoder()
+
+const MODE_RESET_TEXT = '\x1b[?1000l\x1b[?1002l\x1b[?1003l\x1b[?1006l\x1b[?2004l\x1b[?1l\x1b[?25h'
+
+/**
+ * Turns off mouse reporting, bracketed paste and application cursor keys and shows the cursor,
+ * leaving the screen, its text, the cursor position and the attributes as they are.
+ */
+export const MODE_RESET: Uint8Array = encoder.encode(MODE_RESET_TEXT)
 
 /**
  * Bytes that bring a screen rebuilt from a dead process's history back to a usable state: abort
@@ -17,9 +25,7 @@ const encoder = new TextEncoder()
  * because that restores the saved cursor, home when none was saved; `?1047l` would leave an
  * alternate-screen program's cursor where the program put it instead of where it was on entry.
  */
-export const GROUND: Uint8Array = encoder.encode(
-  '\x18\x1b7\x1b[?1049l\x1b[?1000l\x1b[?1002l\x1b[?1003l\x1b[?1006l\x1b[?2004l\x1b[?1l\x1b[?25h\x1b[0m\r\n'
-)
+export const GROUND: Uint8Array = encoder.encode(`\x18\x1b7\x1b[?1049l${MODE_RESET_TEXT}\x1b[0m\r\n`)
 
 export type RestoreSource = 'checkpoint+log' | 'log' | 'checkpoint' | 'none'
 
@@ -43,10 +49,12 @@ function isDirectory(path: string): boolean {
 
 /**
  * Rebuilds a session's last screen into a fresh `screen` from `<dir>`: the checkpoint's screen
- * plus the log after it, else the whole readable log, else a note. Terminal queries inside the
- * history are answered by nobody: `screen.seeding` is true while the bytes are parsed, and the
- * promise resolves only once the screen has parsed all of them, so the caller can append the
- * ground and spawn the shell straight after. `screen.seeding` is put back to its prior value.
+ * plus the log after it, else the whole readable log, else a note. Output before the newest
+ * `clear` record never reaches the screen, and a checkpoint taken at or before that record is
+ * not used; the cwd, title and size set earlier still count. Terminal queries inside the history
+ * are answered by nobody: `screen.seeding` is true while the bytes are parsed, and the promise
+ * resolves only once the screen has parsed all of them, so the caller can append the ground and
+ * spawn the shell straight after. `screen.seeding` is put back to its prior value.
  */
 export async function rebuildScreen(
   dir: string,
@@ -55,6 +63,11 @@ export async function rebuildScreen(
 ): Promise<RestoredScreen> {
   const checkpoint = readCheckpoint(dir)
   const { segments } = readSegments(dir)
+  const clearedAt = newestClearOffset(segments)
+  // a checkpoint at the clear offset was taken just before it, so only a later one shows the cleared screen
+  const base = checkpoint?.offset ?? 0
+  const checkpointScreen = checkpoint !== null && (clearedAt === null || base > clearedAt)
+  const screenFrom = Math.max(base, clearedAt ?? 0)
   const wasSeeding = screen.seeding
   screen.seeding = true
 
@@ -72,7 +85,7 @@ export async function rebuildScreen(
     rows = Math.max(1, r)
     screen.resize(cols, rows)
   }
-  const replay = (bytes: Uint8Array): void => {
+  const replay = (bytes: Uint8Array, toScreenFrom: number): void => {
     for (const fact of scanner.push(bytes).facts) {
       if (fact.kind === 'title') title = fact.title
       else if (fact.kind === 'cwd') {
@@ -85,26 +98,26 @@ export async function rebuildScreen(
         }
       }
     }
-    screen.write(bytes)
+    if (toScreenFrom < bytes.length) screen.write(toScreenFrom > 0 ? bytes.subarray(toScreenFrom) : bytes)
   }
 
   try {
     resize(cols, rows)
-    if (checkpoint) screen.write(checkpoint.ansi)
-    const from = checkpoint?.offset ?? 0
+    if (checkpoint && checkpointScreen) screen.write(checkpoint.ansi)
 
     for (const segment of segments) {
       for (const record of segment.records) {
         if (record.kind === 'resize') {
-          if (checkpoint === null || record.offset >= from) {
+          if (record.offset >= base) {
             await screen.settled()
             resize(record.cols!, record.rows!)
           }
         } else if (record.kind === 'output') {
           const bytes = record.bytes!
           const end = record.offset + bytes.length
-          if (checkpoint === null || record.offset >= from) replay(bytes)
-          else if (end > from) replay(bytes.subarray(from - record.offset))
+          if (end <= base) continue
+          const skip = Math.max(0, base - record.offset)
+          replay(skip > 0 ? bytes.subarray(skip) : bytes, Math.max(0, screenFrom - record.offset - skip))
         }
       }
     }
@@ -118,7 +131,7 @@ export async function rebuildScreen(
   const cwd =
     [...cwds.keys()].reverse().find(isDirectory) ?? evictedExisting ?? checkpoint?.cwd ?? fallback.cwd
   const source: RestoreSource =
-    checkpoint && segments.length > 0 ? 'checkpoint+log' : checkpoint ? 'checkpoint' : segments.length > 0 ? 'log' : 'none'
+    checkpointScreen && segments.length > 0 ? 'checkpoint+log' : checkpointScreen ? 'checkpoint' : segments.length > 0 ? 'log' : 'none'
   return { source, cols, rows, cwd, title, offset: segments[segments.length - 1]?.endOffset ?? 0 }
 }
 

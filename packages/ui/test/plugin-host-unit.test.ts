@@ -1,4 +1,4 @@
-import { expect, test } from 'bun:test'
+import { describe, expect, test } from 'bun:test'
 import {
   DEFAULT_THEME,
   type QuirkyEvent,
@@ -41,6 +41,7 @@ function slot(kind: UiSlotEntry['kind'], plugin: string, name: string, extra: Pa
 const section = (plugin: string, name: string, extra?: Partial<UiSlotEntry>) =>
   slot('sidebar-section', plugin, name, extra)
 const panel = (plugin: string, name: string) => slot('panel', plugin, name)
+const overlay = (plugin: string, name: string) => slot('overlay', plugin, name)
 const view = (plugin: string, name: string) => slot('view', plugin, name)
 const command = (plugin: string, name: string, title = name): UiCommandEntry => ({
   id: `command:${plugin}/${name}`,
@@ -59,6 +60,7 @@ function makeModel(parts: Partial<UiModel> = {}): UiModel {
     sidebarSections: [],
     panels: [],
     views: [],
+    overlays: [],
     commands: [],
     keybindings: [],
     settings: [],
@@ -68,7 +70,7 @@ function makeModel(parts: Partial<UiModel> = {}): UiModel {
     ...parts
   }
   if (parts.modules) return model
-  const entries = [...model.sidebarSections, ...model.panels, ...model.views, ...model.commands]
+  const entries = [...model.sidebarSections, ...model.panels, ...model.views, ...model.overlays, ...model.commands]
   for (const entry of entries) {
     const module = (model.modules[entry.plugin] ??= { url: urlOf(entry.plugin), provides: [] })
     module.provides.push(entry.id)
@@ -2062,4 +2064,526 @@ test('D23: runCommandForResult returns the value, rejects with the error and nev
   fail = true
   await expect(t.host.runCommandForResult(OPEN)).rejects.toThrow('nope')
   expect(t.toasts).toEqual([])
+})
+
+const FLOAT = 'overlay:acme.notes/float'
+
+test('SC-67: an overlay mounts with only a report function, and the host reports it mounted', async () => {
+  const t = setup(makeModel({ overlays: [overlay(NOTES, 'float')] }))
+  let received: unknown
+  let cleanups = 0
+  t.useModule(NOTES, recording([FLOAT], () => (_el: unknown, props: unknown) => {
+    received = props
+    return () => cleanups++
+  }).module)
+  await t.host.refresh()
+
+  const dispose = t.host.mount(FLOAT, element(), { input: 'ignored' })
+  await settled(t, FLOAT)
+  expect(received).toEqual({ report: expect.any(Function) })
+  expect(state(t).slots[FLOAT]).toEqual({ status: 'mounted' })
+  expect(t.methodCalls('ui.report').map((call) => call.params)).toEqual([{ slot: FLOAT, state: {} }])
+
+  dispose()
+  expect(cleanups).toBe(1)
+  expect(state(t).slots[FLOAT]).toBeUndefined()
+  expect(t.methodCalls('ui.report').at(-1)!.params).toEqual({ slot: FLOAT, state: null })
+})
+
+test('SC-67: an overlay that reports while mounting sends no extra mounted report, and later reports replace it', async () => {
+  const t = setup(makeModel({ overlays: [overlay(NOTES, 'float')] }))
+  let report!: (state: unknown) => void
+  t.useModule(NOTES, recording([FLOAT], () => (_el: unknown, props: { report(state: unknown): void }) => {
+    report = props.report
+    report({ shown: false })
+  }).module)
+  await t.host.refresh()
+  t.host.mount(FLOAT, element())
+  await settled(t, FLOAT)
+  report({ shown: true })
+
+  expect(t.methodCalls('ui.report').map((call) => call.params)).toEqual([
+    { slot: FLOAT, state: { shown: false } },
+    { slot: FLOAT, state: { shown: true } }
+  ])
+})
+
+test('SC-67: after a reconnect the host sends an overlay\'s last report again', async () => {
+  const t = setup(makeModel({ overlays: [overlay(NOTES, 'float')] }))
+  let report!: (state: unknown) => void
+  t.useModule(NOTES, recording([FLOAT], () => (_el: unknown, props: { report(state: unknown): void }) => (report = props.report)).module)
+  await t.host.refresh()
+  t.host.mount(FLOAT, element())
+  await settled(t, FLOAT)
+  report({ open: true })
+  const before = t.methodCalls('ui.report').length
+
+  await t.host.connected()
+  expect(t.methodCalls('ui.report').slice(before).map((call) => call.params)).toEqual([{ slot: FLOAT, state: { open: true } }])
+})
+
+test('SC-67: an overlay that leaves the model is unmounted and its report cleared', async () => {
+  const t = setup(makeModel({ overlays: [overlay(NOTES, 'float')] }))
+  let cleanups = 0
+  t.useModule(NOTES, recording([FLOAT], () => () => () => cleanups++).module)
+  await t.host.refresh()
+  t.host.mount(FLOAT, element())
+  await settled(t, FLOAT)
+
+  t.setModel(makeModel())
+  await t.host.refresh()
+  expect(cleanups).toBe(1)
+  expect(state(t).slots[FLOAT]).toBeUndefined()
+  expect(t.methodCalls('ui.report').at(-1)!.params).toEqual({ slot: FLOAT, state: null })
+})
+
+test('SC-67: mounting an overlay that is not in the model is an error slot', async () => {
+  const t = setup(makeModel())
+  await t.host.refresh()
+  t.host.mount(FLOAT, element())
+  expect(state(t).slots[FLOAT]).toEqual({ status: 'error', message: `no contribution ${FLOAT}` })
+})
+
+const JKEY = (when?: string, name = 'j', command = 'go') => ({
+  ...binding(NOTES, name, 'mod+j', `command:acme.notes/${command}`),
+  ...(when !== undefined ? { when } : {})
+})
+const cmdJ = key('KeyJ', { metaKey: true })
+
+/** A plugin whose commands `ids` record their names in `ran`; its context is `contexts[0]` once loaded. */
+async function withCommands(model: UiModel, ids: string[]) {
+  const t = setup(model)
+  const ran: string[] = []
+  const { module, record } = recording(
+    ids.map((id) => `command:acme.notes/${id}`),
+    (id) => () => ran.push(id.split('/')[1]!)
+  )
+  t.useModule(NOTES, module)
+  await t.host.refresh()
+  await loaded(t, NOTES)
+  return { t, ran, context: () => record.contexts[0]! }
+}
+
+test('SC-68: the same chord runs the command whose when holds, as the context keys change', async () => {
+  const { t, ran, context } = await withCommands(
+    makeModel({
+      commands: [command(NOTES, 'in-terminal'), command(NOTES, 'elsewhere')],
+      keybindings: [JKEY('terminalFocus', 'jt', 'in-terminal'), JKEY('!terminalFocus', 'je', 'elsewhere')]
+    }),
+    ['in-terminal', 'elsewhere']
+  )
+
+  expect(t.host.handleKey(cmdJ)).toBe(true)
+  context().setContext('terminalFocus', true)
+  expect(t.host.handleKey(cmdJ)).toBe(true)
+  context().setContext('terminalFocus', false)
+  expect(t.host.handleKey(cmdJ)).toBe(true)
+  context().setContext('terminalFocus', undefined)
+  expect(t.host.handleKey(cmdJ)).toBe(true)
+  await until(() => ran.length === 4)
+  expect(ran).toEqual(['elsewhere', 'in-terminal', 'elsewhere', 'elsewhere'])
+})
+
+test('SC-68: a chord whose only binding has a false when is not consumed and runs nothing', async () => {
+  const { t, ran, context } = await withCommands(
+    makeModel({ commands: [command(NOTES, 'go')], keybindings: [JKEY('terminalFocus && searchOpen')] }),
+    ['go']
+  )
+  let prevented = 0
+  const press = { ...cmdJ, preventDefault: () => prevented++ }
+  context().setContext('terminalFocus', true)
+  expect(t.host.handleKey(press)).toBe(false)
+  context().setContext('searchOpen', true)
+  expect(t.host.handleKey(press)).toBe(true)
+  await until(() => ran.length === 1)
+  expect(prevented).toBe(0)
+})
+
+test('SC-68: a binding with a when beats one without when both apply, and the unconditional one is the fallback', async () => {
+  const { t, ran, context } = await withCommands(
+    makeModel({
+      commands: [command(NOTES, 'plain'), command(NOTES, 'cond')],
+      keybindings: [JKEY(undefined, 'a-plain', 'plain'), JKEY('terminalFocus', 'z-cond', 'cond')]
+    }),
+    ['plain', 'cond']
+  )
+  t.host.handleKey(cmdJ)
+  context().setContext('terminalFocus', true)
+  t.host.handleKey(cmdJ)
+  await until(() => ran.length === 2)
+  expect(ran).toEqual(['plain', 'cond'])
+})
+
+test('SC-68: among bindings that all apply, the first in model order wins', async () => {
+  const { t, ran, context } = await withCommands(
+    makeModel({
+      commands: [command(NOTES, 'one'), command(NOTES, 'two')],
+      keybindings: [JKEY('a', 'z', 'two'), JKEY('b', 'a', 'one')]
+    }),
+    ['one', 'two']
+  )
+  context().setContext('a', true)
+  context().setContext('b', true)
+  t.host.handleKey(cmdJ)
+  await until(() => ran.length === 1)
+  expect(ran).toEqual(['two'])
+})
+
+test('SC-68: shadowed and unbound bindings never run, whatever their when', async () => {
+  const { t, ran, context } = await withCommands(
+    makeModel({
+      commands: [command(NOTES, 'go')],
+      keybindings: [
+        { ...JKEY('a', 'shadowed'), status: 'shadowed', shadowedBy: 'kernel' },
+        { ...JKEY('a', 'unbound'), status: 'unbound' }
+      ]
+    }),
+    ['go']
+  )
+  context().setContext('a', true)
+  expect(t.host.handleKey(cmdJ)).toBe(false)
+  await tick()
+  expect(ran).toEqual([])
+})
+
+test('SC-68: compound conditions read the keys the plugins set, and an unset key is false', async () => {
+  const { t, ran, context } = await withCommands(
+    makeModel({ commands: [command(NOTES, 'go')], keybindings: [JKEY('a && (b || !c)')] }),
+    ['go']
+  )
+  const pressed = () => t.host.handleKey(cmdJ)
+  expect(pressed()).toBe(false)
+  context().setContext('a', true)
+  expect(pressed()).toBe(true)
+  context().setContext('c', true)
+  expect(pressed()).toBe(false)
+  context().setContext('b', true)
+  expect(pressed()).toBe(true)
+  context().setContext('b', false)
+  expect(pressed()).toBe(false)
+  await until(() => ran.length === 2)
+})
+
+test('SC-68: context keys are window-global and a plugin\'s keys are cleared when it is deactivated', async () => {
+  const OTHER = 'acme.other'
+  const t = setup(
+    makeModel({
+      commands: [command(NOTES, 'go'), command(OTHER, 'noop')],
+      keybindings: [JKEY('flag')]
+    })
+  )
+  const notes = recording(['command:acme.notes/go'])
+  const other = recording(['command:acme.other/noop'])
+  t.useModule(NOTES, notes.module)
+  t.useModule(OTHER, other.module)
+  await t.host.refresh()
+  await loaded(t, NOTES)
+  await loaded(t, OTHER)
+
+  other.record.contexts[0]!.setContext('flag', true)
+  expect(t.host.handleKey(cmdJ)).toBe(true)
+
+  t.setModel(makeModel({ commands: [command(NOTES, 'go')], keybindings: [JKEY('flag')] }))
+  t.emit({ type: 'plugin.changed' } as unknown as QuirkyEvent)
+  await until(() => state(t).plugins[OTHER]?.state === 'idle')
+  expect(other.record.deactivations).toBe(1)
+  expect(t.host.handleKey(cmdJ)).toBe(false)
+  expect(() => other.record.contexts[0]!.setContext('flag', true)).toThrow('acme.other is not active')
+})
+
+test('SC-68: a key another plugin took over survives the first plugin being deactivated', async () => {
+  const OTHER = 'acme.other'
+  const t = setup(
+    makeModel({
+      commands: [command(NOTES, 'go'), command(OTHER, 'noop')],
+      keybindings: [JKEY('flag')]
+    })
+  )
+  const notes = recording(['command:acme.notes/go'])
+  const other = recording(['command:acme.other/noop'])
+  t.useModule(NOTES, notes.module)
+  t.useModule(OTHER, other.module)
+  await t.host.refresh()
+  await loaded(t, NOTES)
+  await loaded(t, OTHER)
+
+  other.record.contexts[0]!.setContext('flag', true)
+  notes.record.contexts[0]!.setContext('flag', true)
+  t.setModel(makeModel({ commands: [command(NOTES, 'go')], keybindings: [JKEY('flag')] }))
+  t.emit({ type: 'plugin.changed' } as unknown as QuirkyEvent)
+  await until(() => state(t).plugins[OTHER]?.state === 'idle')
+  expect(t.host.handleKey(cmdJ)).toBe(true)
+})
+
+test('SC-68: setContext with undefined clears a key', async () => {
+  const { t, context } = await withCommands(
+    makeModel({ commands: [command(NOTES, 'go')], keybindings: [JKEY('flag')] }),
+    ['go']
+  )
+  context().setContext('flag', true)
+  expect(t.host.handleKey(cmdJ)).toBe(true)
+  context().setContext('flag', undefined)
+  expect(t.host.handleKey(cmdJ)).toBe(false)
+})
+
+describe('the terminal-first rule', () => {
+  const MODEL = () =>
+    makeModel({
+      commands: [command(NOTES, 'plain'), command(NOTES, 'terminal'), command(NOTES, 'negated')],
+      keybindings: [
+        JKEY(undefined, 'plain', 'plain'),
+        { ...binding(NOTES, 'k', 'mod+k', 'command:acme.notes/terminal'), when: 'terminalFocus' },
+        { ...binding(NOTES, 'n', 'mod+n', 'command:acme.notes/negated'), when: '!terminalFocus || other' }
+      ]
+    })
+  const IDS = ['plain', 'terminal', 'negated']
+  const press = (code: string) => {
+    const calls = { prevented: 0, stopped: 0 }
+    const event = {
+      ...key(code, { metaKey: true }),
+      preventDefault: () => calls.prevented++,
+      stopPropagation: () => calls.stopped++
+    }
+    return { event, calls }
+  }
+
+  test('SC-61: with terminal keys first and a terminal focused, a binding without terminalFocus is prevented but not consumed', async () => {
+    const { t, ran, context } = await withCommands(MODEL(), IDS)
+    context().setContext('terminalKeysFirst', true)
+    context().setContext('terminalFocus', true)
+    const { event, calls } = press('KeyJ')
+
+    expect(t.host.handleKey(event)).toBe(false)
+    expect(calls).toEqual({ prevented: 1, stopped: 0 })
+    await tick()
+    expect(ran).toEqual([])
+  })
+
+  test('SC-61: a binding whose when mentions terminalFocus still fires and is consumed', async () => {
+    const { t, ran, context } = await withCommands(MODEL(), IDS)
+    context().setContext('terminalKeysFirst', true)
+    context().setContext('terminalFocus', true)
+    const { event, calls } = press('KeyK')
+
+    expect(t.host.handleKey(event)).toBe(true)
+    expect(calls.stopped).toBe(0)
+    await until(() => ran.length === 1)
+    expect(ran).toEqual(['terminal'])
+  })
+
+  test('SC-61: a binding that only mentions terminalFocus under ! is skipped, and is skipped when its when holds through another key', async () => {
+    const { t, ran, context } = await withCommands(MODEL(), IDS)
+    context().setContext('terminalKeysFirst', true)
+    context().setContext('terminalFocus', true)
+    context().setContext('other', true)
+    const { event, calls } = press('KeyN')
+
+    expect(t.host.handleKey(event)).toBe(false)
+    expect(calls.prevented).toBe(1)
+    await tick()
+    expect(ran).toEqual([])
+  })
+
+  test('SC-61: another binding on the chord that does mention terminalFocus fires when the first one is skipped', async () => {
+    const { t, ran, context } = await withCommands(
+      makeModel({
+        commands: [command(NOTES, 'first'), command(NOTES, 'terminal')],
+        keybindings: [JKEY('other', 'a', 'first'), JKEY('terminalFocus', 'b', 'terminal')]
+      }),
+      ['first', 'terminal']
+    )
+    context().setContext('terminalKeysFirst', true)
+    context().setContext('terminalFocus', true)
+    context().setContext('other', true)
+    expect(t.host.handleKey(press('KeyJ').event)).toBe(true)
+    await until(() => ran.length === 1)
+    expect(ran).toEqual(['terminal'])
+  })
+
+  test('SC-61: under app first the same binding fires, and nothing is prevented by the host', async () => {
+    const { t, ran, context } = await withCommands(MODEL(), IDS)
+    context().setContext('terminalFocus', true)
+    context().setContext('terminalKeysFirst', false)
+    const { event, calls } = press('KeyJ')
+
+    expect(t.host.handleKey(event)).toBe(true)
+    expect(calls.prevented).toBe(0)
+    await until(() => ran.length === 1)
+    expect(ran).toEqual(['plain'])
+  })
+
+  test('SC-61: with terminal keys first but no terminal focused the binding fires', async () => {
+    const { t, ran, context } = await withCommands(MODEL(), IDS)
+    context().setContext('terminalKeysFirst', true)
+    context().setContext('terminalFocus', false)
+    expect(t.host.handleKey(press('KeyJ').event)).toBe(true)
+    await until(() => ran.length === 1)
+  })
+
+  test('SC-61: a chord with no binding is neither prevented nor consumed', async () => {
+    const { t, context } = await withCommands(MODEL(), IDS)
+    context().setContext('terminalKeysFirst', true)
+    context().setContext('terminalFocus', true)
+    const { event, calls } = press('KeyQ')
+    expect(t.host.handleKey(event)).toBe(false)
+    expect(calls).toEqual({ prevented: 0, stopped: 0 })
+  })
+
+  test('SC-61: a skipped binding with an event that has no preventDefault does not throw', async () => {
+    const { t, context } = await withCommands(MODEL(), IDS)
+    context().setContext('terminalKeysFirst', true)
+    context().setContext('terminalFocus', true)
+    expect(t.host.handleKey(key('KeyJ', { metaKey: true }))).toBe(false)
+  })
+
+  test('the reserved palette chord is never prevented by the host', async () => {
+    const { t, context } = await withCommands(MODEL(), IDS)
+    context().setContext('terminalKeysFirst', true)
+    context().setContext('terminalFocus', true)
+    const calls = { prevented: 0 }
+    expect(t.host.handleKey({ ...key('KeyP', { metaKey: true, shiftKey: true }), preventDefault: () => calls.prevented++ })).toBe(false)
+    expect(calls.prevented).toBe(0)
+  })
+})
+
+describe('mountView', () => {
+  const SHELF = 'view:acme.shelf/page'
+  const SHELF_PLUGIN = 'acme.shelf'
+
+  /** The notes plugin embeds the shelf plugin's view; each is loaded lazily by the host. */
+  async function embed(options: { shelfProvides?: boolean } = {}) {
+    const t = setup(makeModel({ views: [view(SHELF_PLUGIN, 'page')], commands: [command(NOTES, 'go')] }))
+    const mounts: { element: HTMLElement; props: unknown; cleanups: number }[] = []
+    const shelf = recording(options.shelfProvides === false ? [] : [SHELF], () => (el: HTMLElement, props: unknown) => {
+      const mount = { element: el, props, cleanups: 0 }
+      mounts.push(mount)
+      return () => mount.cleanups++
+    })
+    const notes = recording(['command:acme.notes/go'])
+    t.useModule(SHELF_PLUGIN, shelf.module)
+    t.useModule(NOTES, notes.module)
+    await t.host.refresh()
+    await loaded(t, NOTES)
+    return { t, mounts, shelf, context: () => notes.record.contexts[0]! }
+  }
+
+  test('SC-69: mounts another plugin\'s view with only the input, off the slot status and the report path', async () => {
+    const { t, mounts, context } = await embed()
+    const el = element()
+    context().mountView(SHELF, el, { session: 's-1' })
+    await until(() => mounts.length === 1)
+
+    expect(mounts[0]!.element).toBe(el)
+    expect(mounts[0]!.props).toEqual({ input: { session: 's-1' } })
+    expect('report' in (mounts[0]!.props as object)).toBe(false)
+    expect(state(t).slots[SHELF]).toBeUndefined()
+    expect(t.methodCalls('ui.report')).toEqual([])
+  })
+
+  test('SC-69: the returned function unmounts once, and nothing is reported', async () => {
+    const { t, mounts, context } = await embed()
+    const unmount = context().mountView(SHELF, element())
+    await until(() => mounts.length === 1)
+
+    unmount()
+    unmount()
+    expect(mounts[0]!.cleanups).toBe(1)
+    expect(t.methodCalls('ui.report')).toEqual([])
+    expect(state(t).slots[SHELF]).toBeUndefined()
+  })
+
+  test('SC-69: unmounting before the view\'s plugin has loaded mounts nothing', async () => {
+    const t = setup(makeModel({ views: [view(SHELF_PLUGIN, 'page')], commands: [command(NOTES, 'go')] }))
+    const release = gate()
+    let mounted = 0
+    t.useModule(SHELF_PLUGIN, async () => {
+      await release.opened
+      return recording([SHELF], () => () => {
+        mounted++
+      }).module
+    })
+    const notes = recording(['command:acme.notes/go'])
+    t.useModule(NOTES, notes.module)
+    await t.host.refresh()
+    await loaded(t, NOTES)
+
+    notes.record.contexts[0]!.mountView(SHELF, element())()
+    release.open()
+    await loaded(t, SHELF_PLUGIN)
+    await tick()
+    expect(mounted).toBe(0)
+  })
+
+  test('SC-69: an embedded view does not disturb a slot mount of the same view', async () => {
+    const { t, mounts, context } = await embed()
+    t.host.mount(SHELF, element())
+    await settled(t, SHELF)
+    const unmount = context().mountView(SHELF, element())
+    await until(() => mounts.length === 2)
+
+    unmount()
+    expect(state(t).slots[SHELF]).toEqual({ status: 'mounted' })
+    expect(t.methodCalls('ui.report')).toEqual([])
+  })
+
+  test('SC-69: a view that is not in the model throws no contribution <id>', async () => {
+    const { context } = await embed()
+    expect(() => context().mountView('view:acme.shelf/missing', element())).toThrow('no contribution view:acme.shelf/missing')
+  })
+
+  test('SC-69: an id that is not a view throws no contribution <id>', async () => {
+    const { context } = await embed()
+    expect(() => context().mountView('command:acme.notes/go', element())).toThrow('no contribution command:acme.notes/go')
+  })
+
+  test('SC-69: deactivating the embedding plugin unmounts what it embedded', async () => {
+    const { t, mounts, context } = await embed()
+    context().mountView(SHELF, element())
+    await until(() => mounts.length === 1)
+
+    t.setModel(makeModel({ views: [view(SHELF_PLUGIN, 'page')] }))
+    t.emit({ type: 'plugin.changed' } as unknown as QuirkyEvent)
+    await until(() => state(t).plugins[NOTES]?.state === 'idle')
+    expect(mounts[0]!.cleanups).toBe(1)
+    expect(() => context().mountView(SHELF, element())).toThrow('acme.notes is not active')
+  })
+
+  test('SC-69: an embedded view whose own plugin leaves the model is unmounted', async () => {
+    const { t, mounts, context } = await embed()
+    context().mountView(SHELF, element())
+    await until(() => mounts.length === 1)
+
+    t.setModel(makeModel({ commands: [command(NOTES, 'go')] }))
+    await t.host.refresh()
+    expect(mounts[0]!.cleanups).toBe(1)
+  })
+
+  test('SC-69: stopping the host unmounts embedded views', async () => {
+    const { t, mounts, context } = await embed()
+    context().mountView(SHELF, element())
+    await until(() => mounts.length === 1)
+    t.host.stop()
+    expect(mounts[0]!.cleanups).toBe(1)
+  })
+
+  test('SC-69: a view that did not provide its implementation is logged, not thrown', async () => {
+    const { t, context } = await embed({ shelfProvides: false })
+    expect(() => context().mountView(SHELF, element())).not.toThrow()
+    await until(() => t.logs.length > 0)
+    expect(t.logs[0]).toContain(`${SHELF_PLUGIN} did not provide ${SHELF}`)
+  })
+
+  test('SC-69: a view that throws while mounting is logged, not thrown', async () => {
+    const t = setup(makeModel({ views: [view(SHELF_PLUGIN, 'page')], commands: [command(NOTES, 'go')] }))
+    t.useModule(SHELF_PLUGIN, recording([SHELF], () => () => {
+      throw new Error('kaboom')
+    }).module)
+    const notes = recording(['command:acme.notes/go'])
+    t.useModule(NOTES, notes.module)
+    await t.host.refresh()
+    await loaded(t, NOTES)
+    expect(() => notes.record.contexts[0]!.mountView(SHELF, element())).not.toThrow()
+    await until(() => t.logs.length > 0)
+    expect(t.logs[0]).toContain('kaboom')
+  })
 })

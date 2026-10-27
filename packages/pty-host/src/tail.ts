@@ -5,7 +5,7 @@ export class TailBuffer {
   private filled = 0
   /** Output position after the newest byte: `startTotal` plus every byte appended, overwritten or not. */
   total: number
-  private readonly base: number
+  private base: number
 
   /**
    * `startTotal` is the output position the first appended byte will have, for a session that
@@ -39,6 +39,14 @@ export class TailBuffer {
     this.buffer.set(bytes.subarray(head), 0)
     this.writePos = (this.writePos + bytes.length) % this.capacity
     this.filled = Math.min(this.capacity, this.filled + bytes.length)
+  }
+
+  /** Drops every retained byte and keeps only `bytes`; `total` carries on counting from where it was. */
+  replaceWith(bytes: Uint8Array): void {
+    this.writePos = 0
+    this.filled = 0
+    this.base = this.total
+    this.append(bytes)
   }
 
   /** The retained bytes in output order. */
