@@ -88,8 +88,7 @@
       "deps": [
         "gate-m0"
       ],
-      "status": "in-progress",
-      "lane": 1
+      "status": "done"
     },
     {
       "id": "m1-launch-settings",
