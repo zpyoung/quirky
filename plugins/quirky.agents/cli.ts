@@ -45,7 +45,7 @@ type OptionInfo = { id: string; type: string; choices: { value: string }[] | nul
 type OptionsInfo = {
   agent: string
   supported: boolean
-  models: { id: string; label: string; options: OptionInfo[] }[]
+  models: { id: string; label: string; description: string | null; options: OptionInfo[] }[]
   unlisted: 'accept' | 'refuse'
   unlistedOptions: OptionInfo[]
   extraArgs: { supported: boolean; allowed: string | null; placeholder: string | null; message: string | null }
@@ -132,7 +132,10 @@ function formatCatalog(info: OptionsInfo, ctx: CliContext): string {
   } else {
     lines.push(
       info.models.length
-        ? ctx.format.table(['MODEL', 'LABEL', 'OPTIONS'], info.models.map((m) => [m.id, m.label, formatOptions(m.options)]))
+        ? ctx.format.table(
+            ['MODEL', 'LABEL', 'OPTIONS', 'DESCRIPTION'],
+            info.models.map((m) => [m.id, m.label, formatOptions(m.options), m.description ?? '-'])
+          )
         : 'no listed models'
     )
     lines.push(
