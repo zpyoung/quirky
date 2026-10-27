@@ -66,7 +66,7 @@ describe('badge and status', () => {
     rig = await Rig.start()
     expect((await rig.status()).sound).toEqual({ ok: true })
     await rig.setting('sound', 'custom')
-    expect((await rig.status()).sound).toEqual({ ok: false, reason: 'no custom file chosen' })
+    expect((await rig.status()).sound).toEqual({ ok: false, reason: 'must be an absolute path' })
     await waitForAsync(async () => rig.pluginEvents('changed').length > 0)
   })
 })
