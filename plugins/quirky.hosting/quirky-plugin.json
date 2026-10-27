@@ -459,6 +459,7 @@
       {"id": "list-work-items", "method": "listWorkItems", "summary": "list GitHub issues and pull requests"},
       {"id": "count-work-items", "method": "countWorkItems", "summary": "count GitHub issues and pull requests"},
       {"id": "work-item", "method": "workItem", "summary": "read a GitHub issue or pull request"},
+      {"id": "worktree-source", "method": "worktreeSource", "summary": "resolve a fresh GitHub issue or pull request source"},
       {"id": "work-item-details", "method": "workItemDetails", "summary": "read work item participants and timeline"},
       {"id": "create-issue", "method": "createIssue", "summary": "create a GitHub issue"},
       {"id": "update-issue", "method": "updateIssue", "summary": "update a GitHub issue"},
