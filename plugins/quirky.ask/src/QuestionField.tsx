@@ -1,117 +1,98 @@
-import type { AskQuestion } from '@quirky/protocol'
-import { OTHER, type Draft } from './askAnswers'
+import { useState } from 'react'
+import type { AskOption, AskQuestion } from '@quirky/protocol'
+import type { QuestionDraft } from './core/submission'
 
 type Props = {
   question: AskQuestion
-  draft: Draft
-  name: string
-  onChange: (draft: Draft) => void
+  draft: QuestionDraft
+  onChange: (draft: QuestionDraft) => void
 }
 
-export function QuestionField({ question, draft, name, onChange }: Props) {
-  if (question.type === 'select' && draft.type === 'select') {
-    return (
-      <div className="options">
-        {question.options.map((option) => (
-          <label key={option.value}>
-            <input
-              type="radio"
-              name={name}
-              checked={draft.choice === option.value}
-              onChange={() => onChange({ ...draft, choice: option.value })}
-            />
-            <span>
-              {option.label}
-              {option.description && <small className="muted"> {option.description}</small>}
-            </span>
-          </label>
-        ))}
-        <label>
+const OWN_ANSWER = 'Add your own answer'
+
+/** The controls for one question, edited through its `QuestionDraft`. */
+export function QuestionField({ question, draft, onChange }: Props) {
+  switch (question.type) {
+    case 'select':
+    case 'multiselect': {
+      const multiple = question.type === 'multiselect'
+      const toggle = (value: string) => {
+        const picked = draft.selected.includes(value)
+        if (multiple) {
+          onChange({ ...draft, selected: picked ? draft.selected.filter((v) => v !== value) : [...draft.selected, value] })
+        } else {
+          onChange({ ...draft, selected: picked ? [] : [value] })
+        }
+      }
+      return (
+        <div className="options">
+          {question.options.map((option) => (
+            <OptionRow key={option.value} option={option} pressed={draft.selected.includes(option.value)} onPress={() => toggle(option.value)} />
+          ))}
           <input
-            type="radio"
-            name={name}
-            checked={draft.choice === OTHER}
-            onChange={() => onChange({ ...draft, choice: OTHER })}
+            value={draft.freeText}
+            placeholder={OWN_ANSWER}
+            aria-label={OWN_ANSWER}
+            onChange={(event) => onChange({ ...draft, freeText: event.target.value })}
           />
-          <span>Other</span>
-        </label>
-        {draft.choice === OTHER && (
-          <input
-            autoFocus
-            value={draft.other}
-            placeholder="Your answer"
-            aria-label="Other answer"
-            onChange={(event) => onChange({ ...draft, other: event.target.value })}
-          />
+        </div>
+      )
+    }
+    case 'text':
+      return question.multiline ? (
+        <textarea rows={3} value={draft.text} aria-label={question.question} onChange={(event) => onChange({ ...draft, text: event.target.value })} />
+      ) : (
+        <input value={draft.text} aria-label={question.question} onChange={(event) => onChange({ ...draft, text: event.target.value })} />
+      )
+    case 'number':
+      return (
+        <input
+          type="number"
+          step={question.integer ? '1' : 'any'}
+          min={question.min}
+          max={question.max}
+          value={draft.text}
+          aria-label={question.question}
+          onChange={(event) => onChange({ ...draft, text: event.target.value })}
+        />
+      )
+    case 'date':
+      return <input type="date" value={draft.text} aria-label={question.question} onChange={(event) => onChange({ ...draft, text: event.target.value })} />
+    case 'confirm':
+      return (
+        <div className="options inline">
+          {([true, false] as const).map((value) => (
+            <button
+              key={String(value)}
+              type="button"
+              className={draft.confirm === value ? 'active' : undefined}
+              aria-pressed={draft.confirm === value}
+              onClick={() => onChange({ ...draft, confirm: value })}
+            >
+              {value ? 'Yes' : 'No'}
+            </button>
+          ))}
+        </div>
+      )
+  }
+}
+
+function OptionRow({ option, pressed, onPress }: { option: AskOption; pressed: boolean; onPress: () => void }) {
+  const [previewing, setPreviewing] = useState(false)
+  return (
+    <div>
+      <div className="options inline" style={{ gap: 6 }}>
+        <button type="button" className={pressed ? 'active' : undefined} aria-pressed={pressed} onClick={onPress} style={{ flex: 1, textAlign: 'left' }}>
+          {option.label}
+          {option.description && <small className="muted"> {option.description}</small>}
+        </button>
+        {option.preview && (
+          <button type="button" onClick={() => setPreviewing(!previewing)}>
+            {previewing ? 'Hide preview' : 'Show preview'}
+          </button>
         )}
       </div>
-    )
-  }
-  if (question.type === 'multiselect' && draft.type === 'multiselect') {
-    return (
-      <div className="options">
-        {question.options.map((option) => (
-          <label key={option.value}>
-            <input
-              type="checkbox"
-              checked={draft.values.includes(option.value)}
-              onChange={(event) =>
-                onChange({
-                  ...draft,
-                  values: event.target.checked
-                    ? [...draft.values, option.value]
-                    : draft.values.filter((v) => v !== option.value)
-                })
-              }
-            />
-            <span>
-              {option.label}
-              {option.description && <small className="muted"> {option.description}</small>}
-            </span>
-          </label>
-        ))}
-      </div>
-    )
-  }
-  if (question.type === 'text' && draft.type === 'text') {
-    return question.multiline ? (
-      <textarea
-        rows={3}
-        value={draft.text}
-        aria-label={question.question}
-        onChange={(event) => onChange({ ...draft, text: event.target.value })}
-      />
-    ) : (
-      <input
-        value={draft.text}
-        aria-label={question.question}
-        onChange={(event) => onChange({ ...draft, text: event.target.value })}
-      />
-    )
-  }
-  if (question.type === 'confirm' && draft.type === 'confirm') {
-    return (
-      <div className="options inline">
-        <label>
-          <input
-            type="radio"
-            name={name}
-            checked={draft.value === true}
-            onChange={() => onChange({ ...draft, value: true })}
-          />
-          <span>Yes</span>
-        </label>
-        <label>
-          <input
-            type="radio"
-            name={name}
-            checked={draft.value === false}
-            onChange={() => onChange({ ...draft, value: false })}
-          />
-          <span>No</span>
-        </label>
-      </div>
-    )
-  }
-  return null
+      {option.preview && previewing && <pre style={{ whiteSpace: 'pre-wrap', margin: '4px 0 0' }}>{option.preview.content}</pre>}
+    </div>
+  )
 }
