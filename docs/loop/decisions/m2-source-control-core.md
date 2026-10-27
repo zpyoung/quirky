@@ -597,12 +597,12 @@
 ## D55: The Source Control window tests run in a second `bun test` process
 - **Question:** after the catch-up merge, the full suite failed 225 tests with `EBADF: bad file descriptor, posix_spawn` starting at the first `plugins/quirky.git/test/window` file, while every directory passed on its own
 - **Options:** cut the window tests; find and close a leak; run the window tests in their own process
-- **Chose:** the root `test` script runs `bun test packages apps plugins` with `plugins/quirky.git/test/window/**` ignored, then `bun test plugins/quirky.git/test/window`
-- **Why:** `Bun.spawnSync` fails with EBADF once the process holds more than about 10,000 descriptors (a scratch script opening N descriptors then spawning git passed at 10,000 and failed at 12,000). The window tests alone hold a flat ~1,300 across files, about 1,145 of them directory handles Bun keeps for module resolution, so they don't leak; the single-process suite as a whole simply crossed Bun's ceiling once they were added. A second process keeps both under it, and every test still runs in `bun run test`, which `queue.ts land` uses.
+- **Chose:** the root `test` script runs three processes: everything except `plugins/quirky.git`, then `plugins/quirky.git` without its window tests, then `plugins/quirky.git/test/window`. (First written as two processes; the second gate still crossed the ceiling inside the main process, near `plugins/quirky.git/test/scenarios`, so `plugins/quirky.git` moved out entirely.)
+- **Why:** `Bun.spawnSync` fails with EBADF once the process holds more than about 10,000 descriptors (a scratch script opening N descriptors then spawning git passed at 10,000 and failed at 12,000). The window tests alone hold a flat ~1,300 across files, about 1,145 of them directory handles Bun keeps for module resolution, so they don't leak; the single-process suite as a whole simply crossed Bun's ceiling once they were added. The growth is a leak in the kernel's plugin host, not in this item: `lsof` on a scenario run shows each plugin's `main.ts` held open once per daemon start (10 daemons, 10 handles each for `quirky.repo`, `quirky.worktree` and `quirky.git`), and the count climbs from about 330 to 1,260 over `plugins/quirky.git/test/scenarios`. This item adds about 200 daemon-starting tests, which tipped the single process over. Separate processes keep each under the ceiling, and every test still runs in `bun run test`, which `queue.ts land` uses.
 - **Evidence:** scratchpad final-test.txt (first EBADF at plugins/quirky.git/test/window/conflicts.test.ts), bisect/*.txt (each part alone passes), fdexp/t.ts
 - **Reversibility:** easy
 - **Confidence:** medium
-- **Revisit if:** the main process hits the ceiling again as other items add tests; the suite would then need splitting per plugin
+- **Revisit if:** the main process hits the ceiling again as other items add tests, or someone fixes the plugin host so a stopped daemon releases its plugin modules; that fix would let the script go back to one process
 - **Source:** assumed — autonomous
 
 ## Progress
