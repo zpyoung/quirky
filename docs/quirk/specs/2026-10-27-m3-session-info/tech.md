@@ -49,6 +49,8 @@ Add public quirky.terminal/focusContext, params `{workspace?:string|null}`, resu
 
 Integration prerequisites for SC-7 and SC-32: `command:quirky.terminal/focus-pane` accepts `{pane:string,workspace?:string}`, activates the exact group/tab/pane, opens the terminal view, then focuses/flashes and scrolls that mounted pane to bottom. `quirky.terminal/openSession` accepts `{session:string,workspace?:string}` and returns `{workspace:Workspace,pane:string}`; it idempotently locates an existing session leaf or places the already-running local terminal session into a new tab without spawning a process. `command:quirky.terminal/open-session` uses that method then the focus-pane command. Session-info uses open-session after public session/resume returns. Nullable focusContext schema fields use Quirky's existing description-only schema convention with explicit handler validation; the public schema engine does not support a type array.
 
+The registered main terminal root is `view:quirky.session/worktree` (the terminal plugin overrides that stable contribution). A view-name prefix is not a valid capability test; there is no registered terminal/workspace alias. Main focus without that visible root is empty. Focused floating inspection validates its overlay independently of the root underneath.
+
 ### Public plugin methods
 All methods are declared in `plugins/quirky.session-info/quirky-plugin.json` with params/results and matching CLI commands. Namespace `quirky.session-info/*`, CLI group `session-info`.
 

@@ -176,5 +176,27 @@
 - **Revisit if:** Required acceptance still fails; investigate before further changes.
 - **Source:** assumed — autonomous
 
+## D17: Preserve the launch-settings allowlist and report per-launch hook evidence
+- **Question:** Public acceptance exposed unsupported test inputs and the lack of Claude in the global hook-installation status list.
+- **Options:** Expand the locked extras allowlist or fabricate a global Claude installation; exercise configured arguments and project actual session hook evidence.
+- **Chose:** User --settings enters through the existing configured agent argument/replay-record path, with shell quoting, not through restricted extraArgs. Claude hook health comes from public session-specific status evidence; observed hooks may be reported Installed, absent evidence must be labeled waiting/skipped rather than falsely healthy. Independent MCP parse errors do not remove valid hook evidence.
+- **Why:** m1-launch-settings D14 intentionally permits only model/effort/add-dir extras. Claude hooks are per-launch, so the config-file installer list cannot establish their health. No locked rule needs changing.
+- **Evidence:** docs/loop/decisions/m1-launch-settings.md D14; plugins/quirky.agent-status/src/hooks.ts:18-20,50-62; narrow-2 public API failure log.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** Agent-status exposes a direct per-launch health API.
+- **Source:** locked by docs/loop/decisions/m1-launch-settings.md
+
+## D18: Use the registered terminal root and a shared cross-process throttle clock
+- **Question:** Mounted acceptance and the statusline subprocess test exposed assumptions hidden by isolated tests.
+- **Options:** Guess a terminal-plugin view ID/use process-relative clock; use the actual registry and a shared observation clock.
+- **Chose:** Main inspection accepts the registered view:quirky.session/worktree root; missing/nonterminal roots are empty. Floating inspection depends on actual floating focus plus enabled/open overlay, independently of the underlying root. Statusline throttling compares wall-clock receipt time with the atomic shared stamp file's modification time across runner processes.
+- **Why:** There is no view:quirky.terminal/workspace contribution. A namespace-prefix guard hid valid mounted agents. Process-relative hrtime values did not establish the interval across the tested Bun subprocesses; the shared file clock passed the under/over-15-second boundary tests.
+- **Evidence:** narrow-4 public API and mounted e2e logs; narrow-2 statusline-runner pass; actual contribution registry and terminal e2e-ui support.ts WORKTREE_VIEW.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** Clock adjustments need stronger monotonic coordination or the shell adds another registered terminal root.
+- **Source:** assumed — autonomous
+
 ## Progress
-Step 5 combined acceptance: original four components authored and audited; integration tree assembled, first red-gate corrections underway. No implementation commit, final review, UI dogfood or landing yet. Next: finish scoped gate fixes, pass acceptance/typecheck, commit tested tree, catch up with build/roadmap and read new decisions, run full gates, final three-lens Gemini review and one fix batch, UI dogfood, land.
+Step 5 implementation accepted in combined tree: 62d14a2 contains all scoped code plus gate corrections. Targeted API, mounted UI, settings, focus, scanner/runner/cache tests and typecheck pass through narrow-1–4 and the final mounted rerun. Next: merge tested implementation, catch up with build/roadmap/read new decisions, build and dogfood real web UI, update user docs/native handoff, run full gates, final three-lens Gemini review plus one fix batch, then land.
