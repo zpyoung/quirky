@@ -21,15 +21,19 @@ export function findGroupByName(env: Env, name: string): ProjectGroup | null {
 }
 
 /** Adds an empty group after the existing ones. */
-export function createGroup(env: Env, params: { name: string; parentPath?: string | null; createdFrom?: 'manual' | 'folder-scan' }): ProjectGroup {
+export function createGroup(
+  env: Env,
+  params: { name: string; parentPath?: string | null; parentId?: string | null; createdFrom?: 'manual' | 'folder-scan' }
+): ProjectGroup {
   const name = cleanName(env, params.name)
   const last = env.store.get<{ top: number | null }>('SELECT MAX(sort_order) AS top FROM groups')?.top ?? -1
   const id = `grp_${randomId()}`
   env.store.run(
-    'INSERT INTO groups (id, name, parent_path, collapsed, sort_order, created_from, created_at) VALUES (?, ?, ?, 0, ?, ?, ?)',
+    'INSERT INTO groups (id, name, parent_path, parent_id, collapsed, sort_order, created_from, created_at) VALUES (?, ?, ?, ?, 0, ?, ?, ?)',
     id,
     name,
     params.parentPath ?? null,
+    params.parentId ?? null,
     last + 1,
     params.createdFrom ?? 'manual',
     Date.now()
@@ -48,7 +52,36 @@ export function setGroupMembers(env: Env, groupId: string, repoIds: string[]): v
 
 export const groupList = (env: Env): ProjectGroup[] => env.groups()
 
-export const groupCreate = (env: Env, params: { name: string; parentPath?: string }): ProjectGroup => createGroup(env, params)
+export const groupDeletedIds = (env: Env): string[] =>
+  env.store.all<{ id: string }>('SELECT id FROM deleted_groups ORDER BY deleted_at, id').map((row) => row.id)
+
+export function groupCreate(env: Env, params: { name: string; parentPath?: string; parent?: string | null }): ProjectGroup {
+  if (params.parent !== undefined && params.parent !== null && typeof params.parent !== 'string') {
+    throw env.fail('invalid-params', 'parent must be a group ID, exact name or null')
+  }
+  const parentId = params.parent == null ? null : env.resolveGroup(params.parent).id
+  return createGroup(env, { name: params.name, parentPath: params.parentPath, parentId })
+}
+
+
+export function groupSetParent(env: Env, params: { group: string; parent: string | null }): ProjectGroup {
+  if (params.parent !== null && typeof params.parent !== 'string') {
+    throw env.fail('invalid-params', 'parent must be a group ID, exact name or null')
+  }
+  const group = env.resolveGroup(params.group)
+  const parent = params.parent === null ? null : env.resolveGroup(params.parent)
+  if (parent !== null) {
+    const byId = new Map(env.groups().map((entry) => [entry.id, entry]))
+    for (let current: ProjectGroup | undefined = parent; current; current = current.parentId === null ? undefined : byId.get(current.parentId)) {
+      if (current.id === group.id) {
+        throw env.fail('invalid-params', 'a group cannot be its own ancestor', { reason: 'parent-cycle' })
+      }
+    }
+  }
+  env.store.run('UPDATE groups SET parent_id = ? WHERE id = ?', parent?.id ?? null, group.id)
+  env.changed({ groupId: group.id })
+  return load(env, group.id)
+}
 
 export function groupRename(env: Env, params: { group: string; name: string }): ProjectGroup {
   const group = env.resolveGroup(params.group)
@@ -58,12 +91,29 @@ export function groupRename(env: Env, params: { group: string; name: string }): 
 }
 
 export function groupDelete(env: Env, params: { group: string }): { ok: true } {
-  const group = env.resolveGroup(params.group)
+  const root = env.resolveGroup(params.group)
+  const all = env.groups()
+  const removed = new Set([root.id])
+  const pending = [root.id]
+  while (pending.length > 0) {
+    const parentId = pending.pop()!
+    for (const group of all) {
+      if (group.parentId === parentId && !removed.has(group.id)) {
+        removed.add(group.id)
+        pending.push(group.id)
+      }
+    }
+  }
+  const ids = [...removed]
+  const deletedAt = Date.now()
   env.store.transaction(() => {
-    env.store.run('UPDATE repos SET group_id = NULL WHERE group_id = ?', group.id)
-    env.store.run('DELETE FROM groups WHERE id = ?', group.id)
+    for (const id of ids) {
+      env.store.run('UPDATE repos SET group_id = NULL WHERE group_id = ?', id)
+      env.store.run('INSERT OR IGNORE INTO deleted_groups (id, deleted_at) VALUES (?, ?)', id, deletedAt)
+    }
+    for (const id of ids.reverse()) env.store.run('DELETE FROM groups WHERE id = ?', id)
   })
-  env.changed({ groupId: group.id })
+  env.changed({ groupId: root.id })
   return { ok: true }
 }
 
