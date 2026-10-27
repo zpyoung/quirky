@@ -526,5 +526,36 @@
 - **Confidence:** high
 - **Source:** locked by docs/loop/LOOP.md
 
+## D53: Wave 1 widened two tasks' scope to fixtures and a report model the contracts forced
+- **Question:** K and M made `UiState.toasts` and `UiModel.menuItems` required, which broke typed fixtures outside their scope; B's tab report lives in `model.ts`, outside its scope
+- **Options:** make the new fields optional (contradicts the contract); widen the scope to the exact files
+- **Chose:** widen. The orchestrator added `toasts: []` to eight `UiState` fixtures (packages/cli/test/kernel-commands.test.ts, plugins/quirky.notifications/test/lookups, policy, unit), `menuItems: []` to packages/cli/test/fixtures/fake-daemon.ts and `menu-item` to the kinds list in packages/protocol/test/ui.test.ts; B's worker was given plugins/quirky.terminal/src/window/workspace/model.ts. No other component owned those files, so the partition stayed disjoint.
+- **Why:** the contracts name the fields required; the edits are mechanical
+- **Evidence:** session run journal
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** assumed — autonomous
+
+## D54: Wave 1 choices the specs left open
+- **Question:** small calls the implementers made
+- **Options:** as listed
+- **Chose:** a non-plugin caller of `setBadge` (the CLI) gets its client role as key prefix; a badge without a command is a plain chip that lets the tab click through; `newTab {activate:false}` into an empty group still gives that group an active tab (layout repair); an ambiguous Claude project scan returns verdict none with reason `ambiguous`, two files exactly 300,000 ms apart count as ambiguous, provider ids outside `[A-Za-z0-9._-]` are never looked up, a session-id lookup with several matches takes the newest; the `diff-truncated` warning reads "Some repository state was cut and will not travel in full."; diff bodies are plain `--- before`/`+++ after` text; a clean tree's changed-paths line reads "No repository changes were reported."; template substitution is single pass; clicking a toast body dismisses it (running `onDismiss`), except a persistent toast with no view to open, which ignores body clicks
+- **Why:** each keeps Orca's observable behavior where the doc gives one and is the least surprising otherwise
+- **Evidence:** plugins/quirky.handoff/src/core, src/daemon/probe.ts, packages/ui/src/components/Toasts.tsx
+- **Reversibility:** easy
+- **Confidence:** medium
+- **Source:** assumed — autonomous
+
+## D55: Wave 1 gate: host.test.ts failed on the remote runner and passes alone
+- **Question:** the wave 1 full suite failed `packages/pty-host/test/host.test.ts` (alternate-screen read, kill process group timeout) twice on the remote host and `plugins/quirky.worktree/test/window-projects.test.ts` SC-10 once
+- **Options:** treat as a regression; establish a flake by isolated reproduction
+- **Chose:** flake: wave 1 changed nothing in packages/pty-host or quirky.worktree, and both files pass alone on this Mac (32/32, 18/18). The suite is re-run before the checkpoint review.
+- **Why:** SDD step 7 accepts a flake only with an isolated reproduction; iteration 4 saw the same pty-host files flake under the remote runner
+- **Evidence:** session scratchpad gate1-test.log
+- **Reversibility:** easy
+- **Confidence:** medium
+- **Revisit if:** host.test.ts fails on build/roadmap's own gate
+- **Source:** assumed — autonomous
+
 ## Progress
-Specs written and reviewed (D51), pairing recorded (D52). Next: SDD wave 1 (K toasts, M menu-item kind, B session badges, T newTab, C pure core, P probe), then wave 2 (H service, manifest, CLI), checkpoint, wave 3 (W window, E e2e), catch up with build/roadmap, Final Round 1, UI pass, land.
+Wave 1 (K toasts, M menu-item, B badges, T newTab, C core, P probe) merged; gate green apart from the remote pty-host flake (D55). Next: wave 1 checkpoint review (3 lenses, standard), fixes, then wave 2 (H1 then H2 chain, task briefs in the session scratchpad are re-derivable from tech.md H1/H2), wave 3 (W window + manifest UI contributions), catch-up merge with build/roadmap, Final Round 1, UI pass, land.
