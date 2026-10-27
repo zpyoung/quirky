@@ -58,9 +58,11 @@ it or block the item. Never silently diverge.
 The user set this target, so until then these rules override the steps below wherever they differ.
 After 4am, `docs/loop/BLOCKERS.md` lists the deferred items to requeue.
 
-- **Three hours per item.** Run `queue.ts land` within three hours of claiming the item. At two and
-  a half hours, stop starting new flows and land what passes, deferring the rest as
-  [Blocking an item](#blocking-an-item) describes.
+- **Two hours per item.** Have the item ready to land within two hours of claiming it. At an hour
+  and a half, stop starting new flows and land what passes, deferring the rest as
+  [Blocking an item](#blocking-an-item) describes. An item claimed before this rule, or already
+  past two hours, lands as soon as its own tests and typecheck pass: skip any review round or
+  dogfood pass it hasn't started.
 - **No research swarms.** The feature doc, the roadmap and earlier decision logs are the research.
   Brainstorm with the standard gray areas and answer them yourself.
 - **One spec.** Write `logic.md` with the tech decisions in a final section, and skip `tech.md` and
@@ -76,11 +78,17 @@ After 4am, `docs/loop/BLOCKERS.md` lists the deferred items to requeue.
 - **Clean up as you go.** The Mac's disk is nearly full. Remove each implementer's worktree with
   `git worktree remove --force <path>` once its branch is merged, and delete your temporary
   directories under `/tmp` after the item lands.
-- **Early items.** An item marked `"early": true` can be claimed while its dependencies are still
-  being built. Run `queue.ts deps <id>`. While it reports `"ready": false`, write the spec and
-  commit the contracts against the dependencies' specs on their `build/<dep>` branches, then end
-  the turn; your next iteration resumes the item. Once it reports `"ready": true`, merge
-  `build/roadmap` and implement.
+- **Early items build on their dependencies' branches.** An item marked `"early": true` can be
+  claimed once each dependency is claimed, even when those dependencies are early items too.
+  Never end the turn just because a dependency hasn't landed:
+  1. Run `queue.ts status`: those of the item's `deps` that aren't done are pending.
+  2. Write the spec and commit the contracts against the dependencies' specs on their
+     `build/<dep>` branches.
+  3. Run `git merge build/<dep>` for each pending dependency whose branch exists, and implement
+     against what they provide. Merge them again before your final tests. If a dependency is
+     blocked, take its code back out or block your item.
+  4. When everything but the land is done, run `queue.ts deps <id>` again, in this same turn, until
+     it reports `"ready": true`. Then merge `build/roadmap`, rerun your affected tests, and land.
 
 ## Each iteration
 

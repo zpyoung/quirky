@@ -25,7 +25,7 @@ export type Item = {
   id: string
   milestone: string
   kind?: 'gate'
-  /** On the critical path: claimable once each dependency is at least being implemented, see {@link next}. */
+  /** On the critical path: claimable once each dependency is claimed, so it builds on their branches, see {@link next}. */
   early?: boolean
   title: string
   docs: string[]
@@ -59,10 +59,9 @@ function depsOf(item: Item, items: Item[]): string[] {
   return items.filter((other) => !other.deps.includes('*')).map((other) => other.id)
 }
 
-/** Whether `dep` is done, or is in progress with its own dependencies done, so its implementation is under way. */
-function underway(dep: Item | undefined, byId: Map<string, Item>, items: Item[]): boolean {
-  if (dep?.status === 'done') return true
-  return dep?.status === 'in-progress' && depsOf(dep, items).every((id) => byId.get(id)?.status === 'done')
+/** Whether `dep` is done or held by a lane, so its branch exists to build on. */
+function underway(dep: Item | undefined): boolean {
+  return dep?.status === 'done' || dep?.status === 'in-progress'
 }
 
 /** The dependencies of `id` that aren't done yet. */
@@ -76,8 +75,8 @@ export function pendingDeps(items: Item[], id: string): string[] {
 /**
  * Picks what `lane` works on. Its own in-progress item wins so a crashed iteration resumes it; a
  * waiting gate halts every lane; otherwise the first todo item, in file order, whose dependencies
- * are all done. An `early` item may start sooner, once each dependency is under way, so its lane
- * can write its specs while the dependency is built. When nothing is ready but other lanes hold
+ * are all done. An `early` item may start sooner, once each dependency is claimed, so its lane
+ * builds on the dependency branches while they are finished and lands after them. When nothing is ready but other lanes hold
  * work, the lane is `busy`, because their items may unblock more.
  */
 export function next(items: Item[], lane = 1): Next {
@@ -90,7 +89,7 @@ export function next(items: Item[], lane = 1): Next {
     (item) =>
       item.status === 'todo' &&
       depsOf(item, items).every((dep) =>
-        item.early ? underway(byId.get(dep), byId, items) : byId.get(dep)?.status === 'done'
+        item.early ? underway(byId.get(dep)) : byId.get(dep)?.status === 'done'
       )
   )
   if (ready) return { kind: 'item', item: ready }
