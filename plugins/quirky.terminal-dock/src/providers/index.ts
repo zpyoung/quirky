@@ -200,15 +200,45 @@ function emptyOptions(notice: string | null = null): DockOptions {
   return { model: null, effort: null, permission: null, choices: { model: [], effort: [], permission: [] }, context: null, notice }
 }
 
-function findModel(models: OptionCatalog['models'], id: string | null): OptionCatalog['models'][number] | undefined {
-  if (!id) return undefined
-  const target = normalized(id)
-  return models.find((model) => normalized(model.id) === target || normalized(model.label) === target) ??
-    models.find((model) => target.length >= 4 && (
-      normalized(model.id).includes(target) || target.includes(normalized(model.id)) ||
-      normalized(model.label).includes(target) || target.includes(normalized(model.label))
-    ))
+const CLAUDE_MODEL_FAMILIES: Record<string, true> = { fable: true, opus: true, sonnet: true, haiku: true }
+
+function claudeModelFamily(id: string): string | null {
+  const tokens = id.toLowerCase().split(/[^a-z0-9]+/)
+  if (tokens[0] !== 'claude') return null
+  let family: string | null = null
+  for (const token of tokens) {
+    if (!CLAUDE_MODEL_FAMILIES[token]) continue
+    if (family && family !== token) return null
+    family = token
+  }
+  return family
 }
+
+function findModel(models: OptionCatalog['models'], id: string | null, agent: string): OptionCatalog['models'][number] | undefined {
+  if (!id) return undefined
+  for (const model of models) {
+    if (model.id === id) return model
+  }
+  const target = normalized(id)
+  let normalizedExact: OptionCatalog['models'][number] | undefined
+  for (const model of models) {
+    if (normalized(model.id) !== target) continue
+    if (normalizedExact) return undefined
+    normalizedExact = model
+  }
+  if (normalizedExact) return normalizedExact
+  if (agent !== 'claude' && agent !== 'openclaude') return undefined
+  const family = claudeModelFamily(id)
+  if (!family) return undefined
+  let alias: OptionCatalog['models'][number] | undefined
+  for (const model of models) {
+    if (normalized(model.id) !== family) continue
+    if (alias) return undefined
+    alias = model
+  }
+  return alias
+}
+
 
 function stringChoices(values: PublicOption[]): string[] {
   return [...new Set(values.flatMap((item) => typeof item.value === 'string' && item.value.trim() ? [item.value] : []))]
@@ -230,9 +260,9 @@ function catalogOptions(value: unknown): OptionCatalog | null {
   return { models }
 }
 
-function optionsFromEvidence(status: StatusRow | null, transcript: TranscriptSnapshot, catalog: OptionCatalog | null): DockOptions {
+function optionsFromEvidence(agent: string, status: StatusRow | null, transcript: TranscriptSnapshot, catalog: OptionCatalog | null): DockOptions {
   const model = stringValue(status?.model) ?? transcript.model
-  const selectedModel = findModel(catalog?.models ?? [], model)
+  const selectedModel = findModel(catalog?.models ?? [], model, agent)
   const effortOption = selectedModel?.options.find((option) => ['effort', 'reasoning_effort', 'reasoning-effort'].includes(option.id))
   return {
     model,
@@ -581,7 +611,7 @@ export function createProviderBridge(context: PluginContext): ProviderBridge {
   const readOptions = async (session: Session, live: LiveState): Promise<DockOptions> => {
     if (!SUPPORTED_AGENTS[session.agent]) return emptyOptions('This terminal agent has no supported provider adapter.')
     const { catalog, error } = await readOptionCatalog(session)
-    const options = optionsFromEvidence(live.status, live.transcript, catalog)
+    const options = optionsFromEvidence(session.agent, live.status, live.transcript, catalog)
     const screen = await readScreen(session)
     const evidence = permissionEvidence(session.agent, screen)
     const inputOwned = !!live.question && !answered.has(live.question.id) || screenOwnsApprovalInput(session.agent, screen)
@@ -765,7 +795,7 @@ export function createProviderBridge(context: PluginContext): ProviderBridge {
     }
     const { catalog, error } = await readOptionCatalog(session)
     if (!catalog) return { notice: error ?? 'This provider has no public session-option catalog.' }
-    const options = optionsFromEvidence(live.status, live.transcript, catalog)
+    const options = optionsFromEvidence(session.agent, live.status, live.transcript, catalog)
     if (!options.choices[kind].includes(value)) return { notice: `The ${kind} choice is not in this session's provider catalog.` }
     return { live, catalog }
   }

@@ -422,6 +422,28 @@ const jsonlCases: {
     }
   }
 ]
+const claudeEffortChoices = [
+  { value: 'low', label: 'Low' },
+  { value: 'medium', label: 'Medium' },
+  { value: 'high', label: 'High' },
+  { value: 'xhigh', label: 'Extra high' },
+  { value: 'max', label: 'Max' }
+]
+
+function claudeOptionCatalog(fableLabel = 'Fable') {
+  const effortOption = () => ({ id: 'effort', label: 'Effort', type: 'select', choices: claudeEffortChoices })
+  return {
+    agent: 'claude',
+    supported: true,
+    models: [
+      { id: 'fable', label: fableLabel, options: [effortOption()] },
+      { id: 'opus', label: 'Opus', options: [effortOption()] },
+      { id: 'sonnet', label: 'Sonnet', options: [effortOption()] },
+      { id: 'haiku', label: 'Haiku', options: [] }
+    ]
+  }
+}
+
 
 describe('provider bridge from actual transcript and hook evidence', () => {
   test('decodes unresolved provider-shaped question calls for each JSONL family', async () => {
@@ -443,6 +465,99 @@ describe('provider bridge from actual transcript and hook evidence', () => {
       bridge.dispose()
     }
   })
+  test('matches a Claude native Sonnet transcript to its family catalog without changing the reported ID', async () => {
+    const transcriptPath = join(home, 'claude-native-sonnet.jsonl')
+    await writeJsonl(transcriptPath, [{
+      type: 'assistant',
+      uuid: 'claude-sonnet-options',
+      timestamp: '2026-10-27T12:00:00.000Z',
+      message: {
+        id: 'claude-sonnet-options',
+        model: 'claude-sonnet-4-5',
+        effort: 'medium',
+        usage: { input_tokens: 100, context_window: 1_000 },
+        content: []
+      }
+    }])
+    const tui = new FakeTui('Model selector\nEffort\n❯ Low\nPress s for this session only')
+    tui.onInput = (input) => {
+      if (input === 's') tui.screen = 'Current effort: low'
+    }
+    const { context, calls } = makeContext({
+      agent: 'claude',
+      status: makeStatus('claude', { model: undefined, question: undefined, toolName: undefined, toolInput: undefined }),
+      tui,
+      onCall: (method) => method === 'quirky.agents/options' ? claudeOptionCatalog() : undefined
+    })
+    const bridge = createProviderBridge(context)
+    const session = makeSession('claude', transcriptPath)
+    const state = await bridge.read(session)
+    expect(state.options.model).toBe('claude-sonnet-4-5')
+    expect(state.options.effort).toBe('medium')
+    expect(state.options.choices.model).toEqual(['fable', 'opus', 'sonnet', 'haiku'])
+    expect(state.options.choices.effort).toEqual(['low', 'medium', 'high', 'xhigh', 'max'])
+
+    const result = await bridge.setOption(session, 'effort', 'low', new AbortController().signal)
+    expect(tui.writes).toEqual(['s'])
+    expect(result.confirmed).toBe(true)
+    expect(calls.some(([method]) => method === 'setting.set')).toBe(false)
+    bridge.dispose()
+  })
+
+  test('keeps a Claude native Haiku model unavailable when its catalog alias has no options', async () => {
+    const transcriptPath = join(home, 'claude-native-haiku.jsonl')
+    await writeJsonl(transcriptPath, [{
+      type: 'assistant',
+      uuid: 'claude-haiku-options',
+      timestamp: '2026-10-27T12:00:00.000Z',
+      message: {
+        id: 'claude-haiku-options',
+        model: 'claude-haiku-4-5',
+        effort: 'medium',
+        usage: { input_tokens: 100, context_window: 1_000 },
+        content: []
+      }
+    }])
+    const { context } = makeContext({
+      agent: 'claude',
+      status: makeStatus('claude', { model: undefined, question: undefined, toolName: undefined, toolInput: undefined }),
+      onCall: (method) => method === 'quirky.agents/options' ? claudeOptionCatalog() : undefined
+    })
+    const bridge = createProviderBridge(context)
+    const state = await bridge.read(makeSession('claude', transcriptPath))
+    expect(state.options.model).toBe('claude-haiku-4-5')
+    expect(state.options.effort).toBe('medium')
+    expect(state.options.choices.effort).toEqual([])
+    bridge.dispose()
+  })
+
+  test('does not infer an effort family from an unknown Claude native model ID', async () => {
+    const transcriptPath = join(home, 'claude-native-unknown.jsonl')
+    await writeJsonl(transcriptPath, [{
+      type: 'assistant',
+      uuid: 'claude-unknown-options',
+      timestamp: '2026-10-27T12:00:00.000Z',
+      message: {
+        id: 'claude-unknown-options',
+        model: 'claude-nova-4-5',
+        effort: 'medium',
+        usage: { input_tokens: 100, context_window: 1_000 },
+        content: []
+      }
+    }])
+    const { context } = makeContext({
+      agent: 'claude',
+      status: makeStatus('claude', { model: undefined, question: undefined, toolName: undefined, toolInput: undefined }),
+      onCall: (method) => method === 'quirky.agents/options' ? claudeOptionCatalog('Claude') : undefined
+    })
+    const bridge = createProviderBridge(context)
+    const state = await bridge.read(makeSession('claude', transcriptPath))
+    expect(state.options.model).toBe('claude-nova-4-5')
+    expect(state.options.effort).toBe('medium')
+    expect(state.options.choices.effort).toEqual([])
+    bridge.dispose()
+  })
+
 
   test('retires transcript questions only when the matching provider call resolves', async () => {
     for (const fixture of jsonlCases) {
