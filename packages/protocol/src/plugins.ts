@@ -97,7 +97,11 @@ export type PluginPty = {
   ): Promise<{ pid: number; restored: boolean; cwd: string; cols: number; rows: number }>
   write(sessionId: string, data: string | Uint8Array): void
   resize(sessionId: string, cols: number, rows: number): Promise<void>
-  read(sessionId: string, lines: number): Promise<{ lines: string[]; cols: number; rows: number; alt: boolean }>
+  /**
+   * The visible screen plus up to `lines` of scrollback, as text. `unwrap` joins rows the terminal
+   * wrapped into logical lines; a line that starts above the `lines` cutoff may be cut.
+   */
+  read(sessionId: string, lines: number, options?: { unwrap?: boolean }): Promise<{ lines: string[]; cols: number; rows: number; alt: boolean }>
   /** A `reason` records the exit as requested (cause `killed`) and defaults the signal to SIGKILL. */
   kill(sessionId: string, signal?: string, options?: { reason?: 'killed' }): Promise<void>
   forget(sessionId: string): Promise<void>
@@ -156,6 +160,8 @@ export type PluginLaunch = {
     worktreeId: string
     agent: string
     envPatch?: Record<string, string | null>
+    /** Absolute path to the trusted plugin shell init file for an interactive shell session. */
+    shellInit?: string
   }): Record<string, string>
   shellArgv(): string[]
   /** True when the configured shell gets Quirky's ready-marker wrapper (zsh or bash). */
@@ -184,6 +190,8 @@ export type ClientStream = {
 export type CallerConnection = {
   id: number
   transport: 'websocket' | 'socket'
+  /** Registers transport-neutral cleanup for disconnect, invoking immediately if already closed. */
+  onClose(callback: () => void): () => void
   /** Throws InvalidParams on a socket connection. */
   openStream(): ClientStream
 }

@@ -77,6 +77,18 @@ function userMessage(text: string, claudeSessionId: string): SDKUserMessage {
   } as SDKUserMessage
 }
 
+function environmentOf(patch: Record<string, string | null>): Record<string, string> {
+  const env: Record<string, string> = {}
+  for (const [name, value] of Object.entries(process.env)) {
+    if (value !== undefined) env[name] = value
+  }
+  for (const [name, value] of Object.entries(patch)) {
+    if (value === null) delete env[name]
+    else env[name] = value
+  }
+  return env
+}
+
 function oneLine(text: string, limit = SUMMARY_LIMIT): string {
   const flat = text.replace(/\s+/g, ' ').trim()
   return flat.length > limit ? `${flat.slice(0, limit - 1)}…` : flat
@@ -187,6 +199,7 @@ class ClaudeRunner implements StructuredRunner {
             : { resume: providerSessionId }),
           permissionMode: 'default',
           canUseTool: this.canUseTool(session.id),
+          ...(launchOptions.env !== undefined ? { env: environmentOf(launchOptions.env) } : {}),
           ...(typeof launchOptions.model === 'string' ? { model: launchOptions.model } : {}),
           ...(typeof launchOptions.effort === 'string' ? { effort: launchOptions.effort as Options['effort'] } : {})
         }

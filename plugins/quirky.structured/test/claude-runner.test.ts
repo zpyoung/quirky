@@ -146,6 +146,12 @@ describe('start', () => {
     expect(queries[1].written[0]).toMatchObject({ session_id: 'native-claude-id', message: { content: 'continue later' } })
   })
 
+  test('passes the prepared account environment to Claude Code', async () => {
+    await runner.start(session, 'hello', { env: { CLAUDE_CONFIG_DIR: '/managed/claude' } })
+
+    expect(queries[0]?.params.options?.env).toMatchObject({ CLAUDE_CONFIG_DIR: '/managed/claude' })
+  })
+
   test('journals the prompt, sets working and returns before the session ends', async () => {
     await begin('do it')
     expect(messages).toHaveLength(1)

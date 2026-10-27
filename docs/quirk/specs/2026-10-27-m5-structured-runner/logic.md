@@ -5,6 +5,7 @@ Status: Autonomous design accepted under LOOP.md; Codex promote/refute reviewed,
 
 **Amendments:** 2026-10-27 — initial design, decisions D1–D10 in [item log](../../../loop/decisions/m5-structured-runner.md). Codex review clarified single-owner resume and ask ownership cleanup on plugin shutdown (D12–D13).
 2026-10-27 — daemon/CLI smoke clarified that send waits for asynchronous native startup, including immediately after resume (D17).
+2026-10-27 — integration with landed accounts requires provider-specific preparation before Claude/Codex spawn and preserves a relocated Codex resume transcript path without persisting prepared environment (D36–D40).
 
 ## Purpose
 Provide the native conversation and bounded command-execution seams that unattended automation, loop and objective plugins consume, without hidden PTYs or duplicated check-process implementations.
@@ -18,6 +19,8 @@ Checks are separate shell commands, not agent turns. A shared public checks plug
 Create resolves model/options through the existing agent catalog before registration, saves the applied snapshot, then starts the selected native runner in the resolved workspace. Provider identity is captured through the session API. Messages append to the structured journal; status and settled events identify the actual provider. Permission requests travel through asks and the native reply resumes or denies the operation.
 
 Resume reads the old session, captured provider identity, original folder and stored structured launch options. It creates a new Quirky session pointing at the same provider conversation, with the original launch snapshot and resumedFrom. Old history is untouched. This works after a daemon restart; no in-memory map is the source of truth for resume.
+
+When the accounts plugin is enabled, create and resume prepare the selected provider account before native startup. Explicit provider-home configuration wins over managed defaults; preparation failure refuses launch. Codex receives the prepared home and retains the native conversation ID when account preparation relocates its transcript. Prepared environment values stay transient rather than entering the journal or launch snapshot.
 
 Checks run a command in the selected directory, stream bounded tails, enforce the timeout, and return normalized evidence. Cancel and plugin shutdown stop the whole process group.
 

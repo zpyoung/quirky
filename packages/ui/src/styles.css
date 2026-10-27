@@ -142,6 +142,35 @@ textarea {
   flex-direction: column;
 }
 
+.plugin-status-bar {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 8px;
+  overflow: visible;
+  background: var(--bg-raised);
+}
+
+.plugin-status-bar .plugin-status-bar-slot {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: row;
+  align-items: center;
+  min-width: 0;
+}
+
+.plugin-status-bar-slot .plugin-slot-body {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  min-width: 0;
+}
+
+.plugin-status-bar-slot .plugin-slot-error {
+  margin: 0;
+}
+
 .layout {
   flex: 1;
   min-height: 0;

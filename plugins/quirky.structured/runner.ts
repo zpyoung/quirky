@@ -33,8 +33,8 @@ export type StructuredContext = {
   resolveCodexPath(): Promise<string>
 }
 
-/** The native model and effort fields a catalog selection resolved to. */
-export type StructuredLaunchOptions = { model?: string; effort?: string }
+/** The per-session launch inputs: agent picks plus the resolved provider environment patch. */
+export type StructuredLaunchOptions = { model?: string; effort?: string; env?: Record<string, string | null> }
 
 /** Start-only provider identity; launch options remain provider-native model/effort strings. */
 export type StructuredStartOptions = StructuredLaunchOptions & { providerSession?: SessionProviderSession }

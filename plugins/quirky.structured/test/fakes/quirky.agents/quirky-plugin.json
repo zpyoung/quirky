@@ -4,6 +4,9 @@
   "version": "0.0.0",
   "main": "main.ts",
   "contributes": {
-    "method": [{ "id": "resolveLaunch", "readOnly": true, "params": { "type": "object", "additionalProperties": true } }]
+    "method": [
+      { "id": "resolveLaunch", "readOnly": true, "params": { "type": "object", "additionalProperties": true } },
+      { "id": "plan", "readOnly": true, "params": { "type": "object", "additionalProperties": true } }
+    ]
   }
 }

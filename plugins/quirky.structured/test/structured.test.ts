@@ -16,7 +16,7 @@ import { startHarness, waitFor, waitForAsync, type Harness } from '../../../pack
 import { makeTempDir, removeTempDirs } from '../../../packages/daemon/test/plugins/fixtures'
 import { createClaudeRunner, type ClaudeQueryParams } from '../claude-runner'
 import { createCodexRunner } from '../codex-runner'
-import type { StructuredContext, StructuredStartOptions, StructuredRunner, StructuredRunnerFactory } from '../runner'
+import type { StructuredContext, StructuredLaunchOptions, StructuredStartOptions, StructuredRunner, StructuredRunnerFactory } from '../runner'
 import { createCodexAppServerFixture, isolatedProviderEnvironment } from './fakes/codex-app-server'
 import { FakeQuery } from './fakes/fake-query'
 import { FakeWorld } from './fakes/world'
@@ -57,19 +57,23 @@ let runner: FakeRunner
 /** A short home under /tmp so unix sockets fit. */
 const shortHome = () => mkdtempSync('/tmp/qs-')
 
-function builtinDir(): string {
+function builtinDir(accountPreparation = false): string {
   const dir = makeTempDir('qs-builtin-')
   symlinkSync(PLUGIN_DIR, join(dir, 'quirky.structured'))
   for (const id of ['quirky.session', 'quirky.worktree', 'quirky.ask', 'quirky.agents']) symlinkSync(join(FAKES_DIR, id), join(dir, id))
+  if (accountPreparation) symlinkSync(join(FAKES_DIR, 'quirky.accounts'), join(dir, 'quirky.accounts'))
   return dir
 }
 
-async function boot(options: { factory?: StructuredRunnerFactory | null; home?: string; world?: FakeWorld } = {}) {
+async function boot(options: { factory?: StructuredRunnerFactory | null; home?: string; world?: FakeWorld; accountPreparation?: boolean } = {}) {
   world = options.world ?? new FakeWorld()
   globals.__structuredFakes = world
   globals.__QUIRKY_TEST_STRUCTURED_RUNNER__ =
     options.factory === null ? undefined : options.factory ?? ((context: StructuredContext) => (runner = new FakeRunner(context)))
-  h = await startHarness({ home: options.home ?? shortHome(), builtinPluginsDir: builtinDir() })
+  h = await startHarness({
+    home: options.home ?? shortHome(),
+    builtinPluginsDir: builtinDir(options.accountPreparation === true)
+  })
   ;({ client, events } = await h.connectWithEvents('cli'))
 }
 
@@ -119,8 +123,48 @@ describe('structured sessions with a runner', () => {
     expect(runner.started[0].prompt).toBe('fix the bug')
     expect(runner.started[0].session).toMatchObject({ id: session.id, cwd: '/fake/alpha' })
     expect(h.pty.requests.some((r) => r.type === 'create')).toBe(false)
+    expect(world.planCalls).toEqual([])
+    expect(world.accountPrepareCalls).toEqual([])
     await waitFor(() => world.statusLog.some((entry) => entry.status === 'working'))
     expect(world.statusLog[0]).toEqual({ sessionId: session.id, status: 'working' })
+  })
+
+  test('account prep receives plan provenance and explicit home wins in the runner environment', async () => {
+    const worldWithCustomHome = new FakeWorld()
+    worldWithCustomHome.agentPlanEnv = { CLAUDE_CONFIG_DIR: '/custom/claude' }
+    worldWithCustomHome.accountPreparationResult = {
+      env: { CLAUDE_CONFIG_DIR: '/managed/claude' },
+      shellInit: null,
+      account: null
+    }
+    await boot({ world: worldWithCustomHome, accountPreparation: true })
+
+    const session = await create()
+    await waitFor(() => runner.started.length === 1)
+
+    expect(world.planCalls).toHaveLength(1)
+    expect(world.accountPrepareCalls[0]).toMatchObject({
+      agent: 'claude',
+      sessionId: session.id,
+      worktreeId: 'wt_1',
+      cwd: '/fake/alpha',
+      homeOverrides: { claude: { value: '/custom/claude', source: 'explicit' } }
+    })
+    const options = runner.started[0]?.options as StructuredLaunchOptions | undefined
+    expect(options?.env).toEqual({ CLAUDE_CONFIG_DIR: '/custom/claude' })
+  })
+
+  test('a selected account prep failure removes the session before the runner starts', async () => {
+    const worldWithUnavailableHome = new FakeWorld()
+    worldWithUnavailableHome.accountPreparationFailure = 'selected Claude home is unavailable'
+    await boot({ world: worldWithUnavailableHome, accountPreparation: true })
+
+    const error = await failure(create())
+
+    expect(error.message).toContain('selected Claude home is unavailable')
+    expect(world.sessions.size).toBe(0)
+    expect(world.accountPrepareCalls).toHaveLength(1)
+    expect(runner.started).toEqual([])
   })
 
   test('create without a worktree resolves the caller current worktree', async () => {
@@ -526,6 +570,100 @@ describe('the Codex runner inside the plugin', () => {
       expect(settledEvents().some((event) => event.sessionId === session.id && event.state === 'done')).toBe(false)
     }
     expect(h.pty.requests.some((request) => request.type === 'create')).toBe(false)
+  })
+
+  test('sends the selected Codex home to the native app-server on create and resume', async () => {
+    const home = makeTempDir('qs-codex-account-')
+    const managedHome = join(home, 'managed-codex')
+    const resumeTranscriptPath = join(managedHome, 'sessions', '2026', '10', '27', 'rollout-scripted-thread.jsonl')
+    const fixture = createCodexAppServerFixture(home)
+    const worldWithManagedCodex = new FakeWorld()
+    worldWithManagedCodex.worktree.path = home
+    worldWithManagedCodex.accountPreparationResult = {
+      env: { CODEX_HOME: managedHome },
+      shellInit: null,
+      account: {
+        provider: 'codex',
+        id: '00000000-0000-4000-8000-000000000001',
+        label: 'Managed Codex',
+        source: 'managed'
+      },
+      resumeTranscriptPath
+    }
+    await boot({
+      home,
+      world: worldWithManagedCodex,
+      accountPreparation: true,
+      factory: (context) =>
+        createCodexRunner(
+          { ...context, resolveCodexPath: async () => fixture.executable },
+          { env: isolatedProviderEnvironment(home) }
+        )
+    })
+
+    const original = await createAgent('codex', 'continue this conversation')
+    await waitFor(() =>
+      worldWithManagedCodex.statusLog.some((entry) => entry.sessionId === original.id && entry.status === 'done')
+    )
+    expect(fixture.environments()).toEqual([{ CODEX_HOME: managedHome }])
+    expect((await call('quirky.session/get', { session: original.id })).providerSession).toMatchObject({
+      id: 'scripted-thread',
+      transcriptPath: null
+    })
+    await call('quirky.structured/stop', { session: original.id })
+
+    const resumed = (await call('quirky.structured/resume', { session: original.id })) as Session
+    const resumedRecord = await waitForAsync(async () => {
+      const stored = (await call('quirky.session/get', { session: resumed.id })) as Session
+      return fixture.environments().length === 2 && stored.providerSession?.transcriptPath === resumeTranscriptPath
+        ? stored
+        : undefined
+    })
+
+    expect(resumedRecord).toMatchObject({
+      agent: 'codex',
+      resumedFrom: original.id,
+      providerSession: { id: 'scripted-thread', transcriptPath: resumeTranscriptPath }
+    })
+    expect(worldWithManagedCodex.accountPrepareCalls[1]).toMatchObject({
+      agent: 'codex',
+      sessionId: resumed.id,
+      resume: {
+        sourceSessionId: original.id,
+        providerSession: { id: 'scripted-thread', transcriptPath: null }
+      }
+    })
+    expect(fixture.requests().find((request) => request.method === 'thread/resume')?.params).toMatchObject({
+      threadId: 'scripted-thread',
+      cwd: home
+    })
+    expect(fixture.environments()).toEqual([{ CODEX_HOME: managedHome }, { CODEX_HOME: managedHome }])
+    await call('quirky.structured/stop', { session: resumed.id })
+  })
+
+  test('does not spawn Codex app-server when account preparation fails', async () => {
+    const home = makeTempDir('qs-codex-account-failure-')
+    const fixture = createCodexAppServerFixture(home)
+    const worldWithUnavailableHome = new FakeWorld()
+    worldWithUnavailableHome.worktree.path = home
+    worldWithUnavailableHome.accountPreparationFailure = 'selected Codex home is unavailable'
+    await boot({
+      home,
+      world: worldWithUnavailableHome,
+      accountPreparation: true,
+      factory: (context) =>
+        createCodexRunner(
+          { ...context, resolveCodexPath: async () => fixture.executable },
+          { env: isolatedProviderEnvironment(home) }
+        )
+    })
+
+    const error = await failure(createAgent('codex', 'must not start'))
+
+    expect(error.message).toContain('selected Codex home is unavailable')
+    expect(worldWithUnavailableHome.sessions.size).toBe(0)
+    expect(fixture.environments()).toEqual([])
+    expect(fixture.requests()).toEqual([])
   })
 })
 

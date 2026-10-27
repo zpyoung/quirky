@@ -9,6 +9,16 @@ const INTERRUPT_TIMEOUT_MS = 1_000
 const MAX_DEFERRED_EVENTS = 512
 const SUMMARY_LIMIT = 180
 
+function environmentWithPatch(base: NodeJS.ProcessEnv, patch?: Record<string, string | null>): NodeJS.ProcessEnv {
+  if (patch === undefined) return base
+  const env = { ...base }
+  for (const [name, value] of Object.entries(patch)) {
+    if (value === null) delete env[name]
+    else env[name] = value
+  }
+  return env
+}
+
 type DeferredEvent =
   | { kind: 'notification'; message: CodexRpcMessage }
   | { kind: 'request'; request: { id: CodexRpcId; method: string; params: unknown } }
@@ -75,7 +85,7 @@ class CodexRunner implements StructuredRunner {
         ...(typeof startOptions.model === 'string' ? { model: startOptions.model } : {}),
         ...(typeof startOptions.effort === 'string' ? { effort: startOptions.effort } : {})
       }
-      const run = this.createRun(session, executable, providerSession?.id ?? '', options)
+      const run = this.createRun(session, executable, providerSession?.id ?? '', options, startOptions.env)
       startup.run = run
       startup.connection = run.connection
       const connection = run.connection
@@ -209,13 +219,24 @@ class CodexRunner implements StructuredRunner {
     return cleanup
   }
 
-  private createRun(session: Session, executable: string, threadId: string, options: StructuredLaunchOptions): Running {
+  private createRun(
+    session: Session,
+    executable: string,
+    threadId: string,
+    options: StructuredLaunchOptions,
+    envPatch?: Record<string, string | null>
+  ): Running {
     let run!: Running
-    const connection = new CodexConnection(executable, session.cwd, this.deps.env ?? process.env, {
-      notification: (message) => this.onNotification(run, message),
-      serverRequest: (request) => this.onServerRequest(run, request),
-      failure: (error) => this.onFailure(run, error)
-    })
+    const connection = new CodexConnection(
+      executable,
+      session.cwd,
+      environmentWithPatch(this.deps.env ?? process.env, envPatch),
+      {
+        notification: (message) => this.onNotification(run, message),
+        serverRequest: (request) => this.onServerRequest(run, request),
+        failure: (error) => this.onFailure(run, error)
+      }
+    )
     run = {
       sessionId: session.id,
       threadId,

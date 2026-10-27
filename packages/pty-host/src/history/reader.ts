@@ -424,8 +424,24 @@ export async function pageBefore(
   dir: string,
   options: { before?: number; lines: number; format: 'text' | 'ansi'; screenRows: number }
 ): Promise<HistoryPage> {
+  const page = await renderPage(dir, options)
+  return { lines: page.rows.map((row) => row.text), cursor: page.cursor }
+}
+
+/** A text page that keeps each row's `wrapped` flag; the same rows and cursor as `pageBefore`. */
+async function pageRowsBefore(
+  dir: string,
+  options: { before?: number; lines: number; screenRows: number }
+): Promise<{ rows: Array<{ text: string; wrapped: boolean }>; cursor: string | null }> {
+  return renderPage(dir, { ...options, format: 'text' })
+}
+
+async function renderPage(
+  dir: string,
+  options: { before?: number; lines: number; format: 'text' | 'ansi'; screenRows: number }
+): Promise<{ rows: Array<{ text: string; wrapped: boolean }>; cursor: string | null }> {
   const read = readWindow(dir, options.before, options.lines, options.screenRows)
-  if (read.start >= read.end) return { lines: [], cursor: read.start > read.oldest ? formatCursor(read.start) : null }
+  if (read.start >= read.end) return { rows: [], cursor: read.start > read.oldest ? formatCursor(read.start) : null }
 
   const fallback = { cols: DEFAULT_COLS, rows: options.screenRows || DEFAULT_ROWS }
   const { screen, window } = await renderBounded(read, fallback, scratchControlRows(options.lines, options.screenRows))
@@ -434,11 +450,11 @@ export async function pageBefore(
     const rows = screen.lines()
     let count = options.before === undefined ? Math.max(0, rows.length - options.screenRows) : rows.length
     while (count > 0 && rows[count - 1].text === '') count--
-    const lines =
+    const kept =
       options.format === 'text'
-        ? rows.slice(0, count).map((row) => row.text)
-        : Array.from({ length: count }, (_, y) => serializeRow(screen, y))
-    return { lines, cursor }
+        ? rows.slice(0, count)
+        : Array.from({ length: count }, (_, y) => ({ text: serializeRow(screen, y), wrapped: rows[y].wrapped }))
+    return { rows: kept, cursor }
   } finally {
     screen.dispose()
   }
@@ -480,7 +496,12 @@ export async function composeReplay(
 
 /** The last `lines` text rows above the live screen, for a plain `read`; trimmed, unlike a page. */
 export async function textLinesAbove(dir: string, lines: number, screenRows: number): Promise<string[]> {
+  return (await textRowsAbove(dir, lines, screenRows)).map((row) => row.text)
+}
+
+/** Like `textLinesAbove`, with each row's `wrapped` flag so a caller can rejoin wrapped lines. */
+export async function textRowsAbove(dir: string, lines: number, screenRows: number): Promise<Array<{ text: string; wrapped: boolean }>> {
   if (lines <= 0) return []
-  const page = await pageBefore(dir, { lines, format: 'text', screenRows })
-  return page.lines.slice(-lines)
+  const page = await pageRowsBefore(dir, { lines, screenRows })
+  return page.rows.slice(-lines)
 }

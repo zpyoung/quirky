@@ -54,7 +54,12 @@ function write(path: string, content: string) {
   writeFileSync(path, content)
 }
 
-function sessionEnv(shell: string, agent: 'shell' | 'claude' = 'shell', extra: Record<string, string> = {}) {
+function sessionEnv(
+  shell: string,
+  agent: 'shell' | 'claude' = 'shell',
+  extra: Record<string, string> = {},
+  shellInit?: string
+) {
   return buildSessionEnv({
     home: quirkyHome,
     sessionId: 's_test',
@@ -63,6 +68,7 @@ function sessionEnv(shell: string, agent: 'shell' | 'claude' = 'shell', extra: R
     hookToken: 'tok',
     shell,
     agent,
+    ...(shellInit === undefined ? {} : { shellInit }),
     base: { HOME: userHome, PATH: '/usr/bin:/bin', SHELL: shell, ...extra }
   })
 }
@@ -176,6 +182,12 @@ describe('integration files', () => {
     expect(env.PATH).toBe(`${join(quirkyHome, 'bin')}:/usr/bin:/bin`)
     expect(env.ZDOTDIR).toBeUndefined()
   })
+
+  test('refuses a missing plugin shell init file before launch', () => {
+    expect(() => sessionEnv('/bin/bash', 'shell', {}, join(quirkyHome, 'accounts', 'shell-init'))).toThrow(
+      'plugin shell init file is unavailable'
+    )
+  })
 })
 
 describe.each([
@@ -186,13 +198,13 @@ describe.each([
   const BEL = '\x07'
 
   /** Starts the shell exactly as a session would, on a real PTY, and returns what it has printed so far. */
-  function startInteractive() {
+  function startInteractive(shellInit?: string, extra: Record<string, string> = {}) {
     write(join(userHome, rcFile), `PS1='$ '\nexport QK_MARK=user-rc-ran\n`)
     mkdirSync(join(root, 'sub'), { recursive: true })
     let out = ''
     const decoder = new TextDecoder()
     const proc = spawnPty(shellArgv(quirkyHome, shell), {
-      env: { ...sessionEnv(shell), ...scope.env },
+      env: { ...sessionEnv(shell, 'shell', extra, shellInit), ...scope.env },
       cwd: root,
       cols: 100,
       rows: 30,
@@ -214,14 +226,83 @@ describe.each([
         proc.terminal.write(`${line}\r`)
         await waitFor(() => prompts() > before, 10000)
       },
-      awaitFirstPrompt: () => waitFor(() => prompts() >= 1, 10000),
+      awaitShellReady: () => waitFor(() => out.includes(`${ESC}]777;quirky-shell-ready${BEL}`), 10000),
       finishedCodes: () => [...out.matchAll(new RegExp(`${ESC}\\]133;D;(\\d+)${BEL}`, 'g'))].map((m) => Number(m[1]))
     }
   }
+  test('sources the trusted init after user rc once and routes every command through the current pointer', async () => {
+    const pointer = join(root, 'active-home')
+    const firstHome = join(root, 'account-a')
+    const secondHome = join(root, 'account-b')
+    const init = join(root, 'account-init')
+    const initLog = join(root, 'init.log')
+    write(pointer, `${firstHome}\n`)
+    write(
+      init,
+      `if [ -z "\${__quirky_account_init_sourced-}" ]; then
+  __quirky_account_init_sourced=1
+  printf 'init:%s\\n' "\${QK_MARK-unset}" >> ${initLog}
+  printf 'account-init-sourced\\n'
+fi
+claude() {
+  if [ -n "\${CLAUDE_CONFIG_DIR-}" ]; then
+    printf 'route:%s\\n' "$CLAUDE_CONFIG_DIR"
+  else
+    __target=$(cat "$QK_TEST_POINTER")
+    ( export CLAUDE_CONFIG_DIR="$__target"; printf 'route:%s\\n' "$CLAUDE_CONFIG_DIR" )
+  fi
+}`
+    )
+    const session = startInteractive(init, { QK_TEST_POINTER: pointer })
+    await session.awaitShellReady()
+
+    const ready = session.output().indexOf(`${ESC}]777;quirky-shell-ready${BEL}`)
+    const sourced = session.output().indexOf('account-init-sourced')
+    expect(sourced).toBeGreaterThanOrEqual(0)
+    expect(sourced).toBeLessThan(ready)
+    expect(readFileSync(initLog, 'utf8').trim()).toBe('init:user-rc-ran')
+
+    await session.run('claude')
+    expect(session.output()).toContain(`route:${firstHome}`)
+    write(pointer, `${secondHome}\n`)
+    await session.run('claude')
+    expect(session.output()).toContain(`route:${secondHome}`)
+
+    const wrapper = shell.endsWith('zsh') ? join(quirkyHome, 'shell', 'zsh', '.zshrc') : join(quirkyHome, 'shell', 'bash', 'rcfile')
+    await session.run(`. ${wrapper}`)
+    expect(readFileSync(initLog, 'utf8').trim().split('\n')).toEqual(['init:user-rc-ran'])
+    session.proc.terminal.write('exit\r')
+    await session.proc.exited
+  }, 30000)
+
+  test('a shell user home override wins over dynamic account routing', async () => {
+    const pointer = join(root, 'active-home')
+    const customHome = join(root, 'custom-home')
+    const init = join(root, 'account-init')
+    write(pointer, `${join(root, 'account-a')}\n`)
+    write(
+      init,
+      `claude() {
+  if [ -n "\${CLAUDE_CONFIG_DIR-}" ]; then
+    printf 'route:%s\\n' "$CLAUDE_CONFIG_DIR"
+  else
+    __target=$(cat "$QK_TEST_POINTER")
+    ( export CLAUDE_CONFIG_DIR="$__target"; printf 'route:%s\\n' "$CLAUDE_CONFIG_DIR" )
+  fi
+}`
+    )
+    const session = startInteractive(init, { QK_TEST_POINTER: pointer, CLAUDE_CONFIG_DIR: customHome })
+    await session.awaitShellReady()
+    await session.run('claude')
+    expect(session.output()).toContain(`route:${customHome}`)
+    session.proc.terminal.write('exit\r')
+    await session.proc.exited
+  }, 30000)
+
 
   test('reports readiness once, each command exit code, the cwd, and keeps the exit status', async () => {
     const session = startInteractive()
-    await session.awaitFirstPrompt()
+    await session.awaitShellReady()
     await session.run('true')
     await session.run('false')
     await session.run('')
@@ -240,7 +321,7 @@ describe.each([
 
   test('sourcing the wrapper again does not repeat the reports', async () => {
     const session = startInteractive()
-    await session.awaitFirstPrompt()
+    await session.awaitShellReady()
     const wrapper = shell.endsWith('zsh') ? join(quirkyHome, 'shell', 'zsh', '.zshrc') : join(quirkyHome, 'shell', 'bash', 'rcfile')
     await session.run(`. ${wrapper}`)
     await session.run('true')

@@ -761,6 +761,61 @@ describe('workspace trust', () => {
     }
   })
 
+  test('uses prepared provider homes for Claude and Codex trust writes', async () => {
+    const t = await start({ installed: ['claude', 'codex'], trust: true })
+    const folder = realpathSync(mkdtempSync('/tmp/qag-wt-'))
+    const claudeHome = join(t.userHome, 'managed-claude')
+    const codexHome = join(t.userHome, 'managed-codex')
+    mkdirSync(claudeHome)
+    mkdirSync(codexHome)
+    const defaultClaude = join(t.userHome, '.claude.json')
+    writeFileSync(defaultClaude, '{"theme":"default"}\n')
+    const defaultClaudeBefore = readFileSync(defaultClaude, 'utf8')
+    try {
+      await t.call(A('prepareLaunch'), {
+        agent: 'claude',
+        cwd: folder,
+        hookArgs: [],
+        hookEnv: { CLAUDE_CONFIG_DIR: claudeHome }
+      })
+      const managedClaude = JSON.parse(readFileSync(join(claudeHome, '.claude.json'), 'utf8'))
+      expect(managedClaude.projects[folder].hasTrustDialogAccepted).toBe(true)
+      expect(readFileSync(defaultClaude, 'utf8')).toBe(defaultClaudeBefore)
+
+      await t.call(A('prepareLaunch'), {
+        agent: 'codex',
+        cwd: folder,
+        hookArgs: [],
+        hookEnv: { CODEX_HOME: codexHome }
+      })
+      expect(readFileSync(join(codexHome, 'config.toml'), 'utf8')).toContain(`[projects."${folder}"]`)
+      expect(existsSync(join(t.userHome, '.codex'))).toBe(false)
+    } finally {
+      rmSync(folder, { recursive: true, force: true })
+    }
+  })
+
+  test('a failed provider-home trust write does not log the private home path', async () => {
+    const t = await start({ installed: ['claude'], trust: true })
+    const folder = realpathSync(mkdtempSync('/tmp/qag-wt-'))
+    const claudeHome = join(t.userHome, 'managed-private-home')
+    writeFileSync(claudeHome, 'not a directory')
+    try {
+      const launch = await t.call(A('prepareLaunch'), {
+        agent: 'claude',
+        cwd: folder,
+        hookArgs: [],
+        hookEnv: { CLAUDE_CONFIG_DIR: claudeHome }
+      })
+      expect(launch.command.startsWith('claude')).toBe(true)
+      const failure = t.logs.find((line) => line.includes('trust for claude failed: '))
+      expect(failure).toBeDefined()
+      expect(failure).not.toContain(claudeHome)
+    } finally {
+      rmSync(folder, { recursive: true, force: true })
+    }
+  })
+
   test('SC-36: an agent without a trust preset writes nothing', async () => {
     const t = await start({ trust: true })
     await t.call(A('prepareLaunch'), { agent: 'aider', cwd: t.userHome, hookArgs: [], hookEnv: {} })
@@ -807,6 +862,32 @@ describe('delivery', () => {
     await t.call('quirky.session/remove', { sessionId: 's2' })
     expect(await result).toEqual({ delivery: 'not-delivered' })
     expect(t.h.pty.inputs).toEqual([])
+  })
+
+  test('deliver with ready pastes at once without any ready signal', async () => {
+    const t = await start({ fakeSession: true, timeScale: 0.05, plugins: [cursorAgent()] })
+    await t.call('quirky.session/spawn', { sessionId: 's1' })
+    const result = await t.call(A('deliver'), { sessionId: 's1', agent: 'acme-bot', text: 'hi', submit: false, ready: true })
+    expect(result).toEqual({ delivery: 'pasted' })
+    expect(t.h.pty.inputs.map((input) => input.text)).toEqual(['\x1b[200~hi\x1b[201~'])
+  })
+
+  test('submitPlan reports the entry\'s submit timing', async () => {
+    const t = await start({
+      plugins: [
+        agentManifest('acme.agents', [
+          { id: 'plain', label: 'Plain', detect: 'plain', prompt: 'stdin-after-start' },
+          { id: 'fussy', label: 'Fussy', detect: 'fussy', prompt: 'stdin-after-start', submitRetryMs: 1200, enterWithPaste: true, lineSettleMs: 45 }
+        ])
+      ]
+    })
+    expect(await t.call(A('submitPlan'), { agent: 'plain', text: 'a\nb' })).toEqual({ enterWithPaste: false, delayMs: 501, retryMs: null })
+    expect(await t.call(A('submitPlan'), { agent: 'fussy', text: 'a\nb' })).toEqual({ enterWithPaste: true, delayMs: 591, retryMs: 1200 })
+  })
+
+  test('submitPlan refuses an unknown agent', async () => {
+    const t = await start()
+    expect(await failure(t.call(A('submitPlan'), { agent: 'nope', text: 'x' }))).toMatchObject({ code: RpcErrorCode.NotFound })
   })
 
   test('deliver refuses an unknown agent', async () => {

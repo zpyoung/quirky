@@ -9,10 +9,14 @@ export type CodexAppServerLogEntry = {
   error?: unknown
 }
 
+export type CodexAppServerEnvironment = { CODEX_HOME: string | null }
+
 export type CodexAppServerFixture = {
   executable: string
   logPath: string
+  environmentLogPath: string
   requests(): CodexAppServerLogEntry[]
+  environments(): CodexAppServerEnvironment[]
 }
 
 /**
@@ -23,10 +27,12 @@ export function createCodexAppServerFixture(home: string): CodexAppServerFixture
   mkdirSync(home, { recursive: true })
   const executable = join(home, 'codex-app-server-fixture')
   const logPath = join(home, 'codex-app-server.jsonl')
+  const environmentLogPath = join(home, 'codex-app-server-environments.jsonl')
   const script = `#!/usr/bin/env node
 const fs = require('node:fs')
 const { spawn } = require('node:child_process')
 const logPath = ${JSON.stringify(logPath)}
+const environmentLogPath = ${JSON.stringify(environmentLogPath)}
 let input = ''
 let nextTurn = 1
 let nextApproval = 1
@@ -35,6 +41,7 @@ const approvals = new Map()
 const send = (message) => process.stdout.write(JSON.stringify(message) + '\\n')
 const notify = (method, params) => send({ method, params })
 const log = (message) => fs.appendFileSync(logPath, JSON.stringify(message) + '\\n')
+fs.appendFileSync(environmentLogPath, JSON.stringify({ CODEX_HOME: process.env.CODEX_HOME ?? null }) + '\\n')
 const textInput = (items) => items.filter((item) => item.type === 'text').map((item) => item.text).join('\\n')
 function finish(threadId, turn, status = 'completed') {
   const state = active.get(threadId)
@@ -210,6 +217,7 @@ process.stdin.on('end', () => process.exit(0))
   return {
     executable,
     logPath,
+    environmentLogPath,
     requests() {
       if (!existsSync(logPath)) return []
       return readFileSync(logPath, 'utf8')
@@ -222,6 +230,13 @@ process.stdin.on('end', () => process.exit(0))
           }
           return message as CodexAppServerLogEntry
         })
+    },
+    environments() {
+      if (!existsSync(environmentLogPath)) return []
+      return readFileSync(environmentLogPath, 'utf8')
+        .split('\n')
+        .filter(Boolean)
+        .map((line) => JSON.parse(line) as CodexAppServerEnvironment)
     }
   }
 }

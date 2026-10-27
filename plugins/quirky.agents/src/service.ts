@@ -4,6 +4,7 @@ import { buildCatalog } from './core/catalog'
 import { extrasSummary, parseExtraArgs } from './core/extras'
 import { agentPermissionMode, applyPermissionMode, effectiveArgs, effectiveEnv, PermissionError, permissionSummary } from './core/permissions'
 import { buildLaunchPlan, buildResumePlan, PlanError } from './core/plan'
+import { submitDelayMs } from './core/paste'
 import { resolveLaunch } from './core/resolve'
 import { pickAgent } from './core/select'
 import { SelectionError, validateSelection } from './core/selection'
@@ -287,7 +288,7 @@ export class AgentsService {
         resolveExecutable: (name) => this.detection.resolveExecutable(name)
       })
     )
-    this.trustFolder(entry, params.cwd as string)
+    this.trustFolder(entry, params.cwd as string, plan.env)
     return plan
   }
 
@@ -308,8 +309,16 @@ export class AgentsService {
 
   deliver = async (params: Params): Promise<{ delivery: DeliveryOutcome }> => {
     const entry = this.entryOf(params.agent as string)
-    const delivery = await this.runner.deliver(params.sessionId as string, entry, params.text as string, params.submit as boolean)
+    const delivery = await this.runner.deliver(params.sessionId as string, entry, params.text as string, params.submit as boolean, {
+      ready: params.ready === true
+    })
     return { delivery }
+  }
+
+  /** How `deliver` would submit `text` to this agent, for callers that guard the Enter themselves. */
+  submitPlan = (params: Params): { enterWithPaste: boolean; delayMs: number; retryMs: number | null } => {
+    const entry = this.entryOf(params.agent as string)
+    return { enterWithPaste: entry.enterWithPaste, delayMs: submitDelayMs(params.text as string, entry), retryMs: entry.submitRetryMs }
   }
 
   /** Runs one agent (or a custom command) once and returns its decoded output; see `generate.ts`. */
@@ -470,18 +479,25 @@ export class AgentsService {
     return { ...(env as Record<string, string>) }
   }
 
-  private trustFolder(entry: AgentEntry, cwd: string): void {
+  private trustFolder(entry: AgentEntry, cwd: string, env: Env): void {
     if (this.context.getSetting(TRUST_SETTING) !== true || entry.trust === null) return
     const home = userHome()
+    const providerHomeName = entry.id === 'claude' ? 'CLAUDE_CONFIG_DIR' : entry.id === 'codex' ? 'CODEX_HOME' : null
+    let providerHome: string | undefined
+    if (providerHomeName !== null) {
+      const configuredHome = Object.hasOwn(env, providerHomeName) ? env[providerHomeName] : process.env[providerHomeName]
+      if (typeof configuredHome === 'string' && configuredHome !== '') providerHome = configuredHome
+    }
     // a test run must never write the developer's real agent configs; Bun's homedir() ignores $HOME, so it names the real one
     if (process.env.NODE_ENV === 'test' && home === homedir()) {
       this.context.log(`trust for ${entry.id} skipped: test run against the real home`)
       return
     }
     try {
-      writeTrust(entry.trust, cwd, home)
+      writeTrust(entry.trust, cwd, home, providerHome)
     } catch (error) {
-      this.context.log(`trust for ${entry.id} failed: ${error instanceof Error ? error.message : String(error)}`)
+      const code = error instanceof Error && 'code' in error && typeof error.code === 'string' ? error.code : null
+      this.context.log(`trust for ${entry.id} failed: ${code ?? 'could not write the trust record'}`)
     }
   }
 
