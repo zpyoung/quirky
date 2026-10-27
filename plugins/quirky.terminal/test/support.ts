@@ -1,4 +1,5 @@
 import { mkdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { Session } from '@quirky/protocol'
 import { startHarness, makeTempHome, type Harness } from '../../../packages/daemon/test/helpers'
@@ -34,13 +35,34 @@ export function makeBuiltinDir(home: string, set: PluginSet, name = 'builtin'): 
   return dir
 }
 
+const sharedBuiltinDirs = new Map<string, string>()
+
+/**
+ * One built-in directory per plugin set for the whole test process. Under `bun test` every import
+ * of a plugin from a new path keeps about four file descriptors open for the rest of the run, so a
+ * fresh directory per daemon start runs the single-process suite out of descriptors.
+ */
+function sharedBuiltinDir(set: PluginSet): string {
+  const key = [...set.real, '|', ...set.fakes].join(',')
+  let dir = sharedBuiltinDirs.get(key)
+  if (dir === undefined) {
+    const root = join(tmpdir(), `qtb-${process.pid}-${sharedBuiltinDirs.size}`)
+    if (sharedBuiltinDirs.size === 0) process.once('exit', () => { for (const d of sharedBuiltinDirs.values()) rmSync(join(d, '..'), { recursive: true, force: true }) })
+    dir = makeBuiltinDir(root, set)
+    sharedBuiltinDirs.set(key, dir)
+  }
+  return dir
+}
+
 /** Starts a daemon with the fake PTY host whose only built-ins are those of `set`. */
 export async function startPluginHarness(
   set: PluginSet,
   options: { home?: string } & Parameters<typeof startHarness>[0] = {}
 ): Promise<Harness> {
   const home = options.home ?? makeTempHome()
-  return startHarness({ ...options, home, builtinPluginsDir: makeBuiltinDir(home, set) })
+  // restartDaemon's default directory; restarts are few enough that their imports don't add up
+  makeBuiltinDir(home, set)
+  return startHarness({ ...options, home, builtinPluginsDir: sharedBuiltinDir(set) })
 }
 
 /** Puts terminal sessions into the fake session plugin's file, as records the session plugin kept across a restart. */
