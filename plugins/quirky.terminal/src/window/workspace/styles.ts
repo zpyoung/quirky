@@ -19,6 +19,9 @@ const CSS = `
 .qt-tab.qt-drop-before { box-shadow: inset 2px 0 0 var(--accent); }
 .qt-tab.qt-drop-target { background: var(--bg-active); outline: 1px dashed var(--accent); }
 .qt-tab-title { overflow: hidden; text-overflow: ellipsis; }
+.qt-badge { flex: none; max-width: 90px; overflow: hidden; text-overflow: ellipsis; padding: 0 6px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg-hover); color: var(--muted); font: inherit; font-size: 10px; line-height: 14px; cursor: default; }
+button.qt-badge { cursor: pointer; }
+button.qt-badge:hover { background: var(--bg-active); color: var(--text); }
 .qt-dot { display: inline-block; flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--grey); }
 .qt-dot-waiting { background: var(--amber); }
 .qt-dot-working { background: var(--accent); }

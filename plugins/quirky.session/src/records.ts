@@ -9,6 +9,7 @@ import type {
   PromptDeliveryState,
   LaunchSettings,
   Session,
+  SessionBadge,
   SessionLaunch,
   SessionProviderSession,
   SessionStatus,
@@ -36,6 +37,7 @@ type Row = {
   launch_settings: string | null
   agent_status: string | null
   unread: Session['unread']
+  badges: string | null
 }
 
 function parseJson<T>(text: string | null): T | null {
@@ -45,6 +47,11 @@ function parseJson<T>(text: string | null): T | null {
   } catch {
     return null
   }
+}
+
+const badgesOf = (text: string | null): Pick<Session, 'badges'> => {
+  const badges = parseJson<Record<string, SessionBadge>>(text)
+  return badges ? { badges } : {}
 }
 
 const toSession = (row: Row): Session => ({
@@ -67,7 +74,8 @@ const toSession = (row: Row): Session => ({
   launchSettings: parseJson<LaunchSettings>(row.launch_settings),
   resumedFrom: row.resumed_from,
   agentStatus: parseJson<AgentStatusSummary>(row.agent_status),
-  unread: row.unread
+  unread: row.unread,
+  ...badgesOf(row.badges)
 })
 
 const jsonOrNull = (value: unknown) => (value === null || value === undefined ? null : JSON.stringify(value))
@@ -148,6 +156,9 @@ export function sessionMigrations(home: string): StoreMigration[] {
     },
     (store) => {
       store.exec('ALTER TABLE sessions ADD COLUMN unread TEXT')
+    },
+    (store) => {
+      store.exec('ALTER TABLE sessions ADD COLUMN badges TEXT')
     }
   ]
 }
@@ -227,6 +238,7 @@ export class SessionRecords {
       launchSettings?: LaunchSettings | null
       agentStatus?: AgentStatusSummary | null
       unread?: Session['unread']
+      badges?: Record<string, SessionBadge> | null
     }
   ): Session | null {
     const columns: [string, string | number | null][] = []
@@ -243,6 +255,7 @@ export class SessionRecords {
     if (fields.launchSettings !== undefined) columns.push(['launch_settings', jsonOrNull(fields.launchSettings)])
     if (fields.agentStatus !== undefined) columns.push(['agent_status', jsonOrNull(fields.agentStatus)])
     if (fields.unread !== undefined) columns.push(['unread', fields.unread])
+    if (fields.badges !== undefined) columns.push(['badges', fields.badges && Object.keys(fields.badges).length > 0 ? JSON.stringify(fields.badges) : null])
     if (columns.length > 0) {
       this.store.run(
         `UPDATE sessions SET ${columns.map(([name]) => `${name} = ?`).join(', ')} WHERE id = ?`,

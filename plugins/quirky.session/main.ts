@@ -16,6 +16,7 @@ export async function activate(context: PluginContext): Promise<void> {
     close: sessions.close,
     setStatus: sessions.setStatus,
     setUnread: sessions.setUnread,
+    setBadge: sessions.setBadge,
     restore: sessions.restore
   }
   for (const [name, handler] of Object.entries(methods)) context.provide(`method:${context.pluginId}/${name}`, handler)
