@@ -3,7 +3,7 @@ import { existsSync, readFileSync, mkdirSync, symlinkSync, writeFileSync } from 
 import { join } from 'node:path'
 import { RpcErrorCode } from '@quirky/protocol'
 import { commands } from '../cli'
-import type { AccountPrepareResult, AccountState, ManagedProvider, PendingLogin } from '../src/types'
+import type { AccountPrepareResult, AccountState, AccountSummary, ManagedProvider, PendingLogin } from '../src/types'
 import type { AccountsHarness } from './support/index'
 import { cleanupAll, defaultHome, startAccounts, testCli, waitForAsync } from './support/index'
 
@@ -25,6 +25,16 @@ async function add(h: AccountsHarness, provider: ManagedProvider, label?: string
     ...(label === undefined ? {} : { label })
   })
   return finishLogin(h, pending)
+}
+
+async function addCodex(h: AccountsHarness, email: string): Promise<AccountSummary> {
+  h.setLoginMode('complete', email)
+  const pending = await call<PendingLogin>(h.client, 'quirky.accounts/beginLogin', { provider: 'codex' })
+  const completed = await finishLogin(h, pending)
+  if (completed.status !== 'complete' || !completed.result) {
+    throw new Error(`Codex login for ${email} did not complete with an account`)
+  }
+  return completed.result
 }
 
 const CODEX_PROVIDER_SESSION_ID = '8db472c0-f25c-49de-8c13-40e5f21b5740'
@@ -257,10 +267,10 @@ describe('quirky.accounts lifecycle API and CLI', () => {
 
   test('Codex resume finds a pathless conversation from its recorded source session and copies its rollout', async () => {
     const h = await startAccounts()
-    const first = await add(h, 'codex', 'source@example.test')
-    const second = await add(h, 'codex', 'target@example.test')
-    const sourceId = first.result?.id ?? ''
-    const targetId = second.result?.id ?? ''
+    const first = await addCodex(h, 'source@example.test')
+    const second = await addCodex(h, 'target@example.test')
+    const sourceId = first.id
+    const targetId = second.id
     await call(h.client, 'quirky.accounts/select', { provider: 'codex', accountId: sourceId })
     await call(h.client, 'quirky.accounts/prepare', codexPrepareArgs(h, 'recorded-source-session'))
 
@@ -317,12 +327,12 @@ describe('quirky.accounts lifecycle API and CLI', () => {
 
   test('Codex resume continues from the prepared target after the original profile is removed', async () => {
     const h = await startAccounts()
-    const first = await add(h, 'codex', 'source@example.test')
-    const second = await add(h, 'codex', 'middle@example.test')
-    const third = await add(h, 'codex', 'next@example.test')
-    const sourceId = first.result?.id ?? ''
-    const middleId = second.result?.id ?? ''
-    const nextId = third.result?.id ?? ''
+    const first = await addCodex(h, 'source@example.test')
+    const second = await addCodex(h, 'middle@example.test')
+    const third = await addCodex(h, 'next@example.test')
+    const sourceId = first.id
+    const middleId = second.id
+    const nextId = third.id
 
     await call(h.client, 'quirky.accounts/select', { provider: 'codex', accountId: sourceId })
     await call(h.client, 'quirky.accounts/prepare', codexPrepareArgs(h, 'source-session-a'))
@@ -373,10 +383,10 @@ describe('quirky.accounts lifecycle API and CLI', () => {
 
   test('Codex resume rejects missing, untrusted, traversing, symlinked, non-rollout, and mismatched transcripts without falling back', async () => {
     const h = await startAccounts()
-    const first = await add(h, 'codex', 'source@example.test')
-    const second = await add(h, 'codex', 'target@example.test')
-    const sourceId = first.result?.id ?? ''
-    const targetId = second.result?.id ?? ''
+    const first = await addCodex(h, 'source@example.test')
+    const second = await addCodex(h, 'target@example.test')
+    const sourceId = first.id
+    const targetId = second.id
     await call(h.client, 'quirky.accounts/select', { provider: 'codex', accountId: sourceId })
     await call(h.client, 'quirky.accounts/prepare', codexPrepareArgs(h, 'recorded-source-session'))
 
@@ -415,10 +425,10 @@ describe('quirky.accounts lifecycle API and CLI', () => {
 
   test('Codex resume preserves a conflicting target rollout instead of overwriting it', async () => {
     const h = await startAccounts()
-    const first = await add(h, 'codex', 'source@example.test')
-    const second = await add(h, 'codex', 'target@example.test')
-    const sourceId = first.result?.id ?? ''
-    const targetId = second.result?.id ?? ''
+    const first = await addCodex(h, 'source@example.test')
+    const second = await addCodex(h, 'target@example.test')
+    const sourceId = first.id
+    const targetId = second.id
     await call(h.client, 'quirky.accounts/select', { provider: 'codex', accountId: sourceId })
     await call(h.client, 'quirky.accounts/prepare', codexPrepareArgs(h, 'recorded-source-session'))
 
