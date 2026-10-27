@@ -41,6 +41,7 @@ function WorktreeCard({ context, worktree, depth, childCount, collapsed, session
     context.openView(SESSION_VIEW, { worktree: worktree.id })
     if (worktree.unread) void setWorktree(context, worktree.id, { unread: false })
   }
+  const linkedWork = worktree.linkedPR ?? worktree.linkedIssue
   const className = ['worktree', selected && 'selected', worktree.removing && 'removing'].filter(Boolean).join(' ')
   return (
     <li
@@ -58,6 +59,17 @@ function WorktreeCard({ context, worktree, depth, childCount, collapsed, session
         {worktree.status !== 'in-progress' && <span className="tag tag-status">{STATUS_LABELS[worktree.status]}</span>}
         {worktree.removing && <span className="tag tag-state">Deleting…</span>}
       </button>
+      {linkedWork && (
+        <a
+          className="tag tag-github"
+          href={linkedWork.url}
+          target="_blank"
+          rel="noreferrer"
+          aria-label={`${linkedWork.kind === 'pullRequest' ? 'Pull request' : 'Issue'} #${linkedWork.number}: ${linkedWork.title}`}
+        >
+          {linkedWork.kind === 'pullRequest' ? 'PR' : 'Issue'} #{linkedWork.number}
+        </a>
+      )}
       {childCount > 0 && (
         <button className="children-chip" aria-expanded={!collapsed} onClick={onToggle}>
           {plural(childCount)}
