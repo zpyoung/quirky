@@ -1,0 +1,6 @@
+title: prime-agent
+● Changed the loader.
+
+Details mode (ctrl+o to expand)
+>
+← manage

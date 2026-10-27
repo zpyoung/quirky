@@ -1,0 +1,40 @@
+{
+  "agent": "gemini",
+  "description": "Gemini CLI detection rules, from the glyphs it puts in its title.",
+  "rules": [
+    {
+      "id": "permission-title",
+      "why": "Gemini CLI puts ✋ in its title while a tool waits for permission.",
+      "state": "blocked",
+      "kind": "approval",
+      "region": "title",
+      "all": [
+        {
+          "contains": "✋"
+        }
+      ]
+    },
+    {
+      "id": "working-title",
+      "why": "Gemini CLI puts ✦ (or ⏲ when silent) in its title while a turn runs.",
+      "state": "working",
+      "region": "title",
+      "all": [
+        {
+          "regex": "[✦⏲]"
+        }
+      ]
+    },
+    {
+      "id": "rest-title",
+      "why": "Gemini CLI marks rest with ◇ in its title, a glyph it never shows mid-turn.",
+      "state": "idle",
+      "region": "title",
+      "all": [
+        {
+          "contains": "◇"
+        }
+      ]
+    }
+  ]
+}

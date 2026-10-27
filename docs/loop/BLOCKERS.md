@@ -109,3 +109,12 @@ Source anchors for the completion findings above: SC-02 `75445e6:plugins/quirky.
 
 - **LOW — X2 / SC-07, related consent tip-seen bookkeeping** (`plugins/quirky.vault/src/service.ts:92`, logic criterion `docs/quirk/specs/2026-10-27-m3-vault/logic.md:80-83`). The security gate suppressed this claim as an invented requirement because no tip implementation exists. The criterion explicitly requires marking the related tip seen, and case-insensitive source search found no such bookkeeping. Core consent/search works, but that ancillary flow remains unfinished; it gets a separate dependent completion item because the first parity item was already queued.
 - **Review assurance limitation:** the final security promote/refute round suppressed2/2 claims. X1's missing-caller authorization claim is contradicted by the locked shared authenticated API model; X2's requirement interpretation is not accepted as closure above. This round is not a clean security bill of health. The evidence-gated output and raw traces remain in the recorded X review directory. The unsandboxed reviewer created and removed traced repository probes; it also ran `mkdir -p /tmp/-foo`, whose prior ownership is unknown, so that path was not deleted.
+## Deferred past the 4am target
+
+- **Decided by:** the user, 2026-10-27, to land everything else by 4am on 2026-10-28.
+- **Items:** m6-objective-plan, m6-objective-execute, m6-objective-landing, m6-sitter-github, m6-sitter-gitlab, m6-sitter-fix-ui, m4-hosting-api-gitlab, m4-hosting-api-bitbucket-gitea-azure, m4-hosting-ui-gitlab, m4-worktrees-create-from-gitlab.
+- **To resume:** `queue.ts set <id> todo` for each, after the 4am target.
+
+## m3-vault: integration verification finding
+
+- **LOW — load-sensitive terminal search report** (`plugins/quirky.terminal/test/e2e-ui/features-search.test.ts:154`). The post-conflict remote run read current match1 immediately after search-next expected2; the runner's one isolated retry passed all5 cases and returned ok with this file in flaky[]. Root cause is not established. The operator requested only blocking fixes, so no search behavior, assertion or retry policy was changed here.

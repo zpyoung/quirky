@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import { load, next, setStatus, type Item } from './queue'
+import { load, next, pendingDeps, setStatus, type Item } from './queue'
 
 const item = (id: string, deps: string[] = [], status: Item['status'] = 'todo'): Item => ({
   id,
@@ -54,6 +54,25 @@ describe('next', () => {
 
   test('reports done when every item is done', () => {
     expect(next([item('a', [], 'done')])).toEqual({ kind: 'done' })
+  })
+})
+
+describe('early items', () => {
+  const early = (id: string, deps: string[]): Item => ({ ...item(id, deps), early: true })
+
+  test('start once each dependency is being implemented', () => {
+    const items = [item('a', [], 'done'), { ...item('b', ['a'], 'in-progress'), lane: 1 }, early('c', ['b']), item('d', ['b'])]
+    expect(next(items, 2)).toMatchObject({ kind: 'item', item: { id: 'c' } })
+  })
+
+  test('wait while a dependency is itself still waiting on its own', () => {
+    const items = [item('a'), { ...item('b', ['a'], 'in-progress'), lane: 1 }, early('c', ['b'])]
+    expect(next(items, 2)).toMatchObject({ kind: 'item', item: { id: 'a' } })
+    expect(next([{ ...item('a', [], 'in-progress'), lane: 3 }, ...items.slice(1)], 2)).toMatchObject({ kind: 'busy' })
+  })
+
+  test('pendingDeps names the dependencies not yet done', () => {
+    expect(pendingDeps([item('a', [], 'done'), item('b', [], 'in-progress'), item('c', ['a', 'b'])], 'c')).toEqual(['b'])
   })
 })
 

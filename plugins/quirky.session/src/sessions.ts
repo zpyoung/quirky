@@ -49,6 +49,20 @@ function exitFields(details: SessionExit) {
   }
 }
 
+const NAME_PATTERN = /^(?!s_)[a-z0-9][a-z0-9._-]{0,63}$/
+const MAX_NAME = 64
+
+/** The rule a session name breaks, or null when its lowercase form is a valid name. */
+export function nameProblem(name: string): string | null {
+  const lower = name.toLowerCase()
+  if (lower === '') return "session name can't be empty"
+  if (lower.length > MAX_NAME) return `session name can't be longer than ${MAX_NAME} characters`
+  if (/[^a-z0-9._-]/.test(lower)) return "session name can only contain letters, digits, '.', '_' and '-'"
+  if (!/^[a-z0-9]/.test(lower)) return 'session name must start with a letter or digit'
+  if (lower.startsWith('s_')) return "session name can't start with 's_'"
+  return NAME_PATTERN.test(lower) ? null : 'session name is not valid'
+}
+
 const MAX_PROVIDER_SESSION_ID = 512
 const CONTROL_CHARACTERS = /[\u0000-\u001f\u007f-\u009f]/
 const UNREAD_REASONS = ['agent', 'bell', 'notification']
@@ -172,6 +186,7 @@ export class SessionService {
    * `cwd` is where the session starts instead of the worktree's path; it must be an existing absolute directory.
    */
   create = async (params: Record<string, unknown>, caller: PluginCaller): Promise<Session> => {
+    const name = params.name === undefined || params.name === null ? null : this.validName(params.name)
     const cwd = this.startCwd(params.cwd)
     const resolved = await this.resolveWorktree(params.worktree, caller, cwd)
     const worktree = cwd === undefined ? resolved : { ...resolved, path: cwd }
@@ -187,7 +202,7 @@ export class SessionService {
       throw this.context.error('invalid-params', 'command is only allowed with agent shell')
     }
     const title = (params.title as string | undefined) ?? (agent === 'shell' ? 'Shell' : (await this.agentInfo(agent)).label)
-    const session = this.newRecord(worktree, 'terminal', agent, title)
+    const session = { ...this.newRecord(worktree, 'terminal', agent, title), name }
     const launched = await this.start(session, worktree.repoId, params, prompt, async (additions) => {
       if (agent === 'shell') {
         return {
@@ -347,6 +362,23 @@ export class SessionService {
       }
     })
     return this.deliverAfterLaunch(launched, false)
+  }
+
+  /**
+   * Gives a session a name, or clears it with null. The name is stored lowercase and is unique among
+   * sessions that have not exited: a running holder refuses it with `name-taken`, an exited holder
+   * loses it to this session.
+   */
+  setName = (params: Record<string, unknown>): Session => {
+    const session = this.require(params.session as string)
+    const name = params.name === null ? null : this.validName(params.name)
+    if (name === session.name) return session
+    const { updated, released } = this.records.transaction(() => {
+      const released = name === null ? [] : this.releaseName(name, session.id)
+      return { updated: this.records.update(session.id, { name }) as Session, released }
+    })
+    released.forEach((holder) => this.publish(holder))
+    return this.publish(updated)
   }
 
   /** Stores the agent CLI's own session ID (and transcript path) so a later resume can pass it back. */
@@ -547,10 +579,41 @@ export class SessionService {
     }
   }
 
-  private require(sessionId: string): Session {
-    const session = this.records.get(sessionId)
-    if (!session) throw this.context.error('not-found', `no such session: ${sessionId}`)
+  /** The session stored under `ref` as an ID, else the one that name picks: a running holder, else the newest. */
+  private require(ref: string): Session {
+    const session = this.records.get(ref) ?? this.byName(ref)
+    if (!session) throw this.context.error('not-found', `no such session: ${ref}`)
     return session
+  }
+
+  private byName(name: unknown): Session | null {
+    if (typeof name !== 'string') return null
+    const holders = this.records.byName(name.toLowerCase())
+    const running = holders.filter((holder) => holder.status !== 'exited')
+    return (running.length > 0 ? running : holders).at(-1) ?? null
+  }
+
+  private validName(value: unknown): string {
+    if (typeof value !== 'string') throw this.context.error('invalid-params', 'name must be a string')
+    const problem = nameProblem(value)
+    if (problem) throw this.context.error('invalid-params', problem)
+    return value.toLowerCase()
+  }
+
+  /**
+   * Frees `name` for the session `forId` (null for one not stored yet): refuses when another session
+   * that has not exited holds it, otherwise clears it from exited holders and returns them. Call inside
+   * a transaction.
+   */
+  private releaseName(name: string, forId: string | null): Session[] {
+    const holders = this.records.byName(name).filter((holder) => holder.id !== forId)
+    const running = holders.find((holder) => holder.status !== 'exited')
+    if (running) {
+      throw Object.assign(this.context.error('conflict', `name ${name} is held by session ${running.id}`), {
+        data: { reason: 'name-taken' }
+      })
+    }
+    return holders.map((holder) => this.records.update(holder.id, { name: null }) as Session)
   }
 
   private publish(session: Session): Session {
@@ -580,6 +643,7 @@ export class SessionService {
       promptDelivery: null,
       resumedFrom: null,
       agentStatus: null,
+      name: null,
       unread: null
     }
   }
@@ -602,7 +666,9 @@ export class SessionService {
 
   /**
    * Inserts `session` as `starting`, runs the launch hooks, builds the launch with `build`, spawns
-   * it and records what it launched with. Any failure removes the record again.
+   * it and records what it launched with. Any failure removes the record again. A name the session
+   * carries is taken from exited holders in the insert's own transaction, and given back to them when
+   * the launch fails, unless they were renamed or the name was taken meanwhile.
    */
   private async start(
     session: Session,
@@ -611,7 +677,13 @@ export class SessionService {
     prompt: string | undefined,
     build: (additions: { env: Record<string, string | null>; args: string[] }) => Promise<LaunchSpec>
   ): Promise<{ session: Session; paste: LaunchSpec['paste'] }> {
-    this.records.insert(session, repoId)
+    const name = session.name ?? null
+    const released = this.records.transaction(() => {
+      const holders = name === null ? [] : this.releaseName(name, null)
+      this.records.insert(session, repoId)
+      return holders
+    })
+    released.forEach((holder) => this.publish(holder))
     const closedWhileStarting = () =>
       this.context.error('conflict', `session ${session.id} was closed before its terminal started`)
     let spec!: LaunchSpec
@@ -646,7 +718,17 @@ export class SessionService {
         throw closedWhileStarting()
       }
     } catch (error) {
-      this.records.delete(session.id)
+      const restored = this.records.transaction(() => {
+        this.records.delete(session.id)
+        const taken = name !== null && this.records.byName(name).length > 0
+        return released.flatMap((holder) => {
+          const now = this.records.get(holder.id)
+          // a holder renamed, or a name taken by someone else, since the release keeps what it has
+          if (!now || now.name !== null || taken) return []
+          return this.records.update(holder.id, { name }) ?? []
+        })
+      })
+      restored.forEach((holder) => this.publish(holder))
       if (isRpcError(error)) throw error
       throw new Error(`could not start ${session.agent}: ${messageOf(error)}`)
     }

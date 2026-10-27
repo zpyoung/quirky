@@ -6,6 +6,12 @@ import type { AgentEntry, DeliveryOutcome } from './core/types'
 /** How long a liveness check may go unanswered before the delivery gives up on it. */
 const LIVENESS_TIMEOUT_MS = 2000
 
+/** Per-delivery switches. */
+export type DeliverOptions = {
+  /** The agent already shows its input: skip the ready wait and paste once the session is known alive. */
+  ready?: boolean
+}
+
 type DeliveryRunnerOptions = {
   pty: PluginPty
   /** Registers a listener for sessions that were closed or forgotten; returns its remover. */
@@ -44,8 +50,11 @@ export class DeliveryRunner {
    * The readiness deadline runs from the call and stays armed until the delivery settles, and a
    * liveness check gets its own short timeout, so a stalled PTY host cannot leave this pending.
    * Nothing is written to a session that is no longer alive.
+   *
+   * With `options.ready` the readiness wait is skipped entirely: the paste follows a liveness check
+   * and settles `pasted`, or `not-delivered` when the session is gone or the write fails.
    */
-  deliver(sessionId: string, entry: AgentEntry, text: string, submit: boolean): Promise<DeliveryOutcome> {
+  deliver(sessionId: string, entry: AgentEntry, text: string, submit: boolean, options: DeliverOptions = {}): Promise<DeliveryOutcome> {
     return new Promise((resolve) => {
       // scanner and deadline run on scaled time, so one factor converts to real timer delays
       const clock = () => this.now() / this.timeScale
@@ -254,6 +263,12 @@ export class DeliveryRunner {
           }
         })
       )
+
+      if (options.ready === true) {
+        subscribing = false
+        paste('pasted')
+        return
+      }
 
       deadlineTimer = setTimeout(() => {
         deadlineTimer = null

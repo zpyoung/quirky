@@ -473,5 +473,16 @@
 - **Revisit if:** The land-owned whole-suite gate reports a blocking integration failure.
 - **Source:** locked by the latest operator test-host instruction
 
+## D44: Preserve external resume and landed session naming after the first land conflict
+- **Question:** How should the land-reported conflict with m1-agent-status-scripting be resolved?
+- **Options:** Keep only vault's resumeExternal; keep only the landed setName; retain both independent methods and registrations.
+- **Chose:** Both. Resolve the shared insertion point with separate complete method bodies/comments, and expose both in main.ts. Preserve upstream name/unread fields and migrations6/7 unchanged.
+- **Why:** These are additive public operations, not competing implementations. Dropping either would remove a verified flow. This catch-up is the mandatory LOOP7.3 response to the failed first land, not an additional optional pre-land merge.
+- **Evidence:** Newly landed m1-agent-status-scripting log read completely, D1-D47; D20-D22/D38 bind naming and migrations. Post-resolution typecheck and packaged build exit0. Remote session/vault/terminal/agent-status verification passes142 remote files and2 macOS-only files; terminal features-search passes its isolated retry and is recorded as the one flaky file, not hidden or changed.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** Land's integration gate identifies another actual contract conflict.
+- **Source:** locked by docs/loop/LOOP.md step7.3 and m1-agent-status-scripting decisions
+
 ## Progress
-Implementation, core packaged UI smoke, the one review/fix batch and final affected gates are complete. Catch-up occurred once at9ec4c97; all brought-in decisions were read. Both dependent completion items are confirmed in the queue, with unfinished flows/reasons recorded in BLOCKERS.md. Build, scripts49/0, typecheck and affected files325/0 pass. Whole-suite verification and merged/done status are owned by queue.ts land; no manual whole-suite run is claimed.
+Implementation, packaged core smoke, one final review/fix batch and affected gates are complete. Both dependent completion items and open findings are recorded. Initial catch-up was9ec4c97; first land required the additive session naming/resume resolution in D44. The resolved build/typecheck and144-file integration run pass (one runner-reported flaky file). Whole-suite verification and done status remain owned by queue.ts land; no manual whole-suite run is claimed.
