@@ -70,6 +70,7 @@ export type ServiceOptions = {
 export const BELL_HOLD_MS = 250
 export const LOOKUP_TIMEOUT_MS = 2000
 const PROGRAM_TEXT_MAX = 256
+const OWN_WRITE_TTL_MS = 60_000
 const SETTING_PREFIX = 'setting:quirky.notifications/'
 
 type Marker = UnreadReason
@@ -79,8 +80,11 @@ type Pending = {
   worktreeId: string | null
   marker?: Marker
   occasion?: 'always' | 'unfocused' | 'invisible'
+  hold?: BellHold
   banner(): Promise<Banner>
 }
+
+class LookupTimeout extends Error {}
 
 type BellHold = { sessionId: string; superseded: boolean }
 
@@ -111,12 +115,13 @@ export function badgeLabel(count: number): string {
  */
 export class NotificationsService {
   private readonly cooldown: Cooldown
+  private readonly now: () => number
   private readonly bellHoldMs: number
   private readonly lookupTimeoutMs: number
   private tail: Promise<void> = Promise.resolve()
   private syncQueued = false
   private lastStatus: string | null = null
-  private readonly ownWrites = new Map<string, number>()
+  private readonly ownWrites = new Map<string, number[]>()
   private readonly holds = new Set<BellHold>()
   private readonly timers = new Set<ReturnType<typeof setTimeout>>()
   private stopped = false
@@ -125,11 +130,12 @@ export class NotificationsService {
     private readonly context: PluginContext,
     options: ServiceOptions = {}
   ) {
+    this.now = options.now ?? Date.now
     this.bellHoldMs = options.bellHoldMs ?? BELL_HOLD_MS
     this.lookupTimeoutMs = options.lookupTimeoutMs ?? LOOKUP_TIMEOUT_MS
     this.cooldown = new Cooldown({
       ...(options.cooldownMs === undefined ? {} : { windowMs: options.cooldownMs }),
-      ...(options.now === undefined ? {} : { now: options.now })
+      now: this.now
     })
   }
 
@@ -150,11 +156,14 @@ export class NotificationsService {
     switch (event.type) {
       case 'quirky.agent-status/settled':
       case 'quirky.structured/settled':
+        this.supersedeBells((event.data as SettledData).sessionId)
         this.fire(() => this.agentSettled(event.data as SettledData))
         return
-      case 'quirky.terminal/bell':
-        this.fire(() => this.bell((event.data as { sessionId: string }).sessionId))
+      case 'quirky.terminal/bell': {
+        const hold = this.openHold((event.data as { sessionId: string }).sessionId)
+        this.fire(() => this.bell(hold))
         return
+      }
       case 'quirky.terminal/notification':
         this.fire(() => this.terminalNotification(event.data as TerminalNotification))
         return
@@ -251,7 +260,8 @@ export class NotificationsService {
       sound,
       customSoundPath: path ?? String(this.context.getSetting('customSoundPath') ?? ''),
       volume,
-      pluginDir: this.context.dir
+      pluginDir: this.context.dir,
+      checkTimeoutMs: this.lookupTimeoutMs
     })
     if (!choice.sound || typeof choice.sound.file !== 'string') return { played: false, reason: choice.problem ?? 'no sound to play' }
     this.context.emit('sound', { file: choice.sound.file, volume })
@@ -285,7 +295,7 @@ export class NotificationsService {
   private async bounded(method: string, params: Record<string, unknown>): Promise<unknown> {
     let timer: ReturnType<typeof setTimeout> | undefined
     const timeout = new Promise<never>((_, reject) => {
-      timer = setTimeout(() => reject(new Error(`${method} did not answer within ${this.lookupTimeoutMs}ms`)), this.lookupTimeoutMs)
+      timer = setTimeout(() => reject(new LookupTimeout(`${method} did not answer within ${this.lookupTimeoutMs}ms`)), this.lookupTimeoutMs)
     })
     try {
       return await Promise.race([this.context.call(method, params), timeout])
@@ -344,24 +354,37 @@ export class NotificationsService {
     return `${worktreeId}:${unread}`
   }
 
+  /**
+   * Records the write before sending it. A write that timed out may still land, so its entry stays
+   * until its event arrives or the entry expires; only a write that failed outright is withdrawn.
+   */
   private async setWorktreeUnread(worktreeId: string, unread: boolean): Promise<void> {
     const key = this.ownKey(worktreeId, unread)
-    this.ownWrites.set(key, (this.ownWrites.get(key) ?? 0) + 1)
+    const expiresAt = this.now() + OWN_WRITE_TTL_MS
+    this.ownWrites.set(key, [...(this.ownWrites.get(key) ?? []), expiresAt])
     try {
       await this.bounded('quirky.worktree/set', { worktree: `id:${worktreeId}`, unread })
     } catch (error) {
-      this.consumeOwn(worktreeId, unread)
+      if (!(error instanceof LookupTimeout)) this.withdrawOwn(key, expiresAt)
       if (!isMissing(error)) this.context.log(`could not mark worktree ${worktreeId}: ${errorText(error)}`)
     }
   }
 
+  private withdrawOwn(key: string, expiresAt: number): void {
+    const entries = this.ownWrites.get(key) ?? []
+    const index = entries.indexOf(expiresAt)
+    if (index !== -1) entries.splice(index, 1)
+    if (entries.length === 0) this.ownWrites.delete(key)
+  }
+
   private consumeOwn(worktreeId: string, unread: boolean): boolean {
     const key = this.ownKey(worktreeId, unread)
-    const pending = this.ownWrites.get(key) ?? 0
-    if (pending === 0) return false
-    if (pending === 1) this.ownWrites.delete(key)
-    else this.ownWrites.set(key, pending - 1)
-    return true
+    const now = this.now()
+    const live = (this.ownWrites.get(key) ?? []).filter((expiresAt) => expiresAt > now)
+    const consumed = live.shift() !== undefined
+    if (live.length === 0) this.ownWrites.delete(key)
+    else this.ownWrites.set(key, live)
+    return consumed
   }
 
   /** A `set` that asked for unread=false and was not ours is Mark Read: it clears the worktree's sessions too. */
@@ -392,12 +415,13 @@ export class NotificationsService {
   /** Clears the markers of what an attended window shows. */
   private async autoRead(worktrees: Worktree[]): Promise<void> {
     const viewing = await this.viewing()
-    if (!viewing.attended || viewing.shownWorktree === null) return
+    if (!viewing.attended) return
     if (viewing.visibleSessions.size > 0) {
       for (const session of await this.listSessions()) {
         if (session.unread && sessionViewed(viewing, session.id)) await this.setSessionUnread(session.id, null)
       }
     }
+    if (viewing.shownWorktree === null) return
     const shown = worktrees.find((worktree) => worktree.id === viewing.shownWorktree)
     if (shown?.unread) {
       shown.unread = false
@@ -414,7 +438,8 @@ export class NotificationsService {
       sound: String(this.context.getSetting('sound')),
       customSoundPath: String(this.context.getSetting('customSoundPath') ?? ''),
       volume: this.numberSetting('volume'),
-      pluginDir: this.context.dir
+      pluginDir: this.context.dir,
+      checkTimeoutMs: this.lookupTimeoutMs
     })
     return {
       badge,
@@ -459,19 +484,27 @@ export class NotificationsService {
     })
   }
 
-  private async bell(sessionId: string): Promise<void> {
-    const session = await this.lookup<Session>('quirky.session/get', { session: sessionId })
-    if (!session) return
-    await this.handle({
-      source: 'bell',
-      sessionId,
-      worktreeId: session.worktreeId,
-      marker: 'bell',
-      banner: async () => {
-        const place = await this.place(session.worktreeId)
-        return bellBanner({ repo: place.repo, worktree: place.worktree })
-      }
-    })
+  private async bell(hold: BellHold): Promise<void> {
+    const { sessionId } = hold
+    let held = false
+    try {
+      const session = await this.lookup<Session>('quirky.session/get', { session: sessionId })
+      if (!session) return
+      held =
+        (await this.handle({
+          source: 'bell',
+          sessionId,
+          worktreeId: session.worktreeId,
+          marker: 'bell',
+          hold,
+          banner: async () => {
+            const place = await this.place(session.worktreeId)
+            return bellBanner({ repo: place.repo, worktree: place.worktree })
+          }
+        })) === 'held'
+    } finally {
+      if (!held) this.holds.delete(hold)
+    }
   }
 
   private async terminalNotification(data: TerminalNotification): Promise<void> {
@@ -536,16 +569,28 @@ export class NotificationsService {
     }
   }
 
+  /** Starts watching for a completion of `sessionId` from the moment its bell arrives. */
+  private openHold(sessionId: string): BellHold {
+    const hold: BellHold = { sessionId, superseded: false }
+    this.holds.add(hold)
+    return hold
+  }
+
+  /** Runs when a completion is received, before any lookup, so a slow decision cannot miss a bell's hold. */
+  private supersedeBells(sessionId: unknown): void {
+    for (const hold of this.holds) if (hold.sessionId === sessionId) hold.superseded = true
+  }
+
   /** A bell waits briefly so a completion that rang it can replace its banner. */
   private holdBell(pending: Pending): void {
-    const hold: BellHold = { sessionId: pending.sessionId!, superseded: false }
-    this.holds.add(hold)
+    const hold = pending.hold!
     const timer = setTimeout(() => {
       this.timers.delete(timer)
       this.holds.delete(hold)
       if (this.stopped) return
+      const superseded = hold.superseded
       this.fire(async () => {
-        if (hold.superseded) this.decide(pending, 'superseded')
+        if (superseded) this.decide(pending, 'superseded')
         else await this.deliver(pending, await this.viewing())
       })
     }, this.bellHoldMs)
@@ -553,9 +598,6 @@ export class NotificationsService {
   }
 
   private decide(pending: Pending, result: Result): Result {
-    if (pending.source === 'agent' && pending.sessionId !== null) {
-      for (const hold of this.holds) if (hold.sessionId === pending.sessionId) hold.superseded = true
-    }
     this.context.emit('decided', {
       source: pending.source,
       sessionId: pending.sessionId,
@@ -580,17 +622,23 @@ export class NotificationsService {
   private async deliver(pending: Pending, viewing: Viewing): Promise<Result> {
     const gated = this.gate(pending, viewing)
     if (gated !== 'delivered') return this.decide(pending, gated)
-    if (pending.source !== 'test') this.cooldown.reserve(pending.worktreeId ?? 'global')
 
     const banner = await pending.banner()
     const choice = await deliverySound({
       sound: String(this.context.getSetting('sound')),
       customSoundPath: String(this.context.getSetting('customSoundPath') ?? ''),
       volume: this.numberSetting('volume'),
-      pluginDir: this.context.dir
+      pluginDir: this.context.dir,
+      checkTimeoutMs: this.lookupTimeoutMs
     })
     const sound = choice.sound
     const playHere = sound !== undefined && typeof sound.file === 'string' && !(await this.hasDesktopClient())
+    // preparation can be slow, so the window is checked and reserved at the moment of delivery
+    if (pending.source !== 'test') {
+      const key = pending.worktreeId ?? 'global'
+      if (this.cooldown.check(key)) return this.decide(pending, 'cooldown')
+      this.cooldown.reserve(key)
+    }
     this.context.notify({
       title: banner.title,
       body: banner.body,
