@@ -161,6 +161,13 @@ files, not this one.
 | medium | high | [m0-daemon-api D8](decisions/m0-daemon-api.md) | Method results and errors | assumed — autonomous |
 | medium | high | [m0-daemon-api D10](decisions/m0-daemon-api.md) | Stores migrate forward only, by an ordered list, and refuse a downgrade | assumed — autonomous |
 | medium | high | [m0-daemon-api D24](decisions/m0-daemon-api.md) | Plugin methods use the daemon's token, and any client may call any method | locked by docs/roadmap.md |
+| medium | high | [m5-structured-runner D1](decisions/m5-structured-runner.md) | Build the shared background seams, not the downstream products | locked by docs/roadmap.md |
+| medium | high | [m5-structured-runner D3](decisions/m5-structured-runner.md) | Native provider runners share the existing structured journal and ask path | locked by docs/architecture.md |
+| medium | high | [m5-structured-runner D4](decisions/m5-structured-runner.md) | Resume creates a new session in the original directory, replaying original structured options | assumed — autonomous |
+| medium | high | [m5-structured-runner D5](decisions/m5-structured-runner.md) | Error and approval paths fail closed, and stop bounds process lifetime | assumed — autonomous |
+| medium | high | [m5-structured-runner D7](decisions/m5-structured-runner.md) | Checks are a built-in plugin with run and cancel methods | assumed — autonomous |
+| medium | high | [m5-structured-runner D12](decisions/m5-structured-runner.md) | One connected runner owns each native conversation | assumed — autonomous |
+| medium | high | [m5-structured-runner D13](decisions/m5-structured-runner.md) | Ask owns cancellation when its creating plugin is disabled or the daemon stops | assumed — autonomous |
 | medium | high | [m0-ui-api D5](decisions/m0-ui-api.md) | Plugin UI code is one ES module named by a manifest `ui` field, loaded in the window only when needed | assumed — autonomous |
 | medium | high | [m0-ui-api D8](decisions/m0-ui-api.md) | The daemon resolves UI contributions into one model the window and agents read | assumed — autonomous |
 | medium | high | [m0-ui-api D12](decisions/m0-ui-api.md) | Keybindings are `mod+shift+k` chords that must include a modifier, or a function key | deferred: platform |
@@ -656,6 +663,26 @@ files, not this one.
 | easy | high | [m0-daemon-api D41](decisions/m0-daemon-api.md) | The daemon plugin API is kernel, not a built-in plugin | locked by docs/roadmap.md |
 | easy | high | [m0-daemon-api D43](decisions/m0-daemon-api.md) | The final review loop ends after the closure round passes on all three lenses | assumed — autonomous |
 | easy | high | [m0-daemon-api D44](decisions/m0-daemon-api.md) | Every scenario has an API test, and there are no Orca defects to test | locked by docs/loop/LOOP.md |
+| easy | high | [m5-structured-runner D2](decisions/m5-structured-runner.md) | Classify API, CLI and integration; resolve every relevant gray area autonomously | locked by docs/loop/LOOP.md |
+| easy | high | [m5-structured-runner D6](decisions/m5-structured-runner.md) | Reuse launch resolution unchanged; reject structured raw arguments | locked by docs/loop/decisions/m1-launch-settings.md |
+| easy | high | [m5-structured-runner D8](decisions/m5-structured-runner.md) | Checks preserve bounded tails and terminate process groups | locked by research/orca-features/automations.md and fork-loops.md |
+| easy | high | [m5-structured-runner D9](decisions/m5-structured-runner.md) | Implement with omp OpenAI tasks and review with Gemini fallback | assumed — autonomous |
+| easy | high | [m5-structured-runner D10](decisions/m5-structured-runner.md) | macOS execution is the acceptance target | deferred: platform |
+| easy | high | [m5-structured-runner D11](decisions/m5-structured-runner.md) | Smoke processes must isolate HOME as well as QUIRKY_HOME | assumed — autonomous |
+| easy | high | [m5-structured-runner D14](decisions/m5-structured-runner.md) | Adjudicate every spec finding and build one wave of three disjoint components | assumed — autonomous |
+| easy | high | [m5-structured-runner D15](decisions/m5-structured-runner.md) | Gate component reports with observed behavior and repair root causes | assumed — autonomous |
+| easy | high | [m5-structured-runner D16](decisions/m5-structured-runner.md) | Installed Codex schemas define wire enums, not documentation shorthand | assumed — autonomous |
+| easy | high | [m5-structured-runner D17](decisions/m5-structured-runner.md) | A send waits for native startup, including immediately after resume | assumed — autonomous |
+| easy | high | [m5-structured-runner D18](decisions/m5-structured-runner.md) | Preserve caught-up process ownership and unrelated scope decisions | locked by docs/loop/decisions/fix-test-process-leaks.md |
+| easy | high | [m5-structured-runner D19](decisions/m5-structured-runner.md) | Lifecycle ownership excludes kernel confirmations | assumed — autonomous |
+| easy | high | [m5-structured-runner D20](decisions/m5-structured-runner.md) | Preserve the full gate and record slow-suite cost without changing runner configuration | locked by docs/loop/LOOP.md |
+| easy | high | [m5-structured-runner D21](decisions/m5-structured-runner.md) | Keep one-shot generation separate and pin the latest pre-review integration baseline | supersedes m5-structured-runner D18 (review baseline only) |
+| easy | high | [m5-structured-runner D22](decisions/m5-structured-runner.md) | Complete all three final review lenses without treating transport failure as a pass | assumed — autonomous |
+| easy | high | [m5-structured-runner D23](decisions/m5-structured-runner.md) | Accept the real close hang despite the evidence gate's line-range suppression, then close it with one fix batch | assumed — autonomous |
+| easy | high | [m5-structured-runner D24](decisions/m5-structured-runner.md) | Land only through the queue after the complete final gate | locked by docs/loop/LOOP.md |
+| easy | high | [m5-structured-runner D25](decisions/m5-structured-runner.md) | Resolve public workspace types directly rather than requiring generated plugin links | assumed — autonomous |
+| easy | high | [m5-structured-runner D26](decisions/m5-structured-runner.md) | Preserve the final catch-up's regex semantics and browser feasibility block | locked by docs/loop/decisions/fix-ask-regex-budget-20261027.md |
+| easy | high | [m5-structured-runner D27](decisions/m5-structured-runner.md) | Preserve the implemented item and block on the protected queue-order gate | locked by docs/loop/LOOP.md |
 | easy | high | [m0-ui-api D1](decisions/m0-ui-api.md) | Classify the item as an API and Visual design, and run both research phases | assumed — autonomous |
 | easy | high | [m0-ui-api D2](decisions/m0-ui-api.md) | Skip the visual companion and the adhd offer, use the standard gray-area set | locked by docs/loop/LOOP.md |
 | easy | high | [m0-ui-api D3](decisions/m0-ui-api.md) | Select every gray area that matters for the UI plugin API | assumed — autonomous |
