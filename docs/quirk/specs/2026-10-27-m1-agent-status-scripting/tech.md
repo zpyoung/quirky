@@ -230,10 +230,10 @@ Errors (all `conflict` carry `data.reason`):
   2. Get the agent's submit plan from `quirky.agents/submitPlan {agent, text}`
      (`{ enterWithPaste, delayMs, retryMs }`); an agent quirky.agents doesn't know gets
      `{ enterWithPaste: false, delayMs: 500, retryMs: null }`.
-  3. Paste with `quirky.agents/deliver {sessionId, agent, text, submit: false, ready: true}` (for
-     an unknown agent, `pty.write` of the same bracketed-paste bytes `encodeBracketedPaste` makes,
-     whose rules are restated in the deliver manifest description). With `enterWithPaste`, the
-     paste and Enter go in one deliver call with `submit: true` and step 4 is skipped.
+  3. Take a fresh judgement (`inspect`); blocked → `agent-blocked`, nothing written. With no
+     await between that check and the write, write the bracketed paste with `context.pty.write`
+     (the bytes `encodeBracketedPaste` makes); for an agent whose plan has `enterWithPaste`, the
+     `\r` goes in the same write and step 4 is skipped ([D42](../../../loop/decisions/m1-agent-status-scripting.md)).
   4. After `delayMs`: sample and re-check; blocked → `agent-blocked` with the message "pasted but
      not submitted"; else write `\r` and record `enterAt`. Start the observer now.
   5. If `retryMs` is set and the observer has seen no start by `enterAt + retryMs`: sample and
@@ -244,7 +244,7 @@ Errors (all `conflict` carry `data.reason`):
      committed row with `turnStartedAt >= enterAt` (a turn that already ended still started); a
      screen verdict of working or blocked; or the agent was working before step 1. The result's
      `state` is the script state at the moment the observer settles (working, blocked or idle).
-  - A deliver of `not-delivered` is `session-exited`. The `agent-blocked` message names the
+  - A write that throws is `session-exited`. The `agent-blocked` message names the
     detail (`Bash: rm -rf build`) or the question text, else the rule id.
 - **Nested helpers** never count as a start because `decideIdentity` already drops their events
   before the row changes (`src/service.ts:230-240`); the observer reads only committed rows.

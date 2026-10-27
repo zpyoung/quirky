@@ -399,5 +399,35 @@
 - **Confidence:** high
 - **Source:** assumed — autonomous
 
+## D40: Wave 3 landed: end-to-end tests for every scenario; SC-7 stays a unit-level scenario
+- **Question:** whether each acceptance criterion has a test that drives Quirky through the CLI or the daemon API (LOOP.md step 6)
+- **Options:** add an end-to-end test for SC-7; keep SC-7 in unit tests
+- **Chose:** SC-1 to SC-41 each have a named test in `plugins/quirky.agent-status/test/e2e/{explain,send,waits,names}.e2e.test.ts` except SC-7, the rule-evaluation semantics, which `test/rules-match.test.ts` covers case by case and SC-9 and SC-10 exercise end to end through user rule files. The end-to-end tests found no product bugs.
+- **Why:** SC-7 is a property of the evaluator, and every path it feeds is already driven through the daemon
+- **Evidence:** test/rules-match.test.ts; test/e2e/explain.e2e.test.ts (SC-9, SC-10)
+- **Reversibility:** easy
+- **Confidence:** medium
+- **Source:** assumed — autonomous
+
+## D41: Final Round 1: accept twelve findings that collapse to six defects; dismiss one
+- **Question:** how to rule on Final Round 1 (Codex, deep, three lenses over the item's non-test source on top of build/roadmap; 10 blocking, 1 advisory, 1 suppressed, nothing contested)
+- **Options:** accept; reject
+- **Chose:** accept: an approval that appears while send looks up the submit plan, or during deliver's liveness check, gets the paste and an Enter (C1, S2, X1, HIGH); inspect refreshed the row but not the session after sampling (C2); a timeout from an older rule-file version could blacklist a corrected one (C3); text `rules show` omitted the matchers (S4); output waits queued behind slow matcher requests overran their deadline (X2); the pre-pass suite failed on `packages/pty-host/test/host.test.ts` "reports alt", a race in the test (it stops reading when the alt flag flips, before its second printf lands; 6 of 6 local runs pass) (C4, S5, X3). Dismiss S3 (LOW): `session list` hides the NAME column when nothing is named so v1's table stays as it was, which the v1 exit test requires.
+- **Why:** each accepted finding came with a reproduction; S3 describes the chosen behavior
+- **Evidence:** scratchpad fr1/{C,S,X}/gate.json; packages/cli/test/v1-words.e2e.test.ts:82
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** assumed — autonomous
+
+## D42: Send writes the paste and Enter itself, right after its check
+- **Question:** closing D41's HIGH: deliver's own awaits sit between send's check and the write
+- **Options:** keep using `quirky.agents/deliver` with another check before it; write the bytes directly
+- **Chose:** send takes the submit plan first, then its fresh check, then writes the bracketed paste (and the Enter for agents that take it with the paste) with `context.pty.write` with no await in between; `quirky.agents/deliver`'s `ready` option stays for other callers
+- **Why:** any await between the check and the write is a window for an approval to appear; the paste bytes are a fixed encoding
+- **Evidence:** scratchpad fr1 C1/X1 reproductions
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** supersedes m1-agent-status-scripting D30 (who writes the paste)
+
 ## Progress
-Step 5 (build). Waves 1 and 2 merged, catch-up with build/roadmap merged (eeb6ed4). Running: G1/G2 (checkpoint-2 fixes) and wave 3 end-to-end tests T10-T13 (briefs in the iteration-12 scratchpad). Next: merge them, gate, Final Round 1 (deep, three lenses), one fix batch, gate, land.
+Step 5 (build), final fix batch. Final Round 1 done (D41); fixers H1 (agent-status) and H2 (pty-host test) running. Next: merge, gate, append any unclosed finding to BLOCKERS.md, land.

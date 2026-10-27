@@ -15,6 +15,9 @@
   output waits say what happens when the session exits.
 - 2026-10-27, build (D34): a done row never goes stale, so an agent that finished long ago still
   reads idle.
+- 2026-10-27, final review (D42): send checks the state right before the paste is written and
+  writes the paste (and, for agents that take Enter with it, the Enter) itself, so an approval that
+  appears while it looks up the agent's timing is still caught.
 
 ## Conceptual model
 
