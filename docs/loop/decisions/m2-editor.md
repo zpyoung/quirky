@@ -440,7 +440,18 @@
 - **Revisit if:** a tabless retained draft is listed as open or content hydration is required for a paths-only block
 - **Source:** assumed — autonomous
 
+## D41: Preserve declared private assets and pinned graphs in the reported browser/ledger conflict
+- **Question:** How should the next concrete moving-tip conflict retain editor and browser packaging without losing dependency pins?
+- **Options:** choose one package set; accept an unconstrained lock regeneration; combine package/workspace records and the existing syntax fence
+- **Chose:** resolve the reported rejection at pinned cfaab6ab219f9feba003d1643f18efedc2560290. Read both updated ledger/browser logs. Keep editor UI/KaTeX/PDF/Python assets, sounds/notices and the incoming declared private binary/LICENSE assets. Preserve both Mac-only reasons. Consolidate the equivalent TypeScript fences using the broader import-equals-aware traversal and retain both regression sets.
+- **Why:** both workspace additions are required. The initial partial lock resolution could not name the missing browser workspace; restore the exact three-way workspace/package records from the two valid parent locks and their common base, rather than silently upgrading unrelated pins. The semantic record merge has no conflicting values.
+- **Evidence:** bg_89 conflict rejection; LastPackagingMerge full log reads and asset audit; parent-lock semantic merge against c183153/cfaab6ab/1df36ca; no protected or controller-tree edits
+- **Reversibility:** medium
+- **Confidence:** high
+- **Revisit if:** frozen installation or packaging cannot resolve a declared private asset
+- **Source:** locked by docs/loop/decisions/sa-browser-agent.md and docs/loop/decisions/m5-ledger.md
+
 ## Progress
-Step 7 retry ready: full controller verification reached 506/509 passing files; the host-timeout and autosave cases passed isolated retries, and the remaining optional-editor fixture collision is fixed. The actual handoff consumer is now migrated to live buffer/tab metadata, with real-editor paths/dedup/close coverage; its full content file and editor core-acceptance file pass, and latest typecheck passes. No new catch-up is needed for this concrete repair. Commit/detach and resubmit; keep the queued completion boundary and SC-9 ruling intact, and claim no success until the controller accepts the complete result.
+Step 7 resubmission ready: the reported browser/ledger conflict is resolved in e394b9a plus the pin-preserving lock correction. Both updated logs were fully read. Frozen install, typecheck, full packaged-app build and the combined import fence pass; editor/real-handoff/core and earlier full-controller repair proofs remain intact. Commit/detach and resubmit without optional scope changes. The controller still decides complete merge acceptance; do not claim landed or alter protected/foreign integration state.
 
 Last SC-9 point: Finder drops import copies under D19, including in-worktree sources. Native SC-9 stays pending for the nightly run. Open-in-place is owned by the operator's `m4-editor-drop-open-in-place`, not an m2-editor blocker.
