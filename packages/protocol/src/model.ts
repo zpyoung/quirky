@@ -214,6 +214,8 @@ export type Session = {
   resumedFrom?: string | null
   /** Null or absent until the agent-status plugin has evidence; the coarse `status` then stands alone. */
   agentStatus?: AgentStatusSummary | null
+  /** Lowercase, unique among sessions that have not exited; scripts can pass it wherever a session ID is taken. */
+  name?: string | null
 }
 
 export type GitFileStatus = {

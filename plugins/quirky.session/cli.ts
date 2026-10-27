@@ -2,6 +2,7 @@ import type { CliContext, CliModule, Session } from '@quirky/protocol'
 
 const recordRows = (session: Session): [string, string][] => [
   ['id', session.id],
+  ...(session.name ? [['name', session.name] as [string, string]] : []),
   ['agent', session.agent],
   ['kind', session.kind],
   ['status', session.status],
@@ -57,8 +58,8 @@ const named: CliModule['commands'] = {
     ctx.out.result(sessions, () =>
       sessions.length
         ? ctx.format.table(
-            ['ID', 'AGENT', 'KIND', 'STATUS', 'WORKTREE', 'TITLE'],
-            sessions.map((s) => [s.id, s.agent, s.kind, s.status, s.worktreeId, s.title])
+            ['ID', 'NAME', 'AGENT', 'KIND', 'STATUS', 'WORKTREE', 'TITLE'],
+            sessions.map((s) => [s.id, s.name ?? '', s.agent, s.kind, s.status, s.worktreeId, s.title])
           )
         : 'no sessions'
     )
@@ -80,10 +81,12 @@ const named: CliModule['commands'] = {
     const wait = args.flags.wait === true
     const draft = args.flags.draft === true
     const cwd = args.flags.cwd as string | undefined
+    const name = args.flags.name as string | undefined
     if (background && !prompt) throw ctx.usage('--background requires --prompt')
     if (background && agent === undefined) throw ctx.usage('--background requires --agent')
     if (background && (wait || draft)) throw ctx.usage('--wait and --draft do not apply to --background')
     if (background && cwd !== undefined) throw ctx.usage('--cwd does not apply to --background')
+    if (background && name !== undefined) throw ctx.usage('--name does not apply to --background')
     const target = worktree ? { worktree } : {}
     const picks = selectionParams(args.flags, ctx)
     const session = (await (background
@@ -92,12 +95,23 @@ const named: CliModule['commands'] = {
           ...target,
           ...(agent === undefined ? {} : { agent }),
           ...(cwd === undefined ? {} : { cwd }),
+          ...(name === undefined ? {} : { name }),
           ...picks,
           ...(prompt ? { prompt } : {}),
           ...(wait ? { waitForPrompt: true } : {}),
           ...(draft ? { submitPrompt: false } : {})
         }))) as Session
     ctx.out.result(session, () => ctx.format.record([...recordRows(session), ...launchRows(session), ['prompt', session.promptDelivery ?? 'none']]))
+  },
+
+  async name(args, ctx) {
+    const [session, name] = args.positionals
+    if (session === undefined) throw ctx.usage('missing <session>')
+    const clear = args.flags.clear === true
+    if (clear && name !== undefined) throw ctx.usage('give a name or --clear, not both')
+    if (!clear && name === undefined) throw ctx.usage('give a name or --clear')
+    const updated = (await ctx.call('quirky.session/setName', { session, name: clear ? null : name })) as Session
+    ctx.out.result(updated, () => ctx.format.record([...recordRows(updated), ...launchRows(updated)]))
   },
 
   async resume(args, ctx) {
