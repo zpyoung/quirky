@@ -93,6 +93,9 @@ type Detail = {files?:unknown[]; checks?:unknown[]; comments?:unknown[]; partici
 ```
 
 Bounds: query 8192 UTF-8 bytes; search offset+limit<=1000; PR files/timeline<=300; project table<=500; comments/thread source<=100; failed logs<=5, 100-line tail + failure context; raw files<=8 MiB with NUL binary detection; general output<=10 MiB, logs<=64 MiB. Reject invalid params before upstream mutation. Unknown provider states remain unknown, never inferred success. Lists and Projects use the feature doc's cursor/pagination semantics and expose cap/partial failures.
+Client `page`/`limit` apply to `listWorkItems`, whose contract is `Page`. Files, labels, assignees, Projects discovery, work-item details and a project table are fixed-cap reads that follow upstream pages internally, matching the feature doc; do not advertise ignored client pagination flags or fictional page-result fields for them. Their schemas expose actual named collections, counts, truncation and partial failures. Document nullable results/coordinates precisely using descriptions and untyped nullable fields within the existing schema subset; no unsupported union keywords.
+
+Refresh events expose `aliases` plus `worktreeId` and `repoId` for a resolved candidate. Validation-denied events may have null identity fields rather than invent registered IDs; those nullability conditions are declared. Preserve request sequence, reason, scheduling/skipped metadata and outcomes so a client can correlate multi-worktree refreshes without guessing.
 
 ## DO-NOT-CHANGE fences
 
