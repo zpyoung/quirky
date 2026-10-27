@@ -269,6 +269,65 @@ describe('closing panes', () => {
     await settle()
     expect(mounted.fake.callsTo('quirky.terminal/setFloating').map((call) => call.params)).toEqual([{ open: false }])
   })
+
+  describe('closing the last tab of the floating workspace', () => {
+    const floating = (tabs = 1) =>
+      makeWorkspace(
+        group(
+          'grp-1',
+          Array.from({ length: tabs }, (_, index) => tab(`tab-${index + 1}`, pane(`pane-${index + 1}`, `s-${index + 1}`)))
+        ),
+        { id: 'floating' }
+      )
+    const mountFloating = async (workspace = floating(), daemon: DaemonOptions = {}) => {
+      mounted = await mountFixture(fakeDaemon(workspace, daemon), { input: undefined, view: { workspace: 'floating' } })
+      return mounted
+    }
+    const minimized = (view: MountedWorkspace) => view.fake.callsTo('quirky.terminal/setFloating').map((call) => call.params)
+
+    test('minimizes the panel in the same command', async () => {
+      const view = await mountFloating()
+      await closeFocused(view)
+      expect(callsTo(view.fake, 'closeTab')).toEqual([{ tab: 'tab-1', yes: true }])
+      expect(minimized(view)).toEqual([{ open: false }])
+    })
+
+    test('keeps the panel open while another tab remains', async () => {
+      const view = await mountFloating(floating(2))
+      await closeFocused(view)
+      expect(callsTo(view.fake, 'closeTab')).toHaveLength(1)
+      expect(minimized(view)).toEqual([])
+    })
+
+    test('minimizes after a confirmed close through the dialog', async () => {
+      const view = await mountFloating(floating(), { describe: 'Stop sleep in Tab tab-1?' })
+      await closeFocused(view)
+      expect(minimized(view)).toEqual([])
+      await click(button(view, 'Stop and Close'))
+      expect(callsTo(view.fake, 'closeTab')).toEqual([{ tab: 'tab-1', yes: true }])
+      expect(minimized(view)).toEqual([{ open: false }])
+    })
+
+    test('a failed close leaves the panel open', async () => {
+      const view = await mountFloating()
+      view.daemon.fail('closeTab', RpcErrorCode.Internal, 'boom')
+      await closeFocused(view)
+      expect(minimized(view)).toEqual([])
+    })
+
+    test('the tab close button minimizes too', async () => {
+      const view = await mountFloating()
+      await click(view.q('.qt-tab-close'))
+      expect(minimized(view)).toEqual([{ open: false }])
+    })
+
+    test('a worktree workspace never minimizes the panel', async () => {
+      const view = await mount()
+      await closeFocused(view)
+      expect(callsTo(view.fake, 'closeTab')).toHaveLength(1)
+      expect(minimized(view)).toEqual([])
+    })
+  })
 })
 
 describe('SC-33: the exit overlay', () => {

@@ -101,6 +101,15 @@ export type ViewReport = {
 
 const messageOf = (error: unknown) => (error instanceof Error ? error.message : String(error))
 
+const hasTabs = (workspace: Workspace): boolean => groupsInOrder(workspace.root).some((group) => group.tabs.length > 0)
+
+/** Whether `element` is a text field a person types into, other than a terminal's own input. */
+function isEditableControl(element: Element): boolean {
+  if (element.classList.contains('xterm-helper-textarea')) return false
+  const tag = element.tagName
+  return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || (element as HTMLElement).isContentEditable === true
+}
+
 /** Writes to the clipboard; the failure case is the caller's to report. */
 async function writeClipboard(text: string): Promise<void> {
   if (!navigator.clipboard) throw new Error('the clipboard is not available')
@@ -389,12 +398,13 @@ export class WorkspaceController {
     return target === undefined ? undefined : this.handles.get(target)
   }
 
-  /** Gives keyboard focus back to the focused pane after the layout changed under it. */
+  /** Gives keyboard focus back to the focused pane after the layout changed under it; a text field that holds focus keeps it. */
   refocus(): void {
     const { menu, dialog, rename } = this.state
     if (menu || dialog || rename || !this.ws) return
     const active = this.root?.ownerDocument.activeElement
     if (active && active !== this.root?.ownerDocument.body && !this.root?.contains(active)) return
+    if (active && isEditableControl(active)) return
     this.handleOf()?.focus()
   }
 
@@ -637,9 +647,17 @@ export class WorkspaceController {
 
   private async execClose(target: CloseTarget): Promise<void> {
     const params = { ...this.closeParams(target), yes: true }
-    if (target.kind === 'tab') await this.run('closeTab', params, 'close the tab')
-    else if (target.kind === 'pane') await this.run('closePane', params, 'close the pane')
-    else await this.run('closeTabs', params, 'close the tabs')
+    const hadTabs = this.ws !== null && hasTabs(this.ws)
+    let after: Workspace | null
+    if (target.kind === 'tab') after = await this.run('closeTab', params, 'close the tab')
+    else if (target.kind === 'pane') after = await this.run('closePane', params, 'close the pane')
+    else after = await this.run('closeTabs', params, 'close the tabs')
+    if (hadTabs && after && !hasTabs(after)) await this.minimizeFloating()
+  }
+
+  /** Minimizes the floating panel; nothing happens in a worktree's workspace. */
+  private async minimizeFloating(): Promise<void> {
+    if (this.floating && !this.stopped) await this.context.call(`${TERMINAL_PREFIX}setFloating`, { open: false }).catch(() => {})
   }
 
   private async setBooleanSetting(name: string, value: boolean): Promise<void> {
@@ -681,7 +699,7 @@ export class WorkspaceController {
   async closeFocused(): Promise<void> {
     const at = this.ws ? focusedPaneOf(this.ws) : null
     if (!at) {
-      if (this.floating) await this.context.call(`${TERMINAL_PREFIX}setFloating`, { open: false }).catch(() => {})
+      await this.minimizeFloating()
       return
     }
     if (paneLeaves(at.tab.root).length > 1) await this.requestClose({ kind: 'pane', pane: at.leaf.id })

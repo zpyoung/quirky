@@ -17,6 +17,7 @@ import { resolveKeyAction } from './keys'
 import { createOsc52Base64, createOsc52Provider, createOsc52QueryGuard } from './osc52'
 import { planPaste, runPaste } from './paste'
 import { createInputGate, writeReplay } from './replayGate'
+import { isSafeRegex } from './regexSafety'
 import { SearchBox } from './SearchBox'
 import { trimGutter } from './selection'
 import { fontStack, zoomed, type PaneSettings } from './settings'
@@ -144,8 +145,14 @@ function hasMore(results: Results): boolean {
   return results.count > 0 && (results.index < 0 || results.count >= HIGHLIGHT_LIMIT)
 }
 
+/** Whether the addon may run this search; a regex that can backtrack catastrophically would freeze the window. */
+function searchable(search: SearchState): boolean {
+  return !search.regex || isSafeRegex(search.query, search.caseSensitive)
+}
+
 function searchStatus(search: SearchState, results: Results): string {
   if (!search.query) return '0/0'
+  if (!searchable(search)) return 'Regex too complex'
   if (results.count === 0) return 'No results'
   return hasMore(results) ? `${results.count}+` : `${results.index + 1}/${results.count}`
 }
@@ -202,6 +209,11 @@ export function TerminalPaneView(props: TerminalPaneProps) {
     const rt = runtime.current
     const state = searchRef.current
     if (!rt || !state || !state.query) return false
+    if (!searchable(state)) {
+      setResults(EMPTY_RESULTS)
+      clearHighlights()
+      return false
+    }
     const options = { regex: state.regex, caseSensitive: state.caseSensitive, incremental, decorations: SEARCH_DECORATIONS }
     const found = guarded(() => (direction === 'next' ? rt.search.findNext(state.query, options) : rt.search.findPrevious(state.query, options)), null)
     if (found === null) setResults(EMPTY_RESULTS)
