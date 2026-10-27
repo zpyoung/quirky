@@ -386,5 +386,15 @@
 - **Revisit if:** the bytes-based scratch scrollback (an 8 MiB newline-free window allocates about 68 MB while it renders) shows up in the memory probe; a cap with a documented trim would trade exactness for memory
 - **Source:** assumed — autonomous
 
+## D39: W3 checkpoint: accept all eight findings, which collapse to six defects; accept one fixer's widening into the terminal manifest
+- **Question:** adjudicating the W3 checkpoint review (three lenses, standard, codex, independence full, 0 suppressed), and a fixer that changed `quirky.terminal/read`'s `lines` minimum to 0 in the manifest and added tests to `shutdown.test.ts`, both outside its declared files
+- **Options:** accept or reject each finding; block the widening or accept it
+- **Chose:** accept all: `terminal snapshot` text stripped ANSI and printed wrong rows (C1/S1); a sink removed during a settling screen subscribe was registered afterwards (C2/X1); read-only streams were never closed (C3); a stored snapshot reported the stale meta cwd (S2); a stored `read` always said `alt: false` (S3); a restore awaiting its replay could spawn after shutdown began (X2). The snapshot CLI now prints the host's rows through `read` with `lines: 0`, which needed the manifest minimum lowered; no other task owned that file or `shutdown.test.ts`, so the widening is accepted.
+- **Why:** each reproduced; the scope rule's reason (concurrent editing) did not apply
+- **Evidence:** review bundle rev-w3 in the session scratchpad; fix commits on build/m1-term-daemon
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** assumed — autonomous
+
 ## Progress
-Step 5: W1 and W2 merged, checkpoint-reviewed and fixed (D36-D38). Next: W3 (host session manager + server, terminal plugin daemon side), then W4 (panel and pane UI, end-to-end scenarios), then the final review round.
+Step 5: W1-W3 merged, checkpoint-reviewed and fixed (D36-D39). Next: W4 (T12 panel and pane UI, T13 end-to-end scenarios), then Final Round 1 over the run, one fix batch, then step 6 verification.
