@@ -501,4 +501,4 @@
 - **Source:** assumed — autonomous
 
 ## Progress
-Waves 1–2 merged (d2bed5f, gate green 4214/30/tsc). Checkpoint cp1 (0fc710b..d2bed5f) running; wave 3 (C1 workspace view, C2 quick-command window parts, C3 CLI) dispatched from d2bed5f on sdd/termui/C1..C3. Next: merge wave 3, apply cp1 fixes, then wave 4 (ui.tsx wiring with overrides/commands/keybindings/panel/overlay, floating overlay, scenario tests).
+Waves 1–3 and the cp1 fix batch merged (350bc59 + test fix b16e767; gate green apart from the pinned word list, fixed). Wave 4 (D1 window wiring with overrides/commands/keybindings/panel/overlay and the floating overlay; D2 CLI/API scenario tests in test/e2e/) dispatched from b16e767 on sdd/termui/D1, D2. Checkpoint cp2 (d2bed5f..b16e767) running. Next: merge wave 4, fix cp2 findings, wave 5 (E1/E2 UI scenario tests in test/e2e-ui/ against a real daemon and the headless window; briefs in the session scratchpad), then catch-up merge of build/roadmap, Final Round 1, the like-a-user web pass, land.
