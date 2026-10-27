@@ -1093,6 +1093,19 @@
       ],
       "deps": [],
       "status": "todo"
+    },
+    {
+      "id": "followup-m3-session-info-parity-20261027",
+      "milestone": "M3",
+      "title": "Finish Session Info parity checks: native clipboard/denied-permission feedback, OS focus/scroll/flash and Finder reveal (headless-only evidence); audit narrow-width controls; investigate local one-shot SIGTERM timeout NA-29 (311ms versus >=2s, non-core).",
+      "docs": [
+        "session-info.md",
+        "source-control.md"
+      ],
+      "deps": [
+        "m3-session-info"
+      ],
+      "status": "todo"
     }
   ]
 }
