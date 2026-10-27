@@ -407,7 +407,18 @@
 - **Revisit if:** the controller reports another concrete conflict or verification defect
 - **Source:** locked by docs/loop/LOOP.md step 7 conflict recovery
 
+## D38: Preserve handoff's terminal IDs and background focus alongside hosted views
+- **Question:** How should the next reported moving-tip conflict incorporate the newly landed handoff contract?
+- **Options:** drop hosted views; strip handoff IDs/focus; combine the terminal-only append contract with the Tab union
+- **Chose:** repair the concrete rejection against pinned 1df36ca1c71e3f18951ccc093de23da53b1d243f. Read the complete m3-handoff D1–D84 log. Keep `activate:false` append behavior and `{workspace,session,tab,pane}` new-terminal IDs; keep view open/rekey and synchronous editor close guards. Narrow terminal-only expanded-pane/test accesses rather than invent sessions for views.
+- **Why:** handoff's incoming caller appends via newTab and does not replace/remove hosted views. The existing destructive tab/group paths remain guarded, so no new bypass or queue cycle is introduced. Obsolete copied contribution/count tests stay removed.
+- **Evidence:** bg_81 rejection; merge ba9718c; HandoffHostedMerge audit; newtab-activate test Tab-union narrowing
+- **Reversibility:** medium
+- **Confidence:** high
+- **Revisit if:** a handoff append steals focus or an unguarded destructive view mutation is introduced
+- **Source:** locked by docs/loop/decisions/m3-handoff.md
+
 ## Progress
-Step 7 conflict-repair ready: the reported moving-tip conflicts are resolved and committed as 5a24554; all six new/updated incoming logs were read, with account/session/accessory/hosting contracts preserved. Frozen install succeeds for the merged graph. Typecheck is the final branch confirmation before commit/detach and another queue land request. Earlier core/API/real-kernel/browser proof, all repaired first-land failures, full scripts pass and the dependent completion item remain unchanged. Do not modify protected/foreign controller state or claim success before the controller accepts the full merge result.
+Step 7 retry: the reported handoff conflict is resolved in ba9718c; the complete new log was read, and only incoming terminal-only test accesses needed explicit Tab narrowing. Final typecheck/targeted append verification precede commit/detach and controller resubmission. All first-land blocker repairs and the queued completion boundary remain intact. No protected or foreign integration state is edited, and no land success is claimed until the controller accepts it.
 
 Last SC-9 point: Finder drops import copies under D19, including in-worktree sources. Native SC-9 stays pending for the nightly run. Open-in-place is owned by the operator's `m4-editor-drop-open-in-place`, not an m2-editor blocker.
