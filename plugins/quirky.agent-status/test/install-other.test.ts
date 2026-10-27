@@ -231,6 +231,52 @@ describe('kimi', () => {
     expectError(kimiInstaller, target(home), 'Could not parse ~/.kimi-code/config.toml')
   })
 
+  test('a hooks key that [[hooks]] tables cannot extend is reported and left alone', () => {
+    const home = makeHome()
+    const path = join(home, '.kimi-code', 'config.toml')
+    for (const existing of ['hooks = []\n', 'hooks = [{ event = "Stop", command = "mine" }]\n', 'model = "x"\n\n[hooks]\nfoo = 1\n', 'hooks.foo = 1\n']) {
+      put(home, '.kimi-code/config.toml', existing)
+      expect(() => kimiInstaller.install(target(home))).toThrow(InstallError)
+      expect(() => kimiInstaller.install(target(home))).toThrow('~/.kimi-code/config.toml')
+      expect(read(path)).toBe(existing)
+      expect(kimiInstaller.remove(target(home)).changed).toEqual([])
+      expect(read(path)).toBe(existing)
+    }
+  })
+
+  test('adds to the user own [[hooks]] tables', () => {
+    const home = makeHome()
+    const mine = '[[hooks]]\nevent = "Stop"\ncommand = "mine"\n'
+    const path = put(home, '.kimi-code/config.toml', mine)
+    kimiInstaller.install(target(home))
+    const hooks = (Bun.TOML.parse(read(path)) as { hooks: Array<{ command: string }> }).hooks
+    expect(hooks).toHaveLength(8)
+    expect(hooks[0]!.command).toBe('mine')
+    kimiInstaller.remove(target(home))
+    expect(read(path)).toBe(mine)
+  })
+
+  test('markers inside a user string are not a region and the file is left alone', () => {
+    const home = makeHome()
+    const inString = 'note = """\n# >>> quirky-managed-kimi-hooks\nkeep me\n# <<< quirky-managed-kimi-hooks\n"""\n'
+    const path = put(home, '.kimi-code/config.toml', inString)
+    expect(() => kimiInstaller.install(target(home))).toThrow(InstallError)
+    expect(read(path)).toBe(inString)
+    expect(() => kimiInstaller.remove(target(home))).toThrow(InstallError)
+    expect(read(path)).toBe(inString)
+  })
+
+  test('input the TOML parser rejects is reported and left alone', () => {
+    const home = makeHome()
+    const path = join(home, '.kimi-code', 'config.toml')
+    for (const bad of ['model = "unterminated\n', 'model = 1\nmodel = 2\n', 'model = nonsense\n', '[a]\nx = 1\n[a]\ny = 2\n']) {
+      put(home, '.kimi-code/config.toml', bad)
+      expectError(kimiInstaller, target(home), 'Could not parse ~/.kimi-code/config.toml')
+      expect(() => kimiInstaller.remove(target(home))).toThrow('Could not parse ~/.kimi-code/config.toml')
+      expect(read(path)).toBe(bad)
+    }
+  })
+
   test('keeps CRLF line endings', () => {
     const home = makeHome()
     const path = put(home, '.kimi-code/config.toml', 'model = "x"\r\n')
@@ -308,6 +354,17 @@ describe('jcode', () => {
     const custom = join(home, 'custom-jcode')
     const env = target(home, { JCODE_HOME: custom })
     expect(jcodeInstaller.install(env).changed).toEqual([join(custom, 'config.toml')])
+  })
+
+  test('input the TOML parser rejects is reported and left alone', () => {
+    const home = makeHome()
+    const path = join(home, '.jcode', 'config.toml')
+    for (const bad of ['model = "unterminated\n', 'model = 1\nmodel = 2\n', 'model = nonsense\n', '[hooks]\nturn_start = "a"\nturn_start = "b"\n']) {
+      put(home, '.jcode/config.toml', bad)
+      expectError(jcodeInstaller, target(home), 'Could not parse ~/.jcode/config.toml')
+      expect(() => jcodeInstaller.remove(target(home))).toThrow('Could not parse ~/.jcode/config.toml')
+      expect(read(path)).toBe(bad)
+    }
   })
 
   test('a file it cannot place a hooks table in is reported and left alone', () => {
