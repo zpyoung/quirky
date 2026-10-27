@@ -749,6 +749,41 @@ describe('quirky.hosting PR creation', () => {
     expect(events.some((event) => isRecord(event) && event.type === 'quirky.hosting/changed')).toBe(true)
   }, 20_000)
 
+  test('GH11 discards an in-flight refresh superseded by a review edit', async () => {
+    const testHost = await host(fixtureState({ prs: [pr({ title: 'Old title' })], pauseNextView: true }))
+    const events: unknown[] = []
+    testHost.client.onEvent((event) => events.push(event))
+    await testHost.client.callAny('events.subscribe', {})
+
+    const lookupStarted = waitForState(testHost, 'lookupStarted')
+    const stalePromise = testHost.call('refresh', {
+      candidate: { worktree: testHost.worktree, branch: 'feature' },
+      reason: 'manual'
+    })
+    let staleResult: unknown
+    try {
+      await lookupStarted
+      await testHost.call('updateReview', { worktree: testHost.worktree, number: 7, action: 'edit', title: 'Fresh title' })
+    } finally {
+      const current = testHost.readState()
+      if (isRecord(current)) testHost.writeState({ ...current, releaseLookup: true })
+      staleResult = await stalePromise
+    }
+
+    expect(staleResult).toMatchObject({ kind: 'unavailable', reason: 'superseded' })
+    expect(JSON.stringify(staleResult)).not.toContain('Old title')
+    const refreshPayloads = events
+      .filter((event) => isRecord(event) && event.type === 'quirky.hosting/refresh')
+      .map((event) => isRecord(event) && isRecord(event.data) ? event.data : {})
+    expect(refreshPayloads.some((payload) => JSON.stringify(payload).includes('Old title'))).toBe(false)
+    expect(refreshPayloads.filter((payload) => payload.reason === 'manual' && 'outcome' in payload)).toHaveLength(0)
+    expect(refreshPayloads.some((payload) => payload.status === 'skipped' && payload.skippedReason === 'superseded')).toBe(true)
+
+    const next = recordOf(await testHost.call('forBranch', { worktree: testHost.worktree, branch: 'feature' }))
+    expect(next).toMatchObject({ kind: 'found', review: { title: 'Fresh title' } })
+  }, 20_000)
+
+
   test('GH13 creation blockers are ordered and a failed lookup never becomes absence', async () => {
     const testHost = await host(fixtureState({ prs: [pr()] }))
     writeFileSync(join(testHost.repoPath, 'dirty.txt'), 'uncommitted\n')
@@ -1129,8 +1164,10 @@ describe('quirky.hosting PR creation', () => {
       body: 'Body'
     }))
     expect(reasonOf(error)).toBe('partial_change')
-    expect(error.message).toContain('21')
-    expect(error.message).toContain('Completed steps: create')
+    expect(error.data).toMatchObject({
+      reason: 'partial_change', partial: true, completedSteps: ['create'],
+      createdReview: { number: 21, url: 'https://github.com/test-owner/test-repo/pull/21' }
+    })
     expect(events.some((event) => isRecord(event) && event.type === 'quirky.hosting/changed' && isRecord(event.data) && event.data.partial === true)).toBe(true)
     expect(testHost.readState()).toMatchObject({ prs: [{ number: 20 }, { number: 21, title: 'Child' }] })
     expect(await testHost.call('review', { worktree: testHost.worktree, number: 21 })).toMatchObject({

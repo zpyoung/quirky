@@ -208,10 +208,11 @@ export function createEnv(context: PluginContext): HostingEnv {
       .map(([name, value]) => `${name}=${value}`)
       .join('\0')
     const auth = scope.binding ? `${scope.binding.host}:${scope.binding.user}` : 'ambient'
+    const scopeGeneration = scopeGenerations.get(scope.worktree.repoId) ?? 0
     const fingerprint = createHash('sha256')
       .update(`${scope.worktree.path}\0${environment}\0${JSON.stringify({ origin: scope.origin, repository: scope.repository, candidates: scope.candidates, issueRepository: scope.issueRepository, issueSourcePreference: scope.issueSourcePreference, issueSourceFellBack: scope.issueSourceFellBack, binding: scope.binding ?? null })}\0${auth}`)
       .digest('hex')
-    return `repo:${scope.worktree.repoId}|worktree:${scope.worktree.id}|${fingerprint}|${key}`
+    return `repo:${scope.worktree.repoId}|scope-generation:${scopeGeneration}|worktree:${scope.worktree.id}|${fingerprint}|${key}`
   }
 
   async function cache<T>(key: string, ttlMs: number, load: () => Promise<T>): Promise<T> {

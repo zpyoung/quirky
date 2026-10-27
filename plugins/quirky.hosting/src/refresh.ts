@@ -13,7 +13,7 @@ type RefreshEvent = {
   reason: RefreshReason
   aliases: string[]
   status?: 'queued' | 'in-flight' | 'paused' | 'skipped'
-  skippedReason?: 'fresh' | 'not-git' | 'bare' | 'archived' | 'disconnected' | 'remote' | 'rate-limit' | 'capacity'
+  skippedReason?: 'fresh' | 'not-git' | 'bare' | 'archived' | 'disconnected' | 'remote' | 'rate-limit' | 'capacity' | 'superseded'
   pausedUntil?: number
   requestStartedAt?: number
   outcome?: unknown
@@ -340,10 +340,20 @@ export function refreshMethods(env: HostingEnv, prHandlers: Record<string, Handl
     } catch {
       outcome = { kind: 'unavailable', reason: 'upstream_unavailable', message: 'GitHub pull request refresh failed.', fetchedAt: Date.now() }
     }
-    if (disposed) return { kind: 'completed', outcome, stale: true }
+    if (disposed) {
+      return {
+        kind: 'completed',
+        outcome: { kind: 'unavailable', reason: 'plugin_inactive', message: 'The GitHub hosting plugin is shutting down.', fetchedAt: Date.now() },
+        stale: true
+      }
+    }
     if (cacheGeneration !== env.cacheKey(resolved.scope, `refresh-generation:${resolved.key}`)) {
-      emit({ reason, aliases: [resolved.candidate.worktree], outcome }, resolved.scope)
-      return { kind: 'completed', outcome, stale: true }
+      emit({ reason, aliases: [resolved.candidate.worktree], status: 'skipped', skippedReason: 'superseded' }, resolved.scope)
+      return {
+        kind: 'completed',
+        outcome: { kind: 'unavailable', reason: 'superseded', message: 'The pull request refresh result was superseded by a repository change.', fetchedAt: Date.now() },
+        stale: true
+      }
     }
     const fetchedAt = Date.now()
     outcomes.set(resolved.key, { outcome, fetchedAt })

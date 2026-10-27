@@ -457,5 +457,38 @@
 - **Revisit if:** local and remote behavior diverge beyond scheduling.
 - **Source:** assumed — autonomous; operator-required core landing
 
+## D42: Close the two standing core findings from the single final review
+- **Question:** which final-round candidates actually survive independent refutation?
+- **Options:** accept every promoted severity; independently refute and fix only standing core defects.
+- **Chose:** Gemini promoted C1, S1 and three X candidates; fresh OpenAI reviewers upheld C1 atMEDIUM and S1 atHIGH. C1 makes cache identity mutation-generation-aware and discards superseded refresh payloads with a skipped lifecycle event. S1 returns structured partial/completedSteps/createdReview data after successful creation and failed stack registration. Both have daemon API regressions; S1 failed before its fix.
+- **Why:** stale refresh data and unstructured partial-write recovery break core invariants. The X candidates concern inherited harness code; independent provenance review refuted item ownership, and the request-marker claim does not lose the requesting process's actual land. Retain the technical LOW scheduling advisories without editing inherited code.
+- **Evidence:** /tmp/hosting-lane11-final-review/adjudication.json; original Gemini outputs and independent reviewer records C1/S1/X1-X3. The pre-fix snapshot had scripts55 passed, typecheck passed and1580 tests across99 files passed. Lossless output-field normalization was needed; post-fix machine quote-suppression PASS outputs are not used as a review or semantic-closure verdict.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** fix verification fails or another core invariant is demonstrably broken.
+- **Source:** assumed — autonomous; operator blocking-fixes-only ruling
+
+## D43: Preserve provenance when the integration comparison is overbroad
+- **Question:** does a raw diff against0152 prove author changes to protected loop code?
+- **Options:** treat every raw diff path as authored; distinguish mandatory earlier catch-up provenance.
+- **Chose:** use the actual author-edit contract. Protected files and scripts/suite.ts are byte-identical to earlier integration ae15c50; their changes originated in7201702. No protected-file edit was made to address those candidates.
+- **Why:** the mechanically computed ownership set against divergent0152 included inherited changes. The independent refuter explicitly superseded its initial HIGH ownership adjudication after tracing that history.
+- **Evidence:** independent X refutation; empty diff ae15c50..HEAD for scripts/build-loop/lanes.ts, lanes.test.ts, queue.ts and scripts/suite.ts; only the two authored scripts/suite.test.ts deadline annotations differ.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** an actual author-introduced protected-file change is identified.
+- **Source:** assumed — autonomous
+
+## D44: Remove unsafe review experiments and restrict integration access to normal CLI use
+- **Question:** how to respond to the operator's report that review scratch scripts modified real shared integration?
+- **Options:** continue the experiments; stop, delete their artifacts and rely only on isolated harnesses and the normal queue CLI.
+- **Chose:** immediately removed test-race.ts, test-race2.ts, test-race3.ts, test-race-explicit.ts and test-rmsync.ts. Also removed the review-generated slowest-log scripts, worker/log artifact and invalid test-create-stacked scaffold. Named-process checks found none running. The operator restored the queue; no scratch/test invocation of locate(), land() or queue.ts is permitted.
+- **Why:** the review stage's experiments violated its read-only mandate and the shared-state safety contract. Harness experiments require an independent throwaway repository, as the existing lanes tests use. No further integration experiment was run.
+- **Evidence:** operator report in this conversation; deletion tool results and empty process-match results. Normal queue CLI status still identifies lane11's m4-hosting-api-github, and read-only restored-ref inspection retains the legitimate dependent parity item.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** any additional unrequested review artifact or live experiment is found.
+- **Source:** locked by operator instruction in this conversation
+
 ## Progress
-Follow-up m4-hosting-api-github-parity was added successfully through queue.ts after waiting for its shared lock. The single catch-up and decision reads are complete. Scripts55 passed and typecheck passed; the scoped run passed98/99 files, and the sole fixture failure is corrected and isolated refresh5/5 passed. Run the frozen local scoped gate, final cross-family review/blocking fixes, and land. No further scope expansion, catch-up or whole-suite preflight.
+Core ready for normal queue CLI landing. Scoped gate: scripts55 passed, typecheck passed,1580 tests/99 files passed. Single final review and accepted C1/S1 fix batch complete; final typecheck, both targeted regressions, full hosting135/135 and real CLI merge/readback passed. Follow-up m4-hosting-api-github-parity remains in the restored queue; nonblocking inherited advisories are recorded. All unsafe review scratch files/scaffolds were deleted and named-process checks were empty. All agents and verification jobs are settled. Commit final closure, detach and run queue.ts land m4-hosting-api-github; no more harness experiments, review rounds or whole-suite preflight.

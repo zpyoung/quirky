@@ -1,6 +1,6 @@
 # GitHub hosting implementation contracts
 
-Status: Joint Codex spec review completed. Core provider/consent CLI smokes and targeted blocker checks passed; scoped pre-land checks, final cross-family review and landing remain. The operator-approved parity follow-up is defined in the [logic scope](logic.md#scope-and-non-goals).
+Status: Core implementation verified. The scoped gate passed55 scripts tests, typecheck and1580 tests across99 affected files. The single final cross-family review's two standing core findings were fixed; final typecheck, both targeted regressions, all135 hosting tests and the actual CLI merge/readback smoke passed. Landing is next. Operator-approved parity work is defined in the [logic scope](logic.md#scope-and-non-goals).
 
 ## Architecture
 

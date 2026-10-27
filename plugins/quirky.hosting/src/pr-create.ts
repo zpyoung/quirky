@@ -579,7 +579,12 @@ export function createPRCreationMethods(env: HostingEnv, lookup: PRLookup): Reco
           completedSteps: ['create'],
           createdReview: { number: result.number, url: result.url }
         })
-        throw env.invalid('partial_change', `Pull request #${result.number} (${result.url}) was created, but GitHub stack registration failed; the stacks API may not be available for this repository. Completed steps: create.`)
+        throw Object.assign(env.invalid('partial_change', `Pull request #${result.number} (${result.url}) was created, but GitHub stack registration failed; the stacks API may not be available for this repository.`), {
+          data: {
+            reason: 'partial_change', partial: true, completedSteps: ['create'],
+            createdReview: { number: result.number, url: result.url }
+          }
+        })
       }
       throw env.invalid('upstream_unavailable', 'GitHub could not register the existing pull request in the stack; the stacks API may not be available for this repository.')
     }
