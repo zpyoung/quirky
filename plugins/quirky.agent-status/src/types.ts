@@ -27,6 +27,17 @@ export type Child = { id: string; kind: ChildKind; state: 'working' | 'waiting' 
 
 export type ProviderSession = { id: string; transcriptPath: string | null }
 
+/** The evidence that last changed a row's state, outcome or source, as `explain` shows it. */
+export type Because = {
+  source: EvidenceSource
+  /** One line, at most 200 characters, e.g. `claude PermissionRequest → waiting`. */
+  rule: string
+  /** The hook event name, for hook and replay evidence. */
+  event?: string
+  /** Evidence time. */
+  at: number
+}
+
 /** The program's own OSC 7501 report riding on a row; it never decides the row's state. */
 export type ProgramStatusFacet = { state: string; kind?: string; progress?: number; msg?: string; app?: string }
 
@@ -71,6 +82,8 @@ export type AgentRow = {
   source: EvidenceSource
   restoredUnconfirmed?: boolean
   programStatus?: ProgramStatusFacet
+  /** Absent on rows stored before `explain` existed. */
+  because?: Because
 }
 
 /** The row summary carried on `Session.agentStatus` and returned by `list`. */

@@ -106,7 +106,7 @@ export class AgentStatusService {
   onFact(sessionId: string, fact: PtyFact): void {
     if (fact.kind === 'title') {
       const status = classifyTitle(fact.title)
-      if (status) void this.enqueue(sessionId, () => this.handleTitle(sessionId, status))
+      if (status) void this.enqueue(sessionId, () => this.handleTitle(sessionId, status, fact.title))
     } else if (fact.kind === 'program-status') {
       const message = parseProgramStatusBody(fact.body)
       if (message?.type === 'report') void this.enqueue(sessionId, () => this.handleReport(sessionId, message.report))
@@ -286,14 +286,14 @@ export class AgentStatusService {
     return session && session.kind === 'terminal' && session.status !== 'exited' ? session : null
   }
 
-  private async handleTitle(sessionId: string, status: TitleStatus): Promise<void> {
+  private async handleTitle(sessionId: string, status: TitleStatus, title: string): Promise<void> {
     const prev = this.rows.get(sessionId)
     const at = this.now()
     // most titles change nothing, so the session is only looked up once one would
-    if (titleEvidence(prev, status, { sessionId, agent: '', at }) === prev) return
+    if (titleEvidence(prev, status, { sessionId, agent: '', at, title }) === prev) return
     const session = await this.liveSession(sessionId)
     if (!session) return
-    const row = titleEvidence(prev, status, { sessionId, agent: session.agent, at })
+    const row = titleEvidence(prev, status, { sessionId, agent: session.agent, at, title })
     if (row !== prev) await this.commit(session, row)
   }
 
@@ -414,16 +414,16 @@ export class AgentStatusService {
     }
     if (!interruptible(row, this.now())) return
     const baseline = baselineOf(row)
-    this.after(this.timing.settleMs, () => void this.enqueue(sessionId, () => this.settleInterrupt(sessionId, baseline)))
+    this.after(this.timing.settleMs, () => void this.enqueue(sessionId, () => this.settleInterrupt(sessionId, baseline, intent)))
   }
 
   /** Infers the interrupt when nothing else touched the row while the key settled. */
-  private async settleInterrupt(sessionId: string, baseline: Baseline): Promise<void> {
+  private async settleInterrupt(sessionId: string, baseline: Baseline, intent: InterruptIntent): Promise<void> {
     const row = this.rows.get(sessionId)
     const at = this.now()
     if (!row || !interruptible(row, at) || !sameBaseline(row, baseline)) return
     const session = await this.liveSession(sessionId)
-    if (session) await this.commit(session, interrupted(row, at))
+    if (session) await this.commit(session, interrupted(row, at, intent))
   }
 
   private async handleEnter(sessionId: string): Promise<void> {

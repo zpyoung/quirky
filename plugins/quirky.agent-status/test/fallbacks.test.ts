@@ -195,8 +195,8 @@ describe('precedence when the hooks setting is off', () => {
 
   test('a title never replaces a fresh hook row or a program-status row', () => {
     const hook = hooked()
-    expect(titleEvidence(hook, 'idle', { sessionId: 's1', agent: 'claude', at: at + 1000 })).toBe(hook)
+    expect(titleEvidence(hook, 'idle', { sessionId: 's1', agent: 'claude', at: at + 1000, title: '✳ claude' })).toBe(hook)
     const program = programEvidence(null, { id: null, state: 'working' }, ev({})).row!
-    expect(titleEvidence(program, 'idle', { sessionId: 's1', agent: 'claude', at: at + 1000 })).toBe(program)
+    expect(titleEvidence(program, 'idle', { sessionId: 's1', agent: 'claude', at: at + 1000, title: '✳ claude' })).toBe(program)
   })
 })
