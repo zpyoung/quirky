@@ -5,7 +5,8 @@ const recordRows = (session: Session): [string, string][] => [
   ['agent', session.agent],
   ['kind', session.kind],
   ['status', session.status],
-  ['worktree', session.worktreeId]
+  ['worktree', session.worktreeId],
+  ...(session.unread ? ([['unread', session.unread]] as [string, string][]) : [])
 ]
 
 /** What the launch applied, as record rows; none when the session recorded nothing. */

@@ -276,6 +276,16 @@ textarea {
   height: 8px;
 }
 
+.glyph-unread {
+  width: 12px;
+  height: 12px;
+  border-radius: 0;
+  background: var(--amber);
+  -webkit-mask: var(--bell-icon) center / contain no-repeat;
+  mask: var(--bell-icon) center / contain no-repeat;
+  --bell-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M12 2a6 6 0 0 0-6 6v4l-2 4h16l-2-4V8a6 6 0 0 0-6-6zM9.5 19a2.5 2.5 0 0 0 5 0z'/%3E%3C/svg%3E");
+}
+
 .glyph-unverifiable,
 .glyph-unconfirmed {
   border: 1.5px dashed var(--amber);
@@ -393,6 +403,10 @@ textarea {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.worktree-name-unread {
+  font-weight: 700;
 }
 
 .worktree .icon-button {
@@ -1149,14 +1163,6 @@ select {
 .tag-status {
   color: var(--amber);
   border-color: var(--amber);
-}
-
-.unread-mark {
-  flex: none;
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--accent);
 }
 
 .children-chip {
