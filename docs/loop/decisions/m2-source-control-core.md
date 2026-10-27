@@ -396,5 +396,49 @@
 - **Revisit if:** never
 - **Source:** locked by docs/loop/LOOP.md
 
+## D37: A folder workspace keeps m1-worktrees' sentence instead of Orca's
+- **Question:** the panel's empty state for a folder workspace (Visual: empty-state)
+- **Options:** Orca's "Source Control is only available for Git repositories"; m1-worktrees' "Opened as folder. Git features are unavailable for this workspace."
+- **Chose:** m1-worktrees' sentence, from the method's refusal
+- **Why:** an earlier item's decision binds this one, and its sentence is the same refusal the CLI prints
+- **Evidence:** docs/quirk/specs/2026-10-26-m1-worktrees/logic.md SC on folder workspaces; plugins/quirky.git/main.ts resolve
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** never
+- **Source:** locked by docs/quirk/specs/2026-10-26-m1-worktrees/logic.md
+
+## D38: The CLI's JSON error document gains the error's `data`
+- **Question:** how a script reads a commit or push failure's summary and output (tech spec; the CLI prints only `data.reason` today)
+- **Options:** fold the summary into the message; add `data` to the JSON error document beside `reason`
+- **Chose:** add `data` (the whole error data object) to `{error: {code, message, reason?, suggestions?, data?}}`; text mode is unchanged
+- **Why:** m0-scripting D15 fixed the document's shape and exit codes, and an additive field keeps both; agents need the hook output to fix a failed commit
+- **Evidence:** packages/cli/src/main.ts ~125-190 (`errorReason`); docs/loop/decisions/m0-scripting.md D15
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** M7's freeze wants a narrower error document
+- **Source:** assumed — autonomous (extends m0-scripting D15)
+
+## D39: `setPanelBadge` takes an optional tooltip
+- **Question:** how the panel toggle says "N uncommitted changes" when the shell hard-codes "N waiting" (tech spec)
+- **Options:** keep "waiting"; grow the UI API with an optional title
+- **Chose:** `setPanelBadge(panelId, count, title?)`, defaulting to the current "N waiting"
+- **Why:** the roadmap grows the API when a feature needs it, and "waiting" is wrong for changes
+- **Evidence:** packages/protocol/src/ui.ts:208; packages/ui/src/plugins/PanelToggles.tsx:20
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** never
+- **Source:** locked by docs/roadmap.md ("Plugin API growth")
+
+## D40: Write a tech spec
+- **Question:** the tech-spec complexity gate (quirk:writing-specs tech-spec.md)
+- **Options:** skip; write one
+- **Chose:** write `tech.md`
+- **Why:** the work crosses the git package, the plugin's daemon and window halves, two other plugins and the CLI kernel, and LOOP.md asks for one always
+- **Evidence:** docs/loop/LOOP.md step 4
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** never
+- **Source:** locked by docs/loop/LOOP.md
+
 ## Progress
 Brainstorming done (D1–D36). Next: write docs/quirk/specs/2026-10-27-m2-source-control-core/logic.md and tech.md, run one Codex adversarial review over both, commit, then build.

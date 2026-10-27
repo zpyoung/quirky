@@ -179,7 +179,7 @@ a scenario says otherwise, so `--worktree` defaults to it.
 10. **SC-10: the panel's empty states** (UI)
     - **Given** (a) no view showing a worktree, (b) a folder workspace, (c) **feat** with no changes and nothing ahead of its base
     - **When** the person opens the panel in each
-    - **Then** (a) "Select a workspace to view changes"; (b) "Source Control is only available for Git repositories"; (c) "No changes on this branch" with "This workspace is clean and this branch has no changes ahead of origin/main"
+    - **Then** (a) "Select a workspace to view changes"; (b) "Opened as folder. Git features are unavailable for this workspace." as m1-worktrees set it ([D37](../../../loop/decisions/m2-source-control-core.md)); (c) "No changes on this branch" with "This workspace is clean and this branch has no changes ahead of origin/main"
 
 11. **SC-11: the panel toggle shows the uncommitted count** (UI)
     - **Given** **feat** with the four changes of SC-1
