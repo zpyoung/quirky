@@ -3,12 +3,12 @@
  * integration worktree, which keeps `build/roadmap` checked out and is never worked in, and only
  * while holding the lock, so two lanes never claim one item or land at once.
  */
-import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { rebuild } from './decisions'
 import { load, next, QUEUE_FILE, save, setStatus, STATUSES, type Item, type Next, type Status } from './queue'
 
-export type Repo = { integration: string; lock: string }
+export type Repo = { integration: string; lock: string; lands: string }
 
 /** Run on every merge result that changes more than `docs/`; `bun run test` reruns a failing file alone once. */
 export const VERIFY = [
@@ -26,7 +26,11 @@ function git(cwd: string, ...args: string[]): string {
 /** The integration worktree and lock live in the shared git dir, so every worktree finds the same ones. */
 export function locate(cwd = process.cwd()): Repo {
   const common = git(cwd, 'rev-parse', '--path-format=absolute', '--git-common-dir')
-  const repo = { integration: join(common, 'build-loop', 'integration'), lock: join(common, 'build-loop', 'lock') }
+  const repo = {
+    integration: join(common, 'build-loop', 'integration'),
+    lock: join(common, 'build-loop', 'lock'),
+    lands: join(common, 'build-loop', 'lands')
+  }
   if (!existsSync(repo.integration)) throw new Error(`no integration worktree at ${repo.integration}; see docs/loop/README.md`)
   return repo
 }
@@ -106,24 +110,41 @@ function run(cmd: string[], cwd: string): boolean {
   return Bun.spawnSync(cmd, { cwd, stdout: 'inherit', stderr: 'inherit' }).exitCode === 0
 }
 
+/** Merges `branch` into `build/roadmap`; false, with the merge undone, when it conflicts. */
+function tryMerge(repo: Repo, branch: string): boolean {
+  try {
+    git(repo.integration, 'merge', '--no-ff', '-q', '-m', `Merge branch '${branch}' into build/roadmap`, branch)
+    return true
+  } catch {
+    if (existsSync(join(git(repo.integration, 'rev-parse', '--absolute-git-dir'), 'MERGE_HEAD'))) git(repo.integration, 'merge', '--abort')
+    return false
+  }
+}
+
+const conflicts = (branch: string) =>
+  new Error(`${branch} conflicts with build/roadmap: merge build/roadmap into it, resolve, and try again`)
+
+/** The first of `verify` that fails on what was merged since `before`; none when only `docs/` changed. */
+function failing(repo: Repo, before: string, verify: string[][]): string[] | undefined {
+  const changed = git(repo.integration, 'diff', '--name-only', before, 'HEAD').split('\n')
+  if (changed.every((path) => path.startsWith('docs/'))) return undefined
+  return verify.find((cmd) => !run(cmd, repo.integration))
+}
+
+const failedOn = (cmd: string[], branch: string) =>
+  new Error(`\`${cmd.join(' ')}\` failed on the merge result: merge build/roadmap into ${branch}, fix it there, and try again`)
+
 /**
  * Merges `branch` into `build/roadmap` and runs `verify`, unless the merge changed only `docs/`;
  * a conflict or failure leaves it as it was.
  */
 function mergeVerified(repo: Repo, branch: string, verify: string[][]): void {
   const before = git(repo.integration, 'rev-parse', 'HEAD')
-  try {
-    git(repo.integration, 'merge', '--no-ff', '-q', '-m', `Merge branch '${branch}' into build/roadmap`, branch)
-  } catch (error) {
-    if (existsSync(join(git(repo.integration, 'rev-parse', '--absolute-git-dir'), 'MERGE_HEAD'))) git(repo.integration, 'merge', '--abort')
-    throw new Error(`${branch} conflicts with build/roadmap: merge build/roadmap into it, resolve, and try again\n${(error as Error).message}`)
-  }
-  const changed = git(repo.integration, 'diff', '--name-only', before, 'HEAD').split('\n')
-  if (changed.every((path) => path.startsWith('docs/'))) return
-  const failed = verify.find((cmd) => !run(cmd, repo.integration))
+  if (!tryMerge(repo, branch)) throw conflicts(branch)
+  const failed = failing(repo, before, verify)
   if (failed) {
     git(repo.integration, 'reset', '-q', '--hard', before)
-    throw new Error(`\`${failed.join(' ')}\` failed on the merge result: merge build/roadmap into ${branch}, fix it there, and try again`)
+    throw failedOn(failed, branch)
   }
 }
 
@@ -135,19 +156,107 @@ function deleteBranch(repo: Repo, branch: string): void {
   }
 }
 
-/** Lands `build/<id>` through {@link mergeVerified} and marks the item done. */
-export function land(repo: Repo, id: string, verify = VERIFY): Promise<void> {
-  return withLock(repo.lock, () => {
-    requireClean(repo)
-    const items = load(queuePath(repo))
-    const item = items.find((entry) => entry.id === id)
-    if (item?.status !== 'in-progress') throw new Error(`${id} is ${item?.status ?? 'not in the queue'}, not in-progress`)
-    mergeVerified(repo, `build/${id}`, verify)
-    save(setStatus(items, id, 'done'), queuePath(repo))
-    rebuild(join(repo.integration, 'docs/loop'))
-    commit(repo, `chore(build): finish ${id}`)
-    deleteBranch(repo, `build/${id}`)
-  })
+/** The most items one land verifies together. */
+export const BATCH = 4
+
+type Request = { pid: number; head: string; solo?: boolean }
+
+function readRequest(path: string): Request | undefined {
+  try {
+    return JSON.parse(readFileSync(path, 'utf8')) as Request
+  } catch {
+    return undefined
+  }
+}
+
+const branchHead = (repo: Repo, id: string) => {
+  try {
+    return git(repo.integration, 'rev-parse', '--verify', '-q', `build/${id}`)
+  } catch {
+    return ''
+  }
+}
+
+/** Announces that this process is waiting to land `id` at its current commit, so whoever holds the lock may land it too. */
+export function requestLand(repo: Repo, id: string): string {
+  mkdirSync(repo.lands, { recursive: true })
+  const path = join(repo.lands, id)
+  writeFileSync(path, JSON.stringify({ pid: process.pid, head: branchHead(repo, id) } satisfies Request))
+  return path
+}
+
+/** Other items waiting to land, oldest request first, skipping those that must land alone or whose branch has moved. */
+function waitingToLand(repo: Repo, items: Item[], id: string): string[] {
+  if (!existsSync(repo.lands)) return []
+  const inProgress = new Set(items.filter((item) => item.status === 'in-progress').map((item) => item.id))
+  const waiting: { id: string; since: number }[] = []
+  for (const other of readdirSync(repo.lands)) {
+    const path = join(repo.lands, other)
+    const request = readRequest(path)
+    if (!request || !alive(request.pid)) {
+      rmSync(path, { force: true })
+      continue
+    }
+    if (other === id || request.solo || !inProgress.has(other)) continue
+    if (request.head && request.head === branchHead(repo, other)) waiting.push({ id: other, since: statSync(path).mtimeMs })
+  }
+  return waiting.sort((a, b) => a.since - b.since).map((entry) => entry.id)
+}
+
+function landAlone(repo: Repo, id: string): void {
+  const path = join(repo.lands, id)
+  const request = readRequest(path)
+  if (request) writeFileSync(path, JSON.stringify({ ...request, solo: true } satisfies Request))
+}
+
+/**
+ * Lands `build/<id>` and marks the item done. Items whose lanes are waiting to land too are merged
+ * with it, up to {@link BATCH}, and verified in one run, since that run is what holds the lock longest.
+ * A waiting item that conflicts is left for its own lane. If the batch fails, `id` is verified alone
+ * and the others are marked to land alone, so one bad branch can't fail a batch twice.
+ */
+export async function land(repo: Repo, id: string, verify = VERIFY): Promise<void> {
+  const own = requestLand(repo, id)
+  try {
+    await withLock(repo.lock, () => {
+      requireClean(repo)
+      const items = load(queuePath(repo))
+      const item = items.find((entry) => entry.id === id)
+      if (item?.status === 'done') {
+        console.log(`${id} was landed together with another lane's item`)
+        return
+      }
+      if (item?.status !== 'in-progress') throw new Error(`${id} is ${item?.status ?? 'not in the queue'}, not in-progress`)
+      const others = readRequest(own)?.solo ? [] : waitingToLand(repo, items, id).slice(0, BATCH - 1)
+      const before = git(repo.integration, 'rev-parse', 'HEAD')
+      if (!tryMerge(repo, `build/${id}`)) throw conflicts(`build/${id}`)
+      let batch = [id, ...others.filter((other) => tryMerge(repo, `build/${other}`))]
+      let failed = failing(repo, before, verify)
+      if (failed && batch.length > 1) {
+        console.error(`\nthe batch ${batch.join(', ')} failed, so ${id} is verified alone`)
+        git(repo.integration, 'reset', '-q', '--hard', before)
+        for (const other of batch.slice(1)) landAlone(repo, other)
+        batch = [id]
+        tryMerge(repo, `build/${id}`)
+        failed = failing(repo, before, verify)
+      }
+      if (failed) {
+        git(repo.integration, 'reset', '-q', '--hard', before)
+        throw failedOn(failed, `build/${id}`)
+      }
+      let landed = items
+      for (const done of batch) {
+        landed = setStatus(landed, done, 'done')
+        save(landed, queuePath(repo))
+        rebuild(join(repo.integration, 'docs/loop'))
+        commit(repo, `chore(build): finish ${done}`)
+      }
+      for (const done of batch) deleteBranch(repo, `build/${done}`)
+      if (batch.length > 1) console.log(`landed ${batch.join(', ')} in one verified run`)
+    })
+  } finally {
+    rmSync(own, { force: true })
+  }
 }
 
 /** Lands a branch that isn't a queue item, such as a nightly native run's results. */
