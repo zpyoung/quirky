@@ -37,8 +37,12 @@ export type NewTabSpec = {
   extraArgs?: string
   title?: string
   quickCommand?: string
+  activate?: boolean
   revision?: number
 }
+
+/** The ids of the tab `createTab` opened and its only pane. */
+type NewTabIds = { tab: string; pane: string }
 
 /** A start directory for a new session; a `soft` one is dropped when the session plugin refuses it. */
 type StartCwd = { path: string; soft: boolean }
@@ -218,7 +222,7 @@ export class LayoutService {
   }
 
   /** Starts a session and binds it as a new tab in one queue slot. */
-  createTab(workspaceId: string, spec: NewTabSpec): Promise<{ workspace: Workspace; session: Session }> {
+  createTab(workspaceId: string, spec: NewTabSpec): Promise<{ workspace: Workspace; session: Session } & NewTabIds> {
     return this.queued(() => this.addTab(workspaceId, spec))
   }
 
@@ -416,12 +420,12 @@ export class LayoutService {
     return { workspace: this.workspaces.get(id)! }
   }
 
-  private async newTab(params: Params, caller: PluginCaller): Promise<{ workspace: Workspace }> {
+  private async newTab(params: Params, caller: PluginCaller): Promise<{ workspace: Workspace; session: string } & NewTabIds> {
     const id =
       params.group !== undefined && params.workspace === undefined
         ? this.ownerOf('group', params.group as string).id
         : await this.resolveWorkspace(params.workspace, caller)
-    const { workspace } = await this.addTab(id, {
+    const { workspace, session, tab, pane } = await this.addTab(id, {
       ...(params.group === undefined ? {} : { group: params.group as string }),
       ...(params.cwd === undefined ? {} : { cwd: params.cwd as string }),
       ...(params.agent === undefined ? {} : { agent: params.agent as string }),
@@ -429,9 +433,10 @@ export class LayoutService {
       ...(params.extraArgs === undefined ? {} : { extraArgs: params.extraArgs as string }),
       ...(params.title === undefined ? {} : { title: params.title as string }),
       ...(params.quickCommand === undefined ? {} : { quickCommand: params.quickCommand as string }),
+      ...(params.activate === undefined ? {} : { activate: params.activate as boolean }),
       ...(params.revision === undefined ? {} : { revision: params.revision as number })
     })
-    return { workspace }
+    return { workspace, session: session.id, tab, pane }
   }
 
   /** Opens an already running local terminal session in its workspace without creating or restoring a process. */
@@ -487,7 +492,7 @@ export class LayoutService {
     return { workspace: focused, pane }
   }
 
-  private async addTab(workspaceId: string, spec: NewTabSpec): Promise<{ workspace: Workspace; session: Session }> {
+  private async addTab(workspaceId: string, spec: NewTabSpec): Promise<{ workspace: Workspace; session: Session } & NewTabIds> {
     const ws = this.ensure(workspaceId)
     this.checkRevision(ws, spec.revision)
     const group = spec.group === undefined ? findGroup(ws.root, ws.activeGroup) : findGroup(ws.root, spec.group)
@@ -507,9 +512,9 @@ export class LayoutService {
       const ids = this.ids()
       const defaultTitle = title || (agent === 'shell' ? nextTerminalTitle(this.defaultTitles(ws)) : session.title)
       const tab = ops.makeTab(ids, { defaultTitle, session: session.id, now: this.now() })
-      let next = this.unwrap(ops.appendTab(ws, group.id, tab))
+      let next = this.unwrap(ops.appendTab(ws, group.id, tab, spec.activate !== false))
       if (spec.quickCommand !== undefined) next = ops.setLastQuickCommand(next, group.id, spec.quickCommand)
-      return { workspace: this.commit(ws, next, ids), session }
+      return { workspace: this.commit(ws, next, ids), session, tab: tab.id, pane: tab.activePane }
     } catch (error) {
       await this.closeQuietly(session.id)
       throw error

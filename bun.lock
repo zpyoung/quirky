@@ -159,6 +159,23 @@
         "@types/react-dom": "^19.3.0",
       },
     },
+    "plugins/quirky.handoff": {
+      "name": "@quirky/plugin-handoff",
+      "version": "0.1.0",
+      "dependencies": {
+        "@codemirror/state": "^6.7.6",
+        "@codemirror/view": "^6.43.15",
+        "@quirky/protocol": "workspace:*",
+        "react": "19.2.0",
+        "react-dom": "19.2.0",
+      },
+      "devDependencies": {
+        "@happy-dom/global-registrator": "20.14.6",
+        "@quirky/git": "workspace:*",
+        "@types/react": "^19.3.0",
+        "@types/react-dom": "^19.3.0",
+      },
+    },
     "plugins/quirky.hosting": {
       "name": "@quirky/plugin-hosting",
       "version": "0.1.0",
@@ -362,6 +379,7 @@
 
     "@quirky/plugin-git": ["@quirky/plugin-git@workspace:plugins/quirky.git"],
 
+    "@quirky/plugin-handoff": ["@quirky/plugin-handoff@workspace:plugins/quirky.handoff"],
     "@quirky/plugin-hosting": ["@quirky/plugin-hosting@workspace:plugins/quirky.hosting"],
 
     "@quirky/plugin-notifications": ["@quirky/plugin-notifications@workspace:plugins/quirky.notifications"],

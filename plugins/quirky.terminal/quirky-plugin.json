@@ -693,6 +693,10 @@
               "type": "string",
               "description": "The quick command this tab runs, remembered on the group."
             },
+            "activate": {
+              "type": "boolean",
+              "description": "Whether the new tab takes focus; default true. When false the workspace's active group, that group's active tab and the recent list stay as they are."
+            },
             "revision": {
               "type": "integer",
               "description": "Fails with a conflict naming the current revision when the workspace is at another one."
@@ -705,10 +709,25 @@
             "workspace": {
               "type": "object",
               "description": "The whole workspace after the change, with its new revision."
+            },
+            "session": {
+              "type": "string",
+              "description": "The id of the session the new tab runs."
+            },
+            "tab": {
+              "type": "string",
+              "description": "The id of the new tab."
+            },
+            "pane": {
+              "type": "string",
+              "description": "The id of the new tab's pane."
             }
           },
           "required": [
-            "workspace"
+            "workspace",
+            "session",
+            "tab",
+            "pane"
           ]
         }
       },
