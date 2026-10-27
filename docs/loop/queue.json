@@ -137,8 +137,7 @@
       "deps": [
         "gate-m0"
       ],
-      "status": "in-progress",
-      "lane": 3
+      "status": "done"
     },
     {
       "id": "m1-term-ui",

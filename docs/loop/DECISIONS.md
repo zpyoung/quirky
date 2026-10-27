@@ -13,6 +13,7 @@ files, not this one.
 | hard | medium | [m0-core D11](decisions/m0-core.md) | The plugin API grows by six members so the built-ins need nothing private | assumed — autonomous |
 | hard | medium | [m0-core D21](decisions/m0-core.md) | The daemon owns the window's layout, focus and visible view | locked by docs/roadmap.md (what lives in the daemon); assumed — autonomous (the shape) |
 | hard | medium | [m0-core D26](decisions/m0-core.md) | A distro is applied as an overlay that removing it takes away | locked by docs/roadmap.md (what the manifest names); assumed — autonomous (the overlay) |
+| hard | medium | [m1-worktrees D8](decisions/m1-worktrees.md) | The worktree record grows additively, and `name` becomes the display name or the folder name | assumed — autonomous |
 | hard | medium | [m0-daemon-api D4](decisions/m0-daemon-api.md) | Plugin method wire names are `<pluginId>/<name>` | assumed — autonomous |
 | hard | medium | [m0-daemon-api D9](decisions/m0-daemon-api.md) | Each plugin gets one SQLite file and a data directory of its own | assumed — autonomous |
 | hard | medium | [m0-ui-api D6](decisions/m0-ui-api.md) | A slot gives the plugin one container element to mount into, and nothing else of the page | assumed — autonomous |
@@ -26,6 +27,8 @@ files, not this one.
 | hard | high | [m0-core D6](decisions/m0-core.md) | v1's methods are renamed to their plugin's namespace, with no aliases, and the protocol version goes to 2 | supersedes m0-daemon-api D5 |
 | hard | high | [m0-core D7](decisions/m0-core.md) | v1's events become the plugins' events | assumed — autonomous |
 | hard | high | [m0-core D31](decisions/m0-core.md) | Port v1 for real, growing the public plugin API, rather than facades or raw RPC primitives | locked by docs/roadmap.md (built-ins use only the public API); assumed — autonomous (the approach) |
+| hard | high | [m1-worktrees D5](decisions/m1-worktrees.md) | Extend `quirky.repo` and `quirky.worktree` in place, with one create path and one remove path | assumed — autonomous |
+| hard | high | [m1-worktrees D7](decisions/m1-worktrees.md) | Worktree IDs stay v1's path hash; extra folder workspaces get random IDs | assumed — autonomous |
 | hard | high | [m0-daemon-api D7](decisions/m0-daemon-api.md) | The four kinds are `method`, `event`, `job` and `launch-hook` | assumed — autonomous |
 | hard | high | [m0-daemon-api D13](decisions/m0-daemon-api.md) | Choose declared contributions with provided implementations | supersedes nothing; extends m0-registry D23 |
 | hard | high | [m0-ui-api D4](decisions/m0-ui-api.md) | The seven UI kinds are `view`, `panel`, `sidebar-section`, `command`, `keybinding`, `setting` and `theme` | assumed — autonomous |
@@ -40,6 +43,13 @@ files, not this one.
 | medium | medium | [m0-core D22](decisions/m0-core.md) | Plugin slots report their own content as JSON | assumed — autonomous |
 | medium | medium | [m0-core D27](decisions/m0-core.md) | Plugin install lists what the plugin contributes and confirms through an ask | assumed — autonomous |
 | medium | medium | [m0-core D36](decisions/m0-core.md) | Tech-spec mechanisms: built-ins as workspace packages, UI modules built by the UI build, a headless window for tests | assumed — autonomous |
+| medium | medium | [m1-worktrees D6](decisions/m1-worktrees.md) | Git stays the source of truth for which worktrees exist; Quirky stores what git can't, and never attaches it to a different worktree at the same path | assumed — autonomous |
+| medium | medium | [m1-worktrees D18](decisions/m1-worktrees.md) | `wt create` takes `[<repo>] [<name>]`, inferring the repo from the caller when one positional is given | assumed — autonomous |
+| medium | medium | [m1-worktrees D19](decisions/m1-worktrees.md) | Hooks come from `quirky.yaml`, or `orca.yaml` when there is none, read from the base the worktree starts at | assumed — autonomous |
+| medium | medium | [m1-worktrees D22](decisions/m1-worktrees.md) | A shared script runs only when its content is trusted, on every path, including the CLI | assumed — autonomous |
+| medium | medium | [m1-worktrees D32](decisions/m1-worktrees.md) | Metadata is edited with `quirky.worktree/set` and `wt set`, using Orca's flag names | assumed — autonomous |
+| medium | medium | [m1-worktrees D46](decisions/m1-worktrees.md) | Project groups live in `quirky.repo`, with `repo group` commands | assumed — autonomous |
+| medium | medium | [m1-worktrees D47](decisions/m1-worktrees.md) | A scanned group can hold folder workspaces on its parent folder | locked by research/orca-features/worktrees.md; assumed — autonomous (the synthetic repo ID) |
 | medium | medium | [m0-daemon-api D6](decisions/m0-daemon-api.md) | Plugin events arrive as `{ type: "<pluginId>/<name>", data }` | assumed — autonomous |
 | medium | medium | [m0-daemon-api D15](decisions/m0-daemon-api.md) | Jobs run on a fixed delay, at least one second apart, never overlapping | assumed — autonomous |
 | medium | medium | [m0-daemon-api D19](decisions/m0-daemon-api.md) | Launch hooks are a sequential pipeline in contribution-ID order | assumed — autonomous |
@@ -79,6 +89,11 @@ files, not this one.
 | medium | high | [m0-core D19](decisions/m0-core.md) | Mutating calls carry a request ID, and the daemon returns the first outcome to a retry | assumed — autonomous |
 | medium | high | [m0-core D23](decisions/m0-core.md) | Plugin UI commands run in the window when called through the API | locked by docs/roadmap.md |
 | medium | high | [m0-core D24](decisions/m0-core.md) | v1's window surfaces become the built-ins' UI contributions, and the shell keeps only the chrome | supersedes m0-ui-api D26 |
+| medium | high | [m1-worktrees D9](decisions/m1-worktrees.md) | New worktrees go under `<worktrees folder>/<repo>/<name>`, with nesting and a per-project location as settings | locked by research/orca-features/worktrees.md (the rules); assumed — autonomous (v1's root) |
+| medium | high | [m1-worktrees D11](decisions/m1-worktrees.md) | Branches get a prefix, by default the git username | locked by research/orca-features/worktrees.md |
+| medium | high | [m1-worktrees D14](decisions/m1-worktrees.md) | The base is the requested one, else the project's saved base, else the detected default | locked by research/orca-features/worktrees.md |
+| medium | high | [m1-worktrees D49](decisions/m1-worktrees.md) | Project settings are a `quirky.repo` record, set with `repo set` and shown with `repo show` | supersedes nothing; works within m0-ui-api D17 |
+| medium | high | [m1-worktrees D52](decisions/m1-worktrees.md) | Platform-specific parts are logged and built for macOS only | deferred: platform |
 | medium | high | [m0-daemon-api D8](decisions/m0-daemon-api.md) | Method results and errors | assumed — autonomous |
 | medium | high | [m0-daemon-api D10](decisions/m0-daemon-api.md) | Stores migrate forward only, by an ordered list, and refuse a downgrade | assumed — autonomous |
 | medium | high | [m0-daemon-api D24](decisions/m0-daemon-api.md) | Plugin methods use the daemon's token, and any client may call any method | locked by docs/roadmap.md |
@@ -123,6 +138,21 @@ files, not this one.
 | easy | medium | [m0-core D39](decisions/m0-core.md) | Build in five waves: a scaffold, kernel modules, plugins beside v1, the switch-over with the UI port, then scenario tests | assumed — autonomous |
 | easy | medium | [m0-core D41](decisions/m0-core.md) | W3 starts while W2's checkpoint review runs, with fakes of sibling plugins in each plugin's tests | assumed — autonomous |
 | easy | medium | [m0-core D44](decisions/m0-core.md) | W4 calls the tasks made inside their briefs, accepted at audit | assumed — autonomous |
+| easy | medium | [m1-worktrees D3](decisions/m1-worktrees.md) | The slice is projects, create, delete, metadata edits, setup and archive hooks, folder workspaces and groups | locked by docs/loop/queue.json (the title); assumed — autonomous (the exact cut) |
+| easy | medium | [m1-worktrees D16](decisions/m1-worktrees.md) | New branches are cut with no upstream and record their base | locked by research/orca-features/worktrees.md |
+| easy | medium | [m1-worktrees D17](decisions/m1-worktrees.md) | A blank name gets a generated marine-creature name that is never reused | locked by research/orca-features/worktrees.md |
+| easy | medium | [m1-worktrees D25](decisions/m1-worktrees.md) | A create can start an agent, optionally after setup finishes | assumed — autonomous |
+| easy | medium | [m1-worktrees D26](decisions/m1-worktrees.md) | `.worktreeinclude` copies gitignored files by gitignore pattern, and `sharedDirectories` are symlinked | assumed — autonomous |
+| easy | medium | [m1-worktrees D33](decisions/m1-worktrees.md) | The sidebar shows groups, then projects, then workspaces with the primary first and children nested | assumed — autonomous |
+| easy | medium | [m1-worktrees D37](decisions/m1-worktrees.md) | The archive hook runs on every delete unless skipped, and its failure stops the delete | assumed — autonomous |
+| easy | medium | [m1-worktrees D41](decisions/m1-worktrees.md) | Deletes finish before the call returns, and two deletes of one worktree share one run | assumed — autonomous |
+| easy | medium | [m1-worktrees D44](decisions/m1-worktrees.md) | Clone and create-new-project put the repo in the worktrees folder and add it | locked by research/orca-features/worktrees.md |
+| easy | medium | [m1-worktrees D51](decisions/m1-worktrees.md) | The Orca defects tested are the two create paths, the CLI's folder gap, the CLI's trust gap, the generic setup error and the stuck blank name | assumed — autonomous |
+| easy | medium | [m1-worktrees D59](decisions/m1-worktrees.md) | Build in four waves: types and git primitives, the repo plugin and pure worktree modules, the worktree daemon, then the window | assumed — autonomous |
+| easy | medium | [m1-worktrees D60](decisions/m1-worktrees.md) | Skip W1's checkpoint review | assumed — autonomous |
+| easy | medium | [m1-worktrees D61](decisions/m1-worktrees.md) | W3 starts while W2's checkpoint review runs | assumed — autonomous |
+| easy | medium | [m1-worktrees D65](decisions/m1-worktrees.md) | W4 starts while W3's checkpoint review runs, and owns only the manifest's UI keys | assumed — autonomous |
+| easy | medium | [m1-worktrees D71](decisions/m1-worktrees.md) | SC-27 is run with base `origin/main` on both sides, because a create with no base never falls back | assumed — autonomous |
 | easy | medium | [m0-daemon-api D22](decisions/m0-daemon-api.md) | A launch hook that fails or times out is skipped | assumed — autonomous |
 | easy | medium | [m0-daemon-api D23](decisions/m0-daemon-api.md) | Launch hooks apply to terminal sessions only | assumed — autonomous |
 | easy | medium | [m0-daemon-api D25](decisions/m0-daemon-api.md) | No rate limits on plugin events or method calls, and no event filters yet | assumed — autonomous |
@@ -224,6 +254,48 @@ files, not this one.
 | easy | high | [m0-core D43](decisions/m0-core.md) | W3 checkpoint: accept all eight findings, which collapse to five defects | assumed — autonomous |
 | easy | high | [m0-core D45](decisions/m0-core.md) | W4 checkpoint: accept all six findings, which collapse to four defects | assumed — autonomous |
 | easy | high | [m0-core D46](decisions/m0-core.md) | Final Round 1: accept all thirteen findings, which collapse to seven defects | assumed — autonomous |
+| easy | high | [m1-worktrees D1](decisions/m1-worktrees.md) | Classify the item as an API, CLI, Organization, Visual and Data design, and run research phases A and B | assumed — autonomous |
+| easy | high | [m1-worktrees D2](decisions/m1-worktrees.md) | Skip the visual companion and the adhd offer, use the standard gray-area set | locked by docs/loop/LOOP.md |
+| easy | high | [m1-worktrees D4](decisions/m1-worktrees.md) | Select every gray area that matters for worktrees | assumed — autonomous |
+| easy | high | [m1-worktrees D10](decisions/m1-worktrees.md) | Names are sanitised by Orca's rule, without emoji shortcodes | locked by research/orca-features/worktrees.md; assumed — autonomous (no shortcodes) |
+| easy | high | [m1-worktrees D12](decisions/m1-worktrees.md) | Collisions take the next free `-2`, `-3` suffix, up to 100 tries | locked by research/orca-features/worktrees.md; assumed — autonomous (PR check deferred) |
+| easy | high | [m1-worktrees D13](decisions/m1-worktrees.md) | Creating from an existing branch checks it out and keeps it on delete | locked by research/orca-features/worktrees.md |
+| easy | high | [m1-worktrees D15](decisions/m1-worktrees.md) | A missing remote base is fetched; if the fetch fails the create falls back to the local branch and says so | locked by research/orca-features/worktrees.md; assumed — autonomous (one rule for every caller) |
+| easy | high | [m1-worktrees D20](decisions/m1-worktrees.md) | Projects also keep local setup and archive scripts, merged by Orca's command-source policy | locked by research/orca-features/worktrees.md |
+| easy | high | [m1-worktrees D21](decisions/m1-worktrees.md) | Setup follows the project's policy, and "ask" with no decision creates nothing | locked by research/orca-features/worktrees.md; assumed — autonomous (the error code) |
+| easy | high | [m1-worktrees D23](decisions/m1-worktrees.md) | Setup runs in a background "Setup" terminal in the new worktree, or in the daemon when sessions are off | locked by research/orca-features/worktrees.md |
+| easy | high | [m1-worktrees D24](decisions/m1-worktrees.md) | `quirky.session/create` grows an optional title and command for shell sessions | assumed — autonomous |
+| easy | high | [m1-worktrees D27](decisions/m1-worktrees.md) | Creates in one repo run one at a time | assumed — autonomous |
+| easy | high | [m1-worktrees D28](decisions/m1-worktrees.md) | The create result is the worktree plus what happened around it | assumed — autonomous |
+| easy | high | [m1-worktrees D29](decisions/m1-worktrees.md) | A CLI create inside a worktree nests under it unless `--no-parent` | locked by research/orca-features/worktrees.md |
+| easy | high | [m1-worktrees D30](decisions/m1-worktrees.md) | A window create shows a pending row and opens the result only if you're still where you started | locked by research/orca-features/worktrees.md |
+| easy | high | [m1-worktrees D31](decisions/m1-worktrees.md) | The create dialog has Project, Name, Create from, Agent, Advanced and Create more | locked by research/orca-features/worktrees.md |
+| easy | high | [m1-worktrees D34](decisions/m1-worktrees.md) | A workspace's menu has Update, Move to Status, Copy Path, Pin, Mark Unread, Set Parent and Delete | locked by research/orca-features/worktrees.md |
+| easy | high | [m1-worktrees D35](decisions/m1-worktrees.md) | The window's delete dialog warns about changes, offers Don't ask again, and then deletes even a dirty worktree | locked by research/orca-features/worktrees.md |
+| easy | high | [m1-worktrees D36](decisions/m1-worktrees.md) | CLI and API deletes keep the kernel confirmation, refuse changes without `--force`, and refuse locked worktrees always | locked by research/orca-features/worktrees.md |
+| easy | high | [m1-worktrees D38](decisions/m1-worktrees.md) | A deleted worktree's branch goes only when git shows it is merged, else it is kept and reported | locked by research/orca-features/worktrees.md |
+| easy | high | [m1-worktrees D39](decisions/m1-worktrees.md) | Deleting a parent requires taking its descendants too | locked by research/orca-features/worktrees.md |
+| easy | high | [m1-worktrees D40](decisions/m1-worktrees.md) | A worktree git already forgot is cleaned if its folder is gone, and refused if its folder remains | locked by research/orca-features/worktrees.md |
+| easy | high | [m1-worktrees D42](decisions/m1-worktrees.md) | A delete checks first, then runs the archive hook, then closes sessions, then removes | locked by research/orca-features/worktrees.md |
+| easy | high | [m1-worktrees D43](decisions/m1-worktrees.md) | A non-Git folder is added with `--folder`, and the CLI says so instead of just failing | locked by research/orca-features/worktrees.md |
+| easy | high | [m1-worktrees D45](decisions/m1-worktrees.md) | A folder of repos is scanned and imported, with or without a group | locked by research/orca-features/worktrees.md |
+| easy | high | [m1-worktrees D48](decisions/m1-worktrees.md) | Removing a project keeps its folder and closes its terminals, and says both | locked by research/orca-features/worktrees.md |
+| easy | high | [m1-worktrees D50](decisions/m1-worktrees.md) | Global worktree settings are plugin settings | locked by research/orca-features/worktrees.md |
+| easy | high | [m1-worktrees D53](decisions/m1-worktrees.md) | Fast-track the remaining defaults | locked by docs/loop/LOOP.md |
+| easy | high | [m1-worktrees D54](decisions/m1-worktrees.md) | Add project takes a typed path; the macOS Open panel waits | assumed — autonomous |
+| easy | high | [m1-worktrees D55](decisions/m1-worktrees.md) | Write a tech spec | locked by docs/loop/LOOP.md |
+| easy | high | [m1-worktrees D56](decisions/m1-worktrees.md) | One Codex adversarial review over both specs, at deep depth, standing in for the tech-spec reviewer | locked by docs/loop/LOOP.md |
+| easy | high | [m1-worktrees D57](decisions/m1-worktrees.md) | Spec review: fix all seven standing findings, accept the two refutations, and add Mod+N anyway | assumed — autonomous |
+| easy | high | [m1-worktrees D58](decisions/m1-worktrees.md) | Build with Claude subagents implementing and Codex reviewing | locked by docs/loop/LOOP.md |
+| easy | high | [m1-worktrees D62](decisions/m1-worktrees.md) | W2 checkpoint: accept all six findings, which collapse to five defects, and narrow X3 | assumed — autonomous |
+| easy | high | [m1-worktrees D63](decisions/m1-worktrees.md) | Add a fixture task to the W3 chain for the fake git's `listRegistrations` | assumed — autonomous |
+| easy | high | [m1-worktrees D64](decisions/m1-worktrees.md) | Test runs wrote folders under the real home; they were removed and every later gate checks for them | locked by docs/loop/LOOP.md |
+| easy | high | [m1-worktrees D66](decisions/m1-worktrees.md) | W3 checkpoint: accept all seven findings, which collapse to five defects | assumed — autonomous |
+| easy | high | [m1-worktrees D67](decisions/m1-worktrees.md) | T9a's one-line edit to the window exit test is accepted as a scope widening | assumed — autonomous |
+| easy | high | [m1-worktrees D68](decisions/m1-worktrees.md) | Create takes any installed agent ID, as `quirky.session/create` does after m1-providers | assumed — autonomous |
+| easy | high | [m1-worktrees D69](decisions/m1-worktrees.md) | Final Round 1: accept all eight findings, which collapse to seven defects, and fix them in one batch | assumed — autonomous |
+| easy | high | [m1-worktrees D70](decisions/m1-worktrees.md) | The UI scenarios run as three web batches, each on its own daemon, temp HOME and fixture world | assumed — autonomous |
+| easy | high | [m1-worktrees D72](decisions/m1-worktrees.md) | The UI scenarios pass as a user, with SC-59's tooltip checked by its test because the tool can't hover | assumed — autonomous |
 | easy | high | [m0-daemon-api D1](decisions/m0-daemon-api.md) | Classify the item as an API design, and run both research phases | assumed — autonomous |
 | easy | high | [m0-daemon-api D2](decisions/m0-daemon-api.md) | Skip the visual companion and the adhd offer, use the standard gray-area set | locked by docs/loop/LOOP.md |
 | easy | high | [m0-daemon-api D3](decisions/m0-daemon-api.md) | Select every gray area that matters for the daemon plugin API | assumed — autonomous |
