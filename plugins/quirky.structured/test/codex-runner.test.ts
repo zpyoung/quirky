@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
+import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { AskEnvelope, AskSpec, Session, SessionStatus, StructuredMessage } from '@quirky/protocol'
@@ -245,4 +245,38 @@ describe('Codex app-server runner', () => {
     expect(setup.statuses.at(-1)).toBe('exited')
     expect(setup.statuses).not.toContain('done')
   })
+  test('bounds close when an escaped descendant retains app-server stdio', async () => {
+    const escapedPidPath = setup.fixture.logPath + '.escaped-pid'
+    try {
+      await setup.runner.start(setup.session, '[escaped-stdio] complete turn')
+      await until(() => setup.statuses.includes('done') && existsSync(escapedPidPath))
+
+      const threadStart = setup.fixture.requests().find((request) => request.method === 'thread/start')
+      expect(threadStart?.params).toMatchObject({ approvalPolicy: 'on-request', sandbox: 'workspace-write' })
+
+      // Real OS pipe descriptors are held by the escaped child; fake timers cannot release them.
+      const deadline = Promise.withResolvers<boolean>()
+      const timer = setTimeout(() => deadline.resolve(false), 1_500)
+      let stoppedInTime: boolean
+      try {
+        stoppedInTime = await Promise.race([
+          setup.runner.stop(setup.session.id).then(() => true),
+          deadline.promise
+        ])
+      } finally {
+        clearTimeout(timer)
+      }
+      expect(stoppedInTime).toBe(true)
+      expect(setup.statuses.at(-1)).toBe('exited')
+    } finally {
+      try {
+        const escapedPid = Number(readFileSync(escapedPidPath, 'utf8'))
+        if (Number.isSafeInteger(escapedPid) && escapedPid > 0) process.kill(escapedPid, 'SIGKILL')
+      } catch {
+        // The escaped child may already have exited or not have been created.
+      }
+      await setup.runner.stop(setup.session.id)
+    }
+  })
+
 })
