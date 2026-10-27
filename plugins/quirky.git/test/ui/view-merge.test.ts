@@ -1,7 +1,8 @@
 import { afterAll, beforeEach, describe, expect, test } from 'bun:test'
 import { GlobalRegistrator } from '@happy-dom/global-registrator'
+import { registerDom } from './register-dom'
 
-if (!GlobalRegistrator.isRegistered) GlobalRegistrator.register()
+registerDom()
 const { createMerge } = await import('../../src/view/merge')
 const { EditorView } = await import('@codemirror/view')
 

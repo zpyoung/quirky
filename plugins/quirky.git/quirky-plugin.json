@@ -1273,7 +1273,7 @@
       },
       {
         "id": "conflictFile",
-        "description": "A conflicted file's working text and content hash, and records that it was opened for the current operation.",
+        "description": "A conflicted file's working text and content hash. Unless peek is set, records that it was opened for the current operation.",
         "readOnly": true,
         "params": {
           "type": "object",
@@ -1285,6 +1285,10 @@
             "path": {
               "type": "string",
               "description": "Conflicted path relative to the worktree root."
+            },
+            "peek": {
+              "type": "boolean",
+              "description": "Read without recording the file as opened, for a caller that only inspects it."
             }
           },
           "required": [

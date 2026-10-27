@@ -3,7 +3,10 @@ import type { GitOperation } from '@quirky/protocol'
 import type { DaemonEnv, Handler } from './env'
 import { containedPath } from './paths'
 
-/** A conflicted file's working text and hash; opening it is what lets it show as resolved locally later. */
+/**
+ * A conflicted file's working text and hash. Opening it is what lets it show as resolved locally
+ * later, unless `peek` is set, which reads it without leaving that trace.
+ */
 export function conflictFile(env: DaemonEnv): Handler {
   return async (params, caller) => {
     const worktree = await env.resolve(params, caller)
@@ -12,10 +15,12 @@ export function conflictFile(env: DaemonEnv): Handler {
     const status = await env.readStatus(worktree)
     const entry = status.entries.find((candidate) => candidate.area === 'conflicts' && candidate.path === rel)
     if (!entry?.conflict) throw env.context.error('not-found', `${rel} is not in conflict.`)
-    env.opened.record(worktree.id, status.operation, await gitApi().operationHead(worktree.path), {
-      path: rel,
-      kind: entry.conflict.kind
-    })
+    if (params.peek !== true) {
+      env.opened.record(worktree.id, status.operation, await gitApi().operationHead(worktree.path), {
+        path: rel,
+        kind: entry.conflict.kind
+      })
+    }
     return { path: rel, kind: entry.conflict.kind, state: entry.conflict.state, content, hash, operation: status.operation }
   }
 }

@@ -117,6 +117,17 @@ describe('opening a conflict', () => {
     expect(conflictRows(await status(s))).toEqual([['a.ts', 'both_modified', 'resolved_locally']])
   })
 
+  test('a peek reads the file without recording it as opened', async () => {
+    s = await startScenario(scratch)
+    mergeAB(s)
+    expect(await s.api('conflictFile', { path: 'a.ts', peek: true })).toMatchObject({ path: 'a.ts', state: 'unresolved' })
+    await s.api('conflictFile', { path: 'b.ts' })
+    s.write('a.ts', 'ra\n')
+    s.write('b.ts', 'rb\n')
+    await s.api('stage', { paths: ['a.ts', 'b.ts'] })
+    expect(conflictRows(await status(s))).toEqual([['b.ts', 'both_modified', 'resolved_locally']])
+  })
+
   test('a new operation starts with nothing opened', async () => {
     s = await startScenario(scratch)
     mergeAB(s)

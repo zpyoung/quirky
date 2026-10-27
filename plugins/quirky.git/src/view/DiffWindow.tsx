@@ -8,7 +8,6 @@ import { ConflictReview } from './ConflictReview'
 import { FileDiff } from './FileDiff'
 import { registerView, type ViewHandle } from './registry'
 import { useDiffSettings } from './settings'
-import { VIEW_CSS } from './styles'
 import type { Controller, ViewReport } from './types'
 
 const MODES: ReadonlyArray<DiffViewInput['mode']> = ['file', 'combined', 'conflicts', 'conflict-file']
@@ -81,7 +80,6 @@ export function mountDiffView(context: UiPluginContext): MountFunction {
     }
     root.render(
       <div className="qgv-root">
-        <style>{VIEW_CSS}</style>
         <DiffWindow context={context} input={parsed} report={send} />
       </div>
     )
