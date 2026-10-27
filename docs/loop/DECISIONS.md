@@ -513,6 +513,12 @@ files, not this one.
 | easy | high | [m1-notifications D60](decisions/m1-notifications.md) | The descriptor fix lives in `startHarness`, shared by every symlink-only built-in directory | supersedes m1-term-ui D51 |
 | easy | high | [m1-notifications D61](decisions/m1-notifications.md) | The final gate passes; nothing goes to BLOCKERS.md | locked by docs/loop/LOOP.md |
 | easy | high | [m1-notifications D62](decisions/m1-notifications.md) | The first land failed on the integration tree's missing package links for the new plugin; they were copied in, as m1-term-daemon D49 did | assumed — autonomous |
+| easy (workflow only) | high | [fix-sc31-first-shell-race D1](decisions/fix-sc31-first-shell-race.md) | Follow the fix-item workflow without new feature specs | locked by docs/loop/LOOP.md |
+| easy (test-only correction) | high | [fix-sc31-first-shell-race D2](decisions/fix-sc31-first-shell-race.md) | Skipping setup does not suppress the window's normal first shell | locked by /Users/zpyoung/PycharmProjects/PERSONAL/quirky/research/orca-features/worktrees.md |
+| easy (test synchronization only) | high | [fix-sc31-first-shell-race D3](decisions/fix-sc31-first-shell-race.md) | Wait for the terminal override's ensured shell before asserting setup was skipped | locked by docs/loop/decisions/m1-term-ui.md |
+| easy | high | [fix-sc31-first-shell-race D4](decisions/fix-sc31-first-shell-race.md) | Keep the fake PTY boundary explicit in the script side-effect assertion | assumed — autonomous |
+| easy | high | [fix-sc31-first-shell-race D5](decisions/fix-sc31-first-shell-race.md) | Record the guarded browser smoke as tool-blocked, not passed | assumed — autonomous |
+| easy (restore the preserved branch once the gate is repaired) | high for the gate failure; medium for its cause | [fix-sc31-first-shell-race D6](decisions/fix-sc31-first-shell-race.md) | Preserve the repaired item and block on the failing required full-suite gate | locked by docs/loop/LOOP.md |
 | easy | high | [m0-daemon-api D1](decisions/m0-daemon-api.md) | Classify the item as an API design, and run both research phases | assumed — autonomous |
 | easy | high | [m0-daemon-api D2](decisions/m0-daemon-api.md) | Skip the visual companion and the adhd offer, use the standard gray-area set | locked by docs/loop/LOOP.md |
 | easy | high | [m0-daemon-api D3](decisions/m0-daemon-api.md) | Select every gray area that matters for the daemon plugin API | assumed — autonomous |

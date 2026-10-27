@@ -263,8 +263,7 @@
         "worktrees.md"
       ],
       "deps": [],
-      "status": "in-progress",
-      "lane": 8
+      "status": "blocked"
     },
     {
       "id": "m3-terminal-dock",
