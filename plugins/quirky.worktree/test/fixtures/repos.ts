@@ -77,7 +77,7 @@ export type World = {
 export async function startWorld(sessions: SessionMode = 'fake'): Promise<World> {
   const t = await startPluginHarness({
     realGit: true,
-    ...(sessions === 'real' ? { plugins: ['quirky.repo', 'quirky.worktree', 'quirky.session'], fakeSession: false } : {}),
+    ...(sessions === 'real' ? { plugins: ['quirky.repo', 'quirky.worktree', 'quirky.agents', 'quirky.session'], fakeSession: false } : {}),
     ...(sessions === 'none' ? { fakeSession: false } : {})
   })
   const root = realpathSync(makeTempDir('qw-'))
