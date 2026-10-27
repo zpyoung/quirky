@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test'
 import { builtinModules } from 'node:module'
 import { readdirSync, readFileSync, statSync } from 'node:fs'
 import { dirname, join, relative, resolve, sep } from 'node:path'
+import ts from 'typescript'
 
 const PLUGINS_ROOT = resolve(import.meta.dir, '..')
 const SKIPPED_DIRS = new Set(['test', 'node_modules', 'dist'])
@@ -23,18 +24,6 @@ function sourceFiles(dir: string): string[] {
   return files
 }
 
-/** Blanks comments but keeps newlines, so offsets still map to the right line. */
-function stripComments(source: string): string {
-  const blank = (text: string) => text.replace(/[^\n]/g, ' ')
-  return source.replace(/\/\*[\s\S]*?\*\//g, blank).replace(/(^|\s)\/\/[^\n]*/g, (_, lead: string) => lead + blank(_.slice(lead.length)))
-}
-
-const IMPORT_FORMS = [
-  /\bfrom\s*(['"])([^'"\n]+)\1/g,
-  /\bimport\s*(['"])([^'"\n]+)\1/g,
-  /\bimport\s*\(\s*(['"])([^'"\n]+)\1/g,
-  /\brequire\s*\(\s*(['"])([^'"\n]+)\1/g
-]
 
 /** The package a bare specifier names: `react/jsx-runtime` is `react`, `@xterm/xterm/css` is `@xterm/xterm`. */
 function packageOf(specifier: string): string {
@@ -53,12 +42,23 @@ function isRuntimeBuiltin(specifier: string): boolean {
  * built-ins, `@quirky/protocol`, nor in `declared`.
  */
 export function scanImports(source: string, file: string, pluginDir: string, declared: ReadonlySet<string>): ImportViolation[] {
-  const code = stripComments(source)
+  const syntax = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, false, file.endsWith('.tsx') ? ts.ScriptKind.TSX : ts.ScriptKind.TS)
   const violations: ImportViolation[] = []
-  for (const form of IMPORT_FORMS) {
-    for (const match of code.matchAll(form)) {
-      const specifier = match[2]!
-      const line = code.slice(0, match.index).split('\n').length
+  const visit = (node: ts.Node): void => {
+    let module: ts.Expression | undefined
+    if (ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) {
+      module = node.moduleSpecifier
+    } else if (ts.isImportEqualsDeclaration(node) && ts.isExternalModuleReference(node.moduleReference)) {
+      module = node.moduleReference.expression
+    } else if (ts.isImportTypeNode(node) && ts.isLiteralTypeNode(node.argument) && ts.isStringLiteralLike(node.argument.literal)) {
+      module = node.argument.literal
+    } else if (ts.isCallExpression(node) && (node.expression.kind === ts.SyntaxKind.ImportKeyword ||
+      (ts.isIdentifier(node.expression) && node.expression.text === 'require'))) {
+      module = node.arguments[0]
+    }
+    if (module && ts.isStringLiteralLike(module)) {
+      const specifier = module.text
+      const line = syntax.getLineAndCharacterOfPosition(module.getStart(syntax)).line + 1
       const flag = (reason: string) => violations.push({ file, line, specifier, reason })
       if (specifier.startsWith('.')) {
         const target = resolve(dirname(file), specifier)
@@ -69,7 +69,9 @@ export function scanImports(source: string, file: string, pluginDir: string, dec
         flag('package is not declared in the plugin package.json')
       }
     }
+    ts.forEachChild(node, visit)
   }
+  visit(syntax)
   return violations
 }
 
@@ -125,6 +127,38 @@ describe('import fence', () => {
       [7, '../../quirky.repo/main'],
       [8, 'lodash'],
       [10, '../../../packages/ui/src/y']
+    ])
+  })
+
+  test('non-module text and member import calls do not cross the import fence', () => {
+    const dir = join(PLUGINS_ROOT, 'quirky.sample')
+    const source = [
+      "const native = `ObjC.import('Foundation');`",
+      "const text = \"require('not-a-package')\";",
+      "const regex = /from 'not-a-package'/;",
+      "// import('not-a-package')",
+      "ObjC.import('Foundation')"
+    ].join('\n')
+    expect(scanImports(source, join(dir, 'src', 'a.ts'), dir, new Set())).toEqual([])
+  })
+
+  test('type-only, export, require and interpolated dynamic imports retain the fence', () => {
+    const dir = join(PLUGINS_ROOT, 'quirky.sample')
+    const source = [
+      "import type { Private } from '../../../packages/daemon/src/private'",
+      "type Other = import('../../quirky.repo/main').Private",
+      "import legacy = require('../../../packages/daemon/src/legacy')",
+      "export { secret } from '../../quirky.repo/main'",
+      "const required = require('../../../packages/ui/src/private')",
+      "const content = `${await import('../../../packages/git/src/private')}`"
+    ].join('\n')
+    expect(scanImports(source, join(dir, 'src', 'a.ts'), dir, new Set()).sort((a, b) => a.line - b.line).map(({ line, specifier }) => [line, specifier])).toEqual([
+      [1, '../../../packages/daemon/src/private'],
+      [2, '../../quirky.repo/main'],
+      [3, '../../../packages/daemon/src/legacy'],
+      [4, '../../quirky.repo/main'],
+      [5, '../../../packages/ui/src/private'],
+      [6, '../../../packages/git/src/private']
     ])
   })
 })

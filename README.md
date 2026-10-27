@@ -58,7 +58,8 @@ Advanced parity and verification obligations are tracked in
 - **`apps/desktop`:** the Electrobun window.
 - **`prototypes/`:** stack experiments, such as the native Swift shell.
 
-`bun test` runs every package's tests.
+`bun run test` runs the whole suite through the configured test host. Use
+`bun scripts/suite.ts <dirs>` for affected packages and `bun test <file>` for a single file.
 
 ## Docs
 

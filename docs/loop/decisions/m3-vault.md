@@ -484,5 +484,16 @@
 - **Revisit if:** Land's integration gate identifies another actual contract conflict.
 - **Source:** locked by docs/loop/LOOP.md step7.3 and m1-agent-status-scripting decisions
 
+## D45: Parse real module syntax rather than regex-match embedded native text
+- **Question:** Does ObjC.import('Foundation') in the native Trash script violate the public plugin import fence?
+- **Options:** Declare a fake JavaScript dependency; special-case Foundation or member names; parse actual TypeScript module references.
+- **Chose:** Use the existing TypeScript compiler dependency to visit import/export declarations, import-equals, type imports and direct require/dynamic-import calls. Remove regex/comment stripping. Ignore strings, regex literals and ordinary member calls while still inspecting executable template interpolations.
+- **Why:** The land-owned whole suite reproduced an import-fence false positive on the JXA template at actions.ts:9. This is Objective-C bridge loading, not a Swift or JavaScript package import. A package allowlist or renamed native expression would hide the scanner defect.
+- **Evidence:** Whole gate464remote files initially462pass/2fail; PTY host passes32/32 isolated, import fence fails again. New single-file regressions reproduce non-module false positives before the fix (artifact419). After the AST fix, all4 fence cases pass, including real private type-only/require/export/interpolation references, and typecheck exits0. No runtime/native deletion code or dependency declaration changed.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** A supported module syntax bypasses the fence or valid non-module text is flagged.
+- **Source:** locked by the public-only plugin boundary and the operator's blocking-findings-only instruction
+
 ## Progress
-Implementation, packaged core smoke, one final review/fix batch and affected gates are complete. Both dependent completion items and open findings are recorded. Initial catch-up was9ec4c97; first land required the additive session naming/resume resolution in D44. The resolved build/typecheck and144-file integration run pass (one runner-reported flaky file). Whole-suite verification and done status remain owned by queue.ts land; no manual whole-suite run is claimed.
+Core implementation, packaged smoke, review/fix batch and affected gates are complete; both completion items are queued. The additive session conflict is resolved and144 integration files pass under runner policy. Land's whole gate found the import-fence false positive; D45 fixes it with4 passing regressions/typecheck. Runtime code is unchanged by that repair. Whole-suite success and done status remain owned by queue.ts land; no manual whole-suite run is claimed.
