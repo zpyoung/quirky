@@ -181,7 +181,8 @@ function QuickCommandsMenu({ context, anchor, commands, preferred, onClose, onRu
       setHighlight(shown[next]!.id)
       return
     }
-    if (event.key === 'Enter' && active && isQuickCommandComplete(active)) {
+    // enter on a row action or the footer button must activate that button, not run the highlighted row
+    if (event.key === 'Enter' && event.target === search.current && active && isQuickCommandComplete(active)) {
       event.preventDefault()
       onRun(active)
     }

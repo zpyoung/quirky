@@ -171,6 +171,20 @@ describe('QuickCommandsStripButton', () => {
       expect(fake.callsTo('quirky.terminal/runQuickCommand')[0]!.params).toMatchObject({ id: 'draft' })
     })
 
+    test('Enter on a row action activates that button instead of running the highlighted row', async () => {
+      const { fake } = await mountStrip({ commands: [hello] })
+      await click(button('More quick commands'))
+      for (const name of ['Copy Hello', 'Edit Hello', 'Delete Hello']) {
+        const action = button(name)
+        action.focus()
+        await key(action, 'Enter')
+      }
+      const footer = button('+ Command')
+      footer.focus()
+      await key(footer, 'Enter')
+      expect(fake.callsTo('quirky.terminal/runQuickCommand')).toHaveLength(0)
+    })
+
     test('Escape closes the menu', async () => {
       await mountStrip({ commands: [hello] })
       await click(button('More quick commands'))
