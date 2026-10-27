@@ -101,6 +101,11 @@ export class Screen {
     this.term.resize(cols, rows)
   }
 
+  /** Empties the scrollback and every row but the cursor's, which becomes the first row. */
+  clear(): void {
+    this.term.clear()
+  }
+
   /** Resolves once everything written so far has been parsed. */
   settled(): Promise<void> {
     return new Promise((resolve) => this.term.write('', resolve))

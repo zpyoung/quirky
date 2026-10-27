@@ -3,7 +3,7 @@ import * as fs from 'node:fs'
 import { appendFileSync, closeSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { HistoryLog, LogReader, newestOffset, oldestOffset, readSegments } from '../src/history/log'
+import { HistoryLog, LogReader, newestClearOffset, newestOffset, oldestOffset, readSegments } from '../src/history/log'
 
 const enc = (s: string) => new TextEncoder().encode(s)
 const dec = (b: Uint8Array | undefined) => new TextDecoder().decode(b)
@@ -97,6 +97,53 @@ describe('HistoryLog format', () => {
     expect(segments[0]!.records[2]).toMatchObject({ cols: 90, rows: 20 })
     expect(oldestOffset(dir)).toBe(0)
     expect(newestOffset(dir)).toBe(6)
+  })
+
+  test('SC-34: a clear record is zero-length, takes no output position and is found by newestClearOffset', () => {
+    const dir = freshDir()
+    const log = HistoryLog.create(dir, { cols: 80, rows: 24 })
+    log.appendOutput(enc('abc'))
+    log.appendClear()
+    log.appendOutput(enc('de'))
+    log.appendClear()
+    log.appendOutput(enc('f'))
+    expect(log.offset).toBe(6)
+    log.close()
+
+    const raw = readFileSync(join(dir, 'output.log'))
+    const kinds = readSegments(dir).segments[0]!.records.map((r) => [r.kind, r.offset])
+    expect(kinds).toEqual([
+      ['resize', 0],
+      ['output', 0],
+      ['clear', 3],
+      ['output', 3],
+      ['clear', 5],
+      ['output', 5]
+    ])
+    expect(raw[16 + 9 + 8]).toBe(0x04)
+    expect(raw.readUInt32LE(16 + 9 + 8 + 1)).toBe(0)
+    expect(newestClearOffset(readSegments(dir).segments)).toBe(5)
+
+    const reader = LogReader.open(dir)
+    try {
+      expect(reader.segments[0]!.records.map((r) => [r.kind, r.offset])).toEqual(kinds)
+      expect(newestClearOffset(reader.segments)).toBe(5)
+    } finally {
+      reader.close()
+    }
+  })
+
+  test('newestClearOffset is null without a clear record and looks across segments', () => {
+    const dir = freshDir()
+    const log = HistoryLog.create(dir, { cols: 80, rows: 24, maxSegmentBytes: OPENING_BYTES + 20 })
+    log.appendOutput(enc('abcd'))
+    expect(newestClearOffset(readSegments(dir).segments)).toBeNull()
+    log.appendClear()
+    log.appendOutput(enc('0123456789AB'))
+    log.appendOutput(enc('tail'))
+    log.close()
+    expect(readSegments(dir).segments).toHaveLength(2)
+    expect(newestClearOffset(readSegments(dir).segments)).toBe(4)
   })
 
   test('create discards segments left by an earlier run', () => {

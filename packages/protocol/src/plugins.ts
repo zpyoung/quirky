@@ -107,6 +107,10 @@ export type PluginPty = {
     sessionId: string,
     options?: { lines?: number; before?: string; format?: 'text' | 'ansi' }
   ): Promise<PtyHistoryPage>
+  /** Drops the scrollback and keeps the cursor's line, in every attached viewer and in later restores. */
+  clear(sessionId: string): Promise<void>
+  /** Turns mouse tracking, bracketed paste and application cursor off and shows the cursor; nothing reaches the process. */
+  resetModes(sessionId: string): Promise<void>
   /** Replaces the PTY host process and returns the new host's pid. */
   restartHost(): Promise<{ pid: number }>
   unsubscribe(sessionId: string): Promise<void>

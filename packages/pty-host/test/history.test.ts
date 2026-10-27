@@ -376,6 +376,89 @@ describe('pageBefore', () => {
   })
 })
 
+/** A log of `before`, a clear (the cursor row kept), then `after`; the screen is the emulator the host would hold. */
+async function clearedLog(before: string, after: string, rows = 24): Promise<{ dir: string; live: Screen }> {
+  const dir = freshDir()
+  const log = HistoryLog.create(dir, { cols: 80, rows })
+  const live = new Screen({ cols: 80, rows })
+  log.appendOutput(enc(before))
+  live.write(before)
+  await live.settled()
+  live.clear()
+  log.appendClear()
+  log.appendOutput(enc(`\x1b[H\x1b[2J\x1b[3J${live.snapshot().ansi}`))
+  log.appendOutput(enc(after))
+  live.write(after)
+  await live.settled()
+  log.close()
+  return { dir, live }
+}
+
+describe('history after a clear (SC-34)', () => {
+  test('pages hold only rows after the clear and end there', async () => {
+    const { dir, live } = await clearedLog(`${numbered('old', 1, 300)}$ `, `${numbered('new', 1, 120)}$ `)
+    const pages = await pageToTheEnd(dir, 40)
+    const all = pages.slice().reverse().flat()
+    expect(all.some((row) => row.startsWith('old-'))).toBe(false)
+    expect(all[0]).toBe('$ new-1')
+    expect(all.at(-1)).toBe('new-97')
+    expect(pages.at(-1)).not.toHaveLength(0)
+    live.dispose()
+  })
+
+  test('nothing is above the screen right after a clear, and an older cursor is clamped to it', async () => {
+    const { dir, live } = await clearedLog(`${numbered('old', 1, 300)}$ `, '')
+    expect(await pageBefore(dir, { lines: 100, format: 'text', screenRows: 24 })).toEqual({ lines: [], cursor: null })
+    expect(await pageBefore(dir, { before: 500, lines: 100, format: 'text', screenRows: 24 })).toEqual({ lines: [], cursor: null })
+    expect(await textLinesAbove(dir, 100, 24)).toEqual([])
+    live.dispose()
+  })
+
+  test('the attach replay shows the kept line and what came after, with no older scrollback', async () => {
+    const { dir, live } = await clearedLog(`${numbered('old', 1, 300)}$ `, `${numbered('new', 1, 50)}$ `)
+    const { replay, historyCursor } = await composeReplay(dir, { historyLines: 2000, live: live.snapshot() })
+    expect(historyCursor).toBeNull()
+
+    const fresh = new Screen({ cols: 80, rows: 24, scrollback: 10_000 })
+    fresh.write(replay)
+    await fresh.settled()
+    const rows = fresh.lines().map((row) => row.text)
+    expect(rows.some((row) => row.startsWith('old-'))).toBe(false)
+    expect(rows[0]).toBe('$ new-1')
+    expect(rows.slice(0, 50).at(-1)).toBe('new-50')
+    expect(fresh.snapshot().ansi).toBe(live.snapshot().ansi)
+    live.dispose()
+    fresh.dispose()
+  })
+
+  test('the attach replay right after a clear is the kept line alone', async () => {
+    const { dir, live } = await clearedLog(`${numbered('old', 1, 300)}$ `, '')
+    const { replay } = await composeReplay(dir, { historyLines: 2000, live: live.snapshot() })
+    const fresh = new Screen({ cols: 80, rows: 24, scrollback: 10_000 })
+    fresh.write(replay)
+    await fresh.settled()
+    expect(fresh.lines().map((row) => row.text).filter((row) => row !== '')).toEqual(['$ '])
+    expect(fresh.scrollbackRows).toBe(0)
+    live.dispose()
+    fresh.dispose()
+  })
+
+  test('a second clear hides the rows between the two', async () => {
+    const first = await clearedLog(`${numbered('old', 1, 100)}$ `, `${numbered('mid', 1, 100)}$ `)
+    first.live.dispose()
+    const dir = first.dir
+    const log = HistoryLog.openForAppend(dir, { cols: 80, rows: 24 })
+    log.appendClear()
+    log.appendOutput(enc('\x1b[H\x1b[2J\x1b[3J$ '))
+    log.appendOutput(enc(numbered('last', 1, 60)))
+    log.close()
+
+    const all = (await pageToTheEnd(dir, 40)).flat()
+    expect(all.some((row) => row.startsWith('old-') || row.startsWith('mid-'))).toBe(false)
+    expect(all.some((row) => row.endsWith('last-1'))).toBe(true)
+  })
+})
+
 describe('textLinesAbove', () => {
   test('returns the last lines above the screen, trimmed to the count', async () => {
     const dir = logWith(numbered('r', 1, 500))
