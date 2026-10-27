@@ -153,7 +153,18 @@ export type UiLayout = {
 }
 
 /** A connected window (a client with role `ui`). */
-export type UiWindowInfo = { connId: number; name?: string; focused: boolean }
+export type UiWindowInfo = {
+  connId: number
+  name?: string
+  focused: boolean
+  /** Epoch milliseconds of the window's last reported input; null before any. */
+  inputAt: number | null
+  /** Whether that input is within the away threshold. */
+  present: boolean
+}
+
+/** How long without input before a window stops counting as present; milliseconds. */
+export const DESKTOP_AWAY_MS = 180_000
 
 /** One slot in the UI model, with the latest report from its mounted window. */
 export type UiSlotState = {
