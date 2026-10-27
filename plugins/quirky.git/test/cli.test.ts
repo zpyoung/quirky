@@ -25,8 +25,9 @@ describe('quirky git CLI group', () => {
     expect(commit.stdout).toContain('c'.repeat(40))
 
     expect(g.git.calls.map((c) => [c.fn, ...c.args.slice(1)])).toEqual([
-      ['status'],
-      ['stage', ['a.txt']],
+      ['statusV2'],
+      ['statusV2'],
+      ['stagePaths', ['a.txt']],
       ['commit', 'edit']
     ])
     await waitFor(() => g.events.filter((e) => e.type === 'quirky.git/changed').length >= 2)

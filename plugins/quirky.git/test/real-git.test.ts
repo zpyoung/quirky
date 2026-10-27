@@ -37,7 +37,8 @@ describe('quirky.git against a real repository', () => {
   test('a git failure reports git stderr', async () => {
     g = await startGitHarness({ realGit: true })
     const error = await g.call('quirky.git/stage', { worktree: g.main.id, paths: ['missing.txt'] }).catch((e) => e)
-    expect(error.code).toBe(-32603)
-    expect(error.message).toContain("pathspec 'missing.txt' did not match")
+    expect(error.code).toBe(-32009)
+    expect(error.data).toEqual({ reason: 'failed' })
+    expect(error.message).toContain("pathspec ':(literal)missing.txt' did not match")
   })
 })
