@@ -47,6 +47,7 @@ type AskRow = {
   summary: string
   seq: number
   created_seq: number
+  owner_plugin_id: string | null
 }
 
 function toAsk(row: AskRow, queued: boolean): Ask {
@@ -110,7 +111,7 @@ export class AskService {
     specInput: unknown,
     sessionId: string | null,
     worktreeId: string | null,
-    options: { timeoutMs?: number; checkCredentialText: boolean }
+    options: { timeoutMs?: number; checkCredentialText: boolean; ownerPluginId?: string }
   ): Ask {
     const checked = validateAskSpec(specInput, { checkCredentialText: options.checkCredentialText })
     if (!checked.ok) throw this.errors.invalidParams(formatSpecErrors(checked.errors))
@@ -124,8 +125,8 @@ export class AskService {
     const seq = this.store.transaction(() => {
       const next = this.nextSeq()
       this.store.run(
-        `INSERT INTO asks (id, spec, session_id, worktree_id, created_at, status, answers, skipped, partial, expires_at, summary, seq, created_seq)
-         VALUES (?, ?, ?, ?, ?, 'pending', '{}', '[]', '{}', ?, '', ?, ?)`,
+        `INSERT INTO asks (id, spec, session_id, worktree_id, created_at, status, answers, skipped, partial, expires_at, summary, seq, created_seq, owner_plugin_id)
+         VALUES (?, ?, ?, ?, ?, 'pending', '{}', '[]', '{}', ?, '', ?, ?, ?)`,
         id,
         JSON.stringify(checked.spec),
         sessionId,
@@ -133,7 +134,8 @@ export class AskService {
         createdAt,
         expiresAt,
         next,
-        next
+        next,
+        options.ownerPluginId ?? null
       )
       return next
     })
@@ -241,6 +243,26 @@ export class AskService {
     const ask = this.get(askId)
     if (ask.envelope.status !== 'pending') return ask.envelope
     return this.resolve(ask, { status: 'declined', answers: {}, skipped: [], summary: '' })
+  }
+
+  /** Declines pending asks created by plugins whose owners are no longer active. */
+  cancelOwnedByInactivePlugins(activePluginIds: ReadonlySet<string>): void {
+    this.cancelPendingOwned((ownerPluginId) => ownerPluginId !== null && !activePluginIds.has(ownerPluginId))
+  }
+
+  /** Declines every pending plugin-owned ask during service shutdown or crash recovery. */
+  cancelPluginOwned(): void {
+    this.cancelPendingOwned((ownerPluginId) => ownerPluginId !== null)
+  }
+
+  private cancelPendingOwned(shouldCancel: (ownerPluginId: string | null) => boolean): void {
+    if (this.stopped) return
+    const rows = this.store.all<{ id: string; owner_plugin_id: string | null }>(
+      "SELECT id, owner_plugin_id FROM asks WHERE status = 'pending' AND owner_plugin_id IS NOT NULL ORDER BY created_seq"
+    )
+    for (const row of rows) {
+      if (shouldCancel(row.owner_plugin_id)) this.cancel(row.id)
+    }
   }
 
   /** Times a pending ask out now, exactly as its deadline would; a finished ask is returned unchanged. */

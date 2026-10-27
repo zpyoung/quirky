@@ -11,6 +11,7 @@ import {
   migratedStore,
   openWindow,
   PANEL,
+  confirmSpec,
   spec,
   startAsk,
   stopKeepingHome,
@@ -212,6 +213,27 @@ const askEvents = (events: QuirkyEvent[]) =>
     .map((event) => [event.type.slice('quirky.ask/'.length), (event as any).data.seq as number])
 const eventsOf = (events: QuirkyEvent[], name: string) => events.filter((event) => event.type === `quirky.ask/${name}`) as any[]
 const asksOf = async (c: QuirkyClient, pendingOnly = false) => (await c.callAny('quirky.ask/list', { pendingOnly })) as Ask[]
+const ASK_OWNER_ID = 'quirky.ask-owner'
+
+function approvalOwnerPlugins(): string {
+  const builtin = askOnlyPluginsDir()
+  writePlugin(
+    builtin,
+    {
+      id: ASK_OWNER_ID,
+      name: 'Ask owner fixture',
+      version: '1.0.0',
+      main: 'main.ts',
+      dependencies: ['quirky.ask'],
+      contributes: { method: [{ id: 'create', params: { type: 'object', additionalProperties: true } }] }
+    },
+    {
+      'main.ts':
+        "type FixtureContext = { provide(name: string, handler: (params: Record<string, unknown>) => unknown): void; call(method: string, params: Record<string, unknown>): Promise<unknown> }; export function activate(context: FixtureContext) { context.provide('method:quirky.ask-owner/create', (params: Record<string, unknown>) => context.call('quirky.ask/create', params)) }\n"
+    }
+  )
+  return builtin
+}
 
 describe('questions and answers', () => {
   test('SC-1: number and date questions register and come back typed', async () => {
@@ -314,6 +336,87 @@ describe('questions and answers', () => {
     expect(envelope.status).toBe('partial')
     expect(envelope.skipped).toContain('go')
     expect(Object.values(envelope.answers).map((answer: any) => answer.source)).not.toContain('default')
+  })
+})
+
+describe('plugin-owned approvals', () => {
+  test('ownership is private and disabling an owner cancels its pending asks', async () => {
+    const builtin = approvalOwnerPlugins()
+    const harness = await startAsk(undefined, builtin)
+    const owner = await connectAs(harness)
+    const user = await connectAs(harness)
+    const first = (await owner.callAny('quirky.ask-owner/create', {
+      spec: confirmSpec,
+      session: 'approval-session'
+    })) as { askId: string }
+    const queued = (await owner.callAny('quirky.ask-owner/create', { spec: confirmSpec, session: 'approval-session' })) as { askId: string }
+    const refusedOwner = await errorOf(user.callAny('quirky.ask/create', { spec: confirmSpec, ownerPluginId: ASK_OWNER_ID }))
+    expect(refusedOwner?.code).toBe(RpcErrorCode.InvalidParams)
+    const userAsk = (await user.callAny('quirky.ask/create', { spec: confirmSpec })) as { askId: string }
+    const before = await asksOf(user)
+    const beforeById = new Map(before.map((ask) => [ask.id, ask]))
+    expect(beforeById.get(first.askId)).not.toHaveProperty('ownerPluginId')
+    expect(beforeById.get(first.askId)).not.toHaveProperty('owner_plugin_id')
+    expect(beforeById.get(userAsk.askId)).not.toHaveProperty('ownerPluginId')
+    expect(beforeById.get(userAsk.askId)).not.toHaveProperty('owner_plugin_id')
+
+    const waiting = user.callAny('quirky.ask/wait', { askId: first.askId, timeoutMs: 10000 }) as Promise<AskEnvelope>
+    await user.call('plugin.disable', { id: ASK_OWNER_ID })
+
+    expect(await waiting).toMatchObject({ askId: first.askId, status: 'declined' })
+    const after = await asksOf(user)
+    const afterById = new Map(after.map((ask) => [ask.id, ask]))
+    expect(afterById.get(first.askId)).toMatchObject({ envelope: { status: 'declined' } })
+    expect(afterById.get(queued.askId)).toMatchObject({ envelope: { status: 'declined' } })
+    expect(afterById.get(userAsk.askId)).toMatchObject({ envelope: { status: 'pending' } })
+    expect(afterById.get(first.askId)!.seq).toBeGreaterThan(beforeById.get(first.askId)!.seq)
+    expect(afterById.get(queued.askId)!.seq).toBeGreaterThan(afterById.get(first.askId)!.seq)
+
+    const home = harness.home
+    await stopKeepingHome(harness)
+    const restarted = await startAsk(home, builtin)
+    const recovered = await asksOf(await connectAs(restarted))
+    const recoveredById = new Map(recovered.map((ask) => [ask.id, ask]))
+    expect(recoveredById.get(first.askId)).toMatchObject({ envelope: { status: 'declined' } })
+    expect(recoveredById.get(queued.askId)).toMatchObject({ envelope: { status: 'declined' } })
+    expect(recoveredById.get(userAsk.askId)).toMatchObject({ envelope: { status: 'pending' } })
+  })
+
+  test('ask deactivation cancels plugin-owned asks before shutting down waiters with revoked emits', async () => {
+    const harness = await startAsk(undefined, approvalOwnerPlugins())
+    const owner = await connectAs(harness)
+    const user = await connectAs(harness)
+    const { askId: ownedAskId } = (await owner.callAny('quirky.ask-owner/create', { spec: confirmSpec })) as { askId: string }
+    const { askId: userAskId } = (await user.callAny('quirky.ask/create', { spec: confirmSpec })) as { askId: string }
+    const ownedWaiting = user.callAny('quirky.ask/wait', { askId: ownedAskId, timeoutMs: 10000 }) as Promise<AskEnvelope>
+    const userWaiting = errorOf(user.callAny('quirky.ask/wait', { askId: userAskId, timeoutMs: 10000 }))
+
+    await user.call('plugin.disable', { id: 'quirky.ask' })
+
+    expect(await ownedWaiting).toMatchObject({ askId: ownedAskId, status: 'declined' })
+    expect(await userWaiting).not.toBeNull()
+    await user.call('plugin.enable', { id: 'quirky.ask' })
+    const asks = await asksOf(user)
+    const byId = new Map(asks.map((ask) => [ask.id, ask]))
+    expect(byId.get(ownedAskId)).toMatchObject({ envelope: { status: 'declined' } })
+    expect(byId.get(userAskId)).toMatchObject({ envelope: { status: 'pending' } })
+  })
+
+  test('activation declines persisted plugin-owned approvals after restart but preserves user asks', async () => {
+    const builtin = approvalOwnerPlugins()
+    const harness = await startAsk(undefined, builtin)
+    const owner = await connectAs(harness)
+    const user = await connectAs(harness)
+    const { askId: ownedAskId } = (await owner.callAny('quirky.ask-owner/create', { spec: confirmSpec })) as { askId: string }
+    const { askId: userAskId } = (await user.callAny('quirky.ask/create', { spec: confirmSpec })) as { askId: string }
+    const home = harness.home
+    await stopKeepingHome(harness)
+
+    const restarted = await startAsk(home, builtin)
+    const asks = await asksOf(await connectAs(restarted))
+    const byId = new Map(asks.map((ask) => [ask.id, ask]))
+    expect(byId.get(ownedAskId)).toMatchObject({ envelope: { status: 'declined' } })
+    expect(byId.get(userAskId)).toMatchObject({ envelope: { status: 'pending' } })
   })
 })
 
