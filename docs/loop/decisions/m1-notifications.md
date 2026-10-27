@@ -477,5 +477,25 @@
 - **Confidence:** high
 - **Source:** locked by docs/loop/LOOP.md
 
+## D48: W1 landed as six components; two one-line test fixes outside their scopes were applied by the orchestrator
+- **Question:** wave 1's results and the choices its implementers made where the contract was open
+- **Options:** accept; send back
+- **Chose:** accept all six (merged at a889dca). K and P each stopped BLOCKED on one test outside scope that pinned an old shape (`packages/cli/test/kernel-commands.test.ts` building a `UiWindowInfo`; `plugins/quirky.terminal/test/terminal.test.ts` listing the terminal events); no other component touched either file, so the orchestrator widened those scopes and made the one-line fixes. Recorded choices: K adds `DaemonOptions.desktopAwayMs` and an injectable clock, passes the threshold with `layout.setAwayMs` after the runtime starts, and keeps `sound.file` untyped in the schema (the schema subset has no unions); P needs no PTY protocol bump (facts are forwarded opaquely), cuts to 255 characters plus "…", and lets the last `o=` of an OSC 99 id win; R emits title-driven `settled` only for an existing row, leaves inferred interrupts silent, and drops the v1 notifications import (the daemon's v1 import still writes the old setting ID, which N migrates); M uses the theme's `--amber` token for the bells, a masked inline SVG per plugin, and description-only schemas for the nullable `unread`; S's tones are 0.09 to 0.58 s at a peak of 20000; T cuts with `n-1` units plus "…" and moves a re-reserved cooldown key to newest.
+- **Why:** every component's acceptance passed in its tree; each choice fits the contract
+- **Evidence:** sdd journal in the session scratchpad; merges 435e685..a889dca
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** assumed — autonomous
+
+## D49: W2 starts while the W1 gate finishes; its two failures belong to W2
+- **Question:** the W1 gate shows `plugins/test/imports.test.ts` SC-24 failing (the new `plugins/quirky.notifications/` has no `package.json` yet) and `packages/ui/test/exit.e2e.test.ts` SC-31 failing (the ask no longer announces itself until the notifications plugin exists)
+- **Options:** fix them with a scoped wave-gate fixer; let W2's plugin task own them
+- **Chose:** W2's plugin task, whose scope adds `package.json` and whose acceptance now runs both tests
+- **Why:** both failures are the planned gap between W1 removing the producers' notify calls and W2 adding the plugin; a separate fixer would write a stub the plugin task replaces
+- **Evidence:** sdd/gate-w1.log in the session scratchpad
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** assumed — autonomous
+
 ## Progress
 Specs written (logic.md, tech.md). Spec review done and fixed (D46). Next: subagent-driven development W1 (K, P, R, M, S), W2 (N, D, N6), W3 (e2e and UI tests), catch-up, Final Round 1, UI pass, land.
