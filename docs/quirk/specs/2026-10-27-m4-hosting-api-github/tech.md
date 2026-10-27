@@ -31,7 +31,7 @@ Implements [locked decisions](logic.md#decisions-locked).
 type Handler = (params: Record<string, unknown>, caller: PluginCaller) => unknown;
 type Identity = { host: string; owner: string; repo: string };
 type Scope = { worktree: Worktree; origin: Identity; repository: Identity; binding?: { host: string; user: string } };
-type RunOptions = { idempotent?: boolean; timeoutMs?: number; maxBytes?: number; input?: string; ambient?: boolean; signal?: AbortSignal };
+type RunOptions = { idempotent?: boolean; timeoutMs?: number; maxBytes?: number; input?: string; ambient?: boolean; signal?: AbortSignal; projectHost?: string };
 type HostingEnv = {
   context: PluginContext;
   resolve(params: Record<string, unknown>, caller: PluginCaller): Promise<Scope>;
@@ -62,6 +62,7 @@ PR `merge` requires positive number, expectedHead (40/64 hex), method squash/mer
 
 `updateReview` action enum edit/close/reopen/ready with optional title/body. `reviewers` action add/remove with nonempty logins. `reviewComment` action inline/reply with current head, file/line/range or reply id. Thread/reaction/file IDs are validated against the selected PR before mutation, preventing arbitrary cross-repo GraphQL IDs. `projectItemMutation` action enum editIssue/editReview/addComment/updateComment/deleteComment/updateIssueType; no arbitrary GraphQL or arbitrary HTTP escape hatch is exposed.
 Projects item content repositories are not restricted to local remotes. `projectItemContext` obtains owner/repo/number/kind from authenticated project metadata, validates exact syntactic slugs and the selected project host, and carries that identity through REST/GraphQL actions using ambient auth. Project/item association and comment-to-item association checks remain mandatory. Pasted `workItem` references and `prRepo` remain restricted to configured remotes. Add GH31 stateful readback coverage for an item in a different repository on the same trusted host, plus refusal of a substituted foreign host.
+For Projects only, internal `RunOptions.projectHost` marks the authenticated project-host route; it is never a public method parameter. The runner requires ambient auth, exact equality with the target host, and either github.com or a host present in the local gh auth inventory before allowing a target repository outside configured remotes. Do not waive the ordinary remote guard merely because ambient auth is requested. Projects helpers set this option after project/item/URL validation; foreign-host substitution and untrusted GHES hosts fail before authenticated API calls. Discovery on an authenticated GHES host must not depend on a local remote for that host.
 
 ### Refresh ownership and partial mutations
 
