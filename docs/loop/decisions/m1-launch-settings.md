@@ -361,4 +361,4 @@
 - **Source:** locked by docs/loop/LOOP.md
 
 ## Progress
-All four waves merged (b69fa1d), checkpoint fixes F1 merged, F2 in flight. Next: merge F2, catch up with build/roadmap, Final Round 1 plus one fix batch, verify (no UI scenarios, no native scenarios), land.
+Done. Built in four waves plus three fix batches (checkpoint 1, checkpoint 2, Final Round 1); every SC-1–SC-24 has a named test; `bun run test` 2988 pass, `bun test scripts` 30 pass, typecheck clean. No open review findings. Landing on build/roadmap.
