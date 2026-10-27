@@ -8,6 +8,13 @@
   "contributes": {
     "method": [
       {
+        "id": "worktreeSource",
+        "description": "Resolve a fresh GitHub PR or issue source for worktree creation, including authenticated fork head and base identity.",
+        "readOnly": true,
+        "params": {"type": "object", "properties": {"worktree": {"type": "string"}, "reference": {"type": "string", "description": "#number or a configured repository's credential-free HTTPS issue/PR URL."}}, "required": ["reference"]},
+        "result": {"type": "object", "properties": {"item": {"type": "object", "properties": {"provider": {"type": "string", "enum": ["github"]}, "kind": {"type": "string", "enum": ["issue", "pullRequest"]}, "number": {"type": "integer"}, "title": {"type": "string"}, "url": {"type": "string"}, "repository": {"type": "object", "properties": {"host": {"type": "string"}, "owner": {"type": "string"}, "repo": {"type": "string"}}, "required": ["host", "owner", "repo"]}}, "required": ["provider", "kind", "number", "title", "url", "repository"]}, "head": {"description": "Null for issues; PR head repository, refName, oid, sshUrl, httpsUrl and maintainerCanModify.", "properties": {"repository": {"type": "object", "properties": {"host": {"type": "string"}, "owner": {"type": "string"}, "repo": {"type": "string"}}, "required": ["host", "owner", "repo"]}, "refName": {"type": "string"}, "oid": {"type": "string"}, "sshUrl": {"type": "string"}, "httpsUrl": {"type": "string"}, "maintainerCanModify": {"type": "boolean"}}}, "base": {"description": "Null for issues; PR base repository, refName and oid.", "properties": {"repository": {"type": "object", "properties": {"host": {"type": "string"}, "owner": {"type": "string"}, "repo": {"type": "string"}}, "required": ["host", "owner", "repo"]}, "refName": {"type": "string"}, "oid": {"type": "string"}}}}, "required": ["item", "head", "base"]}
+      },
+      {
         "id": "repository",
         "description": "Resolve the registered worktree's trusted GitHub origin, pull-request candidates, and issue source.",
         "readOnly": true,

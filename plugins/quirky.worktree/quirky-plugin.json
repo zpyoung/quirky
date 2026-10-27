@@ -166,6 +166,19 @@
               "type": "string",
               "description": "Ref to cut the new branch from; default: the project's saved base, else the detected default branch."
             },
+            "github": {
+              "type": "string",
+              "description": "Create from a GitHub #number or HTTPS PR/issue URL, resolved freshly through the hosting plugin."
+            },
+            "issueCommand": {
+              "type": "string",
+              "enum": ["run", "skip"],
+              "description": "Run (default) or skip the configured command for an issue source."
+            },
+            "trustIssueCommand": {
+              "type": "boolean",
+              "description": "Trust the selected commit's shared issue command for this creation only."
+            },
             "displayName": {
               "type": "string",
               "description": "Label shown in place of the name."

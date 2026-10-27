@@ -34,6 +34,10 @@ export type CreateParams = {
   branch?: string
   branchName?: string
   base?: string
+  /** GitHub #number or credential-free HTTPS PR/issue URL; resolved again by the daemon. */
+  github?: string
+  issueCommand?: 'run' | 'skip'
+  trustIssueCommand?: boolean
   displayName?: string
   comment?: string
   parent?: string
