@@ -521,5 +521,25 @@
 - **Revisit if:** a later Bun release stops leaking, or the suite starts failing with EBADF again
 - **Source:** assumed — autonomous
 
+## D52: Catching up twice: m1-worktrees, then m1-agent-status, whose tab glyph moves into the workspace tab strip
+- **Question:** LOOP.md step 5's catch-up merge, and what the merged decision logs mean for this item
+- **Options:** —
+- **Chose:** merged build/roadmap after wave 4 (m1-worktrees: clean) and again after Final Round 1 (m1-agent-status, which landed meanwhile: two import-level conflicts in `quirky.session/src/sessions.ts` and `quirky.terminal/main.ts`, where `factEvent` now returns null for prompt and program-status facts). m1-worktrees D24 gave sessions a `title`, so a Setup terminal's tab takes its session title (wave 5). m1-agent-status D56 draws the agent glyph in `quirky.session`'s tab strip, which this item's override hides, so the glyph and the report's `display`/`label` are ported into the workspace tab strip in the final fix batch. Neither log conflicts with a decision here.
+- **Why:** LOOP.md "Read every decision log the merge brought in"
+- **Evidence:** docs/loop/decisions/m1-worktrees.md D24, D64; docs/loop/decisions/m1-agent-status.md D56
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** assumed — autonomous
+
+## D53: Final Round 1: accept nine findings, dismiss five
+- **Question:** Final Round 1 (Codex, deep, three lenses over two partitions of build/roadmap..HEAD without tests and docs)
+- **Options:** —
+- **Chose:** accepted: an incoming layout revision stole focus from the search box (A-C1); closing the floating workspace's last tab left the panel open (A-C2); a regex search could freeze the window (A-X1; pathological patterns are refused before search); the `toggle-quick-commands` command opened a reduced menu (A-S1); explicit pane IDs weren't found across worktrees (A-S2); "received input" was lost on daemon restart (B-C3=B-S3; now stored on the pane); a PTY reconnect kept stale cwds (B-C4); `newTab {group}` didn't resolve the group's workspace (B-S2); plus the agent glyph port (D52) and the Quick Command dialog's late Project preselect found by the UI scenario tests. Dismissed: B-C1, B-X1, B-X2 and B-S1 are the reverse of m1-agent-status's changes, which landed on build/roadmap after this branch's first catch-up, so the tree diff showed them as removals; B-C2 (`quirky terminal send` not counting as input) is deliberate: a script that sends `exit` keeps the session record it reads back, as m1-term-daemon's exit-code scenarios do.
+- **Why:** each accepted finding breaks a stated scenario or contract; the dismissed ones aren't this item's code or follow a recorded rule.
+- **Evidence:** scratchpad fr1a/, fr1b/ gate.json; `git log HEAD..build/roadmap` at review time
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** assumed — autonomous
+
 ## Progress
-All five waves and three checkpoint fix batches merged (a1c5387), with the catch-up merge of build/roadmap (m1-worktrees) and the descriptor fix (D51). Gate w5 running. Next: Final Round 1 (deep, three lenses, two partitions over build/roadmap..HEAD minus tests/docs), one fix batch, the like-a-user web pass on the (UI) scenarios, native handoff file, then land. Known small bug for the final batch: the Add Quick Command dialog doesn't preselect Project scope when the repo lookup resolves after it opens.
+Final Round 1 done and adjudicated (D53); second catch-up merge 70e375f. Final fix batch GW (window), GQ (quick commands), GD (daemon) dispatched from 70e375f on sdd/termui/G*. Next: merge them, gate, the like-a-user web pass (setup script scratchpad uiv/setup.sh), native handoff file, BLOCKERS for anything left open, land.
