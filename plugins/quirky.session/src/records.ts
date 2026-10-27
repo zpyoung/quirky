@@ -6,6 +6,7 @@ import type {
   ExitCause,
   PluginStore,
   PromptDeliveryState,
+  LaunchSettings,
   Session,
   SessionLaunch,
   SessionProviderSession,
@@ -31,6 +32,7 @@ type Row = {
   provider_session: string | null
   prompt_delivery: PromptDeliveryState | null
   resumed_from: string | null
+  launch_settings: string | null
 }
 
 function parseJson<T>(text: string | null): T | null {
@@ -59,6 +61,7 @@ const toSession = (row: Row): Session => ({
   launch: parseJson<SessionLaunch>(row.launch),
   providerSession: parseJson<SessionProviderSession>(row.provider_session),
   promptDelivery: row.prompt_delivery,
+  launchSettings: parseJson<LaunchSettings>(row.launch_settings),
   resumedFrom: row.resumed_from
 })
 
@@ -126,6 +129,9 @@ export function sessionMigrations(home: string): StoreMigration[] {
       `)
     },
     (store) => {
+      store.exec('ALTER TABLE sessions ADD COLUMN launch_settings TEXT')
+    },
+    (store) => {
       store.exec(`
         ALTER TABLE sessions ADD COLUMN exit_signal TEXT;
         ALTER TABLE sessions ADD COLUMN exit_cause TEXT;
@@ -165,8 +171,8 @@ export class SessionRecords {
   insert(session: Session, repoId: string | null): void {
     this.store.run(
       `INSERT OR IGNORE INTO sessions (id, kind, agent, worktree_id, cwd, title, status, created_at, last_activity_at, exit_code, repo_id,
-        launch, provider_session, prompt_delivery, resumed_from, exit_signal, exit_cause, restorable)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        launch, provider_session, prompt_delivery, resumed_from, launch_settings, exit_signal, exit_cause, restorable)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       session.id,
       session.kind,
       session.agent,
@@ -182,6 +188,7 @@ export class SessionRecords {
       jsonOrNull(session.providerSession),
       session.promptDelivery ?? null,
       session.resumedFrom ?? null,
+      jsonOrNull(session.launchSettings),
       session.exitSignal,
       session.exitCause,
       session.restorable ? 1 : 0
@@ -205,6 +212,7 @@ export class SessionRecords {
       launch?: SessionLaunch | null
       providerSession?: SessionProviderSession | null
       promptDelivery?: PromptDeliveryState | null
+      launchSettings?: LaunchSettings | null
     }
   ): Session | null {
     const columns: [string, string | number | null][] = []
@@ -218,6 +226,7 @@ export class SessionRecords {
     if (fields.launch !== undefined) columns.push(['launch', jsonOrNull(fields.launch)])
     if (fields.providerSession !== undefined) columns.push(['provider_session', jsonOrNull(fields.providerSession)])
     if (fields.promptDelivery !== undefined) columns.push(['prompt_delivery', fields.promptDelivery])
+    if (fields.launchSettings !== undefined) columns.push(['launch_settings', jsonOrNull(fields.launchSettings)])
     if (columns.length > 0) {
       this.store.run(
         `UPDATE sessions SET ${columns.map(([name]) => `${name} = ?`).join(', ')} WHERE id = ?`,

@@ -1,0 +1,9 @@
+{
+  "id": "quirky.agents",
+  "name": "Agents (fake)",
+  "version": "0.0.0",
+  "main": "main.ts",
+  "contributes": {
+    "method": [{ "id": "resolveLaunch", "readOnly": true, "params": { "type": "object", "additionalProperties": true } }]
+  }
+}

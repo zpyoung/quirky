@@ -665,6 +665,7 @@ describe('the session store migration', () => {
         launch: null,
         providerSession: null,
         promptDelivery: null,
+        launchSettings: null,
         resumedFrom: null
       }
     ])

@@ -5,18 +5,25 @@
   "description": "Background Claude sessions without a terminal: journaled messages and permission prompts as asks.",
   "main": "main.ts",
   "activation": "lazy",
-  "dependencies": ["quirky.session", "quirky.ask"],
+  "dependencies": ["quirky.session", "quirky.ask", "quirky.agents"],
   "contributes": {
     "method": [
       {
         "id": "create",
-        "description": "Starts a structured (no PTY) background agent session; only `claude` is supported.",
+        "description": "Starts a structured (no PTY) background agent session, optionally with a model and effort pick. Only the `claude` runner exists; extra arguments are refused.",
         "params": {
           "type": "object",
           "properties": {
             "worktree": { "type": "string", "description": "A worktree selector; defaults to the caller's worktree." },
             "agent": { "type": "string", "description": "The agent to run." },
-            "prompt": { "type": "string" }
+            "prompt": { "type": "string" },
+            "model": { "type": "string", "description": "A model ID from the agent's catalog, 1 to 128 characters." },
+            "options": {
+              "type": "object",
+              "additionalProperties": true,
+              "description": "Launch option picks by option ID, such as { \"effort\": \"high\" }: up to 16 entries, each a string or a boolean."
+            },
+            "extraArgs": { "type": "string", "description": "Refused: a structured session has no command line." }
           },
           "required": ["agent", "prompt"]
         },

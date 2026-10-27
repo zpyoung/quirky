@@ -2,8 +2,17 @@ import { afterAll, describe, expect, test } from 'bun:test'
 import { chmodSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { PlanError, buildLaunchPlan, buildResumePlan } from '../../src/core/plan'
+import { SelectionError } from '../../src/core/selection'
 import { tokenize } from '../../src/core/shell'
-import { EMPTY_CONFIG, type AgentConfig, type AgentEntry, type LaunchRecord } from '../../src/core/types'
+import {
+  EMPTY_CONFIG,
+  type AgentConfig,
+  type AgentEntry,
+  type LaunchCatalog,
+  type LaunchRecord,
+  type ParsedExtras,
+  type ValidSelection
+} from '../../src/core/types'
 
 function entry(id: string, overrides: Partial<AgentEntry> = {}): AgentEntry {
   return {
@@ -36,6 +45,7 @@ function entry(id: string, overrides: Partial<AgentEntry> = {}): AgentEntry {
     trust: null,
     homepage: null,
     install: null,
+    launchOptions: null,
     ...overrides
   }
 }
@@ -678,5 +688,131 @@ describe('resume plans', () => {
   test('a recorded command carrying shell syntax is quoted, not run', () => {
     const result = resume(CODEX, { command: 'touch /tmp/x; rm -rf y', args: '', env: {} })
     expect(words(result.command)).toEqual(['touch', '/tmp/x;', 'rm', '-rf', 'y', 'resume', 'S'])
+  })
+})
+
+describe('launch settings in plans', () => {
+  const catalog: LaunchCatalog = {
+    model: { flag: ['--model', '{value}'], conflicts: [{ flags: ['--model'] }], structured: 'model' },
+    options: [
+      {
+        id: 'effort',
+        label: 'Effort',
+        type: 'select',
+        choices: ['low', 'high'].map((value) => ({ value, label: value })),
+        flag: ['--effort', '{value}'],
+        conflicts: [{ flags: ['--effort'] }],
+        composed: false,
+        structured: 'effort'
+      }
+    ],
+    models: [{ id: 'opus', label: 'Opus', description: null, options: [{ id: 'effort', choices: null }] }],
+    unlisted: 'accept',
+    unlistedOptions: [],
+    composeModel: null,
+    valueFlags: ['--effort', '--model'],
+    extraArgs: null
+  }
+  const picks: ValidSelection = { model: 'opus', values: Object.assign(Object.create(null), { effort: 'high' }), listed: true }
+  const extras = (text: string): ParsedExtras => ({ tokens: words(text), kinds: new Set(['repeatable']) })
+  const claude = { ...CLAUDE, label: 'Claude', launchOptions: catalog }
+
+  test("a selection's flags land before the configured terminator and hook args keep their place", () => {
+    const result = buildLaunchPlan({
+      entry: claude,
+      config: config({ args: '--verbose -- tail' }),
+      selection: picks,
+      hookArgs: ['--settings', 'x']
+    })
+    expect(words(result.command)).toEqual([
+      'claude', '--verbose', '--model', 'opus', '--effort', 'high', '--settings', 'x', '--', 'tail'
+    ])
+  })
+
+  test("a flag's value of -- is not taken as the arguments' terminator", () => {
+    const result = buildLaunchPlan({
+      entry: { ...claude, launchOptions: { ...catalog, valueFlags: ['--append-system-prompt'] } },
+      config: config({ args: '--append-system-prompt -- --verbose' }),
+      hookArgs: ['--settings', 'x']
+    })
+    expect(words(result.command)).toEqual(['claude', '--append-system-prompt', '--', '--verbose', '--settings', 'x'])
+  })
+
+  test('the prompt still follows the arguments', () => {
+    const result = buildLaunchPlan({ entry: claude, config: config({ args: '' }), selection: picks, prompt: 'hi' })
+    expect(words(result.command)).toEqual(['claude', '--model', 'opus', '--effort', 'high', 'hi'])
+  })
+
+  test('SC-21: the record holds the resolved arguments and resume replays them', () => {
+    const launched = buildLaunchPlan({ entry: claude, config: config({ args: '--model haiku' }), selection: picks })
+    expect(launched.record).toEqual({ command: 'claude', args: '--model opus --effort high', env: {} })
+    const resumed = buildResumePlan({
+      entry: claude,
+      record: launched.record,
+      providerSession: { id: 'abc', transcriptPath: null },
+      fork: false
+    })
+    expect(words(resumed.command)).toEqual(['claude', '--model', 'opus', '--effort', 'high', '--resume', 'abc'])
+    expect(resumed.command).not.toContain('haiku')
+  })
+
+  test('extras alone also rewrite the record, quoted', () => {
+    const result = buildLaunchPlan({ entry: claude, config: config({ args: '' }), extras: extras('--add-dir "my docs"') })
+    expect(result.record.args).toBe("--add-dir 'my docs'")
+    expect(result.launchSettings).toEqual({
+      agent: 'claude',
+      options: {},
+      args: { value: "--add-dir 'my docs'", source: 'explicit' },
+      summary: 'Claude'
+    })
+  })
+
+  test('the snapshot is the resolution of the pick', () => {
+    const result = buildLaunchPlan({ entry: claude, config: EMPTY_CONFIG, selection: picks })
+    expect(result.launchSettings).toEqual({
+      agent: 'claude',
+      options: { model: { value: 'opus', source: 'explicit' }, effort: { value: 'high', source: 'explicit' } },
+      args: { value: '--dangerously-skip-permissions', source: 'inherited' },
+      summary: 'Claude · Opus · Effort: high'
+    })
+  })
+
+  test('SC-22: a Yolo launch with no pick records its inherited arguments and keeps its command', () => {
+    const result = buildLaunchPlan({ entry: claude, config: EMPTY_CONFIG })
+    expect(result.command).toBe('claude --dangerously-skip-permissions')
+    expect(result.record).toEqual({ command: 'claude', args: '--dangerously-skip-permissions', env: {} })
+    expect(result.launchSettings).toEqual({
+      agent: 'claude',
+      options: {},
+      args: { value: '--dangerously-skip-permissions', source: 'inherited' },
+      summary: 'Claude'
+    })
+  })
+
+  test('SC-22: a Manual launch with no pick has no snapshot', () => {
+    const result = buildLaunchPlan({ entry: claude, config: config({ args: '' }) })
+    expect(result.command).toBe('claude')
+    expect(result.launchSettings).toBeNull()
+  })
+
+  test('the raw configured text is recorded untouched when nothing is picked', () => {
+    const result = buildLaunchPlan({ entry: claude, config: config({ args: "--x   'y z'" }) })
+    expect(result.record.args).toBe("--x   'y z'")
+  })
+
+  test('SC-16: a command override that already sets the model refuses a pick', () => {
+    const attempt = () => buildLaunchPlan({ entry: claude, config: config({ command: 'claude --model sonnet' }), selection: picks })
+    expect(attempt).toThrow(SelectionError)
+    expect(attempt).toThrow('Agent command override conflicts with the requested launch preferences.')
+  })
+
+  test('SC-16: the catalog launch command is not an override', () => {
+    const own = { ...claude, launch: 'claude --model sonnet' }
+    expect(buildLaunchPlan({ entry: own, config: EMPTY_CONFIG, selection: picks }).record.args).toContain('--model opus')
+  })
+
+  test('a blank command override is not an override', () => {
+    const result = buildLaunchPlan({ entry: claude, config: config({ command: '  ' }), selection: picks })
+    expect(words(result.command).slice(0, 3)).toEqual(['claude', '--dangerously-skip-permissions', '--model'])
   })
 })

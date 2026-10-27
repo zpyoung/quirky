@@ -100,8 +100,7 @@
       "deps": [
         "m1-providers"
       ],
-      "status": "in-progress",
-      "lane": 1
+      "status": "done"
     },
     {
       "id": "m1-agent-status",
@@ -215,7 +214,8 @@
       "deps": [
         "gate-m0"
       ],
-      "status": "todo"
+      "status": "in-progress",
+      "lane": 1
     },
     {
       "id": "m3-session-info",

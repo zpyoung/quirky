@@ -40,6 +40,7 @@ function entry(id: string, over: Partial<AgentEntry> = {}): AgentEntry {
     trust: null,
     homepage: null,
     install: null,
+    launchOptions: null,
     ...over
   }
 }

@@ -307,6 +307,314 @@ describe('quirky.agents manifest', () => {
   })
 })
 
+type RawChoice = { value: string; label: string }
+type RawOption = { id: string; label: string; type: string; choices?: RawChoice[]; flag?: string[]; conflicts?: unknown[]; composed?: true; structured?: string }
+type RawModel = { id: string; label: string; description?: string; options: { id: string; choices?: string[] }[] }
+type RawBlock = {
+  model: { flag: string[]; conflicts: unknown[]; structured?: string }
+  options?: RawOption[]
+  models?: RawModel[]
+  unlisted?: 'accept' | 'refuse'
+  unlistedOptions?: { id: string; choices?: string[] }[]
+  composeModel?: string
+  valueFlags?: string[]
+  extraArgs?: { allowed: { kind: string; flags: string[]; valuePrefix?: string }[]; placeholder: string }
+}
+
+const rawBlock = (id: string): RawBlock => {
+  const block = manifest.contributes.agent.find((entry) => entry.id === id)!.launchOptions as RawBlock | undefined
+  if (!block) throw new Error(`${id} has no launchOptions`)
+  return block
+}
+
+const LAUNCH_AGENTS = ['claude', 'codex', 'codebuddy', 'gemini', 'cursor', 'grok', 'muse', 'antigravity', 'omp', 'opencode']
+
+// The values a model offers for an option: the declared choices narrowed by the model's subset.
+const choiceValues = (block: RawBlock, use: { id: string; choices?: string[] }): string[] | boolean => {
+  const decl = block.options!.find((option) => option.id === use.id)!
+  if (decl.type === 'boolean') return true
+  const declared = decl.choices!.map((choice) => choice.value)
+  if (!use.choices) return declared
+  expect(use.choices.every((value) => declared.includes(value))).toBe(true)
+  expect(use.choices).toEqual(declared.filter((value) => use.choices!.includes(value)))
+  return use.choices
+}
+
+const modelsOf = (id: string) => {
+  const block = rawBlock(id)
+  return (block.models ?? []).map((model) => ({
+    id: model.id,
+    label: model.label,
+    description: model.description ?? null,
+    options: Object.fromEntries(model.options.map((use) => [use.id, choiceValues(block, use)]))
+  }))
+}
+
+const effectiveUnlisted = (block: RawBlock) => block.unlisted ?? ((block.models ?? []).length === 0 ? 'accept' : 'refuse')
+
+const choiceList = (...pairs: [string, string][]): RawChoice[] => pairs.map(([value, label]) => ({ value, label }))
+
+const CLAUDE_EFFORT = ['low', 'medium', 'high', 'xhigh', 'max']
+const CODEX_EFFORT = ['minimal', 'low', 'medium', 'high', 'xhigh', 'max', 'ultra']
+const CLAUDE_VALUE_FLAGS = [
+  '--add-dir', '--agent', '--agents', '--allowedTools', '--allowed-tools', '--append-system-prompt', '--append-system-prompt-file',
+  '--autocompact', '--betas', '--debug-file', '--disallowedTools', '--disallowed-tools', '--effort', '--environment', '--fallback-model',
+  '--file', '--input-format', '--json-schema', '--max-budget-usd', '--mcp-config', '--model', '-n', '--name', '--output-format',
+  '--permission-mode', '--permission-prompts', '--plugin-dir', '--plugin-url', '--remote-control-session-name-prefix', '--session-id',
+  '--setting-sources', '--settings', '--system-prompt', '--system-prompt-file', '--system-prompt-snapshot', '--tools'
+]
+const CURSOR_VALUE_FLAGS = [
+  '--api-key', '-H', '--header', '-e', '--endpoint', '--output-format', '--mode', '--model', '--sandbox', '--workspace', '--add-dir',
+  '--plugin-dir', '--worktree-base'
+]
+
+describe('quirky.agents launchOptions data', () => {
+  test('only the ten catalogued agents carry a launchOptions block', () => {
+    const withBlock = manifest.contributes.agent.filter((entry) => entry.launchOptions !== undefined).map((entry) => entry.id)
+    expect([...withBlock].sort()).toEqual([...LAUNCH_AGENTS].sort())
+    const others = manifest.contributes.agent.filter((entry) => !LAUNCH_AGENTS.includes(entry.id))
+    expect(others).toHaveLength(35)
+    for (const entry of others) expect(entry.launchOptions).toBeUndefined()
+  })
+
+  test('SC-1: claude offers Fable, Opus, Sonnet with five effort levels and Haiku with none', () => {
+    const block = rawBlock('claude')
+    expect(block.model).toEqual({ flag: ['--model', '{value}'], conflicts: [{ flags: ['--model'] }], structured: 'model' })
+    expect(block.options).toEqual([
+      {
+        id: 'effort',
+        label: 'Effort',
+        type: 'select',
+        choices: choiceList(['low', 'Low'], ['medium', 'Medium'], ['high', 'High'], ['xhigh', 'Extra high'], ['max', 'Max']),
+        flag: ['--effort', '{value}'],
+        conflicts: [{ flags: ['--effort'] }],
+        structured: 'effort'
+      }
+    ])
+    expect(modelsOf('claude')).toEqual([
+      { id: 'fable', label: 'Fable', description: 'Most capable for the hardest, longest-running tasks', options: { effort: CLAUDE_EFFORT } },
+      { id: 'opus', label: 'Opus', description: 'Best for everyday, complex tasks', options: { effort: CLAUDE_EFFORT } },
+      { id: 'sonnet', label: 'Sonnet', description: 'Efficient for routine tasks', options: { effort: CLAUDE_EFFORT } },
+      { id: 'haiku', label: 'Haiku', description: 'Fastest for quick answers', options: {} }
+    ])
+    expect(block.models!.find((model) => model.id === 'haiku')!.options).toEqual([])
+    expect(block.unlisted).toBe('accept')
+    expect(block.unlistedOptions).toEqual([{ id: 'effort' }])
+    expect(block.composeModel).toBeUndefined()
+    expect(block.valueFlags).toEqual(CLAUDE_VALUE_FLAGS)
+  })
+
+  test('SC-2: codex caps each model\'s reasoning effort at its ceiling and accepts unlisted models', () => {
+    const block = rawBlock('codex')
+    expect(block.model).toEqual({
+      flag: ['-m', '{value}'],
+      conflicts: [{ flags: ['-m', '--model'] }, { flags: ['-c', '--config'], valuePrefix: 'model=' }]
+    })
+    expect(block.options).toEqual([
+      {
+        id: 'effort',
+        label: 'Reasoning effort',
+        type: 'select',
+        choices: choiceList(
+          ['minimal', 'Minimal'], ['low', 'Low'], ['medium', 'Medium'], ['high', 'High'], ['xhigh', 'Extra high'], ['max', 'Max'], ['ultra', 'Ultra']
+        ),
+        flag: ['-c', 'model_reasoning_effort={value}'],
+        conflicts: [{ flags: ['--reasoning-effort'] }, { flags: ['-c', '--config'], valuePrefix: 'model_reasoning_effort=' }]
+      }
+    ])
+    const upTo = (ceiling: string) => CODEX_EFFORT.slice(0, CODEX_EFFORT.indexOf(ceiling) + 1)
+    expect(modelsOf('codex')).toEqual([
+      { id: 'gpt-5.6-sol', label: 'GPT-5.6 Sol', description: null, options: { effort: upTo('ultra') } },
+      { id: 'gpt-5.6-terra', label: 'GPT-5.6 Terra', description: null, options: { effort: upTo('ultra') } },
+      { id: 'gpt-5.6-luna', label: 'GPT-5.6 Luna', description: null, options: { effort: upTo('max') } },
+      { id: 'gpt-5.5', label: 'GPT-5.5', description: null, options: { effort: upTo('xhigh') } },
+      { id: 'gpt-5.2-codex', label: 'GPT-5.2 Codex', description: null, options: { effort: upTo('xhigh') } }
+    ])
+    expect(block.unlisted).toBe('accept')
+    expect(block.unlistedOptions).toEqual([{ id: 'effort' }])
+    expect(block.model.structured).toBeUndefined()
+    expect(block.valueFlags).toBeUndefined()
+  })
+
+  test('SC-3: codebuddy, gemini, cursor, grok, muse, antigravity, omp and opencode carry Orca\'s models and options', () => {
+    const codebuddy = rawBlock('codebuddy')
+    expect(codebuddy.model).toEqual({ flag: ['--model', '{value}'], conflicts: [{ flags: ['--model'] }] })
+    expect(codebuddy.options).toEqual([
+      {
+        id: 'effort',
+        label: 'Reasoning effort',
+        type: 'select',
+        choices: choiceList(['minimal', 'Minimal'], ['low', 'Low'], ['medium', 'Medium'], ['high', 'High'], ['xhigh', 'Extra high'], ['max', 'Max']),
+        flag: ['--effort', '{value}'],
+        conflicts: [{ flags: ['--effort'] }]
+      }
+    ])
+    const codebuddyEffort = ['minimal', 'low', 'medium', 'high', 'xhigh', 'max']
+    expect(modelsOf('codebuddy')).toEqual([
+      { id: 'default-model', label: 'Default', description: null, options: { effort: codebuddyEffort } },
+      { id: 'fast-model', label: 'Fast', description: null, options: { effort: codebuddyEffort } },
+      { id: 'balanced-model', label: 'Balanced', description: null, options: { effort: codebuddyEffort } },
+      { id: 'primary-model', label: 'Primary', description: null, options: { effort: codebuddyEffort } },
+      { id: 'deep-model', label: 'Deep', description: null, options: { effort: codebuddyEffort } }
+    ])
+    expect(codebuddy.unlisted).toBe('accept')
+    expect(codebuddy.unlistedOptions).toEqual([{ id: 'effort' }])
+
+    const gemini = rawBlock('gemini')
+    expect(gemini.model).toEqual({ flag: ['-m', '{value}'], conflicts: [{ flags: ['-m', '--model'] }] })
+    expect(gemini.options ?? []).toEqual([])
+    expect(modelsOf('gemini')).toEqual([
+      { id: 'gemini-3-pro-preview', label: 'Gemini 3 Pro Preview', description: null, options: {} },
+      { id: 'gemini-3-flash-preview', label: 'Gemini 3 Flash Preview', description: null, options: {} },
+      { id: 'gemini-2.5-pro', label: 'Gemini 2.5 Pro', description: null, options: {} },
+      { id: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash', description: null, options: {} }
+    ])
+    expect(effectiveUnlisted(gemini)).toBe('refuse')
+    expect(gemini.unlistedOptions).toBeUndefined()
+
+    const cursor = rawBlock('cursor')
+    expect(cursor.model).toEqual({ flag: ['--model', '{value}'], conflicts: [{ flags: ['-m', '--model'] }] })
+    expect(cursor.composeModel).toBe('cursor')
+    expect(cursor.options).toEqual([
+      { id: 'effort', label: 'Effort', type: 'select', choices: choiceList(['low', 'Low'], ['medium', 'Medium'], ['high', 'High']), composed: true },
+      { id: 'fastMode', label: 'Fast mode', type: 'boolean', composed: true },
+      { id: 'thinking', label: 'Thinking', type: 'boolean', composed: true }
+    ])
+    expect(modelsOf('cursor')).toEqual([
+      { id: 'auto', label: 'Auto', description: null, options: {} },
+      { id: 'gpt-5.3-codex', label: 'GPT-5.3 Codex', description: null, options: { effort: ['low', 'medium', 'high'], fastMode: true } },
+      { id: 'claude-opus-4-8', label: 'Claude Opus 4.8', description: null, options: { thinking: true, effort: ['low', 'medium', 'high'] } }
+    ])
+    expect(rawBlock('cursor').models!.map((model) => model.options.map((use) => use.id))).toEqual([[], ['effort', 'fastMode'], ['thinking', 'effort']])
+    expect(effectiveUnlisted(cursor)).toBe('refuse')
+    expect(cursor.valueFlags).toEqual(CURSOR_VALUE_FLAGS)
+
+    const grok = rawBlock('grok')
+    expect(grok.model).toEqual({ flag: ['-m', '{value}'], conflicts: [{ flags: ['-m', '--model'] }] })
+    expect(grok.options).toEqual([
+      {
+        id: 'effort',
+        label: 'Reasoning effort',
+        type: 'select',
+        choices: choiceList(['low', 'Low'], ['medium', 'Medium'], ['high', 'High'], ['xhigh', 'Extra high']),
+        flag: ['--reasoning-effort', '{value}'],
+        conflicts: [{ flags: ['--effort', '--reasoning-effort'] }]
+      }
+    ])
+    expect(modelsOf('grok')).toEqual([
+      { id: 'grok-4.7', label: 'Grok 4.7', description: "xAI's latest frontier model", options: { effort: ['low', 'medium', 'high', 'xhigh'] } },
+      { id: 'grok-4.6', label: 'Grok 4.6', description: "xAI's previous frontier model", options: { effort: ['low', 'medium', 'high', 'xhigh'] } },
+      { id: 'grok-4.5', label: 'Grok 4.5', description: 'An earlier xAI frontier model', options: { effort: ['low', 'medium', 'high'] } }
+    ])
+    expect(grok.unlisted).toBe('accept')
+    expect(grok.unlistedOptions).toEqual([{ id: 'effort' }])
+
+    const muse = rawBlock('muse')
+    expect(muse.model).toEqual({ flag: ['--model', '{value}'], conflicts: [{ flags: ['--model'] }] })
+    expect(muse.options).toEqual([
+      {
+        id: 'effort',
+        label: 'Reasoning effort',
+        type: 'select',
+        choices: choiceList(
+          ['minimal', 'Minimal'], ['low', 'Low'], ['medium', 'Medium'], ['high', 'High'], ['xhigh', 'Extra high'], ['max', 'Max'], ['ultra', 'Ultra']
+        ),
+        flag: ['--reasoning-effort', '{value}'],
+        conflicts: [{ flags: ['--reasoning-effort'] }]
+      }
+    ])
+    expect(modelsOf('muse')).toEqual([])
+    expect(effectiveUnlisted(muse)).toBe('accept')
+    expect(muse.unlistedOptions).toEqual([{ id: 'effort' }])
+
+    const antigravity = rawBlock('antigravity')
+    expect(antigravity.model).toEqual({ flag: ['--model', '{value}'], conflicts: [{ flags: ['--model'] }] })
+    expect(antigravity.options).toEqual([
+      {
+        id: 'effort',
+        label: 'Reasoning effort',
+        type: 'select',
+        choices: choiceList(['low', 'Low'], ['medium', 'Medium'], ['high', 'High']),
+        flag: ['--effort', '{value}'],
+        conflicts: [{ flags: ['--effort'] }]
+      }
+    ])
+    expect(modelsOf('antigravity')).toEqual([])
+    expect(effectiveUnlisted(antigravity)).toBe('accept')
+    expect(antigravity.unlistedOptions).toEqual([{ id: 'effort' }])
+
+    const omp = rawBlock('omp')
+    expect(omp.model).toEqual({ flag: ['--model', '{value}'], conflicts: [{ flags: ['--model'] }] })
+    expect(omp.options ?? []).toEqual([])
+    expect(modelsOf('omp')).toEqual([])
+    expect(effectiveUnlisted(omp)).toBe('accept')
+    expect(omp.unlistedOptions).toBeUndefined()
+
+    const opencode = rawBlock('opencode')
+    expect(opencode.model).toEqual({ flag: ['--model', '{value}'], conflicts: [{ flags: ['-m', '--model'] }] })
+    expect(opencode.options ?? []).toEqual([])
+    expect(modelsOf('opencode')).toEqual([])
+    expect(effectiveUnlisted(opencode)).toBe('accept')
+    expect(opencode.unlistedOptions).toBeUndefined()
+  })
+
+  test('structured keys exist only on claude\'s model and effort, and composition only on cursor', () => {
+    for (const id of LAUNCH_AGENTS) {
+      const block = rawBlock(id)
+      const keys = [block.model.structured, ...(block.options ?? []).map((option) => option.structured)].filter((key) => key !== undefined)
+      expect({ id, keys }).toEqual({ id, keys: id === 'claude' ? ['model', 'effort'] : [] })
+      expect({ id, composeModel: block.composeModel }).toEqual({ id, composeModel: id === 'cursor' ? 'cursor' : undefined })
+      expect({ id, composed: (block.options ?? []).filter((option) => option.composed).length }).toEqual({ id, composed: id === 'cursor' ? 3 : 0 })
+      expect({ id, valueFlags: block.valueFlags !== undefined }).toEqual({ id, valueFlags: id === 'claude' || id === 'cursor' })
+    }
+  })
+
+  test('every flagged option and the model flag carry exactly one {value} item', () => {
+    for (const id of LAUNCH_AGENTS) {
+      const block = rawBlock(id)
+      const templates = [block.model.flag, ...(block.options ?? []).flatMap((option) => (option.flag ? [option.flag] : []))]
+      for (const template of templates) expect({ id, count: template.filter((item) => item.includes('{value}')).length }).toEqual({ id, count: 1 })
+    }
+  })
+
+  test('SC-4: extra-argument allowlists and placeholders match Orca for claude, codex, codebuddy, cursor, grok and omp', () => {
+    const extras = Object.fromEntries(LAUNCH_AGENTS.map((id) => [id, rawBlock(id).extraArgs]).filter(([, value]) => value !== undefined))
+    expect(extras).toEqual({
+      claude: {
+        allowed: [
+          { kind: 'model', flags: ['--model'] },
+          { kind: 'effort', flags: ['--effort'] },
+          { kind: 'repeatable', flags: ['--add-dir'] }
+        ],
+        placeholder: '--model opus --effort high --add-dir docs'
+      },
+      codex: {
+        allowed: [
+          { kind: 'model', flags: ['-m', '--model'] },
+          { kind: 'effort', flags: ['-c', '--config'], valuePrefix: 'model_reasoning_effort=' }
+        ],
+        placeholder: '-m model-id -c model_reasoning_effort=high'
+      },
+      codebuddy: {
+        allowed: [
+          { kind: 'model', flags: ['--model'] },
+          { kind: 'effort', flags: ['--effort'] }
+        ],
+        placeholder: '--model model-id --effort high'
+      },
+      cursor: { allowed: [{ kind: 'model', flags: ['-m', '--model'] }], placeholder: '-m model-id' },
+      grok: {
+        allowed: [
+          { kind: 'model', flags: ['-m', '--model'] },
+          { kind: 'effort', flags: ['--effort', '--reasoning-effort'] }
+        ],
+        placeholder: '-m model-id --effort high'
+      },
+      omp: { allowed: [{ kind: 'model', flags: ['--model'] }], placeholder: '--model model-id' }
+    })
+  })
+})
+
 describe('quirky.agents as a built-in plugin', () => {
   let h: Harness
 

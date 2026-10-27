@@ -20,16 +20,22 @@ const session: Session = {
   launch: { command: 'claude', args: '--model haiku', env: { A: '1' } },
   providerSession: { id: 'abc', transcriptPath: '/t.jsonl' },
   promptDelivery: 'pending',
+  launchSettings: {
+    agent: 'claude',
+    options: { model: { value: 'haiku', source: 'explicit' }, effort: { source: 'extra-args' } },
+    args: { value: '--verbose', source: 'explicit' },
+    summary: 'Claude · Haiku'
+  },
   resumedFrom: 's_old'
 }
 
-describe('session store migration 3', () => {
+describe('session store migration 4', () => {
   test('a row written before it reads as not restorable, with no signal or cause', () => {
-    const store = memoryStore(2)
+    const store = memoryStore(3)
     store.run(
       "INSERT INTO sessions (id, kind, agent, worktree_id, cwd, title, status, created_at, last_activity_at, exit_code, repo_id) VALUES ('s_old', 'terminal', 'shell', 'wt', '/work', 'Shell', 'exited', 1, 1, 0, 'repo')"
     )
-    migrateStore(store, 2)
+    migrateStore(store, 3)
     const records = new SessionRecords(store)
 
     expect(records.get('s_old')).toMatchObject({ exitCode: 0, exitSignal: null, exitCause: null, restorable: false, launch: null })
@@ -71,6 +77,7 @@ describe('session store migration 2', () => {
       launch: null,
       providerSession: null,
       promptDelivery: null,
+      launchSettings: null,
       resumedFrom: null
     })
     expect(records.update('s_old', { status: 'exited', exitCode: 0 })).toMatchObject({ status: 'exited', launch: null })
@@ -88,9 +95,15 @@ describe('session store migration 2', () => {
 
   test('a session recorded without the new fields stores them as null', () => {
     const records = new SessionRecords(memoryStore())
-    const { launch, providerSession, promptDelivery, resumedFrom, ...bare } = session
+    const { launch, providerSession, promptDelivery, launchSettings, resumedFrom, ...bare } = session
     records.insert(bare, 'repo')
-    expect(records.get('s_new')).toMatchObject({ launch: null, providerSession: null, promptDelivery: null, resumedFrom: null })
+    expect(records.get('s_new')).toMatchObject({
+      launch: null,
+      providerSession: null,
+      promptDelivery: null,
+      launchSettings: null,
+      resumedFrom: null
+    })
   })
 
   test('a row whose JSON column is damaged reads as null instead of failing the listing', () => {
@@ -109,6 +122,41 @@ describe('session store migration 2', () => {
     expect(records.get('s_new')?.promptDelivery).toBe('not-delivered')
     expect(records.get('s_done')?.promptDelivery).toBe('pasted')
     expect(records.sweepPendingDeliveries()).toEqual([])
+  })
+})
+
+describe('session store migration 3', () => {
+  test('a row written at migration 2 migrates and reads null launchSettings', () => {
+    const store = memoryStore(2)
+    store.run(
+      "INSERT INTO sessions (id, kind, agent, worktree_id, cwd, title, status, created_at, last_activity_at, exit_code, repo_id, launch) VALUES ('s_v2', 'terminal', 'claude', 'wt', '/work', 'Claude', 'running', 1, 1, NULL, 'repo', '{\"command\":\"claude\",\"args\":\"\",\"env\":{}}')"
+    )
+    migrateStore(store, 2)
+    const records = new SessionRecords(store)
+
+    expect(records.get('s_v2')).toMatchObject({ launch: { command: 'claude', args: '', env: {} }, launchSettings: null })
+    const settings = session.launchSettings!
+    expect(records.update('s_v2', { launchSettings: settings })?.launchSettings).toEqual(settings)
+  })
+
+  test('launchSettings round-trips through insert and update', () => {
+    const records = new SessionRecords(memoryStore())
+    records.insert(session, 'repo')
+    expect(records.get('s_new')?.launchSettings).toEqual(session.launchSettings)
+
+    const next = { agent: 'claude', options: {}, summary: 'Claude' }
+    records.update('s_new', { launchSettings: next })
+    expect(records.get('s_new')).toEqual({ ...session, launchSettings: next })
+
+    records.update('s_new', { launchSettings: null })
+    expect(records.get('s_new')?.launchSettings).toBeNull()
+  })
+
+  test('an update that omits launchSettings leaves it alone', () => {
+    const records = new SessionRecords(memoryStore())
+    records.insert(session, 'repo')
+    records.update('s_new', { status: 'exited' })
+    expect(records.get('s_new')?.launchSettings).toEqual(session.launchSettings)
   })
 })
 

@@ -339,6 +339,168 @@
         }
       },
       {
+        "id": "options",
+        "description": "The models and launch options an agent offers, and the extra arguments it accepts.",
+        "readOnly": true,
+        "params": {
+          "type": "object",
+          "properties": {
+            "agent": {
+              "type": "string",
+              "description": "The agent ID."
+            }
+          },
+          "required": [
+            "agent"
+          ]
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "agent": {
+              "type": "string"
+            },
+            "label": {
+              "type": "string"
+            },
+            "supported": {
+              "type": "boolean",
+              "description": "Whether the agent takes a model and options at launch."
+            },
+            "models": {
+              "type": "array",
+              "description": "The listed models in display order.",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "label": {
+                    "type": "string"
+                  },
+                  "description": {
+                    "description": "A sentence, or null."
+                  },
+                  "options": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "label": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "select",
+                            "boolean"
+                          ]
+                        },
+                        "choices": {
+                          "description": "The values this model offers, in order, each { value, label }; null for a boolean."
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "label",
+                        "type",
+                        "choices"
+                      ]
+                    }
+                  }
+                },
+                "required": [
+                  "id",
+                  "label",
+                  "description",
+                  "options"
+                ]
+              }
+            },
+            "unlisted": {
+              "type": "string",
+              "enum": [
+                "accept",
+                "refuse"
+              ],
+              "description": "Whether a model outside the list is accepted."
+            },
+            "unlistedOptions": {
+              "type": "array",
+              "description": "The options an unlisted model gets.",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "label": {
+                    "type": "string"
+                  },
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "select",
+                      "boolean"
+                    ]
+                  },
+                  "choices": {
+                    "description": "The values this model offers, in order, each { value, label }; null for a boolean."
+                  }
+                },
+                "required": [
+                  "id",
+                  "label",
+                  "type",
+                  "choices"
+                ]
+              }
+            },
+            "structured": {
+              "type": "boolean",
+              "description": "Whether a structured session can take the model."
+            },
+            "extraArgs": {
+              "type": "object",
+              "properties": {
+                "supported": {
+                  "type": "boolean"
+                },
+                "allowed": {
+                  "description": "The allowed options as text, or null."
+                },
+                "placeholder": {
+                  "description": "An example, or null."
+                },
+                "message": {
+                  "description": "Why extra arguments are unavailable, or null."
+                }
+              },
+              "required": [
+                "supported",
+                "allowed",
+                "placeholder",
+                "message"
+              ]
+            }
+          },
+          "required": [
+            "agent",
+            "label",
+            "supported",
+            "models",
+            "unlisted",
+            "unlistedOptions",
+            "structured",
+            "extraArgs"
+          ]
+        }
+      },
+      {
         "id": "refresh",
         "description": "Re-reads the login shell's PATH, detects installed agents again and announces the change.",
         "params": {
@@ -1090,6 +1252,19 @@
             },
             "cwd": {
               "type": "string"
+            },
+            "model": {
+              "type": "string",
+              "description": "Model to launch the agent with (1 to 128 characters). Checked against the agent's catalog."
+            },
+            "options": {
+              "type": "object",
+              "additionalProperties": true,
+              "description": "Option picks for the model, such as {effort: \"high\"}: up to 16 entries whose values are strings or booleans. Needs `model`."
+            },
+            "extraArgs": {
+              "type": "string",
+              "description": "Extra agent arguments the agent's allowlist permits, such as \"--add-dir docs\"."
             }
           },
           "required": [
@@ -1137,6 +1312,9 @@
             },
             "paste": {
               "description": "{ text, submit } to paste after start, or null."
+            },
+            "launchSettings": {
+              "description": "What the launch applied and where each value came from: { agent, options, args?, summary }, or null with no pick and no arguments."
             }
           },
           "required": [
@@ -1145,7 +1323,80 @@
             "env",
             "record",
             "promptDelivery",
-            "paste"
+            "paste",
+            "launchSettings"
+          ]
+        }
+      },
+      {
+        "id": "resolveLaunch",
+        "description": "Shows what a model and option pick adds to an agent's launch, without starting it: no session, no trust record, no event.",
+        "readOnly": true,
+        "params": {
+          "type": "object",
+          "properties": {
+            "agent": {
+              "type": "string",
+              "description": "The agent ID."
+            },
+            "model": {
+              "type": "string",
+              "description": "Model to launch the agent with (1 to 128 characters). Checked against the agent's catalog."
+            },
+            "options": {
+              "type": "object",
+              "additionalProperties": true,
+              "description": "Option picks for the model, such as {effort: \"high\"}: up to 16 entries whose values are strings or booleans. Needs `model`."
+            },
+            "extraArgs": {
+              "type": "string",
+              "description": "Extra agent arguments the agent's allowlist permits, such as \"--add-dir docs\"."
+            },
+            "structured": {
+              "type": "boolean",
+              "description": "Resolve for a structured session, which takes options instead of arguments; default false."
+            }
+          },
+          "required": [
+            "agent"
+          ]
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "added": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "The pick's flags as emitted; empty when the extra arguments set them or there is no pick."
+            },
+            "args": {
+              "type": "string",
+              "description": "The arguments the launch would use, shell-quoted; empty for a structured launch."
+            },
+            "structured": {
+              "type": "object",
+              "additionalProperties": true,
+              "description": "The pick as structured-session options; empty with no pick."
+            },
+            "shadowed": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "Picked option IDs, and `model`, that the extra arguments set instead."
+            },
+            "launchSettings": {
+              "description": "What the launch applied and where each value came from: { agent, options, args?, summary }, or null with no pick and no arguments."
+            }
+          },
+          "required": [
+            "added",
+            "args",
+            "structured",
+            "shadowed",
+            "launchSettings"
           ]
         }
       },
@@ -1209,6 +1460,19 @@
               "type": "object",
               "additionalProperties": true,
               "description": "Environment additions from launch hooks; a null value removes the variable."
+            },
+            "model": {
+              "type": "string",
+              "description": "Model to launch the agent with (1 to 128 characters). Checked against the agent's catalog."
+            },
+            "options": {
+              "type": "object",
+              "additionalProperties": true,
+              "description": "Option picks for the model, such as {effort: \"high\"}: up to 16 entries whose values are strings or booleans. Needs `model`."
+            },
+            "extraArgs": {
+              "type": "string",
+              "description": "Extra agent arguments the agent's allowlist permits, such as \"--add-dir docs\"."
             }
           },
           "required": [
@@ -1259,6 +1523,9 @@
             },
             "paste": {
               "description": "{ text, submit } to paste after start, or null."
+            },
+            "launchSettings": {
+              "description": "What the launch applied and where each value came from: { agent, options, args?, summary }, or null with no pick and no arguments."
             }
           },
           "required": [
@@ -1267,7 +1534,8 @@
             "env",
             "record",
             "promptDelivery",
-            "paste"
+            "paste",
+            "launchSettings"
           ]
         }
       },
@@ -1459,7 +1727,169 @@
         ],
         "resumeStyle": "claude-splice",
         "trust": "claude",
-        "homepage": "https://code.claude.com/docs"
+        "homepage": "https://code.claude.com/docs",
+        "launchOptions": {
+          "model": {
+            "flag": [
+              "--model",
+              "{value}"
+            ],
+            "conflicts": [
+              {
+                "flags": [
+                  "--model"
+                ]
+              }
+            ],
+            "structured": "model"
+          },
+          "options": [
+            {
+              "id": "effort",
+              "label": "Effort",
+              "type": "select",
+              "choices": [
+                {
+                  "value": "low",
+                  "label": "Low"
+                },
+                {
+                  "value": "medium",
+                  "label": "Medium"
+                },
+                {
+                  "value": "high",
+                  "label": "High"
+                },
+                {
+                  "value": "xhigh",
+                  "label": "Extra high"
+                },
+                {
+                  "value": "max",
+                  "label": "Max"
+                }
+              ],
+              "flag": [
+                "--effort",
+                "{value}"
+              ],
+              "conflicts": [
+                {
+                  "flags": [
+                    "--effort"
+                  ]
+                }
+              ],
+              "structured": "effort"
+            }
+          ],
+          "models": [
+            {
+              "id": "fable",
+              "label": "Fable",
+              "description": "Most capable for the hardest, longest-running tasks",
+              "options": [
+                {
+                  "id": "effort"
+                }
+              ]
+            },
+            {
+              "id": "opus",
+              "label": "Opus",
+              "description": "Best for everyday, complex tasks",
+              "options": [
+                {
+                  "id": "effort"
+                }
+              ]
+            },
+            {
+              "id": "sonnet",
+              "label": "Sonnet",
+              "description": "Efficient for routine tasks",
+              "options": [
+                {
+                  "id": "effort"
+                }
+              ]
+            },
+            {
+              "id": "haiku",
+              "label": "Haiku",
+              "description": "Fastest for quick answers",
+              "options": []
+            }
+          ],
+          "unlisted": "accept",
+          "unlistedOptions": [
+            {
+              "id": "effort"
+            }
+          ],
+          "valueFlags": [
+            "--add-dir",
+            "--agent",
+            "--agents",
+            "--allowedTools",
+            "--allowed-tools",
+            "--append-system-prompt",
+            "--append-system-prompt-file",
+            "--autocompact",
+            "--betas",
+            "--debug-file",
+            "--disallowedTools",
+            "--disallowed-tools",
+            "--effort",
+            "--environment",
+            "--fallback-model",
+            "--file",
+            "--input-format",
+            "--json-schema",
+            "--max-budget-usd",
+            "--mcp-config",
+            "--model",
+            "-n",
+            "--name",
+            "--output-format",
+            "--permission-mode",
+            "--permission-prompts",
+            "--plugin-dir",
+            "--plugin-url",
+            "--remote-control-session-name-prefix",
+            "--session-id",
+            "--setting-sources",
+            "--settings",
+            "--system-prompt",
+            "--system-prompt-file",
+            "--system-prompt-snapshot",
+            "--tools"
+          ],
+          "extraArgs": {
+            "allowed": [
+              {
+                "kind": "model",
+                "flags": [
+                  "--model"
+                ]
+              },
+              {
+                "kind": "effort",
+                "flags": [
+                  "--effort"
+                ]
+              },
+              {
+                "kind": "repeatable",
+                "flags": [
+                  "--add-dir"
+                ]
+              }
+            ],
+            "placeholder": "--model opus --effort high --add-dir docs"
+          }
+        }
       },
       {
         "id": "claude-agent-teams",
@@ -1508,6 +1938,179 @@
         "homepage": "https://github.com/openai/codex",
         "windows": {
           "inputRecordPasteNewline": "alt-enter"
+        },
+        "launchOptions": {
+          "model": {
+            "flag": [
+              "-m",
+              "{value}"
+            ],
+            "conflicts": [
+              {
+                "flags": [
+                  "-m",
+                  "--model"
+                ]
+              },
+              {
+                "flags": [
+                  "-c",
+                  "--config"
+                ],
+                "valuePrefix": "model="
+              }
+            ]
+          },
+          "options": [
+            {
+              "id": "effort",
+              "label": "Reasoning effort",
+              "type": "select",
+              "choices": [
+                {
+                  "value": "minimal",
+                  "label": "Minimal"
+                },
+                {
+                  "value": "low",
+                  "label": "Low"
+                },
+                {
+                  "value": "medium",
+                  "label": "Medium"
+                },
+                {
+                  "value": "high",
+                  "label": "High"
+                },
+                {
+                  "value": "xhigh",
+                  "label": "Extra high"
+                },
+                {
+                  "value": "max",
+                  "label": "Max"
+                },
+                {
+                  "value": "ultra",
+                  "label": "Ultra"
+                }
+              ],
+              "flag": [
+                "-c",
+                "model_reasoning_effort={value}"
+              ],
+              "conflicts": [
+                {
+                  "flags": [
+                    "--reasoning-effort"
+                  ]
+                },
+                {
+                  "flags": [
+                    "-c",
+                    "--config"
+                  ],
+                  "valuePrefix": "model_reasoning_effort="
+                }
+              ]
+            }
+          ],
+          "models": [
+            {
+              "id": "gpt-5.6-sol",
+              "label": "GPT-5.6 Sol",
+              "options": [
+                {
+                  "id": "effort"
+                }
+              ]
+            },
+            {
+              "id": "gpt-5.6-terra",
+              "label": "GPT-5.6 Terra",
+              "options": [
+                {
+                  "id": "effort"
+                }
+              ]
+            },
+            {
+              "id": "gpt-5.6-luna",
+              "label": "GPT-5.6 Luna",
+              "options": [
+                {
+                  "id": "effort",
+                  "choices": [
+                    "minimal",
+                    "low",
+                    "medium",
+                    "high",
+                    "xhigh",
+                    "max"
+                  ]
+                }
+              ]
+            },
+            {
+              "id": "gpt-5.5",
+              "label": "GPT-5.5",
+              "options": [
+                {
+                  "id": "effort",
+                  "choices": [
+                    "minimal",
+                    "low",
+                    "medium",
+                    "high",
+                    "xhigh"
+                  ]
+                }
+              ]
+            },
+            {
+              "id": "gpt-5.2-codex",
+              "label": "GPT-5.2 Codex",
+              "options": [
+                {
+                  "id": "effort",
+                  "choices": [
+                    "minimal",
+                    "low",
+                    "medium",
+                    "high",
+                    "xhigh"
+                  ]
+                }
+              ]
+            }
+          ],
+          "unlisted": "accept",
+          "unlistedOptions": [
+            {
+              "id": "effort"
+            }
+          ],
+          "extraArgs": {
+            "allowed": [
+              {
+                "kind": "model",
+                "flags": [
+                  "-m",
+                  "--model"
+                ]
+              },
+              {
+                "kind": "effort",
+                "flags": [
+                  "-c",
+                  "--config"
+                ],
+                "valuePrefix": "model_reasoning_effort="
+              }
+            ],
+            "placeholder": "-m model-id -c model_reasoning_effort=high"
+          }
         }
       },
       {
@@ -1530,6 +2133,121 @@
         "homepage": "https://x.ai/cli",
         "windows": {
           "ctrlEnterEncoding": "csi-u"
+        },
+        "launchOptions": {
+          "model": {
+            "flag": [
+              "-m",
+              "{value}"
+            ],
+            "conflicts": [
+              {
+                "flags": [
+                  "-m",
+                  "--model"
+                ]
+              }
+            ]
+          },
+          "options": [
+            {
+              "id": "effort",
+              "label": "Reasoning effort",
+              "type": "select",
+              "choices": [
+                {
+                  "value": "low",
+                  "label": "Low"
+                },
+                {
+                  "value": "medium",
+                  "label": "Medium"
+                },
+                {
+                  "value": "high",
+                  "label": "High"
+                },
+                {
+                  "value": "xhigh",
+                  "label": "Extra high"
+                }
+              ],
+              "flag": [
+                "--reasoning-effort",
+                "{value}"
+              ],
+              "conflicts": [
+                {
+                  "flags": [
+                    "--effort",
+                    "--reasoning-effort"
+                  ]
+                }
+              ]
+            }
+          ],
+          "models": [
+            {
+              "id": "grok-4.7",
+              "label": "Grok 4.7",
+              "description": "xAI's latest frontier model",
+              "options": [
+                {
+                  "id": "effort"
+                }
+              ]
+            },
+            {
+              "id": "grok-4.6",
+              "label": "Grok 4.6",
+              "description": "xAI's previous frontier model",
+              "options": [
+                {
+                  "id": "effort"
+                }
+              ]
+            },
+            {
+              "id": "grok-4.5",
+              "label": "Grok 4.5",
+              "description": "An earlier xAI frontier model",
+              "options": [
+                {
+                  "id": "effort",
+                  "choices": [
+                    "low",
+                    "medium",
+                    "high"
+                  ]
+                }
+              ]
+            }
+          ],
+          "unlisted": "accept",
+          "unlistedOptions": [
+            {
+              "id": "effort"
+            }
+          ],
+          "extraArgs": {
+            "allowed": [
+              {
+                "kind": "model",
+                "flags": [
+                  "-m",
+                  "--model"
+                ]
+              },
+              {
+                "kind": "effort",
+                "flags": [
+                  "--effort",
+                  "--reasoning-effort"
+                ]
+              }
+            ],
+            "placeholder": "-m model-id --effort high"
+          }
         }
       },
       {
@@ -1574,7 +2292,24 @@
         "readySignal": "render-cursor-after-bracketed-paste",
         "submitSignal": "opencode-agent-row",
         "readyTimeoutMs": 20000,
-        "homepage": "https://opencode.ai/docs/cli/"
+        "homepage": "https://opencode.ai/docs/cli/",
+        "launchOptions": {
+          "model": {
+            "flag": [
+              "--model",
+              "{value}"
+            ],
+            "conflicts": [
+              {
+                "flags": [
+                  "-m",
+                  "--model"
+                ]
+              }
+            ]
+          },
+          "models": []
+        }
       },
       {
         "id": "mimo-code",
@@ -1616,7 +2351,76 @@
           "resume",
           "{id}"
         ],
-        "homepage": "https://dev.meta.ai/docs/muse-code"
+        "homepage": "https://dev.meta.ai/docs/muse-code",
+        "launchOptions": {
+          "model": {
+            "flag": [
+              "--model",
+              "{value}"
+            ],
+            "conflicts": [
+              {
+                "flags": [
+                  "--model"
+                ]
+              }
+            ]
+          },
+          "options": [
+            {
+              "id": "effort",
+              "label": "Reasoning effort",
+              "type": "select",
+              "choices": [
+                {
+                  "value": "minimal",
+                  "label": "Minimal"
+                },
+                {
+                  "value": "low",
+                  "label": "Low"
+                },
+                {
+                  "value": "medium",
+                  "label": "Medium"
+                },
+                {
+                  "value": "high",
+                  "label": "High"
+                },
+                {
+                  "value": "xhigh",
+                  "label": "Extra high"
+                },
+                {
+                  "value": "max",
+                  "label": "Max"
+                },
+                {
+                  "value": "ultra",
+                  "label": "Ultra"
+                }
+              ],
+              "flag": [
+                "--reasoning-effort",
+                "{value}"
+              ],
+              "conflicts": [
+                {
+                  "flags": [
+                    "--reasoning-effort"
+                  ]
+                }
+              ]
+            }
+          ],
+          "models": [],
+          "unlistedOptions": [
+            {
+              "id": "effort"
+            }
+          ]
+        }
       },
       {
         "id": "dsh",
@@ -1715,6 +2519,33 @@
         "homepage": "https://omp.sh",
         "windows": {
           "shiftEnterEncoding": "csi-u"
+        },
+        "launchOptions": {
+          "model": {
+            "flag": [
+              "--model",
+              "{value}"
+            ],
+            "conflicts": [
+              {
+                "flags": [
+                  "--model"
+                ]
+              }
+            ]
+          },
+          "models": [],
+          "extraArgs": {
+            "allowed": [
+              {
+                "kind": "model",
+                "flags": [
+                  "--model"
+                ]
+              }
+            ],
+            "placeholder": "--model model-id"
+          }
         }
       },
       {
@@ -1742,7 +2573,45 @@
           "--resume",
           "{id}"
         ],
-        "homepage": "https://github.com/google-gemini/gemini-cli"
+        "homepage": "https://github.com/google-gemini/gemini-cli",
+        "launchOptions": {
+          "model": {
+            "flag": [
+              "-m",
+              "{value}"
+            ],
+            "conflicts": [
+              {
+                "flags": [
+                  "-m",
+                  "--model"
+                ]
+              }
+            ]
+          },
+          "models": [
+            {
+              "id": "gemini-3-pro-preview",
+              "label": "Gemini 3 Pro Preview",
+              "options": []
+            },
+            {
+              "id": "gemini-3-flash-preview",
+              "label": "Gemini 3 Flash Preview",
+              "options": []
+            },
+            {
+              "id": "gemini-2.5-pro",
+              "label": "Gemini 2.5 Pro",
+              "options": []
+            },
+            {
+              "id": "gemini-2.5-flash",
+              "label": "Gemini 2.5 Flash",
+              "options": []
+            }
+          ]
+        }
       },
       {
         "id": "antigravity",
@@ -1756,7 +2625,60 @@
         ],
         "lineSettleMs": 45,
         "trust": "antigravity",
-        "homepage": "https://antigravity.google/docs/cli-overview"
+        "homepage": "https://antigravity.google/docs/cli-overview",
+        "launchOptions": {
+          "model": {
+            "flag": [
+              "--model",
+              "{value}"
+            ],
+            "conflicts": [
+              {
+                "flags": [
+                  "--model"
+                ]
+              }
+            ]
+          },
+          "options": [
+            {
+              "id": "effort",
+              "label": "Reasoning effort",
+              "type": "select",
+              "choices": [
+                {
+                  "value": "low",
+                  "label": "Low"
+                },
+                {
+                  "value": "medium",
+                  "label": "Medium"
+                },
+                {
+                  "value": "high",
+                  "label": "High"
+                }
+              ],
+              "flag": [
+                "--effort",
+                "{value}"
+              ],
+              "conflicts": [
+                {
+                  "flags": [
+                    "--effort"
+                  ]
+                }
+              ]
+            }
+          ],
+          "models": [],
+          "unlistedOptions": [
+            {
+              "id": "effort"
+            }
+          ]
+        }
       },
       {
         "id": "aider",
@@ -1880,7 +2802,116 @@
           "{id}"
         ],
         "trust": "cursor",
-        "homepage": "https://cursor.com/cli"
+        "homepage": "https://cursor.com/cli",
+        "launchOptions": {
+          "model": {
+            "flag": [
+              "--model",
+              "{value}"
+            ],
+            "conflicts": [
+              {
+                "flags": [
+                  "-m",
+                  "--model"
+                ]
+              }
+            ]
+          },
+          "options": [
+            {
+              "id": "effort",
+              "label": "Effort",
+              "type": "select",
+              "choices": [
+                {
+                  "value": "low",
+                  "label": "Low"
+                },
+                {
+                  "value": "medium",
+                  "label": "Medium"
+                },
+                {
+                  "value": "high",
+                  "label": "High"
+                }
+              ],
+              "composed": true
+            },
+            {
+              "id": "fastMode",
+              "label": "Fast mode",
+              "type": "boolean",
+              "composed": true
+            },
+            {
+              "id": "thinking",
+              "label": "Thinking",
+              "type": "boolean",
+              "composed": true
+            }
+          ],
+          "models": [
+            {
+              "id": "auto",
+              "label": "Auto",
+              "options": []
+            },
+            {
+              "id": "gpt-5.3-codex",
+              "label": "GPT-5.3 Codex",
+              "options": [
+                {
+                  "id": "effort"
+                },
+                {
+                  "id": "fastMode"
+                }
+              ]
+            },
+            {
+              "id": "claude-opus-4-8",
+              "label": "Claude Opus 4.8",
+              "options": [
+                {
+                  "id": "thinking"
+                },
+                {
+                  "id": "effort"
+                }
+              ]
+            }
+          ],
+          "composeModel": "cursor",
+          "valueFlags": [
+            "--api-key",
+            "-H",
+            "--header",
+            "-e",
+            "--endpoint",
+            "--output-format",
+            "--mode",
+            "--model",
+            "--sandbox",
+            "--workspace",
+            "--add-dir",
+            "--plugin-dir",
+            "--worktree-base"
+          ],
+          "extraArgs": {
+            "allowed": [
+              {
+                "kind": "model",
+                "flags": [
+                  "-m",
+                  "--model"
+                ]
+              }
+            ],
+            "placeholder": "-m model-id"
+          }
+        }
       },
       {
         "id": "droid",
@@ -1987,7 +3018,136 @@
           "--resume",
           "{id}"
         ],
-        "homepage": "https://www.codebuddy.ai/cli"
+        "homepage": "https://www.codebuddy.ai/cli",
+        "launchOptions": {
+          "model": {
+            "flag": [
+              "--model",
+              "{value}"
+            ],
+            "conflicts": [
+              {
+                "flags": [
+                  "--model"
+                ]
+              }
+            ]
+          },
+          "options": [
+            {
+              "id": "effort",
+              "label": "Reasoning effort",
+              "type": "select",
+              "choices": [
+                {
+                  "value": "minimal",
+                  "label": "Minimal"
+                },
+                {
+                  "value": "low",
+                  "label": "Low"
+                },
+                {
+                  "value": "medium",
+                  "label": "Medium"
+                },
+                {
+                  "value": "high",
+                  "label": "High"
+                },
+                {
+                  "value": "xhigh",
+                  "label": "Extra high"
+                },
+                {
+                  "value": "max",
+                  "label": "Max"
+                }
+              ],
+              "flag": [
+                "--effort",
+                "{value}"
+              ],
+              "conflicts": [
+                {
+                  "flags": [
+                    "--effort"
+                  ]
+                }
+              ]
+            }
+          ],
+          "models": [
+            {
+              "id": "default-model",
+              "label": "Default",
+              "options": [
+                {
+                  "id": "effort"
+                }
+              ]
+            },
+            {
+              "id": "fast-model",
+              "label": "Fast",
+              "options": [
+                {
+                  "id": "effort"
+                }
+              ]
+            },
+            {
+              "id": "balanced-model",
+              "label": "Balanced",
+              "options": [
+                {
+                  "id": "effort"
+                }
+              ]
+            },
+            {
+              "id": "primary-model",
+              "label": "Primary",
+              "options": [
+                {
+                  "id": "effort"
+                }
+              ]
+            },
+            {
+              "id": "deep-model",
+              "label": "Deep",
+              "options": [
+                {
+                  "id": "effort"
+                }
+              ]
+            }
+          ],
+          "unlisted": "accept",
+          "unlistedOptions": [
+            {
+              "id": "effort"
+            }
+          ],
+          "extraArgs": {
+            "allowed": [
+              {
+                "kind": "model",
+                "flags": [
+                  "--model"
+                ]
+              },
+              {
+                "kind": "effort",
+                "flags": [
+                  "--effort"
+                ]
+              }
+            ],
+            "placeholder": "--model model-id --effort high"
+          }
+        }
       },
       {
         "id": "jcode",
@@ -2251,6 +3411,21 @@
         ]
       },
       {
+        "id": "options",
+        "words": "options",
+        "summary": "list an agent's models and launch options",
+        "positionals": [
+          {
+            "name": "agent",
+            "description": "the agent ID",
+            "required": true
+          }
+        ],
+        "methods": [
+          "quirky.agents/options"
+        ]
+      },
+      {
         "id": "refresh",
         "words": "refresh",
         "summary": "detect installed agents again",
@@ -2387,10 +3562,61 @@
           "draft": {
             "type": "boolean",
             "description": "leave the prompt in the input without submitting it"
+          },
+          "model": {
+            "type": "string",
+            "description": "model to launch the agent with"
+          },
+          "effort": {
+            "type": "string",
+            "description": "effort level for the model; needs --model"
+          },
+          "option": {
+            "type": "string",
+            "repeatable": true,
+            "description": "another model option as KEY=VALUE; needs --model"
+          },
+          "extra-args": {
+            "type": "string",
+            "description": "extra agent arguments, such as \"--add-dir docs\""
           }
         },
         "methods": [
           "quirky.agents/plan"
+        ]
+      },
+      {
+        "id": "resolve",
+        "words": "resolve",
+        "summary": "show what a model and effort pick adds to an agent's launch, without starting it",
+        "positionals": [
+          {
+            "name": "agent",
+            "description": "the agent ID",
+            "required": true
+          }
+        ],
+        "flags": {
+          "model": {
+            "type": "string",
+            "description": "model to launch the agent with"
+          },
+          "effort": {
+            "type": "string",
+            "description": "effort level for the model; needs --model"
+          },
+          "option": {
+            "type": "string",
+            "repeatable": true,
+            "description": "another model option as KEY=VALUE; needs --model"
+          },
+          "extra-args": {
+            "type": "string",
+            "description": "extra agent arguments, such as \"--add-dir docs\""
+          }
+        },
+        "methods": [
+          "quirky.agents/resolveLaunch"
         ]
       }
     ]

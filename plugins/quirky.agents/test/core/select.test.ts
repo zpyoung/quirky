@@ -32,7 +32,8 @@ function entry(id: string): AgentEntry {
     enterWithPaste: false,
     trust: null,
     homepage: null,
-    install: null
+    install: null,
+    launchOptions: null
   }
 }
 

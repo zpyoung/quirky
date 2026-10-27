@@ -1,0 +1,165 @@
+{
+  "id": "acme.launch-override",
+  "name": "Acme launch override",
+  "version": "1.0.0",
+  "description": "Replaces the built-in claude entry with a one-model launch catalog for e2e tests.",
+  "overrides": [
+    {
+      "id": "agent:quirky.agents/claude",
+      "label": "Claude",
+      "detect": "claude",
+      "prompt": "argv",
+      "draftFlag": "--prefill",
+      "yolo": "--dangerously-skip-permissions",
+      "auto": "--permission-mode auto",
+      "resume": [
+        "--resume",
+        "{id}"
+      ],
+      "fork": [
+        "--resume",
+        "{id}",
+        "--fork-session"
+      ],
+      "resumeStyle": "claude-splice",
+      "trust": "claude",
+      "homepage": "https://code.claude.com/docs",
+      "launchOptions": {
+        "model": {
+          "flag": [
+            "--model",
+            "{value}"
+          ],
+          "conflicts": [
+            {
+              "flags": [
+                "--model"
+              ]
+            }
+          ],
+          "structured": "model"
+        },
+        "options": [
+          {
+            "id": "effort",
+            "label": "Effort",
+            "type": "select",
+            "choices": [
+              {
+                "value": "low",
+                "label": "Low"
+              },
+              {
+                "value": "medium",
+                "label": "Medium"
+              },
+              {
+                "value": "high",
+                "label": "High"
+              },
+              {
+                "value": "xhigh",
+                "label": "Extra high"
+              },
+              {
+                "value": "max",
+                "label": "Max"
+              }
+            ],
+            "flag": [
+              "--effort",
+              "{value}"
+            ],
+            "conflicts": [
+              {
+                "flags": [
+                  "--effort"
+                ]
+              }
+            ],
+            "structured": "effort"
+          }
+        ],
+        "models": [
+          {
+            "id": "opus",
+            "label": "Opus",
+            "description": "Best for everyday, complex tasks",
+            "options": [
+              {
+                "id": "effort"
+              }
+            ]
+          }
+        ],
+        "unlisted": "accept",
+        "unlistedOptions": [
+          {
+            "id": "effort"
+          }
+        ],
+        "valueFlags": [
+          "--add-dir",
+          "--agent",
+          "--agents",
+          "--allowedTools",
+          "--allowed-tools",
+          "--append-system-prompt",
+          "--append-system-prompt-file",
+          "--autocompact",
+          "--betas",
+          "--debug-file",
+          "--disallowedTools",
+          "--disallowed-tools",
+          "--effort",
+          "--environment",
+          "--fallback-model",
+          "--file",
+          "--input-format",
+          "--json-schema",
+          "--max-budget-usd",
+          "--mcp-config",
+          "--model",
+          "-n",
+          "--name",
+          "--output-format",
+          "--permission-mode",
+          "--permission-prompts",
+          "--plugin-dir",
+          "--plugin-url",
+          "--remote-control-session-name-prefix",
+          "--session-id",
+          "--setting-sources",
+          "--settings",
+          "--system-prompt",
+          "--system-prompt-file",
+          "--system-prompt-snapshot",
+          "--tools"
+        ],
+        "extraArgs": {
+          "allowed": [
+            {
+              "kind": "model",
+              "flags": [
+                "--model"
+              ]
+            },
+            {
+              "kind": "effort",
+              "flags": [
+                "--effort"
+              ]
+            },
+            {
+              "kind": "repeatable",
+              "flags": [
+                "--add-dir"
+              ]
+            }
+          ],
+          "placeholder": "--model opus --effort high --add-dir docs"
+        }
+      }
+    }
+  ]
+}

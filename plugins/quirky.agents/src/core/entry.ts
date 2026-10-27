@@ -4,11 +4,13 @@ import {
   SUBMIT_SIGNALS,
   TRUST_PRESETS,
   type AgentEntry,
+  type LaunchCatalog,
   type PromptMode,
   type ReadySignal,
   type SubmitSignal,
   type TrustPreset
 } from './types'
+import { parseLaunchOptions } from './launch-options'
 
 export type EntryResult = { ok: true; entry: AgentEntry } | { ok: false; error: string }
 
@@ -44,7 +46,8 @@ const KNOWN_FIELDS = new Set([
   'trust',
   'homepage',
   'install',
-  'windows'
+  'windows',
+  'launchOptions'
 ])
 
 class Invalid extends Error {}
@@ -115,7 +118,17 @@ function parse(plugin: string, id: string, data: Record<string, unknown>): Agent
     enterWithPaste: boolean(data, 'enterWithPaste') ?? false,
     trust: oneOf<TrustPreset>(data, 'trust', TRUST_PRESETS) ?? null,
     homepage: link(data, 'homepage'),
-    install: link(data, 'install')
+    install: link(data, 'install'),
+    launchOptions: data.launchOptions === undefined ? null : launchOptions(data.launchOptions)
+  }
+}
+
+function launchOptions(value: unknown): LaunchCatalog {
+  try {
+    return parseLaunchOptions(value)
+  } catch (error) {
+    if (error instanceof Error) return fail(error.message)
+    throw error
   }
 }
 

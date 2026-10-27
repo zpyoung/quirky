@@ -11,7 +11,13 @@ import type {
 import { resolveClaudeThroughLoginShell } from './claude-path'
 import { createClaudeRunner } from './claude-runner'
 import { Journal, journalMigrations } from './journal'
-import type { NewStructuredMessage, StructuredContext, StructuredRunner, StructuredRunnerFactory } from './runner'
+import type {
+  NewStructuredMessage,
+  StructuredContext,
+  StructuredLaunchOptions,
+  StructuredRunner,
+  StructuredRunnerFactory
+} from './runner'
 
 const CLAUDE_TITLE = 'Claude'
 const NOTIFICATIONS_SETTING = 'setting:quirky.agent-status/notifications'
@@ -129,20 +135,37 @@ export function activate(context: PluginContext): void {
     }
   }
 
+  const resolveStructuredLaunch = async (
+    params: Record<string, unknown>
+  ): Promise<{ structured: StructuredLaunchOptions; launchSettings: unknown } | null> => {
+    if (params.model === undefined && params.options === undefined) return null
+    return (await context.call('quirky.agents/resolveLaunch', {
+      agent: params.agent,
+      model: params.model,
+      options: params.options,
+      structured: true
+    })) as { structured: StructuredLaunchOptions; launchSettings: unknown }
+  }
+
   const create: MethodHandler = async (params, caller) => {
     if (params.agent !== 'claude') {
       throw context.error('invalid-params', 'structured sessions support only the claude agent')
     }
+    if (params.extraArgs !== undefined) {
+      throw context.error('invalid-params', "Extra arguments can't be applied to a structured session.")
+    }
     const worktree = await resolveWorktree(params.worktree, caller)
     const title = await nextTitle(worktree.id)
+    const resolution = await resolveStructuredLaunch(params)
     const registered = (await context.call('quirky.session/register', {
       worktree: worktree.id,
       agent: 'claude',
       kind: 'structured',
-      title
+      title,
+      ...(resolution?.launchSettings ? { launchSettings: resolution.launchSettings } : {})
     })) as Session
     live.set(registered.id, { title, worktreeId: worktree.id, worktreeName: worktree.name, status: registered.status })
-    runner.start({ ...registered, cwd: worktree.path }, params.prompt as string).catch((error: Error) => {
+    runner.start({ ...registered, cwd: worktree.path }, params.prompt as string, resolution?.structured ?? {}).catch((error: Error) => {
       appendMessage({ sessionId: registered.id, role: 'system', text: `could not start: ${error.message}` })
       setStatus(registered.id, 'exited')
     })
