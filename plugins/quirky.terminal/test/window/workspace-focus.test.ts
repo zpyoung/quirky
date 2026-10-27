@@ -1,6 +1,6 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from 'bun:test'
 import { act } from 'react'
-import { fakeDaemon, loadWorkspace, mountFixture, settle, simpleWorkspace, startRecording, stopRecording, unloadWorkspace, type MountedWorkspace } from './workspace-support'
+import { fakeDaemon, fire, loadWorkspace, mountFixture, mouse, settle, simpleWorkspace, startRecording, stopRecording, unloadWorkspace, type MountedWorkspace } from './workspace-support'
 
 let mounted: MountedWorkspace | null = null
 
@@ -50,5 +50,29 @@ describe('focus across a layout revision', () => {
     expect(document.activeElement).not.toBe(area)
     await revise(mounted)
     expect(document.activeElement).toBe(area)
+  })
+})
+
+describe('authoritative terminal focus reporting', () => {
+  test('reports a workspace only when its terminal input receives focus', async () => {
+    mounted = await mountFixture(fakeDaemon(simpleWorkspace()), {
+      extra: { 'quirky.terminal/focusContext': (params) => ({ workspace: params.workspace ?? null }) }
+    })
+    const pane = mounted.q('[data-pane="pane-1"]')!
+    const textarea = mounted.q<HTMLTextAreaElement>('[data-pane="pane-1"] textarea.xterm-helper-textarea')!
+    const focusCalls = () => mounted!.fake.callsTo('quirky.terminal/focusContext').map((call) => call.params)
+    const panel = document.createElement('button')
+    panel.dataset.sessionInfoPanel = 'true'
+    document.body.appendChild(panel)
+    await act(async () => void panel.focus())
+    const callsBeforeMouseDown = focusCalls().length
+    await fire(pane, mouse('mousedown', { button: 0 }))
+    expect(focusCalls()).toHaveLength(callsBeforeMouseDown)
+    await act(async () => void textarea.focus())
+    expect(focusCalls()).toHaveLength(callsBeforeMouseDown + 1)
+    expect(focusCalls().at(-1)).toEqual({ workspace: 'wt-main' })
+    const callsBeforePanelFocus = focusCalls().length
+    await act(async () => void panel.focus())
+    expect(focusCalls()).toHaveLength(callsBeforePanelFocus)
   })
 })

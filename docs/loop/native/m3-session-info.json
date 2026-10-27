@@ -1,0 +1,30 @@
+{
+  "item": "m3-session-info",
+  "spec": "docs/quirk/specs/2026-10-27-m3-session-info/logic.md",
+  "scenarios": [
+    {
+      "id": "SC-5",
+      "title": "In the real Electrobun window with an isolated local agent/provider ID, Copy ID shows Copied for 1.5 seconds and delivers that provider ID to the macOS clipboard; restore the clipboard afterward.",
+      "status": "pending",
+      "lastRun": null,
+      "report": null,
+      "summary": null
+    },
+    {
+      "id": "SC-7",
+      "title": "Focus pane from Session Info activates the real application window and exact target tab/group/pane, flashes it, scrolls to the bottom and routes keyboard input only to that isolated target terminal.",
+      "status": "pending",
+      "lastRun": null,
+      "report": null,
+      "summary": null
+    },
+    {
+      "id": "SC-9",
+      "title": "Reveal transcript opens Finder selecting the captured transcript created under the disposable home, never a caller-supplied alternate path; return focus and close the Finder window created by this run.",
+      "status": "pending",
+      "lastRun": null,
+      "report": null,
+      "summary": null
+    }
+  ]
+}

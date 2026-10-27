@@ -65,6 +65,34 @@ describe('launch hooks', () => {
     expect(request.env.STAGE).toBe('ab')
   })
 
+  test('JSON hook arguments merge once after ordinary arguments in the launched command', async () => {
+    const first = { statusLine: { format: 'first' }, hooks: { Stop: ['first'] }, list: ['first'] }
+    const second = { statusLine: { command: 'second' }, hooks: { SessionStart: ['second'] }, list: ['second'] }
+    const effective = {
+      statusLine: { format: 'first', command: 'second' },
+      hooks: { Stop: ['first'], SessionStart: ['second'] },
+      list: ['second']
+    }
+    const s = await boot([
+      hookPlugin(
+        'acme.b',
+        'second',
+        `() => ({ args: ['--second'], jsonArgs: { '--settings': ${JSON.stringify(second)} } })`
+      ),
+      hookPlugin(
+        'acme.a',
+        'first',
+        `() => ({ args: ['--first'], jsonArgs: { '--settings': ${JSON.stringify(first)} } })`
+      )
+    ])
+
+    const { request } = await s.createSession('claude')
+    const command = request.argv[3]!
+
+    expect(command).toContain(`'--first' '--second' '--settings' '${JSON.stringify(effective)}'`)
+    expect(command.match(/'--settings'/g)).toHaveLength(1)
+  })
+
   test("SC-25: a hook can't change the kernel's variables, and a broken hook doesn't block the launch", async () => {
     const timeoutMs = 300
     const s = await boot(

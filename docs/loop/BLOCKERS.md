@@ -113,6 +113,19 @@ The item landed with these low-severity findings from the like-a-user pass and t
 - **Cleanup:** all implementation, repair and smoke agents returned. Both disposable smoke runtimes/homes were stopped and removed. The cancelled remote copy `/home/quirkyci/runs/1793125374884-31860` and its exact owned process tree were cleaned up. Merged component branches/worktrees and diagnostic scaffolds were removed. No native-only scenario was added.
 - **Resume:** after authorized queue repair, restore `blocked/m5-ledger` as `build/m5-ledger`, requeue it, merge current integration and read new decisions. Run the affected remote suites plus scripts/typecheck/build. Then run the required one Gemini three-lens final review and one accepted-finding fix batch (Opus/Sonnet were unreachable; Gemini real dispatch returned READY), record any remaining review findings as LOOP.md requires, and land through `queue.ts land`. The final code review was not run because its mandatory gate is red; the earlier real Codex spec promote/refute review is not a substitute.
 
+## m3-session-info: open review findings
+
+Operator-authorized nonblocking follow-up; the core Session Info flows are implemented and exercised.
+
+- **LOW — native clipboard and real denial feedback:** `docs/loop/native/m3-session-info.json:6`. Browser copy/paste and immediate Copied/reset screenshots pass, and deterministic UI tests cover a denied clipboard. Real Electrobun/macOS clipboard delivery and a real denied-permission UI case were not exercised because this lane used unattended headless web verification; its settled sampler also misses the 1.5-second label.
+- **LOW — native window activation/focus:** `docs/loop/native/m3-session-info.json:14`. Exact web-pane focus, scrolling, floating Cmd+T input and main-pane restoration pass. OS-window activation and native flash/focus still need the real-window run.
+- **LOW — Finder reveal:** `docs/loop/native/m3-session-info.json:22`. The captured-path reveal API is covered; actual Finder selection was not exercised because this lane forbids foreground/native automation.
+- **LOW — narrow-width control discoverability:** `.quirk/using-apps-like-a-user/runs/20261027T160654-487b/report.md` F1/F2/F3/F5. Visibility guards found occluded tab/Terminal Sessions controls and opacity-hidden xterm refs. Core flows passed through visible overflow/collapse/prompt routes; a dedicated narrow-width accessibility/discoverability audit remains.
+- **MEDIUM — local one-shot timeout verification:** `plugins/quirky.agents/test/generate.test.ts:305`. In the catch-up check, NA-29 returned the requested timeout at 311 ms but the test expected at least 2,000 ms for a SIGTERM-resistant group. The test stopped before its descendant-gone assertion. Startup/grace/platform behavior remains unconfirmed; this is not a Session Info core-flow failure, and no production timeout or cleanup assertion was weakened. Evidence: `/tmp/quirky-session-info.TBh9Q4/land-catchup-targeted/1-plugins_quirky.agents_test_generate.test.ts.txt`.
+
+Required follow-up: `followup-m3-session-info-parity-20261027`, depending on `m3-session-info`; register it through queue.ts before landing.
+
+Registration update: `bun scripts/build-loop/queue.ts add /tmp/quirky-session-info.TBh9Q4/operator-followup.json` returned 0 before landing. `followup-m3-session-info-parity-20261027` is registered with dependency `m3-session-info` and names the unfinished flows and their verification limits above.
 ## Deferred past the 4am target
 
 - **Decided by:** the user, 2026-10-27, to land everything else by 4am on 2026-10-28.

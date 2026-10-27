@@ -1,4 +1,10 @@
 const CSS = `
+
+@keyframes qt-pane-focus-flash {
+  0% { box-shadow: inset 0 0 0 2px var(--accent), 0 0 18px var(--accent); opacity: 0.95; }
+  100% { box-shadow: inset 0 0 0 1px var(--accent); opacity: 0; }
+}
+.qt-focus-flash { position: absolute; inset: 0; z-index: 10; border: 2px solid var(--accent); pointer-events: none; animation: qt-pane-focus-flash 800ms ease-out both; }
 .qt-workspace { position: relative; flex: 1; min-width: 0; min-height: 0; display: flex; background: var(--bg); color: var(--text); }
 .qt-muted { color: var(--muted); }
 .qt-pad { padding: 12px; }

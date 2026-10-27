@@ -61,6 +61,8 @@ export class LayoutService {
   private tail: Promise<unknown> = Promise.resolve()
   private reconcileWaiting = false
   private closed = false
+  private focusedWorkspace: string | null = null
+  private stopFocusSettings: (() => void) | null = null
 
   constructor(
     private readonly context: PluginContext,
@@ -89,6 +91,7 @@ export class LayoutService {
   readonly methods: Record<string, MethodHandler> = {
     workspace: (params, caller) => this.queued(() => this.workspace(params, caller)),
     newTab: (params, caller) => this.queued(() => this.newTab(params, caller)),
+    openSession: (params, caller) => this.queued(() => this.openSession(params, caller)),
     closeTab: (params) => this.queued(() => this.closeTab(params)),
     closeTabs: (params) => this.queued(() => this.closeTabs(params)),
     describeClose: (params) => this.queued(() => this.describeClose(params)),
@@ -102,6 +105,7 @@ export class LayoutService {
     closePane: (params) => this.queued(() => this.closePane(params)),
     restartPane: (params) => this.queued(() => this.restartPane(params)),
     focusPane: (params, caller) => this.queued(() => this.focusPane(params, caller)),
+    focusContext: (params) => this.queued(() => this.readOrSetFocusContext(params)),
     setPaneTitle: (params) => this.queued(() => this.editPane(params, (ws, pane) => ops.setPaneTitle(ws, pane, params.title as string))),
     expandPane: (params) => this.queued(() => this.editPane(params, (ws, pane) => ops.expandPaneOp(ws, pane, params.expanded as boolean))),
     equalize: (params) => this.queued(() => this.editTab(params, (ws, id) => ops.equalizeTab(ws, id))),
@@ -119,6 +123,11 @@ export class LayoutService {
 
   /** Starts the first reconciliation pass; calls that arrive meanwhile wait behind it. */
   start(): void {
+    this.stopFocusSettings ??= this.context.subscribe((event) => {
+      if (event.type === 'setting.changed' && event.id === 'setting:quirky.terminal/floating-enabled' && event.value !== true) {
+        this.clearHiddenFloatingFocus()
+      }
+    })
     this.enqueueBackground(async () => {
       await this.seedFacts()
       await this.reconcile()
@@ -158,6 +167,8 @@ export class LayoutService {
   /** Stops accepting work; a pass already running finishes. */
   shutdown(): void {
     this.closed = true
+    this.stopFocusSettings?.()
+    this.stopFocusSettings = null
   }
 
   /** The workspace a selector names; none means the caller's, and a floating caller means `floating`. */
@@ -423,6 +434,59 @@ export class LayoutService {
     return { workspace }
   }
 
+  /** Opens an already running local terminal session in its workspace without creating or restoring a process. */
+  private async openSession(params: Params, caller: PluginCaller): Promise<{ workspace: Workspace; pane: string }> {
+    if (typeof params.session !== 'string' || params.session.trim() === '') {
+      throw this.context.error('invalid-params', 'session is required')
+    }
+    const session = await this.session(params.session)
+    if (session.kind !== 'terminal') throw this.context.error('invalid-params', `session ${session.id} is not a terminal session`)
+    if (session.status === 'exited') throw this.context.error('conflict', `session ${session.id} is not running`)
+    if (typeof session.worktreeId !== 'string' || session.worktreeId.trim() === '') {
+      throw this.context.error('invalid-params', `session ${session.id} has no local worktree`)
+    }
+    if (params.workspace !== undefined && (typeof params.workspace !== 'string' || params.workspace.trim() === '')) {
+      throw this.context.error('invalid-params', 'workspace must be a worktree ID or floating')
+    }
+    const workspaceId =
+      params.workspace === undefined ? session.worktreeId : await this.resolveWorkspace(params.workspace, caller)
+    if (workspaceId !== session.worktreeId) {
+      throw this.context.error('invalid-params', `session ${session.id} belongs to workspace ${session.worktreeId}, not ${workspaceId}`)
+    }
+    if (!(await this.context.pty.list()).some((entry) => entry.sessionId === session.id && entry.state === 'running')) {
+      throw this.context.error('conflict', `session ${session.id} is not running in the local terminal host`)
+    }
+
+    for (const workspace of this.workspaces.values()) {
+      const loc = ops.locateSession(workspace, session.id)
+      if (!loc) continue
+      if (workspace.id !== workspaceId) {
+        throw this.context.error('conflict', `session ${session.id} is already open in workspace ${workspace.id}`)
+      }
+      const alreadyFocused =
+        workspace.activeGroup === loc.group.id &&
+        loc.group.activeTab === loc.tab.id &&
+        loc.tab.activePane === loc.pane.id &&
+        (loc.tab.expandedPane === null || loc.tab.expandedPane === loc.pane.id)
+      const focused = alreadyFocused
+        ? workspace
+        : this.commit(workspace, this.unwrap(ops.focusPaneOp(workspace, loc.pane.id)), this.ids())
+      if (workspaceId !== FLOATING_WORKSPACE || this.floatingIsVisible()) this.updateFocusContext(workspaceId)
+      return { workspace: focused, pane: loc.pane.id }
+    }
+
+    const workspace = this.ensure(workspaceId)
+    const group = findGroup(workspace.root, workspace.activeGroup)
+    if (!group) throw this.context.error('conflict', `workspace ${workspaceId} has no active group`)
+    const ids = this.ids()
+    const tab = ops.makeTab(ids, { defaultTitle: session.title, session: session.id, now: this.now() })
+    const pane = (tab.root as PaneLeaf).id
+    const next = this.unwrap(ops.appendTab(workspace, group.id, tab))
+    const focused = this.commit(workspace, next, ids)
+    if (workspaceId !== FLOATING_WORKSPACE || this.floatingIsVisible()) this.updateFocusContext(workspaceId)
+    return { workspace: focused, pane }
+  }
+
   private async addTab(workspaceId: string, spec: NewTabSpec): Promise<{ workspace: Workspace; session: Session }> {
     const ws = this.ensure(workspaceId)
     this.checkRevision(ws, spec.revision)
@@ -595,10 +659,16 @@ export class LayoutService {
   }
 
   private async focusPane(params: Params, caller: PluginCaller): Promise<{ workspace: Workspace }> {
-    if (params.offset === undefined) return this.editPane(params, (ws, pane) => ops.focusPaneOp(ws, pane))
-    const ws =
-      params.tab !== undefined ? this.ownerOf('tab', params.tab as string) : this.ensure(await this.resolveWorkspace(params.workspace, caller))
-    return this.edit(ws, params, () => ops.focusPaneBy(ws, params.tab as string | undefined, params.offset as 1 | -1))
+    let result: { workspace: Workspace }
+    if (params.offset === undefined) {
+      result = await this.editPane(params, (ws, pane) => ops.focusPaneOp(ws, pane))
+    } else {
+      const ws =
+        params.tab !== undefined ? this.ownerOf('tab', params.tab as string) : this.ensure(await this.resolveWorkspace(params.workspace, caller))
+      result = await this.edit(ws, params, () => ops.focusPaneBy(ws, params.tab as string | undefined, params.offset as 1 | -1))
+    }
+    if (result.workspace.id !== FLOATING_WORKSPACE || this.floatingIsVisible()) this.updateFocusContext(result.workspace.id)
+    return result
   }
 
   private resizeSplit(params: Params): { workspace: Workspace } {
@@ -722,6 +792,36 @@ export class LayoutService {
     return tabs.flatMap((tab) => paneLeaves(tab.root).map((leaf) => ({ tab, leaf })))
   }
 
+  private readOrSetFocusContext(params: Params): { workspace: string | null } {
+    const workspace = params.workspace
+    if (workspace !== undefined) {
+      if (workspace !== null && (typeof workspace !== 'string' || workspace.trim() === '')) {
+        throw this.context.error('invalid-params', 'workspace must be a non-empty worktree ID, floating, or null')
+      }
+      if (workspace === null) this.updateFocusContext(null)
+      else if (workspace === FLOATING_WORKSPACE && !this.floatingIsVisible()) this.clearHiddenFloatingFocus()
+      else this.updateFocusContext(workspace as string)
+    } else {
+      this.clearHiddenFloatingFocus()
+    }
+    return { workspace: this.focusedWorkspace }
+  }
+
+  private updateFocusContext(workspace: string | null): void {
+    if (this.focusedWorkspace === workspace) return
+    this.focusedWorkspace = workspace
+    this.context.emit('focusContextChanged', { workspace })
+  }
+
+  private floatingIsVisible(): boolean {
+    const state = this.floating()
+    return state.enabled && state.open
+  }
+
+  private clearHiddenFloatingFocus(): void {
+    if (this.focusedWorkspace === FLOATING_WORKSPACE && !this.floatingIsVisible()) this.updateFocusContext(null)
+  }
+
   private floating(): FloatingState {
     return { enabled: this.context.getSetting('floating-enabled') !== false, ...this.floatingStored }
   }
@@ -732,6 +832,7 @@ export class LayoutService {
     this.store.saveFloating(result.state)
     this.floatingStored = result.state
     const state = this.floating()
+    this.clearHiddenFloatingFocus()
     this.context.emit('floating', { state })
     return state
   }

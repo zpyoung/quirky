@@ -1,0 +1,129 @@
+{
+  "id": "quirky.session-info",
+  "name": "Session Info",
+  "version": "0.1.0",
+  "description": "A provider-neutral projection of the focused terminal agent, with guarded Claude session telemetry.",
+  "main": "main.ts",
+  "cli": "cli.ts",
+  "ui": "dist/ui.js",
+  "activation": "startup",
+  "dependencies": ["quirky.session", "quirky.agent-status", "quirky.terminal", "quirky.agents", "quirky.worktree"],
+  "contributes": {
+    "method": [
+      {
+        "id": "get",
+        "description": "The session-info projection for a selected session, or the authoritative focused terminal workspace. An empty focus returns info null.",
+        "readOnly": true,
+        "params": {
+          "type": "object",
+          "properties": { "session": { "type": "string", "description": "A Quirky session ID; omitted uses terminal focus." } }
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "session": { "description": "The selected Quirky session ID, or null." },
+            "pane": { "description": "The focused pane ID, or null." },
+            "workspace": { "description": "The focused worktree or floating workspace ID, or null." },
+            "openSections": { "type": "array", "items": { "type": "string", "enum": ["identity", "usage", "liveActivity", "context", "filesTouched", "hooksAndMcp"] } },
+            "info": {
+              "description": "SessionInfo object (identity and liveActivity plus optional usage, context, filesTouched and hooksAndMcp), or null when no terminal agent is focused."
+            }
+          },
+          "required": ["session", "pane", "workspace", "openSections", "info"]
+        }
+      },
+      {
+        "id": "sections",
+        "description": "Read or replace the durable set of open accordion section IDs.",
+        "params": { "type": "object", "properties": { "open": { "type": "array", "items": { "type": "string", "enum": ["identity", "usage", "liveActivity", "context", "filesTouched", "hooksAndMcp"] } } } },
+        "result": { "type": "object", "properties": { "open": { "type": "array", "items": { "type": "string", "enum": ["identity", "usage", "liveActivity", "context", "filesTouched", "hooksAndMcp"] } } }, "required": ["open"] }
+      },
+      {
+        "id": "inspect",
+        "description": "Independently inspect agent hooks, statusline consent and configured MCP servers. Each call also refreshes local Claude usage from its recorded transcript.",
+        "params": { "type": "object", "properties": { "session": { "type": "string", "description": "A Quirky session ID; omitted uses terminal focus." } } },
+        "result": { "type": "object", "properties": { "hooks": { "type": "object", "properties": { "state": { "type": "string" }, "detail": { "type": "string" } }, "required": ["state"] }, "statusline": { "type": "object", "properties": { "state": { "type": "string", "enum": ["managed", "chained", "available", "drifted", "disabled", "error"] }, "detail": { "type": "string" } }, "required": ["state"] }, "mcp": { "type": "array", "items": { "type": "object", "properties": { "name": { "type": "string" }, "transport": { "type": "string" }, "state": { "type": "string", "enum": ["enabled", "disabled", "invalid"] } }, "required": ["name", "transport", "state"] } }, "updatedAt": { "type": "number" }, "error": { "type": "string" } }, "required": ["mcp", "updatedAt"] }
+      },
+      {
+        "id": "telemetry",
+        "description": "Ingest a session-correlated statusline payload only for a local Claude session whose captured provider ID matches.",
+        "params": { "type": "object", "properties": { "session": { "type": "string" }, "payload": { "type": "object", "additionalProperties": true } }, "required": ["session", "payload"] },
+        "result": { "type": "object", "properties": { "accepted": { "type": "boolean" } }, "required": ["accepted"] }
+      },
+      {
+        "id": "enableTelemetry",
+        "description": "Consent to the exact current custom statusline command or opt out. The result states the next-launch effect; running sessions do not change.",
+        "params": { "type": "object", "properties": { "session": { "type": "string" }, "enabled": { "type": "boolean", "default": true } } },
+        "result": { "type": "object", "properties": { "statusline": { "type": "object", "properties": { "state": { "type": "string", "enum": ["managed", "chained", "available", "drifted", "disabled", "error"] }, "detail": { "type": "string" } }, "required": ["state"] }, "nextLaunchEffect": { "type": "string" } }, "required": ["statusline", "nextLaunchEffect"] }
+      },
+      {
+        "id": "history",
+        "description": "Search recorded sessions by provider session ID, Quirky session ID, or title; transcripts are never indexed.",
+        "readOnly": true,
+        "params": { "type": "object", "properties": { "query": { "type": "string" } } },
+        "result": { "type": "array", "items": { "type": "object", "properties": { "id": { "type": "string" }, "title": { "type": "string" }, "providerSession": { "description": "Captured provider session, or null." } }, "required": ["id"], "additionalProperties": true } }
+      },
+      {
+        "id": "transcript",
+        "description": "Read the recorded local transcript for display, bounded to 16 MiB. The path always comes from the captured session record.",
+        "readOnly": true,
+        "params": { "type": "object", "properties": { "session": { "type": "string" } }, "required": ["session"] },
+        "result": { "type": "object", "properties": { "path": { "type": "string" }, "text": { "type": "string" } }, "required": ["path", "text"] }
+      },
+      {
+        "id": "resumeCommand",
+        "description": "Plan, but do not start, a resume or fork command through the public agent planner.",
+        "readOnly": true,
+        "params": { "type": "object", "properties": { "session": { "type": "string" }, "fork": { "type": "boolean" } }, "required": ["session"] },
+        "result": { "type": "object", "properties": { "command": { "type": "string" } }, "required": ["command"] }
+      }
+    ],
+    "event": [
+      {
+        "id": "changed",
+        "description": "A session projection changed. Consumers refetch by session ID; null invalidates focus or preference state.",
+        "data": { "type": "object", "properties": { "sessionId": { "description": "A Quirky session ID, or null for global invalidation." } }, "required": ["sessionId"] }
+      }
+    ],
+    "launch-hook": [
+      { "id": "statusline", "description": "Adds a local, session-scoped Claude statusline overlay while preserving consented custom statuslines.", "agents": ["claude"] }
+    ],
+    "panel": [
+      { "id": "info", "title": "Session Info" }
+    ],
+    "view": [
+      { "id": "history", "title": "Session History" },
+      { "id": "transcript", "title": "Session Transcript" }
+    ],
+    "command": [
+      { "id": "open", "title": "Open Session Info", "description": "Open the Session Info panel." },
+      { "id": "copy-id", "title": "Copy Provider Session ID", "args": { "type": "object", "properties": { "session": { "type": "string" } } } },
+      { "id": "open-history", "title": "Open Session History", "args": { "type": "object", "properties": { "session": { "type": "string" } } } },
+      { "id": "focus-pane", "title": "Focus Agent Pane", "args": { "type": "object", "properties": { "session": { "type": "string" } } } },
+      { "id": "open-transcript", "title": "Open Session Transcript", "args": { "type": "object", "properties": { "session": { "type": "string" } } } },
+      { "id": "reveal-transcript", "title": "Reveal Session Transcript", "args": { "type": "object", "properties": { "session": { "type": "string" } } } },
+      { "id": "resume", "title": "Resume Agent Session", "args": { "type": "object", "properties": { "session": { "type": "string" } } } },
+      { "id": "fork", "title": "Fork Agent Session", "args": { "type": "object", "properties": { "session": { "type": "string" } } } },
+      { "id": "copy-resume-command", "title": "Copy Resume Command", "args": { "type": "object", "properties": { "session": { "type": "string" } } } }
+    ],
+    "cli-command": [
+      { "id": "get", "words": "get", "summary": "show the focused or selected session-info projection", "flags": { "session": { "type": "string", "description": "select a Quirky session ID" } }, "methods": ["quirky.session-info/get"] },
+      { "id": "sections", "words": "sections", "summary": "read or replace the durable open-section set", "flags": { "open": { "type": "string", "description": "an open section ID; repeat to open several", "repeatable": true, "enum": ["identity", "usage", "liveActivity", "context", "filesTouched", "hooksAndMcp"] } }, "methods": ["quirky.session-info/sections"] },
+      { "id": "inspect", "words": "inspect", "summary": "inspect hooks, statusline and MCP configuration", "flags": { "session": { "type": "string", "description": "select a Quirky session ID" } }, "methods": ["quirky.session-info/inspect"] },
+      { "id": "telemetry", "words": "telemetry", "summary": "ingest a guarded statusline payload", "positionals": [{ "name": "session", "description": "the Quirky session ID", "required": true }], "flags": { "payload": { "type": "string", "description": "statusline JSON object, or @path to a JSON file", "required": true } }, "methods": ["quirky.session-info/telemetry"] },
+      { "id": "enable-telemetry", "words": "enable-telemetry", "summary": "consent to or disable next-launch session telemetry", "flags": { "session": { "type": "string", "description": "select a Quirky session ID" }, "enabled": { "type": "boolean", "description": "false opts out; defaults to true" } }, "methods": ["quirky.session-info/enableTelemetry"] },
+      { "id": "history", "words": "history", "summary": "search sessions by provider ID, Quirky ID or title", "flags": { "query": { "type": "string", "description": "text to match against session identity and title" } }, "methods": ["quirky.session-info/history"] },
+      { "id": "transcript", "words": "transcript", "summary": "read a recorded transcript, bounded to 16 MiB", "positionals": [{ "name": "session", "description": "the Quirky session ID", "required": true }], "methods": ["quirky.session-info/transcript"] },
+      { "id": "resume-command", "words": "resume-command", "summary": "print a resume or fork command without starting a process", "positionals": [{ "name": "session", "description": "the Quirky session ID", "required": true }], "flags": { "fork": { "type": "boolean", "description": "plan a fork instead of a resume" } }, "methods": ["quirky.session-info/resumeCommand"] },
+      { "id": "open", "words": "open", "summary": "open the Session Info panel", "methods": ["ui.command.run"] },
+      { "id": "copy-id", "words": "copy-id", "summary": "copy the selected provider session ID", "flags": { "session": { "type": "string", "description": "select a Quirky session ID" } }, "methods": ["ui.command.run"] },
+      { "id": "open-history", "words": "open-history", "summary": "open session history for the selected provider ID", "flags": { "session": { "type": "string", "description": "select a Quirky session ID" } }, "methods": ["ui.command.run"] },
+      { "id": "focus-pane", "words": "focus-pane", "summary": "focus the selected session's terminal pane", "flags": { "session": { "type": "string", "description": "select a Quirky session ID" } }, "methods": ["ui.command.run"] },
+      { "id": "open-transcript", "words": "open-transcript", "summary": "open the selected session transcript view", "flags": { "session": { "type": "string", "description": "select a Quirky session ID" } }, "methods": ["ui.command.run"] },
+      { "id": "reveal-transcript", "words": "reveal-transcript", "summary": "reveal the selected session transcript in the file manager", "flags": { "session": { "type": "string", "description": "select a Quirky session ID" } }, "methods": ["ui.command.run"] },
+      { "id": "resume", "words": "resume", "summary": "resume the selected session", "flags": { "session": { "type": "string", "description": "select a Quirky session ID" } }, "methods": ["ui.command.run"] },
+      { "id": "fork", "words": "fork", "summary": "fork the selected session", "flags": { "session": { "type": "string", "description": "select a Quirky session ID" } }, "methods": ["ui.command.run"] },
+      { "id": "copy-resume-command", "words": "copy-resume-command", "summary": "copy a resume command for the selected session", "flags": { "session": { "type": "string", "description": "select a Quirky session ID" } }, "methods": ["ui.command.run"] }
+    ]
+  }
+}

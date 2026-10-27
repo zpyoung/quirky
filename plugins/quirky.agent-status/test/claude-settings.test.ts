@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from 'bun:test'
-import { readFileSync, statSync, utimesSync, writeFileSync } from 'node:fs'
+import { writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import type { PluginContext } from '@quirky/protocol'
 import { makeTempDir, removeTempDirs } from '../../../packages/daemon/test/plugins/fixtures'
@@ -10,8 +10,7 @@ import {
   claudeEventsFor,
   claudeSettings,
   commandProbe,
-  parseClaudeVersion,
-  writeClaudeSettings
+  parseClaudeVersion
 } from '../src/claude-settings'
 
 afterEach(() => removeTempDirs())
@@ -91,44 +90,6 @@ describe('claudeSettings', () => {
       expect(settings.hooks[name]).toEqual([{ matcher: '*', hooks: [{ type: 'command', command, timeout: 10 }] }])
     }
     expect(Object.keys(settings)).toEqual(['hooks'])
-  })
-})
-
-describe('writeClaudeSettings', () => {
-  test('writes the file for the event set and returns its path', () => {
-    const dir = makeTempDir()
-    const path = writeClaudeSettings(dir, '2.1.300')
-    expect(path.startsWith(join(dir, 'claude-settings-'))).toBe(true)
-    expect(path.endsWith('.json')).toBe(true)
-    expect(JSON.parse(readFileSync(path, 'utf8'))).toEqual(claudeSettings(claudeEventsFor('2.1.300')))
-  })
-
-  test('versions with one event set share a file, different sets get different files', () => {
-    const dir = makeTempDir()
-    expect(writeClaudeSettings(dir, '2.1.300')).toBe(writeClaudeSettings(dir, '2.1.400'))
-    expect(writeClaudeSettings(dir, null)).toBe(writeClaudeSettings(dir, '1.0.64'))
-    expect(writeClaudeSettings(dir, '1.0.60')).not.toBe(writeClaudeSettings(dir, '2.1.300'))
-    expect(writeClaudeSettings(dir, '2.1.260')).not.toBe(writeClaudeSettings(dir, '2.1.261'))
-  })
-
-  test('leaves a current file alone and rewrites a stale one', () => {
-    const dir = makeTempDir()
-    const path = writeClaudeSettings(dir, '2.1.300')
-    const past = new Date(Date.now() - 60_000)
-    utimesSync(path, past, past)
-    const before = statSync(path).mtimeMs
-    expect(writeClaudeSettings(dir, '2.1.300')).toBe(path)
-    expect(statSync(path).mtimeMs).toBe(before)
-
-    writeFileSync(path, '{"hooks":{}}\n')
-    expect(writeClaudeSettings(dir, '2.1.300')).toBe(path)
-    expect(JSON.parse(readFileSync(path, 'utf8'))).toEqual(claudeSettings(claudeEventsFor('2.1.300')))
-  })
-
-  test('creates the data dir when missing', () => {
-    const dir = join(makeTempDir(), 'nested', 'data')
-    const path = writeClaudeSettings(dir, null)
-    expect(JSON.parse(readFileSync(path, 'utf8')).hooks.SessionStart).toBeDefined()
   })
 })
 

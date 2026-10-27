@@ -7,12 +7,14 @@ import { paneQuickCommandItems } from './quick-commands'
 import { repoFirst } from './quick-commands/search'
 import { SEPARATOR, controllerFor, focusedController, type MenuItem, type WorkspaceController } from './workspace'
 import { locatePane, locateTab } from './workspace/model'
+import { waitForController } from './workspace/registry'
 
 export const QUICK_COMMANDS_PANEL = 'panel:quirky.terminal/quick-commands'
 export const QUICK_COMMANDS_MENU = 'quick-commands'
 
 const QUICK_COMMANDS_EVENT = 'quirky.terminal/quickCommands'
 const MENU_KINDS = ['tab', 'pane', 'plus', 'actions', QUICK_COMMANDS_MENU]
+const WORKTREE_VIEW = 'view:quirky.session/worktree'
 
 /** What a window command returns when it can't act: JSON, so a caller on the CLI can read it. */
 export type CommandFailure = { ok: false; reason: string }
@@ -125,10 +127,64 @@ async function changeFloating(context: UiPluginContext, change: (state: Floating
   return context.call('quirky.terminal/setFloating', change(state))
 }
 
+async function focusPaneCommand(context: UiPluginContext, raw: unknown): Promise<CommandFailure | typeof OK> {
+  const args = argsOf(raw)
+  const pane = textArg(args, 'pane')
+  if (pane === undefined) return { ok: false, reason: 'pane is required' }
+  try {
+    const location = (await context.call('quirky.terminal/paneOf', { pane })) as { workspace: string }
+    const requestedWorkspace = textArg(args, 'workspace')
+    if (requestedWorkspace !== undefined && requestedWorkspace !== location.workspace) {
+      return { ok: false, reason: `pane ${pane} belongs to workspace ${location.workspace}, not ${requestedWorkspace}` }
+    }
+    if (location.workspace === FLOATING_WORKSPACE) {
+      const state = (await context.call('quirky.terminal/floating')) as FloatingState
+      if (!state.enabled) return { ok: false, reason: 'the floating workspace is turned off' }
+      if (!state.open) await context.call('quirky.terminal/setFloating', { open: true })
+    } else {
+      context.openView(WORKTREE_VIEW, { worktree: location.workspace })
+    }
+    const controller = controllerFor(location.workspace) ?? (await waitForController(location.workspace))
+    if (!controller || controllerFor(location.workspace) !== controller) return { ok: false, reason: `workspace ${location.workspace} did not open` }
+    if (!(await controller.focusPaneForCommand(pane))) return { ok: false, reason: `pane ${pane} is not a terminal pane` }
+    return OK
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : String(error)
+    context.toast('Could not focus pane', reason)
+    return { ok: false, reason }
+  }
+}
+
+async function openSessionCommand(context: UiPluginContext, raw: unknown): Promise<CommandFailure | typeof OK> {
+  const args = argsOf(raw)
+  const session = textArg(args, 'session')
+  if (session === undefined) return { ok: false, reason: 'session is required' }
+  const workspace = textArg(args, 'workspace')
+  try {
+    const opened = (await context.call('quirky.terminal/openSession', { session, ...(workspace === undefined ? {} : { workspace }) })) as {
+      workspace: Workspace
+      pane: string
+    }
+    const focused: unknown = await context.executeCommand('command:quirky.terminal/focus-pane', {
+      pane: opened.pane,
+      workspace: opened.workspace.id
+    })
+    if (typeof focused === 'object' && focused !== null && 'ok' in focused && focused.ok === false) {
+      const reason = 'reason' in focused && typeof focused.reason === 'string' ? focused.reason : 'could not focus pane'
+      return { ok: false, reason }
+    }
+    return OK
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : String(error)
+    context.toast('Could not open session', reason)
+    return { ok: false, reason }
+  }
+}
+
 /**
- * The handlers of `quirky.terminal`'s window commands, by command name. Each acts on the focused
- * workspace, or on the one holding the `pane`, `tab` or `target` it is given, and returns JSON:
- * `{ok: true}` (`copy` returns `{text}`), or `{ok: false, reason}` when no mounted workspace fits.
+ * The handlers of `quirky.terminal`'s window commands, by command name. Most act on the focused
+ * workspace or an explicit target; `focus-pane` and `open-session` open the target workspace.
+ * Commands return JSON: `{ok: true}` (`copy` returns `{text}`), or `{ok: false, reason}` on failure.
  */
 export function terminalCommands(context: UiPluginContext): Record<string, CommandHandler> {
   return {
@@ -145,7 +201,9 @@ export function terminalCommands(context: UiPluginContext): Record<string, Comma
     clear: onPane(context, (controller, pane) => controller.clearPane(pane)),
     'reset-terminal': onPane(context, (controller, pane) => controller.resetPane(pane)),
     'focus-next-pane': on(context, 'pane', (controller) => controller.focusNext()),
+    'focus-pane': (args) => focusPaneCommand(context, args),
     'focus-previous-pane': on(context, 'pane', (controller) => controller.focusPrevious()),
+    'open-session': (args) => openSessionCommand(context, args),
     'toggle-expand-pane': onPane(context, (controller, pane) => controller.toggleExpand(pane)),
     equalize: on(context, 'tab', (controller, args) => controller.equalize(textArg(args, 'tab'))),
     'set-pane-title': onPane(context, (controller, pane) => controller.setTitle(pane)),
