@@ -17,8 +17,8 @@ test('SC-05/07: transcript content becomes searchable only after explicit consen
   const harness = await startHarness({ home, builtinPluginsDir: builtinsDir() })
   try {
     const client = await harness.connect()
-    const status = await client.call('quirky.vault/searchStatus' as never, {} as never).catch(error => ({ error: String(error) })) as { enabled?: boolean }
-    expect(status.enabled).toBe(false)
+    const status = await client.call('quirky.vault/searchStatus' as never, {} as never).catch(error => ({ error: String(error) })) as { status?: { enabled: boolean } }
+    expect(status.status?.enabled).toBe(false)
     const result = await client.call('quirky.vault/list' as never, { unlimited: true } as never) as { sessions: { sessionId: string }[] }
     expect(result.sessions.map(session => session.sessionId)).toContain('vault-consent')
     const db = join(home, 'plugin-data/quirky.vault/session-search.sqlite')

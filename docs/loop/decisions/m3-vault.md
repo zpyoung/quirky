@@ -176,5 +176,82 @@
 - **Revisit if:** A later gate still fails after the runner's allowed isolated retry.
 - **Source:** assumed — autonomous
 
+## D17: Build four disjoint components in one implementation wave
+- **Question:** How should implementation be partitioned without shared-file races?
+- **Options:** One sequential implementer; independent scanner/search/service/window components with fixed shared contracts.
+- **Chose:** Four omp tasks, width cap four, each in an external /tmp worktree forked from 39c5c2b. Scanner owns parser/discovery/fixtures/package; search owns FTS/index/query; service owns daemon/CLI/manifest plus generic public owner/API/packaging growth; window owns vault renderer and terminal window drop. Parent owns shared types/inventory/consent regression, scope audits, integration and checks. No overlapping files, dependency edges or overlap demotions.
+- **Why:** JSON/Scanner/Search boundaries are fixed before dispatch. Service public UI/terminal manifest changes and renderer changes are separated by ownership. Separate worktrees avoid cross-task writes while preserving achievable width. The parent applies the higher-priority rule that workers skip checks mid-flight and runs verification at the barrier.
+- **Evidence:** /tmp/quirky-vault-l8-journal.md; worktrees /tmp/quirky-vault-l8-{scanner,search,service,window}, all clean at 39c5c2b before dispatch. Scope and acceptance contracts are recorded in that journal and task prompts.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** An actual contract dependency invalidates independent implementation.
+- **Source:** assumed — autonomous
+
+## D18: Keep a failing-before privacy regression on the real API path
+- **Question:** What test proves the new feature is missing before implementation and guards the privacy boundary?
+- **Options:** Source-text/wiring test; real daemon browse/index lifecycle with private fixture term.
+- **Chose:** consent.test.ts uses temporary Quirky/source home, real builtin API, original Claude-shaped records and checks no search DB before explicit opt-in, then actual content matching after consent.
+- **Why:** Consumer-visible privacy is the highest-risk invariant. Before implementation, the assertion expecting enabled=false fails with undefined because the method does not exist; the test cleans its harness/home and environment.
+- **Evidence:** `bun test plugins/quirky.vault/test/consent.test.ts`: 0 pass, 1 fail, expected false/received undefined at line21; artifact://47. Test committed at39c5c2b before production implementation.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** The real public policy contract changes.
+- **Source:** assumed — autonomous
+
+## D19: Lock generic Worker/settings and evidence interfaces before integrating consumers
+- **Question:** What exact interfaces bridge the independent runtime and renderer components?
+- **Options:** Plugin-specific shell branches and source-path guesses; generic declared Worker entries/settings mounts and one safe evidence encoding.
+- **Chose:** Manifest workers maps names to relative entries, bundler rewrites .js paths, and public workerEntrypoint resolves declared entries only. Generic settings-section uses standard MountFunction and UiModel.settingsSections. Evidence reserves raw bracket marks for FTS highlights; literal brackets and U+E002 use injective 0/1/2 escapes decoded once only in text runs.
+- **Why:** These interfaces preserve public-only plugins, packaged operation and unspoofable text highlighting without shell special cases or HTML injection.
+- **Evidence:** tech.md Worker/public-growth/evidence contracts; explicit service/search interface messages routed to window implementers.
+- **Reversibility:** medium
+- **Confidence:** high
+- **Revisit if:** Packaged smoke or producer/consumer tests reject the contract.
+- **Source:** assumed — autonomous
+
+## D20: Use one canonical public result envelope and remove renderer guessing
+- **Question:** Should independently written UI code accept several possible service response shapes?
+- **Options:** Wrapper/raw compatibility fallbacks; exact declared schemas and migrated consumers.
+- **Chose:** Direct HostedSession/null, HostedSession[], ViewState and Session results; firstPrompt uses prompt wrapper; searchStatus/enable use status+hosts wrapper; clear uses cleared/status/hosts; openSource uses ok; deletion uses deleted/trashed-count/alreadyMissing/reason. setView takes a flat partial ViewState. Parent privacy regression and window consumers migrate to these canonical shapes.
+- **Why:** There is no installed legacy vault contract to preserve. Guessing hides interface errors; one schema makes real CLI/API/window behavior verifiable.
+- **Evidence:** tech.md canonical public result contract; service implementation interface report and completed UI call-site inspection.
+- **Reversibility:** medium
+- **Confidence:** high
+- **Revisit if:** A confirmed public consumer requires a documented contract amendment.
+- **Source:** assumed — autonomous
+
+## D21: Prepare external resume records from public effective configuration without trust side effects
+- **Question:** How does external history use configured launch flags and managed Codex homes without changing existing record-backed resume semantics?
+- **Options:** Pass null record; call prepareLaunch merely to copy; get effective public agent fields and pass a real LaunchRecord.
+- **Chose:** Use quirky.agents/get command/args/env, overlay source CODEX_HOME where present, and feed existing prepareResume/session-owned launch. Do not change null-record planner behavior and do not invoke trustFolder for a copy/prepare action.
+- **Why:** buildResumePlan deliberately maps null record to catalog defaults/no custom args, while prepareLaunch calls trustFolder. Both would violate the external history configuration/pure-copy contract in different ways.
+- **Evidence:** plugins/quirky.agents/src/core/plan.ts:433-447; src/service.ts:265-282,469-490; src/core/types.ts:110-142.
+- **Reversibility:** medium
+- **Confidence:** high
+- **Revisit if:** Provider owner adds an explicit side-effect-free external-history planner.
+- **Source:** locked by docs/loop/decisions/m1-providers.md
+
+## D22: Repair module seams and invalid fixture oracles without narrowing parser/search contracts
+- **Question:** How are failed component acceptance checks handled before integration?
+- **Options:** Suppress errors or repin outputs; diagnose actual module bindings, source behavior and persisted state.
+- **Chose:** Fixed scanner helper bindings/internal typing and corrected source-aligned Cursor fixture/oracles. Scanner passes9 tests/251 assertions. Search engine bindings and fixture timestamps are corrected; replacement publication now preserves the candidate file's last_seen_scan so the same sweep cannot erase newly indexed content. Fork fixtures share all eight hashed messages rather than incorrectly expecting a shared two-message prefix to collapse differing third messages. Search passes10 tests/96 assertions; both component typechecks passed.
+- **Why:** These checks exposed actual binding/transaction defects and invalid fixture assumptions. No production behavior was weakened to satisfy an invalid title, path-body or fork oracle.
+- **Evidence:** scanner artifacts56/58/60/63 and final9pass0fail251assertion output; search artifacts68/69/72 and final10pass0fail96assertion output; replacement diagnostic observed the emptied index before the file-row preservation fix.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** Integrated CLI/API scenarios expose another actual source-format mismatch.
+- **Source:** assumed — autonomous
+
+## D23: Assemble audited components before accepting cross-component behavior
+- **Question:** How can the service and renderer acceptance run when their isolated trees deliberately lack the independently implemented scanner/search and public UI extensions?
+- **Options:** Fake dependencies or claim isolated tests pass; assemble the audited code with explicit unverified checkpoints and accept only after real integration checks.
+- **Chose:** After every worker returned, verify all five HEADs remain39c5c2b and audit all actual changed paths. Commit scanner/search with observed component acceptance, and checkpoint service/window without claiming acceptance. Merge the disjoint checkpoints into build/m3-vault, install the new workspace package, then run real integrated API/CLI/window/owner checks before any completion claim or landing. The desktop worker-bundle test is explicitly owned by the service slice as bundle-plugins-workers.test.ts; no other component touches it.
+- **Why:** Service/window runtime verification genuinely depends on the other components. Mocking those dependencies would prove less than assembling the real feature. Checkpoint commits preserve every returned result; they are not claims that an item is complete. No unverified code can land through the final gate.
+- **Evidence:** authoritative barrier status artifact89 and five matching full HEAD outputs; per-component scopes in /tmp/quirky-vault-l8-journal.md. Temporary dependency symlinks and generated Serena configs were removed rather than committed. Parent-only diff is limited to this log, tech contract refinements, native handoff and the canonical privacy-test envelope.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** The assembled tree reveals a contract conflict requiring re-plan rather than an implementation fix.
+- **Source:** assumed — autonomous
+
 ## Progress
-Step 4 complete: both specifications drafted, self-reviewed and subjected to mandatory Codex standard promote/refute review; confirmed F3/F4 corrected. Baseline build, remote suite, scripts and typecheck pass (D16 records the one suite-reported flaky file). Next commit specs, establish shared JSON contracts, then build with omp task workers in disjoint external worktrees. No production implementation yet.
+Step 5: all workers have returned. Scanner/search accepted by targeted checks; service/window remain unverified integration checkpoints. Authoritative barrier audit verified unchanged HEADs and disjoint declared source scopes. Next assemble on build/m3-vault, install workspace dependencies, run targeted real API/CLI/window and owner tests, repair confirmed defects, then complete all24 acceptance scenarios, packaged/UI smoke, catchup decisions and final review before landing.
