@@ -500,5 +500,15 @@
 - **Revisit if:** a checkpoint finding changes a contract wave 3 builds against
 - **Source:** assumed — autonomous
 
+## D50: Checkpoint 2: accept nine findings, dismiss one; the spec lens was adjudicated from its first stage
+- **Question:** the wave 3 checkpoint review (Codex, standard depth) and its spec lens, whose second stage failed twice because the reviewer gave a finding a wrong ID prefix
+- **Options:** rerun until the lens completes; adjudicate the lens's first-stage findings here against the code
+- **Chose:** adjudicate here. Accepted and fixed: Enter on a quick-command menu's row buttons ran the command (C1=X1); stale quick-command refreshes could land last (C4); focusing a structured pane didn't move the daemon's active pane (C2=S1); a new tab-group split remounted the untouched group's terminals (C3); a failed session-list refresh dropped session metadata (X3); the view didn't re-fetch on session and setting events (S5); `pane get` refused a pane resolved in another worktree (S4); the pane's `open-external` import (S2, folded into the wiring task). Dismissed: S3, `describeClose` returning null when the session is not found, because a session that no longer exists runs nothing a close could stop.
+- **Why:** each accepted finding is a behaviour the logic spec states; S3 conflicts with no rule (D43's fail-closed rule covers records that can't be read, not records that are gone).
+- **Evidence:** scratchpad cp2/{C,X}/gate.json, cp2/S/findings.json
+- **Reversibility:** easy
+- **Confidence:** medium
+- **Source:** assumed — autonomous
+
 ## Progress
 Waves 1–3 and the cp1 fix batch merged (350bc59 + test fix b16e767; gate green apart from the pinned word list, fixed). Wave 4 (D1 window wiring with overrides/commands/keybindings/panel/overlay and the floating overlay; D2 CLI/API scenario tests in test/e2e/) dispatched from b16e767 on sdd/termui/D1, D2. Checkpoint cp2 (d2bed5f..b16e767) running. Next: merge wave 4, fix cp2 findings, wave 5 (E1/E2 UI scenario tests in test/e2e-ui/ against a real daemon and the headless window; briefs in the session scratchpad), then catch-up merge of build/roadmap, Final Round 1, the like-a-user web pass, land.
