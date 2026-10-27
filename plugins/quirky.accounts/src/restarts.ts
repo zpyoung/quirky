@@ -1,6 +1,7 @@
 import { existsSync } from 'node:fs'
 import { isAbsolute } from 'node:path'
 import type { PluginContext } from '@quirky/protocol'
+import type { ManagedProvider } from './types'
 import { CodexHistoryError } from './codex-history'
 
 export type SessionView = {

@@ -7,6 +7,15 @@ import type { ProviderSnapshot, ResetCreditExpectedScope, UsageState } from '../
 import type { AccountsHarness } from './support/index'
 import { commands } from '../cli'
 import { cleanupAll, defaultHome, startAccounts, testCli, waitForAsync } from './support/index'
+import {
+  interceptProviderFetch,
+  restartAccounts,
+  restoreProviderFetchFixtures,
+  writeAntigravityCli,
+  writeCursorCliCredential,
+  writePrivateJson,
+  type RestartedAccounts
+} from './acceptance-fixtures'
 
 const nativeDateNow = Date.now
 const originalAppData = process.env.APPDATA
