@@ -276,5 +276,35 @@
 - **Confidence:** high
 - **Source:** assumed — autonomous
 
+## D28: Build pairing `claude-task + codex`, four waves, no checkpoint after wave 1
+- **Question:** subagent-driven-development preflight and decomposition
+- **Options:** n/a
+- **Chose:** Claude Sonnet implementers, Codex (`gpt-6.1-sol`, verified with `pi-watch --check codex`) reviewing. Shared types, value helpers and the manifest committed first by the orchestrator. Wave 1: four pure modules (spec validator, answers/timeout/partial, window submission, Claude flags and gate). Wave 2: the service with wiring, and the window. Then the CLI and a fake-agent fix as wave-gate fixers, wave 3 the suppression e2e. No checkpoint after wave 1, whose modules are leaf code with their own unit tests; one after wave 2. Wave 1 started while the spec review ran, since its modules port Orca's rules directly; the review's three findings on them were sent back to the same workers before their trees were committed.
+- **Why:** docs/loop/LOOP.md step 5 names the pairing; the waves follow the dependency order of the tech spec
+- **Evidence:** docs/quirk/specs/2026-10-26-m2-ask-parity/tech.md "Architecture"
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** locked by docs/loop/LOOP.md
+
+## D29: The fake agent answers `--version` as a probe, not a launch
+- **Question:** wave 2 gate: the new Claude hook probes `claude --version` before each launch, and the agents e2e fake logged that as a launch, failing 12 tests
+- **Options:** filter probe events in each test; make the fake treat a bare `--version` as a probe
+- **Chose:** the fake logs a bare `--version` as a `version` event, prints `0.0.0 (fake)` unless a test sets a version, and exits at once. Below the 1.0.51 floor, so tests that don't ask for the flags don't get them.
+- **Why:** one change in test support keeps every existing e2e expectation; the probe never hangs for its 3 s timeout in tests
+- **Evidence:** plugins/quirky.agents/test/support/fake-agent.ts
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** assumed — autonomous
+
+## D30: `surfaced` is emitted only for promotions
+- **Question:** build (task B1): whether an ask that is live at creation also gets a `surfaced` event
+- **Options:** emit `surfaced` at creation too; only on promotion
+- **Chose:** only on promotion; an ask live at creation is announced (notification, panel) from `created`
+- **Why:** SC-15's walkthrough (created 1, created 2, resolved 3, surfaced 4) spends no `seq` on surfacing at creation, and `created` already carries `queued: false`
+- **Evidence:** docs/quirk/specs/2026-10-26-m2-ask-parity/logic.md SC-15; plugins/quirky.ask/main.ts
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** assumed — autonomous
+
 ## Progress
-Specs written and reviewed (D1-D27). Building with subagent-driven-development; journal in the session scratchpad. Wave 1 (core modules A1-A4) done in worktrees.
+Building. Waves 1 and 2 and the wave-gate fixers (CLI, fake agent) are merged on build/m2-ask-parity, gate green. Next: wave 2 checkpoint review, wave 3 (suppression e2e), catch-up merge of build/roadmap, Final Round 1, verification (UI run), land.
