@@ -160,6 +160,32 @@ describe('session new', () => {
     }
   })
 
+  test('SC-23: --cwd starts the session in that folder', async () => {
+    const dir = makeTempDir('qs-cwd-')
+    const { ctx } = testCliContext(client)
+    await run('new', ctx, [], { agent: 'shell', worktree: 'id:wt_main', cwd: dir })
+    const [session] = await call<Session[]>(client, 'quirky.session/list')
+    expect(session).toMatchObject({ worktreeId: 'wt_main', cwd: dir })
+    const request = h.pty.requests.find((r) => r.type === 'create')
+    expect(request?.type === 'create' && request.cwd).toBe(dir)
+  })
+
+  test('--cwd and --worktree floating run through the real CLI', async () => {
+    const dir = makeTempDir('qs-cwd-')
+    const result = await runCli(['session', 'new', '--agent', 'shell', '--worktree', 'floating', '--cwd', dir, '--json'], { home: h.home })
+    expect(result.code).toBe(0)
+    expect(JSON.parse(result.stdout)).toMatchObject({ worktreeId: 'floating', cwd: dir })
+    const listed = await runCli(['session', 'list', '--worktree', 'floating', '--json'], { home: h.home })
+    expect(JSON.parse(listed.stdout)).toHaveLength(1)
+  })
+
+  test('a --cwd that is not an existing directory is the daemon\'s refusal', async () => {
+    const result = await runCli(['session', 'new', '--agent', 'shell', '--worktree', 'id:wt_main', '--cwd', '/no/such/dir'], { home: h.home })
+    expect(result.code).not.toBe(0)
+    expect(result.stderr).toContain('cwd must be an existing directory')
+    expect(await call(client, 'quirky.session/list')).toEqual([])
+  })
+
   test('passes the prompt to the agent', async () => {
     const { ctx } = testCliContext(client)
     await run('new', ctx, [], { agent: 'claude', prompt: 'go', worktree: 'id:wt_main' })
@@ -182,6 +208,9 @@ describe('session new', () => {
     expect((await failure(run('new', ctx, [], { background: true, prompt: 'p' }))).message).toBe('--background requires --agent')
     expect((await failure(run('new', ctx, [], { agent: 'claude', prompt: 'p', background: true, wait: true }))).message).toBe(
       '--wait and --draft do not apply to --background'
+    )
+    expect((await failure(run('new', ctx, [], { agent: 'claude', prompt: 'p', background: true, cwd: '/tmp' }))).message).toBe(
+      '--cwd does not apply to --background'
     )
     expect(await call(client, 'quirky.session/list')).toEqual([])
   })
@@ -307,6 +336,7 @@ describe('the CLI catalog', () => {
     expect(own.find((c) => c.words === 'session new')!.flags.map((f) => f.name).sort()).toEqual([
       'agent',
       'background',
+      'cwd',
       'draft',
       'effort',
       'extra-args',

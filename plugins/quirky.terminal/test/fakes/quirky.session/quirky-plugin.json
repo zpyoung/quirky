@@ -18,7 +18,10 @@
       {
         "id": "list",
         "readOnly": true,
-        "params": { "type": "object" }
+        "params": {
+          "type": "object",
+          "properties": { "worktree": { "type": "string" } }
+        }
       },
       {
         "id": "create",
@@ -26,9 +29,10 @@
           "type": "object",
           "properties": {
             "worktree": { "type": "string" },
-            "agent": { "type": "string" }
-          },
-          "required": ["agent"]
+            "agent": { "type": "string" },
+            "cwd": { "type": "string" },
+            "prompt": { "type": "string" }
+          }
         }
       },
       {
@@ -69,6 +73,15 @@
           "type": "object",
           "properties": { "sessionId": { "type": "string" } },
           "required": ["sessionId"]
+        }
+      },
+      {
+        "id": "changed",
+        "description": "A session was created or changed.",
+        "data": {
+          "type": "object",
+          "properties": { "session": { "type": "object" } },
+          "required": ["session"]
         }
       }
     ]

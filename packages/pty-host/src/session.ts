@@ -17,7 +17,7 @@ import { writeCheckpoint } from './history/checkpoint'
 import { DEFAULT_SEGMENT_BYTES, HistoryLog } from './history/log'
 import { type SessionMeta, writeMeta } from './history/meta'
 import { composeReplay, pageBefore, parseCursor, textLinesAbove } from './history/reader'
-import { CheckpointScheduler, GROUND, rebuildScreen, type RestoredScreen } from './history/restore'
+import { CheckpointScheduler, GROUND, MODE_RESET, rebuildScreen, type RestoredScreen } from './history/restore'
 import { spawnPty, type PtyProcess } from './pty-process'
 import { OutputScanner, type ScanFact } from './scanner'
 import { Screen } from './screen'
@@ -27,6 +27,8 @@ import { TailBuffer } from './tail'
 export const DEFAULT_TAIL_BYTES = 256 * 1024
 export const DEFAULT_CHECKPOINT_INTERVAL_MS = 5000
 export const DEFAULT_SHELL_READY_TIMEOUT_MS = 15000
+
+const ERASE_SCREEN_AND_SCROLLBACK = new TextEncoder().encode('\x1b[H\x1b[2J\x1b[3J')
 
 const DEFAULT_HISTORY_LINES = 2000
 const MAX_HISTORY_LINES = 10000
@@ -322,6 +324,45 @@ export class SessionManager {
     return pageBefore(source.dir, { before, lines, format, screenRows: source.rows })
   }
 
+  /**
+   * Empties the scrollback and keeps only the cursor's line, as the first row, for the emulator,
+   * the history, every attached viewer and a later cold restore. Subscribers are sent the erase
+   * sequences and the serialized cleared screen as ordinary output, so offsets keep growing and
+   * output that follows lands after it. Works on a session whose process has exited; a stored
+   * session that is not in memory cannot be cleared.
+   */
+  async clear(sessionId: string): Promise<void> {
+    const session = this.inMemory(sessionId)
+    await this.atRest(session, () => {
+      session.screen.clear()
+      const screen = session.screen.snapshot()
+      const bytes = concatBytes(ERASE_SCREEN_AND_SCROLLBACK, new TextEncoder().encode(screen.ansi))
+      this.withLog(session, (log) => {
+        log.appendClear()
+        log.appendOutput(bytes)
+      })
+      session.tail.replaceWith(bytes)
+      this.broadcast(session, bytes)
+      this.checkpointNow(session, screen)
+    })
+  }
+
+  /**
+   * Turns off mouse tracking, bracketed paste and application cursor keys and shows the cursor, in
+   * the emulator, the history and every attached viewer. Nothing is written to the process. Works
+   * on a session whose process has exited.
+   */
+  async resetModes(sessionId: string): Promise<void> {
+    const session = this.inMemory(sessionId)
+    await this.atRest(session, () => {
+      session.screen.write(MODE_RESET)
+      this.withLog(session, (log) => log.appendOutput(MODE_RESET))
+      session.tail.append(MODE_RESET)
+      this.broadcast(session, MODE_RESET)
+      session.checkpointer.noteOutput()
+    })
+  }
+
   subscriberCount(sessionId: string): number {
     return this.sessions.get(sessionId)?.subscribers.size ?? 0
   }
@@ -352,6 +393,58 @@ export class SessionManager {
     const stored = this.stored.get(sessionId)
     if (stored) return { stored }
     throw new Error(`unknown session: ${sessionId}`)
+  }
+
+  /** The session held in memory, running or exited; stored sessions have no emulator to change. */
+  private inMemory(sessionId: string): Session {
+    const { live } = this.locate(sessionId)
+    if (this.stopping) throw new Error(SHUTTING_DOWN)
+    if (!live) throw new Error(`session ${sessionId} is not running`)
+    return live
+  }
+
+  /** Runs `write` against the session's history log, reopening it for append when the session has ended and closed it. */
+  private withLog(session: Session, write: (log: HistoryLog) => void): void {
+    if (session.log.isOpen || session.log.disabled) {
+      write(session.log)
+      return
+    }
+    const log = HistoryLog.openForAppend(session.dir, { cols: session.cols, rows: session.rows, maxSegmentBytes: this.maxSegmentBytes })
+    try {
+      write(log)
+    } finally {
+      log.close()
+    }
+  }
+
+  /** Writes a checkpoint of `screen` at the current output position, unless the parser is mid-sequence there. */
+  private checkpointNow(session: Session, screen: { ansi: string; cols: number; rows: number }): void {
+    if (!session.scanner.atBoundary) return
+    try {
+      writeCheckpoint(session.dir, {
+        version: 1,
+        offset: session.tail.total,
+        cols: screen.cols,
+        rows: screen.rows,
+        ansi: screen.ansi,
+        cwd: session.cwd,
+        title: session.title,
+        savedAt: Date.now()
+      })
+      this.persistMeta(session)
+    } catch (error) {
+      console.error(`pty-host: checkpoint write failed for ${session.dir}: ${error instanceof Error ? error.message : String(error)}`)
+    }
+  }
+
+  private broadcast(session: Session, bytes: Uint8Array): void {
+    for (const sink of session.subscribers) {
+      try {
+        sink(session.sessionId, bytes)
+      } catch (error) {
+        console.error(`sink for ${session.sessionId} failed:`, error)
+      }
+    }
   }
 
   private createFresh(params: CreateParams): PtyResults['create'] {
@@ -562,13 +655,7 @@ export class SessionManager {
       session.log.appendOutput(bytes)
       session.tail.append(bytes)
       session.screen.write(bytes)
-      for (const sink of session.subscribers) {
-        try {
-          sink(session.sessionId, bytes)
-        } catch (error) {
-          console.error(`sink for ${session.sessionId} failed:`, error)
-        }
-      }
+      this.broadcast(session, bytes)
       session.checkpointer.noteOutput()
     }
     for (const fact of facts) this.applyFact(session, fact)
@@ -836,6 +923,16 @@ function readResult(above: string[], visible: Array<{ text: string }>, cols: num
   const lines = [...above, ...visible.map((row) => row.text.trimEnd())]
   while (lines.length > 0 && lines[lines.length - 1] === '') lines.pop()
   return { lines, cols, rows, alt }
+}
+
+function concatBytes(...parts: Uint8Array[]): Uint8Array {
+  const out = new Uint8Array(parts.reduce((total, part) => total + part.length, 0))
+  let at = 0
+  for (const part of parts) {
+    out.set(part, at)
+    at += part.length
+  }
+  return out
 }
 
 function historyLinesOf(requested: number | undefined): number {

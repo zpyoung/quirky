@@ -22,7 +22,7 @@
           "properties": {
             "worktree": {
               "type": "string",
-              "description": "Only sessions in this worktree (selector); omitted lists all."
+              "description": "Only sessions in this worktree (selector, or `floating`); omitted lists all."
             }
           }
         },
@@ -237,7 +237,7 @@
           "properties": {
             "worktree": {
               "type": "string",
-              "description": "Worktree selector; default: the caller's current worktree."
+              "description": "Worktree selector, or `floating` for the workspace outside any repository; default: the caller's current worktree."
             },
             "agent": {
               "type": "string",
@@ -283,6 +283,10 @@
             "extraArgs": {
               "type": "string",
               "description": "Extra agent arguments the agent's allowlist permits, such as \"--add-dir docs\"."
+            },
+            "cwd": {
+              "type": "string",
+              "description": "Absolute directory the session starts in; default: the worktree path."
             }
           }
         },
@@ -621,7 +625,7 @@
           "properties": {
             "worktree": {
               "type": "string",
-              "description": "Worktree selector; default: the caller's current worktree."
+              "description": "Worktree selector, or `floating` for the workspace outside any repository; default: the caller's current worktree."
             },
             "agent": {
               "type": "string",
@@ -1223,6 +1227,10 @@
       {
         "id": "worktree",
         "title": "Sessions"
+      },
+      {
+        "id": "structured",
+        "title": "Structured session"
       }
     ],
     "command": [
@@ -1385,6 +1393,10 @@
           "worktree": {
             "type": "string",
             "description": "worktree selector (default: the current worktree)"
+          },
+          "cwd": {
+            "type": "string",
+            "description": "folder to start in (default: the worktree path)"
           },
           "prompt": {
             "type": "string",

@@ -9,6 +9,7 @@ const model: UiModel = {
   sidebarSections: [],
   panels: [],
   views: [],
+  overlays: [],
   commands: [],
   keybindings: [],
   settings: [],

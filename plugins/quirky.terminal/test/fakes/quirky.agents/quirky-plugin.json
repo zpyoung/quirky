@@ -1,0 +1,20 @@
+{
+  "id": "quirky.agents",
+  "name": "Agents (test fake)",
+  "version": "0.0.0",
+  "main": "main.ts",
+  "activation": "startup",
+  "contributes": {
+    "method": [
+      {
+        "id": "get",
+        "readOnly": true,
+        "params": {
+          "type": "object",
+          "properties": { "agent": { "type": "string" } },
+          "required": ["agent"]
+        }
+      }
+    ]
+  }
+}

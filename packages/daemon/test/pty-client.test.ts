@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, test } from 'bun:test'
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { PtyFrameDecoder, encodePtyJson, type ExitCause, type PtyFact, type PtyRequest } from '@quirky/protocol'
+import { PTY_PROTOCOL_VERSION, PtyFrameDecoder, encodePtyJson, type ExitCause, type PtyFact, type PtyRequest } from '@quirky/protocol'
 import { socketPath } from '@quirky/protocol/node'
 import { createPtyApi } from '../src/plugins/pty-api'
 import { PtyClient } from '../src/pty-client'
@@ -94,15 +94,28 @@ describe('protocol version handling', () => {
     expect(client.hostPid).toBe(Number(readFileSync(join(dir, 'pty.pid'), 'utf8')))
   })
 
+  test('a protocol 2 host is retired and replaced by a protocol 3 one', async () => {
+    const dir = home()
+    const old = startStoppableHost(dir, 2)
+    const client = newClient(dir)
+    await client.connect()
+
+    expect(PTY_PROTOCOL_VERSION).toBe(3)
+    expect(old.requests.map((r) => r.type)).toEqual(['hello', 'hello', 'shutdown'])
+    expect(old.requests[1]).toMatchObject({ type: 'hello', version: 2 })
+    expect(client.connected).toBe(true)
+    expect(client.hostPid).not.toBe(process.pid)
+  })
+
   test('a newer host is refused without starting another one', async () => {
     const dir = home()
-    const newer = startFakePtyHost(dir, { version: 3 })
+    const newer = startFakePtyHost(dir, { version: 4 })
     cleanups.push(() => newer.stop())
     const client = newClient(dir, { connectTimeoutMs: 5000 })
 
     const started = Date.now()
     await expect(client.connect()).rejects.toThrow(
-      'quirky-pty speaks protocol 3; this quirkyd speaks 2. Stop it or upgrade Quirky.'
+      'quirky-pty speaks protocol 4; this quirkyd speaks 3. Stop it or upgrade Quirky.'
     )
     expect(Date.now() - started).toBeLessThan(2000)
     expect(existsSync(join(dir, 'pty.pid'))).toBe(false)
@@ -135,7 +148,7 @@ describe('restartHost', () => {
 describe('a host that accepts shutdown but never replies or closes', () => {
   test('restartHost gives up within the wait and drops the connection', async () => {
     const dir = home()
-    const silent = startSilentHost(dir, 2)
+    const silent = startSilentHost(dir, PTY_PROTOCOL_VERSION)
     const client = newClient(dir, { shutdownWaitMs: 100 })
     await client.connect()
 
@@ -225,5 +238,28 @@ describe('events through createPtyApi', () => {
     expect(sent[1]).toMatchObject({ mode: 'raw', historyLines: 50 })
     expect(sent[2]).toMatchObject({ lines: 2, before: 'c0', format: 'ansi' })
     expect(sent[4]).toMatchObject({ signal: 'SIGTERM', reason: 'killed' })
+  })
+
+  test('SC-34: clear and resetModes go to the host by session id and reject for an unknown one', async () => {
+    const dir = home()
+    const host = startFakePtyHost(dir)
+    cleanups.push(() => host.stop())
+    const client = newClient(dir)
+    const { api, revoke } = createPtyApi(client, 'acme.clear')
+    await api.spawn('s1', { argv: ['sh'], cwd: '/tmp', env: {}, cols: 80, rows: 24 })
+
+    await expect(api.clear('s1')).resolves.toBeUndefined()
+    await expect(api.resetModes('s1')).resolves.toBeUndefined()
+    await expect(api.clear('ghost')).rejects.toThrow('unknown session: ghost')
+    await expect(api.resetModes('ghost')).rejects.toThrow('unknown session: ghost')
+
+    expect(host.requests.filter((r) => r.type === 'clear' || r.type === 'resetModes')).toEqual([
+      { id: expect.any(Number), type: 'clear', sessionId: 's1' },
+      { id: expect.any(Number), type: 'resetModes', sessionId: 's1' },
+      { id: expect.any(Number), type: 'clear', sessionId: 'ghost' },
+      { id: expect.any(Number), type: 'resetModes', sessionId: 'ghost' }
+    ])
+    revoke()
+    await expect(api.clear('s1')).rejects.toThrow()
   })
 })

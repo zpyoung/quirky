@@ -1,4 +1,7 @@
 import type { CliArgs, CliContext, CliModule, PtySnapshot } from '@quirky/protocol'
+import { paneCommands } from './src/cli/pane'
+import { quickFloatingCommands } from './src/cli/quick-floating'
+import { workspaceCommands } from './src/cli/workspace'
 
 function singleSessionArg(args: CliArgs, ctx: CliContext): string {
   if (args.positionals.length > 1) throw ctx.usage(`unexpected argument "${args.positionals[1]}"`)
@@ -16,6 +19,10 @@ function sessionIdOr(explicit: string | undefined, ctx: CliContext): string {
 }
 
 const named: CliModule['commands'] = {
+  ...workspaceCommands,
+  ...paneCommands,
+  ...quickFloatingCommands,
+
   async read(args, ctx) {
     const session = singleSessionArg(args, ctx)
     const lines = args.flags.lines as number | undefined

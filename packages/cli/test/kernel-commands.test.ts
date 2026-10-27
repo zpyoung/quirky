@@ -43,6 +43,32 @@ describe('ui commands', () => {
     expect(JSON.parse((await run(['ui', 'state', '--json'])).stdout)).toEqual(state)
   })
 
+  test('SC-67: ui state prints a shown overlay with its report, and ui contributions lists the OVERLAYS table', async () => {
+    const state: UiState = {
+      windows: [{ connId: 3, name: 'window', focused: true, inputAt: null, present: false }],
+      layout: LAYOUT,
+      slots: [
+        { id: 'overlay:quirky.terminal/floating', kind: 'overlay', plugin: 'quirky.terminal', title: 'Floating', shown: true, report: { open: false } },
+        { id: 'overlay:acme.hud/hud', kind: 'overlay', plugin: 'acme.hud', title: 'Hud', shown: false }
+      ]
+    }
+    daemon.results.set('ui.state', state)
+    const printed = (await run(['ui', 'state'])).stdout.trimEnd().split('\n')
+    expect(printed.slice(5)).toEqual(['slot overlay:quirky.terminal/floating: Floating {"open":false}'])
+
+    daemon.addUiSlot('overlay', 'quirky.terminal', 'floating', { title: 'Floating', order: 50, module: '/plugins/quirky.terminal/ui.js' })
+    const sections = (await run(['ui', 'contributions'])).stdout.trimEnd().split('\n\n')
+    expect(sections.map((section) => section.split('\n')[0])).toEqual(['OVERLAYS', 'THEMES'])
+    expect(sections[0].split('\n')[2].split(/\s{2,}/)).toEqual([
+      'overlay:quirky.terminal/floating',
+      'quirky.terminal',
+      'Floating',
+      '50',
+      '/plugins/quirky.terminal/ui.js'
+    ])
+    expect(JSON.parse((await run(['ui', 'contributions', '--json'])).stdout).overlays).toHaveLength(1)
+  })
+
   test('ui open-view passes the id and the parsed --input', async () => {
     daemon.results.set('ui.view.open', LAYOUT)
     const result = await run(['ui', 'open-view', 'view:quirky.session/worktree', '--input', '{"worktree":"fix-login"}'])

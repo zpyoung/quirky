@@ -68,9 +68,11 @@ export class Confirmations {
    * Resolves the action text for `target` with `params` as `from` (the `describe` method's answer,
    * else the `confirm` text with `{name}` filled from params) and digests it with the call and the
    * caller's cwd, session and worktree. `params` must not contain `yes` or `confirmation`.
+   * Resolves null when the `describe` method returned null: nothing irreversible, so no ask.
    */
-  async prepare(target: ConfirmTarget, params: Record<string, unknown>, from: DispatchSource): Promise<PreparedConfirmation> {
+  async prepare(target: ConfirmTarget, params: Record<string, unknown>, from: DispatchSource): Promise<PreparedConfirmation | null> {
     const action = await this.actionText(target, params, from)
+    if (action === null) return null
     const { cwd, sessionId, worktreeId } = identityOf(from)
     const digest = createHash('sha256')
       .update(canonicalJson([target.method, params, cwd, sessionId, worktreeId, action]))
@@ -135,10 +137,11 @@ export class Confirmations {
     if (!this.store.markConfirmationUsed(askId)) throw conflict('confirmation already used')
   }
 
-  private async actionText(target: ConfirmTarget, params: Record<string, unknown>, from: DispatchSource): Promise<string> {
+  private async actionText(target: ConfirmTarget, params: Record<string, unknown>, from: DispatchSource): Promise<string | null> {
     if (target.describeWith) return await target.describeWith(params, from)
     if (target.describe) {
       const text = await this.call(target.describe, params, from)
+      if (text === null) return null
       if (typeof text !== 'string') throw internal(`${target.describe} must return a string`)
       return text
     }

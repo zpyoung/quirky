@@ -1,0 +1,275 @@
+import { afterEach, expect, test } from 'bun:test'
+import type { UiModel } from '@quirky/protocol'
+import {
+  FEATURE_MS,
+  bufferLines,
+  focusTerminal,
+  focusedSession,
+  layoutOf,
+  press,
+  runCommand,
+  startFeatures,
+  stopAll,
+  tabsOf,
+  termOf,
+  until,
+  viewReport,
+  waitFor,
+  waitForScreen,
+  type Features
+} from './features-support'
+
+afterEach(stopAll)
+
+async function firstPane(f: Features) {
+  const report = await viewReport(f, 'a mounted pane')
+  const session = focusedSession(report)
+  await focusTerminal(f, session)
+  return { session, pane: report.focusedPane! }
+}
+
+const writes = (f: Features, from = 0) => f.calls.slice(from).filter((call) => call.method === 'quirky.terminal/write')
+const setSetting = (f: Features, name: string, value: string) => f.h.ok(['setting', 'set', `setting:quirky.terminal/${name}`, value])
+
+/** The window's own view of the context keys the plugin sets, which a key press is checked against. */
+const contextKey = (f: Features, key: string): boolean | undefined => (f.win.host as unknown as { contextValues: Map<string, boolean> }).contextValues.get(key)
+
+test(
+  'SC-60: terminal keys act only in a terminal',
+  async () => {
+    const f = await startFeatures()
+    const { session } = await firstPane(f)
+    await f.h.run(session, 'seq 1 30')
+    await waitForScreen(f, session, 'line 30', (rows) => rows.includes('30'))
+    const term = termOf(f, session)
+    await waitFor('terminal focus', () => (contextKey(f, 'terminalFocus') ? true : undefined))
+
+    // in the pane every key runs its terminal action
+    const select = await press('mod+a')
+    expect(select.defaultPrevented).toBe(true)
+    expect(term.hasSelection()).toBe(true)
+    const copy = await press('mod+c')
+    expect(copy.defaultPrevented).toBe(true)
+    await waitFor('the selection on the clipboard', () => (f.clipboard.writes.at(-1)?.includes('30') ? true : undefined))
+    term.clearSelection()
+    f.clipboard.text = 'from-clipboard'
+    const fromPaste = f.calls.length
+    expect((await press('mod+v')).defaultPrevented).toBe(true)
+    await waitFor('the pasted text', () => (writes(f, fromPaste).some((call) => String(call.params.data).includes('from-clipboard')) ? true : undefined))
+    expect((await press('mod+f')).defaultPrevented).toBe(true)
+    const searching = await viewReport(f, 'an open search box', (report) => report.panes[0]!.search !== null)
+    expect(searching.panes[0]!.search).toMatchObject({ query: '', current: 0, total: 0 })
+    await runCommand(f, 'search-close')
+    await viewReport(f, 'a closed search box', (report) => report.panes[0]!.search === null)
+    await focusTerminal(f, session)
+    await press('mod+k')
+    await waitForScreen(f, session, 'a cleared screen', (rows) => !rows.includes('30'))
+    await focusTerminal(f, session)
+    await press('mod+d')
+    const split = await viewReport(f, 'a split pane', (report) => report.panes.length === 2)
+    const splitRevision = split.layout!.revision
+
+    // in a text field the same keys are left to the browser, and the others do nothing
+    document.querySelector<HTMLElement>('button.gear')!.click()
+    const field = await until(f, () => document.querySelector<HTMLInputElement>('[role="dialog"] input:not([type])'))
+    field.focus()
+    await waitFor('terminal focus to leave', () => (contextKey(f, 'terminalFocus') === false ? true : undefined))
+    const baseline = f.calls.length
+    const clipboardBefore = f.clipboard.writes.length
+    for (const chord of ['mod+c', 'mod+a', 'mod+v']) expect((await press(chord, field)).defaultPrevented, chord).toBe(false)
+    for (const chord of ['mod+f', 'mod+k', 'mod+d']) expect((await press(chord, field)).defaultPrevented, chord).toBe(false)
+    await Bun.sleep(300)
+    expect(writes(f, baseline)).toEqual([])
+    expect(f.clipboard.writes).toHaveLength(clipboardBefore)
+    expect(f.calls.slice(baseline).filter((call) => /^quirky\.terminal\/(splitPane|clearPane|closePane)$/.test(call.method))).toEqual([])
+    const after = await viewReport(f, 'the same layout', (report) => report.layout!.revision >= splitRevision)
+    expect(after.layout!.revision).toBe(splitRevision)
+    expect(after.panes.map((pane) => pane.search)).toEqual([null, null])
+  },
+  FEATURE_MS
+)
+
+test(
+  'SC-61: the shortcut policy',
+  async () => {
+    const f = await startFeatures()
+    const { pane } = await firstPane(f)
+    const tabCount = async () => tabsOf(await layoutOf(f.h, f.worktree)).length
+    await waitFor('terminal focus', () => (contextKey(f, 'terminalFocus') ? true : undefined))
+
+    expect(contextKey(f, 'terminalKeysFirst')).toBe(false)
+    expect((await press('mod+t')).defaultPrevented).toBe(true)
+    await waitFor('a second tab under App first', async () => ((await tabCount()) === 2 ? true : undefined))
+    const second = await viewReport(f, 'the new tab focused', (report) => report.tabs.length === 2 && report.focusedPane !== pane)
+    await focusTerminal(f, focusedSession(second))
+    expect((await press('mod+r')).defaultPrevented).toBe(true)
+    const renameField = await until(f, () => document.querySelector<HTMLInputElement>('input[aria-label="Tab title"]'))
+    await press('escape', renameField)
+    await focusTerminal(f, focusedSession(second))
+
+    await setSetting(f, 'shortcut-policy', 'terminal-first')
+    await waitFor('Terminal first in the window', () => (contextKey(f, 'terminalKeysFirst') === true ? true : undefined))
+    const from = f.calls.length
+    const newTab = await press('mod+t')
+    const reopen = await press('mod+shift+t')
+    const rename = await press('mod+r')
+    expect([newTab.defaultPrevented, reopen.defaultPrevented, rename.defaultPrevented]).toEqual([true, true, true])
+    await Bun.sleep(400)
+    expect(await tabCount()).toBe(2)
+    expect(f.calls.slice(from).filter((call) => /^quirky\.terminal\/(newTab|reopenTab)$/.test(call.method))).toEqual([])
+    // a command chord reaches the terminal as a key, and xterm sends nothing for Cmd+letter
+    expect(writes(f, from)).toEqual([])
+
+    // terminal actions still run under Terminal first
+    const focused = focusedSession(await viewReport(f, 'the focused pane'))
+    await press('mod+f')
+    await viewReport(f, 'a search box under Terminal first', (report) => report.panes.some((candidate) => candidate.search !== null))
+    await runCommand(f, 'search-close')
+    await focusTerminal(f, focused)
+    await press('mod+a')
+    expect(termOf(f, focused).hasSelection()).toBe(true)
+    await press('mod+d')
+    const split = await viewReport(f, 'a split under Terminal first', (report) => report.panes.length === 2)
+    await focusTerminal(f, focusedSession(split))
+    await press('mod+w')
+    await viewReport(f, 'the split pane closed', (report) => report.panes.length === 1)
+    expect(await tabCount()).toBe(2)
+
+    await setSetting(f, 'shortcut-policy', 'app-first')
+    await waitFor('App first again', () => (contextKey(f, 'terminalKeysFirst') === false ? true : undefined))
+    await focusTerminal(f, focusedSession(await viewReport(f, 'the focused pane')))
+    expect((await press('mod+t')).defaultPrevented).toBe(true)
+    await waitFor('a third tab', async () => ((await tabCount()) === 3 ? true : undefined))
+  },
+  FEATURE_MS
+)
+
+/** Starts a raw-mode `cat -v` that stops after `count` bytes; the markers are assembled by the shell. */
+async function catBytes(f: Features, session: string, count: number, tag: string, prelude = ''): Promise<void> {
+  await f.h.type(session, `${prelude}stty raw -echo; printf 'READY-%s' ${tag}; dd bs=1 count=${count} 2>/dev/null | cat -v; stty sane; printf '\\033[<u'; printf 'END-%s' ${tag}; echo`)
+  await waitForScreen(f, session, `READY-${tag}`, (rows) => rows.some((row) => row.includes(`READY-${tag}`)))
+}
+
+const joined = (term: ReturnType<typeof termOf>) => bufferLines(term).join('')
+
+test(
+  'SC-62: byte translations',
+  async () => {
+    const f = await startFeatures()
+    const { session } = await firstPane(f)
+    const term = termOf(f, session)
+    await catBytes(f, session, 13, 'one')
+    const steps: [string, string][] = [
+      ['shift+enter', '^[^M'],
+      ['ctrl+backspace', '^W'],
+      ['alt+backspace', '^[^?'],
+      ['mod+backspace', '^U'],
+      ['mod+delete', '^K'],
+      ['mod+left', '^A'],
+      ['mod+right', '^E'],
+      ['alt+left', '^[b'],
+      ['alt+right', '^[f']
+    ]
+    for (const [chord] of steps) expect((await press(chord)).defaultPrevented, chord).toBe(true)
+    const expected = steps.map(([, shown]) => shown).join('')
+    // cat -v holds its output until its input ends, so the whole run is read at once
+    await waitForScreen(f, session, 'the reader to finish', (rows) => rows.some((row) => row.includes('END-one')))
+    expect(joined(term)).toContain(`READY-one${expected}`)
+    expect((await f.h.ok(['terminal', 'read', session])).replaceAll('\n', '')).toContain(`READY-one${expected}`)
+
+    // kitty keyboard flags change Shift+Enter
+    await catBytes(f, session, 7, 'two', `printf '\\033[>1u'; `)
+    await press('shift+enter')
+    await waitForScreen(f, session, 'the second reader to finish', (rows) => rows.some((row) => row.includes('END-two')))
+    expect(joined(term)).toContain('READY-two^[[13;2u')
+
+    // Cmd+Up and Cmd+Down scroll the scrollback and send nothing
+    await f.h.run(session, 'seq 1 300')
+    await waitForScreen(f, session, 'line 300', (rows) => rows.includes('300'))
+    const from = f.calls.length
+    await press('mod+up')
+    await waitFor('the top of the scrollback', () => (term.buffer.active.viewportY === 0 ? true : undefined))
+    expect(term.buffer.active.baseY).toBeGreaterThan(0)
+    await press('mod+down')
+    await waitFor('the bottom of the scrollback', () => (term.buffer.active.viewportY === term.buffer.active.baseY ? true : undefined))
+    expect(writes(f, from)).toEqual([])
+  },
+  FEATURE_MS
+)
+
+const TERMINAL_KEYS: [string, string][] = [
+  ['mod+c', 'copy'],
+  ['mod+a', 'select-all'],
+  ['mod+v', 'paste'],
+  ['mod+f', 'search'],
+  ['mod+g', 'search-next'],
+  ['mod+shift+g', 'search-previous'],
+  ['mod+k', 'clear'],
+  ['mod+]', 'focus-next-pane'],
+  ['mod+[', 'focus-previous-pane'],
+  ['mod+shift+enter', 'toggle-expand-pane'],
+  ['mod+w', 'close-pane'],
+  ['mod+d', 'split-right'],
+  ['mod+shift+d', 'split-down'],
+  ['mod+=', 'zoom-in'],
+  ['mod+shift+=', 'zoom-in'],
+  ['mod+-', 'zoom-out'],
+  ['mod+0', 'zoom-reset']
+]
+
+const WINDOW_KEYS: [string, string][] = [
+  ['mod+r', 'rename-tab'],
+  ['mod+shift+t', 'reopen-tab'],
+  ['mod+alt+]', 'next-tab'],
+  ['mod+alt+[', 'previous-tab'],
+  ['mod+shift+]', 'next-tab'],
+  ['mod+shift+[', 'previous-tab'],
+  ['ctrl+tab', 'recent-tab'],
+  ['ctrl+pagedown', 'next-tab'],
+  ['ctrl+pageup', 'previous-tab'],
+  ['mod+alt+a', 'toggle-floating'],
+  ['mod+alt+shift+a', 'maximize-floating']
+]
+
+const COMMANDS_WITHOUT_KEYS = ['equalize', 'set-pane-title', 'clear-pane-title', 'reset-terminal', 'toggle-quick-commands', 'search-close', 'manage-quick-commands', 'minimize-floating', 'open-menu', 'close-menu']
+
+test(
+  'SC-63: every action has a command and a default key as listed',
+  async () => {
+    const f = await startFeatures({ window: false })
+    const model = JSON.parse(await f.h.ok(['ui', 'contributions', '--json'])) as UiModel
+    const commands = new Set(model.commands.map((command) => command.id))
+    const bindings = model.keybindings.filter((binding) => binding.status === 'active')
+    const bound = (key: string, command: string, when?: string) =>
+      bindings.find((binding) => binding.key === key && binding.command === command && binding.when === when)
+
+    for (const [key, name] of TERMINAL_KEYS) {
+      expect(commands.has(`command:quirky.terminal/${name}`), name).toBe(true)
+      expect(bound(key, `command:quirky.terminal/${name}`, 'terminalFocus'), `${key} ${name}`).toBeDefined()
+    }
+    for (const [key, name] of WINDOW_KEYS) {
+      expect(commands.has(`command:quirky.terminal/${name}`), name).toBe(true)
+      expect(bound(key, `command:quirky.terminal/${name}`), `${key} ${name}`).toBeDefined()
+    }
+    for (const name of COMMANDS_WITHOUT_KEYS) {
+      expect(commands.has(`command:quirky.terminal/${name}`), name).toBe(true)
+      expect(bindings.filter((binding) => binding.command === `command:quirky.terminal/${name}`), name).toEqual([])
+    }
+    for (let n = 1; n <= 9; n += 1) {
+      expect(bound(`ctrl+${n}`, `command:quirky.session/select-tab-${n}`), `ctrl+${n}`).toBeDefined()
+      expect(bound(`mod+${n}`, `command:quirky.session/select-tab-${n}`), `mod+${n}`).toBeDefined()
+    }
+    expect(bound('mod+t', 'command:quirky.session/new-shell')).toBeDefined()
+    expect(bound('mod+w', 'command:quirky.session/close-session')).toBeDefined()
+    expect(bound('mod+w', 'command:quirky.terminal/close-pane', 'terminalFocus')).toBeDefined()
+
+    // terminal-scope keys carry the condition, window-scope ones do not
+    for (const binding of model.keybindings.filter((candidate) => candidate.plugin === 'quirky.terminal' && TERMINAL_KEYS.some(([key]) => key === candidate.key))) {
+      expect(binding.when, binding.id).toBe('terminalFocus')
+    }
+    for (const [key] of WINDOW_KEYS) {
+      expect(model.keybindings.find((binding) => binding.plugin === 'quirky.terminal' && binding.key === key)?.when, key).toBeUndefined()
+    }
+  },
+  FEATURE_MS
+)

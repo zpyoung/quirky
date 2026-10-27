@@ -96,6 +96,28 @@ describe('slots', () => {
     ])
   })
 
+  test('overlays sort by order then id and are listed like panels', () => {
+    const { model } = build(
+      [
+        decl('overlay', 'a.p', 'z', { title: 'Z', order: 1 }),
+        decl('overlay', 'a.p', 'b', { title: 'B' }),
+        decl('overlay', 'a.p', 'a', { title: 'A' }),
+        withStatus(decl('overlay', 'a.p', 'off', { title: 'Off' }), 'disabled'),
+      ],
+      [withUi('a.p')]
+    )
+    expect(model.overlays).toEqual([
+      { id: 'overlay:a.p/z', kind: 'overlay', plugin: 'a.p', title: 'Z', order: 1, module: '/plugins/a.p/ui.js' },
+      { id: 'overlay:a.p/a', kind: 'overlay', plugin: 'a.p', title: 'A', order: 100, module: '/plugins/a.p/ui.js' },
+      { id: 'overlay:a.p/b', kind: 'overlay', plugin: 'a.p', title: 'B', order: 100, module: '/plugins/a.p/ui.js' },
+    ])
+    expect(model.modules['a.p'].provides).toEqual(['overlay:a.p/a', 'overlay:a.p/b', 'overlay:a.p/off', 'overlay:a.p/z'])
+  })
+
+  test('a model with no overlays lists an empty array', () => {
+    expect(build([], []).model.overlays).toEqual([])
+  })
+
   test('commands sort by title then id; title defaults to the name; description is kept only when set', () => {
     const { model } = build(
       [
@@ -422,6 +444,165 @@ describe('keybindings', () => {
     expect(byId['keybinding:a.p/second']).toMatchObject({ status: 'shadowed', shadowedBy: 'keybinding:a.p/first' })
   })
 
+  test('SC-68: the same chord with different when conditions is active in each group', () => {
+    const { model, warnings } = build(
+      [
+        decl('command', 'a.p', 'in-terminal'),
+        decl('command', 'a.p', 'elsewhere'),
+        decl('keybinding', 'a.p', 'jt', { key: 'mod+j', command: 'in-terminal', when: 'terminalFocus' }),
+        decl('keybinding', 'a.p', 'je', { key: 'Cmd+J', command: 'elsewhere', when: '!terminalFocus' }),
+      ],
+      [withUi('a.p')]
+    )
+    expect(model.keybindings).toEqual([
+      { id: 'keybinding:a.p/je', plugin: 'a.p', key: 'mod+j', command: 'command:a.p/elsewhere', status: 'active', when: '!terminalFocus' },
+      { id: 'keybinding:a.p/jt', plugin: 'a.p', key: 'mod+j', command: 'command:a.p/in-terminal', status: 'active', when: 'terminalFocus' },
+    ])
+    expect(warnings.size).toBe(0)
+  })
+
+  test('a binding with a when and one without on the same chord are both active', () => {
+    const { model } = build(
+      [
+        decl('command', 'a.p', 'go'),
+        key('a.p', 'plain', 'mod+k'),
+        decl('keybinding', 'a.p', 'cond', { key: 'mod+k', command: 'go', when: 'terminalFocus' }),
+      ],
+      [withUi('a.p')]
+    )
+    expect(model.keybindings.map((k) => [k.id, k.status, k.when])).toEqual([
+      ['keybinding:a.p/cond', 'active', 'terminalFocus'],
+      ['keybinding:a.p/plain', 'active', undefined],
+    ])
+    expect('when' in model.keybindings[1]).toBe(false)
+  })
+
+  test('conditions that differ only in spacing or parentheses compete in one group', () => {
+    const { model, warnings } = build(
+      [
+        decl('command', 'a.one', 'go'),
+        decl('command', 'b.two', 'go'),
+        decl('keybinding', 'a.one', 'k', { key: 'mod+k', command: 'go', when: 'x&&(y)' }),
+        decl('keybinding', 'b.two', 'k', { key: 'mod+k', command: 'go', when: 'x  &&  y' }),
+      ],
+      [withUi('a.one'), withUi('b.two')]
+    )
+    expect(model.keybindings.map((k) => [k.id, k.status, k.shadowedBy, k.when])).toEqual([
+      ['keybinding:a.one/k', 'active', undefined, 'x && y'],
+      ['keybinding:b.two/k', 'shadowed', 'keybinding:a.one/k', 'x && y'],
+    ])
+    expect(warnings.get('b.two')?.[0].message).toBe('keybinding:b.two/k is shadowed by keybinding:a.one/k on mod+k')
+  })
+
+  test('installed beats builtin inside a when group only', () => {
+    const { model } = build(
+      [
+        decl('command', 'quirky.sample', 'go'),
+        decl('command', 'acme.keys', 'go'),
+        decl('keybinding', 'quirky.sample', 'k', { key: 'mod+k', command: 'go', when: 'a' }),
+        decl('keybinding', 'quirky.sample', 'other', { key: 'mod+k', command: 'go', when: 'b' }),
+        decl('keybinding', 'acme.keys', 'k', { key: 'mod+k', command: 'go', when: 'a' }),
+      ],
+      [withUi('quirky.sample', 'builtin'), withUi('acme.keys')]
+    )
+    const byId = Object.fromEntries(model.keybindings.map((k) => [k.id, k]))
+    expect(byId['keybinding:acme.keys/k'].status).toBe('active')
+    expect(byId['keybinding:quirky.sample/k']).toMatchObject({ status: 'shadowed', shadowedBy: 'keybinding:acme.keys/k' })
+    expect(byId['keybinding:quirky.sample/other'].status).toBe('active')
+  })
+
+  test('a reserved chord is shadowed by the kernel in every when group', () => {
+    const { model, warnings } = build(
+      [
+        decl('command', 'a.p', 'go'),
+        key('a.p', 'plain', 'mod+shift+p'),
+        decl('keybinding', 'a.p', 'cond', { key: 'mod+shift+p', command: 'go', when: 'terminalFocus' }),
+      ],
+      [withUi('a.p')]
+    )
+    expect(model.keybindings.map((k) => [k.id, k.status, k.shadowedBy])).toEqual([
+      ['keybinding:a.p/cond', 'shadowed', 'kernel'],
+      ['keybinding:a.p/plain', 'shadowed', 'kernel'],
+    ])
+    expect(warnings.get('a.p')).toHaveLength(2)
+  })
+
+  test('an unbound binding with a when drops out of its group before the clash', () => {
+    const { model } = build(
+      [
+        decl('command', 'quirky.sample', 'go'),
+        decl('keybinding', 'acme.keys', 'k', { key: 'mod+k', command: 'ghost', when: 'a' }),
+        decl('keybinding', 'quirky.sample', 'k', { key: 'mod+k', command: 'go', when: 'a' }),
+      ],
+      [withUi('quirky.sample', 'builtin'), withUi('acme.keys')]
+    )
+    const byId = Object.fromEntries(model.keybindings.map((k) => [k.id, k]))
+    expect(byId['keybinding:acme.keys/k']).toMatchObject({ status: 'unbound', when: 'a' })
+    expect(byId['keybinding:quirky.sample/k'].status).toBe('active')
+  })
+
+  test('skips a keybinding whose when does not parse', () => {
+    const { model } = build(
+      [
+        decl('command', 'a.p', 'go'),
+        decl('keybinding', 'a.p', 'bad', { key: 'mod+k', command: 'go', when: 'a &&' }),
+        key('a.p', 'good', 'mod+j'),
+      ],
+      [withUi('a.p')]
+    )
+    expect(model.keybindings.map((k) => k.id)).toEqual(['keybinding:a.p/good'])
+  })
+
+  test('the keybindings array is ordered by registry precedence: a plugin that beats another comes first', () => {
+    const plugins = [
+      withUi('a.base'),
+      withUi('b.app', 'installed', { dependencies: ['a.base'] }),
+      withUi('c.core', 'builtin'),
+    ]
+    const { model } = build(
+      [
+        decl('command', 'a.base', 'go'),
+        decl('command', 'b.app', 'go'),
+        decl('command', 'c.core', 'go'),
+        key('c.core', 'a', 'mod+a'),
+        key('a.base', 'z', 'mod+z'),
+        key('a.base', 'a', 'mod+y'),
+        key('b.app', 'k', 'mod+k'),
+      ],
+      plugins
+    )
+    // installed outranks builtin; b.app depends on a.base, so b.app comes before it
+    expect(model.keybindings.map((k) => k.id)).toEqual([
+      'keybinding:b.app/k',
+      'keybinding:a.base/a',
+      'keybinding:a.base/z',
+      'keybinding:c.core/a',
+    ])
+  })
+
+  test('distro bindings come first in manifest order, shadowed or not', () => {
+    const { model } = buildUiModel({
+      declarations: [decl('command', 'a.p', 'go'), key('a.p', 'k', 'mod+k'), key('a.p', 'j', 'mod+j')],
+      plugins: [withUi('a.p')],
+      chosenTheme: 'default',
+      distroKeybindings: [
+        { key: 'mod+z', command: 'command:a.p/go' },
+        { key: 'mod+shift+p', command: 'command:a.p/go' },
+        { key: 'mod+a', command: 'command:a.p/ghost' },
+        { key: 'mod+k', command: 'command:a.p/go' },
+      ],
+      distroId: 'night',
+    })
+    expect(model.keybindings.map((k) => [k.id, k.status])).toEqual([
+      ['keybinding:night/k1', 'active'],
+      ['keybinding:night/k2', 'shadowed'],
+      ['keybinding:night/k3', 'unbound'],
+      ['keybinding:night/k4', 'active'],
+      ['keybinding:a.p/j', 'active'],
+      ['keybinding:a.p/k', 'shadowed'],
+    ])
+  })
+
   test('installed beats builtin before the dependency rule is considered', () => {
     const { model } = build(
       [decl('command', 'a.core', 'go'), decl('command', 'b.ext', 'go'), key('a.core', 'k', 'mod+k'), key('b.ext', 'k', 'mod+k')],
@@ -442,8 +623,13 @@ describe('warnings', () => {
       [plugin('acme.bare')]
     )
     expect(warnings.get('acme.bare')).toEqual([
-      { level: 'warning', message: 'declares commands, views, panels or sidebar sections but has no ui module' },
+      { level: 'warning', message: 'declares commands, views, panels, overlays or sidebar sections but has no ui module' },
     ])
+  })
+
+  test('a plugin whose only code-backed entry is an overlay and has no ui is warned', () => {
+    const { warnings } = build([decl('overlay', 'acme.bare', 'o', { title: 'O' })], [plugin('acme.bare')])
+    expect(warnings.get('acme.bare')).toHaveLength(1)
   })
 
   test('a plugin with a ui module gets no missing-module warning', () => {
@@ -596,6 +782,23 @@ describe('distro keybindings', () => {
     const byId = Object.fromEntries(model.keybindings.map((k) => [k.id, k]))
     expect(byId['keybinding:night/k1'].status).toBe('unbound')
     expect(byId['keybinding:a.p/k'].status).toBe('active')
+  })
+
+  test('SC-68: a distro binding shadows only the unconditional group on its chord', () => {
+    const { model, warnings } = withDistro(
+      [
+        decl('command', 'a.p', 'go'),
+        key('a.p', 'plain', 'mod+k'),
+        decl('keybinding', 'a.p', 'cond', { key: 'mod+k', command: 'go', when: 'terminalFocus' }),
+      ],
+      [withUi('a.p')],
+      [{ key: 'mod+k', command: 'command:a.p/go' }]
+    )
+    const byId = Object.fromEntries(model.keybindings.map((k) => [k.id, k]))
+    expect(byId['keybinding:night/k1'].status).toBe('active')
+    expect(byId['keybinding:a.p/plain']).toMatchObject({ status: 'shadowed', shadowedBy: 'keybinding:night/k1' })
+    expect(byId['keybinding:a.p/cond']).toMatchObject({ status: 'active', when: 'terminalFocus' })
+    expect(warnings.get('a.p')).toHaveLength(1)
   })
 
   test('without distro input the model is unchanged', () => {

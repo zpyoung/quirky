@@ -116,8 +116,55 @@ describe('keybinding entries', () => {
   })
 
   test('rejects unknown fields', () => {
-    expect(errorsFor('keybinding', { id: 'k', key: 'mod+k', command: 'go', when: 'x' })).toEqual([
-      'keybinding k: unknown field `when`',
+    expect(errorsFor('keybinding', { id: 'k', key: 'mod+k', command: 'go', scope: 'x' })).toEqual([
+      'keybinding k: unknown field `scope`',
+    ])
+  })
+
+  test('SC-68: accepts a when condition and names the parse error of one that does not parse', () => {
+    expect(accepts('keybinding', { id: 'k', key: 'mod+j', command: 'go', when: 'terminalFocus' })).toBe(true)
+    expect(accepts('keybinding', { id: 'k', key: 'mod+j', command: 'go', when: '!(a && b) || c.d' })).toBe(true)
+    expect(errorsFor('keybinding', { id: 'k', key: 'mod+j', command: 'go', when: 'terminalFocus &&' })).toEqual([
+      'keybinding k: when is invalid: expected a key at the end',
+    ])
+    expect(errorsFor('keybinding', { id: 'k', key: 'mod+j', command: 'go', when: 'a b' })).toEqual([
+      'keybinding k: when is invalid: unexpected `b` at position 3',
+    ])
+    expect(errorsFor('keybinding', { id: 'k', key: 'mod+j', command: 'go', when: '' })).toEqual([
+      'keybinding k: when is invalid: expected a key at the end',
+    ])
+  })
+
+  test('when must be a string', () => {
+    expect(errorsFor('keybinding', { id: 'k', key: 'mod+j', command: 'go', when: true })).toEqual([
+      'keybinding k: when must be a string',
+    ])
+  })
+
+  test('a bad when is reported alongside a bad chord', () => {
+    expect(errorsFor('keybinding', { id: 'k', key: 'x', command: 'go', when: '(a' })).toEqual([
+      'keybinding k: key needs a modifier or a function key',
+      'keybinding k: when is invalid: missing `)` at the end',
+    ])
+  })
+})
+
+describe('overlay entries', () => {
+  test('accepts title, description and order', () => {
+    expect(accepts('overlay', { id: 'floating', title: 'Floating', description: 'd', order: 10 })).toBe(true)
+  })
+
+  test('requires a non-empty title', () => {
+    expect(errorsFor('overlay', { id: 'floating' })).toEqual(['overlay floating: title is required'])
+    expect(errorsFor('overlay', { id: 'floating', title: '' })).toEqual([
+      'overlay floating: title must be a non-empty string',
+    ])
+  })
+
+  test('order must be a number and unknown fields are refused', () => {
+    expect(errorsFor('overlay', { id: 'f', title: 'F', order: 'high', icon: 'x' })).toEqual([
+      'overlay f: unknown field `icon`',
+      'overlay f: order must be a number',
     ])
   })
 })

@@ -140,6 +140,32 @@ describe('sessions', () => {
     expect(info.offset).toBe(out.all().length)
   })
 
+  test('SC-34: clear and resetModes over the socket reach the screen, history and the attached stream', async () => {
+    const host = startHost()
+    const client = await host.connect()
+    await client.request(
+      'create',
+      createParams('cm', sh(`seq -f 'old-%g' 1 200; printf '\\033[?2004h$ '; exec cat`))
+    )
+    await waitFor(async () => (await client.request('snapshot', { sessionId: 'cm' })).modes.bracketedPaste, 5000, 'modes on')
+    const out = collect(client, 'cm')
+    const sub = await client.request('subscribe', { sessionId: 'cm' })
+
+    expect(await client.request('clear', { sessionId: 'cm' })).toEqual({})
+    expect(out.text().startsWith('\x1b[H\x1b[2J\x1b[3J')).toBe(true)
+    expect(out.text()).not.toContain('old-')
+    expect((await client.request('history', { sessionId: 'cm', lines: 100 })).lines).toEqual([])
+    expect(await client.request('read', { sessionId: 'cm', lines: 500 })).toMatchObject({ lines: ['$'] })
+
+    expect(await client.request('resetModes', { sessionId: 'cm' })).toEqual({})
+    expect((await client.request('snapshot', { sessionId: 'cm' })).modes.bracketedPaste).toBe(false)
+    const [info] = await client.request('list', {})
+    expect(info.offset).toBe(sub.offset + out.all().length)
+
+    await expect(client.request('clear', { sessionId: 'ghost' })).rejects.toThrow(/unknown session/i)
+    await expect(client.request('resetModes', { sessionId: 'ghost' })).rejects.toThrow(/unknown session/i)
+  })
+
   test('output is appended to the session log and counted into offset', async () => {
     const host = startHost()
     const client = await host.connect()

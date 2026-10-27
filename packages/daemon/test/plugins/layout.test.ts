@@ -417,6 +417,98 @@ describe('slot reports', () => {
   })
 })
 
+describe('overlay slots', () => {
+  const FLOAT = 'acme.float'
+  const SHELF = `overlay:${FLOAT}/shelf`
+  const HUD = `overlay:${FLOAT}/hud`
+
+  async function startWithOverlays() {
+    const env = makeEnv()
+    writePlugin(
+      join(env.home, 'plugins'),
+      {
+        id: FLOAT,
+        name: FLOAT,
+        version: '1.0.0',
+        ui: 'ui.js',
+        contributes: {
+          overlay: [
+            { id: 'hud', title: 'Hud', order: 5 },
+            { id: 'shelf', title: 'Shelf' }
+          ]
+        }
+      },
+      { 'ui.js': 'export function activate() {}\n' }
+    )
+    const harness = await env.start()
+    return { harness, caller: await harness.connect('cli') }
+  }
+
+  test('SC-67: ui.state lists each overlay, hidden until a window reports for it', async () => {
+    const { harness, caller } = await startWithOverlays()
+    const before = await caller.call('ui.state', {})
+    expect(slotOf(before, SHELF)).toEqual({ id: SHELF, kind: 'overlay', plugin: FLOAT, title: 'Shelf', shown: false })
+    expect(before.slots.map((slot) => slot.id).filter((id) => id.startsWith('overlay:'))).toEqual([HUD, SHELF])
+
+    const window = await openWindow(harness)
+    await window.client.call('ui.report', { slot: SHELF, state: { open: false } })
+    expect(slotOf(await caller.call('ui.state', {}), SHELF)).toEqual({
+      id: SHELF,
+      kind: 'overlay',
+      plugin: FLOAT,
+      title: 'Shelf',
+      shown: true,
+      report: { open: false }
+    })
+    expect(slotOf(await caller.call('ui.state', {}), HUD).shown).toBe(false)
+  })
+
+  test('SC-67: shown follows the report boolean and stays true for any other report', async () => {
+    const { harness, caller } = await startWithOverlays()
+    const window = await openWindow(harness)
+    const shown = async () => slotOf(await caller.call('ui.state', {}), SHELF).shown
+
+    await window.client.call('ui.report', { slot: SHELF, state: { shown: false } })
+    expect(await shown()).toBe(false)
+    await window.client.call('ui.report', { slot: SHELF, state: { shown: true } })
+    expect(await shown()).toBe(true)
+    for (const state of [{ shown: 'no' }, { shown: 0 }, {}, 'text', 3, [false], [{ shown: false }]]) {
+      await window.client.call('ui.report', { slot: SHELF, state })
+      expect(await shown()).toBe(true)
+    }
+    await window.client.call('ui.report', { slot: SHELF, state: null })
+    expect(await shown()).toBe(false)
+  })
+
+  test('SC-67: shown is false again once the window that reported disconnects', async () => {
+    const { harness, caller } = await startWithOverlays()
+    const window = await openWindow(harness)
+    await window.client.call('ui.report', { slot: SHELF, state: {} })
+    expect(slotOf(await caller.call('ui.state', {}), SHELF).shown).toBe(true)
+    window.client.close()
+    await waitForAsync(async () => slotOf(await caller.call('ui.state', {}), SHELF).shown === false)
+  })
+
+  test('SC-67: the focused window decides when two windows report different shown values', async () => {
+    const { harness, caller } = await startWithOverlays()
+    const first = await openWindow(harness, 'first')
+    const second = await openWindow(harness, 'second')
+    await first.client.call('ui.report', { slot: SHELF, state: { shown: false } })
+    await second.client.call('ui.report', { slot: SHELF, state: { shown: true } })
+    expect(slotOf(await caller.call('ui.state', {}), SHELF).shown).toBe(true)
+    await first.client.call('ui.window.focused', { focused: true })
+    expect(slotOf(await caller.call('ui.state', {}), SHELF).shown).toBe(false)
+  })
+
+  test('SC-67: disabling the plugin removes its overlays from ui.state', async () => {
+    const { caller } = await startWithOverlays()
+    expect(slotOf(await caller.call('ui.state', {}), SHELF).kind).toBe('overlay')
+    await caller.call('plugin.disable', { id: FLOAT })
+    const state = await caller.call('ui.state', {})
+    expect(state.slots.some((slot) => slot.kind === 'overlay')).toBe(false)
+  })
+})
+
 describe('command routing timeout', () => {
   test('a window that never answers fails the command after the timeout', async () => {
     const conn = { id: 1, role: 'ui', closed: false, focusedAt: undefined } as unknown as ClientConn

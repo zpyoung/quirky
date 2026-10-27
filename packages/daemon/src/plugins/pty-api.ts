@@ -179,6 +179,14 @@ export function createPtyApi(
       live()
       return pty.request('history', { sessionId, ...options })
     },
+    async clear(sessionId) {
+      live()
+      await pty.request('clear', { sessionId })
+    },
+    async resetModes(sessionId) {
+      live()
+      await pty.request('resetModes', { sessionId })
+    },
     async restartHost() {
       live()
       return pty.restartHost()
