@@ -319,6 +319,28 @@
 - **Revisit if:** reviewer dispatch fails
 - **Source:** assumed — autonomous
 
+## D30: Grow shared public runtime seams rather than infer worker authority
+- **Question:** implementation feasibility and component partition after dependency integration
+- **Options:** trust hello session metadata; import private runtime state; add minimal public caller/identity/pointer seams
+- **Chose:** kernel-verified launch-scoped caller authority, non-secret session identity, and exact-incarnation idempotent pointer submission. Domain component owns the new orchestration plugin; runtime component owns protocol/daemon/CLI/session/structured changes. Read-only shared signatures were committed before dispatch.
+- **Why:** source inspection found hello sessionId is client metadata, structured/send lacks operation IDs, and PTY.write is an unguarded byte write. Existing APIs cannot establish exact owner or unknown-submit safety. Locked D4/D10/D15 explicitly require public growth instead of weakened checks. Runtime worker's one kernel helper keeps total implementers at three.
+- **Evidence:** OrchestrationSeams source survey; packages/daemon/src/methods.ts:163–178; packages/protocol/src/plugins.ts:98,203–213; plugins/quirky.structured/main.ts:716–724; plugins/quirky.orchestration/src/runtime-contracts.ts. Fresh-home daemon reproduced all three absent APIs; launched-session smoke reached unknown runCreate after actual repo/worktree/session setup and cleaned up.
+- **Reversibility:** medium
+- **Confidence:** high
+- **Revisit if:** the runtime cannot prove exact live process/lease ownership without changing a locked trust decision
+- **Source:** assumed — autonomous
+
+## D31: Preserve incoming account, hosting and worktree decisions
+- **Question:** whether prerequisite-branch integration conflicts with the orchestration design
+- **Options:** revise account/process behavior; preserve independent contracts and add only needed public seams
+- **Chose:** preserve required public account preparation before spawn, immutable process account/launch identity, transcript-preserving resume, public plugin composition, connection-close cleanup and isolated process fixtures.
+- **Why:** all imported logs were read. Account/provider IDs, launch snapshots and connection IDs do not independently attest worker ownership. Their public extension patterns permit the new seams; none weakens the pointer/restart rule.
+- **Evidence:** m3-accounts D5–D6,D9–D11,D20,D24,D26,D28; m4-hosting-api-github D9,D13,D26,D28; fix-flaky-quirky-worktree-window-projects D2–D8; m5-structured-runner D1–D44. Reconciliation by OrchestrationSeams; m5 log read by parent.
+- **Reversibility:** medium
+- **Confidence:** high
+- **Revisit if:** a final incoming decision changes shared authority or launch behavior
+- **Source:** locked by docs/loop/decisions/m3-accounts.md
+
 ## Early preparation verification
 - `bun run typecheck`: exit0 on the final contracts, no diagnostics.
 - Actual Bun import of contracts.ts: `CONTRACT_MODULE_INERT_OK`; the module exports no runtime values. No daemon, model, process, real user state or placeholder contribution was started/installed.

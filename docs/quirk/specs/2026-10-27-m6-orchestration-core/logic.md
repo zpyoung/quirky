@@ -1,11 +1,11 @@
 # Orchestration core, mailbox, questions and gates
 
-Reader: the next lane-1 implementer — Decision: whether dependencies permit implementation, then which contracts and acceptance flows to build.
+Reader: lane-1 implementer — Decision: implement against the merged prerequisite branch, then verify readiness before landing.
 
 ## Status & amendments
-Status: autonomously approved design under LOOP.md; early-item spec and inert contracts prepared, implementation waits for dependency readiness. Night mode combines technical decisions here; no separate tech.md.
+Status: autonomously approved design under current LOOP.md; shared contracts committed, implementation proceeds against the available dependency branch. Night mode combines technical decisions here; no separate tech.md.
 
-**Amendments:** 2026-10-27 — initial combined specification, self-reviewed against the selected feature-doc sections.
+**Amendments:** 2026-10-27 — initial combined specification, self-reviewed against the selected feature-doc sections. Iteration16 — current early-item protocol permits implementation against prerequisite branches before they land; independent public runtime seams are specified in `src/runtime-contracts.ts`.
 
 ## Purpose
 Give coordinators and workers a durable, scriptable namespace for supervised work without introducing an automatic scheduler. A coordinator owns a Run, creates dependent Tasks, and handles durable messages, questions and gates. A Dispatch is one authoritative attempt, never merely a copied Task ID.
@@ -81,7 +81,7 @@ The selected source sections name no numbered Orca defects. Explicit regression 
 Night mode explicitly replaces external research swarms with the feature doc, roadmap and prior decision logs. Sources: orchestration.md sections The database through Reset, Constants and limits, Edge cases; docs/architecture.md Structured agent sessions/Decisions; m1-agent-status D2; m5-structured-runner D3-D8/D12/D17/D25. No external research claims.
 
 ## Deferred Ideas
-Only the explicitly separated feature slices in Scope and non-goals. No additional product behavior proposed. Early dependency readiness is an execution prerequisite, not a deferred acceptance flow.
+Only the explicitly separated feature slices in Scope and non-goals. No additional product behavior proposed. Early dependency readiness gates landing, not implementation against the available prerequisite branch.
 
 ## Glossary
 Run: durable coordinator namespace. Task: dependency-bound work item. Dispatch: authoritative attempt. Worker: supervised attempt execution state, separate from Dispatch state. Mailbox: durable run/dispatch address or supported direct address. Delivery: replayable acknowledged batch. Consumer generation: monotonic fence for prior readers. Question: resumable answer thread. Gate: coordinator-owned blocked-Task decision. Pointer: best-effort instruction to check, not message delivery proof.
@@ -95,15 +95,14 @@ Reuse openStore migrations/transaction for the plugin-private SQLite database. S
 ### Contracts and interfaces
 Committed types define exact domain rows, request/result mapping, mutation metadata, caller evidence, CAS transition input and public dependency ports. API namespace is `quirky.orchestration/`; CLI alias `orchestration`, verbs are the documented kebab-case names. All API methods declare schemas in the eventual manifest, including outputs/events. Caller session comes from PluginCaller; compare all declared aliases and require a live runtime-owned session. A provider conversation ID or arbitrary `from` is not authority. Any missing attestation capability requires public API growth, not trusting client fields or importing private stores.
 
-`src/contracts.ts` is inert types only during the early stage. Runtime schemas, implementations and their acceptance tests ship together after deps ready. Mutation methods carry `requestId` UUID and a contract-version discriminator; CLI uses the existing transport request mechanism plus the orchestration receipt contract where long waits need a durable accepted checkpoint. Avoid duplicating conflicting ledger ownership; kernel request behavior must be inspected before integration.
+`src/contracts.ts` defines domain shapes; `src/runtime-contracts.ts` defines the public runtime integration signatures. Kernel-verified `PluginCaller.sessionAuthority` derives from launch-scoped `QUIRKY_SESSION_TOKEN` supplied separately as hello `sessionToken`, plus independent live process/lease evidence. Public `quirky.session/identity` returns only non-secret target identity; `quirky.session/pointer` provides exact-incarnation, durable-operation-ID safe submission with honest unknown results. Runtime schemas, implementations and acceptance tests ship together. Mutation methods carry `requestId` UUID and a contract-version discriminator; CLI uses the existing transport request mechanism plus the orchestration receipt contract where long waits need a durable accepted checkpoint. Avoid duplicating conflicting ledger ownership; kernel request behavior must be inspected before integration.
 
 ### Data models and security
 Run, Task, Dispatch, Worker, Message, Delivery, QuestionThread, Gate and MutationReceipt fields are defined in the committed contracts. IDs use run_/task_/ctx_/msg_/delivery_/gate_ plus 12 hex. Secret capability hashes never appear in public rows; plaintext secrets never persist. Preserve active-role authority across new Run creation. Reset is marked destructive and uses kernel confirmation (`--yes` in unattended tests only). Lifecycle report acceptance, not a timeout/idle pointer, decides completion.
 
-### Implementation slices after dependency readiness
-1. Core store, authenticated identity/run/task/lifecycle, mutation receipts and reset, with API-driven DAG/authority/recovery tests.
-2. Mail routing, delivery/check waits, question/reply/gates, with API-driven FIFO/fencing/resume/concurrency tests, against committed shared core ports.
-3. Manifest/CLI integration and idle-pointer scheduling through public session/structured APIs, with real daemon/CLI and pointer restart safety scenarios.
+### Implementation slices against committed runtime signatures
+1. Orchestration plugin: core store, authenticated identity/run/task/lifecycle, mutation receipts/reset, routing/delivery/waits/question/reply/gates, manifest/custom CLI and idle-pointer scheduler; API-driven acceptance for AC1–AC13.
+2. Existing runtime: public kernel-verified caller authority and live session identity; launch-scoped terminal/structured child environments; exact-incarnation, idempotent safe pointers and structured send receipts. Preserve account preparation, launch snapshots and revocation.
 At most three implementers. Shared contract changes are owned by the integration parent and committed before implementers. Do not edit shared files concurrently. Tests cover plausible consumer-visible boundaries, not copied schemas/text snapshots.
 
 The CLI adapter preserves source flags while normalizing them to the type contracts: string addresses become mailbox/group discriminants, CSV/JSON arrays become arrays, and `--id`/`--task`/`--run` map to explicit typed identity fields. Its module is declared by the manifest and remains visible in the public schema catalog. Preserve raw-payload versus structured-flag exclusivity; acknowledgement remains a durable mutation even when the following read is peek/history.
