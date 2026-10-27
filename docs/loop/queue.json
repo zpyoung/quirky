@@ -1204,6 +1204,16 @@
       ],
       "deps": [],
       "status": "todo"
+    },
+    {
+      "id": "fix-flaky-pty-host-clear",
+      "milestone": "M1",
+      "title": "Fix the flaky packages/pty-host/test/clear.test.ts: it failed 3 times in full-suite runs today (15:28, 22:47, 23:11 UTC). Find out with quirk:systematic-debugging whether a wait is too short under load or the clear races with output, reproduce it under CPU load on the test host, and fix the code or the test",
+      "docs": [
+        "term-daemon.md"
+      ],
+      "deps": [],
+      "status": "todo"
     }
   ]
 }
