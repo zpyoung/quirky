@@ -1,0 +1,14 @@
+{
+  "item": "m2-source-control-core",
+  "spec": "docs/quirk/specs/2026-10-27-m2-source-control-core/logic.md",
+  "scenarios": [
+    {
+      "id": "SC-18",
+      "title": "Reveal in Finder on a Source Control row opens a Finder window with that file selected",
+      "status": "pending",
+      "lastRun": null,
+      "report": null,
+      "summary": null
+    }
+  ]
+}

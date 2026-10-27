@@ -25,11 +25,37 @@ describe('SC-13: quirky.git on a folder workspace', () => {
     ['diff', { path: 'a.txt' }],
     ['stage', { paths: ['a.txt'] }],
     ['unstage', { paths: ['a.txt'] }],
-    ['commit', { message: 'msg' }]
+    ['commit', { message: 'msg' }],
+    ['discard', { paths: ['a.txt'], yes: true }],
+    ['describeDiscard', { paths: ['a.txt'] }],
+    ['continue', {}],
+    ['abort', { yes: true }],
+    ['describeAbort', {}],
+    ['conflictFile', { path: 'a.txt' }],
+    ['save', { path: 'a.txt', content: 'x' }],
+    ['submoduleStatus', { path: 'lib' }],
+    ['hugeFolders', {}],
+    ['ignoreFolder', { folder: 'dist' }],
+    ['reveal', { path: 'a.txt' }],
+    ['push', {}],
+    ['forcePush', { yes: true }],
+    ['describeForcePush', {}],
+    ['pull', {}],
+    ['fastForward', {}],
+    ['fetch', {}],
+    ['sync', {}],
+    ['rebaseFromBase', {}],
+    ['compare', {}],
+    ['setBase', { clear: true }],
+    ['branches', {}],
+    ['history', {}],
+    ['commitFiles', { commit: 'HEAD' }],
+    ['diff', { path: 'a.txt', source: 'branch' }],
+    ['diff', { path: 'a.txt', source: 'commit', commit: 'a'.repeat(40) }]
   ]
 
   for (const [method, params] of methods) {
-    test(`${method} is InvalidParams with the folder reason and runs no git`, async () => {
+    test(`${method} ${JSON.stringify(params)} is InvalidParams with the folder reason and runs no git`, async () => {
       const error = await errorOf(g.call(`quirky.git/${method}`, { worktree: g.notes.id, ...params }))
       expect(error.code).toBe(RpcErrorCode.InvalidParams)
       expect(error.message).toBe(SENTENCE)
@@ -46,6 +72,6 @@ describe('SC-13: quirky.git on a folder workspace', () => {
 
   test('git workspaces still run git', async () => {
     await g.call('quirky.git/status', { worktree: g.main.id })
-    expect(g.git.calls.map((c) => c.fn)).toEqual(['status'])
+    expect(g.git.calls.map((c) => c.fn)).toEqual(['statusV2'])
   })
 })

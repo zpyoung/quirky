@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync } from 'node:fs'
 import { basename } from 'node:path'
-import type { GitDiff, GitStatus } from '@quirky/protocol'
+import type { GitDiff, GitDiffPair, GitStatus, GitStatusSummary } from '@quirky/protocol'
 import * as realGit from './index'
 import type { GitApi } from './api'
 
@@ -57,7 +57,7 @@ export function createFakeGit(): FakeGit {
         )
       }
     },
-    async status(cwd): Promise<GitStatus> {
+    async status(cwd): Promise<GitStatusSummary> {
       record('status', cwd)
       return {
         branch: basename(cwd),
@@ -67,7 +67,30 @@ export function createFakeGit(): FakeGit {
         files: [{ path: 'a.txt', index: ' ', worktree: 'M', untracked: false }]
       }
     },
-    async diff(cwd, path, staged): Promise<GitDiff> {
+    async statusV2(cwd): Promise<GitStatus> {
+      record('statusV2', cwd)
+      return {
+        branch: basename(cwd),
+        upstream: null,
+        ahead: 0,
+        behind: 0,
+        files: [{ path: 'a.txt', index: ' ', worktree: 'M', untracked: false }],
+        head: 'a'.repeat(40),
+        detached: false,
+        unborn: false,
+        entries: [{ path: 'a.txt', area: 'unstaged', status: 'modified', added: 1, removed: 1 }],
+        operation: 'none',
+        capped: false,
+        upstreamStatus: { hasUpstream: false, name: null, sha: null, ahead: 0, behind: 0, behindPatchEquivalent: null },
+        busy: null
+      }
+    },
+    async diffSource(cwd, request): Promise<GitDiff> {
+      record('diffSource', cwd, request)
+      const staged = request.source === 'staged'
+      return { path: request.path, staged, original: 'old', modified: 'new', binary: false, source: request.source, kind: 'text' }
+    },
+    async diff(cwd, path, staged): Promise<GitDiffPair> {
       record('diff', cwd, path, staged)
       return { path, staged, original: 'old', modified: 'new', binary: false }
     },
