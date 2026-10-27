@@ -219,4 +219,15 @@ describe('validateEntry', () => {
     expect(data.detectAliases).toEqual(['a'])
     expect(data.env).toEqual({ A: '1' })
   })
+
+  test('launchOptions is parsed into a catalog', () => {
+    const entry = entryOf({ ...minimal, launchOptions: { model: { flag: ['--model', '{value}'], conflicts: [{ flags: ['--model'] }] } } })
+    expect(entry.launchOptions).toMatchObject({ model: { flag: ['--model', '{value}'] }, models: [], unlisted: 'accept', extraArgs: null })
+  })
+
+  test('an invalid launchOptions block makes the entry invalid with a message starting launchOptions', () => {
+    expect(errorOf({ ...minimal, launchOptions: 'x' })).toStartWith('launchOptions')
+    expect(errorOf({ ...minimal, launchOptions: { model: { flag: ['--model'], conflicts: [] } } })).toStartWith('launchOptions.model.flag')
+    expect(errorOf({ ...minimal, launchOptions: null })).toStartWith('launchOptions')
+  })
 })
