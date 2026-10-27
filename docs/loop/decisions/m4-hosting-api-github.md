@@ -446,5 +446,16 @@
 - **Revisit if:** a workflow exceeds its finite20-second deadline or a product latency requirement is introduced.
 - **Source:** assumed — autonomous; operator-required blocking-gate repair
 
+## D41: Repair the sole scoped-suite failure and avoid remote-slot starvation
+- **Question:** how to finish the operator's scoped check after the remote run spent3845 seconds queued/executing?
+- **Options:** repeat the remote queue wait; use the supported local scoped runner after fixing the observed fixture mismatch.
+- **Chose:** changed the refresh gh fixture to answer the supported REST head-filter route, retained all refresh assertions, and reran it locally:5 passed. Run the same scoped directory set with QUIRKY_TEST_LOCAL=1; do not run a whole-suite preflight.
+- **Why:** the remote result was98 of99 files passed; only refresh's obsolete fixture route returned an invalid object instead of the expected PR list. The registry and provider implementation were not changed. Local mode is an existing runner option and uses this macOS host without waiting for shared remote slots.
+- **Evidence:** canonical scoped output99 files/98 passed/1 failed; isolated refresh output5 passed/28 assertions after the one-line fixture correction. Scripts55 passed and typecheck passed in that canonical run.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** local and remote behavior diverge beyond scheduling.
+- **Source:** assumed — autonomous; operator-required core landing
+
 ## Progress
-The single operator-requested catch-up is complete and incoming decisions are compatible. Core CLI smokes, authoritative schema/runtime-request validation, all35 runtime tests and four repaired Projects blockers passed. The stale queue-order scripts failure is corrected by integration; two real-process scripts test cases now have finite native bounds. Run the scoped checks on this frozen tree, one final cross-family review with blocking fixes only, confirm the dependent queue add, and land without another catch-up or whole-suite preflight.
+Follow-up m4-hosting-api-github-parity was added successfully through queue.ts after waiting for its shared lock. The single catch-up and decision reads are complete. Scripts55 passed and typecheck passed; the scoped run passed98/99 files, and the sole fixture failure is corrected and isolated refresh5/5 passed. Run the frozen local scoped gate, final cross-family review/blocking fixes, and land. No further scope expansion, catch-up or whole-suite preflight.

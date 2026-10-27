@@ -22,7 +22,7 @@ const fail = (message) => { process.stderr.write(message); process.exit(1) }
 if (args[0] === 'auth' && args[1] === 'status') {
   if (fixture.authenticated === false) fail('not logged in')
   emit('Logged in to github.com account test-user (keyring)\n')
-} else if (args[0] === 'pr' && args[1] === 'list') {
+} else if (args[0] === 'api' && args.some((arg) => arg.startsWith('repos/') && arg.includes('/pulls?'))) {
   if (fixture.listFailure) fail(String(fixture.listFailure))
   emit([])
 } else if (args[0] === 'pr' && args[1] === 'view') {
