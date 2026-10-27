@@ -538,5 +538,26 @@
 - **Confidence:** high
 - **Source:** assumed — autonomous
 
+## D54: Catching up with m1-term-ui moves the unread bell into the terminal workspace and widens what counts as visible
+- **Question:** LOOP.md step 5's catch-up merge brought m1-term-ui, whose `quirky.terminal` view overrides `view:quirky.session/worktree` with tab groups, pane trees and a floating workspace overlay
+- **Options:** keep the bell only in quirky.session's simple strip; carry it into the terminal strip and read the terminal view's visibility
+- **Chose:** carry it, as the tech spec's "Catch-up obligations" planned: the terminal tab strip shows the bell when any session in a tab is unread, the terminal view's report and the floating overlay's report give `visibleSessions`, and the notifications plugin treats sessions in the open floating panel as viewed. Two merge conflicts were mechanical (`packages/ui/src/plugins/host.ts` kept both the activity constant and m1-term-ui's key type; the terminal event list gained `notification`), plus one `UiWindowInfo` literal in a new m1-term-ui CLI test.
+- **Why:** m1-term-ui D6 routes every caller of the view ID to the terminal workspace, so a bell only in the fallback strip would never be seen; D36 makes the view's report the place the window says what it shows. Orca counts the open floating panel as viewed (notifications.md "What an agent-completion event does" point 5).
+- **Evidence:** docs/loop/decisions/m1-term-ui.md D6, D25, D36, D52; merge 9fcea51
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** assumed — autonomous
+
+## D55: The suite is over the descriptor limit after the catch-up; this item moves the remaining harnesses to shared plugin directories
+- **Question:** the post-catch-up gate failed 175 tests with `EBADF` (descriptor exhaustion, docs/loop/BLOCKERS.md "m1-term-ui: the single-process test suite is close to running out of file descriptors"); this item can't land a red gate
+- **Options:** change how the suite runs (protected: `scripts/build-loop/`, and land runs the root script); block the item for a person; reduce the leak in the other harnesses as m1-term-ui D51 did for its own
+- **Chose:** reduce the leak: a test-only task memoises each harness's built-in plugin directory per process, measured per file, with the full suite as its acceptance
+- **Why:** the BLOCKERS entry names this as one of the two fixes, and the only one that stays inside a build item's allowed paths; every test keeps a fresh home
+- **Evidence:** sdd/gate-cu.log in the session scratchpad (6218 pass, 177 fail, 322 EBADF lines)
+- **Reversibility:** easy
+- **Confidence:** medium
+- **Revisit if:** the leak returns as tests grow; then a person should split the suite into processes
+- **Source:** supersedes m1-term-ui D51
+
 ## Progress
-W1 and W2 merged (25319b9); the W1 checkpoint's four fixes are in flight. Next: merge the fixes, full gate, W2 checkpoint (C, S, X standard over ee9d1d9..HEAD), W3 (settings view N6 with the manifest's view/command/ui entries; e2e CLI scenarios on a daemon subprocess in plugins/quirky.notifications/test/e2e/), then catch up with build/roadmap (m1-term-ui obligations in tech.md), Final Round 1, the like-a-user web pass (SC-6, SC-46 to SC-50), docs/loop/native/m1-notifications.json, land. Briefs and run journal: session scratchpad sdd/.
+W1–W3 and both checkpoint fix batches merged; caught up with build/roadmap (m1-term-ui) at 9fcea51. In flight: the term-ui obligations task (bell in the terminal strip, `visibleSessions` from the terminal view and floating overlay) and the descriptor task (shared harness directories, window-presence fake). Next: merge both, full gate green, Final Round 1 (C, S, X deep over d325202..HEAD without docs), its fix batch, gate, the like-a-user web pass (SC-6, SC-46 to SC-50), docs/loop/native/m1-notifications.json, land. Briefs and run journal: session scratchpad sdd/; review drivers cp1/run_cp.py.
