@@ -1,64 +1,30 @@
-import { Database } from 'bun:sqlite'
-import { existsSync } from 'node:fs'
-import { basename, join } from 'node:path'
 import {
   formatContributionId,
   RpcErrorCode,
   type PluginCaller,
+  type EffectiveHooks,
   type PluginContext,
-  type PluginStore,
+  type ProjectGroup,
   type QuirkyEvent,
   type Repo,
   type Worktree
 } from '@quirky/protocol'
-import { BranchCheckedOutError, GitError, gitApi } from '@quirky/git'
 import { expandHome, resolveRealPath, worktreeIdForPath } from './paths'
 import { SelectorSyntaxError, matchWorktrees, type CallerIdentity } from './selector'
+import { BranchCleaner } from './src/daemon/branches'
+import { createWorkspace, suggestName, type CreateEnv, type CreateParams, type PendingStart } from './src/daemon/create'
+import { groupRepoId, listEverything, listGroup, listProject, type ListEnv } from './src/daemon/list'
+import { KeyedQueue } from './src/daemon/queue'
+import { deleteBranch, describeRemove, removeWorktree, type DeleteBranchParams, type InFlightRemove, type RemoveEnv, type RemoveParams } from './src/daemon/remove'
+import { setWorktree, showWorktree, type SetEnv, type SetParams } from './src/daemon/set'
+import { openWorktreeStore, readV1Rows } from './src/daemon/store'
 
-const WORKTREE_NAME = /^[A-Za-z0-9_./-]+$/
 const DEFAULT_WORKTREES_ROOT = '~/quirky/workspaces'
 const ROOT_SETTING = 'setting:quirky.worktree/worktreesRoot'
 const SETTINGS_IMPORTED = 'v1-settings-imported'
 
 type ErrorKind = 'invalid-params' | 'not-found' | 'conflict'
 type Handler = (params: Record<string, any>, caller: PluginCaller) => unknown
-
-/** Rows of `table` in the v1 `<home>/quirky.db`, or none when it is missing or unreadable. */
-function readV1Rows<T>(home: string, table: string, log: (message: string) => void): T[] {
-  const file = join(home, 'quirky.db')
-  if (!existsSync(file)) return []
-  let db: Database | undefined
-  try {
-    db = new Database(file, { readonly: true })
-    const present = db.query("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?").get(table)
-    return present ? (db.query(`SELECT * FROM ${table}`).all() as T[]) : []
-  } catch (error) {
-    log(`could not read ${table} from the v1 database: ${error instanceof Error ? error.message : String(error)}`)
-    return []
-  } finally {
-    db?.close()
-  }
-}
-
-function openWorktreeStore(context: PluginContext): PluginStore {
-  return context.openStore([
-    (store) => {
-      store.exec(`
-        CREATE TABLE worktrees (
-          id TEXT PRIMARY KEY,
-          repo_id TEXT NOT NULL
-        );
-        CREATE TABLE meta (
-          key TEXT PRIMARY KEY,
-          value TEXT NOT NULL
-        );
-      `)
-      for (const row of readV1Rows<{ id: string; repo_id: string }>(context.home, 'worktrees', context.log)) {
-        store.run('INSERT OR IGNORE INTO worktrees (id, repo_id) VALUES (?, ?)', row.id, row.repo_id)
-      }
-    }
-  ])
-}
 
 function isMethodNotFound(error: unknown): boolean {
   return (error as { code?: unknown } | null)?.code === RpcErrorCode.MethodNotFound
@@ -83,6 +49,14 @@ function identityOf(caller: PluginCaller, params: { cwd?: string; worktreeId?: s
   return { ...(cwd ? { cwd } : {}), ...(worktreeId ? { worktreeId } : {}) }
 }
 
+let releasePending: (() => void) | undefined
+
+/** Drops the agent starts still waiting for a Setup terminal; they do not survive a daemon stop. */
+export function deactivate(): void {
+  releasePending?.()
+  releasePending = undefined
+}
+
 export async function activate(context: PluginContext): Promise<void> {
   const store = openWorktreeStore(context)
 
@@ -91,27 +65,26 @@ export async function activate(context: PluginContext): Promise<void> {
 
   const listRepos = async () => (await context.call('quirky.repo/list')) as Repo[]
 
-  function recordWorktrees(repoId: string, ids: string[]): void {
-    store.transaction(() => {
-      for (const id of ids) {
-        store.run('INSERT INTO worktrees (id, repo_id) VALUES (?, ?) ON CONFLICT(id) DO UPDATE SET repo_id = excluded.repo_id', id, repoId)
-      }
-    })
+  const listGroups = async () => (await context.call('quirky.repo/groupList')) as ProjectGroup[]
+  const removing = new Set<string>()
+  const pendingStarts = new Set<PendingStart>()
+  releasePending = () => {
+    for (const start of [...pendingStarts]) {
+      context.log(`dropped the pending start of ${start.label}: the daemon stopped before setup finished`)
+      start.dispose()
+    }
   }
+  const listEnv: ListEnv = { store, groups: listGroups, log: context.log, removing }
 
-  async function repoWorktrees(repo: Repo): Promise<Worktree[]> {
-    const infos = await gitApi().listWorktrees(repo.path)
-    const worktrees = infos.map((info) => ({
-      id: worktreeIdForPath(info.path),
-      repoId: repo.id,
-      path: resolveRealPath(info.path),
-      branch: info.branch,
-      head: info.head,
-      isMain: info.isMain,
-      name: info.branch ?? basename(info.path)
-    }))
-    recordWorktrees(repo.id, worktrees.map((worktree) => worktree.id))
-    return worktrees
+  /** The group with this ID or exact name; several of one name is a conflict. */
+  async function resolveGroup(selector: string): Promise<ProjectGroup> {
+    const groups = await listGroups()
+    const byId = groups.filter((group) => group.id === selector)
+    const matches = byId.length > 0 ? byId : groups.filter((group) => group.name === selector)
+    if (matches.length === 1) return matches[0]!
+    if (matches.length === 0) throw fail('not-found', `no group matches ${selector}; use its ID or exact name`)
+    const ids = matches.map((group) => group.id)
+    throw fail('conflict', `${selector} matches ${matches.length} groups: ${ids.join(', ')}`, { matches: ids })
   }
 
   /** The directory under the worktrees root for a repo's worktrees; unique even for repos sharing a name. */
@@ -125,16 +98,15 @@ export async function activate(context: PluginContext): Promise<void> {
     return resolveRealPath(expandHome(configured === '' ? DEFAULT_WORKTREES_ROOT : configured))
   }
 
-  async function allWorktrees(repos: Repo[]): Promise<Worktree[]> {
-    const lists = await Promise.all(repos.map((repo) => repoWorktrees(repo).catch(() => [] as Worktree[])))
-    return lists.flat()
-  }
-
-  async function findWorktree(selector: string, identity: CallerIdentity): Promise<{ repo: Repo; worktree: Worktree }> {
+  async function findWorktree(
+    selector: string,
+    identity: CallerIdentity
+  ): Promise<{ repo: Repo | undefined; worktree: Worktree; all: Worktree[] }> {
     const repos = await listRepos()
+    const all = await listEverything(listEnv, repos)
     let matches: Worktree[]
     try {
-      matches = matchWorktrees(await allWorktrees(repos), selector, identity)
+      matches = matchWorktrees(all, selector, identity)
     } catch (error) {
       if (error instanceof SelectorSyntaxError) throw fail('invalid-params', error.message)
       throw error
@@ -147,7 +119,7 @@ export async function activate(context: PluginContext): Promise<void> {
       throw fail('conflict', `${selector} matches ${matches.length} worktrees: ${ids.join(', ')}`, { matches: ids })
     }
     const worktree = matches[0]!
-    return { repo: repos.find((repo) => repo.id === worktree.repoId)!, worktree }
+    return { repo: repos.find((repo) => repo.id === worktree.repoId), worktree, all }
   }
 
   /** Closes every session of the worktree, attempting all of them; returns one message per failure. */
@@ -171,82 +143,66 @@ export async function activate(context: PluginContext): Promise<void> {
     return errors
   }
 
-  async function create(params: Record<string, any>): Promise<Worktree> {
-    const repo = (await context.call('quirky.repo/resolve', { selector: String(params.repo) })) as Repo
-    const name = String(params.name)
-    if (!WORKTREE_NAME.test(name) || name.startsWith('-') || name.startsWith('/') || name.endsWith('/') || name.includes('..')) {
-      throw fail('invalid-params', 'name may contain letters, digits, - _ . and /, cannot start with - or /, and cannot contain ..')
-    }
-    const path = join(worktreesRoot(), await worktreeDirName(repo), name.replaceAll('/', '-'))
-    try {
-      await gitApi().addWorktree(repo.path, path, name, params.baseRef)
-    } catch (error) {
-      if (error instanceof BranchCheckedOutError) throw fail('conflict', error.message)
-      throw new Error(gitMessage(error))
-    }
-    const created = (await repoWorktrees(repo).catch(() => [] as Worktree[])).find((worktree) => worktree.path === path)
-    const worktree: Worktree = created ?? {
-      id: worktreeIdForPath(path),
-      repoId: repo.id,
-      path,
-      branch: name,
-      head: '',
-      isMain: false,
-      name
-    }
-    recordWorktrees(repo.id, [worktree.id])
-    context.emit('changed', { repoId: repo.id })
-    return worktree
+  const createEnv: CreateEnv = {
+    ...listEnv,
+    fail,
+    changed: (data) => void context.emit('changed', data),
+    call: (method, params) => context.call(method, params),
+    subscribe: (listener) => context.subscribe(listener),
+    getSetting: (name) => context.getSetting(name),
+    dataDir: context.dataDir,
+    worktreesRoot,
+    worktreeDirName,
+    resolveRepo: async (selector) => (await context.call('quirky.repo/resolve', { selector })) as Repo,
+    resolveGroup,
+    find: async (selector, identity) => {
+      const { worktree, all } = await findWorktree(selector, identity)
+      return { worktree, all }
+    },
+    queue: new KeyedQueue(),
+    suggestions: new Map(),
+    pending: pendingStarts
+  }
+
+  const removeEnv: RemoveEnv = {
+    ...listEnv,
+    removing,
+    inflight: new Map<string, InFlightRemove>(),
+    fail,
+    changed: (data) => void context.emit('changed', data),
+    repos: listRepos,
+    resolveRepo: async (selector) => (await context.call('quirky.repo/resolve', { selector })) as Repo,
+    hooksAt: async (repo, ref) => (await context.call('quirky.repo/hooks', { repo: repo.id, ref })) as EffectiveHooks,
+    closeSessions,
+    branches: new BranchCleaner()
   }
 
   /**
-   * Removes a worktree. Without `force`, git decides first and a refusal (dirty or untracked
-   * files) is a Conflict that leaves the worktree's sessions running; with `force` the sessions
-   * are closed before the forced removal. Once git has removed the worktree, closing its sessions
-   * is best effort: failures are reported as `sessionErrors` instead of failing a removal that
-   * already happened.
+   * Every worktree ID recorded for `repo`, plus its main worktree's, so removing the repo can find
+   * their sessions. Rows git no longer knows are kept: their sessions may still be open.
    */
-  async function remove(params: Record<string, any>, caller: PluginCaller): Promise<{ ok: true; sessionErrors?: string[] }> {
-    const { repo, worktree } = await findWorktree(String(params.worktree), identityOf(caller))
-    const force = params.force === true
-    if (worktree.isMain) throw fail('conflict', 'the main worktree cannot be removed')
-    if (force) {
-      const errors = await closeSessions(worktree.id)
-      if (errors.length > 0) throw new Error(errors.join('; '))
-    }
-    try {
-      await gitApi().removeWorktree(repo.path, worktree.path, force)
-    } catch (error) {
-      if (error instanceof GitError && error.exitCode > 0) {
-        throw fail('conflict', `could not remove ${worktree.name}: ${gitMessage(error)}`)
-      }
-      throw new Error(gitMessage(error))
-    }
-    const sessionErrors = force ? [] : await closeSessions(worktree.id)
-    context.emit('changed', { repoId: repo.id })
-    return sessionErrors.length > 0 ? { ok: true, sessionErrors } : { ok: true }
-  }
-
-  async function describeRemove(params: Record<string, any>, caller: PluginCaller): Promise<string> {
-    const { worktree } = await findWorktree(String(params.worktree), identityOf(caller))
-    const discarding = params.force === true ? ', discarding uncommitted changes' : ''
-    return `Remove worktree ${worktree.name} (${worktree.path})${discarding}?`
-  }
-
-  /** Every worktree ID recorded for `repo`, plus its main worktree's, so removing the repo can find their sessions. */
   async function ownedIds(params: Record<string, any>): Promise<string[]> {
     const repo = (await context.call('quirky.repo/resolve', { selector: String(params.repo) })) as Repo
-    await repoWorktrees(repo).catch(() => [])
+    const listed = await listProject(listEnv, repo, { prune: false }).catch(() => [] as Worktree[])
     const recorded = store.all<{ id: string }>('SELECT id FROM worktrees WHERE repo_id = ?', repo.id).map((row) => row.id)
-    return [...new Set([...recorded, worktreeIdForPath(repo.path)])].sort()
+    return [...new Set([...recorded, ...listed.map((worktree) => worktree.id), worktreeIdForPath(repo.path)])].sort()
   }
 
-  /** Drops ownership rows of repos that no longer exist, so a re-added repo starts clean. */
+  /**
+   * Drops the metadata of projects and groups that no longer exist, so a re-added project starts
+   * from defaults. Group workspaces are kept while their group is known; when the group list
+   * can't be read nothing of theirs is dropped.
+   */
   async function pruneRemovedRepos(): Promise<void> {
     const live = new Set((await listRepos()).map((repo) => repo.id))
+    const liveGroups = await listGroups().then(
+      (groups) => new Set(groups.map((group) => groupRepoId(group.id))),
+      () => null
+    )
     const recorded = store.all<{ repo_id: string }>('SELECT DISTINCT repo_id FROM worktrees').map((row) => row.repo_id)
     for (const repoId of recorded) {
-      if (!live.has(repoId)) store.run('DELETE FROM worktrees WHERE repo_id = ?', repoId)
+      const known = repoId.startsWith('group:') ? (liveGroups === null || liveGroups.has(repoId)) : live.has(repoId)
+      if (!known) store.run('DELETE FROM worktrees WHERE repo_id = ?', repoId)
     }
   }
 
@@ -275,21 +231,38 @@ export async function activate(context: PluginContext): Promise<void> {
     if (event.type === 'quirky.repo/changed') pruneRemovedRepos().catch((error) => context.log(`could not prune worktree records: ${error}`))
   })
 
+  const setEnv: SetEnv = {
+    store,
+    fail,
+    find: async (selector, identity) => {
+      const { worktree, all } = await findWorktree(selector, identity)
+      return { worktree, all }
+    },
+    changed: (data) => void context.emit('changed', data)
+  }
+
   const handlers: Record<string, Handler> = {
     async list(params) {
+      if (params.repo === undefined && params.group === undefined) return await listEverything(listEnv, await listRepos())
+      const result: Worktree[] = []
       if (params.repo !== undefined) {
         const repo = (await context.call('quirky.repo/resolve', { selector: String(params.repo) })) as Repo
         try {
-          return await repoWorktrees(repo)
+          result.push(...(await listProject(listEnv, repo)))
         } catch (error) {
           throw new Error(gitMessage(error))
         }
       }
-      return await allWorktrees(await listRepos())
+      if (params.group !== undefined) result.push(...listGroup(listEnv, await resolveGroup(String(params.group))))
+      return result
     },
-    create: (params) => create(params),
-    remove,
-    describeRemove,
+    create: (params, caller) => createWorkspace(createEnv, params as CreateParams, identityOf(caller)),
+    suggestName: (params) => suggestName(createEnv, params as { repo: string }),
+    set: (params, caller) => setWorktree(setEnv, params as SetParams, identityOf(caller)),
+    show: (params, caller) => showWorktree(setEnv, params as { worktree: string }, identityOf(caller)),
+    remove: (params, caller) => removeWorktree(removeEnv, params as RemoveParams, identityOf(caller)),
+    describeRemove: (params, caller) => describeRemove(removeEnv, params as RemoveParams, identityOf(caller)),
+    deleteBranch: (params) => deleteBranch(removeEnv, params as DeleteBranchParams),
     async resolve(params, caller) {
       return (await findWorktree(String(params.selector), identityOf(caller, params))).worktree
     },

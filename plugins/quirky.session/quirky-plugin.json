@@ -219,7 +219,7 @@
       },
       {
         "id": "create",
-        "description": "Starts a terminal session. `agent` defaults to the default agent (else the first installed one, else a shell). `prompt` reaches the agent the way that agent takes it; `promptDelivery` on the result says how. A prompt pasted after start settles later and emits `changed`, unless `waitForPrompt` is set.",
+        "description": "Starts a terminal session. `agent` defaults to the default agent (else the first installed one, else a shell). `prompt` reaches the agent the way that agent takes it; `promptDelivery` on the result says how. A prompt pasted after start settles later and emits `changed`, unless `waitForPrompt` is set. `title` names the tab; `command` runs one shell command instead of an interactive shell (agent shell only)",
         "params": {
           "type": "object",
           "properties": {
@@ -242,6 +242,14 @@
             "waitForPrompt": {
               "type": "boolean",
               "description": "Return only after a pasted prompt has settled; default false."
+            },
+            "title": {
+              "type": "string",
+              "description": "Tab title; numbered like the default titles when taken"
+            },
+            "command": {
+              "type": "string",
+              "description": "For agent shell only: a shell command string run under the login shell instead of an interactive shell; the session exits with its exit code"
             },
             "cols": {
               "type": "integer",

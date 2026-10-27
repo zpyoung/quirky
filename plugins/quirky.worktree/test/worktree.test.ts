@@ -4,13 +4,17 @@ import { createHash } from 'node:crypto'
 import { realpathSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
-import { RpcError, RpcErrorCode, type QuirkyClient, type QuirkyEvent, type Repo, type Worktree } from '@quirky/protocol'
+import { RpcError, RpcErrorCode, type QuirkyClient, type QuirkyEvent, type Repo, type Worktree, type WorktreeCreateResult } from '@quirky/protocol'
 import { GitError } from '@quirky/git'
 import { makeTempDir } from '../../../packages/daemon/test/plugins/fixtures'
 import { waitFor } from '../../../packages/daemon/test/helpers'
+import { isolateGitConfig } from '../../quirky.repo/test/git-fixtures'
+import { expandHome } from '../paths'
 import { fakeAsks } from '../../quirky.repo/test/fakes/quirky.ask/main'
 import { startPluginHarness, type PluginHarness } from '../../quirky.repo/test/harness'
+import { addFakeRepo, fakeRegistrations } from './fixtures/fake-git'
 
+isolateGitConfig()
 let t: PluginHarness | undefined
 afterEach(async () => {
   await t?.cleanup()
@@ -31,137 +35,164 @@ async function failure(promise: Promise<unknown>): Promise<{ code: number; messa
 
 async function start(options: Parameters<typeof startPluginHarness>[0] = {}) {
   t = await startPluginHarness(options)
-  t.git?.addRepo('/fake/alpha')
+  fakeRegistrations(t.git!)
+  const alpha = addFakeRepo(t.git!, 'alpha')
   const root = realpathSync(makeTempDir('qw-'))
   await call(t.client, 'setting.set', { id: 'setting:quirky.worktree/worktreesRoot', value: root })
   const watcher = await t.h.connectWithEvents('cli')
-  const repo = (await call(t.client, 'quirky.repo/add', { path: '/fake/alpha' })) as Repo
-  return { t, client: t.client, events: watcher.events, root, repo }
+  const repo = (await call(t.client, 'quirky.repo/add', { path: alpha })) as Repo
+  return { t, client: t.client, events: watcher.events, root, repo, alpha }
 }
+
+/** Creates a worktree and returns its record (the create result's `worktree`). */
+const createWt = async (client: QuirkyClient, params: Record<string, unknown>) =>
+  ((await call(client, 'quirky.worktree/create', params)) as WorktreeCreateResult).worktree
 
 const list = async (client: QuirkyClient, repo?: string) =>
   (await call(client, 'quirky.worktree/list', repo ? { repo } : {})) as Worktree[]
 
 describe('quirky.worktree list', () => {
   test('gives stable ids and marks the main worktree', async () => {
-    const { client, repo } = await start()
+    const { client, repo, alpha } = await start()
     const [main] = await list(client, repo.id)
-    const expectedId = `wt_${createHash('sha1').update('/fake/alpha').digest('hex').slice(0, 12)}`
+    const expectedId = `wt_${createHash('sha1').update(alpha).digest('hex').slice(0, 12)}`
     expect(main).toMatchObject({ id: expectedId, repoId: repo.id, isMain: true, name: 'main', branch: 'main' })
     expect(await list(client)).toHaveLength(1)
   })
 
   test('the repo param is a selector', async () => {
-    const { client, repo } = await start()
+    const { client, repo, alpha } = await start()
     expect(await list(client, 'name:alpha')).toHaveLength(1)
-    expect(await list(client, 'path:/fake/alpha')).toHaveLength(1)
+    expect(await list(client, `path:${alpha}`)).toHaveLength(1)
     expect((await failure(call(client, 'quirky.worktree/list', { repo: 'name:nope' }))).code).toBe(RpcErrorCode.NotFound)
     expect(repo.id).toBeTruthy()
   })
 
   test('a repo that git cannot list is skipped in the full list and an Internal error for its own', async () => {
-    const { t, client, repo } = await start()
-    t.git!.worktreesByRepo.delete('/fake/alpha')
+    const { t, client, repo, alpha } = await start()
+    t.git!.worktreesByRepo.delete(alpha)
     expect(await list(client)).toEqual([])
     expect((await failure(call(client, 'quirky.worktree/list', { repo: repo.id }))).code).toBe(RpcErrorCode.Internal)
   })
 })
 
 describe('quirky.worktree create', () => {
-  test('validates the name and builds the path under the worktrees root', async () => {
-    const { t, client, events, root, repo } = await start()
-    for (const name of ['-bad', 'a..b', 'has space', '', 'semi;colon']) {
-      expect((await failure(call(client, 'quirky.worktree/create', { repo: repo.id, name }))).code).toBe(RpcErrorCode.InvalidParams)
+  test('sanitises the name and builds the path under the worktrees root', async () => {
+    const { t, client, events, root, repo, alpha } = await start()
+    // D10: a name is rewritten into a safe folder and branch name instead of being rejected; only an empty result is refused
+    const sanitised: [string, string][] = [['-bad', 'bad'], ['a..b', 'a.b'], ['has space', 'has-space'], ['semi;colon', 'semi-colon']]
+    for (const [name, expected] of sanitised) {
+      expect((await createWt(client, { repo: repo.id, name })).path).toBe(join(root, 'alpha', expected))
     }
-    const worktree = (await call(client, 'quirky.worktree/create', {
-      repo: repo.id,
-      name: 'feat/login',
-      baseRef: 'develop'
-    })) as Worktree
+    expect((await failure(call(client, 'quirky.worktree/create', { repo: repo.id, name: '...' }))).code).toBe(RpcErrorCode.InvalidParams)
+
+    const worktree = await createWt(client, { repo: repo.id, name: 'feat/login', base: 'develop' })
     expect(worktree).toMatchObject({
       path: join(root, 'alpha', 'feat-login'),
-      branch: 'feat/login',
+      // D10, D11: the name is sanitised for the folder and the branch; the fake git has no user, so no prefix
+      branch: 'feat-login',
       isMain: false,
-      repoId: repo.id
+      repoId: repo.id,
+      // D8: a non-primary worktree is named for its folder, not its branch
+      name: 'feat-login',
+      createdBy: 'api',
+      baseRef: 'develop'
     })
-    expect(t.git!.calls.find((c) => c.fn === 'addWorktree')?.args).toEqual([
-      '/fake/alpha',
+    expect(t.git!.calls.find((c) => c.fn === 'addWorktree' && c.args[2] === 'feat-login')?.args).toEqual([
+      alpha,
       join(root, 'alpha', 'feat-login'),
-      'feat/login',
-      'develop'
+      'feat-login',
+      'c'.repeat(40)
     ])
     const changed = await waitFor(() => events.find((e) => e.type === 'quirky.worktree/changed'))
     expect(changed).toMatchObject({ data: { repoId: repo.id } })
-    expect(await list(client, repo.id)).toHaveLength(2)
+    expect(await list(client, repo.id)).toHaveLength(6)
   })
 
   test('a second repo with the same name gets its own directory under the root', async () => {
     const { t, client, root } = await start()
-    t.git!.addRepo('/fake/one/alpha')
-    const other = (await call(client, 'quirky.repo/add', { path: '/fake/one/alpha' })) as Repo
-    const worktree = (await call(client, 'quirky.worktree/create', { repo: other.id, name: 'feature' })) as Worktree
+    const otherDir = addFakeRepo(t.git!, 'alpha')
+    const other = (await call(client, 'quirky.repo/add', { path: otherDir })) as Repo
+    const worktree = await createWt(client, { repo: other.id, name: 'feature' })
     const suffix = other.id.replace(/^repo_/, '').slice(0, 6)
     expect(worktree.path).toBe(join(root, `alpha-${suffix}`, 'feature'))
   })
 
   test('a repo with a unique name keeps the plain directory', async () => {
     const { client, root, repo } = await start()
-    const worktree = (await call(client, 'quirky.worktree/create', { repo: repo.id, name: 'feature' })) as Worktree
+    const worktree = await createWt(client, { repo: repo.id, name: 'feature' })
     expect(worktree.path).toBe(join(root, 'alpha', 'feature'))
   })
 })
 
 describe('SC-25: the worktrees root setting', () => {
   test('is declared with its title and default, and a leading ~ is expanded when read', async () => {
-    const { t, client, repo } = await start()
+    const { client } = await start()
     const info = (await call(client, 'setting.get', { id: 'setting:quirky.worktree/worktreesRoot' })) as Record<string, unknown>
     await call(client, 'setting.reset', { id: 'setting:quirky.worktree/worktreesRoot' })
     const reset = (await call(client, 'setting.get', { id: 'setting:quirky.worktree/worktreesRoot' })) as Record<string, unknown>
     expect(reset).toMatchObject({ type: 'string', title: 'Worktrees folder', default: '~/quirky/workspaces', value: '~/quirky/workspaces' })
     expect(info.id).toBe('setting:quirky.worktree/worktreesRoot')
+    // creating under the real home would leave folders behind, so the expansion is checked on its own
+    expect(expandHome(reset.value as string)).toBe(join(homedir(), 'quirky', 'workspaces'))
+    expect(expandHome('~/wt')).toBe(join(homedir(), 'wt'))
+  })
 
-    const worktree = (await call(client, 'quirky.worktree/create', { repo: repo.id, name: 'home' })) as Worktree
-    expect(worktree.path).toBe(join(realpathSync(homedir()), 'quirky', 'workspaces', 'alpha', 'home'))
+  test('a worktree is created under whatever the setting names', async () => {
+    const { t, client, repo } = await start()
+    const elsewhere = realpathSync(makeTempDir('qw-'))
+    await call(client, 'setting.set', { id: 'setting:quirky.worktree/worktreesRoot', value: elsewhere })
+    const worktree = await createWt(client, { repo: repo.id, name: 'again' })
+    expect(worktree.path).toBe(join(elsewhere, 'alpha', 'again'))
     expect(t.git!.calls.some((c) => c.fn === 'addWorktree')).toBe(true)
-
-    await call(client, 'setting.set', { id: 'setting:quirky.worktree/worktreesRoot', value: '~/wt' })
-    const second = (await call(client, 'quirky.worktree/create', { repo: repo.id, name: 'again' })) as Worktree
-    expect(second.path).toBe(join(realpathSync(homedir()), 'wt', 'alpha', 'again'))
   })
 })
 
 describe('quirky.worktree remove', () => {
   test('refuses the main worktree and closes sessions on a forced removal', async () => {
-    const { t, client, repo } = await start()
+    const { t, client, repo, alpha } = await start()
     const [main] = await list(client, repo.id)
     expect((await failure(call(client, 'quirky.worktree/remove', { worktree: main!.id, yes: true }))).code).toBe(RpcErrorCode.Conflict)
 
-    const worktree = (await call(client, 'quirky.worktree/create', { repo: repo.id, name: 'tmp' })) as Worktree
+    const worktree = await createWt(client, { repo: repo.id, name: 'tmp' })
     const session = (await call(client, 'quirky.session/create', { worktree: worktree.id, agent: 'shell' })) as { id: string }
-    expect(await call(client, 'quirky.worktree/remove', { worktree: worktree.id, force: true, yes: true })).toEqual({ ok: true })
+    expect(await call(client, 'quirky.worktree/remove', { worktree: worktree.id, force: true, yes: true })).toEqual({ ok: true, removed: [worktree.id] })
     expect(t.sessions.sessions).toEqual([])
     expect(t.sessions.closed).toEqual([session.id])
-    expect(t.git!.calls.find((c) => c.fn === 'removeWorktree')?.args).toEqual(['/fake/alpha', worktree.path, true])
+    expect(t.git!.calls.find((c) => c.fn === 'removeWorktree')?.args).toEqual([alpha, worktree.path, true])
     expect(await list(client, repo.id)).toHaveLength(1)
   })
 
-  test('leaves sessions alone when git refuses a non-forced removal', async () => {
+  test('a change found before anything is stopped leaves the sessions running', async () => {
     const { t, client, repo } = await start()
-    const worktree = (await call(client, 'quirky.worktree/create', { repo: repo.id, name: 'dirty' })) as Worktree
+    const worktree = await createWt(client, { repo: repo.id, name: 'dirty' })
     await call(client, 'quirky.session/create', { worktree: worktree.id, agent: 'shell' })
+    t.git!.dirtyEntries = async () => ['notes.txt']
+    const result = await failure(call(client, 'quirky.worktree/remove', { worktree: worktree.id, yes: true }))
+    expect(result.code).toBe(RpcErrorCode.Conflict)
+    expect(result.message).toBe('Worktree has uncommitted or untracked changes.')
+    expect(t.sessions.sessions).toHaveLength(1)
+    expect(t.sessions.closed).toEqual([])
+    expect(t.git!.calls.some((c) => c.fn === 'removeWorktree')).toBe(false)
+  })
+
+  test('a refusal by git itself is a Conflict with its message, after the sessions were closed (D42 order)', async () => {
+    const { t, client, repo } = await start()
+    const worktree = await createWt(client, { repo: repo.id, name: 'dirty' })
+    const session = (await call(client, 'quirky.session/create', { worktree: worktree.id, agent: 'shell' })) as { id: string }
     t.git!.removeWorktree = async () => {
       throw new GitError('git worktree failed', "fatal: 'x' contains modified or untracked files, use --force to delete it", 128)
     }
     const result = await failure(call(client, 'quirky.worktree/remove', { worktree: worktree.id, yes: true }))
     expect(result.code).toBe(RpcErrorCode.Conflict)
     expect(result.message).toContain('could not remove dirty')
-    expect(t.sessions.sessions).toHaveLength(1)
-    expect(t.sessions.closed).toEqual([])
+    expect(result.message).toContain('use --force')
+    expect(t.sessions.closed).toEqual([session.id])
   })
 
-  test('a clean removal closes the sessions afterwards and emits changed', async () => {
+  test('a clean removal closes the sessions and emits changed', async () => {
     const { t, client, events, repo } = await start()
-    const worktree = (await call(client, 'quirky.worktree/create', { repo: repo.id, name: 'clean' })) as Worktree
+    const worktree = await createWt(client, { repo: repo.id, name: 'clean' })
     await call(client, 'quirky.session/create', { worktree: worktree.id, agent: 'shell' })
     events.length = 0
     await call(client, 'quirky.worktree/remove', { worktree: worktree.id, yes: true })
@@ -169,9 +200,9 @@ describe('quirky.worktree remove', () => {
     await waitFor(() => events.find((e: QuirkyEvent) => e.type === 'quirky.worktree/changed'))
   })
 
-  test('a session that fails to close after git removed the worktree is reported, not thrown', async () => {
+  test('with force, a session that fails to close is reported and the removal goes ahead', async () => {
     const { t, client, events, repo } = await start()
-    const worktree = (await call(client, 'quirky.worktree/create', { repo: repo.id, name: 'stuck' })) as Worktree
+    const worktree = await createWt(client, { repo: repo.id, name: 'stuck' })
     const first = (await call(client, 'quirky.session/create', { worktree: worktree.id, agent: 'shell' })) as { id: string }
     const second = (await call(client, 'quirky.session/create', { worktree: worktree.id, agent: 'shell' })) as { id: string }
     // the fake reads closeError twice per close (check, then throw), so serve the message for the first close only
@@ -180,7 +211,7 @@ describe('quirky.worktree remove', () => {
     events.length = 0
     let result: { ok: boolean; sessionErrors?: string[] }
     try {
-      result = (await call(client, 'quirky.worktree/remove', { worktree: worktree.id, yes: true })) as typeof result
+      result = (await call(client, 'quirky.worktree/remove', { worktree: worktree.id, force: true, yes: true })) as typeof result
     } finally {
       // the shared fake state is reset by plain assignment, which a getter-only property would reject
       Object.defineProperty(t.sessions, 'closeError', { value: null, writable: true, configurable: true, enumerable: true })
@@ -196,7 +227,7 @@ describe('quirky.worktree remove', () => {
 
   test('works without quirky.session', async () => {
     const { client, repo } = await start({ fakeSession: false })
-    const worktree = (await call(client, 'quirky.worktree/create', { repo: repo.id, name: 'solo' })) as Worktree
+    const worktree = await createWt(client, { repo: repo.id, name: 'solo' })
     await call(client, 'quirky.worktree/remove', { worktree: worktree.id, yes: true })
     expect(await list(client, repo.id)).toHaveLength(1)
   })
@@ -205,7 +236,7 @@ describe('quirky.worktree remove', () => {
 describe('describeRemove and the confirmation', () => {
   test('SC-43: the confirm question names the worktree and its path; force says what it discards', async () => {
     const { client, repo } = await start({ fakeAsk: true })
-    const worktree = (await call(client, 'quirky.worktree/create', { repo: repo.id, name: 'feature-x' })) as Worktree
+    const worktree = await createWt(client, { repo: repo.id, name: 'feature-x' })
     expect(await call(client, 'quirky.worktree/describeRemove', { worktree: 'name:feature-x' })).toBe(
       `Remove worktree feature-x (${worktree.path})?`
     )
@@ -222,7 +253,7 @@ describe('describeRemove and the confirmation', () => {
     const ask = fakeAsks().get(data.askId)!
     ask.status = 'answered'
     ask.value = true
-    expect(await call(client, 'quirky.worktree/remove', { worktree: 'feature-x', confirmation: data.askId })).toEqual({ ok: true })
+    expect(await call(client, 'quirky.worktree/remove', { worktree: 'feature-x', confirmation: data.askId })).toEqual({ ok: true, removed: [worktree.id] })
     expect(await list(client, repo.id)).toHaveLength(1)
   })
 
@@ -307,7 +338,7 @@ describe('repo removal and worktree ownership', () => {
 
   test('ownedIds lists the main worktree and the created ones; removing the repo forgets them', async () => {
     const { t, client, repo } = await start()
-    const created = (await call(client, 'quirky.worktree/create', { repo: repo.id, name: 'feature' })) as Worktree
+    const created = await createWt(client, { repo: repo.id, name: 'feature' })
     const owned = (await call(client, 'quirky.worktree/ownedIds', { repo: repo.id })) as string[]
     expect(owned).toHaveLength(2)
     expect(owned).toContain(created.id)

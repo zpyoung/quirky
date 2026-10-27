@@ -1,139 +1,36 @@
-import { Database } from 'bun:sqlite'
-import { existsSync } from 'node:fs'
-import { basename, join } from 'node:path'
-import {
-  formatContributionId,
-  RpcErrorCode,
-  type PluginCaller,
-  type PluginContext,
-  type PluginStore,
-  type Repo
-} from '@quirky/protocol'
-import { NoSuchDirectoryError, gitApi } from '@quirky/git'
-import { expandHome, resolveRealPath } from './paths'
-import { SelectorSyntaxError, matchRepos } from './selector'
+import { formatContributionId, type PluginCaller, type PluginContext } from '@quirky/protocol'
+import { createEnv } from './src/env'
+import * as groups from './src/groups'
+import { cloneRepo, createRepo, addRepo, removeRepo } from './src/projects'
+import { importRepos, scan } from './src/scan'
+import * as settings from './src/settings'
+import { createStore } from './src/store'
 
-type RepoRow = { id: string; name: string; path: string; added_at: number }
-
-const toRepo = (row: RepoRow): Repo => ({ id: row.id, name: row.name, path: row.path, addedAt: row.added_at })
-
-function randomId(length = 12): string {
-  return crypto.randomUUID().replaceAll('-', '').slice(0, length)
-}
-
-/** Rows of `table` in the v1 `<home>/quirky.db`, or none when it is missing or unreadable. */
-function readV1Rows<T>(home: string, table: string, log: (message: string) => void): T[] {
-  const file = join(home, 'quirky.db')
-  if (!existsSync(file)) return []
-  let db: Database | undefined
-  try {
-    db = new Database(file, { readonly: true })
-    const present = db.query("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?").get(table)
-    return present ? (db.query(`SELECT * FROM ${table}`).all() as T[]) : []
-  } catch (error) {
-    log(`could not read ${table} from the v1 database: ${error instanceof Error ? error.message : String(error)}`)
-    return []
-  } finally {
-    db?.close()
-  }
-}
-
-function createStore(context: PluginContext): PluginStore {
-  return context.openStore([
-    (store) => {
-      store.exec(`
-        CREATE TABLE repos (
-          id TEXT PRIMARY KEY,
-          name TEXT NOT NULL,
-          path TEXT NOT NULL UNIQUE,
-          added_at INTEGER NOT NULL
-        )
-      `)
-      for (const row of readV1Rows<RepoRow>(context.home, 'repos', context.log)) {
-        store.run('INSERT OR IGNORE INTO repos (id, name, path, added_at) VALUES (?, ?, ?, ?)', row.id, row.name, row.path, row.added_at)
-      }
-    }
-  ])
-}
-
-function isMethodNotFound(error: unknown): boolean {
-  return (error as { code?: unknown } | null)?.code === RpcErrorCode.MethodNotFound
-}
-
-/** The result of `method`, or `fallback` when the plugin that provides it is absent or disabled. */
-async function callIfPresent<T>(context: PluginContext, method: string, params: Record<string, unknown>, fallback: T): Promise<T> {
-  try {
-    return (await context.call(method, params)) as T
-  } catch (error) {
-    if (isMethodNotFound(error)) return fallback
-    throw error
-  }
-}
+type Params = Record<string, any>
 
 export function activate(context: PluginContext): void {
-  const store = createStore(context)
-  const list = (): Repo[] => store.all<RepoRow>('SELECT * FROM repos ORDER BY added_at, id').map(toRepo)
-
-  const fail = (kind: 'invalid-params' | 'not-found' | 'conflict', message: string, data?: unknown) =>
-    data === undefined ? context.error(kind, message) : Object.assign(context.error(kind, message), { data })
-
-  function resolve(selector: string): Repo {
-    let matches: Repo[]
-    try {
-      matches = matchRepos(list(), selector)
-    } catch (error) {
-      if (error instanceof SelectorSyntaxError) throw fail('invalid-params', error.message)
-      throw error
-    }
-    if (matches.length === 1) return matches[0]!
-    if (matches.length === 0) throw fail('not-found', `no repo matches ${selector}; use id:, name: or path:`)
-    const ids = matches.map((repo) => `id:${repo.id}`)
-    throw fail('conflict', `${selector} matches ${matches.length} repos: ${ids.join(', ')}`, { matches: ids })
-  }
-
-  async function add(path: string): Promise<Repo> {
-    const expanded = expandHome(path)
-    const git = gitApi()
-    let root: string
-    try {
-      root = await git.resolveRepoRoot(expanded)
-    } catch (error) {
-      if (error instanceof NoSuchDirectoryError) throw fail('invalid-params', `no such directory: ${expanded}`)
-      throw fail('invalid-params', `not a git repository: ${expanded}`)
-    }
-    const real = resolveRealPath(root)
-    const existing = store.get<RepoRow>('SELECT * FROM repos WHERE path = ?', real)
-    if (existing) return toRepo(existing)
-    const repo: Repo = { id: `repo_${randomId()}`, name: basename(real), path: real, addedAt: Date.now() }
-    store.run('INSERT INTO repos (id, name, path, added_at) VALUES (?, ?, ?, ?)', repo.id, repo.name, repo.path, repo.addedAt)
-    context.emit('changed', {})
-    return repo
-  }
-
-  /**
-   * Closes every session in a worktree of `repo`, so removal leaves nothing running in a folder
-   * Quirky no longer tracks. A close that fails aborts the removal and the repo stays.
-   */
-  async function closeSessions(repo: Repo): Promise<void> {
-    const owned = await callIfPresent<string[]>(context, 'quirky.worktree/ownedIds', { repo: repo.id }, [])
-    if (owned.length === 0) return
-    const sessions = await callIfPresent<{ id: string; worktreeId: string }[]>(context, 'quirky.session/list', {}, [])
-    for (const session of sessions) {
-      if (owned.includes(session.worktreeId)) await context.call('quirky.session/close', { session: session.id })
-    }
-  }
-
-  const provide = (name: string, handler: (params: Record<string, unknown>, caller: PluginCaller) => unknown) =>
+  const env = createEnv(context, createStore(context))
+  const provide = (name: string, handler: (params: Params, caller: PluginCaller) => unknown) =>
     context.provide(formatContributionId('method', context.pluginId, name), handler)
 
-  provide('list', () => list())
-  provide('add', (params) => add(String(params.path)))
-  provide('resolve', (params) => resolve(String(params.selector)))
-  provide('remove', async (params) => {
-    const repo = resolve(String(params.repo))
-    await closeSessions(repo)
-    store.run('DELETE FROM repos WHERE id = ?', repo.id)
-    context.emit('changed', {})
-    return { ok: true }
-  })
+  provide('list', () => env.list())
+  provide('add', (params) => addRepo(env, String(params.path), params.folder === true))
+  provide('clone', (params) => cloneRepo(env, params as Parameters<typeof cloneRepo>[1]))
+  provide('create', (params) => createRepo(env, params as Parameters<typeof createRepo>[1]))
+  provide('scan', (params) => scan(env, params as Parameters<typeof scan>[1]))
+  provide('import', (params) => importRepos(env, params as Parameters<typeof importRepos>[1]))
+  provide('remove', (params) => removeRepo(env, String(params.repo)))
+  provide('resolve', (params) => env.resolve(String(params.selector)))
+  provide('show', (params) => settings.show(env, params as Parameters<typeof settings.show>[1]))
+  provide('set', (params) => settings.set(env, params as settings.SetParams))
+  provide('hooks', (params) => settings.hooks(env, params as Parameters<typeof settings.hooks>[1]))
+  provide('trustHooks', (params) => settings.trustHooks(env, params as Parameters<typeof settings.trustHooks>[1]))
+
+  provide('groupList', () => groups.groupList(env))
+  provide('groupCreate', (params) => groups.groupCreate(env, params as Parameters<typeof groups.groupCreate>[1]))
+  provide('groupRename', (params) => groups.groupRename(env, params as Parameters<typeof groups.groupRename>[1]))
+  provide('groupDelete', (params) => groups.groupDelete(env, params as Parameters<typeof groups.groupDelete>[1]))
+  provide('groupAdd', (params) => groups.groupAdd(env, params as Parameters<typeof groups.groupAdd>[1]))
+  provide('groupRemove', (params) => groups.groupRemove(env, params as Parameters<typeof groups.groupRemove>[1]))
+  provide('groupCollapse', (params) => groups.groupCollapse(env, params as Parameters<typeof groups.groupCollapse>[1]))
 }

@@ -2,10 +2,26 @@ import type { PluginContext, Worktree } from '@quirky/protocol'
 
 const head = 'a'.repeat(40)
 
+const WORKTREE_DEFAULTS = {
+  kind: 'git',
+  displayName: null,
+  comment: '',
+  status: 'in-progress',
+  pinned: false,
+  unread: false,
+  parentId: null,
+  createdAt: 0,
+  createdBy: 'external',
+  baseRef: null,
+  keepBranch: false,
+  removing: false,
+  groupId: null
+} as const
+
 export const WORKTREES: Worktree[] = [
-  { id: 'wt_main', repoId: 'repo_alpha', path: '/fake/alpha', branch: 'main', head, isMain: true, name: 'main' },
-  { id: 'wt_other', repoId: 'repo_alpha', path: '/fake/other', branch: 'other', head, isMain: false, name: 'other' },
-  { id: 'wt_beta', repoId: 'repo_beta', path: '/fake/beta', branch: 'main', head, isMain: true, name: 'main' }
+  { id: 'wt_main', repoId: 'repo_alpha', path: '/fake/alpha', branch: 'main', head, isMain: true, name: 'main', ...WORKTREE_DEFAULTS },
+  { id: 'wt_other', repoId: 'repo_alpha', path: '/fake/other', branch: 'other', head, isMain: false, name: 'other', ...WORKTREE_DEFAULTS },
+  { id: 'wt_beta', repoId: 'repo_beta', path: '/fake/beta', branch: 'main', head, isMain: true, name: 'main', ...WORKTREE_DEFAULTS }
 ]
 
 const contains = (parent: string, child: string) => child === parent || child.startsWith(`${parent}/`)
@@ -14,7 +30,7 @@ const contains = (parent: string, child: string) => child === parent || child.st
 const worktrees = (): Worktree[] => {
   const real = process.env.QUIRKY_TEST_REAL_WORKTREE
   return real
-    ? [...WORKTREES, { id: 'wt_real', repoId: 'repo_alpha', path: real, branch: 'real', head, isMain: false, name: 'real' }]
+    ? [...WORKTREES, { id: 'wt_real', repoId: 'repo_alpha', path: real, branch: 'real', head, isMain: false, name: 'real', ...WORKTREE_DEFAULTS }]
     : WORKTREES
 }
 

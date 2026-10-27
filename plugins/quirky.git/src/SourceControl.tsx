@@ -14,6 +14,8 @@ function message(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
 }
 
+const isFolderRefusal = (error: unknown): boolean => (error as { data?: { reason?: unknown } } | null)?.data?.reason === 'folder-workspace'
+
 /** Source control for the worktree the open view shows; follows the layout as the view changes. */
 export function SourceControl({ context, report }: Props) {
   const [layout, setLayout] = useState(() => context.getLayout())
@@ -44,6 +46,7 @@ export function SourceControl({ context, report }: Props) {
 function WorktreeChanges({ context, worktree, report }: Props & { worktree: string }) {
   const [status, setStatus] = useState<GitStatus | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [unavailable, setUnavailable] = useState<string | null>(null)
   const [selection, setSelection] = useState<DiffSelection | null>(null)
   const [diff, setDiff] = useState<GitDiff | null>(null)
 
@@ -51,8 +54,10 @@ function WorktreeChanges({ context, worktree, report }: Props & { worktree: stri
     try {
       setStatus((await context.call('quirky.git/status', { worktree })) as GitStatus)
       setError(null)
+      setUnavailable(null)
     } catch (e) {
-      setError(message(e))
+      if (isFolderRefusal(e)) setUnavailable(message(e))
+      else setError(message(e))
     }
   }, [context, worktree])
 
@@ -121,6 +126,17 @@ function WorktreeChanges({ context, worktree, report }: Props & { worktree: stri
   }
 
   const selectedKey = selection ? fileKey(selection.path, selection.staged) : null
+
+  if (unavailable !== null) {
+    return (
+      <div className="scm">
+        <div className="scm-header">
+          <strong>Source control</strong>
+        </div>
+        <p className="muted pad scm-unavailable">{unavailable}</p>
+      </div>
+    )
+  }
 
   return (
     <div className="scm">
