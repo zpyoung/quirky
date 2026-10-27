@@ -441,9 +441,10 @@ export function movePaneToTab(ws: Workspace, paneId: string, toTabId: string, id
   if (!from) return fail('not-found', `no pane ${paneId}`)
   const to = locateTab(ws, toTabId)
   if (!to) return fail('not-found', `no tab ${toTabId}`)
-  if (!isTerminalTab(to.tab)) return fail('invalid-params', `view tab ${toTabId} has no panes`)
+  const targetTab = to.tab
+  if (!isTerminalTab(targetTab)) return fail('invalid-params', `view tab ${toTabId} has no panes`)
   if (from.tab.id === toTabId) return fail('invalid-params', `pane ${paneId} is already in tab ${toTabId}`)
-  return moveAcross(ws, from, to.tab, (root) => insertPane(root, to.tab.activePane, from.pane, 'right', ids))
+  return moveAcross(ws, from, targetTab, (root) => insertPane(root, targetTab.activePane, from.pane, 'right', ids))
 }
 
 function moveAcross(ws: Workspace, from: PaneLocation, target: TerminalTab, insert: (root: PaneNode) => OpResult<PaneNode>): OpResult {

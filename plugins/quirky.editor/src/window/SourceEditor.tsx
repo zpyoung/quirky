@@ -1,5 +1,5 @@
 import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react'
-import { closeHistory, defaultKeymap, history, historyKeymap, indentWithTab, redo, undo } from '@codemirror/commands'
+import { defaultKeymap, history, historyKeymap, indentWithTab, isolateHistory, redo, undo } from '@codemirror/commands'
 import { css } from '@codemirror/lang-css'
 import { html } from '@codemirror/lang-html'
 import { javascript } from '@codemirror/lang-javascript'
@@ -122,7 +122,7 @@ function initialSelection(buffer: EditorSurfaceBuffer, tabId: string | null): Ed
   const view = viewStateForTab(buffer, tabId) as { selection?: { anchor?: unknown; head?: unknown }; cursor?: { line?: unknown; column?: unknown } } | undefined
   const saved = view?.selection
   if (typeof saved?.anchor === 'number' && typeof saved.head === 'number') {
-    return EditorSelection.range(Math.min(text.length, Math.max(0, saved.anchor)), Math.min(text.length, Math.max(0, saved.head)))
+    return EditorSelection.single(Math.min(text.length, Math.max(0, saved.anchor)), Math.min(text.length, Math.max(0, saved.head)))
   }
   const cursor = view?.cursor
   if (typeof cursor?.line === 'number') {
@@ -139,7 +139,7 @@ function initialSelection(buffer: EditorSurfaceBuffer, tabId: string | null): Ed
     }
     const newline = text.indexOf('\n', lineStart)
     const lineEnd = newline < 0 ? text.length : newline
-    return EditorSelection.cursor(Math.min(lineEnd, lineStart + column - 1))
+    return EditorSelection.single(Math.min(lineEnd, lineStart + column - 1))
   }
   return undefined
 }
@@ -149,7 +149,7 @@ export const SourceEditor = forwardRef<SourceEditorHandle, Props>(function Sourc
   const host = useRef<HTMLDivElement>(null)
   const canvas = useRef<HTMLCanvasElement>(null)
   const viewRef = useRef<EditorView | null>(null)
-  const pendingView = useRef<number | undefined>()
+  const pendingView = useRef<number | undefined>(undefined)
   const acceptedText = useRef(props.buffer.draft ?? props.buffer.content)
   const suppressDraft = useRef(false)
   const scheduleView = useRef<() => void>(() => {})
@@ -271,13 +271,11 @@ export const SourceEditor = forwardRef<SourceEditorHandle, Props>(function Sourc
             }
             setPasteError(null)
             callbacks.current.onError(null)
-            closeHistory(view)
             const range = view.state.selection.main
             view.dispatch({
               changes: { from: range.from, to: range.to, insert: text },
-              annotations: [Transaction.userEvent.of('input.paste')]
+              annotations: [Transaction.userEvent.of('input.paste'), isolateHistory.of('full')]
             })
-            closeHistory(view)
             return true
           },
           contextmenu: (event, view) => {

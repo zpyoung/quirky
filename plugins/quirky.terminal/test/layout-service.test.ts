@@ -11,7 +11,7 @@ import { LayoutService } from '../src/layout/service'
 import { appendTab, emptyWorkspace, makeTab } from '../src/layout/ops'
 import { sequentialIds, groupsInOrder, paneLeaves } from '../src/layout/tree'
 import { isTerminalTab } from '../src/layout/types'
-import type { FloatingState, Group, PaneLeaf, TerminalTab, Workspace } from '../src/layout/types'
+import type { FloatingState, Group, PaneLeaf, Tab, TerminalTab, Workspace } from '../src/layout/types'
 import { sessionCreates } from './fakes/quirky.session/main'
 import { call, createSession, restartDaemon, startPluginHarness, TERMINAL_PLUGINS, type PluginSet } from './support'
 

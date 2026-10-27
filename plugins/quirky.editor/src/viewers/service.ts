@@ -16,6 +16,7 @@ import {
   readCsvPage,
   resetCsvPager,
   serializeCsv,
+  type CsvPageRow,
   type CsvPager,
   type CsvTable
 } from './csv'

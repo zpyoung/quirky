@@ -1,4 +1,5 @@
 import { Node } from '@tiptap/core'
+import type { MarkdownLexerConfiguration, MarkdownToken } from '@tiptap/core'
 
 function decodeHtmlText(value: string): string {
   return value.replace(/&(?:amp|lt|gt|quot|#39);/g, (entity) => {
@@ -118,7 +119,7 @@ export const MarkdownToggle = Node.create({
   markdownTokenizer: {
     name: 'markdownToggle',
     start: (source: string) => source.search(/<details(?=\s|>)/i),
-    tokenize: (source: string, _tokens: unknown, lexer: { blockTokens(value: string): unknown[] }) => {
+    tokenize: (source: string, _tokens: MarkdownToken[], lexer: MarkdownLexerConfiguration) => {
       const opening = /^<details(?:\s[^>]*)?>\s*<summary(?:\s[^>]*)?>([\s\S]*?)<\/summary>\s*/i.exec(source)
       if (!opening) return undefined
       const bodyStart = opening[0].length

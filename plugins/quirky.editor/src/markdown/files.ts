@@ -1,5 +1,6 @@
 import { constants, existsSync, fstatSync, lstatSync, openSync, readSync, closeSync } from 'node:fs'
 import { opendir } from 'node:fs/promises'
+import { dirname, extname, join, normalize, posix, relative, sep } from 'node:path'
 import type { EditorBuffer, EditorServices } from '../types'
 import {
   MARKDOWN_MAX_DOCUMENTS,
@@ -284,7 +285,7 @@ export function imageMimeType(path: string): string | null {
   return IMAGE_MIME_TYPES[extname(path).toLowerCase()] ?? null
 }
 
-export function destinationDirectory(buffer: EditorBuffer): string {
+export function destinationDirectory(buffer: Pick<EditorBuffer, 'relativePath'>): string {
   const directory = dirname(buffer.relativePath)
   return directory === '.' ? '.' : directory
 }

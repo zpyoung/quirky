@@ -32,6 +32,15 @@ function requiredString(value: ApiRecord, key: string): string {
   return result
 }
 
+function kernelPid(value: ApiRecord): number {
+  const kernel = record(value.kernel, 'kernel state')
+  const pid = kernel.pid
+  if (typeof pid !== 'number' || !Number.isSafeInteger(pid) || pid <= 0) {
+    throw new Error('kernel state has no process id')
+  }
+  return pid
+}
+
 function outputText(output: ApiRecord): string {
   if (typeof output.text === 'string') return output.text
   const data = output.data
@@ -340,7 +349,7 @@ describe('notebook API behavior', () => {
     await notebook(world, bufferId, 'trust')
     await notebook(world, bufferId, 'start', { python })
     const initial = record(await notebook(world, bufferId, 'state'))
-    const pid = pythonPid(initial)
+    const pid = kernelPid(initial)
 
     const running = notebook(world, bufferId, 'run', { index: 0, mode: 'in-place' })
     await waitForAsync(async () => Boolean(record(await notebook(world, bufferId, 'state')).busy))
@@ -351,7 +360,7 @@ describe('notebook API behavior', () => {
     expect(restarted).toMatchObject({ trusted: false, busy: false, kernel: { status: 'stopped' } })
     await notebook(world, bufferId, 'trust')
     await notebook(world, bufferId, 'start', { python })
-    const restartedPid = pythonPid(record(await notebook(world, bufferId, 'state')))
+    const restartedPid = kernelPid(record(await notebook(world, bufferId, 'state')))
     expect(restartedPid).not.toBe(pid)
     await notebook(world, bufferId, 'shutdown')
     await world.call('save', { bufferId })

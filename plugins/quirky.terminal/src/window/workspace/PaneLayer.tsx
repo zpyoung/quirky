@@ -7,6 +7,7 @@ import { CollapseIcon, CloseIcon, ExpandIcon, GripIcon } from './icons'
 import type { ControllerState, PaneDropTarget, WorkspaceController } from './controller'
 import { isViewTab } from '../../layout/types'
 import { useBoxSize } from './useBoxSize'
+import { byPaneId, px, STRUCTURED_VIEW_ID } from './model'
 
 /** The narrowest a pane may be drawn or dragged to, unless its pair is smaller. */
 export const MIN_PANE_PX = 50
@@ -134,7 +135,7 @@ function ExitOverlay({ controller, leaf }: { controller: WorkspaceController; le
   )
 }
 
-function PaneHeader({ controller, state, tab, leaf, multi, onGrip }: { controller: WorkspaceController; state: ControllerState; tab: Tab; leaf: PaneLeaf; multi: boolean; onGrip: (event: ReactMouseEvent) => void }) {
+function PaneHeader({ controller, state, tab, leaf, multi, onGrip }: { controller: WorkspaceController; state: ControllerState; tab: TerminalTab; leaf: PaneLeaf; multi: boolean; onGrip: (event: ReactMouseEvent) => void }) {
   const renaming = state.rename?.kind === 'pane' && state.rename.id === leaf.id
   const expanded = tab.expandedPane !== null
   let close

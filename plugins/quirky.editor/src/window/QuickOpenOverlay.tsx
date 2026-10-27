@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react'
 import type { UiPluginContext } from '@quirky/protocol'
-import { dismissQuickOpen, useQuickOpenRequest } from '../overlayState'
+import { dismissQuickOpen, useQuickOpenRequest } from './overlayState'
 
 type QuickOpenResult = { path: string; name: string; score: number; line?: number; column?: number }
 type QuickOpenResponse = { results: QuickOpenResult[]; truncated: boolean; history: string[] }

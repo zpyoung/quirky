@@ -1,3 +1,4 @@
+import { displayTitle } from '../layout/titles'
 import { isViewTab } from '../layout/types'
 import type { FloatingState, GroupNode, PaneNode, QuickCommand, Tab, Workspace } from '../layout/types'
 

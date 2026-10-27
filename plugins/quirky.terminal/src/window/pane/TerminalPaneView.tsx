@@ -70,6 +70,7 @@ export type TerminalPaneProps = {
   /** The owning worktree ID, or `floating` when this pane has no worktree owner. */
   workspaceId?: string
   /** The directory relative file links are joined onto. */
+  cwd: string
   settings: PaneSettings
   /** Whether this is the focused pane of its tab; the pane takes keyboard focus when it becomes active. */
   active: boolean

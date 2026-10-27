@@ -7,7 +7,7 @@ const encoder = new TextEncoder()
 
 type TransferKind = 'draft' | 'createFile' | 'import'
 type TransferBegin = { transferId: string; offset: 0; maxChunkBytes: number }
-type TransferChunk = { transferId: string; offset: number; data: string }
+type TransferChunk = { action: 'chunk'; transferId: string; offset: number; data: string }
 type TransferChunkResult = { transferId: string; offset: number }
 
 export function utf8ByteLength(text: string): number {

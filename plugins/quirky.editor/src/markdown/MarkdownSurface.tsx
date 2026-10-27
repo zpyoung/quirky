@@ -1,6 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { EditorContent, useEditor, type Editor } from '@tiptap/react'
 import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
+import remarkMath from 'remark-math'
 import type { SurfaceProps } from '../types'
 import type { MarkdownHeading } from './source'
 import type { MarkdownReviewNote } from './notes'
@@ -774,7 +776,7 @@ function RichSurface({ props }: { props: SurfaceProps }): React.JSX.Element {
   }, [call])
 
   const checkLink = useCallback(async (target: string) => {
-    const result = await call(MARKDOWN_METHOD, { action: 'links', target }) as { safe?: boolean; kind?: string; resolved?: string | null; ambiguous?: boolean }
+    const result = await call(MARKDOWN_METHOD, { action: 'links', target }) as { safe?: boolean; kind?: string; resolved?: string | null; ambiguous?: boolean; anchor?: string | null }
     if (!result.safe || result.ambiguous) throw new Error(result.ambiguous ? 'This document link is ambiguous; use its relative path.' : 'This link target is unsafe or unavailable.')
     return result
   }, [call])

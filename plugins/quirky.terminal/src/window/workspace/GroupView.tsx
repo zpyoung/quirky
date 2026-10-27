@@ -2,7 +2,7 @@ import { useRef, type DragEvent, type MouseEvent as ReactMouseEvent } from 'reac
 import { displayTitle } from '../../layout/titles'
 import { dropZone, paneLeaves, roundRatio } from '../../layout/tree'
 import type { DropZone } from '../../layout/tree'
-import { isTerminalTab, isViewTab } from '../../layout/types'
+import { GROUP_RATIO_MAX, GROUP_RATIO_MIN, isTerminalTab, isViewTab, TAB_COLOR_HEX } from '../../layout/types'
 import type { Group, GroupNode, Tab } from '../../layout/types'
 import { CollapseIcon, CloseIcon, PinIcon } from './icons'
 import type { ControllerState, WorkspaceController } from './controller'

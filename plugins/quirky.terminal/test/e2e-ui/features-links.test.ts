@@ -1,6 +1,7 @@
 import { afterEach, expect, test } from 'bun:test'
 import { mkdirSync, realpathSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { mouse } from './support'
 import type { ILink } from '@xterm/xterm'
 import {
   FEATURE_MS,
@@ -107,24 +108,24 @@ test(
     const buttonNamed = (label: string) => [...document.querySelectorAll<HTMLElement>('[data-pane-link-popover] button')].find((button) => button.textContent === label)!
 
     // a plain click offers the actions, and each does what it says
-    url.activate(mouse(), url.text)
+    url.activate(mouse('mouseup'), url.text)
     await waitFor('the URL popover', () => (popover() ? true : undefined))
     expect(popoverLabels()).toEqual(['Open', 'Copy Link'])
     expect(clicks()).toEqual([])
     buttonNamed('Open').click()
     await waitFor('the URL to be opened', () => (clicks().length === 1 ? true : undefined))
     expect(clicks()).toEqual([{ target: URL_TEXT, reveal: false }])
-    url.activate(mouse(), url.text)
+    url.activate(mouse('mouseup'), url.text)
     await waitFor('the popover again', () => (popover() ? true : undefined))
     buttonNamed('Copy Link').click()
     await waitFor('the link on the clipboard', () => (f.clipboard.writes.at(-1) === URL_TEXT ? true : undefined))
 
-    path.activate(mouse(), path.text)
+    path.activate(mouse('mouseup'), path.text)
     await waitFor('the file popover', () => (popover() ? true : undefined))
     expect(popoverLabels()).toEqual(['Open with Default App', 'Reveal in Finder', 'Copy Path'])
     buttonNamed('Reveal in Finder').click()
     await waitFor('the file to be revealed', () => (clicks().length === 2 ? true : undefined))
-    path.activate(mouse(), path.text)
+    path.activate(mouse('mouseup'), path.text)
     await waitFor('the popover again', () => (popover() ? true : undefined))
     buttonNamed('Copy Path').click()
     await waitFor('the path on the clipboard', () => (f.clipboard.writes.at(-1) === file ? true : undefined))
@@ -134,11 +135,11 @@ test(
     ])
 
     // Cmd-click opens URLs; Shift-Cmd-click copies URLs and reveals paths.
-    url.activate(mouse({ metaKey: true }), url.text)
+    url.activate(mouse('mouseup', { metaKey: true }), url.text)
     await waitFor('the URL Cmd-click to open', () => (clicks().length === 3 ? true : undefined))
     const writes = f.clipboard.writes.length
-    url.activate(mouse({ metaKey: true, shiftKey: true }), url.text)
-    path.activate(mouse({ metaKey: true, shiftKey: true }), path.text)
+    url.activate(mouse('mouseup', { metaKey: true, shiftKey: true }), url.text)
+    path.activate(mouse('mouseup', { metaKey: true, shiftKey: true }), path.text)
     await waitFor('the URL to be copied and the file revealed', () => (clicks().length === 4 && f.clipboard.writes.length === writes + 1 ? true : undefined))
     expect(clicks().slice(2)).toEqual([
       { target: URL_TEXT, reveal: false },
@@ -147,25 +148,25 @@ test(
     expect(f.clipboard.writes.at(-1)).toBe(URL_TEXT)
 
     // A middle click follows its setting, while other click combinations do nothing.
-    url.activate(mouse({ button: 1 }), url.text)
+    url.activate(mouse('mouseup', { button: 1 }), url.text)
     await waitFor('the middle URL to open', () => (clicks().length === 5 ? true : undefined))
     expect(clicks().slice(4)).toEqual([{ target: URL_TEXT, reveal: false }])
-    url.activate(mouse({ altKey: true }), url.text)
-    url.activate(mouse({ button: 2 }), url.text)
-    path.activate(mouse({ altKey: true }), path.text)
+    url.activate(mouse('mouseup', { altKey: true }), url.text)
+    url.activate(mouse('mouseup', { button: 2 }), url.text)
+    path.activate(mouse('mouseup', { altKey: true }), path.text)
     expect(clicks()).toHaveLength(5)
     expect(popover()).toBeNull()
 
     // the plain click setting: Open opens, Leave to terminal does nothing
     await f.h.ok(['setting', 'set', 'setting:quirky.terminal/link-click', 'open'])
     await waitFor('the setting in the window', () => (settingNow(f, 'setting:quirky.terminal/link-click') === 'open' ? true : undefined))
-    url.activate(mouse(), url.text)
+    url.activate(mouse('mouseup'), url.text)
     await waitFor('a plain click to open', () => (clicks().length > 5 ? true : undefined))
     await f.h.ok(['setting', 'set', 'setting:quirky.terminal/link-click', 'terminal'])
     await waitFor('the setting in the window', () => (settingNow(f, 'setting:quirky.terminal/link-click') === 'terminal' ? true : undefined))
     const before = clicks().length
-    url.activate(mouse(), url.text)
-    path.activate(mouse(), path.text)
+    url.activate(mouse('mouseup'), url.text)
+    path.activate(mouse('mouseup'), path.text)
     expect(clicks()).toHaveLength(before)
     expect(popover()).toBeNull()
 
@@ -185,7 +186,7 @@ test(
   async () => {
     const { f, session, root, rowOf } = await withLinks()
     const path = await linkAt(f, session, rowOf('src/app.ts:12:4'), 'src/app.ts')
-    path.activate(mouse({ metaKey: true }), path.text)
+    path.activate(mouse('mouseup', { metaKey: true }), path.text)
 
     const openCall = await waitFor('editor open API call', () => editorOpenCalls(f).at(-1))
     expect(openCall.params).toMatchObject({ worktree: `id:${f.worktree}`, path: 'src/app.ts', line: 12, column: 4, focus: true })

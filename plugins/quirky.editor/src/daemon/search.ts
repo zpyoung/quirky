@@ -1,4 +1,5 @@
-import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process'
+import { spawn, type ChildProcessByStdio } from 'node:child_process'
+import type { Readable } from 'node:stream'
 import { randomUUID } from 'node:crypto'
 import type { PluginCaller, PluginContext } from '@quirky/protocol'
 import type { EditorSearchState, SearchFile } from '../types'
@@ -36,7 +37,7 @@ type MatchData = {
 
 type RunningSearch = {
   id: string
-  child: ChildProcessWithoutNullStreams
+  child: ChildProcessByStdio<null, Readable, Readable>
   timer: ReturnType<typeof setTimeout>
   result: SearchResult
   done: Promise<SearchResult>
@@ -100,7 +101,7 @@ export class ContentsSearch {
     this.cancel(worktreeId)
     const requestId = params.requestId ?? randomUUID()
     const args = this.arguments(params, query, includePattern, excludePattern)
-    let child: ChildProcessWithoutNullStreams
+    let child: ChildProcessByStdio<null, Readable, Readable>
     try {
       child = spawn('rg', args, { cwd: root, stdio: ['ignore', 'pipe', 'pipe'] })
     } catch (error) {

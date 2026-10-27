@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, test, vi } from 'bun:test'
+import { afterEach, describe, expect, setSystemTime, test } from 'bun:test'
 import { spawnSync } from 'node:child_process'
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, utimesSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -157,8 +157,12 @@ describe('editor core through the daemon API', () => {
     })).rejects.toThrow()
     const publicBuffer = (await state(t)).buffers.find((item) => item.id === buffer.id)!
     expect(publicBuffer.draft).toBeUndefined()
-    expect(publicBuffer.draftLength).toBe(acknowledged.draft?.length)
-    expect(await readText(t, buffer.id, 'draft', publicBuffer.contentRevision, publicBuffer.draftLength!)).toBe(acknowledged.draft)
+    const expectedDraft = acknowledged.draft
+    if (expectedDraft === undefined || expectedDraft === null) throw new Error('small draft was not returned inline')
+    const draftLength = publicBuffer.draftLength
+    if (draftLength === null) throw new Error('draft length is missing')
+    expect(draftLength).toBe(expectedDraft.length)
+    expect(await readText(t, buffer.id, 'draft', publicBuffer.contentRevision, draftLength)).toBe(expectedDraft)
     const saved = await t.call<EditorBuffer>('quirky.editor/save', { bufferId: buffer.id })
     expect(readFileSync(join(t.root, 'answer.ts'), 'utf8')).toBe('const answer = 2;\n')
     expect(saved.draft).toBeNull()
@@ -846,15 +850,15 @@ describe('editor bounded transfers over the Unix socket', () => {
     const client = await connectUnix(t)
     try {
       const opened = await client.callAny('quirky.editor/open', { worktree: t.worktreeId, path: 'expiry.txt' }) as EditorBufferInfo
-      vi.useFakeTimers()
       const transfer = await client.callAny('quirky.editor/transfer', {
         action: 'begin', kind: 'draft', bufferId: opened.id, expectedRevision: opened.contentRevision, totalBytes: 12
       }) as { transferId: string }
-      await vi.advanceTimersByTimeAsync(5 * 60 * 1000 + 1)
+      setSystemTime(new Date(Date.now() + 5 * 60 * 1000 + 1))
+      // Looking up the expired capability awaits removal of its staging and draft gate.
       await expect(client.callAny('quirky.editor/transfer', { action: 'state', transferId: transfer.transferId })).rejects.toThrow()
       expect(await client.callAny('quirky.editor/canClose', { bufferId: opened.id, tabId: opened.tabId })).toBe(true)
     } finally {
-      vi.useRealTimers()
+      setSystemTime()
       client.close()
     }
   })

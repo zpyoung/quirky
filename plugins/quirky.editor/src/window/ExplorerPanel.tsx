@@ -105,10 +105,10 @@ export function ExplorerPanel({ context, report }: { context: UiPluginContext; r
   const [renamePath, setRenamePath] = useState<string | null>(null)
   const [renameValue, setRenameValue] = useState('')
   const [itemBusy, setItemBusy] = useState(false)
-  const searchRequest = useRef<string | undefined>()
+  const searchRequest = useRef<string | undefined>(undefined)
   const searchSequence = useRef(0)
   const inlineOpenedAt = useRef(0)
-  const inlineBlurTimer = useRef<number | undefined>()
+  const inlineBlurTimer = useRef<number | undefined>(undefined)
 
   useEffect(() => context.onLayout(() => setLayoutWorktree(worktreeFromLayout(context))), [context])
 

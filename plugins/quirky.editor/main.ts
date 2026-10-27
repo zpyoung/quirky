@@ -1,4 +1,4 @@
-import type { PluginContext } from '@quirky/protocol'
+import type { PluginCaller, PluginContext } from '@quirky/protocol'
 import { createMarkdownMethods } from './src/markdown/service'
 import { createNotebookMethods } from './src/notebook/service'
 import { createViewerMethods } from './src/viewers/service'
@@ -28,8 +28,8 @@ export async function activate(context: PluginContext): Promise<void> {
     ...viewerMethods.methods
   }
   for (const [name, handler] of Object.entries(methods)) {
-    context.provide(`method:${context.pluginId}/${name}`, async (params, caller) =>
-      core.projectPublic(name, await handler(params as Record<string, unknown>, caller as Parameters<typeof handler>[1]))
+    context.provide(`method:${context.pluginId}/${name}`, async (params: Record<string, unknown>, caller: PluginCaller) =>
+      core.projectPublic(name, await handler(params, caller))
     )
   }
   await core.restore()

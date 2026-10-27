@@ -16,7 +16,14 @@ export type NotebookDocument = JsonObject & {
   nbformat: number
   nbformat_minor: number
 }
-export type NotebookCellView = Omit<NotebookCell, 'source'> & { source: string }
+export type NotebookCellView = JsonObject & {
+  cell_type: NotebookCellType
+  metadata: JsonObject
+  source: string
+  id?: string
+  outputs?: JsonObject[]
+  execution_count?: number | null
+}
 export type NotebookParse = {
   valid: boolean
   rawSource: string

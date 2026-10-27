@@ -5,6 +5,7 @@ import type { Rect } from '../../layout/tree'
 import { isTerminalTab } from '../../layout/types'
 import type { Group, GroupNode, GroupSplit, PaneLeaf, Tab, TerminalTab, Workspace } from '../../layout/types'
 import type { PaneReport } from '../pane/TerminalPaneView'
+import { DEFAULT_PANE_SETTINGS, readPaneSettings, type PaneSettings } from '../pane/settings'
 
 export const STRUCTURED_VIEW_ID = 'view:quirky.session/structured'
 
@@ -129,9 +130,12 @@ export function focusedTabOf(ws: Workspace): TabLocation | null {
 /** The pane that has keyboard focus in the workspace: the active pane of the active tab of the active group. */
 export function focusedPaneOf(ws: Workspace): PaneLocation | null {
   const at = focusedTabOf(ws)
-  if (!at || !isTerminalTab(at.tab)) return null
-  const leaf = paneLeaves(at.tab.root).find((candidate) => candidate.id === at.tab.activePane) ?? paneLeaves(at.tab.root)[0]
-  return leaf ? { ...at, tab: at.tab, leaf } : null
+  if (!at) return null
+  const tab = at.tab
+  if (!isTerminalTab(tab)) return null
+  const leaves = paneLeaves(tab.root)
+  const leaf = leaves.find((candidate) => candidate.id === tab.activePane) ?? leaves[0]
+  return leaf ? { ...at, tab, leaf } : null
 }
 
 /** The panes a window mounts: each group's active terminal tab, or only its expanded pane. */

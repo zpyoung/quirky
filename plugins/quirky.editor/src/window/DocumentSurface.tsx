@@ -208,7 +208,7 @@ function DocumentBody({ context, input }: { context: UiPluginContext; input: Doc
   const ackRevision = useRef(info?.contentRevision ?? 0)
   const pendingDrafts = useRef(new Set<string>())
   const blockedDraft = useRef(false)
-  const undoReloadTimer = useRef<number | undefined>()
+  const undoReloadTimer = useRef<number | undefined>(undefined)
   const activeActions = useRef<{ flush(): Promise<void>; save(): Promise<void>; close(): Promise<boolean>; focus(): void }>({
     flush: async () => {},
     save: async () => {},

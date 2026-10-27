@@ -177,7 +177,7 @@ export class EditorDaemon {
       store,
       get: (bufferId) => this.get(bufferId),
       resolve: (worktree, caller) => this.paths.resolve(worktree, caller),
-      path: (worktreeId, path, options) => this.paths.path(worktreeId, path, options),
+      path: (worktreeId, path, options) => this.paths.path(worktreeId, path, options).then((authorized) => authorized.path),
       draft: (bufferId, content, expectedRevision) => this.draft(bufferId, content, expectedRevision),
       save: (bufferId, trigger) => this.save(bufferId, trigger),
       readBytes: (bufferId, offset, length) => this.readBytes(bufferId, offset, length),
@@ -188,7 +188,10 @@ export class EditorDaemon {
     this.methods = {
       open: (params, caller) => this.open(params as unknown as EditorOpenParams, caller),
       state: (params, caller) => this.state(params as CoreStateParams, caller),
-      draft: (params) => this.draft(params as unknown as DraftParams),
+      draft: (params) => {
+        const request = params as unknown as DraftParams
+        return this.draft(request.bufferId, request.content, request.expectedRevision)
+      },
       save: (params) => this.save((params as SaveParams).bufferId, (params as SaveParams).trigger),
       close: (params) => this.close(params as unknown as CloseParams),
       canClose: (params) => this.canClose(params as unknown as CloseParams),
@@ -638,10 +641,11 @@ export class EditorDaemon {
   }
 
   async read(params: EditorReadParams): Promise<EditorReadResult> {
+    const action: string = params.action
     const buffer = this.get(params.bufferId)
     if (params.action === 'buffer') return { buffer, eof: true, size: buffer.size }
     if (params.action === 'bytes') return await this.readBytes(params.bufferId, params.offset ?? 0, params.length ?? MAX_READ_BYTES)
-    if (params.action !== 'text') throw this.context.error('invalid-params', `unknown read action: ${params.action}`)
+    if (params.action !== 'text') throw this.context.error('invalid-params', `unknown read action: ${action}`)
     if (!Number.isInteger(params.contentRevision) || params.contentRevision !== buffer.contentRevision) {
       throw this.context.error('conflict', `stale editor content revision: expected ${params.contentRevision}, current ${buffer.contentRevision}`)
     }
@@ -1109,11 +1113,12 @@ export class EditorDaemon {
     const invalid = keys.find((key) => !VIEW_KEYS.has(key))
     if (invalid !== undefined) throw this.context.error('invalid-params', `view patch cannot change protected or unknown field: ${invalid}`)
     if (keys.length > 32) throw this.context.error('invalid-params', 'view patch contains too many fields')
-    const mode = patch.mode
-    if (mode === 'preview') throw this.context.error('invalid-params', 'Preview is a separate editor tab; open it with mode preview.')
-    if (mode !== undefined && mode !== 'source' && mode !== 'rich') {
+    const requestedMode = patch.mode
+    if (requestedMode === 'preview') throw this.context.error('invalid-params', 'Preview is a separate editor tab; open it with mode preview.')
+    if (requestedMode !== undefined && requestedMode !== 'source' && requestedMode !== 'rich') {
       throw this.context.error('invalid-params', 'Editable view mode must be source or rich')
     }
+    const mode: EditorMode | undefined = requestedMode === 'source' || requestedMode === 'rich' ? requestedMode : undefined
     for (const field of ['line', 'column', 'cursorLine', 'cursorColumn'] as const) {
       const position = patch[field]
       if (position !== undefined && (typeof position !== 'number' || !Number.isSafeInteger(position) || position < 1)) {

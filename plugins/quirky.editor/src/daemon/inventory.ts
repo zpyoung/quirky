@@ -164,10 +164,10 @@ function spawnBounded(command: string, args: string[], cwd: string, maxBytes: nu
   })
   process.stderr.setEncoding('utf8')
   process.stderr.on('data', (chunk: string) => { stderr = (stderr + chunk).slice(-8192) })
-  return new Promise((resolve, reject) => {
-    process.once('error', reject)
-    process.once('close', (code) => resolve({ bytes: Buffer.concat(chunks, bytes), code: code ?? -1, stderr, truncated }))
-  }).catch((error: NodeJS.ErrnoException) => {
+  const { promise, resolve, reject } = Promise.withResolvers<SpawnResult>()
+  process.once('error', reject)
+  process.once('close', (code) => resolve({ bytes: Buffer.concat(chunks, bytes), code: code ?? -1, stderr, truncated }))
+  return promise.catch((error: NodeJS.ErrnoException) => {
     if (error.code === 'ENOENT') throw new Error('ripgrep (rg) is required for file inventory and contents search; install ripgrep and retry')
     throw error
   })

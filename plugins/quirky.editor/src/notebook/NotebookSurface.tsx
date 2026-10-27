@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent } from 'react'
 import type { SurfaceProps } from '../types'
-import { parseNotebook, serializeNotebook, sourceLines, type NotebookCellView, type NotebookParse } from './document'
+import { parseNotebook, serializeNotebook, sourceLines, type NotebookParse } from './document'
 import { base64ImageDataUrl, outputText, parseAnsi, preferredOutput, sanitizeHtml } from './outputs'
 
 type ApiRecord = Record<string, unknown>
@@ -46,10 +46,6 @@ function notebookRuntime(value: unknown): NotebookRuntimeState {
     selectedPython: state.selectedPython && typeof state.selectedPython === 'object' ? asRecord(state.selectedPython) as NotebookRuntimeState['selectedPython'] : null,
     kernel: state.kernel && typeof state.kernel === 'object' ? asRecord(state.kernel) as KernelState : { status: 'stopped' }
   }
-}
-
-function source(cell: NotebookCellView): string {
-  return typeof cell.source === 'string' ? cell.source : ''
 }
 
 function outputColor(name: string): string | undefined {
@@ -355,7 +351,7 @@ export function NotebookSurface(props: SurfaceProps) {
       </nav>}
       {visibleCells.map((cell, visibleIndex) => {
         const index = cellOffset + visibleIndex
-        const cellText = cellDrafts[index] ?? source(cell)
+        const cellText = cellDrafts[index] ?? cell.source
         const preview = cellPreview(cellText)
         const isEditing = editingCell === index
         const outputList = Array.isArray(cell.outputs) ? cell.outputs.map(asRecord) : []

@@ -18,7 +18,7 @@ import {
   type NotebookDocument,
   type NotebookParse
 } from './document'
-import { KernelSession, type KernelFrame } from './kernel'
+import { KernelSession, type KernelFrame, type KernelStartResult } from './kernel'
 import {
   createWorkspaceVenv,
   describeCandidates,
@@ -585,7 +585,7 @@ export function createNotebookMethods(host: EditorServices): FeatureMethods {
         return undefined
       })
       const clearAfter = { value: false }
-      const execution = await session.execute(code, async (frame) => {
+      const execution = await session.execute(code, async (frame: KernelFrame) => {
         if (frame.type === 'done' || frame.type === 'ready') return
         if (!OUTPUT_TYPES.has(frame.type)) return
         await withBufferMutation(host, bufferId, mutationLocks, (document) => {

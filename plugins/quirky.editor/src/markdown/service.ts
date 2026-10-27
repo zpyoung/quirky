@@ -467,6 +467,7 @@ async function markdownAction(host: EditorServices, rawParams: Record<string, un
       }
       return commitRichText(host, buffer, requireRevision(host, params), body.slice(0, selection.from) + replacement + body.slice(selection.to), params.openAnyway === true)
     }
+    if (typeof params.target !== 'string') throw errorOf(host, 'invalid-params', 'target is required for Markdown link resolution.')
     return resolveMarkdownLink(host, buffer, params.target)
   }
 

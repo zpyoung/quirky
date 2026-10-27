@@ -11,6 +11,7 @@ const PAGE_PRELOAD_BYTES = 256 * 1024
 const tableStyle: CSSProperties = { borderCollapse: 'collapse', width: '100%', tableLayout: 'auto' }
 const cellStyle: CSSProperties = { padding: '4px 8px', border: '1px solid var(--border, #777)', minWidth: 48, maxWidth: 1200 }
 const pageStyle: CSSProperties = { width: '100%', overflow: 'auto', position: 'relative' }
+const imageStyle: CSSProperties = { display: 'block', maxWidth: '100%', maxHeight: 520, objectFit: 'contain' }
 
 type ApiRecord = Record<string, unknown>
 type CsvRow = { index: number; cells: string[] }
@@ -34,6 +35,7 @@ type ViewerMetadata = {
   delimiter?: string
   nextPage?: number | null
   rows?: number | null
+  columns?: number | null
   limits?: Record<string, number>
 }
 
@@ -392,7 +394,7 @@ function PdfViewer({ props, url, error, retry }: { props: SurfaceProps; url: str
     let active = true
     setPdf(null)
     setLocalError(null)
-    const task = getDocument({ url, disableRange: false, disableAutoFetch: false, rangeChunkSize: PAGE_PRELOAD_BYTES, isEvalSupported: false, enableXfa: false })
+    const task = getDocument({ url, disableRange: false, disableAutoFetch: false, rangeChunkSize: PAGE_PRELOAD_BYTES, enableXfa: false })
     void task.promise.then((document) => {
       if (active) {
         setPdf(document)
@@ -427,7 +429,7 @@ function PdfViewer({ props, url, error, retry }: { props: SurfaceProps; url: str
       if (!context) throw new Error('PDF canvas is unavailable.')
       target.width = Math.ceil(viewport.width)
       target.height = Math.ceil(viewport.height)
-      renderTask = pdfPage.render({ canvasContext: context, viewport })
+      renderTask = pdfPage.render({ canvas: null, canvasContext: context, viewport })
       return renderTask.promise
     }).then(() => {
       if (active) void call(props, 'position', { page, offset: container.current?.scrollTop ?? 0 })

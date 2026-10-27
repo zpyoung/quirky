@@ -33,6 +33,7 @@ type EditorState = {
   buffers: EditorBuffer[]
   tabs: { tabId: string; bufferId: string; mode: 'edit' | 'preview'; group?: string }[]
 }
+type EditorCloseResult = { closed: true } | { closed: false; needsDecision?: boolean }
 type EditorFixture = { harness: Harness; client: QuirkyClient; worktree: Worktree; root: string }
 
 const fixtures = new Set<EditorFixture>()
@@ -190,11 +191,12 @@ test('closing a Markdown preview never closes or discards its dirty edit tab', a
   const previewTab = before.tabs.find((tab) => tab.bufferId === edit.id && tab.mode === 'preview')
   expect(editTab).toBeDefined()
   expect(previewTab).toBeDefined()
+  if (!editTab || !previewTab) throw new Error('The open Markdown buffer must have both edit and preview tabs.')
 
-  expect(await call(client, 'quirky.editor/close', { bufferId: edit.id, tabId: previewTab!.tabId })).toEqual({ closed: true })
+  expect(await call<EditorCloseResult>(client, 'quirky.editor/close', { bufferId: edit.id, tabId: previewTab.tabId })).toEqual({ closed: true })
   const after = await stateOf(client, worktree.id)
   expect(after.tabs).toContainEqual(editTab)
-  expect(after.tabs.some((tab) => tab.tabId === previewTab!.tabId)).toBe(false)
+  expect(after.tabs.some((tab) => tab.tabId === previewTab.tabId)).toBe(false)
   expect(await bufferOf(client, edit.id)).toMatchObject({ draft: '# Draft\n', dirty: true })
 })
 
@@ -203,14 +205,14 @@ test('dirty close requires an explicit choice and cancel preserves the tab and d
   const opened = await call<EditorBuffer>(client, 'quirky.editor/open', { worktree: worktree.id, path: 'a.ts' })
   await call(client, 'quirky.editor/draft', { bufferId: opened.id, content: 'let value = 2\n', expectedRevision: opened.contentRevision })
 
-  expect(await call(client, 'quirky.editor/canClose', { bufferId: opened.id, tabId: opened.tabId! })).toBe(false)
-  expect(await call(client, 'quirky.editor/close', { bufferId: opened.id, tabId: opened.tabId! })).toEqual({ closed: false, needsDecision: true })
-  expect(await call(client, 'quirky.editor/close', { bufferId: opened.id, tabId: opened.tabId!, choice: 'cancel' })).toMatchObject({ closed: false })
+  expect(await call<boolean>(client, 'quirky.editor/canClose', { bufferId: opened.id, tabId: opened.tabId! })).toBe(false)
+  expect(await call<EditorCloseResult>(client, 'quirky.editor/close', { bufferId: opened.id, tabId: opened.tabId! })).toEqual({ closed: false, needsDecision: true })
+  expect(await call<EditorCloseResult>(client, 'quirky.editor/close', { bufferId: opened.id, tabId: opened.tabId!, choice: 'cancel' })).toMatchObject({ closed: false })
   const state = await stateOf(client, worktree.id)
   expect(state.tabs.some((tab) => tab.tabId === opened.tabId)).toBe(true)
   expect(await bufferOf(client, opened.id)).toMatchObject({ draft: 'let value = 2\n', dirty: true })
 
-  expect(await call(client, 'quirky.editor/close', { bufferId: opened.id, tabId: opened.tabId!, choice: 'discard' })).toEqual({ closed: true })
+  expect(await call<EditorCloseResult>(client, 'quirky.editor/close', { bufferId: opened.id, tabId: opened.tabId!, choice: 'discard' })).toEqual({ closed: true })
   expect((await stateOf(client, worktree.id)).tabs.some((tab) => tab.tabId === opened.tabId)).toBe(false)
 })
 
