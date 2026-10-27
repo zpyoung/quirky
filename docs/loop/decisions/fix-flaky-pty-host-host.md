@@ -143,18 +143,41 @@
 - **Revisit if:** The fixture changes its expected output contract.
 - **Source:** assumed — autonomous
 
+## D14: Follow the incoming night-mode verification contract
+- **Question:** Which verification and integration rules apply after the final catch-up?
+- **Options:** Repeat another independent whole-suite preflight; use the updated loop's affected-suite/scripts/typecheck gate and let normal land verify the merge.
+- **Chose:** One post-catch-up PTY suite and fresh scripts/typecheck checks; no further independent full-suite or unstarted review/dogfood rounds.
+- **Why:** The incoming LOOP.md night-mode section explicitly supersedes the earlier steps. Incoming Handoff, Session Info, Ledger, Browser and Git-fixture decisions were read: none conflicts with closing only finalized dead terminal handles while preserving live persistence and durable history. Shared loop infrastructure stays unchanged.
+- **Evidence:** docs/loop/LOOP.md:56–79; m3-handoff D6/D7/D27/D49/D83–D84; m3-session-info D19/D24; m5-ledger D17/D20/D22/D31; sa-browser-agent D7/D16; fix-flaky-quirky-git-files-scenarios D3–D7. IncomingDecisionScout reviewed all five logs.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** Normal landing reports a concrete merge-result failure.
+- **Source:** locked by docs/loop/LOOP.md
+
+## D15: Attach the independent fetch failure to its existing queued repair
+- **Question:** Should this PTY item also redesign worktree background fetch after the failed full preflight?
+- **Options:** Expand the PTY item; ignore the failure; preserve evidence under the existing worktree-create repair.
+- **Chose:** Append the full failure evidence to BLOCKERS.md for `fix-flaky-quirky-worktree-create`; do not change that feature or duplicate its queued item.
+- **Why:** Catch-up contains the exact queued repair for create.test.ts. The observed background-fetch/ref-lock failures are in that file, while this item's corrected package passed repeated complete remote runs. Normal land still verifies its actual merge result; this records the error rather than treating a failed preflight as green.
+- **Evidence:** docs/loop/queue.json entry fix-flaky-quirky-worktree-create; docs/loop/BLOCKERS.md additional remote gate evidence; artifact://51.
+- **Reversibility:** easy
+- **Confidence:** high for attribution to the named test file; no root-cause claim about the fetch implementation
+- **Revisit if:** Landing shows a causal interaction with the PTY changes.
+- **Source:** assumed — autonomous
+
 ## Verification
 - Regression red/green: delayed real guardian startup rejected at the old four-second bound and accepted at fifteen seconds, with actual owned child and guardian cleanup verified (D6).
 - Actual CLI lifecycle: real daemon and PTY host started through `owned-run`, CLI JSON status succeeded, both service PIDs were gone afterward (D7).
-- Initial budget-only gates passed: scripts 63 tests/462 assertions; typecheck and build exit 0; full suite 455 remote files plus two macOS files, no flaky reruns. These precede the terminal-release and query-barrier changes; final-source gates are running again.
+- Initial budget-only gates passed: scripts 63 tests/462 assertions; typecheck and build exit 0; full suite 455 remote files plus two macOS files, no flaky reruns. These precede the terminal-release and query-barrier changes; the final-source gates are listed below.
 - Native-resource regression: the real socket-API test timed out waiting for PTY descriptors before the close (7.61 seconds); passed after it (1.48 seconds), preserving final output and exit code 3.
 - Actual final-source PTY API smoke: launched the real host entry under `owned-run`, created three shell sessions, read each final marker and exit code 3 through the socket API, and shut down the host with code 0 (2.46 seconds).
 - Whole host file after restoring an accidentally removed protocol import and fixing D11: 33 pass, 0 fail, 73 assertions. The accidental import removal was found by full-file verification, restored exactly, and is not shipped.
-- A local scripts-gate attempt after the resource change failed one protected loop-fixture test at its five-second deadline (62 pass/1 fail). No protected loop code was changed. The normal prescribed gate is running again after the final source corrections; do not claim it passed yet.
+- A local scripts-gate attempt after the resource change failed one protected loop-fixture test at its five-second deadline (62 pass/1 fail). No protected loop code was changed. The fresh post-catch-up current-tree gate subsequently passed all 63 tests with 466 assertions; its required typecheck passed with no diagnostics (90.15 seconds total).
 - Separate `bun scripts/suite.ts packages/pty-host` exited 0 with a host.test.ts flaky rerun, not a clean result (D9). Diagnostic remote runs exposed a retained native terminal handle (D10); those results do not establish closure.
 - Frozen-source remote PTY verification: two consecutive `bun scripts/suite.ts packages/pty-host` runs each passed all 14 files, zero failures and no flaky reruns (`{"ok":true,"flaky":[]}` both times; 235.85 seconds total). This includes the resource-release, subscriber-ordering, bulk raw-tail and cold-restore corrections.
-- Post-resource full-suite preflight: typecheck and build passed; 454 of 455 remote files and both macOS files passed. The sole failed file was plugins/quirky.worktree/test/create.test.ts: first a background origin/main refresh wait timed out, then the isolated rerun hit a concurrent git-fetch ref-lock error. This command stopped before its scripts gate. Source snapshot preceded D12/D13; both corrected PTY suites subsequently passed as recorded above. Catch up with integration before deciding remediation; no worktree production code has been changed by this item.
+- Post-catch-up affected gate: all 14 PTY files passed remotely with zero failures and no flaky reruns (37.37 seconds).
+- Post-resource full-suite preflight: typecheck and build passed; 454 of 455 remote files and both macOS files passed. The sole failed file was plugins/quirky.worktree/test/create.test.ts: first a background origin/main refresh wait timed out, then the isolated rerun hit a concurrent git-fetch ref-lock error. This command stopped before its scripts gate. Source snapshot preceded D12/D13; corrected PTY suites and fresh post-catch-up gates subsequently passed as recorded above. D15 routes the worktree failure to its existing queued item; no worktree implementation or test was changed.
 - Final Round 1: Gemini returned no actionable findings, STATUS: PASS. No open findings to append to BLOCKERS.md.
 
 ## Progress
-Step 6: PTY source frozen in d123de4; two clean 14-file remote runs passed. Post-resource whole-suite preflight failed only the worktree-create file (background-fetch timeout/ref-lock race); typecheck/build passed and scripts did not run in that chain. A separate normal scripts/typecheck gate is active. Commit this evidence, merge current build/roadmap and read incoming decisions before handling the full-suite blocker. Do not land until required verification is satisfied. No diagnostic code or load workers remain.
+Ready for normal queue.ts land: source commits 8d38140 and d123de4, final integration catch-up complete, all incoming decisions compatible, post-catch-up affected suite 14/14 clean, scripts 63/63 (466 assertions), typecheck passed. Build and actual real-host API smoke passed; red/green regressions prove both delayed readiness and native descriptor release. All agents/jobs and disposable diagnostics are stopped. Commit this final evidence log and BLOCKERS append, detach, then invoke normal queue.ts land fix-flaky-pty-host-host; only its exact merge-result gate marks the item done.
