@@ -1,5 +1,5 @@
 import { homedir } from 'node:os'
-import { isReservedLaunchEnv, type ContributionInfo, type PluginContext, type QuirkyEvent } from '@quirky/protocol'
+import { isReservedLaunchEnv, type ContributionInfo, type PluginCaller, type PluginContext, type QuirkyEvent } from '@quirky/protocol'
 import { buildCatalog } from './core/catalog'
 import { extrasSummary, parseExtraArgs } from './core/extras'
 import { agentPermissionMode, applyPermissionMode, effectiveArgs, effectiveEnv, PermissionError, permissionSummary } from './core/permissions'
@@ -29,6 +29,7 @@ import {
 } from './core/types'
 import { DeliveryRunner } from './delivery'
 import { detect, readLoginPath, searchDirs, type Detection, type SearchDirs } from './detect'
+import { Generator } from './generate'
 import { sameConfig, type AgentConfigStore } from './store'
 import { writeTrust } from './trust'
 
@@ -98,6 +99,7 @@ export class AgentsService {
   private detection: Detection = detect([], { dirs: [], loginDirs: new Set() })
   private search: SearchDirs = { dirs: [], loginDirs: new Set() }
   private readonly runner: DeliveryRunner
+  private readonly generator: Generator
   private readonly goneListeners = new Set<(sessionId: string) => void>()
   private readonly reportedProblems = new Set<string>()
   private known: { default: unknown; trust: unknown }
@@ -115,6 +117,13 @@ export class AgentsService {
       },
       timeScale: timeScaleFromEnv(),
       log: (message) => context.log(message)
+    })
+    this.generator = new Generator({
+      context,
+      entryOf: (id) => this.catalog.agents.find((entry) => entry.id === id),
+      configOf: (id) => this.configs.get(id),
+      installed: (id) => this.detection.installed(id),
+      resolveExecutable: (name) => this.detection.resolveExecutable(name)
     })
     this.known = { default: context.getSetting(DEFAULT_SETTING), trust: context.getSetting(TRUST_SETTING) }
   }
@@ -335,6 +344,16 @@ export class AgentsService {
     return { delivery }
   }
 
+  /** Runs one agent (or a custom command) once and returns its decoded output; see `generate.ts`. */
+  generate = (params: Params, caller: PluginCaller) => this.generator.generate(params, caller)
+
+  cancelGenerate = (params: Params) => this.generator.cancelGenerate(params)
+
+  /** Stops every running generation; the daemon is shutting the plugin down. */
+  stopGenerating(): void {
+    this.generator.stopAll()
+  }
+
   private enqueue<T>(work: () => Promise<T>): Promise<T> {
     const run = this.queue.then(work)
     this.queue = run.then(
@@ -521,7 +540,8 @@ export class AgentsService {
       env: effectiveEnv(entry, config),
       envOverridden: config.env !== null,
       showEnv: entry.yoloEnv !== null || config.env !== null,
-      permissions: { mode: agentPermissionMode(entry, config), hasAuto: entry.auto !== null }
+      permissions: { mode: agentPermissionMode(entry, config), hasAuto: entry.auto !== null },
+      canGenerate: entry.oneShot !== null
     }
   }
 

@@ -46,6 +46,7 @@ function entry(id: string, overrides: Partial<AgentEntry> = {}): AgentEntry {
     homepage: null,
     install: null,
     launchOptions: null,
+    oneShot: null,
     ...overrides
   }
 }

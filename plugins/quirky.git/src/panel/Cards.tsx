@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { GitOperation } from '@quirky/protocol'
+import { FixSplitButton, type FixButtonProps } from '../ai/FixSplitButton'
 
 type OperationName = Exclude<GitOperation, 'none'>
 
@@ -17,13 +18,15 @@ type OperationProps = {
   onReview(): void
   onContinue(): void
   onAbort(): void
+  /** Resolve with AI, shown on the conflict card only. */
+  fix?: FixButtonProps
 }
 
 /**
  * The merge, rebase or cherry-pick in progress. With unresolved conflicts it is the conflict card
  * (Review conflicts, Abort); with none it is the banner with Continue. A cherry-pick has no Abort.
  */
-export function OperationCard({ operation, unresolved, busy, onReview, onContinue, onAbort }: OperationProps) {
+export function OperationCard({ operation, unresolved, busy, onReview, onContinue, onAbort, fix }: OperationProps) {
   const title = OPERATION_TITLES[operation]
   const abort = operation === 'cherry-pick' ? null : (
     <button type="button" disabled={busy} onClick={onAbort}>{`Abort ${operation}`}</button>
@@ -34,6 +37,7 @@ export function OperationCard({ operation, unresolved, busy, onReview, onContinu
         <strong>{`${title} conflicts: ${unresolved} unresolved`}</strong>
         <p className="muted">Resolved files move back to normal changes after they leave the live conflict state.</p>
         <div className="scm-card-actions">
+          {fix && <FixSplitButton {...fix} />}
           <button type="button" onClick={onReview}>
             Review conflicts
           </button>
@@ -91,10 +95,12 @@ type BlockedProps = {
   summary: string
   /** Null when the summary says everything the output does. */
   onDetails: (() => void) | null
+  /** AI Fix for the failure. */
+  fix?: FixButtonProps
 }
 
 /** The card for a commit or push a hook refused, with the hook's summary and a Details button. */
-export function BlockedCard({ title, pill, summary, onDetails }: BlockedProps) {
+export function BlockedCard({ title, pill, summary, onDetails, fix }: BlockedProps) {
   return (
     <div className="scm-card scm-card-blocked" role="alert">
       <div className="scm-card-head">
@@ -102,11 +108,14 @@ export function BlockedCard({ title, pill, summary, onDetails }: BlockedProps) {
         <span className="scm-pill">{pill}</span>
       </div>
       <p className="scm-summary">{summary}</p>
-      {onDetails && (
+      {(fix || onDetails) && (
         <div className="scm-card-actions">
-          <button type="button" onClick={onDetails}>
-            Details
-          </button>
+          {fix && <FixSplitButton {...fix} />}
+          {onDetails && (
+            <button type="button" onClick={onDetails}>
+              Details
+            </button>
+          )}
         </div>
       )}
     </div>

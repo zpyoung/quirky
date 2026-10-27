@@ -280,3 +280,42 @@ export async function saveWorkingFile(
   }
   return { hash: contentHash(bytes) }
 }
+
+/**
+ * The whole staged diff as one minimal, colourless patch, for the commit-message prompt. Past
+ * `MAX_BLOB_BYTES` of output the process is killed and the result is `{patch: '', omitted: true}`
+ * so the prompt can say the diff was too large to read. Throws `GitError` on any other failure.
+ */
+export async function stagedPatch(cwd: string): Promise<{ patch: string; omitted: boolean }> {
+  const proc = Bun.spawn(['git', 'diff', '--cached', '--patch', '--minimal', '--no-color', '--no-ext-diff'], {
+    cwd,
+    env: await gitEnv(cwd, { readOnly: true }),
+    stdin: 'ignore',
+    stdout: 'pipe',
+    stderr: 'pipe'
+  })
+  const stderr = new Response(proc.stderr as ReadableStream).text()
+  const chunks: Uint8Array[] = []
+  let total = 0
+  let omitted = false
+  const reader = (proc.stdout as ReadableStream<Uint8Array>).getReader()
+  for (;;) {
+    const { done, value } = await reader.read()
+    if (done) break
+    total += value.length
+    if (total > MAX_BLOB_BYTES) {
+      omitted = true
+      proc.kill()
+      await reader.cancel().catch(() => {})
+      break
+    }
+    chunks.push(value)
+  }
+  const [message, exitCode] = await Promise.all([stderr, proc.exited])
+  if (omitted) return { patch: '', omitted: true }
+  if (exitCode !== 0) {
+    const detail = message.trim()
+    throw new GitError(`git diff failed (exit ${exitCode})${detail ? `: ${detail}` : ''}`, message, exitCode)
+  }
+  return { patch: new TextDecoder().decode(concat(chunks, total)), omitted: false }
+}

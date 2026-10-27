@@ -1,5 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { GitBusyOp, GitChange, GitCommit, GitStatus, GitStatusEntry, UiPluginContext } from '@quirky/protocol'
+import { CommitSparkle } from '../ai/CommitSparkle'
+import type { FixButtonProps } from '../ai/FixSplitButton'
+import { LaunchDialog } from '../ai/LaunchDialog'
+import type { FixAction } from '../ai/types'
+import { useAiFix } from '../ai/useAiFix'
+import { NotesShelf } from '../notes/NotesShelf'
+import { noteViewInput } from '../notes/open-note'
+import { noteCounts, useNotes } from '../notes/useNotes'
 import { DIFF_VIEW_ID, PANEL_ID, type DiffViewInput } from '../shared/view-input'
 import { discardText } from '../shared/discard-text'
 import type { ScmReport } from '../scm'
@@ -93,23 +101,27 @@ const asText = (value: unknown): string | null => (typeof value === 'string' && 
 
 const rowKey = (entry: GitStatusEntry): string => `${entry.area}:${entry.path}`
 
-const toItem = (entry: GitStatusEntry): RowItem => ({
+type NoteCounts = ReadonlyMap<string, number>
+
+const toItem = (entry: GitStatusEntry, notes?: NoteCounts): RowItem => ({
   key: rowKey(entry),
   path: entry.path,
   oldPath: entry.oldPath,
   status: entry.status,
   added: entry.added,
   removed: entry.removed,
-  entry
+  entry,
+  notes: notes?.get(entry.path)
 })
 
-const changeToItem = (change: GitChange): RowItem => ({
+const changeToItem = (change: GitChange, notes?: NoteCounts): RowItem => ({
   key: `branch:${change.path}`,
   path: change.path,
   oldPath: change.oldPath,
   status: change.status,
   added: change.added,
-  removed: change.removed
+  removed: change.removed,
+  notes: notes?.get(change.path)
 })
 
 /** Everything the Source Control panel shows and does for one worktree. */
@@ -124,6 +136,8 @@ export function WorktreePanel({ context, worktree, report, notify, drafts, offer
   const compareData = useCompare(context, worktree, compareTrigger, polled !== null)
   const { compare } = compareData
   const worktreePath = useWorktreePath(context, worktree)
+  const notes = useNotes(context, worktree)
+  const counts = useMemo(() => noteCounts(notes), [notes])
 
   const [filter, setFilter] = useState('')
   const [filterOpen, setFilterOpen] = useState(false)
@@ -131,12 +145,17 @@ export function WorktreePanel({ context, worktree, report, notify, drafts, offer
   const selectionRef = useRef(selection)
   const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(new Set())
   const [historyOpen, setHistoryOpen] = useState(false)
+  const [notesCollapsed, setNotesCollapsed] = useState(false)
+  const [notesReveal, setNotesReveal] = useState(0)
   const [message, setMessageState] = useState(() => drafts.get(worktree))
   const [committing, setCommitting] = useState(false)
+  const edits = useRef(0)
+  const aiFix = useAiFix(context, worktree)
   const [remoteError, setRemoteError] = useState<string | null>(null)
   const [commitBlocked, setCommitBlocked] = useState<Blocked | null>(null)
   const [pushBlocked, setPushBlocked] = useState<Blocked | null>(null)
   const [dialog, setDialog] = useState<DialogState | null>(null)
+  const [launch, setLaunch] = useState<FixAction | null>(null)
   const [menu, setMenu] = useState<{ x: number; y: number; item: RowItem } | null>(null)
   const [submodules, setSubmodules] = useState<Record<string, SubmoduleState>>({})
 
@@ -160,6 +179,7 @@ export function WorktreePanel({ context, worktree, report, notify, drafts, offer
   )
 
   const setMessage = (text: string) => {
+    edits.current += 1
     setMessageState(text)
     drafts.set(worktree, text)
   }
@@ -175,14 +195,14 @@ export function WorktreePanel({ context, worktree, report, notify, drafts, offer
   )
   const compareReady = compare?.status === 'ready'
   const branchItems = useMemo(
-    () => (compareReady ? compare.entries.filter((c) => query === '' || matchesFilter(c.path, query)).map(changeToItem) : []),
-    [compare, compareReady, query]
+    () => (compareReady ? compare.entries.filter((c) => query === '' || matchesFilter(c.path, query)).map((c) => changeToItem(c, counts)) : []),
+    [compare, compareReady, query, counts]
   )
   const tooLarge = applyFilter([], filter).state === 'too-large'
 
   const order = useMemo(() => {
     if (tooLarge) return []
-    return sections.flatMap((s) => displayPaths(visibleEntries(s).map(toItem), viewMode, s.id, collapsed))
+    return sections.flatMap((s) => displayPaths(visibleEntries(s).map((e) => toItem(e)), viewMode, s.id, collapsed))
   }, [sections, visibleEntries, viewMode, collapsed, tooLarge])
   const orderKey = order.join('\n')
 
@@ -259,6 +279,10 @@ export function WorktreePanel({ context, worktree, report, notify, drafts, offer
   const menuRows = menuItems(ladder)
   const unresolved = entries.filter((e) => e.conflict?.state === 'unresolved').length
   const operation = status?.operation ?? 'none'
+  const aiEnabled = settings.aiEnabled
+  const stagedCount = entries.filter((e) => e.area === 'staged').length
+  const fixFor = (action: FixAction): FixButtonProps | undefined =>
+    aiEnabled ? { action, busy: aiFix.busy, onFix: () => void aiFix.start(action), onCustomize: () => setLaunch(action) } : undefined
 
   const open = (input: Omit<DiffViewInput, 'worktree'>) => context.openView(DIFF_VIEW_ID, { worktree, ...input })
 
@@ -627,6 +651,8 @@ export function WorktreePanel({ context, worktree, report, notify, drafts, offer
     return buttons
   }
 
+  const openNote = (note: { id: string; path: string }) => open(noteViewInput(note.path, note.id, entries, compare))
+
   const openCommit = (commit: GitCommit) => open({ mode: 'combined', commit: commit.oid, title: commitTitle(commit.oid, commit.subject) })
   const openCommitFile = (commit: GitCommit, change: GitChange) =>
     open({ mode: 'file', source: 'commit', commit: commit.oid, path: change.path, ...(change.oldPath === undefined ? {} : { oldPath: change.oldPath }) })
@@ -694,8 +720,25 @@ export function WorktreePanel({ context, worktree, report, notify, drafts, offer
         onViewMode={setViewMode}
         onChangeBase={() => setDialog({ kind: 'base' })}
         onRefreshCompare={() => void compareData.refresh()}
+        notes={notes.length}
+        onNotes={() => {
+          setNotesCollapsed(false)
+          setNotesReveal((n) => n + 1)
+        }}
       />
       {status && <BranchRow status={status} compare={compare} onChangeBase={() => setDialog({ kind: 'base' })} />}
+      {notes.length > 0 && (
+        <NotesShelf
+          context={context}
+          worktree={worktree}
+          notes={notes}
+          collapsed={notesCollapsed}
+          onToggle={() => setNotesCollapsed((collapsed) => !collapsed)}
+          revealTick={notesReveal}
+          onOpenNote={openNote}
+          ask={ask}
+        />
+      )}
       {data.error && <div className="scm-error">{data.error}</div>}
       <div className="scm-body">
         {status === null && data.error === null && <p className="muted pad">Loading…</p>}
@@ -707,6 +750,7 @@ export function WorktreePanel({ context, worktree, report, notify, drafts, offer
             onReview={() => open({ mode: 'conflicts' })}
             onContinue={() => void remote('continue')}
             onAbort={() => void abort()}
+            fix={fixFor('resolveConflicts')}
           />
         )}
         {status?.capped && (
@@ -728,6 +772,19 @@ export function WorktreePanel({ context, worktree, report, notify, drafts, offer
             remoteError={remoteError}
             onPrimary={onPrimary}
             onMenu={(id) => void runMenu(id)}
+            sparkle={
+              aiEnabled ? (
+                <CommitSparkle
+                  context={context}
+                  worktree={worktree}
+                  staged={stagedCount}
+                  message={message}
+                  committing={committing}
+                  edits={edits}
+                  onResult={setMessage}
+                />
+              ) : undefined
+            }
           >
             {commitBlocked && (
               <BlockedCard
@@ -735,6 +792,7 @@ export function WorktreePanel({ context, worktree, report, notify, drafts, offer
                 pill={commitBlocked.pill}
                 summary={commitBlocked.summary}
                 onDetails={hasMoreDetail(commitBlocked.summary, commitBlocked.output) ? () => setDialog({ kind: 'details', title: 'Commit Failed', output: commitBlocked.output }) : null}
+                fix={fixFor('fixCommitFailure')}
               />
             )}
             {pushBlocked && (
@@ -743,6 +801,7 @@ export function WorktreePanel({ context, worktree, report, notify, drafts, offer
                 pill={pushBlocked.pill}
                 summary={pushBlocked.summary}
                 onDetails={hasMoreDetail(pushBlocked.summary, pushBlocked.output) ? () => setDialog({ kind: 'details', title: 'Push Failed', output: pushBlocked.output }) : null}
+                fix={fixFor('fixPushFailure')}
               />
             )}
           </CommitArea>
@@ -768,7 +827,7 @@ export function WorktreePanel({ context, worktree, report, notify, drafts, offer
             >
               <Rows
                 scope={section.id}
-                items={rows.map(toItem)}
+                items={rows.map((row) => toItem(row, counts))}
                 viewMode={viewMode}
                 collapsedDirs={collapsed}
                 onToggleDir={sectionToggle}
@@ -848,11 +907,27 @@ export function WorktreePanel({ context, worktree, report, notify, drafts, offer
         <Dialog title={dialog.title} onClose={() => setDialog(null)} wide>
           <pre className="script-preview">{dialog.output}</pre>
           <div className="dialog-actions">
+            {aiEnabled && (
+              <button
+                type="button"
+                className="primary"
+                disabled={aiFix.busy}
+                onClick={() => {
+                  setDialog(null)
+                  void aiFix.start(dialog.title === 'Commit Failed' ? 'fixCommitFailure' : 'fixPushFailure')
+                }}
+              >
+                Fix with AI
+              </button>
+            )}
             <button type="button" onClick={() => setDialog(null)}>
               Close
             </button>
           </div>
         </Dialog>
+      )}
+      {launch !== null && aiEnabled && (
+        <LaunchDialog context={context} worktree={worktree} action={launch} onClose={() => setLaunch(null)} start={(params) => aiFix.start(launch, params)} />
       )}
       {dialog?.kind === 'base' && (
         <ChangeBaseDialog context={context} worktree={worktree} current={base} onClose={() => setDialog(null)} onChanged={() => void refreshAll()} />

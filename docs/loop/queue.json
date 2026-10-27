@@ -188,8 +188,7 @@
         "m1-launch-settings",
         "m1-agent-status"
       ],
-      "status": "in-progress",
-      "lane": 3
+      "status": "done"
     },
     {
       "id": "m2-editor",
@@ -216,7 +215,8 @@
         "m2-source-control-core",
         "m1-agent-status"
       ],
-      "status": "blocked"
+      "status": "in-progress",
+      "lane": 7
     },
     {
       "id": "m2-ask-parity",
@@ -259,8 +259,7 @@
       "title": "Fix required remote suite: plugins/quirky.ask/test/core/spec.test.ts accepts unanchored a*a*a*b with a 200-character nonmatching default but validation takes 103-118 ms and violates its 100 ms budget even in isolated runs; investigate bounded regex validation without suppressing the assertion or changing matching semantics",
       "docs": [],
       "deps": [],
-      "status": "in-progress",
-      "lane": 7
+      "status": "done"
     },
     {
       "id": "fix-sc31-first-shell-race",
@@ -270,8 +269,7 @@
         "worktrees.md"
       ],
       "deps": [],
-      "status": "in-progress",
-      "lane": 5
+      "status": "done"
     },
     {
       "id": "m3-terminal-dock",
@@ -361,9 +359,9 @@
       "lane": 8
     },
     {
-      "id": "m4-hosting-api-others",
+      "id": "m4-hosting-api-gitlab",
       "milestone": "M4",
-      "title": "Git hosting API: GitLab, Bitbucket, Gitea, Azure DevOps",
+      "title": "Git hosting API: GitLab through glab only (hosting-api.md 'GitLab (glab CLI)'): host and project identity, MR lookup and state mapping, pipeline job graph and checks, MR details with discussions, merge, close, reopen, ready, edit, reviewers, comments, inline comments, resolve, job retry and trace, MR creation with templates, issue and MR lists, todos, rate limit, auth diagnosis. Not Bitbucket, Gitea or Azure DevOps",
       "docs": [
         "hosting-api.md"
       ],
@@ -373,9 +371,21 @@
       "status": "todo"
     },
     {
-      "id": "m4-hosting-ui",
+      "id": "m4-hosting-api-bitbucket-gitea-azure",
       "milestone": "M4",
-      "title": "Hosting UI: checks panel, PR page, Create PR, tasks list, issue page, Projects",
+      "title": "Scope: all of the parts below together; a \"Not ...\" note in one part excludes only what no other part here covers. Part 1: Git hosting API: Bitbucket Cloud only (hosting-api.md 'Bitbucket Cloud (REST)'): repository identity, env and stored-credential auth with connect, disconnect and status, PR lookup by branch and number, build status, PR creation without draft, creation eligibility auth check. Not GitLab, Gitea or Azure DevOps Part 2: Git hosting API: Gitea/Forgejo and Azure DevOps only (hosting-api.md 'Gitea / Forgejo (REST)' and 'Azure DevOps (REST)'): repository identity for self-hosted remotes and _git URLs, token auth and status, PR lookup including the cached paged scan, status mapping, PR creation, eligibility auth check. Not GitLab or Bitbucket",
+      "docs": [
+        "hosting-api.md"
+      ],
+      "deps": [
+        "m4-hosting-api-github"
+      ],
+      "status": "todo"
+    },
+    {
+      "id": "m4-hosting-ui-tasks",
+      "milestone": "M4",
+      "title": "Scope: all of the parts below together; a \"Not ...\" note in one part excludes only what no other part here covers. Part 1: Hosting UI: Tasks page for GitHub (hosting-ui.md sections 1-3, 7 and the task rows of 12): source bar and provider availability, Issues and PRs modes, repo combobox, presets, Filters, search, pagination, issue source selector, list states, inline row editing for reviewers, checks, merge, status and assignees, Start or Resume workspace from a row, task settings. Not the issue page, PR page, New issue dialog, Projects or GitLab tasks Part 2: Hosting UI: issue page and New GitHub issue (hosting-ui.md sections 4 and 6): header, edit strip for status, workspace, labels and assignees, description, timeline, comments, markdown composer, New issue dialog with session draft. Not the Tasks list, PR page or Projects Part 3: Hosting UI: Projects v2 mode (hosting-ui.md section 8): project picker with pinned, recent and add by URL, view tabs, table with inline field editing, board with drag between columns, roadmap timeline, Start work, states and scope-missing help cards. Not issue or PR lists",
       "docs": [
         "hosting-ui.md"
       ],
@@ -385,14 +395,55 @@
       "status": "todo"
     },
     {
-      "id": "m4-worktrees-create-from",
+      "id": "m4-hosting-ui-reviews",
       "milestone": "M4",
-      "title": "Worktrees: Create from a PR, MR or issue",
+      "title": "Scope: all of the parts below together; a \"Not ...\" note in one part excludes only what no other part here covers. Part 1: Hosting UI: right-sidebar Checks panel (hosting-ui.md section 10): review header and link routing, stack map, inline title edit, merge, close, reopen and ready actions, triage strip with Fix and Resolve agent dialogs, conflict section, checks list with check details, comments list with threads and reactions, every no-review empty state. Not the Create PR composer or the PR sitter panel Part 2: Hosting UI: PR page (hosting-ui.md section 5): header and Start workspace, Conversation tab with All/Humans/Bots filter, actions panel with merge methods, merge-state pill and auto-merge, assignees and reviewers panels, Checks tab with rerun and Fix broken checks, Files changed tab with viewed state. Not the Tasks list, issue page or Checks panel Part 3: Hosting UI: Create PR or MR and hosting settings (hosting-ui.md section 11 and the settings of section 12 other than task settings): Create composer with base picker, draft, AI-generated details and disabled reasons, submit flow with push-first and already-exists handling, Source Control Create PR chain, hosted-review creation defaults, Integrations provider cards, GitHub API budget card, GitHub account binding",
       "docs": [
-        "worktrees.md"
+        "hosting-ui.md"
+      ],
+      "deps": [
+        "m4-hosting-api-github",
+        "m4-hosting-ui-tasks"
+      ],
+      "status": "todo"
+    },
+    {
+      "id": "m4-hosting-ui-gitlab",
+      "milestone": "M4",
+      "title": "Hosting UI: GitLab tasks (hosting-ui.md section 9): Issues, MRs and My Todos views, presets, list columns, GitLab item sheet with Description, Conversation, Files and Pipeline tabs, MR edit, reviewers, discussion resolve, inline comments, job trace and retry, merge actions, create workspace. Not GitHub surfaces",
+      "docs": [
+        "hosting-ui.md"
+      ],
+      "deps": [
+        "m4-hosting-ui-tasks",
+        "m4-hosting-api-gitlab"
+      ],
+      "status": "todo"
+    },
+    {
+      "id": "m4-worktrees-create-from-github",
+      "milestone": "M4",
+      "title": "Worktrees: Create from a GitHub PR or issue (worktrees.md section 2 Smart tab #N and GitHub URL resolution, GitHub tab, observed PR result; hosting-api.md 'Other GitHub plumbing'): PR head checkout and workspace named after the PR, fork PR start points, push targets and tracking refs, linked PR and issue metadata, issue command. Not GitLab MRs",
+      "docs": [
+        "worktrees.md",
+        "hosting-api.md"
       ],
       "deps": [
         "m4-hosting-api-github"
+      ],
+      "status": "todo"
+    },
+    {
+      "id": "m4-worktrees-create-from-gitlab",
+      "milestone": "M4",
+      "title": "Worktrees: Create from a GitLab MR (worktrees.md section 2 GitLab tab and Smart tab GitLab URL resolution; hosting-api.md 'Other GitHub plumbing' GitLab refs/orca/merge-requests start point): MR head checkout, workspace named after the MR, linked MR metadata. Not GitHub PRs or issues",
+      "docs": [
+        "worktrees.md",
+        "hosting-api.md"
+      ],
+      "deps": [
+        "m4-worktrees-create-from-github",
+        "m4-hosting-api-gitlab"
       ],
       "status": "todo"
     },
@@ -419,12 +470,13 @@
       "deps": [
         "m1-worktrees"
       ],
-      "status": "todo"
+      "status": "in-progress",
+      "lane": 5
     },
     {
-      "id": "sa-browser-ui",
+      "id": "sa-browser-pane",
       "milestone": "Side A",
-      "title": "Browser: visible pane and screencast, design mode",
+      "title": "Scope: all of the parts below together; a \"Not ...\" note in one part excludes only what no other part here covers. Part 1: Browser: visible pane and screencast (browser.md section 1 items 1-6 and 10): tab and pane lifecycle with on-demand Chrome screencast, address bar normalization and suggestions, URL history, find in page, zoom, viewport presets, local HTML and workspace document preview, Default Home Page, Default Search Engine and Default Zoom settings. Not downloads, prompts, popups, profile menus or design mode Part 2: Browser: page events in the pane (browser.md section 1 items 7-9): download shelf, alert, confirm, prompt, beforeunload, basic-auth and certificate prompts shown as UI over the page, popups and OAuth windows, page-initiated tab budget, external app launch prompt",
       "docs": [
         "browser.md"
       ],
@@ -434,9 +486,33 @@
       "status": "todo"
     },
     {
-      "id": "m5-automations",
+      "id": "sa-browser-profiles-settings",
+      "milestone": "Side A",
+      "title": "Browser: profile and cookie UI plus settings (browser.md section 2 menus and the Settings table): Browser menu profile rows and New Profile, Import Cookies menu and toolbar hint, Settings > Browser including Session & Cookies, Link Routing, terminal URL click behavior, Localhost Worktree Labels, identity mode. Not the import engine",
+      "docs": [
+        "browser.md"
+      ],
+      "deps": [
+        "sa-browser-pane"
+      ],
+      "status": "todo"
+    },
+    {
+      "id": "sa-browser-design-mode",
+      "milestone": "Side A",
+      "title": "Scope: all of the parts below together; a \"Not ...\" note in one part excludes only what no other part here covers. Part 1: Browser design mode: Grab page element only (browser.md section 3 'Grab page element', 'In-guest extraction', 'The payload', 'Safety layer', 'Screenshot', 'Text shape 1: Grab copy'): armed picker overlay, payload extraction, C and S shortcuts, right-click menu, budgets and redaction, clipboard text and image. Not annotate or draw Part 2: Browser design mode: Annotate page element only (browser.md section 3 'Annotate page element', 'Text shape 2: Annotation Markdown', 'Delivery'): annotation popover with Change and Question intent, tray with edit, delete and copy, 20-per-page cap, Markdown generation, Send notes to a running or new agent. Not grab or draw Part 3: Browser design mode: Draw on screenshot only (browser.md section 3 'Draw on screenshot'): frozen screenshot canvas with pen, highlighter, arrow, rectangle, ellipse, text and eraser, color and size, undo, redo, clear, Copy Markup as PNG to the clipboard. Not grab or annotate",
+      "docs": [
+        "browser.md"
+      ],
+      "deps": [
+        "sa-browser-pane"
+      ],
+      "status": "todo"
+    },
+    {
+      "id": "m5-automations-core",
       "milestone": "M5",
-      "title": "Automations",
+      "title": "Automations core: definitions, schedules and scheduler (automations.md 'Data model', 'Schedules', 'The scheduler tick', 'Storage and retention', 'Run statuses', 'CLI' and Run now, Pause, Edit, Delete behaviour): RRULE subset and cron dialect with DST, occurrence math and labels, 60 s tick with missed-run grace and per-automation lane, run records and retention, `quirky automations` list, show, create, edit, remove, run, runs with paging. Not target resolution, dispatch, UI or OpenClaw",
       "docs": [
         "automations.md"
       ],
@@ -447,14 +523,63 @@
       "status": "todo"
     },
     {
-      "id": "m5-loops",
+      "id": "m5-automations-dispatch",
       "milestone": "M5",
-      "title": "Loops",
+      "title": "Automations dispatch (automations.md 'Target resolution and refusal reasons', 'Dispatch: claim, recheck, then renderer or headless', 'Prechecks', 'Session reuse', 'Workspace policy, pin, and re-pin', 'Execution target, owner, and host fencing', 'Usage attribution', 'Extra agent args and launch overrides'): run target resolution with refusals and folding, claim and launch of the agent in a hidden terminal, precheck, reuse of a live session, new-per-run workspaces with setup decision, extra args and model and effort overrides with per-run snapshot, completion detection, usage and cost per run",
+      "docs": [
+        "automations.md"
+      ],
+      "deps": [
+        "m5-automations-core"
+      ],
+      "status": "todo"
+    },
+    {
+      "id": "m5-automations-ui",
+      "milestone": "M5",
+      "title": "Scope: all of the parts below together; a \"Not ...\" note in one part excludes only what no other part here covers. Part 1: Automations UI: create and edit (automations.md 'Create an automation in the UI', 'Run now, pause, edit, delete'): two-pane Create automation dialog with agent and launch fields, extra args, host, project, workspace mode, session, schedule presets and custom cron, grace, precheck, setup decision, validation toasts, the four templates and empty-state cards, Delete Automation dialog Part 2: Automations UI: list, detail and runs (automations.md 'Browse, search, filter, and sort the list', 'Open an automation', 'Runs dashboard and run details'): searchable sortable table with Filters and pills, row menu, empty and host-status states, detail pane with Overview and Runs tabs, Run Now, Pause and Resume, Runs dashboard with 24h and 7d cards, run details with Rerun and status labels Part 3: Automations: external OpenClaw jobs (automations.md 'External automations (OpenClaw)', 'External automations jobs file (OpenClaw)'): jobs file discovery and mapping, list rows with Pause, Resume, Run Now and Delete, `openclaw cron` actions with id validation",
+      "docs": [
+        "automations.md"
+      ],
+      "deps": [
+        "m5-automations-core"
+      ],
+      "status": "todo"
+    },
+    {
+      "id": "m5-loops-core",
+      "milestone": "M5",
+      "title": "Scope: all of the parts below together; a \"Not ...\" note in one part excludes only what no other part here covers. Part 1: Loops core: Until done engine (fork-loops.md 'RPC methods', 'Config shape', 'Persistence', 'Creating a loop', 'The iteration cycle', 'Detecting that an iteration is finished', 'Session policy and pane lifecycle', 'Restart behavior', iteration and time caps in 'Iteration limits and caps', CLI create, list, show, pause, resume, stop, steer, edit): loop service and driver, prompt delivery gated on user idle, settle detection from agent status, crash retry, fresh and continue sessions, restart pause. Not done checks, evaluator, markers, queue or interval presets, UI Part 2: Loops completion and safety rules (fork-loops.md 'Evidence gathered after a settled iteration', 'Check-command mode', 'Evaluator mode', 'Stop conditions: decideNext' completion, protected-path and marker branches, cost cap in 'Iteration limits and caps', 'No-progress rule', 'Notifications'): working-tree snapshot and diff, LOOP_DONE, LOOP_BLOCKED and LOOP_DECIDE markers, done check command, evaluator, protected paths, no-progress pause, checkpoint commits, cost cap and usage-limit resume, notifications",
       "docs": [
         "fork-loops.md"
       ],
       "deps": [
         "m5-structured-runner"
+      ],
+      "status": "todo"
+    },
+    {
+      "id": "m5-loops-presets",
+      "milestone": "M5",
+      "title": "Loops Queue and On an interval presets (fork-loops.md 'Start a loop from the CLI' queue and interval flags, 'Observe and adjust' queue operations, 'Stop conditions: decideNext' queue and pacing branches): queue claim, add, edit, move and remove, repeat and exhaustion, interval pacing from end of iteration or wall clock with skipped ticks, ask before each new iteration",
+      "docs": [
+        "fork-loops.md"
+      ],
+      "deps": [
+        "m5-loops-core"
+      ],
+      "status": "todo"
+    },
+    {
+      "id": "m5-loops-ui",
+      "milestone": "M5",
+      "title": "Scope: all of the parts below together; a \"Not ...\" note in one part excludes only what no other part here covers. Part 1: Loops UI: New loop dialog (fork-loops.md 'Start a loop from the UI' and the dialog fields table): tab-bar menu entry, agent, Run preset, prompt or queue editor, session, iteration cap, Advanced fields, running-loop warning, validation texts, Start loop. Not the rail Part 2: Loops UI: rail and tab handling (fork-loops.md 'Observe and adjust' rail sections, 'Closing a loop's tab'): header with state pill and progress, pause reasons text, Pause, Resume with added iterations, Stop panel, Steer form, Edit form, queue editor, iterations list and iteration detail, close-running-loop dialog with detach",
+      "docs": [
+        "fork-loops.md"
+      ],
+      "deps": [
+        "m5-loops-core",
+        "m5-loops-presets"
       ],
       "status": "todo"
     },
@@ -468,12 +593,12 @@
       "deps": [
         "gate-m0"
       ],
-      "status": "todo"
+      "status": "blocked"
     },
     {
-      "id": "m6-orchestration",
+      "id": "m6-orchestration-core",
       "milestone": "M6",
-      "title": "Orchestration: tasks, dispatch, mailbox, worker start and done, gates",
+      "title": "Scope: all of the parts below together; a \"Not ...\" note in one part excludes only what no other part here covers. Part 1: Orchestration core: runs and tasks (orchestration.md 'The database', 'Task model and DAG semantics', 'CLI reference' Runs and Tasks, 'Caller identity and authority', 'Mutation idempotency and request IDs', 'Reset', 'Constants and limits'): Runs bound to a coordinator, Tasks with dependency promotion, Dispatch and worker state graphs with compare-and-set transitions, circuit breaker, nesting depth cap of 1 by default, `quirky orchestration` run-* and task-* commands. Not messaging, worker start, federation or legacy compatibility Part 2: Orchestration mailbox, questions and gates (orchestration.md 'Messaging', 'Blocking ask and reply', 'Decision gates', 'The coordinator loop' steps 4 and 6): mailboxes and addresses, send, check with waiting, Deliveries and acks, inbox, nudge pointer line to idle agents, ask and reply with timeout and resume, gate-create, gate-resolve, gate-list",
       "docs": [
         "orchestration.md"
       ],
@@ -485,47 +610,151 @@
       "status": "todo"
     },
     {
-      "id": "m6-heimdall",
+      "id": "m6-orchestration-workers",
       "milestone": "M6",
-      "title": "Heimdall supervisor kernel, without leases, remote fleets or the judgment layer",
+      "title": "Scope: all of the parts below together; a \"Not ...\" note in one part excludes only what no other part here covers. Part 1: Orchestration worker start and done (orchestration.md 'Starting a worker', 'Worker modes (terminal vs chat)', 'How a worker reports completion', 'The injected preamble', 'Low-level dispatch', 'The worker side'): worker-start admission, placement, launch, readiness, preamble delivery, turn observation and receipts, terminal or structured chat worker, worker_done and heartbeat settlement, dispatch and dispatch-show. Not stop, release or fleet projection Part 2: Orchestration worker lifecycle and fleet (orchestration.md 'Follow up, stop, retain, release, retry', 'Process exit, stop, abandon', 'Terminal resource ownership, retain and release', 'Reading worker output', 'Fleet projection'): worker-stop and worker-abandon, unexpected exit handling, retry, retain and release, user takeover of a terminal, worker-read, worker-list and worker-show with liveness, attention and nextAction",
+      "docs": [
+        "orchestration.md"
+      ],
+      "deps": [
+        "m6-orchestration-core"
+      ],
+      "status": "todo"
+    },
+    {
+      "id": "m6-orchestration-ui",
+      "milestone": "M6",
+      "title": "Orchestration skill and UI (orchestration.md 'Install the orchestration skill', 'Change how deep workers may nest', 'Ask an agent to coordinate', 'Click a task ID, take over a worker terminal', 'UI'): skill install pane with agent coverage and usage examples, nested worker depth setting, task ID terminal links, nested worker rows in the sidebar, takeover reporting, generated agent skill text",
+      "docs": [
+        "orchestration.md"
+      ],
+      "deps": [
+        "m6-orchestration-workers"
+      ],
+      "status": "todo"
+    },
+    {
+      "id": "m6-heimdall-core",
+      "milestone": "M6",
+      "title": "Heimdall kernel core, without leases, remote fleets or the judgment layer (heimdall.md 'Kernel pieces' through 'Parking, terminal, stop predicates', 'Workers and mailbox', 'Shutdown'): kind contract and registry, enrollment with refusals and re-arm, kernel database and journal with retention and tick traces, scheduling and pacing, one tick, action loop with generic gate and write-ahead attempts, budgets and active time, parking and stop predicates, orchestration adapter. Not control commands, CLI, fleet page or owner layer",
       "docs": [
         "heimdall.md"
       ],
       "deps": [
-        "m6-orchestration"
+        "m6-orchestration-workers"
       ],
       "status": "todo"
     },
     {
-      "id": "m6-objective",
+      "id": "m6-heimdall-control",
       "milestone": "M6",
-      "title": "Objective runner as a Heimdall kind",
+      "title": "Scope: all of the parts below together; a \"Not ...\" note in one part excludes only what no other part here covers. Part 1: Heimdall controls and CLI (heimdall.md 'Act on a watcher', 'Command results', 'CLI', 'Debug report', 'Notifications', fleet and detail read methods): pause, resume, disarm, delete, approve, adjust-budget, set-concurrency, answer-question, answer-escalation and stop-worker serialized per watcher with refusal reasons, fleet and detail snapshots with push updates, `quirky heimdall` command group, debug report, the two notifications. Not the fleet page Part 2: Heimdall fleet page (heimdall.md 'Where to find it', 'Read the fleet', 'Inspect one watcher', 'Decision trace'): sidebar entry with bucket counts, fleet table ordered by urgency, header summary and refresh banner, detail pane with owner controls, approval cards and status pills, decision trace, watcher activity feed, per-worktree glyph, Copy debug report. Not the New objective sheet",
+      "docs": [
+        "heimdall.md"
+      ],
+      "deps": [
+        "m6-heimdall-core"
+      ],
+      "status": "todo"
+    },
+    {
+      "id": "m6-heimdall-owner",
+      "milestone": "M6",
+      "title": "Heimdall owner layer (heimdall.md 'The owner layer (optional)'): owner agent config, deviation hand-off from kinds, owner interventions, idle-worker and stall detection. Not the judgment layer",
+      "docs": [
+        "heimdall.md"
+      ],
+      "deps": [
+        "m6-heimdall-core"
+      ],
+      "status": "todo"
+    },
+    {
+      "id": "m6-objective-plan",
+      "milestone": "M6",
+      "title": "Scope: all of the parts below together; a \"Not ...\" note in one part excludes only what no other part here covers. Part 1: Objective runner contract and plan (heimdall-objective.md 'Start an objective (CLI)', 'The tick decision', 'Actions and capabilities', 'Content identity', 'Plan, revisions and repair', 'Persistence', 'RPC and wire', 'Enrollment authorization'): objective kind in Heimdall, contract schema and defaults, enrollment authorization, objective database, content identity, plan DAG with revisions, planner dispatch and ingest, plan review, activation, repair patches, plan lint, `quirky heimdall create objective`, objective detail method. Not implementation, review, landing or the sheet Part 2: Objective UI (heimdall-objective.md 'Start an objective (UI)' and 'Watch and steer' detail sections): New objective sheet with workspace picker, new worktree option, contract fields, budgets, capabilities, role agents, gates, review watcher overrides and validation, objective detail with Contract, Plan revisions, nodes, criteria and Landing",
       "docs": [
         "heimdall-objective.md"
       ],
       "deps": [
-        "m6-heimdall",
+        "m6-heimdall-core",
+        "m6-heimdall-control",
         "m4-hosting-api-github"
       ],
       "status": "todo"
     },
     {
-      "id": "m6-sitter",
+      "id": "m6-objective-execute",
       "milestone": "M6",
-      "title": "PR sitter as a Heimdall kind",
+      "title": "Objective implementation and checks (heimdall-objective.md 'Implementation: dispatch, ingestion and the merge train', 'Acceptance checks', 'Write territory enforcement'): node dispatch with role prompts and report schemas, ingestion with territory checks, infra redispatch, parallel scheduling with isolated worktrees and merge train, acceptance checks and objective gates with stale-evidence re-issue",
+      "docs": [
+        "heimdall-objective.md"
+      ],
+      "deps": [
+        "m6-objective-plan"
+      ],
+      "status": "todo"
+    },
+    {
+      "id": "m6-sitter-github",
+      "milestone": "M6",
+      "title": "Scope: all of the parts below together; a \"Not ...\" note in one part excludes only what no other part here covers. Part 1: PR sitter policy and kind (hosted-review-sitter.md 'Enrollment and authorization', 'Decision policy', 'Gating', 'Stop predicates and parking', 'Outcome resolution after a crash or timeout', 'Discrepancies shown to the user', 'Owner agent', pacing in 'The watch loop'): hosted-review kind in Heimdall, authorization from the forge, snapshot types and provider interface, pure decision policy with action identity, fix-checks and conflict paths, preflight gate, pacing, stop predicates, outcome rules, owner interventions. Provider reads and executors are separate slices Part 2: PR sitter GitHub provider (hosted-review-sitter.md 'Reading the review' GitHub part and local conflict simulation, 'Executing each action' for rerun-check, update-branch, merge and enqueue on GitHub): GraphQL snapshot with required checks, merge queue, failure signatures and readiness, executors and outcome resolution for rerun, update-branch, merge and enqueue",
       "docs": [
         "hosted-review-sitter.md"
       ],
       "deps": [
-        "m6-heimdall",
+        "m6-heimdall-core",
+        "m6-heimdall-control",
+        "m6-heimdall-owner",
         "m4-hosting-api-github"
       ],
       "status": "todo"
     },
     {
-      "id": "sb-mobile",
+      "id": "m6-objective-landing",
+      "milestone": "M6",
+      "title": "Objective review, landing and owner interventions (heimdall-objective.md 'Review by tier', 'Landing and evidence', 'Stop and park rules', 'Pacing', 'Owner interventions for objectives', and the hosted-review hand-off that enrolls a derived sitter): Express, Standard and Full review, reviewer and integrator verdicts, landing ladder record-landing, commit, push and open hosted review, stop predicates, pacing, owner deviations",
+      "docs": [
+        "heimdall-objective.md",
+        "hosted-review-sitter.md"
+      ],
+      "deps": [
+        "m6-objective-execute",
+        "m6-heimdall-owner",
+        "m6-sitter-github"
+      ],
+      "status": "todo"
+    },
+    {
+      "id": "m6-sitter-gitlab",
+      "milestone": "M6",
+      "title": "PR sitter GitLab provider (hosted-review-sitter.md 'Reading the review' GitLab part, 'Executing each action' for rerun-check, update-branch, merge and enqueue on GitLab, GitLab push target): MR and pipeline job snapshot, status checks, merge trains, readiness, executors and outcome resolution",
+      "docs": [
+        "hosted-review-sitter.md"
+      ],
+      "deps": [
+        "m6-sitter-github",
+        "m4-hosting-api-gitlab"
+      ],
+      "status": "todo"
+    },
+    {
+      "id": "m6-sitter-fix-ui",
+      "milestone": "M6",
+      "title": "Scope: all of the parts below together; a \"Not ...\" note in one part excludes only what no other part here covers. Part 1: PR sitter fix agent and publication (hosted-review-sitter.md 'prepare-fix / prepare-conflict-resolution', 'Reading the prepared commit', 'publish-fix / publish-conflict-resolution', diff policy, 'Push target', worktree contention in 'Gating'): agent dispatch through orchestration with the policy prompt, prepared-commit verification, diff policy, contention check, force-with-lease publish, GitHub push target Part 2: PR sitter dialog, CLI and manual fix (hosted-review-sitter.md 'Arm a sitter', 'Read the status and the ledger', 'Approve an action', 'Stop, re-arm, copy debug report', 'CLI', 'Human-initiated fix broken checks'): enrollment form with capability selects, branch update, merge method, check scope and budget, status card and activity ledger, approval cards, stop, stop all, re-arm, debug report, `quirky heimdall create hosted-review`, manual fix-checks launch",
+      "docs": [
+        "hosted-review-sitter.md"
+      ],
+      "deps": [
+        "m6-sitter-github",
+        "m4-hosting-ui-reviews"
+      ],
+      "status": "todo"
+    },
+    {
+      "id": "sb-mobile-daemon",
       "milestone": "Side B",
-      "title": "Mobile: daemon groundwork (non-loopback listener, pairing, end-to-end encryption, method allowlist) and the app, a fork of Orca's Expo app onto Quirky's API",
+      "title": "Scope: all of the parts below together; a \"Not ...\" note in one part excludes only what no other part here covers. Part 1: Mobile daemon: listener, pairing and allowlist (mobile.md 'Transport: the WebSocket listener', 'Pairing protocol' offers, device registry and revocation, 'RPC envelope, authorization and the allowlist'): non-loopback listener widened on demand with port ladder and connection limits, network interface ranking, advertised endpoint, pairing offer and QR, device registry with rotate and revoke, mobile scope method allowlist. Not the E2EE channel or any UI Part 2: Mobile daemon: end-to-end encryption (mobile.md 'Encryption (application-layer E2EE)'): X25519 keypair, v2 hello and ready handshake with transcript hash, HKDF key schedule, sealed frames with deterministic nonces, e2ee_auth with device token, limits and close codes. Not pairing offers or UI Part 3: Mobile desktop UI (mobile.md 'Install the app and open the pairing flow (desktop)', 'Pair from Settings > Mobile (desktop)', 'Revoke a phone', phone-driving overlay): Mobile page intro, install and pair stages, Settings > Mobile pane with machine name, QR generation, paired devices and revoke, auto-restore-fit setting, sidebar button toggle, Phone driving overlay with Take back",
       "docs": [
         "mobile.md"
       ],
@@ -536,11 +765,77 @@
       "status": "todo"
     },
     {
+      "id": "sb-mobile-app",
+      "milestone": "Side B",
+      "title": "Scope: all of the parts below together; a \"Not ...\" note in one part excludes only what no other part here covers. Part 1: Mobile app foundation: fork of Orca's Expo app onto Quirky's API, pairing and shell (mobile.md 'Pair the phone', 'First-run onboarding', 'Home screen and host cards', 'Phone settings screens', 'Credential storage on the phone', 'Direct-connection client details', 'The page bundle'): pairing by QR, link and pasted code, E2EE client with v2 latch, host store and keychain tokens, connection verdicts, home and host cards, onboarding, settings screens, diagnostics, page bundle shell Part 2: Mobile app: workspace list and session screen (mobile.md 'Host workspace list', 'Session screen', 'Terminal streaming'): worktree list with options and search, tab strip, terminal tab with command dock and shortcuts, structured chat tab, new tab sheet, tab actions, driver lock and phone-fit. Not source control, files, tasks, accounts or agent history",
+      "docs": [
+        "mobile.md"
+      ],
+      "deps": [
+        "sb-mobile-daemon"
+      ],
+      "status": "todo"
+    },
+    {
+      "id": "sb-mobile-app-panels",
+      "milestone": "Side B",
+      "title": "Mobile app: panels and notifications (mobile.md 'Source control, review, files, tasks, accounts, agent history', 'Notifications and push' for LAN and tailnet hosts): source control hub, diff review with notes, files explorer and preview, tasks, accounts usage, agent history with resume, notification subscriptions",
+      "docs": [
+        "mobile.md"
+      ],
+      "deps": [
+        "sb-mobile-app"
+      ],
+      "status": "todo"
+    },
+    {
       "id": "fix-flaky-quirky-git-files-scenarios",
       "milestone": "M2",
       "title": "Fix the flaky plugins/quirky.git/test/scenarios/files.test.ts: it failed under load in 3 full-suite runs on the test host and passed each time it was rerun alone (see <git common dir>/build-loop/flakes.log). Find the timing assumption or shared state with quirky.git:systematic-debugging, reproduce it under CPU load, and fix the test or the code it exposes",
       "docs": [
         "source-control.md"
+      ],
+      "deps": [],
+      "status": "todo"
+    },
+    {
+      "id": "m4-editor-drop-open-in-place",
+      "milestone": "M4",
+      "title": "Finder drops into the editor open a file in place when it is inside the worktree and import it otherwise, as Orca does (editor SC-9). m2-editor imports every drop, by user ruling, because Electrobun 2.0.4 gives the page no source path for a dropped file (see docs/loop/decisions/m2-editor.md). Get the dropped paths through a supported Electrobun API or a newer Electrobun release and route them through the shell's typed RPC as a public event. Block with a BLOCKERS.md entry if that needs a native patch or fork, which the user hasn't approved",
+      "docs": [
+        "editor.md"
+      ],
+      "deps": [
+        "m2-editor"
+      ],
+      "status": "todo"
+    },
+    {
+      "id": "fix-flaky-quirky-worktree-window-projects",
+      "milestone": "M1",
+      "title": "Fix the flaky plugins/quirky.worktree/test/window-projects.test.ts: it failed under load in 3 full-suite runs on the test host and passed each time it was rerun alone (see <git common dir>/build-loop/flakes.log). Find the timing assumption or shared state with quirk:systematic-debugging, reproduce it under CPU load, and fix the test or the code it exposes",
+      "docs": [
+        "worktrees.md"
+      ],
+      "deps": [],
+      "status": "todo"
+    },
+    {
+      "id": "fix-flaky-pty-host-host",
+      "milestone": "M1",
+      "title": "Fix the flaky packages/pty-host/test/host.test.ts: it failed under load in 3 full-suite runs on the test host and passed each time it was rerun alone (see <git common dir>/build-loop/flakes.log). Under load, many tests time out at 5 s, and startHost fails with 'could not start process scope guardian' when the guardian isn't ready within 4 s. Reproduce it under CPU load with quirk:systematic-debugging, and fix the timing assumptions in the test helpers or the code they expose",
+      "docs": [
+        "term-daemon.md"
+      ],
+      "deps": [],
+      "status": "todo"
+    },
+    {
+      "id": "fix-test-cost",
+      "milestone": "M1",
+      "title": "Make the test suite cheaper to run. Today every test file starts a real daemon, a pty-host and a login zsh (`zsh -l`), and on the 8-vCPU test host that keeps the load near 21 while four files run. Measure per-file wall time and CPU with `bun run test`, then cut the cost without losing coverage: start non-login shells (`zsh -f`, `bash --noprofile --norc`) in tests that don't exercise shell integration or the login environment, share one daemon and pty-host per test file (beforeAll) where tests don't depend on a fresh one, and drop fixed sleeps in favour of waiting on the event. Keep every scenario test that checks shell integration on a real login shell. Report the before and after suite times in the decision log",
+      "docs": [
+        "term-daemon.md"
       ],
       "deps": [],
       "status": "todo"

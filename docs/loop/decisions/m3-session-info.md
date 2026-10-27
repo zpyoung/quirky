@@ -330,5 +330,38 @@
 - **Revisit if:** Queue land reports an integration conflict or failing command.
 - **Source:** locked by docs/loop/LOOP.md
 
+## D31: Resolve the landing catch-up without dropping either API surface
+- **Question:** The first queue land reported a conflict with newer integration.
+- **Options:** Keep only the older registry; keep the new lifecycle and preserve settingsOverlay.
+- **Chose:** Caught up once to build/roadmap 4cf972048e8697cb94e722051baea3dcde4fa53b. The sole conflict in agents/main.ts now uses the new created-service lifecycle and retains generate/cancelGenerate plus settingsOverlay. Read all five new decision logs fully: ask regex budget, source-control notes/AI, structured runner, ledger and browser agent. No additional contract conflict was found.
+- **Why:** One-shot generation, terminal sessions and structured sessions remain separate; the new lifecycle must not displace Session Info's public settings-resolution method.
+- **Evidence:** Post-resolution typecheck returns 0. Service, core settings, core plan and Session Info API targeted files pass. The local NA-29 generation timing assertion is recorded separately as a nonblocking follow-up, not silently weakened.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** The affected-package suite or queue land reports a core compatibility failure.
+- **Source:** assumed — autonomous
+
+## D32: Follow the operator's core-only landing instruction
+- **Question:** The operator explicitly requires this item to land within the next hour/by 4am.
+- **Options:** Hold the completed core for all native/polish checks; land core flows with explicit dependent follow-up.
+- **Chose:** Fix only blocking core/landing findings. Record native clipboard/denial feedback, OS focus/scroll/flash, Finder reveal, narrow-width discoverability and the observed local one-shot NA-29 verification gap in BLOCKERS. Register followup-m3-session-info-parity-20261027 through queue.ts with dependency m3-session-info and reasons for each unfinished check. Run scripts, typecheck and affected-package suites before queue land, not another pre-land whole suite.
+- **Why:** This is the operator's explicit scope and verification override; queue land runs the complete integration gate. Core Session Info behavior is already implemented and exercised.
+- **Evidence:** Operator instruction in this iteration; docs/loop/BLOCKERS.md m3-session-info section; external queue-add payload operator-followup.json.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** A blocking core-flow failure is observed.
+- **Source:** locked by operator instruction
+
+## D33: Give the subprocess-harness test its teardown budget
+- **Question:** The requested scripts check timed out its load-failure fixture at the implicit 5-second test limit.
+- **Options:** Change production deadlines/assertions; retain assertions and allow the owned subprocess fixture to finish.
+- **Chose:** Only that scripts/suite.test.ts case now uses the existing 15-second owned-process harness budget. It includes child startup, an isolated retry and awaited process-tree cleanup. The expected failure result and every assertion are unchanged.
+- **Why:** This is a harness execution budget, not the agent runtime or SIGTERM grace contract. No one-shot cleanup assertion or production timeout was altered.
+- **Evidence:** First scripts output: fixture timeout at 5001 ms. After the harness-only change, bun test scripts returns 0 with 49 pass, zero fail and 285 assertions. Post-change typecheck returns 0.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** The fixture cannot complete within its bounded cleanup contract.
+- **Source:** assumed — autonomous
+
 ## Progress
-Step 7 ready: implementation, specs, user docs, capped deep review, single supplemental A1 batch, actual web verification and post-fix full gates are complete. Native-only SC-5/7/9 remain pending in the required nightly handoff; the official short-copy-feedback tool partial is documented with independent positive label/reset and clipboard evidence. Next: commit this verification record, detach and run queue.ts land m3-session-info. If interrupted before land, resume that operation; queue status is the authority for whether it landed.
+Operator-directed finish is active. Current catch-up is resolved; core API/planning checks, scripts (49 pass) and typecheck pass. The affected-package remote suite and dependent follow-up registration are running. Nonblocking checks are explicitly listed in BLOCKERS and the native handoff. Next: receive those results, commit the current merge/resolution records, detach and run queue.ts land. Do not start another pre-land whole suite or broaden the core scope.
