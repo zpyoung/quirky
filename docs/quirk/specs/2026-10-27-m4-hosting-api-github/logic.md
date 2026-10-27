@@ -61,7 +61,7 @@ Every numbered scenario is exercised against the daemon API or real quirky CLI w
 | GH05 | Concurrent reads and repointed remote | At most four active gh processes; duplicate reads coalesce; fresh identity follows changed git config |
 | GH06 | Child hangs or output exceeds cap | Bounded failure; descendants terminated; next request remains usable |
 | GH07 | Transient read failure, then success; mutation timeout | Read retries at most three attempts; mutation exactly once, unknown completion reported |
-| GH08 | Exhausted quota or Retry-After, two hosts/accounts | Same scope pauses without spawn until reset; unrelated scope works; snapshot query remains available |
+| GH08 | Exhausted quota, reported GraphQL cost or Retry-After, two hosts/accounts | Reported spend contributes to the safe floor before another queued request starts; same scope pauses without spawn until reset; unrelated scope works; snapshot query remains available |
 | GH09 | Branch in fork origin plus upstream PR | Match correct owner and head repo; linked number wins; tracked upstream supported; number detail carries checks/review/merge state |
 | GH10 | Empty branch, no PR, merged reused branch, default branch | No-review only for definitive absence; implicit stale merged/default-branch PR hidden; explicit link remains available |
 | GH11 | Concurrent cached lookup then mutation | Old in-flight response cannot repopulate cache; next lookup observes mutation; changed event emitted |
@@ -84,7 +84,7 @@ Every numbered scenario is exercised against the daemon API or real quirky CLI w
 | GH28 | Issue get/create/update/comments/labels/assignees | PR-shaped issue endpoint not mistaken for issue; state/reason/duplicate and field edits work; oversize-body partial save returns warning |
 | GH29 | Work item details, participants/timeline and pasted configured reference | Correct issue/PR details with bounded pagination and explicit partial availability; foreign repo refused |
 | GH30 | Projects discovery/ref resolve/views/table across user/org | Host-pinned ambient account; partial org failures; URL validation; pagination/caps; table/board/roadmap supported, unsupported layouts explicit |
-| GH31 | Project field set/clear and issue/PR/comment/type edits, including an item from a repository absent from local remotes | Correct field-specific mutation on the selected trusted project host using ambient auth; cross-repository item changes read back correctly; foreign-host substitution refused; capability fallback and distinct auth/scope/schema/too-large errors |
+| GH31 | Typed project field set/clear and issue/PR/comment/type edits, including an item from a repository absent from local remotes | Correct field-specific mutation/readback on the trusted project host using ambient auth; reversible edits need no consent, comment deletion requires answered confirmation or yes; foreign-host substitution refused; capability fallback and distinct auth/scope/schema/too-large errors |
 | GH32 | Generated hosting CLI and plugin disable/override | Same method behavior as API; schemas discoverable without activation; disabled methods disappear and consumers cannot bypass registry |
 
 ### Orca defect regressions

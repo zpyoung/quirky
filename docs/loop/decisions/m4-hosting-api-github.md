@@ -347,5 +347,16 @@
 - **Revisit if:** the provider changes its schema or introduces another capability-probed field.
 - **Source:** assumed — autonomous; locked by hosting-api.md provider API contract
 
+## D32: Account for reported GraphQL spend before admitting more work
+- **Question:** is subtracting one per request sufficient when a search reports a larger provider cost?
+- **Options:** ignore the selected cost field; debit its additional spend before releasing admission.
+- **Chose:** retain the one-point reservation and apply larger reported cost to the same host/account budget before queued requests resume. Parse once and reuse the decoded response.
+- **Why:** the current runner ignored data.rateLimit.cost. The API regression reported51 points from a99-point bucket, then incorrectly allowed a second search instead of applying the safe50-point floor. Other buckets must remain usable.
+- **Evidence:** hosting-api.md:304,316; runtime-runner.ts:170,405-410; new GH08 daemon API regression failed with partial:false instead of a rate_limited PR source; captured request bodies contain the requested rateLimit cost field.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** GitHub replaces reported query cost with another authoritative budget mechanism.
+- **Source:** locked by hosting-api.md
+
 ## Progress
 Step5 catch-up completed. The original115 targeted tests, typecheck and isolated CLI smoke passed; the post-catch-up smoke also passed under owned-run. Before final gates, fix newly confirmed provider-wire and conditional-consent defects with failing-before/passing-after API regressions. Verify GraphQL queries against the authoritative schema rather than trusting synthetic fixtures. Then run required full gates, the one final cross-family review and accepted-finding fix batch, and land.
