@@ -6,7 +6,10 @@ import { join } from 'node:path'
 import { QuirkyClient, RpcErrorCode, type PluginEvent, type QuirkyEvent, type Session } from '@quirky/protocol'
 import { rpcUrl } from '@quirky/protocol/node'
 import { waitFor, waitForAsync, type Harness } from '../../../packages/daemon/test/helpers'
-import { groupsInOrder, paneLeaves } from '../src/layout/tree'
+import { InputTracker } from '../src/input-tracker'
+import { LayoutService } from '../src/layout/service'
+import { appendTab, emptyWorkspace, makeTab } from '../src/layout/ops'
+import { sequentialIds, groupsInOrder, paneLeaves } from '../src/layout/tree'
 import type { FloatingState, Group, PaneLeaf, Tab, Workspace } from '../src/layout/types'
 import { sessionCreates } from './fakes/quirky.session/main'
 import { call, createSession, restartDaemon, startPluginHarness, TERMINAL_PLUGINS, type PluginSet } from './support'
@@ -416,13 +419,14 @@ describe('closed tabs', () => {
     expect(groupsOf(ws)[0]!.activeTab).toBe(lastTab(ws).id)
   })
 
-  test('the directory a shell reported is the directory the tab reopens in', async () => {
-    const dir = tempDir()
-    const ws = await newTab()
+  test('a closed tab remembers the directory its session started in, not the one the shell moved to', async () => {
+    const start = tempDir()
+    const moved = tempDir()
+    const ws = await newTab({ cwd: start })
     const tab = lastTab(ws)
-    await fact(panesOf(tab)[0]!.session, { kind: 'cwd', cwd: dir }, 'cwd')
+    await fact(panesOf(tab)[0]!.session, { kind: 'cwd', cwd: moved }, 'cwd')
     const closed = (await api('closeTab', { tab: tab.id })).workspace
-    expect(closed.closed[0]!.cwd).toBe(dir)
+    expect(closed.closed[0]!.cwd).toBe(start)
   })
 
   test('only ten closed tabs are kept, newest first', async () => {
@@ -624,13 +628,38 @@ describe('panes', () => {
   test('SC-34: clearPane and resetPane reach the PTY host for the pane\'s session', async () => {
     const { tab } = await tabWithPanes(2)
     const pane = panesOf(tab)[1]!
-    expect(await api('clearPane', { pane: pane.id })).toEqual({ ok: true })
-    expect(await api('resetPane', { session: pane.session })).toEqual({ ok: true })
+    const before = await layoutOf()
+    expect(await api('clearPane', { pane: pane.id })).toEqual({ workspace: before })
+    expect(await api('resetPane', { session: pane.session })).toEqual({ workspace: before })
+    expect((await layoutOf()).revision).toBe(before.revision)
     const sent = h.pty.requests.filter((r) => r.type === 'clear' || r.type === 'resetModes')
     expect(sent.map((r) => [r.type, (r as { sessionId: string }).sessionId])).toEqual([
       ['clear', pane.session],
       ['resetModes', pane.session]
     ])
+  })
+})
+
+describe('clearPane and resetPane revision precondition', () => {
+  test('a stale revision is a conflict and nothing reaches the PTY host', async () => {
+    const ids = sequentialIds(1)
+    const empty = emptyWorkspace('floating', ids)
+    const ws = (appendTab(empty, empty.activeGroup, makeTab(ids, { defaultTitle: 'T', session: 's1', now: 'now' })) as { ok: true; value: Workspace }).value
+    const store = { loadWorkspaces: () => ({ workspaces: [ws], unreadable: [] }), counter: () => 20, floating: () => ({}), save: () => {} }
+    const reached: string[] = []
+    const context = {
+      log: () => {},
+      error: (kind: string, message: string) => Object.assign(new Error(message), { kind }),
+      pty: { clear: async (s: string) => void reached.push(s), resetModes: async (s: string) => void reached.push(s) }
+    }
+    const service = new LayoutService(context as never, store as never, new InputTracker())
+    const pane = paneLeaves(groupsInOrder(ws.root)[0]!.tabs[0]!.root)[0]!
+    for (const method of ['clearPane', 'resetPane']) {
+      const refused = (await Promise.resolve(service.methods[method]!({ pane: pane.id, revision: ws.revision + 5 }, {} as never)).catch((e: unknown) => e)) as { kind?: string }
+      expect(refused.kind).toBe('conflict')
+      expect(await service.methods[method]!({ pane: pane.id, revision: ws.revision }, {} as never)).toEqual({ workspace: ws })
+    }
+    expect(reached).toEqual(['s1', 's1'])
   })
 })
 
@@ -887,6 +916,42 @@ describe('describeClose and conditional confirmation', () => {
     asking.pty.exit(panesOf(shell)[0]!.session, 3)
     await waitForAsync(async () => (await ask('describeClose', { tab: shell.id })) === null)
     expect(await ask('describeClose', { tab: shell.id })).toBeNull()
+  })
+})
+
+describe('describeClose fails closed', () => {
+  function serviceWith(sessions: { call: (method: string) => Promise<unknown>; list: () => Promise<unknown[]> }) {
+    const ids = sequentialIds(1)
+    let ws = emptyWorkspace('floating', ids)
+    const tab = makeTab(ids, { defaultTitle: 'Live agent', session: 's1', now: 'now' })
+    ws = (appendTab(ws, ws.activeGroup, tab) as { ok: true; value: Workspace }).value
+    const store = { loadWorkspaces: () => ({ workspaces: [ws], unreadable: [] }), counter: () => 20, floating: () => ({}), save: () => {} }
+    const context = {
+      log: () => {},
+      error: (_kind: string, message: string) => Object.assign(new Error(message), { code: _kind === 'not-found' ? RpcErrorCode.NotFound : 0 }),
+      pty: { list: sessions.list },
+      call: sessions.call
+    }
+    const service = new LayoutService(context as never, store as never, new InputTracker())
+    return { tab, describe: () => service.methods.describeClose!({ tab: tab.id }, {} as never) }
+  }
+  const shell = { id: 's1', kind: 'terminal', agent: 'shell', status: 'running', title: 'Shell' }
+
+  test('a failed session lookup asks for confirmation, naming the tab', async () => {
+    const { describe } = serviceWith({ call: async () => Promise.reject(new Error('temporary failure')), list: async () => [] })
+    expect(await describe()).toBe('Stop the session in Live agent?')
+  })
+
+  test('a running shell with no PTY row asks, while a session that is definitively gone does not', async () => {
+    const missingRow = serviceWith({ call: async () => shell, list: async () => [] })
+    expect(await missingRow.describe()).toBe('Stop the session in Live agent?')
+    const gone = serviceWith({ call: async () => Promise.reject(Object.assign(new Error('no session'), { code: RpcErrorCode.NotFound })), list: async () => [] })
+    expect(await gone.describe()).toBeNull()
+  })
+
+  test('an idle shell with a PTY row closes with no question', async () => {
+    const idle = serviceWith({ call: async () => shell, list: async () => [{ sessionId: 's1', pid: 2 ** 22 + 7, alive: true }] })
+    expect(await idle.describe()).toBeNull()
   })
 })
 

@@ -1,4 +1,5 @@
 import type { MethodHandler, PluginCaller, PluginContext, Session } from '@quirky/protocol'
+import type { InputTracker } from '../input-tracker'
 import type { LayoutService } from '../layout/service'
 import type { LayoutStore } from '../layout/store'
 import type { QuickCommand } from '../layout/types'
@@ -26,7 +27,8 @@ export class QuickCommandService {
   constructor(
     private readonly context: PluginContext,
     private readonly store: LayoutStore,
-    private readonly layout: LayoutService
+    private readonly layout: LayoutService,
+    private readonly inputs: InputTracker
   ) {}
 
   readonly methods: Record<string, MethodHandler> = {
@@ -125,7 +127,9 @@ export class QuickCommandService {
       const { session } = await this.layout.paneSession({ pane: params.pane })
       const record = (await this.context.call('quirky.session/get', { session })) as Session
       if (record.status === 'exited') throw this.context.error('conflict', `session ${session} has exited`)
+      this.inputs.mark(session)
       this.context.pty.write(session, command.appendEnter ? `${text}\r` : text)
+      await this.layout.rememberQuickCommand(params.pane as string, command.id)
       return { ok: true, session }
     }
 
@@ -137,6 +141,7 @@ export class QuickCommandService {
       return { ok: true, session: created.session.id, workspace: created.workspace }
     }
     const created = await this.layout.createTab(workspace, { ...target, title: command.label, quickCommand: command.id })
+    this.inputs.mark(created.session.id)
     this.context.pty.write(created.session.id, `${text}\r`)
     return { ok: true, session: created.session.id, workspace: created.workspace }
   }

@@ -168,6 +168,29 @@ describe('SC-51, SC-52: running a command', () => {
     expect(tabsOf(multi.workspace as Workspace).map((t) => t.defaultTitle)).toEqual(['Hello', 'Build'])
   })
 
+  test('a lone shell a quick command made exit 0 closes, whether the command ran in a new tab or an existing pane', async () => {
+    await add({ label: 'Leave', command: 'exit 0' })
+    const created = await api('runQuickCommand', { id: 'leave', workspace: 'main' })
+    h.pty.exit(created.session, 0)
+    await waitForAsync(async () => tabsOf((await api('workspace', { workspace: 'main' })).workspace).length === 0)
+
+    const ws = (await api('newTab', { workspace: 'main' })).workspace as Workspace
+    const pane = paneLeaves(tabsOf(ws)[0]!.root)[0]!
+    await api('runQuickCommand', { id: 'leave', pane: pane.id })
+    h.pty.exit(pane.session, 0)
+    await waitForAsync(async () => tabsOf((await api('workspace', { workspace: 'main' })).workspace).length === 0)
+  })
+
+  test('a pane run is remembered as the group\'s last quick command', async () => {
+    await add({ label: 'Hello', command: 'echo hello' })
+    const ws = (await api('newTab', { workspace: 'main' })).workspace as Workspace
+    const pane = paneLeaves(tabsOf(ws)[0]!.root)[0]!
+    await api('runQuickCommand', { id: 'hello', pane: pane.id })
+    const after = (await api('workspace', { workspace: 'main' })).workspace as Workspace
+    expect(groupsInOrder(after.root)[0]!.lastQuickCommand).toBe('hello')
+    expect(after.revision).toBe(ws.revision + 1)
+  })
+
   test('a run in the floating workspace opens a floating tab', async () => {
     await add({ label: 'Hello', command: 'echo hello' })
     const result = await api('runQuickCommand', { id: 'hello', workspace: 'floating' })
