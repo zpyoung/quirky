@@ -605,5 +605,27 @@
 - **Revisit if:** the main process hits the ceiling again as other items add tests, or someone fixes the plugin host so a stopped daemon releases its plugin modules; that fix would let the script go back to one process
 - **Source:** assumed — autonomous
 
+## D56: Final Round 1: accept all nine standing findings, which collapse to seven defects, and fix them in one batch
+- **Question:** Final Round 1's adjudication (subagent-driven-development step 9; LOOP.md "One final review round")
+- **Options:** accept, reject or re-grade each standing finding
+- **Chose:** three Codex lenses (`gpt-6.1-sol`, independence full, depth deep) over merge-base(build/roadmap)..HEAD returned correctness NEEDS_FIXES (C1–C4), spec NEEDS_FIXES (S1, S2; S3 suppressed as C4's duplicate) and security CRITICAL_ISSUES (X1–X3; X4 refuted). All nine accepted, collapsing to seven defects, with these effective severities: C2/X1 HIGH (a save finishing marks newer typing clean, and a layout switch then drops it; X1's CRITICAL is lowered because only unsaved typing is lost), X2 HIGH (`ignoreFolder` follows a repo's `.gitignore` symlink outside the worktree; lowered from CRITICAL because the write is a fixed `<folder>/` line), C1 HIGH (combined diff never refreshes content whose counts didn't change), C3/S1 HIGH (the whitespace filter hides internal-space changes), X3 MEDIUM (two concurrent saves with one precondition both win; lowered from CRITICAL because it needs two writers within one save's window), C4/S3 MEDIUM (conflicts past the first 50 never get Stage), S2 MEDIUM (submodule rows don't expand). One fix batch: the view (C1, C2/X1, C3/S1), the panel (C4, S2), git and the daemon (X2, X3), each in its own worktree.
+- **Why:** each finding reproduced in the refute stage; none contradicts a locked decision
+- **Evidence:** scratchpad final/gate-C.json, gate-S.json, gate-X.json, manifest inputs model.json and prepass.json
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** a fix can't be confirmed closed; it then goes to BLOCKERS.md
+- **Source:** assumed — autonomous
+
+## D57: X4 (a git timeout kills only git, not helpers holding its pipes) stays as it is
+- **Question:** the security lens's X4, refuted as unchanged code
+- **Options:** fix `runGit`'s timeout to kill a process group; leave it
+- **Chose:** leave it. The refute stage reproduced the overrun but found `runGit`'s timeout and pipe draining unchanged from before this item; this item only adds callers with a 120 s timeout. An ssh helper that outlives a killed git keeps the call, and the worktree's lock, until the helper exits.
+- **Why:** the refutation stands on the rule that the review covers this item's changes; batch-mode ssh (D34) makes a helper waiting for input fail fast, which removes the likely cause
+- **Evidence:** scratchpad final/refute-X.json; packages/git/src/run.ts
+- **Reversibility:** easy
+- **Confidence:** medium
+- **Revisit if:** a remote call is seen holding a worktree's lock past its timeout
+- **Source:** assumed — autonomous
+
 ## Progress
-W1–W3 merged and caught up with build/roadmap. Next: post-merge full gate, Final Round 1 (three deep Codex lenses over merge-base(build/roadmap)..HEAD), one fix batch, rerun the suites, verify (UI scenarios with quirk:using-apps-like-a-user on a built daemon), land. If this iteration stops, start at the gate.
+Final Round 1 done (D56); its fix batch (view, panel, git/daemon) is running. Next: audit and merge the fixes, rerun the three suites, UI verification with quirk:using-apps-like-a-user on a built daemon, land. If this iteration stops, rerun the fix batch from D56's list on the branch tip.
