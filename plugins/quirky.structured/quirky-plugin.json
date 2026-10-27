@@ -2,7 +2,7 @@
   "id": "quirky.structured",
   "name": "Structured sessions",
   "version": "0.1.0",
-  "description": "Background native Claude and Codex sessions without terminals: journaled messages and permission prompts as asks.",
+  "description": "Background Claude sessions without a terminal: journaled messages and permission prompts as asks.",
   "main": "main.ts",
   "activation": "lazy",
   "dependencies": ["quirky.session", "quirky.ask", "quirky.agents"],
@@ -10,12 +10,12 @@
     "method": [
       {
         "id": "create",
-        "description": "Starts a structured (no PTY) Claude or Codex conversation, optionally with model and effort picks. Extra arguments are refused.",
+        "description": "Starts a structured (no PTY) background agent session, optionally with a model and effort pick. Only the `claude` runner exists; extra arguments are refused.",
         "params": {
           "type": "object",
           "properties": {
             "worktree": { "type": "string", "description": "A worktree selector; defaults to the caller's worktree." },
-            "agent": { "type": "string", "enum": ["claude", "codex"], "description": "The structured provider to run." },
+            "agent": { "type": "string", "description": "The agent to run." },
             "prompt": { "type": "string" },
             "model": { "type": "string", "description": "A model ID from the agent's catalog, 1 to 128 characters." },
             "options": {
@@ -73,51 +73,6 @@
             },
             "required": ["sessionId", "seq", "role", "text", "at"]
           }
-        }
-      },
-      {
-        "id": "resume",
-        "description": "Resumes the persisted native Claude or Codex conversation into a new structured session; the optional prompt starts its first turn.",
-        "params": {
-          "type": "object",
-          "properties": {
-            "session": { "type": "string", "description": "The structured session to resume." },
-            "prompt": { "type": "string", "description": "Optional first prompt; omit to connect idle and send later." }
-          },
-          "required": ["session"]
-        },
-        "result": {
-          "type": "object",
-          "properties": {
-            "id": { "type": "string" },
-            "kind": { "type": "string", "enum": ["structured"] },
-            "agent": { "type": "string", "enum": ["claude", "codex"] },
-            "worktreeId": { "type": "string" },
-            "cwd": { "type": "string" },
-            "title": { "type": "string" },
-            "status": { "type": "string", "enum": ["starting", "running", "working", "waiting", "done", "exited"] },
-            "createdAt": { "type": "number" },
-            "lastActivityAt": { "type": "number" },
-            "exitCode": { "description": "The exit code, or null while the process is alive." },
-            "launchSettings": { "description": "The original catalog launch snapshot." },
-            "providerSession": { "description": "The native provider conversation identity." },
-            "resumedFrom": { "type": "string", "description": "The Quirky session this record resumes." }
-          },
-          "required": ["id", "kind", "agent", "worktreeId", "cwd", "title", "status"]
-        }
-      },
-      {
-        "id": "stop",
-        "description": "Stops a structured provider connection without removing its session record or journal.",
-        "params": {
-          "type": "object",
-          "properties": { "session": { "type": "string" } },
-          "required": ["session"]
-        },
-        "result": {
-          "type": "object",
-          "properties": { "ok": { "type": "boolean" } },
-          "required": ["ok"]
         }
       },
       {

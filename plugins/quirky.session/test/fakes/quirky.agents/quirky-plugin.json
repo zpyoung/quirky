@@ -20,19 +20,6 @@
         "params": { "type": "object", "properties": { "agent": { "type": "string" } }, "required": ["agent"] }
       },
       {
-        "id": "resolveLaunch",
-        "params": {
-          "type": "object",
-          "properties": {
-            "agent": { "type": "string" },
-            "model": { "type": "string" },
-            "options": { "type": "object", "additionalProperties": true },
-            "structured": { "type": "boolean" }
-          },
-          "required": ["agent", "structured"]
-        }
-      },
-      {
         "id": "prepareLaunch",
         "params": {
           "type": "object",

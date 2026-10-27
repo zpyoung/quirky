@@ -749,5 +749,37 @@ Cleanup: the corrected run ended with no kept-open windows or cleanup errors. It
 - **Confidence:** high for the independently reproduced missing prerequisite
 - **Source:** supersedes m3-handoff D70
 
+## D74: Preserve the shipped name migration and append handoff badges after it
+- **Question:** how to resolve the failed landing's independent session-name and handoff-badge additions
+- **Options:** select one side; put both columns in the same existing migration; preserve integration's seventh `name` migration and add badges as the eighth
+- **Chose:** preserve both session fields and use separate ordered migrations, name first and badges next. The existing migration regression now constructs the shipped named-session schema explicitly and verifies the upgrade preserves its name and permits persisted badge writes.
+- **Why:** an existing store already at version 7 must still receive the new badges column; changing that old migration would skip the upgrade. The throwaway runtime smoke against pre-resolution `c4bc792` fails with `SQLiteError: no such column: badges`; the reconciled implementation preserves `name: reviewer` and persists the badge. Both the permanent test and smoke exercise session records, not source text.
+- **Evidence:** `plugins/quirky.session/src/records.ts`, `test/badges.test.ts`; failing-before/passing-after migration smoke exit 0 and cleanup confirmed. LSP reported no available server; known-symbol lookup found `sessionMigrations` consumers in plugin activation and memory-store fixture.
+- **Reversibility:** medium
+- **Confidence:** high
+- **Source:** locked by docs/loop/decisions/m1-agent-status-scripting.md
+
+## D75: Review the new reconciliation with the available cross-family fallback
+- **Question:** how to review this omp continuation's new merge resolution without repeating the already completed full-feature review
+- **Options:** use the required Opus reviewer; fall back to the next available different-family reviewer; skip review
+- **Chose:** Opus preflight reported no authenticated/shipping model, while Gemini resolved to `google/gemini-3.1-pro-preview:high`. Ran one read-only scoped review of the current-integration diff, session records and migration regression after removing the captured candidate. Reviewer returned `STATUS: PASS`, finding no merge/migration, naming/badge preservation, or unlanded-M5 leakage defect.
+- **Why:** LOOP.md requires cross-family review for omp implementation and permits fallback when Opus is unreachable. The previous feature-wide final review remains complete; this pass covers only newly required reconciliation.
+- **Evidence:** `pi-watch --check opus` exit 5; `pi-watch --check gemini` exit 0; `pi-watch --alias gemini --tools read,grep,find,ls --require-trailer STATUS ...` exit 0 / `STATUS: PASS`. Review's temporary diff directory was removed.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** locked by docs/loop/LOOP.md
+
+Candidate cleanup: reversed only `38a4f23`'s contribution, retaining the incoming complete M5 decision record and current integration. The checks plugin, native Codex runner, M5 structured-resume/ask-owner integrations, accidental M5 specs/docs claims and lockfile entry were removed. Handoff/session naming/status APIs remain. No active revert sequence or conflict remains.
+
+## D76: Reconciled source passes the final affected-consumer gate
+- **Question:** whether the candidate removal and shipped-schema migration resolution preserve handoff and the current integration contracts
+- **Options:** rely on the earlier candidate-containing result; verify the reconciled source and leave whole-repo verification to queue landing
+- **Chose:** the affected-consumer suite covering CLI, daemon, protocol, UI, handoff, notifications, session, terminal, ask, agents and structured plugins exits 0 for 297 remote files plus 2 macOS-only files. Shell-path and terminal divider-sizing files initially failed under parallel load, then passed the runner's isolated reruns; both remain explicitly reported as flaky. Scripts pass 62 tests, typecheck exits 0, and the UI/desktop packaged build exits 0 with 11 bundled plugins.
+- **Why:** this exercises both the handoff consumers and the source restored by removal, rather than relying on verification of an unlanded candidate. The migration also has the failing-before/passing-after smoke in D74 and the independent scoped review in D75.
+- **Evidence:** final affected suite `suite-result {"ok":true,"flaky":["packages/daemon/test/shell-path.test.ts","plugins/quirky.terminal/test/e2e-ui/workspace-panes.test.ts"]}`; `bun test scripts && bun run typecheck && bun run build` exit 0
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** locked by docs/loop/LOOP.md
+
 ## Progress
-Implementation, checkpoint reviews and Final Round 1 are complete. Latest integration decisions are reconciled (D64). Guarded UI scenarios SC-1, 3, 21, 24, 33, 36, 50, 53, 54, 58 and 59 pass; SC-40 has only the permitted hover-tool limitation, with marker/count/cost verified. Every UI run, smoke container and owned daemon/temporary home is closed. The operator's night-mode affected-package gate passes (242 remote files plus 2 macOS-only files, one reported terminal divider-sizing flake passed alone), scripts pass 49 tests, typecheck/build pass (D71). Diagnostic-only edits were removed; no product changes were needed this iteration. Next: commit this verification log, detach and `queue.ts land m3-handoff`; land retains its whole-suite integration gate. Do not start another item.
+Implementation, checkpoint reviews and Final Round 1 are complete. Latest incoming decision logs are reconciled; accidental transient M5 source is removed (D72–D73). Session name migration 7 and badge migration 8 are preserved with a consumer-visible upgrade regression and before/after runtime smoke (D74). Scoped cross-family fallback review passes (D75). Final affected-consumer verification passes 297 remote files plus 2 macOS-only files, with two runner-reported flakes passing alone; scripts 62 pass, typecheck and packaged build pass (D76). Eleven selected guarded UI scenarios pass; SC-40 has only the permitted hover-tooltip limitation, with marker/count/cost verified. All temporary UI/smoke/review resources are closed/removed. Next: commit the reconciliation, detach and retry `queue.ts land m3-handoff`; that command retains the whole-suite integration gate. Do not start another item.

@@ -112,11 +112,19 @@ describe('session store badges column', () => {
       "INSERT INTO sessions (id, kind, agent, worktree_id, cwd, title, status, created_at, last_activity_at, exit_code, repo_id) VALUES ('s_old', 'terminal', 'claude', 'wt', '/work', 'Claude', 'running', 1, 1, NULL, 'repo')"
     )
 
-  test('a row written before the migration reads with no badges', () => {
+  test('a named session from the shipped schema upgrades without losing its name or badge writes', () => {
     const store = memoryStore(6)
+    store.exec('ALTER TABLE sessions ADD COLUMN name TEXT')
     insert(store)
-    migrateStore(store, 6)
-    expect(new SessionRecords(store).get('s_old')?.badges ?? {}).toEqual({})
+    store.run("UPDATE sessions SET name = 'reviewer' WHERE id = 's_old'")
+    migrateStore(store, 7)
+    const records = new SessionRecords(store)
+    expect(records.get('s_old')).toMatchObject({ name: 'reviewer' })
+    expect(records.get('s_old')?.badges ?? {}).toEqual({})
+    expect(records.update('s_old', { badges: { 'a/k': { label: 'A' } } })).toMatchObject({
+      name: 'reviewer',
+      badges: { 'a/k': { label: 'A' } }
+    })
   })
 
   test('badges round-trip through update and other updates leave them', () => {
