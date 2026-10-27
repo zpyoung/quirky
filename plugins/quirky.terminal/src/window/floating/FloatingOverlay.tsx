@@ -109,17 +109,32 @@ export function FloatingOverlay({ context, report, workspaceOptions }: Props) {
 
   useEffect(() => {
     let live = true
-    const load = () =>
+    // a read answered after a newer event describes an older daemon state and must not replace it
+    let eventSeq = 0
+    let settingSeq = 0
+    let settingEnabled = false
+    const load = () => {
+      const eventAtStart = eventSeq
+      const settingAtStart = settingSeq
       void context
         .call('quirky.terminal/floating')
-        .then((next) => live && setState(next as FloatingState))
+        .then((next) => {
+          if (!live || eventAtStart !== eventSeq) return
+          const read = next as FloatingState
+          setState(settingAtStart === settingSeq ? read : { ...read, enabled: settingEnabled })
+        })
         .catch((error) => context.log(`floating state: ${messageOf(error)}`))
+    }
     load()
     const unsubscribe = context.subscribe((event: QuirkyEvent) => {
       const data = (event as { data?: { state?: FloatingState } }).data
-      if (event.type === FLOATING_EVENT && data?.state) setState(data.state)
-      else if (event.type === 'setting.changed' && terminalSettingName(event.id) === 'floating-enabled') {
-        setState((held) => (held ? { ...held, enabled: event.value === true } : held))
+      if (event.type === FLOATING_EVENT && data?.state) {
+        eventSeq += 1
+        setState(data.state)
+      } else if (event.type === 'setting.changed' && terminalSettingName(event.id) === 'floating-enabled') {
+        settingSeq += 1
+        settingEnabled = event.value === true
+        setState((held) => (held ? { ...held, enabled: settingEnabled } : held))
       }
     })
     const unwatch = context.onConnection((status) => status === 'connected' && load())
@@ -291,13 +306,15 @@ export function FloatingOverlay({ context, report, workspaceOptions }: Props) {
         <Icon path={PANELS} />
       </button>
       {menu ? (
-        <Menu
-          items={[{ label: 'Hide Floating Workspace', onSelect: () => void context.call('setting.set', { id: ENABLED_SETTING, value: false }).catch((error) => context.toast('Could not hide the floating workspace', messageOf(error))) }]}
-          label="Floating workspace"
-          x={menu.x}
-          y={menu.y}
-          onClose={() => setMenu(null)}
-        />
+        <div className="qf-menu-layer">
+          <Menu
+            items={[{ label: 'Hide Floating Workspace', onSelect: () => void context.call('setting.set', { id: ENABLED_SETTING, value: false }).catch((error) => context.toast('Could not hide the floating workspace', messageOf(error))) }]}
+            label="Floating workspace"
+            x={menu.x}
+            y={menu.y}
+            onClose={() => setMenu(null)}
+          />
+        </div>
       ) : null}
     </>
   )

@@ -31,6 +31,12 @@ function textArg(args: Args, name: string): string | undefined {
   return typeof value === 'string' && value !== '' ? value : undefined
 }
 
+/** Like `textArg` but an explicit empty string survives, so a caller can tell "cleared" from "omitted". */
+function stringArg(args: Args, name: string): string | undefined {
+  const value = args[name]
+  return typeof value === 'string' ? value : undefined
+}
+
 function viewedWorktree(context: UiPluginContext): string | null {
   const worktree = (context.getLayout().view?.input as { worktree?: unknown } | null | undefined)?.worktree
   return typeof worktree === 'string' && worktree !== '' ? worktree : null
@@ -123,7 +129,7 @@ export function terminalCommands(context: UiPluginContext): Record<string, Comma
       const text = typeof args.text === 'string' ? args.text : await readClipboard(context)
       if (text !== '') await controller.paste(text, pane)
     }),
-    search: onPane(context, (controller, pane, args) => controller.search(textArg(args, 'query'), searchOptions(args), pane)),
+    search: onPane(context, (controller, pane, args) => controller.search(stringArg(args, 'query'), searchOptions(args), pane)),
     'search-next': onPane(context, (controller, pane) => controller.searchNext(pane)),
     'search-previous': onPane(context, (controller, pane) => controller.searchPrevious(pane)),
     'search-close': onPane(context, (controller, pane) => controller.searchClose(pane)),
@@ -213,10 +219,12 @@ export function watchQuickCommands(context: UiPluginContext, workspace: string):
   const listeners = new Set<() => void>()
   const changed = () => listeners.forEach((listener) => listener())
 
+  let latest = 0
   const load = async () => {
+    const mine = ++latest
     try {
       const result = (await context.call('quirky.terminal/quickCommands', { workspace })) as { commands: QuickCommand[] }
-      if (live) commands = result.commands
+      if (live && mine === latest) commands = result.commands
     } catch {
       // the menus show "No quick commands" until the next change brings them
     }

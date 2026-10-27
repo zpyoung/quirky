@@ -58,6 +58,7 @@ type Options = {
   floatingWorkspace?: Workspace
   withMain?: boolean
   settings?: Record<string, unknown>
+  read?: () => unknown
 }
 
 /** Mounts the plugin's overlay (and, with `withMain`, the worktree view beside it) over fake daemons. */
@@ -75,7 +76,7 @@ async function mountOverlay(options: Options = {}) {
       'quirky.terminal/activateTab': (params) => ({ workspace: forWorkspace(params.workspace).current }),
       'quirky.terminal/quickCommands': () => ({ commands: [] }),
       'quirky.worktree/resolve': () => ({ repoId: 'repo-1' }),
-      'quirky.terminal/floating': () => state,
+      'quirky.terminal/floating': () => (options.read ? options.read() : state),
       'quirky.terminal/setFloating': (params) => {
         state = { ...state, ...params }
         for (const listener of [...listeners]) listener({ type: 'quirky.terminal/floating', data: { state } } as never)
@@ -226,6 +227,36 @@ describe('SC-59: the floating button', () => {
     expect([...rows].map((row) => row.textContent)).toEqual(['Hide Floating Workspace'])
     await click(rows[0]!)
     expect(view.fake.callsTo('setting.set').map((call) => call.params)).toEqual([{ id: 'setting:quirky.terminal/floating-enabled', value: false }])
+  })
+
+  test('the Hide Floating Workspace menu takes pointer events, since the overlay layer does not', async () => {
+    const view = await mountOverlay()
+    await fire(button(view), mouse('contextmenu', { clientX: 1300, clientY: 800 }))
+    const layer = document.querySelector('.qf-menu-layer')
+    expect(layer?.querySelector('.qt-menu-anchor')).not.toBeNull()
+    const css = [...document.querySelectorAll('style[data-part="floating"]')].map((style) => style.textContent).join('')
+    expect(css).toMatch(/\.qf-menu-layer\s*\{[^}]*pointer-events:\s*auto/)
+  })
+
+  test('a floating-state read answered after the setting turned the workspace off does not bring the button back', async () => {
+    let finish: (state: FloatingState) => void = () => {}
+    const view = await mountOverlay({ read: () => new Promise((resolve) => (finish = resolve as never)) })
+    expect(view.q('[data-floating-button]')).toBeNull()
+    await view.fake.emit({ type: 'setting.changed', id: 'setting:quirky.terminal/floating-enabled', value: false })
+    await act(async () => finish({ enabled: true, open: false, maximized: false, bounds: null, button: null }))
+    await settle()
+    expect(view.q('[data-floating-button]')).toBeNull()
+  })
+
+  test('a floating-state read answered after a newer floating event does not replace it', async () => {
+    let finish: (state: FloatingState) => void = () => {}
+    const view = await mountOverlay({ read: () => new Promise((resolve) => (finish = resolve as never)) })
+    const newer: FloatingState = { enabled: true, open: false, maximized: false, bounds: null, button: { x: 300, y: 200 } }
+    await view.fake.emit({ type: 'quirky.terminal/floating', data: { state: newer } } as never)
+    expect(at(button(view))).toMatchObject({ x: 300, y: 200 })
+    await act(async () => finish({ ...newer, button: { x: 10, y: 10 } }))
+    await settle()
+    expect(at(button(view))).toMatchObject({ x: 300, y: 200 })
   })
 
   test('turning the setting off removes the button and the panel; turning it on brings them back', async () => {
