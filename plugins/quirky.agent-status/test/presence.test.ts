@@ -72,6 +72,20 @@ describe('SC-19: an agent that exits without saying so ends its row', () => {
     expect(await rig.row()).toBeNull()
   })
 
+  test('a successor of the same kind replaces the dead agent and keeps its own process id', async () => {
+    rig = await Rig.start()
+    const predecessor = agentProcess()
+    const successor = agentProcess()
+    await prompt(predecessor)
+    await killed(predecessor.process)
+
+    await prompt(successor)
+    expect(await rig.row()).toMatchObject({ state: 'working', lead: { agentPid: successor.pid, agentStart: successor.pstart } })
+
+    await runPresence()
+    expect(await rig.state()).toBe('working')
+  })
+
   test('rows without a process id are left alone', async () => {
     rig = await Rig.start()
     await rig.hook('claude', { hook_event_name: 'UserPromptSubmit', prompt: 'go' })
