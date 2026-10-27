@@ -55,7 +55,7 @@ test('SC-41: a sync that stops on a conflict leads, in the window, to Continue m
   await click(stage)
   const banner = await w.win.waitFor(() => (text(q('.scm-card strong')) === 'Merge in progress' ? q('.scm-card') : undefined))
   expect(buttonText('Continue merge', banner)).toBeDefined()
-  expect(text(q('.scm-badge-resolved'))).toBe('Resolved locally')
+  expect(text(q('.scm-badge-resolved .scm-badge-text'))).toBe('Resolved locally')
 
   await click(buttonText('Continue merge', banner))
   await w.win.waitFor(() => !q('.scm-card') && text(primary()) === 'Push')

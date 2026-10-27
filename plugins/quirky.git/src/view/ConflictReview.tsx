@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import type { GitConflictKind, GitStatus } from '@quirky/protocol'
-import { DIFF_VIEW_ID, PANEL_ID } from '../shared/view-input'
+import { DIFF_VIEW_ID, PANEL_ID, type ReviewSnapshot } from '../shared/view-input'
 import { messageOf } from './data'
 import { ErrorNotice } from './Fallbacks'
 import type { ModeProps } from './types'
@@ -53,8 +53,8 @@ export function ConflictReview({ context, input, report, bind, close }: ModeProp
   const worktree = input.worktree
   const [rows, setRows] = useState<Row[] | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [capturedAt, setCapturedAt] = useState<Date | null>(null)
-  const snapshot = useRef<Array<{ path: string; kind: GitConflictKind }> | null>(null)
+  const [capturedAt, setCapturedAt] = useState<Date | null>(input.review ? new Date(input.review.capturedAt) : null)
+  const snapshot = useRef<ReviewSnapshot['entries'] | null>(input.review?.entries ?? null)
 
   const readStatus = async () => (await context.call('quirky.git/status', { worktree })) as GitStatus
 
@@ -131,7 +131,14 @@ export function ConflictReview({ context, input, report, bind, close }: ModeProp
               {row.state === 'unresolved' && (
                 <button
                   type="button"
-                  onClick={() => context.openView(DIFF_VIEW_ID, { worktree, mode: 'conflict-file', path: row.path })}
+                  onClick={() =>
+                    context.openView(DIFF_VIEW_ID, {
+                      worktree,
+                      mode: 'conflict-file',
+                      path: row.path,
+                      review: { entries: snapshot.current ?? [], capturedAt: capturedAt?.getTime() ?? Date.now() }
+                    })
+                  }
                 >
                   Open
                 </button>

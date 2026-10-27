@@ -256,11 +256,54 @@ describe('quirky.git conflict review view', () => {
     expect(report()).toMatchObject({ mode: 'conflicts', conflicts: 2 })
   })
 
-  test('SC-45: Open shows the conflict file', async () => {
-    fake.handlers['quirky.git/status'] = () => status([conflict('a.ts')])
+  test('SC-45: Open shows the conflict file and carries the snapshot with it', async () => {
+    fake.handlers['quirky.git/status'] = () => status([conflict('a.ts'), conflict('b.ts')])
     const { element } = await openReview()
     await click(byText(element, 'Open'))
-    expectOpened(fake, s.DIFF_VIEW, { worktree: 'w1', mode: 'conflict-file', path: 'a.ts' })
+    const opened = fake.opened.at(-1) as { id: string; input: { review: { capturedAt: number } } }
+    expect(typeof opened.input.review.capturedAt).toBe('number')
+    expectOpened(fake, s.DIFF_VIEW, {
+      worktree: 'w1',
+      mode: 'conflict-file',
+      path: 'a.ts',
+      review: { entries: [{ path: 'a.ts', kind: 'both_modified' }, { path: 'b.ts', kind: 'both_modified' }], capturedAt: opened.input.review.capturedAt }
+    })
+  })
+
+  test('SC-45: closing a file opened from the review returns to that review, not the sessions', async () => {
+    const review = { entries: [{ path: 'a.ts', kind: 'both_modified' }], capturedAt: 1_700_000_000_000 }
+    fake.handlers['quirky.git/conflictFile'] = () => conflictFile({ path: 'a.ts' })
+    mounted = mountView(fake, { worktree: 'w1', mode: 'conflict-file', path: 'a.ts', review })
+    await settle()
+    await click(byLabel(mounted.element, 'Close'))
+    expectOpened(fake, s.DIFF_VIEW, { worktree: 'w1', mode: 'conflicts', review })
+  })
+
+  test('SC-45: a review reopened with its snapshot keeps the snapshot and its time, so Refresh reads Gone', async () => {
+    const capturedAt = new Date(2026, 9, 27, 6, 52, 9).getTime()
+    const review = { entries: [{ path: 'a.ts', kind: 'both_modified' }, { path: 'b.ts', kind: 'both_modified' }], capturedAt }
+    fake.handlers['quirky.git/status'] = () => status([conflict('a.ts', 'resolved_locally'), { path: 'a.ts', area: 'staged', status: 'modified' }])
+    fake.handlers['quirky.git/conflictFile'] = () => ({ content: null })
+    mounted = mountView(fake, { worktree: 'w1', mode: 'conflicts', review })
+    await settle()
+    expect([...mounted.element.querySelectorAll('.qgv-review-row')].map((r) => r.textContent)).toEqual(['a.tsResolved', 'b.tsGone'])
+    expect(mounted.element.textContent).toContain('All conflicts resolved')
+  })
+
+  test('a malformed review in the input is ignored, so the review takes a fresh snapshot', async () => {
+    fake.handlers['quirky.git/status'] = () => status([conflict('a.ts')])
+    mounted = mountView(fake, { worktree: 'w1', mode: 'conflicts', review: { entries: 'nope', capturedAt: 'x' } })
+    await settle()
+    expect([...mounted.element.querySelectorAll('.qgv-review-row')].map((r) => r.textContent)).toEqual(['a.tsUnresolvedOpen'])
+  })
+
+  test('SC-45: a reopened review that still has conflicts shows the original capture time', async () => {
+    const capturedAt = new Date(2026, 9, 27, 6, 52, 9).getTime()
+    const review = { entries: [{ path: 'a.ts', kind: 'both_modified' }], capturedAt }
+    fake.handlers['quirky.git/status'] = () => status([conflict('a.ts')])
+    mounted = mountView(fake, { worktree: 'w1', mode: 'conflicts', review })
+    await settle()
+    expect(mounted.element.textContent).toContain(`Snapshot captured at ${new Date(capturedAt).toLocaleTimeString()}.`)
   })
 
   test('SC-45: after Refresh a resolved file reads Resolved and a removed one Gone, and the review says all are resolved', async () => {

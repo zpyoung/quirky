@@ -1700,6 +1700,10 @@ select {
   white-space: nowrap;
 }
 
+.scm-badge-icon {
+  margin-right: 3px;
+}
+
 .scm-badge-unresolved {
   border: 1px solid var(--danger);
   color: var(--danger);
@@ -2101,6 +2105,13 @@ select {
   background: var(--bg-raised);
   color: var(--amber);
   border-bottom: 1px solid var(--amber);
+}
+
+/* the file diff scrolls as a whole, so the banner would scroll away with the lines above the edit */
+.qgv-body > .qgv-pane > .qgv-stale {
+  position: sticky;
+  top: 0;
+  z-index: 5;
 }
 
 .qgv-stale span {

@@ -46,7 +46,9 @@ describe('SC-41: conflicts lead to Continue', () => {
     })
     const row = rowOf(element, 'math.ts')!
     expect(q(row, '.scm-row-sub')?.textContent).toBe('Both modified')
-    expect(q(row, '.scm-badge')?.textContent).toBe('Unresolved')
+    expect(q(row, '.scm-badge-text')?.textContent).toBe('Unresolved')
+    expect(q(row, '.scm-badge-icon')?.textContent).toBe('⚠')
+    expect(q(row, '.scm-badge-icon')?.getAttribute('aria-hidden')).toBe('true')
     expect(q(row, '.scm-badge')?.getAttribute('aria-label')).toBe('Unresolved conflict (Both modified)')
     expect(q(rowOf(element, 'b.ts')!, '.scm-row-sub')?.textContent).toBe('Deleted by them')
     expect(q(element, '[data-section="conflicts"] .scm-section-note')?.textContent).toBe('2 conflict(s)')
@@ -120,7 +122,8 @@ describe('SC-41: conflicts lead to Continue', () => {
       f.status = statusOf([conflict('math.ts', 'both_modified', 'resolved_locally'), entry('math.ts', 'staged')], { operation: 'merge' })
     })
     const row = rowOf(element, 'math.ts', 'conflicts')!
-    expect(q(row, '.scm-badge')?.textContent).toBe('Resolved locally')
+    expect(q(row, '.scm-badge-text')?.textContent).toBe('Resolved locally')
+    expect(q(row, '.scm-badge-icon')?.textContent).toBe('✓')
     expect(q(row, '.scm-badge')?.className).toContain('scm-badge-resolved')
     expect(qa(row.parentElement!, '.scm-row-actions button')).toHaveLength(0)
     expect(q(element, '.scm-card strong')?.textContent).toBe('Merge in progress')

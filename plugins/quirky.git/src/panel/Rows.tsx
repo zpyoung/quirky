@@ -115,7 +115,10 @@ function Trailing({ item }: { item: RowItem }) {
         aria-label={`${text} conflict (${conflictLabel(conflict.kind)})`}
         title={unresolved ? undefined : 'Local session state derived from a conflict you opened here.'}
       >
-        {text}
+        <span className="scm-badge-icon" aria-hidden="true">
+          {unresolved ? '⚠' : '✓'}
+        </span>
+        <span className="scm-badge-text">{text}</span>
       </span>
     )
   }

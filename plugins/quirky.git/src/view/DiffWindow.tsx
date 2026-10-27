@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef } from 'react'
 import { createRoot } from 'react-dom/client'
 import type { MountFunction, UiPluginContext } from '@quirky/protocol'
-import { SESSIONS_VIEW_ID, type DiffViewInput } from '../shared/view-input'
+import { DIFF_VIEW_ID, SESSIONS_VIEW_ID, type DiffViewInput, type ReviewSnapshot } from '../shared/view-input'
 import { CombinedDiff } from './CombinedDiff'
 import { ConflictFile } from './ConflictFile'
 import { ConflictReview } from './ConflictReview'
@@ -18,7 +18,14 @@ export function parseInput(input: unknown): DiffViewInput | null {
   const value = input as Partial<DiffViewInput>
   if (typeof value.worktree !== 'string' || value.worktree === '') return null
   const mode = MODES.includes(value.mode as DiffViewInput['mode']) ? (value.mode as DiffViewInput['mode']) : 'file'
-  return { ...value, worktree: value.worktree, mode }
+  const { review, ...rest } = value
+  return { ...rest, worktree: value.worktree, mode, ...(isReview(review) ? { review } : {}) }
+}
+
+function isReview(value: unknown): value is ReviewSnapshot {
+  if (typeof value !== 'object' || value === null) return false
+  const { entries, capturedAt } = value as Partial<ReviewSnapshot>
+  return typeof capturedAt === 'number' && Array.isArray(entries) && entries.every((e) => typeof e?.path === 'string' && typeof e?.kind === 'string')
 }
 
 /** The view's content for one input: the mode's component under the view's settings and handle. */
@@ -28,7 +35,10 @@ function DiffWindow({ context, input, report }: { context: UiPluginContext; inpu
   const bind = useCallback((next: Controller) => {
     controller.current = next
   }, [])
-  const close = useCallback(() => context.openView(SESSIONS_VIEW_ID, { worktree: input.worktree }), [context, input.worktree])
+  const close = useCallback(() => {
+    if (input.mode === 'conflict-file' && input.review) context.openView(DIFF_VIEW_ID, { worktree: input.worktree, mode: 'conflicts', review: input.review })
+    else context.openView(SESSIONS_VIEW_ID, { worktree: input.worktree })
+  }, [context, input])
 
   useEffect(() => {
     const call = <K extends keyof Controller>(name: K) =>

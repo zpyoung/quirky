@@ -638,5 +638,49 @@
 - **Revisit if:** the full suite or the UI run shows one of them reopened
 - **Source:** assumed — autonomous
 
+## D59: UI verification round 1: 18 goals pass, three app defects found and fixed on the branch
+- **Question:** what the `quirk:using-apps-like-a-user` run (web, owner yours, unattended) over the UI scenarios showed (LOOP.md step 6)
+- **Options:** fix every app failure on the branch and rerun those goals; log them as open findings
+- **Chose:** fix and rerun. Five throwaway worlds, one sonnet agent each. Pass: SC-8, SC-16, SC-17, SC-60, SC-23, SC-25, SC-28 (world A); SC-41 pull to conflict and SC-41 Continue merge (B); SC-47, SC-50, SC-54 (C); SC-43 setup and abort (D). Fails, all fixed: (1) SC-61, the "changed on disk" banner sits at the top of the file diff's scroll area, so with the editor scrolled to the edit it is off screen and can't be used; it is now sticky in the file diff. (2) SC-45, Open in the conflict review replaces the review (the window shows one view at a time) and the review kept its snapshot only in component state, so after opening a file the snapshot was gone and Gone could never show; the snapshot now travels in the view input, and closing a conflict file opened from the review returns to that review. (3) SC-41, the Unresolved / Resolved locally badges had no icon, while source-control.md "Conflict badge" gives them a warning and a check icon; they now have both. Partial, not app defects: SC-15 and SC-62 (D60), SC-45 in world B (one conflict only; world E covers it).
+- **Why:** LOOP.md says a fail is a bug to fix on `build/<id>`, then rerun
+- **Evidence:** reports /private/tmp/claude-502/-Users-zpyoung-orca-workspaces-quirky-build-lane-3/c19b0470-0297-45fe-90f4-c72391d47f7e/scratchpad/uiv/.quirk/using-apps-like-a-user/runs/20261027T114058-cf8a/report.md (A), /private/tmp/claude-502/-Users-zpyoung-orca-workspaces-quirky-build-lane-3/c19b0470-0297-45fe-90f4-c72391d47f7e/scratchpad/uiv/.quirk/using-apps-like-a-user/runs/20261027T114057-19cc/report.md (B), /private/tmp/claude-502/-Users-zpyoung-orca-workspaces-quirky-build-lane-3/c19b0470-0297-45fe-90f4-c72391d47f7e/scratchpad/uiv/.quirk/using-apps-like-a-user/runs/20261027T114057-7c97/report.md (C), /private/tmp/claude-502/-Users-zpyoung-orca-workspaces-quirky-build-lane-3/c19b0470-0297-45fe-90f4-c72391d47f7e/scratchpad/uiv/.quirk/using-apps-like-a-user/runs/20261027T114103-6744/report.md (D), /private/tmp/claude-502/-Users-zpyoung-orca-workspaces-quirky-build-lane-3/c19b0470-0297-45fe-90f4-c72391d47f7e/scratchpad/uiv/.quirk/using-apps-like-a-user/runs/20261027T115128-73e6/report.md (E); fixes in packages/ui/src/styles.css (`.qgv-body > .qgv-pane > .qgv-stale`), plugins/quirky.git/src/view/{ConflictReview,DiffWindow}.tsx, plugins/quirky.git/src/shared/view-input.ts, plugins/quirky.git/src/panel/Rows.tsx; tests in plugins/quirky.git/test/ui/view-conflicts.test.ts and panel-conflicts.test.ts
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** the rerun (D61) shows one of them still failing
+- **Source:** assumed — autonomous
+
+## D60: Goals the tool could not fully drive are recorded, not failed
+- **Question:** how to treat partial results caused by the UI tool rather than the app (LOOP.md step 6)
+- **Options:** record them as decisions with the report path; keep rerunning; fail the item
+- **Chose:** record them. SC-15: the tool's click has no modifier keys, so Shift- and Cmd-click selection is unverified in the window; plugins/quirky.git/test/window/selection.test.ts and test/ui/panel-layout.test.ts cover it. SC-62: lazy loading, Load diff and conflict exclusion need a large file and a conflict the world didn't have; test/ui/view-entries.test.ts, view-loader.test.ts and view-combined.test.ts cover them. Hover-only row buttons (Stage on a row) can't be hovered by the tool; agents reached Stage through the row menu or by selecting the row, and the window test plugins/quirky.git/test/window/conflicts.test.ts clicks the row's Stage. The conflict tab after Continue merge still reading "Resolved locally conflict" matches Orca's session-local continuity text (source-control.md, conflict file banner), so it isn't a defect. The Abort dialog focuses its destructive button by default, as every confirm dialog here does (plugins/quirky.git/src/panel/Dialog.tsx, "Enter confirms", which SC-23 checks); left as is.
+- **Why:** LOOP.md: a blocked or partial result caused by the tool is recorded as a decision with the report path
+- **Evidence:** /private/tmp/claude-502/-Users-zpyoung-orca-workspaces-quirky-build-lane-3/c19b0470-0297-45fe-90f4-c72391d47f7e/scratchpad/uiv/.quirk/using-apps-like-a-user/runs/20261027T114058-cf8a/report.md, /private/tmp/claude-502/-Users-zpyoung-orca-workspaces-quirky-build-lane-3/c19b0470-0297-45fe-90f4-c72391d47f7e/scratchpad/uiv/.quirk/using-apps-like-a-user/runs/20261027T114057-19cc/report.md, /private/tmp/claude-502/-Users-zpyoung-orca-workspaces-quirky-build-lane-3/c19b0470-0297-45fe-90f4-c72391d47f7e/scratchpad/uiv/.quirk/using-apps-like-a-user/runs/20261027T114103-6744/report.md
+- **Reversibility:** easy
+- **Confidence:** medium
+- **Revisit if:** the nightly native run or a later UI run with modifier support shows selection or hover actions broken
+- **Source:** assumed — autonomous
+
+## D61: The file diff's changed-on-disk banner has no layout test
+- **Question:** how to guard the sticky banner (SC-61) against regressions
+- **Options:** a test in the headless window; a stylesheet assertion; the UI rerun only
+- **Chose:** the UI rerun only. The headless window and happy-dom do no layout, so neither can tell whether the banner is on screen, and a test that greps the stylesheet tests the text, not the behavior.
+- **Why:** the only check that sees layout is the UI run, and its result is recorded in D62
+- **Evidence:** plugins/quirky.git/test/window/world.ts (`startHeadlessWindow`); packages/ui/src/styles.css
+- **Reversibility:** easy
+- **Confidence:** medium
+- **Revisit if:** the project gains a layout-capable window test harness
+- **Source:** assumed — autonomous
+
+## D62: The UI rerun passes SC-61, SC-45 and the conflict badge
+- **Question:** whether the D59 fixes hold when used like a user (LOOP.md step 6, rerun after a fix)
+- **Options:** rerun the failed goals in fresh worlds; rerun every goal
+- **Chose:** rerun the failed goals, since the fixes touch only the file diff banner, the conflict review and the conflict badge. SC-61 passes: with the editor at line 55 the changed-on-disk banner is on screen and Overwrite saves the draft. The conflict badge passes: "Resolved locally" with its check icon. SC-45 passes on its second rerun: Close on a file opened from the review returns to the same snapshot, and Refresh shows a.ts Resolved, b.ts Gone and "All conflicts resolved". Its first rerun was partial because the agent left-clicked a panel row, which opens that file's diff in place of the review; the window shows one view at a time, so that is how every view behaves, not a defect of the review. Other notes, none app defects: a conflict row's right-click menu has no Stage, matching Orca's row menu (source-control.md "Row context menu"); the panel's Conflicts header counts rows while "N conflict(s)" counts unresolved ones, as Orca's section table says. The full gate on the branch before the fixes passed (typecheck, `bun test scripts`, `bun run test`), and after them typecheck plus both quirky.git suites pass (620 and 50 tests).
+- **Why:** each goal now passes with screenshot evidence
+- **Evidence:** /private/tmp/claude-502/-Users-zpyoung-orca-workspaces-quirky-build-lane-3/c19b0470-0297-45fe-90f4-c72391d47f7e/scratchpad/uiv/.quirk/using-apps-like-a-user/runs/20261027T120608-2017/report.md (SC-61), /private/tmp/claude-502/-Users-zpyoung-orca-workspaces-quirky-build-lane-3/c19b0470-0297-45fe-90f4-c72391d47f7e/scratchpad/uiv/.quirk/using-apps-like-a-user/runs/20261027T120617-6284/report.md (first SC-45 rerun, badge), /private/tmp/claude-502/-Users-zpyoung-orca-workspaces-quirky-build-lane-3/c19b0470-0297-45fe-90f4-c72391d47f7e/scratchpad/uiv/.quirk/using-apps-like-a-user/runs/20261027T121711-9a8e/report.md (SC-45)
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** a person finds losing the review on opening another file confusing; then the review could stay as a pinned view
+- **Source:** assumed — autonomous
+
 ## Progress
-Fix batch merged (D58). Running: the full gate and the UI verification (four worlds A to D, one subagent each). Next: record the UI run, land. If this iteration stops, rerun the gate and the UI verification from scratch on the branch tip, then land.
+UI verification done (D59 to D62) and its fixes committed. Next: land with `git switch --detach` and `bun scripts/build-loop/queue.ts land m2-source-control-core`. If land fails, merge build/roadmap into the branch, fix what it names, rerun the tests and land again.
