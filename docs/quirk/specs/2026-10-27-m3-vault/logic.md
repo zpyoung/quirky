@@ -10,7 +10,9 @@ Browsing scans the 25 documented source formats and caches derived metadata. Ful
 
 ## Scope and non-goals
 
-In scope: the feature document's macOS local browse, filters, settings, title filtering, full-text indexing/search/status, session previews/subagents, provider-specific terminal resume, navigation/copy/log/reveal/delete, handoff integration, session-info vault navigation, keyboard/drag interactions, CLI/API contracts, cancellation/freshness and error states. The source inventory includes all 25 history agents, including sidecar- and SQLite-backed sources. Existing account/profile roots must be discoverable when their owner exposes them.
+Full parity contract: the feature document's macOS local browse, filters, settings, title filtering, full-text indexing/search/status, session previews/subagents, provider-specific terminal resume, navigation/copy/log/reveal/delete, handoff integration, session-info vault navigation, keyboard/drag interactions, CLI/API contracts, cancellation/freshness and error states. The source inventory includes all 25 history agents, including sidecar- and SQLite-backed sources. Existing account/profile roots must be discoverable when their owner exposes them.
+
+**Operator-authorized landing amendment:** this item lands the core browse/resume, explicit-consent transcript search and disable/clear flows. Remaining advanced flows and incomplete proof obligations are named individually in [BLOCKERS.md](../../../loop/BLOCKERS.md#m3-vault-open-review-findings) and the dependent `m3-vault-parity-completion` item. The scenario catalog below remains that completion contract; it is not a claim that every scenario passed in this landing.
 
 Explicit exclusions are native-chat actions, the native-chat /resume modal and chat-only structured ownership, because interactive native chat is dropped; SSH/WSL hosts and their scanning because SSH/WSL remote is dropped; Windows/Linux execution under the macOS-only rule. Pairing, non-loopback listeners, E2EE and the mobile application belong to the separate mobile roadmap slice; the vault must not invent another transport. Local and All hosts work with no paired servers, and host forwarding/access policy uses the shared authenticated transport when available. A dependent feature not being installed must produce an honest unavailable action, not simulated success.
 
@@ -181,4 +183,4 @@ No feature expansion. Technical choices for parser reuse, Worker protocol, publi
 
 Status: Approved autonomously under LOOP.md after the mandatory Codex promote/refute review. Technical F3/F4 corrections preserve this behavior contract. Tech spec required: crosses plugin/runtime/UI subsystems and more than three source files. Same-token local clients retain user-level consented indexing access under the locked one-API authorization model.
 
-**Amendments:** 2026-10-27 — Initial behavior contract; no post-approval amendments.
+**Amendments:** 2026-10-27 — Initial contract approved after review. The later operator note explicitly narrows this landing to core flows, requires a dependent completion item naming unfinished flows and reasons, and reserves the whole-suite run for `queue.ts land` (decision D34). Dropped native-chat/SSH/WSL and separate mobile transport scope is unchanged.

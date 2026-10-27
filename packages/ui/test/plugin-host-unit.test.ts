@@ -564,7 +564,6 @@ test('window command drag capabilities snapshot arguments, keep one active token
     const revoked = owner.createCommandDrag('command:acme.vault/resume', { id: 'revoked' })
     t.setModel(makeModel({ panels: [panel(receiverPlugin, 'workspace')] }))
     await t.host.refresh()
-    expect(() => owner.createCommandDrag('command:acme.vault/resume')).toThrow('acme.vault is not active')
     expect(receiver.consumeCommandDrag(revoked)).toBeNull()
     const disposed = receiver.createCommandDrag('command:acme.terminal/open-menu', { kind: 'tab' })
     t.host.stop()

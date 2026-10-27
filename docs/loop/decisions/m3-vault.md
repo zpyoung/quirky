@@ -396,5 +396,71 @@
 - **Revisit if:** Another provider's mixed-content format contains structured tool blocks in its conversation extractor.
 - **Source:** assumed — autonomous
 
+## D37: Preserve semantic assertions instead of stale warning and catalog copies
+- **Question:** Which affected-suite failures represent behavior changes versus copied implementation details?
+- **Options:** Re-pin new warning strings/counts; suppress failing files; retain behavior assertions while deleting incidental wording/catalog copies and correcting physical fixtures.
+- **Chose:** Warning identity/presence and working settings remain asserted; copied resume-array/count checks are deleted while actual per-provider argv executions remain. The unavailable-root test physically moves its owned source root. Large list/paging integration cases use a finite30-second deadline.
+- **Why:** The affected run failed on old warning prose, a copied25-agent catalog count after four supported resume additions, a fake unavailable root whose source was still readable, and implicit5-second deadlines under load. None justifies changing production semantics or adding retries.
+- **Evidence:** artifact199; isolated corrected eight files:180 pass,0 fail,1297 assertions (artifact307). Absent DataTransfer was a separate real event-boundary defect, fixed without a raw command fallback; three drop/tab files then passed27 tests (artifact305).
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** A corrected assertion no longer detects its consumer-visible boundary.
+- **Source:** assumed — autonomous
+
+## D38: Serialize new calls behind idle retirement rather than replay or strand them
+- **Question:** How should a browse request arriving while an idle Worker closes be handled?
+- **Options:** Keep posting to the closing Worker; reject all concurrent calls; wait before posting and start the next Worker once retirement finishes.
+- **Chose:** The last option, with bounded graceful close, shutdown handling and stale-generation isolation. Already-issued operations are never automatically replayed.
+- **Why:** Final spec review S1 found the race; the parent reproduced a concurrent operation remaining unsettled after the old Worker acknowledged close. Failing a valid caller merely because an internal idle timer fired avoids the hang but does not fix the lifecycle boundary.
+- **Evidence:** final review S/gate.json under the recorded m3-vault-final-g3ziied1 scratch directory; owned actual-Bun-Worker probe /tmp/m3-vault-retirement-red.ts printed outcomeSTRANDED after one second and cleaned up. Fix/regression verification is pending and will be recorded before land.
+- **Reversibility:** medium
+- **Confidence:** high
+- **Revisit if:** Queued calls are posted twice, shutdown leaves them pending, or a retired Worker affects its successor.
+- **Source:** assumed — autonomous
+
+## D39: Use an explicit owned executable, not PATH, for packaged resume proof
+- **Question:** Why did the first smoke reach a Claude Code trust screen instead of the fake collector?
+- **Options:** Confirm the trust screen; assume the PATH shim ran; stop, preserve the limitation, and configure an absolute owned command in a fresh isolated profile.
+- **Chose:** Stop without confirming trust. The repeat smoke must set owned HOME/XDG_CONFIG_HOME/QUIRKY_HOME/source roots and configure the absolute fake command through the public agents API before starting UI actions.
+- **Why:** The login-shell path did not establish fake-provider selection: the collector log was absent and the screenshot visibly showed Claude Code's trust screen. No credential entry, trust confirmation or file side effect was observed; that is not proof none occurred, nor proof the collector ran.
+- **Evidence:** built-web report20261027T194621-0706, obs31/35; agent correction of its earlier overstrong no-real-CLI claim. The first run's daemon/browser/temp root were cleaned up. Public agents configure command/args/env is declared in plugins/quirky.agents/cli.ts:227-235.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** An explicitly configured absolute executable is not the actual resumed process.
+- **Source:** locked by docs/loop/LOOP.md isolated-state rule
+
+## D40: Clear the local index through its declared local-only API
+- **Question:** Should the UI's rejected host parameter be added to the clearing API?
+- **Options:** Broaden the API to remote clearing; ignore unknown parameters; remove the unsupported selector from the local UI caller.
+- **Chose:** Remove host from the confirmed clear call. Keep local policy-disable ordering, derived-file deletion and the existing strict schema.
+- **Why:** The first packaged user run reproduced params.host-is-not-allowed twice. Clearing is explicitly local-only; adding a remote contract would expand scope and obscure which computer's private copy is removed.
+- **Evidence:** SearchSettings.tsx:191; component0ee1d08; three mounted-window tests pass13 assertions (artifact339). Focused built-web run20261027T201423-c17a passes clear and shows the success toast, disabled search and zero counts in obs8.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** An approved feature requires remote derived-index deletion.
+- **Source:** locked by the existing public clearSearchIndex declaration
+
+## D41: Record the one final review round without overstating security assurance
+- **Question:** How do the final lenses affect this operator-authorized core landing?
+- **Options:** Run additional discovery rounds; treat every PASS as a clean bill; adjudicate the one round, fix blockers once and retain nonblocking obligations explicitly.
+- **Chose:** C passes with no findings; S1 is accepted HIGH, reproduced and fixed by the retirement barrier; X1 is rejected under the locked shared-authenticated-API model; X2 is retained as a LOW unfinished consent-tip flow rather than accept its requirement-based refutation. No second final round.
+- **Why:** LOOP.md specifies one final round/fix batch, and the operator requires only blocking fixes. The security round suppressed2/2 candidates, which limits assurance; hiding that would misrepresent the review.
+- **Evidence:** shared review directory /var/folders/x5/07kj5yld16l9wd5p_v01h20c0000gp/T/m3-vault-final-g3ziied1, C/gate.final.json, S/gate.json and X/gate.json. Reviewer google/gemini-3.1-pro-preview:high, full cross-family independence. All lenses have zero contested/unreviewed paths; bun.lock15 lines excluded. S1 actual-Bun regression/lifecycle/public-flow check passes13 tests143 assertions and typecheck (artifact383).
+- **Reversibility:** easy
+- **Confidence:** medium
+- **Revisit if:** Completion-item or native-run evidence contradicts a dismissal or exposes another core failure.
+- **Source:** locked by docs/loop/LOOP.md and the operator note
+
+## D42: Packaged core UI and owned provider execution have direct evidence
+- **Question:** Which visible flows can this landing actually claim?
+- **Options:** Treat source tests as UI proof; count the initial failed clear/blocked resume as success; require the corrected built surface and actual owned process.
+- **Chose:** Keep both reports. First run proves browse/title-only/consent/transcript-only search and disable, and exposes clear's real schema mismatch. Focused corrected run proves clear plus actual absolute-command fake-provider resume. Advanced flows remain explicitly queued, not inferred passing.
+- **Why:** A fake daemon result or copied command alone cannot prove a built Worker, visible consent action or real terminal process.
+- **Evidence:** .quirk/using-apps-like-a-user/runs/20261027T194621-0706/report.md and runs/20261027T201423-c17a/report.md. Focused obs8 shows clear; obs13 shows OWNED_FAKE_CLAUDE_PTY_OK and exit0. Retained fake-provider.log proves absolute executable, canonical original cwd and --resume claude-fixture-session. Both runs cleaned owned daemon/browser/temp roots. Packaged Worker src/worker.js and full MIT NOTICE were observed; no separate LICENSE is claimed. Configure uses an unreserved OWNED_FAKE_CLAUDE_LOG key, preserving QUIRKY_* guards.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** The final packaged build differs on a core surface from the verified components.
+- **Source:** locked by docs/loop/LOOP.md verification requirements
+
 ## Progress
-Step 6 integration: all repairs assembled; current typecheck passes. The strict all25 copied-command execution test passes, and Gemini metadata tests pass8cases/114assertions. Private APFS actions pass4/5: real file trash/repeat/owned-state work, directory target still fails as expected (D33 fix next). Remaining real API/CLI/UI/flow and progress tests, inherited-unlimited red/fix, packaged/actual web smoke, integration catchup and final cross-family review are still required. No landing/completion claim.
+Core implementation and the one final review/fix batch are ready for final assembly. Built-web browse/title/consent/search/disable passed; corrected clear and absolute-owned-provider resume passed the focused packaged run. All25 copied commands, private-APFS file/directory Trash, typed APIs, scan/search boundaries and the S1 retirement regression have direct checks. Integration catch-up happened once at9ec4c97; all eight brought-in decision logs were read without conflict. Main parity completion item was added through queue.ts with dependency m3-vault; supplemental SC-07 tip flow must also be added before land. Next: merge the verified component fixes, run final build/scripts/typecheck/affected suites (not the whole suite), commit/detach and queue.ts land. Whole-suite and successful landing are not yet claimed.

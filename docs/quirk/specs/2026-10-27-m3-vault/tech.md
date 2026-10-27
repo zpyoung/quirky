@@ -168,14 +168,14 @@ Rollback: disable quirky.vault stops its jobs/workers and hides contributions wi
 
 ## Testing strategy
 
-Implements all [logic acceptance scenarios](logic.md#behavior-and-acceptance-scenarios).
+The scenario catalog is the full parity contract. The operator-authorized core landing and individually named remaining verification/flow obligations are recorded in the sibling logic amendment, decision D34 and BLOCKERS.md.
 
 - `plugins/quirky.vault/test/scanner.test.ts` and minimized fixtures: format/title/sidecar/SQLite/pruning/caps; all 25 identities plus mutable-tail/sidecar edge cases.
 - `plugins/quirky.vault/test/search.test.ts`: real Bun FTS schema/tokenizer/ranking/column/rowid-subselect contracts, snippet-marker safety, cursor/candidate/fork boundaries; no mocked SQL.
-- `plugins/quirky.vault/test/api.test.ts`, `cli.test.ts`, `actions.test.ts`, `lifecycle.test.ts`: real temporary daemon and CLI drive SC-01 through SC-24; tests enumerate scenario coverage in names and assert concrete results/state. Fake agent binaries log actual exec argv/cwd/env. Each process uses fresh QUIRKY_HOME/source home and is stopped in finally/afterEach.
+- `plugins/quirky.vault/test/api.test.ts`, `cli.test.ts`, `flows.test.ts`, `actions.test.ts`, `lifecycle.test.ts`: real temporary daemon and CLI exercise core flows and selected boundary scenarios. Actual copied commands run owned collector executables. Each process uses fresh QUIRKY_HOME/source home and is stopped in finally/afterEach; packaged smoke additionally isolates HOME and uses an absolute configured fake command rather than relying on login-shell PATH.
 - Public API growth tests remain in their owner's existing test conventions; update existing consumers/contracts when changed. Permanent tests target plausible behavior boundaries, not source wording or forwarding echoes.
-- `plugins/quirky.vault/test/window.test.ts` uses existing mounted-window/real API conventions for control state. Actual UI smoke is separate and mandatory: build, temporary daemon, unattended web dogfood for SC-03/05/06/07/08/09/12/15/18/20/21, with tool-caused limitations recorded and native-only banners/Finder/clipboard OS behavior handed off through native scenarios.
-- After every implementation wave, orchestrator runs task-scoped checks once; workers skip mid-flight build/lint/test/format commands. Final gates: `bun run build`, `bun run test` (remote whole suite only), `bun test scripts`, `bun run typecheck`; smoke the packaged worker and actual fake-provider resume; merge build/roadmap and read brought-in decision logs before final cross-family review.
+- `plugins/quirky.vault/test/window.test.ts` uses existing mounted-window/real API conventions for source selection, consented evidence and confirmed clear. Actual UI smoke is separate: build, temporary packaged daemon, unattended web dogfood for core browse/title-only/consent/search/disable/clear/resume. Tool-caused limitations are recorded; advanced presentation campaigns remain with the completion item and native-only focus/Finder/clipboard behavior with native scenarios.
+- After every implementation wave, the orchestrator runs scoped checks; workers skip mid-flight build/lint/test/format commands. Operator-selected pre-land gates are `bun test scripts`, `bun run typecheck` and `bun scripts/suite.ts <affected dirs>`, plus packaged build/smoke. Catch up with build/roadmap once and read brought-in decisions before the one final cross-family review/fix batch. `queue.ts land` runs the whole suite; do not duplicate that whole run manually.
 
 ## Non-goals
 
