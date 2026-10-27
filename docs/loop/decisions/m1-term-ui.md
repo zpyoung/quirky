@@ -437,5 +437,36 @@
 - **Confidence:** high
 - **Source:** assumed — autonomous
 
+## D44: Build pairing `claude-task + codex`, five waves, one checkpoint over waves 1–2
+- **Question:** subagent-driven-development's preflight card (backend pairing) and wave plan
+- **Options:** claude-task + codex (recommended); claude-task + gemini; pi-codex + opus
+- **Chose:** Claude Sonnet implementers and Codex reviewers (`pi-watch --check codex` passed). Waves: (1) kernel UI growth, kernel daemon growth, `quirky.session` growth, terminal pure modules; (2) the layout service with the full manifest, and the pane component; (3) the workspace view, the Quick Commands window parts, the CLI; (4) wiring, the floating overlay and the scenario tests; (5) fixes. The checkpoint after wave 1 is folded into the one after wave 2, reviewing both waves' diff, because wave 1 is foundation code whose first consumer lands in wave 2.
+- **Why:** LOOP.md step 5 names the pairing; the dependency graph forces the order.
+- **Evidence:** docs/loop/LOOP.md step 5; tech.md "Architecture"
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** locked by docs/loop/LOOP.md
+
+## D45: The e2e helper reads the whole process table
+- **Question:** the baseline gate failed every `quirky.terminal` e2e test with `spawnSync ps ENOBUFS`
+- **Options:** treat it as a flake; raise the helper's buffer
+- **Chose:** raise `maxBuffer` on the helper's `ps -axo pid=,ppid=,command=` call to 256 MiB.
+- **Why:** this machine's process table is 2.5 MB because some command lines are 400 KB; Node's default 1 MiB buffer kills the read, so no e2e test could start. The PTY host's own `descendantsOf` reads only pids and is unaffected.
+- **Evidence:** plugins/quirky.terminal/test/e2e-support.ts:51; `ps -axo pid=,ppid=,command= | wc -c` = 2582062
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** assumed — autonomous
+
+## D46: PTY protocol 3 retires a running protocol 2 host
+- **Question:** adding `clear` and `resetModes` to the PTY host (tech.md) changes the wire protocol
+- **Options:** negotiate the ops per host; bump the version
+- **Chose:** bump to 3; the daemon retires an older host as m1-term-daemon already does, so sessions of a host started by an older build end restorable when the new daemon starts.
+- **Why:** the existing version gate is the mechanism, and running sessions cold-restore (m1-term-daemon D10), so no history is lost.
+- **Evidence:** packages/daemon/src/pty-client.ts:269-311
+- **Reversibility:** easy
+- **Confidence:** medium
+- **Revisit if:** upgrading a running Quirky must keep live shells
+- **Source:** assumed — autonomous
+
 ## Progress
-Brainstorming done (D1–D42). Next: write docs/quirk/specs/2026-10-26-m1-term-ui/logic.md.
+Specs reviewed and committed. Building with subagent-driven-development; run journal in the session scratchpad. Wave 1 (A1 kernel UI, A2 kernel daemon, A3 session, A4 terminal pure modules) dispatched from 0fc710b on branches sdd/termui/A1..A4. If this iteration stops early: check those branches/worktrees for uncommitted work, audit against tech.md, then continue with wave 2 (layout service + manifest; pane component).
