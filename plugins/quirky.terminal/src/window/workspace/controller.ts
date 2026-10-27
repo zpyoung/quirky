@@ -113,6 +113,50 @@ function isEditableControl(element: Element): boolean {
   return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || (element as HTMLElement).isContentEditable === true
 }
 
+/** MIME payloads carry a bounded, declared UI command rather than arbitrary shell text. */
+export const COMMAND_DROP_MIME = 'application/x-quirky-command'
+
+export type CommandDropDescriptor = { command: string; args: Record<string, unknown> }
+
+export function hasCommandDrop(transfer: DataTransfer | null): transfer is DataTransfer {
+  return transfer !== null && Array.from(transfer.types).includes(COMMAND_DROP_MIME)
+}
+
+function boundedValue(value: unknown, depth: number, budget: { nodes: number }): boolean {
+  budget.nodes += 1
+  if (budget.nodes > 256 || depth > 5) return false
+  if (value === null || typeof value === 'boolean') return true
+  if (typeof value === 'number') return Number.isFinite(value)
+  if (typeof value === 'string') return value.length <= 4096
+  if (Array.isArray(value)) return value.length <= 32 && value.every((item) => boundedValue(item, depth + 1, budget))
+  if (typeof value !== 'object') return false
+  const entries = Object.entries(value)
+  if (entries.length > 32) return false
+  return entries.every(([key, item]) =>
+    key.length <= 128 && key !== '__proto__' && key !== 'prototype' && key !== 'constructor' && boundedValue(item, depth + 1, budget)
+  )
+}
+
+export function parseCommandDrop(transfer: DataTransfer | null): CommandDropDescriptor | null {
+  const data = transfer
+  if (!hasCommandDrop(data)) return null
+  const raw = data.getData(COMMAND_DROP_MIME)
+  if (raw.length === 0 || raw.length > 8192) return null
+  try {
+    const parsed: unknown = JSON.parse(raw)
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return null
+    const descriptor = parsed as Record<string, unknown>
+    if (Object.keys(descriptor).some((key) => key !== 'command' && key !== 'args')) return null
+    const command = descriptor.command
+    if (typeof command !== 'string' || command.length > 192 || !/^command:[A-Za-z0-9][A-Za-z0-9._-]{0,95}\/[A-Za-z0-9][A-Za-z0-9._-]{0,95}$/.test(command)) return null
+    const args = descriptor.args === undefined ? {} : descriptor.args
+    if (!args || typeof args !== 'object' || Array.isArray(args) || !boundedValue(args, 0, { nodes: 0 })) return null
+    return { command, args: args as Record<string, unknown> }
+  } catch {
+    return null
+  }
+}
+
 /** Writes to the clipboard; the failure case is the caller's to report. */
 async function writeClipboard(text: string): Promise<void> {
   if (!navigator.clipboard) throw new Error('the clipboard is not available')
@@ -1067,6 +1111,25 @@ export class WorkspaceController {
     if (drop.kind === 'strip') await this.moveTabToGroup(drag.tab, drop.group, drop.index)
     else if (drop.zone === 'center') await this.moveTabToGroup(drag.tab, drop.group)
     else await this.moveTabToSplit(drag.tab, drop.zone, drop.group)
+  }
+
+  /** Executes one declared UI command after the daemon validates its explicit group target. */
+  async dropCommand(transfer: DataTransfer | null, groupId: string): Promise<void> {
+    const descriptor = parseCommandDrop(transfer)
+    const workspace = this.ws
+    if (!descriptor || !workspace || workspace.id === FLOATING_WORKSPACE || !findGroup(workspace.root, groupId)) return
+    try {
+      const info = await this.context.call('quirky.terminal/groupInfo', { group: groupId })
+      const target = info && typeof info === 'object' && 'workspace' in info && typeof info.workspace === 'string' ? info.workspace : null
+      const current = this.ws
+      if (target === null || target !== workspace.id || current !== workspace || current === null || !findGroup(current.root, groupId)) {
+        this.context.toast('Could not run dropped command', 'The target group is no longer available in this worktree.')
+        return
+      }
+      await this.context.executeCommand(descriptor.command, { ...descriptor.args, group: groupId, worktree: target })
+    } catch (error) {
+      this.context.toast('Could not run dropped command', messageOf(error))
+    }
   }
 
   // ---- report
