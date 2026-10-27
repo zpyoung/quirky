@@ -1,13 +1,18 @@
 import { gitApi, RemoteError } from '@quirky/git'
 import type { GitBusyOp, Worktree } from '@quirky/protocol'
+import { holdPushFailure } from './ai-fix'
 import { effectiveBase } from './base'
 import type { DaemonEnv, Handler } from './env'
 
 const FULL_SHA = /^[0-9a-f]{40}$/i
 
+/** The operations that publish commits, so a hook failure of one is held for AI Fix and a success clears it. */
+const PUSHING: readonly GitBusyOp[] = ['push', 'force-push', 'sync']
+
 /**
  * Runs a remote operation under the worktree's lock and announces the change once the lock is
  * free. A pull, sync or rebase that stopped on conflicts changed the tree, so it announces too.
+ * A push, force push or sync that a hook refused is held for AI Fix until one of them succeeds.
  * Logs `<op> <worktreeId> ok|<reason> <ms>`.
  */
 async function remoteOperation<T>(env: DaemonEnv, worktree: Worktree, op: GitBusyOp, run: () => Promise<T>): Promise<T> {
@@ -15,12 +20,14 @@ async function remoteOperation<T>(env: DaemonEnv, worktree: Worktree, op: GitBus
   let outcome = 'ok'
   try {
     const result = await env.lock.withLock(worktree.id, op, run)
+    if (PUSHING.includes(op)) env.failures.clearPush(worktree.id)
     env.changed(worktree)
     return result
   } catch (error) {
     const translated = env.errors.translate(error)
     outcome = (translated as { data?: { reason?: string } } | null)?.data?.reason ?? 'failed'
     if (outcome === 'conflicts') env.changed(worktree)
+    if (PUSHING.includes(op)) await holdPushFailure(env, worktree, translated)
     throw translated
   } finally {
     env.context.log(`${op} ${worktree.id} ${outcome} ${Date.now() - started}`)

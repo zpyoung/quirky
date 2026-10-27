@@ -14,7 +14,7 @@ const VIEW_MODES: readonly ViewMode[] = ['list', 'tree']
 const COMPARE_BASES = ['repository-default', 'branch-upstream'] as const
 
 /** The settings the panel reads; each falls back to its default when the setting is missing or invalid. */
-export type PanelSettings = { groupOrder: GroupOrder; viewMode: ViewMode; compareBase: string }
+export type PanelSettings = { groupOrder: GroupOrder; viewMode: ViewMode; compareBase: string; aiEnabled: boolean }
 
 function read<T extends string>(context: UiPluginContext, name: string, allowed: readonly T[], fallback: T): T {
   try {
@@ -25,11 +25,21 @@ function read<T extends string>(context: UiPluginContext, name: string, allowed:
   }
 }
 
+/** Whether Source Control AI actions show; a setting that cannot be read counts as off. */
+function readAiEnabled(context: UiPluginContext): boolean {
+  try {
+    return context.getSetting('ai-enabled') === true
+  } catch {
+    return false
+  }
+}
+
 function readSettings(context: UiPluginContext): PanelSettings {
   return {
     groupOrder: read(context, 'groupOrder', GROUP_ORDERS, 'changes-first'),
     viewMode: read(context, 'viewMode', VIEW_MODES, 'list'),
-    compareBase: read(context, 'compareBase', COMPARE_BASES, 'repository-default')
+    compareBase: read(context, 'compareBase', COMPARE_BASES, 'repository-default'),
+    aiEnabled: readAiEnabled(context)
   }
 }
 

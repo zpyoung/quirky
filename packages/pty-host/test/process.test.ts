@@ -3,7 +3,7 @@ import { existsSync, readFileSync, statSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { base64ToBytes, encodePtyJson, PTY_PROTOCOL_VERSION, PtyFrameDecoder } from '@quirky/protocol'
 import type { PtyClient } from '../src/client'
-import { ready, runCleanups, startProcess, tempHome, text, waitFor } from './helpers'
+import { createScopedSession, ready, runCleanups, startProcess, tempHome, text, waitFor } from './helpers'
 
 afterEach(runCleanups)
 
@@ -87,7 +87,7 @@ describe('quirky-pty process', () => {
     const home = tempHome()
     const proc = startProcess(home)
     const { client } = await ready(home)
-    const { pid } = await client.request('create', {
+    const { pid } = await createScopedSession(client, home, {
       sessionId: 'a',
       cwd: '/tmp',
       argv: ['/bin/cat'],
@@ -106,7 +106,7 @@ describe('quirky-pty process', () => {
     const home = tempHome()
     const proc = startProcess(home)
     const { client } = await ready(home)
-    const { pid } = await client.request('create', {
+    const { pid } = await createScopedSession(client, home, {
       sessionId: 'a',
       cwd: '/tmp',
       argv: ['/bin/cat'],
@@ -125,7 +125,7 @@ describe('quirky-pty process', () => {
     const home = tempHome()
     const proc = startProcess(home)
     const { client } = await ready(home)
-    await client.request('create', {
+    await createScopedSession(client, home, {
       sessionId: 'a',
       cwd: '/tmp',
       argv: ['/bin/cat'],
@@ -145,7 +145,7 @@ describe('quirky-pty process', () => {
     const home = tempHome()
     startProcess(home)
     const first = await ready(home)
-    await first.client.request('create', params('a', ['/bin/cat']))
+    await createScopedSession(first.client, home, params('a', ['/bin/cat']))
     await first.client.request('subscribe', { sessionId: 'a' })
     const seen = collect(first.client, 'a')
     first.client.sendInput('a', new TextEncoder().encode('alpha\n'))
@@ -165,7 +165,7 @@ describe('quirky-pty process', () => {
     const home = tempHome()
     startProcess(home)
     const { client, token } = await ready(home)
-    await client.request('create', params('busy', ['/bin/sh', '-c', 'while :; do echo tick; done']))
+    await createScopedSession(client, home, params('busy', ['/bin/sh', '-c', 'while :; do echo tick; done']))
     await Bun.sleep(100)
 
     const order: string[] = []
@@ -196,7 +196,7 @@ describe('quirky-pty process', () => {
     const home = tempHome()
     const first = startProcess(home)
     const one = await ready(home)
-    await one.client.request('create', params('s', ['/bin/sh', '-c', 'echo marker-before-crash; exec cat']))
+    await createScopedSession(one.client, home, params('s', ['/bin/sh', '-c', 'echo marker-before-crash; exec cat']))
     await waitFor(async () => (await one.client.request('read', { sessionId: 's', lines: 10 })).lines.join('\n').includes('marker-before-crash'), 5000, 'marker')
     await Bun.sleep(500)
     first.kill('SIGKILL')
@@ -206,7 +206,7 @@ describe('quirky-pty process', () => {
     const [info] = await two.client.request('list', {})
     expect(info).toMatchObject({ sessionId: 's', state: 'restorable', exitCause: 'host-lost', alive: false })
 
-    const restored = await two.client.request('create', { ...params('s', ['/bin/cat']), restore: true })
+    const restored = await createScopedSession(two.client, home, { ...params('s', ['/bin/cat']), restore: true })
     expect(restored.restored).toBe(true)
     const snap = await two.client.request('snapshot', { sessionId: 's' })
     expect(snap.ansi).toContain('marker-before-crash')
@@ -218,7 +218,7 @@ describe('quirky-pty process', () => {
     const home = tempHome()
     const first = startProcess(home)
     const one = await ready(home)
-    await one.client.request('create', params('s', ['/bin/sh', '-c', 'echo marker-before-stop; exec cat']))
+    await createScopedSession(one.client, home, params('s', ['/bin/sh', '-c', 'echo marker-before-stop; exec cat']))
     await waitFor(async () => (await one.client.request('read', { sessionId: 's', lines: 10 })).lines.join('\n').includes('marker-before-stop'), 5000, 'marker')
     await one.client.request('shutdown', {})
     expect(await first.exited).toBe(0)

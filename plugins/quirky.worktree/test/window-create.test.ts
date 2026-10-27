@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, expect, test } from 'bun:test'
 import { chmodSync, existsSync, realpathSync, writeFileSync } from 'node:fs'
-import { basename, join } from 'node:path'
+import { basename, join, resolve } from 'node:path'
 import type { QuirkyClient, Repo, Session, UiState, Worktree, WorktreeCreateResult } from '@quirky/protocol'
 import { builtinsDir, makeTempHome, startHarness, type Harness } from '../../../packages/daemon/test/helpers'
 import { makeTempDir, removeTempDirs } from '../../../packages/daemon/test/plugins/fixtures'
@@ -310,7 +310,7 @@ test('SC-27: the window creates the same worktree as the CLI from the same input
 test('SC-31: the window asks for the setup choice before it will create', async () => {
   const w = await boot()
   const api = await addProject(w, 'api')
-  await repoSet(w.agent, 'api', { setupScript: 'echo hi', setupPolicy: 'ask' })
+  await repoSet(w.agent, 'api', { setupScript: 'touch setup-ran.txt', setupPolicy: 'ask' })
   const dialog = await openCreate(w, api)
 
   expect(field(dialog, 'Display name')).toBeUndefined()
@@ -330,6 +330,9 @@ test('SC-31: the window asks for the setup choice before it will create', async 
   await click(submit)
   const made = await named(w, 'with-setup')
   await w.win.waitFor(async () => (await sessionsOf(w.agent, made.id)).some((s) => s.title === 'Setup'))
+  const runner = resolve(made.path, git(made.path, 'rev-parse', '--git-path', 'quirky/setup-runner.sh'))
+  expect(Bun.spawnSync(['/bin/bash', runner], { stdin: 'ignore', stdout: 'pipe', stderr: 'pipe' }).exitCode).toBe(0)
+  await w.win.waitFor(() => existsSync(join(made.path, 'setup-ran.txt')))
 
   const again = await openCreate(w, api)
   await expandAdvanced(again)
@@ -339,7 +342,13 @@ test('SC-31: the window asks for the setup choice before it will create', async 
   await click(button(again, 'Create')!)
   const skipped = await named(w, 'no-setup')
   await closed(w, CREATE)
-  expect(await sessionsOf(w.agent, skipped.id)).toEqual([])
+  await w.win.waitFor(async () => (await openView(w.agent))?.input?.worktree === skipped.id)
+  await w.win.waitFor(async () =>
+    (await sessionsOf(w.agent, skipped.id)).some((s) => s.kind === 'terminal' && s.agent === 'shell' && s.title !== 'Setup' && s.cwd === skipped.path)
+  )
+  const skippedSessions = await sessionsOf(w.agent, skipped.id)
+  expect(skippedSessions.some((s) => s.title === 'Setup')).toBe(false)
+  expect(existsSync(join(skipped.path, 'setup-ran.txt'))).toBe(false)
 }, SLOW)
 
 test('SC-33: the window asks before running an untrusted shared script', async () => {
