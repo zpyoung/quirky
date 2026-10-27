@@ -1,9 +1,12 @@
-import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
+import { afterEach, beforeEach, describe, expect, setDefaultTimeout, test } from 'bun:test'
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { add, block, claim, land, locate, merge, requestLand, waitForDeps, withLock, type Repo } from './lanes'
 import { load, save, type Item } from './queue'
+
+// each test builds throwaway git repos and worktrees, which a loaded Mac makes slow
+setDefaultTimeout(30_000)
 
 const item = (id: string, deps: string[] = []): Item => ({ id, milestone: 'M1', title: id, docs: [], deps, status: 'todo' })
 

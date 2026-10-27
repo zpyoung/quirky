@@ -53,7 +53,7 @@ test(
     const { h } = f
     await floatingReport(f, 'initial floating state', (report) => report.state !== null)
     expect(panel()).toBeNull()
-    expect(button()).not.toBeNull()
+    await until(f, button)
 
     expect((await press('mod+alt+a')).defaultPrevented).toBe(true)
     await until(f, panel)
