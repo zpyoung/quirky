@@ -102,24 +102,27 @@ function installProviderFetch(): void {
   if (savedFetch !== null) return
   const original = globalThis.fetch
   savedFetch = original
-  const isolated: typeof fetch = async (input, init) => {
-    const request = (async () => {
-      const text = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url
-      const url = new URL(text)
-      if (url.protocol === 'http:' && ['localhost', '127.0.0.1', '::1', '[::1]'].includes(url.hostname)) {
-        return original(input, init)
+  const isolated: typeof fetch = Object.assign(
+    async (input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
+      const request = (async () => {
+        const text = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url
+        const url = new URL(text)
+        if (url.protocol === 'http:' && ['localhost', '127.0.0.1', '::1', '[::1]'].includes(url.hostname)) {
+          return original(input, init)
+        }
+        const response = providerFixture(url)
+        if (response === null) throw new Error('Unexpected external provider request blocked by isolated account fixtures.')
+        return response
+      })()
+      activeFetches.add(request)
+      try {
+        return await request
+      } finally {
+        activeFetches.delete(request)
       }
-      const response = providerFixture(url)
-      if (response === null) throw new Error('Unexpected external provider request blocked by isolated account fixtures.')
-      return response
-    })()
-    activeFetches.add(request)
-    try {
-      return await request
-    } finally {
-      activeFetches.delete(request)
-    }
-  }
+    },
+    { preconnect: original.preconnect }
+  )
   globalThis.fetch = isolated
 }
 

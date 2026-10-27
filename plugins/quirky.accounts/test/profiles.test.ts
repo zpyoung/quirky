@@ -3,6 +3,7 @@ import { existsSync, lstatSync, mkdirSync, readFileSync, rmSync, symlinkSync, wr
 import { join } from 'node:path'
 import type { AccountPrepareResult, ManagedProvider, PendingLogin } from '../src/types'
 import type { AccountsHarness } from './support/index'
+import { spawnNativePty } from './support/native-pty'
 import { cleanupAll, defaultHome, startAccounts, waitForAsync } from './support/index'
 
 afterEach(cleanupAll)
@@ -70,12 +71,12 @@ describe('quirky.accounts profile ownership and routing', () => {
     const h = await startAccounts()
     const added = await add(h, 'claude', 'managed@example.test')
     const id = added.result?.id
-    expect(id).toBeTruthy()
+    if (!id) throw new Error('Completed Claude login did not return an account ID')
     await call(h, 'quirky.accounts/select', { provider: 'claude', accountId: id })
 
     const inherited = await call<AccountPrepareResult>(h, 'quirky.accounts/prepare', prepareArgs(h, 'claude', 'session-managed'))
     expect(inherited.account).toEqual({ provider: 'claude', id, label: 'managed@example.test', source: 'managed' })
-    expect(inherited.env.CLAUDE_CONFIG_DIR).toBe(h.managedHome('claude', id ?? ''))
+    expect(inherited.env.CLAUDE_CONFIG_DIR).toBe(h.managedHome('claude', id))
     expect(inherited.account?.id).toBe(id)
 
     const custom = join(h.userHome, 'explicit-claude-home')
@@ -84,7 +85,7 @@ describe('quirky.accounts profile ownership and routing', () => {
     writeFileSync(join(custom, '.credentials.json'), '{"claudeAiOauth":{"accessToken":"fixture-custom-token"}}')
     const explicit = await call<AccountPrepareResult>(h, 'quirky.accounts/prepare', prepareArgs(h, 'claude', 'session-custom', 'explicit', custom))
     expect(explicit.account).toEqual({ provider: 'claude', id: null, label: 'custom@example.test', source: 'custom' })
-    expect(explicit.env.CLAUDE_CONFIG_DIR).not.toBe(h.managedHome('claude', id ?? ''))
+    expect(explicit.env.CLAUDE_CONFIG_DIR).not.toBe(h.managedHome('claude', id))
   })
 
   test('an existing bash PTY re-reads the pointer after a later selection', async () => {
@@ -96,10 +97,9 @@ describe('quirky.accounts profile ownership and routing', () => {
       const state = await call<PendingLogin>(h, 'quirky.accounts/loginStatus', { id: secondStarted.id })
       return state.status === 'pending' ? undefined : state
     })
-    expect(first.result?.id).toBeTruthy()
-    expect(second.result?.id).toBeTruthy()
-    const firstId = first.result?.id ?? ''
-    const secondId = second.result?.id ?? ''
+    const firstId = first.result?.id
+    const secondId = second.result?.id
+    if (!firstId || !secondId) throw new Error('Completed Claude logins did not return account IDs')
     await call(h, 'quirky.accounts/select', { provider: 'claude', accountId: firstId })
     const prepared = await call<AccountPrepareResult>(h, 'quirky.accounts/prepare', prepareArgs(h, 'shell', 'shell-session'))
     expect(prepared.shellInit).toBeTruthy()
@@ -123,7 +123,7 @@ describe('quirky.accounts profile ownership and routing', () => {
       else env[name] = value
     }
     env.QUIRKY_SHELL_INIT = prepared.shellInit ?? ''
-    const pty = Bun.spawn(['/bin/bash', '--noprofile', '--norc', '-i'], {
+    const pty = spawnNativePty(['/bin/bash', '--noprofile', '--norc', '-i'], {
       env,
       terminal: { cols: 80, rows: 24, data: (_terminal, data) => onOutput(data) }
     })

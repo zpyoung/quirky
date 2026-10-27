@@ -18,6 +18,11 @@ import { spawnSync } from 'node:child_process'
 import type { ConfigWarning, ManagedProvider } from './types'
 import { MANAGED_ID_RE } from './types'
 
+type SecurityReadResult = {
+  hasCredential: boolean
+  unavailable: boolean
+}
+
 const OWNER_FILE = 'owner.json'
 const OWNER_VERSION = 1
 const CLAUDE_HISTORY_DIRS = [

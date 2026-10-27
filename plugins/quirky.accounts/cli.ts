@@ -4,6 +4,10 @@ const output = (context: CliContext, value: unknown): void => {
   context.out.result(value, () => JSON.stringify(value, null, 2))
 }
 
+function stringFlag(args: CliArgs, context: CliContext, name: string): string
+function stringFlag(args: CliArgs, context: CliContext, name: string, required: true): string
+function stringFlag(args: CliArgs, context: CliContext, name: string, required: false): string | undefined
+function stringFlag(args: CliArgs, context: CliContext, name: string, required: boolean): string | undefined
 function stringFlag(args: CliArgs, context: CliContext, name: string, required = true): string | undefined {
   const value = args.flags[name]
   if (value === undefined && !required) return undefined

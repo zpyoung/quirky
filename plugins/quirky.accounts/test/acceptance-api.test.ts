@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from 'bun:test'
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { HOOK_PATH_PREFIX, HOOK_TOKEN_HEADER, RpcErrorCode } from '@quirky/protocol'
-import type { AccountState, ManagedProvider, PendingLogin } from '../src/types'
+import type { AccountPrepareResult, AccountState, AccountUiState, ManagedProvider, PendingLogin } from '../src/types'
 import type { ProviderSnapshot, ResetCreditExpectedScope, UsageState } from '../src/usage/types'
 import type { AccountsHarness } from './support/index'
 import { cleanupAll, defaultHome, startAccounts, waitForAsync } from './support/index'
@@ -80,7 +80,7 @@ describe('quirky.accounts daemon API acceptance', () => {
       visibleProviders: ['claude', 'codex', 'minimax', 'opencode-go', 'zcode'],
       density: 'icons'
     })
-    expect(await call(h, 'quirky.accounts/setUiState', { open: true, provider: 'minimax', expanded: 'claude', settingsSection: 'accounts' }))
+    expect(await call<AccountUiState>(h, 'quirky.accounts/setUiState', { open: true, provider: 'minimax', expanded: 'claude', settingsSection: 'accounts' }))
       .toEqual({ open: true, provider: 'minimax', expanded: 'claude', settingsSection: 'accounts' })
 
     const claudeHome = defaultHome(h.home, 'claude')
@@ -207,12 +207,13 @@ describe('quirky.accounts daemon API acceptance', () => {
       expect(credentialState).toContainEqual({ provider: 'minimax', kind: 'api-key', configured: true, readable: true })
       expect(credentialState).toContainEqual({ provider: 'opencode-go', kind: 'api-key', configured: true, readable: true })
       expect(credentialState).toContainEqual({ provider: 'zcode', kind: 'api-key', configured: true, readable: true })
-      const secretValues = configuredCredentials.map(([, , value]) => value).concat([
+      const secretValues = [
+        ...configuredCredentials.map(([, , value]) => value),
         'fixture-claude-api-secret', 'fixture-claude-refresh-secret', 'fixture-codex-api-secret',
         'fixture-anthropic-api-key-secret', 'fixture-codex-api-key-secret',
         'fixture-gemini-api-secret', 'fixture-gemini-refresh-secret', 'fixture-kimi-api-secret',
         'fixture-grok-api-secret', cursorToken
-      ])
+      ]
       const apiAndEventOutput = JSON.stringify({
         credentialResults,
         credentialState,
@@ -389,12 +390,13 @@ describe('quirky.accounts daemon API acceptance', () => {
     const h = await startAccounts()
     const accountA = await add(h, 'claude', 'hook-a@example.test')
     const accountB = await add(h, 'claude', 'hook-b@example.test')
-    const idA = accountA.result?.id ?? ''
-    const idB = accountB.result?.id ?? ''
+    const idA = accountA.result?.id
+    const idB = accountB.result?.id
+    if (!idA || !idB) throw new Error('Completed Claude logins did not return account IDs')
     await call(h, 'quirky.accounts/select', { provider: 'claude', accountId: idA })
     await call<UsageState>(h, 'quirky.accounts/refresh', { provider: 'claude', force: true })
     const sessionId = 'session-info-acceptance'
-    const prepared = await call<{ account: { provider: string; id: string | null; source: string } | null; env: Record<string, string | null> }>(h, 'quirky.accounts/prepare', {
+    const prepared = await call<AccountPrepareResult>(h, 'quirky.accounts/prepare', {
       agent: 'claude', sessionId, worktreeId: 'worktree-acceptance', cwd: h.userHome,
       homeOverrides: { claude: { value: null, source: 'absent' }, codex: { value: null, source: 'absent' } }
     })
