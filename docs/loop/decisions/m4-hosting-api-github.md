@@ -336,5 +336,16 @@
 - **Revisit if:** the kernel changes its conditional-describer contract.
 - **Source:** locked by docs/roadmap.md
 
+## D31: Validate provider GraphQL instead of trusting permissive fixtures
+- **Question:** how to detect syntactically plausible requests that no real GitHub server accepts?
+- **Options:** trust canned response tests; validate every document variant and actual request variables against the authoritative provider schema.
+- **Chose:** use a temporary official-SDL validator, fix all confirmed malformed queries/mappers and their fake response shapes, and verify captured runtime requests. Keep the validator dependency outside the product. Replace the nonexistent userIds field-value input with provider-supported multiSelectOptionIds.
+- **Why:** thirty extracted variants exposed eight invalid operations: check-suite placement, reaction viewer placement/ownership conflicts, incompatible issue/PR state selections, project-field union selection and sort-node shape. Optional parent/vertical retries also retained invalid fields. Permissive fixtures had hidden these API failures.
+- **Evidence:** https://docs.github.com/public/fpt/schema.docs.graphql; /tmp/hosting-lane11-schema-audit.mjs and schema-audit-report.json; parent rerun reported30 variants and8 failures. ProjectV2FieldValue defines multiSelectOptionIds but not userIds. No real GitHub credentials or repositories were accessed.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** the provider changes its schema or introduces another capability-probed field.
+- **Source:** assumed — autonomous; locked by hosting-api.md provider API contract
+
 ## Progress
 Step5 catch-up completed. The original115 targeted tests, typecheck and isolated CLI smoke passed; the post-catch-up smoke also passed under owned-run. Before final gates, fix newly confirmed provider-wire and conditional-consent defects with failing-before/passing-after API regressions. Verify GraphQL queries against the authoritative schema rather than trusting synthetic fixtures. Then run required full gates, the one final cross-family review and accepted-finding fix batch, and land.
