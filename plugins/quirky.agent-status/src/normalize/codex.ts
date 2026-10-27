@@ -137,6 +137,7 @@ export const normalizeCodex: Normalizer = (payload, eventName, cache) => {
     childOps: childOps.length > 0 ? childOps : undefined,
     providerSession: captureProviderSession('codex', payload) ?? undefined,
     permissionRequest: eventName === 'PermissionRequest' && state === 'waiting' ? true : undefined,
+    movesLead: eventName === 'SessionStart' && (payload.source === 'resume' || payload.source === 'clear') ? true : undefined,
     cacheReset: freshSession ? true : undefined
   }
 }

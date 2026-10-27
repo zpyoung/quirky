@@ -24,6 +24,16 @@ describe('codex hooks', () => {
     expect(r?.sessionBoundary).toBeUndefined()
   })
 
+  test('a resume or clear SessionStart moves the lead; startup, compact and child events do not', () => {
+    const lead = (source: string) => run([['SessionStart', { source, session_id: 'c2' }]])[0]
+    expect(lead('resume')?.movesLead).toBe(true)
+    expect(lead('clear')?.movesLead).toBe(true)
+    expect(lead('startup')?.movesLead).toBeUndefined()
+    expect(lead('compact')?.movesLead).toBeUndefined()
+    const [child] = run([['SessionStart', { source: 'resume', agent_id: 'a1' }]])
+    expect(child?.movesLead).toBeUndefined()
+  })
+
   test('a turn: prompt, tool, question, permission, done', () => {
     const r = run([
       ['SessionStart', { source: 'startup' }],
