@@ -151,6 +151,9 @@
       "dependencies": {
         "@quirky/protocol": "workspace:*",
       },
+      "devDependencies": {
+        "@quirky/git": "workspace:*",
+      },
     },
     "plugins/quirky.notifications": {
       "name": "@quirky/plugin-notifications",

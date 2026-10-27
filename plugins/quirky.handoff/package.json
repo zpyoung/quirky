@@ -5,5 +5,8 @@
   "type": "module",
   "dependencies": {
     "@quirky/protocol": "workspace:*"
+  },
+  "devDependencies": {
+    "@quirky/git": "workspace:*"
   }
 }
