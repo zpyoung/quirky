@@ -450,8 +450,7 @@
         "m1-worktrees",
         "m2-source-control-core"
       ],
-      "status": "in-progress",
-      "lane": 11
+      "status": "done"
     },
     {
       "id": "m3-vault",

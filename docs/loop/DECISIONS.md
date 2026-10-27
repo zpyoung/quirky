@@ -21,6 +21,7 @@ files, not this one.
 | hard | medium | [m0-daemon-api D4](decisions/m0-daemon-api.md) | Plugin method wire names are `<pluginId>/<name>` | assumed — autonomous |
 | hard | medium | [m0-daemon-api D9](decisions/m0-daemon-api.md) | Each plugin gets one SQLite file and a data directory of its own | assumed — autonomous |
 | hard | medium | [m5-ledger D5](decisions/m5-ledger.md) | Keep stable ledger codebase identity separate from generated repo IDs | assumed — autonomous |
+| hard (history ownership) | medium | [m3-accounts D6](decisions/m3-accounts.md) | Preserve configuration/auth; distinguish shared history | assumed — autonomous |
 | hard | medium | [m0-ui-api D6](decisions/m0-ui-api.md) | A slot gives the plugin one container element to mount into, and nothing else of the page | assumed — autonomous |
 | hard | medium | [m0-registry D4](decisions/m0-registry.md) | Contribution IDs are `<kind>:<pluginId>/<name>` | assumed — autonomous |
 | hard | medium | [m1-launch-settings D5](decisions/m1-launch-settings.md) | Approach: each agent's model and option catalog is a `launchOptions` data block on its `agent` contribution, resolved by code in `quirky.agents` | assumed — autonomous |
@@ -41,6 +42,8 @@ files, not this one.
 | hard | high | [m1-agent-status D2](decisions/m1-agent-status.md) | The status row is keyed by Quirky session, and the session ID from the hook's environment is the pane identity | assumed — autonomous |
 | hard | high | [m1-agent-status D4](decisions/m1-agent-status.md) | Orca's four states, its derived display states and its labels are kept as they are | locked by docs/roadmap.md |
 | hard | high | [m1-notifications D40](decisions/m1-notifications.md) | Approach: a daemon policy plugin that listens to producers, with markers on their records and the shell rendering | assumed — autonomous |
+| hard | high | [m4-hosting-api-github D6](decisions/m4-hosting-api-github.md) | Keep gh as auth boundary with fail-closed per-repo binding | locked by hosting-api.md |
+| hard | high | [m4-hosting-api-github D9](decisions/m4-hosting-api-github.md) | Share one head-guarded destructive merge seam before the sitter exists | locked by docs/roadmap.md |
 | hard | high | [m0-daemon-api D7](decisions/m0-daemon-api.md) | The four kinds are `method`, `event`, `job` and `launch-hook` | assumed — autonomous |
 | hard | high | [m0-daemon-api D13](decisions/m0-daemon-api.md) | Choose declared contributions with provided implementations | supersedes nothing; extends m0-registry D23 |
 | hard | high | [m5-ledger D2](decisions/m5-ledger.md) | Use the same authenticated scripting surface for every ledger action | locked by docs/architecture.md |
@@ -174,6 +177,20 @@ files, not this one.
 | medium | high | [m1-agent-status-scripting D10](decisions/m1-agent-status-scripting.md) | Rows record the evidence that decided them, and explain reads it | assumed — autonomous |
 | medium | high | [m1-agent-status-scripting D19](decisions/m1-agent-status-scripting.md) | Distinct failures are plugin errors with a machine-readable reason | assumed — autonomous |
 | medium | high | [m1-agent-status-scripting D38](decisions/m1-agent-status-scripting.md) | Catching up with build/roadmap brought m1-notifications, m2-source-control-core and m3-terminal-dock; no decision conflicts | assumed — autonomous |
+| medium | high | [m4-hosting-api-github D1](decisions/m4-hosting-api-github.md) | Take the complete GitHub API slice, not its UI or other providers | locked by docs/roadmap.md |
+| medium | high | [m4-hosting-api-github D4](decisions/m4-hosting-api-github.md) | Keep one plugin owner with focused internal modules | assumed — autonomous |
+| medium | high | [m4-hosting-api-github D5](decisions/m4-hosting-api-github.md) | Resolve identity from registered worktrees and local authenticated host inventory | locked by hosting-api.md |
+| medium | high | [m4-hosting-api-github D7](decisions/m4-hosting-api-github.md) | Use typed safe outcomes, generated CLI and bounded pages | locked by docs/roadmap.md; assumed — autonomous (concrete method vocabulary) |
+| medium | high | [m4-hosting-api-github D8](decisions/m4-hosting-api-github.md) | Bound subprocesses, scope rate limits per account and never replay mutations | locked by hosting-api.md; assumed — autonomous (account-scoped defect correction) |
+| medium | high | [m4-hosting-api-github D10](decisions/m4-hosting-api-github.md) | Recheck creation eligibility and preserve the existing PR base owner | locked by hosting-api.md; locked by docs/loop/decisions/m2-source-control-core.md |
+| medium | high | [m4-hosting-api-github D11](decisions/m4-hosting-api-github.md) | Preserve detail mutations, Projects and refresh as full API flows | locked by hosting-api.md |
+| medium | high | [m4-hosting-api-github D12](decisions/m4-hosting-api-github.md) | Verify macOS subprocess behavior without claiming other platforms | deferred: platform |
+| medium | high | [m4-hosting-api-github D13](decisions/m4-hosting-api-github.md) | Accept both joint-spec review findings and grow the public connection lifecycle hook | assumed — autonomous |
+| medium | high | [m4-hosting-api-github D17](decisions/m4-hosting-api-github.md) | Projects item mutations do not require local remote membership | supersedes m4-hosting-api-github D5 (Projects only); locked by hosting-api.md |
+| medium | high | [m4-hosting-api-github D18](decisions/m4-hosting-api-github.md) | Make public discovery describe actual results and supported inputs | locked by hosting-api.md; locked by docs/loop/decisions/m0-scripting.md |
+| medium | high | [m4-hosting-api-github D19](decisions/m4-hosting-api-github.md) | Authorize Projects routes explicitly without weakening ordinary remote checks | locked by hosting-api.md; supersedes m4-hosting-api-github D5 (Projects transport only) |
+| medium | high | [m4-hosting-api-github D21](decisions/m4-hosting-api-github.md) | Preserve provider lifecycle semantics instead of fixture mistakes | locked by hosting-api.md |
+| medium | high | [m4-hosting-api-github D29](decisions/m4-hosting-api-github.md) | Honor actual provider wire shapes and supported branch routes | locked by hosting-api.md |
 | medium | high | [m0-daemon-api D8](decisions/m0-daemon-api.md) | Method results and errors | assumed — autonomous |
 | medium | high | [m0-daemon-api D10](decisions/m0-daemon-api.md) | Stores migrate forward only, by an ordered list, and refuse a downgrade | assumed — autonomous |
 | medium | high | [m0-daemon-api D24](decisions/m0-daemon-api.md) | Plugin methods use the daemon's token, and any client may call any method | locked by docs/roadmap.md |
@@ -191,6 +208,17 @@ files, not this one.
 | medium | high | [m5-ledger D10](decisions/m5-ledger.md) | Preserve documented UI surfaces with scriptable controls and pinned detail actions | locked by external research/orca-features/ledger.md |
 | medium | high | [m5-ledger D12](decisions/m5-ledger.md) | Correct genuine spec-review gaps and reject planned-path prepass false positives | assumed — autonomous |
 | medium | high | [m5-ledger D16](decisions/m5-ledger.md) | Correct import paths, value flags and Quirky JSON rather than copy Orca's transport envelope | assumed — autonomous |
+| medium (provider contracts and ui scenarios) | high | [m3-accounts D1](decisions/m3-accounts.md) | Implement meters and only Claude/Codex switching | locked by docs/roadmap.md |
+| medium (provider adapter boundaries) | high for cli/codex; medium for observed private quota protocols | [m3-accounts D4](decisions/m3-accounts.md) | Native CLI login and provider-specific usage ports beat custom OAuth or imported snapshots | assumed — autonomous |
+| medium (inter-plugin preparation) | high | [m3-accounts D5](decisions/m3-accounts.md) | Required account preparation is separate from launch hooks | assumed — autonomous |
+| medium (api/store) | high | [m3-accounts D8](decisions/m3-accounts.md) | Login lifecycle is asynchronous, serialized, owned and scriptable | assumed — autonomous |
+| medium (restart state machine) | high | [m3-accounts D9](decisions/m3-accounts.md) | Running processes keep old identity until conversation-preserving restart | locked by research/orca-features/accounts.md |
+| medium (public api) | high | [m3-accounts D10](decisions/m3-accounts.md) | Grow generic public status-bar and shell-init seams | assumed — autonomous |
+| medium (public contracts) | high | [m3-accounts D12](decisions/m3-accounts.md) | Apply confirmed spec findings before dispatch | assumed — autonomous |
+| medium (profile/credential lifecycle) | high | [m3-accounts D15](decisions/m3-accounts.md) | Preserve Gemini consent and complete Codex config-warning parity | locked by research/orca-features/accounts.md |
+| medium (authorization/ledger ordering) | high | [m3-accounts D18](decisions/m3-accounts.md) | Bridge dispatcher authorization once and reserve reset scope before validation | assumed — autonomous |
+| medium (platform adapters) | high | [m3-accounts D21](decisions/m3-accounts.md) | Non-macOS account adapters remain explicit platform work | deferred: platform |
+| medium | high at the daemon/filesystem boundary; strengthened real-pty fixture smoke still required | [m3-accounts D24](decisions/m3-accounts.md) | Preserve real native conversation data across profile changes | assumed — autonomous |
 | medium | high | [m0-ui-api D5](decisions/m0-ui-api.md) | Plugin UI code is one ES module named by a manifest `ui` field, loaded in the window only when needed | assumed — autonomous |
 | medium | high | [m0-ui-api D8](decisions/m0-ui-api.md) | The daemon resolves UI contributions into one model the window and agents read | assumed — autonomous |
 | medium | high | [m0-ui-api D12](decisions/m0-ui-api.md) | Keybindings are `mod+shift+k` chords that must include a modifier, or a function key | deferred: platform |
@@ -347,6 +375,7 @@ files, not this one.
 | easy | medium | [m0-daemon-api D40](decisions/m0-daemon-api.md) | The scenario tests are split by area, and each task may fix only its area's modules | assumed — autonomous |
 | easy | medium | [m0-daemon-api D42](decisions/m0-daemon-api.md) | Final round 1: fix four defects, and narrow the spec's promise about listener timing | assumed — autonomous |
 | easy | medium | [m5-structured-runner D30](decisions/m5-structured-runner.md) | Diagnose the scripts fixture timeout without weakening its assertion or budget | assumed — autonomous |
+| easy (before dispatch) | medium (large account domain, contract integration risk) | [m3-accounts D13](decisions/m3-accounts.md) | Execute one four-component wave with disjoint scopes | assumed — autonomous |
 | easy | medium | [m0-ui-api D11](decisions/m0-ui-api.md) | Commands run in the window, from a command palette or a keybinding | assumed — autonomous |
 | easy | medium | [m0-ui-api D14](decisions/m0-ui-api.md) | No `when` clauses yet | assumed — autonomous |
 | easy | medium | [m0-ui-api D20](decisions/m0-ui-api.md) | The active theme is chosen through `theme.list` and `theme.set`, and applies live | assumed — autonomous |
@@ -688,6 +717,35 @@ files, not this one.
 | easy | high | [m1-agent-status-scripting D45](decisions/m1-agent-status-scripting.md) | A later land failed on a quirky.worktree test race; this branch carries that plugin's own fix | assumed — autonomous |
 | easy | high | [m1-agent-status-scripting D46](decisions/m1-agent-status-scripting.md) | The resumed lane verifies the existing final fix batch and proceeds to land | assumed — autonomous |
 | easy | high | [m1-agent-status-scripting D47](decisions/m1-agent-status-scripting.md) | Retry landing after the protected queue tests pass unchanged | locked by docs/loop/LOOP.md |
+| easy | high | [m4-hosting-api-github D2](decisions/m4-hosting-api-github.md) | Resolve questions autonomously and keep markdown specs | locked by docs/loop/LOOP.md |
+| easy | high | [m4-hosting-api-github D3](decisions/m4-hosting-api-github.md) | Use OpenAI task implementers and Gemini review after Opus fails preflight | locked by docs/loop/LOOP.md |
+| easy | high | [m4-hosting-api-github D14](decisions/m4-hosting-api-github.md) | Build four disjoint components and integrate before checking | assumed — autonomous |
+| easy | high | [m4-hosting-api-github D15](decisions/m4-hosting-api-github.md) | Preserve tooling-generated Serena state outside feature commits | assumed — autonomous |
+| easy | high | [m4-hosting-api-github D16](decisions/m4-hosting-api-github.md) | Repair integration roots rather than weakening scenarios | assumed — autonomous |
+| easy | high | [m4-hosting-api-github D20](decisions/m4-hosting-api-github.md) | Accept correctly encoded repository-relative filenames | locked by hosting-api.md |
+| easy | high | [m4-hosting-api-github D22](decisions/m4-hosting-api-github.md) | Write fake-upstream JSON state as atomic snapshots | assumed — autonomous |
+| easy | high | [m4-hosting-api-github D23](decisions/m4-hosting-api-github.md) | Bound integration scenarios independently from subprocess deadline assertions | assumed — autonomous |
+| easy | high | [m4-hosting-api-github D24](decisions/m4-hosting-api-github.md) | Keep assertions from mutating retained observations | assumed — autonomous |
+| easy | high | [m4-hosting-api-github D25](decisions/m4-hosting-api-github.md) | Parse standard decorated gh authentication output | locked by hosting-api.md |
+| easy | high | [m4-hosting-api-github D26](decisions/m4-hosting-api-github.md) | Verify the actual CLI contract with isolated upstream state | locked by docs/roadmap.md; locked by docs/loop/decisions/m0-scripting.md |
+| easy | high | [m4-hosting-api-github D27](decisions/m4-hosting-api-github.md) | Advance only after every targeted acceptance file passes | locked by docs/loop/LOOP.md |
+| easy | high | [m4-hosting-api-github D28](decisions/m4-hosting-api-github.md) | Apply incoming test ownership and broad-protocol verification rules | locked by docs/loop/LOOP.md; locked by docs/loop/decisions/fix-test-process-leaks.md |
+| easy | high | [m4-hosting-api-github D30](decisions/m4-hosting-api-github.md) | Require consent for destructive project-comment deletion only | locked by docs/roadmap.md |
+| easy | high | [m4-hosting-api-github D31](decisions/m4-hosting-api-github.md) | Validate provider GraphQL instead of trusting permissive fixtures | assumed — autonomous; locked by hosting-api.md provider API contract |
+| easy | high | [m4-hosting-api-github D32](decisions/m4-hosting-api-github.md) | Account for reported GraphQL spend before admitting more work | locked by hosting-api.md |
+| easy | high | [m4-hosting-api-github D33](decisions/m4-hosting-api-github.md) | Implement required project issue fields instead of removing advertised functionality | locked by hosting-api.md |
+| easy | high | [m4-hosting-api-github D34](decisions/m4-hosting-api-github.md) | Preserve original project row content and built-in field values | locked by hosting-api.md |
+| easy | high | [m4-hosting-api-github D35](decisions/m4-hosting-api-github.md) | Return the human-facing URL from REST work items | locked by hosting-api.md work-item contract |
+| easy | high | [m4-hosting-api-github D36](decisions/m4-hosting-api-github.md) | Match the async merge envelope and queue request contract | locked by hosting-api.md |
+| easy | high | [m4-hosting-api-github D37](decisions/m4-hosting-api-github.md) | Preserve standalone budget warm-up and the CLI resource boundary | locked by hosting-api.md |
+| easy | high | [m4-hosting-api-github D38](decisions/m4-hosting-api-github.md) | Follow the operator's core-first landing and verification ruling | supersedes m4-hosting-api-github D1 (scope) and D28 (pre-land whole suite), by explicit operator ruling |
+| easy | high | [m4-hosting-api-github D39](decisions/m4-hosting-api-github.md) | Keep verification behavioral rather than pinning implementation text | assumed — autonomous |
+| easy | high | [m4-hosting-api-github D40](decisions/m4-hosting-api-github.md) | Apply the single catch-up and bound real subprocess test workflows | assumed — autonomous; operator-required blocking-gate repair |
+| easy | high | [m4-hosting-api-github D41](decisions/m4-hosting-api-github.md) | Repair the sole scoped-suite failure and avoid remote-slot starvation | assumed — autonomous; operator-required core landing |
+| easy | high | [m4-hosting-api-github D42](decisions/m4-hosting-api-github.md) | Close the two standing core findings from the single final review | assumed — autonomous; operator blocking-fixes-only ruling |
+| easy | high | [m4-hosting-api-github D43](decisions/m4-hosting-api-github.md) | Preserve provenance when the integration comparison is overbroad | assumed — autonomous |
+| easy | high | [m4-hosting-api-github D44](decisions/m4-hosting-api-github.md) | Remove unsafe review experiments and restrict integration access to normal CLI use | locked by operator instruction in this conversation |
+| easy | high | [m4-hosting-api-github D45](decisions/m4-hosting-api-github.md) | Resolve public workspace types without depending on new installation links | assumed — autonomous; blocking landing-environment repair |
 | easy (workflow only) | high | [fix-sc31-first-shell-race D1](decisions/fix-sc31-first-shell-race.md) | Follow the fix-item workflow without new feature specs | locked by docs/loop/LOOP.md |
 | easy (test-only correction) | high | [fix-sc31-first-shell-race D2](decisions/fix-sc31-first-shell-race.md) | Skipping setup does not suppress the window's normal first shell | locked by /Users/zpyoung/PycharmProjects/PERSONAL/quirky/research/orca-features/worktrees.md |
 | easy (test synchronization only) | high | [fix-sc31-first-shell-race D3](decisions/fix-sc31-first-shell-race.md) | Wait for the terminal override's ensured shell before asserting setup was skipped | locked by docs/loop/decisions/m1-term-ui.md |
@@ -757,6 +815,28 @@ files, not this one.
 | easy | high | [m5-ledger D18](decisions/m5-ledger.md) | Treat an unchanged fast refresh as a visual-probe limitation, not a proved dead request | assumed — autonomous |
 | easy | high | [m5-ledger D19](decisions/m5-ledger.md) | Preserve separate visual outcomes and the constrained-viewport footer proof | assumed — autonomous |
 | easy | high | [m5-ledger D20](decisions/m5-ledger.md) | Fix asynchronous test readiness, retain the red infrastructure gate, and stop superseded verification | assumed — autonomous |
+| easy (decision review) | high | [m3-accounts D2](decisions/m3-accounts.md) | Answer unattended design questions without a human gate | locked by docs/loop/LOOP.md |
+| easy (no implementation dispatched) | high | [m3-accounts D3](decisions/m3-accounts.md) | Use OpenAI task implementers and Gemini review fallback | assumed — autonomous |
+| easy (ui); medium (cache) | high | [m3-accounts D7](decisions/m3-accounts.md) | Retain documented presentation, errors and freshness defaults | locked by research/orca-features/accounts.md |
+| easy | high | [m3-accounts D11](decisions/m3-accounts.md) | Verify isolated provider boundaries, CLI/API, owned web UI and native handoffs | locked by docs/loop/LOOP.md |
+| easy | high | [m3-accounts D14](decisions/m3-accounts.md) | Baseline verification is green with one recorded load flake | assumed — autonomous |
+| easy | high | [m3-accounts D16](decisions/m3-accounts.md) | Complete daemon-driven coverage rather than count service tests as flow proof | locked by docs/loop/LOOP.md |
+| easy (feature branch only) | high | [m3-accounts D17](decisions/m3-accounts.md) | Integrate accepted prerequisites before dependent lifecycle acceptance | assumed — autonomous |
+| easy (identity comparison only) | high | [m3-accounts D19](decisions/m3-accounts.md) | Distinct known Codex users may share a workspace | assumed — autonomous |
+| easy | high | [m3-accounts D20](decisions/m3-accounts.md) | Use native PTY behavior and strict fixture isolation as runtime evidence | assumed — autonomous |
+| easy | high | [m3-accounts D22](decisions/m3-accounts.md) | Refresh on actual window focus with freshness debouncing | assumed — autonomous |
+| easy | high for the observed defect; replacement geometry awaits a fresh browser run | [m3-accounts D23](decisions/m3-accounts.md) | Treat failed browser geometry as an application defect | assumed — autonomous |
+| easy | high for repaired assertions/fixtures; host race cause not established | [m3-accounts D25](decisions/m3-accounts.md) | Fix observed suite and fixture failures without changing production lifetime | assumed — autonomous |
+| easy | high | [m3-accounts D26](decisions/m3-accounts.md) | Preserve incoming integration contracts during roadmap catch-up | locked by docs/loop/LOOP.md |
+| easy | high | [m3-accounts D27](decisions/m3-accounts.md) | Apply the operator's core-flow landing deadline | locked by operator decision |
+| easy | high for named exercised paths; extended paths remain explicitly unverified | [m3-accounts D28](decisions/m3-accounts.md) | Accept real core UI and transcript-content proof, not metadata echoes | assumed — autonomous |
+| easy | high | [m3-accounts D29](decisions/m3-accounts.md) | Preserve failed and timed-out verification honestly | locked by operator decision |
+| easy | high | [m3-accounts D30](decisions/m3-accounts.md) | Finish the final catch-up without changing production source | locked by operator decision |
+| easy | high for the execution result; no confidence claim for unreviewed correctness/security | [m3-accounts D31](decisions/m3-accounts.md) | Record incomplete independent review rather than invent clearance | locked by operator decision |
+| easy | high | [m3-accounts D32](decisions/m3-accounts.md) | Fix the authoritative landing failures instead of claiming completion | assumed — autonomous |
+| easy | high | [m3-accounts D33](decisions/m3-accounts.md) | Retain proof and unexpected local state while cleaning owned worktrees | locked by docs/loop/LOOP.md |
+| easy | high | [m3-accounts D34](decisions/m3-accounts.md) | Install the merged workspace graph before typechecking it | assumed — autonomous |
+| easy | high for the observed load-sensitive result | [m3-accounts D35](decisions/m3-accounts.md) | Preserve protected script assertions after an isolated passing rerun | locked by docs/loop/LOOP.md |
 | easy | high | [m0-ui-api D1](decisions/m0-ui-api.md) | Classify the item as an API and Visual design, and run both research phases | assumed — autonomous |
 | easy | high | [m0-ui-api D2](decisions/m0-ui-api.md) | Skip the visual companion and the adhd offer, use the standard gray-area set | locked by docs/loop/LOOP.md |
 | easy | high | [m0-ui-api D3](decisions/m0-ui-api.md) | Select every gray area that matters for the UI plugin API | assumed — autonomous |
