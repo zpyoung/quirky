@@ -251,6 +251,7 @@ files, not this one.
 | medium | high | [m0-registry D6](decisions/m0-registry.md) | A plugin's own contributions use short names, overrides use full IDs | assumed — autonomous |
 | medium | high | [m0-registry D9](decisions/m0-registry.md) | Disable works by plugin ID or contribution ID, before any code loads, and persists | locked by docs/roadmap.md (disable by ID); assumed — autonomous (cascade and persistence) |
 | medium | high | [m0-registry D11](decisions/m0-registry.md) | Plugins activate lazily on first use by default, or at startup when the manifest says so | locked by docs/roadmap.md (lazy); assumed — autonomous (trigger set) |
+| medium | high | [fix-test-cost D11](decisions/fix-test-cost.md) | Retain the POSIX test platform boundary | deferred: platform |
 | medium | high | [m3-terminal-dock D1](decisions/m3-terminal-dock.md) | Build the dock as an opt-in built-in plugin with its own composer | locked by docs/roadmap.md |
 | medium | high | [m3-terminal-dock D3](decisions/m3-terminal-dock.md) | Preserve macOS parity and do not reproduce the three observed Orca defects | locked by docs/roadmap.md |
 | medium | high | [m3-terminal-dock D7](decisions/m3-terminal-dock.md) | Missing pane and send APIs alone are not reasons to block | assumed — autonomous |
@@ -1056,6 +1057,18 @@ files, not this one.
 | easy | high | [m0-registry D32](decisions/m0-registry.md) | Wave 2 checkpoint findings: fix all four defects | assumed — autonomous |
 | easy | high | [m0-registry D33](decisions/m0-registry.md) | A long QUIRKY_HOME breaks the PTY host's socket; logged, not fixed here | deferred: platform |
 | easy | high | [m0-registry D34](decisions/m0-registry.md) | The final review loop closed after three rounds with no open finding | assumed — autonomous |
+| easy | high | [fix-test-cost D1](decisions/fix-test-cost.md) | Optimize test execution, not product behavior | assumed — autonomous |
+| easy | high | [fix-test-cost D2](decisions/fix-test-cost.md) | Use omp implementers and the reachable Gemini reviewer | assumed — autonomous |
+| easy | high | [fix-test-cost D3](decisions/fix-test-cost.md) | Measure on the existing configured remote runner | assumed — autonomous |
+| easy | high for measured command cost; limited for total process-tree cost | [fix-test-cost D4](decisions/fix-test-cost.md) | Profile test commands without claiming whole-host CPU | assumed — autonomous |
+| easy | high | [fix-test-cost D5](decisions/fix-test-cost.md) | Share only compatible daemon state, not every test fixture | assumed — autonomous |
+| easy | high | [fix-test-cost D6](decisions/fix-test-cost.md) | Make clean real shells explicit and keep integration scenarios on login shells | assumed — autonomous |
+| easy | high | [fix-test-cost D7](decisions/fix-test-cost.md) | Replace positive-completion sleeps, retain real observation windows | assumed — autonomous |
+| easy | high | [fix-test-cost D8](decisions/fix-test-cost.md) | Apply the incoming verification policy without an unstarted review round | locked by docs/loop/LOOP.md |
+| easy | high | [fix-test-cost D9](decisions/fix-test-cost.md) | Preserve the real output and restart-observation boundaries | assumed — autonomous |
+| easy | high | [fix-test-cost D10](decisions/fix-test-cost.md) | Keep incoming feature decisions and default test semantics intact | locked by docs/loop/decisions/m3-session-info.md |
+| easy | high for observed results; no attribution of the intermittent failures | [fix-test-cost D12](decisions/fix-test-cost.md) | Keep the established flaky-rerun policy and report each non-first-pass gate | locked by scripts/suite.ts |
+| easy | high for observed costs; no causal aggregate speedup claim | [fix-test-cost D13](decisions/fix-test-cost.md) | Report the measured costs without claiming an aggregate suite speedup | assumed — autonomous |
 | easy | high | [m3-terminal-dock D2](decisions/m3-terminal-dock.md) | Run unattended brainstorming and select every relevant gray area | locked by docs/loop/LOOP.md |
 | easy | high | [m3-terminal-dock D4](decisions/m3-terminal-dock.md) | Bind omp OpenAI implementers to Gemini review after Opus proved unavailable | assumed — autonomous |
 | easy | high | [m3-terminal-dock D5](decisions/m3-terminal-dock.md) | Linux and Windows execution remain deferred | deferred: platform |
