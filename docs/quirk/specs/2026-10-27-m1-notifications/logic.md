@@ -32,7 +32,8 @@ the session and worktree records, and their own plugins draw them (D35, D36).
 
 **Viewing means attended.** A session is viewed when a window is focused, the person has used its
 mouse or keyboard in the last 3 minutes, and its worktree view shows the session. Viewing clears the
-session's marker and its worktree's. If the person hasn't touched the window for 3 minutes, events
+session's marker and its worktree's. Opening a worktree from its sidebar card, like Mark Read, clears
+the worktree and every session in it. If the person hasn't touched the window for 3 minutes, events
 mark unread even on the visible tab, and the next touch clears what is on screen (D10).
 
 **Delivery is gated, then rendered elsewhere.** A banner passes Enable Notifications, its source's
@@ -139,10 +140,11 @@ are relative to the first event.
    - **When** the window reports focus and input
    - **Then** S1's marker and B's marker clear; S2 stays unread `agent`; the badge drops by one
 
-6. **SC-6: opening a worktree from the sidebar clears it and its shown session** (API)
-   - **Given** B unread, S1 and S2 in B both unread; a window attended with the view on worktree A
-   - **When** the window opens B's view showing S1
-   - **Then** B and S1 are cleared; S2 keeps its marker
+6. **SC-6: opening a worktree from its sidebar card clears it and all its sessions** (UI)
+   - **Given** B unread, S1 and S2 in B both unread; the person on worktree A
+   - **When** the person clicks B's card
+   - **Then** B, S1 and S2 are all cleared, as Orca does when a workspace is opened; opening B any
+     other way (a toast, `quirky ui open-view`) clears only what SC-5's rule clears
 
 7. **SC-7: Mark Read clears the worktree and all its sessions; Mark Unread marks only the worktree** (CLI)
    - **Given** B unread with S1 and S2 unread

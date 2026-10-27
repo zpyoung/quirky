@@ -95,7 +95,7 @@
 ## D10: Viewing means a focused window whose person is present and whose view shows the session
 - **Question:** when a session or worktree counts as viewed, and when markers clear
 - **Options:** the window is focused; the window is focused and shows it; Orca's rule with presence
-- **Chose:** Orca's rule. A session is viewed when a window is focused, the person used the mouse or keyboard in it within the last 180 seconds, and its worktree view shows that session. A worktree is viewed under the same conditions when its view is open. When a session becomes viewed its marker clears, and the worktree's marker clears too. Marks on the worktree's other sessions stay until each is viewed. Mark Read on the worktree clears it and all its sessions. Presence never seen counts as away, so it never clears a marker.
+- **Chose:** Orca's rule. A session is viewed when a window is focused, the person used the mouse or keyboard in it within the last 180 seconds, and its worktree view shows that session. A worktree is viewed under the same conditions when its view is open. When a session becomes viewed its marker clears, and the worktree's marker clears too. Marks on the worktree's other sessions stay until each is viewed. Mark Read on the worktree, and opening it from its sidebar card (which m1-worktrees already makes clear the worktree's mark), clear it and all its sessions, as Orca's pass saw ("Opening the workspace cleared all of that at once"). Presence never seen counts as away, so it never clears a marker.
 - **Why:** notifications.md flow 3 and "What an agent-completion event does" point 5; "Unknown presence never clears unread". Phase B research (local-operator #2939) warns against inferring reads from a focused window alone.
 - **Evidence:** notifications.md lines 62, 128, 264; research: https://github.com/damianvtran/local-operator/pull/2939
 - **Reversibility:** medium
@@ -416,5 +416,46 @@
 - **Confidence:** high
 - **Source:** locked by docs/loop/LOOP.md
 
+## D42: The tray's dot is an amber dot image beside the "Q", not a dot drawn into a glyph
+- **Question:** how to draw Orca's dot with Electrobun's tray (tech spec, shell)
+- **Options:** composite a dot into a template glyph per appearance, as Orca does; keep the text "Q" and add a non-template amber dot image while attention is on
+- **Chose:** the second. The tray is recreated with the dot image (`template: false`) when attention starts and without it when it ends.
+- **Why:** Electrobun's `setImage` has no template switch and no way to clear the image, the app ships no tray glyph, and a non-template glyph would need the menu bar's appearance; the text title follows the menu bar by itself. The amber dot keeps Orca's colour and white ring.
+- **Evidence:** ~/.hutch/releases/electrobun/2.0.4/macos-arm64/api/sdks/main/core/Tray.ts; notifications.md "Tray attention dot"; research: https://github.com/Zeitgleich/TeamCraft/issues/632
+- **Reversibility:** easy
+- **Confidence:** medium
+- **Revisit if:** Quirky gets a menu bar glyph
+- **Source:** assumed — autonomous
+
+## D43: Every decision is an event, and two environment variables make time and sound testable
+- **Question:** how tests see a suppressed or throttled banner, and avoid real sounds and 3-minute waits (tech spec)
+- **Options:** inspect internals; a `decided` event plus test hooks
+- **Chose:** `quirky.notifications/decided` reports every decision's result; `QUIRKY_SOUND_PLAYER` replaces afplay (in the plugin and the shell) and `QUIRKY_DESKTOP_AWAY_MS` shortens the presence window. Every test sets the player.
+- **Why:** SC-26 and SC-35 assert a result for an event no CLI call returns; tests must not play sounds on the machine; SC-4 needs presence to lapse
+- **Evidence:** logic.md SC-4, SC-26, SC-35
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** assumed — autonomous
+
+## D44: The Codex adversarial review of both specs replaces the separate tech-spec reviewer
+- **Question:** the tech-spec rubric's reviewer step
+- **Options:** run both; run the adversarial review over both specs
+- **Chose:** the adversarial review, which LOOP.md asks for and which covers pointer precision and fidelity to the locked decisions
+- **Why:** LOOP.md step 4 replaces the user's spec review with one adversarial pass over both specs together
+- **Evidence:** docs/loop/LOOP.md step 4
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** locked by docs/loop/LOOP.md
+
+## D45: Opening a worktree from its card counts as Mark Read
+- **Question:** tech spec, Mark Read detection: the card's `open()` clears `unread` through the same `set` call as Mark Read
+- **Options:** add a reason to `set`; stop `open()` clearing; treat both as Mark Read
+- **Chose:** treat both as Mark Read, so opening from the card clears the worktree and all its sessions; the logic spec's SC-6 says so
+- **Why:** Orca's pass saw exactly that ("Opening the workspace cleared all of that at once; the tab strip showed no bell afterwards"); keeping `open()` keeps m1-worktrees' behaviour when the notifications plugin is off
+- **Evidence:** notifications.md line 133; plugins/quirky.worktree/src/Tree.tsx:40-43
+- **Reversibility:** easy
+- **Confidence:** medium
+- **Source:** locked by research/orca-features/notifications.md
+
 ## Progress
-Brainstorming done (D1–D41). Next: write logic.md and tech.md under docs/quirk/specs/2026-10-27-m1-notifications/, commit, run the Codex spec review.
+Specs written (logic.md, tech.md). Next: the Codex adversarial review of both specs, fix findings, then subagent-driven development W1 (K, P, R, M, S), W2 (N, D, N6), W3 (e2e and UI tests), catch-up, Final Round 1, UI pass, land.
