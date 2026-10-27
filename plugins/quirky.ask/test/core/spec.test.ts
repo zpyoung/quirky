@@ -118,6 +118,21 @@ describe('validateAskSpec: limits', () => {
   })
 })
 
+describe('validateAskSpec: reserved ids', () => {
+  test.each(['__proto__', 'constructor', 'prototype'])('refuses the question id %s', (id) => {
+    expect(validate(specOf(textQuestion({ id })))).toMatchObject({
+      ok: false,
+      errors: [
+        { path: 'questions[0].id', message: 'id must not be __proto__, constructor or prototype' }
+      ]
+    })
+  })
+
+  test('refuses a reserved id even when credential text checks are off', () => {
+    expect(validateAskSpec(specOf(textQuestion({ id: '__proto__' })), SKIP_TEXT_CHECK).ok).toBe(false)
+  })
+})
+
 describe('validateAskSpec: id uniqueness', () => {
   test('rejects a blank id', () => {
     expect(validate(specOf(textQuestion({ id: '' })))).toMatchObject({
@@ -216,8 +231,67 @@ describe('validateAskSpec: pattern safety', () => {
     )
   })
 
-  test('rejects a pattern with more than 10 quantifiers', () => {
-    expect(validate(specOf(textQuestion({ pattern: 'a?'.repeat(11) }))).ok).toBe(false)
+  test('rejects a pattern with more than 3 variable quantifiers', () => {
+    expect(validate(specOf(textQuestion({ pattern: 'a?'.repeat(4) }))).ok).toBe(false)
+    expect(messageOf(specOf(textQuestion({ pattern: '^a*a*a*a*a*a*a*a*a*b$' })))).toBe(
+      'questions[0].pattern: pattern must have at most 3 variable quantifiers; it can hang the regex engine'
+    )
+  })
+
+  test.each(['a?a?a?', '^a{1,}b{2,3}c+$', '^\\d{4}-\\d{2}-\\d{2}$', '^a{2}b{3}c{4}d{5}e{6}$'])(
+    'counts only variable quantifiers: accepts %s',
+    (pattern) => {
+      expect(validate(specOf(textQuestion({ pattern }))).ok).toBe(true)
+    }
+  )
+
+  test('does not count a lazy modifier or a group prefix as a quantifier', () => {
+    expect(validate(specOf(textQuestion({ pattern: '^(?:a+?)(?=b*)c*$' }))).ok).toBe(true)
+  })
+
+  test.each(['(a|aa)+b', '^(a|ab){2}$', '^((a|b)c)*$'])(
+    'rejects a quantified group with alternatives: %s',
+    (pattern) => {
+      expect(messageOf(specOf(textQuestion({ pattern })))).toBe(
+        'questions[0].pattern: pattern must not repeat a group with alternatives (e.g. (a|ab)+); it can hang the regex engine'
+      )
+    }
+  )
+
+  test.each(['^(https?|ftp)://', '^(a|b)?c$'])('still accepts alternation that is not repeated: %s', (pattern) => {
+    expect(validate(specOf(textQuestion({ pattern }))).ok).toBe(true)
+  })
+
+  test.each(['^a*a*a*b$', '^a*a*a*$', 'a*a*a*b', '^(a?){3}b$', '^a?a?a?aaa$', '^[a-z]*[a-z]*[a-z]*!$'])(
+    'validates the worst accepted pattern %s against a 200-character default in well under 100 ms',
+    (pattern) => {
+      const start = performance.now()
+      const result = validate(specOf(textQuestion({ pattern, default: `${'a'.repeat(199)}c` })))
+      expect(performance.now() - start).toBeLessThan(100)
+      expect(result.ok).toBe(false)
+    }
+  )
+
+  test('counts backreferences against the quantifier budget', () => {
+    const start = performance.now()
+    const result = validate(
+      specOf(textQuestion({ pattern: '(a*)(a*)(a*)\\1\\2\\3b', default: 'a'.repeat(200) }))
+    )
+    expect(performance.now() - start).toBeLessThan(100)
+    expect(result.ok).toBe(false)
+    expect(messageOf(specOf(textQuestion({ pattern: '(a*)(a*)(a*)\\1\\2\\3b' })))).toContain(
+      'at most 3 variable quantifiers'
+    )
+    expect(validate(specOf(textQuestion({ pattern: '^(a*)\\1$' }))).ok).toBe(true)
+  })
+
+  test('keeps common patterns accepted', () => {
+    for (const [pattern, def] of [
+      ['^[a-z0-9-]+$', 'my-slug-1'],
+      ['^\\d{4}-\\d{2}-\\d{2}$', '2026-10-26']
+    ] as const) {
+      expect(validate(specOf(textQuestion({ pattern, default: def }))).ok).toBe(true)
+    }
   })
 
   test('rejects a pattern that is not a valid regular expression', () => {
