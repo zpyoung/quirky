@@ -333,6 +333,21 @@ describe('quirky.agents/generate', () => {
     expect(await t.call(A('cancelGenerate'), { requestId: 'never-started' })).toEqual({ cancelled: false })
   })
 
+  test('a cancelled run settles only after a SIGTERM-resistant child of an agent that already exited is gone', async () => {
+    const t = await start()
+    await t.fake('claude', `echo $$ > "$REC.pid"\n(trap '' TERM; exec sleep 120) &\necho $! > "$REC.child"\nwait`)
+    const running = failure(t.call(A('generate'), { agent: 'claude', prompt: 'p', cwd: t.work, requestId: 'r1' }))
+    await waitFor(() => existsSync(join(t.rec, 'claude.child')))
+    const child = pidOf(t, 'claude.child')
+    const began = Date.now()
+
+    await t.call(A('cancelGenerate'), { requestId: 'r1' })
+    expect(reasonOf(await running)).toBe('cancelled')
+
+    expect(alive(child)).toBe(false)
+    expect(Date.now() - began).toBeGreaterThanOrEqual(1900)
+  })
+
   test('NA-26: Claude is retried once without --strict-mcp-config when an enterprise MCP config refuses it', async () => {
     const t = await start()
     await t.fake(
