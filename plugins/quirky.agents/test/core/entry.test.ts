@@ -47,7 +47,8 @@ describe('validateEntry', () => {
       enterWithPaste: false,
       trust: null,
       homepage: null,
-      install: null
+      install: null,
+      launchOptions: null
     })
   })
 

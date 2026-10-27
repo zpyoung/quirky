@@ -25,7 +25,7 @@ Everything lives in the built-in plugin `quirky.agents`, with small additions to
   - `core/resolve.ts` turns configured arguments, extras and a selection into argv, structured
     options, the snapshot and the summary in one pass.
   - `core/compose.ts` holds the named model-composition rules (`cursor`).
-- `core/plan.ts` `buildLaunchPlan` calls `resolve` when a selection or extras are given.
+- `core/plan.ts` `buildLaunchPlan` always calls `resolve` for the snapshot; the command and record change only when a selection or extras are given.
 - `src/service.ts` adds two read-only methods (`options`, `resolveLaunch`) and passes the new
   parameters through `plan` and `prepareLaunch`. `cli.ts` adds `options` and `resolve` and the
   launch flags on `plan`.
@@ -61,7 +61,8 @@ Key technologies: Bun, TypeScript, `bun:sqlite` stores through `PluginStore`, th
 | `plugins/quirky.session/quirky-plugin.json` | `create` params `model`, `options`, `extraArgs`; `launchSettings` in every `Session` result schema next to `launch`; `new` flags `model`, `effort`, `option`, `extra-args`; new `cli-command` `get` (`quirky.session/get`) |
 | `plugins/quirky.session/cli.ts` | `new` passes the flags to either create method; new `get`; both print a `launch` row when `launchSettings` is set |
 | `plugins/quirky.structured/quirky-plugin.json` | `create` params `model`, `options`, `extraArgs`; add `quirky.agents` to `dependencies` |
-| `plugins/quirky.structured/main.ts` | `create`: refuse `extraArgs`; when `model` or `options` is given, call `quirky.agents/resolveLaunch` with `structured: true` before `quirky.session/register`; pass `resolution.structured` to `runner.start` |
+| `plugins/quirky.session/src/sessions.ts` `register` + manifest | optional `launchSettings` param (object) stored on the structured record |
+| `plugins/quirky.structured/main.ts` | `create`: refuse `extraArgs`; when `model` or `options` is given, call `quirky.agents/resolveLaunch` with `structured: true` before `quirky.session/register`; pass `resolution.launchSettings` to `register` and `resolution.structured` to `runner.start` |
 | `plugins/quirky.structured/runner.ts` | `StructuredRunner.start(session, prompt, options?: StructuredLaunchOptions)` |
 | `plugins/quirky.structured/claude-runner.ts` | spread `model` and `effort` from the options into the `query({options})` object built in `start` (around line 168) |
 
@@ -214,10 +215,13 @@ The model is trimmed. Options are copied into a null-prototype object.
 
 `CONTRACT:` `parseExtraArgs(entry, text) -> {tokens: string[], kinds: Set<'model'|'effort'|'repeatable'>} | null`
 (null for blank text). Checks and messages are `parseExtraAgentArgs`'s, in its order, with the
-agent's `label` in place of Orca's display name. "Shell syntax": scanning the raw text outside
-single quotes, `$` or a backtick; outside any quotes, any of `; & | < > ( ) * ? [ ] { } #`, or `~`
-at the start of a word. The message quotes the raw word that contains it
-(`$(pwd) uses shell syntax that extra arguments don't allow.`).
+agent's `label` in place of Orca's display name. "Shell syntax" is exactly Orca's `divergesFromShell`
+rule in `tokenizeCustomCommandTemplate` (`ORCA/commit-message-prompt.ts` around line 167), escape
+mode: unquoted `; & | < > `` ` ``; a word-leading unquoted `#`; unquoted `$` followed by `(`, `{`,
+`'` or `"`; inside double quotes a backtick, `$(` or `${`, or a backslash before a character other
+than `$`, backtick, `"`, `\`; an unquoted backslash-newline; a trailing unpaired backslash. So
+`--add-dir docs#old` and `--add-dir docs\;src` pass, as in Orca. The message quotes the raw source
+span of the word (`$(pwd) uses shell syntax that extra arguments don't allow.`).
 
 `CONTRACT:` `resolveLaunch(input) -> Resolution`, with
 `input = {entry, commandTokens: string[], configuredArgs: string[], selection: ValidSelection, extras: ParsedExtras | null, structured: boolean}`.
@@ -225,9 +229,12 @@ Pure. Steps, in order (logic D11, D15):
 
 1. If `structured`: extras given → `SelectionError("Extra arguments can't be applied to a structured session.")`;
    a selection on an agent whose model has no `structured` key →
-   `Agent <id> does not support launch-time model selection.`; return `structured` built from the
-   model's and each option's `structured` keys, `added: []`, `args: ""`, and a snapshot with every
-   pick `explicit`.
+   `Agent <id> does not support launch-time model selection.`; a picked option with no `structured`
+   key → `Agent <id> option <option> can't be applied to a structured launch.`; return `structured`
+   built from the model's and each option's `structured` keys, `added: []`, `args: []`, and a
+   snapshot with every pick `explicit` and no `args`.
+   Otherwise (terminal): a picked option with neither `flag` nor `composed` →
+   `Agent <id> option <option> can't be applied to a terminal launch.`
 2. `args` = `configuredArgs`. For each extras kind present: `model` removes every model conflict;
    `effort` removes every conflict of the option with ID `effort`. Then the extras tokens are inserted
    before `args`' terminator (`--` found by `findOptionOccurrence` with `valueFlags`), or appended.
@@ -242,14 +249,18 @@ Pure. Steps, in order (logic D11, D15):
    conflict, or any conflict of option `effort`, found in `commandTokens` past index 0) →
    `SelectionError("Agent command override conflicts with the requested launch preferences. Remove model or effort flags from the command override.")`.
    Check only when `entry`'s command is overridden (the caller passes `commandTokens: []` otherwise).
-6. Snapshot as in the schema. Invariant (SC-15): an option is `explicit` iff its value is in `added`
+6. `structured` (terminal case) = the `structured` keys of the model and options that ended
+   `explicit`, with their picked values; shadowed picks and keys the catalog lacks are left out.
+7. Snapshot as in the schema. Invariant (SC-15): an option is `explicit` iff its value is in `added`
    (directly or composed), `extra-args` iff it was picked and shadowed; `added` and `args` together
    never contain two occurrences of a model or effort conflict.
 
-`CONTRACT:` `buildLaunchPlan` with neither `selection` nor `extraArgs` is unchanged byte for byte
-(every existing `plan.test.ts` case still passes, `record.args` is still the raw configured text).
-With either, the user args are the resolution's tokens and `record.args = joinCommand(tokens)`, so
-`buildResumePlan` replays them; `launchSettings` is set. Hook args and the prompt keep their positions.
+`CONTRACT:` `buildLaunchPlan` always resolves, so `launchSettings` is the snapshot on every plan
+(SC-22: null on Manual, inherited arguments on Yolo). With neither `selection` nor `extraArgs` the
+command, env and record are unchanged byte for byte (every existing `plan.test.ts` case still passes,
+`record.args` is still the raw configured text). With either, the user args are the resolution's
+tokens and `record.args = joinCommand(tokens)`, so `buildResumePlan` replays them (resume and fork).
+Hook args and the prompt keep their positions.
 
 `CONTRACT:` `AgentsService.resolveLaunch(params)` uses the agent's saved config exactly as
 `prepareLaunch` would (`config.args ?? entry.yolo ?? ''`, `stripArgs` applied), passes the command
@@ -263,6 +274,13 @@ refusing it.
 inserted. Otherwise the params go to `prepareLaunch`; its failure already deletes the record through
 `start` (sessions.ts `start` catch block), so no session survives and nothing is spawned.
 `launchSettings` is stored in the same `records.update` as `launch`.
+
+`CONTRACT:` CLI `selectionParams(flags, ctx)` (duplicated in `plugins/quirky.session/cli.ts`, since
+plugins can't import each other): `--model` → `model`; `--effort v` → `options.effort`; each
+`--option k=v` → `options[k]` (`true`/`false` become booleans, the first `=` splits, an empty key is
+a usage error); `--effort` with `--option effort=…`, or one key given twice → usage error naming the
+key; `--effort` or `--option` without `--model` → usage error `--effort requires --model` (or
+`--option requires --model`); `--extra-args` → `extraArgs` as given.
 
 `CONTRACT:` `quirky.structured/create`: `extraArgs` present → `invalid-params` with the logic
 message, before `quirky.session/register`. Resolution failure → `invalid-params`, nothing
@@ -323,14 +341,19 @@ Unit (`bun test`, under `plugins/quirky.agents/test/core/`):
 API and CLI e2e (`plugins/quirky.agents/test/e2e/launch-settings.e2e.test.ts`, `startAgentsE2E`):
 SC-1, SC-2, SC-3, SC-4 through `quirky agents options`; SC-5 with two new fixture plugins under
 `test/e2e/fixtures/` installed through `plugin.install` (as `catalog.e2e.test.ts` does); SC-6, SC-7,
-SC-9, SC-13, SC-17 through `quirky agents resolve`; SC-18–SC-22 through `quirky session new`,
-`quirky session get` and `quirky session resume` with fake `claude` and `codex`, asserting the
-fake's recorded argv.
+SC-9, SC-13, SC-17 through `quirky agents resolve`; SC-8, SC-10, SC-11, SC-12, SC-14, SC-16 through
+`quirky.agents/resolveLaunch` over the daemon API (after `quirky agents configure` sets the
+configured arguments or command); SC-18–SC-22 through `quirky session new`, `quirky session get`,
+`quirky session resume` and `quirky session resume --fork` with fake `claude` and `codex`, asserting
+the fake's recorded argv. Every scenario not marked "unit" in the logic spec gets a test here or in
+the session and structured tests below; unit tests add depth, never replace one.
 
 Session and structured unit tests: `plugins/quirky.session/test/records.test.ts` (migration, round
 trip), `sessions-launch.test.ts` (shell refusal, snapshot stored, resume copies it);
 `plugins/quirky.structured/test/claude-runner.test.ts` (SC-23: the fake `query` receives `model` and
-`effort`, and neither without a pick), `structured.test.ts` (SC-24 refusals; nothing registered).
+`effort`, and neither without a pick), `structured.test.ts` (SC-23 through `quirky.structured/create` with the test runner factory
+capturing the options passed to `start` and the registered session's `launchSettings`; SC-24
+refusals, nothing registered).
 
 Acceptance bar: `bun run test`, `bun test scripts`, `bun run typecheck` pass; every SC-1–SC-24 is
 named in a test title.

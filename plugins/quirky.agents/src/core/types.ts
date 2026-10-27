@@ -1,3 +1,5 @@
+import type { LaunchSettings } from '@quirky/protocol'
+
 /** How an agent's first prompt reaches it. */
 export type PromptMode =
   | 'argv'
@@ -80,6 +82,8 @@ export type AgentEntry = {
   trust: TrustPreset | null
   homepage: string | null
   install: string | null
+  /** The model and option catalog; null when the agent takes no launch settings. */
+  launchOptions: LaunchCatalog | null
 }
 
 /** A declared agent the catalog left out, and why. */
@@ -150,7 +154,69 @@ export type LaunchPlan = {
   record: LaunchRecord
   promptDelivery: 'command-line' | 'pending' | null
   paste: { text: string; submit: boolean } | null
+  /** What the launch applied; null with no picks and no arguments. */
+  launchSettings: LaunchSettings | null
 }
 
 /** The settled outcome of pasting a prompt after start. */
 export type DeliveryOutcome = 'pasted' | 'unconfirmed' | 'not-delivered'
+
+/** Flags that already set something: any of `flags`, and with `valuePrefix` only when the value starts with it. */
+export type Conflict = { flags: string[]; valuePrefix?: string }
+
+export type OptionDecl = {
+  id: string
+  label: string
+  type: 'select' | 'boolean'
+  /** Present, non-empty, for a select; null for a boolean. */
+  choices: { value: string; label: string }[] | null
+  /** Argv template with one item containing `{value}`; null when composed or structured-only. */
+  flag: string[] | null
+  conflicts: Conflict[]
+  composed: boolean
+  structured: string | null
+}
+
+/** An option a model offers; `choices` narrows the declared values (in declared order), null means all. */
+export type OptionUse = { id: string; choices: string[] | null }
+
+export type ModelDecl = { id: string; label: string; description: string | null; options: OptionUse[] }
+
+export type ExtraArgKind = 'model' | 'effort' | 'repeatable'
+
+export type ExtraArgRule = { kind: ExtraArgKind; flags: string[]; valuePrefix?: string }
+
+/** The validated `launchOptions` block of an agent entry; field meanings are in tech.md "Data models / schemas". */
+export type LaunchCatalog = {
+  model: { flag: string[]; conflicts: Conflict[]; structured: string | null }
+  options: OptionDecl[]
+  models: ModelDecl[]
+  unlisted: 'accept' | 'refuse'
+  unlistedOptions: OptionUse[]
+  composeModel: 'cursor' | null
+  valueFlags: string[]
+  extraArgs: { allowed: ExtraArgRule[]; placeholder: string } | null
+}
+
+/** A caller's pick before validation. */
+export type Selection = { model?: string; options?: Record<string, string | boolean> }
+
+/** A pick checked against the catalog; `listed` is false for a model the catalog doesn't name. */
+export type ValidSelection = { model: string; values: Record<string, string | boolean>; listed: boolean }
+
+/** Extra arguments that passed the allowlist. */
+export type ParsedExtras = { tokens: string[]; kinds: Set<ExtraArgKind> }
+
+/** The result of resolving a selection and extras against an agent's configured arguments. */
+export type Resolution = {
+  /** The pick's flags as emitted; empty when there is no pick or it is shadowed. */
+  added: string[]
+  /** The arguments a launch uses, as tokens: configured minus replaced flags, extras, then `added`, before any `--`. */
+  args: string[]
+  structured: Record<string, string | boolean>
+  /** Picked option IDs (and "model") that extras set instead. */
+  shadowed: string[]
+  launchSettings: LaunchSettings | null
+}
+
+export type { LaunchSettings }

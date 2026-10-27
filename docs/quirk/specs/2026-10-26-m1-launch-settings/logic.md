@@ -9,6 +9,13 @@
   structured sessions), not `create`; `quirky session get <session>` is added as a declared command.
   Extras that set the model shadow the whole pick (SC-15). Options carry no catalog default, since
   defaults are never injected (SC-8).
+- 2026-10-26, Codex spec review ([D30](../../../loop/decisions/m1-launch-settings.md)): every agent
+  launch records a snapshot, so a no-pick Yolo launch records its inherited arguments (SC-22);
+  structured sessions store their snapshot too (SC-23); a shadowed pick is left out of the
+  structured options (SC-13); options a launch can't carry, `--effort` with `--option effort`, and a
+  repeated `--option` key are refused (SC-9); the CLI message for effort without a model is Orca's
+  `--effort requires --model` (SC-9); fork keeps picks like resume (SC-21); the shell-syntax rule
+  for extras is Orca's (SC-17).
 
 ## Conceptual model
 
@@ -183,13 +190,18 @@ Each scenario's test drives Quirky through the `quirky` CLI or the daemon API un
 
      | Command | Message |
      |---|---|
-     | `quirky agents resolve claude --effort low` | `effort requires a model` |
+     | `quirky agents resolve claude --effort low` | `--effort requires --model` (the API says `effort requires a model`) |
      | `quirky agents resolve claude --model haiku --effort low` | `Agent claude model haiku does not support effort low.` |
      | `quirky agents resolve codex --model gpt-5.5 --effort ultra` | `Agent codex model gpt-5.5 does not support effort ultra.` |
      | `quirky agents resolve aider --model gpt-4o` | `Agent aider does not support launch-time model selection.` |
      | `quirky agents resolve gemini --model gemini-9` | `Agent gemini does not support model gemini-9.` |
      | `quirky agents resolve claude --model opus --option speed=fast` | `Agent claude model opus does not support speed fast.` |
      | `quirky agents resolve cursor --model claude-opus-4-8 --option thinking=maybe` | `Agent cursor model claude-opus-4-8 does not support thinking maybe.` |
+
+     The CLI also refuses `--effort` together with `--option effort=…`, and the same `--option` key
+     twice, before calling the daemon. An option the launch can't carry is refused: a structured-only
+     option on a terminal launch, or an option with no structured key on a structured launch, gets
+     `Agent <id> option <option> can't be applied to a <terminal|structured> launch.`
 
      At the API, a model longer than 128 characters, more than 16 options, an option ID longer than 64
      characters, or an option named `__proto__`, `constructor`, `prototype` or `model` is refused
@@ -229,7 +241,8 @@ Each scenario's test drives Quirky through the `quirky` CLI or the daemon API un
       The snapshot has `model: {value: "opus", source: "explicit"}`,
       `effort: {source: "extra-args"}` (no value) and
       `args: {value: "--dangerously-skip-permissions --effort high --add-dir docs", source: "explicit"}`.
-      The summary is `Claude · Opus`.
+      The summary is `Claude · Opus`. The structured options are `{model: "opus"}`: a shadowed pick
+      is left out of them.
     - **Data after:** **argv** ✓ one `--effort high`; ✗ `--effort low`; **snapshot** ✓ effort from extras
 
 14. **SC-14: extra arguments replace the configured model flag** (API)
@@ -306,21 +319,26 @@ Each scenario's test drives Quirky through the `quirky` CLI or the daemon API un
       `abc`; afterwards codex's configured arguments were changed to `--model gpt-5.4`
     - **When** the agent runs `quirky session resume <session>`
     - **Then** the new session runs `codex … -m gpt-5.5 -c model_reasoning_effort=low … resume abc`
-      with no `gpt-5.4`, and its `launchSettings` equal the old session's
+      with no `gpt-5.4`, and its `launchSettings` equal the old session's. `quirky session resume
+      <session> --fork` does the same with `fork abc`.
     - **Data before:** **Session 1**: codex, gpt-5.5, low, provider `abc`; **codex arguments now**: `--model gpt-5.4`
     - **Data after:** **Session 2**: ✓ `-m gpt-5.5 -c model_reasoning_effort=low`; ✗ `gpt-5.4`; ✓ same `launchSettings`
 
-22. **SC-22: a session with no pick records no snapshot options** (CLI)
-    - **When** `quirky session new --agent claude` runs with claude on Manual
-    - **Then** the session's `launchSettings` is null and `quirky session get` prints no `Launch:`
-      line. Sessions recorded before this item have no `launchSettings` and still list and resume.
+22. **SC-22: a session with no pick records only its inherited arguments** (CLI)
+    - **When** `quirky session new --agent claude` runs with claude on Manual, and again on Yolo
+    - **Then** on Manual the session's `launchSettings` is null and `quirky session get` prints no
+      `Launch:` line. On Yolo it is `{agent: "claude", options: {}, args: {value:
+      "--dangerously-skip-permissions", source: "inherited"}, summary: "Claude"}`, and the command is
+      what it was before this item. Sessions recorded before this item have no `launchSettings` and still list and resume.
 
 ### Structured sessions
 
 23. **SC-23: a structured session gets the same pick as SDK options** (API, with the runner's fake query)
     - **When** `quirky session new --background --agent claude --model opus --effort high --prompt hi` runs
     - **Then** the runner starts the Agent SDK query with `options.model` `opus` and
-      `options.effort` `high`; with no pick, neither option is set
+      `options.effort` `high`, and the structured session's `launchSettings` records both as
+      `explicit` with the summary `Claude · Opus · Effort: high`; with no pick, neither option is set
+      and `launchSettings` is null
 
 24. **SC-24: structured sessions refuse extras and agents without structured keys** (API)
     - **When** `quirky.structured/create` is called with `extraArgs`, and with an agent whose catalog

@@ -115,7 +115,8 @@ function parse(plugin: string, id: string, data: Record<string, unknown>): Agent
     enterWithPaste: boolean(data, 'enterWithPaste') ?? false,
     trust: oneOf<TrustPreset>(data, 'trust', TRUST_PRESETS) ?? null,
     homepage: link(data, 'homepage'),
-    install: link(data, 'install')
+    install: link(data, 'install'),
+    launchOptions: null
   }
 }
 

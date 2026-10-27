@@ -27,6 +27,21 @@ export type AgentKind = string
 /** What a terminal session was launched with, replayed by resume. */
 export type SessionLaunch = { command: string; args: string; env: Record<string, string> }
 
+/** Where a launch setting came from: a pick, or extra arguments that set the same flag. */
+export type LaunchSettingSource = 'explicit' | 'extra-args'
+
+/**
+ * What a launch applied, kept with the session so history doesn't change when settings do.
+ * `options` holds the model under the key `model`; a value is absent when extra arguments set it.
+ */
+export type LaunchSettings = {
+  agent: string
+  options: Record<string, { value?: string | boolean; source: LaunchSettingSource }>
+  args?: { value: string; source: 'explicit' | 'inherited' }
+  /** "Claude · Opus · Effort: high", computed at launch. */
+  summary: string
+}
+
 /** The agent CLI's own session, which resume passes back to it. */
 export type SessionProviderSession = { id: string; transcriptPath: string | null }
 
@@ -56,6 +71,8 @@ export type Session = {
   launch?: SessionLaunch | null
   providerSession?: SessionProviderSession | null
   promptDelivery?: PromptDeliveryState | null
+  /** Null for a launch with no picks and no arguments, and for sessions recorded before launch settings. */
+  launchSettings?: LaunchSettings | null
   /** The session this one was resumed or forked from. */
   resumedFrom?: string | null
 }

@@ -265,7 +265,7 @@ export function buildLaunchPlan(input: LaunchPlanInput): LaunchPlan {
     promptDelivery: LaunchPlan['promptDelivery'],
     paste: LaunchPlan['paste'],
     planEnv = env
-  ): LaunchPlan => ({ agent: entry.id, command, env: planEnv, record, promptDelivery, paste })
+  ): LaunchPlan => ({ agent: entry.id, command, env: planEnv, record, promptDelivery, paste, launchSettings: null })
 
   const terminator = userArgs.indexOf('--')
   const head =

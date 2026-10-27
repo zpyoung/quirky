@@ -278,5 +278,35 @@
 - **Confidence:** high
 - **Source:** locked by docs/loop/LOOP.md
 
+## D28: One Codex adversarial review covers both specs and stands in for the tech-spec reviewer
+- **Question:** writing-specs asks for a tech-spec reviewer pass and LOOP.md asks for one adversarial review over both specs
+- **Options:** run both; run the adversarial review only
+- **Chose:** the adversarial review only, with the tech-spec rubric checks in its criteria
+- **Why:** LOOP.md replaces the user's spec review with one Codex pass; m1-providers D42 did the same
+- **Evidence:** docs/loop/LOOP.md step 4; docs/loop/decisions/m1-providers.md D42
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** locked by docs/loop/LOOP.md
+
+## D29: Build with Claude subagents implementing and Codex reviewing
+- **Question:** subagent-driven-development preflight backend pairing
+- **Options:** claude-task + codex (Recommended); other cross-family pairs
+- **Chose:** claude-task + codex; `pi-watch --check codex` passed (openai-codex/gpt-6.1-sol). Full suite `bun run test && bun run typecheck`, plus `bun test scripts` at the end.
+- **Why:** LOOP.md step 5 names this pair
+- **Evidence:** docs/loop/LOOP.md step 5
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** locked by docs/loop/LOOP.md
+
+## D30: Spec review: eight findings accepted and fixed, 41 prepass findings dismissed
+- **Question:** what to do with the Codex adversarial review of both specs (verdict NEEDS_FIXES, 3 HIGH, 45 MEDIUM, 1 LOW)
+- **Options:** fix each; dismiss with a reason
+- **Chose:** fixed: F2 (a no-pick launch must still record its inherited arguments, so `buildLaunchPlan` always resolves the snapshot while leaving the command unchanged), F3 (structured sessions store their snapshot through a new optional `launchSettings` on `quirky.session/register`), F4 (a shadowed pick is left out of the structured options), F5 (the CLI refuses `--effort` with `--option effort` and a repeated `--option` key), F6 (an option a launch can't carry is refused, per transport), F7 (every non-unit scenario gets a CLI or API test, and fork is tested), F9 (the shell-syntax rule for extras is exactly Orca's `divergesFromShell`, so `docs#old` passes), F10 (the CLI says Orca's `--effort requires --model`). Dismissed: F11–F51, the deterministic prepass flagging command-shaped prose (`quirky ...`, `--model ...`), method and contribution IDs the specs create, choice values, and the feature-doc link, which points into the local-only research repo outside this worktree (the m1-providers specs use the same link).
+- **Why:** each accepted finding changed what an implementer would build or what a test would prove; the dismissed ones are not defects in the specs
+- **Evidence:** /private/tmp/claude-502/-Users-zpyoung-orca-workspaces-quirky-build-roadmap/0dae7158-2102-4966-acd5-0f7bd686e990/scratchpad/sr1/gate.json; docs/quirk/specs/2026-10-26-m1-launch-settings/logic.md Amendments
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** assumed — autonomous
+
 ## Progress
-Brainstorming done (D1–D27). Next: write docs/quirk/specs/2026-10-26-m1-launch-settings/logic.md and tech.md, run the Codex adversarial review over both, commit, then build.
+Specs written, reviewed (D30) and committed; shared types committed. Next: build wave 1 (launch-options parser, arg-occurrence, manifest data, session records migration).

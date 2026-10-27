@@ -36,6 +36,7 @@ function entry(id: string, overrides: Partial<AgentEntry> = {}): AgentEntry {
     trust: null,
     homepage: null,
     install: null,
+    launchOptions: null,
     ...overrides
   }
 }
