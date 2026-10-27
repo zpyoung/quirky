@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 import { CONNECTION_METHODS, KERNEL_EVENT_SCHEMAS, KERNEL_METHOD_SCHEMAS, type KernelMethodSchema, type Schema } from '../src'
 
-const METHOD_COUNT = 38
+const METHOD_COUNT = 40
 const EVENT_TYPES = [
   'notify',
   'plugin.changed',
@@ -54,7 +54,7 @@ describe('kernel method schemas', () => {
   })
 
   test('ui window methods are connection methods', () => {
-    for (const name of ['ui.report', 'ui.window.focused', 'ui.window.activity', 'ui.command.reply']) {
+    for (const name of ['ui.report', 'ui.shell.report', 'ui.window.focused', 'ui.window.activity', 'ui.command.reply']) {
       expect(CONNECTION_METHODS).toContain(name as (typeof CONNECTION_METHODS)[number])
     }
   })
@@ -65,6 +65,7 @@ describe('kernel method schemas', () => {
       'events.subscribe',
       'ui.command.reply',
       'ui.report',
+      'ui.shell.report',
       'ui.window.activity',
       'ui.window.focused'
     ])

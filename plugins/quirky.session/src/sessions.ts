@@ -7,11 +7,13 @@ import {
   type AgentStatusSummary,
   type ExitCause,
   type LaunchSettings,
+  type LaunchHookInput,
   type PluginCaller,
   type PluginContext,
   type PromptDeliveryState,
   type PtySessionInfo,
   type Session,
+  type SessionBadge,
   type SessionLaunch,
   type SessionProviderSession,
   type SessionStatus
@@ -78,6 +80,19 @@ export function providerSessionIdProblem(id: string): string | null {
 
 const isPlainObject = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value)
+
+const isBadge = (value: unknown): value is SessionBadge =>
+  isPlainObject(value) &&
+  typeof value.label === 'string' &&
+  (value.tooltip === undefined || typeof value.tooltip === 'string') &&
+  (value.command === undefined || typeof value.command === 'string')
+
+const pickBadge = ({ label, tooltip, command, args }: SessionBadge): SessionBadge => ({
+  label,
+  ...(tooltip === undefined ? {} : { tooltip }),
+  ...(command === undefined ? {} : { command }),
+  ...(args === undefined ? {} : { args })
+})
 
 type HomeOverride = { value: string | null; source: 'explicit' | 'inherited' | 'injected' | 'absent' }
 type HomeOverrides = { claude: HomeOverride; codex: HomeOverride }
@@ -375,7 +390,7 @@ export class SessionService {
         paste: plan.paste,
         providerSession: null
       }
-    })
+    }, picks)
     return this.deliverAfterLaunch(launched, params.waitForPrompt === true)
   }
 
@@ -408,6 +423,9 @@ export class SessionService {
       launchSettings: old.launchSettings ?? null,
       resumedFrom: old.id
     }
+    const replayRecord = old.launch
+      ? { command: old.launch.command, args: old.launch.args, env: { ...old.launch.env } }
+      : { command: '', args: '', env: {} }
     const accountPrepare = await this.accountPreparationAvailable()
     const userEnv = old.launch?.env ?? {}
     const launched = await this.start(session, this.records.repoIdOf(old.id), params, undefined, async (additions) => {
@@ -441,7 +459,7 @@ export class SessionService {
         paste: null,
         providerSession: fork ? null : preparedProviderSession
       }
-    })
+    }, { record: replayRecord })
     return this.deliverAfterLaunch(launched, false)
   }
 
@@ -537,6 +555,25 @@ export class SessionService {
     }
     if ((before.unread ?? null) === unread) return before
     return this.publish(this.records.update(before.id, { unread: unread as Session['unread'] }) as Session)
+  }
+
+  /**
+   * Sets or removes (`badge: null`) one chip on a session's tab. The stored key is prefixed with
+   * the calling plugin's ID, or the client role for a non-plugin caller, so callers never touch
+   * each other's badges.
+   */
+  setBadge = (params: Record<string, unknown>, caller: PluginCaller): { session: Session } => {
+    const before = this.require(params.session as string)
+    const { key, badge } = params
+    if (typeof key !== 'string' || key === '') throw this.context.error('invalid-params', 'key must be a non-empty string')
+    if (badge !== null && !isBadge(badge)) {
+      throw this.context.error('invalid-params', 'badge must be null or an object with a label and optional tooltip, command and args')
+    }
+    const badges = { ...before.badges }
+    const qualified = `${caller.role === 'plugin' ? caller.pluginId : caller.role}/${key}`
+    if (badge === null) delete badges[qualified]
+    else badges[qualified] = pickBadge(badge)
+    return { session: this.publish(this.records.update(before.id, { badges }) as Session) }
   }
 
   /**
@@ -783,7 +820,8 @@ export class SessionService {
     repoId: string | null,
     params: Record<string, unknown>,
     prompt: string | undefined,
-    build: (additions: { env: Record<string, string | null>; args: string[] }) => Promise<LaunchSpec>
+    build: (additions: { env: Record<string, string | null>; args: string[] }) => Promise<LaunchSpec>,
+    launchContext: Pick<LaunchHookInput, 'record' | 'model' | 'options' | 'extraArgs'> = {}
   ): Promise<{ session: Session; paste: LaunchSpec['paste'] }> {
     const name = session.name ?? null
     const released = this.records.transaction(() => {
@@ -796,13 +834,21 @@ export class SessionService {
       this.context.error('conflict', `session ${session.id} was closed before its terminal started`)
     let spec!: LaunchSpec
     try {
+      const hookContext = {
+        ...launchContext,
+        ...(launchContext.options === undefined ? {} : { options: { ...launchContext.options } }),
+        ...(launchContext.record === undefined
+          ? {}
+          : { record: { ...launchContext.record, env: { ...launchContext.record.env } } })
+      }
       const additions = await this.context.launch.hooks({
         sessionId: session.id,
         worktreeId: session.worktreeId,
         repoId: repoId ?? '',
         cwd: session.cwd,
         agent: session.agent,
-        ...(prompt === undefined ? {} : { prompt })
+        ...(prompt === undefined ? {} : { prompt }),
+        ...hookContext
       })
       if (!this.records.get(session.id)) throw closedWhileStarting()
       spec = await build(additions)

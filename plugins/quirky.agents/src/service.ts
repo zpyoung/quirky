@@ -3,11 +3,12 @@ import { isReservedLaunchEnv, type ContributionInfo, type PluginCaller, type Plu
 import { buildCatalog } from './core/catalog'
 import { extrasSummary, parseExtraArgs } from './core/extras'
 import { agentPermissionMode, applyPermissionMode, effectiveArgs, effectiveEnv, PermissionError, permissionSummary } from './core/permissions'
-import { buildLaunchPlan, buildResumePlan, PlanError } from './core/plan'
 import { submitDelayMs } from './core/paste'
 import { resolveLaunch } from './core/resolve'
 import { pickAgent } from './core/select'
 import { SelectionError, validateSelection } from './core/selection'
+import { buildLaunchPlan, buildResumePlan, PlanError, userSettingsForLaunch, userSettingsForResume } from './core/plan'
+import { SettingsError } from './core/settings'
 import { joinCommand, tokenize } from './core/shell'
 import {
   EMPTY_CONFIG,
@@ -272,6 +273,35 @@ export class AgentsService {
     return { agent }
   }
 
+  /** Projects user CLI settings from the current create arguments or a supplied replay record. */
+  settingsOverlay = (params: Params): { settings: Record<string, unknown> } => {
+    const entry = this.entryOf(params.agent as string)
+    const cwd = params.cwd
+    if (typeof cwd !== 'string') throw this.context.error('invalid-params', 'cwd must be a string')
+
+    return this.guard(() => {
+      if (params.record !== undefined) {
+        return {
+          settings: userSettingsForResume({
+            entry,
+            record: params.record as LaunchRecord | null,
+            cwd,
+            resolveExecutable: (name) => this.detection.resolveExecutable(name)
+          })
+        }
+      }
+      return {
+        settings: userSettingsForLaunch({
+          entry,
+          config: this.configs.get(entry.id),
+          ...this.picks(entry, params),
+          cwd,
+          resolveExecutable: (name) => this.detection.resolveExecutable(name)
+        })
+      }
+    })
+  }
+
   prepareLaunch = (params: Params): LaunchPlan => {
     const entry = this.entryOf(params.agent as string)
     const config = this.configs.get(entry.id)
@@ -280,6 +310,7 @@ export class AgentsService {
       buildLaunchPlan({
         entry,
         config,
+        cwd: params.cwd as string,
         ...(params.prompt === undefined ? {} : { prompt: params.prompt as string }),
         ...(params.submitPrompt === undefined ? {} : { submitPrompt: params.submitPrompt as boolean }),
         ...this.picks(entry, params),
@@ -297,6 +328,7 @@ export class AgentsService {
     return this.guard(() =>
       buildResumePlan({
         entry,
+        cwd: params.cwd as string,
         record: (params.record as LaunchRecord | null | undefined) ?? null,
         providerSession: params.providerSession as ProviderSession,
         fork: params.fork === true,
@@ -431,7 +463,9 @@ export class AgentsService {
     try {
       return work()
     } catch (error) {
-      if (error instanceof PlanError || error instanceof SelectionError) throw this.context.error('invalid-params', error.message)
+      if (error instanceof PlanError || error instanceof SelectionError || error instanceof SettingsError) {
+        throw this.context.error('invalid-params', error.message)
+      }
       throw error
     }
   }

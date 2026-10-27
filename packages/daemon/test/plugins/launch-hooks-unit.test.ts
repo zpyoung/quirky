@@ -148,6 +148,76 @@ describe('runLaunchHooks', () => {
     ])
   })
 
+  test('merges JSON args in hook order and exposes frozen accumulated JSON args', async () => {
+    const t = setup()
+    t.hook(
+      'acme.b',
+      `(launch) => ({
+        env: { SEEN: JSON.stringify({
+          frozen: Object.isFrozen(launch.jsonArgs) &&
+            Object.isFrozen(launch.jsonArgs['--settings']) &&
+            Object.isFrozen(launch.jsonArgs['--settings'].shared),
+          value: launch.jsonArgs
+        }) },
+        args: ['--second'],
+        jsonArgs: { '--settings': { shared: { last: true }, list: ['new'], second: true } }
+      })`
+    )
+    t.hook(
+      'acme.a',
+      `() => ({
+        args: ['--first'],
+        jsonArgs: { '--settings': { shared: { first: true, last: false }, list: ['old'], first: true } }
+      })`
+    )
+    t.reload()
+
+    const result = await t.run()
+
+    expect(result.args.slice(0, 2)).toEqual(['--first', '--second'])
+    const at = result.args.indexOf('--settings')
+    expect(at).toBe(2)
+    expect(JSON.parse(result.args[at + 1]!)).toEqual({
+      shared: { first: true, last: true },
+      list: ['new'],
+      first: true,
+      second: true
+    })
+    expect(JSON.parse(result.env.SEEN!)).toEqual({
+      frozen: true,
+      value: { '--settings': { shared: { first: true, last: false }, list: ['old'], first: true } }
+    })
+    expect(t.warnings).toEqual([])
+  })
+
+  test('invalid JSON args are dropped without losing valid earlier JSON, env, or args', async () => {
+    const t = setup()
+    t.hook('acme.a', `() => ({ env: { FIRST: 'yes' }, args: ['--first'], jsonArgs: { '--settings': { retained: true } } })`)
+    t.hook(
+      'acme.b',
+      `() => ({
+        env: { SECOND: 'yes' },
+        args: ['--second'],
+        jsonArgs: {
+          settings: { invalidKey: true },
+          '--settings': { invalid: NaN },
+          '--config': JSON.parse('{"__proto__":{"polluted":true}}')
+        }
+      })`
+    )
+    t.hook('acme.c', `() => ({ env: { THIRD: 'yes' }, args: ['--third'], jsonArgs: [] })`)
+    t.reload()
+
+    const result = await t.run()
+
+    expect(result.env).toEqual({ FIRST: 'yes', SECOND: 'yes', THIRD: 'yes' })
+    expect(result.args.slice(0, 3)).toEqual(['--first', '--second', '--third'])
+    const at = result.args.indexOf('--settings')
+    expect(JSON.parse(result.args[at + 1]!)).toEqual({ retained: true })
+    expect(result.args).not.toContain('--config')
+    expect(t.warnings).toHaveLength(4)
+  })
+
   test('drops args for a shell session but keeps its env', async () => {
     const t = setup()
     t.hook('acme.x', `() => ({ env: { OK: '1' }, args: ['--x'] })`)

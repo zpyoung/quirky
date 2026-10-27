@@ -61,6 +61,8 @@ export type Scenario = {
   write(rel: string, text: string): void
   /** Runs git in feat (or in `cwd`) and returns its trimmed stdout. */
   gitIn(...args: string[]): string
+  /** Reasserts the watcher subscription as a FIFO receipt barrier. Await the mutation first; this does not wait for future asynchronous work. */
+  flushEvents(): Promise<void>
   changedEvents(): number
   cleanup(): Promise<void>
 }
@@ -140,6 +142,9 @@ export async function startScenario(scratch: () => string, options: { files?: Re
       git(feat.path, '-c', 'protocol.file.allow=always', 'submodule', 'add', '-q', lib, 'vendor/lib')
       git(feat.path, 'commit', '-q', '-m', 'add submodule')
       writeFileSync(join(feat.path, 'vendor/lib/x.c'), 'int y;\n')
+    },
+    async flushEvents() {
+      await watcher.client.call('events.subscribe', {})
     },
     changedEvents: () => watcher.events.filter((event) => event.type === 'quirky.git/changed').length,
     cleanup: () => t.cleanup()
