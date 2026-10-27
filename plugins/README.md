@@ -91,3 +91,25 @@ and review actions, file contents, issues, work-item searches, Projects v2, and
 connection-owned refreshes. Use `quirky api --json` for the live method, parameter,
 result, and event contracts. Fixed-cap reads report truncation, partial results, or a limit error;
 only work-item search exposes client `--page` and `--limit`.
+
+Top-level PR conversation comments use `hosting review-conversation`, not issue
+or Project mutation routes:
+
+```sh
+quirky hosting review-conversation --number 7 --action add --body 'Review notes' --json
+quirky hosting review-conversation --number 7 --action edit --comment-id 101 --body 'Updated notes' --json
+quirky hosting review-conversation --number 7 --action delete --comment-id 101 --yes --json
+quirky hosting review-assignees --number 7 --action set --logins jo --logins pat --json
+```
+
+Only deletion requires confirmation. Edits and deletes recheck that the comment
+belongs to that exact PR; assignee `set` replaces the assignment and accepts an empty
+array through `--params` to clear it. `add` and `remove` take at least one login.
+Use `--pr-repo '{"host":"github.com","owner":"team","repo":"project"}'`
+when origin and upstream contain different PRs with the same number.
+
+`quirky git mergePreview --base <full-sha> --head <full-sha> --json` reports
+conflicting paths from existing local commit objects without changing HEAD, refs,
+the index or working files. It never fetches or executes a custom merge driver.
+An unavailable preview reports a reason rather than presenting changed files as
+conflicts. Git may add immutable merge-tree objects to its object database.

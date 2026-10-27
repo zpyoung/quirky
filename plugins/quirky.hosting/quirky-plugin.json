@@ -156,6 +156,28 @@
         "result": {"type": "object", "properties": {"number": {"type": "integer"}, "reviewers": {"type": "array", "items": {"type": "string"}}, "updated": {"type": "boolean"}}}
       },
       {
+        "id": "reviewConversation",
+        "description": "Add or edit a top-level PR conversation comment; deletion requires confirmation and fresh comment membership.",
+        "destructive": true,
+        "confirm": "Delete PR #{number} conversation comment {commentId}?",
+        "describe": "reviewConversationConfirmation",
+        "params": {"type":"object","properties":{"worktree":{"type":"string"},"number":{"type":"integer","minimum":1},"prRepo":{"type":"object","properties":{"host":{"type":"string"},"owner":{"type":"string"},"repo":{"type":"string"}},"required":["host","owner","repo"]},"action":{"type":"string","enum":["add","edit","delete"]},"commentId":{"type":"integer","minimum":1},"body":{"type":"string"}},"required":["number","action"]},
+        "result": {"type":"object","properties":{"number":{"type":"integer"},"action":{"type":"string"},"comment":{"type":"object","properties":{"id":{"type":"integer"},"kind":{"type":"string"},"body":{"type":"string"},"author":{},"createdAt":{},"url":{"type":"string"}},"required":["id","kind","body","author","createdAt","url"]},"commentId":{"type":"integer"},"deleted":{"type":"boolean"}},"required":["number","action"]}
+      },
+      {
+        "id": "reviewConversationConfirmation",
+        "description": "Describe a fresh PR conversation deletion; return null for reversible add/edit.",
+        "readOnly": true,
+        "params": {"type":"object","properties":{"worktree":{"type":"string"},"number":{"type":"integer","minimum":1},"prRepo":{"type":"object","properties":{"host":{"type":"string"},"owner":{"type":"string"},"repo":{"type":"string"}},"required":["host","owner","repo"]},"action":{"type":"string","enum":["add","edit","delete"]},"commentId":{"type":"integer","minimum":1},"body":{"type":"string"}},"required":["number","action"]},
+        "result": {}
+      },
+      {
+        "id": "reviewAssignees",
+        "description": "Add, remove, replace, or clear PR assignees on a freshly resolved trusted pull request.",
+        "params": {"type":"object","properties":{"worktree":{"type":"string"},"number":{"type":"integer","minimum":1},"prRepo":{"type":"object","properties":{"host":{"type":"string"},"owner":{"type":"string"},"repo":{"type":"string"}},"required":["host","owner","repo"]},"action":{"type":"string","enum":["add","remove","set"]},"logins":{"type":"array","items":{"type":"string"}}},"required":["number","action","logins"]},
+        "result": {"type":"object","properties":{"number":{"type":"integer"},"assignees":{"type":"array","items":{"type":"string"}}},"required":["number","assignees"]}
+      },
+      {
         "id": "checks",
         "description": "List checks, legacy statuses, and approval-required suites for a pull request.",
         "readOnly": true,
@@ -439,6 +461,9 @@
       {"id": "auto-merge", "method": "autoMerge", "summary": "enable or disable pull request auto-merge"},
       {"id": "update-review", "method": "updateReview", "summary": "edit or update pull request state"},
       {"id": "reviewers", "method": "reviewers", "summary": "add or remove pull request reviewers"},
+      {"id":"review-conversation","method":"reviewConversation","summary":"add, edit, or confirmed-delete a PR conversation comment"},
+      {"id":"review-conversation-confirmation","method":"reviewConversationConfirmation","summary":"describe a PR conversation comment deletion"},
+      {"id":"review-assignees","method":"reviewAssignees","summary":"add, remove, replace, or clear PR assignees"},
       {"id": "checks", "method": "checks", "summary": "list pull request checks and status rollup"},
       {"id": "check-details", "method": "checkDetails", "summary": "read check annotations, jobs, and log tails"},
       {"id": "rerun-checks", "method": "rerunChecks", "summary": "rerun pull request checks"},
