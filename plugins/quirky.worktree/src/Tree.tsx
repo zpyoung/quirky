@@ -128,6 +128,7 @@ export function Tree({ context, model, groups, sessions, selectedId, now, openDi
       label: `Actions for ${repoLabel(repo)}`,
       items: projectMenu(repo, groups, {
         openDialog,
+        openLedger: () => context.openView('view:quirky.ledger/ledger', { target: { owner: { tier: 'project', id: repo.id } } }),
         moveToGroup: (r, group) =>
           void changeGroup(context, 'Could not move project', () =>
             group ? context.call('quirky.repo/groupAdd', { group: group.id, repo: r.id }) : context.call('quirky.repo/groupRemove', { group: r.groupId, repo: r.id })
@@ -136,7 +137,12 @@ export function Tree({ context, model, groups, sessions, selectedId, now, openDi
     })
 
   const openGroupMenu = (group: ProjectGroup, x: number, y: number) =>
-    setMenu({ x, y, label: `Actions for group ${group.name}`, items: groupMenu(group, openDialog) })
+    setMenu({
+      x,
+      y,
+      label: `Actions for group ${group.name}`,
+      items: groupMenu(group, openDialog, () => context.openView('view:quirky.ledger/ledger', { target: { owner: { tier: 'group', id: group.id } } }))
+    })
 
   const rows = (list: TreeRow[]) =>
     list

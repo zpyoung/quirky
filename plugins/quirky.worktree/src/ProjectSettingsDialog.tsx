@@ -82,6 +82,9 @@ export function ProjectSettingsDialog({ context, repo, onClose }: Props) {
   const close = useRef(onClose)
   close.current = onClose
   const title = `Project Settings > ${repoLabel(repo)}`
+  const ledgerSettingsMount = useRef<HTMLDivElement>(null)
+  const [ledgerMountError, setLedgerMountError] = useState('')
+  const formReady = form !== null
 
   useEffect(() => {
     let live = true
@@ -103,6 +106,18 @@ export function ProjectSettingsDialog({ context, repo, onClose }: Props) {
       live = false
     }
   }, [context, repo.id])
+  useEffect(() => {
+    const element = ledgerSettingsMount.current
+    if (repo.kind !== 'git' || !formReady || !element) return
+    setLedgerMountError('')
+    try {
+      const unmount = context.mountView('view:quirky.ledger/settings', element, { repoId: repo.id })
+      // Let the dialog's unmount commit finish before tearing down the embedded React root.
+      return () => { queueMicrotask(unmount) }
+    } catch (error) {
+      setLedgerMountError(`Ledger Staleness is unavailable: ${messageOf(error)}`)
+    }
+  }, [context, repo.id, formReady])
 
   const set = <K extends keyof Form>(key: K, value: Form[K]) => setForm((prev) => (prev ? { ...prev, [key]: value } : prev))
 
@@ -171,6 +186,10 @@ export function ProjectSettingsDialog({ context, repo, onClose }: Props) {
               ))}
             </select>
           </label>
+          {repo.kind === 'git' && <section className="form-group" aria-label="Ledger Staleness">
+            <div ref={ledgerSettingsMount} />
+            {ledgerMountError && <p className="error" role="alert">{ledgerMountError}</p>}
+          </section>}
           <section className="form-group shared-hooks" aria-label="Shared hooks">
             <h3>{details.hooks.file ? `Shared hooks (${details.hooks.file})` : 'Shared hooks'}</h3>
             {!details.hooks.setup?.shared && !details.hooks.archive?.shared && <p className="muted">No shared scripts.</p>}
