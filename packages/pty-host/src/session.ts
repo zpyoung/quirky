@@ -271,7 +271,8 @@ export class SessionManager {
    * The last `lines` rows of history above the screen, then the visible screen, with trailing
    * whitespace trimmed from each row and trailing blank rows dropped. A blank screen with no
    * history reads as `[]`; `rows` and `cols` report the screen size. With `unwrap`, every row the
-   * terminal wrapped is joined onto the row before it, across the history/screen seam.
+   * terminal wrapped is joined onto the row before it, across the history/screen seam, keeping the
+   * spaces at the wrap points; only the last row of each line is trimmed.
    */
   async read(sessionId: string, lines: number, unwrap = false): Promise<PtyResults['read']> {
     const { live, stored } = this.locate(sessionId)
@@ -929,10 +930,16 @@ function readResult(
   unwrap: boolean
 ): PtyResults['read'] {
   const lines: string[] = []
-  for (const row of [...above, ...visible.map((row) => ({ text: row.text.trimEnd(), wrapped: row.wrapped }))]) {
-    if (unwrap && row.wrapped && lines.length > 0) lines[lines.length - 1] += row.text
-    else lines.push(row.text)
+  let open: string | null = null
+  for (const row of [...above, ...visible]) {
+    if (unwrap && row.wrapped && open !== null) {
+      open += row.text
+      continue
+    }
+    if (open !== null) lines.push(open.trimEnd())
+    open = row.text
   }
+  if (open !== null) lines.push(open.trimEnd())
   while (lines.length > 0 && lines[lines.length - 1] === '') lines.pop()
   return { lines, cols, rows, alt }
 }
