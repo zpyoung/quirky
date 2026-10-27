@@ -11,6 +11,9 @@
   several handoffs shows one badge per handoff, each jumping to its own other end (SC-53, SC-54).
 - 2026-10-27, wave 2: SC-9's failure example is a refused base branch, since a taken worktree name
   gets a suffix rather than failing.
+- 2026-10-27, Accounts integration: SC-25 uses the source session's recorded effective provider
+  home when available, including managed/custom homes and explicitly unset overrides. Account
+  selection changes do not retarget an existing source's transcript root.
 
 ## Conceptual model
 
@@ -317,7 +320,8 @@ source's worktree in repo R.
 ### Transcript
 
 25. **SC-25: a reported transcript inside the agent's root is used by path** (API)
-    - **Given** S's reported transcript exists under `~/.claude/projects`
+    - **Given** S's reported transcript exists inside its recorded effective provider home, or
+      the daemon's configured provider home when no account-session record exists
     - **When** `quirky handoff preview S --json`
     - **Then** the probe is usable; the base names the path; ✗ no terminal capture is inlined
 

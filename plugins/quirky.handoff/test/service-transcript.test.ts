@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from 'bun:test'
-import { writeFileSync } from 'node:fs'
+import { symlinkSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { makeTempDir } from '../../../packages/daemon/test/plugins/fixtures'
 import { readCapture } from '../src/daemon/source'
@@ -16,6 +16,87 @@ const preview = (params: Record<string, unknown>) => rig.call('quirky.handoff/pr
 const projectOf = (cwd: string) => cwd.replace(/[^A-Za-z0-9]/g, '-')
 const cwdOf = async (session: string) => ((await rig.call('quirky.session/get', { session })) as { cwd: string }).cwd
 const noRepo = { include: { repoState: false, diffBodies: false, openEditorTabs: false } }
+const prepareAccountSession = async (
+  sessionId: string,
+  agent: 'claude' | 'codex',
+  override: { value: string | null; source: 'explicit' | 'absent' }
+) => {
+  const absent = { value: null, source: 'absent' as const }
+  return rig.call('quirky.accounts/prepare', {
+    agent,
+    sessionId,
+    worktreeId: rig.worktrees.w!.id,
+    cwd: await cwdOf(sessionId),
+    homeOverrides: agent === 'claude'
+      ? { claude: override, codex: absent }
+      : { claude: absent, codex: override }
+  })
+}
+
+describe('M3: account-prepared session homes scope source transcript probes', () => {
+  for (const agent of ['claude', 'codex'] as const) {
+    test(`accepts a ${agent} transcript inside its prepared custom home`, async () => {
+      rig = await HandoffRig.start()
+      const session = await rig.session('w', agent)
+      const sourceHome = join(rig.userHome, `account-${agent}-home`)
+      process.env[agent === 'claude' ? 'CLAUDE_CONFIG_DIR' : 'CODEX_HOME'] = join(rig.userHome, `daemon-${agent}-override`)
+      await prepareAccountSession(session.id, agent, { value: sourceHome, source: 'explicit' })
+      const path = agent === 'claude'
+        ? rig.writeFile(join(sourceHome, 'projects', 'w', 'provider-source.jsonl'))
+        : rig.writeFile(join(sourceHome, 'sessions', '2026', '10', '27', 'rollout-2026-10-27T13-15-00-provider-source.jsonl'))
+      await rig.reportTranscript(session.id, 'provider-source', path)
+
+      expect(await rig.call('quirky.handoff/probe', { source: { session: session.id } })).toEqual({
+        verdict: 'usable',
+        path,
+        reason: null,
+        candidate: 'reported'
+      })
+    })
+  }
+
+  test('uses the recorded unset Codex home instead of the daemon CODEX_HOME override', async () => {
+    rig = await HandoffRig.start()
+    const session = await rig.session('w', 'codex')
+    process.env.CODEX_HOME = join(rig.userHome, 'daemon-codex-override')
+    await prepareAccountSession(session.id, 'codex', { value: null, source: 'explicit' })
+    const path = rig.writeFile(join(rig.userHome, '.codex', 'sessions', '2026', '10', '27', 'rollout-2026-10-27T13-15-00-provider-source.jsonl'))
+    await rig.reportTranscript(session.id, 'provider-source', path)
+
+    expect(await rig.call('quirky.handoff/probe', { source: { session: session.id } })).toEqual({
+      verdict: 'usable',
+      path,
+      reason: null,
+      candidate: 'reported'
+    })
+  })
+
+  test('the account-recorded Codex root does not admit outsider files or symlink escapes', async () => {
+    rig = await HandoffRig.start()
+    const session = await rig.session('w', 'codex')
+    const sourceHome = join(rig.userHome, 'account-codex-home')
+    await prepareAccountSession(session.id, 'codex', { value: sourceHome, source: 'explicit' })
+    const outsider = rig.writeFile(join(makeTempDir('qho-account-outsider-'), 'outside.jsonl'))
+    await rig.reportTranscript(session.id, 'provider-source', outsider)
+    expect(await rig.call('quirky.handoff/probe', { source: { session: session.id } })).toMatchObject({
+      verdict: 'unverifiable',
+      reason: 'path-outside-known-roots',
+      candidate: 'reported'
+    })
+
+    const directory = join(sourceHome, 'sessions', '2026', '10', '27')
+    rig.writeFile(join(directory, 'placeholder.jsonl'))
+    const escape = join(directory, 'rollout-2026-10-27T13-15-00-provider-source.jsonl')
+    symlinkSync(outsider, escape)
+    await rig.reportTranscript(session.id, 'provider-source', escape)
+    expect(await rig.call('quirky.handoff/probe', { source: { session: session.id } })).toMatchObject({
+      verdict: 'unverifiable',
+      reason: 'path-outside-known-roots',
+      candidate: 'reported'
+    })
+  })
+})
+
 
 describe('SC-25: a reported transcript inside the agent root is used by path', () => {
   test('the probe is usable, the base names the path and no capture is inlined', async () => {

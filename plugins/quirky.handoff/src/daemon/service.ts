@@ -1,5 +1,6 @@
 import { homedir } from 'node:os'
-import type { PluginContext, PluginErrorKind, PluginStore, QuirkyEvent, Session } from '@quirky/protocol'
+import { isAbsolute } from 'node:path'
+import { RpcErrorCode, type PluginContext, type PluginErrorKind, type PluginStore, type QuirkyEvent, type Session } from '@quirky/protocol'
 import { composeBrief, estimateTokens, scanSecrets, type SourceFacts, type Warning } from '../core'
 import { TEMPLATE_LIMIT } from '../core/template'
 import { DeliveryTracker } from './delivery'
@@ -241,24 +242,65 @@ export class HandoffService {
     if (target.create.name.trim() === '') throw this.invalidTarget('A new worktree needs a name')
   }
 
-  private probeOf(info: SourceInfo): Promise<ProbeResult> {
+  private async probeOf(info: SourceInfo): Promise<ProbeResult> {
     const env = process.env
-    return claimedTranscripts(this.call, info.session).then((claimed) =>
-      probeTranscript({
-        agent: info.agent,
-        sessionId: info.session,
-        providerSessionId: info.providerSessionId,
-        reportedPath: info.transcriptPath,
-        cwd: info.cwd ?? '',
-        history: info.session === null ? [] : this.history.get(info.session),
-        claimed,
-        env: {
-          HOME: env.HOME || homedir(),
-          ...(env.CLAUDE_CONFIG_DIR ? { CLAUDE_CONFIG_DIR: env.CLAUDE_CONFIG_DIR } : {}),
-          ...(env.CODEX_HOME ? { CODEX_HOME: env.CODEX_HOME } : {})
+    const probeEnv: { HOME: string; CLAUDE_CONFIG_DIR?: string; CODEX_HOME?: string } = {
+      HOME: env.HOME || homedir(),
+      ...(env.CLAUDE_CONFIG_DIR ? { CLAUDE_CONFIG_DIR: env.CLAUDE_CONFIG_DIR } : {}),
+      ...(env.CODEX_HOME ? { CODEX_HOME: env.CODEX_HOME } : {})
+    }
+    const claimed = await claimedTranscripts(this.call, info.session)
+    if (info.session !== null) {
+      let sessionHome: unknown
+      let optionalUnavailable = false
+      try {
+        sessionHome = await this.call('quirky.accounts/sessionHome', { session: info.session })
+      } catch (error) {
+        if (isRecord(error) && error.code === RpcErrorCode.MethodNotFound) optionalUnavailable = true
+        else throw error
+      }
+      if (!optionalUnavailable) {
+        if (!isRecord(sessionHome)) {
+          return {
+            verdict: 'unverifiable',
+            path: null,
+            reason: 'path-outside-known-roots',
+            candidate: null
+          }
         }
-      })
-    )
+        const provider = sessionHome.provider
+        const home = sessionHome.home
+        if (provider === null && home === null) {
+          // No account provenance was recorded; retain the daemon-root behavior.
+        } else if (
+          (provider !== 'claude' && provider !== 'codex') ||
+          provider !== info.agent ||
+          typeof home !== 'string' ||
+          !isAbsolute(home)
+        ) {
+          return {
+            verdict: 'unverifiable',
+            path: null,
+            reason: 'path-outside-known-roots',
+            candidate: null
+          }
+        } else if (provider === 'claude') {
+          probeEnv.CLAUDE_CONFIG_DIR = home
+        } else {
+          probeEnv.CODEX_HOME = home
+        }
+      }
+    }
+    return probeTranscript({
+      agent: info.agent,
+      sessionId: info.session,
+      providerSessionId: info.providerSessionId,
+      reportedPath: info.transcriptPath,
+      cwd: info.cwd ?? '',
+      history: info.session === null ? [] : this.history.get(info.session),
+      claimed,
+      env: probeEnv
+    })
   }
 
   private async captureOf(info: SourceInfo, refresh: boolean): Promise<string | null> {

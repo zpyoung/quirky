@@ -136,6 +136,7 @@
       {
         "id": "sessionHome",
         "description": "Reads an existing session's recorded effective provider home without preparing a launch or changing account selection. Returns null fields when no provider-home record exists.",
+        "readOnly": true,
         "params": { "type": "object", "properties": { "session": { "type": "string" } }, "required": ["session"] },
         "result": { "type": "object", "properties": { "provider": { "description": "claude, codex, or null when no record exists." }, "home": { "description": "Absolute recorded effective provider home, or null when no record exists." } }, "required": ["provider", "home"] }
       },

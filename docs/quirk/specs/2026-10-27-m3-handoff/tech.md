@@ -234,6 +234,14 @@ SCHEMA:
 
 CONTRACT: `probeTranscript(input: { agent: string; sessionId: string|null; providerSessionId: string|null; reportedPath: string|null; cwd: string; history: string[]; claimed: Set<string>; env: { HOME, CLAUDE_CONFIG_DIR?, CODEX_HOME? } }) -> ProbeResult`
 - Roots: claude `${CLAUDE_CONFIG_DIR ?? HOME/.claude}/projects`; codex `${CODEX_HOME ?? HOME/.codex}/sessions`; other agents have none (a reported path is `unverifiable: undiscoverable-path`).
+- Before probing a live or ended source, the service calls the optional read-only public method
+  `quirky.accounts/sessionHome {session}`. It returns `{provider, home}` from the recorded account
+  session, or `{provider: null, home: null}` when absent. `quirky accounts session-home --session`
+  exposes the same lookup without preparing a launch or changing selection.
+- A matching provider's absolute recorded home supplies `CLAUDE_CONFIG_DIR` or `CODEX_HOME` for the
+  probe. Explicitly unset launch variables have an absolute HOME-based home recorded by Accounts;
+  they are not represented as a null home. Missing Accounts/no record keeps the daemon environment.
+  Operational errors propagate; malformed provenance is unverifiable. Containment checks remain.
 - Candidate order and verdict rules: logic spec [Transcript](logic.md#transcript), D25. Paths are
   `realpath`-normalized before the root check; a `.jsonl` suffix is required.
 - Session-id lookup: claude `projects/*/<id>.jsonl`; codex `sessions/**/rollout-*-<id>.jsonl`.

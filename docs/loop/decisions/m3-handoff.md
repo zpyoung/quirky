@@ -781,5 +781,67 @@ Candidate cleanup: reversed only `38a4f23`'s contribution, retaining the incomin
 - **Confidence:** high
 - **Source:** locked by docs/loop/LOOP.md
 
+## D77: Preserve landed account/hosting additions while reconciling handoff
+- **Question:** how to resolve the second landing's conflicts with newly landed Accounts and Hosting
+- **Options:** take either feature's side; preserve independent contributions and shared helpers
+- **Chose:** union `status-bar`/`statusBars` with `menu-item`/`menuItems` in public kinds, schemas and validation; preserve both account-preparation and badge helpers in sessions; retain handoff and hosting lockfile entries. Removed the obsolete copied-constant/overlay assertions instead of re-pinning incidental lists. Read incoming account, hosting and worktree-flake decision logs.
+- **Why:** these are additive public contracts, not competing implementations. Required account preparation remains before spawn; handoff still uses ready-gated delivery. Incoming integration history contains finish commits for the landed items, unlike the earlier transient M5 candidate.
+- **Evidence:** merge `1e95ddb`; incoming `m3-accounts.md`, `m4-hosting-api-github.md`, `fix-flaky-quirky-worktree-window-projects.md`; scoped Gemini task-level review `STATUS: PASS`; pre-provenance-patch affected suite 293 remote files plus 2 macOS-only files passes
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** locked by docs/loop/decisions/m3-accounts.md
+
+## D78: Use recorded source-home provenance without weakening transcript validation
+- **Question:** how handoff can validate a source launched under the newly landed Accounts plugin's managed or custom provider home
+- **Options:** accept arbitrary reported paths; use the daemon home regardless of the source; read the existing account-session provenance through a new public query
+- **Chose:** declare `quirky.accounts/sessionHome({session}) -> {provider, home}` and `quirky accounts session-home --session <id>` as a read-only lookup of the recorded effective source home, not current selection or a new preparation. A missing record returns null fields. Handoff uses a matching provider's absolute recorded home for the existing probe; missing Accounts/no record keeps the existing daemon-root behavior. Extension, realpath and subtree checks remain intact.
+- **Why:** [INFERENCE before regression] managed Codex histories and explicit custom homes are physically outside the daemon's native root; only managed Claude normally links history back. Accounts already records the source home privately, while `Session.launch.env` precedes account preparation and cannot establish the final root. A public query preserves the plugin boundary and avoids recomputing account identity or mutating transcripts.
+- **Evidence:** `plugins/quirky.accounts/src/profiles.ts:233-300`, `src/service.ts:399-472,982-1006`; `plugins/quirky.handoff/src/daemon/service.ts:244-260`, `probe.ts:37-75`; contract commit `eb9366c`
+- **Reversibility:** easy
+- **Confidence:** high for the inspected data flow; runtime regression proof pending
+- **Source:** supersedes m3-handoff D25 (recorded source-home selection only; candidate order and containment remain)
+
+## D79: Preserve local script-gate failures as failures while diagnosing host pressure
+- **Question:** whether the local script-gate timeouts justify changing assertions or test budgets
+- **Options:** weaken the gate; attribute all errors to code without evidence; retain the failure and retry the unchanged gate in isolation
+- **Chose:** retain the failure, record the environment snapshot, and run the unchanged `bun test scripts` separately. No protected script, assertion or timeout changes.
+- **Why:** the failed run timed out across unrelated guardian and temporary-repository fixtures; subsequent ENOENT errors occurred after timed-out fixture cleanup. A snapshot measured Mac load averages 254.01 / 260.08 / 164.92 and 97% disk use. This proves substantial pressure, not the exact cause of every failure.
+- **Evidence:** first post-additive-merge `bun test scripts` 48 pass/14 fail; `uptime`, `df -h .`, process-pressure snapshot; all scripts had passed 62 tests before this merge
+- **Reversibility:** easy
+- **Confidence:** high for recorded failures and environment; cause not yet established
+- **Source:** assumed — autonomous
+
+## D80: Prove and fix the recorded-home gap through public daemon consumers
+- **Question:** whether the inspected account-home mismatch is observable, and whether the public-query fix preserves the trust boundary
+- **Options:** keep the daemon-root assumption; weaken containment; implement the committed query and select only the recorded source root
+- **Chose:** the public-query fix. Before implementation, the accounts regression fails with the unprovided method and three handoff regressions fail with `unverifiable/path-outside-known-roots` instead of usable for custom Claude, custom Codex and explicitly unset Codex. After implementation, all 34 account/handoff test files pass with no flakes.
+- **Why:** the accounts service returns stored source provenance without preparing, switching or authenticating anything. Handoff overrides only a matching provider's root; missing method/no record preserves baseline behavior, operational lookup errors propagate, and malformed provenance cannot broaden trust. The managed-source regression also preserves the original home after selection changes.
+- **Evidence:** RED two-file remote run; GREEN `bun scripts/suite.ts plugins/quirky.handoff plugins/quirky.accounts` (`ok:true`, 34 files); public RPC/CLI and daemon probe regressions; standalone daemon/API/CLI-module smoke prints “M3 session-home, CLI, stored-root probe, safe recovery, and outsider guard passed.”
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** supersedes m3-handoff D78 (runtime proof and completed implementation)
+
+## D81: Reject the review's null-home finding against the recorded-home contract
+- **Question:** whether the scoped Gemini review's sole finding—that an explicitly unset source must return `home:null`—describes a reachable valid result
+- **Options:** accept null homes with a non-null provider; retain the effective-home contract after checking the producer
+- **Chose:** retain the contract. `AccountsService.prepare` resolves an explicit null override with `unsetHome(provider)`, saves that absolute home through `saveSessionIdentity`, and returns a null environment patch only to clear the launched child's variable. `sessionHome` returns the saved absolute home; both fields are null only when no record exists.
+- **Why:** the reviewer conflated the launch environment patch with persisted effective-home provenance. The explicit-unset daemon regression passes. Accepting a provider with a null home would instead weaken malformed-result handling; it is correctly unverifiable. No accepted blocking finding remains from this scoped review.
+- **Evidence:** `plugins/quirky.accounts/src/service.ts:208-214,410-425,991`; `src/types.ts` account-session `home:string`; GREEN explicit-unset case; scoped Gemini output `STATUS: NEEDS_FIXES` with this single rejected finding
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** assumed — autonomous
+
+## D82: Preserve the probe's safe candidate recovery and finish the runtime proof
+- **Question:** whether reporting an outsider path must forbid recovery of a separately verified transcript for the same source
+- **Options:** alter the existing probe chain; correct the throwaway smoke's assumption and retain the documented candidate order
+- **Chose:** retain the chain. The first smoke recovered the legitimate in-root file by provider session ID rather than using the outsider. The corrected smoke verifies that safe recovery, then uses another source with no valid fallback and verifies outsider refusal. No production change was needed for this smoke correction.
+- **Why:** D25 explicitly permits session-ID/history fallback after an unusable reported path. Rejecting a legitimate verified fallback would be a regression, not a security improvement.
+- **Evidence:** first smoke's `candidate:session-id` and original valid path; corrected smoke exit 0; fresh typecheck exit 0 and packaged UI/desktop build exit 0 with 13 plugins; unchanged isolated script gate 62 pass/0 fail
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** locked by docs/quirk/specs/2026-10-27-m3-handoff/tech.md
+
+Documentation: amended logic SC-25 and the dated amendment log first, then documented the public provenance query and root-selection contract in its sibling tech spec. Removed the throwaway smoke script after its cleanup completed. The read-only manifest metadata matches existing Accounts query conventions.
+
 ## Progress
-Implementation, checkpoint reviews and Final Round 1 are complete. Latest incoming decision logs are reconciled; accidental transient M5 source is removed (D72–D73). Session name migration 7 and badge migration 8 are preserved with a consumer-visible upgrade regression and before/after runtime smoke (D74). Scoped cross-family fallback review passes (D75). Final affected-consumer verification passes 297 remote files plus 2 macOS-only files, with two runner-reported flakes passing alone; scripts 62 pass, typecheck and packaged build pass (D76). Eleven selected guarded UI scenarios pass; SC-40 has only the permitted hover-tooltip limitation, with marker/count/cost verified. All temporary UI/smoke/review resources are closed/removed. Next: commit the reconciliation, detach and retry `queue.ts land m3-handoff`; that command retains the whole-suite integration gate. Do not start another item.
+The account/hosting catch-up is reconciled and committed (`1e95ddb`); both UI contribution kinds and session helper sets remain. The recorded-home compatibility fix is implemented after RED proof and passes all 34 account/handoff files, with managed/custom/unset roots, immutable source-home selection and containment covered (D80). Its scoped review's sole null-home finding is rejected with producer/runtime evidence (D81). Standalone API/CLI-module/probe smoke passes, including safe recovery and outsider refusal; temporary resources/script are removed (D82). Earlier additive affected suite passes 293 remote plus 2 macOS-only files; isolated scripts 62 pass; final typecheck and packaged build pass. Specs are amended; eleven handoff UI goals pass with only SC-40's documented hover-tool limitation. Next: commit this completed integration fix, detach and retry `queue.ts land m3-handoff`; no further feature flows or pre-land whole-suite run. Do not start another item.
