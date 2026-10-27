@@ -30,9 +30,15 @@ export interface WorkerLifecyclePort {
   }): void
 }
 
+/** Acceptance runs in the ledger's transaction; asynchronous effects begin after commit. */
+export interface DurableMutationOptions<T extends object> {
+  acceptedCheckpoint?: (accepted: T) => MutationCheckpoint
+  afterCommit?: (accepted: T) => T | Promise<T>
+}
+
 /** Shared core service implemented by OrchestrationCore in core.ts.
- * Worker starts surround createTask/reserveWorkerDispatch + worker/custody inserts
- * and mutate's checkpoint callback in store.transaction, before launch side effects.
+ * Worker starts createTask/reserveWorkerDispatch + worker/custody rows in mutate's
+ * synchronous operation; acceptedCheckpoint persists with them before launch effects.
  * A supervised dispatch is permanently marked dispatches.supervised=1; if its worker
  * port is unavailable, core fails closed rather than treating it as context-only.
  * Async process/provider work occurs only after transaction commit.
@@ -45,16 +51,18 @@ export interface OrchestrationWorkerCore extends LifecycleCorePort {
   getRun(runId: RunId): RunRow
   getTask(taskId: TaskId): TaskRow
   getDispatch(dispatchId: DispatchId): DispatchRow
-  createDispatch(input: DispatchAdmissionInput & { supervised?: boolean }, caller: RuntimeCallerEvidence): DispatchRow
+  createDispatch(input: DispatchAdmissionInput & { supervised?: boolean }, caller: RuntimeCallerEvidence, identity: SessionIdentity): DispatchRow
   createTask(input: Omit<TaskCreateParams, keyof MutationRequest>, caller: RuntimeCallerEvidence): TaskRow
   reserveWorkerDispatch(input: Omit<DispatchAdmissionInput, 'assigneeSessionId'>, caller: RuntimeCallerEvidence): DispatchRow
   attachDispatchAuthority(dispatchId: DispatchId, identity: SessionIdentity, caller: RuntimeCallerEvidence): DispatchRow
-  /** Pending -> dispatched uses transitionDispatch after positive prompt acceptance. */
+  emitWorkerStatus(dispatchId: DispatchId, subject: string, body: string, high: boolean): void
+  closeWorkerQuestions(dispatchId: DispatchId, at: UtcTimestamp): void
   mutate<T extends object>(
     method: MutatingOrchestrationMethod,
     params: MutationRequest & Record<string, unknown>,
     caller: RuntimeCallerEvidence,
-    effect: (checkpoint: (value: MutationCheckpoint) => void) => T | Promise<T>,
+    operation: (store: PluginStore) => T,
+    options?: DurableMutationOptions<T>,
   ): Promise<MutationResult<T>>
 }
 

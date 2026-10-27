@@ -341,6 +341,28 @@
 - **Revisit if:** a final incoming decision changes shared authority or launch behavior
 - **Source:** locked by docs/loop/decisions/m3-accounts.md
 
+## D32: Apply the aged-item night-mode landing rule
+- **Question:** whether to start a new review/dogfood campaign after the preparation-only stall
+- **Options:** start every remaining campaign; follow the current rule for items already past two hours
+- **Chose:** finish implementation and required behavioral tests, scripts, typecheck and runtime smoke, then land without starting a new final-review or UI-dogfood round. Tool readiness checks are not dogfood passes.
+- **Why:** the initial spec commit predates this iteration's observed runtime by more than two hours. Night mode explicitly directs already-aged items to land as soon as their own tests/typecheck pass and skip review/dogfood not yet started. No acceptance scenario or safety invariant is removed.
+- **Evidence:** 51b4f01 commit timestamp 2026-10-27T16:21:44-05:00; inter-lane message runtime timestamps 2026-10-27T23:44Z onward; current LOOP.md Night mode first bullet. No review dispatch or dogfood begin has run.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** the operator changes the night-mode landing instruction
+- **Source:** locked by docs/loop/LOOP.md
+
+## D33: Share atomic staged worker acceptance with lane9
+- **Question:** lane9 requires pre-launch durable acceptance, post-spawn authority attachment and shared receipt ownership
+- **Options:** independent worker ledger/database; fake pending assignee; shared store/service with nullable reserved identity and synchronous lifecycle hooks
+- **Chose:** committed worker-integration.ts service/port contracts. Reserve a pending supervised Dispatch without assignee, create --spec Task and worker row in the same transaction, checkpoint acceptance before effects, then attach exact public runtime identity and CAS to dispatched. Worker methods reuse the core mutate ledger. WorkerRow projection and transition callbacks remain worker-owned; missing supervised port fails closed.
+- **Why:** process/workspace launch cannot precede durable acceptance, and a not-yet-created session has no truthful attestation. One transaction must own report/heartbeat/Task/Dispatch/worker/question/promotion/receipt changes. Lane9 owns src/workers/**, worker-contracts.ts and worker acceptance tests; core owns dispatch/send settlement. Main/manifest/CLI integration is serialized after core merge.
+- **Evidence:** lane9 priority interjections; commits24cf319 and d304f31; exact signatures sent to its confirmed terminal mailbox; OrchestrationDomain acknowledged ownership and atomicity requirements.
+- **Reversibility:** medium
+- **Confidence:** high
+- **Revisit if:** worker integration needs another source-backed lifecycle operation
+- **Source:** assumed — autonomous
+
 ## Early preparation verification
 - `bun run typecheck`: exit0 on the final contracts, no diagnostics.
 - Actual Bun import of contracts.ts: `CONTRACT_MODULE_INERT_OK`; the module exports no runtime values. No daemon, model, process, real user state or placeholder contribution was started/installed.

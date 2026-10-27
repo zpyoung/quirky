@@ -139,7 +139,7 @@ export interface DispatchRow {
   taskId: TaskId
   contractVersion: ContractVersion
   status: DispatchStatus
-  /** Null only while a supervised start is durably reserved before session creation. */
+  /** Null until supervised authority attaches, including a settled pre-launch failure. */
   assigneeSessionId: SessionId | null
   creatorSessionId: SessionId | null
   creatorDispatchId: DispatchId | null
@@ -295,7 +295,17 @@ export interface AcceptedWorkerCheckpoint {
   dispatchId: DispatchId
 }
 
-export type MutationCheckpoint = AcceptedAskCheckpoint | AcceptedWorkerCheckpoint
+/** Accepted acknowledgement/read boundary before a connection-aware mailbox wait. */
+export interface AcceptedCheckCheckpoint {
+  state: 'accepted'
+  accepted: true
+  mailbox: MailboxAddress
+  runId: RunId | null
+  consumerGeneration: number
+  acknowledged: DeliveryId | null
+}
+
+export type MutationCheckpoint = AcceptedAskCheckpoint | AcceptedWorkerCheckpoint | AcceptedCheckCheckpoint
 
 export type MutatingOrchestrationMethod =
   | 'runCreate'
