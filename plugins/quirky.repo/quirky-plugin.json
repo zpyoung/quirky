@@ -854,7 +854,7 @@
       },
       {
         "id": "trustHooks",
-        "description": "Approves the shared setup and archive scripts now at HEAD, so they may run.",
+        "description": "Approves the shared setup and archive scripts now at a ref (default HEAD), so they may run.",
         "params": {
           "type": "object",
           "properties": {
@@ -870,6 +870,10 @@
                 "archive",
                 "all"
               ]
+            },
+            "ref": {
+              "type": "string",
+              "description": "Ref to read the shared scripts at (default HEAD)."
             }
           },
           "required": [
@@ -1626,7 +1630,7 @@
       },
       {
         "id": "trust-hooks",
-        "summary": "trust the shared scripts now at HEAD",
+        "summary": "trust the shared scripts now at a ref (default HEAD)",
         "positionals": [
           {
             "name": "repo",
@@ -1643,6 +1647,10 @@
               "archive",
               "all"
             ]
+          },
+          "ref": {
+            "type": "string",
+            "description": "the ref to read the scripts at (default HEAD)"
           }
         },
         "methods": [

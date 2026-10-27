@@ -137,7 +137,7 @@ error with `data.reason` set:
 | reason | kind | data |
 |---|---|---|
 | `setup-decision-required` | conflict | `{ repo }` |
-| `hooks-untrusted` | conflict | `{ repo, kind: 'setup'\|'archive', source, script, hash, changed: boolean }` |
+| `hooks-untrusted` | conflict | `{ repo, kind: 'setup'\|'archive', source, script, hash, changed: boolean, ref? }` (`ref`: the commit a create read the script at; absent for archive) |
 | `no-base` | conflict | `{}` |
 | `base-unreachable` | conflict | `{ ref, remote }` |
 | `no-commits` | conflict | `{ repo }` |
@@ -187,8 +187,8 @@ All take a repo selector `repo` where named. `readOnly` methods are marked (R).
   an empty string clears a string field; enums are validated by schema.
 - `hooks({ repo, ref? }) → EffectiveHooks` (R): the hooks file read at `ref` (default: the repo's
   `HEAD`), merged with local scripts by the command-source policy, with trust per script.
-- `trustHooks({ repo, kind? = 'all' }) → RepoDetails`: stores the current shared scripts' hashes
-  (read at `HEAD`).
+- `trustHooks({ repo, kind? = 'all', ref? }) → RepoDetails`: stores the current shared scripts' hashes
+  as read at `ref` (default `HEAD`), validated like `hooks`' `ref`.
 - `groupList() → ProjectGroup[]` (R); `groupCreate({ name, parentPath? })`; `groupRename({ group, name })`;
   `groupDelete({ group }) → { ok }`; `groupAdd({ group, repo })`; `groupRemove({ group, repo })`;
   `groupCollapse({ group, collapsed? = true })`. Group selectors are an ID or an exact name;
@@ -284,7 +284,7 @@ Steps run in this order; any refusal before step 6 leaves git and the disk untou
 3. `hasCommits` false → `no-commits`.
 4. Resolve the base ([Base resolution](#base-resolution)) unless `branch` is given (its tip is the
    start point).
-5. Hooks gate: `quirky.repo/hooks { repo, ref: <base or branch full ref> }`. If there is an
+5. Resolve the base or branch to a commit id once; the hooks gate and step 7 both use that commit, so a background fetch cannot split them. Hooks gate: `quirky.repo/hooks { repo, ref: <commit> }`. If there is an
    effective setup script: decision = `setup` unless inherit, else the policy
    (`run-by-default` → run, `skip-by-default` → skip, `ask` → `setup-decision-required`). If the
    decision is run and the setup has an untrusted shared part and not `trustSetup` →
@@ -294,9 +294,9 @@ Steps run in this order; any refusal before step 6 leaves git and the disk untou
    `worktreeLocation` (relative → against `repo.path`) else `worktreesRoot`, and `repoDir` is
    `worktreeDirName` (`main.ts:117-120`); `ensureInside(root, folder)` or `invalid-name`. Walk
    suffixes to 100 ([Naming](#naming)).
-7. `git worktree add`: new branch `git worktree add --no-track -b <branch> <path> <fullBase>`;
+7. `git worktree add`: new branch `git worktree add --no-track -b <branch> <path> <commit>`;
    existing branch `git worktree add <path> <branch>` (a remote-only `origin/<b>` first creates
-   local `<b>` with `git branch --track <b> origin/<b>`); refusal when checked out elsewhere →
+   local `<b>` at `<commit>` with `origin/<b>` as its upstream); refusal when checked out elsewhere →
    `branch-checked-out`.
 8. Best-effort git config: `branch.<branch>.base = <fullBase>`; `push.autoSetupRemote true` unless
    `git config --get push.autoSetupRemote` returns anything; upstream when the branch name equals the
@@ -498,7 +498,7 @@ Back-link: [SC-14](logic.md#create), [SC-40](logic.md#metadata), [SC-61](logic.m
   `create <name> [--location P]`, `scan <path> [--max-depth N] [--max-repos N]`,
   `import <path> [--group N] [--max-depth N] [--max-repos N]`, `show <repo>`,
   `set <repo> [--display-name] [--default-base] [--worktree-location] [--setup-policy ask|run-by-default|skip-by-default] [--agent-startup start-immediately|wait-for-setup] [--command-source shared-only|local-only|run-both] [--setup-script] [--archive-script]`,
-  `trust-hooks <repo> [--kind setup|archive|all]`,
+  `trust-hooks <repo> [--kind setup|archive|all] [--ref <ref>]`,
   `group list|create <name> [--parent-path P]|rename <group> <name>|delete <group>|add <group> <repo>|remove <group> <repo>|collapse <group> [--expand]`
   (cli-command `words` such as `"group create"`).
 
@@ -534,9 +534,11 @@ Back-link: [SC-3](logic.md#projects), [SC-25](logic.md#create)–[SC-28](logic.m
   `openView(SESSION_VIEW, { worktree })`, else toast "Created <name>"; show `baseFallback` in a
   "Workspace created from a local base" dialog with Got it. A `hooks-untrusted` error opens the
   trust dialog; Run hooks retries with `trustSetup: true`, Always trust calls `quirky.repo/trustHooks`
-  then retries, Don't run retries with `setup: 'skip'`.
+  with the error's `ref` then retries, Don't run retries with `setup: 'skip'`.
 - The setup choice shows when `quirky.repo/hooks` for the project reports a setup script and the
-  policy is ask; Create is disabled until chosen; the source badge is `quirky.yaml`, `orca.yaml`,
+  policy is ask, or when a create is refused with `setup-decision-required` (the chosen base or
+  branch has a setup the project's `HEAD` lacks; the dialog opens Advanced and resubmits with the
+  answer, with no error toast); Create is disabled until chosen; the source badge is `quirky.yaml`, `orca.yaml`,
   `local settings`, or the joined form for run-both.
 - Name placeholder: `quirky.worktree/suggestName`, refreshed when the dialog opens and after each
   create.
@@ -547,9 +549,9 @@ Back-link: [SC-3](logic.md#projects), [SC-25](logic.md#create)–[SC-28](logic.m
   with the message. A `keptBranch` adds a section notice with Delete branch, which calls
   `deleteBranch` with `yes: true`.
 - Opening a worktree (row click) calls `set { unread: false }` when it is unread.
-- Report (`report.ts`): `{ pinned: string[], groups: { id, name, collapsed, projects: ProjectReport[] }[], projects: ProjectReport[] }`
+- Report (`report.ts`): `{ pinned: string[], groups: { id, name, collapsed, worktrees: WorkspaceReport[], projects: ProjectReport[] }[], projects: ProjectReport[] }`
   with `ProjectReport = { id, name, kind, worktrees: { id, name, branch, kind, primary, status, workspaceStatus, pinned, unread, parentId, depth, pending, removing, selected }[] }`;
-  workspaces in tree order with `depth`. Pending rows appear with `pending: true` and no `id`
+  workspaces in tree order with `depth`; a group's `worktrees` are the folder workspaces of the group itself (repoId `group:<id>`), shaped like a project's. Pending rows appear with `pending: true` and no `id`
   beyond `pending:<name>`.
 
 ## Data models

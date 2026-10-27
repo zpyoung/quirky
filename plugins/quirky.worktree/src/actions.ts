@@ -119,17 +119,21 @@ export type CreateHooks = {
   showFallback(worktreeId: string, message: string): void
 }
 
+/** What `createWorkspace` returns when the chosen start point has a setup script the form never offered a choice for. */
+export const SETUP_CHOICE_NEEDED = 'setup-choice-needed'
+
 /**
  * Creates a workspace from the window. The new workspace opens only when the open view is still the
  * one the person submitted from, else a toast names it. An untrusted shared setup script is put to
- * the person and the create retried with their answer. Returns the result, or null after a toast
+ * the person and the create retried with their answer. Returns the result, `SETUP_CHOICE_NEEDED`
+ * when the daemon wants a run-or-skip answer the form can still collect, or null after a toast
  * says why nothing was created (or the person backed out of the trust question).
  */
 export async function createWorkspace(
   context: UiPluginContext,
   fields: Record<string, unknown>,
   hooks: CreateHooks
-): Promise<WorktreeCreateResult | null> {
+): Promise<WorktreeCreateResult | typeof SETUP_CHOICE_NEEDED | null> {
   const viewAtSubmit = JSON.stringify(context.getLayout().view)
   let attempt = fields
   for (;;) {
@@ -140,11 +144,12 @@ export async function createWorkspace(
       if (result.baseFallback) hooks.showFallback(result.worktree.id, result.baseFallback.message)
       return result
     } catch (error) {
+      if (reasonOf(error) === 'setup-decision-required') return SETUP_CHOICE_NEEDED
       if (reasonOf(error) !== 'hooks-untrusted') {
         context.toast('Could not create worktree', messageOf(error))
         return null
       }
-      const data = (error as { data?: { repo?: unknown; script?: unknown; changed?: unknown } }).data ?? {}
+      const data = (error as { data?: { repo?: unknown; script?: unknown; changed?: unknown; ref?: unknown } }).data ?? {}
       const choice = await hooks.askTrust({
         repoId: typeof data.repo === 'string' ? data.repo : String(fields.repo),
         script: typeof data.script === 'string' ? data.script : '',
@@ -155,7 +160,7 @@ export async function createWorkspace(
       else if (choice === 'skip') attempt = { ...fields, setup: 'skip' }
       else {
         try {
-          await context.call('quirky.repo/trustHooks', { repo: String(fields.repo), kind: 'setup' })
+          await context.call('quirky.repo/trustHooks', { repo: String(fields.repo), kind: 'setup', ...(typeof data.ref === 'string' ? { ref: data.ref } : {}) })
         } catch (trustError) {
           context.toast('Could not trust setup', messageOf(trustError))
           return null

@@ -514,6 +514,7 @@ test('SC-44: groups, the Pinned section, the primary badge, nested children and 
       id: 'g1',
       name: 'services',
       collapsed: false,
+      worktrees: [expect.objectContaining({ id: 'w7', name: 'shared', kind: 'folder', depth: 0 })],
       projects: [
         {
           id: 'r1',
@@ -869,7 +870,8 @@ const untrusted = (changed = false) =>
     repo: 'r1',
     kind: 'setup',
     script: 'touch ran.txt',
-    changed
+    changed,
+    ref: 'abc123'
   })
 
 async function submitNamed(h: ReturnType<typeof setup>, name: string) {
@@ -903,7 +905,7 @@ test('SC-33: an untrusted script asks, and each answer retries the create its ow
       { repo: 'r1', name: 'trusted', createdBy: 'window' },
       { repo: 'r1', name: 'trusted', createdBy: 'window', ...extra }
     ])
-    expect(h.callsTo('quirky.repo/trustHooks')).toEqual(label === 'Always trust' ? [{ repo: 'r1', kind: 'setup' }] : [])
+    expect(h.callsTo('quirky.repo/trustHooks')).toEqual(label === 'Always trust' ? [{ repo: 'r1', kind: 'setup', ref: 'abc123' }] : [])
     expect(h.opened).toEqual([{ id: SESSION_VIEW, input: { worktree: 'w9' } }])
     expect(dialogTitles()).toEqual([])
   }
@@ -934,6 +936,26 @@ test('any other create failure toasts and keeps the dialog open', async () => {
   expect(h.toasts).toEqual([{ title: 'Could not create worktree', body: 'Branch "x" was not found.' }])
   expect(dialogTitles()).toEqual(['New workspace'])
   expect(h.opened).toEqual([])
+})
+
+test('a setup-decision-required refusal opens the setup choice instead of a toast, and the answer goes with the retry', async () => {
+  const h = setup()
+  h.world.createFailures = [new RpcLike('Setup decision required', RpcErrorCode.Conflict, { reason: 'setup-decision-required', repo: 'r1' })]
+  await submitNamed(h, 'branchy')
+  expect(h.toasts).toEqual([])
+  expect(dialogTitles()).toEqual(['New workspace'])
+  const create = () => document.querySelector('[role="dialog"] button[type="submit"]') as HTMLButtonElement
+  expect(dialogButton('Run setup now')).toBeDefined()
+  expect(create().disabled).toBe(true)
+
+  await click(dialogButton('Skip for now'))
+  expect(create().disabled).toBe(false)
+  await act(async () => void create().click())
+  expect(h.callsTo('quirky.worktree/create')).toEqual([
+    { repo: 'r1', name: 'branchy', createdBy: 'window' },
+    { repo: 'r1', name: 'branchy', createdBy: 'window', setup: 'skip' }
+  ])
+  expect(dialogTitles()).toEqual([])
 })
 
 test('SC-20: a base fallback is shown in its own dialog with Got it', async () => {

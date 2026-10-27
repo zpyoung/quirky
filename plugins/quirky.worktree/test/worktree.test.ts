@@ -98,12 +98,11 @@ describe('quirky.worktree create', () => {
       createdBy: 'api',
       baseRef: 'develop'
     })
-    // D14: the add-worktree primitive gets the resolved full base ref
     expect(t.git!.calls.find((c) => c.fn === 'addWorktree' && c.args[2] === 'feat-login')?.args).toEqual([
       alpha,
       join(root, 'alpha', 'feat-login'),
       'feat-login',
-      'refs/heads/develop'
+      'c'.repeat(40)
     ])
     const changed = await waitFor(() => events.find((e) => e.type === 'quirky.worktree/changed'))
     expect(changed).toMatchObject({ data: { repoId: repo.id } })

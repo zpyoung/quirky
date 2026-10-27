@@ -1,9 +1,10 @@
-import { existsSync, lstatSync, rmSync, unlinkSync } from 'node:fs'
-import { isAbsolute, join, resolve } from 'node:path'
+import { existsSync, lstatSync, readlinkSync, rmSync, unlinkSync } from 'node:fs'
+import { dirname, isAbsolute, join, resolve } from 'node:path'
 import { GitError, gitApi, type GitRegistration } from '@quirky/git'
 import type { EffectiveHooks, Repo, Worktree, WorktreeRemoveResult } from '@quirky/protocol'
 import { contains, resolveRealPath, worktreeIdForPath } from '../../paths'
 import { SelectorSyntaxError, matchWorktrees, type CallerIdentity } from '../../selector'
+import { sharedEntryProblem, symlinkedAncestor } from './carry'
 import type { BranchCleaner, BranchOutcome } from './branches'
 import { gitRunnerPath, runHookScript } from './hooks-run'
 import { birthtimeOf, joinMetadata, listEverything, type ListEnv } from './list'
@@ -344,13 +345,20 @@ async function removeOrphan(env: RemoveEnv, repo: Repo, target: Worktree, orphan
   return { removed: [target.id], kept: [], sessionErrors }
 }
 
-/** The shared directories of the hooks file that are symlinks in the worktree: Quirky's own links, not changes. */
-function sharedLinks(worktreePath: string, sharedDirectories: string[]): string[] {
+/**
+ * The shared directories of the hooks file that are Quirky's own links in the worktree: an entry
+ * that passes the creation rules, sits under no symlinked directory, and points at the primary
+ * checkout's copy. Anything else is left in place and counts as a change.
+ */
+function sharedLinks(repoPath: string, worktreePath: string, sharedDirectories: string[]): string[] {
   return sharedDirectories
     .map((entry) => entry.replace(/\/+$/, ''))
     .filter((entry) => {
       try {
-        return entry !== '' && lstatSync(join(worktreePath, entry)).isSymbolicLink()
+        if (entry === '' || sharedEntryProblem(entry) !== null || symlinkedAncestor(worktreePath, entry) !== null) return false
+        const link = join(worktreePath, entry)
+        if (!lstatSync(link).isSymbolicLink()) return false
+        return resolve(dirname(link), readlinkSync(link)) === resolve(repoPath, entry)
       } catch {
         return false
       }
@@ -368,7 +376,7 @@ async function removeRegistered(env: RemoveEnv, repo: Repo, target: Worktree, op
 
   let hooks: Promise<EffectiveHooks> | undefined
   const loadHooks = () => (hooks ??= env.hooksAt(repo, target.head || 'HEAD'))
-  const links = sharedLinks(target.path, await loadHooks().then((loaded) => loaded.sharedDirectories, () => []))
+  const links = sharedLinks(repo.path, target.path, await loadHooks().then((loaded) => loaded.sharedDirectories, () => []))
 
   if (!options.force) {
     const linked = new Set(links)

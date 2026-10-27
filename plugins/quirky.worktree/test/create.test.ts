@@ -3,6 +3,8 @@ import { existsSync, mkdirSync, readdirSync, realpathSync, writeFileSync } from 
 import { join } from 'node:path'
 import { RpcErrorCode, type Repo, type Session, type Worktree, type WorktreeCreateResult } from '@quirky/protocol'
 import { waitFor } from '../../../packages/daemon/test/helpers'
+import { gitApi } from '@quirky/git'
+import { useTestGit } from '@quirky/git/testing'
 import { call, commitFiles, failure, git, isolateGitConfig } from '../../quirky.repo/test/git-fixtures'
 import { testCliContext } from '../../quirky.repo/test/harness'
 import { commands } from '../cli'
@@ -366,6 +368,32 @@ describe('SC-20: a remote base that cannot be fetched falls back to the local br
   })
 })
 
+describe('the commit the setup gate read is the commit the workspace is made from', () => {
+  test('a remote base that moves after the hooks were read does not change the commit checked out', async () => {
+    const { dir, origin } = await startApi()
+    const pusher = makeProject(join(scratch(), 'pusher'), { origin })
+    const gated = git(dir, 'rev-parse', 'origin/main')
+    commitFiles(pusher, { 'b.txt': 'two\n' })
+    git(pusher, 'push', '-q', 'origin', 'main')
+
+    const real = gitApi()
+    useTestGit({
+      ...real,
+      addNewBranchWorktree: async (...args: Parameters<typeof real.addNewBranchWorktree>) => {
+        git(dir, 'fetch', '-q', 'origin')
+        return real.addNewBranchWorktree(...args)
+      }
+    })
+    try {
+      const made = await create({ repo: 'api', name: 'pinned', base: 'origin/main' })
+      expect(git(dir, 'rev-parse', 'origin/main')).not.toBe(gated)
+      expect(git(made.worktree.path, 'rev-parse', 'HEAD')).toBe(gated)
+    } finally {
+      useTestGit(null)
+    }
+  })
+})
+
 describe('SC-21: a blank name gets a generated name that is never reused (CLI)', () => {
   test('names differ, a deleted worktree\'s name is not handed out again, and a typed name can be reused', async () => {
     const { dir } = await startApi()
@@ -400,6 +428,15 @@ describe('SC-21: a blank name gets a generated name that is never reused (CLI)',
     expect(retired(t.h.home)).toEqual([one.name])
     const next = (await call(w!.client, 'quirky.worktree/suggestName', { repo: 'api' })) as { name: string }
     expect(next.name).not.toBe(one.name)
+  })
+
+  test('a generated name the collision walk suffixed is retired along with the one picked', async () => {
+    const { t, root } = await startApi()
+    const suggested = (await call(w!.client, 'quirky.worktree/suggestName', { repo: 'api' })) as { name: string }
+    mkdirSync(join(root, 'api', suggested.name), { recursive: true })
+    const made = await create({ repo: 'api' })
+    expect(made.worktree.name).toBe(`${suggested.name}-2`)
+    expect(retired(t.h.home)).toEqual([suggested.name, `${suggested.name}-2`].sort())
   })
 
   test('a failed create still retires the generated name it picked', async () => {

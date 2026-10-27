@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 'react'
 import type { EffectiveHooks, ProjectSettings, Repo, RepoDetails, UiPluginContext, Worktree } from '@quirky/protocol'
-import { createWorkspace, type CreateHooks } from './actions'
+import { createWorkspace, SETUP_CHOICE_NEEDED, type CreateHooks } from './actions'
 import { Dialog } from './Dialog'
 import { repoLabel, workspaceOption } from './report'
 
@@ -65,6 +65,7 @@ export function CreateDialog({ context, repos, worktrees, repoId, onRepoChange, 
   const [parent, setParent] = useState('')
   const [note, setNote] = useState('')
   const [setupChoice, setSetupChoice] = useState<'run' | 'skip' | null>(null)
+  const [choiceDemanded, setChoiceDemanded] = useState(false)
   const [createMore, setCreateMore] = useState(false)
   const [busy, setBusy] = useState(false)
   const [placeholder, setPlaceholder] = useState('')
@@ -76,6 +77,7 @@ export function CreateDialog({ context, repos, worktrees, repoId, onRepoChange, 
     let live = true
     setProject(null)
     setSetupChoice(null)
+    setChoiceDemanded(false)
     baseEdited.current = false
     setBase('')
     void loadProject(context, repoId).then((loaded) => {
@@ -109,7 +111,7 @@ export function CreateDialog({ context, repos, worktrees, repoId, onRepoChange, 
 
   const folder = repo?.kind === 'folder'
   const setup = project?.hooks?.setup ?? null
-  const asksForSetup = setup !== null && project?.settings?.setupPolicy === 'ask'
+  const asksForSetup = choiceDemanded || (setup !== null && project?.settings?.setupPolicy === 'ask')
   const waitsForSetup = project?.hooks?.agentStartup === 'wait-for-setup'
   const defaultBase = project?.settings?.defaultBase ?? ''
   const fromBranch = branch.trim() !== ''
@@ -138,12 +140,18 @@ export function CreateDialog({ context, repos, worktrees, repoId, onRepoChange, 
     const result = await createWorkspace(context, fields(), hooks)
     clearPending()
     setBusy(false)
+    if (result === SETUP_CHOICE_NEEDED) {
+      setChoiceDemanded(true)
+      setAdvanced(true)
+      return
+    }
     if (!result) return
     if (!createMore) return onClose()
     setName('')
     setAgent('')
     setPrompt('')
     setSetupChoice(null)
+    setChoiceDemanded(false)
     setSuggestion((n) => n + 1)
   }
 
@@ -244,11 +252,11 @@ export function CreateDialog({ context, repos, worktrees, repoId, onRepoChange, 
               <span>Note</span>
               <textarea rows={2} value={note} onChange={(event) => setNote(event.target.value)} />
             </label>
-            {setup && (
+            {(setup || asksForSetup) && (
               <div className="setup-block">
                 <div className="setup-heading">
                   <span>Setup script</span>
-                  <span className="setup-badge">{setup.badge}</span>
+                  {setup && <span className="setup-badge">{setup.badge}</span>}
                 </div>
                 <label className="check-row">
                   <input type="checkbox" checked={waitsForSetup} disabled readOnly title="Set in the project's settings" />

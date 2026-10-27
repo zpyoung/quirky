@@ -587,6 +587,21 @@ describe('SC-34 and SC-35: hooks from the repo', () => {
     expect(all.hooks.setup?.shared).toMatchObject({ trusted: true, changed: false })
     expect(all.hooks.archive?.shared).toMatchObject({ trusted: true })
   })
+
+  test('trusts the scripts at the named ref, not HEAD, and refuses a bad ref', async () => {
+    const { client, home } = await start()
+    const dir = makeRepo(join(home, 'api'), { 'quirky.yaml': 'scripts:\n  setup: touch head.txt\n' })
+    const repo = await add(client, dir)
+    git(dir, 'checkout', '-q', '-b', 'topic')
+    commitFiles(dir, { 'quirky.yaml': 'scripts:\n  setup: touch topic.txt\n' })
+    git(dir, 'checkout', '-q', '-')
+
+    await call(client, 'quirky.repo/trustHooks', { repo: repo.id, kind: 'setup', ref: 'topic' })
+    expect((await hooks(client, repo.id, 'topic')).setup?.shared).toMatchObject({ trusted: true })
+    expect((await hooks(client, repo.id)).setup?.shared).toMatchObject({ trusted: false, changed: true })
+    expect((await failure(call(client, 'quirky.repo/trustHooks', { repo: repo.id, ref: '--bad' }))).data).toMatchObject({ reason: 'invalid-ref' })
+    expect((await failure(call(client, 'quirky.repo/trustHooks', { repo: repo.id, ref: 'nope' }))).data).toMatchObject({ reason: 'unknown-ref' })
+  })
 })
 
 describe('selectors and errors', () => {

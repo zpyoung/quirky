@@ -166,6 +166,7 @@ test('SC-44: the sidebar shows groups, projects, the primary badge and nested ch
       id: group!.id,
       name: 'services',
       collapsed: false,
+      worktrees: [],
       projects: [
         { id: api.id, name: 'api', kind: 'git', worktrees: [entry(main, 0, true), entry(fixLogin, 0, false), entry(child!, 1, false)] }
       ]

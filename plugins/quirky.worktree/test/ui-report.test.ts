@@ -128,6 +128,32 @@ test('SC-44: groups hold their projects in the group order; ungrouped projects f
   expect(report.projects[0]!.worktrees[0]).toMatchObject({ workspaceStatus: 'in-review', unread: true, pinned: false })
 })
 
+test('SC-44: a group reports its own folder workspaces in tree order, as the sidebar shows them', () => {
+  const report = buildReport(
+    input({
+      groups: [group('g1', 'apps', [])],
+      worktrees: [
+        worktree('w1', 'group:g1', 'apps-root', { kind: 'folder', branch: null, path: '/r/apps' }),
+        worktree('w2', 'group:g1', 'scratch', { kind: 'folder', branch: null, parentId: 'w1', pinned: true })
+      ],
+      selectedId: 'w2'
+    })
+  )
+  expect(report.groups).toEqual([
+    {
+      id: 'g1',
+      name: 'apps',
+      collapsed: false,
+      worktrees: [
+        expect.objectContaining({ id: 'w1', name: 'apps-root', kind: 'folder', branch: null, depth: 0, selected: false }),
+        expect.objectContaining({ id: 'w2', name: 'scratch', parentId: 'w1', depth: 1, pinned: true, selected: true })
+      ],
+      projects: []
+    }
+  ])
+  expect(report.pinned).toEqual(['w2'])
+})
+
 test('SC-44: a project reports its display name, and a folder project its kind', () => {
   const report = buildReport(input({ repos: [repo('r1', 'notes', { kind: 'folder', displayName: 'Notes' })] }))
   expect(report.projects).toEqual([{ id: 'r1', name: 'Notes', kind: 'folder', worktrees: [] }])

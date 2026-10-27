@@ -178,7 +178,7 @@ async function findBranch(env: CreateEnv, repo: Repo, input: string): Promise<Br
 type SetupDecision = 'run' | 'skip' | 'none'
 
 /** Whether setup runs for this create, refusing an undecided "ask" project and an untrusted shared script. */
-function decideSetup(env: CreateEnv, repo: Repo, settings: ProjectSettings, hooks: EffectiveHooks, params: CreateParams): SetupDecision {
+function decideSetup(env: CreateEnv, repo: Repo, settings: ProjectSettings, hooks: EffectiveHooks, params: CreateParams, hooksRef?: string): SetupDecision {
   const setup = hooks.setup
   if (!setup) return 'none'
   const choice = params.setup ?? 'inherit'
@@ -196,8 +196,8 @@ function decideSetup(env: CreateEnv, repo: Repo, settings: ProjectSettings, hook
       env,
       'conflict',
       'hooks-untrusted',
-      `${lead}:\n${shared.text}\nPass --trust-setup to run it once, or run: quirky repo trust-hooks ${labelOf(repo)}`,
-      { repo: repo.id, kind: 'setup', source: file, script: shared.text, hash: shared.hash, changed: shared.changed }
+      `${lead}:\n${shared.text}\nPass --trust-setup to run it once, or run: quirky repo trust-hooks ${labelOf(repo)}${hooksRef !== undefined ? ` --ref ${hooksRef}` : ''}`,
+      { repo: repo.id, kind: 'setup', source: file, script: shared.text, hash: shared.hash, changed: shared.changed, ...(hooksRef !== undefined ? { ref: hooksRef } : {}) }
     )
   }
   return decision
@@ -299,14 +299,19 @@ async function createGit(env: CreateEnv, repo: Repo, params: CreateParams, creat
     }
   }
 
-  const hooksRef = existing?.fullRef ?? base!.fullRef
+  const startRef = existing?.fullRef ?? base!.fullRef
+  const hooksRef = await git.resolveCommit(repo.path, startRef)
+  if (hooksRef === null) throw env.fail('invalid-params', `Base ref "${existing?.branch ?? base!.shortRef}" was not found.`)
   const hooks = (await env.call('quirky.repo/hooks', { repo: repo.id, ref: hooksRef })) as EffectiveHooks
-  const decision = decideSetup(env, repo, settings, hooks, params)
+  const decision = decideSetup(env, repo, settings, hooks, params, hooksRef)
 
   const typed = params.name?.trim() ?? ''
   let generated: string | null = null
+  let unavailable: ReadonlySet<string> = new Set()
+  let placed: string | null = null
   const retire = () => {
-    if (generated !== null) env.store.run('INSERT OR IGNORE INTO retired_names (repo_id, name) VALUES (?, ?)', repo.id, generated)
+    if (generated === null) return
+    for (const name of new Set([generated, placed ?? generated])) env.store.run('INSERT OR IGNORE INTO retired_names (repo_id, name) VALUES (?, ?)', repo.id, name)
   }
   try {
     const root = rootOf(env, repo, settings)
@@ -315,7 +320,8 @@ async function createGit(env: CreateEnv, repo: Repo, params: CreateParams, creat
     if (typed !== '') name = sanitize(env, typed)
     else if (existing !== null) name = sanitize(env, existing.branch)
     else {
-      generated = generateName(env, repo.id, await unavailableNames(env, repo))
+      unavailable = await unavailableNames(env, repo)
+      generated = generateName(env, repo.id, unavailable)
       name = generated
     }
     const folderOf = (candidate: string) => join(parentDir, candidate)
@@ -332,7 +338,7 @@ async function createGit(env: CreateEnv, repo: Repo, params: CreateParams, creat
       if (existing === null) {
         if (!(await git.checkRefFormatBranch(branch))) throw reasoned(env, 'invalid-params', 'invalid-name', 'Invalid worktree name')
         if (await git.localBranchExists(repo.path, branch)) {
-          const atBase = (await git.branchHead(repo.path, branch)) === (await git.resolveCommit(repo.path, base!.fullRef))
+          const atBase = (await git.branchHead(repo.path, branch)) === hooksRef
           if (!atBase || (await checkedOut(branch))) throw reasoned(env, 'conflict', 'branch-exists', `Branch ${branch} already exists`, { branch })
           mode = 'existing'
         }
@@ -350,6 +356,10 @@ async function createGit(env: CreateEnv, repo: Repo, params: CreateParams, creat
         folderName = await walkCandidates(
           name,
           async (candidate) => {
+            if (generated !== null && unavailable.has(candidate)) {
+              lastTaken = 'path'
+              return true
+            }
             const candidateBranch = joinBranch(prefix, candidate)
             if (await git.localBranchExists(repo.path, candidateBranch)) {
               lastTaken = 'locally'
@@ -372,6 +382,7 @@ async function createGit(env: CreateEnv, repo: Repo, params: CreateParams, creat
       }
       branch = joinBranch(prefix, folderName)
     }
+    placed = folderName
     const folder = folderOf(folderName)
     if (!contains(resolveRealPath(root), resolveRealPath(folder))) throw reasoned(env, 'invalid-params', 'invalid-name', 'Invalid worktree name')
 
@@ -379,7 +390,7 @@ async function createGit(env: CreateEnv, repo: Repo, params: CreateParams, creat
       const holder = await checkedOut(branch)
       if (holder) throw branchCheckedOut(env, branch, holder.path)
     }
-    await addWorktree(env, repo, { mode, branch, folder, base, existing })
+    await addWorktree(env, repo, { mode, branch, folder, start: hooksRef, existing })
 
     await configureBranch(env, repo, branch, mode === 'tracking' || existing !== null ? null : base!)
 
@@ -422,21 +433,20 @@ const branchCheckedOut = (env: CreateEnv, branch: string, path: string | null) =
 async function addWorktree(
   env: CreateEnv,
   repo: Repo,
-  plan: { mode: 'new' | 'existing' | 'tracking'; branch: string; folder: string; base: ResolvedBase | null; existing: BranchSource | null }
+  plan: { mode: 'new' | 'existing' | 'tracking'; branch: string; folder: string; start: string; existing: BranchSource | null }
 ): Promise<void> {
   const git = gitApi()
   try {
     if (plan.mode === 'new') {
-      await git.addNewBranchWorktree(repo.path, plan.folder, plan.branch, plan.base!.fullRef)
+      await git.addNewBranchWorktree(repo.path, plan.folder, plan.branch, plan.start)
       return
     }
     if (plan.mode === 'tracking') {
-      const tip = await git.resolveCommit(repo.path, plan.existing!.fullRef)
-      await git.createTrackingBranch(repo.path, plan.branch, plan.existing!.fullRef)
+      await git.createTrackingBranch(repo.path, plan.branch, plan.existing!.fullRef, plan.start)
       try {
         await git.addExistingBranchWorktree(repo.path, plan.folder, plan.branch)
       } catch (error) {
-        if (tip) await git.deleteRefIfAt(repo.path, plan.branch, tip)
+        await git.deleteRefIfAt(repo.path, plan.branch, plan.start)
         throw error
       }
       return

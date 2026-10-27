@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, setDefaultTimeout, test } from 'bun:test'
-import { existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
+import { existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, readlinkSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { basename, join } from 'node:path'
 import { RpcErrorCode, type ApiDescription, type ProjectGroup, type Repo, type Worktree, type WorktreeCreateResult, type WorktreeRemoveResult } from '@quirky/protocol'
 import { waitFor, waitForAsync } from '../../../packages/daemon/test/helpers'
@@ -149,6 +149,31 @@ describe('SC-47: changes block a delete unless forced, and nothing is stopped fi
     await remove(w, fix.id)
     expect(existsSync(fix.path)).toBe(false)
     expect(readFileSync(join(w.repoDir, 'node_modules', 'dep.js'), 'utf8')).toBe('x')
+  })
+
+  test('a shared directory entry that climbs out of the worktree never unlinks the symlink it names', async () => {
+    const w = await start({ files: { 'quirky.yaml': 'worktree:\n  sharedDirectories:\n    - ../outside-link\n' } })
+    const fix = await create(w, 'climbing')
+    const outside = join(fix.path, '..', 'outside-link')
+    symlinkSync(w.repoDir, outside)
+
+    await remove(w, fix.id)
+    expect(existsSync(fix.path)).toBe(false)
+    expect(lstatSync(outside).isSymbolicLink()).toBe(true)
+    expect(readlinkSync(outside)).toBe(w.repoDir)
+  })
+
+  test('a shared directory entry under a symlinked directory leaves the link it reaches alone', async () => {
+    const w = await start({ files: { 'quirky.yaml': 'worktree:\n  sharedDirectories:\n    - hop/cache\n' } })
+    const fix = await create(w, 'hopping')
+    const elsewhere = join(scratch(), 'elsewhere')
+    mkdirSync(elsewhere, { recursive: true })
+    symlinkSync(join(w.repoDir, 'hop', 'cache'), join(elsewhere, 'cache'))
+    symlinkSync(elsewhere, join(fix.path, 'hop'))
+
+    await remove(w, fix.id, { force: true })
+    expect(existsSync(fix.path)).toBe(false)
+    expect(lstatSync(join(elsewhere, 'cache')).isSymbolicLink()).toBe(true)
   })
 })
 

@@ -69,16 +69,14 @@ describe('SC-20: quirky worktree commands keep v1 output', () => {
     expect(lines[0]).toMatch(
       new RegExp(`^id: wt_[0-9a-f]{12}\\nname: feature-x\\nbranch: feature-x\\npath: ${join(root, 'alpha', 'feature-x')}$`)
     )
-    // D14: the git primitive receives the full ref the base resolved to
-    expect(t.git!.calls.find((c) => c.fn === 'addWorktree')?.args[3]).toBe('refs/heads/main')
+    expect(t.git!.calls.find((c) => c.fn === 'addWorktree')?.args[3]).toBe('c'.repeat(40))
   })
 
   test('create without --base cuts from the detected default branch, not HEAD', async () => {
     const { t, client } = await start()
     const { ctx } = testCliContext(client)
     await commands.create!({ positionals: ['alpha', 'feature-x'], flags: {} }, ctx)
-    // D14: the fake's detected default is main
-    expect(t.git!.calls.find((c) => c.fn === 'addWorktree')?.args[3]).toBe('refs/heads/main')
+    expect(t.git!.calls.find((c) => c.fn === 'addWorktree')?.args[3]).toBe('c'.repeat(40))
   })
 
   test('rm prints "removed <worktree>" and passes --force', async () => {

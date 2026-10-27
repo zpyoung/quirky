@@ -207,9 +207,17 @@ export async function addExistingBranchWorktree(repo: string, path: string, bran
   }
 }
 
-/** Creates local `branch` at `remoteRef` with that remote branch as its upstream. */
-export async function createTrackingBranch(repo: string, branch: string, remoteRef: string): Promise<void> {
-  await git(repo, ['branch', '--track', branch, remoteRef])
+/**
+ * Creates local `branch` with `remoteRef` as its upstream. It starts at `remoteRef`, or at
+ * `startPoint` (a commit id) when given, so a ref that moves meanwhile does not change where it starts.
+ */
+export async function createTrackingBranch(repo: string, branch: string, remoteRef: string, startPoint?: string): Promise<void> {
+  if (startPoint === undefined) {
+    await git(repo, ['branch', '--track', branch, remoteRef])
+    return
+  }
+  await git(repo, ['branch', '--no-track', branch, startPoint])
+  await git(repo, ['branch', `--set-upstream-to=${remoteRef}`, branch])
 }
 
 /** The effective value of a git config key, or null when unset. */
