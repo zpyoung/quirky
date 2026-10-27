@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import type { PluginContext, PluginErrorKind, PluginStore, Session, Worktree } from '@quirky/protocol'
+import { NO_CONTEXT_MESSAGE } from '../core/compose'
 import type { DeliveryTracker } from './delivery'
 import type { LineageStore } from './lineage'
 import { listAgents, type Call, type Composition, type Destination } from './source'
@@ -71,6 +72,9 @@ export class Launcher {
   async start(request: StartRequest): Promise<StartResult> {
     const { deps } = this
     const { ref, controls } = request
+    if (request.body !== undefined && request.body.trim() === '') {
+      throw deps.fail('conflict', NO_CONTEXT_MESSAGE, { reason: 'no-context' })
+    }
     const destination = await deps.destination(ref, controls)
     const created = await this.createWorktree(destination, controls)
     try {

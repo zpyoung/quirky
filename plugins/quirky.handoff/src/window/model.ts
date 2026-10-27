@@ -152,7 +152,7 @@ export function disabledOf(s: Snapshot): string[] {
   if (s.mode === 'create') {
     if (s.createName.trim() === '') start('create-name')
   } else if (s.worktree === null || !s.candidates.some((candidate) => candidate.id === s.worktree)) start('no-target')
-  if (s.analysis !== null && !s.analysis.contextAvailable) start('no-context')
+  if ((s.analysis !== null && !s.analysis.contextAvailable) || (s.detached && s.text.trim() === '')) start('no-context')
   if (!s.detached && (s.previewing || s.analysis === null)) {
     start('probe-loading')
     if (s.include.repoState) start('repo-state-loading')
@@ -515,9 +515,13 @@ export class HandoffDialog {
     try {
       const { templates } = (await this.context.call(METHOD('templates'))) as TemplateResult
       if (!this.snapshot.shown) return
-      const gone = this.snapshot.templateId !== null && !templates.some((template) => template.id === this.snapshot.templateId)
+      const { templateId } = this.snapshot
+      const before = this.snapshot.templates.find((template) => template.id === templateId)
+      const after = templates.find((template) => template.id === templateId)
+      const gone = templateId !== null && after === undefined
+      const edited = after !== undefined && (before === undefined || before.name !== after.name || before.body !== after.body)
       this.commit({ templates, ...(gone ? { templateId: null } : {}) })
-      if (gone) this.changed('template')
+      if (gone || edited) this.changed('template')
     } catch (error) {
       this.context.log(`handoff templates: ${messageOf(error)}`)
     }
@@ -602,7 +606,7 @@ export class HandoffDialog {
     if (reasonOf(error) === 'source-changed' && data?.preview) this.applyPreview(data.preview, !this.snapshot.detached)
   }
 
-  /** Closes the dialog, keeping a draft for the source on the daemon. */
+  /** Closes the dialog, keeping a draft for the source on the daemon; if the draft cannot be saved the dialog stays open with the error shown. */
   async cancel(): Promise<CommandResult> {
     const s = this.snapshot
     if (!s.shown) return refused('not-open')
@@ -612,6 +616,9 @@ export class HandoffDialog {
       await this.context.call(METHOD('draft'), { source: this.ref, draft })
     } catch (error) {
       this.context.log(`could not keep the handoff draft: ${messageOf(error)}`)
+      if (!this.snapshot.shown) return refused('superseded')
+      this.commit({ error: `Could not save your draft: ${messageOf(error)}` })
+      return refused(reasonOf(error) ?? 'draft-failed')
     }
     this.close()
     return ok()

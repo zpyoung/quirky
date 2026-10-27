@@ -241,6 +241,47 @@ describe('SC-36 and SC-37: editing detaches and regenerating reattaches', () => 
   })
 })
 
+describe('a template edited in another window while the dialog is open', () => {
+  const edited = (world: ReturnType<typeof makeWorld>) => {
+    world.templates = world.templates.map((template) => (template.id === 'debug-failure' ? { ...template, body: 'A new body.' } : template))
+  }
+  const changed = { type: 'quirky.handoff/changed', data: { kind: 'templates' } } as never
+
+  test('an attached preview recomposes when the selected template changes', async () => {
+    const { world, fake } = await opened()
+    await fake.run('set', { field: 'template', value: 'debug-failure' })
+    await afterDebounce()
+    const previews = fake.callsTo('preview').length
+    edited(world)
+    await fake.emit(changed)
+    await afterDebounce()
+    expect(fake.callsTo('preview').length).toBe(previews + 1)
+  })
+
+  test('a template that was not selected leaves the preview alone', async () => {
+    const { world, fake } = await opened()
+    const previews = fake.callsTo('preview').length
+    edited(world)
+    await fake.emit(changed)
+    await afterDebounce()
+    expect(fake.callsTo('preview')).toHaveLength(previews)
+  })
+
+  test('a detached preview gains a stale reason and keeps its text', async () => {
+    const { world, overlay, fake } = await opened()
+    await fake.run('set', { field: 'template', value: 'debug-failure' })
+    await fake.run('edit', { text: 'my own brief' })
+    await afterDebounce()
+    const previews = fake.callsTo('preview').length
+    edited(world)
+    await fake.emit(changed)
+    await afterDebounce()
+    expect(fake.callsTo('preview')).toHaveLength(previews)
+    expect(overlay.last().preview).toMatchObject({ detached: true, text: 'my own brief', stale: ['controls'] })
+    expect(overlay.last().preview.warnings.at(-1)).toMatchObject({ code: 'stale' })
+  })
+})
+
 describe('SC-39 and SC-40: secrets are marked in the editor', () => {
   test('SC-40: both ranges are marked with their excerpt, the line counts them, and an edit follows the new text', async () => {
     const { overlay, fake } = await opened()
@@ -309,6 +350,19 @@ describe('SC-42: Start is disabled until the dialog can start', () => {
     })
     expect(lost.overlay.last().disabled).toContain('start:no-target')
     expect(lost.overlay.last().canStart).toBe(false)
+  })
+
+  test('SC-42: deleting the whole preview disables Start at once, before the analysis returns', async () => {
+    const { overlay, fake } = await opened()
+    expect(overlay.last().canStart).toBe(true)
+    await fake.run('edit', { text: '  \n ' })
+    expect(overlay.last().canStart).toBe(false)
+    expect(overlay.last().disabled).toContain('start:no-context')
+    expect(await fake.run('start')).toEqual({ ok: false, reason: 'cannot-start' })
+    expect(fake.callsTo('start')).toEqual([])
+    await fake.run('edit', { text: 'something' })
+    await afterDebounce()
+    expect(overlay.last().canStart).toBe(true)
   })
 
   test('SC-42: a start in progress reads Starting… and stays disabled', async () => {

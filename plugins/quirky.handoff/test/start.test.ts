@@ -327,6 +327,20 @@ describe('SC-45: an attached preview that went out of date is refused', () => {
     expect(pasted(result.child.session)[0]).toContain(shown.split('\n')[0]!)
   })
 
+  test('a blank detached body is refused with no-context before a worktree is created or a tab opens', async () => {
+    const s = await opened()
+    const before = await sessions()
+    const worktrees = ((await rig.call('quirky.worktree/list', {})) as unknown[]).length
+    const error = await rig.failure('quirky.handoff/start', {
+      source: { session: s.id },
+      controls: { agent: 'gemini', target: { create: { name: 'blank-body' } } },
+      body: ' \n  '
+    })
+    expect(error.data).toEqual({ reason: 'no-context' })
+    expect(await sessions()).toEqual(before)
+    expect(((await rig.call('quirky.worktree/list', {})) as unknown[]).length).toBe(worktrees)
+  })
+
   test('a detached body is not compared with a composition', async () => {
     const s = await opened()
     const result = await start({ source: { session: s.id }, controls: { agent: 'gemini' }, body: 'edited', shown: 'something else', wait: true })

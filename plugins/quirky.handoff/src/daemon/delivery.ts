@@ -161,7 +161,8 @@ export class DeliveryTracker {
       }
       return result.delivery ?? 'not-delivered'
     } catch {
-      return 'not-delivered'
+      // a failed call says nothing about whether the paste landed, so it must never earn the automatic retry
+      return 'unconfirmed'
     }
   }
 

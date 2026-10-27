@@ -221,6 +221,34 @@ describe('SC-58, SC-59 and SC-60: Cancel and Escape keep a draft', () => {
     expect((overlay.view.q('textarea[aria-label="Steering note"]') as HTMLTextAreaElement).value).toBe('keep this')
   })
 
+  test('SC-58: a draft that cannot be saved keeps the dialog open with every field and the edited text', async () => {
+    let fail = true
+    const { overlay, fake } = await opened(() => {}, {
+      'quirky.handoff/draft': () => {
+        if (fail) throw rpcError('The daemon is not reachable')
+        return { ok: true }
+      }
+    })
+    await fake.run('set', { field: 'note', value: 'keep this' })
+    await fake.run('edit', { text: 'my edited brief' })
+    await afterDebounce()
+
+    expect(await fake.run('cancel', { via: 'button' })).toMatchObject({ ok: false })
+    expect(overlay.last().shown).toBe(true)
+    expect(overlay.last().error).toContain('The daemon is not reachable')
+    expect(overlay.view.text()).toContain('The daemon is not reachable')
+    expect(overlay.last().controls.note).toBe('keep this')
+    expect(overlay.last().preview).toMatchObject({ detached: true, text: 'my edited brief' })
+
+    await pressEscape()
+    expect(overlay.last().shown).toBe(true)
+    expect(overlay.last().preview.text).toBe('my edited brief')
+
+    fail = false
+    await fake.run('cancel', { via: 'button' })
+    expect(overlay.last().shown).toBe(false)
+  })
+
   test('SC-59: Escape is not passed on to the rest of the window', async () => {
     await opened()
     let reached = false
