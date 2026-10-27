@@ -12,7 +12,8 @@ import {
   type RepoDetails,
   type Worktree,
   type WorktreeCreatedBy,
-  type WorktreeCreateResult
+  type WorktreeCreateResult,
+  type GitHubWorktreeSource
 } from '@quirky/protocol'
 import { contains, expandHome, resolveRealPath, worktreeIdForPath } from '../../paths'
 import type { CallerIdentity } from '../../selector'
@@ -25,6 +26,17 @@ import { InvalidNameError, NoFreeNameError, branchName as joinBranch, normalizeP
 import { pickGeneratedName } from './names'
 import type { KeyedQueue } from './queue'
 import { insertRow } from './store'
+import {
+  addPushRemote,
+  configurePullBranch,
+  planPullRequest,
+  removePushRemote,
+  resolveGitHubSource,
+  restoreBranchConfig,
+  restorePullRef,
+  snapshotBranchConfig,
+  type PullRequestPlan
+} from './github'
 
 /** What `quirky.worktree/create` accepts. */
 export type CreateParams = {
@@ -206,6 +218,34 @@ function decideSetup(env: CreateEnv, repo: Repo, settings: ProjectSettings, hook
   }
   return decision
 }
+type IssueCommandDecision = 'run' | 'skip' | 'none'
+
+/** Whether a linked issue command runs, independently of the setup decision and trust hash. */
+function decideIssueCommand(
+  env: CreateEnv,
+  repo: Repo,
+  hooks: EffectiveHooks,
+  params: CreateParams,
+  source: GitHubWorktreeSource | null,
+  hooksRef?: string
+): IssueCommandDecision {
+  if (source?.item.kind !== 'issue' || !hooks.issueCommand) return 'none'
+  if (params.issueCommand === 'skip') return 'skip'
+  const shared = hooks.issueCommand.shared
+  if (shared && !shared.trusted && params.trustIssueCommand !== true) {
+    const file = hooks.file ?? 'quirky.yaml'
+    const lead = shared.changed ? `The issue command in ${file} changed since you last trusted it` : `The issue command in ${file} has not been trusted`
+    throw reasoned(
+      env,
+      'conflict',
+      'hooks-untrusted',
+      `${lead}:\n${shared.text}\nPass --trust-issue-command to run it once, or run: quirky repo trust-hooks ${labelOf(repo)} --kind issue${hooksRef !== undefined ? ` --ref ${hooksRef}` : ''}`,
+      { repo: repo.id, kind: 'issue', source: file, script: shared.text, hash: shared.hash, changed: shared.changed, ...(hooksRef !== undefined ? { ref: hooksRef } : {}) }
+    )
+  }
+  return 'run'
+}
+
 
 /** Everything the finishing steps need once the workspace exists. */
 type Created = {
@@ -213,6 +253,8 @@ type Created = {
   rootPath: string
   hooks: EffectiveHooks | null
   decision: SetupDecision
+  source: GitHubWorktreeSource | null
+  issueCommandDecision: IssueCommandDecision
   warnings: string[]
   baseFallback?: ResolvedBase['fallback']
 }
@@ -224,6 +266,9 @@ export async function createWorkspace(env: CreateEnv, params: CreateParams, iden
   if (params.parent !== undefined && params.noParent === true) throw env.fail('invalid-params', 'parent and noParent cannot be used together')
   if (params.branch !== undefined && params.branchName !== undefined) throw env.fail('invalid-params', 'pass either a branch or a branch name, not both')
   const target = await resolveTarget(env, params, identity)
+  if (params.github !== undefined && ('group' in target || target.repo.kind !== 'git')) {
+    throw reasoned(env, 'invalid-params', 'github-target', 'GitHub work-item creation requires a Git project, not a folder or group.')
+  }
   const parentId = await resolveParent(env, params, identity, createdBy, 'repo' in target ? target.repo.id : groupRepoId(target.group.id))
 
   let created: Created
@@ -252,7 +297,7 @@ async function createFolder(env: CreateEnv, target: Target, params: CreateParams
     parentId,
     generate: (unavailable) => generateName(env, repoId, unavailable)
   })
-  return { worktree, rootPath: worktree.path, hooks, decision, warnings: [] }
+  return { worktree, rootPath: worktree.path, hooks, decision, source: null, issueCommandDecision: 'none', warnings: [] }
 }
 
 /** The generated name for `repoId`: the one last suggested if still free, else a fresh pick. */
@@ -291,11 +336,13 @@ async function createGit(env: CreateEnv, repo: Repo, params: CreateParams, creat
 
   if (!(await git.hasCommits(repo.path))) throw reasoned(env, 'conflict', 'no-commits', `${labelOf(repo)} has no commits yet`, { repo: repo.id })
 
-  const existing = params.branch !== undefined ? await findBranch(env, repo, params.branch) : null
+  let source: GitHubWorktreeSource | null = null
+  let pullPlan: PullRequestPlan | null = null
+  let existing: BranchSource | null = null
   let base: ResolvedBase | null = null
-  if (existing === null) {
+  const resolveRequestedBase = async () => {
     try {
-      base = await resolveBase(repo.path, { requested: params.base, saved: settings.defaultBase, allowLocalFallback: params.allowLocalBaseFallback, log: env.log })
+      return await resolveBase(repo.path, { requested: params.base, saved: settings.defaultBase, allowLocalFallback: params.allowLocalBaseFallback, log: env.log })
     } catch (error) {
       if (!(error instanceof BaseError)) throw error
       if (error.reason === 'not-found') throw env.fail('invalid-params', error.message)
@@ -303,25 +350,72 @@ async function createGit(env: CreateEnv, repo: Repo, params: CreateParams, creat
     }
   }
 
-  const startRef = existing?.fullRef ?? base!.fullRef
-  const hooksRef = await git.resolveCommit(repo.path, startRef)
+  if (params.github !== undefined) {
+    source = await resolveGitHubSource(env, repo, params.github)
+    if (source.item.kind === 'pullRequest') {
+      if (params.branch !== undefined || params.branchName !== undefined || params.base !== undefined) {
+        throw reasoned(env, 'invalid-params', 'github-pr-overrides', 'A GitHub pull request source does not accept base, branch, or branchName overrides.')
+      }
+      pullPlan = await planPullRequest(env, repo, source)
+      existing = pullPlan.existing
+      base = pullPlan.base
+    } else {
+      if (params.branch !== undefined) {
+        throw reasoned(env, 'invalid-params', 'github-issue-branch', 'A GitHub issue creates a new branch and does not accept an existing branch.')
+      }
+      base = await resolveRequestedBase()
+    }
+  } else {
+    existing = params.branch !== undefined ? await findBranch(env, repo, params.branch) : null
+    if (existing === null) base = await resolveRequestedBase()
+  }
+
+  const startRef = pullPlan?.startRef ?? existing?.fullRef ?? base!.fullRef
+  const hooksRef = pullPlan?.hooksRef ?? await git.resolveCommit(repo.path, startRef)
   if (hooksRef === null) throw env.fail('invalid-params', `Base ref "${existing?.branch ?? base!.shortRef}" was not found.`)
-  const hooks = (await env.call('quirky.repo/hooks', { repo: repo.id, ref: hooksRef })) as EffectiveHooks
-  const decision = decideSetup(env, repo, settings, hooks, params, hooksRef)
+  let hooks: EffectiveHooks
+  let decision: SetupDecision
+  let issueCommandDecision: IssueCommandDecision
+  try {
+    hooks = (await env.call('quirky.repo/hooks', { repo: repo.id, ref: hooksRef })) as EffectiveHooks
+    decision = decideSetup(env, repo, settings, hooks, params, hooksRef)
+    issueCommandDecision = decideIssueCommand(env, repo, hooks, params, source, hooksRef)
+  } catch (error) {
+    if (pullPlan) await restorePullRef(repo.path, pullPlan).catch((cleanupError) => env.log(`could not restore GitHub pull ref after a refused create: ${messageOf(cleanupError)}`))
+    throw error
+  }
 
   const typed = params.name?.trim() ?? ''
   let generated: string | null = null
   let unavailable: ReadonlySet<string> = new Set()
   let placed: string | null = null
+  let folder = ''
+  let branch = ''
+  let mode: 'new' | 'existing' | 'tracking' = 'new'
+  let worktreeAdded = false
+  let branchCreated = false
+  let durable = false
+  let pushRemoteAdded = false
+  let branchConfig: Map<string, string[]> | null = null
   const retire = () => {
     if (generated === null) return
     for (const name of new Set([generated, placed ?? generated])) env.store.run('INSERT OR IGNORE INTO retired_names (repo_id, name) VALUES (?, ?)', repo.id, name)
   }
+  const rollback = async () => {
+    if (!pullPlan || durable) return
+    if (worktreeAdded && folder !== '') await git.removeWorktree(repo.path, folder, true).catch((error) => env.log(`could not remove incomplete GitHub worktree ${folder}: ${messageOf(error)}`))
+    if (branchCreated) await git.deleteRefIfAt(repo.path, branch, hooksRef).catch((error) => env.log(`could not remove incomplete GitHub branch ${branch}: ${messageOf(error)}`))
+    if (branchConfig !== null) await restoreBranchConfig(repo.path, branchConfig).catch((error) => env.log(`could not restore GitHub branch config for ${branch}: ${messageOf(error)}`))
+    if (pushRemoteAdded) await removePushRemote(repo.path, pullPlan).catch((error) => env.log(`could not remove incomplete GitHub remote ${pullPlan!.pushTarget.remoteName}: ${messageOf(error)}`))
+    await restorePullRef(repo.path, pullPlan).catch((error) => env.log(`could not restore GitHub tracking ref ${pullPlan!.trackingRef}: ${messageOf(error)}`))
+  }
+
   try {
     const root = rootOf(env, repo, settings)
     const parentDir = env.getSetting('nestWorkspaces') === false ? root : join(root, await env.worktreeDirName(repo))
     let name: string
     if (typed !== '') name = sanitize(env, typed)
+    else if (source !== null) name = sanitize(env, source.item.title)
     else if (existing !== null) name = sanitize(env, existing.branch)
     else {
       unavailable = await unavailableNames(env, repo)
@@ -329,13 +423,11 @@ async function createGit(env: CreateEnv, repo: Repo, params: CreateParams, creat
       name = generated
     }
     const folderOf = (candidate: string) => join(parentDir, candidate)
-    const checkedOut = async (branch: string) => (await git.listRegistrations(repo.path)).find((registration) => registration.branch === branch)
+    const checkedOut = async (candidate: string) => (await git.listRegistrations(repo.path)).find((registration) => registration.branch === candidate)
 
     let folderName: string
-    let branch: string
-    let mode: 'new' | 'existing' | 'tracking'
     let lastTaken = 'path'
-    const fixed = existing?.branch ?? params.branchName?.trim()
+    const fixed = pullPlan?.branch ?? existing?.branch ?? params.branchName?.trim()
     if (fixed !== undefined) {
       branch = fixed
       mode = existing === null ? 'new' : existing.remote === null ? 'existing' : 'tracking'
@@ -343,8 +435,11 @@ async function createGit(env: CreateEnv, repo: Repo, params: CreateParams, creat
         if (!(await git.checkRefFormatBranch(branch))) throw reasoned(env, 'invalid-params', 'invalid-name', 'Invalid worktree name')
         if (await git.localBranchExists(repo.path, branch)) {
           const atBase = (await git.branchHead(repo.path, branch)) === hooksRef
-          if (!atBase || (await checkedOut(branch))) throw reasoned(env, 'conflict', 'branch-exists', `Branch ${branch} already exists`, { branch })
+          const holder = await checkedOut(branch)
+          if (pullPlan && atBase && holder) throw branchCheckedOut(env, branch, holder.path)
+          if (!atBase || holder) throw reasoned(env, 'conflict', 'branch-exists', `Branch ${branch} already exists`, { branch })
           mode = 'existing'
+          if (pullPlan) existing = { branch, fullRef: `refs/heads/${branch}`, remote: null }
         }
       }
       try {
@@ -387,18 +482,28 @@ async function createGit(env: CreateEnv, repo: Repo, params: CreateParams, creat
       branch = joinBranch(prefix, folderName)
     }
     placed = folderName
-    const folder = folderOf(folderName)
+    folder = folderOf(folderName)
     if (!contains(resolveRealPath(root), resolveRealPath(folder))) throw reasoned(env, 'invalid-params', 'invalid-name', 'Invalid worktree name')
 
     if (mode !== 'new') {
       const holder = await checkedOut(branch)
       if (holder) throw branchCheckedOut(env, branch, holder.path)
     }
-    await addWorktree(env, repo, { mode, branch, folder, start: hooksRef, existing })
 
-    await configureBranch(env, repo, branch, mode === 'tracking' || existing !== null ? null : base!)
+    if (pullPlan) {
+      branchConfig = await snapshotBranchConfig(repo.path, branch)
+      pushRemoteAdded = await addPushRemote(repo.path, pullPlan)
+    }
+    await addWorktree(env, repo, { mode, branch, folder, start: hooksRef, existing })
+    worktreeAdded = true
+    branchCreated = pullPlan !== null && mode === 'new'
+
+    if (pullPlan) await configurePullBranch(repo.path, pullPlan)
+    else await configureBranch(env, repo, branch, mode === 'tracking' || existing !== null ? null : base!)
 
     const id = worktreeIdForPath(folder)
+    const displayName = params.displayName !== undefined ? params.displayName.trim() || null : source?.item.title ?? null
+    const comment = params.comment ?? (source === null ? '' : `${source.item.kind === 'pullRequest' ? 'PR' : 'Issue'} #${source.item.number} — ${source.item.title}`)
     env.store.transaction(() => {
       env.store.run('DELETE FROM worktrees WHERE id = ?', id)
       insertRow(env.store, {
@@ -409,23 +514,37 @@ async function createGit(env: CreateEnv, repo: Repo, params: CreateParams, creat
         createdAt: Date.now(),
         createdBy,
         birthtime: birthtimeOf(folder),
-        baseRef: existing === null ? base!.shortRef : null,
+        baseRef: pullPlan ? pullPlan.baseRef : existing === null ? base!.shortRef : null,
         keepBranch: existing !== null,
         createdRoot: root,
-        displayName: params.displayName?.trim() || null,
-        comment: params.comment ?? '',
-        parentId
+        displayName,
+        comment,
+        parentId,
+        linkedPR: source?.item.kind === 'pullRequest' ? source.item : null,
+        linkedIssue: source?.item.kind === 'issue' ? source.item : null,
+        pushTarget: pullPlan?.pushTarget ?? null
       })
       retire()
     })
+    durable = true
 
     const warnings = await carryFiles(repo.path, folder, hooks.sharedDirectories)
     for (const warning of warnings) env.log(`carried files for ${folder}: ${warning}`)
     const worktree = (await listProject(env, repo)).find((listed) => listed.id === id)
     if (!worktree) throw new Error(`the new worktree ${folder} is not listed`)
-    return { worktree, rootPath: repo.path, hooks, decision, warnings, ...(base?.fallback ? { baseFallback: base.fallback } : {}) }
+    return {
+      worktree,
+      rootPath: repo.path,
+      hooks,
+      decision,
+      source,
+      issueCommandDecision,
+      warnings,
+      ...(base?.fallback ? { baseFallback: base.fallback } : {})
+    }
   } catch (error) {
     retire()
+    await rollback()
     throw error
   }
 }
@@ -546,10 +665,173 @@ async function startAgent(env: CreateEnv, worktreeId: string, params: CreatePara
   return session.id
 }
 
+type ObjectRecord = Record<string, unknown>
+
+function objectRecord(value: unknown): ObjectRecord | null {
+  return typeof value === 'object' && value !== null && !Array.isArray(value) ? value as ObjectRecord : null
+}
+
+function activePaneOf(value: unknown): string | null {
+  const workspace = objectRecord(objectRecord(value)?.workspace)
+  if (!workspace || typeof workspace.activeGroup !== 'string') return null
+  const findGroup = (node: unknown): ObjectRecord | null => {
+    const current = objectRecord(node)
+    if (!current) return null
+    if (current.kind === 'group' && current.id === workspace.activeGroup) return current
+    if (current.kind !== 'split') return null
+    return findGroup(current.first) ?? findGroup(current.second)
+  }
+  const group = findGroup(workspace.root)
+  const tabs = group?.tabs
+  if (!Array.isArray(tabs)) return null
+  const tab = tabs.map(objectRecord).find((candidate) => candidate?.id === group?.activeTab)
+  return typeof tab?.activePane === 'string' ? tab.activePane : null
+}
+
+async function paneForSession(env: CreateEnv, session: string): Promise<{ workspace: string; pane: string } | null> {
+  try {
+    const location = objectRecord(await env.call('quirky.terminal/paneOf', { session }))
+    if (typeof location?.workspace !== 'string' || typeof location.pane !== 'string') return null
+    return { workspace: location.workspace, pane: location.pane }
+  } catch {
+    return null
+  }
+}
+
+/** Adds the issue terminal to the worktree layout and restores the caller's prior terminal focus. */
+async function placeIssueTerminal(
+  env: CreateEnv,
+  worktree: Worktree,
+  issueSession: string,
+  setupSession: string | undefined,
+  number: number,
+  warnings: string[]
+): Promise<void> {
+  let priorFocus: string | null = null
+  let havePriorFocus = false
+  try {
+    const focus = objectRecord(await env.call('quirky.terminal/focusContext'))
+    if (focus && (typeof focus.workspace === 'string' || focus.workspace === null)) {
+      priorFocus = focus.workspace
+      havePriorFocus = true
+    }
+  } catch {
+    // The terminal plugin may be unavailable even when sessions are supported.
+  }
+
+  let priorPane: string | null = null
+  try {
+    priorPane = activePaneOf(await env.call('quirky.terminal/workspace', { workspace: `id:${worktree.id}` }))
+  } catch {
+    // The worktree may not have a terminal workspace yet.
+  }
+
+  let changedFocus = false
+  try {
+    await env.call('quirky.terminal/workspace', { workspace: `id:${worktree.id}`, ensure: true })
+    let setupLocation = setupSession ? await paneForSession(env, setupSession) : null
+    if (setupSession && setupLocation === null) {
+      try {
+        await env.call('quirky.terminal/openSession', { session: setupSession })
+        changedFocus = true
+        setupLocation = await paneForSession(env, setupSession)
+      } catch {
+        setupLocation = null
+      }
+    }
+
+    let issueLocation = await paneForSession(env, issueSession)
+    if (issueLocation === null) {
+      await env.call('quirky.terminal/openSession', { session: issueSession })
+      changedFocus = true
+      issueLocation = await paneForSession(env, issueSession)
+    }
+    if (issueLocation === null) throw new Error(`Issue #${number} terminal has no pane in its worktree`)
+    if (setupSession && setupLocation === null) warnings.push(`could not split Issue #${number} beside Setup because its session is no longer available`)
+    if (setupLocation && issueLocation && setupLocation.workspace === issueLocation.workspace && setupLocation.pane !== issueLocation.pane) {
+      await env.call('quirky.terminal/movePane', { session: issueSession, toPane: setupLocation.pane, edge: 'right' })
+      changedFocus = true
+    } else if (setupLocation && issueLocation && setupLocation.workspace !== issueLocation.workspace) {
+      throw new Error('the issue and setup sessions are in different terminal workspaces')
+    }
+  } catch (error) {
+    warnings.push(`could not place the Issue #${number} terminal beside Setup: ${messageOf(error)}`)
+  } finally {
+    if (changedFocus && priorPane !== null) {
+      try {
+        await env.call('quirky.terminal/focusPane', { pane: priorPane })
+      } catch (error) {
+        warnings.push(`could not restore the terminal pane focus after starting Issue #${number}: ${messageOf(error)}`)
+      }
+    }
+    if (havePriorFocus) {
+      try {
+        await env.call('quirky.terminal/focusContext', { workspace: priorFocus })
+      } catch (error) {
+        warnings.push(`could not restore terminal focus after starting Issue #${number}: ${messageOf(error)}`)
+      }
+    }
+  }
+}
+
+async function runIssueCommand(
+  env: CreateEnv,
+  created: Created,
+  source: GitHubWorktreeSource,
+  script: string,
+  warnings: string[],
+  setupSession: string | undefined
+): Promise<NonNullable<WorktreeCreateResult['issueCommand']>> {
+  const { worktree } = created
+  const target: HookTarget = { rootPath: created.rootPath, worktreePath: worktree.path }
+  const expanded = script
+    .replaceAll('{{issue}}', String(source.item.number))
+    .replaceAll('{{artifact_url}}', source.item.url)
+  let runner: string
+  try {
+    runner = await gitRunnerPath(worktree.path, 'issue')
+    await writeRunner(runner, target, expanded)
+  } catch (error) {
+    warnings.push(`could not prepare the issue command for ${worktree.path}: ${messageOf(error)}`)
+    return { ran: 'none' }
+  }
+  try {
+    const session = (await env.call('quirky.session/create', {
+      worktree: worktree.id,
+      agent: 'shell',
+      title: `Issue #${source.item.number}`,
+      command: runnerCommand(runner)
+    })) as SessionLike
+    await placeIssueTerminal(env, worktree, session.id, setupSession, source.item.number, warnings)
+    return { ran: 'terminal', sessionId: session.id }
+  } catch (error) {
+    if (codeOf(error) !== RpcErrorCode.MethodNotFound) {
+      warnings.push(`could not start the Issue #${source.item.number} terminal for ${worktree.path}: ${messageOf(error)}`)
+      return { ran: 'none' }
+    }
+  }
+
+  try {
+    const outcome = await runHookInDaemon(runner, target)
+    if (outcome.exitCode !== 0 || outcome.timedOut) {
+      warnings.push(`issue command for #${source.item.number} in ${worktree.path} ${outcome.timedOut ? 'timed out' : `exited with ${outcome.exitCode}`}`)
+    }
+    return { ran: 'daemon', exitCode: outcome.exitCode, timedOut: outcome.timedOut }
+  } catch (error) {
+    warnings.push(`could not run the issue command for ${worktree.path}: ${messageOf(error)}`)
+    return { ran: 'none' }
+  }
+}
+
 /** Steps 12 to 14: setup, the agent, and opening the view. */
 async function finish(env: CreateEnv, created: Created, params: CreateParams): Promise<WorktreeCreateResult> {
   const { worktree, hooks, warnings } = created
-  const result: WorktreeCreateResult = { worktree, warnings, setup: { ran: 'none' }, ...(created.baseFallback ? { baseFallback: created.baseFallback } : {}) }
+  const result: WorktreeCreateResult = {
+    worktree,
+    warnings,
+    setup: { ran: 'none' },
+    ...(created.baseFallback ? { baseFallback: created.baseFallback } : {})
+  }
   const script = hooks?.setup?.text
   const runs = created.decision === 'run' && script !== undefined
 
@@ -566,6 +848,17 @@ async function finish(env: CreateEnv, created: Created, params: CreateParams): P
     : null
 
   if (runs) result.setup = await runSetup(env, created, script, warnings, gate ? (session) => gate.arm(session) : undefined)
+
+  if (created.source?.item.kind === 'issue') {
+    if (created.issueCommandDecision === 'skip') {
+      result.issueCommand = { ran: 'skipped' }
+    } else if (created.issueCommandDecision === 'run' && hooks?.issueCommand) {
+      const setupSession = result.setup.ran === 'terminal' ? result.setup.sessionId : undefined
+      result.issueCommand = await runIssueCommand(env, created, created.source, hooks.issueCommand.text, warnings, setupSession)
+    } else {
+      result.issueCommand = { ran: 'none' }
+    }
+  }
 
   if (params.agent !== undefined) {
     if (gate && result.setup.ran === 'terminal') result.agentPending = true

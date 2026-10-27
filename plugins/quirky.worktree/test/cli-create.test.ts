@@ -52,13 +52,16 @@ describe('SC-14: the create command reads its positionals and flags', () => {
     const { calls } = await run(['api', 'n'], {
       group: 'apps',
       base: 'origin/dev',
+      github: '#3',
       branch: 'feat/x',
       'branch-name': 'mine',
       'display-name': 'Nice',
       comment: 'note',
       'parent-worktree': 'p',
       setup: 'run',
+      'issue-command': 'skip',
       'trust-setup': true,
+      'trust-issue-command': true,
       agent: 'claude',
       prompt: 'go',
       'no-fallback': true,
@@ -71,6 +74,7 @@ describe('SC-14: the create command reads its positionals and flags', () => {
         repo: 'api',
         name: 'n',
         group: 'apps',
+        github: '#3',
         base: 'origin/dev',
         branch: 'feat/x',
         branchName: 'mine',
@@ -79,9 +83,11 @@ describe('SC-14: the create command reads its positionals and flags', () => {
         parent: 'p',
         setup: 'run',
         agent: 'claude',
+        issueCommand: 'skip',
         prompt: 'go',
         trustSetup: true,
         allowLocalBaseFallback: false,
+        trustIssueCommand: true,
         activate: true
       }
     })
@@ -132,6 +138,10 @@ describe('SC-14: the create command reads its positionals and flags', () => {
     expect((await run(['x'], {}, { setup: { ran: 'daemon', exitCode: null, timedOut: true } })).lines[0]).toContain('setup: timed out in the daemon')
     expect((await run(['x'], { agent: 'codex' }, { agentSessionId: 's_9' })).lines[0]).toContain('agent: started codex in session s_9')
     expect((await run(['x'], {}, { setup: { ran: 'skipped' } })).lines[0]!.split('\n')).toHaveLength(4)
+  })
+  test('the issue command outcome is included in CLI notes', async () => {
+    expect((await run(['x'], {}, { issueCommand: { ran: 'terminal', sessionId: 's_issue' } })).lines[0]).toContain('issue command: running in the Issue terminal s_issue')
+    expect((await run(['x'], {}, { issueCommand: { ran: 'daemon', exitCode: 4, timedOut: false } })).lines[0]).toContain('issue command: failed in the daemon (exit 4)')
   })
 
   test('--json prints the whole result', async () => {
