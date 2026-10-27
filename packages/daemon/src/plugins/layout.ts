@@ -96,6 +96,7 @@ export class LayoutService {
     const windows = this.windows()
     const focusedConn = windows.find((window) => window.focused)?.connId
     const slots: UiSlotState[] = [
+      ...model.activityItems.map((entry) => ({ entry, shown: () => true })),
       ...model.sidebarSections.map((entry) => ({ entry, shown: () => layout.sidebar })),
       ...model.panels.map((entry) => ({ entry, shown: () => layout.panel === entry.id })),
       ...model.views.map((entry) => ({ entry, shown: () => layout.view?.id === entry.id })),

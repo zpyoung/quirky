@@ -31,6 +31,7 @@ function commandTable(items: UiCommandEntry[]): string {
 function renderModel(model: UiModel): string {
   const sections: [string, unknown[], () => string][] = [
     ['SIDEBAR', model.sidebarSections, () => slotTable(model.sidebarSections)],
+    ['ACTIVITY ITEMS', model.activityItems, () => slotTable(model.activityItems)],
     ['PANELS', model.panels, () => slotTable(model.panels)],
     ['VIEWS', model.views, () => slotTable(model.views)],
     ['OVERLAYS', model.overlays, () => slotTable(model.overlays)],

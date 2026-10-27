@@ -1,10 +1,10 @@
 import type { QuirkyEvent } from './rpc'
 
 /** The contribution kinds the UI plugin API adds. */
-export const UI_KINDS = ['sidebar-section', 'panel', 'view', 'overlay', 'command', 'keybinding', 'setting', 'theme'] as const
+export const UI_KINDS = ['sidebar-section', 'activity-item', 'panel', 'view', 'overlay', 'command', 'keybinding', 'setting', 'theme'] as const
 
 /** UI kinds whose implementation is code a plugin's UI module provides. */
-export const CODE_BACKED_KINDS = ['view', 'panel', 'sidebar-section', 'overlay', 'command'] as const
+export const CODE_BACKED_KINDS = ['view', 'panel', 'sidebar-section', 'activity-item', 'overlay', 'command'] as const
 
 /** The color slots a theme fills; window tokens map to CSS custom properties `--<token>`. */
 export const THEME_TOKENS = [
@@ -68,10 +68,10 @@ export const DEFAULT_THEME: ThemeInfo = {
 
 export type ThemeList = { chosen: string; active: string; themes: ThemeInfo[] }
 
-/** A sidebar section, panel, view or overlay in the UI model. */
+/** A sidebar section, activity item, panel, view or overlay in the UI model. */
 export type UiSlotEntry = {
   id: string
-  kind: 'sidebar-section' | 'panel' | 'view' | 'overlay'
+  kind: 'sidebar-section' | 'activity-item' | 'panel' | 'view' | 'overlay'
   /** The plugin whose declaration is in effect. */
   plugin: string
   title: string
@@ -107,6 +107,9 @@ export type SettingDeclaration = {
   type: 'boolean' | 'number' | 'string' | 'enum'
   title: string
   description?: string
+  /** Optional generic settings navigation metadata. */
+  category?: string
+  section?: string
   default: boolean | number | string
   minimum?: number
   maximum?: number
@@ -128,6 +131,8 @@ export type SettingInfo = UiSettingEntry & {
 export type UiModel = {
   /** Order ascending, then ID. */
   sidebarSections: UiSlotEntry[]
+  /** Order ascending, then ID. */
+  activityItems: UiSlotEntry[]
   /** Order ascending, then ID. */
   panels: UiSlotEntry[]
   /** ID ascending. */
@@ -167,7 +172,7 @@ export type UiWindowInfo = { connId: number; name?: string; focused: boolean }
 /** One slot in the UI model, with the latest report from its mounted window. */
 export type UiSlotState = {
   id: string
-  kind: 'sidebar-section' | 'panel' | 'view' | 'overlay'
+  kind: 'sidebar-section' | 'activity-item' | 'panel' | 'view' | 'overlay'
   plugin: string
   title: string
   shown: boolean

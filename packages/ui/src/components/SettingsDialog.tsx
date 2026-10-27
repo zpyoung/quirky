@@ -73,6 +73,17 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
   const [busy, setBusy] = useState(false)
 
+  const renderFields = (fields: SettingField[]) =>
+    fields.map((field) => (
+      <PluginField
+        key={field.id}
+        field={field}
+        value={draftOf(field, edits, field.id)}
+        error={fieldErrors[field.id]}
+        onChange={(value) => setEdits({ ...edits, [field.id]: value })}
+      />
+    ))
+
   const submit = async (event: FormEvent) => {
     event.preventDefault()
     const changes = changedSettings(plugin.settings, edits)
@@ -92,20 +103,31 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
     <Dialog title="Settings" onClose={onClose}>
       <form className="form" onSubmit={submit}>
         {groups.length === 0 && themes.options.length <= 1 && <p className="muted pad">No settings to change.</p>}
-        {groups.map((group) => (
-          <fieldset key={group.plugin} className="settings-group">
-            <legend>{group.plugin}</legend>
-            {group.fields.map((field) => (
-              <PluginField
-                key={field.id}
-                field={field}
-                value={draftOf(field, edits, field.id)}
-                error={fieldErrors[field.id]}
-                onChange={(value) => setEdits({ ...edits, [field.id]: value })}
-              />
-            ))}
-          </fieldset>
-        ))}
+        {groups.map((group) =>
+          group.kind === 'plugin' ? (
+            <fieldset key={`plugin:${group.plugin}`} className="settings-group">
+              <legend>{group.plugin}</legend>
+              {renderFields(group.fields)}
+            </fieldset>
+          ) : group.category !== undefined ? (
+            <fieldset key={`category:${group.category}`} className="settings-group">
+              <legend>{group.category}</legend>
+              {group.sections.map((section) => (
+                <div key={`section:${section.section ?? ''}`} className="settings-section">
+                  {section.section !== undefined && <h3 className="settings-section-title">{section.section}</h3>}
+                  {renderFields(section.fields)}
+                </div>
+              ))}
+            </fieldset>
+          ) : (
+            group.sections.map((section) => (
+              <fieldset key={`section:${section.section ?? ''}`} className="settings-group">
+                <legend>{section.section}</legend>
+                {renderFields(section.fields)}
+              </fieldset>
+            ))
+          )
+        )}
         {themes.options.length > 1 && (
           <>
             <label>

@@ -14,6 +14,7 @@ export function PluginSlot({ id, input }: Props) {
   const anchor = useRef<HTMLDivElement>(null)
   const entry = [
     ...(state.model?.sidebarSections ?? []),
+    ...(state.model?.activityItems ?? []),
     ...(state.model?.panels ?? []),
     ...(state.model?.views ?? []),
     ...(state.model?.overlays ?? [])
