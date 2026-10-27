@@ -468,7 +468,7 @@ describe('removed worktrees', () => {
     expect((await w.call('quirky.git/notes', { worktree: keeper.id })).notes).toHaveLength(1)
   })
 
-  test('NA-23: the notes of a worktree that went away while the daemon was down are dropped on activation', async () => {
+  test('NA-23: activation keeps notes of a worktree that went away while the daemon was down, and a read of it drops them', async () => {
     w = await startWorld()
     const keeper = (await w.call('quirky.worktree/create', { repo: w.feat.repoId, name: 'keeper', branchName: 'zoe/keeper', base: 'main', setup: 'skip' })).worktree
     await addThree(w)
@@ -478,7 +478,11 @@ describe('removed worktrees', () => {
     Bun.spawnSync(['git', 'worktree', 'remove', '--force', w.feat.path], { cwd: w.e2e.repo, env: { PATH: '/usr/bin:/bin', HOME: w.e2e.userHome, GIT_CONFIG_GLOBAL: '/dev/null' } })
     await w.restartDaemon()
     await w.call('quirky.git/notes', { worktree: keeper.id })
-    await waitFor(() => w!.storedNotes().length === 1, 10_000)
+    await Bun.sleep(1_500)
+    expect(w.storedNotes()).toHaveLength(4)
+
+    const failure = await fails(w.call('quirky.git/notes', { worktree: w.feat.id }))
+    expect(failure.code).toBe(RpcErrorCode.NotFound)
     expect(w.storedNotes().map((note) => note.worktree_id)).toEqual([keeper.id])
   })
 })

@@ -151,6 +151,24 @@ describe('truncateDiffForPrompt', () => {
     expect(truncateDiffForPrompt(files, 120).length).toBeLessThanOrEqual(120)
   })
 
+  test('measures the budget in UTF-8 bytes, so non-ASCII patches are cut too', () => {
+    const patch = `diff --git a/a.txt b/a.txt\n${'+\u4f60\u597d\u4e16\u754c\n'.repeat(30000)}`
+    expect(Buffer.byteLength(patch)).toBeGreaterThan(STAGED_DIFF_BYTE_BUDGET)
+    const result = truncateDiffForPrompt(patch)
+    expect(Buffer.byteLength(result)).toBeLessThanOrEqual(STAGED_DIFF_BYTE_BUDGET)
+    const omitted = Number(/diff truncated, (\d+) bytes omitted/.exec(result)![1])
+    const kept = result.slice(0, result.indexOf('\n...(diff truncated'))
+    expect(Buffer.byteLength(kept) + omitted).toBe(Buffer.byteLength(patch))
+    for (const line of kept.split('\n').slice(1)) expect(line).toBe('+\u4f60\u597d\u4e16\u754c')
+  })
+
+  test('never splits a code point when clipping inside a long line', () => {
+    const result = truncateDiffForPrompt(`+${'\u{1f600}'.repeat(500)}`, 300)
+    expect(Buffer.byteLength(result)).toBeLessThanOrEqual(300)
+    expect(result).not.toContain('\ufffd')
+    expect(result).toMatch(/diff truncated, \d+ bytes omitted/)
+  })
+
   test('shares the budget fairly so a huge file does not starve a small one', () => {
     const hugeFile = `diff --git a/data.jsonl b/data.jsonl\n${'+x\n'.repeat(5000)}`
     const smallFile = 'diff --git a/src/app.ts b/src/app.ts\n+const meaningful = true\n'

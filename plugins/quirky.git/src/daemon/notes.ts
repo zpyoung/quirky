@@ -93,12 +93,6 @@ export class NotesStore {
     return changes
   }
 
-  /** Deletes the notes of every worktree whose ID is not in `known`. */
-  keepOnly(known: ReadonlySet<string>): void {
-    const stored = this.store.all<{ worktree_id: string }>('SELECT DISTINCT worktree_id FROM notes')
-    for (const { worktree_id } of stored) if (!known.has(worktree_id)) this.clear(worktree_id)
-  }
-
   /**
    * Finishes a send: deletes each of `picked` whose stored row still equals what was sent. A note
    * that was edited meanwhile stays and is `kept`; one that is already gone counts as `sent`.
@@ -259,15 +253,5 @@ export function formatNotes(env: DaemonEnv): Handler {
       picked = picked.filter((note) => wanted.has(note.id))
     }
     return { text: formatPrompt(picked), count: picked.length }
-  }
-}
-
-/** Drops the notes of worktrees `quirky.worktree` no longer lists; a failed listing drops nothing. */
-export async function pruneNotes(env: DaemonEnv): Promise<void> {
-  try {
-    const listed = (await env.context.call('quirky.worktree/list', {})) as { id: string }[]
-    env.notes.keepOnly(new Set(listed.map((worktree) => worktree.id)))
-  } catch (error) {
-    env.context.log(`could not prune notes: ${error instanceof Error ? error.message : String(error)}`)
   }
 }

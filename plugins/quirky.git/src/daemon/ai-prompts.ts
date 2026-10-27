@@ -37,21 +37,35 @@ function splitDiffIntoFileSections(diff: string): string[] {
   return sections
 }
 
-/** Clips one section to `limit` characters on a line boundary and records how many were dropped. */
+const utf8Length = (value: string): number => Buffer.byteLength(value, 'utf8')
+
+/** The longest prefix of `value` that fits in `maxBytes` of UTF-8 without splitting a code point. */
+function prefixWithinBytes(value: string, maxBytes: number): string {
+  let bytes = 0
+  let end = 0
+  for (const char of value) {
+    bytes += utf8Length(char)
+    if (bytes > maxBytes) break
+    end += char.length
+  }
+  return value.slice(0, end)
+}
+
+/** Clips one section to `limit` UTF-8 bytes on a line boundary and records how many bytes were dropped. */
 function clipSectionOnLineBoundary(section: string, limit: number): string {
-  if (section.length <= limit) return section
+  const total = utf8Length(section)
+  if (total <= limit) return section
   if (limit <= 0) return ''
 
   const markerFor = (omitted: number): string => `\n...(diff truncated, ${omitted} bytes omitted)\n`
-  let marker = markerFor(section.length)
-  if (marker.length >= limit) return marker.slice(0, limit)
+  const fullMarker = markerFor(total)
+  if (utf8Length(fullMarker) >= limit) return prefixWithinBytes(fullMarker, limit)
 
-  const target = limit - marker.length
-  const lineBreak = section.lastIndexOf('\n', target)
+  const room = prefixWithinBytes(section, limit - utf8Length(fullMarker))
+  const lineBreak = room.lastIndexOf('\n')
   // a very long single line would waste most of the budget, so cut inside it instead
-  const cut = lineBreak > target / 2 ? lineBreak : target
-  marker = markerFor(section.length - cut)
-  return `${section.slice(0, Math.min(cut, Math.max(0, limit - marker.length)))}${marker}`
+  const kept = lineBreak >= 0 && utf8Length(room.slice(0, lineBreak)) > utf8Length(room) / 2 ? room.slice(0, lineBreak) : room
+  return `${kept}${markerFor(total - utf8Length(kept))}`
 }
 
 /** Water-filling split of `budget`: files that fit hand their slack back to the files that don't. */
@@ -76,15 +90,15 @@ function allocateBudgetFairly(sizes: number[], budget: number): number[] {
 }
 
 /**
- * Fits a diff into `budget` characters: the budget is shared fairly across files and each file is
+ * Fits a diff into `budget` UTF-8 bytes: the budget is shared fairly across files and each file is
  * cut on a line boundary, so one huge file cannot crowd out the rest and no line is cut in half.
  */
 export function truncateDiffForPrompt(diff: string, budget: number = STAGED_DIFF_BYTE_BUDGET): string {
-  if (diff.length <= budget) return diff
+  if (utf8Length(diff) <= budget) return diff
   const sections = splitDiffIntoFileSections(diff)
   if (sections.length <= 1) return clipSectionOnLineBoundary(diff, budget)
   const allocations = allocateBudgetFairly(
-    sections.map((section) => section.length),
+    sections.map(utf8Length),
     budget
   )
   return sections.map((section, i) => clipSectionOnLineBoundary(section, allocations[i]!)).join('')
