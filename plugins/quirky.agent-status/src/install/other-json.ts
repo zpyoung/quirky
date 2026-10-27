@@ -162,6 +162,24 @@ function museHooksPath(target: InstallEnv): string {
   return join(target.quirkyHome, 'agent-hooks', 'muse-hooks.json')
 }
 
+function museEnvRecordPath(target: InstallEnv): string {
+  return join(target.quirkyHome, 'agent-hooks', 'muse-env-added.json')
+}
+
+/** What install added to `managed_hooks_env_vars`, so remove leaves names and a key the user already had. */
+type MuseEnvRecord = { added: string[]; createdKey: boolean }
+
+function readMuseEnvRecord(path: string): MuseEnvRecord | null {
+  try {
+    const parsed: unknown = JSON.parse(readFileSync(path, 'utf8'))
+    if (typeof parsed !== 'object' || parsed === null) return null
+    const { added, createdKey } = parsed as { added?: unknown; createdKey?: unknown }
+    return { added: stringList(added), createdKey: createdKey === true }
+  } catch {
+    return null
+  }
+}
+
 function museHooksText(): string {
   const hooks = Object.fromEntries(MUSE_EVENTS.map((event) => [event, [claudeDefinition(hookCommand('muse'), {})]]))
   return serializeJson({ hooks })
@@ -178,7 +196,7 @@ function stringList(value: unknown): string[] {
 export const museInstaller: Installer = {
   agent: 'muse',
   source: 'muse',
-  files: (target) => [museSettingsPath(target), museHooksPath(target)],
+  files: (target) => [museSettingsPath(target), museHooksPath(target), museEnvRecordPath(target)],
   install(target) {
     if (isRealHomeInTest(target.home)) return { changed: [], message: REAL_HOME_SKIPPED }
     const settingsPath = museSettingsPath(target)
@@ -191,6 +209,9 @@ export const museInstaller: Installer = {
     const hooksText = museHooksText()
     const hooksChanged = !existsSync(hooksPath) || readFileSync(hooksPath, 'utf8') !== hooksText
     if (hooksChanged) writeFileAtomic(hooksPath, hooksText)
+    const recordPath = museEnvRecordPath(target)
+    const prior = readMuseEnvRecord(recordPath)
+    let record: MuseEnvRecord = { added: [], createdKey: false }
     const settingsChanged = editJsonFile(
       settingsPath,
       target.home,
@@ -198,30 +219,41 @@ export const museInstaller: Installer = {
         // Muse rejects a settings file without schema_version
         if (next.schema_version === undefined) next.schema_version = 1
         next.managed_hooks_path = hooksPath
-        const names = [...new Set([...stringList(next.managed_hooks_env_vars), ...MUSE_ENV_VARS])]
-        if (JSON.stringify(next.managed_hooks_env_vars) !== JSON.stringify(names)) next.managed_hooks_env_vars = names
+        const existing: unknown[] = Array.isArray(next.managed_hooks_env_vars) ? next.managed_hooks_env_vars : []
+        const missing = MUSE_ENV_VARS.filter((name) => !existing.includes(name))
+        record = {
+          added: [...new Set([...(prior?.added ?? []), ...missing])],
+          createdKey: prior?.createdKey ?? next.managed_hooks_env_vars === undefined
+        }
+        if (missing.length > 0 || !Array.isArray(next.managed_hooks_env_vars)) next.managed_hooks_env_vars = [...existing, ...missing]
       },
       { createIfMissing: true }
     )
+    const recordText = serializeJson(record)
+    if (!existsSync(recordPath) || readFileSync(recordPath, 'utf8') !== recordText) writeFileAtomic(recordPath, recordText)
     return { changed: [...(settingsChanged ? [settingsPath] : []), ...(hooksChanged ? [hooksPath] : [])] }
   },
   remove(target) {
     if (isRealHomeInTest(target.home)) return { changed: [], message: REAL_HOME_SKIPPED }
     const settingsPath = museSettingsPath(target)
     const hooksPath = museHooksPath(target)
+    const recordPath = museEnvRecordPath(target)
+    const record = readMuseEnvRecord(recordPath)
     const settingsChanged = editJsonFile(
       settingsPath,
       target.home,
       (next) => {
         if (next.managed_hooks_path !== hooksPath) return
         delete next.managed_hooks_path
-        if (next.managed_hooks_env_vars === undefined) return
-        const kept = stringList(next.managed_hooks_env_vars).filter((name) => !MUSE_ENV_VARS.includes(name))
-        if (kept.length > 0) next.managed_hooks_env_vars = kept
+        if (!Array.isArray(next.managed_hooks_env_vars)) return
+        const added = record?.added ?? []
+        const kept = next.managed_hooks_env_vars.filter((name) => !(typeof name === 'string' && added.includes(name)))
+        if (kept.length > 0 || !record?.createdKey) next.managed_hooks_env_vars = kept
         else delete next.managed_hooks_env_vars
       },
       { createIfMissing: false, isEmpty: (next) => JSON.stringify(next) === '{"schema_version":1}' }
     )
+    rmSync(recordPath, { force: true })
     const hooksChanged = existsSync(hooksPath)
     if (hooksChanged) rmSync(hooksPath, { force: true })
     return { changed: [...(settingsChanged ? [settingsPath] : []), ...(hooksChanged ? [hooksPath] : [])] }
