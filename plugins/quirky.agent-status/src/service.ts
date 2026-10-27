@@ -157,8 +157,12 @@ export class AgentStatusService {
   async hydrate(): Promise<void> {
     for (const { row, updatedAt } of this.rows.all()) {
       const session = await this.findSession(row.sessionId)
-      if (this.now() - updatedAt > RESTORE_MAX_AGE_MS || !session || session.kind !== 'terminal' || session.status === 'exited') {
+      if (!session || session.kind !== 'terminal' || session.status === 'exited') {
         this.rows.delete(row.sessionId)
+        continue
+      }
+      if (this.now() - updatedAt > RESTORE_MAX_AGE_MS) {
+        await this.commit(session, null)
         continue
       }
       const restored: AgentRow = row.state === 'done' ? row : { ...row, restoredUnconfirmed: true }
@@ -258,8 +262,9 @@ export class AgentStatusService {
       ...(input.agentStart !== undefined ? { agentStart: input.agentStart } : {})
     })
     // an event that can't start a row leaves the row it would have replaced alone
-    if (row === known || (starts && row === null)) return
+    if (starts && row === null) return
     await this.capture(session, normalized)
+    if (row === known) return
 
     if (row) this.attachFacet(row)
     else this.caches.delete(session.id)

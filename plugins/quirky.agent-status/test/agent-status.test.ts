@@ -271,6 +271,13 @@ describe('SC-12: provider capture', () => {
     expect(await rig.providerCalls()).toEqual([])
   })
 
+  test('an accepted hook that makes no row still stores the id', async () => {
+    rig = await Rig.start({ sessions: [{ agent: 'jcode' }] })
+    await rig.hook('jcode', { session_id: 'j1' }, { event: 'session_start' })
+    expect(await rig.row()).toBeNull()
+    expect(await rig.providerCalls()).toEqual([{ session: 's1', id: 'j1' }])
+  })
+
   test('an id that fails the stored-id rules is not stored', async () => {
     rig = await Rig.start()
     await play([['SessionStart', { source: 'startup', session_id: '--evil' }]])

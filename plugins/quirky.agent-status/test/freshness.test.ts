@@ -94,6 +94,19 @@ describe('SC-17: a daemon restart', () => {
     expect((await rig.session('s1')).agentStatus).toMatchObject({ display: 'working', restoredUnconfirmed: false })
   })
 
+  test('a row dropped for age clears the summary and coarse status of the session that survives', async () => {
+    rig = await Rig.start()
+    await prompt()
+    expect(await rig.session()).toMatchObject({ status: 'working', agentStatus: { display: 'working' } })
+
+    await rig.stop()
+    editStore(rig.storeFile(), (row) => ({ row, updatedAt: Date.now() - 8 * DAY }))
+
+    rig = await Rig.start({ home: rig.h.home, sessions: [] })
+    expect(await rig.row()).toBeNull()
+    expect(await rig.session()).toMatchObject({ status: 'running', agentStatus: null })
+  })
+
   test('a restored row yields to a different agent, and its own lead confirms it', async () => {
     rig = await Rig.start()
     await rig.hook('claude', { hook_event_name: 'UserPromptSubmit', prompt: 'go', session_id: 'abc' })
