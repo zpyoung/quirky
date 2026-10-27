@@ -467,5 +467,15 @@
 - **Confidence:** high
 - **Source:** locked by docs/loop/LOOP.md
 
+## D47: Build with Claude subagents implementing and Codex reviewing, in three waves
+- **Question:** subagent-driven development's preflight pairing and wave shape (LOOP.md step 5)
+- **Options:** `claude-task + codex`; another cross-family pair if Codex is unreachable
+- **Chose:** `claude-task + codex` (Codex gpt-6.1-sol verified reachable by the spec review's `select-model`). W1: six disjoint components (K kernel, P OSC fact, R producers, M markers, S sound files, T pure text/cooldown/sound modules); W2: the notifications plugin core, the desktop shell, the settings view; W3: e2e CLI and UI scenario tests. Full gate `bun run test && bun test scripts && bun run typecheck`, run in the background because it takes ~15 minutes.
+- **Why:** LOOP.md names the pairing; the tech spec's units split by file so W1 needs no serialisation
+- **Evidence:** docs/loop/LOOP.md step 5; tech.md "Build waves"
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** locked by docs/loop/LOOP.md
+
 ## Progress
 Specs written (logic.md, tech.md). Spec review done and fixed (D46). Next: subagent-driven development W1 (K, P, R, M, S), W2 (N, D, N6), W3 (e2e and UI tests), catch-up, Final Round 1, UI pass, land.
