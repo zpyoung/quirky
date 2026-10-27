@@ -198,5 +198,27 @@
 - **Revisit if:** Clock adjustments need stronger monotonic coordination or the shell adds another registered terminal root.
 - **Source:** assumed — autonomous
 
+## D19: Honor the merged process-ownership rules and review only this item's delta
+- **Question:** Roadmap catch-up brought six binding decision logs, process guardians and separately reviewed feature commits.
+- **Options:** Ignore new constraints/review inherited work as this feature; read all logs, migrate ownership and pin the merged integration baseline.
+- **Chose:** Read fix-sc31-first-shell-race, fix-test-process-leaks, m1-notifications, m2-sidebar-extras, m2-source-control-core and m3-terminal-dock in full through two scout reviews. No behavioral conflict found. The new standalone runner test now allocates a guardian-owned fresh home, propagates scope env, tracks its detached child and awaits cleanup; allocated home and its quoted-path fixture are removed even after owner death. Product PTY persistence stays unchanged.
+- **Why:** Crash-safe disposable process ownership is now binding. Parallel authorship did not waive newer integration decisions.
+- **Evidence:** Merged integration tip 8c348238967449d44c6dfd4cd07092032f91d780; post-merge build exit 0, runner subprocess file nine tests pass and typecheck exit 0. Build also emitted an icon.iconset-not-found warning; no session-info build failure occurred.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** A newer integration merge brings additional decisions.
+- **Source:** locked by docs/loop/decisions/fix-test-process-leaks.md
+
+## D20: Pin the final review baseline to the merged integration tip
+- **Question:** RUN_BASE precedes independently landed features now inherited through required catch-up.
+- **Options:** Review thousands of inherited lines as this item; review this item's complete delta against the merged integration parent while retaining full-tree gates/context.
+- **Chose:** Keep RUN_BASE immutable at 74fe2893700a55fef6a4e6fd5f1c46bf512834dc; final REVIEW_BASE is 8c348238967449d44c6dfd4cd07092032f91d780. The first final campaign uses REVIEW_BASE..HEAD, all SC-1–35 criteria, full-tree build/tests and live-file seam inspection. No session-info change is excluded; inherited items retain their own reviews.
+- **Why:** This is the actual feature diff after catch-up, not a reduction of the acceptance contract. The review campaign has not started, so its baseline is fixed before Round 1.
+- **Evidence:** Catch-up merge 5af64a0a61ea905ee37f5aacaf1c81442f053c05 has the tested item and integration tip as ancestry; final-review runner accepts an explicit target.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** Another catch-up occurs before the first final review; pin that integration parent instead.
+- **Source:** assumed — autonomous
+
 ## Progress
-Step 5 implementation accepted in combined tree: 62d14a2 contains all scoped code plus gate corrections. Targeted API, mounted UI, settings, focus, scanner/runner/cache tests and typecheck pass through narrow-1–4 and the final mounted rerun. Next: merge tested implementation, catch up with build/roadmap/read new decisions, build and dogfood real web UI, update user docs/native handoff, run full gates, final three-lens Gemini review plus one fix batch, then land.
+Tested implementation merged, then caught up with build/roadmap at 8c348238967449d44c6dfd4cd07092032f91d780. All six new logs read; process-ownership test adoption passes. Build/typecheck pass after catch-up. Real web dogfood is running on isolated fixture service sessionInfoDogfood6d; final full gates/review/landing remain pending. Never end while the fixture or dogfood worker is live.
