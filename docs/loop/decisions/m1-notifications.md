@@ -569,5 +569,25 @@
 - **Confidence:** high
 - **Source:** assumed — autonomous
 
+## D57: The UI pass: SC-6 and SC-46 to SC-50 all pass
+- **Question:** LOOP.md step 6, the window scenarios, run with using-apps-like-a-user (`--surface web --owner yours --unattended`) against a built quirkyd (`bun run build` at 1686b08) on a temporary HOME and QUIRKY_HOME, a fake claude, hooks posted through the installed shim, and `QUIRKY_SOUND_PLAYER` set to a recorder
+- **Options:** pass; fail and fix
+- **Chose:** pass, report run 20261027T121452-d3a2 (no findings): SC-46 with the person on main, a claude finish in fix-tests gave its card the amber bell "Unread" and a bold name and the toast "repo / fix-tests - Claude finished / All green."; with the person on fix-tests' shell tab, a second finish put "Unread agent completion" on the Claude tab of the terminal workspace with no toast (suppressed while focused), and showing the tab cleared it; SC-6 clicking the unread card cleared it and its sessions; SC-47 the palette's "Open notification settings" showed the view at its defaults; SC-48 Bong showed the 100% slider and its preview reached the recorder, a custom `.wav` path played and showed "Custom: <path>", and Bong again hid that line; SC-49 Enable Notifications off dimmed and disabled every dependent control but Show Menu Bar Icon; SC-50 Send Test Notification showed exactly one toast. One tool note: filling the custom path read NO_EFFECT to the script's value check although the next observation shows the Use button enabled by it. The daemon, its PTY host and a five-hour-old PTY host leaked from an earlier iteration's UI pass were stopped, and the temporary home was deleted. SC-46 was amended before the run to follow SC-6 (logic.md amendments).
+- **Why:** every goal's acting step was OBSERVED and its screenshot shows the result
+- **Evidence:** .quirk/using-apps-like-a-user/runs/20261027T121452-d3a2/report.md (local, uncommitted)
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** assumed — autonomous
+
+## D58: Six native-only scenarios go to the nightly run
+- **Question:** which scenarios only the real window can show (LOOP.md step 6)
+- **Options:** n/a
+- **Chose:** `docs/loop/native/m1-notifications.json`: the macOS banner text (SC-19), the chosen sound versus the system sound (SC-37), the tray dot while minimized (SC-44), the tray menu and its Settings… item (SC-45), Show Menu Bar Icon removing and restoring the item, and the Dock badge count and its reset on quit (SC-42)
+- **Why:** banners, sounds, the menu bar and the Dock are outside the webview the web pass drives
+- **Evidence:** docs/loop/NATIVE.md "Scenario files"
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** locked by docs/loop/LOOP.md
+
 ## Progress
 W1–W3 and both checkpoint fix batches merged; caught up with build/roadmap (m1-term-ui) at 9fcea51. In flight: the term-ui obligations task (bell in the terminal strip, `visibleSessions` from the terminal view and floating overlay) and the descriptor task (shared harness directories, window-presence fake). Next: merge both, full gate green, Final Round 1 (C, S, X deep over d325202..HEAD without docs), its fix batch, gate, the like-a-user web pass (SC-6, SC-46 to SC-50), docs/loop/native/m1-notifications.json, land. Briefs and run journal: session scratchpad sdd/; review drivers cp1/run_cp.py.
