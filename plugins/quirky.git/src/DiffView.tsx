@@ -1,36 +1,12 @@
 import { useEffect, useRef } from 'react'
 import { MergeView } from '@codemirror/merge'
-import { EditorState, type Extension } from '@codemirror/state'
+import { EditorState } from '@codemirror/state'
 import { EditorView, lineNumbers } from '@codemirror/view'
 import { oneDark } from '@codemirror/theme-one-dark'
-import { javascript } from '@codemirror/lang-javascript'
-import { json } from '@codemirror/lang-json'
-import { markdown } from '@codemirror/lang-markdown'
-import { python } from '@codemirror/lang-python'
 import type { GitDiffPair } from '@quirky/protocol'
 import { withoutTrailingNewline } from './diffText'
-import { languageForPath, type LanguageId } from './language'
-
-function languageExtension(id: LanguageId): Extension[] {
-  switch (id) {
-    case 'javascript':
-      return [javascript()]
-    case 'jsx':
-      return [javascript({ jsx: true })]
-    case 'typescript':
-      return [javascript({ typescript: true })]
-    case 'tsx':
-      return [javascript({ typescript: true, jsx: true })]
-    case 'json':
-      return [json()]
-    case 'markdown':
-      return [markdown()]
-    case 'python':
-      return [python()]
-    case 'plain':
-      return []
-  }
-}
+import { languageForPath } from './language'
+import { languageExtension } from './view/theme'
 
 /** Read-only side-by-side diff: the left side is `original`, the right side is `modified`. */
 export function DiffView({ diff }: { diff: GitDiffPair }) {
