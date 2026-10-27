@@ -14,7 +14,7 @@ import { PathChecker, createFileLinkProvider } from './link-provider'
 import { LinkPopover, type PopoverItem } from './LinkPopover'
 import { decideLinkClick, type LinkKind } from './links'
 import { resolveKeyAction } from './keys'
-import { createOsc52Base64, createOsc52Provider } from './osc52'
+import { createOsc52Base64, createOsc52Provider, createOsc52QueryGuard } from './osc52'
 import { planPaste, runPaste } from './paste'
 import { createInputGate, writeReplay } from './replayGate'
 import { SearchBox } from './SearchBox'
@@ -370,14 +370,17 @@ export function TerminalPaneView(props: TerminalPaneProps) {
 
     // xterm's clipboard addon takes the codec first at runtime although its typings list only the provider
     const ClipboardWithCodec = ClipboardAddon as unknown as new (base64: IBase64, provider: IClipboardProvider) => ITerminalAddon
-    let osc52: ITerminalAddon | null = null
+    let osc52: ITerminalAddon[] | null = null
     const syncOsc52 = () => {
       const wanted = latest.current.settings['allow-osc52']
       if (wanted && !osc52) {
-        osc52 = new ClipboardWithCodec(createOsc52Base64(), createOsc52Provider((text) => navigator.clipboard?.writeText(text)))
-        term.loadAddon(osc52)
+        osc52 = [
+          new ClipboardWithCodec(createOsc52Base64(), createOsc52Provider((text) => navigator.clipboard?.writeText(text))),
+          createOsc52QueryGuard()
+        ]
+        for (const addon of osc52) term.loadAddon(addon)
       } else if (!wanted && osc52) {
-        osc52.dispose()
+        for (const addon of osc52) addon.dispose()
         osc52 = null
       }
     }

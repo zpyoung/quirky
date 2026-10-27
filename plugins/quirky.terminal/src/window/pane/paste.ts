@@ -4,6 +4,7 @@ export const PASTE_DIRECT_BYTES = 64 * 1024
 export const PASTE_CHUNK_BYTES = 16 * 1024
 export const PASTE_MAX_BYTES = 16 * 1024 * 1024
 export const PASTE_TIMEOUT_MS = 30_000
+export const PASTE_CLOSER_TIMEOUT_MS = 1_000
 
 // a pasted ESC could close the bracket early and run the rest as typed input
 const INERT_ESCAPE = '␛'
@@ -13,13 +14,21 @@ export type PastePlan =
   /** `closer` ends a bracketed paste that was cut short; null when no bracket is open. */
   | { kind: 'write'; chunks: string[]; closer: string | null }
 
+/** True when the UTF-16 unit at `index` is a high surrogate followed by a low one. */
+function startsPair(text: string, index: number): boolean {
+  const unit = text.charCodeAt(index)
+  if (unit < 0xd800 || unit > 0xdbff || index + 1 >= text.length) return false
+  const next = text.charCodeAt(index + 1)
+  return next >= 0xdc00 && next <= 0xdfff
+}
+
 function utf8Length(text: string): number {
   let total = 0
   for (let index = 0; index < text.length; index += 1) {
     const unit = text.charCodeAt(index)
     if (unit < 0x80) total += 1
     else if (unit < 0x800) total += 2
-    else if (unit >= 0xd800 && unit <= 0xdbff && index + 1 < text.length) {
+    else if (startsPair(text, index)) {
       total += 4
       index += 1
     } else total += 3
@@ -35,7 +44,7 @@ function chunkByBytes(text: string, maxBytes: number): string[] {
   let index = 0
   while (index < text.length) {
     const unit = text.charCodeAt(index)
-    const pair = unit >= 0xd800 && unit <= 0xdbff && index + 1 < text.length
+    const pair = startsPair(text, index)
     const size = unit < 0x80 ? 1 : unit < 0x800 ? 2 : pair ? 4 : 3
     if (bytes + size > maxBytes) {
       chunks.push(text.slice(start, index))
@@ -74,13 +83,14 @@ export type PasteOutcome = 'done' | 'timeout' | 'failed'
 
 /**
  * Sends `chunks` one at a time, waiting for each write to finish, and gives up after
- * `timeoutMs` overall. A cut-short paste still sends `closer` so the program doesn't stay in
- * bracketed-paste mode.
+ * `timeoutMs` overall. A cut-short paste still tries to send `closer` so the program doesn't
+ * stay in bracketed-paste mode, but waits at most `closerTimeoutMs` for it, so this always
+ * settles shortly after the deadline.
  */
 export async function runPaste(
   chunks: readonly string[],
   send: (data: string) => Promise<unknown>,
-  options: { timeoutMs?: number; now?: () => number; closer: string | null }
+  options: { timeoutMs?: number; closerTimeoutMs?: number; now?: () => number; closer: string | null }
 ): Promise<PasteOutcome> {
   const now = options.now ?? Date.now
   const deadline = now() + (options.timeoutMs ?? PASTE_TIMEOUT_MS)
@@ -108,7 +118,14 @@ export async function runPaste(
     }
   }
   if (outcome !== 'done' && options.closer) {
-    await send(options.closer).catch(() => {})
+    let timer: ReturnType<typeof setTimeout> | undefined
+    await Promise.race([
+      send(options.closer).catch(() => {}),
+      new Promise<void>((resolve) => {
+        timer = setTimeout(resolve, options.closerTimeoutMs ?? PASTE_CLOSER_TIMEOUT_MS)
+      })
+    ])
+    clearTimeout(timer)
   }
   return outcome
 }

@@ -422,6 +422,7 @@ describe('OSC 52', () => {
     await pane.flush()
     await act(async () => void new Promise((resolve) => setTimeout(resolve, 0)))
     expect(written(fake).join('')).not.toContain(btoa('secret'))
+    expect(written(fake).filter((data) => data.includes(']52;'))).toEqual([])
   })
 
   test('the setting off blocks writes, and turning it on lets them through', async () => {
