@@ -128,6 +128,10 @@ files, not this one.
 | medium | high | [m0-registry D6](decisions/m0-registry.md) | A plugin's own contributions use short names, overrides use full IDs | assumed — autonomous |
 | medium | high | [m0-registry D9](decisions/m0-registry.md) | Disable works by plugin ID or contribution ID, before any code loads, and persists | locked by docs/roadmap.md (disable by ID); assumed — autonomous (cascade and persistence) |
 | medium | high | [m0-registry D11](decisions/m0-registry.md) | Plugins activate lazily on first use by default, or at startup when the manifest says so | locked by docs/roadmap.md (lazy); assumed — autonomous (trigger set) |
+| medium | high | [m3-terminal-dock D1](decisions/m3-terminal-dock.md) | Build the dock as an opt-in built-in plugin with its own composer | locked by docs/roadmap.md |
+| medium | high | [m3-terminal-dock D3](decisions/m3-terminal-dock.md) | Preserve macOS parity and do not reproduce the three observed Orca defects | locked by docs/roadmap.md |
+| medium | high | [m3-terminal-dock D7](decisions/m3-terminal-dock.md) | Missing pane and send APIs alone are not reasons to block | assumed — autonomous |
+| medium | high | [m3-terminal-dock D9](decisions/m3-terminal-dock.md) | Prefer daemon-authoritative state and a per-PTY send queue if scope is resolved | assumed — autonomous |
 | medium | high | [m2-ask-parity D5](decisions/m2-ask-parity.md) | The question schema is Orca's, plus Quirky's optional `title` | locked by research/orca-features/ask.md |
 | medium | high | [m2-ask-parity D9](decisions/m2-ask-parity.md) | The deadline lives in the daemon, is stored, and survives a restart | locked by research/orca-features/ask.md |
 | medium | high | [m2-ask-parity D12](decisions/m2-ask-parity.md) | Drafts are Orca's per-question partial, saved by the window 500 ms after typing stops | locked by research/orca-features/ask.md |
@@ -514,6 +518,11 @@ files, not this one.
 | easy | high | [m0-registry D32](decisions/m0-registry.md) | Wave 2 checkpoint findings: fix all four defects | assumed — autonomous |
 | easy | high | [m0-registry D33](decisions/m0-registry.md) | A long QUIRKY_HOME breaks the PTY host's socket; logged, not fixed here | deferred: platform |
 | easy | high | [m0-registry D34](decisions/m0-registry.md) | The final review loop closed after three rounds with no open finding | assumed — autonomous |
+| easy | high | [m3-terminal-dock D2](decisions/m3-terminal-dock.md) | Run unattended brainstorming and select every relevant gray area | locked by docs/loop/LOOP.md |
+| easy | high | [m3-terminal-dock D4](decisions/m3-terminal-dock.md) | Bind omp OpenAI implementers to Gemini review after Opus proved unavailable | assumed — autonomous |
+| easy | high | [m3-terminal-dock D5](decisions/m3-terminal-dock.md) | Linux and Windows execution remain deferred | deferred: platform |
+| easy | high | [m3-terminal-dock D6](decisions/m3-terminal-dock.md) | Claude session-only picker controls avoid the global-settings defect | locked by docs/roadmap.md |
+| easy | high | [m3-terminal-dock D8](decisions/m3-terminal-dock.md) | Do not silently narrow parity or resurrect explicitly dropped subsystems | assumed — autonomous |
 | easy | high | [m2-ask-parity D1](decisions/m2-ask-parity.md) | In scope: the roadmap's five ask-parity points plus what they need to be testable | locked by docs/roadmap.md |
 | easy | high | [m2-ask-parity D2](decisions/m2-ask-parity.md) | Out of scope: hand-off, liveness, the wait cap, the 3-minute notification, rich previews, attention markers | locked by docs/roadmap.md |
 | easy | high | [m2-ask-parity D4](decisions/m2-ask-parity.md) | Brainstorming runs headless with the standard gray areas, all selected | locked by docs/loop/LOOP.md |

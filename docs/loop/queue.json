@@ -255,8 +255,7 @@
         "m1-agent-status",
         "m1-providers"
       ],
-      "status": "in-progress",
-      "lane": 5
+      "status": "blocked"
     },
     {
       "id": "m3-handoff",
