@@ -1,6 +1,6 @@
 import type { CliArgs, CliContext } from '@quirky/protocol'
 import type { FloatingState, QuickCommand } from '../layout/types'
-import { atMost, paneIdOf, positional, requiredNumber, showWorkspace, stringFlag, stringFlags, type Handler } from './shared'
+import { atMost, paneIdOf, positional, requiredNumber, showWorkspace, stringFlag, stringFlags, workspaceParam, type Handler } from './shared'
 import { floatingPairs, quickCommandRows } from './text'
 
 const call = (ctx: CliContext, method: string, params: Record<string, unknown>) => ctx.call(`quirky.terminal/${method}`, params)
@@ -61,7 +61,7 @@ function showFloating(ctx: CliContext, state: unknown): void {
 export const quickFloatingCommands: Record<string, Handler> = {
   async 'quick-command-list'(args, ctx) {
     atMost(args, ctx, 0)
-    showCommands(ctx, await call(ctx, 'quickCommands', args.flags.all === true ? { all: true } : {}))
+    showCommands(ctx, await call(ctx, 'quickCommands', { ...(args.flags.all === true ? { all: true } : {}), ...workspaceParam(args, ctx) }))
   },
   'quick-command-add': addCommand,
   'quick-command-update': updateCommand,

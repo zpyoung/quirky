@@ -25,6 +25,14 @@ export type ReconcileOutput = {
   notes: string[]
 }
 
+const GENERATED_SHELL_TITLE = /^Shell( \d+)?$/
+
+/** The default title of an adopted tab: its session's own title unless that is the session plugin's generated shell title. */
+function adoptedTitle(session: Session, existingTitles: readonly string[]): string {
+  const generated = session.kind === 'terminal' && session.agent === 'shell' && GENERATED_SHELL_TITLE.test(session.title)
+  return generated ? nextTerminalTitle(existingTitles) : session.title
+}
+
 const isTabbed = (session: Session) => session.kind === 'terminal' || session.kind === 'structured'
 
 /**
@@ -57,7 +65,7 @@ export function reconcileWorkspace(input: ReconcileInput): ReconcileOutput {
     .sort((a, b) => a.createdAt - b.createdAt || a.id.localeCompare(b.id))
   for (const session of unbound) {
     const titles = workspaceTabs(ws).map((tab) => tab.defaultTitle)
-    const defaultTitle = session.kind === 'terminal' && session.agent === 'shell' ? nextTerminalTitle(titles) : session.title
+    const defaultTitle = adoptedTitle(session, titles)
     apply(appendTab(ws, ws.activeGroup, makeTab(ids, { defaultTitle, session: session.id, now })))
     notes.push(`added a tab for session ${session.id}`)
   }

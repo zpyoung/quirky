@@ -3056,6 +3056,10 @@
         "words": "quick-command list",
         "summary": "list quick commands visible to this worktree",
         "flags": {
+          "worktree": {
+            "type": "string",
+            "description": "the worktree whose repo scopes the list (a selector); default the caller's"
+          },
           "all": {
             "type": "boolean",
             "description": "list every quick command"
