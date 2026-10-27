@@ -1164,6 +1164,26 @@
         "m2-sidebar-extras"
       ],
       "status": "todo"
+    },
+    {
+      "id": "fix-flaky-quirky-worktree-create",
+      "milestone": "M1",
+      "title": "Fix the flaky plugins/quirky.worktree/test/create.test.ts: it failed under load in 5 full-suite runs and passed when rerun alone (see <git common dir>/build-loop/flakes.log). Find the timing assumption with quirk:systematic-debugging, reproducing on the test host with bun scripts/suite.ts plugins/quirky.worktree (never generate CPU load on the Mac), and fix the test or the code it exposes",
+      "docs": [
+        "worktrees.md"
+      ],
+      "deps": [],
+      "status": "todo"
+    },
+    {
+      "id": "fix-flaky-terminal-features-pane",
+      "milestone": "M1",
+      "title": "Fix the flaky plugins/quirky.terminal/test/e2e-ui/features-pane.test.ts, a macOS-only test (scripts/test-on-macos.txt) that failed in 4 runs and passed when rerun alone (see <git common dir>/build-loop/flakes.log). Find the timing assumption with quirk:systematic-debugging from the logged failures, without generating CPU load on the Mac, and fix the test or the code it exposes",
+      "docs": [
+        "term-ui.md"
+      ],
+      "deps": [],
+      "status": "todo"
     }
   ]
 }
