@@ -1,6 +1,7 @@
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, unlinkSync, writeFileSync } from 'node:fs'
+import { appendFileSync, chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, unlinkSync, writeFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { QuirkyClient } from '@quirky/protocol'
+import { createProcessScope, type ProcessScope } from '../../../../scripts/test-support/process-scope'
 import { isDaemonAlive, readRuntime, rpcUrl } from '@quirky/protocol/node'
 
 const REPO_ROOT = resolve(import.meta.dir, '../../../..')
@@ -37,6 +38,7 @@ export type StartOptions = {
 export type CliResult = { code: number; stdout: string; stderr: string }
 
 export type E2E = {
+  processScope: ProcessScope
   /** `QUIRKY_HOME` of the daemon under test. */
   home: string
   /** The `HOME` of the daemon and everything it launches. */
@@ -49,6 +51,8 @@ export type E2E = {
   addFake(name: string, behavior?: FakeBehavior | true): void
   removeFake(name: string): void
   fakeLog(name: string): FakeEvent[]
+  /** Makes the running fake `name` write `text` to its terminal, as if the agent had printed it. */
+  print(name: string, text: string): void
   /** Resolves with the log once `predicate` holds for it; rejects after `timeoutMs`. */
   waitForFakeLog(name: string, predicate: (events: FakeEvent[]) => boolean, timeoutMs: number): Promise<FakeEvent[]>
   call(method: string, params?: Record<string, unknown>): Promise<unknown>
@@ -58,14 +62,6 @@ export type E2E = {
   cleanup(): Promise<void>
 }
 
-function isAlive(pid: number): boolean {
-  try {
-    process.kill(pid, 0)
-    return true
-  } catch {
-    return false
-  }
-}
 
 async function waitUntil<T>(check: () => T | undefined | null | false | Promise<T | undefined | null | false>, timeoutMs: number, what: string): Promise<T> {
   const deadline = Date.now() + timeoutMs
@@ -77,19 +73,6 @@ async function waitUntil<T>(check: () => T | undefined | null | false | Promise<
   }
 }
 
-async function terminate(pid: number): Promise<void> {
-  if (!pid || !isAlive(pid)) return
-  try {
-    process.kill(pid, 'SIGTERM')
-  } catch {}
-  const deadline = Date.now() + 2000
-  while (isAlive(pid) && Date.now() < deadline) await Bun.sleep(20)
-  if (isAlive(pid)) {
-    try {
-      process.kill(pid, 'SIGKILL')
-    } catch {}
-  }
-}
 
 function gitInit(repo: string): void {
   mkdirSync(repo, { recursive: true })
@@ -117,90 +100,99 @@ function gitInit(repo: string): void {
 export async function startAgentsE2E(options: StartOptions = {}): Promise<E2E> {
   const root = realpathSync(mkdtempSync('/tmp/qa-'))
   const home = join(root, 'q')
+  let scope: ProcessScope
+  try {
+    mkdirSync(home, { recursive: true })
+    scope = createProcessScope(home)
+  } catch (error) {
+    try {
+      rmSync(root, { recursive: true, force: true })
+    } catch (cleanupError) {
+      throw new AggregateError([error, cleanupError], 'agents E2E scope startup and cleanup failed')
+    }
+    throw error
+  }
   const userHome = join(root, 'home')
   const fakebin = join(root, 'fakebin')
   const shells = join(root, 'shells')
   const repo = join(root, 'repo')
-  for (const dir of [home, userHome, fakebin, shells]) mkdirSync(dir, { recursive: true })
-
-  const fakeShell = join(shells, 'sh')
-  writeFileSync(fakeShell, '#!/bin/sh\n[ "$1" = "-l" ] && shift\nexec /bin/sh "$@"\n')
-  chmodSync(fakeShell, 0o755)
-
-  const logPath = (name: string) => join(fakebin, `${name}.log.jsonl`)
-  const addFake = (name: string, behavior: FakeBehavior | true = true) => {
-    const path = join(fakebin, name)
-    writeFileSync(path, `#!${process.execPath}\nimport ${JSON.stringify(FAKE_AGENT)}\n`)
-    chmodSync(path, 0o755)
-    rmSync(logPath(name), { force: true })
-    if (behavior === true) rmSync(`${path}.json`, { force: true })
-    else writeFileSync(`${path}.json`, JSON.stringify(behavior))
-  }
-  const removeFake = (name: string) => {
-    unlinkSync(join(fakebin, name))
-    rmSync(join(fakebin, `${name}.json`), { force: true })
-  }
-  const fakeLog = (name: string): FakeEvent[] => {
-    const path = logPath(name)
-    if (!existsSync(path)) return []
-    return readFileSync(path, 'utf8')
-      .split('\n')
-      .filter(Boolean)
-      .map((line) => JSON.parse(line) as FakeEvent)
-  }
-  for (const [name, behavior] of Object.entries(options.fakes ?? {})) addFake(name, behavior)
-
-  const env: Record<string, string> = {
-    QUIRKY_HOME: home,
-    HOME: userHome,
-    SHELL: fakeShell,
-    PATH: `${fakebin}:/usr/bin:/bin`,
-    QUIRKY_AGENT_SEARCH_DIRS: options.searchDirs ?? '',
-    QUIRKY_PORT: '0',
-    QUIRKY_TEST_AGENT_TIME_SCALE: String(options.timeScale ?? 1),
-    ...options.extraEnv
-  }
-
-  const daemonLog = join(root, 'daemon.log')
-  const daemon = Bun.spawn([process.execPath, DAEMON_MAIN], { env, stdout: Bun.file(daemonLog), stderr: Bun.file(daemonLog) })
-  const cliProcs = new Set<ReturnType<typeof Bun.spawn>>()
   let client: QuirkyClient | undefined
   let hostPid = 0
   let cleaning: Promise<void> | undefined
 
   const cleanup = (): Promise<void> => {
     cleaning ??= (async () => {
-      if (client && !hostPid) {
+      const errors: unknown[] = []
+      const step = async (run: () => void | Promise<void>) => {
         try {
-          hostPid = ((await client.call('status.get', {})) as { ptyHost: { pid: number } }).ptyHost.pid
-        } catch {}
-      }
-      client?.close()
-      for (const proc of cliProcs) proc.kill('SIGKILL')
-      if (daemon.exitCode === null) {
-        daemon.kill('SIGTERM')
-        await Promise.race([daemon.exited, Bun.sleep(5000)])
-        if (daemon.exitCode === null) daemon.kill('SIGKILL')
-      }
-      await terminate(hostPid)
-      for (const entry of existsSync(fakebin) ? readdirSync(fakebin) : []) {
-        if (!entry.endsWith('.log.jsonl')) continue
-        const events = fakeLog(entry.slice(0, -'.log.jsonl'.length))
-        const exited = events.some((event) => event.type === 'exit')
-        for (const event of events) {
-          if (event.type === 'start' && !exited && isAlive(event.pid)) {
-            try {
-              process.kill(event.pid, 'SIGKILL')
-            } catch {}
-          }
+          await run()
+        } catch (error) {
+          errors.push(error)
         }
       }
-      rmSync(root, { recursive: true, force: true })
+      await step(() => {
+        try {
+          client?.close()
+        } finally {
+          client = undefined
+        }
+      })
+      await step(() => scope.cleanup())
+      await step(() => rmSync(root, { recursive: true, force: true }))
+      if (errors.length > 0) throw errors[0]
     })()
     return cleaning
   }
 
   try {
+    for (const dir of [userHome, fakebin, shells]) mkdirSync(dir, { recursive: true })
+
+    const fakeShell = join(shells, 'sh')
+    writeFileSync(fakeShell, '#!/bin/sh\n[ "$1" = "-l" ] && shift\nexec /bin/sh "$@"\n')
+    chmodSync(fakeShell, 0o755)
+
+    const logPath = (name: string) => join(fakebin, `${name}.log.jsonl`)
+    const addFake = (name: string, behavior: FakeBehavior | true = true) => {
+      const path = join(fakebin, name)
+      writeFileSync(path, `#!${process.execPath}\nimport ${JSON.stringify(FAKE_AGENT)}\n`)
+      chmodSync(path, 0o755)
+      rmSync(logPath(name), { force: true })
+      rmSync(`${path}.outbox`, { force: true })
+      if (behavior === true) rmSync(`${path}.json`, { force: true })
+      else writeFileSync(`${path}.json`, JSON.stringify(behavior))
+    }
+    const removeFake = (name: string) => {
+      unlinkSync(join(fakebin, name))
+      rmSync(join(fakebin, `${name}.json`), { force: true })
+      rmSync(join(fakebin, `${name}.outbox`), { force: true })
+    }
+    const fakeLog = (name: string): FakeEvent[] => {
+      const path = logPath(name)
+      if (!existsSync(path)) return []
+      return readFileSync(path, 'utf8')
+        .split('\n')
+        .filter(Boolean)
+        .map((line) => JSON.parse(line) as FakeEvent)
+    }
+    for (const [name, behavior] of Object.entries(options.fakes ?? {})) addFake(name, behavior)
+
+    const env: Record<string, string> = {
+      QUIRKY_HOME: home,
+      HOME: userHome,
+      SHELL: fakeShell,
+      PATH: `${fakebin}:/usr/bin:/bin`,
+      QUIRKY_AGENT_SEARCH_DIRS: options.searchDirs ?? '',
+      QUIRKY_PORT: '0',
+      QUIRKY_TEST_AGENT_TIME_SCALE: String(options.timeScale ?? 1),
+      ...options.extraEnv
+    }
+
+    const daemonLog = join(root, 'daemon.log')
+    const daemon = scope.spawn([process.execPath, DAEMON_MAIN], {
+      env: { ...env, ...scope.env },
+      stdout: Bun.file(daemonLog),
+      stderr: Bun.file(daemonLog)
+    })
     const runtime = await waitUntil(async () => {
       if (daemon.exitCode !== null) throw new Error(`quirkyd exited ${daemon.exitCode}: ${readFileSync(daemonLog, 'utf8')}`)
       const info = readRuntime(home)
@@ -211,30 +203,30 @@ export async function startAgentsE2E(options: StartOptions = {}): Promise<E2E> {
 
     gitInit(repo)
     const harness: E2E = {
+      processScope: scope,
       home,
       userHome,
       fakebin,
       repo,
       client,
       async cli(args) {
-        const proc = Bun.spawn([process.execPath, CLI_MAIN, ...args], {
+        const proc = scope.spawn([process.execPath, CLI_MAIN, ...args], {
           cwd: repo,
-          env: { PATH: env.PATH!, HOME: userHome, QUIRKY_HOME: home },
+          env: { PATH: env.PATH!, HOME: userHome, QUIRKY_HOME: home, ...scope.env },
           stdout: 'pipe',
           stderr: 'pipe'
         })
-        cliProcs.add(proc)
         const [stdout, stderr, code] = await Promise.all([
           new Response(proc.stdout as ReadableStream).text(),
           new Response(proc.stderr as ReadableStream).text(),
           proc.exited
         ])
-        cliProcs.delete(proc)
         return { code, stdout, stderr }
       },
       addFake,
       removeFake,
       fakeLog,
+      print: (name, text) => appendFileSync(`${join(fakebin, name)}.outbox`, text),
       async waitForFakeLog(name, predicate, timeoutMs) {
         return waitUntil(() => {
           const events = fakeLog(name)
@@ -249,7 +241,11 @@ export async function startAgentsE2E(options: StartOptions = {}): Promise<E2E> {
     if (added.code !== 0) throw new Error(`quirky repo add failed: ${added.stderr || added.stdout}`)
     return harness
   } catch (error) {
-    await cleanup()
+    try {
+      await cleanup()
+    } catch (cleanupError) {
+      throw new AggregateError([error, cleanupError], 'agents E2E startup and cleanup failed')
+    }
     throw error
   }
 }

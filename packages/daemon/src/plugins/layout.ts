@@ -1,4 +1,5 @@
 import {
+  DESKTOP_AWAY_MS,
   parseContributionId,
   validateValue,
   type QuirkyEvent,
@@ -35,6 +36,10 @@ export type LayoutServiceOptions = {
   sendTo: (conn: ClientConn, event: QuirkyEvent) => void
   /** How long a routed command waits for its window; defaults to 30 seconds. */
   commandTimeoutMs?: number
+  /** How long without input before a window stops counting as present; defaults to `DESKTOP_AWAY_MS`. */
+  awayMs?: number
+  /** The clock for presence; defaults to `Date.now`. */
+  now?: () => number
 }
 
 type Report = { state: unknown; order: number }
@@ -62,6 +67,16 @@ function jsonLength(value: unknown): number {
 
 function isPanelWidth(value: unknown): value is number {
   return typeof value === 'number' && Number.isInteger(value) && value >= PANEL_WIDTH_MIN && value <= PANEL_WIDTH_MAX
+}
+
+function sameValue(a: unknown, b: unknown): boolean {
+  if (a === b) return true
+  if (typeof a !== 'object' || typeof b !== 'object' || a === null || b === null) return false
+  if (Array.isArray(a) !== Array.isArray(b)) return false
+  const left = a as Record<string, unknown>
+  const right = b as Record<string, unknown>
+  const keys = Object.keys(left)
+  return keys.length === Object.keys(right).length && keys.every((key) => key in right && sameValue(left[key], right[key]))
 }
 
 function readStored(value: unknown): UiLayout {
@@ -105,8 +120,16 @@ export class LayoutService {
   private readonly pending = new Map<string, PendingCommand>()
   private reportCounter = 0
   private lastFocusedAt = 0
+  private awayMs: number
 
-  constructor(private readonly options: LayoutServiceOptions) {}
+  constructor(private readonly options: LayoutServiceOptions) {
+    this.awayMs = options.awayMs ?? DESKTOP_AWAY_MS
+  }
+
+  /** Replaces the away threshold; the daemon sets it once at startup. */
+  setAwayMs(awayMs: number): void {
+    this.awayMs = awayMs
+  }
 
   /**
    * The effective layout, the connected windows, and every slot of the UI model with what it shows
@@ -209,23 +232,40 @@ export class LayoutService {
       throw invalidParams('report is over 64 KiB')
     }
     if (state === null) {
-      this.reports.get(slot)?.delete(conn.id)
+      const existed = this.reports.get(slot)?.delete(conn.id)
+      if (existed) this.options.broadcast({ type: 'ui.report.changed', slot, connId: conn.id })
       return
     }
     const bySlot = this.reports.get(slot) ?? new Map<number, Report>()
+    const previous = bySlot.get(conn.id)
+    const unchanged = previous !== undefined && sameValue(previous.state, state)
     bySlot.set(conn.id, { state, order: ++this.reportCounter })
     this.reports.set(slot, bySlot)
+    if (!unchanged) this.options.broadcast({ type: 'ui.report.changed', slot, connId: conn.id })
   }
 
   /** Records that a window gained (`true`) or lost focus; the latest window to gain it is the focused one. */
   windowFocused(conn: ClientConn, focused: boolean): void {
     this.requireWindow(conn)
+    const before = this.focusedConn()
     if (focused) {
       this.lastFocusedAt = Math.max(Date.now(), this.lastFocusedAt + 1)
       conn.focusedAt = this.lastFocusedAt
     } else {
       delete conn.focusedAt
     }
+    if (this.focusedConn() !== before) this.announceWindows()
+  }
+
+  /**
+   * Records input in a window, keeping it present. Announces the windows only when this turns the
+   * window from away to present. InvalidParams for a connection that is not a window.
+   */
+  windowActivity(conn: ClientConn): void {
+    this.requireWindow(conn)
+    const wasPresent = this.isPresent(conn)
+    conn.inputAt = this.now()
+    if (!wasPresent) this.announceWindows()
   }
 
   /**
@@ -263,15 +303,20 @@ export class LayoutService {
     })
   }
 
-  /** Forgets a disconnected window's reports and fails commands routed to it. */
+  /**
+   * Forgets a disconnected window's reports, telling plugins about each one removed, fails commands
+   * routed to it, and announces the remaining windows.
+   */
   dropConnection(conn: ClientConn): void {
     for (const [slot, bySlot] of this.reports) {
-      bySlot.delete(conn.id)
+      const existed = bySlot.delete(conn.id)
       if (bySlot.size === 0) this.reports.delete(slot)
+      if (existed) this.options.broadcast({ type: 'ui.report.changed', slot, connId: conn.id })
     }
     for (const [requestId, pending] of this.pending) {
       if (pending.conn === conn) this.settle(requestId, (settled) => settled.reject(unanswered()))
     }
+    if (conn.role === 'ui') this.announceWindows()
   }
 
   private settle(requestId: string, finish: (pending: PendingCommand) => void): void {
@@ -286,16 +331,37 @@ export class LayoutService {
     if (conn.role !== 'ui') throw invalidParams('only a window (role ui) can do this')
   }
 
-  private windows(): UiWindowInfo[] {
-    const open = [...this.options.clients()].filter((conn) => conn.role === 'ui' && !conn.closed)
-    const latest = open.reduce<ClientConn | undefined>(
+  private now(): number {
+    return (this.options.now ?? Date.now)()
+  }
+
+  private isPresent(conn: ClientConn): boolean {
+    return conn.inputAt !== undefined && this.now() - conn.inputAt < this.awayMs
+  }
+
+  private openWindows(): ClientConn[] {
+    return [...this.options.clients()].filter((conn) => conn.role === 'ui' && !conn.closed)
+  }
+
+  private focusedConn(): ClientConn | undefined {
+    return this.openWindows().reduce<ClientConn | undefined>(
       (best, conn) => (conn.focusedAt !== undefined && conn.focusedAt > (best?.focusedAt ?? 0) ? conn : best),
       undefined
     )
-    return open.map((conn) => ({
+  }
+
+  private announceWindows(): void {
+    this.options.broadcast({ type: 'ui.window.changed', windows: this.windows() })
+  }
+
+  private windows(): UiWindowInfo[] {
+    const latest = this.focusedConn()
+    return this.openWindows().map((conn) => ({
       connId: conn.id,
       ...(conn.name ? { name: conn.name } : {}),
-      focused: conn === latest
+      focused: conn === latest,
+      inputAt: conn.inputAt ?? null,
+      present: this.isPresent(conn)
     }))
   }
 

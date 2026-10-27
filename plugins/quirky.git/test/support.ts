@@ -1,7 +1,7 @@
 import { mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
-import { dirname, join } from 'node:path'
+import { basename, dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import type { QuirkyClient, QuirkyEvent, Worktree } from '@quirky/protocol'
+import type { GitDiff, GitStatus, QuirkyClient, QuirkyEvent, Worktree } from '@quirky/protocol'
 import { useTestGit, type FakeGit, createFakeGit } from '@quirky/git/testing'
 import type { GitApi } from '@quirky/git'
 import { startHarness, type Harness } from '../../../packages/daemon/test/helpers'
@@ -35,6 +35,50 @@ function worktree(id: string, path: string, name: string, isMain: boolean): Work
     isMain,
     name,
     ...WORKTREE_DEFAULTS
+  }
+}
+
+/**
+ * The daemon half reads status through `statusV2`, diffs through `diffSource` and stages through
+ * `stagePaths`/`unstagePaths`; the fake answers them from memory and records the calls beside the v1 ones.
+ */
+function fakeDaemonGit(git: FakeGit): void {
+  const record = (fn: string, ...args: unknown[]) => git.calls.push({ fn, args })
+  git.statusV2 = async (cwd): Promise<GitStatus> => {
+    record('statusV2', cwd)
+    return {
+      branch: basename(cwd),
+      upstream: null,
+      ahead: 0,
+      behind: 0,
+      files: [{ path: 'a.txt', index: ' ', worktree: 'M', untracked: false }],
+      head: 'a'.repeat(40),
+      detached: false,
+      unborn: false,
+      entries: [{ path: 'a.txt', area: 'unstaged', status: 'modified' }],
+      operation: 'none',
+      capped: false,
+      upstreamStatus: { hasUpstream: false, name: null, sha: null, ahead: 0, behind: 0, behindPatchEquivalent: null },
+      busy: null
+    }
+  }
+  git.diffSource = async (cwd, request): Promise<GitDiff> => {
+    record('diffSource', cwd)
+    return {
+      path: request.path,
+      staged: request.source === 'staged',
+      original: 'old',
+      modified: 'new',
+      binary: false,
+      source: request.source,
+      kind: 'text'
+    }
+  }
+  git.stagePaths = async (cwd, paths) => {
+    record('stagePaths', cwd, paths)
+  }
+  git.unstagePaths = async (cwd, paths) => {
+    record('unstagePaths', cwd, paths)
   }
 }
 
@@ -77,6 +121,7 @@ export async function startGitHarness(
   mkdirSync(join(fixLogin.path, 'src'), { recursive: true })
 
   const git = (options.git as FakeGit | undefined) ?? createFakeGit()
+  if (!options.git) fakeDaemonGit(git)
   let restoreEnv = () => {}
   if (options.realGit) {
     restoreEnv = initRepo(main.path)

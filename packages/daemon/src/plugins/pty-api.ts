@@ -126,9 +126,9 @@ export function createPtyApi(
       live()
       await pty.request('resize', { sessionId, cols, rows })
     },
-    async read(sessionId, lines) {
+    async read(sessionId, lines, options) {
       live()
-      return pty.request('read', { sessionId, lines })
+      return pty.request('read', { sessionId, lines, ...(options?.unwrap === true ? { unwrap: true } : {}) })
     },
     async kill(sessionId, signal, options) {
       live()

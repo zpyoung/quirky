@@ -1,0 +1,5 @@
+title: hermes
+Done. The config is updated.
+
+❯ Ask me anything…
+─ ready │ 3m 12s │ 41% ctx

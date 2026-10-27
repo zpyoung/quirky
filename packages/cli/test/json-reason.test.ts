@@ -22,7 +22,7 @@ describe('the --json error carries the daemon error reason', () => {
     const result = await run(['acme.notes', 'fail', '--json'])
     expect(result.code).toBe(1)
     expect(JSON.parse(result.stdout)).toEqual({
-      error: { code: 'conflict', message: 'setup needs a decision', reason: 'setup-decision-required' }
+      error: { code: 'conflict', message: 'setup needs a decision', reason: 'setup-decision-required', data: { reason: 'setup-decision-required' } }
     })
   })
 
@@ -33,10 +33,24 @@ describe('the --json error carries the daemon error reason', () => {
     expect(JSON.parse(result.stdout)).toEqual({ error: { code: 'conflict', message: 'plain conflict' } })
   })
 
-  test('data whose reason is not a string has no reason key', async () => {
+  test('data whose reason is not a string has no reason key but is still printed', async () => {
     seedFailure({ code: RpcErrorCode.InvalidParams, message: 'bad', data: { reason: 7 } })
     const result = await run(['acme.notes', 'fail', '--json'])
-    expect(JSON.parse(result.stdout)).toEqual({ error: { code: 'invalid-params', message: 'bad' } })
+    expect(JSON.parse(result.stdout)).toEqual({ error: { code: 'invalid-params', message: 'bad', data: { reason: 7 } } })
+  })
+
+  test('the whole data object is printed under error.data beside the reason', async () => {
+    const data = { reason: 'hook', summary: 'Lint failed during commit.', output: 'src/a.ts:1 unexpected token\n' }
+    seedFailure({ code: RpcErrorCode.Conflict, message: 'commit hook failed', data })
+    const result = await run(['acme.notes', 'fail', '--json'])
+    expect(result.code).toBe(1)
+    expect(JSON.parse(result.stdout)).toEqual({ error: { code: 'conflict', message: 'commit hook failed', reason: 'hook', data } })
+  })
+
+  test('data that is not an object is not printed', async () => {
+    seedFailure({ code: RpcErrorCode.Conflict, message: 'bad', data: 'oops' })
+    const result = await run(['acme.notes', 'fail', '--json'])
+    expect(JSON.parse(result.stdout)).toEqual({ error: { code: 'conflict', message: 'bad' } })
   })
 
   test('text mode output is unchanged', async () => {
@@ -45,5 +59,12 @@ describe('the --json error carries the daemon error reason', () => {
     expect(result.code).toBe(1)
     expect(result.stdout).toBe('')
     expect(result.stderr).toBe('quirky: setup needs a decision\n')
+  })
+
+  test('text mode ignores data beyond the message', async () => {
+    seedFailure({ code: RpcErrorCode.Conflict, message: 'commit hook failed', data: { reason: 'hook', output: 'noisy' } })
+    const result = await run(['acme.notes', 'fail'])
+    expect(result.stdout).toBe('')
+    expect(result.stderr).toBe('quirky: commit hook failed\n')
   })
 })

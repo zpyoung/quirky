@@ -4,7 +4,7 @@ import { usePluginHost, usePluginState } from '../context'
 /** One activity control per panel; the open panel's button is pressed and badges show beside its title. */
 export function PanelToggles({ vertical = false }: { vertical?: boolean }) {
   const host = usePluginHost()
-  const { model, layout, badges } = usePluginState()
+  const { model, layout, badges, badgeTitles } = usePluginState()
   const [menu, setMenu] = useState<{ panelId: string; x: number; y: number } | null>(null)
   const menuRef = useRef<HTMLDivElement>(null)
 
@@ -44,7 +44,7 @@ export function PanelToggles({ vertical = false }: { vertical?: boolean }) {
           >
             {panel.title}
             {count !== undefined && count > 0 && (
-              <span className="badge" title={`${count} waiting`}>
+              <span className="badge" title={badgeTitles[panel.id] ?? `${count} waiting`}>
                 {count}
               </span>
             )}

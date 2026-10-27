@@ -71,6 +71,8 @@ export type PluginContext = {
   openStore(migrations: StoreMigration[]): PluginStore
   /** The current value of a setting: a short name in this plugin's own namespace, or a full setting ID. */
   getSetting(name: string): unknown
+  /** The raw stored value of any setting ID, declared or not, or undefined when none is stored. */
+  storedSettingValue(id: string): unknown
   /** Builds an Error that the RPC layer reports with the code for `kind`. */
   error(kind: PluginErrorKind, message: string): Error
   /** The Quirky home directory. */
@@ -101,7 +103,11 @@ export type PluginPty = {
   ): Promise<{ pid: number; restored: boolean; cwd: string; cols: number; rows: number }>
   write(sessionId: string, data: string | Uint8Array): void
   resize(sessionId: string, cols: number, rows: number): Promise<void>
-  read(sessionId: string, lines: number): Promise<{ lines: string[]; cols: number; rows: number; alt: boolean }>
+  /**
+   * The visible screen plus up to `lines` of scrollback, as text. `unwrap` joins rows the terminal
+   * wrapped into logical lines; a line that starts above the `lines` cutoff may be cut.
+   */
+  read(sessionId: string, lines: number, options?: { unwrap?: boolean }): Promise<{ lines: string[]; cols: number; rows: number; alt: boolean }>
   /** A `reason` records the exit as requested (cause `killed`) and defaults the signal to SIGKILL. */
   kill(sessionId: string, signal?: string, options?: { reason?: 'killed' }): Promise<void>
   forget(sessionId: string): Promise<void>
@@ -144,6 +150,10 @@ export type PluginNotification = {
   open?: { view: string; input?: unknown }
   /** Whether the desktop shell shows a native notification; defaults to true. */
   desktop?: boolean
+  /** A sound to play; `file: null` is the system sound, `volume` is 0-100. Absent means silent. */
+  sound?: { file: string | null; volume: number }
+  /** Whether the webview shows a toast; defaults to true. */
+  toast?: boolean
 }
 
 /** The kernel half of launching a session. */

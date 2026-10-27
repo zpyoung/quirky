@@ -4,6 +4,7 @@ import { dirname, join, parse } from 'node:path'
 type Manifest = { id?: string; main?: string; cli?: string; ui?: string; [key: string]: unknown }
 
 const MANIFEST = 'quirky-plugin.json'
+const SOUNDS = 'sounds'
 
 /** `entry` with its extension replaced by `.js`, keeping the directory. */
 function jsName(entry: string): string {
@@ -56,8 +57,9 @@ function copyNotebookBridge(pluginDir: string, outPluginDir: string): void {
 /**
  * Writes a self-contained copy of every plugin under `srcDir` into `outDir`, replacing whatever
  * was there. Each copy holds the rewritten manifest, `main` and `cli` bundled to `.js` with their
- * dependencies inlined, and the generated UI asset tree; other sources, `test/` and `node_modules/` stay behind.
- * The plugin-local runtime bridge `src/notebook/kernel-bridge.py` is copied verbatim when present.
+ * dependencies inlined, and the generated UI asset tree and any `sounds/` directory; other sources,
+ * `test/` and `node_modules/` stay behind. The plugin-local runtime bridge
+ * `src/notebook/kernel-bridge.py` is copied verbatim when present.
  * A manifest that names a UI module which has not been built fails the whole bundle. Returns the
  * bundled plugin IDs.
  */
@@ -80,6 +82,7 @@ export async function bundlePlugins(srcDir: string, outDir: string): Promise<str
     if (manifest.cli) manifest.cli = await bundleEntry(id, pluginDir, outPluginDir, manifest.cli)
     if (manifest.ui) copyUi(id, pluginDir, outPluginDir, manifest.ui)
     copyNotebookBridge(pluginDir, outPluginDir)
+    if (existsSync(join(pluginDir, SOUNDS))) cpSync(join(pluginDir, SOUNDS), join(outPluginDir, SOUNDS), { recursive: true })
 
     writeFileSync(join(outPluginDir, MANIFEST), `${JSON.stringify(manifest, null, 2)}\n`)
     bundled.push(id)

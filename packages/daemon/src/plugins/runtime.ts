@@ -215,6 +215,10 @@ export function createPluginRuntime(options: PluginRuntimeOptions): PluginRuntim
           guard()
           return ui.valueFor(id, name)
         },
+        storedSettingValue(settingId) {
+          guard()
+          return store.getSettingValue(settingId)?.value
+        },
         error(kind, message) {
           guard()
           if (kind === 'invalid-params') return invalidParams(message)

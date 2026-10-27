@@ -249,6 +249,10 @@ export function createHandlers(
       layout.windowFocused(conn, focused)
       return OK
     },
+    'ui.window.activity': (_params, conn) => {
+      layout.windowActivity(conn)
+      return OK
+    },
     'ui.command.reply': (params, conn) => {
       const error = params.error as { message?: unknown } | undefined
       layout.commandReply(conn, str(params, 'requestId'), {

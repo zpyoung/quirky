@@ -17,7 +17,8 @@ export type ExitCause = 'exited' | 'killed' | 'host-restart' | 'host-lost'
 
 /**
  * Something the terminal reported out of band: a bell, a finished command, a new title or cwd, a
- * prompt mark, or the body of an OSC 7501 program-status report.
+ * prompt mark, the body of an OSC 7501 program-status report, or a program's own notification
+ * (OSC 9, 99 or 777) with its text already cleaned.
  */
 export type PtyFact =
   | { kind: 'bell' }
@@ -26,6 +27,7 @@ export type PtyFact =
   | { kind: 'cwd'; cwd: string }
   | { kind: 'prompt' }
   | { kind: 'program-status'; body: string }
+  | { kind: 'notification'; title: string | null; body: string; occasion: 'always' | 'unfocused' | 'invisible' }
 
 export type PtySessionInfo = {
   sessionId: string
@@ -115,8 +117,11 @@ export type PtyRequest =
    */
   | { id: number; type: 'subscribe'; sessionId: string; mode?: 'screen' | 'raw'; historyLines?: number }
   | { id: number; type: 'unsubscribe'; sessionId: string }
-  /** The visible screen plus up to `lines` of scrollback from the host's emulator, as text. */
-  | { id: number; type: 'read'; sessionId: string; lines: number }
+  /**
+   * The visible screen plus up to `lines` of scrollback from the host's emulator, as text. With
+   * `unwrap`, rows the terminal wrapped are joined back into the logical line they came from.
+   */
+  | { id: number; type: 'read'; sessionId: string; lines: number; unwrap?: boolean }
   | { id: number; type: 'snapshot'; sessionId: string }
   /** A page of scrollback ending just before the `before` cursor, or at the newest line when absent. */
   | { id: number; type: 'history'; sessionId: string; lines?: number; before?: string; format?: 'text' | 'ansi' }

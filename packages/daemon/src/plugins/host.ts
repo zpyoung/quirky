@@ -31,7 +31,8 @@ type ExtensionMembers = Pick<
   | 'notify'
   | 'launch'
   | 'createFileResource'
->
+> &
+  Partial<Pick<PluginContext, 'storedSettingValue'>>
 
 /** The daemon-side half of a plugin's context, created and torn down per activation attempt. */
 export type ContextExtension = {
@@ -540,7 +541,7 @@ export class PluginHost {
           throw new Error(`${id}: context.${member} is not available`)
         }
       })
-    const defaults: ExtensionMembers = {
+    const defaults: Omit<ExtensionMembers, 'storedSettingValue'> & Pick<PluginContext, 'storedSettingValue'> = {
       dataDir: '',
       home: '',
       pty: unavailableObject<PluginContext['pty']>('pty'),
@@ -561,6 +562,9 @@ export class PluginHost {
       },
       getSetting: () => {
         throw new Error(`${id}: context.getSetting is not available`)
+      },
+      storedSettingValue: () => {
+        throw new Error(`${id}: context.storedSettingValue is not available`)
       },
       error: (_kind, message) => new Error(message)
     }

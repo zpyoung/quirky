@@ -1,5 +1,5 @@
 import { useEffect, useState, type CSSProperties } from 'react'
-import type { AgentStatusSummary } from '@quirky/protocol'
+import type { AgentStatusSummary, SessionUnread } from '@quirky/protocol'
 import { ringPercent, windowDisplay, type DisplayStatus } from './status'
 
 const TICK_MS = 60_000
@@ -33,4 +33,16 @@ export function StatusDot({ status, summary, now = Date.now(), running = true }:
   }
   if (!status) return <span className="dot dot-none" aria-hidden />
   return <span className={`dot dot-${status}`} title={status} role="img" aria-label={status} />
+}
+
+const UNREAD_LABELS: Record<SessionUnread, string> = {
+  agent: 'Unread agent completion',
+  bell: 'Unread bell',
+  notification: 'Unread notification'
+}
+
+/** The tab's glyph for a session marked unread: a filled amber bell labelled by why. */
+export function UnreadBell({ reason }: { reason: SessionUnread }) {
+  const label = UNREAD_LABELS[reason]
+  return <span className="glyph glyph-unread" title={label} role="img" aria-label={label} />
 }

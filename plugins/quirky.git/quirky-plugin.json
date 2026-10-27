@@ -2,7 +2,7 @@
   "id": "quirky.git",
   "name": "Source control",
   "version": "0.1.0",
-  "description": "Branch status, diffs, staging and commits for a worktree.",
+  "description": "Branch status, diffs, staging, commits, remote operations, history and conflicts for a worktree.",
   "main": "main.ts",
   "ui": "dist/ui.js",
   "activation": "lazy",
@@ -13,7 +13,7 @@
     "method": [
       {
         "id": "status",
-        "description": "A worktree's branch, upstream and changed files.",
+        "description": "A worktree's branch, upstream, changed files by section, the operation in progress and the running remote call.",
         "readOnly": true,
         "params": {
           "type": "object",
@@ -27,19 +27,184 @@
         "result": {
           "type": "object",
           "properties": {
-            "branch": {},
-            "upstream": {},
+            "branch": {
+              "description": "Current branch name, or null when detached or unborn without a name."
+            },
+            "upstream": {
+              "description": "Upstream as git names it (origin/main), or null."
+            },
             "ahead": {
-              "type": "integer"
+              "type": "integer",
+              "description": "Commits ahead of the upstream."
             },
             "behind": {
-              "type": "integer"
+              "type": "integer",
+              "description": "Commits behind the upstream."
             },
             "files": {
               "type": "array",
+              "description": "v1 file list: one row per path with index and worktree letters.",
               "items": {
                 "type": "object"
               }
+            },
+            "head": {
+              "description": "HEAD commit sha, or null on an unborn branch."
+            },
+            "detached": {
+              "type": "boolean",
+              "description": "HEAD points at a commit, not a branch."
+            },
+            "unborn": {
+              "type": "boolean",
+              "description": "The branch has no commits yet."
+            },
+            "entries": {
+              "type": "array",
+              "description": "One row per change, with area, status, line counts and conflict kind; conflicts first.",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "path": {
+                    "type": "string",
+                    "description": "Path relative to the worktree root."
+                  },
+                  "oldPath": {
+                    "type": "string",
+                    "description": "Previous path of a renamed or copied file."
+                  },
+                  "area": {
+                    "type": "string",
+                    "description": "Section the row belongs to.",
+                    "enum": [
+                      "conflicts",
+                      "staged",
+                      "unstaged",
+                      "untracked"
+                    ]
+                  },
+                  "status": {
+                    "type": "string",
+                    "description": "Kind of change.",
+                    "enum": [
+                      "modified",
+                      "added",
+                      "deleted",
+                      "renamed",
+                      "copied",
+                      "untracked"
+                    ]
+                  },
+                  "conflict": {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "description": "How the two sides conflict."
+                      },
+                      "state": {
+                        "type": "string",
+                        "description": "unresolved, or resolved_locally once git stopped listing it but it was opened for this operation.",
+                        "enum": [
+                          "unresolved",
+                          "resolved_locally"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "state"
+                    ]
+                  },
+                  "added": {
+                    "type": "integer",
+                    "description": "Added lines; absent when unknown or the status is capped."
+                  },
+                  "removed": {
+                    "type": "integer",
+                    "description": "Removed lines; absent when unknown or the status is capped."
+                  },
+                  "binary": {
+                    "type": "boolean",
+                    "description": "True for a binary file."
+                  },
+                  "submodule": {
+                    "type": "object",
+                    "properties": {
+                      "commitChanged": {
+                        "type": "boolean",
+                        "description": "The submodule points at another commit."
+                      },
+                      "trackedChanges": {
+                        "type": "boolean",
+                        "description": "It has modified tracked files."
+                      },
+                      "untrackedChanges": {
+                        "type": "boolean",
+                        "description": "It has untracked files."
+                      }
+                    },
+                    "required": [
+                      "commitChanged",
+                      "trackedChanges",
+                      "untrackedChanges"
+                    ]
+                  }
+                },
+                "required": [
+                  "path",
+                  "area",
+                  "status"
+                ]
+              }
+            },
+            "operation": {
+              "type": "string",
+              "description": "Merge, rebase or cherry-pick in progress, else none.",
+              "enum": [
+                "merge",
+                "rebase",
+                "cherry-pick",
+                "none"
+              ]
+            },
+            "capped": {
+              "type": "boolean",
+              "description": "True when the status stopped at 1,000 entries."
+            },
+            "upstreamStatus": {
+              "type": "object",
+              "properties": {
+                "hasUpstream": {
+                  "type": "boolean",
+                  "description": "The branch has an effective upstream."
+                },
+                "name": {
+                  "description": "Upstream name, or null."
+                },
+                "sha": {
+                  "description": "Upstream commit sha, or null."
+                },
+                "ahead": {
+                  "type": "integer",
+                  "description": "Commits ahead of the upstream."
+                },
+                "behind": {
+                  "type": "integer",
+                  "description": "Commits behind the upstream."
+                },
+                "behindPatchEquivalent": {
+                  "description": "True when every commit behind the upstream is a patch-equivalent copy of a local one; null when unknown."
+                }
+              },
+              "required": [
+                "hasUpstream",
+                "ahead",
+                "behind"
+              ]
+            },
+            "busy": {
+              "description": "The locked operation running in this worktree (push, force-push, pull, fast-forward, fetch, sync, rebase, continue, abort), or null."
             }
           },
           "required": [
@@ -47,13 +212,21 @@
             "upstream",
             "ahead",
             "behind",
-            "files"
+            "files",
+            "head",
+            "detached",
+            "unborn",
+            "entries",
+            "operation",
+            "capped",
+            "upstreamStatus",
+            "busy"
           ]
         }
       },
       {
         "id": "diff",
-        "description": "Both sides of a file diff; with `staged`, HEAD against the index, else the index against the working tree.",
+        "description": "Both sides of a file diff for a source; staged is HEAD against the index, unstaged the index against the working file.",
         "readOnly": true,
         "params": {
           "type": "object",
@@ -63,10 +236,42 @@
               "description": "Worktree selector (id, name, branch, path: or current); defaults to the caller's worktree."
             },
             "path": {
-              "type": "string"
+              "type": "string",
+              "description": "File path relative to the worktree root."
             },
             "staged": {
-              "type": "boolean"
+              "type": "boolean",
+              "description": "Shorthand for source staged."
+            },
+            "source": {
+              "type": "string",
+              "description": "Which sides to read; defaults to staged when `staged` is set, else unstaged.",
+              "enum": [
+                "unstaged",
+                "staged",
+                "branch",
+                "commit"
+              ]
+            },
+            "oldPath": {
+              "type": "string",
+              "description": "Previous path of a renamed file."
+            },
+            "mergeBase": {
+              "type": "string",
+              "description": "Merge base commit for source branch (40 hex)."
+            },
+            "head": {
+              "type": "string",
+              "description": "Head commit for source branch (40 hex)."
+            },
+            "commit": {
+              "type": "string",
+              "description": "Commit for source commit (40 hex)."
+            },
+            "parent": {
+              "type": "string",
+              "description": "Parent commit for source commit (40 hex); omit for a root commit."
             }
           },
           "required": [
@@ -77,19 +282,83 @@
           "type": "object",
           "properties": {
             "path": {
-              "type": "string"
+              "type": "string",
+              "description": "The path."
             },
             "staged": {
-              "type": "boolean"
+              "type": "boolean",
+              "description": "True for the staged source."
             },
             "original": {
-              "type": "string"
+              "type": "string",
+              "description": "The left side's text; empty for binary, image and too-large files."
             },
             "modified": {
-              "type": "string"
+              "type": "string",
+              "description": "The right side's text; empty for binary, image and too-large files."
             },
             "binary": {
-              "type": "boolean"
+              "type": "boolean",
+              "description": "Either side is binary."
+            },
+            "source": {
+              "type": "string",
+              "description": "Which sides were read.",
+              "enum": [
+                "unstaged",
+                "staged",
+                "branch",
+                "commit"
+              ]
+            },
+            "kind": {
+              "type": "string",
+              "description": "text, binary or image.",
+              "enum": [
+                "text",
+                "binary",
+                "image"
+              ]
+            },
+            "oldPath": {
+              "type": "string",
+              "description": "Previous path of a renamed file."
+            },
+            "mime": {
+              "type": "string",
+              "description": "Mime type of an image; original and modified are then base64."
+            },
+            "modifiedHash": {
+              "description": "sha-256 of the working file for an unstaged diff; null when the file is missing."
+            },
+            "modifiedDeleted": {
+              "type": "boolean",
+              "description": "The working file is missing."
+            },
+            "tooLarge": {
+              "type": "object",
+              "properties": {
+                "originalLines": {
+                  "type": "integer",
+                  "description": "Lines on the left."
+                },
+                "modifiedLines": {
+                  "type": "integer",
+                  "description": "Lines on the right."
+                },
+                "characters": {
+                  "type": "integer",
+                  "description": "Characters on both sides."
+                },
+                "reason": {
+                  "type": "string",
+                  "description": "lines or characters.",
+                  "enum": [
+                    "lines",
+                    "characters"
+                  ]
+                }
+              }
             }
           },
           "required": [
@@ -103,7 +372,7 @@
       },
       {
         "id": "stage",
-        "description": "Stages files.",
+        "description": "Stages files by path, or every change with scope. A submodule root and a conflict that still has markers are refused.",
         "params": {
           "type": "object",
           "properties": {
@@ -113,20 +382,27 @@
             },
             "paths": {
               "type": "array",
+              "description": "Paths relative to the worktree root; give this or scope.",
               "items": {
                 "type": "string"
               }
+            },
+            "scope": {
+              "type": "string",
+              "description": "all stages everything including untracked files; tracked only modified and deleted tracked files. Give this or paths.",
+              "enum": [
+                "all",
+                "tracked"
+              ]
             }
-          },
-          "required": [
-            "paths"
-          ]
+          }
         },
         "result": {
           "type": "object",
           "properties": {
             "ok": {
-              "type": "boolean"
+              "type": "boolean",
+              "description": "Always true."
             }
           },
           "required": [
@@ -136,7 +412,7 @@
       },
       {
         "id": "unstage",
-        "description": "Unstages files.",
+        "description": "Unstages files; a staged rename is reset on both its new and old path.",
         "params": {
           "type": "object",
           "properties": {
@@ -146,6 +422,7 @@
             },
             "paths": {
               "type": "array",
+              "description": "Paths relative to the worktree root.",
               "items": {
                 "type": "string"
               }
@@ -159,7 +436,8 @@
           "type": "object",
           "properties": {
             "ok": {
-              "type": "boolean"
+              "type": "boolean",
+              "description": "Always true."
             }
           },
           "required": [
@@ -168,8 +446,85 @@
         }
       },
       {
+        "id": "discard",
+        "description": "Throws away working-tree changes: reverts tracked files to the index, deletes untracked ones. Staged changes are unstaged first when area is staged. Cannot be undone.",
+        "destructive": true,
+        "confirm": "Discard these changes?",
+        "describe": "describeDiscard",
+        "params": {
+          "type": "object",
+          "properties": {
+            "worktree": {
+              "type": "string",
+              "description": "Worktree selector (id, name, branch, path: or current); defaults to the caller's worktree."
+            },
+            "paths": {
+              "type": "array",
+              "description": "Paths relative to the worktree root; give this or area.",
+              "items": {
+                "type": "string"
+              }
+            },
+            "area": {
+              "type": "string",
+              "description": "Discard every row of a section; give this or paths.",
+              "enum": [
+                "staged",
+                "unstaged",
+                "untracked"
+              ]
+            }
+          }
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "ok": {
+              "type": "boolean",
+              "description": "Always true."
+            }
+          },
+          "required": [
+            "ok"
+          ]
+        }
+      },
+      {
+        "id": "describeDiscard",
+        "description": "The question asked before a discard.",
+        "readOnly": true,
+        "params": {
+          "type": "object",
+          "properties": {
+            "worktree": {
+              "type": "string",
+              "description": "Worktree selector (id, name, branch, path: or current); defaults to the caller's worktree."
+            },
+            "paths": {
+              "type": "array",
+              "description": "Paths relative to the worktree root; give this or area.",
+              "items": {
+                "type": "string"
+              }
+            },
+            "area": {
+              "type": "string",
+              "description": "Discard every row of a section; give this or paths.",
+              "enum": [
+                "staged",
+                "unstaged",
+                "untracked"
+              ]
+            }
+          }
+        },
+        "result": {
+          "type": "string"
+        }
+      },
+      {
         "id": "commit",
-        "description": "Commits the staged changes.",
+        "description": "Commits the staged changes. A failing hook is reported with a summary and its output.",
         "params": {
           "type": "object",
           "properties": {
@@ -178,7 +533,8 @@
               "description": "Worktree selector (id, name, branch, path: or current); defaults to the caller's worktree."
             },
             "message": {
-              "type": "string"
+              "type": "string",
+              "description": "The commit message; blank is refused."
             }
           },
           "required": [
@@ -189,11 +545,2039 @@
           "type": "object",
           "properties": {
             "sha": {
-              "type": "string"
+              "type": "string",
+              "description": "The new commit's full sha."
             }
           },
           "required": [
             "sha"
+          ]
+        }
+      },
+      {
+        "id": "push",
+        "description": "Pushes HEAD to its push remote, publishing the branch when it has no upstream.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "worktree": {
+              "type": "string",
+              "description": "Worktree selector (id, name, branch, path: or current); defaults to the caller's worktree."
+            }
+          }
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "remote": {
+              "type": "string",
+              "description": "Remote pushed to."
+            },
+            "branch": {
+              "type": "string",
+              "description": "Branch name on the remote."
+            },
+            "upstream": {
+              "type": "string",
+              "description": "Upstream the branch now tracks."
+            }
+          },
+          "required": [
+            "remote",
+            "branch",
+            "upstream"
+          ]
+        }
+      },
+      {
+        "id": "forcePush",
+        "description": "Force pushes HEAD with a lease on the remote branch's last known commit, replacing what the remote has.",
+        "destructive": true,
+        "confirm": "Force push this branch?",
+        "describe": "describeForcePush",
+        "params": {
+          "type": "object",
+          "properties": {
+            "worktree": {
+              "type": "string",
+              "description": "Worktree selector (id, name, branch, path: or current); defaults to the caller's worktree."
+            },
+            "expected": {
+              "type": "string",
+              "description": "Commit sha (40 hex) the remote branch must still be at; defaults to the remote-tracking ref."
+            }
+          }
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "remote": {
+              "type": "string",
+              "description": "Remote pushed to."
+            },
+            "branch": {
+              "type": "string",
+              "description": "Branch name on the remote."
+            },
+            "upstream": {
+              "type": "string",
+              "description": "Upstream the branch now tracks."
+            }
+          },
+          "required": [
+            "remote",
+            "branch",
+            "upstream"
+          ]
+        }
+      },
+      {
+        "id": "describeForcePush",
+        "description": "The question asked before a force push.",
+        "readOnly": true,
+        "params": {
+          "type": "object",
+          "properties": {
+            "worktree": {
+              "type": "string",
+              "description": "Worktree selector (id, name, branch, path: or current); defaults to the caller's worktree."
+            },
+            "expected": {
+              "type": "string",
+              "description": "Commit sha (40 hex) the remote branch must still be at; defaults to the remote-tracking ref."
+            }
+          }
+        },
+        "result": {
+          "type": "string"
+        }
+      },
+      {
+        "id": "pull",
+        "description": "Pulls the upstream into the branch, retrying as a merge when git asks for a divergent-branch policy.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "worktree": {
+              "type": "string",
+              "description": "Worktree selector (id, name, branch, path: or current); defaults to the caller's worktree."
+            }
+          }
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "ok": {
+              "type": "boolean",
+              "description": "Always true."
+            }
+          },
+          "required": [
+            "ok"
+          ]
+        }
+      },
+      {
+        "id": "fastForward",
+        "description": "Pulls the upstream only when the branch can fast-forward.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "worktree": {
+              "type": "string",
+              "description": "Worktree selector (id, name, branch, path: or current); defaults to the caller's worktree."
+            }
+          }
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "ok": {
+              "type": "boolean",
+              "description": "Always true."
+            }
+          },
+          "required": [
+            "ok"
+          ]
+        }
+      },
+      {
+        "id": "fetch",
+        "description": "Fetches every remote and prunes deleted branches.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "worktree": {
+              "type": "string",
+              "description": "Worktree selector (id, name, branch, path: or current); defaults to the caller's worktree."
+            }
+          }
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "ok": {
+              "type": "boolean",
+              "description": "Always true."
+            }
+          },
+          "required": [
+            "ok"
+          ]
+        }
+      },
+      {
+        "id": "sync",
+        "description": "Fetches, then pulls and pushes as the branch needs; force pushes with a lease when the remote only has older copies of local commits.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "worktree": {
+              "type": "string",
+              "description": "Worktree selector (id, name, branch, path: or current); defaults to the caller's worktree."
+            }
+          }
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "steps": {
+              "type": "array",
+              "description": "The steps that ran, in order (fetch, pull, push, force-push).",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          "required": [
+            "steps"
+          ]
+        }
+      },
+      {
+        "id": "rebaseFromBase",
+        "description": "Fetches the base branch and rebases the current branch onto it.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "worktree": {
+              "type": "string",
+              "description": "Worktree selector (id, name, branch, path: or current); defaults to the caller's worktree."
+            },
+            "base": {
+              "type": "string",
+              "description": "Remote base as <remote>/<branch>; defaults to the worktree's effective base."
+            }
+          }
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "ok": {
+              "type": "boolean",
+              "description": "Always true."
+            },
+            "base": {
+              "type": "string",
+              "description": "The base rebased onto."
+            }
+          },
+          "required": [
+            "ok",
+            "base"
+          ]
+        }
+      },
+      {
+        "id": "continue",
+        "description": "Finishes the merge, rebase or cherry-pick in progress once every conflict is resolved and staged; a rebase that stops again returns finished false.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "worktree": {
+              "type": "string",
+              "description": "Worktree selector (id, name, branch, path: or current); defaults to the caller's worktree."
+            }
+          }
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "finished": {
+              "type": "boolean",
+              "description": "False when a rebase or cherry-pick stopped on the next conflict."
+            },
+            "operation": {
+              "type": "string",
+              "description": "The operation in progress after the call.",
+              "enum": [
+                "merge",
+                "rebase",
+                "cherry-pick",
+                "none"
+              ]
+            }
+          },
+          "required": [
+            "finished",
+            "operation"
+          ]
+        }
+      },
+      {
+        "id": "abort",
+        "description": "Cancels the merge or rebase in progress and restores the state before it. Can discard conflict resolutions.",
+        "destructive": true,
+        "confirm": "Abort the operation in progress?",
+        "describe": "describeAbort",
+        "params": {
+          "type": "object",
+          "properties": {
+            "worktree": {
+              "type": "string",
+              "description": "Worktree selector (id, name, branch, path: or current); defaults to the caller's worktree."
+            }
+          }
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "ok": {
+              "type": "boolean",
+              "description": "Always true."
+            }
+          },
+          "required": [
+            "ok"
+          ]
+        }
+      },
+      {
+        "id": "describeAbort",
+        "description": "The question asked before an abort.",
+        "readOnly": true,
+        "params": {
+          "type": "object",
+          "properties": {
+            "worktree": {
+              "type": "string",
+              "description": "Worktree selector (id, name, branch, path: or current); defaults to the caller's worktree."
+            }
+          }
+        },
+        "result": {
+          "type": "string"
+        }
+      },
+      {
+        "id": "compare",
+        "description": "What the branch changed since its merge base with a base ref. A compare that cannot run is a result with a status and message.",
+        "readOnly": true,
+        "params": {
+          "type": "object",
+          "properties": {
+            "worktree": {
+              "type": "string",
+              "description": "Worktree selector (id, name, branch, path: or current); defaults to the caller's worktree."
+            },
+            "base": {
+              "type": "string",
+              "description": "Base ref to compare against; defaults to the effective base."
+            }
+          }
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "status": {
+              "type": "string",
+              "description": "ready, or why the compare cannot run.",
+              "enum": [
+                "ready",
+                "invalid-base",
+                "unborn-head",
+                "no-merge-base"
+              ]
+            },
+            "base": {
+              "description": "The base ref compared against, or null."
+            },
+            "baseSource": {
+              "description": "Where the base came from: worktree, project, detected, upstream or param; null when none."
+            },
+            "message": {
+              "description": "Why the compare is not ready; null when ready."
+            },
+            "baseOid": {
+              "description": "Commit the base resolved to."
+            },
+            "headOid": {
+              "description": "HEAD commit."
+            },
+            "mergeBase": {
+              "description": "Merge base of the base and HEAD."
+            },
+            "ahead": {
+              "type": "integer",
+              "description": "Commits on the branch not on the base."
+            },
+            "behind": {
+              "type": "integer",
+              "description": "Commits on the base not on the branch."
+            },
+            "entries": {
+              "type": "array",
+              "description": "Files the branch changed since the merge base.",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "path": {
+                    "type": "string",
+                    "description": "Path relative to the worktree root."
+                  },
+                  "oldPath": {
+                    "type": "string",
+                    "description": "Previous path of a renamed or copied file."
+                  },
+                  "status": {
+                    "type": "string",
+                    "description": "Kind of change.",
+                    "enum": [
+                      "modified",
+                      "added",
+                      "deleted",
+                      "renamed",
+                      "copied",
+                      "untracked"
+                    ]
+                  },
+                  "added": {
+                    "description": "Added lines; null for a binary file."
+                  },
+                  "removed": {
+                    "description": "Removed lines; null for a binary file."
+                  },
+                  "binary": {
+                    "type": "boolean",
+                    "description": "True for a binary file."
+                  }
+                },
+                "required": [
+                  "path",
+                  "status",
+                  "added",
+                  "removed",
+                  "binary"
+                ]
+              }
+            },
+            "added": {
+              "type": "integer",
+              "description": "Total added lines."
+            },
+            "removed": {
+              "type": "integer",
+              "description": "Total removed lines."
+            }
+          },
+          "required": [
+            "status",
+            "base",
+            "baseSource",
+            "message",
+            "baseOid",
+            "headOid",
+            "mergeBase",
+            "ahead",
+            "behind",
+            "entries",
+            "added",
+            "removed"
+          ]
+        }
+      },
+      {
+        "id": "setBase",
+        "description": "Sets or clears the base ref: on the worktree when it has its own, else on the project.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "worktree": {
+              "type": "string",
+              "description": "Worktree selector (id, name, branch, path: or current); defaults to the caller's worktree."
+            },
+            "base": {
+              "type": "string",
+              "description": "Ref to use as the base; must resolve to a commit."
+            },
+            "clear": {
+              "type": "boolean",
+              "description": "Clear the saved base instead; give this or base."
+            }
+          }
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "target": {
+              "type": "string",
+              "description": "Where the base was written.",
+              "enum": [
+                "worktree",
+                "project"
+              ]
+            },
+            "base": {
+              "description": "The saved base, or null when cleared."
+            }
+          },
+          "required": [
+            "target",
+            "base"
+          ]
+        }
+      },
+      {
+        "id": "branches",
+        "description": "Local and remote branches, filtered by a substring.",
+        "readOnly": true,
+        "params": {
+          "type": "object",
+          "properties": {
+            "worktree": {
+              "type": "string",
+              "description": "Worktree selector (id, name, branch, path: or current); defaults to the caller's worktree."
+            },
+            "query": {
+              "type": "string",
+              "description": "Case-insensitive substring of the branch name."
+            }
+          }
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "refs": {
+              "type": "array",
+              "description": "Matching branches, locals first.",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "description": "Branch name."
+                  },
+                  "kind": {
+                    "type": "string",
+                    "description": "local or remote.",
+                    "enum": [
+                      "local",
+                      "remote"
+                    ]
+                  }
+                },
+                "required": [
+                  "name",
+                  "kind"
+                ]
+              }
+            },
+            "current": {
+              "description": "The checked-out branch, or null."
+            }
+          },
+          "required": [
+            "refs",
+            "current"
+          ]
+        }
+      },
+      {
+        "id": "history",
+        "description": "Recent commits from HEAD, newest first.",
+        "readOnly": true,
+        "params": {
+          "type": "object",
+          "properties": {
+            "worktree": {
+              "type": "string",
+              "description": "Worktree selector (id, name, branch, path: or current); defaults to the caller's worktree."
+            },
+            "limit": {
+              "type": "integer",
+              "description": "Commits to return (default 50); values above 200 are treated as 200.",
+              "minimum": 1
+            }
+          }
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "commits": {
+              "type": "array",
+              "description": "The commits.",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "oid": {
+                    "type": "string",
+                    "description": "Full commit sha."
+                  },
+                  "parents": {
+                    "type": "array",
+                    "description": "Parent shas.",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "author": {
+                    "type": "string",
+                    "description": "Author name."
+                  },
+                  "email": {
+                    "type": "string",
+                    "description": "Author email."
+                  },
+                  "authoredAt": {
+                    "type": "integer",
+                    "description": "Author time, ms since the epoch."
+                  },
+                  "committedAt": {
+                    "type": "integer",
+                    "description": "Commit time, ms since the epoch."
+                  },
+                  "subject": {
+                    "type": "string",
+                    "description": "First line of the message."
+                  },
+                  "body": {
+                    "type": "string",
+                    "description": "The rest of the message."
+                  },
+                  "refs": {
+                    "type": "array",
+                    "description": "Branches and tags pointing at the commit.",
+                    "items": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "required": [
+                  "oid",
+                  "parents",
+                  "author",
+                  "email",
+                  "authoredAt",
+                  "committedAt",
+                  "subject",
+                  "body",
+                  "refs"
+                ]
+              }
+            },
+            "hasMore": {
+              "type": "boolean",
+              "description": "More commits exist beyond limit."
+            }
+          },
+          "required": [
+            "commits",
+            "hasMore"
+          ]
+        }
+      },
+      {
+        "id": "commitFiles",
+        "description": "The files a commit changed against its first parent.",
+        "readOnly": true,
+        "params": {
+          "type": "object",
+          "properties": {
+            "worktree": {
+              "type": "string",
+              "description": "Worktree selector (id, name, branch, path: or current); defaults to the caller's worktree."
+            },
+            "commit": {
+              "type": "string",
+              "description": "Commit sha or ref."
+            }
+          },
+          "required": [
+            "commit"
+          ]
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "commit": {
+              "type": "string",
+              "description": "The commit's full sha."
+            },
+            "parent": {
+              "description": "First parent sha, or null for a root commit."
+            },
+            "entries": {
+              "type": "array",
+              "description": "Files the commit changed.",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "path": {
+                    "type": "string",
+                    "description": "Path relative to the worktree root."
+                  },
+                  "oldPath": {
+                    "type": "string",
+                    "description": "Previous path of a renamed or copied file."
+                  },
+                  "status": {
+                    "type": "string",
+                    "description": "Kind of change.",
+                    "enum": [
+                      "modified",
+                      "added",
+                      "deleted",
+                      "renamed",
+                      "copied",
+                      "untracked"
+                    ]
+                  },
+                  "added": {
+                    "description": "Added lines; null for a binary file."
+                  },
+                  "removed": {
+                    "description": "Removed lines; null for a binary file."
+                  },
+                  "binary": {
+                    "type": "boolean",
+                    "description": "True for a binary file."
+                  }
+                },
+                "required": [
+                  "path",
+                  "status",
+                  "added",
+                  "removed",
+                  "binary"
+                ]
+              }
+            }
+          },
+          "required": [
+            "commit",
+            "parent",
+            "entries"
+          ]
+        }
+      },
+      {
+        "id": "conflictFile",
+        "description": "A conflicted file's working text and content hash. Unless peek is set, records that it was opened for the current operation.",
+        "readOnly": true,
+        "params": {
+          "type": "object",
+          "properties": {
+            "worktree": {
+              "type": "string",
+              "description": "Worktree selector (id, name, branch, path: or current); defaults to the caller's worktree."
+            },
+            "path": {
+              "type": "string",
+              "description": "Conflicted path relative to the worktree root."
+            },
+            "peek": {
+              "type": "boolean",
+              "description": "Read without recording the file as opened, for a caller that only inspects it."
+            }
+          },
+          "required": [
+            "path"
+          ]
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "path": {
+              "type": "string",
+              "description": "The path."
+            },
+            "kind": {
+              "type": "string",
+              "description": "How the two sides conflict."
+            },
+            "state": {
+              "type": "string",
+              "description": "unresolved or resolved_locally.",
+              "enum": [
+                "unresolved",
+                "resolved_locally"
+              ]
+            },
+            "content": {
+              "description": "The working file's text; null when the file is missing."
+            },
+            "hash": {
+              "description": "sha-256 of the working file's bytes, for save's expected; null when missing."
+            },
+            "operation": {
+              "type": "string",
+              "description": "The operation in progress.",
+              "enum": [
+                "merge",
+                "rebase",
+                "cherry-pick",
+                "none"
+              ]
+            }
+          },
+          "required": [
+            "path",
+            "kind",
+            "state",
+            "content",
+            "hash",
+            "operation"
+          ]
+        }
+      },
+      {
+        "id": "save",
+        "description": "Writes a working file atomically. With expected, refuses when the file changed on disk since it was read.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "worktree": {
+              "type": "string",
+              "description": "Worktree selector (id, name, branch, path: or current); defaults to the caller's worktree."
+            },
+            "path": {
+              "type": "string",
+              "description": "File path relative to the worktree root."
+            },
+            "content": {
+              "type": "string",
+              "description": "The new text."
+            },
+            "expected": {
+              "type": "string",
+              "description": "sha-256 the file must still have; omit to overwrite."
+            }
+          },
+          "required": [
+            "path",
+            "content"
+          ]
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "hash": {
+              "type": "string",
+              "description": "sha-256 of the saved content."
+            }
+          },
+          "required": [
+            "hash"
+          ]
+        }
+      },
+      {
+        "id": "submoduleStatus",
+        "description": "The changed files inside a submodule that the worktree's status lists.",
+        "readOnly": true,
+        "params": {
+          "type": "object",
+          "properties": {
+            "worktree": {
+              "type": "string",
+              "description": "Worktree selector (id, name, branch, path: or current); defaults to the caller's worktree."
+            },
+            "path": {
+              "type": "string",
+              "description": "Submodule path relative to the worktree root."
+            }
+          },
+          "required": [
+            "path"
+          ]
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "entries": {
+              "type": "array",
+              "description": "The submodule's own status entries.",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "path": {
+                    "type": "string",
+                    "description": "Path relative to the worktree root."
+                  },
+                  "oldPath": {
+                    "type": "string",
+                    "description": "Previous path of a renamed or copied file."
+                  },
+                  "area": {
+                    "type": "string",
+                    "description": "Section the row belongs to.",
+                    "enum": [
+                      "conflicts",
+                      "staged",
+                      "unstaged",
+                      "untracked"
+                    ]
+                  },
+                  "status": {
+                    "type": "string",
+                    "description": "Kind of change.",
+                    "enum": [
+                      "modified",
+                      "added",
+                      "deleted",
+                      "renamed",
+                      "copied",
+                      "untracked"
+                    ]
+                  },
+                  "conflict": {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "description": "How the two sides conflict."
+                      },
+                      "state": {
+                        "type": "string",
+                        "description": "unresolved, or resolved_locally once git stopped listing it but it was opened for this operation.",
+                        "enum": [
+                          "unresolved",
+                          "resolved_locally"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "state"
+                    ]
+                  },
+                  "added": {
+                    "type": "integer",
+                    "description": "Added lines; absent when unknown or the status is capped."
+                  },
+                  "removed": {
+                    "type": "integer",
+                    "description": "Removed lines; absent when unknown or the status is capped."
+                  },
+                  "binary": {
+                    "type": "boolean",
+                    "description": "True for a binary file."
+                  },
+                  "submodule": {
+                    "type": "object",
+                    "properties": {
+                      "commitChanged": {
+                        "type": "boolean",
+                        "description": "The submodule points at another commit."
+                      },
+                      "trackedChanges": {
+                        "type": "boolean",
+                        "description": "It has modified tracked files."
+                      },
+                      "untrackedChanges": {
+                        "type": "boolean",
+                        "description": "It has untracked files."
+                      }
+                    },
+                    "required": [
+                      "commitChanged",
+                      "trackedChanges",
+                      "untrackedChanges"
+                    ]
+                  }
+                },
+                "required": [
+                  "path",
+                  "area",
+                  "status"
+                ]
+              }
+            }
+          },
+          "required": [
+            "entries"
+          ]
+        }
+      },
+      {
+        "id": "hugeFolders",
+        "description": "Dependency and build folders at the worktree root that are not ignored: node_modules, .next, dist, build, target, vendor.",
+        "readOnly": true,
+        "params": {
+          "type": "object",
+          "properties": {
+            "worktree": {
+              "type": "string",
+              "description": "Worktree selector (id, name, branch, path: or current); defaults to the caller's worktree."
+            }
+          }
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "folders": {
+              "type": "array",
+              "description": "Folder names.",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          "required": [
+            "folders"
+          ]
+        }
+      },
+      {
+        "id": "ignoreFolder",
+        "description": "Adds one of node_modules, .next, dist, build, target or vendor to the worktree's .gitignore.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "worktree": {
+              "type": "string",
+              "description": "Worktree selector (id, name, branch, path: or current); defaults to the caller's worktree."
+            },
+            "folder": {
+              "type": "string",
+              "description": "The folder name."
+            }
+          },
+          "required": [
+            "folder"
+          ]
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "ok": {
+              "type": "boolean",
+              "description": "Always true."
+            },
+            "added": {
+              "type": "boolean",
+              "description": "False when the line was already there."
+            }
+          },
+          "required": [
+            "ok",
+            "added"
+          ]
+        }
+      },
+      {
+        "id": "reveal",
+        "description": "Shows a file in Finder.",
+        "readOnly": true,
+        "params": {
+          "type": "object",
+          "properties": {
+            "worktree": {
+              "type": "string",
+              "description": "Worktree selector (id, name, branch, path: or current); defaults to the caller's worktree."
+            },
+            "path": {
+              "type": "string",
+              "description": "File path relative to the worktree root."
+            }
+          },
+          "required": [
+            "path"
+          ]
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "ok": {
+              "type": "boolean",
+              "description": "Always true."
+            }
+          },
+          "required": [
+            "ok"
+          ]
+        }
+      },
+      {
+        "id": "notes",
+        "description": "A worktree's diff notes, sorted by path, line, start line and creation time.",
+        "readOnly": true,
+        "params": {
+          "type": "object",
+          "properties": {
+            "worktree": {
+              "type": "string",
+              "description": "Worktree selector (id, name, branch, path: or current); defaults to the caller's worktree."
+            },
+            "path": {
+              "type": "string",
+              "description": "Only notes of this path, relative to the worktree root."
+            }
+          }
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "notes": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "worktreeId": {
+                    "type": "string"
+                  },
+                  "path": {
+                    "type": "string",
+                    "description": "Path relative to the worktree root."
+                  },
+                  "startLine": {
+                    "type": "integer",
+                    "description": "First line of the range, on the modified side."
+                  },
+                  "line": {
+                    "type": "integer",
+                    "description": "Last line of the range."
+                  },
+                  "body": {
+                    "type": "string"
+                  },
+                  "createdAt": {
+                    "type": "number"
+                  },
+                  "updatedAt": {
+                    "description": "When the note was last edited, or null."
+                  }
+                },
+                "required": [
+                  "id",
+                  "worktreeId",
+                  "path",
+                  "startLine",
+                  "line",
+                  "body",
+                  "createdAt",
+                  "updatedAt"
+                ]
+              }
+            }
+          },
+          "required": [
+            "notes"
+          ]
+        }
+      },
+      {
+        "id": "addNote",
+        "description": "Pins a note to a line (or a range of lines) of a path, on the modified side of its diff. The body is trimmed; blank, over 65,536 bytes, bad lines and paths outside the worktree are refused.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "worktree": {
+              "type": "string",
+              "description": "Worktree selector (id, name, branch, path: or current); defaults to the caller's worktree."
+            },
+            "path": {
+              "type": "string",
+              "description": "Path relative to the worktree root; it need not exist on disk."
+            },
+            "line": {
+              "type": "number",
+              "description": "Last line of the range, a whole number from 1."
+            },
+            "startLine": {
+              "type": "number",
+              "description": "First line of the range; defaults to line."
+            },
+            "body": {
+              "type": "string",
+              "description": "The note text."
+            }
+          },
+          "required": [
+            "path",
+            "line",
+            "body"
+          ]
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "note": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "worktreeId": {
+                  "type": "string"
+                },
+                "path": {
+                  "type": "string",
+                  "description": "Path relative to the worktree root."
+                },
+                "startLine": {
+                  "type": "integer",
+                  "description": "First line of the range, on the modified side."
+                },
+                "line": {
+                  "type": "integer",
+                  "description": "Last line of the range."
+                },
+                "body": {
+                  "type": "string"
+                },
+                "createdAt": {
+                  "type": "number"
+                },
+                "updatedAt": {
+                  "description": "When the note was last edited, or null."
+                }
+              },
+              "required": [
+                "id",
+                "worktreeId",
+                "path",
+                "startLine",
+                "line",
+                "body",
+                "createdAt",
+                "updatedAt"
+              ]
+            }
+          },
+          "required": [
+            "note"
+          ]
+        }
+      },
+      {
+        "id": "editNote",
+        "description": "Replaces a note's text and stamps updatedAt.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "worktree": {
+              "type": "string",
+              "description": "Worktree selector (id, name, branch, path: or current); defaults to the caller's worktree."
+            },
+            "id": {
+              "type": "string",
+              "description": "The note ID."
+            },
+            "body": {
+              "type": "string",
+              "description": "The new text, trimmed; blank or over 65,536 bytes is refused."
+            }
+          },
+          "required": [
+            "id",
+            "body"
+          ]
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "note": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "worktreeId": {
+                  "type": "string"
+                },
+                "path": {
+                  "type": "string",
+                  "description": "Path relative to the worktree root."
+                },
+                "startLine": {
+                  "type": "integer",
+                  "description": "First line of the range, on the modified side."
+                },
+                "line": {
+                  "type": "integer",
+                  "description": "Last line of the range."
+                },
+                "body": {
+                  "type": "string"
+                },
+                "createdAt": {
+                  "type": "number"
+                },
+                "updatedAt": {
+                  "description": "When the note was last edited, or null."
+                }
+              },
+              "required": [
+                "id",
+                "worktreeId",
+                "path",
+                "startLine",
+                "line",
+                "body",
+                "createdAt",
+                "updatedAt"
+              ]
+            }
+          },
+          "required": [
+            "note"
+          ]
+        }
+      },
+      {
+        "id": "deleteNote",
+        "description": "Deletes one note.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "worktree": {
+              "type": "string",
+              "description": "Worktree selector (id, name, branch, path: or current); defaults to the caller's worktree."
+            },
+            "id": {
+              "type": "string",
+              "description": "The note ID."
+            }
+          },
+          "required": [
+            "id"
+          ]
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "ok": {
+              "type": "boolean",
+              "description": "Always true."
+            }
+          },
+          "required": [
+            "ok"
+          ]
+        }
+      },
+      {
+        "id": "clearNotes",
+        "description": "Deletes every note of the worktree, or of one path. Cannot be undone.",
+        "destructive": true,
+        "confirm": "Clear these notes?",
+        "describe": "describeClearNotes",
+        "params": {
+          "type": "object",
+          "properties": {
+            "worktree": {
+              "type": "string",
+              "description": "Worktree selector (id, name, branch, path: or current); defaults to the caller's worktree."
+            },
+            "path": {
+              "type": "string",
+              "description": "Only notes of this path, relative to the worktree root."
+            }
+          }
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "cleared": {
+              "type": "integer",
+              "description": "How many notes were deleted."
+            }
+          },
+          "required": [
+            "cleared"
+          ]
+        }
+      },
+      {
+        "id": "describeClearNotes",
+        "description": "The question asked before clearNotes.",
+        "readOnly": true,
+        "params": {
+          "type": "object",
+          "properties": {
+            "worktree": {
+              "type": "string",
+              "description": "Worktree selector (id, name, branch, path: or current); defaults to the caller's worktree."
+            },
+            "path": {
+              "type": "string",
+              "description": "Only notes of this path, relative to the worktree root."
+            }
+          }
+        },
+        "result": {
+          "type": "string"
+        }
+      },
+      {
+        "id": "formatNotes",
+        "description": "The prompt a send would paste for the chosen notes: Orca's text, with control characters removed. All notes when neither ids nor path is given.",
+        "readOnly": true,
+        "params": {
+          "type": "object",
+          "properties": {
+            "worktree": {
+              "type": "string",
+              "description": "Worktree selector (id, name, branch, path: or current); defaults to the caller's worktree."
+            },
+            "ids": {
+              "type": "array",
+              "description": "Only these notes.",
+              "items": {
+                "type": "string"
+              }
+            },
+            "path": {
+              "type": "string",
+              "description": "Only notes of this path, relative to the worktree root."
+            }
+          }
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "text": {
+              "type": "string"
+            },
+            "count": {
+              "type": "integer"
+            }
+          },
+          "required": [
+            "text",
+            "count"
+          ]
+        }
+      },
+      {
+        "id": "noteTargets",
+        "description": "Where notes can go: the worktree's live agent sessions, each marked sendable or not with the reason, and the installed, enabled agents a new tab can start.",
+        "readOnly": true,
+        "params": {
+          "type": "object",
+          "properties": {
+            "worktree": {
+              "type": "string",
+              "description": "Worktree selector (id, name, branch, path: or current); defaults to the caller's worktree."
+            }
+          }
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "sessions": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "session": {
+                    "type": "string"
+                  },
+                  "agent": {
+                    "type": "string"
+                  },
+                  "label": {
+                    "type": "string"
+                  },
+                  "title": {
+                    "type": "string"
+                  },
+                  "status": {
+                    "type": "string"
+                  },
+                  "state": {
+                    "description": "The agent-status state (working, waiting, blocked, done), or null."
+                  },
+                  "lastActivityAt": {
+                    "type": "number"
+                  },
+                  "sendable": {
+                    "type": "boolean"
+                  },
+                  "reason": {
+                    "type": "string",
+                    "description": "Why the session cannot take notes; absent when sendable."
+                  }
+                },
+                "required": [
+                  "session",
+                  "agent",
+                  "label",
+                  "title",
+                  "status",
+                  "state",
+                  "lastActivityAt",
+                  "sendable"
+                ]
+              }
+            },
+            "agents": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "label": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "id",
+                  "label"
+                ]
+              }
+            }
+          },
+          "required": [
+            "sessions",
+            "agents"
+          ]
+        }
+      },
+      {
+        "id": "sendNotes",
+        "description": "Sends notes as one prompt to an agent session of the worktree, or to a new agent tab, and deletes the notes that were delivered unchanged. Notes already in a running send are skipped; a session that is starting, waiting for approval, blocked or exited is refused, and an undelivered or unconfirmed send keeps every note.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "worktree": {
+              "type": "string",
+              "description": "Worktree selector (id, name, branch, path: or current); defaults to the caller's worktree."
+            },
+            "scope": {
+              "type": "string",
+              "enum": [
+                "note",
+                "file",
+                "all"
+              ],
+              "description": "One note (needs id), one file's notes (needs path), or all notes."
+            },
+            "id": {
+              "type": "string",
+              "description": "The note, for scope note."
+            },
+            "path": {
+              "type": "string",
+              "description": "The file, for scope file."
+            },
+            "session": {
+              "type": "string",
+              "description": "A running agent session of this worktree; give this or agent."
+            },
+            "agent": {
+              "type": "string",
+              "description": "An installed, enabled agent to start in a new tab; give this or session."
+            }
+          },
+          "required": [
+            "scope"
+          ]
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "sent": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "IDs of the notes that were delivered and are gone."
+            },
+            "kept": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "IDs of delivered notes that stay because they changed during the send."
+            },
+            "target": {
+              "type": "object",
+              "properties": {
+                "session": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "session"
+              ]
+            },
+            "delivery": {
+              "type": "string",
+              "description": "pasted into a running session, or command-line / pasted for a new tab."
+            }
+          },
+          "required": [
+            "sent",
+            "kept",
+            "target",
+            "delivery"
+          ]
+        }
+      },
+      {
+        "id": "generateCommitMessage",
+        "description": "Asks an AI agent for a commit message for the staged changes. The recipe's agent, template and arguments apply unless given here; the commit box is not touched. One run per worktree.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "worktree": {
+              "type": "string",
+              "description": "Worktree selector (id, name, branch, path: or current); defaults to the caller's worktree."
+            },
+            "agent": {
+              "type": "string",
+              "description": "An agent ID or custom (the ai-custom-command setting); default the commit message recipe's, else the default agent."
+            },
+            "template": {
+              "type": "string",
+              "description": "Command template for this run, with {basePrompt}, {branch}, {stagedFiles}, {stagedPatch} and {linkedIssue}."
+            },
+            "args": {
+              "type": "string",
+              "description": "Extra agent arguments for this run."
+            },
+            "requestId": {
+              "type": "string",
+              "description": "Names the run so the agents plugin can cancel it; generated when omitted."
+            }
+          }
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "message": {
+              "type": "string",
+              "description": "Subject, a blank line and the body; the subject alone when there is no body."
+            },
+            "subject": {
+              "type": "string",
+              "description": "First line, at most 72 characters, no trailing dot."
+            },
+            "body": {
+              "type": "string",
+              "description": "Everything after the first line, trimmed; empty when none."
+            },
+            "agent": {
+              "type": "string",
+              "description": "The agent that ran."
+            }
+          },
+          "required": [
+            "message",
+            "subject",
+            "body",
+            "agent"
+          ]
+        }
+      },
+      {
+        "id": "cancelGenerate",
+        "description": "Stops the worktree's running commit message generation and its agent process group.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "worktree": {
+              "type": "string",
+              "description": "Worktree selector (id, name, branch, path: or current); defaults to the caller's worktree."
+            }
+          }
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "cancelled": {
+              "type": "boolean",
+              "description": "False when no generation was running."
+            }
+          },
+          "required": [
+            "cancelled"
+          ]
+        }
+      },
+      {
+        "id": "aiFix",
+        "description": "Opens a new agent tab in the worktree with a prompt that asks the agent to fix the failed commit or push, or to resolve the conflicts. Agent, arguments and template override the action's recipe for this launch; save stores them as that scope's recipe.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "worktree": {
+              "type": "string",
+              "description": "Worktree selector (id, name, branch, path: or current); defaults to the caller's worktree."
+            },
+            "action": {
+              "type": "string",
+              "description": "fixCommitFailure, fixPushFailure or resolveConflicts."
+            },
+            "agent": {
+              "type": "string",
+              "description": "An installed, enabled agent; default the recipe's, else the default agent."
+            },
+            "template": {
+              "type": "string",
+              "description": "Command template for this launch; {basePrompt} stands for the built-in prompt."
+            },
+            "args": {
+              "type": "string",
+              "description": "Extra agent arguments, checked against the agent's allowlist."
+            },
+            "save": {
+              "type": "string",
+              "enum": [
+                "repo",
+                "global"
+              ],
+              "description": "Store what this launch used as the recipe of this repository or of all repositories."
+            }
+          },
+          "required": [
+            "action"
+          ]
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "session": {
+              "type": "string",
+              "description": "The new agent session."
+            },
+            "agent": {
+              "type": "string",
+              "description": "The agent started."
+            },
+            "prompt": {
+              "type": "string",
+              "description": "The first prompt it was given."
+            },
+            "saved": {
+              "type": "boolean",
+              "description": "Whether a recipe was written; false when save was not asked for or the recipe was already stored."
+            }
+          },
+          "required": [
+            "session",
+            "agent",
+            "prompt",
+            "saved"
+          ]
+        }
+      },
+      {
+        "id": "aiFixPreview",
+        "description": "The prompt aiFix would send for the action, rendered through the recipe in effect, and that recipe. Starts nothing.",
+        "readOnly": true,
+        "params": {
+          "type": "object",
+          "properties": {
+            "worktree": {
+              "type": "string",
+              "description": "Worktree selector (id, name, branch, path: or current); defaults to the caller's worktree."
+            },
+            "action": {
+              "type": "string",
+              "description": "fixCommitFailure, fixPushFailure or resolveConflicts."
+            }
+          },
+          "required": [
+            "action"
+          ]
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "prompt": {
+              "type": "string"
+            },
+            "recipe": {
+              "type": "object",
+              "properties": {
+                "action": {
+                  "type": "string"
+                },
+                "agent": {
+                  "description": "The agent ID, custom, or null when none is saved (the default agent runs)."
+                },
+                "args": {
+                  "type": "string",
+                  "description": "Extra arguments for the agent; empty when none are saved."
+                },
+                "template": {
+                  "type": "string",
+                  "description": "The command template; {basePrompt} unless saved."
+                },
+                "sources": {
+                  "type": "object",
+                  "properties": {
+                    "agent": {
+                      "type": "string",
+                      "enum": [
+                        "repo",
+                        "global",
+                        "default"
+                      ],
+                      "description": "Where the agent comes from."
+                    },
+                    "args": {
+                      "type": "string",
+                      "enum": [
+                        "repo",
+                        "global",
+                        "default"
+                      ],
+                      "description": "Where the arguments come from."
+                    },
+                    "template": {
+                      "type": "string",
+                      "enum": [
+                        "repo",
+                        "global",
+                        "default"
+                      ],
+                      "description": "Where the template comes from."
+                    }
+                  },
+                  "required": [
+                    "agent",
+                    "args",
+                    "template"
+                  ]
+                }
+              },
+              "required": [
+                "action",
+                "agent",
+                "args",
+                "template",
+                "sources"
+              ]
+            }
+          },
+          "required": [
+            "prompt",
+            "recipe"
+          ]
+        }
+      },
+      {
+        "id": "aiRecipe",
+        "description": "The recipe an AI action runs with in the worktree's repository: each field from the repository's saved recipe, else the global one, else the default, with where it came from.",
+        "readOnly": true,
+        "params": {
+          "type": "object",
+          "properties": {
+            "worktree": {
+              "type": "string",
+              "description": "Worktree selector (id, name, branch, path: or current); defaults to the caller's worktree."
+            },
+            "action": {
+              "type": "string",
+              "description": "CommitMessage, fixCommitFailure, fixPushFailure or resolveConflicts."
+            }
+          },
+          "required": [
+            "action"
+          ]
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "action": {
+              "type": "string"
+            },
+            "agent": {
+              "description": "The agent ID, custom, or null when none is saved (the default agent runs)."
+            },
+            "args": {
+              "type": "string",
+              "description": "Extra arguments for the agent; empty when none are saved."
+            },
+            "template": {
+              "type": "string",
+              "description": "The command template; {basePrompt} unless saved."
+            },
+            "sources": {
+              "type": "object",
+              "properties": {
+                "agent": {
+                  "type": "string",
+                  "enum": [
+                    "repo",
+                    "global",
+                    "default"
+                  ],
+                  "description": "Where the agent comes from."
+                },
+                "args": {
+                  "type": "string",
+                  "enum": [
+                    "repo",
+                    "global",
+                    "default"
+                  ],
+                  "description": "Where the arguments come from."
+                },
+                "template": {
+                  "type": "string",
+                  "enum": [
+                    "repo",
+                    "global",
+                    "default"
+                  ],
+                  "description": "Where the template comes from."
+                }
+              },
+              "required": [
+                "agent",
+                "args",
+                "template"
+              ]
+            }
+          },
+          "required": [
+            "action",
+            "agent",
+            "args",
+            "template",
+            "sources"
+          ]
+        }
+      },
+      {
+        "id": "setAiRecipe",
+        "description": "Saves fields of an AI action's recipe for this repository or for all repositories, or deletes the saved recipe with reset. Fields not given are left as they are; an empty agent or template clears it.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "worktree": {
+              "type": "string",
+              "description": "Worktree selector (id, name, branch, path: or current); defaults to the caller's worktree."
+            },
+            "action": {
+              "type": "string",
+              "description": "CommitMessage, fixCommitFailure, fixPushFailure or resolveConflicts."
+            },
+            "scope": {
+              "type": "string",
+              "enum": [
+                "repo",
+                "global"
+              ],
+              "description": "This worktree's repository, or all repositories."
+            },
+            "agent": {
+              "type": "string",
+              "description": "An agent ID or custom."
+            },
+            "args": {
+              "type": "string",
+              "description": "Extra agent arguments."
+            },
+            "template": {
+              "type": "string",
+              "description": "Command template; {basePrompt} stands for the built-in prompt."
+            },
+            "reset": {
+              "type": "boolean",
+              "description": "Delete the recipe saved at this scope."
+            }
+          },
+          "required": [
+            "action",
+            "scope"
+          ]
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "saved": {
+              "type": "boolean",
+              "description": "False when the recipe already held these values."
+            },
+            "recipe": {
+              "type": "object",
+              "properties": {
+                "action": {
+                  "type": "string"
+                },
+                "agent": {
+                  "description": "The agent ID, custom, or null when none is saved (the default agent runs)."
+                },
+                "args": {
+                  "type": "string",
+                  "description": "Extra arguments for the agent; empty when none are saved."
+                },
+                "template": {
+                  "type": "string",
+                  "description": "The command template; {basePrompt} unless saved."
+                },
+                "sources": {
+                  "type": "object",
+                  "properties": {
+                    "agent": {
+                      "type": "string",
+                      "enum": [
+                        "repo",
+                        "global",
+                        "default"
+                      ],
+                      "description": "Where the agent comes from."
+                    },
+                    "args": {
+                      "type": "string",
+                      "enum": [
+                        "repo",
+                        "global",
+                        "default"
+                      ],
+                      "description": "Where the arguments come from."
+                    },
+                    "template": {
+                      "type": "string",
+                      "enum": [
+                        "repo",
+                        "global",
+                        "default"
+                      ],
+                      "description": "Where the template comes from."
+                    }
+                  },
+                  "required": [
+                    "agent",
+                    "args",
+                    "template"
+                  ]
+                }
+              },
+              "required": [
+                "action",
+                "agent",
+                "args",
+                "template",
+                "sources"
+              ]
+            }
+          },
+          "required": [
+            "saved",
+            "recipe"
           ]
         }
       }
@@ -213,12 +2597,418 @@
             "worktreeId"
           ]
         }
+      },
+      {
+        "id": "notesChanged",
+        "description": "A worktree's diff notes changed.",
+        "data": {
+          "type": "object",
+          "properties": {
+            "worktreeId": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "worktreeId"
+          ]
+        }
+      },
+      {
+        "id": "aiChanged",
+        "description": "Saved AI recipes changed.",
+        "data": {
+          "type": "object",
+          "properties": {
+            "repoId": {
+              "description": "The repository whose recipes changed, or null for the global ones."
+            }
+          },
+          "required": [
+            "repoId"
+          ]
+        }
       }
     ],
     "panel": [
       {
         "id": "source-control",
         "title": "Source control"
+      }
+    ],
+    "view": [
+      {
+        "id": "diff",
+        "title": "Diff"
+      },
+      {
+        "id": "ai-settings",
+        "title": "Source Control AI defaults"
+      }
+    ],
+    "command": [
+      {
+        "id": "show",
+        "title": "Show Source Control"
+      },
+      {
+        "id": "open-diff",
+        "title": "Open Diff",
+        "args": {
+          "type": "object",
+          "properties": {
+            "path": {
+              "type": "string",
+              "description": "File path relative to the worktree root."
+            },
+            "source": {
+              "type": "string",
+              "description": "Which sides to show; conflict opens the conflict file view.",
+              "enum": [
+                "unstaged",
+                "staged",
+                "branch",
+                "commit",
+                "conflict"
+              ]
+            },
+            "area": {
+              "type": "string",
+              "description": "Section the row is in.",
+              "enum": [
+                "staged",
+                "unstaged",
+                "untracked",
+                "branch",
+                "all"
+              ]
+            },
+            "commit": {
+              "type": "string",
+              "description": "Commit for source commit."
+            },
+            "oldPath": {
+              "type": "string",
+              "description": "Previous path of a renamed file."
+            },
+            "worktree": {
+              "type": "string",
+              "description": "Worktree selector; defaults to the open view's worktree."
+            }
+          },
+          "required": [
+            "path"
+          ]
+        }
+      },
+      {
+        "id": "open-changes",
+        "title": "View All Changes",
+        "args": {
+          "type": "object",
+          "properties": {
+            "area": {
+              "type": "string",
+              "description": "Section to show; all shows uncommitted then branch changes.",
+              "enum": [
+                "staged",
+                "unstaged",
+                "untracked",
+                "branch",
+                "all"
+              ]
+            },
+            "worktree": {
+              "type": "string",
+              "description": "Worktree selector; defaults to the open view's worktree."
+            }
+          }
+        }
+      },
+      {
+        "id": "open-branch-changes",
+        "title": "Open Branch Diff",
+        "args": {
+          "type": "object",
+          "properties": {
+            "worktree": {
+              "type": "string",
+              "description": "Worktree selector; defaults to the open view's worktree."
+            }
+          }
+        }
+      },
+      {
+        "id": "open-commit",
+        "title": "Open Commit Diff",
+        "args": {
+          "type": "object",
+          "properties": {
+            "commit": {
+              "type": "string",
+              "description": "Commit sha."
+            },
+            "worktree": {
+              "type": "string",
+              "description": "Worktree selector; defaults to the open view's worktree."
+            }
+          },
+          "required": [
+            "commit"
+          ]
+        }
+      },
+      {
+        "id": "review-conflicts",
+        "title": "Review Conflicts",
+        "args": {
+          "type": "object",
+          "properties": {
+            "worktree": {
+              "type": "string",
+              "description": "Worktree selector; defaults to the open view's worktree."
+            }
+          }
+        }
+      },
+      {
+        "id": "next-change",
+        "title": "Go to Next Change"
+      },
+      {
+        "id": "previous-change",
+        "title": "Go to Previous Change"
+      },
+      {
+        "id": "next-conflict",
+        "title": "Go to Next Conflict"
+      },
+      {
+        "id": "previous-conflict",
+        "title": "Go to Previous Conflict"
+      },
+      {
+        "id": "revert-change",
+        "title": "Revert Change"
+      },
+      {
+        "id": "save",
+        "title": "Save File"
+      },
+      {
+        "id": "reload-from-disk",
+        "title": "Reload from Disk"
+      },
+      {
+        "id": "overwrite",
+        "title": "Overwrite File on Disk"
+      },
+      {
+        "id": "collapse-all",
+        "title": "Collapse All Files",
+        "args": {
+          "type": "object",
+          "properties": {
+            "collapsed": {
+              "type": "boolean",
+              "description": "Collapse when true, expand when false; omit to toggle."
+            }
+          }
+        }
+      },
+      {
+        "id": "load-diff",
+        "title": "Load Diff",
+        "args": {
+          "type": "object",
+          "properties": {
+            "path": {
+              "type": "string",
+              "description": "Path of the combined diff section to load."
+            }
+          },
+          "required": [
+            "path"
+          ]
+        }
+      },
+      {
+        "id": "refresh-compare",
+        "title": "Refresh Branch Compare"
+      },
+      {
+        "id": "set-filter",
+        "title": "Filter Changed Files",
+        "args": {
+          "type": "object",
+          "properties": {
+            "query": {
+              "type": "string",
+              "description": "Filter text; an empty string closes the filter."
+            }
+          },
+          "required": [
+            "query"
+          ]
+        }
+      },
+      {
+        "id": "select",
+        "title": "Select Files",
+        "args": {
+          "type": "object",
+          "properties": {
+            "paths": {
+              "type": "array",
+              "description": "Paths to select in the panel.",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          "required": [
+            "paths"
+          ]
+        }
+      },
+      {
+        "id": "toggle-history",
+        "title": "Toggle Commit History",
+        "args": {
+          "type": "object",
+          "properties": {
+            "open": {
+              "type": "boolean",
+              "description": "Open when true, close when false; omit to toggle."
+            }
+          }
+        }
+      },
+      {
+        "id": "add-review-note",
+        "title": "Add Review Note"
+      },
+      {
+        "id": "send-review-notes",
+        "title": "Send Review Notes to Agent"
+      },
+      {
+        "id": "ai-settings",
+        "title": "Source Control AI Settings"
+      }
+    ],
+    "keybinding": [
+      {
+        "id": "show",
+        "key": "mod+shift+g",
+        "command": "show"
+      },
+      {
+        "id": "next-change",
+        "key": "f7",
+        "command": "next-change"
+      },
+      {
+        "id": "previous-change",
+        "key": "shift+f7",
+        "command": "previous-change"
+      },
+      {
+        "id": "add-review-note",
+        "key": "mod+shift+a",
+        "command": "add-review-note"
+      }
+    ],
+    "setting": [
+      {
+        "id": "groupOrder",
+        "type": "enum",
+        "title": "Source Control Group Order",
+        "description": "Which section comes first after Conflicts.",
+        "default": "changes-first",
+        "values": [
+          "changes-first",
+          "staged-first",
+          "untracked-first"
+        ]
+      },
+      {
+        "id": "compareBase",
+        "type": "enum",
+        "title": "Default Compare Base",
+        "description": "What the branch compare uses when the worktree has no base of its own.",
+        "default": "repository-default",
+        "values": [
+          "repository-default",
+          "branch-upstream"
+        ]
+      },
+      {
+        "id": "viewMode",
+        "type": "enum",
+        "title": "Source Control View Mode",
+        "description": "Show changed files as a list or grouped by folder.",
+        "default": "list",
+        "values": [
+          "list",
+          "tree"
+        ]
+      },
+      {
+        "id": "diffDefaultView",
+        "type": "enum",
+        "title": "Default Diff View",
+        "description": "How a diff opens.",
+        "default": "inline",
+        "values": [
+          "inline",
+          "side-by-side"
+        ]
+      },
+      {
+        "id": "diffWordWrap",
+        "type": "boolean",
+        "title": "Diff Word Wrap",
+        "description": "Wrap long lines in diffs.",
+        "default": false
+      },
+      {
+        "id": "diffShowWhitespace",
+        "type": "boolean",
+        "title": "Diff Show Whitespace",
+        "description": "Highlight whitespace-only changes and trailing whitespace in diffs.",
+        "default": false
+      },
+      {
+        "id": "diffCollapseUnchanged",
+        "type": "boolean",
+        "title": "Collapse Unchanged Regions",
+        "description": "Fold long unchanged stretches in diffs.",
+        "default": false
+      },
+      {
+        "id": "combinedDiffFileTree",
+        "type": "enum",
+        "title": "Default Diff File Tree",
+        "description": "Whether a combined diff opens with its file tree.",
+        "default": "hidden",
+        "values": [
+          "hidden",
+          "shown"
+        ]
+      },
+      {
+        "id": "ai-enabled",
+        "type": "boolean",
+        "title": "Show Source Control AI actions",
+        "description": "Adds AI buttons that run the selected agent with the command template for that action.",
+        "default": true
+      },
+      {
+        "id": "ai-custom-command",
+        "type": "string",
+        "title": "Custom command",
+        "description": "Command line Quirky runs when a recipe uses Custom command.",
+        "default": ""
       }
     ]
   }

@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 import { join } from 'node:path'
-import { findRepoRoot, resolveRuntimeEnv } from '../src/bun/paths'
+import { findRepoRoot, resolveRuntimeEnv, trayDotPath } from '../src/bun/paths'
 
 const fakeFs = (files: string[]) => (path: string) => files.includes(path)
 
@@ -83,5 +83,26 @@ describe('resolveRuntimeEnv', () => {
 describe('findRepoRoot', () => {
   test('returns null when no ancestor contains the daemon entry', () => {
     expect(findRepoRoot('/a/b/c', () => false)).toBeNull()
+  })
+})
+
+describe('trayDotPath', () => {
+  test('packaged builds read the image copied into resources/assets', () => {
+    const moduleDir = '/Apps/Quirky.app/Contents/Resources/app/bun'
+    expect(trayDotPath({ packaged: true, moduleDir, env: {}, exists: () => true })).toBe(
+      '/Apps/Quirky.app/Contents/Resources/app/resources/assets/tray-dot.png'
+    )
+  })
+
+  test('source mode reads the image from the repo checkout', () => {
+    expect(
+      trayDotPath({ packaged: false, moduleDir: '/anywhere', env: { QUIRKY_REPO_ROOT: '/repo' }, exists: () => true })
+    ).toBe('/repo/apps/desktop/assets/tray-dot.png')
+  })
+
+  test('source mode without a findable repo root falls back to resources', () => {
+    expect(trayDotPath({ packaged: false, moduleDir: '/nowhere/app/bun', env: {}, exists: () => false })).toBe(
+      '/nowhere/app/resources/assets/tray-dot.png'
+    )
   })
 })

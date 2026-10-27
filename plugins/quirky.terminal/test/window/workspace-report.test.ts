@@ -41,7 +41,7 @@ describe('SC-3: the view reports what the window shows', () => {
   test('keeps the v1 fields and adds layout, focusedPane, panes, menu and dialog', async () => {
     const view = await mount()
     const report = view.last()
-    expect(Object.keys(report).sort()).toEqual(['active', 'dialog', 'focusedPane', 'layout', 'menu', 'panes', 'tabs', 'worktree'])
+    expect(Object.keys(report).sort()).toEqual(['active', 'dialog', 'focusedPane', 'layout', 'menu', 'panes', 'tabs', 'visibleSessions', 'worktree'])
     expect(report.worktree).toBe('wt-main')
     expect(report.active).toBe('s-3')
     expect(report.focusedPane).toBe('pane-3')

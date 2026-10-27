@@ -51,6 +51,8 @@ export type DaemonOptions = {
   socketPath?: string
   /** Called when `daemon.stop` asks the daemon to stop; defaults to stopping this daemon handle. */
   onStopRequested?: () => void
+  /** How long without input before a window stops counting as present; defaults to `$QUIRKY_DESKTOP_AWAY_MS` (a positive integer) or `DESKTOP_AWAY_MS`. */
+  desktopAwayMs?: number
 }
 
 export type DaemonHandle = {
@@ -95,6 +97,11 @@ function defaultUiDir(): string {
 
 function defaultBuiltinPluginsDir(): string {
   return process.env.QUIRKY_BUILTIN_PLUGINS_DIR ?? fileURLToPath(new URL('../../../plugins', import.meta.url))
+}
+
+function positiveInteger(text: string | undefined): number | undefined {
+  const value = Number(text)
+  return text !== undefined && Number.isInteger(value) && value > 0 ? value : undefined
 }
 
 /**
@@ -171,6 +178,8 @@ export async function startDaemon(options: DaemonOptions): Promise<DaemonHandle>
     stopDaemon: () => (options.onStopRequested ?? (() => void handle?.stop()))()
   })
   lateRuntime = pluginRuntime
+  const awayMs = options.desktopAwayMs ?? positiveInteger(process.env.QUIRKY_DESKTOP_AWAY_MS)
+  if (awayMs !== undefined) pluginRuntime.layout.setAwayMs(awayMs)
   let handle: DaemonHandle | undefined
 
   installIntegrationFiles(home, cliEntry)

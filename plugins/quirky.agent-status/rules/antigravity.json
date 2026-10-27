@@ -1,0 +1,20 @@
+{
+  "agent": "antigravity",
+  "description": "Antigravity detection rules.",
+  "rules": [
+    {
+      "id": "composer-ready",
+      "why": "The bottom four rows at an idle composer, decided by the `? for shortcuts` hint (it reads `esc to cancel` mid-turn and the model picker covers it); the submit repaints the composer for a moment mid-turn, so the screen must be quiet.",
+      "state": "idle",
+      "region": "screen",
+      "lastLines": 4,
+      "all": [
+        {
+          "regex": "^─{8,}\\n(?:>[ \\t]*|>[ \\t]+[a-z][a-z-]*[ \\t]+mode:[ \\t][^\\n]*)\\n─{8,}\\n\\? for shortcuts",
+          "ignoreCase": true
+        }
+      ],
+      "quietMs": 1000
+    }
+  ]
+}

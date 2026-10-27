@@ -106,7 +106,7 @@ describe('OutputScanner facts', () => {
   })
 
   test('other OSC 777 payloads pass through untouched', () => {
-    const input = `${ESC}]777;quirky-shell-ready-not${BEL}${ESC}]777;notify;t;b${BEL}`
+    const input = `${ESC}]777;quirky-shell-ready-not${BEL}${ESC}]777;precmd;t;b${BEL}`
     const r = scan(input)
     expect(r.facts).toEqual([])
     expect(dec(r.bytes)).toBe(input)

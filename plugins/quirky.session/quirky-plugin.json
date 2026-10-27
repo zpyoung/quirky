@@ -101,6 +101,12 @@
               },
               "agentStatus": {
                 "description": "The agent-status summary ({state, display, label, detail, progress, stateStartedAt, evidenceAt, restoredUnconfirmed}) the window draws; null or absent when no agent has reported one."
+              },
+              "name": {
+                "description": "The session's name (lowercase; unique among sessions that have not exited), or null when it has none."
+              },
+              "unread": {
+                "description": "Why the session is marked unread: `agent`, `bell` or `notification`; null or absent when it is not."
               }
             },
             "required": [
@@ -120,14 +126,14 @@
       },
       {
         "id": "get",
-        "description": "One session by ID.",
+        "description": "One session by ID or name.",
         "readOnly": true,
         "params": {
           "type": "object",
           "properties": {
             "session": {
               "type": "string",
-              "description": "The session ID."
+              "description": "The session ID or name."
             }
           },
           "required": [
@@ -207,6 +213,12 @@
             },
             "agentStatus": {
               "description": "The agent-status summary ({state, display, label, detail, progress, stateStartedAt, evidenceAt, restoredUnconfirmed}) the window draws; null or absent when no agent has reported one."
+            },
+            "name": {
+              "description": "The session's name (lowercase; unique among sessions that have not exited), or null when it has none."
+            },
+            "unread": {
+              "description": "Why the session is marked unread: `agent`, `bell` or `notification`; null or absent when it is not."
             }
           },
           "required": [
@@ -252,6 +264,10 @@
             "title": {
               "type": "string",
               "description": "Tab title; numbered like the default titles when taken"
+            },
+            "name": {
+              "type": "string",
+              "description": "Name for the session: 1 to 64 letters, digits, `.`, `_` or `-`, starting with a letter or digit and not with `s_`; stored lowercase. Refused with `name-taken` while a session that has not exited holds it."
             },
             "command": {
               "type": "string",
@@ -357,6 +373,12 @@
             },
             "agentStatus": {
               "description": "The agent-status summary ({state, display, label, detail, progress, stateStartedAt, evidenceAt, restoredUnconfirmed}) the window draws; null or absent when no agent has reported one."
+            },
+            "name": {
+              "description": "The session's name (lowercase; unique among sessions that have not exited), or null when it has none."
+            },
+            "unread": {
+              "description": "Why the session is marked unread: `agent`, `bell` or `notification`; null or absent when it is not."
             }
           },
           "required": [
@@ -473,6 +495,126 @@
             },
             "agentStatus": {
               "description": "The agent-status summary ({state, display, label, detail, progress, stateStartedAt, evidenceAt, restoredUnconfirmed}) the window draws; null or absent when no agent has reported one."
+            },
+            "name": {
+              "description": "The session's name (lowercase; unique among sessions that have not exited), or null when it has none."
+            },
+            "unread": {
+              "description": "Why the session is marked unread: `agent`, `bell` or `notification`; null or absent when it is not."
+            }
+          },
+          "required": [
+            "id",
+            "kind",
+            "agent",
+            "worktreeId",
+            "cwd",
+            "title",
+            "status",
+            "createdAt",
+            "lastActivityAt",
+            "exitCode"
+          ]
+        }
+      },
+      {
+        "id": "setName",
+        "description": "Gives a session a name, or clears it with null. Names are stored lowercase and are unique among sessions that have not exited: a running holder refuses it with a conflict (`data.reason` `name-taken`), an exited holder loses the name to this session.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "session": {
+              "type": "string",
+              "description": "The session ID or name."
+            },
+            "name": {
+              "description": "The new name (1 to 64 letters, digits, `.`, `_` or `-`, starting with a letter or digit and not with `s_`), or null to clear it."
+            }
+          },
+          "required": [
+            "session",
+            "name"
+          ]
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "kind": {
+              "type": "string",
+              "enum": [
+                "terminal",
+                "structured"
+              ]
+            },
+            "agent": {
+              "type": "string",
+              "description": "`shell` or the ID of the agent the session runs."
+            },
+            "worktreeId": {
+              "type": "string"
+            },
+            "cwd": {
+              "type": "string"
+            },
+            "title": {
+              "type": "string"
+            },
+            "status": {
+              "type": "string",
+              "enum": [
+                "starting",
+                "running",
+                "working",
+                "waiting",
+                "done",
+                "exited"
+              ]
+            },
+            "createdAt": {
+              "type": "number"
+            },
+            "lastActivityAt": {
+              "type": "number"
+            },
+            "exitCode": {
+              "description": "The exit code, or null while the process is alive."
+            },
+            "exitSignal": {
+              "description": "The signal that ended the process, or null."
+            },
+            "exitCause": {
+              "description": "Why the session ended (exited, killed, host-restart or host-lost), or null while it is alive."
+            },
+            "restorable": {
+              "type": "boolean",
+              "description": "True when the session ended with the PTY host and can be restored."
+            },
+            "launch": {
+              "description": "What the session launched with ({command, args, env}); null for a shell or a session recorded before launches were kept."
+            },
+            "launchSettings": {
+              "description": "What the launch applied ({agent, options, args, summary}); null when it applied nothing."
+            },
+            "providerSession": {
+              "description": "The agent CLI's own session ({id, transcriptPath}) that resume passes back; null until one is stored."
+            },
+            "promptDelivery": {
+              "description": "How the first prompt reached the agent: null (no prompt), command-line, pending, pasted, unconfirmed or not-delivered."
+            },
+            "resumedFrom": {
+              "description": "The session this one was resumed or forked from; null otherwise."
+            },
+            "agentStatus": {
+              "description": "The agent-status summary ({state, display, label, detail, progress, stateStartedAt, evidenceAt, restoredUnconfirmed}) the window draws; null or absent when no agent has reported one."
+            },
+            "name": {
+              "description": "The session's name (lowercase; unique among sessions that have not exited), or null when it has none."
+            },
+            "unread": {
+              "description": "Why the session is marked unread: `agent`, `bell` or `notification`; null or absent when it is not."
             }
           },
           "required": [
@@ -586,6 +728,12 @@
             },
             "agentStatus": {
               "description": "The agent-status summary ({state, display, label, detail, progress, stateStartedAt, evidenceAt, restoredUnconfirmed}) the window draws; null or absent when no agent has reported one."
+            },
+            "name": {
+              "description": "The session's name (lowercase; unique among sessions that have not exited), or null when it has none."
+            },
+            "unread": {
+              "description": "Why the session is marked unread: `agent`, `bell` or `notification`; null or absent when it is not."
             }
           },
           "required": [
@@ -707,6 +855,12 @@
             },
             "agentStatus": {
               "description": "The agent-status summary ({state, display, label, detail, progress, stateStartedAt, evidenceAt, restoredUnconfirmed}) the window draws; null or absent when no agent has reported one."
+            },
+            "name": {
+              "description": "The session's name (lowercase; unique among sessions that have not exited), or null when it has none."
+            },
+            "unread": {
+              "description": "Why the session is marked unread: `agent`, `bell` or `notification`; null or absent when it is not."
             }
           },
           "required": [
@@ -811,6 +965,12 @@
             },
             "agentStatus": {
               "description": "The agent-status summary ({state, display, label, detail, progress, stateStartedAt, evidenceAt, restoredUnconfirmed}) the window draws; null or absent when no agent has reported one."
+            },
+            "name": {
+              "description": "The session's name (lowercase; unique among sessions that have not exited), or null when it has none."
+            },
+            "unread": {
+              "description": "Why the session is marked unread: `agent`, `bell` or `notification`; null or absent when it is not."
             }
           },
           "required": [
@@ -835,7 +995,7 @@
           "properties": {
             "session": {
               "type": "string",
-              "description": "The session ID."
+              "description": "The session ID or name."
             }
           },
           "required": [
@@ -880,6 +1040,9 @@
             },
             "agentStatus": {
               "description": "The agent-status summary to store, or null to clear it; omitted leaves it unchanged. Cleared when the session exits."
+            },
+            "unread": {
+              "description": "Why the session is marked unread: `agent`, `bell` or `notification`; null or absent when it is not."
             }
           },
           "required": [
@@ -960,6 +1123,123 @@
             },
             "agentStatus": {
               "description": "The agent-status summary ({state, display, label, detail, progress, stateStartedAt, evidenceAt, restoredUnconfirmed}) the window draws; null or absent when no agent has reported one."
+            },
+            "name": {
+              "description": "The session's name (lowercase; unique among sessions that have not exited), or null when it has none."
+            },
+            "unread": {
+              "description": "Why the session is marked unread: `agent`, `bell` or `notification`; null or absent when it is not."
+            }
+          },
+          "required": [
+            "id",
+            "kind",
+            "agent",
+            "worktreeId",
+            "cwd",
+            "title",
+            "status",
+            "createdAt",
+            "lastActivityAt",
+            "exitCode"
+          ]
+        }
+      },
+      {
+        "id": "setUnread",
+        "description": "Sets or clears a session's unread reason; `changed` is emitted only when the value changes.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "session": {
+              "type": "string",
+              "description": "The session ID."
+            },
+            "unread": {
+              "description": "The reason (`agent`, `bell` or `notification`), or null to mark the session read."
+            }
+          },
+          "required": [
+            "session",
+            "unread"
+          ]
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "kind": {
+              "type": "string",
+              "enum": [
+                "terminal",
+                "structured"
+              ]
+            },
+            "agent": {
+              "type": "string",
+              "description": "`shell` or the ID of the agent the session runs."
+            },
+            "worktreeId": {
+              "type": "string"
+            },
+            "cwd": {
+              "type": "string"
+            },
+            "title": {
+              "type": "string"
+            },
+            "status": {
+              "type": "string",
+              "enum": [
+                "starting",
+                "running",
+                "working",
+                "waiting",
+                "done",
+                "exited"
+              ]
+            },
+            "createdAt": {
+              "type": "number"
+            },
+            "lastActivityAt": {
+              "type": "number"
+            },
+            "exitCode": {
+              "description": "The exit code, or null while the process is alive."
+            },
+            "exitSignal": {
+              "description": "The signal that ended the process, or null."
+            },
+            "exitCause": {
+              "description": "Why the session ended (exited, killed, host-restart or host-lost), or null while it is alive."
+            },
+            "restorable": {
+              "type": "boolean",
+              "description": "True when the session ended with the PTY host and can be restored."
+            },
+            "launch": {
+              "description": "What the session launched with ({command, args, env}); null for a shell or a session recorded before launches were kept."
+            },
+            "launchSettings": {
+              "description": "What the launch applied ({agent, options, args, summary}); null when it applied nothing."
+            },
+            "providerSession": {
+              "description": "The agent CLI's own session ({id, transcriptPath}) that resume passes back; null until one is stored."
+            },
+            "promptDelivery": {
+              "description": "How the first prompt reached the agent: null (no prompt), command-line, pending, pasted, unconfirmed or not-delivered."
+            },
+            "resumedFrom": {
+              "description": "The session this one was resumed or forked from; null otherwise."
+            },
+            "agentStatus": {
+              "description": "The agent-status summary ({state, display, label, detail, progress, stateStartedAt, evidenceAt, restoredUnconfirmed}) the window draws; null or absent when no agent has reported one."
+            },
+            "unread": {
+              "description": "Why the session is marked unread: `agent`, `bell` or `notification`; null or absent when it is not."
             }
           },
           "required": [
@@ -1054,6 +1334,12 @@
                 },
                 "agentStatus": {
                   "description": "The agent-status summary ({state, display, label, detail, progress, stateStartedAt, evidenceAt, restoredUnconfirmed}) the window draws; null or absent when no agent has reported one."
+                },
+                "name": {
+                  "description": "The session's name (lowercase; unique among sessions that have not exited), or null when it has none."
+                },
+                "unread": {
+                  "description": "Why the session is marked unread: `agent`, `bell` or `notification`; null or absent when it is not."
                 }
               },
               "required": [
@@ -1241,7 +1527,7 @@
         "positionals": [
           {
             "name": "session",
-            "description": "the session",
+            "description": "the session (ID or name)",
             "required": true
           }
         ],
@@ -1261,6 +1547,10 @@
           "worktree": {
             "type": "string",
             "description": "worktree selector (default: the current worktree)"
+          },
+          "name": {
+            "type": "string",
+            "description": "name the session so scripts can address it (lowercase letters, digits, . _ -)"
           },
           "cwd": {
             "type": "string",
@@ -1336,6 +1626,31 @@
         ]
       },
       {
+        "id": "name",
+        "words": "name",
+        "summary": "name a session, or clear its name with --clear",
+        "positionals": [
+          {
+            "name": "session",
+            "description": "the session (ID or name)",
+            "required": true
+          },
+          {
+            "name": "name",
+            "description": "the new name"
+          }
+        ],
+        "flags": {
+          "clear": {
+            "type": "boolean",
+            "description": "remove the session's name instead of setting one"
+          }
+        },
+        "methods": [
+          "quirky.session/setName"
+        ]
+      },
+      {
         "id": "set-provider-session",
         "words": "set-provider-session",
         "summary": "store the agent CLI's own session ID on a session so it can be resumed",
@@ -1386,7 +1701,7 @@
         "positionals": [
           {
             "name": "session",
-            "description": "the session to close",
+            "description": "the session (ID or name)",
             "required": true
           }
         ],

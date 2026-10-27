@@ -2,5 +2,4 @@
 # these still run on this Mac. Add a file only when it fails on Linux for a macOS reason, and say why.
 plugins/quirky.terminal/test/e2e.test.ts  expects zsh's macOS default prompt, which shows the folder name
 plugins/quirky.terminal/test/e2e-ui/features-pane.test.ts  SC-37 pastes more than Linux's 128 KB limit on one argument
-plugins/quirky.worktree/test/window-create.test.ts  SC-31 races the window's first shell on Linux; fix-sc31-first-shell-race removes this line
 plugins/quirky.editor/test/markdown.test.ts  SC-14 exports a real PDF with the installed macOS Chrome; the remote Linux host has no Chrome/Chromium

@@ -38,6 +38,21 @@ describe('SC-21: terminal titles fill in where hooks are silent', () => {
     expect(rig.notifies()).toEqual([])
   })
 
+  test('a title that moves a row into waiting or done settles it; the row a title starts and a repeated title do not', async () => {
+    rig = await Rig.start()
+    await rig.title('✳ Claude Code')
+    expect(await rig.row()).toMatchObject({ state: 'done', source: 'title' })
+    await rig.title('⠋ Working on it')
+    await rig.title('✋ gemini')
+    await rig.title('✋ gemini')
+    await rig.title('✳ Claude Code')
+    expect(rig.settles()).toMatchObject([
+      { sessionId: 's1', worktreeId: 'wt1', agent: 'claude', state: 'waiting', outcome: null, interrupted: false },
+      { sessionId: 's1', worktreeId: 'wt1', agent: 'claude', state: 'done' }
+    ])
+    expect(rig.notifies()).toEqual([])
+  })
+
   test('a fresh hook row ignores the same titles', async () => {
     rig = await Rig.start()
     await prompt()
@@ -90,6 +105,11 @@ describe('SC-22: OSC 7501 reports and the probe', () => {
     expect(await rig.row()).toBeNull()
     expect((await rig.session()).status).toBe('running')
     expect(rig.notifies()).toEqual([])
+    expect(rig.settles().map((s) => [s.state, s.outcome])).toEqual([
+      ['waiting', null],
+      ['blocked', null],
+      ['done', 'success']
+    ])
   })
 
   test('a report with a bad state, bad base64 in msg, or over 4096 bytes is ignored', async () => {
@@ -163,9 +183,48 @@ describe('SC-23: hooks outrank OSC 7501 until they fall silent', () => {
     await waitForAsync(async () => (await rig.state()) === 'done', 2000)
     expect(await rig.row()).toMatchObject({ state: 'done', source: 'program-status', display: 'done' })
     expect(rig.notifies()).toEqual([])
+    expect(rig.settles()).toEqual([])
 
     await prompt()
     expect(await rig.row()).toMatchObject({ state: 'working', source: 'hook' })
+  })
+
+  test('a done report that takes over a row with a working child settles nothing', async () => {
+    rig = await Rig.start()
+    await prompt()
+    await rig.hook('claude', { hook_event_name: 'SubagentStart', agent_id: 'a1' })
+    await rig.hook('claude', { hook_event_name: 'Stop' })
+    expect(await rig.row()).toMatchObject({ state: 'working', lead: { state: 'done' }, children: [{ state: 'working' }] })
+
+    await rig.osc('state=done')
+    await waitForAsync(async () => (await rig.row())?.source === 'program-status', 2000)
+    await rig.settle()
+    expect(rig.settles()).toEqual([])
+    expect(await rig.row()).toMatchObject({ state: 'working', source: 'program-status', lead: { state: 'done' } })
+
+    await rig.hook('claude', { hook_event_name: 'SubagentStop', agent_id: 'a1' })
+    await rig.waitForSettles(1)
+    await rig.settle()
+    expect(rig.settles()).toMatchObject([{ state: 'done', agent: 'claude' }])
+    expect(await rig.state()).toBe('done')
+  })
+
+  test('an idle report is a session boundary, so the row it moves into done settles nothing', async () => {
+    rig = await Rig.start()
+    await rig.osc('state=working')
+    await rig.osc('state=idle')
+    expect(await rig.row()).toMatchObject({ state: 'done', sessionBoundary: true })
+    expect(rig.settles()).toEqual([])
+  })
+
+  test('a done report that follows a hook row into done settles it once', async () => {
+    rig = await Rig.start()
+    await prompt()
+    await rig.osc('state=idle')
+    await rig.osc('state=done')
+    await waitForAsync(async () => (await rig.row())?.source === 'program-status', 2000)
+    await rig.settle()
+    expect(rig.settles()).toMatchObject([{ state: 'done', agent: 'claude' }])
   })
 
   test('a report that agrees with the hook row changes nothing, even after the silence', async () => {
@@ -195,8 +254,8 @@ describe('precedence when the hooks setting is off', () => {
 
   test('a title never replaces a fresh hook row or a program-status row', () => {
     const hook = hooked()
-    expect(titleEvidence(hook, 'idle', { sessionId: 's1', agent: 'claude', at: at + 1000 })).toBe(hook)
+    expect(titleEvidence(hook, 'idle', { sessionId: 's1', agent: 'claude', at: at + 1000, title: '✳ claude' })).toBe(hook)
     const program = programEvidence(null, { id: null, state: 'working' }, ev({})).row!
-    expect(titleEvidence(program, 'idle', { sessionId: 's1', agent: 'claude', at: at + 1000 })).toBe(program)
+    expect(titleEvidence(program, 'idle', { sessionId: 's1', agent: 'claude', at: at + 1000, title: '✳ claude' })).toBe(program)
   })
 })

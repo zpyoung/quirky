@@ -8,22 +8,31 @@ files, not this one.
 | --- | --- | --- | --- | --- |
 | hard | medium | [m0-scripting D10](decisions/m0-scripting.md) | A plugin's methods become `quirky <group> <method>`, where the group is the plugin ID without the `quirky.` prefix | assumed — autonomous |
 | hard | medium | [m0-scripting D12](decisions/m0-scripting.md) | Each param is a kebab-case flag, objects take JSON, and `--params` passes the whole object | assumed — autonomous |
+| hard | medium | [m2-source-control-notes-ai D15](decisions/m2-source-control-notes-ai.md) | Approach: one-shot invocations are agent data in `quirky.agents`; prompts, recipes and notes stay in `quirky.git` | assumed — autonomous |
 | hard | medium | [m0-core D5](decisions/m0-core.md) | v1 moves into eight built-in plugins, one per roadmap feature | assumed — autonomous |
 | hard | medium | [m0-core D9](decisions/m0-core.md) | Plugins ship CLI commands as `cli-command` contributions, with an optional CLI module for custom run code | assumed — autonomous |
 | hard | medium | [m0-core D11](decisions/m0-core.md) | The plugin API grows by six members so the built-ins need nothing private | assumed — autonomous |
 | hard | medium | [m0-core D21](decisions/m0-core.md) | The daemon owns the window's layout, focus and visible view | locked by docs/roadmap.md (what lives in the daemon); assumed — autonomous (the shape) |
 | hard | medium | [m0-core D26](decisions/m0-core.md) | A distro is applied as an overlay that removing it takes away | locked by docs/roadmap.md (what the manifest names); assumed — autonomous (the overlay) |
 | hard | medium | [m1-worktrees D8](decisions/m1-worktrees.md) | The worktree record grows additively, and `name` becomes the display name or the folder name | assumed — autonomous |
+| hard | medium | [m1-agent-status-scripting D3](decisions/m1-agent-status-scripting.md) | Scripts see four states: working, blocked, idle and unknown, plus exited | assumed — autonomous |
+| hard | medium | [m1-agent-status-scripting D5](decisions/m1-agent-status-scripting.md) | One JSON rule file per agent, first match wins, title or screen regions, regex and contains matchers | assumed — autonomous |
+| hard | medium | [m1-agent-status-scripting D20](decisions/m1-agent-status-scripting.md) | Sessions get an optional unique name, and every session parameter in this item takes a name or an ID | assumed — autonomous |
 | hard | medium | [m0-daemon-api D4](decisions/m0-daemon-api.md) | Plugin method wire names are `<pluginId>/<name>` | assumed — autonomous |
 | hard | medium | [m0-daemon-api D9](decisions/m0-daemon-api.md) | Each plugin gets one SQLite file and a data directory of its own | assumed — autonomous |
+| hard | medium | [m5-ledger D5](decisions/m5-ledger.md) | Keep stable ledger codebase identity separate from generated repo IDs | assumed — autonomous |
 | hard | medium | [m0-ui-api D6](decisions/m0-ui-api.md) | A slot gives the plugin one container element to mount into, and nothing else of the page | assumed — autonomous |
 | hard | medium | [m0-registry D4](decisions/m0-registry.md) | Contribution IDs are `<kind>:<pluginId>/<name>` | assumed — autonomous |
 | hard | medium | [m1-launch-settings D5](decisions/m1-launch-settings.md) | Approach: each agent's model and option catalog is a `launchOptions` data block on its `agent` contribution, resolved by code in `quirky.agents` | assumed — autonomous |
 | hard | medium | [m1-providers D5](decisions/m1-providers.md) | A new built-in plugin, `quirky.agents`, owns the catalog, detection, agent configuration and launch planning; `quirky.session` keeps records and spawning | supersedes m0-core D5 (narrows it) |
 | hard | medium | [m1-providers D6](decisions/m1-providers.md) | Each agent is an `agent` contribution in a manifest, so plugins can add, replace or disable agents as data | assumed — autonomous |
 | hard | medium | [m1-providers D36](decisions/m1-providers.md) | Approach: port Orca's pure launch code into `quirky.agents`, with the catalog as manifest data | assumed — autonomous |
+| hard (target safety and command semantics) | high | [sa-browser-agent D4](decisions/sa-browser-agent.md) | Keep page targeting scoped and snapshot references ephemeral | locked by docs/architecture.md |
+| hard (authentication-state mutation) | high | [sa-browser-agent D6](decisions/sa-browser-agent.md) | Import cookies with transactional domain-scoped replacement and explicit warnings | locked by docs/architecture.md |
 | hard | high | [m0-scripting D4](decisions/m0-scripting.md) | Schemas are a flat subset of JSON Schema | assumed — autonomous |
 | hard | high | [m0-scripting D24](decisions/m0-scripting.md) | Choose schemas declared in the manifest, a daemon catalog, and a CLI that builds plugin commands from it at run time | assumed — autonomous |
+| hard (metadata and external api) | high | [m2-sidebar-extras D7](decisions/m2-sidebar-extras.md) | Worktree membership stays separate from repo ownership and group-folder identity | locked by research/orca-features/sidebar-extras.md |
+| hard | high | [m2-source-control-core D5](decisions/m2-source-control-core.md) | Extend `quirky.git` in place, with every composite (sync, discard-all, stage-all) in the daemon | assumed — autonomous |
 | hard | high | [m0-core D6](decisions/m0-core.md) | v1's methods are renamed to their plugin's namespace, with no aliases, and the protocol version goes to 2 | supersedes m0-daemon-api D5 |
 | hard | high | [m0-core D7](decisions/m0-core.md) | v1's events become the plugins' events | assumed — autonomous |
 | hard | high | [m0-core D31](decisions/m0-core.md) | Port v1 for real, growing the public plugin API, rather than facades or raw RPC primitives | locked by docs/roadmap.md (built-ins use only the public API); assumed — autonomous (the approach) |
@@ -31,16 +40,28 @@ files, not this one.
 | hard | high | [m1-worktrees D7](decisions/m1-worktrees.md) | Worktree IDs stay v1's path hash; extra folder workspaces get random IDs | assumed — autonomous |
 | hard | high | [m1-agent-status D2](decisions/m1-agent-status.md) | The status row is keyed by Quirky session, and the session ID from the hook's environment is the pane identity | assumed — autonomous |
 | hard | high | [m1-agent-status D4](decisions/m1-agent-status.md) | Orca's four states, its derived display states and its labels are kept as they are | locked by docs/roadmap.md |
+| hard | high | [m1-notifications D40](decisions/m1-notifications.md) | Approach: a daemon policy plugin that listens to producers, with markers on their records and the shell rendering | assumed — autonomous |
 | hard | high | [m0-daemon-api D7](decisions/m0-daemon-api.md) | The four kinds are `method`, `event`, `job` and `launch-hook` | assumed — autonomous |
 | hard | high | [m0-daemon-api D13](decisions/m0-daemon-api.md) | Choose declared contributions with provided implementations | supersedes nothing; extends m0-registry D23 |
+| hard | high | [m5-ledger D2](decisions/m5-ledger.md) | Use the same authenticated scripting surface for every ledger action | locked by docs/architecture.md |
+| hard | high | [m5-ledger D7](decisions/m5-ledger.md) | Preserve validation, history and no-op semantics exactly | locked by external research/orca-features/ledger.md |
+| hard | high | [m5-ledger D8](decisions/m5-ledger.md) | Keep imports replay-safe and evidence advisory | locked by external research/orca-features/ledger.md |
 | hard | high | [m0-ui-api D4](decisions/m0-ui-api.md) | The seven UI kinds are `view`, `panel`, `sidebar-section`, `command`, `keybinding`, `setting` and `theme` | assumed — autonomous |
 | hard | high | [m0-ui-api D29](decisions/m0-ui-api.md) | Choose declared slots with lazily imported modules that mount into host elements | assumed — autonomous |
 | hard | high | [m0-registry D12](decisions/m0-registry.md) | Every contribution is declared in the manifest, and code can only provide declared ones | assumed — autonomous |
 | hard | high | [m0-registry D23](decisions/m0-registry.md) | Choose declarative contributions with lazily loaded code | assumed — autonomous |
 | hard | high | [m1-term-ui D7](decisions/m1-term-ui.md) | Layout lives in the daemon; the window renders it and changes it only through methods | locked by docs/roadmap.md |
 | hard | high | [m1-providers D9](decisions/m1-providers.md) | Agent IDs, labels and table values are Orca's | locked by docs/architecture.md |
+| medium (internal driver; public behavior unchanged) | medium | [sa-browser-agent D11](decisions/sa-browser-agent.md) | Reuse agent-browser over explicitly owned CDP targets | assumed — autonomous |
 | medium | medium | [m0-scripting D6](decisions/m0-scripting.md) | The daemon validates every call's params against the method's schema, and leaves results and event data unchecked | assumed — autonomous |
 | medium | medium | [m0-scripting D29](decisions/m0-scripting.md) | Tech-spec mechanisms: one shared validator in protocol, validation in the dispatcher, declarative command specs, a JSON-mode pre-scan | assumed — autonomous |
+| medium | medium | [m2-source-control-notes-ai D4](decisions/m2-source-control-notes-ai.md) | Markdown notes and Changes mode stay with m2-editor; the Notes shelf lists diff notes | assumed — autonomous |
+| medium | medium | [m2-source-control-notes-ai D7](decisions/m2-source-control-notes-ai.md) | Notes are anchored by path and line numbers, as in Orca, and show in every diff of their path | assumed — autonomous |
+| medium | medium | [m2-source-control-notes-ai D16](decisions/m2-source-control-notes-ai.md) | The one-shot shapes, default models and limits are Orca's, for every agent Orca supports, plus a custom command | assumed — autonomous |
+| medium | medium | [m2-source-control-core D3](decisions/m2-source-control-core.md) | The slice is all of source-control.md except diff notes, AI actions and hosted review | locked by docs/loop/queue.json (the titles); assumed — autonomous (the exact cut) |
+| medium | medium | [m2-source-control-core D23](decisions/m2-source-control-core.md) | Diffs open in a `quirky.git/diff` view in the main area, and closing it returns to the worktree's sessions | assumed — autonomous |
+| medium | medium | [m2-source-control-core D25](decisions/m2-source-control-core.md) | Diffs render with `@codemirror/merge`, editable only for unstaged changes, saved with a disk precondition | locked by docs/architecture.md (CodeMirror); assumed — autonomous (the save method) |
+| medium | medium | [m2-source-control-core D27](decisions/m2-source-control-core.md) | The conflict review and conflict file views live in this plugin, without accept buttons | assumed — autonomous |
 | medium | medium | [m0-core D10](decisions/m0-core.md) | Repo and worktree selectors resolve in the daemon, with the caller's cwd and identity | assumed — autonomous |
 | medium | medium | [m0-core D20](decisions/m0-core.md) | Irreversible methods confirm through an ask unless the call passes `yes` | locked by docs/roadmap.md (ask unless `--yes`); assumed — autonomous (the protocol) |
 | medium | medium | [m0-core D22](decisions/m0-core.md) | Plugin slots report their own content as JSON | assumed — autonomous |
@@ -58,6 +79,15 @@ files, not this one.
 | medium | medium | [m1-agent-status D11](decisions/m1-agent-status.md) | A different provider session in a live row is a nested agent and is ignored, which fixes Orca's helper-overwrite defect | assumed — autonomous |
 | medium | medium | [m1-agent-status D22](decisions/m1-agent-status.md) | OSC 7501 is parsed in the PTY host, answered there, and yields to hooks for 2 minutes | locked by docs/roadmap.md |
 | medium | medium | [m1-agent-status D33](decisions/m1-agent-status.md) | Approach A (global installers) over per-launch overlays or a manual-only command | assumed — autonomous |
+| medium | medium | [m1-notifications D9](decisions/m1-notifications.md) | Unread is a marker on the session and on its worktree, written before delivery and whatever the switches say | locked by research/orca-features/notifications.md |
+| medium | medium | [m1-notifications D10](decisions/m1-notifications.md) | Viewing means a focused window whose person is present and whose view shows the session | locked by research/orca-features/notifications.md |
+| medium | medium | [m1-notifications D35](decisions/m1-notifications.md) | The session record carries its unread reason; the worktree keeps its `unread` flag | assumed — autonomous |
+| medium | medium | [m1-agent-status-scripting D2](decisions/m1-agent-status-scripting.md) | Screen rules decide what scripts see, never the dot (approach A) | supersedes m1-agent-status D23 (the rules engine is now built, for scripts) |
+| medium | medium | [m1-agent-status-scripting D4](decisions/m1-agent-status-scripting.md) | A fresh hook row decides working and idle; the screen may only add blocked, and decides alone without one | assumed — autonomous |
+| medium | medium | [m1-agent-status-scripting D6](decisions/m1-agent-status-scripting.md) | A user file replaces the whole rule set; then a plugin's contribution; then the built-in file | assumed — autonomous |
+| medium | medium | [m1-agent-status-scripting D17](decisions/m1-agent-status-scripting.md) | `wait --output` matches a pattern line by line in the rendered text, existing text included | assumed — autonomous |
+| medium | medium | [m1-agent-status-scripting D21](decisions/m1-agent-status-scripting.md) | A name is unique among sessions still running; an exited session's name can be taken | assumed — autonomous |
+| medium | medium | [m1-agent-status-scripting D29](decisions/m1-agent-status-scripting.md) | Patterns run in a worker with a 250 ms budget per evaluation | supersedes m1-agent-status-scripting D8 (adds the time limit) |
 | medium | medium | [m0-daemon-api D6](decisions/m0-daemon-api.md) | Plugin events arrive as `{ type: "<pluginId>/<name>", data }` | assumed — autonomous |
 | medium | medium | [m0-daemon-api D15](decisions/m0-daemon-api.md) | Jobs run on a fixed delay, at least one second apart, never overlapping | assumed — autonomous |
 | medium | medium | [m0-daemon-api D19](decisions/m0-daemon-api.md) | Launch hooks are a sequential pipeline in contribution-ID order | assumed — autonomous |
@@ -91,11 +121,34 @@ files, not this one.
 | medium | medium | [m1-term-daemon D10](decisions/m1-term-daemon.md) | Cold restore starts a shell, lazily on attach or on an explicit restore | locked by term-daemon.md |
 | medium | medium | [m1-term-daemon D17](decisions/m1-term-daemon.md) | The PTY protocol goes to 2; an older host is retired on upgrade, a newer one is refused | assumed — autonomous |
 | medium | medium | [m1-term-daemon D31](decisions/m1-term-daemon.md) | Tech-spec mechanisms: the host renders history windows through a scratch emulator, composes the attach replay by overlaying the live snapshot, and the wrappers report through hooks | assumed — autonomous |
+| medium (changes acceptance coverage and successor contracts) | high | [sa-browser-agent D1](decisions/sa-browser-agent.md) | Build the queue item's automation and cookie-import slice | locked by docs/loop/queue.json |
+| medium (consumer-visible names and schemas) | high | [sa-browser-agent D3](decisions/sa-browser-agent.md) | Use the existing authenticated plugin RPC and namespaced browser CLI | locked by docs/roadmap.md |
+| medium (profile model and import semantics) | high | [sa-browser-agent D5](decisions/sa-browser-agent.md) | Discover browsers only on explicit import discovery and isolate destination profiles | locked by docs/architecture.md |
+| medium (lifetime and error contracts) | high | [sa-browser-agent D7](decisions/sa-browser-agent.md) | Time out commands and close owned processes, without speculative retry behavior | assumed — autonomous |
+| medium (acceptance boundary) | high | [sa-browser-agent D8](decisions/sa-browser-agent.md) | Keep browser scope within the local backend and record other-platform work | locked by docs/roadmap.md |
+| medium (observable import job api) | high | [sa-browser-agent D12](decisions/sa-browser-agent.md) | Explicit imports use tracked one-shot daemon operations, not recurring scheduler jobs | assumed — autonomous |
 | medium | high | [m0-scripting D5](decisions/m0-scripting.md) | Methods declare `params` and `result`, events declare `data`, UI commands declare `args` | assumed — autonomous |
 | medium | high | [m0-scripting D7](decisions/m0-scripting.md) | Kernel methods and events get schemas too, in one table checked against the protocol types | assumed — autonomous |
 | medium | high | [m0-scripting D9](decisions/m0-scripting.md) | One command table drives parsing, validation, help, suggestions and the catalog | locked by research/orca-features/cli.md |
 | medium | high | [m0-scripting D15](decisions/m0-scripting.md) | Under `--json`, errors are a JSON document on stdout, and the exit codes stay 0, 1 and 2 | assumed — autonomous |
 | medium | high | [m0-scripting D17](decisions/m0-scripting.md) | `quirky api --json` returns one versioned catalog of methods, events, UI commands and CLI commands | assumed — autonomous |
+| medium (acceptance scope) | high | [m2-sidebar-extras D1](decisions/m2-sidebar-extras.md) | Implement the four M2 sidebar additions; leave review filters for M4 | locked by docs/roadmap.md |
+| medium | high | [m2-sidebar-extras D5](decisions/m2-sidebar-extras.md) | Activity windows are a visibility filter, not a new workspace list | locked by research/orca-features/sidebar-extras.md |
+| medium | high | [m2-sidebar-extras D6](decisions/m2-sidebar-extras.md) | Preserve recency, validate custom days, and do not let another client's preferences overwrite this client | locked by research/orca-features/sidebar-extras.md |
+| medium | high | [m2-sidebar-extras D8](decisions/m2-sidebar-extras.md) | Membership actions use one guarded write path and preserve deletion safety | locked by research/orca-features/sidebar-extras.md |
+| medium | high | [m2-sidebar-extras D11](decisions/m2-sidebar-extras.md) | Keep existing CLI/error conventions and expose every new action | locked by docs/roadmap.md |
+| medium | high | [m2-sidebar-extras D12](decisions/m2-sidebar-extras.md) | Add a thin presentation plugin and extend canonical owners | assumed — autonomous |
+| medium | high | [m2-sidebar-extras D13](decisions/m2-sidebar-extras.md) | Add the activity item without changing D10 panel placement or activation | locked by docs/loop/decisions/m0-ui-api.md (invariants); assumed — autonomous (additive extension) |
+| medium | high | [m2-sidebar-extras D15](decisions/m2-sidebar-extras.md) | Use runtime liveness, not timestamps or saved layout, for Live only | locked by research/orca-features/sidebar-extras.md (shared sleeping rule), assumed — autonomous (resolved source reading) |
+| medium | high | [m2-sidebar-extras D18](decisions/m2-sidebar-extras.md) | Accept confirmed spec defects and reject planned-artifact reference false positives | assumed — autonomous |
+| medium | high | [m2-sidebar-extras D20](decisions/m2-sidebar-extras.md) | Preserve accepted W1 components and repair only observed integration defects | assumed — autonomous |
+| medium | high | [m2-sidebar-extras D21](decisions/m2-sidebar-extras.md) | Preserve notification unread semantics when catching up | locked by docs/loop/decisions/m1-notifications.md |
+| medium | high | [m2-source-control-notes-ai D3](decisions/m2-source-control-notes-ai.md) | The slice is diff notes, every Source Control AI action, and their settings | supersedes nothing; bound by m2-source-control-core D6 |
+| medium | high | [m2-source-control-notes-ai D6](decisions/m2-source-control-notes-ai.md) | Notes live in a `quirky.git` plugin store keyed by worktree ID and survive a restart | assumed — autonomous |
+| medium | high | [m2-source-control-notes-ai D14](decisions/m2-source-control-notes-ai.md) | Notes are scriptable: `quirky git` gains note commands, which Orca lacks | assumed — autonomous |
+| medium | high | [m2-source-control-notes-ai D19](decisions/m2-source-control-notes-ai.md) | Recipes are stored by `quirky.git` per action, globally and per repository, and the repository one wins | assumed — autonomous |
+| medium | high | [m2-source-control-core D8](decisions/m2-source-control-core.md) | The status record grows additively, read from porcelain v2 | assumed — autonomous |
+| medium | high | [m2-source-control-core D20](decisions/m2-source-control-core.md) | The compare base is the worktree's base, else the project's, else the detected default, and Change Base Ref writes where the base came from | locked by research/orca-features/source-control.md |
 | medium | high | [m0-core D8](decisions/m0-core.md) | v1's CLI words stay, with `wt` and `term` as group aliases | assumed — autonomous |
 | medium | high | [m0-core D12](decisions/m0-core.md) | Notifications are a kernel service, and each plugin decides when to notify | locked by docs/architecture.md |
 | medium | high | [m0-core D13](decisions/m0-core.md) | v1's settings become plugin settings | supersedes m0-ui-api D18 |
@@ -108,10 +161,36 @@ files, not this one.
 | medium | high | [m1-worktrees D14](decisions/m1-worktrees.md) | The base is the requested one, else the project's saved base, else the detected default | locked by research/orca-features/worktrees.md |
 | medium | high | [m1-worktrees D49](decisions/m1-worktrees.md) | Project settings are a `quirky.repo` record, set with `repo set` and shown with `repo show` | supersedes nothing; works within m0-ui-api D17 |
 | medium | high | [m1-worktrees D52](decisions/m1-worktrees.md) | Platform-specific parts are logged and built for macOS only | deferred: platform |
+| medium | high | [fix-test-process-leaks D1](decisions/fix-test-process-leaks.md) | Treat test subprocess ownership as the fix boundary | locked by docs/architecture.md |
+| medium | high | [fix-test-process-leaks D4](decisions/fix-test-process-leaks.md) | Own disposable runs with an external process-scope guardian | assumed — autonomous |
+| medium | high | [fix-test-process-leaks D7](decisions/fix-test-process-leaks.md) | The test guardian requires POSIX process inspection | deferred: platform |
+| medium | high | [fix-test-process-leaks D10](decisions/fix-test-process-leaks.md) | Guardian control state must outlive the resource home | assumed — autonomous |
 | medium | high | [m1-agent-status D14](decisions/m1-agent-status.md) | The fold keeps a finished lead `working` while children or background work live | locked by research/orca-features/agent-status.md |
+| medium | high | [m1-notifications D5](decisions/m1-notifications.md) | A new built-in plugin, `quirky.notifications`, owns the policy; other plugins only report events | supersedes m0-core D12 |
+| medium | high | [m1-notifications D6](decisions/m1-notifications.md) | Producers emit settled and notification events; boundaries and replays still emit nothing | assumed — autonomous |
+| medium | high | [m1-notifications D7](decisions/m1-notifications.md) | The old "Notify when agents finish" switch becomes Agent Task Complete, and its value carries over | supersedes m0-core D13 |
+| medium | high | [m1-notifications D11](decisions/m1-notifications.md) | The window reports input activity, and focus and presence changes reach plugins as an event | assumed — autonomous |
+| medium | high | [m1-notifications D28](decisions/m1-notifications.md) | The PTY host recognises OSC 9, OSC 99 and OSC 777 notifications | assumed — autonomous |
+| medium | high | [m1-agent-status-scripting D10](decisions/m1-agent-status-scripting.md) | Rows record the evidence that decided them, and explain reads it | assumed — autonomous |
+| medium | high | [m1-agent-status-scripting D19](decisions/m1-agent-status-scripting.md) | Distinct failures are plugin errors with a machine-readable reason | assumed — autonomous |
+| medium | high | [m1-agent-status-scripting D38](decisions/m1-agent-status-scripting.md) | Catching up with build/roadmap brought m1-notifications, m2-source-control-core and m3-terminal-dock; no decision conflicts | assumed — autonomous |
 | medium | high | [m0-daemon-api D8](decisions/m0-daemon-api.md) | Method results and errors | assumed — autonomous |
 | medium | high | [m0-daemon-api D10](decisions/m0-daemon-api.md) | Stores migrate forward only, by an ordered list, and refuse a downgrade | assumed — autonomous |
 | medium | high | [m0-daemon-api D24](decisions/m0-daemon-api.md) | Plugin methods use the daemon's token, and any client may call any method | locked by docs/roadmap.md |
+| medium | high | [m5-structured-runner D1](decisions/m5-structured-runner.md) | Build the shared background seams, not the downstream products | locked by docs/roadmap.md |
+| medium | high | [m5-structured-runner D3](decisions/m5-structured-runner.md) | Native provider runners share the existing structured journal and ask path | locked by docs/architecture.md |
+| medium | high | [m5-structured-runner D4](decisions/m5-structured-runner.md) | Resume creates a new session in the original directory, replaying original structured options | assumed — autonomous |
+| medium | high | [m5-structured-runner D5](decisions/m5-structured-runner.md) | Error and approval paths fail closed, and stop bounds process lifetime | assumed — autonomous |
+| medium | high | [m5-structured-runner D7](decisions/m5-structured-runner.md) | Checks are a built-in plugin with run and cancel methods | assumed — autonomous |
+| medium | high | [m5-structured-runner D12](decisions/m5-structured-runner.md) | One connected runner owns each native conversation | assumed — autonomous |
+| medium | high | [m5-structured-runner D13](decisions/m5-structured-runner.md) | Ask owns cancellation when its creating plugin is disabled or the daemon stops | assumed — autonomous |
+| medium | high | [m5-ledger D1](decisions/m5-ledger.md) | Implement the complete Project ledger feature | locked by docs/roadmap.md |
+| medium | high | [m5-ledger D4](decisions/m5-ledger.md) | Normalize ledger storage in the public plugin SQLite store | locked by docs/loop/decisions/m0-daemon-api.md |
+| medium | high | [m5-ledger D6](decisions/m5-ledger.md) | Preserve target distinctions and reject ambiguous selector combinations | locked by external research/orca-features/ledger.md |
+| medium | high | [m5-ledger D9](decisions/m5-ledger.md) | Reconcile owner recovery before reads, not only mutations | assumed — autonomous |
+| medium | high | [m5-ledger D10](decisions/m5-ledger.md) | Preserve documented UI surfaces with scriptable controls and pinned detail actions | locked by external research/orca-features/ledger.md |
+| medium | high | [m5-ledger D12](decisions/m5-ledger.md) | Correct genuine spec-review gaps and reject planned-path prepass false positives | assumed — autonomous |
+| medium | high | [m5-ledger D16](decisions/m5-ledger.md) | Correct import paths, value flags and Quirky JSON rather than copy Orca's transport envelope | assumed — autonomous |
 | medium | high | [m0-ui-api D5](decisions/m0-ui-api.md) | Plugin UI code is one ES module named by a manifest `ui` field, loaded in the window only when needed | assumed — autonomous |
 | medium | high | [m0-ui-api D8](decisions/m0-ui-api.md) | The daemon resolves UI contributions into one model the window and agents read | assumed — autonomous |
 | medium | high | [m0-ui-api D12](decisions/m0-ui-api.md) | Keybindings are `mod+shift+k` chords that must include a modifier, or a function key | deferred: platform |
@@ -121,6 +200,10 @@ files, not this one.
 | medium | high | [m0-registry D6](decisions/m0-registry.md) | A plugin's own contributions use short names, overrides use full IDs | assumed — autonomous |
 | medium | high | [m0-registry D9](decisions/m0-registry.md) | Disable works by plugin ID or contribution ID, before any code loads, and persists | locked by docs/roadmap.md (disable by ID); assumed — autonomous (cascade and persistence) |
 | medium | high | [m0-registry D11](decisions/m0-registry.md) | Plugins activate lazily on first use by default, or at startup when the manifest says so | locked by docs/roadmap.md (lazy); assumed — autonomous (trigger set) |
+| medium | high | [m3-terminal-dock D1](decisions/m3-terminal-dock.md) | Build the dock as an opt-in built-in plugin with its own composer | locked by docs/roadmap.md |
+| medium | high | [m3-terminal-dock D3](decisions/m3-terminal-dock.md) | Preserve macOS parity and do not reproduce the three observed Orca defects | locked by docs/roadmap.md |
+| medium | high | [m3-terminal-dock D7](decisions/m3-terminal-dock.md) | Missing pane and send APIs alone are not reasons to block | assumed — autonomous |
+| medium | high | [m3-terminal-dock D9](decisions/m3-terminal-dock.md) | Prefer daemon-authoritative state and a per-PTY send queue if scope is resolved | assumed — autonomous |
 | medium | high | [m2-ask-parity D5](decisions/m2-ask-parity.md) | The question schema is Orca's, plus Quirky's optional `title` | locked by research/orca-features/ask.md |
 | medium | high | [m2-ask-parity D9](decisions/m2-ask-parity.md) | The deadline lives in the daemon, is stored, and survives a restart | locked by research/orca-features/ask.md |
 | medium | high | [m2-ask-parity D12](decisions/m2-ask-parity.md) | Drafts are Orca's per-question partial, saved by the window 500 ms after typing stops | locked by research/orca-features/ask.md |
@@ -151,12 +234,43 @@ files, not this one.
 | medium | high | [m1-term-daemon D41](decisions/m1-term-daemon.md) | Catching up with build/roadmap (m1-providers) keeps both sides; the exit columns become migration 3 | assumed — autonomous |
 | medium | high | [m1-term-daemon D42](decisions/m1-term-daemon.md) | A second catch-up merged m1-launch-settings; the exit columns become migration 4 | assumed — autonomous |
 | easy | low | [m1-agent-status D38](decisions/m1-agent-status.md) | mimo-code's plugin goes in its config dir's `plugins/`, not Orca's per-launch overlay | assumed — autonomous |
+| easy (redispatch if a substantive dependency emerges) | medium | [sa-browser-agent D13](decisions/sa-browser-agent.md) | Keep implementation in one component with focused internal modules | assumed — autonomous |
 | easy | medium | [m0-scripting D14](decisions/m0-scripting.md) | Generated commands print a generic text form, and `--json` prints the raw result | assumed — autonomous |
 | easy | medium | [m0-scripting D19](decisions/m0-scripting.md) | The agent skill is generated from the live catalog and shown or installed through `quirky skill` | assumed — autonomous |
 | easy | medium | [m0-scripting D27](decisions/m0-scripting.md) | No closure review round on the logic spec | assumed — autonomous |
 | easy | medium | [m0-scripting D32](decisions/m0-scripting.md) | Build in four waves after a type scaffold: protocol and CLI specs, then validation and generated commands, then discovery and the skill, then scenario tests | assumed — autonomous |
 | easy | medium | [m0-scripting D33](decisions/m0-scripting.md) | Skip wave 1's checkpoint review | assumed — autonomous |
 | easy | medium | [m0-scripting D35](decisions/m0-scripting.md) | Implementers' judgment calls kept: group suggestions only as a fallback, `skill show --json` wraps the text, `quirky help <words>` acts like `--help` | assumed — autonomous |
+| easy | medium | [m2-source-control-notes-ai D10](decisions/m2-source-control-notes-ai.md) | Line 0 (whole file) notes are refused | assumed — autonomous |
+| easy | medium | [m2-source-control-notes-ai D13](decisions/m2-source-control-notes-ai.md) | Sends go to a sendable agent session in the same worktree, or to a new agent tab | assumed — autonomous |
+| easy | medium | [m2-source-control-notes-ai D17](decisions/m2-source-control-notes-ai.md) | Model choice is the spec's default model, overridable through the recipe's CLI arguments; no model discovery or model memory | assumed — autonomous |
+| easy | medium | [m2-source-control-notes-ai D20](decisions/m2-source-control-notes-ai.md) | The recipes get a "Source Control AI" view opened from a command, in place of Orca's Settings > Git section | assumed — autonomous |
+| easy | medium | [m2-source-control-notes-ai D21](decisions/m2-source-control-notes-ai.md) | The repository on/off override of AI actions waits for the parity sweep | assumed — autonomous |
+| easy | medium | [m2-source-control-notes-ai D22](decisions/m2-source-control-notes-ai.md) | The daemon remembers each worktree's last commit and push failure for AI Fix | assumed — autonomous |
+| easy | medium | [m2-source-control-notes-ai D25](decisions/m2-source-control-notes-ai.md) | The sparkle runs directly when a commit message recipe is configured, else opens the Generate dialog | assumed — autonomous |
+| easy | medium | [m2-source-control-notes-ai D26](decisions/m2-source-control-notes-ai.md) | Prompts from diffs and failures are data; nothing is scanned for secrets | assumed — autonomous |
+| easy | medium | [m2-source-control-notes-ai D30](decisions/m2-source-control-notes-ai.md) | A shelf note whose path has no diff opens the file's diff against HEAD | assumed — autonomous |
+| easy | medium | [m2-source-control-notes-ai D35](decisions/m2-source-control-notes-ai.md) | Skip the checkpoint reviews after W1 and W2 | assumed — autonomous |
+| easy | medium | [m2-source-control-notes-ai D37](decisions/m2-source-control-notes-ai.md) | W1 implementation choices accepted as built | assumed — autonomous |
+| easy | medium | [m2-source-control-notes-ai D38](decisions/m2-source-control-notes-ai.md) | W2 implementation choices accepted as built | assumed — autonomous |
+| easy | medium | [m2-source-control-notes-ai D46](decisions/m2-source-control-notes-ai.md) | The UI pass: every scenario's visible behavior passes; four app defects were found and fixed, and the partials are the tool's limits | assumed — autonomous |
+| easy | medium | [m2-source-control-core D6](decisions/m2-source-control-core.md) | AI Fix, Resolve with AI and the Source Control AI settings belong to `m2-source-control-notes-ai` | assumed — autonomous |
+| easy | medium | [m2-source-control-core D9](decisions/m2-source-control-core.md) | "Resolved locally" is tracked by the daemon for conflict files opened through `quirky.git` | assumed — autonomous |
+| easy | medium | [m2-source-control-core D16](decisions/m2-source-control-core.md) | Rebase from base fetches the base's branch and rebases onto it | locked by research/orca-features/source-control.md |
+| easy | medium | [m2-source-control-core D26](decisions/m2-source-control-core.md) | The combined diff loads sections lazily and on demand past 10,000 changed lines | locked by research/orca-features/source-control.md |
+| easy | medium | [m2-source-control-core D30](decisions/m2-source-control-core.md) | The panel polls status every 3 seconds while shown and branch compare every 30 seconds, and nothing fetches on a timer | assumed — autonomous |
+| easy | medium | [m2-source-control-core D33](decisions/m2-source-control-core.md) | The Orca defects tested are the unreachable selection, the dead-end merge and the swallowed diff errors | assumed — autonomous |
+| easy | medium | [m2-source-control-core D35](decisions/m2-source-control-core.md) | Changes mode, Markdown diff preview, preview tabs, split groups and "Open in" are out | assumed — autonomous |
+| easy | medium | [m2-source-control-core D46](decisions/m2-source-control-core.md) | Build in three waves: git primitives and pure modules, then the daemon, panel and view, then integration | assumed — autonomous |
+| easy | medium | [m2-source-control-core D47](decisions/m2-source-control-core.md) | Skip W1's checkpoint review | assumed — autonomous |
+| easy | medium | [m2-source-control-core D48](decisions/m2-source-control-core.md) | W2 starts while W1's full suite is still running | assumed — autonomous |
+| easy | medium | [m2-source-control-core D49](decisions/m2-source-control-core.md) | The diff view's CSS starts in the view and moves to `styles.css` in W3 | assumed — autonomous |
+| easy | medium | [m2-source-control-core D52](decisions/m2-source-control-core.md) | Skip W2's checkpoint review; the final round covers it at deep depth right after W3 | assumed — autonomous |
+| easy | medium | [m2-source-control-core D55](decisions/m2-source-control-core.md) | The Source Control window tests run in a second `bun test` process | assumed — autonomous |
+| easy | medium | [m2-source-control-core D57](decisions/m2-source-control-core.md) | X4 (a git timeout kills only git, not helpers holding its pipes) stays as it is | assumed — autonomous |
+| easy | medium | [m2-source-control-core D60](decisions/m2-source-control-core.md) | Goals the tool could not fully drive are recorded, not failed | assumed — autonomous |
+| easy | medium | [m2-source-control-core D61](decisions/m2-source-control-core.md) | The file diff's changed-on-disk banner has no layout test | assumed — autonomous |
+| easy | medium | [m2-source-control-core D63](decisions/m2-source-control-core.md) | The second catch-up takes build/roadmap's test runner, which retires D55's three-process split | supersedes m2-source-control-core D55 |
 | easy | medium | [m0-core D14](decisions/m0-core.md) | v1 data carries over on upgrade | assumed — autonomous |
 | easy | medium | [m0-core D25](decisions/m0-core.md) | Ask cards move into a Questions panel that opens itself | assumed — autonomous |
 | easy | medium | [m0-core D39](decisions/m0-core.md) | Build in five waves: a scaffold, kernel modules, plugins beside v1, the switch-over with the UI port, then scenario tests | assumed — autonomous |
@@ -177,6 +291,7 @@ files, not this one.
 | easy | medium | [m1-worktrees D61](decisions/m1-worktrees.md) | W3 starts while W2's checkpoint review runs | assumed — autonomous |
 | easy | medium | [m1-worktrees D65](decisions/m1-worktrees.md) | W4 starts while W3's checkpoint review runs, and owns only the manifest's UI keys | assumed — autonomous |
 | easy | medium | [m1-worktrees D71](decisions/m1-worktrees.md) | SC-27 is run with base `origin/main` on both sides, because a create with no base never falls back | assumed — autonomous |
+| easy | medium | [fix-test-process-leaks D9](decisions/fix-test-process-leaks.md) | Final cross-family review returned no actionable findings | assumed — autonomous |
 | easy | medium | [m1-agent-status D1](decisions/m1-agent-status.md) | This item covers the dot, the hooks, provider capture and the fallbacks; the Activity view and the Agent Dashboard are out | assumed — autonomous |
 | easy | medium | [m1-agent-status D7](decisions/m1-agent-status.md) | Codex hooks go into `~/.codex/hooks.json` and the user approves them once in Codex | assumed — autonomous |
 | easy | medium | [m1-agent-status D13](decisions/m1-agent-status.md) | Cold-restore resume stays out | supersedes m1-providers D27 |
@@ -194,6 +309,35 @@ files, not this one.
 | easy | medium | [m1-agent-status D49](decisions/m1-agent-status.md) | The PTY host memory test is a load flake, not a regression | assumed — autonomous |
 | easy | medium | [m1-agent-status D51](decisions/m1-agent-status.md) | W3 starts while the W2 checkpoint review runs | assumed — autonomous |
 | easy | medium | [m1-agent-status D62](decisions/m1-agent-status.md) | The post-fix gate's one failure is a terminal timing flake under load | assumed — autonomous |
+| easy | medium | [m1-notifications D4](decisions/m1-notifications.md) | In scope are the roadmap's five bullets, the OSC sequences, flows 1 to 5 of the doc and the dock badge; phone, machines, hidden-workspace mutes, the permission card and Windows are out | assumed — autonomous |
+| easy | medium | [m1-notifications D12](decisions/m1-notifications.md) | The worktree view reports which sessions it shows; until it does, the active session counts | assumed — autonomous |
+| easy | medium | [m1-notifications D17](decisions/m1-notifications.md) | Status words: needs input, failed, stopped, finished | assumed — autonomous |
+| easy | medium | [m1-notifications D18](decisions/m1-notifications.md) | A notify event, and so a toast, goes out only for a delivered banner | assumed — autonomous |
+| easy | medium | [m1-notifications D19](decisions/m1-notifications.md) | Built-in sounds are short tones generated in the repo, played by afplay after delivery | assumed — autonomous |
+| easy | medium | [m1-notifications D20](decisions/m1-notifications.md) | A custom sound is a typed path, checked by the daemon; the Custom line shows only while it is selected | assumed — autonomous |
+| easy | medium | [m1-notifications D23](decisions/m1-notifications.md) | No permission card, probe or startup registration | deferred: platform |
+| easy | medium | [m1-notifications D24](decisions/m1-notifications.md) | The tray shows an amber dot while the window is hidden and something wants attention; its menu gains Settings | locked by research/orca-features/notifications.md |
+| easy | medium | [m1-notifications D25](decisions/m1-notifications.md) | The dock badge counts unread worktrees plus pending asks, and the daemon computes it | supersedes m2-ask-parity D16 |
+| easy | medium | [m1-notifications D29](decisions/m1-notifications.md) | A program's banner is titled with its worktree, so it can't pose as Quirky | assumed — autonomous |
+| easy | medium | [m1-notifications D31](decisions/m1-notifications.md) | Every live settle notifies, including those from titles and OSC 7501, and a working agent is never announced | locked by research/orca-features/notifications.md |
+| easy | medium | [m1-notifications D33](decisions/m1-notifications.md) | Asks keep their text and go through Enable Notifications, Suppress While Focused and the cooldown | locked by research/orca-features/notifications.md |
+| easy | medium | [m1-notifications D36](decisions/m1-notifications.md) | Markers look like Orca's: an amber bell on the tab and in place of the card's dot, and a bold name | locked by research/orca-features/notifications.md |
+| easy | medium | [m1-notifications D37](decisions/m1-notifications.md) | The Orca defects this item tests against | locked by research/orca-features/notifications.md |
+| easy | medium | [m1-notifications D39](decisions/m1-notifications.md) | Electrobun gives silent banners and window state, but no badge, sound or click | assumed — autonomous |
+| easy | medium | [m1-notifications D42](decisions/m1-notifications.md) | The tray's dot is an amber dot image beside the "Q", not a dot drawn into a glyph | assumed — autonomous |
+| easy | medium | [m1-notifications D45](decisions/m1-notifications.md) | Opening a worktree from its card counts as Mark Read | locked by research/orca-features/notifications.md |
+| easy | medium | [m1-notifications D50](decisions/m1-notifications.md) | The W1 gate's 65 `EBADF` failures are the suite's descriptor exhaustion, not a regression | assumed — autonomous |
+| easy | medium | [m1-notifications D55](decisions/m1-notifications.md) | The suite is over the descriptor limit after the catch-up; this item moves the remaining harnesses to shared plugin directories | supersedes m1-term-ui D51 |
+| easy | medium | [m1-agent-status-scripting D8](decisions/m1-agent-status-scripting.md) | Unsafe patterns reject the file they are in | assumed — autonomous |
+| easy | medium | [m1-agent-status-scripting D9](decisions/m1-agent-status-scripting.md) | Built-in rules ship for the agents whose screens Orca's published rules describe | assumed — autonomous |
+| easy | medium | [m1-agent-status-scripting D12](decisions/m1-agent-status-scripting.md) | Send refuses only a blocked agent; a working agent gets the prompt | assumed — autonomous |
+| easy | medium | [m1-agent-status-scripting D13](decisions/m1-agent-status-scripting.md) | Send waits up to 5 seconds for the agent to start, then fails with `prompt-stalled` | assumed — autonomous |
+| easy | medium | [m1-agent-status-scripting D14](decisions/m1-agent-status-scripting.md) | Send types through the agent's own paste and submit settings | assumed — autonomous |
+| easy | medium | [m1-agent-status-scripting D16](decisions/m1-agent-status-scripting.md) | `wait` waits for script states, defaulting to idle or blocked, and returns at once when already there | assumed — autonomous |
+| easy | medium | [m1-agent-status-scripting D22](decisions/m1-agent-status-scripting.md) | Names stay out of the window and out of `quirky terminal` | assumed — autonomous |
+| easy | medium | [m1-agent-status-scripting D40](decisions/m1-agent-status-scripting.md) | Wave 3 landed: end-to-end tests for every scenario; SC-7 stays a unit-level scenario | assumed — autonomous |
+| easy | medium | [m1-agent-status-scripting D43](decisions/m1-agent-status-scripting.md) | The final fix batch closed every Final Round 1 finding; nothing goes to BLOCKERS.md | locked by docs/loop/LOOP.md |
+| easy | medium (review is not runtime proof) | [fix-sc31-first-shell-race D8](decisions/fix-sc31-first-shell-race.md) | Use Gemini for the resumed final review | assumed — autonomous |
 | easy | medium | [m0-daemon-api D22](decisions/m0-daemon-api.md) | A launch hook that fails or times out is skipped | assumed — autonomous |
 | easy | medium | [m0-daemon-api D23](decisions/m0-daemon-api.md) | Launch hooks apply to terminal sessions only | assumed — autonomous |
 | easy | medium | [m0-daemon-api D25](decisions/m0-daemon-api.md) | No rate limits on plugin events or method calls, and no event filters yet | assumed — autonomous |
@@ -262,6 +406,14 @@ files, not this one.
 | easy | medium | [m1-term-daemon D44](decisions/m1-term-daemon.md) | The fix batch closed every Final Round 1 finding; two fixer notes are accepted as limits | assumed — autonomous |
 | easy | medium | [m1-term-daemon D48](decisions/m1-term-daemon.md) | The e2e harness kills what it started even when a run dies; a daemon lock test leaks fake hosts | assumed — autonomous |
 | easy | medium | [m1-term-daemon D49](decisions/m1-term-daemon.md) | The first land failed in the integration tree; the new package links were copied in by hand, as m1-providers D51 did | assumed — autonomous |
+| easy (documentation and later amendments) | high | [sa-browser-agent D2](decisions/sa-browser-agent.md) | Answer workflow questions autonomously without a visual companion | locked by docs/loop/LOOP.md |
+| easy (additional platform implementations) | high | [sa-browser-agent D9](decisions/sa-browser-agent.md) | Build and exercise macOS only with portable primitives where cheap | deferred: platform |
+| easy (next execution run) | high | [sa-browser-agent D10](decisions/sa-browser-agent.md) | Pair omp implementation tasks with Gemini after Opus preflight failure | assumed — autonomous |
+| easy (no implementation or permanent test was written) | high for the observed helper behavior; medium for the proposed replacement until its identity/recovery scenarios are exercised | [sa-browser-agent D14](decisions/sa-browser-agent.md) | Halt the per-page-helper design at the headless feasibility gate | locked by docs/loop/LOOP.md |
+| easy (corrected evidence record) | high | [sa-browser-agent D15](decisions/sa-browser-agent.md) | Prefer runtime evidence over the scout's unsupported-endpoint inference | assumed — autonomous |
+| easy | high for the exercised process scope/cleanup path | [sa-browser-agent D16](decisions/sa-browser-agent.md) | Isolate the browser investigation and remove its executable scaffold | locked by docs/loop/LOOP.md |
+| easy (no implementation exists) | high | [sa-browser-agent D17](decisions/sa-browser-agent.md) | Preserve the failed spec review and its unapproved contracts with the block | assumed — autonomous |
+| easy | high | [sa-browser-agent D18](decisions/sa-browser-agent.md) | Keep the loop's exact verification commands instead of the reviewer's broader reading | locked by docs/loop/LOOP.md |
 | easy | high | [m0-scripting D1](decisions/m0-scripting.md) | Classify the item as a CLI and API design, and run both research phases | assumed — autonomous |
 | easy | high | [m0-scripting D2](decisions/m0-scripting.md) | Skip the visual companion and the adhd offer, use the standard gray-area set | locked by docs/loop/LOOP.md |
 | easy | high | [m0-scripting D3](decisions/m0-scripting.md) | Select every gray area that matters for the scripting surface | assumed — autonomous |
@@ -285,6 +437,90 @@ files, not this one.
 | easy | high | [m0-scripting D38](decisions/m0-scripting.md) | Final round 1: fix three findings, two of which share a cause | assumed — autonomous |
 | easy | high | [m0-scripting D39](decisions/m0-scripting.md) | The final review loop ends after the closure round passes on all three lenses | locked by docs/loop/LOOP.md |
 | easy | high | [m0-scripting D40](decisions/m0-scripting.md) | Every scenario has a named test through the CLI or the daemon API, and the item's one CLI defect belongs to m0-cli-core | locked by docs/loop/LOOP.md |
+| easy | high | [m2-sidebar-extras D2](decisions/m2-sidebar-extras.md) | Resolve decisions autonomously; skip human-only offers | locked by docs/loop/LOOP.md |
+| easy | high | [m2-sidebar-extras D3](decisions/m2-sidebar-extras.md) | Research Visual, Organization, API, CLI and Data concerns before design | assumed — autonomous |
+| easy | high | [m2-sidebar-extras D4](decisions/m2-sidebar-extras.md) | Select the material gray areas across all five domains | assumed — autonomous |
+| easy | high | [m2-sidebar-extras D9](decisions/m2-sidebar-extras.md) | Dirty status is active-worktree-only and accessible without relying on color | locked by research/orca-features/sidebar-extras.md |
+| easy | high | [m2-sidebar-extras D10](decisions/m2-sidebar-extras.md) | Separators are visual-only and default on | locked by research/orca-features/sidebar-extras.md |
+| easy | high | [m2-sidebar-extras D14](decisions/m2-sidebar-extras.md) | Exclude only roadmap-owned navigation/platform flows, not the four additions | locked by docs/roadmap.md; deferred: platform |
+| easy | high | [m2-sidebar-extras D16](decisions/m2-sidebar-extras.md) | Author both specifications and use Codex for their one adversarial pass | locked by docs/loop/LOOP.md |
+| easy | high | [m2-sidebar-extras D17](decisions/m2-sidebar-extras.md) | Use omp OpenAI implementers with Gemini review after Opus preflight fails | locked by docs/loop/LOOP.md |
+| easy | high | [m2-sidebar-extras D19](decisions/m2-sidebar-extras.md) | Execute two waves with isolated component trees and tests-first checkpoints | assumed — autonomous |
+| easy | high | [m2-sidebar-extras D22](decisions/m2-sidebar-extras.md) | Do not advance past the red required W1 suite gate | locked by docs/loop/LOOP.md (verification); assumed — autonomous (repair routing) |
+| easy | high | [m2-sidebar-extras D23](decisions/m2-sidebar-extras.md) | Keep measured passing checks separate from the failing full suite | locked by docs/loop/LOOP.md |
+| easy | high for exercised behavior; no claim on unexercised save/reopen | [m2-sidebar-extras D24](decisions/m2-sidebar-extras.md) | Smoke the completed W1 paths without calling them full sidebar-extras parity | assumed — autonomous |
+| easy | high | [fix-ask-regex-budget-20261027 D1](decisions/fix-ask-regex-budget-20261027.md) | Repair the bounded matcher without relaxing the existing budget | assumed — autonomous |
+| easy | high | [fix-ask-regex-budget-20261027 D2](decisions/fix-ask-regex-budget-20261027.md) | Use OpenAI implementers and the reachable Gemini reviewer | assumed — autonomous |
+| easy | high | [fix-ask-regex-budget-20261027 D3](decisions/fix-ask-regex-budget-20261027.md) | Add a sound required-literal preflight, not a replacement regex engine | supersedes m2-ask-parity D32 |
+| easy | high | [fix-ask-regex-budget-20261027 D4](decisions/fix-ask-regex-budget-20261027.md) | Preserve JavaScript empty-class parsing and test behavior rather than wiring | assumed — autonomous |
+| easy | high | [fix-ask-regex-budget-20261027 D5](decisions/fix-ask-regex-budget-20261027.md) | Retain the merged SC-31 repair and verify the shared pure matcher without a new UI scenario | assumed — autonomous |
+| easy | high for observed results; no claim that the report race is fixed | [fix-ask-regex-budget-20261027 D6](decisions/fix-ask-regex-budget-20261027.md) | Keep the runner's isolated-retry policy and report its observed race | locked by scripts/suite.ts |
+| easy | high for the exercised scope, not a completeness guarantee | [fix-ask-regex-budget-20261027 D7](decisions/fix-ask-regex-budget-20261027.md) | Accept the standard independent final review and land through the queue | locked by docs/loop/LOOP.md |
+| easy | high | [m2-source-control-notes-ai D1](decisions/m2-source-control-notes-ai.md) | Classify the item as Visual, API, CLI and Integration work, and run research phases A and B | assumed — autonomous |
+| easy | high | [m2-source-control-notes-ai D2](decisions/m2-source-control-notes-ai.md) | Skip the visual companion and the adhd offer, use the standard gray-area set | locked by docs/loop/LOOP.md |
+| easy | high | [m2-source-control-notes-ai D5](decisions/m2-source-control-notes-ai.md) | Select every gray area that matters for notes and AI actions | assumed — autonomous |
+| easy | high | [m2-source-control-notes-ai D8](decisions/m2-source-control-notes-ai.md) | A note body is trimmed, must be non-blank, and is capped at 64 KiB in the daemon as well as the window | assumed — autonomous |
+| easy | high | [m2-source-control-notes-ai D9](decisions/m2-source-control-notes-ai.md) | Edits set `updatedAt`; there is no `sentAt` and no Sent chip | assumed — autonomous |
+| easy | high | [m2-source-control-notes-ai D11](decisions/m2-source-control-notes-ai.md) | The note prompt is Orca's `formatDiffComments` text, with control characters removed | assumed — autonomous |
+| easy | high | [m2-source-control-notes-ai D12](decisions/m2-source-control-notes-ai.md) | A send deletes the delivered notes whose snapshot still matches, and holds them out of other sends while it runs | assumed — autonomous |
+| easy | high | [m2-source-control-notes-ai D18](decisions/m2-source-control-notes-ai.md) | The commit message prompt, diff budget and parsing are Orca's | assumed — autonomous |
+| easy | high | [m2-source-control-notes-ai D23](decisions/m2-source-control-notes-ai.md) | AI Fix and Resolve with AI open a new agent tab with the prompt submitted once the agent is ready | assumed — autonomous |
+| easy | high | [m2-source-control-notes-ai D24](decisions/m2-source-control-notes-ai.md) | One generation runs per worktree; a second is refused, and cancel kills the run | assumed — autonomous |
+| easy | high | [m2-source-control-notes-ai D27](decisions/m2-source-control-notes-ai.md) | The two shortcuts: Add Review Note on Mod+Shift+A, Send Review Notes to Agent with no chord | assumed — autonomous |
+| easy | high | [m2-source-control-notes-ai D28](decisions/m2-source-control-notes-ai.md) | Fast-track the remaining questions with the recommended defaults | locked by docs/loop/LOOP.md |
+| easy | high | [m2-source-control-notes-ai D29](decisions/m2-source-control-notes-ai.md) | Skip Phase C deep research | assumed — autonomous |
+| easy | high | [m2-source-control-notes-ai D31](decisions/m2-source-control-notes-ai.md) | The logic spec is markdown, self-reviewed, and approved headless | locked by docs/loop/LOOP.md |
+| easy | high | [m2-source-control-notes-ai D32](decisions/m2-source-control-notes-ai.md) | Spec review: fix the three standing findings; dismiss the prepass reference and heading checks | assumed — autonomous |
+| easy | high | [m2-source-control-notes-ai D33](decisions/m2-source-control-notes-ai.md) | Build with Claude subagents implementing and Codex reviewing | locked by docs/loop/LOOP.md |
+| easy | high | [m2-source-control-notes-ai D34](decisions/m2-source-control-notes-ai.md) | Build in three waves: agents, terminal, pure modules and the notes daemon; then the AI daemon and the notes window; then the AI window | assumed — autonomous |
+| easy | high | [m2-source-control-notes-ai D36](decisions/m2-source-control-notes-ai.md) | `quirky.git` keeps `quirky.worktree` as its only declared dependency | assumed — autonomous |
+| easy | high | [m2-source-control-notes-ai D39](decisions/m2-source-control-notes-ai.md) | Four scenario details move to match the CLI and the daemon, found while building | assumed — autonomous |
+| easy | high | [m2-source-control-notes-ai D40](decisions/m2-source-control-notes-ai.md) | The orchestrator updated the SC-66 catalog test as the wave-gate fixer | assumed — autonomous |
+| easy | high | [m2-source-control-notes-ai D41](decisions/m2-source-control-notes-ai.md) | The concurrent-save test accepts either save winning | assumed — autonomous |
+| easy | high | [m2-source-control-notes-ai D42](decisions/m2-source-control-notes-ai.md) | Catching up with build/roadmap needed one CSS merge and no design change | assumed — autonomous |
+| easy | high | [m2-source-control-notes-ai D43](decisions/m2-source-control-notes-ai.md) | Final Round 1: accept all seven findings, which collapse to six defects, and fix them in one batch | assumed — autonomous |
+| easy | high | [m2-source-control-notes-ai D44](decisions/m2-source-control-notes-ai.md) | The fix batch closes all six Final Round 1 defects, each with a test; nothing goes to BLOCKERS.md | assumed — autonomous |
+| easy | high | [m2-source-control-notes-ai D45](decisions/m2-source-control-notes-ai.md) | No native-only scenarios | assumed — autonomous |
+| easy | high | [m2-source-control-notes-ai D47](decisions/m2-source-control-notes-ai.md) | The post-UI-fix gate's four failures are load flakes in files this item doesn't touch | assumed — autonomous |
+| easy | high | [m2-source-control-core D1](decisions/m2-source-control-core.md) | Classify the item as a Visual, API, CLI and Integration design, and run research phases A and B | assumed — autonomous |
+| easy | high | [m2-source-control-core D2](decisions/m2-source-control-core.md) | Skip the visual companion and the adhd offer, use the standard gray-area set | locked by docs/loop/LOOP.md |
+| easy | high | [m2-source-control-core D4](decisions/m2-source-control-core.md) | Select every gray area that matters for source control | assumed — autonomous |
+| easy | high | [m2-source-control-core D7](decisions/m2-source-control-core.md) | Hosted review is out until M4 | locked by docs/roadmap.md |
+| easy | high | [m2-source-control-core D10](decisions/m2-source-control-core.md) | One remote operation runs at a time per worktree, and status says which | assumed — autonomous |
+| easy | high | [m2-source-control-core D11](decisions/m2-source-control-core.md) | Discard, force push and abort are destructive methods | locked by docs/roadmap.md |
+| easy | high | [m2-source-control-core D12](decisions/m2-source-control-core.md) | Push always sets the upstream, and Publish Branch is a push with no upstream | locked by research/orca-features/source-control.md |
+| easy | high | [m2-source-control-core D13](decisions/m2-source-control-core.md) | Force push leases on the upstream commit the decision was made on | assumed — autonomous |
+| easy | high | [m2-source-control-core D14](decisions/m2-source-control-core.md) | Pull, fast-forward and fetch follow Orca's arguments | locked by research/orca-features/source-control.md |
+| easy | high | [m2-source-control-core D15](decisions/m2-source-control-core.md) | Sync is one daemon method: fetch, then force push under the lease rule, else pull and push | locked by research/orca-features/source-control.md (the steps); assumed — autonomous (the placement) |
+| easy | high | [m2-source-control-core D17](decisions/m2-source-control-core.md) | Quirky adds Continue for a merge, rebase or cherry-pick once no conflicts are unresolved | assumed — autonomous |
+| easy | high | [m2-source-control-core D18](decisions/m2-source-control-core.md) | The daemon normalises remote errors and gives each a reason; the window frames them per action | locked by research/orca-features/source-control.md |
+| easy | high | [m2-source-control-core D19](decisions/m2-source-control-core.md) | Commit and push failures carry Orca's classification; the cards ship without AI buttons | locked by research/orca-features/source-control.md |
+| easy | high | [m2-source-control-core D21](decisions/m2-source-control-core.md) | Branch compare shows committed changes from the merge base, with Orca's statuses | locked by research/orca-features/source-control.md |
+| easy | high | [m2-source-control-core D22](decisions/m2-source-control-core.md) | History returns 50 commits by default and at most 200, from HEAD, with a has-more flag | locked by research/orca-features/source-control.md |
+| easy | high | [m2-source-control-core D24](decisions/m2-source-control-core.md) | Diff content follows Orca's sources and limits | locked by research/orca-features/source-control.md |
+| easy | high | [m2-source-control-core D28](decisions/m2-source-control-core.md) | Huge repositories cap the status at 1,000 entries, with Orca's banner and ignore offer | locked by research/orca-features/source-control.md |
+| easy | high | [m2-source-control-core D29](decisions/m2-source-control-core.md) | The panel keeps Orca's filter, tree view, selection, group order and row menu, without "Open in" | assumed — autonomous |
+| easy | high | [m2-source-control-core D31](decisions/m2-source-control-core.md) | The panel toggle shows the uncommitted count as its badge | assumed — autonomous |
+| easy | high | [m2-source-control-core D32](decisions/m2-source-control-core.md) | Commands, keybindings and settings follow Orca's, as `quirky.git` contributions | locked by research/orca-features/source-control.md |
+| easy | high | [m2-source-control-core D34](decisions/m2-source-control-core.md) | Platform-specific parts are logged and built for macOS only | deferred: platform |
+| easy | high | [m2-source-control-core D36](decisions/m2-source-control-core.md) | Fast-track the remaining defaults | locked by docs/loop/LOOP.md |
+| easy | high | [m2-source-control-core D37](decisions/m2-source-control-core.md) | A folder workspace keeps m1-worktrees' sentence instead of Orca's | locked by docs/quirk/specs/2026-10-26-m1-worktrees/logic.md |
+| easy | high | [m2-source-control-core D38](decisions/m2-source-control-core.md) | The CLI's JSON error document gains the error's `data` | assumed — autonomous (extends m0-scripting D15) |
+| easy | high | [m2-source-control-core D39](decisions/m2-source-control-core.md) | `setPanelBadge` takes an optional tooltip | locked by docs/roadmap.md ("Plugin API growth") |
+| easy | high | [m2-source-control-core D40](decisions/m2-source-control-core.md) | Write a tech spec | locked by docs/loop/LOOP.md |
+| easy | high | [m2-source-control-core D41](decisions/m2-source-control-core.md) | Actionable messages are notices in the panel, not toasts | assumed — autonomous |
+| easy | high | [m2-source-control-core D42](decisions/m2-source-control-core.md) | Spec review: fix all six standing findings and both gate-dropped gaps, keep Sync's leased force push | assumed — autonomous |
+| easy | high | [m2-source-control-core D43](decisions/m2-source-control-core.md) | The terminal e2e helper reads `ps` with a 64 MiB buffer | assumed — autonomous |
+| easy | high | [m2-source-control-core D44](decisions/m2-source-control-core.md) | Build with Claude subagents implementing and Codex reviewing | locked by docs/loop/LOOP.md |
+| easy | high | [m2-source-control-core D45](decisions/m2-source-control-core.md) | A type and runner scaffold lands before the first wave | assumed — autonomous |
+| easy | high | [m2-source-control-core D50](decisions/m2-source-control-core.md) | Two scenario details move to match git and Orca, found while building the daemon | assumed — autonomous |
+| easy | high | [m2-source-control-core D51](decisions/m2-source-control-core.md) | Daemon part 2's edit to `test/folder.test.ts` is accepted as a widening inside its component | assumed — autonomous |
+| easy | high | [m2-source-control-core D53](decisions/m2-source-control-core.md) | W3 found two daemon–window mismatches and a test-isolation bug; the orchestrator fixed one test race | assumed — autonomous |
+| easy | high | [m2-source-control-core D54](decisions/m2-source-control-core.md) | Catching up with build/roadmap (m1-agent-status) needed no change here | assumed — autonomous |
+| easy | high | [m2-source-control-core D56](decisions/m2-source-control-core.md) | Final Round 1: accept all nine standing findings, which collapse to seven defects, and fix them in one batch | assumed — autonomous |
+| easy | high | [m2-source-control-core D58](decisions/m2-source-control-core.md) | All seven Final Round 1 defects are closed by the fix batch, each with a test | assumed — autonomous |
+| easy | high | [m2-source-control-core D59](decisions/m2-source-control-core.md) | UI verification round 1: 18 goals pass, three app defects found and fixed on the branch | assumed — autonomous |
+| easy | high | [m2-source-control-core D62](decisions/m2-source-control-core.md) | The UI rerun passes SC-61, SC-45 and the conflict badge | assumed — autonomous |
 | easy | high | [m0-core D1](decisions/m0-core.md) | Classify the item as an API, CLI, Organization and Visual design, and run every research phase | assumed — autonomous |
 | easy | high | [m0-core D2](decisions/m0-core.md) | Skip the visual companion and the adhd offer, use the standard gray-area set | locked by docs/loop/LOOP.md |
 | easy | high | [m0-core D3](decisions/m0-core.md) | Keep m0-core as one item with one pair of specs, built in waves | locked by docs/loop/queue.json |
@@ -348,6 +584,13 @@ files, not this one.
 | easy | high | [m1-worktrees D69](decisions/m1-worktrees.md) | Final Round 1: accept all eight findings, which collapse to seven defects, and fix them in one batch | assumed — autonomous |
 | easy | high | [m1-worktrees D70](decisions/m1-worktrees.md) | The UI scenarios run as three web batches, each on its own daemon, temp HOME and fixture world | assumed — autonomous |
 | easy | high | [m1-worktrees D72](decisions/m1-worktrees.md) | The UI scenarios pass as a user, with SC-59's tooltip checked by its test because the tool can't hover | assumed — autonomous |
+| easy | high | [fix-test-process-leaks D2](decisions/fix-test-process-leaks.md) | Use OpenAI implementers and Gemini review | assumed — autonomous |
+| easy | high | [fix-test-process-leaks D3](decisions/fix-test-process-leaks.md) | Fix item skips brainstorming and specs | locked by docs/loop/LOOP.md |
+| easy | high | [fix-test-process-leaks D5](decisions/fix-test-process-leaks.md) | Add an owned CLI launch for unattended web passes | assumed — autonomous |
+| easy | high | [fix-test-process-leaks D6](decisions/fix-test-process-leaks.md) | Keep UI and native product behavior unchanged | assumed — autonomous |
+| easy | high | [fix-test-process-leaks D8](decisions/fix-test-process-leaks.md) | Preserve incoming integration decisions | locked by docs/loop/decisions/fix-sc31-first-shell-race.md |
+| easy | high | [fix-test-process-leaks D11](decisions/fix-test-process-leaks.md) | Scope every suite subprocess, including transport commands | assumed — autonomous |
+| easy | high for the observed result; no claim of eliminating the unrelated load sensitivity | [fix-test-process-leaks D12](decisions/fix-test-process-leaks.md) | Retain the runner's existing isolated-rerun policy | locked by scripts/suite.ts |
 | easy | high | [m1-agent-status D5](decisions/m1-agent-status.md) | Every hook source in the doc gets a normalizer with Orca's event mapping | locked by research/orca-features/agent-status.md |
 | easy | high | [m1-agent-status D8](decisions/m1-agent-status.md) | Installers merge only their own entries, keep the file byte-identical on a rerun, and never write a file they can't parse | locked by research/orca-features/agent-status.md |
 | easy | high | [m1-agent-status D9](decisions/m1-agent-status.md) | Claude's settings file lists only the events the installed Claude knows | locked by research/orca-features/agent-status.md |
@@ -384,6 +627,75 @@ files, not this one.
 | easy | high | [m1-agent-status D59](decisions/m1-agent-status.md) | Final Round 1: accept all six findings, which collapse to four defects; none stays open | assumed — autonomous |
 | easy | high | [m1-agent-status D60](decisions/m1-agent-status.md) | The UI pass: SC-34 to SC-37 all pass | assumed — autonomous |
 | easy | high | [m1-agent-status D61](decisions/m1-agent-status.md) | No native-only scenarios | assumed — autonomous |
+| easy | high | [m1-notifications D1](decisions/m1-notifications.md) | Classify the item as Visual, API, CLI and Integration work, and run research phases A and B | assumed — autonomous |
+| easy | high | [m1-notifications D2](decisions/m1-notifications.md) | Skip the visual companion and the adhd offer; use the standard gray-area set | locked by docs/loop/LOOP.md |
+| easy | high | [m1-notifications D3](decisions/m1-notifications.md) | Select every gray area that matters | locked by docs/loop/LOOP.md |
+| easy | high | [m1-notifications D8](decisions/m1-notifications.md) | Orca's notification settings, labels and defaults, plus Terminal Notifications and Show Menu Bar Icon | locked by research/orca-features/notifications.md |
+| easy | high | [m1-notifications D13](decisions/m1-notifications.md) | Gates run in Orca's order and the result says which one stopped the banner | locked by research/orca-features/notifications.md |
+| easy | high | [m1-notifications D14](decisions/m1-notifications.md) | The cooldown is 5 seconds per worktree, shared by every source, 50 keys, test exempt | locked by research/orca-features/notifications.md |
+| easy | high | [m1-notifications D15](decisions/m1-notifications.md) | Suppress While Focused looks at the worktree and window focus, not presence | locked by research/orca-features/notifications.md |
+| easy | high | [m1-notifications D16](decisions/m1-notifications.md) | Banner text follows Orca's builder, with Quirky's names | locked by research/orca-features/notifications.md |
+| easy | high | [m1-notifications D21](decisions/m1-notifications.md) | Settings > Notifications is a view of the notifications plugin; the generic Settings dialog shows the same settings | assumed — autonomous |
+| easy | high | [m1-notifications D22](decisions/m1-notifications.md) | Send Test Notification always answers with a toast | locked by research/orca-features/notifications.md |
+| easy | high | [m1-notifications D26](decisions/m1-notifications.md) | Clicking a banner only brings Quirky forward; the toast still opens the session | deferred: platform |
+| easy | high | [m1-notifications D27](decisions/m1-notifications.md) | Reading a marker doesn't remove the OS banner | deferred: platform |
+| easy | high | [m1-notifications D30](decisions/m1-notifications.md) | A bell marks unread at once; its banner waits 250 ms and yields to a completion | locked by research/orca-features/notifications.md |
+| easy | high | [m1-notifications D32](decisions/m1-notifications.md) | Structured sessions notify through the same policy | locked by research/orca-features/notifications.md |
+| easy | high | [m1-notifications D34](decisions/m1-notifications.md) | The CLI group is `quirky notifications` with status, send, test and preview | locked by docs/roadmap.md |
+| easy | high | [m1-notifications D38](decisions/m1-notifications.md) | Platform work deferred | deferred: platform |
+| easy | high | [m1-notifications D41](decisions/m1-notifications.md) | Design sections self-reviewed and accepted without a pause | locked by docs/loop/LOOP.md |
+| easy | high | [m1-notifications D43](decisions/m1-notifications.md) | Every decision is an event, and two environment variables make time and sound testable | assumed — autonomous |
+| easy | high | [m1-notifications D44](decisions/m1-notifications.md) | The Codex adversarial review of both specs replaces the separate tech-spec reviewer | locked by docs/loop/LOOP.md |
+| easy | high | [m1-notifications D46](decisions/m1-notifications.md) | Spec review: fix all four Codex findings; the two refuted ones stay as written | locked by docs/loop/LOOP.md |
+| easy | high | [m1-notifications D47](decisions/m1-notifications.md) | Build with Claude subagents implementing and Codex reviewing, in three waves | locked by docs/loop/LOOP.md |
+| easy | high | [m1-notifications D48](decisions/m1-notifications.md) | W1 landed as six components; two one-line test fixes outside their scopes were applied by the orchestrator | assumed — autonomous |
+| easy | high | [m1-notifications D49](decisions/m1-notifications.md) | W2 starts while the W1 gate finishes; its two failures belong to W2 | assumed — autonomous |
+| easy | high | [m1-notifications D51](decisions/m1-notifications.md) | W2 landed as two components; the W1 checkpoint ran over W1 alone | assumed — autonomous |
+| easy | high | [m1-notifications D52](decisions/m1-notifications.md) | W3 landed; the settings view ran in the main tree after its worktree was reclaimed | assumed — autonomous |
+| easy | high | [m1-notifications D53](decisions/m1-notifications.md) | W2 checkpoint: accept all five findings, which collapse to three defects | assumed — autonomous |
+| easy | high | [m1-notifications D54](decisions/m1-notifications.md) | Catching up with m1-term-ui moves the unread bell into the terminal workspace and widens what counts as visible | assumed — autonomous |
+| easy | high | [m1-notifications D56](decisions/m1-notifications.md) | Final Round 1: accept five of six findings; SC-33's ESC case is amended instead | assumed — autonomous |
+| easy | high | [m1-notifications D57](decisions/m1-notifications.md) | The UI pass: SC-6 and SC-46 to SC-50 all pass | assumed — autonomous |
+| easy | high | [m1-notifications D58](decisions/m1-notifications.md) | Six native-only scenarios go to the nightly run | locked by docs/loop/LOOP.md |
+| easy | high | [m1-notifications D59](decisions/m1-notifications.md) | Merge build/roadmap again before the final gate, and run the whole suite only through `bun run test` from now on | operator note |
+| easy | high | [m1-notifications D60](decisions/m1-notifications.md) | The descriptor fix lives in `startHarness`, shared by every symlink-only built-in directory | supersedes m1-term-ui D51 |
+| easy | high | [m1-notifications D61](decisions/m1-notifications.md) | The final gate passes; nothing goes to BLOCKERS.md | locked by docs/loop/LOOP.md |
+| easy | high | [m1-notifications D62](decisions/m1-notifications.md) | The first land failed on the integration tree's missing package links for the new plugin; they were copied in, as m1-term-daemon D49 did | assumed — autonomous |
+| easy | high | [m1-agent-status-scripting D1](decisions/m1-agent-status-scripting.md) | The item covers the roadmap's five bullets for scripts; the dot, the Activity view and `quirky terminal` stay as they are | locked by docs/roadmap.md |
+| easy | high | [m1-agent-status-scripting D7](decisions/m1-agent-status-scripting.md) | Rules are never downloaded | locked by docs/roadmap.md |
+| easy | high | [m1-agent-status-scripting D11](decisions/m1-agent-status-scripting.md) | Explain answers for any session, with or without a row | assumed — autonomous |
+| easy | high | [m1-agent-status-scripting D15](decisions/m1-agent-status-scripting.md) | Sends to one session run one at a time | assumed — autonomous |
+| easy | high | [m1-agent-status-scripting D18](decisions/m1-agent-status-scripting.md) | Waits long-poll like `quirky ask wait`; a timeout exits 1 with the last state | assumed — autonomous |
+| easy | high | [m1-agent-status-scripting D23](decisions/m1-agent-status-scripting.md) | Orca defects for this slice: downloaded rules, and a nested helper's hooks | locked by research/orca-features/agent-status.md |
+| easy | high | [m1-agent-status-scripting D24](decisions/m1-agent-status-scripting.md) | Gray areas and fast-track | locked by docs/loop/LOOP.md |
+| easy | high | [m1-agent-status-scripting D25](decisions/m1-agent-status-scripting.md) | No UI scenarios and no native scenarios | assumed — autonomous |
+| easy | high | [m1-agent-status-scripting D26](decisions/m1-agent-status-scripting.md) | The tech spec's reviewer step is folded into the one adversarial review of both specs | locked by docs/loop/LOOP.md |
+| easy | high | [m1-agent-status-scripting D27](decisions/m1-agent-status-scripting.md) | Spec review: accept eleven findings, reject the pre-pass's heading and reference findings | assumed — autonomous |
+| easy | high | [m1-agent-status-scripting D28](decisions/m1-agent-status-scripting.md) | Blocked rules are tried before working and idle rules | supersedes m1-agent-status-scripting D5 (ordering only) |
+| easy | high | [m1-agent-status-scripting D30](decisions/m1-agent-status-scripting.md) | Send writes each Enter itself and re-checks for an approval before every one | supersedes m1-agent-status-scripting D14 (who writes Enter) |
+| easy | high | [m1-agent-status-scripting D31](decisions/m1-agent-status-scripting.md) | The start check watches row commits from the first Enter | supersedes m1-agent-status-scripting D13 (when the window starts) |
+| easy | high | [m1-agent-status-scripting D32](decisions/m1-agent-status-scripting.md) | The matcher runs in a killable child process, not a Bun Worker | supersedes m1-agent-status-scripting D29 (mechanism only) |
+| easy | high | [m1-agent-status-scripting D33](decisions/m1-agent-status-scripting.md) | Build pairing and waves | locked by docs/loop/LOOP.md |
+| easy | high | [m1-agent-status-scripting D34](decisions/m1-agent-status-scripting.md) | A done row never goes stale for scripts | supersedes m1-agent-status-scripting D4 (freshness of done rows) |
+| easy | high | [m1-agent-status-scripting D35](decisions/m1-agent-status-scripting.md) | Wave 2 splits: T7 lands first, then the send and wait chain runs beside the checkpoint fixes | assumed — autonomous |
+| easy | high | [m1-agent-status-scripting D36](decisions/m1-agent-status-scripting.md) | Wave 1 checkpoint: accept all nine findings, which collapse to four defects | assumed — autonomous |
+| easy | high | [m1-agent-status-scripting D37](decisions/m1-agent-status-scripting.md) | Wave 2 landed; the gate passed with two unrelated files flaky under load | assumed — autonomous |
+| easy | high | [m1-agent-status-scripting D39](decisions/m1-agent-status-scripting.md) | Wave 2 checkpoint: accept all seven findings, which collapse to five defects | assumed — autonomous |
+| easy | high | [m1-agent-status-scripting D41](decisions/m1-agent-status-scripting.md) | Final Round 1: accept twelve findings that collapse to six defects; dismiss one | assumed — autonomous |
+| easy | high | [m1-agent-status-scripting D42](decisions/m1-agent-status-scripting.md) | Send writes the paste and Enter itself, right after its check | supersedes m1-agent-status-scripting D30 (who writes the paste) |
+| easy | high | [m1-agent-status-scripting D44](decisions/m1-agent-status-scripting.md) | The first land conflicted with m2-source-control-notes-ai; both sides' quirky.agents methods are kept | assumed — autonomous |
+| easy | high | [m1-agent-status-scripting D45](decisions/m1-agent-status-scripting.md) | A later land failed on a quirky.worktree test race; this branch carries that plugin's own fix | assumed — autonomous |
+| easy | high | [m1-agent-status-scripting D46](decisions/m1-agent-status-scripting.md) | The resumed lane verifies the existing final fix batch and proceeds to land | assumed — autonomous |
+| easy | high | [m1-agent-status-scripting D47](decisions/m1-agent-status-scripting.md) | Retry landing after the protected queue tests pass unchanged | locked by docs/loop/LOOP.md |
+| easy (workflow only) | high | [fix-sc31-first-shell-race D1](decisions/fix-sc31-first-shell-race.md) | Follow the fix-item workflow without new feature specs | locked by docs/loop/LOOP.md |
+| easy (test-only correction) | high | [fix-sc31-first-shell-race D2](decisions/fix-sc31-first-shell-race.md) | Skipping setup does not suppress the window's normal first shell | locked by /Users/zpyoung/PycharmProjects/PERSONAL/quirky/research/orca-features/worktrees.md |
+| easy (test synchronization only) | high | [fix-sc31-first-shell-race D3](decisions/fix-sc31-first-shell-race.md) | Wait for the terminal override's ensured shell before asserting setup was skipped | locked by docs/loop/decisions/m1-term-ui.md |
+| easy | high | [fix-sc31-first-shell-race D4](decisions/fix-sc31-first-shell-race.md) | Keep the fake PTY boundary explicit in the script side-effect assertion | assumed — autonomous |
+| easy | high | [fix-sc31-first-shell-race D5](decisions/fix-sc31-first-shell-race.md) | Record the guarded browser smoke as tool-blocked, not passed | assumed — autonomous |
+| easy (restore the preserved branch once the gate is repaired) | high for the gate failure; medium for its cause | [fix-sc31-first-shell-race D6](decisions/fix-sc31-first-shell-race.md) | Preserve the repaired item and block on the failing required full-suite gate | locked by docs/loop/LOOP.md |
+| easy | high | [fix-sc31-first-shell-race D7](decisions/fix-sc31-first-shell-race.md) | Resume the preserved correction after integration repairs | locked by docs/loop/decisions/fix-test-process-leaks.md |
+| easy | high for the exercised cli/api path; the guarded visual limitation remains d5. | [fix-sc31-first-shell-race D9](decisions/fix-sc31-first-shell-race.md) | Prove the skip/ordinary-shell contract with real CLI and PTY processes | assumed — autonomous |
+| easy | high for the observed result; no claim that the independent load sensitivity is fixed. | [fix-sc31-first-shell-race D10](decisions/fix-sc31-first-shell-race.md) | Retain the suite's existing isolated-rerun policy | locked by scripts/suite.ts |
 | easy | high | [m0-daemon-api D1](decisions/m0-daemon-api.md) | Classify the item as an API design, and run both research phases | assumed — autonomous |
 | easy | high | [m0-daemon-api D2](decisions/m0-daemon-api.md) | Skip the visual companion and the adhd offer, use the standard gray-area set | locked by docs/loop/LOOP.md |
 | easy | high | [m0-daemon-api D3](decisions/m0-daemon-api.md) | Select every gray area that matters for the daemon plugin API | assumed — autonomous |
@@ -409,6 +721,35 @@ files, not this one.
 | easy | high | [m0-daemon-api D41](decisions/m0-daemon-api.md) | The daemon plugin API is kernel, not a built-in plugin | locked by docs/roadmap.md |
 | easy | high | [m0-daemon-api D43](decisions/m0-daemon-api.md) | The final review loop ends after the closure round passes on all three lenses | assumed — autonomous |
 | easy | high | [m0-daemon-api D44](decisions/m0-daemon-api.md) | Every scenario has an API test, and there are no Orca defects to test | locked by docs/loop/LOOP.md |
+| easy | high | [m5-structured-runner D2](decisions/m5-structured-runner.md) | Classify API, CLI and integration; resolve every relevant gray area autonomously | locked by docs/loop/LOOP.md |
+| easy | high | [m5-structured-runner D6](decisions/m5-structured-runner.md) | Reuse launch resolution unchanged; reject structured raw arguments | locked by docs/loop/decisions/m1-launch-settings.md |
+| easy | high | [m5-structured-runner D8](decisions/m5-structured-runner.md) | Checks preserve bounded tails and terminate process groups | locked by research/orca-features/automations.md and fork-loops.md |
+| easy | high | [m5-structured-runner D9](decisions/m5-structured-runner.md) | Implement with omp OpenAI tasks and review with Gemini fallback | assumed — autonomous |
+| easy | high | [m5-structured-runner D10](decisions/m5-structured-runner.md) | macOS execution is the acceptance target | deferred: platform |
+| easy | high | [m5-structured-runner D11](decisions/m5-structured-runner.md) | Smoke processes must isolate HOME as well as QUIRKY_HOME | assumed — autonomous |
+| easy | high | [m5-structured-runner D14](decisions/m5-structured-runner.md) | Adjudicate every spec finding and build one wave of three disjoint components | assumed — autonomous |
+| easy | high | [m5-structured-runner D15](decisions/m5-structured-runner.md) | Gate component reports with observed behavior and repair root causes | assumed — autonomous |
+| easy | high | [m5-structured-runner D16](decisions/m5-structured-runner.md) | Installed Codex schemas define wire enums, not documentation shorthand | assumed — autonomous |
+| easy | high | [m5-structured-runner D17](decisions/m5-structured-runner.md) | A send waits for native startup, including immediately after resume | assumed — autonomous |
+| easy | high | [m5-structured-runner D18](decisions/m5-structured-runner.md) | Preserve caught-up process ownership and unrelated scope decisions | locked by docs/loop/decisions/fix-test-process-leaks.md |
+| easy | high | [m5-structured-runner D19](decisions/m5-structured-runner.md) | Lifecycle ownership excludes kernel confirmations | assumed — autonomous |
+| easy | high | [m5-structured-runner D20](decisions/m5-structured-runner.md) | Preserve the full gate and record slow-suite cost without changing runner configuration | locked by docs/loop/LOOP.md |
+| easy | high | [m5-structured-runner D21](decisions/m5-structured-runner.md) | Keep one-shot generation separate and pin the latest pre-review integration baseline | supersedes m5-structured-runner D18 (review baseline only) |
+| easy | high | [m5-structured-runner D22](decisions/m5-structured-runner.md) | Complete all three final review lenses without treating transport failure as a pass | assumed — autonomous |
+| easy | high | [m5-structured-runner D23](decisions/m5-structured-runner.md) | Accept the real close hang despite the evidence gate's line-range suppression, then close it with one fix batch | assumed — autonomous |
+| easy | high | [m5-structured-runner D24](decisions/m5-structured-runner.md) | Land only through the queue after the complete final gate | locked by docs/loop/LOOP.md |
+| easy | high | [m5-structured-runner D25](decisions/m5-structured-runner.md) | Resolve public workspace types directly rather than requiring generated plugin links | assumed — autonomous |
+| easy | high | [m5-structured-runner D26](decisions/m5-structured-runner.md) | Preserve the final catch-up's regex semantics and browser feasibility block | locked by docs/loop/decisions/fix-ask-regex-budget-20261027.md |
+| easy | high | [m5-structured-runner D27](decisions/m5-structured-runner.md) | Preserve the implemented item and block on the protected queue-order gate | locked by docs/loop/LOOP.md |
+| easy | high | [m5-ledger D3](decisions/m5-ledger.md) | Use omp implementers with the reachable Gemini reviewer fallback | assumed — autonomous |
+| easy | high | [m5-ledger D11](decisions/m5-ledger.md) | Build and verify macOS behavior without claiming other platforms | deferred: platform |
+| easy | high | [m5-ledger D13](decisions/m5-ledger.md) | Use two independent implementation components with one integration owner | assumed — autonomous |
+| easy | high | [m5-ledger D14](decisions/m5-ledger.md) | Enforce the actual public schema subset and canonical filesystem paths | assumed — autonomous |
+| easy | high | [m5-ledger D15](decisions/m5-ledger.md) | Test consumer invariants rather than SQLite bytes or asynchronous loading frames | assumed — autonomous |
+| easy | high | [m5-ledger D17](decisions/m5-ledger.md) | Do not rewrite protected queue infrastructure to clear the scripts gate | locked by docs/loop/LOOP.md |
+| easy | high | [m5-ledger D18](decisions/m5-ledger.md) | Treat an unchanged fast refresh as a visual-probe limitation, not a proved dead request | assumed — autonomous |
+| easy | high | [m5-ledger D19](decisions/m5-ledger.md) | Preserve separate visual outcomes and the constrained-viewport footer proof | assumed — autonomous |
+| easy | high | [m5-ledger D20](decisions/m5-ledger.md) | Fix asynchronous test readiness, retain the red infrastructure gate, and stop superseded verification | assumed — autonomous |
 | easy | high | [m0-ui-api D1](decisions/m0-ui-api.md) | Classify the item as an API and Visual design, and run both research phases | assumed — autonomous |
 | easy | high | [m0-ui-api D2](decisions/m0-ui-api.md) | Skip the visual companion and the adhd offer, use the standard gray-area set | locked by docs/loop/LOOP.md |
 | easy | high | [m0-ui-api D3](decisions/m0-ui-api.md) | Select every gray area that matters for the UI plugin API | assumed — autonomous |
@@ -451,6 +792,11 @@ files, not this one.
 | easy | high | [m0-registry D32](decisions/m0-registry.md) | Wave 2 checkpoint findings: fix all four defects | assumed — autonomous |
 | easy | high | [m0-registry D33](decisions/m0-registry.md) | A long QUIRKY_HOME breaks the PTY host's socket; logged, not fixed here | deferred: platform |
 | easy | high | [m0-registry D34](decisions/m0-registry.md) | The final review loop closed after three rounds with no open finding | assumed — autonomous |
+| easy | high | [m3-terminal-dock D2](decisions/m3-terminal-dock.md) | Run unattended brainstorming and select every relevant gray area | locked by docs/loop/LOOP.md |
+| easy | high | [m3-terminal-dock D4](decisions/m3-terminal-dock.md) | Bind omp OpenAI implementers to Gemini review after Opus proved unavailable | assumed — autonomous |
+| easy | high | [m3-terminal-dock D5](decisions/m3-terminal-dock.md) | Linux and Windows execution remain deferred | deferred: platform |
+| easy | high | [m3-terminal-dock D6](decisions/m3-terminal-dock.md) | Claude session-only picker controls avoid the global-settings defect | locked by docs/roadmap.md |
+| easy | high | [m3-terminal-dock D8](decisions/m3-terminal-dock.md) | Do not silently narrow parity or resurrect explicitly dropped subsystems | assumed — autonomous |
 | easy | high | [m2-ask-parity D1](decisions/m2-ask-parity.md) | In scope: the roadmap's five ask-parity points plus what they need to be testable | locked by docs/roadmap.md |
 | easy | high | [m2-ask-parity D2](decisions/m2-ask-parity.md) | Out of scope: hand-off, liveness, the wait cap, the 3-minute notification, rich previews, attention markers | locked by docs/roadmap.md |
 | easy | high | [m2-ask-parity D4](decisions/m2-ask-parity.md) | Brainstorming runs headless with the standard gray areas, all selected | locked by docs/loop/LOOP.md |

@@ -330,6 +330,17 @@
 - **Revisit if:** validated output is incomplete or owned renderer cleanup exceeds its bound
 - **Source:** assumed — autonomous
 
+## D31: Combine the single catch-up's additive APIs and cleanup contracts
+- **Question:** How should the pinned roadmap catch-up be integrated without dropping either lane's behavior?
+- **Options:** choose one side; add compatibility shims; combine the actual additive changes and retain both cleanup boundaries
+- **Chose:** one catch-up at d3f4b74eb6964c133ffc46c9cce1fc13b4c1e77c. Read all twelve incoming decision logs; no binding design conflict was found. Resolve the nine code conflicts by retaining resource capabilities, geometry and hosted tabs together with optional stored settings, badge titles/unread state, shared fixture helpers, sound assets, and incoming process-scope cleanup. Per-test HOME isolation remains inside the owned process boundary; SSH environment and machine-wide slots remain unchanged.
+- **Why:** incoming fixes explicitly require awaited disposable-process ownership and preserve production PTY persistence. Sidebar additions retain the existing default controls and one-panel layout. Blocked terminal-dock design prose is not treated as an approved new implementation contract.
+- **Evidence:** incoming logs for fix-ask-regex-budget-20261027, fix-sc31-first-shell-race, fix-test-process-leaks, m1-agent-status-scripting, m1-notifications, m2-sidebar-extras, m2-source-control-core, m2-source-control-notes-ai, m3-terminal-dock, m5-ledger, m5-structured-runner and sa-browser-agent; full-read reports CatchupDecisionsA/B; scoped merge handoffs KernelMerge/ShellMerge/RunnerMerge
+- **Reversibility:** medium
+- **Confidence:** high
+- **Revisit if:** post-merge typecheck or the land verification exposes a concrete integration defect
+- **Source:** locked by docs/loop/LOOP.md and the incoming decision logs
+
 ## Progress
 Step 6 complete for the D25 core boundary: scripts tests and typecheck pass; the affected-suite run reached 182/187 passing files, all four repaired lifecycle/core/UI/hosted-tab files passed on rerun, and the final six-case Markdown file now passes with real PDF bytes and canonical destination access. Real-kernel edge and note-delivery files pass. Fresh browser runs prove saved source, CSV persistence, image rendering/zoom and PDF viewing; prior reports and the open UI findings remain intact. All owned browser sessions and the smoke daemon/shell are stopped. The dependent completion item is queued. Next: commit, catch up with build/roadmap once and read incoming decisions, then detach and queue land; land runs the whole suite.
 

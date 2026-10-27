@@ -3,6 +3,7 @@ import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node
 import { join } from 'node:path'
 import { PTY_PROTOCOL_VERSION, PtyFrameDecoder, encodePtyJson, type ExitCause, type PtyFact, type PtyRequest } from '@quirky/protocol'
 import { socketPath } from '@quirky/protocol/node'
+import { createProcessScope, type ProcessScope } from '../../../scripts/test-support/process-scope'
 import { createPtyApi } from '../src/plugins/pty-api'
 import { PtyClient } from '../src/pty-client'
 import { startFakePtyHost, type FakePtyHost } from './fixtures/fake-pty-host'
@@ -10,10 +11,44 @@ import { makeTempHome, waitFor } from './helpers'
 
 const FAKE_HOST_MAIN = join(import.meta.dir, 'fixtures', 'fake-pty-host.ts')
 
-const cleanups: (() => void)[] = []
-afterEach(() => {
-  for (const cleanup of cleanups.splice(0).reverse()) cleanup()
+const cleanups: (() => Promise<void> | void)[] = []
+const scopes = new Map<string, ProcessScope>()
+afterEach(async () => {
+  let failed = false
+  let firstError: unknown
+  for (const cleanup of cleanups.splice(0).reverse()) {
+    try {
+      await cleanup()
+    } catch (error) {
+      if (!failed) firstError = error
+      failed = true
+    }
+  }
+  if (failed) throw firstError
 })
+
+function scopeFor(home: string): ProcessScope {
+  let scope = scopes.get(home)
+  if (!scope) {
+    scope = createProcessScope(home)
+    scopes.set(home, scope)
+    cleanups.push(async () => {
+      scopes.delete(home)
+      await scope!.cleanup()
+    })
+  }
+  return scope
+}
+async function withScopeToken<T>(scope: ProcessScope, action: () => Promise<T>): Promise<T> {
+  const previous = process.env.QUIRKY_TEST_SCOPE
+  process.env.QUIRKY_TEST_SCOPE = scope.env.QUIRKY_TEST_SCOPE
+  try {
+    return await action()
+  } finally {
+    if (previous === undefined) delete process.env.QUIRKY_TEST_SCOPE
+    else process.env.QUIRKY_TEST_SCOPE = previous
+  }
+}
 
 /** An in-process fake host that stops itself when told to shut down, as the real host exits. */
 function startStoppableHost(home: string, version?: number): FakePtyHost {
@@ -23,23 +58,29 @@ function startStoppableHost(home: string, version?: number): FakePtyHost {
 }
 
 function newClient(home: string, extra: { connectTimeoutMs?: number; shutdownWaitMs?: number } = {}): PtyClient {
+  const scope = scopeFor(home)
   const client = new PtyClient({ home, hostEntry: FAKE_HOST_MAIN, log: () => {}, ...extra })
-  cleanups.push(() => {
-    client.close()
-    const pidFile = join(home, 'pty.pid')
-    if (!existsSync(pidFile)) return
-    try {
-      process.kill(Number(readFileSync(pidFile, 'utf8')))
-    } catch {
-      return
-    }
-  })
+  const connect = client.connect.bind(client)
+  client.connect = async () =>
+    withScopeToken(scope, async () => {
+      await connect()
+      if (client.hostPid !== null) scope.track(client.hostPid)
+    })
+  const restartHost = client.restartHost.bind(client)
+  client.restartHost = async () =>
+    withScopeToken(scope, async () => {
+      const result = await restartHost()
+      scope.track(result.pid)
+      return result
+    })
+  cleanups.push(() => client.close())
   return client
 }
 
 function home(): string {
   const dir = makeTempHome('qp-')
   cleanups.push(() => rmSync(dir, { recursive: true, force: true }))
+  scopeFor(dir)
   return dir
 }
 
@@ -238,6 +279,26 @@ describe('events through createPtyApi', () => {
     expect(sent[1]).toMatchObject({ mode: 'raw', historyLines: 50 })
     expect(sent[2]).toMatchObject({ lines: 2, before: 'c0', format: 'ansi' })
     expect(sent[4]).toMatchObject({ signal: 'SIGTERM', reason: 'killed' })
+  })
+
+  test('read forwards unwrap to the host only when it is true', async () => {
+    const dir = home()
+    const host = startFakePtyHost(dir)
+    cleanups.push(() => host.stop())
+    const client = newClient(dir)
+    const { api } = createPtyApi(client, 'acme.unwrap')
+    await api.spawn('s1', { argv: ['sh'], cwd: '/tmp', env: {}, cols: 80, rows: 24 })
+
+    await api.read('s1', 5)
+    await api.read('s1', 6, { unwrap: false })
+    await api.read('s1', 7, { unwrap: true })
+
+    const reads = host.requests.filter((r) => r.type === 'read')
+    expect(reads).toEqual([
+      { id: expect.any(Number), type: 'read', sessionId: 's1', lines: 5 },
+      { id: expect.any(Number), type: 'read', sessionId: 's1', lines: 6 },
+      { id: expect.any(Number), type: 'read', sessionId: 's1', lines: 7, unwrap: true }
+    ])
   })
 
   test('SC-34: clear and resetModes go to the host by session id and reject for an unknown one', async () => {

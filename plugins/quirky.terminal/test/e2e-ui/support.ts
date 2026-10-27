@@ -231,7 +231,6 @@ export async function startUi(options: UiOptions = {}) {
     async run(command: string, args?: unknown): Promise<any> {
       const id = command.startsWith('command:') ? command : command.includes('/') ? `command:${command}` : `command:quirky.terminal/${command}`
       const reply = jsonOf(await h.ok(['ui', 'run', id, ...(args === undefined ? [] : ['--args', JSON.stringify(args)]), '--json'])) as { result?: unknown }
-      h.noteProcesses()
       return reply.result
     },
 

@@ -1,9 +1,10 @@
 import { homedir } from 'node:os'
-import { isReservedLaunchEnv, type ContributionInfo, type PluginContext, type QuirkyEvent } from '@quirky/protocol'
+import { isReservedLaunchEnv, type ContributionInfo, type PluginCaller, type PluginContext, type QuirkyEvent } from '@quirky/protocol'
 import { buildCatalog } from './core/catalog'
 import { extrasSummary, parseExtraArgs } from './core/extras'
 import { agentPermissionMode, applyPermissionMode, effectiveArgs, effectiveEnv, PermissionError, permissionSummary } from './core/permissions'
 import { buildLaunchPlan, buildResumePlan, PlanError } from './core/plan'
+import { submitDelayMs } from './core/paste'
 import { resolveLaunch } from './core/resolve'
 import { pickAgent } from './core/select'
 import { SelectionError, validateSelection } from './core/selection'
@@ -28,6 +29,7 @@ import {
 } from './core/types'
 import { DeliveryRunner } from './delivery'
 import { detect, readLoginPath, searchDirs, type Detection, type SearchDirs } from './detect'
+import { Generator } from './generate'
 import { sameConfig, type AgentConfigStore } from './store'
 import { writeTrust } from './trust'
 
@@ -97,6 +99,7 @@ export class AgentsService {
   private detection: Detection = detect([], { dirs: [], loginDirs: new Set() })
   private search: SearchDirs = { dirs: [], loginDirs: new Set() }
   private readonly runner: DeliveryRunner
+  private readonly generator: Generator
   private readonly goneListeners = new Set<(sessionId: string) => void>()
   private readonly reportedProblems = new Set<string>()
   private known: { default: unknown; trust: unknown }
@@ -114,6 +117,13 @@ export class AgentsService {
       },
       timeScale: timeScaleFromEnv(),
       log: (message) => context.log(message)
+    })
+    this.generator = new Generator({
+      context,
+      entryOf: (id) => this.catalog.agents.find((entry) => entry.id === id),
+      configOf: (id) => this.configs.get(id),
+      installed: (id) => this.detection.installed(id),
+      resolveExecutable: (name) => this.detection.resolveExecutable(name)
     })
     this.known = { default: context.getSetting(DEFAULT_SETTING), trust: context.getSetting(TRUST_SETTING) }
   }
@@ -299,8 +309,26 @@ export class AgentsService {
 
   deliver = async (params: Params): Promise<{ delivery: DeliveryOutcome }> => {
     const entry = this.entryOf(params.agent as string)
-    const delivery = await this.runner.deliver(params.sessionId as string, entry, params.text as string, params.submit as boolean)
+    const delivery = await this.runner.deliver(params.sessionId as string, entry, params.text as string, params.submit as boolean, {
+      ready: params.ready === true
+    })
     return { delivery }
+  }
+
+  /** How `deliver` would submit `text` to this agent, for callers that guard the Enter themselves. */
+  submitPlan = (params: Params): { enterWithPaste: boolean; delayMs: number; retryMs: number | null } => {
+    const entry = this.entryOf(params.agent as string)
+    return { enterWithPaste: entry.enterWithPaste, delayMs: submitDelayMs(params.text as string, entry), retryMs: entry.submitRetryMs }
+  }
+
+  /** Runs one agent (or a custom command) once and returns its decoded output; see `generate.ts`. */
+  generate = (params: Params, caller: PluginCaller) => this.generator.generate(params, caller)
+
+  cancelGenerate = (params: Params) => this.generator.cancelGenerate(params)
+
+  /** Stops every running generation; the daemon is shutting the plugin down. */
+  stopGenerating(): void {
+    this.generator.stopAll()
   }
 
   private enqueue<T>(work: () => Promise<T>): Promise<T> {
@@ -487,7 +515,8 @@ export class AgentsService {
       env: effectiveEnv(entry, config),
       envOverridden: config.env !== null,
       showEnv: entry.yoloEnv !== null || config.env !== null,
-      permissions: { mode: agentPermissionMode(entry, config), hasAuto: entry.auto !== null }
+      permissions: { mode: agentPermissionMode(entry, config), hasAuto: entry.auto !== null },
+      canGenerate: entry.oneShot !== null
     }
   }
 

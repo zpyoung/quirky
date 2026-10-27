@@ -840,6 +840,10 @@
               "type": "string",
               "description": "The first prompt of an agent."
             },
+            "extraArgs": {
+              "type": "string",
+              "description": "Extra arguments for the agent, checked against its allowlist."
+            },
             "title": {
               "type": "string",
               "description": "The default title; at most 200 characters."
@@ -2156,6 +2160,38 @@
           },
           "required": [
             "sessionId"
+          ]
+        }
+      },
+      {
+        "id": "notification",
+        "description": "A program in a terminal asked for a desktop notification (OSC 9, 99 or 777).",
+        "data": {
+          "type": "object",
+          "properties": {
+            "sessionId": {
+              "type": "string"
+            },
+            "title": {
+              "description": "The notification title, or null when the program sent none. The schema subset has no union type, so this accepts any value."
+            },
+            "body": {
+              "type": "string"
+            },
+            "occasion": {
+              "type": "string",
+              "enum": [
+                "always",
+                "unfocused",
+                "invisible"
+              ]
+            }
+          },
+          "required": [
+            "sessionId",
+            "title",
+            "body",
+            "occasion"
           ]
         }
       },

@@ -1,5 +1,6 @@
-import { newRow } from './apply'
-import { readableDetail, STALE_AFTER_MS } from './model'
+import { becauseOf, newRow } from './apply'
+import { foldLead } from './fold'
+import { capLine, readableDetail, STALE_AFTER_MS } from './model'
 import { ProgramStatusRecords, projectRoot, type ProgramStatusRecord, type ProgramStatusReport } from './program-status'
 import type { TitleStatus } from './title'
 import type { AgentRow, AgentState, ProgramStatusFacet } from './types'
@@ -10,12 +11,19 @@ export const HOOK_SILENCE_MS = 120_000
 /** A title row's evidence is refreshed this often while its title keeps saying the same thing. */
 const TITLE_REFRESH_MS = 60_000
 
+const TITLE_CAP = 120
+
 const TITLE_STATES: Record<TitleStatus, AgentState> = { working: 'working', permission: 'waiting', idle: 'done' }
 
 /** Where a fallback decision stands: the row to store (`prev` itself when nothing changes, null to remove it). */
 export type FallbackDecision = { row: AgentRow | null; retryAt?: number }
 
 type Evidence = { sessionId: string; agent: string; at: number }
+
+export type TitleEv = Evidence & {
+  /** The terminal title the status was read from; `because` quotes it. */
+  title: string
+}
 
 /** A hook row still being fed by hooks: its latest hook is within the freshness window. */
 const hasFreshHooks = (row: AgentRow, at: number) => row.lastHookAt !== null && at - row.lastHookAt <= STALE_AFTER_MS
@@ -28,16 +36,18 @@ const isFallbackRow = (row: AgentRow) => row.lastHookAt === null
  * changes nothing. Hooks win while they are fresh, and so does a program's own OSC 7501 row. Title
  * evidence never counts as a hook and never notifies.
  */
-export function titleEvidence(prev: AgentRow | null, status: TitleStatus, ev: Evidence): AgentRow {
+export function titleEvidence(prev: AgentRow | null, status: TitleStatus, ev: TitleEv): AgentRow {
   if (prev && (hasFreshHooks(prev, ev.at) || (isFallbackRow(prev) && prev.source === 'program-status'))) return prev
   const state = TITLE_STATES[status]
+  const title = capLine(ev.title, TITLE_CAP)
   if (prev && prev.source === 'title' && prev.state === state && !prev.restoredUnconfirmed) {
     return ev.at - prev.evidenceAt < TITLE_REFRESH_MS ? prev : { ...prev, evidenceAt: ev.at }
   }
   const row = newRow({ sessionId: ev.sessionId, source: ev.agent, at: ev.at, replay: false })
   const sameState = prev?.source === 'title' && prev.state === state
   const since = sameState ? prev.stateStartedAt : ev.at
-  return { ...row, state, lead: { ...row.lead, state, stateStartedAt: since }, stateStartedAt: since, source: 'title' }
+  const because = sameState && prev.because ? prev.because : becauseOf('title', `title "${title}" → ${status}`, ev.at)
+  return { ...row, state, lead: { ...row.lead, state, stateStartedAt: since }, stateStartedAt: since, source: 'title', because }
 }
 
 /** The part of a root record that rides on a row. */
@@ -88,24 +98,31 @@ export function programEvidence(prev: AgentRow | null, root: ProgramStatusRecord
     if (silentFor <= ev.silenceMs) return { row: withFacet(prev, facet), retryAt: prev.lastHookAt + ev.silenceMs + 1 }
   }
 
+  const moved = !prev || prev.state !== projection.state || prev.outcome !== projection.outcome || prev.source !== 'program-status'
   const row = prev
     ? { ...prev, lead: { ...prev.lead }, children: [...prev.children] }
     : newRow({ sessionId: ev.sessionId, source: ev.agent, at: ev.at, replay: false })
-  if (row.state !== projection.state) row.stateStartedAt = ev.at
+  const folded = foldLead(projection.state, row.children, false)
+  if (row.state !== folded.state) row.stateStartedAt = ev.at
   if (row.lead.state !== projection.state) row.lead.stateStartedAt = ev.at
-  row.state = projection.state
+  row.state = folded.state
   row.lead.state = projection.state
   if (projection.outcome) row.outcome = projection.outcome
   else delete row.outcome
   delete row.interrupted
   if (projection.sessionBoundary) row.sessionBoundary = true
   else delete row.sessionBoundary
-  delete row.workingMode
+  if (folded.workingMode) row.workingMode = folded.workingMode
+  else delete row.workingMode
   delete row.heldPermission
   delete row.stashedState
   delete row.restoredUnconfirmed
   row.source = 'program-status'
   row.evidenceAt = ev.at
+  if (moved) {
+    const reported = root!.kind !== undefined ? `${root!.state}/${root!.kind}` : root!.state
+    row.because = becauseOf('program-status', `OSC 7501 ${reported} → ${row.state}`, ev.at)
+  }
   return { row: withFacet(row, facet) }
 }
 

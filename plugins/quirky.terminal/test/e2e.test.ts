@@ -1,6 +1,6 @@
 import { afterEach, expect, test } from 'bun:test'
-import { existsSync, mkdirSync, readFileSync, readdirSync } from 'node:fs'
-import { basename, join } from 'node:path'
+import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync } from 'node:fs'
+import { basename, dirname, join } from 'node:path'
 import { base64ToBytes, type Session } from '@quirky/protocol'
 import {
   E2eHarness,
@@ -14,10 +14,63 @@ import {
   type HostRow
 } from './e2e-support'
 
-const spawned: { kill(): void }[] = []
+const spawned: { kill(): void; exited: Promise<number> }[] = []
+
+
+type AbandonedHarness = {
+  ownerPid: number
+  home?: string
+  repo?: string
+  daemonPid?: number
+  hostPid?: number
+  shellPid?: number
+}
+
+const abandonedHarnesses: AbandonedHarness[] = []
+
+async function killForFinalizer(resources: AbandonedHarness): Promise<void> {
+  const pids = new Set<number>()
+  const roots = [resources.ownerPid, resources.daemonPid, resources.hostPid, resources.shellPid].filter(
+    (pid): pid is number => pid !== undefined
+  )
+  for (const pid of roots) {
+    pids.add(pid)
+    try {
+      for (const row of descendantsOf(pid)) pids.add(row.pid)
+    } catch {
+      // The process table may already be unavailable during finalization.
+    }
+  }
+  for (const pid of pids) {
+    try {
+      process.kill(pid, 'SIGKILL')
+    } catch {
+      // Already gone.
+    }
+  }
+  // These pids are real OS processes; fake timers cannot report their exit.
+  await waitFor('abandoned harness processes to exit', () => ([...pids].every((pid) => !isAlive(pid)) ? true : undefined), 10_000).catch(() => {})
+  if (resources.home) rmSync(resources.home, { recursive: true, force: true })
+  if (resources.repo) rmSync(dirname(resources.repo), { recursive: true, force: true })
+}
+
+function childRecord<T>(text: string, stage: string): T | undefined {
+  for (const line of text.split('\n')) {
+    try {
+      const record = JSON.parse(line) as T & { stage?: string }
+      if (record.stage === stage) return record
+    } catch {
+      // Ignore incomplete output while the child is still writing.
+    }
+  }
+  return undefined
+}
 
 afterEach(async () => {
-  for (const proc of spawned.splice(0)) proc.kill()
+  const processes = spawned.splice(0)
+  for (const proc of processes) proc.kill()
+  for (const resources of abandonedHarnesses.splice(0)) await killForFinalizer(resources)
+  await Promise.allSettled(processes.map((proc) => proc.exited))
   await cleanupAll()
 })
 
@@ -505,8 +558,21 @@ scenario('SC-40: every terminal host flow is scriptable', async () => {
     expect(words, command).toContain(command)
   }
   const events = api.events.map((event) => event.name)
-  for (const name of ['bell', 'commandFinished', 'title', 'cwd']) expect(events).toContain(`quirky.terminal/${name}`)
+  for (const name of ['bell', 'commandFinished', 'title', 'cwd', 'notification']) expect(events).toContain(`quirky.terminal/${name}`)
 })
+
+scenario('SC-29: a program notification in a real session becomes a terminal event', async () => {
+  const h = await start()
+  const session = await h.newSession()
+  await h.run(session.id, `printf '\\033]777;notify;Build;done in 4s\\007'`)
+  const event = await waitFor('the notification event', () =>
+    h.events.find((candidate) => candidate.type === 'quirky.terminal/notification')
+  )
+  expect(event).toMatchObject({
+    type: 'quirky.terminal/notification',
+    data: { sessionId: session.id, title: 'Build', body: 'done in 4s', occasion: 'always' }
+  })
+}, 90_000)
 
 scenario('SC-42: an ended session attaches read only after a host restart', async () => {
   const h = await start()
@@ -545,3 +611,70 @@ scenario('cleanup removes a host and shells that a SIGKILLed quirkyd left runnin
   await waitFor('the host and shell to die', () => !isAlive(host) && !isAlive(shell))
   expect(existsSync(home)).toBe(false)
 })
+
+scenario(
+  'hard-killed harness owner still cleans its daemon, PTY host, and shell',
+  async () => {
+    const moduleUrl = new URL('./e2e-support.ts', import.meta.url).href
+    const owner = Bun.spawn(
+      [
+        process.execPath,
+        '-e',
+        // The child must import the real harness in an independently killable runner.
+        `
+const { E2eHarness, waitFor } = await import(${JSON.stringify(moduleUrl)})
+const h = await E2eHarness.start()
+console.log(JSON.stringify({ stage: 'started', home: h.home, repo: h.repo, daemonPid: h.daemonPid }))
+const session = await h.newSession()
+const hostPid = await waitFor('the PTY host', () => {
+  try { return h.hostPid() } catch { return undefined }
+})
+const shellPid = await h.shellPid(session.id)
+await h.waitForLine(session.id, /[%#]$/)
+console.log(JSON.stringify({ stage: 'ready', hostPid, shellPid }))
+await new Promise(() => {})
+`
+      ],
+      { stdout: 'pipe', stderr: 'pipe' }
+    )
+    const output = collect(owner.stdout as ReadableStream<Uint8Array>)
+    const errors = collect(owner.stderr as ReadableStream<Uint8Array>)
+    const resources: AbandonedHarness = { ownerPid: owner.pid }
+    abandonedHarnesses.push(resources)
+    spawned.push(owner)
+
+    const started = await waitFor(
+      'the child harness daemon',
+      () => {
+        if (owner.exitCode !== null) throw new Error(`child harness exited ${owner.exitCode}: ${errors.text}`)
+        return childRecord<{ stage: string; home: string; repo: string; daemonPid: number }>(output.text, 'started')
+      },
+      90_000
+    )
+    Object.assign(resources, started)
+    expect(existsSync(started.home!)).toBe(true)
+    expect(started.home).not.toBe(process.env.QUIRKY_HOME)
+
+    const ready = await waitFor(
+      'the child harness PTY host and shell',
+      () => {
+        if (owner.exitCode !== null) throw new Error(`child harness exited ${owner.exitCode}: ${errors.text}`)
+        return childRecord<{ stage: string; hostPid: number; shellPid: number }>(output.text, 'ready')
+      },
+      90_000
+    )
+    Object.assign(resources, ready)
+
+    process.kill(owner.pid, 'SIGKILL')
+    await owner.exited
+    const ownedPids = [started.daemonPid!, ready.hostPid, ready.shellPid]
+    await waitFor(
+      'the child harness processes to die after their owner is SIGKILLed',
+      () => (ownedPids.every((pid) => !isAlive(pid)) ? true : undefined),
+      20_000
+    )
+    expect(ownedPids.map(isAlive)).toEqual([false, false, false])
+
+  },
+  120_000
+)
