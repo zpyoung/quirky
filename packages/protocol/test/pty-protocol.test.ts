@@ -28,11 +28,21 @@ describe('pty protocol 2', () => {
       { kind: 'command-finished', exitCode: null },
       { kind: 'command-finished', exitCode: 2 },
       { kind: 'title', title: 'vim' },
-      { kind: 'cwd', cwd: '/tmp' }
+      { kind: 'cwd', cwd: '/tmp' },
+      { kind: 'prompt' },
+      { kind: 'program-status', body: '?' }
     ] as const satisfies readonly PtyFact[]
     expect(shellStates).toHaveLength(4)
     expect(causes).toHaveLength(4)
-    expect(facts.map((f) => f.kind)).toEqual(['bell', 'command-finished', 'command-finished', 'title', 'cwd'])
+    expect(facts.map((f) => f.kind)).toEqual([
+      'bell',
+      'command-finished',
+      'command-finished',
+      'title',
+      'cwd',
+      'prompt',
+      'program-status'
+    ])
   })
 
   test('requests, results and events accept the documented shapes', () => {
@@ -120,6 +130,7 @@ describe('pty protocol 2', () => {
       pty.onExit((sessionId: string, exitCode: number | null) => void [sessionId, exitCode])
       pty.onExit((_sessionId, _exitCode, exit) => void (exit.exitCause satisfies ExitCause))
       pty.onFact((_sessionId, fact) => void (fact.kind satisfies PtyFact['kind']))
+      pty.onInput((sessionId, data) => void [sessionId, data satisfies string])
       void (launch.shellReady() satisfies boolean)
     }
     expect(typeof never).toBe('function')

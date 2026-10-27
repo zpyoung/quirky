@@ -58,6 +58,34 @@ export type SessionStatus = 'starting' | 'running' | 'working' | 'waiting' | 'do
 
 export type SessionKind = 'terminal' | 'structured'
 
+/** What the agent-status plugin shows for a session; the order is not urgency (see the worktree priority). */
+export type AgentDisplayState =
+  | 'working'
+  | 'monitoring'
+  | 'waiting'
+  | 'permission'
+  | 'blocked'
+  | 'failed'
+  | 'interrupted'
+  | 'done'
+  | 'unverifiable'
+  | 'idle'
+  | 'unconfirmed'
+
+/** The agent-status plugin's per-session summary: a coarse `state` for rollups and a `display` for the glyph. */
+export type AgentStatusSummary = {
+  state: 'working' | 'waiting' | 'blocked' | 'done'
+  display: AgentDisplayState
+  label: string
+  detail: string
+  /** 0 to 1, or null when the agent reports none. */
+  progress: number | null
+  stateStartedAt: number
+  evidenceAt: number
+  /** True when the row was loaded from a previous run and nothing has confirmed it since. */
+  restoredUnconfirmed: boolean
+}
+
 export type Session = {
   id: string
   kind: SessionKind
@@ -83,6 +111,8 @@ export type Session = {
   launchSettings?: LaunchSettings | null
   /** The session this one was resumed or forked from. */
   resumedFrom?: string | null
+  /** Null or absent until the agent-status plugin has evidence; the coarse `status` then stands alone. */
+  agentStatus?: AgentStatusSummary | null
 }
 
 export type GitFileStatus = {

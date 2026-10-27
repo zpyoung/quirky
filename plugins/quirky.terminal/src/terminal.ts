@@ -33,8 +33,8 @@ function concat(chunks: Uint8Array[]): Uint8Array {
   return out
 }
 
-/** The plugin event a PTY host fact is reported as. */
-export function factEvent(sessionId: string, fact: PtyFact): { name: string; data: Record<string, unknown> } {
+/** The plugin event a PTY host fact is reported as; null for facts only other plugins consume. */
+export function factEvent(sessionId: string, fact: PtyFact): { name: string; data: Record<string, unknown> } | null {
   switch (fact.kind) {
     case 'bell':
       return { name: 'bell', data: { sessionId } }
@@ -44,6 +44,9 @@ export function factEvent(sessionId: string, fact: PtyFact): { name: string; dat
       return { name: 'title', data: { sessionId, title: fact.title } }
     case 'cwd':
       return { name: 'cwd', data: { sessionId, cwd: fact.cwd } }
+    case 'prompt':
+    case 'program-status':
+      return null
   }
 }
 

@@ -8,6 +8,7 @@ type ExitListener = (
   exit: { exitSignal: string | null; exitCause: ExitCause }
 ) => void
 type FactListener = (sessionId: string, fact: PtyFact) => void
+type InputListener = (sessionId: string, data: string) => void
 type ReconnectListener = () => void
 
 /**
@@ -18,10 +19,13 @@ type Fanout = {
   data: Set<{ pluginId: string; listener: DataListener }>
   exit: Set<{ pluginId: string; listener: ExitListener }>
   fact: Set<{ pluginId: string; listener: FactListener }>
+  input: Set<{ pluginId: string; listener: InputListener }>
   reconnect: Set<{ pluginId: string; listener: ReconnectListener }>
   /** Plugins holding a host subscription per session; the host subscription ends when the last holder lets go. */
   holds: Map<string, Set<string>>
   log: (message: string) => void
+  /** Calls a plugin listener with its errors, sync or async, logged instead of thrown. */
+  run: (pluginId: string, call: () => unknown) => void
 }
 
 const fanouts = new WeakMap<PtyClient, Fanout>()
@@ -33,9 +37,11 @@ function fanoutFor(pty: PtyClient, log: (message: string) => void): Fanout {
     data: new Set(),
     exit: new Set(),
     fact: new Set(),
+    input: new Set(),
     reconnect: new Set(),
     holds: new Map(),
-    log
+    log,
+    run: (pluginId, call) => run(pluginId, call)
   }
   const run = (pluginId: string, call: () => unknown) => {
     try {
@@ -112,6 +118,9 @@ export function createPtyApi(
     write(sessionId, data) {
       live()
       pty.sendData(sessionId, typeof data === 'string' ? new TextEncoder().encode(data) : data)
+      if (fanout.input.size === 0) return
+      const text = typeof data === 'string' ? data : new TextDecoder().decode(data)
+      for (const entry of [...fanout.input]) fanout.run(entry.pluginId, () => entry.listener(sessionId, text))
     },
     async resize(sessionId, cols, rows) {
       live()
@@ -182,6 +191,7 @@ export function createPtyApi(
     onData: (listener) => listen(fanout.data, { pluginId, listener }),
     onExit: (listener) => listen(fanout.exit, { pluginId, listener }),
     onFact: (listener) => listen(fanout.fact, { pluginId, listener }),
+    onInput: (listener) => listen(fanout.input, { pluginId, listener }),
     onReconnect: (listener) => listen(fanout.reconnect, { pluginId, listener })
   }
 
