@@ -1015,4 +1015,12 @@ describe('launch settings', () => {
     })
     expect(existsSync(join(t.userHome, '.claude.json'))).toBe(false)
   })
+
+  test('prepareLaunch refuses a model with a control character as invalid-params and writes no trust record', async () => {
+    const t = await start({ trust: true })
+    expect(
+      await failure(t.call(A('prepareLaunch'), { agent: 'claude', cwd: t.userHome, model: 'opus\u0000x', hookArgs: [], hookEnv: {} }))
+    ).toMatchObject({ code: RpcErrorCode.InvalidParams, message: "invalid launch selection: the model can't contain control characters" })
+    expect(existsSync(join(t.userHome, '.claude.json'))).toBe(false)
+  })
 })

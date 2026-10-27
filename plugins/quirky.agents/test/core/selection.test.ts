@@ -289,6 +289,20 @@ describe('bounds and reserved keys', () => {
     )
   })
 
+  test('a model with a control character is invalid', () => {
+    for (const bad of ['opus\u0000x', 'opus\nx', 'opus\tx', 'opus\u007fx', 'opus\u0085x', 'opus\u2028x', 'opus\u2029x']) {
+      expect(refusal(claude, { model: bad })).toBe("invalid launch selection: the model can't contain control characters")
+    }
+  })
+
+  test('an option value with a control character is invalid', () => {
+    for (const bad of ['high\u0000', 'hi\ngh', 'hi\tgh']) {
+      expect(refusal(claude, { model: 'opus', options: { effort: bad } })).toBe(
+        "invalid launch selection: the effort value can't contain control characters"
+      )
+    }
+  })
+
   test('16 options pass and 17 do not', () => {
     const many = (count: number) => Object.fromEntries(Array.from({ length: count }, (_, i) => [`o${i}`, 'x']))
     expect(refusal(claude, { model: 'opus', options: many(16) })).toBe(

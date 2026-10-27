@@ -8,6 +8,8 @@ const MAX_OPTIONS = 16
 const MAX_OPTION_ID_LENGTH = 64
 const RESERVED_OPTION_IDS = new Set(['model', '__proto__', 'constructor', 'prototype'])
 
+const CONTROL_CHARACTER = /[\u0000-\u001f\u007f-\u009f\u2028\u2029]/
+
 const invalid = (why: string): SelectionError => new SelectionError(`invalid launch selection: ${why}`)
 
 function pickedOptions(value: unknown): [string, unknown][] {
@@ -27,6 +29,7 @@ function pickedModel(value: unknown): string | null {
   if (typeof value !== 'string') throw invalid('model must be a string')
   const model = value.trim()
   if (!model) throw invalid('model must not be empty')
+  if (CONTROL_CHARACTER.test(model)) throw invalid("the model can't contain control characters")
   if (model.startsWith('-')) throw invalid('the model can\'t start with "-"')
   if (model.length > MAX_MODEL_LENGTH) throw invalid(`model must be ${MAX_MODEL_LENGTH} characters or fewer`)
   return model
@@ -61,6 +64,9 @@ export function validateSelection(
   for (const [id, value] of options) {
     if (typeof value !== 'string' && typeof value !== 'boolean') {
       throw invalid(`option ${id} must be a string or a boolean`)
+    }
+    if (typeof value === 'string' && CONTROL_CHARACTER.test(value)) {
+      throw invalid(`the ${id} value can't contain control characters`)
     }
     const use = offered.find((candidate) => candidate.id === id)
     const decl = catalog.options.find((candidate) => candidate.id === id)

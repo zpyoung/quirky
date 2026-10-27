@@ -326,9 +326,14 @@ describe('agents options', () => {
     const { ctx, lines } = testCliContext(client)
     await run('options', ctx, ['claude'])
     const rows = lines[0]!.split('\n')
-    expect(cells(rows[0]!)).toEqual(['MODEL', 'LABEL', 'OPTIONS'])
-    expect(cells(rows[1]!)).toEqual(['fable', 'Fable', 'effort: low|medium|high|xhigh|max'])
-    expect(cells(rows[4]!)).toEqual(['haiku', 'Haiku', '-'])
+    expect(cells(rows[0]!)).toEqual(['MODEL', 'LABEL', 'OPTIONS', 'DESCRIPTION'])
+    const effort = 'effort: low|medium|high|xhigh|max'
+    expect(rows.slice(1, 5).map((row) => cells(row))).toEqual([
+      ['fable', 'Fable', effort, 'Most capable for the hardest, longest-running tasks'],
+      ['opus', 'Opus', effort, 'Best for everyday, complex tasks'],
+      ['sonnet', 'Sonnet', effort, 'Efficient for routine tasks'],
+      ['haiku', 'Haiku', '-', 'Fastest for quick answers']
+    ])
     expect(rows[5]).toBe('unlisted models: accepted, with effort: low|medium|high|xhigh|max')
     expect(rows[6]).toBe('extra arguments: --model, --effort, --add-dir (for example --model opus --effort high --add-dir docs)')
   })
