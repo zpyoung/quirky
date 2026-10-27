@@ -1131,6 +1131,16 @@
         "m3-accounts"
       ],
       "status": "todo"
+    },
+    {
+      "id": "fix-flaky-pty-host-manager",
+      "milestone": "M1",
+      "title": "Fix the flaky packages/pty-host/test/manager.test.ts: it failed under load in 4 full-suite runs, and on the new 16-core test host its 'attach > raw mode replays the hot tail and joins the live stream at the offset' test failed even alone ('timed out waiting for echo and cat output' after 5 s). Find out with quirk:systematic-debugging whether the wait is too short or the attach misses output written between the replay and the live subscription, reproduce it under CPU load, and fix the code or the test",
+      "docs": [
+        "term-daemon.md"
+      ],
+      "deps": [],
+      "status": "todo"
     }
   ]
 }
