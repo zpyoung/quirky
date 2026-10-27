@@ -830,6 +830,61 @@ describe('workspace trust', () => {
     }
   })
 
+  test('uses prepared provider homes for Claude and Codex trust writes', async () => {
+    const t = await start({ installed: ['claude', 'codex'], trust: true })
+    const folder = realpathSync(mkdtempSync('/tmp/qag-wt-'))
+    const claudeHome = join(t.userHome, 'managed-claude')
+    const codexHome = join(t.userHome, 'managed-codex')
+    mkdirSync(claudeHome)
+    mkdirSync(codexHome)
+    const defaultClaude = join(t.userHome, '.claude.json')
+    writeFileSync(defaultClaude, '{"theme":"default"}\n')
+    const defaultClaudeBefore = readFileSync(defaultClaude, 'utf8')
+    try {
+      await t.call(A('prepareLaunch'), {
+        agent: 'claude',
+        cwd: folder,
+        hookArgs: [],
+        hookEnv: { CLAUDE_CONFIG_DIR: claudeHome }
+      })
+      const managedClaude = JSON.parse(readFileSync(join(claudeHome, '.claude.json'), 'utf8'))
+      expect(managedClaude.projects[folder].hasTrustDialogAccepted).toBe(true)
+      expect(readFileSync(defaultClaude, 'utf8')).toBe(defaultClaudeBefore)
+
+      await t.call(A('prepareLaunch'), {
+        agent: 'codex',
+        cwd: folder,
+        hookArgs: [],
+        hookEnv: { CODEX_HOME: codexHome }
+      })
+      expect(readFileSync(join(codexHome, 'config.toml'), 'utf8')).toContain(`[projects."${folder}"]`)
+      expect(existsSync(join(t.userHome, '.codex'))).toBe(false)
+    } finally {
+      rmSync(folder, { recursive: true, force: true })
+    }
+  })
+
+  test('a failed provider-home trust write does not log the private home path', async () => {
+    const t = await start({ installed: ['claude'], trust: true })
+    const folder = realpathSync(mkdtempSync('/tmp/qag-wt-'))
+    const claudeHome = join(t.userHome, 'managed-private-home')
+    writeFileSync(claudeHome, 'not a directory')
+    try {
+      const launch = await t.call(A('prepareLaunch'), {
+        agent: 'claude',
+        cwd: folder,
+        hookArgs: [],
+        hookEnv: { CLAUDE_CONFIG_DIR: claudeHome }
+      })
+      expect(launch.command.startsWith('claude')).toBe(true)
+      const failure = t.logs.find((line) => line.includes('trust for claude failed: '))
+      expect(failure).toBeDefined()
+      expect(failure).not.toContain(claudeHome)
+    } finally {
+      rmSync(folder, { recursive: true, force: true })
+    }
+  })
+
   test('SC-36: an agent without a trust preset writes nothing', async () => {
     const t = await start({ trust: true })
     await t.call(A('prepareLaunch'), { agent: 'aider', cwd: t.userHome, hookArgs: [], hookEnv: {} })

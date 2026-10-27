@@ -1,0 +1,15 @@
+{
+  "id": "quirky.accounts",
+  "name": "Accounts (fake)",
+  "version": "0.0.0",
+  "main": "main.ts",
+  "contributes": {
+    "method": [
+      {
+        "id": "prepare",
+        "params": { "type": "object", "additionalProperties": true },
+        "result": { "type": "object", "additionalProperties": true }
+      }
+    ]
+  }
+}

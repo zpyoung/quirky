@@ -17,13 +17,21 @@ const plan = {
   paste: null
 }
 
-/** A context whose `spawn` runs `onSpawn` with the service and session ID, as a process that exits early would. */
-function launchContext(onSpawn: (service: SessionService, sessionId: string) => void, launchPlan: object | Error = plan) {
+type TestLaunchEnvInput = Parameters<PluginContext['launch']['env']>[0]
+
+/** The launch paths can expose or omit the account-preparation method independently of agent planning. */
+function launchContext(
+  onSpawn: (service: SessionService, sessionId: string) => void,
+  launchPlan: object | Error = plan,
+  options: { accountMethod?: boolean; accountResult?: object | Error; userPlan?: object } = {}
+) {
   const calls: { method: string; params: unknown }[] = []
   const hookInputs: Record<string, unknown>[] = []
   const emitted: { event: string; status?: Session['status']; exitCode?: Session['exitCode'] }[] = []
   let service!: SessionService
   let sessionId = ''
+  let spawnCount = 0
+  const launchEnvInputs: TestLaunchEnvInput[] = []
   const context = {
     log() {},
     emit: (event: string, data?: { session?: Session }) => {
@@ -33,7 +41,17 @@ function launchContext(onSpawn: (service: SessionService, sessionId: string) => 
     error: (kind: string, message: string) => new Error(`${kind}: ${message}`),
     call: async (method: string, params: unknown) => {
       calls.push({ method, params })
+      if (method === 'plugin.contributions') {
+        return options.accountMethod
+          ? [{ id: 'method:quirky.accounts/prepare', kind: 'method', name: 'prepare', data: {}, plugin: 'quirky.accounts', override: false, status: 'effective' }]
+          : []
+      }
       if (method === 'quirky.agents/get') return { id: 'claude', label: 'Claude', resumable: true, canFork: true }
+      if (method === 'quirky.agents/plan') return options.userPlan ?? plan
+      if (method === 'quirky.accounts/prepare') {
+        if (options.accountResult instanceof Error) throw options.accountResult
+        return options.accountResult ?? { env: {}, shellInit: null, account: null }
+      }
       if (method === 'quirky.agents/prepareLaunch') {
         if (launchPlan instanceof Error) throw launchPlan
         return launchPlan
@@ -54,27 +72,34 @@ function launchContext(onSpawn: (service: SessionService, sessionId: string) => 
       shellArgv: () => ['/bin/sh'],
       shellReady: () => false,
       commandArgv: () => ['/bin/sh'],
-      env: () => ({})
+      env: (input: TestLaunchEnvInput) => {
+        launchEnvInputs.push(input)
+        return {}
+      }
     },
     pty: {
-      spawn: async () => onSpawn(service, sessionId),
+      spawn: async () => {
+        spawnCount++
+        onSpawn(service, sessionId)
+      },
       forget: async () => {}
     }
   } as unknown as PluginContext
   const records = new SessionRecords(memoryStore())
   service = new SessionService(context, records)
-  return { service, records, emitted, calls, hookInputs }
+  return { service, records, emitted, calls, hookInputs, launchEnvInputs, spawned: () => spawnCount }
 }
 
 describe('SessionService.create', () => {
   test('a process that exits before the spawn call returns leaves the session exited', async () => {
-    const { service, records, emitted } = launchContext((svc, id) => void svc.finish(id, 127))
+    const { service, records, emitted, calls } = launchContext((svc, id) => void svc.finish(id, 127))
 
     const result = await service.create({ agent: 'shell' }, caller)
 
     expect(result).toMatchObject({ status: 'exited', exitCode: 127 })
     expect(records.get(result.id)).toMatchObject({ status: 'exited', exitCode: 127 })
     expect(emitted.filter((e) => e.event === 'changed').map((e) => e.status)).toEqual(['exited'])
+    expect(calls.map((call) => call.method)).not.toContain('quirky.accounts/prepare')
   })
 
   test('an agent that exits before the spawn call returns stays exited and keeps its launch record', async () => {
@@ -123,6 +148,89 @@ describe('SessionService.create', () => {
     expect(calls.map((c) => c.method)).toContain('quirky.agents/deliver')
     expect(result).toMatchObject({ status: 'running', promptDelivery: 'delivered' })
   })
+  test('required account prep receives the explicit user home and preserves the user launch record', async () => {
+    const userPlan = {
+      ...plan,
+      record: { ...plan.record, env: { CLAUDE_CONFIG_DIR: '/custom/claude' } }
+    }
+    const { service, calls } = launchContext(
+      () => {},
+      {
+        ...plan,
+        env: { CLAUDE_CONFIG_DIR: '/custom/claude' },
+        record: { ...plan.record, env: { CLAUDE_CONFIG_DIR: '/custom/claude' } }
+      },
+      { accountMethod: true, userPlan, accountResult: { env: {}, shellInit: null, account: null } }
+    )
+
+    const result = await service.create({ agent: 'claude' }, caller)
+
+    const prepare = calls.find((call) => call.method === 'quirky.accounts/prepare')?.params as {
+      homeOverrides: { claude: { value: string | null; source: string } }
+    }
+    expect(prepare.homeOverrides.claude).toEqual({ value: '/custom/claude', source: 'explicit' })
+    const methods = calls.map((call) => call.method)
+    expect(methods.indexOf('quirky.agents/plan')).toBeLessThan(methods.indexOf('quirky.accounts/prepare'))
+    expect(methods.indexOf('quirky.accounts/prepare')).toBeLessThan(methods.indexOf('quirky.agents/prepareLaunch'))
+    expect(result.launch?.env).toEqual({ CLAUDE_CONFIG_DIR: '/custom/claude' })
+  })
+
+  test('merges managed account env into planner hooks without persisting injected env', async () => {
+    const { service, calls } = launchContext(() => {}, plan, {
+      accountMethod: true,
+      accountResult: { env: { CLAUDE_CONFIG_DIR: '/managed/claude' }, shellInit: null, account: null }
+    })
+
+    const result = await service.create({ agent: 'claude' }, caller)
+
+    const launchParams = calls.find((call) => call.method === 'quirky.agents/prepareLaunch')?.params as {
+      hookEnv: Record<string, string | null>
+    }
+    expect(launchParams.hookEnv.CLAUDE_CONFIG_DIR).toBe('/managed/claude')
+    expect(result.launch?.env).toEqual({})
+  })
+
+  test('a present account preparation failure rejects before spawning', async () => {
+    const { service, records, spawned } = launchContext(() => {}, plan, {
+      accountMethod: true,
+      accountResult: new Error('selected Claude home is unavailable')
+    })
+
+    await expect(service.create({ agent: 'claude' }, caller)).rejects.toThrow('selected Claude home is unavailable')
+    expect(spawned()).toBe(0)
+    expect(records.list()).toEqual([])
+  })
+
+  test('passes prepared shell init to the kernel-owned shell environment', async () => {
+    const shellInit = '/private/plugin-data/quirky.accounts/shell-init'
+    const { service, calls, launchEnvInputs } = launchContext(() => {}, plan, {
+      accountMethod: true,
+      accountResult: { env: {}, shellInit, account: null }
+    })
+
+    await service.create({ agent: 'shell' }, caller)
+
+    expect(calls.find((call) => call.method === 'quirky.accounts/prepare')?.params).toMatchObject({ agent: 'shell' })
+    expect(launchEnvInputs[0]?.shellInit).toBe(shellInit)
+  })
+
+  test('restoring a shell repeats required account prep before spawning', async () => {
+    const shellInit = '/private/plugin-data/quirky.accounts/shell-init'
+    const { service, calls, launchEnvInputs, spawned } = launchContext(() => {}, plan, {
+      accountMethod: true,
+      accountResult: { env: {}, shellInit, account: null }
+    })
+    const created = await service.create({ agent: 'shell' }, caller)
+    service.finish(created.id, { exitCode: 0, restorable: true })
+
+    const restored = await service.restore({ session: created.id })
+
+    expect(restored).toMatchObject({ status: 'running', agent: 'shell' })
+    expect(spawned()).toBe(2)
+    expect(calls.filter((call) => call.method === 'quirky.accounts/prepare')).toHaveLength(2)
+    expect(launchEnvInputs[1]?.shellInit).toBe(shellInit)
+  })
+
 
   test('a provider session saved while spawn is in flight survives the launch', async () => {
     const { service, records } = launchContext((svc, id) => {
@@ -148,7 +256,7 @@ describe('SessionService.restore', () => {
         return true
       },
       error: (kind: string, message: string) => new Error(`${kind}: ${message}`),
-      call: async () => worktree,
+      call: async (method: string) => (method === 'plugin.contributions' ? [] : worktree),
       launch: {
         hooks: async () => ({ env: {}, args: [] }),
         shellArgv: () => ['/bin/sh'],
@@ -312,6 +420,24 @@ describe('SessionService.resume launch settings', () => {
     await service.resume({ session: 's_old', fork: true })
 
     expect(hookInputs.map((input) => input.record)).toEqual([original, original])
+  })
+
+  test('resume derives account home provenance from the saved user launch record', async () => {
+    const { service, records, calls } = launchContext(() => {}, plan, {
+      accountMethod: true,
+      accountResult: { env: {}, shellInit: null, account: null }
+    })
+    seed(records, null)
+    records.update('s_old', { launch: { ...plan.record, env: { CLAUDE_CONFIG_DIR: '/saved/custom' } } })
+
+    const resumed = await service.resume({ session: 's_old' })
+
+    const prepare = calls.find((call) => call.method === 'quirky.accounts/prepare')?.params as {
+      homeOverrides: { claude: { value: string | null; source: string } }
+    }
+    expect(prepare.homeOverrides.claude).toEqual({ value: '/saved/custom', source: 'explicit' })
+    expect(resumed.launch?.env).toEqual({ CLAUDE_CONFIG_DIR: '/saved/custom' })
+    expect(calls.map((call) => call.method)).not.toContain('quirky.agents/plan')
   })
 
   test('SC-21: a session recorded without launchSettings resumes with null', async () => {

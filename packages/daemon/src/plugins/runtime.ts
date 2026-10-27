@@ -155,6 +155,7 @@ export function createPluginRuntime(options: PluginRuntimeOptions): PluginRuntim
               hookToken: core.hookToken,
               shell: options.shell,
               agent: input.agent,
+              ...(input.shellInit === undefined ? {} : { shellInit: input.shellInit }),
               envPatch
             })
           },

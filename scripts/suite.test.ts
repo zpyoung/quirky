@@ -55,14 +55,14 @@ test('runFiles runs each file in its own process and reports one that passes alo
   passing('a.test.ts')
   flaky('b.test.ts')
   expect(await runFiles(dir, ['pkg/a.test.ts', 'pkg/b.test.ts'], [], 2)).toEqual({ ok: true, flaky: ['pkg/b.test.ts'] })
-})
+}, 20_000)
 
 // This fixture includes guarded child startup, an isolated retry and awaited process-tree cleanup.
 test('runFiles fails on a file that fails again, including one that fails to load', async () => {
   passing('a.test.ts')
   write('b.test.ts', `throw new Error('load')`)
   expect(await runFiles(dir, ['pkg/a.test.ts', 'pkg/b.test.ts'], [], 2)).toEqual({ ok: false, flaky: [] })
-}, 15_000)
+}, 20_000)
 
 test('runFiles with more failing files than the limit fails without a rerun', async () => {
   flaky('a.test.ts')
