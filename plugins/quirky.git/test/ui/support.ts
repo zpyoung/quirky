@@ -96,7 +96,9 @@ export function fakeContext(layout: UiLayout = layoutFor(null)): Fake {
       onConnection: () => () => {},
       confirm: async () => true,
       toast: (title, body) => void fake.toasts.push([title, body]),
-      setPanelBadge() {}
+      setPanelBadge() {},
+      setContext() {},
+      mountView: () => () => {}
     }
   }
   void activate(fake.context)

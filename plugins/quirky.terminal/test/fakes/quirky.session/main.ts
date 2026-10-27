@@ -1,8 +1,16 @@
-import { existsSync, readFileSync, writeFileSync } from 'node:fs'
-import { join } from 'node:path'
+import { existsSync, readFileSync, statSync, writeFileSync } from 'node:fs'
+import { isAbsolute, join } from 'node:path'
 import type { AgentKind, PluginContext, Session } from '@quirky/protocol'
 
-const WORKTREE_PATHS: Record<string, string> = { wt_main: '/fake/alpha', wt_other: '/fake/other' }
+declare global {
+  var __FAKE_SESSION_CREATES__: Record<string, unknown>[] | undefined
+}
+
+/** The params of every `create` the fake received, oldest first; the daemon runs in the test process, so the global is shared. */
+export function sessionCreates(): Record<string, unknown>[] {
+  globalThis.__FAKE_SESSION_CREATES__ ??= []
+  return globalThis.__FAKE_SESSION_CREATES__
+}
 
 /** The file a test writes sessions to before the daemon starts; the fake keeps its sessions there across restarts. */
 export function sessionsFile(dataDir: string): string {
@@ -10,10 +18,11 @@ export function sessionsFile(dataDir: string): string {
 }
 
 /**
- * Stands in for the session plugin with the methods and the `removed` event the terminal plugin
- * uses: records are kept in a JSON file, terminals are spawned on the PTY host, and close forgets
- * the terminal before announcing the removal. A PTY exit ends the record, restorable when the host
- * stopped; `restore` starts a shell in such a record.
+ * Stands in for the session plugin with the methods and events the terminal plugin uses: records
+ * are kept in a JSON file, terminals are spawned on the PTY host, `create` takes `cwd`, `agent`,
+ * `prompt` and the synthetic `floating` worktree, and every change announces `changed` or
+ * `removed`. A PTY exit ends the record, restorable when the host stopped; `restore` starts a shell
+ * in such a record.
  */
 export function activate(context: PluginContext): void {
   const file = sessionsFile(context.dataDir)
@@ -26,18 +35,34 @@ export function activate(context: PluginContext): void {
     return session
   }
 
-  const record = (params: Record<string, unknown>, kind: Session['kind'], title: string): Session => {
-    const worktreeId = String(params.worktree ?? 'id:wt_main').replace(/^id:/, '')
-    const cwd = WORKTREE_PATHS[worktreeId]
-    if (!cwd) throw context.error('not-found', `no worktree matches ${String(params.worktree)}`)
+  const target = async (selector: unknown, cwd?: string): Promise<{ id: string; path: string }> => {
+    if (selector === 'floating') return { id: 'floating', path: cwd ?? process.env.HOME ?? '/' }
+    const worktree = (await context.call('quirky.worktree/resolve', { selector: String(selector ?? 'id:wt_main') })) as { id: string; path: string }
+    return { id: worktree.id, path: worktree.path }
+  }
+
+  const titleFor = (worktreeId: string, base: string) => {
+    const taken = new Set(sessions.filter((s) => s.worktreeId === worktreeId).map((s) => s.title))
+    for (let n = 1; ; n++) {
+      const title = n === 1 ? base : `${base} ${n}`
+      if (!taken.has(title)) return title
+    }
+  }
+
+  const record = async (params: Record<string, unknown>, kind: Session['kind'], baseTitle: string): Promise<Session> => {
+    const cwd = params.cwd as string | undefined
+    if (cwd !== undefined && !(isAbsolute(cwd) && existsSync(cwd) && statSync(cwd).isDirectory())) {
+      throw context.error('invalid-params', 'cwd must be an existing directory')
+    }
+    const where = await target(params.worktree, cwd)
     const now = Date.now()
     return {
       id: `s_${crypto.randomUUID().replaceAll('-', '').slice(0, 12)}`,
       kind,
-      agent: params.agent as AgentKind,
-      worktreeId,
-      cwd,
-      title,
+      agent: (params.agent ?? 'shell') as AgentKind,
+      worktreeId: where.id,
+      cwd: cwd ?? where.path,
+      title: titleFor(where.id, baseTitle),
       status: 'running',
       createdAt: now,
       lastActivityAt: now,
@@ -48,19 +73,28 @@ export function activate(context: PluginContext): void {
     }
   }
 
+  const announce = (session: Session) => context.emit('changed', { session })
+
   context.provide('method:quirky.session/get', (params: Record<string, unknown>) => find(params.session as string))
-  context.provide('method:quirky.session/list', () => sessions)
+  context.provide('method:quirky.session/list', (params: Record<string, unknown>) =>
+    params.worktree === undefined ? sessions : sessions.filter((s) => s.worktreeId === String(params.worktree).replace(/^id:/, ''))
+  )
   context.provide('method:quirky.session/create', async (params: Record<string, unknown>) => {
-    const session = record(params, 'terminal', params.agent === 'shell' ? 'Shell' : String(params.agent))
+    sessionCreates().push(params)
+    const agent = (params.agent ?? 'shell') as string
+    const label = agent === 'shell' ? 'Shell' : ((await context.call('quirky.agents/get', { agent })) as { label: string }).label
+    const session = await record(params, 'terminal', label)
     await context.pty.spawn(session.id, { argv: ['/bin/zsh', '-l'], cwd: session.cwd, env: {}, cols: 80, rows: 24 })
     sessions.push(session)
     save()
+    announce(session)
     return session
   })
-  context.provide('method:quirky.session/register', (params: Record<string, unknown>) => {
-    const session = record(params, 'structured', params.title as string)
+  context.provide('method:quirky.session/register', async (params: Record<string, unknown>) => {
+    const session = await record(params, 'structured', params.title as string)
     sessions.push(session)
     save()
+    announce(session)
     return session
   })
   context.provide('method:quirky.session/restore', async (params: Record<string, unknown>) => {
@@ -70,6 +104,7 @@ export function activate(context: PluginContext): void {
     await context.pty.spawn(session.id, { argv: ['/bin/zsh', '-l'], cwd: session.cwd, env: {}, cols: 80, rows: 24, restore: true })
     Object.assign(session, { status: 'running', agent: 'shell', exitCode: null, exitSignal: null, exitCause: null, restorable: false })
     save()
+    announce(session)
     return session
   })
   context.pty.onExit((sessionId, exitCode, exit) => {
@@ -78,10 +113,11 @@ export function activate(context: PluginContext): void {
     const restorable = exit.exitCause === 'host-restart' || exit.exitCause === 'host-lost'
     Object.assign(session, { status: 'exited', exitCode, exitSignal: exit.exitSignal, exitCause: exit.exitCause, restorable })
     save()
+    announce(session)
   })
   context.provide('method:quirky.session/close', async (params: Record<string, unknown>) => {
     const session = find(params.session as string)
-    if (session.kind === 'terminal') await context.pty.forget(session.id)
+    if (session.kind === 'terminal') await context.pty.forget(session.id).catch(() => {})
     sessions = sessions.filter((s) => s.id !== session.id)
     save()
     context.emit('removed', { sessionId: session.id })

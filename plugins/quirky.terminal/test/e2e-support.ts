@@ -48,8 +48,7 @@ export function isAlive(pid: number): boolean {
 type ProcessRow = { pid: number; ppid: number; command: string }
 
 function processTable(): ProcessRow[] {
-  // a busy machine's full command lines overflow the 1 MiB default buffer
-  const out = execFileSync('ps', ['-axo', 'pid=,ppid=,command='], { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 })
+  const out = execFileSync('ps', ['-axo', 'pid=,ppid=,command='], { encoding: 'utf8', maxBuffer: 256 * 1024 * 1024 })
   return out
     .split('\n')
     .map((line) => /^\s*(\d+)\s+(\d+)\s+(.*)$/.exec(line))
@@ -87,6 +86,8 @@ export type E2eOptions = {
   shell?: string
   /** Contents of `$HOME/.zshrc`, which the zsh wrapper sources before its own integration. */
   zshrc?: string
+  /** Contents of `$HOME/.bashrc`, which the bash wrapper sources before its own integration. */
+  bashrc?: string
 }
 
 export type Attached = {
@@ -173,6 +174,7 @@ export class E2eHarness {
     installExitHooks()
     try {
       if (options.zshrc !== undefined) writeFileSync(join(home, '.zshrc'), options.zshrc)
+      if (options.bashrc !== undefined) writeFileSync(join(home, '.bashrc'), options.bashrc)
       harness.initRepo()
       await harness.startDaemon()
       await harness.ok(['repo', 'add', repo])

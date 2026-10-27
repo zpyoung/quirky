@@ -151,7 +151,7 @@ async function boot(write: Writer, options: BootOptions = {}) {
       }),
     inModel: (id: string) => {
       const model = host.getState().model!
-      return [...model.sidebarSections, ...model.panels, ...model.views, ...model.commands].some((e) => e.id === id)
+      return [...model.sidebarSections, ...model.panels, ...model.views, ...model.overlays, ...model.commands].some((e) => e.id === id)
     },
     waitForLine: (line: string) => waitFor(() => readMarker(marker).includes(line)),
     waitForGone: (id: string) => waitFor(() => !booted.inModel(id) && host.getState().slots[id] === undefined),
@@ -292,7 +292,7 @@ describe('window plugin host against a real daemon', () => {
     )
     const plugins = await t.agent.call('plugin.list', {})
     expect(plugins.find((plugin) => plugin.id === 'acme.bare')).toMatchObject({
-      diagnostics: [{ level: 'warning', message: 'declares commands, views, panels or sidebar sections but has no ui module' }]
+      diagnostics: [{ level: 'warning', message: 'declares commands, views, panels, overlays or sidebar sections but has no ui module' }]
     })
     expect(t.state().settings.find((setting) => setting.id === 'setting:acme.bare/size')?.value).toBe(5)
 
@@ -691,6 +691,97 @@ describe('window plugin host against a real daemon', () => {
     expect(t.host.handleKey(press('n'))).toBe(false)
     await Bun.sleep(50)
     expect(t.lines().filter((line) => line === 'ran new')).toHaveLength(2)
+  })
+
+  test('SC-68: mod+j runs the command whose when holds, with the terminal focused or not', async () => {
+    const t = await boot((installed, marker) =>
+      installUi(installed, marker, 'acme.keys', {
+        command: [{ id: 'in-terminal', title: 'In terminal' }, { id: 'elsewhere', title: 'Elsewhere' }],
+        keybinding: [
+          { id: 'jt', key: 'mod+j', command: 'in-terminal', when: 'terminalFocus' },
+          { id: 'je', key: 'mod+j', command: 'elsewhere', when: '!terminalFocus' }
+        ]
+      }, {
+        activate: [
+          provideCommand('command:acme.keys/in-terminal', "record('ran in-terminal')"),
+          provideCommand('command:acme.keys/elsewhere', "record('ran elsewhere')")
+        ].join('\n')
+      })
+    )
+    expect(t.state().model!.keybindings.map((item) => [item.id, item.status, item.when])).toEqual([
+      ['keybinding:acme.keys/je', 'active', '!terminalFocus'],
+      ['keybinding:acme.keys/jt', 'active', 'terminalFocus']
+    ])
+    await waitFor(() => t.lines().includes('ui-activate acme.keys'))
+
+    expect(t.host.handleKey(press('J'))).toBe(true)
+    await t.waitForLine('ran elsewhere')
+    t.ctx('acme.keys').setContext('terminalFocus', true)
+    expect(t.host.handleKey(press('J'))).toBe(true)
+    await t.waitForLine('ran in-terminal')
+    expect(t.lines().filter((line) => line.startsWith('ran '))).toEqual(['ran elsewhere', 'ran in-terminal'])
+  })
+
+  test('SC-68: with terminal keys first, a chord that does not mention terminalFocus goes to the terminal', async () => {
+    const t = await boot((installed, marker) =>
+      installUi(installed, marker, 'acme.keys', {
+        command: [{ id: 'rename', title: 'Rename' }],
+        keybinding: [{ id: 'r', key: 'mod+r', command: 'rename' }]
+      }, {
+        activate: provideCommand('command:acme.keys/rename', "record('ran rename')")
+      })
+    )
+    await waitFor(() => t.lines().includes('ui-activate acme.keys'))
+    const ctx = t.ctx('acme.keys')
+    ctx.setContext('terminalKeysFirst', true)
+    ctx.setContext('terminalFocus', true)
+    let prevented = 0
+    expect(t.host.handleKey({ ...press('R'), preventDefault: () => prevented++ })).toBe(false)
+    expect(prevented).toBe(1)
+
+    ctx.setContext('terminalFocus', false)
+    expect(t.host.handleKey(press('R'))).toBe(true)
+    await t.waitForLine('ran rename')
+  })
+
+  test('SC-69: a plugin embeds another plugin\'s view and unmounts it', async () => {
+    const t = await boot((installed, marker) => {
+      installUi(installed, marker, 'acme.shelf', { view: [{ id: 'page', title: 'Page' }] }, {
+        activate: provideMount('view:acme.shelf/page', "element.text = 'shelf ' + JSON.stringify(props); return () => record('cleanup shelf')")
+      })
+      installUi(installed, marker, 'acme.host', listSection)
+    })
+    await waitFor(() => t.lines().includes('ui-activate acme.host'))
+    const element = el()
+    const unmount = t.ctx('acme.host').mountView('view:acme.shelf/page', asElement(element), { session: 's-1' })
+
+    await waitFor(() => element.text !== undefined)
+    expect(element.text).toBe('shelf {"input":{"session":"s-1"}}')
+    expect(t.slot('view:acme.shelf/page')).toBeUndefined()
+    unmount()
+    await t.waitForLine('cleanup shelf')
+    expect(() => t.ctx('acme.host').mountView('view:acme.shelf/gone', asElement(el()))).toThrow('no contribution view:acme.shelf/gone')
+  })
+
+  test('SC-67: an overlay mounts with a report function and the daemon lists it in ui state', async () => {
+    const t = await boot((installed, marker) =>
+      installUi(installed, marker, 'acme.hud', { overlay: [{ id: 'hud', title: 'Hud' }] }, {
+        activate: provideMount('overlay:acme.hud/hud', "element.text = 'hud'; props.report({ label: 'hud' })")
+      })
+    )
+    const { element, dispose } = t.show('overlay:acme.hud/hud')
+    await t.mounted('overlay:acme.hud/hud')
+    expect(element.text).toBe('hud')
+
+    const overlaySlot = async () =>
+      ((await t.agent.callAny('ui.state', {})) as { slots: { id: string; kind: string; shown: boolean; report?: unknown }[] }).slots.find(
+        (slot) => slot.kind === 'overlay'
+      )
+    await waitFor(async () => (await overlaySlot())?.report !== undefined)
+    expect(await overlaySlot()).toMatchObject({ id: 'overlay:acme.hud/hud', shown: true, report: { label: 'hud' } })
+
+    dispose()
+    await waitFor(async () => (await overlaySlot())?.shown === false)
   })
 
   const sampleWriter =

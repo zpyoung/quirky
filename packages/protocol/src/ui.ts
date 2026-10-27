@@ -1,10 +1,10 @@
 import type { QuirkyEvent } from './rpc'
 
 /** The contribution kinds the UI plugin API adds. */
-export const UI_KINDS = ['sidebar-section', 'panel', 'view', 'command', 'keybinding', 'setting', 'theme'] as const
+export const UI_KINDS = ['sidebar-section', 'panel', 'view', 'overlay', 'command', 'keybinding', 'setting', 'theme'] as const
 
 /** UI kinds whose implementation is code a plugin's UI module provides. */
-export const CODE_BACKED_KINDS = ['view', 'panel', 'sidebar-section', 'command'] as const
+export const CODE_BACKED_KINDS = ['view', 'panel', 'sidebar-section', 'overlay', 'command'] as const
 
 /** The color slots a theme fills; window tokens map to CSS custom properties `--<token>`. */
 export const THEME_TOKENS = [
@@ -68,10 +68,10 @@ export const DEFAULT_THEME: ThemeInfo = {
 
 export type ThemeList = { chosen: string; active: string; themes: ThemeInfo[] }
 
-/** A sidebar section, panel or view in the UI model. */
+/** A sidebar section, panel, view or overlay in the UI model. */
 export type UiSlotEntry = {
   id: string
-  kind: 'sidebar-section' | 'panel' | 'view'
+  kind: 'sidebar-section' | 'panel' | 'view' | 'overlay'
   /** The plugin whose declaration is in effect. */
   plugin: string
   title: string
@@ -98,6 +98,8 @@ export type UiKeybinding = {
   status: 'active' | 'shadowed' | 'unbound'
   /** The winning keybinding ID, or `kernel` for a reserved chord. */
   shadowedBy?: string
+  /** The canonical `when` condition; absent when the binding is unconditional. */
+  when?: string
 }
 
 /** What a plugin declares for a `setting` contribution. */
@@ -130,9 +132,16 @@ export type UiModel = {
   panels: UiSlotEntry[]
   /** ID ascending. */
   views: UiSlotEntry[]
+  /** Order ascending, then ID. */
+  overlays: UiSlotEntry[]
   /** Title ascending, then ID. */
   commands: UiCommandEntry[]
-  /** ID ascending. */
+  /**
+   * Registry precedence, highest first: the distro's bindings in manifest order, then plugin
+   * bindings in the order `resolveKeybindings` ranks them (a plugin that beats another comes
+   * first, ties by plugin ID), each plugin's by ID. A window takes the first matching `active`
+   * binding, so this order is part of the contract.
+   */
   keybindings: UiKeybinding[]
   /** ID ascending. */
   settings: UiSettingEntry[]
@@ -158,7 +167,7 @@ export type UiWindowInfo = { connId: number; name?: string; focused: boolean }
 /** One slot in the UI model, with the latest report from its mounted window. */
 export type UiSlotState = {
   id: string
-  kind: 'sidebar-section' | 'panel' | 'view'
+  kind: 'sidebar-section' | 'panel' | 'view' | 'overlay'
   plugin: string
   title: string
   shown: boolean
@@ -168,7 +177,10 @@ export type UiSlotState = {
 /** What `ui.state` returns. */
 export type UiState = { windows: UiWindowInfo[]; layout: UiLayout; slots: UiSlotState[] }
 
-/** Renders a slot into `element`; the returned function cleans up. `report` sends a JSON summary of what the slot shows. */
+/**
+ * Renders a slot into `element`; the returned function cleans up. `report` sends a JSON summary
+ * of what the slot shows. A view embedded with `mountView` gets `input` and no `report`.
+ */
 export type MountFunction = (
   element: HTMLElement,
   props: { input?: unknown; report?(state: unknown): void }
@@ -206,6 +218,17 @@ export type UiPluginContext = {
   toast(title: string, body: string): void
   /** Shows a count on the panel's toggle, with `title` as its tooltip (default "<count> waiting"); null clears it. */
   setPanelBadge(panelId: string, count: number | null, title?: string): void
+  /**
+   * Sets a window-global context key that keybinding `when` conditions read; `undefined` clears
+   * it. The window clears every key this plugin set when the plugin is deactivated.
+   */
+  setContext(key: string, value: boolean | undefined): void
+  /**
+   * Mounts the effective view `viewId` (any plugin's) into `element` with `{input}` and no
+   * `report`, and returns a function that unmounts it; deactivating this plugin unmounts it too.
+   * Throws `no contribution <id>` for a view the model does not have.
+   */
+  mountView(viewId: string, element: HTMLElement, input?: unknown): () => void
 }
 
 /** The shape a plugin's UI module must export. */
@@ -348,6 +371,182 @@ export function chordFromKeyEvent(event: {
     shift: event.shiftKey
   }
   return [...MODIFIER_ORDER.filter((m) => held[m]), key].join('+')
+}
+
+const WHEN_MAX_DEPTH = 32
+const WHEN_KEY_START_RE = /[A-Za-z]/
+const WHEN_KEY_RE = /[A-Za-z][A-Za-z0-9.]*/y
+
+type WhenNode =
+  | { t: 'key'; name: string }
+  | { t: 'not'; x: WhenNode }
+  | { t: 'and' | 'or'; xs: WhenNode[] }
+
+type WhenToken = { text: string; pos: number }
+
+class WhenError extends Error {}
+
+function tokenizeWhen(text: string): WhenToken[] {
+  const tokens: WhenToken[] = []
+  let at = 0
+  while (at < text.length) {
+    const char = text[at]
+    if (/\s/.test(char)) {
+      at++
+    } else if (text.startsWith('&&', at) || text.startsWith('||', at)) {
+      tokens.push({ text: text.slice(at, at + 2), pos: at + 1 })
+      at += 2
+    } else if (char === '!' || char === '(' || char === ')') {
+      tokens.push({ text: char, pos: at + 1 })
+      at++
+    } else if (WHEN_KEY_START_RE.test(char)) {
+      WHEN_KEY_RE.lastIndex = at
+      const key = WHEN_KEY_RE.exec(text)![0]
+      tokens.push({ text: key, pos: at + 1 })
+      at += key.length
+    } else {
+      throw new WhenError(`unexpected \`${char}\` at position ${at + 1}`)
+    }
+  }
+  return tokens
+}
+
+function parseWhenTokens(tokens: WhenToken[]): WhenNode {
+  let at = 0
+  const peek = (): string | undefined => tokens[at]?.text
+  const unexpected = (): never => {
+    const token = tokens[at]
+    throw new WhenError(token ? `unexpected \`${token.text}\` at position ${token.pos}` : 'expected a key at the end')
+  }
+  const join = (t: 'and' | 'or', xs: WhenNode[]): WhenNode => {
+    const flat = xs.flatMap((x) => (x.t === t ? x.xs : [x]))
+    return flat.length === 1 ? flat[0] : { t, xs: flat }
+  }
+  const unary = (depth: number): WhenNode => {
+    if (depth > WHEN_MAX_DEPTH) throw new WhenError('nested too deeply')
+    const token = peek()
+    if (token === '!') {
+      at++
+      return { t: 'not', x: unary(depth + 1) }
+    }
+    if (token === '(') {
+      at++
+      const inner = or(depth + 1)
+      if (peek() !== ')') {
+        if (at >= tokens.length) throw new WhenError('missing `)` at the end')
+        unexpected()
+      }
+      at++
+      return inner
+    }
+    if (token !== undefined && WHEN_KEY_START_RE.test(token[0])) {
+      at++
+      return { t: 'key', name: token }
+    }
+    return unexpected()
+  }
+  const and = (depth: number): WhenNode => {
+    const xs = [unary(depth)]
+    while (peek() === '&&') {
+      at++
+      xs.push(unary(depth))
+    }
+    return join('and', xs)
+  }
+  const or = (depth: number): WhenNode => {
+    const xs = [and(depth)]
+    while (peek() === '||') {
+      at++
+      xs.push(and(depth))
+    }
+    return join('or', xs)
+  }
+  const root = or(0)
+  if (at < tokens.length) unexpected()
+  return root
+}
+
+function printWhen(node: WhenNode): string {
+  switch (node.t) {
+    case 'key':
+      return node.name
+    case 'not':
+      return `!${node.x.t === 'and' || node.x.t === 'or' ? `(${printWhen(node.x)})` : printWhen(node.x)}`
+    case 'and':
+      return node.xs.map((x) => (x.t === 'or' ? `(${printWhen(x)})` : printWhen(x))).join(' && ')
+    case 'or':
+      return node.xs.map(printWhen).join(' || ')
+  }
+}
+
+function parseWhenNode(text: string): WhenNode {
+  return parseWhenTokens(tokenizeWhen(text))
+}
+
+/**
+ * Parses a keybinding's `when` condition (`!`, `&&`, `||` and parentheses over context keys,
+ * `&&` binding tighter than `||`) to its canonical text: single spaces around binary operators,
+ * no redundant parentheses. Two conditions that differ only in spacing or redundant parentheses
+ * have the same canonical text. On failure `error` names the first problem found.
+ */
+export function parseWhen(text: string): { ok: true; canonical: string } | { ok: false; error: string } {
+  try {
+    return { ok: true, canonical: printWhen(parseWhenNode(text)) }
+  } catch (error) {
+    if (error instanceof WhenError) return { ok: false, error: error.message }
+    throw error
+  }
+}
+
+const parsedWhen = new Map<string, WhenNode | null>()
+
+function whenNodeOf(canonical: string): WhenNode | null {
+  const known = parsedWhen.get(canonical)
+  if (known !== undefined) return known
+  let node: WhenNode | null
+  try {
+    node = parseWhenNode(canonical)
+  } catch {
+    node = null
+  }
+  if (parsedWhen.size >= 512) parsedWhen.clear()
+  parsedWhen.set(canonical, node)
+  return node
+}
+
+/** Whether a canonical `when` holds for the context keys; a key missing from `keys` is false, and so is text that does not parse. */
+export function evaluateWhen(canonical: string, keys: ReadonlyMap<string, boolean>): boolean {
+  const run = (node: WhenNode): boolean => {
+    switch (node.t) {
+      case 'key':
+        return keys.get(node.name) === true
+      case 'not':
+        return !run(node.x)
+      case 'and':
+        return node.xs.every(run)
+      case 'or':
+        return node.xs.some(run)
+    }
+  }
+  const node = whenNodeOf(canonical)
+  return node !== null && run(node)
+}
+
+/** Whether a canonical `when` names `key` somewhere outside every `!`. */
+export function whenMentions(canonical: string, key: string): boolean {
+  const mentions = (node: WhenNode): boolean => {
+    switch (node.t) {
+      case 'key':
+        return node.name === key
+      case 'not':
+        return false
+      case 'and':
+      case 'or':
+        return node.xs.some(mentions)
+    }
+  }
+  const node = whenNodeOf(canonical)
+  return node !== null && mentions(node)
 }
 
 /**

@@ -45,6 +45,14 @@ type PendingCommand = {
 
 const unanswered = () => conflict('the window did not answer')
 
+function overlayShown(report: Report | undefined): boolean {
+  if (!report) return false
+  const state = report.state
+  if (typeof state !== 'object' || state === null || Array.isArray(state)) return true
+  const shown = (state as { shown?: unknown }).shown
+  return typeof shown === 'boolean' ? shown : true
+}
+
 function jsonLength(value: unknown): number {
   return JSON.stringify(value)?.length ?? 0
 }
@@ -77,16 +85,21 @@ export class LayoutService {
 
   constructor(private readonly options: LayoutServiceOptions) {}
 
-  /** The effective layout, the connected windows, and every slot of the UI model with what it shows and reports. */
+  /**
+   * The effective layout, the connected windows, and every slot of the UI model with what it shows
+   * and reports. An overlay is shown while a window has reported for it, unless the latest report
+   * is an object whose boolean `shown` says otherwise.
+   */
   state(): UiState {
     const layout = this.layout()
     const model = this.options.ui.contributions()
     const windows = this.windows()
     const focusedConn = windows.find((window) => window.focused)?.connId
     const slots: UiSlotState[] = [
-      ...model.sidebarSections.map((entry) => ({ entry, shown: layout.sidebar })),
-      ...model.panels.map((entry) => ({ entry, shown: layout.panel === entry.id })),
-      ...model.views.map((entry) => ({ entry, shown: layout.view?.id === entry.id }))
+      ...model.sidebarSections.map((entry) => ({ entry, shown: () => layout.sidebar })),
+      ...model.panels.map((entry) => ({ entry, shown: () => layout.panel === entry.id })),
+      ...model.views.map((entry) => ({ entry, shown: () => layout.view?.id === entry.id })),
+      ...model.overlays.map((entry) => ({ entry, shown: (report?: Report) => overlayShown(report) }))
     ].map(({ entry, shown }) => {
       const report = this.reportFor(entry.id, focusedConn)
       return {
@@ -94,7 +107,7 @@ export class LayoutService {
         kind: entry.kind,
         plugin: entry.plugin,
         title: entry.title,
-        shown,
+        shown: shown(report),
         ...(report ? { report: report.state } : {})
       }
     })

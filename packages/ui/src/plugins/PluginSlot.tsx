@@ -15,7 +15,8 @@ export function PluginSlot({ id, input }: Props) {
   const entry = [
     ...(state.model?.sidebarSections ?? []),
     ...(state.model?.panels ?? []),
-    ...(state.model?.views ?? [])
+    ...(state.model?.views ?? []),
+    ...(state.model?.overlays ?? [])
   ].find((candidate) => candidate.id === id)
   const slot = state.slots[id] ?? { status: 'loading' as const }
 

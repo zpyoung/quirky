@@ -186,7 +186,9 @@ export function fakeContext(initial: UiLayout): Fake {
       onConnection: () => () => {},
       confirm: async () => true,
       toast: (title, body) => void fake.toasts.push([title, body]),
-      setPanelBadge: (panel, count, title) => void fake.badges.push([panel, count, title])
+      setPanelBadge: (panel, count, title) => void fake.badges.push([panel, count, title]),
+      setContext() {},
+      mountView: () => () => {}
     }
   }
   return fake

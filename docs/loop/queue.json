@@ -149,6 +149,19 @@
       "deps": [
         "m1-term-daemon"
       ],
+      "status": "done"
+    },
+    {
+      "id": "m1-agent-status-scripting",
+      "milestone": "M1",
+      "title": "Agent status for scripts: explain a state's source, detection rules as data, never type into an agent waiting for approval, waits for state and output pattern, named sessions",
+      "docs": [
+        "agent-status.md",
+        "cli.md"
+      ],
+      "deps": [
+        "m1-agent-status"
+      ],
       "status": "in-progress",
       "lane": 1
     },

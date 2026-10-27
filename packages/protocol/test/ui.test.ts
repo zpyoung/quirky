@@ -8,7 +8,10 @@ import {
   UI_KINDS,
   checkSettingValue,
   chordFromKeyEvent,
+  evaluateWhen,
   parseChord,
+  parseWhen,
+  whenMentions,
   type SettingDeclaration
 } from '../src'
 
@@ -259,11 +262,127 @@ describe('theme tokens and the default theme', () => {
 })
 
 describe('UI kinds', () => {
-  test('lists the seven kinds, four of them code-backed', () => {
+  test('lists the eight kinds, five of them code-backed', () => {
     expect([...UI_KINDS].sort()).toEqual<string[]>(
-      ['command', 'keybinding', 'panel', 'setting', 'sidebar-section', 'theme', 'view'].sort()
+      ['command', 'keybinding', 'overlay', 'panel', 'setting', 'sidebar-section', 'theme', 'view'].sort()
     )
-    expect([...CODE_BACKED_KINDS].sort()).toEqual(['command', 'panel', 'sidebar-section', 'view'])
+    expect([...CODE_BACKED_KINDS].sort()).toEqual(['command', 'overlay', 'panel', 'sidebar-section', 'view'])
     for (const kind of CODE_BACKED_KINDS) expect(UI_KINDS.includes(kind)).toBe(true)
+  })
+})
+
+function canonicalWhen(text: string): string {
+  const result = parseWhen(text)
+  if (!result.ok) throw new Error(`expected ${text} to parse, got: ${result.error}`)
+  return result.canonical
+}
+
+function whenError(text: string): string {
+  const result = parseWhen(text)
+  if (result.ok) throw new Error(`expected ${text} to fail, got: ${result.canonical}`)
+  return result.error
+}
+
+const keys = (...on: string[]) => new Map(on.map((key) => [key, true] as const))
+
+describe('parseWhen', () => {
+  test('a single key is its own canonical form', () => {
+    expect(canonicalWhen('terminalFocus')).toBe('terminalFocus')
+    expect(canonicalWhen('  floating.open  ')).toBe('floating.open')
+  })
+
+  test('canonical form normalizes spacing and drops redundant parentheses', () => {
+    expect(canonicalWhen('a&&b')).toBe('a && b')
+    expect(canonicalWhen('a  ||b')).toBe('a || b')
+    expect(canonicalWhen('( a )')).toBe('a')
+    expect(canonicalWhen('(a && b) && c')).toBe('a && b && c')
+    expect(canonicalWhen('a || (b || c)')).toBe('a || b || c')
+    expect(canonicalWhen('(a && b) || c')).toBe('a && b || c')
+    expect(canonicalWhen('! terminalFocus')).toBe('!terminalFocus')
+    expect(canonicalWhen('!!a')).toBe('!!a')
+  })
+
+  test('canonical form keeps the parentheses that change meaning', () => {
+    expect(canonicalWhen('a && (b || c)')).toBe('a && (b || c)')
+    expect(canonicalWhen('!(a && b)')).toBe('!(a && b)')
+    expect(canonicalWhen('!(a)')).toBe('!a')
+  })
+
+  test('the canonical form parses back to itself', () => {
+    for (const text of ['a && (b || c)', '!(a || b) && c', 'a||b&&!c', '((x))']) {
+      const once = canonicalWhen(text)
+      expect(canonicalWhen(once)).toBe(once)
+    }
+  })
+
+  test('&& binds tighter than ||', () => {
+    expect(evaluateWhen(canonicalWhen('a || b && c'), keys('a'))).toBe(true)
+    expect(evaluateWhen(canonicalWhen('a || b && c'), keys('b'))).toBe(false)
+    expect(evaluateWhen(canonicalWhen('(a || b) && c'), keys('a'))).toBe(false)
+    expect(evaluateWhen(canonicalWhen('(a || b) && c'), keys('a', 'c'))).toBe(true)
+  })
+
+  test('reports where an expression stops making sense', () => {
+    expect(whenError('')).toBe('expected a key at the end')
+    expect(whenError('a &&')).toBe('expected a key at the end')
+    expect(whenError('&& a')).toBe('unexpected `&&` at position 1')
+    expect(whenError('a b')).toBe('unexpected `b` at position 3')
+    expect(whenError('(a')).toBe('missing `)` at the end')
+    expect(whenError('a)')).toBe('unexpected `)` at position 2')
+    expect(whenError('a & b')).toBe('unexpected `&` at position 3')
+    expect(whenError('a | b')).toBe('unexpected `|` at position 3')
+    expect(whenError('1a')).toBe('unexpected `1` at position 1')
+    expect(whenError('a == b')).toBe('unexpected `=` at position 3')
+    expect(whenError('!')).toBe('expected a key at the end')
+    expect(whenError('()')).toBe('unexpected `)` at position 2')
+  })
+
+  test('refuses an expression nested absurdly deep instead of overflowing the stack', () => {
+    expect(whenError('('.repeat(5000) + 'a' + ')'.repeat(5000))).toBe('nested too deeply')
+    expect(whenError('!'.repeat(5000) + 'a')).toBe('nested too deeply')
+  })
+})
+
+describe('evaluateWhen', () => {
+  test('a key is true only when the map says true; unknown keys are false', () => {
+    expect(evaluateWhen('terminalFocus', keys('terminalFocus'))).toBe(true)
+    expect(evaluateWhen('terminalFocus', new Map([['terminalFocus', false]]))).toBe(false)
+    expect(evaluateWhen('terminalFocus', new Map())).toBe(false)
+    expect(evaluateWhen('!terminalFocus', new Map())).toBe(true)
+  })
+
+  test('combines with !, && and ||', () => {
+    const when = canonicalWhen('terminalFocus && !floatingFocus || searchOpen')
+    expect(evaluateWhen(when, keys('terminalFocus'))).toBe(true)
+    expect(evaluateWhen(when, keys('terminalFocus', 'floatingFocus'))).toBe(false)
+    expect(evaluateWhen(when, keys('floatingFocus', 'searchOpen'))).toBe(true)
+    expect(evaluateWhen(when, keys())).toBe(false)
+  })
+
+  test('an expression that does not parse is false', () => {
+    expect(evaluateWhen('a &&', keys('a'))).toBe(false)
+  })
+})
+
+describe('whenMentions', () => {
+  test('a key mentioned outside any negation is mentioned', () => {
+    expect(whenMentions('terminalFocus', 'terminalFocus')).toBe(true)
+    expect(whenMentions('a && terminalFocus', 'terminalFocus')).toBe(true)
+    expect(whenMentions('a || (b && terminalFocus)', 'terminalFocus')).toBe(true)
+  })
+
+  test('a key only under ! is not mentioned', () => {
+    expect(whenMentions('!terminalFocus', 'terminalFocus')).toBe(false)
+    expect(whenMentions('!(a && terminalFocus)', 'terminalFocus')).toBe(false)
+    expect(whenMentions('a && !terminalFocus', 'terminalFocus')).toBe(false)
+  })
+
+  test('one positive mention is enough', () => {
+    expect(whenMentions('!terminalFocus || terminalFocus', 'terminalFocus')).toBe(true)
+  })
+
+  test('a different key or an expression that does not parse mentions nothing', () => {
+    expect(whenMentions('searchOpen', 'terminalFocus')).toBe(false)
+    expect(whenMentions('terminalFocus &&', 'terminalFocus')).toBe(false)
   })
 })

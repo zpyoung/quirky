@@ -3,9 +3,12 @@ import {
   RESERVED_CHORDS,
   THEME_TOKENS,
   chordFromKeyEvent,
+  evaluateWhen,
+  whenMentions,
   type QuirkyEvent,
   type SettingInfo,
   type UiCommandEntry,
+  type UiKeybinding,
   type UiLayout,
   type UiModel,
   type UiPluginContext,
@@ -57,7 +60,7 @@ export type HostState = {
   themeVariables: Record<string, string>
 }
 
-type KeyEventLike = Parameters<typeof chordFromKeyEvent>[0]
+type KeyEventLike = Parameters<typeof chordFromKeyEvent>[0] & { preventDefault?(): void }
 
 type Session = {
   readonly pluginId: string
@@ -91,6 +94,15 @@ type MountHandle = {
   report?: { state: unknown }
 }
 
+/** A view another plugin embedded with `mountView`; it has no slot status and no report. */
+type EmbeddedHandle = {
+  readonly id: string
+  /** The plugin that owns the view. */
+  readonly plugin: string
+  cleanup?: () => void
+  released: boolean
+}
+
 class LoadFailure extends Error {}
 
 class NoCommand extends Error {
@@ -110,8 +122,12 @@ function messageOf(error: unknown): string {
 }
 
 function findSlot(model: UiModel, id: string): UiSlotEntry | undefined {
-  return [...model.sidebarSections, ...model.panels, ...model.views].find((entry) => entry.id === id)
+  return [...model.sidebarSections, ...model.panels, ...model.views, ...model.overlays].find((entry) => entry.id === id)
 }
+
+/** Context keys the kernel gives meaning to: with both true, terminal keys go to the terminal first. */
+const TERMINAL_FOCUS = 'terminalFocus'
+const TERMINAL_KEYS_FIRST = 'terminalKeysFirst'
 
 function themeVariablesOf(model: UiModel): Record<string, string> {
   const theme = model.themes.find((candidate) => candidate.id === model.theme.active) ?? DEFAULT_THEME
@@ -158,6 +174,10 @@ export class WindowPluginHost {
   private readonly layoutListeners = new Set<(layout: UiLayout) => void>()
   private readonly runtimes = new Map<string, Runtime>()
   private readonly mounts = new Set<MountHandle>()
+  private readonly embedded = new Set<EmbeddedHandle>()
+  private readonly contextValues = new Map<string, boolean>()
+  /** The session that last set each context key; only it clears the key when it is revoked. */
+  private readonly contextOwners = new Map<string, Session>()
   private readonly unsubscribeEvents: () => void
   private readonly unsubscribeFocus: (() => void) | undefined
   private refreshChain: Promise<unknown> = Promise.resolve()
@@ -243,14 +263,30 @@ export class WindowPluginHost {
   }
 
   /**
-   * Routes a key press to the `active` keybinding on its chord and runs that binding's command
-   * without waiting for it. Returns whether the event was consumed; reserved chords never are.
+   * Routes a key press to the `active` keybinding on its chord whose `when` holds and runs that
+   * binding's command without waiting for it. A binding with a `when` beats one without; otherwise
+   * the first in model order wins. When `terminalKeysFirst` and `terminalFocus` are both set, only a
+   * binding whose `when` mentions `terminalFocus` may fire: the others are skipped, the event's
+   * default is prevented so the webview never acts on the chord, and the key is reported as not
+   * consumed so the terminal still receives it. Returns whether the event was consumed; reserved
+   * chords never are.
    */
   handleKey(event: KeyEventLike): boolean {
     const chord = chordFromKeyEvent(event)
     if (chord === null || RESERVED_CHORDS.includes(chord)) return false
-    const binding = this.state.model?.keybindings.find((b) => b.status === 'active' && b.key === chord)
-    if (!binding) return false
+    const applicable = (this.state.model?.keybindings ?? []).filter(
+      (b) => b.status === 'active' && b.key === chord && (b.when === undefined || evaluateWhen(b.when, this.contextValues))
+    )
+    if (applicable.length === 0) return false
+    const terminalFirst = this.contextValues.get(TERMINAL_KEYS_FIRST) === true && this.contextValues.get(TERMINAL_FOCUS) === true
+    const allowed = terminalFirst
+      ? applicable.filter((b) => b.when !== undefined && whenMentions(b.when, TERMINAL_FOCUS))
+      : applicable
+    const binding: UiKeybinding | undefined = allowed.find((b) => b.when !== undefined) ?? allowed[0]
+    if (!binding) {
+      event.preventDefault?.()
+      return false
+    }
     this.runCommand(binding.command).catch((error) => this.deps.log(`${binding.id}: ${messageOf(error)}`))
     return true
   }
@@ -314,6 +350,7 @@ export class WindowPluginHost {
     this.unsubscribeEvents()
     this.unsubscribeFocus?.()
     for (const handle of [...this.mounts]) this.release(handle)
+    for (const handle of [...this.embedded]) this.releaseEmbedded(handle)
     for (const pluginId of this.runtimes.keys()) void this.deactivate(pluginId)
     this.listeners.clear()
     this.layoutListeners.clear()
@@ -354,6 +391,10 @@ export class WindowPluginHost {
     for (const handle of [...this.mounts]) {
       const entry = findSlot(model, handle.id)
       if (!entry || entry.plugin !== handle.plugin) this.release(handle)
+    }
+    for (const handle of [...this.embedded]) {
+      const entry = model.views.find((view) => view.id === handle.id)
+      if (!entry || entry.plugin !== handle.plugin) this.releaseEmbedded(handle)
     }
     const departed = [...this.runtimes.keys()].filter((id) => !this.enabled(id))
     for (const id of departed) {
@@ -420,6 +461,44 @@ export class WindowPluginHost {
     }
     handle.cleanup = cleanupFn
     this.setSlot(handle.id, { status: 'mounted' })
+    // the daemon learns an overlay is mounted from a report, so one that stays silent still sends this
+    if (entry.kind === 'overlay' && handle.report === undefined) report({})
+  }
+
+  private async runEmbedded(handle: EmbeddedHandle, entry: UiSlotEntry, element: HTMLElement, input: unknown): Promise<void> {
+    try {
+      await this.ensureLoaded(entry.plugin)
+    } catch {
+      return
+    }
+    if (handle.released) return
+    const session = this.runtimes.get(entry.plugin)?.session
+    const implementation = session?.provided.get(handle.id)
+    if (typeof implementation !== 'function') {
+      this.deps.log(`${entry.plugin} did not provide ${handle.id}`)
+      return
+    }
+    let cleanup: unknown
+    try {
+      cleanup = implementation(element, { input })
+    } catch (error) {
+      if (!handle.released) this.deps.log(`${entry.plugin}: ${messageOf(error)}`)
+      return
+    }
+    const cleanupFn = typeof cleanup === 'function' ? (cleanup as () => void) : undefined
+    if (handle.released || this.runtimes.get(entry.plugin)?.session !== session) {
+      this.runCleanup(entry.plugin, cleanupFn)
+      return
+    }
+    handle.cleanup = cleanupFn
+  }
+
+  private releaseEmbedded(handle: EmbeddedHandle): void {
+    handle.released = true
+    this.embedded.delete(handle)
+    const cleanup = handle.cleanup
+    handle.cleanup = undefined
+    this.runCleanup(handle.plugin, cleanup)
   }
 
   private failSlot(handle: MountHandle, message: string): void {
@@ -635,6 +714,9 @@ export class WindowPluginHost {
       this.setSlot(handle.id, { status: 'error', message })
       if (handle.report) this.callQuietly('ui.report', { slot: handle.id, state: null })
     }
+    for (const handle of [...this.embedded]) {
+      if (handle.plugin === session.pluginId) this.releaseEmbedded(handle)
+    }
     revoke(session)
     this.fail(session.pluginId, message)
   }
@@ -648,6 +730,7 @@ export class WindowPluginHost {
       }
     }
     const badged = new Set<string>()
+    let contextTracked = false
     const track = (cleanup: () => void): (() => void) => {
       const once = () => {
         if (session.cleanups.delete(once)) cleanup()
@@ -694,6 +777,33 @@ export class WindowPluginHost {
       ),
       confirm: live((options: { title: string; body?: string; confirmLabel?: string }) => this.deps.confirm(options)),
       toast: live((title: string, body: string) => this.deps.toast(title, body, 'info')),
+      setContext: live((key: string, value: boolean | undefined) => {
+        if (value === undefined) {
+          this.contextValues.delete(key)
+          this.contextOwners.delete(key)
+          return
+        }
+        this.contextValues.set(key, value)
+        this.contextOwners.set(key, session)
+        if (!contextTracked) {
+          contextTracked = true
+          track(() => {
+            for (const [name, owner] of [...this.contextOwners]) {
+              if (owner !== session) continue
+              this.contextOwners.delete(name)
+              this.contextValues.delete(name)
+            }
+          })
+        }
+      }),
+      mountView: live((viewId: string, element: HTMLElement, input?: unknown) => {
+        const entry = this.state.model?.views.find((candidate) => candidate.id === viewId)
+        if (!entry) throw new Error(`no contribution ${viewId}`)
+        const handle: EmbeddedHandle = { id: viewId, plugin: entry.plugin, released: false }
+        this.embedded.add(handle)
+        void this.runEmbedded(handle, entry, element, input)
+        return track(() => this.releaseEmbedded(handle))
+      }),
       setPanelBadge: live((panelId: string, count: number | null, title?: string) => {
         if (this.state.model?.panels.find((panel) => panel.id === panelId)?.plugin !== pluginId) {
           throw new Error(`${panelId} is not a panel of ${pluginId}`)

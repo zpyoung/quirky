@@ -278,6 +278,9 @@ const ZSH_INTEGRATION = `if [[ -z \${__quirky_integrated-} ]]; then
     fi
     printf '${OSC}7;file://%s%s${BEL}' "$HOST" "$PWD"
     printf '${OSC}133;A${BEL}'
+    (( __quirky_ready_in_zle )) || __quirky_ready
+  }
+  __quirky_ready() {
     if (( __quirky_first )); then
       __quirky_first=0
       printf '${OSC}777;quirky-shell-ready${BEL}'
@@ -285,6 +288,11 @@ const ZSH_INTEGRATION = `if [[ -z \${__quirky_integrated-} ]]; then
   }
   add-zsh-hook preexec __quirky_preexec
   add-zsh-hook precmd __quirky_precmd
+  # input released at precmd reaches a terminal still echoing on its own, so the line editor draws it twice
+  __quirky_ready_in_zle=0
+  if [[ -o zle ]] && autoload -Uz add-zle-hook-widget && add-zle-hook-widget line-init __quirky_ready 2>/dev/null; then
+    __quirky_ready_in_zle=1
+  fi
 fi`
 
 const BASH_INTEGRATION = `if [ -z "\${__quirky_integrated-}" ]; then
@@ -293,6 +301,9 @@ const BASH_INTEGRATION = `if [ -z "\${__quirky_integrated-}" ]; then
   __quirky_armed=0
   __quirky_first=1
   __quirky_histcmd=
+  # readline prints PS1 only after it takes the terminal, so input released earlier would be echoed twice
+  __quirky_ready_ps1='\\[${OSC}777;quirky-shell-ready${BEL}\\]'
+  __quirky_ready_shown=0
   __quirky_owns_trap=1
   [ -n "$(trap -p DEBUG)" ] && __quirky_owns_trap=0
   # HISTCMD stays constant inside PROMPT_COMMAND on bash 3.2, so the history number comes from history 1
@@ -324,9 +335,9 @@ const BASH_INTEGRATION = `if [ -z "\${__quirky_integrated-}" ]; then
     fi
     printf '${OSC}7;file://%s%s${BEL}' "$HOSTNAME" "$PWD"
     printf '${OSC}133;A${BEL}'
-    if [ "$__quirky_first" = 1 ]; then
-      __quirky_first=0
-      printf '${OSC}777;quirky-shell-ready${BEL}'
+    if [ "$__quirky_ready_shown" = 1 ]; then
+      __quirky_ready_shown=0
+      PS1=\${PS1//"$__quirky_ready_ps1"/}
     fi
     return $__quirky_status
   }
@@ -334,6 +345,11 @@ const BASH_INTEGRATION = `if [ -z "\${__quirky_integrated-}" ]; then
     __quirky_histnum
     __quirky_histcmd=$__quirky_hn
     __quirky_armed=1
+    if [ "$__quirky_first" = 1 ]; then
+      __quirky_first=0
+      __quirky_ready_shown=1
+      PS1=$PS1$__quirky_ready_ps1
+    fi
   }
   [ "$__quirky_owns_trap" = 1 ] && trap '__quirky_debug' DEBUG
   PROMPT_COMMAND="__quirky_prompt

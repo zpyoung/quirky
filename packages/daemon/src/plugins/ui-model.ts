@@ -4,6 +4,7 @@ import {
   RESERVED_CHORDS,
   parseChord,
   parseContributionId,
+  parseWhen,
   type ContributionInfo,
   type PluginDiagnostic,
   type PluginInfo,
@@ -81,7 +82,7 @@ function dependencyClosure(byId: Map<string, PluginInfo>): (id: string) => Reado
   return closure
 }
 
-type Binding = { declaration: ContributionInfo; chord: string; command: string }
+type Binding = { declaration: ContributionInfo; chord: string; when: string; command: string }
 
 export type DistroKeybinding = { key: string; command: string }
 
@@ -96,6 +97,28 @@ function distroBindings(
   })
 }
 
+/**
+ * Plugin IDs from highest to lowest precedence: each step takes, among the plugins no remaining
+ * plugin beats, the one whose ID sorts first. A plugin that beats another is always ahead of it.
+ */
+function precedenceOrder(owners: string[], beats: (a: string, b: string) => boolean): Map<string, number> {
+  const remaining = [...new Set(owners)].sort(compare)
+  const rank = new Map<string, number>()
+  while (remaining.length > 0) {
+    const index = remaining.findIndex((candidate) => !remaining.some((other) => other !== candidate && beats(other, candidate)))
+    const [next] = remaining.splice(index === -1 ? 0 : index, 1)
+    rank.set(next, rank.size)
+  }
+  return rank
+}
+
+/**
+ * Resolves each chord and `when` condition on its own: within one group a single binding is
+ * `active`, the rest `shadowed`; groups with different conditions never shadow each other.
+ * A reserved chord shadows every group, and a distro binding (which has no condition) only
+ * the unconditional one. The result lists distro bindings first, in manifest order, then the
+ * plugins' bindings by `precedenceOrder` of their owner and by ID within an owner.
+ */
 function resolveKeybindings(
   effective: ContributionInfo[],
   effectiveCommands: Set<string>,
@@ -104,27 +127,43 @@ function resolveKeybindings(
   distro: { id: string; bindings: { id: string; chord: string; command: string }[] }
 ): UiKeybinding[] {
   const dependsOn = dependencyClosure(byId)
-  const sourceOf = (declaration: ContributionInfo) => byId.get(declaration.plugin)?.source
-  const beats = (a: ContributionInfo, b: ContributionInfo): boolean => {
-    if (a.plugin === b.plugin) return false
-    return sourceOf(a) === sourceOf(b) ? dependsOn(a.plugin).has(b.plugin) : sourceOf(a) === 'installed'
+  const sourceOf = (pluginId: string) => byId.get(pluginId)?.source
+  const beatsPlugin = (a: string, b: string): boolean => {
+    if (a === b) return false
+    return sourceOf(a) === sourceOf(b) ? dependsOn(a).has(b) : sourceOf(a) === 'installed'
   }
+  const beats = (a: ContributionInfo, b: ContributionInfo): boolean => beatsPlugin(a.plugin, b.plugin)
 
   const result: UiKeybinding[] = []
-  const byChord = new Map<string, Binding[]>()
+  const byGroup = new Map<string, Binding[]>()
+  const owners: string[] = []
   for (const declaration of effective) {
     const parsed = parseChord(stringField(declaration.data, 'key') ?? '')
     if (!parsed.ok) continue
+    const rawWhen = declaration.data.when
+    const parsedWhen = rawWhen === undefined ? null : parseWhen(typeof rawWhen === 'string' ? rawWhen : '')
+    if (parsedWhen !== null && !parsedWhen.ok) continue
+    const when = parsedWhen?.canonical ?? ''
     const written = stringField(declaration.data, 'command') ?? ''
     const command = parseContributionId(written) ? written : `command:${declaration.plugin}/${written}`
-    const base = { id: declaration.id, plugin: declaration.plugin, key: parsed.chord, command }
+    const base = {
+      id: declaration.id,
+      plugin: declaration.plugin,
+      key: parsed.chord,
+      command,
+      ...(when !== '' ? { when } : {}),
+    }
+    owners.push(declaration.plugin)
     if (!effectiveCommands.has(command)) {
       result.push({ ...base, status: 'unbound' })
       continue
     }
-    byChord.set(parsed.chord, [...(byChord.get(parsed.chord) ?? []), { declaration, chord: parsed.chord, command }])
+    const group = `${parsed.chord}\0${when}`
+    byGroup.set(group, [...(byGroup.get(group) ?? []), { declaration, chord: parsed.chord, when, command }])
   }
 
+  const distroOrder = new Map<string, number>()
+  distro.bindings.forEach((binding, index) => distroOrder.set(binding.id, index))
   const distroByChord = new Map<string, { id: string; command: string }>()
   for (const binding of distro.bindings) {
     const base = { id: binding.id, plugin: distro.id, key: binding.chord, command: binding.command }
@@ -133,8 +172,10 @@ function resolveKeybindings(
     else distroByChord.set(binding.chord, binding)
   }
 
-  for (const [chord, bindings] of byChord) {
+  for (const bindings of byGroup.values()) {
+    const { chord, when } = bindings[0]
     const reserved = RESERVED_CHORDS.includes(chord)
+    const distroBinding = when === '' ? distroByChord.get(chord) : undefined
     const maxima = bindings.filter(
       (candidate) => !bindings.some((other) => other !== candidate && beats(other.declaration, candidate.declaration))
     )
@@ -144,14 +185,19 @@ function resolveKeybindings(
     })
     for (const binding of bindings) {
       const { declaration } = binding
-      const base = { id: declaration.id, plugin: declaration.plugin, key: chord, command: binding.command }
+      const base = {
+        id: declaration.id,
+        plugin: declaration.plugin,
+        key: chord,
+        command: binding.command,
+        ...(when !== '' ? { when } : {}),
+      }
       if (reserved) {
         result.push({ ...base, status: 'shadowed', shadowedBy: 'kernel' })
         addWarning(warnings, declaration.plugin, `${declaration.id} is shadowed by the window's own shortcut ${chord}`)
-      } else if (distroByChord.has(chord)) {
-        const distroId = distroByChord.get(chord)!.id
-        result.push({ ...base, status: 'shadowed', shadowedBy: distroId })
-        addWarning(warnings, declaration.plugin, `${declaration.id} is shadowed by ${distroId} on ${chord}`)
+      } else if (distroBinding) {
+        result.push({ ...base, status: 'shadowed', shadowedBy: distroBinding.id })
+        addWarning(warnings, declaration.plugin, `${declaration.id} is shadowed by ${distroBinding.id} on ${chord}`)
       } else if (binding === winner) {
         result.push({ ...base, status: 'active' })
       } else {
@@ -167,7 +213,16 @@ function resolveKeybindings(
   for (const [chord, binding] of distroByChord) {
     result.push({ id: binding.id, plugin: distro.id, key: chord, command: binding.command, status: 'active' })
   }
-  return result.sort((a, b) => compare(a.id, b.id))
+
+  const rank = precedenceOrder(owners, beatsPlugin)
+  return result.sort((a, b) => {
+    const distroA = distroOrder.get(a.id)
+    const distroB = distroOrder.get(b.id)
+    if (distroA !== undefined || distroB !== undefined) {
+      return distroA === undefined ? 1 : distroB === undefined ? -1 : distroA - distroB
+    }
+    return (rank.get(a.plugin) ?? 0) - (rank.get(b.plugin) ?? 0) || compare(a.id, b.id)
+  })
 }
 
 function buildThemes(effective: ContributionInfo[]): ThemeInfo[] {
@@ -216,7 +271,7 @@ export function buildUiModel(input: {
   for (const pluginId of [...codeBackedOwners].sort(compare)) {
     const ui = byId.get(pluginId)?.ui
     if (ui === undefined) {
-      addWarning(warnings, pluginId, 'declares commands, views, panels or sidebar sections but has no ui module')
+      addWarning(warnings, pluginId, 'declares commands, views, panels, overlays or sidebar sections but has no ui module')
       continue
     }
     const url = moduleUrl(pluginId, ui)
@@ -268,6 +323,7 @@ export function buildUiModel(input: {
     sidebarSections: slot('sidebar-section').sort(byOrder),
     panels: slot('panel').sort(byOrder),
     views: slot('view').sort((a, b) => compare(a.id, b.id)),
+    overlays: slot('overlay').sort(byOrder),
     commands,
     keybindings,
     settings,

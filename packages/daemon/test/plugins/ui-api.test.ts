@@ -201,6 +201,34 @@ describe('the UI model', () => {
     expect(model.modules['acme.notes']!.url).toBe(module)
   })
 
+  test('SC-67: an overlay appears in the model and in the CLI listing, with its module and no load', async () => {
+    const env = makeEnv()
+    modulePlugin(
+      env.installed,
+      env.marker,
+      {
+        id: 'acme.float',
+        ui: 'ui.js',
+        contributes: { overlay: [{ id: 'shelf', title: 'Shelf', order: 7 }, { id: 'hud', title: 'Hud' }] }
+      },
+      { files: { 'ui.js': uiSource(env.marker, 'acme.float') } }
+    )
+    await env.start()
+
+    const model = await env.cliJson<UiModel>('ui', 'contributions')
+    expect(model.overlays).toEqual([
+      { id: 'overlay:acme.float/shelf', kind: 'overlay', plugin: 'acme.float', title: 'Shelf', order: 7, module: '/plugins/acme.float/ui.js' },
+      { id: 'overlay:acme.float/hud', kind: 'overlay', plugin: 'acme.float', title: 'Hud', order: 100, module: '/plugins/acme.float/ui.js' }
+    ])
+    expect(model.modules['acme.float']!.provides).toEqual(['overlay:acme.float/hud', 'overlay:acme.float/shelf'])
+    const listed = await env.cli('ui', 'contributions')
+    expect(tableRows(listed.stdout, 'OVERLAYS')).toEqual([
+      ['overlay:acme.float/shelf', 'acme.float', 'Shelf', '7', '/plugins/acme.float/ui.js'],
+      ['overlay:acme.float/hud', 'acme.float', 'Hud', '100', '/plugins/acme.float/ui.js']
+    ])
+    expect(readMarker(env.marker)).toEqual([])
+  })
+
   test('SC-3: an override replaces a slot\'s contribution and its code', async () => {
     const env = makeEnv()
     modulePlugin(env.builtin, env.marker, {
@@ -241,6 +269,8 @@ describe('the UI model', () => {
       ['keybinding without a modifier', { contributes: { keybinding: [{ id: 'k', key: 'x', command: 'go' }] } }, 'keybinding k: key needs a modifier or a function key'],
       ['keybinding with no final key', { contributes: { keybinding: [{ id: 'k', key: 'mod+shift', command: 'go' }] } }, 'keybinding k: key must end in one key'],
       ['keybinding with no command', { contributes: { keybinding: [{ id: 'k', key: 'mod+k' }] } }, 'keybinding k: command is required'],
+      ['keybinding whose when does not parse', { contributes: { keybinding: [{ id: 'k', key: 'mod+j', command: 'go', when: 'terminalFocus &&' }] } }, 'keybinding k: when is invalid: expected a key at the end'],
+      ['overlay with no title', { contributes: { overlay: [{ id: 'float' }] } }, 'overlay float: title is required'],
       ['number setting with a string default', { contributes: { setting: [{ id: 'size', type: 'number', title: 'Size', default: 'big' }] } }, 'setting size: default must be a number'],
       ['enum setting with no values', { contributes: { setting: [{ id: 'mode', type: 'enum', title: 'Mode', default: 'a' }] } }, 'setting mode: values is required for an enum'],
       ['theme with an unknown color', { contributes: { theme: [{ id: 't', title: 'T', appearance: 'dark', colors: { sparkle: '#ffffff' } }] } }, 'theme t: unknown color `sparkle`'],
@@ -290,7 +320,7 @@ describe('the UI model', () => {
 
     const bare = await pluginInfo(client, 'acme.bare')
     expect(bare.state).not.toBe('invalid')
-    expect(warnings(bare)).toEqual(['declares commands, views, panels or sidebar sections but has no ui module'])
+    expect(warnings(bare)).toEqual(['declares commands, views, panels, overlays or sidebar sections but has no ui module'])
     expect(bare.ui).toBeUndefined()
 
     const model = await client.call('ui.contributions', {})
@@ -355,6 +385,35 @@ describe('commands and keybindings', () => {
       }
     ])
     expect(warnings(await pluginInfo(client, 'quirky.sample'))).toEqual([])
+  })
+
+  test('SC-68: one chord with opposite when conditions is active for both, listed in the CLI with the condition', async () => {
+    const env = makeEnv()
+    modulePlugin(env.installed, env.marker, {
+      id: 'acme.keys',
+      ui: 'ui.js',
+      contributes: {
+        command: [{ id: 'in-terminal', title: 'In terminal' }, { id: 'elsewhere', title: 'Elsewhere' }],
+        keybinding: [
+          { id: 'jt', key: 'mod+j', command: 'in-terminal', when: 'terminalFocus' },
+          { id: 'je', key: 'mod+j', command: 'elsewhere', when: '!terminalFocus' }
+        ]
+      }
+    })
+    const harness = await env.start()
+    const client = await harness.connect()
+
+    const model = await client.call('ui.contributions', {})
+    expect(model.keybindings).toEqual([
+      { id: 'keybinding:acme.keys/je', plugin: 'acme.keys', key: 'mod+j', command: 'command:acme.keys/elsewhere', status: 'active', when: '!terminalFocus' },
+      { id: 'keybinding:acme.keys/jt', plugin: 'acme.keys', key: 'mod+j', command: 'command:acme.keys/in-terminal', status: 'active', when: 'terminalFocus' }
+    ])
+    expect(warnings(await pluginInfo(client, 'acme.keys'))).toEqual([])
+    const json = await env.cliJson<UiModel>('ui', 'contributions')
+    expect(json.keybindings.map((item) => [item.id, item.status, item.when])).toEqual([
+      ['keybinding:acme.keys/je', 'active', '!terminalFocus'],
+      ['keybinding:acme.keys/jt', 'active', 'terminalFocus']
+    ])
   })
 
   test('SC-17: the window\'s own shortcuts are reserved', async () => {
