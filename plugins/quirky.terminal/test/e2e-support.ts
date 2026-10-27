@@ -48,7 +48,8 @@ export function isAlive(pid: number): boolean {
 type ProcessRow = { pid: number; ppid: number; command: string }
 
 function processTable(): ProcessRow[] {
-  const out = execFileSync('ps', ['-axo', 'pid=,ppid=,command='], { encoding: 'utf8' })
+  // a busy machine's full command lines overflow the 1 MiB default buffer
+  const out = execFileSync('ps', ['-axo', 'pid=,ppid=,command='], { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 })
   return out
     .split('\n')
     .map((line) => /^\s*(\d+)\s+(\d+)\s+(.*)$/.exec(line))
