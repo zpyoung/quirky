@@ -3,6 +3,10 @@
     "target": "ES2022",
     "module": "ESNext",
     "moduleResolution": "bundler",
+    "paths": {
+      "@quirky/protocol": ["./packages/protocol/src/index.ts"],
+      "@quirky/protocol/node": ["./packages/protocol/src/node/index.ts"]
+    },
     "lib": [
       "ES2022",
       "DOM",
