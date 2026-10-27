@@ -210,6 +210,111 @@ textarea {
   }
 }
 
+.glyph {
+  display: inline-block;
+  position: relative;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex: none;
+  background: transparent;
+}
+
+.glyph-working {
+  border: 2px solid var(--dim);
+  border-top-color: var(--accent);
+  animation: spin 0.9s linear infinite;
+}
+
+.glyph-monitoring {
+  background: var(--accent);
+  border-radius: 0;
+  -webkit-mask: var(--activity-icon) center / contain no-repeat;
+  mask: var(--activity-icon) center / contain no-repeat;
+  --activity-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='2 12 6 12 9 4 15 20 18 12 22 12'/%3E%3C/svg%3E");
+}
+
+.glyph-waiting,
+.glyph-permission {
+  width: 12px;
+  height: 12px;
+  color: var(--amber);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 12px;
+  text-align: center;
+}
+
+.glyph-waiting::after,
+.glyph-permission::after {
+  content: '?';
+}
+
+.glyph-blocked,
+.glyph-failed {
+  background: var(--danger);
+  width: 8px;
+  height: 8px;
+}
+
+.glyph-interrupted {
+  background: var(--muted);
+  width: 8px;
+  height: 8px;
+}
+
+.glyph-done {
+  background: var(--green);
+  width: 8px;
+  height: 8px;
+}
+
+.glyph-idle {
+  background: var(--dim);
+  opacity: 0.6;
+  width: 8px;
+  height: 8px;
+}
+
+.glyph-unverifiable,
+.glyph-unconfirmed {
+  border: 1.5px dashed var(--amber);
+}
+
+/* progress ring: replaces the spinner or question icon on a live state */
+.glyph-ring {
+  width: 12px;
+  height: 12px;
+  border: 0;
+  animation: none;
+  color: transparent;
+  background: conic-gradient(var(--accent) var(--progress, 0%), var(--dim) 0);
+  -webkit-mask: radial-gradient(circle, transparent 3px, #000 3.5px);
+  mask: radial-gradient(circle, transparent 3px, #000 3.5px);
+}
+
+.glyph-ring::after {
+  content: none;
+}
+
+.glyph-waiting.glyph-ring,
+.glyph-permission.glyph-ring {
+  background: conic-gradient(var(--amber) var(--progress, 0%), var(--dim) 0);
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .glyph-working,
+  .dot-working {
+    animation: none;
+  }
+}
+
 .sidebar {
   background: var(--bg-raised);
   border-right: 1px solid var(--border);

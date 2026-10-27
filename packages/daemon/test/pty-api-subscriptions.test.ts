@@ -4,8 +4,12 @@ import type { PtyClient } from '../src/pty-client'
 
 function stubClient(options: { failUnsubscribe?: boolean } = {}) {
   const requests: Array<{ type: string; sessionId: string }> = []
+  const sent: Array<{ sessionId: string; bytes: Uint8Array }> = []
   const client = {
     connected: true,
+    sendData(sessionId: string, bytes: Uint8Array) {
+      sent.push({ sessionId, bytes })
+    },
     onData() {},
     onExit() {},
     onFact() {},
@@ -18,7 +22,7 @@ function stubClient(options: { failUnsubscribe?: boolean } = {}) {
   } as unknown as PtyClient
   const count = (type: string, sessionId?: string) =>
     requests.filter((request) => request.type === type && (sessionId === undefined || request.sessionId === sessionId)).length
-  return { client, count }
+  return { client, count, sent }
 }
 
 describe('PTY subscription holds', () => {
@@ -132,5 +136,79 @@ describe('PTY subscription holds', () => {
     a.revoke()
     await Promise.resolve()
     expect(requests).not.toContain('unsubscribe')
+  })
+})
+
+describe('PTY input fan-out', () => {
+  test('every plugin\'s write reaches every plugin\'s onInput with the data as a string', () => {
+    const { client, sent } = stubClient()
+    const a = createPtyApi(client, 'a').api
+    const b = createPtyApi(client, 'b').api
+    const heardA: Array<[string, string]> = []
+    const heardB: Array<[string, string]> = []
+    a.onInput((sessionId, data) => heardA.push([sessionId, data]))
+    b.onInput((sessionId, data) => heardB.push([sessionId, data]))
+
+    a.write('s1', 'ls\r')
+    b.write('s2', new TextEncoder().encode('\x03'))
+
+    expect(heardA).toEqual([['s1', 'ls\r'], ['s2', '\x03']])
+    expect(heardB).toEqual(heardA)
+    expect(sent.map((entry) => entry.sessionId)).toEqual(['s1', 's2'])
+  })
+
+  test('bytes that are not valid UTF-8 decode lossily', () => {
+    const { client } = stubClient()
+    const a = createPtyApi(client, 'a').api
+    const heard: string[] = []
+    a.onInput((_sessionId, data) => heard.push(data))
+    a.write('s1', new Uint8Array([0x61, 0xff]))
+    expect(heard).toEqual(['a\ufffd'])
+  })
+
+  test('listeners are not called when the send throws', () => {
+    const { client } = stubClient()
+    ;(client as unknown as { sendData: () => void }).sendData = () => {
+      throw new Error('pty down')
+    }
+    const a = createPtyApi(client, 'a').api
+    const heard: string[] = []
+    a.onInput((_sessionId, data) => heard.push(data))
+    expect(() => a.write('s1', 'x')).toThrow('pty down')
+    expect(heard).toEqual([])
+  })
+
+  test('a removed listener and a revoked plugin stop hearing input', () => {
+    const { client } = stubClient()
+    const a = createPtyApi(client, 'a')
+    const b = createPtyApi(client, 'b')
+    const heardA: string[] = []
+    const heardB: string[] = []
+    const stop = a.api.onInput((_sessionId, data) => heardA.push(data))
+    b.api.onInput((_sessionId, data) => heardB.push(data))
+    b.api.write('s1', '1')
+    stop()
+    b.api.write('s1', '2')
+    b.revoke()
+    const c = createPtyApi(client, 'c').api
+    c.write('s1', '3')
+    expect(heardA).toEqual(['1'])
+    expect(heardB).toEqual(['1', '2'])
+    expect(() => b.api.onInput(() => {})).toThrow(/no longer active/)
+  })
+
+  test('a throwing listener is logged and does not stop the others or the write', () => {
+    const { client } = stubClient()
+    const logs: string[] = []
+    const a = createPtyApi(client, 'a', (message) => logs.push(message)).api
+    const b = createPtyApi(client, 'b', (message) => logs.push(message)).api
+    const heard: string[] = []
+    a.onInput(() => {
+      throw new Error('boom')
+    })
+    b.onInput((_sessionId, data) => heard.push(data))
+    expect(() => b.write('s1', 'x')).not.toThrow()
+    expect(heard).toEqual(['x'])
+    expect(logs.some((line) => line.includes('boom'))).toBe(true)
   })
 })

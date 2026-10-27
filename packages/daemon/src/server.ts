@@ -26,6 +26,22 @@ function json(body: unknown, status = 200): Response {
   return Response.json(body, { status })
 }
 
+const HOOK_EVENT_NAME = /^[A-Za-z0-9_.-]{1,64}$/
+const HOOK_PSTART = /^[\x20-\x7e]{1,64}$/
+
+/** The agent process identity a hook shim reports in the query; malformed values are left out, never rejected. */
+function agentIdentity(url: URL): { agentPid?: number; agentStart?: string; event?: string } {
+  const pid = url.searchParams.get('pid')
+  const start = url.searchParams.get('pstart')
+  const event = url.searchParams.get('event')
+  const agentPid = pid !== null && /^\d{1,10}$/.test(pid) ? Number(pid) : 0
+  return {
+    ...(agentPid > 0 ? { agentPid } : {}),
+    ...(start !== null && HOOK_PSTART.test(start) ? { agentStart: start } : {}),
+    ...(event !== null && HOOK_EVENT_NAME.test(event) ? { event } : {})
+  }
+}
+
 /** The single loopback HTTP server: health, the RPC WebSocket, agent hooks and the static UI. */
 export function startServer(options: ServerOptions) {
   const { core, handle } = options
@@ -47,7 +63,7 @@ export function startServer(options: ServerOptions) {
       }
     }
     try {
-      core.deliverToPlugins({ type: 'hook.received', agent, sessionId, payload })
+      core.deliverToPlugins({ type: 'hook.received', agent, sessionId, payload, ...agentIdentity(url) })
     } catch (error) {
       options.log(`hook.received delivery failed: ${(error as Error)?.stack ?? error}`)
     }
