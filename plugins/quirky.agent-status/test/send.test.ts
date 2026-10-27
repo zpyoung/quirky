@@ -4,6 +4,7 @@ import { join } from 'node:path'
 import { RpcErrorCode, type CliArgs, type CliContext } from '@quirky/protocol'
 import { makeTempDir, removeTempDirs } from '../../../packages/daemon/test/plugins/fixtures'
 import { commands } from '../cli'
+import { bracketedPaste, Sender, type SendHost } from '../src/send'
 import { Rig, startOf } from './support'
 
 const SCALE = 'QUIRKY_TEST_AGENT_STATUS_TIME_SCALE'
@@ -91,7 +92,7 @@ describe('SC-14: send types a prompt into an idle agent and waits for it to star
     expect(rig.writes()).toEqual([paste('fix the tests'), '\r'])
     const [pasted, entered] = rig.writeLog
     expect(entered!.at - pasted!.at).toBeGreaterThanOrEqual(40)
-    expect(await rig.delivered()).toMatchObject([{ sessionId: 's1', agent: 'claude', text: 'fix the tests', submit: false, ready: true }])
+    expect(await rig.delivered()).toEqual([])
     expect(await rig.state()).toBe('working')
   })
 
@@ -227,7 +228,7 @@ describe('SC-21: shells, exited sessions and unknown sessions are refused', () =
     rig.show(['> '])
 
     expect((await rig.send('s1', 'more')).state).toBe('working')
-    expect((await rig.delivered())[0]).toMatchObject({ agent: 'claude' })
+    expect(rig.writes()).toEqual([paste('more'), '\r'])
   })
 
   test('a session that ended while the text was going in is session-exited', async () => {
@@ -424,12 +425,11 @@ describe('an approval that lands while the screen is being read', () => {
   })
 })
 
-describe('a turn that runs while the Enter-carrying delivery is still returning', () => {
+describe('a turn that runs to its end right after the paste and Enter are written', () => {
   test('is a start, so send reports idle instead of a stall', async () => {
     scaled('1')
     await idleClaude()
     await rig.plan('claude', { enterWithPaste: true })
-    await rig.holdDelivery(300)
     // no UserPromptSubmit, so the row never records a turn start and only the commits themselves show it
     afterEnter([
       [0, 'PreToolUse', bash('ls', { tool_use_id: 't1' })],
@@ -439,12 +439,89 @@ describe('a turn that runs while the Enter-carrying delivery is still returning'
     const sent = await rig.send('s1', 'list files', 1000)
 
     expect(sent.state).toBe('idle')
-    expect(await rig.delivered()).toMatchObject([{ submit: true }])
+    expect(rig.writes()).toEqual([paste('list files') + '\r'])
+  })
+})
+
+describe('an approval that appears while the submit plan is fetched', () => {
+  const permission = () => rig.hook('claude', claude('PermissionRequest', bash('rm -rf build', { tool_use_id: 't1' })))
+
+  test('stops the paste: nothing is written', async () => {
+    scaled('0.1')
+    await idleClaude()
+    await rig.holdPlan(400)
+
+    const refused = rig.send('s1', 'carry on')
+    refused.catch(() => {})
+    await Bun.sleep(150)
+    await permission()
+
+    await expect(refused).rejects.toMatchObject(conflict('agent-blocked'))
+    await expect(refused).rejects.toThrow('waiting for approval of Bash: rm -rf build')
+    expect(rig.writes()).toEqual([])
+    expect(await rig.delivered()).toEqual([])
+  })
+
+  test('stops an Enter that would have gone with the paste', async () => {
+    scaled('0.1')
+    await idleClaude()
+    await rig.plan('claude', { enterWithPaste: true })
+    await rig.holdPlan(400)
+
+    const refused = rig.send('s1', 'carry on')
+    refused.catch(() => {})
+    await Bun.sleep(150)
+    await permission()
+
+    await expect(refused).rejects.toMatchObject(conflict('agent-blocked'))
+    expect(rig.writes()).toEqual([])
+    expect(await rig.delivered()).toEqual([])
+  })
+})
+
+describe('the write follows the last look with nothing awaited in between', () => {
+  const idleLook = { session: { agent: 'claude' }, row: null, reading: { verdict: null }, result: { state: 'idle', decidedBy: 'none' }, now: 0 }
+
+  test('an approval that lands the moment the look returns finds the bytes already written, and quirky.agents never delivers', async () => {
+    let looks = 0
+    let approvalAt: number | null = null
+    const written: { data: string; approvalShown: boolean }[] = []
+    const calls: string[] = []
+    const host = {
+      context: {
+        call: async (method: string) => {
+          calls.push(method)
+          if (method === 'quirky.agents/submitPlan') return { enterWithPaste: true, delayMs: 500, retryMs: null }
+          throw new Error(`unexpected call ${method}`)
+        },
+        pty: {
+          list: async () => [{ sessionId: 's1', alive: true }],
+          write: (_session: string, data: string) => written.push({ data, approvalShown: approvalAt !== null })
+        },
+        error: (code: string, message: string) => new Error(`${code}: ${message}`)
+      },
+      inspect: async () => {
+        looks += 1
+        if (looks === 2) setTimeout(() => (approvalAt = Date.now()), 0)
+        return idleLook
+      },
+      row: () => null,
+      onCommit: () => () => {},
+      nextCommit: (_session: string, ms: number) => Bun.sleep(ms).then(() => false),
+      settled: async () => {},
+      now: () => Date.now(),
+      scale: 1
+    } as unknown as SendHost
+
+    await expect(new Sender(host).send('s1', 'hello', 30)).rejects.toThrow('conflict')
+
+    expect(written[0]).toEqual({ data: bracketedPaste('hello') + '\r', approvalShown: false })
+    expect(calls).toEqual(['quirky.agents/submitPlan'])
   })
 })
 
 describe('how the prompt is typed for each kind of agent', () => {
-  test('an agent that takes Enter with the paste gets both in one deliver call', async () => {
+  test('an agent that takes Enter with the paste gets both in one write', async () => {
     scaled('0.1')
     await idleClaude()
     await rig.plan('claude', { enterWithPaste: true })
@@ -453,7 +530,7 @@ describe('how the prompt is typed for each kind of agent', () => {
     expect((await rig.send('s1', 'hello')).state).toBe('working')
 
     expect(rig.writes()).toEqual([paste('hello') + '\r'])
-    expect(await rig.delivered()).toMatchObject([{ submit: true, ready: true }])
+    expect(await rig.delivered()).toEqual([])
   })
 
   test('an Enter-with-paste agent that also retries is written by send, so the retry gets its look', async () => {
@@ -467,7 +544,7 @@ describe('how the prompt is typed for each kind of agent', () => {
     expect(await rig.delivered()).toEqual([])
   })
 
-  test('an agent quirky.agents does not know is pasted directly with the 500 ms default delay', async () => {
+  test('an agent quirky.agents does not know gets the 500 ms default delay', async () => {
     scaled('0.1')
     await idleClaude()
     await rig.plan('claude', null)

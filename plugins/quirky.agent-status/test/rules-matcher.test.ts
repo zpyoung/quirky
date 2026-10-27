@@ -65,6 +65,29 @@ describe('matcher process', () => {
     expect(fast).toEqual({ line: 'build: 3 tests', match: 'tests', groups: [] })
   }, 10_000)
 
+  test('a request still queued when its deadline passes expires without running', async () => {
+    const queue = new Matcher({ env: { QUIRKY_TEST_AGENT_STATUS_TIME_SCALE: '0.4' } })
+    try {
+      const file: RuleFile = { agent: 'fake', rules: [slowRule] }
+      const slow = [0, 1, 2, 3].map(() => queue.evaluate(file, { title: '', lines: poison, quietForMs: null }, origin))
+      const started = performance.now()
+      const waiting = await queue.matchLines('tests', false, ['build: 3 tests'], Date.now() + 10)
+      const evaluating = await queue.evaluate({ agent: 'fake', rules: [busy] }, { title: '', lines: ['esc to interrupt'], quietForMs: null }, origin, Date.now() + 10)
+
+      expect(waiting).toEqual({ expired: true })
+      expect(evaluating).toEqual({ expired: true })
+      expect(performance.now() - started).toBeLessThan(150)
+      expect(await Promise.all(slow)).toEqual([{ timedOut: true }, { timedOut: true }, { timedOut: true }, { timedOut: true }])
+      expect(await queue.matchLines('tests', false, ['build: 3 tests'])).toEqual({ line: 'build: 3 tests', match: 'tests', groups: [] })
+    } finally {
+      queue.dispose()
+    }
+  }, 10_000)
+
+  test('a request that is first in line runs even with a deadline close by', async () => {
+    expect(await matcher.matchLines('tests', false, ['build: 3 tests'], Date.now() + 5000)).toEqual({ line: 'build: 3 tests', match: 'tests', groups: [] })
+  })
+
   test('a time scale shortens the budget', async () => {
     const quick = new Matcher({ env: { QUIRKY_TEST_AGENT_STATUS_TIME_SCALE: '0.2' } })
     try {
@@ -148,6 +171,32 @@ describe('slow rule sources', () => {
     expect(fixed.source?.origin.kind).toBe('user')
     expect((await sources.listing('fake'))?.ignored).toEqual([])
   }, 15_000)
+
+  test('a timeout for a file that was replaced while it ran does not ignore the replacement', async () => {
+    const user = join(root, 'user', 'fake.json')
+    write(join(root, 'builtin', 'fake.json'), [busy], 2_000_000)
+    write(user, [slowRule], 2_000_000)
+    const sources = new RuleSources({ userDir: join(root, 'user'), builtinDir: join(root, 'builtin'), contributions: async () => [], log: () => {} })
+    let replaced = false
+    // the corrected file is picked up by another look before the slow evaluation's timeout is reported
+    const replacing = {
+      async evaluate(...args: Parameters<Matcher['evaluate']>) {
+        const result = await matcher.evaluate(...args)
+        if (!replaced) {
+          replaced = true
+          write(user, [busy], 2_000_100)
+          await sources.effective('fake')
+        }
+        return result
+      }
+    } as Matcher
+
+    const result = await evaluateForAgent(sources, replacing, 'fake', { title: '', lines: [...poison, 'esc to interrupt'], quietForMs: null })
+
+    expect(result.source?.origin.kind).toBe('user')
+    expect(result.verdict?.rule).toBe('busy')
+    expect((await sources.listing('fake'))?.ignored).toEqual([])
+  }, 10_000)
 
   test('an agent with no source evaluates to no source and no verdict', async () => {
     const sources = new RuleSources({ userDir: join(root, 'user'), builtinDir: join(root, 'builtin'), contributions: async () => [], log: () => {} })

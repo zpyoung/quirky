@@ -21,9 +21,10 @@ export type RuleSourceOptions = {
   log: (message: string) => void
 }
 
-export type EffectiveRules = { set: RuleFile; origin: Origin }
+/** `version` identifies the exact file (or contribution generation) `set` was read from; see `reportTimeout`. */
+export type EffectiveRules = { set: RuleFile; origin: Origin; version: string }
 
-type Candidate = { origin: Origin; signature: string; result: ParseResult }
+type Candidate = { origin: Origin; signature: string; version: string; result: ParseResult }
 type CachedRead = { signature: string; result: ParseResult }
 
 const signatureOf = (stat: { mtimeMs: number; size: number }) => `${stat.mtimeMs}:${stat.size}`
@@ -41,6 +42,7 @@ export class RuleSources {
   private readonly timedOut = new Map<string, string>()
   private readonly logged = new Set<string>()
   private contributionCache: Promise<ContributionInfo[]> | null = null
+  private contributionGeneration = 0
 
   constructor(private readonly options: RuleSourceOptions) {}
 
@@ -76,20 +78,19 @@ export class RuleSources {
   /** Forgets the fetched contributions, and any contribution marked slow, after a plugin change. */
   invalidateContributions(): void {
     this.contributionCache = null
+    this.contributionGeneration += 1
     for (const key of [...this.timedOut.keys()]) {
       if (key.startsWith('plugin:')) this.timedOut.delete(key)
     }
   }
 
-  /** Marks the source behind `origin` as ignored until its file changes (a contribution: until the next invalidation). */
-  reportTimeout(origin: Origin): void {
-    const key = keyOf(origin)
-    if (origin.kind === 'plugin') {
-      this.timedOut.set(key, '')
-      return
-    }
-    const cached = this.files.get(key)
-    if (cached) this.timedOut.set(key, cached.signature)
+  /**
+   * Marks the source behind `origin` as ignored until its file changes (a contribution: until
+   * the next invalidation). `version` is the one `effective` returned for the evaluation that
+   * ran too long, so a newer version of the same source, which was never evaluated, is not blamed.
+   */
+  reportTimeout(origin: Origin, version: string): void {
+    this.timedOut.set(keyOf(origin), version)
   }
 
   private namesIn(dir: string): string[] {
@@ -158,11 +159,18 @@ export class RuleSources {
     const fromFile = (kind: 'user' | 'built-in', dir: string) => {
       const path = join(dir, `${agent}.json`)
       const read = this.readFile(path, agent)
-      if (read) found.push({ origin: { kind, path }, ...read })
+      if (read) found.push({ origin: { kind, path }, version: read.signature, ...read })
     }
     fromFile('user', this.options.userDir)
     const info = (await this.contributionList()).find((entry) => entry.kind === 'agent-rules' && entry.status === 'effective' && entry.name === agent)
-    if (info) found.push({ origin: { kind: 'plugin', plugin: info.plugin, contribution: info.name }, signature: '', result: parseRuleData(info.data, agent) })
+    if (info) {
+      found.push({
+        origin: { kind: 'plugin', plugin: info.plugin, contribution: info.name },
+        signature: '',
+        version: `contribution:${this.contributionGeneration}`,
+        result: parseRuleData(info.data, agent)
+      })
+    }
     fromFile('built-in', this.options.builtinDir)
     return found
   }
@@ -172,8 +180,8 @@ export class RuleSources {
     if (!AGENT_NAME.test(agent)) return { effective: null, ignored }
     for (const candidate of await this.candidates(agent)) {
       const key = keyOf(candidate.origin)
-      if (candidate.result.ok && this.timedOut.get(key) !== candidate.signature) {
-        return { effective: { set: candidate.result.file, origin: candidate.origin }, ignored }
+      if (candidate.result.ok && this.timedOut.get(key) !== candidate.version) {
+        return { effective: { set: candidate.result.file, origin: candidate.origin, version: candidate.version }, ignored }
       }
       const reason = candidate.result.ok ? TIMED_OUT_REASON : candidate.result.reason
       ignored.push({ origin: candidate.origin, reason })

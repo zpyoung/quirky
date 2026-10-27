@@ -3,6 +3,8 @@ import { RpcError, RpcErrorCode, type CliArgs, type CliContext } from '@quirky/p
 import { removeTempDirs } from '../../../packages/daemon/test/plugins/fixtures'
 import { commands } from '../cli'
 import { STALE_AFTER_MS } from '../src/model'
+import { Matcher } from '../src/rules/matcher'
+import { Waits, type WaitHost } from '../src/waits'
 import { Rig } from './support'
 
 const SCALE = 'QUIRKY_TEST_AGENT_STATUS_TIME_SCALE'
@@ -461,6 +463,39 @@ describe('SC-41: a pattern that runs too long is cut off', () => {
     rig.show(['build: 3 tests'])
     expect(await rig.waitOutput('s1', 'tests')).toMatchObject({ status: 'matched', line: 'build: 3 tests' })
   }, 15_000)
+})
+
+describe('an output wait queued behind slow matcher requests', () => {
+  test('keeps its own timeout: four pathological requests ahead of a 10 ms wait leave it pending, quickly', async () => {
+    const matcher = new Matcher({ env: { QUIRKY_TEST_AGENT_STATUS_TIME_SCALE: '0.4' } })
+    const poison = [`${'a'.repeat(30_000)}!`]
+    try {
+      const host = {
+        context: {
+          error: (code: string, message: string) => new Error(`${code}: ${message}`),
+          pty: { list: async () => [], read: async () => ({ lines: ['build: 3 tests'], cols: 80, rows: 24, alt: false }) }
+        },
+        matcher,
+        inspect: async () => {
+          throw new Error('not used')
+        },
+        session: async () => ({ id: 's1', status: 'running' }),
+        onWake: () => () => {},
+        now: () => Date.now(),
+        scale: 1
+      } as unknown as WaitHost
+      const slow = [0, 1, 2, 3].map(() => matcher.matchLines('a+a+a+a+$', false, poison))
+
+      const started = performance.now()
+      const waited = await new Waits(host).waitOutput('s1', { pattern: 'tests', ignoreCase: false, lines: 200, timeoutMs: 10 })
+
+      expect(waited.status).toBe('pending')
+      expect(performance.now() - started).toBeLessThan(150)
+      await Promise.all(slow)
+    } finally {
+      matcher.dispose()
+    }
+  }, 10_000)
 })
 
 describe('parameters', () => {

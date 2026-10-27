@@ -15,6 +15,10 @@ const ENTRY = fileURLToPath(new URL('./matcher-worker.ts', import.meta.url))
 
 export type TimedOut = { timedOut: true }
 export type Unavailable = { unavailable: string }
+/** The caller's deadline passed while the request was still queued; it was never run. */
+export type Expired = { expired: true }
+
+const EXPIRED: Expired = { expired: true }
 
 /** The per-request budget: 250 ms times a positive `QUIRKY_TEST_AGENT_STATUS_TIME_SCALE`. */
 export function budgetFrom(env: Record<string, string | undefined>): number {
@@ -22,7 +26,7 @@ export function budgetFrom(env: Record<string, string | undefined>): number {
   return BASE_BUDGET_MS * (Number.isFinite(scale) && scale > 0 ? scale : 1)
 }
 
-type Reply = { result: unknown } | TimedOut | Unavailable
+type Reply = { result: unknown } | TimedOut | Unavailable | Expired
 type Waiter = { id: number; settle: (reply: Reply) => void }
 type Child = ReturnType<typeof Bun.spawn>
 
@@ -34,8 +38,10 @@ export type MatcherOptions = {
 
 /**
  * Evaluates rule files and wait patterns in one long-lived child process, one request at a time.
- * Every method answers with `{ timedOut: true }` when the budget ran out or `{ unavailable }`
- * when the process could not run; none of them throws.
+ * Every method answers with `{ timedOut: true }` when the budget ran out, `{ unavailable }`
+ * when the process could not run, or `{ expired: true }` when its `deadline` (epoch ms) passed
+ * while it still waited its turn; none of them throws. A request already running is not cut
+ * short by its deadline, only by the budget.
  */
 export class Matcher {
   private readonly budgetMs: number
@@ -54,13 +60,13 @@ export class Matcher {
   }
 
   /** Runs `file` against `input`. */
-  evaluate(file: RuleFile, input: EvaluateInput, origin: Origin): Promise<Evaluation | TimedOut | Unavailable> {
-    return this.request((id) => ({ id, op: 'evaluate', file, input, origin })) as Promise<Evaluation | TimedOut | Unavailable>
+  evaluate(file: RuleFile, input: EvaluateInput, origin: Origin, deadline?: number): Promise<Evaluation | TimedOut | Unavailable | Expired> {
+    return this.request((id) => ({ id, op: 'evaluate', file, input, origin }), deadline) as Promise<Evaluation | TimedOut | Unavailable | Expired>
   }
 
   /** The newest of `lines` matching `pattern`; the caller screens the pattern with `unsafePatternReason` first. */
-  matchLines(pattern: string, ignoreCase: boolean, lines: string[]): Promise<LineMatch | null | TimedOut | Unavailable> {
-    return this.request((id) => ({ id, op: 'line', pattern, ignoreCase, lines })) as Promise<LineMatch | null | TimedOut | Unavailable>
+  matchLines(pattern: string, ignoreCase: boolean, lines: string[], deadline?: number): Promise<LineMatch | null | TimedOut | Unavailable | Expired> {
+    return this.request((id) => ({ id, op: 'line', pattern, ignoreCase, lines }), deadline) as Promise<LineMatch | null | TimedOut | Unavailable | Expired>
   }
 
   /** Stops the matcher process; later calls report it unavailable. */
@@ -71,10 +77,28 @@ export class Matcher {
     this.kill()
   }
 
-  private async request(build: (id: number) => MatcherRequest): Promise<unknown> {
-    const run = this.tail.then(() => this.execute(build))
+  private async request(build: (id: number) => MatcherRequest, deadline?: number): Promise<unknown> {
+    let started = false
+    let abandoned = false
+    const run = this.tail.then((): Reply | Promise<Reply> => {
+      if (abandoned || (deadline !== undefined && Date.now() >= deadline)) return EXPIRED
+      started = true
+      return this.execute(build)
+    })
     this.tail = run.catch(() => undefined)
-    const reply = await run
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const expiry =
+      deadline === undefined
+        ? null
+        : new Promise<Reply>((resolve) => {
+            timer = setTimeout(() => {
+              if (started) return
+              abandoned = true
+              resolve(EXPIRED)
+            }, Math.max(0, deadline - Date.now()))
+          })
+    const reply = await (expiry === null ? run : Promise.race([run, expiry]))
+    clearTimeout(timer)
     return 'result' in reply ? reply.result : reply
   }
 
@@ -170,19 +194,28 @@ export class Matcher {
   }
 }
 
-export type AgentEvaluation = { source: EffectiveRules | null; verdict: Verdict | null; pendingQuiet?: string; unavailable?: string }
+export type AgentEvaluation = { source: EffectiveRules | null; verdict: Verdict | null; pendingQuiet?: string; unavailable?: string; expired?: true }
 
 /**
  * Evaluates `agent`'s effective rules and, when a source's patterns run too long, marks that
  * source ignored and falls through to the next one. `source` is the set the answer came from.
+ * With a `deadline` (epoch ms), a request still queued behind others when it passes comes back
+ * `expired` with no verdict.
  */
-export async function evaluateForAgent(sources: RuleSources, matcher: Matcher, agent: string, input: EvaluateInput): Promise<AgentEvaluation> {
+export async function evaluateForAgent(
+  sources: RuleSources,
+  matcher: Matcher,
+  agent: string,
+  input: EvaluateInput,
+  deadline?: number
+): Promise<AgentEvaluation> {
   for (let attempt = 0; attempt < 4; attempt += 1) {
     const source = await sources.effective(agent)
     if (source === null) return { source: null, verdict: null }
-    const result = await matcher.evaluate(source.set, input, source.origin)
+    const result = await matcher.evaluate(source.set, input, source.origin, deadline)
+    if ('expired' in result) return { source, verdict: null, expired: true }
     if ('timedOut' in result) {
-      sources.reportTimeout(source.origin)
+      sources.reportTimeout(source.origin, source.version)
       continue
     }
     if ('unavailable' in result) return { source, verdict: null, unavailable: result.unavailable }

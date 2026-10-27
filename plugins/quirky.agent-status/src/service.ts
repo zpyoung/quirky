@@ -265,22 +265,27 @@ export class AgentStatusService {
   /**
    * Looks a session up by ID or name and reads its row and screen rules into a script state.
    * `at` (default now) is the time the row's freshness is judged at; the screen is always read live.
-   * The row is taken after the screen has been read, so a hook that committed meanwhile counts.
+   * The session and row are taken again after the screen has been read, so a hook that committed
+   * or an exit that happened meanwhile counts.
    * A `deadline` (epoch ms) keeps the read from waiting for screen quiet past it.
    * Rejects `not-found` for an unknown session and `invalid-params` for one without a terminal.
    */
   async inspect(ref: string, at?: number, deadline?: number): Promise<Inspection> {
-    const session = await this.requireSession(ref)
+    let session = await this.requireSession(ref)
     const read = (agent: string) =>
       session.status === 'exited' ? this.unreadScreen(agent) : readScreen(this.screen, session.id, agent, deadline)
+    const refresh = async () => {
+      session = (await this.findSession(session.id)) ?? session
+      return this.rows.get(session.id) ?? null
+    }
     let agent = this.rows.get(session.id)?.agent ?? session.agent
     let reading = await read(agent)
-    let row = this.rows.get(session.id) ?? null
+    let row = await refresh()
     const newest = row?.agent ?? session.agent
     if (newest !== agent) {
       agent = newest
       reading = await read(agent)
-      row = this.rows.get(session.id) ?? null
+      row = await refresh()
     }
     const now = at ?? this.now()
     return { session, row, reading, result: scriptState({ session, row, verdict: reading.verdict, now }), now }

@@ -83,18 +83,21 @@ export class Sender {
     const agent = first.session.agent === 'shell' ? (first.row?.agent ?? 'shell') : first.session.agent
     if (agent === 'shell') throw this.fail('not-an-agent', `session ${sessionId} runs a shell, not an agent; nothing was typed`)
     if (first.result.state === 'blocked') throw this.fail('agent-blocked', blockedMessage(first, false))
-    const wasWorking = first.result.state === 'working'
 
-    const { plan, known } = await this.planFor(agent, text)
-    // an Enter written with the paste must not be followed by a retry nobody re-checks
-    const deliverEnter = known && plan.enterWithPaste && plan.retryMs === null
-    const pasteEnter = plan.enterWithPaste && !deliverEnter
-    const withEnter = deliverEnter || pasteEnter
+    const plan = await this.planFor(agent, text)
+    if (!(await this.alive(sessionId))) throw this.fail('session-exited', `session ${sessionId} ended before the text could be typed`)
+    // the last look comes after every other await, and the write follows it with none in between
+    const fresh = await this.look(sessionId)
+    if (fresh.result.state === 'exited') throw this.fail('session-exited', `session ${sessionId} exited before the text was typed`)
+    if (fresh.result.state === 'blocked') throw this.fail('agent-blocked', blockedMessage(fresh, false))
+    const wasWorking = fresh.result.state === 'working'
+
+    const withEnter = plan.enterWithPaste
     let enterAt = this.host.now()
-    // a delivery that carries the Enter can see the whole turn go by before it returns, so the watch starts before it
+    // a turn can run to its end before the first look after the write, so the watch starts before it
     let watch = withEnter ? this.watch(sessionId, enterAt) : null
     try {
-      await this.paste(sessionId, agent, text, known, deliverEnter, pasteEnter)
+      this.write(sessionId, bracketedPaste(text) + (withEnter ? '\r' : ''))
 
       if (!withEnter) {
         await Bun.sleep(plan.delayMs)
@@ -130,28 +133,23 @@ export class Sender {
     }
   }
 
-  private async planFor(agent: string, text: string): Promise<{ plan: SubmitPlan; known: boolean }> {
-    const scale = this.host.scale
+  /** Whether the PTY host still has the session's process; true when it cannot say, since a write to a dead one fails by itself. */
+  private async alive(sessionId: string): Promise<boolean> {
     try {
-      const plan = (await this.host.context.call('quirky.agents/submitPlan', { agent, text })) as SubmitPlan
-      return {
-        known: true,
-        plan: { enterWithPaste: plan.enterWithPaste, delayMs: plan.delayMs * scale, retryMs: plan.retryMs === null ? null : plan.retryMs * scale }
-      }
+      return (await this.host.context.pty.list()).some((info) => info.sessionId === sessionId && info.alive)
     } catch {
-      return { known: false, plan: { ...UNKNOWN_AGENT_PLAN, delayMs: UNKNOWN_AGENT_PLAN.delayMs * scale } }
+      return true
     }
   }
 
-  private async paste(sessionId: string, agent: string, text: string, known: boolean, deliverEnter: boolean, pasteEnter: boolean): Promise<void> {
-    if (!known || pasteEnter) {
-      this.write(sessionId, bracketedPaste(text) + (pasteEnter ? '\r' : ''))
-      return
+  private async planFor(agent: string, text: string): Promise<SubmitPlan> {
+    const scale = this.host.scale
+    try {
+      const plan = (await this.host.context.call('quirky.agents/submitPlan', { agent, text })) as SubmitPlan
+      return { enterWithPaste: plan.enterWithPaste, delayMs: plan.delayMs * scale, retryMs: plan.retryMs === null ? null : plan.retryMs * scale }
+    } catch {
+      return { ...UNKNOWN_AGENT_PLAN, delayMs: UNKNOWN_AGENT_PLAN.delayMs * scale }
     }
-    const outcome = (await this.host.context.call('quirky.agents/deliver', { sessionId, agent, text, submit: deliverEnter, ready: true })) as {
-      delivery: string
-    }
-    if (outcome.delivery === 'not-delivered') throw this.fail('session-exited', `session ${sessionId} ended before the text could be typed`)
   }
 
   /** Reads every row commit of the session from now on, since one can come and go between two looks. */
