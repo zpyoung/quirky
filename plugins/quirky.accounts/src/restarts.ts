@@ -1,7 +1,7 @@
 import { existsSync } from 'node:fs'
 import { isAbsolute } from 'node:path'
 import type { PluginContext } from '@quirky/protocol'
-import type { ManagedProvider } from './types'
+import { CodexHistoryError } from './codex-history'
 
 export type SessionView = {
   id: string
@@ -44,7 +44,8 @@ export async function sessionIsAlive(context: PluginContext, sessionId: string):
 export async function restartSession(
   context: PluginContext,
   sessionId: string,
-  provider: ManagedProvider
+  provider: ManagedProvider,
+  options?: { preflightResume?: (old: SessionView) => Promise<void> }
 ): Promise<RestartOutcome> {
   const old = await readSession(context, sessionId)
   if (!old || old.kind !== 'terminal' || old.agent !== provider || !old.providerSession?.id) {
@@ -62,6 +63,21 @@ export async function restartSession(
 
   const alive = await sessionIsAlive(context, sessionId)
   if (alive === null) return failed(sessionId)
+
+  if (options?.preflightResume) {
+    try {
+      await options.preflightResume(old)
+    } catch (error) {
+      return {
+        sessionId,
+        resumedSessionId: null,
+        error: error instanceof CodexHistoryError
+          ? error.message
+          : 'Codex conversation preparation failed before the old process was stopped. Verify the source rollout and selected account, then retry.'
+      }
+    }
+  }
+
   if (alive) {
     try {
       await killAndWait(context, sessionId)
@@ -74,7 +90,9 @@ export async function restartSession(
   try {
     resumed = parseSession(await context.call('quirky.session/resume', { session: sessionId }))
   } catch {
-    return failed(sessionId)
+    return provider === 'codex'
+      ? failedCodexResume(sessionId)
+      : failed(sessionId)
   }
   if (!resumed) resumed = await findResumedSession(context, sessionId)
   if (
@@ -82,7 +100,7 @@ export async function restartSession(
     resumed.resumedFrom !== old.id ||
     resumed.cwd !== old.cwd ||
     resumed.providerSession?.id !== old.providerSession.id
-  ) return failed(sessionId)
+  ) return provider === 'codex' ? failedCodexResume(sessionId) : failed(sessionId)
 
   try {
     await context.call('quirky.session/close', { session: sessionId })
@@ -180,4 +198,12 @@ function nonempty(value: unknown): string | null {
 
 function failed(sessionId: string): RestartOutcome {
   return { sessionId, resumedSessionId: null, error: 'The session cannot be resumed safely. Keep it on the previous account or retry after it becomes available.' }
+}
+
+function failedCodexResume(sessionId: string): RestartOutcome {
+  return {
+    sessionId,
+    resumedSessionId: null,
+    error: 'Codex resume did not complete; the previous session record was kept. Verify the source rollout and target sessions folder, then retry.'
+  }
 }

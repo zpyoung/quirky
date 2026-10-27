@@ -5,8 +5,8 @@ import { HOOK_PATH_PREFIX, HOOK_TOKEN_HEADER, RpcErrorCode } from '@quirky/proto
 import type { AccountPrepareResult, AccountState, AccountUiState, ManagedProvider, PendingLogin } from '../src/types'
 import type { ProviderSnapshot, ResetCreditExpectedScope, UsageState } from '../src/usage/types'
 import type { AccountsHarness } from './support/index'
-import { cleanupAll, defaultHome, startAccounts, waitForAsync } from './support/index'
-import { interceptProviderFetch, restartAccounts, restoreProviderFetchFixtures, writeAntigravityCli, writeCursorCliCredential, writePrivateJson, type RestartedAccounts } from './acceptance-fixtures'
+import { commands } from '../cli'
+import { cleanupAll, defaultHome, startAccounts, testCli, waitForAsync } from './support/index'
 
 const nativeDateNow = Date.now
 const originalAppData = process.env.APPDATA
@@ -598,5 +598,110 @@ describe('quirky.accounts daemon API acceptance', () => {
       shellInit: null,
       account: { provider: 'codex', id: null, label: 'Third-party preparation', source: 'custom' }
     })
+  })
+
+  test('prepare exposes exact optional resume metadata and the CLI forwards its JSON flag', async () => {
+    const h = await startAccounts()
+    type Manifest = {
+      contributes: {
+        method: { id: string; params?: { properties?: Record<string, unknown> }; result?: { properties?: Record<string, unknown>; required?: string[] } }[]
+        'cli-command': { id: string; flags?: Record<string, unknown> }[]
+      }
+    }
+    const manifest = JSON.parse(readFileSync(join(import.meta.dir, '../quirky-plugin.json'), 'utf8')) as Manifest
+    const prepareMethod = manifest.contributes.method.find((method) => method.id === 'prepare')
+    const resumeSchema = prepareMethod?.params?.properties?.resume as {
+      type?: string
+      required?: string[]
+      additionalProperties?: boolean
+      properties?: Record<string, unknown>
+    } | undefined
+    expect(resumeSchema).toMatchObject({
+      type: 'object',
+      required: ['sourceSessionId', 'providerSession'],
+      additionalProperties: false
+    })
+    const providerSessionSchema = resumeSchema?.properties?.providerSession as {
+      type?: string
+      required?: string[]
+      additionalProperties?: boolean
+      properties?: Record<string, unknown>
+    } | undefined
+    expect(providerSessionSchema).toMatchObject({
+      type: 'object',
+      required: ['id', 'transcriptPath'],
+      additionalProperties: false
+    })
+    const resultSchema = prepareMethod?.result
+    expect(resultSchema?.properties?.resumeTranscriptPath).toMatchObject({
+      type: 'string',
+      description: expect.any(String)
+    })
+    expect(resultSchema?.required).not.toContain('resumeTranscriptPath')
+    const prepareCommand = manifest.contributes['cli-command'].find((command) => command.id === 'prepare')
+    expect(prepareCommand?.flags?.resume).toMatchObject({
+      type: 'json',
+      description: expect.any(String)
+    })
+
+    const resume = {
+      sourceSessionId: 'source-session-cli',
+      providerSession: { id: 'claude-provider-session', transcriptPath: null }
+    }
+    const cli = testCli(h.client)
+    const forwarded: Record<string, unknown>[] = []
+    const context = {
+      ...cli.ctx,
+      call: async (method: string, params: Record<string, unknown> = {}) => {
+        if (method === 'quirky.accounts/prepare') forwarded.push(params)
+        return cli.ctx.call(method, params)
+      }
+    }
+    await commands.prepare({
+      positionals: [],
+      flags: {
+        agent: 'claude',
+        'session-id': 'cli-prepare-resume',
+        'worktree-id': 'worktree-cli',
+        cwd: h.userHome,
+        'home-overrides': {
+          claude: { value: null, source: 'absent' },
+          codex: { value: null, source: 'absent' }
+        },
+        resume
+      }
+    }, context)
+    expect(forwarded[0]?.resume).toEqual(resume)
+    const codexProviderSessionId = 'f17c7d25-34d0-42a9-9f3e-5406fcae83da'
+    const codexHome = defaultHome(h.home, 'codex')
+    const codexTranscriptPath = join(
+      codexHome,
+      'sessions',
+      '2026',
+      '10',
+      '27',
+      `rollout-2026-10-27T13-15-00-${codexProviderSessionId}.jsonl`
+    )
+    mkdirSync(join(codexHome, 'sessions', '2026', '10', '27'), { recursive: true })
+    writeFileSync(codexTranscriptPath, '{"type":"session_meta","payload":{"id":"f17c7d25-34d0-42a9-9f3e-5406fcae83da"}}\n')
+    const codexCli = testCli(h.client)
+    await commands.prepare({
+      positionals: [],
+      flags: {
+        agent: 'codex',
+        'session-id': 'cli-codex-prepare-resume',
+        'worktree-id': 'worktree-cli',
+        cwd: h.userHome,
+        'home-overrides': {
+          claude: { value: null, source: 'absent' },
+          codex: { value: null, source: 'absent' }
+        },
+        resume: {
+          sourceSessionId: 'source-session-cli-codex',
+          providerSession: { id: codexProviderSessionId, transcriptPath: codexTranscriptPath }
+        }
+      }
+    }, codexCli.ctx)
+    expect(codexCli.lines[0]).toMatchObject({ resumeTranscriptPath: codexTranscriptPath })
   })
 })

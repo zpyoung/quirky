@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto'
-import { join, resolve } from 'node:path'
+import { isAbsolute, join, resolve } from 'node:path'
 import type { PluginContext, PluginStore, QuirkyEvent } from '@quirky/protocol'
 import type {
   AccountSummary,
@@ -39,6 +39,7 @@ import {
 import { AccountRouting } from './routing'
 import { AccountLoginManager, type LoginCompletion, type LoginRequest } from './login'
 import { restartSession, sessionBusy, sessionIsAlive, type RestartOutcome, type SessionView } from './restarts'
+import { CodexHistoryError, prepareCodexHistoryResume, type CodexResumeMetadata } from './codex-history'
 import type { CredentialStatus, UsageService, UsageState, UsageTarget } from './usage'
 
 type ResetCreditScope = { accountId: string | null; accountRevision: number; offerRevision: string }
@@ -385,6 +386,7 @@ export class AccountService {
   async prepare(params: Record<string, unknown>): Promise<AccountPrepareResult> {
     const input = this.readPrepareInput(params)
     if (input.agent === 'shell') {
+      if (input.resume) this.fail('invalid-params', 'Resume metadata is only valid for Claude or Codex sessions.')
       const overrides = input.homeOverrides
       const env = this.routing.shellEnvironment(overrides)
       if (overrides.claude.source === 'injected') env.CLAUDE_CONFIG_DIR = null
@@ -392,15 +394,29 @@ export class AccountService {
       return { env, shellInit: this.routing.createShellInit(), account: null }
     }
     const provider = this.providerForAgent(input.agent)
-    if (provider === null) return { env: {}, shellInit: null, account: null }
+    if (provider === null) {
+      if (input.resume) this.fail('invalid-params', 'Resume metadata is only valid for Claude or Codex sessions.')
+      return { env: {}, shellInit: null, account: null }
+    }
     const override = input.homeOverrides[provider]
     if (override.source === 'explicit') {
       if (override.value === null) {
         const home = this.unsetHome(provider)
         const identity = this.readIdentitySafely(provider, home, provider === 'claude')
         const account = this.identityFor(provider, null, identity.email ?? 'System default', 'default')
+        const resumeTranscriptPath = provider === 'codex' && input.resume
+          ? await this.bridgeCodexResume(input.resume, home, null)
+          : undefined
         this.saveSessionIdentity(input, account, home)
-        return { env: { [this.homeVariable(provider)]: null }, shellInit: null, account }
+        return {
+          env: { [this.homeVariable(provider)]: null },
+          shellInit: null,
+          account,
+          ...(resumeTranscriptPath === undefined ? {} : { resumeTranscriptPath })
+        }
+      }
+      if (provider === 'codex' && input.resume) {
+        this.fail('conflict', 'Codex conversations can only be resumed into the System default or a Quirky-managed account.')
       }
       const home = resolve(input.cwd, override.value)
       const identity = this.readIdentitySafely(provider, home, false)
@@ -413,12 +429,22 @@ export class AccountService {
     if (selectedId === null) {
       const home = override.source === 'inherited' && override.value !== null
         ? resolve(input.cwd, override.value)
-        : this.profiles.defaultHome(provider)
+        : override.source === 'injected'
+          ? this.unsetHome(provider)
+          : this.profiles.defaultHome(provider)
       const identity = this.readIdentitySafely(provider, home, provider === 'claude')
       const account = this.identityFor(provider, null, identity.email ?? 'System default', 'default')
+      const resumeTranscriptPath = provider === 'codex' && input.resume
+        ? await this.bridgeCodexResume(input.resume, home, null)
+        : undefined
       this.saveSessionIdentity(input, account, home)
       const env = override.source === 'injected' ? { [this.homeVariable(provider)]: null } : {}
-      return { env, shellInit: null, account }
+      return {
+        env,
+        shellInit: null,
+        account,
+        ...(resumeTranscriptPath === undefined ? {} : { resumeTranscriptPath })
+      }
     }
     const account = getAccount(this.store, selectedId)
     if (!account || account.provider !== provider) this.fail('conflict', `The selected ${provider} account is unavailable; no fallback account was used.`)
@@ -434,10 +460,18 @@ export class AccountService {
       this.markNeedsSignIn(account)
       this.fail('conflict', `Sign in to the selected ${provider} account again before launching it.`)
     }
+    const resumeTranscriptPath = provider === 'codex' && input.resume
+      ? await this.bridgeCodexResume(input.resume, home, selectedId)
+      : undefined
     if (provider === 'codex') this.syncCodexConfigWarning(account.id)
     const accountIdentity = this.identityFor(provider, account.id, account.label, 'managed')
     this.saveSessionIdentity(input, accountIdentity, home)
-    return { env: { [this.homeVariable(provider)]: home }, shellInit: null, account: accountIdentity }
+    return {
+      env: { [this.homeVariable(provider)]: home },
+      shellInit: null,
+      account: accountIdentity,
+      ...(resumeTranscriptPath === undefined ? {} : { resumeTranscriptPath })
+    }
   }
 
   async restart(params: Record<string, unknown>): Promise<AccountState> {
@@ -660,10 +694,13 @@ export class AccountService {
       this.store.run('DELETE FROM restart_intentions WHERE session_id = ?', record.sessionId)
       return { sessionId: record.sessionId, resumedSessionId: null, error: 'The selected account changed; choose restart again for the current account.' }
     }
-    const outcome = await restartSession(this.context, record.sessionId, record.provider)
+    const options = record.provider === 'codex'
+      ? { preflightResume: (old: SessionView) => this.preflightCodexRestart(old, targetId) }
+      : undefined
+    const outcome = await restartSession(this.context, record.sessionId, record.provider, options)
     this.store.run('DELETE FROM restart_intentions WHERE session_id = ?', record.sessionId)
     if (outcome.error) {
-      this.store.run('UPDATE account_sessions SET error = ?, busy = 0 WHERE session_id = ?', outcome.error, record.sessionId)
+      this.store.run('UPDATE account_sessions SET error = ? WHERE session_id = ?', outcome.error, record.sessionId)
       this.publishChanged()
       return outcome
     }
@@ -671,6 +708,33 @@ export class AccountService {
     this.publishChanged()
     return outcome
   }
+  private async preflightCodexRestart(old: SessionView, targetId: string | null): Promise<void> {
+    if (!old.providerSession) throw new CodexHistoryError('The previous Codex session has no provider conversation metadata.')
+    let targetHome: string
+    if (targetId === null) {
+      targetHome = this.profiles.defaultHome('codex')
+    } else {
+      const account = getAccount(this.store, targetId)
+      if (!account || account.provider !== 'codex') {
+        throw new CodexHistoryError('The selected Codex account is unavailable; the previous session was not stopped.')
+      }
+      let identity: ProviderIdentity
+      try {
+        targetHome = this.profiles.ensureOwned('codex', targetId)
+        identity = this.profiles.readIdentity('codex', targetHome)
+      } catch {
+        throw new CodexHistoryError('The selected Codex account home is unavailable or untrusted; the previous session was not stopped.')
+      }
+      if (!isProviderAuth(identity) || !this.identityMatchesRecord(account, identity)) {
+        throw new CodexHistoryError('Sign in to the selected Codex account before restarting this session.')
+      }
+    }
+    await this.bridgeCodexResume({
+      sourceSessionId: old.id,
+      providerSession: old.providerSession
+    }, targetHome, targetId)
+  }
+
 
 
   private async supersedeLoginsWithinMutation(): Promise<void> {
@@ -970,10 +1034,12 @@ export class AccountService {
   private readPrepareInput(params: Record<string, unknown>): PrepareInput {
     const agent = this.readNonempty(params.agent, 'agent')
     const sessionId = this.readNonempty(params.sessionId, 'sessionId')
+    if (sessionId.length > MAX_SESSION_ID) this.fail('invalid-params', 'sessionId is too long.')
     const worktreeId = this.readNonempty(params.worktreeId, 'worktreeId')
     const cwd = this.readNonempty(params.cwd, 'cwd')
     const overrides = asRecord(params.homeOverrides)
     if (!overrides) this.fail('invalid-params', 'homeOverrides is required.')
+    const resume = params.resume === undefined ? undefined : this.readResume(params.resume)
     return {
       agent,
       sessionId,
@@ -982,8 +1048,97 @@ export class AccountService {
       homeOverrides: {
         claude: this.readHomeOverride(overrides.claude, 'claude'),
         codex: this.readHomeOverride(overrides.codex, 'codex')
+      },
+      ...(resume === undefined ? {} : { resume })
+    }
+  }
+
+  private readResume(value: unknown): NonNullable<PrepareInput['resume']> {
+    const resume = asRecord(value)
+    if (!resume || !hasExactKeys(resume, ['sourceSessionId', 'providerSession'])) {
+      this.fail('invalid-params', 'resume must contain only sourceSessionId and providerSession.')
+    }
+    const sourceSessionId = this.readNonempty(resume.sourceSessionId, 'resume.sourceSessionId')
+    if (sourceSessionId.length > MAX_SESSION_ID) this.fail('invalid-params', 'resume.sourceSessionId is too long.')
+    const providerSession = asRecord(resume.providerSession)
+    if (!providerSession || !hasExactKeys(providerSession, ['id', 'transcriptPath'])) {
+      this.fail('invalid-params', 'resume.providerSession must contain only id and transcriptPath.')
+    }
+    const id = this.readNonempty(providerSession.id, 'resume.providerSession.id')
+    const transcriptPath = providerSession.transcriptPath === null
+      ? null
+      : this.readNonempty(providerSession.transcriptPath, 'resume.providerSession.transcriptPath')
+    return { sourceSessionId, providerSession: { id, transcriptPath } }
+  }
+
+  private async bridgeCodexResume(
+    resume: CodexResumeMetadata,
+    targetHome: string,
+    targetAccountId: string | null
+  ): Promise<string> {
+    if (targetAccountId === null) {
+      if (!this.codexSystemHomes().some((home) => resolve(home) === resolve(targetHome))) {
+        this.fail('conflict', 'Codex conversations can only be resumed into the System default or a Quirky-managed account.')
+      }
+    } else {
+      let ownedHome: string
+      try {
+        ownedHome = this.profiles.ensureOwned('codex', targetAccountId)
+      } catch {
+        this.fail('conflict', 'The selected Codex account home is unavailable or untrusted; no fallback account was used.')
+      }
+      if (resolve(ownedHome) !== resolve(targetHome)) {
+        this.fail('conflict', 'Codex resume target does not match the selected managed account.')
       }
     }
+    const sourceHomes = this.codexResumeSourceHomes(resume.sourceSessionId)
+    try {
+      return await prepareCodexHistoryResume({ resume, sourceHomes, targetHome })
+    } catch (error) {
+      if (error instanceof CodexHistoryError) this.fail('conflict', error.message)
+      this.fail('conflict', 'The Codex conversation could not be prepared safely. Verify the source rollout and target sessions folder, then retry.')
+    }
+  }
+
+  private codexResumeSourceHomes(sourceSessionId: string): string[] {
+    const source = getSessionRecord(this.store, sourceSessionId)
+    const systemHomes = this.codexSystemHomes()
+    if (source) {
+      if (source.provider !== 'codex' || source.agent !== 'codex') {
+        this.fail('conflict', 'The recorded source session is not a Codex session.')
+      }
+      if (source.source === 'managed') {
+        if (!source.accountId) this.fail('conflict', 'The recorded Codex source account is unavailable or untrusted.')
+        let home: string
+        try {
+          home = this.profiles.ensureOwned('codex', source.accountId)
+        } catch {
+          this.fail('conflict', 'The recorded Codex source account is unavailable or untrusted.')
+        }
+        if (!isAbsolute(source.home) || resolve(source.home) !== resolve(home)) {
+          this.fail('conflict', 'The recorded Codex source home no longer matches its managed account.')
+        }
+        return [home]
+      }
+      if (source.source === 'default' && source.accountId === null && isAbsolute(source.home)) {
+        return [source.home]
+      }
+      this.fail('conflict', 'The recorded Codex source home is not a trusted System default or managed account.')
+    }
+
+    const homes = [...systemHomes]
+    for (const account of listAccountRecords(this.store, 'codex')) {
+      try {
+        homes.push(this.profiles.ensureOwned('codex', account.id))
+      } catch {
+        // An unavailable profile is not a trusted source candidate.
+      }
+    }
+    return homes
+  }
+
+  private codexSystemHomes(): string[] {
+    return [...new Set([this.profiles.defaultHome('codex'), this.unsetHome('codex')].map((home) => resolve(home)))]
   }
 
   private readHomeOverride(value: unknown, provider: ManagedProvider): PrepareInput['homeOverrides'][ManagedProvider] {
@@ -1235,6 +1390,9 @@ function parseSessionSnapshot(value: unknown): SessionView | null {
 
 function asRecord(value: unknown): Record<string, unknown> | null {
   return typeof value === 'object' && value !== null && !Array.isArray(value) ? value as Record<string, unknown> : null
+}
+function hasExactKeys(record: Record<string, unknown>, keys: readonly string[]): boolean {
+  return Object.keys(record).length === keys.length && keys.every((key) => Object.prototype.hasOwnProperty.call(record, key))
 }
 
 function safeMessage(error: unknown, fallback: string): string {

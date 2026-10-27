@@ -1,9 +1,9 @@
 import { afterEach, describe, expect, test } from 'bun:test'
-import { existsSync, readFileSync, mkdirSync, writeFileSync } from 'node:fs'
+import { existsSync, readFileSync, mkdirSync, symlinkSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { RpcErrorCode } from '@quirky/protocol'
 import { commands } from '../cli'
-import type { AccountState, ManagedProvider, PendingLogin } from '../src/types'
+import type { AccountPrepareResult, AccountState, ManagedProvider, PendingLogin } from '../src/types'
 import type { AccountsHarness } from './support/index'
 import { cleanupAll, defaultHome, startAccounts, testCli, waitForAsync } from './support/index'
 
@@ -25,6 +25,31 @@ async function add(h: AccountsHarness, provider: ManagedProvider, label?: string
     ...(label === undefined ? {} : { label })
   })
   return finishLogin(h, pending)
+}
+
+const CODEX_PROVIDER_SESSION_ID = '8db472c0-f25c-49de-8c13-40e5f21b5740'
+const CODEX_OTHER_SESSION_ID = 'a6e3e4dd-79bb-4a9d-8b77-8ce098320bc1'
+
+function codexRolloutPath(home: string, id = CODEX_PROVIDER_SESSION_ID): string {
+  return join(home, 'sessions', '2026', '10', '27', `rollout-2026-10-27T13-15-00-${id}.jsonl`)
+}
+
+function codexPrepareArgs(
+  h: AccountsHarness,
+  sessionId: string,
+  resume?: { sourceSessionId: string; providerSession: { id: string; transcriptPath: string | null } }
+) {
+  return {
+    agent: 'codex',
+    sessionId,
+    worktreeId: 'worktree-codex-resume',
+    cwd: h.userHome,
+    homeOverrides: {
+      claude: { value: null, source: 'absent' },
+      codex: { value: null, source: 'absent' }
+    },
+    ...(resume === undefined ? {} : { resume })
+  }
 }
 
 describe('quirky.accounts lifecycle API and CLI', () => {
@@ -228,5 +253,208 @@ describe('quirky.accounts lifecycle API and CLI', () => {
     expect(securityLog).toContain('delete-generic-password')
     expect(securityLog).not.toContain('Claude Code-credentials\n')
     expect(securityLog).not.toContain('fixture-claude-token')
+  })
+
+  test('Codex resume finds a pathless conversation from its recorded source session and copies its rollout', async () => {
+    const h = await startAccounts()
+    const first = await add(h, 'codex', 'source@example.test')
+    const second = await add(h, 'codex', 'target@example.test')
+    const sourceId = first.result?.id ?? ''
+    const targetId = second.result?.id ?? ''
+    await call(h.client, 'quirky.accounts/select', { provider: 'codex', accountId: sourceId })
+    await call(h.client, 'quirky.accounts/prepare', codexPrepareArgs(h, 'recorded-source-session'))
+
+    const sourceHome = h.managedHome('codex', sourceId)
+    const sourcePath = codexRolloutPath(sourceHome)
+    const conversation = [
+      JSON.stringify({ type: 'session_meta', payload: { id: CODEX_PROVIDER_SESSION_ID } }),
+      '{"type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"recorded source conversation"}]}}'
+    ].join('\n') + '\n'
+    mkdirSync(join(sourceHome, 'sessions', '2026', '10', '27'), { recursive: true })
+    writeFileSync(sourcePath, conversation)
+
+    await call(h.client, 'quirky.accounts/select', { provider: 'codex', accountId: targetId })
+    const prepared = await call<AccountPrepareResult>(
+      h.client,
+      'quirky.accounts/prepare',
+      codexPrepareArgs(h, 'resumed-session', {
+        sourceSessionId: 'recorded-source-session',
+        providerSession: { id: CODEX_PROVIDER_SESSION_ID, transcriptPath: null }
+      })
+    )
+
+    expect(prepared.env.CODEX_HOME).toBe(h.managedHome('codex', targetId))
+    expect(prepared.resumeTranscriptPath).toBe(codexRolloutPath(h.managedHome('codex', targetId)))
+    expect(readFileSync(codexRolloutPath(h.managedHome('codex', targetId)), 'utf8')).toBe(conversation)
+  })
+
+  test('Codex resume targets the real System default when an injected CODEX_HOME is cleared', async () => {
+    const h = await startAccounts()
+    const injectedHome = join(h.userHome, 'injected-codex-home')
+    process.env.CODEX_HOME = injectedHome
+    const systemHome = defaultHome(h.home, 'codex')
+    const sourcePath = codexRolloutPath(systemHome)
+    const conversation = 'System default Codex rollout\n'
+    mkdirSync(join(systemHome, 'sessions', '2026', '10', '27'), { recursive: true })
+    writeFileSync(sourcePath, conversation)
+
+    const prepared = await call<AccountPrepareResult>(h.client, 'quirky.accounts/prepare', {
+      ...codexPrepareArgs(h, 'system-default-resume', {
+        sourceSessionId: 'untracked-system-session',
+        providerSession: { id: CODEX_PROVIDER_SESSION_ID, transcriptPath: sourcePath }
+      }),
+      homeOverrides: {
+        claude: { value: null, source: 'absent' },
+        codex: { value: null, source: 'injected' }
+      }
+    })
+
+    expect(prepared.env.CODEX_HOME).toBeNull()
+    expect(prepared.resumeTranscriptPath).toBe(sourcePath)
+    expect(existsSync(join(injectedHome, 'sessions'))).toBe(false)
+    expect(readFileSync(sourcePath, 'utf8')).toBe(conversation)
+  })
+
+  test('Codex resume continues from the prepared target after the original profile is removed', async () => {
+    const h = await startAccounts()
+    const first = await add(h, 'codex', 'source@example.test')
+    const second = await add(h, 'codex', 'middle@example.test')
+    const third = await add(h, 'codex', 'next@example.test')
+    const sourceId = first.result?.id ?? ''
+    const middleId = second.result?.id ?? ''
+    const nextId = third.result?.id ?? ''
+
+    await call(h.client, 'quirky.accounts/select', { provider: 'codex', accountId: sourceId })
+    await call(h.client, 'quirky.accounts/prepare', codexPrepareArgs(h, 'source-session-a'))
+    const sourceHome = h.managedHome('codex', sourceId)
+    const sourcePath = codexRolloutPath(sourceHome)
+    const conversation = [
+      JSON.stringify({ type: 'session_meta', payload: { id: CODEX_PROVIDER_SESSION_ID } }),
+      '{"type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"conversation continues after the original profile is removed"}]}}'
+    ].join('\n') + '\n'
+    mkdirSync(join(sourceHome, 'sessions', '2026', '10', '27'), { recursive: true })
+    writeFileSync(sourcePath, conversation)
+
+    await call(h.client, 'quirky.accounts/select', { provider: 'codex', accountId: middleId })
+    const resumedB = await call<AccountPrepareResult>(
+      h.client,
+      'quirky.accounts/prepare',
+      codexPrepareArgs(h, 'resumed-session-b', {
+        sourceSessionId: 'source-session-a',
+        providerSession: { id: CODEX_PROVIDER_SESSION_ID, transcriptPath: sourcePath }
+      })
+    )
+    const pathB = resumedB.resumeTranscriptPath
+    if (!pathB) throw new Error('Codex resume did not return its prepared target transcript path')
+    expect(readFileSync(pathB, 'utf8')).toBe(conversation)
+
+    const refused = await h.client.callAny('quirky.accounts/remove', { provider: 'codex', accountId: sourceId })
+      .then(() => null, (error: unknown) => error as { data?: { askId?: string } })
+    const askId = refused?.data?.askId
+    if (!askId) throw new Error('Codex account removal did not request confirmation')
+    await h.client.callAny('quirky.ask/answer', { askId, answers: { confirm: { value: true, source: 'input' } } })
+    await h.client.callAny('quirky.accounts/remove', { provider: 'codex', accountId: sourceId, confirmation: askId })
+    expect(existsSync(sourcePath)).toBe(false)
+
+    await call(h.client, 'quirky.accounts/select', { provider: 'codex', accountId: nextId })
+    const resumedC = await call<AccountPrepareResult>(
+      h.client,
+      'quirky.accounts/prepare',
+      codexPrepareArgs(h, 'resumed-session-c', {
+        sourceSessionId: 'resumed-session-b',
+        providerSession: { id: CODEX_PROVIDER_SESSION_ID, transcriptPath: pathB }
+      })
+    )
+    const pathC = resumedC.resumeTranscriptPath
+    if (!pathC) throw new Error('Codex resume did not return the next target transcript path')
+    expect(pathC).toBe(codexRolloutPath(h.managedHome('codex', nextId)))
+    expect(readFileSync(pathC, 'utf8')).toBe(conversation)
+  })
+
+  test('Codex resume rejects missing, untrusted, traversing, symlinked, non-rollout, and mismatched transcripts without falling back', async () => {
+    const h = await startAccounts()
+    const first = await add(h, 'codex', 'source@example.test')
+    const second = await add(h, 'codex', 'target@example.test')
+    const sourceId = first.result?.id ?? ''
+    const targetId = second.result?.id ?? ''
+    await call(h.client, 'quirky.accounts/select', { provider: 'codex', accountId: sourceId })
+    await call(h.client, 'quirky.accounts/prepare', codexPrepareArgs(h, 'recorded-source-session'))
+
+    const sourceHome = h.managedHome('codex', sourceId)
+    const targetHome = h.managedHome('codex', targetId)
+    const sourceDir = join(sourceHome, 'sessions', '2026', '10', '27')
+    const targetPath = codexRolloutPath(targetHome)
+    const decoy = 'target-only conversation; must not be resumed\n'
+    mkdirSync(sourceDir, { recursive: true })
+    mkdirSync(join(h.userHome, 'sessions', '2026', '10', '27'), { recursive: true })
+    mkdirSync(join(targetHome, 'sessions', '2026', '10', '27'), { recursive: true })
+    writeFileSync(targetPath, decoy)
+
+    const validSource = codexRolloutPath(sourceHome)
+    const otherSource = codexRolloutPath(sourceHome, CODEX_OTHER_SESSION_ID)
+    writeFileSync(otherSource, 'a different provider session\n')
+    symlinkSync(otherSource, validSource)
+    const nonRollout = join(sourceDir, 'not-a-rollout.jsonl')
+    writeFileSync(nonRollout, 'not a Codex rollout\n')
+    const untrusted = codexRolloutPath(h.userHome)
+    writeFileSync(untrusted, 'valid-looking rollout outside trusted homes\n')
+    const traversal = `${sourceHome}/sessions/2026/10/27/../27/${validSource.split(/[\\/]/).pop()}`
+    const missing = join(sourceDir, `rollout-2026-10-27T14-00-00-${CODEX_PROVIDER_SESSION_ID}.jsonl`)
+
+    await call(h.client, 'quirky.accounts/select', { provider: 'codex', accountId: targetId })
+    for (const transcriptPath of [missing, untrusted, traversal, validSource, nonRollout, otherSource]) {
+      const rejected = await h.client.callAny('quirky.accounts/prepare', codexPrepareArgs(h, 'rejected-resume', {
+        sourceSessionId: 'recorded-source-session',
+        providerSession: { id: CODEX_PROVIDER_SESSION_ID, transcriptPath }
+      })).then(() => null, (error: unknown) => error as { message?: string })
+      expect(rejected?.message).toMatch(/Codex conversation|Codex rollout/i)
+      expect(readFileSync(targetPath, 'utf8')).toBe(decoy)
+    }
+    expect((await call<AccountState>(h.client, 'quirky.accounts/list')).active.codex).toBe(targetId)
+  })
+
+  test('Codex resume preserves a conflicting target rollout instead of overwriting it', async () => {
+    const h = await startAccounts()
+    const first = await add(h, 'codex', 'source@example.test')
+    const second = await add(h, 'codex', 'target@example.test')
+    const sourceId = first.result?.id ?? ''
+    const targetId = second.result?.id ?? ''
+    await call(h.client, 'quirky.accounts/select', { provider: 'codex', accountId: sourceId })
+    await call(h.client, 'quirky.accounts/prepare', codexPrepareArgs(h, 'recorded-source-session'))
+
+    const sourceHome = h.managedHome('codex', sourceId)
+    const targetHome = h.managedHome('codex', targetId)
+    const sourcePath = codexRolloutPath(sourceHome)
+    const targetPath = codexRolloutPath(targetHome)
+    const sourceContent = 'source Codex conversation\n'
+    const conflictingContent = 'a different target rollout must remain untouched\n'
+    mkdirSync(join(sourceHome, 'sessions', '2026', '10', '27'), { recursive: true })
+    mkdirSync(join(targetHome, 'sessions', '2026', '10', '27'), { recursive: true })
+    writeFileSync(sourcePath, sourceContent)
+    writeFileSync(targetPath, conflictingContent)
+
+    await call(h.client, 'quirky.accounts/select', { provider: 'codex', accountId: targetId })
+    const rejected = await h.client.callAny('quirky.accounts/prepare', codexPrepareArgs(h, 'conflicting-resume', {
+      sourceSessionId: 'recorded-source-session',
+      providerSession: { id: CODEX_PROVIDER_SESSION_ID, transcriptPath: sourcePath }
+    })).then(() => null, (error: unknown) => error as { message?: string })
+
+    expect(rejected?.message).toMatch(/Codex conversation|Codex rollout/i)
+    expect(readFileSync(sourcePath, 'utf8')).toBe(sourceContent)
+    expect(readFileSync(targetPath, 'utf8')).toBe(conflictingContent)
+  })
+
+  test('prepare rejects unknown keys in the optional resume metadata', async () => {
+    const h = await startAccounts()
+    const result = await h.client.callAny('quirky.accounts/prepare', {
+      ...codexPrepareArgs(h, 'malformed-resume'),
+      resume: {
+        sourceSessionId: 'old-session',
+        providerSession: { id: CODEX_PROVIDER_SESSION_ID, transcriptPath: null, extra: true }
+      }
+    }).then(() => null, (error: unknown) => error as { code?: number; message?: string })
+
+    expect(result).not.toBeNull()
+    expect(result?.code).toBe(RpcErrorCode.InvalidParams)
   })
 })

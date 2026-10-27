@@ -54,12 +54,10 @@ export type CodexConfigSyncResult = { kind: 'synced' } | { kind: ConfigWarning['
 export class AccountProfiles {
   readonly root: string
   private readonly dataRoot: string
-  private readonly historyRoot: string
 
   constructor(dataDir: string) {
     this.dataRoot = realpathSync.native(dataDir)
     this.root = join(this.dataRoot, 'profiles')
-    this.historyRoot = join(this.root, 'claude', 'shared-history')
     this.ensureDirectories(this.dataRoot, this.root)
   }
 
@@ -266,41 +264,48 @@ export class AccountProfiles {
   }
 
   private linkClaudeHistory(profileHome: string, defaultHome: string): void {
+    this.ensureClaudeDefaultHistoryHome(defaultHome)
     for (const entry of CLAUDE_HISTORY_DIRS) {
       const target = join(profileHome, entry)
       if (this.pathExists(target)) continue
       const source = join(defaultHome, entry)
-      let sourceIsDirectory = false
-      try {
-        const stat = lstatSync(source)
-        sourceIsDirectory = stat.isDirectory() && !stat.isSymbolicLink()
-      } catch (error) {
-        if (!isMissing(error)) throw error
+      if (!this.pathExists(source)) {
+        try {
+          mkdirSync(source, { mode: 0o700 })
+        } catch (error) {
+          if ((error as NodeJS.ErrnoException | null)?.code !== 'EEXIST') throw error
+        }
       }
-      let shared = source
-      if (!sourceIsDirectory) {
-        shared = join(this.historyRoot, entry)
-        if (!this.pathExists(shared)) this.ensureDirectories(this.historyRoot, shared)
+      const stat = lstatSync(source)
+      if (stat.isSymbolicLink() || !stat.isDirectory()) {
+        throw new Error('The System default Claude history folder is not a trusted directory.')
       }
-      symlinkSync(shared, target, 'dir')
+      symlinkSync(source, target, 'dir')
     }
+
     const historyFile = join(profileHome, 'history.jsonl')
     if (this.pathExists(historyFile)) return
     const defaultHistory = join(defaultHome, 'history.jsonl')
-    let sourceIsFile = false
-    try {
-      const stat = lstatSync(defaultHistory)
-      sourceIsFile = stat.isFile() && !stat.isSymbolicLink()
-    } catch (error) {
-      if (!isMissing(error)) throw error
+    if (!this.pathExists(defaultHistory)) {
+      try {
+        writeFileSync(defaultHistory, '', { flag: 'wx', mode: 0o600 })
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException | null)?.code !== 'EEXIST') throw error
+      }
     }
-    if (sourceIsFile) {
-      symlinkSync(defaultHistory, historyFile)
-      return
+    const historyStat = lstatSync(defaultHistory)
+    if (historyStat.isSymbolicLink() || !historyStat.isFile()) {
+      throw new Error('The System default Claude history file is not a trusted file.')
     }
-    const sharedHistory = join(this.historyRoot, 'history.jsonl')
-    if (!this.pathExists(sharedHistory)) this.writePrivateFile(sharedHistory, '')
-    symlinkSync(sharedHistory, historyFile)
+    symlinkSync(defaultHistory, historyFile)
+  }
+
+  private ensureClaudeDefaultHistoryHome(defaultHome: string): void {
+    if (!this.pathExists(defaultHome)) mkdirSync(defaultHome, { recursive: true, mode: 0o700 })
+    const stat = lstatSync(defaultHome)
+    if (stat.isSymbolicLink() || !stat.isDirectory()) {
+      throw new Error('The System default Claude home is not a trusted directory.')
+    }
   }
 
   private copyOptionalFile(source: string, target: string): void {

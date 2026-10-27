@@ -67,6 +67,48 @@ describe('quirky.accounts profile ownership and routing', () => {
       .map((name) => readFileSync(join(source, name)))).toEqual(before)
   })
 
+  test('Claude history remains shared when the first account predates default history and survives its removal', async () => {
+    const h = await startAccounts()
+    const source = defaultHome(h.home, 'claude')
+    expect(existsSync(source)).toBe(false)
+
+    const first = await add(h, 'claude', 'first-history@example.test')
+    const firstId = first.result?.id
+    if (!firstId) throw new Error('First Claude login did not return an account ID')
+    const firstHome = h.managedHome('claude', firstId)
+
+    const defaultConversation = join(source, 'projects', 'late-default-project', 'conversation.jsonl')
+    mkdirSync(join(source, 'projects', 'late-default-project'), { recursive: true })
+    const conversation = '{"type":"user","message":"conversation created after account A"}\n'
+    writeFileSync(defaultConversation, conversation)
+    expect(readFileSync(join(firstHome, 'projects', 'late-default-project', 'conversation.jsonl'), 'utf8')).toBe(conversation)
+    const systemHistory = join(source, 'history.jsonl')
+    const firstHistory = join(firstHome, 'history.jsonl')
+    const historyContent = '{"display":"shared Claude history"}\n'
+    writeFileSync(systemHistory, historyContent)
+    expect(readFileSync(firstHistory, 'utf8')).toBe(historyContent)
+
+    const second = await add(h, 'claude', 'second-history@example.test')
+    const secondId = second.result?.id
+    if (!secondId) throw new Error('Second Claude login did not return an account ID')
+    const secondConversation = join(h.managedHome('claude', secondId), 'projects', 'late-default-project', 'conversation.jsonl')
+    expect(readFileSync(secondConversation, 'utf8')).toBe(conversation)
+    expect(readFileSync(join(h.managedHome('claude', secondId), 'history.jsonl'), 'utf8')).toBe(historyContent)
+
+    const refused = await h.client.callAny('quirky.accounts/remove', { provider: 'claude', accountId: firstId })
+      .then(() => null, (error: unknown) => error as { data?: { askId?: string } })
+    const askId = refused?.data?.askId
+    if (!askId) throw new Error('Claude account removal did not request confirmation')
+    await h.client.callAny('quirky.ask/answer', { askId, answers: { confirm: { value: true, source: 'input' } } })
+    await h.client.callAny('quirky.accounts/remove', { provider: 'claude', accountId: firstId, confirmation: askId })
+
+    expect(existsSync(firstHome)).toBe(false)
+    expect(readFileSync(defaultConversation, 'utf8')).toBe(conversation)
+    expect(readFileSync(secondConversation, 'utf8')).toBe(conversation)
+    expect(readFileSync(systemHistory, 'utf8')).toBe(historyContent)
+    expect(readFileSync(join(h.managedHome('claude', secondId), 'history.jsonl'), 'utf8')).toBe(historyContent)
+  })
+
   test('preparation records actual custom identity and explicit user homes outrank selection', async () => {
     const h = await startAccounts()
     const added = await add(h, 'claude', 'managed@example.test')
