@@ -298,8 +298,9 @@ Back-links: [D6](../../../loop/decisions/m1-term-daemon.md), [D7](../../../loop/
 - **Attach replay (`subscribe` mode `screen`):** render the window before "now", then write
   `ESC[H ESC[2J` and the live `Screen.snapshot().ansi` into the scratch terminal, then serialize the
   scratch terminal with all of its scrollback rows (none are trimmed, so `historyCursor` stays
-  contiguous with the oldest replayed row), then append an absolute cursor position
-  (`ESC[<y+1>;<x+1>H` from the live cursor). `historyCursor` is the window start when older output
+  contiguous with the oldest replayed row). Nothing is appended after it: the live snapshot ends
+  with the cursor, SGR, scroll region, origin mode and pending-wrap state, and a final cursor move
+  would cancel a pending wrap (amended by D43). `historyCursor` is the window start when older output
   exists, else null. A prototype of this composition reproduced scrollback and screen exactly in
   a fresh terminal.
 
