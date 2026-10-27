@@ -1431,6 +1431,72 @@
         }
       },
       {
+        "id": "settingsOverlay",
+        "description": "Resolves the user's CLI --settings JSON and files for create or replay without launching a process or applying launch hooks.",
+        "readOnly": true,
+        "params": {
+          "type": "object",
+          "properties": {
+            "agent": {
+              "type": "string",
+              "description": "The agent ID."
+            },
+            "cwd": {
+              "type": "string",
+              "description": "Working directory used to resolve relative --settings file paths."
+            },
+            "record": {
+              "type": "object",
+              "description": "When supplied, the launch arguments from this replay record are used instead of current configuration and picks.",
+              "properties": {
+                "command": {
+                  "type": "string"
+                },
+                "args": {
+                  "type": "string"
+                },
+                "env": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              },
+              "required": [
+                "command",
+                "args",
+                "env"
+              ]
+            },
+            "model": {
+              "type": "string"
+            },
+            "options": {
+              "type": "object",
+              "additionalProperties": true
+            },
+            "extraArgs": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "agent",
+            "cwd"
+          ]
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "settings": {
+              "type": "object",
+              "additionalProperties": true
+            }
+          },
+          "required": [
+            "settings"
+          ]
+        }
+      },
+
+      {
         "id": "prepareLaunch",
         "description": "Plans a launch for quirky.session to spawn and writes the folder's trust record when workspace trust is on.",
         "params": {

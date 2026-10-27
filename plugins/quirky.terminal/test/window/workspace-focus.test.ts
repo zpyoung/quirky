@@ -1,6 +1,6 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from 'bun:test'
 import { act } from 'react'
-import { fakeDaemon, loadWorkspace, mountFixture, settle, simpleWorkspace, startRecording, stopRecording, unloadWorkspace, type MountedWorkspace } from './workspace-support'
+import { fakeDaemon, fire, loadWorkspace, mountFixture, mouse, settle, simpleWorkspace, startRecording, stopRecording, unloadWorkspace, type MountedWorkspace } from './workspace-support'
 
 let mounted: MountedWorkspace | null = null
 
@@ -50,5 +50,25 @@ describe('focus across a layout revision', () => {
     expect(document.activeElement).not.toBe(area)
     await revise(mounted)
     expect(document.activeElement).toBe(area)
+  })
+})
+
+describe('authoritative terminal focus reporting', () => {
+  test('reports the main workspace when it receives focus and keeps it when an external panel receives focus', async () => {
+    mounted = await mountFixture(fakeDaemon(simpleWorkspace()), {
+      extra: { 'quirky.terminal/focusContext': (params) => ({ workspace: params.workspace ?? null }) }
+    })
+    const pane = mounted.q('[data-pane="pane-1"]')!
+    const focusCalls = () => mounted!.fake.callsTo('quirky.terminal/focusContext').map((call) => call.params)
+    await fire(pane, mouse('mousedown', { button: 0 }))
+    expect(focusCalls().at(-1)).toEqual({ workspace: 'wt-main' })
+    expect(focusCalls().every((params) => params.workspace === 'wt-main')).toBe(true)
+
+    const panel = document.createElement('button')
+    panel.dataset.sessionInfoPanel = 'true'
+    document.body.appendChild(panel)
+    const callsBeforePanelFocus = focusCalls().length
+    await act(async () => void panel.focus())
+    expect(focusCalls()).toHaveLength(callsBeforePanelFocus)
   })
 })

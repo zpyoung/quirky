@@ -7,6 +7,7 @@ import { makeTempDir, removeTempDirs } from '../../../packages/daemon/test/plugi
 import { commands } from '../cli'
 import { waitForAsync } from '../../../packages/daemon/test/helpers'
 import { fakeAgents, resetFakeAgents } from './fakes/quirky.agents/main'
+import { CLAUDE_SETTINGS } from './fakes/quirky.agent-status/main'
 import { call, createSession, SESSION_PLUGINS, startPluginHarness, testCliContext } from './support'
 
 let h: Harness
@@ -90,7 +91,10 @@ describe('session new', () => {
     await run('new', ctx, [], { agent: 'claude', prompt: 'hi', worktree: 'id:wt_main' })
     expect(lines[0]).toEndWith('prompt: command-line')
     const request = h.pty.requests.find((r) => r.type === 'create')
-    expect(request?.type === 'create' && request.argv[3]).toContain(`exec claude '--settings' '${h.home}/hooks/claude-settings.json' 'hi'`)
+    expect(
+      request?.type === 'create' &&
+        request.argv[3]?.includes(`exec claude '--settings' '${JSON.stringify(CLAUDE_SETTINGS)}' 'hi'`)
+    ).toBe(true)
   })
 
   test('SC-18: the prompt row shows how the prompt was delivered', async () => {

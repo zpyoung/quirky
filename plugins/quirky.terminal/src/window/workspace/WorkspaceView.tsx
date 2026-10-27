@@ -13,9 +13,15 @@ export function WorkspaceView({ controller }: { controller: WorkspaceController 
   if (state.status === 'missing') return <p className="qt-muted qt-pad">Worktree not found</p>
   if (state.status === 'error') return <p className="qt-muted qt-pad">Could not load the workspace</p>
   if (!workspace || !root) return null
+  const reportFocus = () => {
+    noteFocus(controller)
+    void controller.context
+      .call('quirky.terminal/focusContext', { workspace: controller.workspaceId })
+      .catch((error) => controller.context.log(`could not report terminal focus: ${error instanceof Error ? error.message : String(error)}`))
+  }
 
   return (
-    <div className="qt-workspace" data-qt-root data-workspace={workspace.id} onFocusCapture={() => noteFocus(controller)} onMouseDownCapture={() => noteFocus(controller)}>
+    <div className="qt-workspace" data-qt-root data-workspace={workspace.id} onFocusCapture={reportFocus} onMouseDownCapture={reportFocus}>
       <GroupTree controller={controller} state={state} node={root} />
       <MenuLayer controller={controller} state={state} />
       <DialogLayer controller={controller} state={state} />
