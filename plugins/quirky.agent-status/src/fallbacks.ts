@@ -1,4 +1,5 @@
 import { newRow } from './apply'
+import { foldLead } from './fold'
 import { readableDetail, STALE_AFTER_MS } from './model'
 import { ProgramStatusRecords, projectRoot, type ProgramStatusRecord, type ProgramStatusReport } from './program-status'
 import type { TitleStatus } from './title'
@@ -91,16 +92,18 @@ export function programEvidence(prev: AgentRow | null, root: ProgramStatusRecord
   const row = prev
     ? { ...prev, lead: { ...prev.lead }, children: [...prev.children] }
     : newRow({ sessionId: ev.sessionId, source: ev.agent, at: ev.at, replay: false })
-  if (row.state !== projection.state) row.stateStartedAt = ev.at
+  const folded = foldLead(projection.state, row.children, false)
+  if (row.state !== folded.state) row.stateStartedAt = ev.at
   if (row.lead.state !== projection.state) row.lead.stateStartedAt = ev.at
-  row.state = projection.state
+  row.state = folded.state
   row.lead.state = projection.state
   if (projection.outcome) row.outcome = projection.outcome
   else delete row.outcome
   delete row.interrupted
   if (projection.sessionBoundary) row.sessionBoundary = true
   else delete row.sessionBoundary
-  delete row.workingMode
+  if (folded.workingMode) row.workingMode = folded.workingMode
+  else delete row.workingMode
   delete row.heldPermission
   delete row.stashedState
   delete row.restoredUnconfirmed

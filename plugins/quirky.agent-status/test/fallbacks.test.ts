@@ -200,6 +200,13 @@ describe('SC-23: hooks outrank OSC 7501 until they fall silent', () => {
     await waitForAsync(async () => (await rig.row())?.source === 'program-status', 2000)
     await rig.settle()
     expect(rig.settles()).toEqual([])
+    expect(await rig.row()).toMatchObject({ state: 'working', source: 'program-status', lead: { state: 'done' } })
+
+    await rig.hook('claude', { hook_event_name: 'SubagentStop', agent_id: 'a1' })
+    await rig.waitForSettles(1)
+    await rig.settle()
+    expect(rig.settles()).toMatchObject([{ state: 'done', agent: 'claude' }])
+    expect(await rig.state()).toBe('done')
   })
 
   test('an idle report is a session boundary, so the row it moves into done settles nothing', async () => {
