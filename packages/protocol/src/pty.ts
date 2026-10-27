@@ -85,6 +85,9 @@ export type PtyHistoryPage = {
   cursor: string | null
 }
 
+/** Certainty reported when an acknowledged terminal write does not accept every byte. */
+export type PtyWriteErrorCode = 'PTY_WRITE_REJECTED' | 'PTY_WRITE_UNCERTAIN'
+
 export type PtyRequest =
   | { id: number; type: 'hello'; token: string; version: number }
   | {
@@ -103,6 +106,8 @@ export type PtyRequest =
       /** Restart a stored `restorable` session of this id instead of creating a fresh one. */
       restore?: boolean
     }
+  /** Base64-encoded input whose result is acknowledged at the live child PTY write boundary. */
+  | { id: number; type: 'writeAccepted'; sessionId: string; bytes: string }
   | { id: number; type: 'resize'; sessionId: string; cols: number; rows: number }
   /** A `reason` marks the exit as requested and defaults the signal to SIGKILL. */
   | { id: number; type: 'kill'; sessionId: string; signal?: string; reason?: 'killed' }
@@ -135,6 +140,7 @@ export type PtyRequest =
 export type PtyResults = {
   hello: { version: number; pid: number }
   create: { pid: number; restored: boolean; cwd: string; cols: number; rows: number }
+  writeAccepted: Record<string, never>
   resize: Record<string, never>
   kill: Record<string, never>
   forget: Record<string, never>
@@ -152,6 +158,13 @@ export type PtyResults = {
 export type PtyResponse =
   | { id: number; ok: true; result: unknown }
   | { id: number; ok: false; error: string }
+  | {
+      id: number
+      ok: false
+      error: string
+      code: PtyWriteErrorCode
+      acceptedBytes: number | null
+    }
 
 export type PtyEvent =
   | { type: 'exit'; sessionId: string; exitCode: number | null; exitSignal: string | null; exitCause: ExitCause }

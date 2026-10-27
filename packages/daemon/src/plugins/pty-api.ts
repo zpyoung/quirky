@@ -1,5 +1,8 @@
-import type { ExitCause, PluginPty, PtyFact } from '@quirky/protocol'
+import { bytesToBase64, type ExitCause, type PluginPty, type PtyFact } from '@quirky/protocol'
 import type { PtyClient } from '../pty-client'
+
+const acceptedInputEncoder = new TextEncoder()
+const acceptedInputDecoder = new TextDecoder()
 
 type DataListener = (sessionId: string, bytes: Uint8Array) => void
 type ExitListener = (
@@ -120,6 +123,20 @@ export function createPtyApi(
       pty.sendData(sessionId, typeof data === 'string' ? new TextEncoder().encode(data) : data)
       if (fanout.input.size === 0) return
       const text = typeof data === 'string' ? data : new TextDecoder().decode(data)
+      for (const entry of [...fanout.input]) fanout.run(entry.pluginId, () => entry.listener(sessionId, text))
+    },
+    async writeAccepted(sessionId, data) {
+      if (revoked) {
+        throw Object.assign(new Error(`${pluginId} is no longer active`), {
+          code: 'PTY_WRITE_REJECTED' as const,
+          acceptedBytes: 0
+        })
+      }
+      const bytes = typeof data === 'string' ? acceptedInputEncoder.encode(data) : data
+      let text: string | null = null
+      if (fanout.input.size > 0) text = typeof data === 'string' ? data : acceptedInputDecoder.decode(data)
+      await pty.request('writeAccepted', { sessionId, bytes: bytesToBase64(bytes) })
+      if (text === null) return
       for (const entry of [...fanout.input]) fanout.run(entry.pluginId, () => entry.listener(sessionId, text))
     },
     async resize(sessionId, cols, rows) {

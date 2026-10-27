@@ -11,7 +11,7 @@ import {
   type PtySessionInfo,
   type PtySnapshot
 } from '@quirky/protocol'
-import { ShellReadyBarrier } from './barrier'
+import { makePtyWriteError, ShellReadyBarrier } from './barrier'
 import { descendantsOf } from './descendants'
 import { writeCheckpoint } from './history/checkpoint'
 import { DEFAULT_SEGMENT_BYTES, HistoryLog } from './history/log'
@@ -190,6 +190,26 @@ export class SessionManager {
   write(sessionId: string, bytes: Uint8Array): void {
     const session = this.sessions.get(sessionId)
     if (session?.alive) session.barrier.input(bytes)
+  }
+
+  /** Waits until all input bytes reach the child PTY write boundary. */
+  writeAccepted(sessionId: string, bytes: Uint8Array): Promise<void> {
+    if (this.stopping) {
+      return Promise.reject(makePtyWriteError('PTY_WRITE_REJECTED', 0, SHUTTING_DOWN))
+    }
+    const session = this.sessions.get(sessionId)
+    if (
+      !session ||
+      !session.alive ||
+      session.forgotten ||
+      session.proc.exitCode !== null ||
+      session.proc.signalCode !== null
+    ) {
+      return Promise.reject(
+        makePtyWriteError('PTY_WRITE_REJECTED', 0, `session ${sessionId} is missing or exited`)
+      )
+    }
+    return session.barrier.inputAccepted(bytes)
   }
 
   /** Resizes a live or exited session; a stored session has nothing to resize. */
@@ -549,7 +569,18 @@ export class SessionManager {
       enabled: init.shellReady,
       timeoutMs: init.shellReadyTimeoutMs,
       deliver: (bytes) => {
-        if (session?.alive) session.proc.terminal.write(bytes)
+        if (
+          session &&
+          session.alive &&
+          !session.forgotten &&
+          !processDone &&
+          !ptyClosed &&
+          session.proc.exitCode === null &&
+          session.proc.signalCode === null
+        ) {
+          return session.proc.terminal.write(bytes)
+        }
+        return 0
       },
       log: (message) => console.error(`pty-host: ${sessionId}: ${message}`)
     })
