@@ -352,5 +352,16 @@
 - **Revisit if:** An approved strict read-time share requires checkpointable parser state rather than a start budget.
 - **Source:** assumed — autonomous
 
+## D33: Preserve expected deletion target kinds across the Worker boundary
+- **Question:** How should validated directory-backed sessions and Claude companion directories reach OS Trash without weakening kind checks?
+- **Options:** Allow any directory by agent name; discard the directory flow; return each validated path with its expected file/directory kind.
+- **Chose:** Internal DeleteTarget objects carrying path and kind, migrated through scanner, Worker result and action consumer with no string-array compatibility path. Keep final lstat/symlink/exact-kind checks and existing root validation.
+- **Why:** The real private-APFS test proved Claude file trash and repeat deletion work, then failed on Grok because the action assumes every target is a file. Agent-wide allowance cannot distinguish a valid companion directory from a file path swapped to a directory.
+- **Evidence:** artifact157:4 pass/1 fail, Grok result deleted=false/trashed=0 with non-file rejection. The disposable volume initialized, probed Foundation, moved Claude and cleaned up. Optional missing Claude companions also exposed and corrected first-delete alreadyMissing semantics.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** A supported source needs a different explicit filesystem target kind.
+- **Source:** assumed — autonomous
+
 ## Progress
-Step 5/6: repair barrier reached; all workers returned. Core consent and all25 browse pass, but full feature acceptance is still pending. Eight HEADs match4736bdc; source scopes are disjoint after D28 serial integration. Prepared fixes cover generic bindings, canonical schemas, real CLI/harness calls, scope availability, four provider templates, Gemini metadata and SQLite backing paths, plus expanded real-client acceptance. Next checkpoint/assemble repairs, run typecheck and targeted API/CLI/UI/owner tests, safely observe the directory Trash and inherited-unlimited regressions, fix confirmed failures, then complete packaged/UI smoke, integration catchup and final review before landing.
+Step 6 integration: all repairs assembled; current typecheck passes. The strict all25 copied-command execution test passes, and Gemini metadata tests pass8cases/114assertions. Private APFS actions pass4/5: real file trash/repeat/owned-state work, directory target still fails as expected (D33 fix next). Remaining real API/CLI/UI/flow and progress tests, inherited-unlimited red/fix, packaged/actual web smoke, integration catchup and final cross-family review are still required. No landing/completion claim.

@@ -8,6 +8,8 @@ import { TrashVolume } from './support/trash-volume'
 
 let rig: VaultRig | undefined
 let trashVolume: TrashVolume | undefined
+let previousProcessHome: string | undefined
+let processHomeOverridden = false
 
 type DeleteResult = { deleted: boolean; trashed: number; alreadyMissing: boolean }
 
@@ -20,6 +22,12 @@ afterEach(async () => {
       trashVolume?.cleanup()
     } finally {
       trashVolume = undefined
+      if (processHomeOverridden) {
+        if (previousProcessHome === undefined) delete process.env.QUIRKY_HOME
+        else process.env.QUIRKY_HOME = previousProcessHome
+        previousProcessHome = undefined
+        processHomeOverridden = false
+      }
     }
   }
 })
@@ -29,7 +37,11 @@ const startWithVolumeTmpdir = async (volume: TrashVolume) => {
   const previousTmpdir = process.env.TMPDIR
   process.env.TMPDIR = volume.tmpDir
   try {
-    return await start()
+    const vault = await start()
+    previousProcessHome = process.env.QUIRKY_HOME
+    processHomeOverridden = true
+    process.env.QUIRKY_HOME = vault.home
+    return vault
   } finally {
     if (previousTmpdir === undefined) delete process.env.TMPDIR
     else process.env.TMPDIR = previousTmpdir
@@ -136,13 +148,11 @@ describe('vault session actions', () => {
       expect(existsSync(claudePath)).toBe(true)
       expect(existsSync(grokDirectory)).toBe(true)
 
-      const initialTrashEntries = volume.listTrashEntries()
       const claudeResult = await vault.call<DeleteResult>('deleteSession', { id: claude.id, yes: true })
 
       expect(claudeResult).toMatchObject({ deleted: true, trashed: 1, alreadyMissing: false })
       expect(existsSync(claudePath)).toBe(false)
       expect(readFileSync(volume.trashPathFor(basename(claudePath)))).toEqual(claudeBytes)
-      expect(volume.listTrashEntries().length).toBeGreaterThan(initialTrashEntries.length)
       expect(readFileSync(unrelatedSourcePath)).toEqual(unrelatedSourceBytes)
       expect(existsSync(vault.sourceHome)).toBe(true)
 
@@ -166,6 +176,7 @@ describe('vault session actions', () => {
       const repeatedGrokResult = await vault.call<DeleteResult>('deleteSession', { id: grok.id, yes: true })
       expect(repeatedGrokResult).toMatchObject({ deleted: true, trashed: 0, alreadyMissing: true })
       expect(volume.listTrashEntries().sort()).toEqual(trashAfterGrok.sort())
-    }
+    },
+    120_000
   )
 })

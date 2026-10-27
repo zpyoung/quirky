@@ -126,21 +126,21 @@ export class VaultActions {
           alreadyMissing = true
           continue
         }
-        return { deleted: false, trashed, alreadyMissing, reason: messageOf(error) }
+        return { deleted: false, trashed, alreadyMissing: false, reason: messageOf(error) }
       }
       if (metadata.isSymbolicLink() || !metadata.isFile()) {
-        return { deleted: false, trashed, alreadyMissing, reason: 'scanner returned a symlink or non-file Trash target' }
+        return { deleted: false, trashed, alreadyMissing: false, reason: 'scanner returned a symlink or non-file Trash target' }
       }
       try {
         await trashWithFoundation(target)
         trashed++
       } catch (error) {
         if (trashed > 0 || alreadyMissing) await this.invalidate(source.sourceId)
-        return { deleted: false, trashed, alreadyMissing, reason: messageOf(error) }
+        return { deleted: false, trashed, alreadyMissing: false, reason: messageOf(error) }
       }
     }
     await this.invalidate(source.sourceId)
-    return { deleted: true, trashed, alreadyMissing }
+    return { deleted: true, trashed, alreadyMissing: trashed === 0 && alreadyMissing }
   }
 
   openSource = async (params: Record<string, unknown>) => {

@@ -2,6 +2,7 @@ import { useState, type FormEvent } from 'react'
 import { usePluginHost, usePluginState } from '../context'
 import { PluginSlot } from '../plugins/PluginSlot'
 import { changedSettings, draftOf, type DraftValue } from '../plugins/settingsDraft'
+import { settingsGroups, themePicker, type SettingField } from '../plugins/settingsGroups'
 import { Dialog } from './Dialog'
 
 function PluginField({

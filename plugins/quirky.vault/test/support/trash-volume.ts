@@ -20,8 +20,14 @@ function run(argv) {
 type HdiutilEntity = { 'dev-entry'?: unknown; 'mount-point'?: unknown }
 type HdiutilAttachResult = { 'system-entities'?: HdiutilEntity[] }
 
-function run(program: string, args: string[], input?: string): string {
-  const result = spawnSync(program, args, { encoding: 'utf8', ...(input === undefined ? {} : { input }) })
+function run(home: string, program: string, args: string[], input?: string): string {
+  const result = spawnSync(program, args, {
+    encoding: 'utf8',
+    env: { ...process.env, QUIRKY_HOME: home },
+    timeout: 30_000,
+    killSignal: 'SIGKILL',
+    ...(input === undefined ? {} : { input })
+  })
   if (result.error) throw result.error
   if (result.status !== 0) {
     const details = result.stderr.trim() || result.stdout.trim() || `exit ${result.status ?? 'unknown'}`
@@ -49,14 +55,17 @@ export class TrashVolume {
 
   private constructor(
     private readonly rootDirectory: string,
-    readonly mountPoint: string
+    readonly mountPoint: string,
+    userId: number
   ) {
     this.tmpDir = join(mountPoint, 'tmp')
-    this.trashDirectory = join(mountPoint, '.Trashes', String(process.getuid()))
+    this.trashDirectory = join(mountPoint, '.Trashes', String(userId))
   }
 
   static create(): TrashVolume {
     if (process.platform !== 'darwin') throw new Error('Disposable macOS Trash volumes require macOS')
+    const userId = process.getuid?.()
+    if (userId === undefined) throw new Error('Disposable macOS Trash volumes require a POSIX user ID')
 
     const temporaryBase = realpathSync(tmpdir())
     const userTrash = existsSync(join(homedir(), '.Trash'))
@@ -68,20 +77,20 @@ export class TrashVolume {
 
     const rootDirectory = mkdtempSync(join(temporaryBase, 'qv-trash-volume-'))
     const mountPoint = join(rootDirectory, 'mount')
-    const volume = new TrashVolume(rootDirectory, mountPoint)
+    const volume = new TrashVolume(rootDirectory, mountPoint, userId)
 
     try {
       mkdirSync(mountPoint)
       const imagePath = join(rootDirectory, 'trash.sparseimage')
-      run('/usr/bin/hdiutil', [
+      run(rootDirectory, '/usr/bin/hdiutil', [
         'create', '-quiet', '-size', '256m', '-fs', 'APFS', '-volname', `QuirkyVaultTrash-${randomUUID()}`,
         '-type', 'SPARSE', imagePath
       ])
-      const attachOutput = run('/usr/bin/hdiutil', [
+      const attachOutput = run(rootDirectory, '/usr/bin/hdiutil', [
         'attach', '-plist', '-nobrowse', '-owners', 'off', '-mountpoint', mountPoint, imagePath
       ])
       volume.mounted = true
-      const attachJson = run('/usr/bin/plutil', ['-convert', 'json', '-o', '-', '-'], attachOutput)
+      const attachJson = run(rootDirectory, '/usr/bin/plutil', ['-convert', 'json', '-o', '-', '-'], attachOutput)
       const entities = (JSON.parse(attachJson) as HdiutilAttachResult)['system-entities'] ?? []
       if (!entities.some((entity) => entity['mount-point'] === mountPoint)) {
         throw new Error('hdiutil did not mount the APFS image at its owned mount point')
@@ -145,7 +154,7 @@ export class TrashVolume {
       let detached = false
       for (const target of targets) {
         try {
-          run('/usr/bin/hdiutil', ['detach', '-force', target])
+          run(this.rootDirectory, '/usr/bin/hdiutil', ['detach', '-force', target])
           detached = true
           break
         } catch (error) {
@@ -195,7 +204,7 @@ export class TrashVolume {
     const probePath = join(this.mountPoint, probeName)
     writeFileSync(probePath, 'isolated Foundation Trash destination probe\n', { flag: 'wx', mode: 0o600 })
     try {
-      run('/usr/bin/osascript', ['-l', 'JavaScript', '-e', FOUNDATION_TRASH_SCRIPT, probePath])
+      run(this.rootDirectory, '/usr/bin/osascript', ['-l', 'JavaScript', '-e', FOUNDATION_TRASH_SCRIPT, probePath])
       if (existsSync(probePath)) throw new Error('Foundation reported success without moving the isolated Trash probe')
       const trashedProbe = this.trashPathFor(probeName)
       if (!existsSync(trashedProbe)) throw new Error('Foundation did not place its probe in the owned volume Trash')

@@ -10,7 +10,7 @@ const PLUGIN_IDS = ['quirky.repo', 'quirky.worktree', 'quirky.agents', 'quirky.s
 const PLUGINS_ROOT = join(import.meta.dir, '..', '..', '..')
 
 export type FixtureExpectation = {
-  expected: Record<string, { sessionId: string; title: string; cwd: string }>
+  expected: Record<string, { sessionId: string; title: string; cwd: string | null }>
   paths: { claude?: string }
 }
 
@@ -32,7 +32,7 @@ export class VaultRig {
     const sourceHome = mkdtempSync(join(tmpdir(), 'qv-source-'))
     const previousSourceHome = process.env[SOURCE_HOME_ENV]
     process.env[SOURCE_HOME_ENV] = sourceHome
-    const fixture = await writeEveryAgentFixture(sourceHome)
+    const fixture = await writeEveryAgentFixture(sourceHome, { cwdRoot: join(sourceHome, 'workspaces') })
     const builtinPluginsDir = join(home, 'builtins')
     mkdirSync(builtinPluginsDir, { recursive: true })
     for (const id of PLUGIN_IDS) symlinkSync(join(PLUGINS_ROOT, id), join(builtinPluginsDir, id), 'dir')

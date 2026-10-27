@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from 'bun:test'
-import type { PublicListResult } from './src/types'
+import type { PublicListResult } from '../src/types'
 import { VaultRig } from './support/harness'
 
 let rig: VaultRig | undefined
