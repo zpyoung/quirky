@@ -38,6 +38,7 @@ export function createAskStore(context: UiPluginContext): AskStore {
   let queuedCount = 0
   let watermark = 0
   let generation = 0
+  let appliedGeneration = 0
   let disposed = false
   // ids removed locally while a refresh was in flight; that refresh's list may still hold them
   const removedDuringRefresh = new Set<Set<string>>()
@@ -50,13 +51,16 @@ export function createAskStore(context: UiPluginContext): AskStore {
     for (const listener of [...listeners]) listener()
   }
 
-  const refresh = async () => {
+  /** Refetches the pending list; the watermark advances to `eventSeq` only once the list is applied. */
+  const refresh = async (eventSeq = 0) => {
     const mine = ++generation
     const removed = new Set<string>()
     removedDuringRefresh.add(removed)
     try {
       const list = (await context.call('quirky.ask/list', { pendingOnly: true })) as Ask[]
-      if (disposed || mine !== generation) return
+      if (disposed || mine < appliedGeneration) return
+      appliedGeneration = mine
+      watermark = Math.max(watermark, eventSeq)
       for (const ask of list) watermark = Math.max(watermark, ask.seq)
       const live = list.filter((ask) => !removed.has(ask.id))
       publish(
@@ -75,7 +79,8 @@ export function createAskStore(context: UiPluginContext): AskStore {
     const seq = (event.data as { seq?: unknown } | null)?.seq
     if (typeof seq === 'number') {
       if (seq <= watermark) return
-      watermark = seq
+      void refresh(seq)
+      return
     }
     void refresh()
   })

@@ -50,6 +50,7 @@ function fakeContext(initial: Ask[]) {
   const connection = new Set<(status: 'connected' | 'reconnecting') => void>()
   let failWith: string | null = null
   let listGate: Promise<void> | null = null
+  let listFailure: string | null = null
 
   const context = {
     pluginId: 'quirky.ask',
@@ -59,6 +60,7 @@ function fakeContext(initial: Ask[]) {
       calls.push({ method, params })
       if (failWith && method !== 'quirky.ask/list' && method !== 'quirky.ask/updatePartial') throw new Error(failWith)
       if (method === 'quirky.ask/list') {
+        if (listFailure) throw new Error(listFailure)
         const snapshot = asks
         if (listGate) await listGate
         return snapshot
@@ -98,6 +100,7 @@ function fakeContext(initial: Ask[]) {
         release()
       }
     },
+    failLists: (message: string | null) => void (listFailure = message),
     failAnswers: (message: string | null) => void (failWith = message),
     add(ask: Ask) {
       asks = [...asks, ask]
@@ -491,6 +494,49 @@ describe('the Questions panel module', () => {
     await fake.emit(surfaced(late, 8))
     expect(lists()).toBe(before + 1)
     expect(fake.badges.at(-1)).toBe(2)
+  })
+
+  test('SC-16: a failed refetch leaves the watermark, so the same event retries', async () => {
+    const fake = fakeContext([{ ...selectAsk('ask_a', 'A', 1), seq: 1 }])
+    await activated(fake)
+    const lists = () => fake.calls.filter((call) => call.method === 'quirky.ask/list').length
+    const before = lists()
+
+    const next = { ...selectAsk('ask_b', 'B', 2), seq: 2 }
+    fake.add(next)
+    fake.failLists('temporary RPC failure')
+    await fake.emit(created(next, 2))
+    expect(lists()).toBe(before + 1)
+    expect(fake.badges.at(-1)).toBe(1)
+
+    fake.failLists(null)
+    await fake.emit(created(next, 2))
+    expect(lists()).toBe(before + 2)
+    expect(fake.badges.at(-1)).toBe(2)
+
+    await fake.emit(created(next, 2))
+    expect(lists()).toBe(before + 2)
+  })
+
+  test('SC-16: an older refetch still applies when the newer one failed', async () => {
+    const fake = fakeContext([{ ...selectAsk('ask_a', 'A', 1), seq: 1 }])
+    await activated(fake)
+
+    const release = fake.holdLists()
+    const next = { ...selectAsk('ask_b', 'B', 2), seq: 2 }
+    fake.add(next)
+    await fake.emit(created(next, 2))
+    fake.failLists('temporary RPC failure')
+    await fake.emit(resolved('ask_x', 3))
+    fake.failLists(null)
+    release()
+    await settled()
+    expect(fake.badges.at(-1)).toBe(2)
+
+    const lists = () => fake.calls.filter((call) => call.method === 'quirky.ask/list').length
+    const before = lists()
+    await fake.emit(resolved('ask_x', 3))
+    expect(lists()).toBe(before + 1)
   })
 
   test('SC-21: the card shows each type with its controls', async () => {
