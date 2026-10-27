@@ -43,7 +43,7 @@ export type PluginRuntimeOptions = {
   stopDaemon: () => void
 }
 
-type LaunchInput = Omit<LaunchHookInput, 'env' | 'args'>
+type LaunchInput = Omit<LaunchHookInput, 'env' | 'args' | 'jsonArgs'>
 
 export type PluginRuntime = {
   extension: ContextExtension

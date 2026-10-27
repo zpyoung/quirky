@@ -8,6 +8,7 @@ import type { Harness } from '../../../packages/daemon/test/helpers'
 import { makeTempHome, waitFor } from '../../../packages/daemon/test/helpers'
 import { makeTempDir, removeTempDirs } from '../../../packages/daemon/test/plugins/fixtures'
 import { fakeAgents, resetFakeAgents } from './fakes/quirky.agents/main'
+import { CLAUDE_SETTINGS } from './fakes/quirky.agent-status/main'
 import {
   call,
   createSession,
@@ -138,7 +139,8 @@ describe('SC-31: resume replays the launch record, in the original folder', () =
     })
     expect(resumed.id).not.toBe(first.id)
     const argv = spawnedArgv(resumed.id)
-    expect(argv).toContain(`claude --model haiku '--settings' '${h.home}/hooks/claude-settings.json' --resume abc`)
+    expect(argv).toContain(`claude --model haiku '--settings' '${JSON.stringify(CLAUDE_SETTINGS)}' --resume abc`)
+    expect(argv.match(/'--settings'/g)).toHaveLength(1)
     expect(argv).not.toContain('--dangerously-skip-permissions')
     const request = h.pty.requests.find((r) => r.type === 'create' && r.sessionId === resumed.id)
     expect(request).toMatchObject({ cwd: folder })
@@ -150,7 +152,7 @@ describe('SC-31: resume replays the launch record, in the original folder', () =
       record: { command: 'claude', args: '--model haiku', env: {} },
       providerSession: { id: 'abc', transcriptPath: null },
       fork: false,
-      hookArgs: ['--settings', `${h.home}/hooks/claude-settings.json`]
+      hookArgs: ['--settings', JSON.stringify(CLAUDE_SETTINGS)]
     })
     expect(await call(client, 'quirky.session/get', { session: first.id })).toMatchObject({
       launch: { command: 'claude', args: '--model haiku', env: {} },
@@ -199,8 +201,10 @@ describe('SC-31: resume replays the launch record, in the original folder', () =
         providerSession: { id: 'abc', transcriptPath: null }
       })
       expect(fakeAgents().calls.find((c) => c.method === 'prepareResume')!.params.record).toBeNull()
-      expect(spawnedArgv(resumed.id)).toContain(`claude '--settings'`)
-      expect(spawnedArgv(resumed.id)).toEndWith('--resume abc')
+      const argv = spawnedArgv(resumed.id)
+      expect(argv).toContain(`claude '--settings' '${JSON.stringify(CLAUDE_SETTINGS)}'`)
+      expect(argv).toEndWith('--resume abc')
+      expect(argv.match(/'--settings'/g)).toHaveLength(1)
     })
   })
 
@@ -235,6 +239,7 @@ describe('SC-31: resume replays the launch record, in the original folder', () =
     expect(resumed.launch).toEqual({ command: 'claude', args: '', env: {} })
     expect(JSON.stringify(resumed.launch)).not.toContain('settings')
     expect(spawnedArgv(resumed.id)).toContain('--settings')
+    expect(spawnedArgv(resumed.id).match(/'--settings'/g)).toHaveLength(1)
   })
 
   test('a resumed session emits changed and shows up in the list', async () => {

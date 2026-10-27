@@ -7,6 +7,7 @@ import {
   type AgentStatusSummary,
   type ExitCause,
   type LaunchSettings,
+  type LaunchHookInput,
   type PluginCaller,
   type PluginContext,
   type PromptDeliveryState,
@@ -217,7 +218,7 @@ export class SessionService {
         paste: plan.paste,
         providerSession: null
       }
-    })
+    }, picks)
     return this.deliverAfterLaunch(launched, params.waitForPrompt === true)
   }
 
@@ -250,6 +251,9 @@ export class SessionService {
       launchSettings: old.launchSettings ?? null,
       resumedFrom: old.id
     }
+    const replayRecord = old.launch
+      ? { command: old.launch.command, args: old.launch.args, env: { ...old.launch.env } }
+      : { command: '', args: '', env: {} }
     const launched = await this.start(session, this.records.repoIdOf(old.id), params, undefined, async (additions) => {
       const resumed = (await this.context.call('quirky.agents/prepareResume', {
         agent: old.agent,
@@ -269,7 +273,7 @@ export class SessionService {
         paste: null,
         providerSession: fork ? null : providerSession
       }
-    })
+    }, { record: replayRecord })
     return this.deliverAfterLaunch(launched, false)
   }
 
@@ -521,20 +525,29 @@ export class SessionService {
     repoId: string | null,
     params: Record<string, unknown>,
     prompt: string | undefined,
-    build: (additions: { env: Record<string, string | null>; args: string[] }) => Promise<LaunchSpec>
+    build: (additions: { env: Record<string, string | null>; args: string[] }) => Promise<LaunchSpec>,
+    launchContext: Pick<LaunchHookInput, 'record' | 'model' | 'options' | 'extraArgs'> = {}
   ): Promise<{ session: Session; paste: LaunchSpec['paste'] }> {
-    this.records.insert(session, repoId)
     const closedWhileStarting = () =>
       this.context.error('conflict', `session ${session.id} was closed before its terminal started`)
     let spec!: LaunchSpec
     try {
+      this.records.insert(session, repoId)
+      const hookContext = {
+        ...launchContext,
+        ...(launchContext.options === undefined ? {} : { options: { ...launchContext.options } }),
+        ...(launchContext.record === undefined
+          ? {}
+          : { record: { ...launchContext.record, env: { ...launchContext.record.env } } })
+      }
       const additions = await this.context.launch.hooks({
         sessionId: session.id,
         worktreeId: session.worktreeId,
         repoId: repoId ?? '',
         cwd: session.cwd,
         agent: session.agent,
-        ...(prompt === undefined ? {} : { prompt })
+        ...(prompt === undefined ? {} : { prompt }),
+        ...hookContext
       })
       if (!this.records.get(session.id)) throw closedWhileStarting()
       spec = await build(additions)

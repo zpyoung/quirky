@@ -24,6 +24,7 @@ export async function activate(context: PluginContext): Promise<void> {
     pick: service.pick,
     prepareLaunch: service.prepareLaunch,
     prepareResume: service.prepareResume,
+    settingsOverlay: service.settingsOverlay,
     deliver: service.deliver
   }
   for (const [name, handler] of Object.entries(methods)) context.provide(`method:${context.pluginId}/${name}`, handler)

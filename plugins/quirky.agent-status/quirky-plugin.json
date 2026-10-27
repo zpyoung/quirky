@@ -248,7 +248,7 @@
     "launch-hook": [
       {
         "id": "agent-hooks",
-        "description": "Points Claude at the hook settings file for its version and Codex at the notify script.",
+        "description": "Adds Claude's version-gated hooks through inline --settings JSON and Codex's notify script.",
         "agents": [
           "claude",
           "claude-agent-teams",

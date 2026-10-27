@@ -107,6 +107,69 @@ describe('SC-1: the first tab', () => {
   })
 })
 
+describe('focus context', () => {
+  test('reads, updates and clears the last focused terminal workspace', async () => {
+    expect(await api('focusContext')).toEqual({ workspace: null })
+    const changes = () =>
+      events
+        .filter((event) => event.type === 'quirky.terminal/focusContextChanged')
+        .map((event) => (event as PluginEvent).data as { workspace: string | null })
+    const seen = changes().length
+
+    expect(await api('focusContext', { workspace: WT })).toEqual({ workspace: WT })
+    await waitFor(() => changes().length === seen + 1)
+    expect(changes().at(-1)).toEqual({ workspace: WT })
+    expect(await api('focusContext')).toEqual({ workspace: WT })
+
+    const beforeClear = changes().length
+    expect(await api('focusContext', { workspace: null })).toEqual({ workspace: null })
+    await waitFor(() => changes().length === beforeClear + 1)
+    expect(changes().at(-1)).toEqual({ workspace: null })
+  })
+
+  test('focusPane records its workspace and hiding floating clears its focus target', async () => {
+    const main = await newTab()
+    const mainPane = panesOf(lastTab(main))[0]!
+    await api('focusPane', { pane: mainPane.id })
+    expect(await api('focusContext')).toEqual({ workspace: WT })
+
+    await api('setFloating', { open: true })
+    const floating = (await api('newTab', { workspace: 'floating' })).workspace as Workspace
+    const floatingPane = panesOf(lastTab(floating))[0]!
+    await api('focusPane', { pane: floatingPane.id })
+    expect(await api('focusContext')).toEqual({ workspace: 'floating' })
+
+    await api('setFloating', { open: false })
+    expect(await api('focusContext')).toEqual({ workspace: null })
+    expect(await api('focusContext', { workspace: 'floating' })).toEqual({ workspace: null })
+  })
+})
+
+describe('openSession', () => {
+  test('focuses an existing session pane repeatedly without creating another session or tab', async () => {
+    const session = await createSession(client, { worktree: `id:${WT}`, agent: 'claude' })
+    const existing = await waitForAsync(async () => {
+      const workspace = await layoutOf(session.worktreeId)
+      const pane = tabsOf(workspace).flatMap(panesOf).find((leaf) => leaf.session === session.id)
+      return pane ? { workspace, pane } : null
+    })
+    const created = sessionCreates().length
+
+    const first = (await api('openSession', { session: session.id })) as { workspace: Workspace; pane: string }
+    const second = (await api('openSession', { session: session.id })) as { workspace: Workspace; pane: string }
+    expect(first.pane).toBe(existing.pane.id)
+    expect(second.pane).toBe(first.pane)
+    expect(tabsOf(second.workspace)).toHaveLength(tabsOf(first.workspace).length)
+    expect(sessionCreates()).toHaveLength(created)
+  })
+
+  test('rejects opening a session in a different worktree', async () => {
+    const session = await createSession(client, { worktree: 'id:wt_other', agent: 'claude' })
+    expect((await error(api('openSession', { session: session.id, workspace: WT })))?.code).toBe(RpcErrorCode.InvalidParams)
+    expect(tabsOf(await layoutOf(WT))).toHaveLength(0)
+  })
+})
+
 describe('SC-4, SC-5: sessions started and closed elsewhere', () => {
   test('SC-4: a session started elsewhere gets a new active tab at the end of the active group', async () => {
     await api('workspace', { workspace: WT, ensure: true })

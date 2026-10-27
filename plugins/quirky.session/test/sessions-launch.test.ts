@@ -20,7 +20,8 @@ const plan = {
 /** A context whose `spawn` runs `onSpawn` with the service and session ID, as a process that exits early would. */
 function launchContext(onSpawn: (service: SessionService, sessionId: string) => void, launchPlan: object | Error = plan) {
   const calls: { method: string; params: unknown }[] = []
-  const emitted: { event: string; status?: string; exitCode?: number | null }[] = []
+  const hookInputs: Record<string, unknown>[] = []
+  const emitted: { event: string; status?: Session['status']; exitCode?: Session['exitCode'] }[] = []
   let service!: SessionService
   let sessionId = ''
   const context = {
@@ -45,8 +46,9 @@ function launchContext(onSpawn: (service: SessionService, sessionId: string) => 
       return worktree
     },
     launch: {
-      hooks: async (request: { sessionId: string }) => {
-        sessionId = request.sessionId
+      hooks: async (request: Record<string, unknown>) => {
+        hookInputs.push(request)
+        sessionId = request.sessionId as string
         return { env: {}, args: [] }
       },
       shellArgv: () => ['/bin/sh'],
@@ -61,7 +63,7 @@ function launchContext(onSpawn: (service: SessionService, sessionId: string) => 
   } as unknown as PluginContext
   const records = new SessionRecords(memoryStore())
   service = new SessionService(context, records)
-  return { service, records, emitted, calls }
+  return { service, records, emitted, calls, hookInputs }
 }
 
 describe('SessionService.create', () => {
@@ -201,23 +203,25 @@ const prepareLaunchParams = (calls: { method: string; params: unknown }[]) =>
 
 describe('SessionService.create launch settings', () => {
   test('forwards model, options and extraArgs to prepareLaunch and stores the plan\'s launchSettings', async () => {
-    const { service, records, calls } = launchContext(() => {}, picked)
+    const { service, records, calls, hookInputs } = launchContext(() => {}, picked)
     const options = { effort: 'high' }
 
     const result = await service.create({ agent: 'claude', model: 'opus', options, extraArgs: '--add-dir docs' }, caller)
 
     expect(prepareLaunchParams(calls)).toMatchObject({ model: 'opus', options, extraArgs: '--add-dir docs' })
+    expect(hookInputs[0]).toMatchObject({ model: 'opus', options, extraArgs: '--add-dir docs' })
     expect(result.launchSettings).toEqual(settings)
     expect(records.get(result.id)?.launchSettings).toEqual(settings)
   })
 
   test('sends none of the three when the caller gave none', async () => {
-    const { service, calls } = launchContext(() => {})
+    const { service, calls, hookInputs } = launchContext(() => {})
 
     await service.create({ agent: 'claude' }, caller)
 
     const params = prepareLaunchParams(calls)
     for (const key of ['model', 'options', 'extraArgs']) expect(key in params).toBe(false)
+    for (const key of ['model', 'options', 'extraArgs']) expect(key in hookInputs[0]!).toBe(false)
   })
 
   test('a plan without launchSettings stores null', async () => {
@@ -299,6 +303,16 @@ describe('SessionService.resume launch settings', () => {
       expect(records.get('s_old')?.launchSettings).toEqual(settings)
     })
   }
+  test('passes the original replay record to launch hooks on resume and fork', async () => {
+    const { service, records, hookInputs } = launchContext(() => {})
+    seed(records, settings)
+    const original = records.get('s_old')!.launch
+
+    await service.resume({ session: 's_old' })
+    await service.resume({ session: 's_old', fork: true })
+
+    expect(hookInputs.map((input) => input.record)).toEqual([original, original])
+  })
 
   test('SC-21: a session recorded without launchSettings resumes with null', async () => {
     const { service, records } = launchContext(() => {})

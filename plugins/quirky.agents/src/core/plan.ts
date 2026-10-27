@@ -1,6 +1,7 @@
 import { terminatorIndex } from './arg-occurrence'
 import { resolveLaunch } from './resolve'
 import { joinCommand, quote, tokenize } from './shell'
+import { mergeSettings, parseSettingsArguments } from './settings'
 import type {
   AgentConfig,
   AgentEntry,
@@ -8,6 +9,7 @@ import type {
   LaunchRecord,
   ParsedExtras,
   ProviderSession,
+  Resolution,
   ValidSelection
 } from './types'
 
@@ -240,6 +242,7 @@ function flagPromptSuffix(entry: AgentEntry, head: readonly string[], quoted: st
 export type LaunchPlanInput = {
   entry: AgentEntry
   config: AgentConfig
+  cwd?: string
   prompt?: string
   /** False leaves the prompt in the agent's input without submitting it. */
   submitPrompt?: boolean
@@ -257,18 +260,20 @@ function blank(text: string | null | undefined): boolean {
   return text === null || text === undefined || text.trim() === ''
 }
 
-/**
- * Plans one agent launch: the command string the launch shell will exec, the environment to
- * apply, the record a later resume replays, and how the first prompt travels. With a selection
- * or extras the record holds the resolved arguments, so resume replays them. Pure; throws
- * `PlanError` for text that doesn't tokenize or a prompt containing NUL, and `SelectionError`
- * when a command override contradicts the pick.
- */
-export function buildLaunchPlan(input: LaunchPlanInput): LaunchPlan {
-  const { entry, config } = input
-  const hookArgs = input.hookArgs ?? []
-  if (input.prompt?.includes('\0')) throw new PlanError('the prompt contains a NUL character')
+type LaunchArgumentInput = Pick<LaunchPlanInput, 'entry' | 'config' | 'selection' | 'extras' | 'resolveExecutable'>
 
+type ResolvedLaunchArguments = {
+  commandText: string
+  argsText: string
+  userEnv: Record<string, string>
+  base: string[]
+  userArgs: string[]
+  resolved: boolean
+  resolution: Resolution
+}
+
+function resolveLaunchArguments(input: LaunchArgumentInput): ResolvedLaunchArguments {
+  const { entry, config } = input
   const commandText = blank(config.command) ? entry.launch : (config.command as string)
   const argsText = config.args ?? entry.yolo ?? ''
   const userEnv = config.env ?? entry.yoloEnv ?? {}
@@ -283,7 +288,55 @@ export function buildLaunchPlan(input: LaunchPlanInput): LaunchPlan {
     structured: false
   })
   const resolved = Boolean(input.selection || input.extras)
-  const userArgs = resolved ? resolution.args : configuredArgs
+  return { commandText, argsText, userEnv, base, userArgs: resolved ? resolution.args : configuredArgs, resolved, resolution }
+}
+
+type UserSettingsLaunchInput = LaunchArgumentInput & { cwd: string }
+
+/** Resolves only the user's current launch arguments and overlays; no hooks or process launch. */
+export function userSettingsForLaunch(input: UserSettingsLaunchInput): Record<string, unknown> {
+  const { base, userArgs } = resolveLaunchArguments(input)
+  return parseSettingsArguments(
+    [...base.slice(1), ...userArgs],
+    input.cwd,
+    input.entry.launchOptions?.valueFlags ?? []
+  ).settings
+}
+
+type MergedLaunchArguments = { userArgs: string[]; hookArgs: string[]; foundSettings: boolean }
+
+function mergeLaunchSettingsArguments(
+  userArgs: readonly string[],
+  hookArgs: readonly string[],
+  cwd: string,
+  valueFlags: readonly string[]
+): MergedLaunchArguments {
+  const user = parseSettingsArguments(userArgs, cwd, valueFlags)
+  const hooks = parseSettingsArguments(hookArgs, cwd, valueFlags)
+  const foundSettings = user.found || hooks.found
+  const cleanedHookArgs = [...hooks.args]
+  if (foundSettings) {
+    const serialized = JSON.stringify(mergeSettings(user.settings, hooks.settings))
+    if (serialized === undefined) throw new PlanError('settings could not be serialized')
+    cleanedHookArgs.splice(terminatorIndex(cleanedHookArgs, valueFlags), 0, '--settings', serialized)
+  }
+  return { userArgs: user.args, hookArgs: cleanedHookArgs, foundSettings }
+}
+
+/**
+ * Plans one agent launch: the command string the launch shell will exec, the environment to
+ * apply, the record a later resume replays, and how the first prompt travels. With a selection
+ * or extras the record holds the resolved arguments, so resume replays them. Pure; throws
+ * `PlanError` for text that doesn't tokenize or a prompt containing NUL, and `SelectionError`
+ * when a command override contradicts the pick.
+ */
+export function buildLaunchPlan(input: LaunchPlanInput): LaunchPlan {
+  const { entry } = input
+  const hookArgs = input.hookArgs ?? []
+  if (input.prompt?.includes('\0')) throw new PlanError('the prompt contains a NUL character')
+
+  const launch = resolveLaunchArguments(input)
+  const { commandText, argsText, userEnv, base, userArgs, resolved, resolution } = launch
   const env = mergeEnv(entry.env, userEnv, input.hookEnv ?? {})
   const record: LaunchRecord = {
     command: commandText,
@@ -297,11 +350,29 @@ export function buildLaunchPlan(input: LaunchPlanInput): LaunchPlan {
     planEnv = env
   ): LaunchPlan => ({ agent: entry.id, command, env: planEnv, record, promptDelivery, paste, launchSettings: resolution.launchSettings })
 
-  const terminator = terminatorIndex(userArgs, entry.launchOptions?.valueFlags ?? [])
-  const head =
-    terminator === userArgs.length
-      ? [...base, ...userArgs, ...hookArgs]
-      : [...base, ...userArgs.slice(0, terminator), ...hookArgs, ...userArgs.slice(terminator)]
+  const valueFlags = entry.launchOptions?.valueFlags ?? []
+  const composed = mergeLaunchSettingsArguments(
+    [...base.slice(1), ...userArgs],
+    hookArgs,
+    input.cwd ?? process.cwd(),
+    valueFlags
+  )
+  let head: string[]
+  if (composed.foundSettings) {
+    const terminator = terminatorIndex(composed.userArgs, valueFlags)
+    head = [
+      base[0]!,
+      ...composed.userArgs.slice(0, terminator),
+      ...composed.hookArgs,
+      ...composed.userArgs.slice(terminator)
+    ]
+  } else {
+    const terminator = terminatorIndex(userArgs, valueFlags)
+    head =
+      terminator === userArgs.length
+        ? [...base, ...userArgs, ...hookArgs]
+        : [...base, ...userArgs.slice(0, terminator), ...hookArgs, ...userArgs.slice(terminator)]
+  }
   const plain = joinCommand(head)
   const prompt = input.prompt?.trim() ?? ''
   if (!prompt) return finish(plain, null, null)
@@ -329,7 +400,7 @@ export function buildLaunchPlan(input: LaunchPlanInput): LaunchPlan {
     case 'flag-interactive':
       return finish(`${plain} -i ${quoted}`, 'command-line', null)
     case 'hermes-query': {
-      const argv = hermesArgv(base, [...userArgs, ...hookArgs])
+      const argv = composed.foundSettings ? hermesArgv(head, []) : hermesArgv(base, [...userArgs, ...hookArgs])
       if (!argv) return paste
       const command = hermesQueryCommand(argv)
       const planEnv = mergeEnv(env, { [HERMES_QUERY_ENV]: prompt })
@@ -383,17 +454,16 @@ function isClaudeResumeSelector(token: string): boolean {
  * after `--resume`/`-r`) from the recorded command, then puts `inserted` before claude's own `--`
  * terminator, or at the end. Appends unchanged when no claude executable can be located.
  */
-function spliceClaudeResume(tokens: string[], inserted: string[]): string[] {
+function spliceClaudeResume(tokens: string[], inserted: string[], valueFlags: readonly string[]): string[] {
   const claude = findClaudeExecutable(tokens)
   if (claude === -1) return [...tokens, ...inserted]
-  const kept = tokens.slice(0, claude + 1)
-  let rest: string[] = []
-  for (let index = claude + 1; index < tokens.length; index += 1) {
+  const firstArgument = claude + 1
+  const terminatorOffset = terminatorIndex(tokens.slice(firstArgument), valueFlags)
+  const hasTerminator = terminatorOffset < tokens.length - firstArgument
+  const boundary = hasTerminator ? firstArgument + terminatorOffset : tokens.length
+  const kept = tokens.slice(0, firstArgument)
+  for (let index = firstArgument; index < boundary; index += 1) {
     const token = tokens[index]
-    if (token === '--') {
-      rest = tokens.slice(index)
-      break
-    }
     if (!isClaudeResumeSelector(token)) {
       kept.push(token)
       continue
@@ -401,6 +471,7 @@ function spliceClaudeResume(tokens: string[], inserted: string[]): string[] {
     const next = tokens[index + 1]
     if ((token === '--resume' || token === '-r') && next !== undefined && !next.startsWith('-')) index += 1
   }
+  const rest = hasTerminator ? tokens.slice(boundary) : []
   return [...kept, ...inserted, ...rest]
 }
 
@@ -408,11 +479,43 @@ export type ResumePlanInput = {
   entry: AgentEntry
   /** What the session launched with; null (a session from before records) resumes with the catalog command and no arguments. */
   record: LaunchRecord | null
+  cwd?: string
   providerSession: ProviderSession
   fork: boolean
   hookArgs?: string[]
   hookEnv?: Record<string, string | null>
   resolveExecutable?: Resolve
+}
+
+type ReplayLaunchArguments = { record: LaunchRecord; base: string[]; userArgs: string[] }
+
+function resolveReplayArguments(
+  entry: AgentEntry,
+  replay: LaunchRecord | null,
+  resolveExecutable?: Resolve
+): ReplayLaunchArguments {
+  const record: LaunchRecord = replay
+    ? { command: replay.command, args: replay.args, env: { ...replay.env } }
+    : { command: entry.launch, args: '', env: {} }
+  const base = commandTokens(blank(record.command) ? entry.launch : record.command, resolveExecutable)
+  return { record, base, userArgs: argTokens(record.args, entry) }
+}
+
+type UserSettingsResumeInput = {
+  entry: AgentEntry
+  record: LaunchRecord | null
+  cwd: string
+  resolveExecutable?: Resolve
+}
+
+/** Reads only the recorded CLI settings for a replay; current configuration and hooks are excluded. */
+export function userSettingsForResume(input: UserSettingsResumeInput): Record<string, unknown> {
+  const { base, userArgs } = resolveReplayArguments(input.entry, input.record, input.resolveExecutable)
+  return parseSettingsArguments(
+    [...base.slice(1), ...userArgs],
+    input.cwd,
+    input.entry.launchOptions?.valueFlags ?? []
+  ).settings
 }
 
 /**
@@ -430,17 +533,32 @@ export function buildResumePlan(input: ResumePlanInput): {
   if (input.fork && !entry.fork) throw new PlanError(`${entry.id} can't fork from Quirky yet`)
   if (!template) throw new PlanError(`${entry.id} can't resume sessions`)
 
-  const record: LaunchRecord = input.record
-    ? { command: input.record.command, args: input.record.args, env: { ...input.record.env } }
-    : { command: entry.launch, args: '', env: {} }
-  const hookArgs = input.hookArgs ?? []
-  const base = commandTokens(blank(record.command) ? entry.launch : record.command, input.resolveExecutable)
-  const userArgs = argTokens(record.args, entry)
+  const replay = resolveReplayArguments(entry, input.record, input.resolveExecutable)
+  const { record } = replay
+  const valueFlags = entry.launchOptions?.valueFlags ?? []
+  const composed = mergeLaunchSettingsArguments(
+    [...replay.base.slice(1), ...replay.userArgs],
+    input.hookArgs ?? [],
+    input.cwd ?? process.cwd(),
+    valueFlags
+  )
+  const base = [replay.base[0]!, ...composed.userArgs]
   const resume = templateTokens(entry, template, providerSession)
-  const tokens =
-    entry.resumeStyle === 'claude-splice'
-      ? spliceClaudeResume([...base, ...userArgs], [...hookArgs, ...resume])
-      : [...base, ...userArgs, ...hookArgs, ...resume]
+  let tokens: string[]
+  if (entry.resumeStyle === 'claude-splice') {
+    tokens = spliceClaudeResume(base, [...composed.hookArgs, ...resume], valueFlags)
+  } else if (!composed.foundSettings) {
+    tokens = [...replay.base, ...replay.userArgs, ...(input.hookArgs ?? []), ...resume]
+  } else {
+    const terminator = terminatorIndex(composed.userArgs, valueFlags)
+    tokens = [
+      ...base.slice(0, 1),
+      ...composed.userArgs.slice(0, terminator),
+      ...composed.hookArgs,
+      ...composed.userArgs.slice(terminator),
+      ...resume
+    ]
+  }
   return {
     command: joinCommand(tokens),
     env: mergeEnv(entry.env, record.env, input.hookEnv ?? {}),
