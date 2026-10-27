@@ -26,6 +26,24 @@ export const claudeSession: Session = {
   restorable: false
 }
 
+export type Write = { session: string; text: string; at: number }
+
+export type SubmitPlan = { enterWithPaste?: boolean; delayMs?: number; retryMs?: number | null }
+
+/** A terminal row: its text, or a row the terminal wrapped, which continues the row before it. */
+export type TerminalRow = string | { text: string; wrapped: true }
+
+export type WaitReply = {
+  status: 'matched' | 'pending'
+  state: string
+  kind?: 'approval' | 'question'
+  decidedBy: string
+  rule?: string
+  at: number
+}
+
+export type OutputReply = { status: 'matched'; line: string; match: string; groups: string[]; at: number } | { status: 'pending'; at: number }
+
 export type StoredView = AgentRow & { display: string; label: string }
 export type HookOptions = { session?: string; pid?: number; pstart?: string; event?: string }
 
@@ -57,6 +75,10 @@ export function startOf(pid: number): string {
 /** A running daemon with the real agent-status plugin over fake session, worktree and agents plugins. */
 export class Rig {
   events: QuirkyEvent[] = []
+  /** Every write the PTY host received, in order, with the time it arrived. */
+  writeLog: Write[] = []
+  private terminalModel: { screen: TerminalRow[]; scrollback: TerminalRow[] } | null = null
+  private writeWatchers: { when: (text: string, session: string) => boolean; action: () => void; every: boolean }[] = []
 
   private constructor(
     public h: Harness,
@@ -68,9 +90,89 @@ export class Rig {
     const { client, events } = await h.connectWithEvents('cli')
     const rig = new Rig(h, client)
     rig.events = events
+    rig.watchWrites()
+    rig.watchReads()
     for (const session of options.sessions ?? [{}]) await rig.seed(session)
     return rig
   }
+
+  private watchWrites(): void {
+    const inputs = this.h.pty.inputs
+    const push = inputs.push.bind(inputs)
+    inputs.push = (...items) => {
+      const length = push(...items)
+      for (const item of items) {
+        this.writeLog.push({ session: item.sessionId, text: item.text, at: Date.now() })
+        for (const watcher of [...this.writeWatchers]) {
+          if (!watcher.when(item.text, item.sessionId)) continue
+          if (!watcher.every) this.writeWatchers.splice(this.writeWatchers.indexOf(watcher), 1)
+          watcher.action()
+        }
+      }
+      return length
+    }
+  }
+
+  private watchReads(): void {
+    const requests = this.h.pty.requests
+    const push = requests.push.bind(requests)
+    // the fake host answers from a fixed result, so the read is shaped for the request before it is answered
+    requests.push = (...items) => {
+      const length = push(...items)
+      for (const item of items) {
+        if (item.type === 'read' && this.terminalModel) this.h.pty.setReadResult(this.readFor(this.terminalModel, item.lines, item.unwrap === true))
+      }
+      return length
+    }
+  }
+
+  private readFor({ screen, scrollback }: { screen: TerminalRow[]; scrollback: TerminalRow[] }, lines: number, unwrap: boolean) {
+    const rows = [...(lines === 0 ? [] : scrollback.slice(-lines)), ...screen]
+    const out: string[] = []
+    for (const row of rows) {
+      const text = typeof row === 'string' ? row : row.text
+      if (unwrap && typeof row !== 'string' && out.length > 0) out[out.length - 1] += text
+      else out.push(text)
+    }
+    while (out.length > 0 && out[out.length - 1]!.trim() === '') out.pop()
+    return { lines: out, cols: 80, rows: Math.max(screen.length, 24), alt: false }
+  }
+
+  /**
+   * Makes the PTY host serve a terminal of `screen` rows under `scrollback` rows, answering each
+   * read with the last `lines` of scrollback plus the screen and joining wrapped rows when asked
+   * to unwrap, as the real host does.
+   */
+  terminal(screen: TerminalRow[], scrollback: TerminalRow[] = [], session = 's1'): void {
+    this.ptySession(session)
+    this.terminalModel = { screen, scrollback }
+  }
+
+  /** What a session was sent, in order. */
+  writes = (session = 's1'): string[] => this.writeLog.filter((entry) => entry.session === session).map((entry) => entry.text)
+
+  /**
+   * Runs `action` synchronously when the PTY host receives a write for which `when` holds, before
+   * it answers anything the plugin asks afterwards; once, or on every such write with `every`.
+   */
+  onWrite(when: (text: string, session: string) => boolean, action: () => void, options: { every?: boolean } = {}): void {
+    this.writeWatchers.push({ when, action, every: options.every === true })
+  }
+
+  /** Sets how the fake `quirky.agents` says `agent` submits a prompt; null makes the agent unknown to it. */
+  plan = (agent: string, plan: SubmitPlan | null) => this.client.callAny('quirky.agents/setPlan', { agent, plan })
+
+  delivered = async () =>
+    (await this.client.callAny('quirky.agents/delivered', {})) as { sessionId: string; agent: string; text: string; submit: boolean; ready: boolean }[]
+
+  send = (session: string, text: string, startTimeoutMs?: number) =>
+    this.client.callAny('quirky.agent-status/send', { session, text, ...(startTimeoutMs !== undefined ? { startTimeoutMs } : {}) }) as Promise<{
+      session: string
+      state: 'working' | 'blocked' | 'idle'
+      kind?: 'approval' | 'question'
+      sentAt: number
+      startedAt: number
+    }>
 
   /** Stops the daemon without deleting its home and starts a new one on it. */
   async restart(options: { sessions?: Partial<Session>[] } = {}): Promise<Rig> {
@@ -167,6 +269,7 @@ export class Rig {
   /** Makes `lines` the screen the PTY host serves; the fake serves one screen to every session. */
   show(lines: string[], session = 's1'): void {
     this.ptySession(session)
+    this.terminalModel = null
     this.h.pty.setReadResult({ lines, cols: 80, rows: 24, alt: false })
   }
 
@@ -184,6 +287,15 @@ export class Rig {
     writeFileSync(path, typeof body === 'string' ? body : JSON.stringify(body))
     return path
   }
+
+  wait = (session: string, params: Record<string, unknown> = {}) =>
+    this.client.callAny('quirky.agent-status/wait', { session, ...params }) as Promise<WaitReply>
+
+  waitOutput = (session: string, pattern: string, params: Record<string, unknown> = {}) =>
+    this.client.callAny('quirky.agent-status/waitOutput', { session, pattern, ...params }) as Promise<OutputReply>
+
+  /** Marks a session exited the way quirky.session does when its process ends, announcing the change. */
+  exit = (session = 's1') => this.client.callAny('quirky.session/setStatus', { session, status: 'exited' })
 
   explain = async (session = 's1', at?: number) =>
     (await this.client.callAny('quirky.agent-status/explain', { session, ...(at !== undefined ? { at } : {}) })) as Explanation
