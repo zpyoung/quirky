@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 import type { QuirkyClient, Session } from '@quirky/protocol'
 import { runCli } from '../../../packages/cli/test/fixtures/fake-daemon'
 import { waitFor, type Harness } from '../../../packages/daemon/test/helpers'
+import { Screen } from '../../../packages/pty-host/src/screen'
 import { commands } from '../cli'
 import { createSession, startPluginHarness, TERMINAL_PLUGINS, testCliContext } from './support'
 
@@ -90,6 +91,7 @@ describe('term snapshot', () => {
       offset: 12
     }
     h.pty.setSnapshotResult(snapshot)
+    h.pty.setReadResult({ lines: ['prompt$ ls', 'file.txt'], cols: 80, rows: 24, alt: false })
     const text = testCliContext(client, { env: { QUIRKY_SESSION_ID: shell.id } })
     await commands.snapshot!({ positionals: [], flags: {} }, text.ctx)
     expect(text.lines).toEqual(['prompt$ ls\nfile.txt'])
@@ -97,6 +99,30 @@ describe('term snapshot', () => {
     const json = testCliContext(client, { json: true })
     await commands.snapshot!({ positionals: [shell.id], flags: {} }, json.ctx)
     expect(JSON.parse(json.lines[0]!)).toEqual(snapshot)
+  })
+
+  test('prints the host screen rows when the serialized snapshot reprints a character or moves the cursor', async () => {
+    const screen = new Screen({ cols: 5, rows: 3 })
+    screen.write('abcdeFGHIJ')
+    await screen.settled()
+    const wrapped = screen.snapshot()
+    const rows = screen.lines().map((row) => row.text.trimEnd())
+    screen.dispose()
+    expect(wrapped.ansi).toContain('\x1b[2;5H\x1b[0mJ')
+    h.pty.setSnapshotResult({ ...wrapped, cwd: '/tmp/w', title: 't', shellState: 'ready', offset: 10 })
+    h.pty.setReadResult({ lines: ['abcde', 'FGHIJ'], cols: 5, rows: 3, alt: false })
+    expect(rows).toEqual(['abcde', 'FGHIJ', ''])
+
+    const text = testCliContext(client)
+    await commands.snapshot!({ positionals: [shell.id], flags: {} }, text.ctx)
+    expect(text.lines).toEqual(['abcde\nFGHIJ'])
+    expect(h.pty.requests.filter((r) => r.type === 'read').at(-1)).toMatchObject({ sessionId: shell.id, lines: 0 })
+
+    const json = testCliContext(client, { json: true })
+    const reads = h.pty.requests.filter((r) => r.type === 'read').length
+    await commands.snapshot!({ positionals: [shell.id], flags: {} }, json.ctx)
+    expect(JSON.parse(json.lines[0]!).ansi).toBe(wrapped.ansi)
+    expect(h.pty.requests.filter((r) => r.type === 'read')).toHaveLength(reads)
   })
 
   test('without a session it is a usage error', async () => {
@@ -209,6 +235,7 @@ describe('through the real CLI', () => {
   test('SC-40: sessions and snapshot reach the daemon by their group words', async () => {
     const sessions = await runCli(['term', 'sessions'], { home: h.home })
     expect(sessions.stdout).toContain(shell.id)
+    h.pty.setReadResult({ lines: ['hello from the screen'], cols: 80, rows: 24, alt: false })
     const snapshot = await runCli(['terminal', 'snapshot', shell.id], { home: h.home })
     expect(snapshot.stdout).toBe('hello from the screen\n')
   })

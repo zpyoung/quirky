@@ -73,6 +73,7 @@ function enterDelayMs(): number {
  */
 export class TerminalService {
   private readonly bySession = new Map<string, Set<Attachment>>()
+  private readonly silent = new Map<string, Set<Attachment>>()
   private readonly byConnection = new Map<number, Map<number, Attachment>>()
   private readonly received = new Map<string, number>()
   private readonly taps = new Map<string, Tap>()
@@ -238,9 +239,11 @@ export class TerminalService {
     if (event.type !== 'quirky.session/removed') return
     const { sessionId } = (event as PluginEvent).data as { sessionId: string }
     const attachments = this.bySession.get(sessionId)
-    if (!attachments || attachments.size === 0) return
-    this.forgotten.add(sessionId)
-    for (const attachment of [...attachments]) attachment.stream.close()
+    if (attachments && attachments.size > 0) {
+      this.forgotten.add(sessionId)
+      for (const attachment of [...attachments]) attachment.stream.close()
+    }
+    for (const attachment of [...(this.silent.get(sessionId) ?? [])]) attachment.stream.close()
   }
 
   /** Re-subscribes every streamed session and sends its streams the output produced while the host was unreachable. */
@@ -271,7 +274,7 @@ export class TerminalService {
   /** Ends every stream and drops the host subscriptions; attaches still in flight are closed when they finish, and new ones are refused. */
   shutdown(): void {
     this.closed = true
-    for (const attachments of [...this.bySession.values()]) {
+    for (const attachments of [...this.bySession.values(), ...this.silent.values()]) {
       for (const attachment of [...attachments]) attachment.stream.close()
     }
   }
@@ -363,8 +366,12 @@ export class TerminalService {
         const streams = this.byConnection.get(attachment.connectionId) ?? new Map()
         streams.set(stream.streamId, attachment)
         this.byConnection.set(attachment.connectionId, streams)
-        // an ended session's stream stays open for the pane but never carries output
-        if (result.live !== false) {
+        if (result.live === false) {
+          // an ended session's stream stays open for the pane but never carries output
+          const set = this.silent.get(sessionId) ?? new Set()
+          set.add(attachment)
+          this.silent.set(sessionId, set)
+        } else {
           const set = this.bySession.get(sessionId) ?? new Set()
           set.add(attachment)
           this.bySession.set(sessionId, set)
@@ -389,6 +396,9 @@ export class TerminalService {
 
   private drop(attachment: Attachment): void {
     this.bySession.get(attachment.sessionId)?.delete(attachment)
+    const silent = this.silent.get(attachment.sessionId)
+    silent?.delete(attachment)
+    if (silent?.size === 0) this.silent.delete(attachment.sessionId)
     const streams = this.byConnection.get(attachment.connectionId)
     streams?.delete(attachment.stream.streamId)
     if (streams?.size === 0) this.byConnection.delete(attachment.connectionId)

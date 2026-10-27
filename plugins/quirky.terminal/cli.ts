@@ -1,14 +1,5 @@
 import type { CliArgs, CliContext, CliModule, PtySnapshot } from '@quirky/protocol'
 
-const ESCAPE_SEQUENCE = /\x1b(?:\[[0-?]*[ -/]*[@-~]|\][^\x07\x1b]*(?:\x07|\x1b\\)|[()][0-9A-Za-z]|[78=>])/g
-
-/** The screen rows of an ANSI snapshot as plain text, without trailing blanks. */
-function screenText(ansi: string): string {
-  const rows = ansi.replace(ESCAPE_SEQUENCE, '').split(/\r?\n/).map((row) => row.trimEnd())
-  while (rows.length > 0 && rows[rows.length - 1] === '') rows.pop()
-  return rows.join('\n')
-}
-
 function singleSessionArg(args: CliArgs, ctx: CliContext): string {
   if (args.positionals.length > 1) throw ctx.usage(`unexpected argument "${args.positionals[1]}"`)
   return sessionIdOr(args.positionals[0], ctx)
@@ -49,7 +40,9 @@ const named: CliModule['commands'] = {
   async snapshot(args, ctx) {
     const session = singleSessionArg(args, ctx)
     const result = (await ctx.call('quirky.terminal/snapshot', { session })) as PtySnapshot
-    ctx.out.result(result, () => screenText(result.ansi))
+    // the host owns the screen model; lines 0 asks for the visible rows alone, without history
+    const rows = ctx.out.json ? [] : ((await ctx.call('quirky.terminal/read', { session, lines: 0 })) as { lines: string[] }).lines
+    ctx.out.result(result, () => rows.join('\n'))
   },
 
   async history(args, ctx) {
