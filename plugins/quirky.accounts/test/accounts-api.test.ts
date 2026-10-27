@@ -94,7 +94,7 @@ describe('quirky.accounts lifecycle API and CLI', () => {
     const first = await add(h, 'codex', 'Personal')
     expect(first).toMatchObject({ status: 'complete', result: { provider: 'codex', email: 'codex@example.test', active: true } })
     const savedId = first.result?.id
-    expect(savedId).toBeTruthy()
+    if (!savedId) throw new Error('Completed Codex login did not return an account ID')
     const state = await call<AccountState>(h.client, 'quirky.accounts/list')
     expect(state.active.codex).toBe(savedId)
 

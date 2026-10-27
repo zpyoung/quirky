@@ -4,6 +4,7 @@ import type { PluginContext, PluginStore, QuirkyEvent } from '@quirky/protocol'
 import type {
   AccountSummary,
   AccountPrepareResult,
+  AccountIdentity,
   AccountRecord,
   AccountSessionRecord,
   AccountState,
