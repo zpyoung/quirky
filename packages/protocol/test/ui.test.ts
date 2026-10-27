@@ -1,11 +1,9 @@
 import { describe, expect, test } from 'bun:test'
 import {
-  CODE_BACKED_KINDS,
   DEFAULT_THEME,
   RESERVED_CHORDS,
   THEME_COLOR_RE,
   THEME_TOKENS,
-  UI_KINDS,
   checkSettingValue,
   chordFromKeyEvent,
   evaluateWhen,
@@ -258,16 +256,6 @@ describe('theme tokens and the default theme', () => {
     for (const bad of ['abc', '#abcd', '#abcde', '#ggg', 'red', '#aabbccdde', ' #abc']) {
       expect(THEME_COLOR_RE.test(bad)).toBe(false)
     }
-  })
-})
-
-describe('UI kinds', () => {
-  test('lists the eight kinds, five of them code-backed', () => {
-    expect([...UI_KINDS].sort()).toEqual<string[]>(
-      ['command', 'keybinding', 'overlay', 'panel', 'setting', 'sidebar-section', 'theme', 'view'].sort()
-    )
-    expect([...CODE_BACKED_KINDS].sort()).toEqual(['command', 'overlay', 'panel', 'sidebar-section', 'view'])
-    for (const kind of CODE_BACKED_KINDS) expect(UI_KINDS.includes(kind)).toBe(true)
   })
 })
 

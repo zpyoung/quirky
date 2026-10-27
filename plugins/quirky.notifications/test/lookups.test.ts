@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test'
 import type { PluginContext, PluginNotification, QuirkyEvent, UiState } from '@quirky/protocol'
 import { NotificationsService } from '../src/service'
 
-const idle: UiState = { windows: [], layout: { view: null, panel: null, sidebar: true, focus: null }, slots: [] }
+const idle: UiState = { windows: [], layout: { view: null, panel: null, sidebar: true, focus: null }, toasts: [], slots: [] }
 const never = () => new Promise<never>(() => {})
 
 const answers = (over: Record<string, unknown> = {}): Record<string, unknown> => ({

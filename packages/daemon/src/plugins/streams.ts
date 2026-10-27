@@ -2,6 +2,31 @@ import { encodeTerminalOutput, type ClientStream } from '@quirky/protocol'
 import { invalidParams } from '../errors'
 import type { ClientConn } from '../types'
 
+/** Registers cleanup on either transport without creating a stream or requiring binary support. */
+export function onConnectionClose(conn: ClientConn, callback: () => void): () => void {
+  const closeId = conn.nextStreamId++
+  let active = true
+  const close = () => {
+    if (!active) return
+    active = false
+    conn.streamClosers.delete(closeId)
+    try {
+      callback()
+    } catch {
+      return
+    }
+  }
+
+  if (conn.closed) close()
+  else conn.streamClosers.set(closeId, close)
+
+  return () => {
+    if (!active) return
+    active = false
+    conn.streamClosers.delete(closeId)
+  }
+}
+
 /**
  * Opens a binary stream to `conn` for a `connection: true` method. The stream ends when the plugin
  * closes it or the connection goes away (`Core.removeClient` runs the registered closer); its

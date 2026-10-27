@@ -70,12 +70,14 @@ export class FakeDaemon {
   readonly jobRuns = new Map<string, JobRun>()
   readonly ui: UiModel = {
     sidebarSections: [],
+    statusBars: [],
     panels: [],
     views: [],
     overlays: [],
     commands: [],
     keybindings: [],
     settings: [],
+    menuItems: [],
     themes: [DEFAULT_THEME],
     theme: { chosen: 'default', active: 'default' },
     modules: {}
@@ -293,11 +295,13 @@ export class FakeDaemon {
     const list =
       kind === 'sidebar-section'
         ? this.ui.sidebarSections
-        : kind === 'panel'
-          ? this.ui.panels
-          : kind === 'overlay'
-            ? this.ui.overlays
-            : this.ui.views
+        : kind === 'status-bar'
+          ? this.ui.statusBars
+          : kind === 'panel'
+            ? this.ui.panels
+            : kind === 'overlay'
+              ? this.ui.overlays
+              : this.ui.views
     list.push(entry)
     return entry
   }

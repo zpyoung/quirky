@@ -8,9 +8,10 @@
  * When `<git common dir>/build-loop/remote-tests.json` names a host (`{"host": "user@box", "jobs": 4}`),
  * the run moves off this machine: the working tree is copied to a fresh folder there and each test
  * file runs in its own process, `jobs` at a time, each holding one of `slots` machine-wide locks there
- * so several runs at once share the host's cores (`slots` defaults to 8). A run from the integration
- * worktree is a land, which holds the queue lock while it runs, so it can use every slot while other
- * runs keep to half of them. Files listed in scripts/test-on-macos.txt still run
+ * so several runs at once share the host's cores (`slots` defaults to 8). Files start slowest first,
+ * by the times logged in `~/test-slots/durations.log` there. A run from the integration or verify
+ * worktree is a land, which holds the land lock while it runs, so it can use every slot while other
+ * runs share one. Files listed in scripts/test-on-macos.txt still run
  * here, alongside. If the host can't be reached the whole run falls back to this machine.
  * `QUIRKY_TEST_LOCAL=1` skips the host.
  *
@@ -145,9 +146,9 @@ export async function runFiles(
   return failed.length === 0 ? { ok: true, flaky: [] } : rerunAlone(cwd, failed.sort(), flags, limit)
 }
 
-/** How many of the host's slots a run may take: all of them, or half while a land runs and this isn't it. */
+/** How many of the host's slots a run may take: all of them, or one while a land runs and this isn't it. */
 export function usableSlots(slots: number, priority: boolean, landRunning: boolean): number {
-  return priority || !landRunning ? slots : Math.max(1, Math.floor(slots / 2))
+  return priority || !landRunning ? slots : 1
 }
 
 function alive(pid: number): boolean {
@@ -171,8 +172,22 @@ function landRunning(dir: string): boolean {
   return running
 }
 
-/** `bun test` that first takes one of `slots` locks shared by every run on this machine. */
-function slotted(slots: number, priority: boolean): Run {
+/** `files` with the slowest first, by the last time logged for each; a file never logged counts as slowest. */
+export function slowestFirst(files: string[], log: string): string[] {
+  const last = new Map<string, number>()
+  if (existsSync(log)) {
+    for (const line of readFileSync(log, 'utf8').split('\n')) {
+      const [file, ms] = line.split(' ')
+      if (file && ms) last.set(file, Number(ms))
+    }
+    if (statSync(log).size > 1_000_000) writeFileSync(log, [...last].map(([file, ms]) => `${file} ${ms}\n`).join(''))
+  }
+  const time = (file: string) => last.get(file) ?? Number.MAX_SAFE_INTEGER
+  return [...files].sort((a, b) => time(b) - time(a))
+}
+
+/** `bun test` that first takes one of `slots` locks shared by every run on this machine, logging each file's time to `log`. */
+function slotted(slots: number, priority: boolean, log: string): Run {
   const dir = join(homedir(), 'test-slots')
   mkdirSync(dir, { recursive: true })
   if (priority) {
@@ -181,16 +196,22 @@ function slotted(slots: number, priority: boolean): Run {
     process.on('exit', () => rmSync(marker, { force: true }))
   }
   const BUSY = 75
+  // a process scope starts a guardian process, so probe a slot with a bare flock before paying for one
+  const free = (lock: string) => Bun.spawnSync(['flock', '-n', '-E', String(BUSY), lock, 'true']).exitCode === 0
   return async (cwd, args) => {
     for (;;) {
       const usable = usableSlots(slots, priority, !priority && landRunning(dir))
       const start = Math.floor(Math.random() * usable)
       for (let i = 0; i < usable; i++) {
         const lock = join(dir, `${(start + i) % usable}.lock`)
+        if (!free(lock)) continue
+        const began = Date.now()
         const result = await exec(['flock', '-n', '-E', String(BUSY), lock, 'bun', 'test', ...args], cwd, false, undefined, createProcessScope())
-        if (result.code !== BUSY) return result
+        if (result.code === BUSY) continue
+        appendFileSync(log, `${args.at(-1)?.replace(/^\.\//, '')} ${Date.now() - began}\n`)
+        return result
       }
-      await Bun.sleep(500)
+      await Bun.sleep(1000)
     }
   }
 }
@@ -250,8 +271,9 @@ async function main(argv: string[]): Promise<boolean> {
   if (argv[0] === '--worker') {
     const value = (name: string) => Number(argv[argv.indexOf(name) + 1])
     const flags = argv.slice(7)
-    const files = (await new Response(Bun.stdin.stream()).text()).split('\n').filter(Boolean)
-    const result = await runFiles(cwd, files, flags, value('--jobs'), 5, slotted(value('--slots'), value('--land') === 1))
+    const log = join(homedir(), 'test-slots', 'durations.log')
+    const files = slowestFirst((await new Response(Bun.stdin.stream()).text()).split('\n').filter(Boolean), log)
+    const result = await runFiles(cwd, files, flags, value('--jobs'), 5, slotted(value('--slots'), value('--land') === 1, log))
     console.log(`${RESULT_PREFIX}${JSON.stringify(result)}`)
     return result.ok
   }
@@ -263,7 +285,7 @@ async function main(argv: string[]): Promise<boolean> {
   const here = files.filter((file) => macos.has(file))
   const there = files.filter((file) => !macos.has(file))
   console.log(`running ${there.length} test files on ${remote.host} and ${here.length} macOS-only files here`)
-  const land = basename(cwd) === 'integration' && basename(dirname(cwd)) === 'build-loop'
+  const land = ['integration', 'verify'].includes(basename(cwd)) && basename(dirname(cwd)) === 'build-loop'
   const [away, local] = await Promise.all([runRemote(cwd, remote, there, flags, land), runFiles(cwd, here, flags, 1)])
   if (away) {
     if (away.flaky.length > 0) recordFlakes(cwd, away.flaky)

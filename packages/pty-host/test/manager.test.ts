@@ -543,6 +543,69 @@ describe('history and read', () => {
     expect(await manager.read('tb', 0)).toMatchObject({ cols: 40, rows: 10 })
   })
 
+  test('read without unwrap returns a wrapped line as several rows and with unwrap as one line', async () => {
+    const { manager } = newManager()
+    const long = 'abcdefghij'.repeat(5)
+    await manager.create(params('uw', sh(`printf 'head\\n${long}\\ntail'; sleep 30`), { cols: 20, rows: 10 }))
+    const rows = await readUntil(manager, 'uw', 0, (lines) => lines.includes('tail'))
+    expect(rows.lines).toEqual(['head', long.slice(0, 20), long.slice(20, 40), long.slice(40), 'tail'])
+    expect((await manager.read('uw', 0, false)).lines).toEqual(rows.lines)
+    expect((await manager.read('uw', 0, true)).lines).toEqual(['head', long, 'tail'])
+  })
+
+  test('read with unwrap joins a line that wraps from scrollback onto the screen', async () => {
+    const { manager } = newManager()
+    const long = 'abcdefghij'.repeat(12)
+    await manager.create(params('uws', sh(`printf 'first\\n${long}'; sleep 30`), { cols: 20, rows: 5 }))
+    await readUntil(manager, 'uws', 0, (lines) => lines.at(-1) === long.slice(100))
+    const rows = await manager.read('uws', 10)
+    expect(rows.lines[0]).toBe('first')
+    expect(rows.lines).toHaveLength(7)
+    expect(rows.lines[1]).toBe(long.slice(0, 20))
+    const joined = await manager.read('uws', 10, true)
+    expect(joined.lines).toEqual(['first', long])
+    expect(joined).toMatchObject({ cols: 20, rows: 5 })
+  })
+
+  test('read with unwrap joins wrapped rows of a stopped session', async () => {
+    const { manager } = newManager()
+    const long = 'abcdefghij'.repeat(5)
+    await manager.create(params('uwx', sh(`printf '${long}'`), { cols: 20, rows: 10 }))
+    await waitFor(() => manager.list().every((info) => !info.alive), 5000, 'exit')
+    expect((await manager.read('uwx', 0, true)).lines).toEqual([long])
+  })
+
+  test('read with unwrap keeps the space at a wrap point', async () => {
+    const { manager } = newManager()
+    await manager.create(params('uwsp', sh(`printf 'hello world'; sleep 30`), { cols: 6, rows: 5 }))
+    await readUntil(manager, 'uwsp', 0, (lines) => lines.at(-1) === 'world')
+    expect((await manager.read('uwsp', 0)).lines).toEqual(['hello', 'world'])
+    expect((await manager.read('uwsp', 0, true)).lines).toEqual(['hello world'])
+  })
+
+  test('read with unwrap keeps a space that sits exactly at the wrap column, on either side of it', async () => {
+    const { manager } = newManager()
+    await manager.create(params('uwcol', sh(`printf 'abcde fghij\\nabcdef ghijkl'; sleep 30`), { cols: 6, rows: 8 }))
+    await readUntil(manager, 'uwcol', 0, (lines) => lines.includes('l'))
+    expect((await manager.read('uwcol', 0, true)).lines).toEqual(['abcde fghij', 'abcdef ghijkl'])
+  })
+
+  test('read with unwrap keeps the space when the wrapped line crosses from scrollback to the screen', async () => {
+    const { manager } = newManager()
+    await manager.create(params('uwseam', sh(`printf 'abcde fghij klmno pqrst'; sleep 30`), { cols: 6, rows: 3 }))
+    await readUntil(manager, 'uwseam', 0, (lines) => lines.includes('pqrst'))
+    const rows = await manager.read('uwseam', 10)
+    expect(rows.lines).toEqual(['abcde', 'fghij', 'klmno', 'pqrst'])
+    expect((await manager.read('uwseam', 10, true)).lines).toEqual(['abcde fghij klmno pqrst'])
+  })
+
+  test('read with unwrap keeps the space across scrollback rows of a stopped session', async () => {
+    const { manager } = newManager()
+    await manager.create(params('uwstop', sh(`printf 'abcde fghij klmno pqrst'`), { cols: 6, rows: 3 }))
+    await waitFor(() => manager.list().every((info) => !info.alive), 5000, 'exit')
+    expect((await manager.read('uwstop', 10, true)).lines).toEqual(['abcde fghij klmno pqrst'])
+  })
+
   test('read validates its line count', async () => {
     const { manager } = newManager()
     await manager.create(params('v', ['/bin/cat']))

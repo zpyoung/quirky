@@ -43,7 +43,7 @@ export type PluginRuntimeOptions = {
   stopDaemon: () => void
 }
 
-type LaunchInput = Omit<LaunchHookInput, 'env' | 'args'>
+type LaunchInput = Omit<LaunchHookInput, 'env' | 'args' | 'jsonArgs'>
 
 export type PluginRuntime = {
   extension: ContextExtension
@@ -155,6 +155,7 @@ export function createPluginRuntime(options: PluginRuntimeOptions): PluginRuntim
               hookToken: core.hookToken,
               shell: options.shell,
               agent: input.agent,
+              ...(input.shellInit === undefined ? {} : { shellInit: input.shellInit }),
               envPatch
             })
           },

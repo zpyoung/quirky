@@ -86,7 +86,7 @@ describe('ClaudeVersionGate', () => {
 })
 
 function hookInput(overrides: Partial<LaunchHookInput> = {}): LaunchHookInput {
-  return { sessionId: 's1', worktreeId: 'w1', repoId: 'r1', cwd: '/tmp', agent: 'claude', env: {}, args: [], ...overrides }
+  return { sessionId: 's1', worktreeId: 'w1', repoId: 'r1', cwd: '/tmp', agent: 'claude', env: {}, args: [], jsonArgs: {}, ...overrides }
 }
 
 function contextFor(agent: { command: string; args: string } | Error): PluginContext {
