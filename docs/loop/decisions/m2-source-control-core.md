@@ -572,5 +572,27 @@
 - **Revisit if:** the final round finds defects a checkpoint would have stopped W3 from building on
 - **Source:** assumed — autonomous
 
+## D53: W3 found two daemon–window mismatches and a test-isolation bug; the orchestrator fixed one test race
+- **Question:** what W3's integration against a real daemon changed, and how its one intermittent window test was handled
+- **Options:** send the race back to a fixer; fix the test in place
+- **Chose:** W3 fixed: the panel's 3-second marker check called `conflictFile`, which marked every conflict as opened, so `conflictFile` gained a `peek` flag the panel and conflict review pass; a staged deletion of a resolved conflict now reads "Gone"; and fake-DOM tests now register happy-dom without replacing the runtime's timers, which had broken every later headless-window test in the same process. The orchestrator's acceptance run then failed SC-61's window test once in two runs: after Reload from Disk the editor is rebuilt, and the test read it before the new one mounted. The test now waits for the reloaded editor; three runs passed.
+- **Why:** the race was in the test's read, not in the view, and the fix is two lines in one test
+- **Evidence:** plugins/quirky.git/test/window/view-file.test.ts; scratchpad w3-acc.txt
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** SC-61's window test flakes again
+- **Source:** assumed — autonomous
+
+## D54: Catching up with build/roadmap (m1-agent-status) needed no change here
+- **Question:** LOOP.md step 5's catch-up merge before the final review
+- **Options:** merge and adapt; merge only
+- **Chose:** `git merge build/roadmap` merged without conflicts (`packages/protocol/src/model.ts` and `packages/ui/src/styles.css` auto-merged). The m1-agent-status decision log has no decision about source control, git or the panel, so nothing here conflicts with it. The shared fake git (`createFakeGit`) also had to answer `statusV2` and `diffSource`, because the M0 exit test runs `quirky git status` on a fake repository; that fix landed before the merge.
+- **Why:** the merge brought only agent-status, terminal and session work
+- **Evidence:** docs/loop/decisions/m1-agent-status.md; packages/git/src/testing.ts
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** a later lane's decision touches source control
+- **Source:** assumed — autonomous
+
 ## Progress
-W1 and W2 merged on build/m2-source-control-core with integration fixes. W3 (window integration, window scenario tests against a real daemon, view CSS into styles.css) dispatched. If this iteration stops, rerun W3 from the branch tip, then the final review round (three deep lenses over RUN_BASE e819317..HEAD), one fix batch, verify (UI scenarios with quirk:using-apps-like-a-user, native scenario file), land.
+W1–W3 merged and caught up with build/roadmap. Next: post-merge full gate, Final Round 1 (three deep Codex lenses over merge-base(build/roadmap)..HEAD), one fix batch, rerun the suites, verify (UI scenarios with quirk:using-apps-like-a-user on a built daemon), land. If this iteration stops, start at the gate.
