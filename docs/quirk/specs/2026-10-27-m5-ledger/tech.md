@@ -1,6 +1,6 @@
 # Project ledger implementation contracts
 
-Status: Implementation resumed after the authorized queue repair; fresh affected gates and final code review pending. Logic: [logic.md](logic.md). Complexity gate: explicit LOOP.md request, >3 source files and daemon/UI/CLI boundary.
+Status: Implemented and final-round fixes verified; queue-owned final integration pending. Logic: [logic.md](logic.md). Complexity gate: explicit LOOP.md request, >3 source files and daemon/UI/CLI boundary.
 
 ## Architecture
 
@@ -69,6 +69,8 @@ Project ledger owner keys use a documented canonical identity: parse scp-style u
 
 Locations parse trailing `:digits`, reject nonpositive/unsafe lines, normalize paths and base. External escape paths retain host identity; review never dereferences them. Read-only git commands stamp baseline/observed HEAD and remote origin for identity; failures reading HEAD give unavailable revision, not invented content. Canonicalize source/evidence paths to avoid following outside-root symlinks. Existing remote-routing errors remain explicit; no new remote implementation.
 
+Evidence containment must accept valid relative, absolute lexical-alias and absolute canonical paths under the same root. Compare lexical membership without confusing it with the canonical root, then retain canonical-target and nearest-existing-parent escape checks. Missing in-root files report false; out-of-scope or unsafe symlink targets remain unavailable/null.
+
 `removal-preview` returns impacted ledgers/revisions/counts and validates expectedLedgers when supplied. Extend repo/group removal public schemas and handlers to accept optional expected ledger snapshots; invoke the ledger public guard after other awaited teardown and before synchronous owner deletion. Only MethodNotFound permits omission when ledger is disabled, not arbitrary ledger errors. Retention notices are additive and feature-disable-safe.
 
 ### Import boundary
@@ -135,6 +137,7 @@ Implements all [acceptance scenarios](logic.md#behavior--acceptance-scenarios).
 - `plugins/quirky.ledger/test/ledger.test.ts`: real daemon/API SC-01–07/10–12, state/revision/no-op/concurrency, lifecycle/recovery, settings, corrupt persistence, confirmation/atomic bulk and stable identity across re-add.
 - `plugins/quirky.ledger/test/import-cli.test.ts`: real daemon plus spawned CLI SC-02/08/09; all types/legacy formats, idempotency/conflicts/tombstones/equivalence collisions, malformed imports/partial success exit, unchanged source bytes, positional ids and targeting.
 - `plugins/quirky.ledger/test/window.test.ts`: real daemon and headless window; API-routed commands and DOM assertions for SC-13–17, owner menus/settings/retention, stale responses and footer/action availability. No source-text assertions or forwarding mocks.
+- `plugins/quirky.ledger/test/evidence-paths.test.ts`: actual filesystem regression for alias-root evidence, all valid path forms, present/missing outcomes, lexical outside paths and existing/missing-leaf symlink escapes; complements the daemon-driven SC-07 flow.
 - Existing worktree/repo tests remain behaviorally valid; update impacted contracts, never re-pin incidental wording tests.
 - Orchestrator acceptance commands: `bun test plugins/quirky.ledger/test/ledger.test.ts`, `bun test plugins/quirky.ledger/test/import-cli.test.ts`, `bun test plugins/quirky.ledger/test/window.test.ts`, then affected package/app/plugin suites via `bun scripts/suite.ts <dir> ...`, `bun test scripts`, `bun run typecheck`, `bun run build`. Current LOOP.md reserves the whole `bun run test` suite for queue.ts land unless shared core code changes.
 - Built web smoke: fresh owned QUIRKY_HOME, UI URL from daemonUrl, using-apps-like-a-user `--surface web --owner yours --unattended`, goals SC-13–17 including clipped-footer regression; clean up every owned process and temp home. Tool-caused blocked/partial is recorded with report, never claimed as passing.

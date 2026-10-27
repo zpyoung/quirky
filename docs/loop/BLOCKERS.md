@@ -135,3 +135,10 @@ Source anchors for the completion findings above: SC-02 `75445e6:plugins/quirky.
 ## m3-vault: land-owned load finding
 
 - **LOW — PTY scope startup under full-suite load** (`packages/pty-host/test/helpers.ts:76`, `scripts/test-support/process-scope.ts:404`). The land-owned464-file run reported guardian startup/connect resets and test timeouts in host.test.ts; its required isolated retry passed all32 tests. No cause is established and no PTY behavior, test deadline or retry policy was changed. The independent import-fence failure, which persisted alone, was fixed rather than suppressed.
+
+## m5-ledger: original queue-order prerequisite resolved
+
+- The operator's authorized 4cf9720 queue-order repair allowed this preserved item to resume. The earlier blocked entry remains historical; no protected queue/test edit was made by this lane.
+- Final C/S/X discovery and its one scoped accepted-finding fix batch are complete. The independently confirmed XR1 alias-root evidence edge is verified closed; no accepted code finding remains open.
+- Exact aggregate/isolated CI outcomes, UI probe limits and reviewer write-constraint violations are preserved in m5-ledger D18-D19,D28-D31. Final landing remains subject to queue.ts's complete merge verification; this resolution is not a claim that landing has already succeeded.
+

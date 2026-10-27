@@ -297,5 +297,49 @@
 - **Revisit if:** a new public owner API contract conflicts with ledger callers
 - **Source:** supersedes m5-ledger D21 (final-review baseline only, before discovery)
 
+## D28: Accept the observed complete gate with its isolated shell-path rerun disclosed
+- **Question:** what verification supports final discovery and what caveats remain
+- **Options:** claim a flake-free run; preserve exact aggregate and isolated outcomes
+- **Chose:** use the real bound prepass on 4b7739a: affected suite accepted 218 remote files, both macOS-only files passed, scripts62pass/0fail, typecheck and packaged build exit0. Record shell-path as the one initial failure that passed its isolated15-test rerun.
+- **Why:** the runner's existing retry policy returned ok:true with the flaky path; no deadline, exclusion, shell behavior or guardian policy was changed. Duration547000ms warrants a runner-cost advisory, not a harness change in this item: investigate remote slot contention and per-worker browser-context reuse where isolation permits. pytest-xdist does not apply to this Bun repository.
+- **Evidence:** /tmp/quirky-m5-ledger-final-4b7739a/prepass.newhost.json and newhost-check.*; tree ac6f48c21c8579330cb652bafa877b7a333ff896; artifact hash3fbe75955a1c1bbe756210bd759680da153e708e0beac17545a3329e524014b2; raw audit archived in .orca/loops/omp-until-done-90f3c2ab/m5-ledger-review-4b7739a.tar.gz
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** the queue-owned full merge verification fails
+- **Source:** assumed — autonomous
+
+## D29: Close XR1 despite its malformed first review packet, with one scoped fix batch
+- **Question:** which Final Round1 findings are accepted and what closure evidence is required
+- **Options:** ignore the malformed packet; treat its HIGH claim as proved normal-path impact; independently reproduce and calibrate the real edge
+- **Chose:** all valid C/S/X deep Gemini gates PASS with zero findings/advisories/limitations/contested/excluded/unreviewed paths. Accept the first X packet's unadmitted alias-root candidate independently as XR1 MEDIUM, not HIGH; fix only that blocking edge in one OpenAI/omp batch. No second model round, as LOOP.md requires.
+- **Why:** the first X promote omitted required stage/disposition and was never refuted or gated; its valid fresh retry returned no claims, so PASS did not adjudicate that candidate. The parent's fresh owned filesystem smoke proved relative/absolute-alias in-root evidence returned null, while canonical absolute paths and escape blocking already worked. Post-fix smoke resolves all valid forms, returns true/false for present/missing files, and still rejects existing/missing-leaf escapes. Boundary tests4pass/15assertions, ledger API25pass, typecheck and packaged build pass.
+- **Evidence:** lenses/C,S,X gate.json/manifest.json and raw stages in the archived audit; original X promote.stdout.raw; /tmp/quirky-ledger-evidence-root-smoke.ts failing-before/passing-after; plugins/quirky.ledger/test/evidence-paths.test.ts; post-fix artifact://470
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** a real caller can cross the canonical-root boundary or valid alias evidence disappears
+- **Source:** assumed — autonomous
+
+## D30: Preserve reviewer write violations as an operational limitation
+- **Question:** whether the pi reviewers obeyed the read-only Bash grant
+- **Options:** conceal generated files; mistake them for product edits; retain ownership evidence and remove only proven review artifacts
+- **Chose:** retain raw traces and clean the known review-generated root diff copies/reproduction script and scratch paths. Parent freeze audit confirmed HEAD4b7739a with no tracked/index or untracked source change before the accepted fix batch.
+- **Why:** C used shell redirects to create nineteen root diff copies; X wrote a helper reproduction script and fixed-name temporary fixtures despite the prompt-only read-only rule. No implementation code was patched by reviewers, but prior contents of overwritten fixed-name scratch targets were not recorded. The machine PASS fields do not capture this operational constraint violation; no stronger write-enforcement claim is made.
+- **Evidence:** archived lenses/C/promote.stderr.log and lenses/X/promote.stderr.log; coordinator cleanup reports; parent source-freeze audit
+- **Reversibility:** medium
+- **Confidence:** high
+- **Revisit if:** review execution needs a tool-enforced read-only filesystem boundary
+- **Source:** assumed — autonomous
+
+## D31: Finish this item through queue-controlled integration without new flows or review rounds
+- **Question:** finishing-a-development-branch choice under the caught-up night-mode loop rules
+- **Options:** queue-controlled local landing; manual integration, push or PR; another discovery round
+- **Chose:** commit the verified XR1 batch and final evidence, catch up once immediately before landing, detach, and call queue.ts land m5-ledger. No push, main checkout, new flows, research swarm or second review round. Preserve D18-D19's actual built-web outcomes rather than invent a new refresh-probe pass.
+- **Why:** current LOOP.md explicitly chooses this integration path, one final round/blocking fix batch and queue-owned full verification. The post-review change is a filesystem evidence predicate; public schemas, UI rendering and caller signatures are unchanged. Its actual filesystem smoke plus regression/API tests and build verify the changed path.
+- **Evidence:** docs/loop/LOOP.md:56-78,139-165,171-181; D18-D19,D28-D30; post-fix runtime and build output
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** the final catch-up introduces a conflicting contract or queue-owned verification fails
+- **Source:** locked by docs/loop/LOOP.md
+
 ## Progress
-Recovery identity smoke and ledger API/CLI regressions pass (25 API, 12 CLI/import); current integration catch-up is being finalized under D27. Both independent AST changes were consolidated into the incoming scanner with five retained regression tests; hosting/ledger lock entries preserved. Shell diagnostics passed without a production or guardian change, but the next gate must run normally without tracing. Next: complete merge/type validation, freeze the new final artifact at the D27 integration baseline, run the affected gate on the new host, then the single deep Gemini C/S/X final discovery/fix batch and queue.ts landing. No final clearance yet.
+Implementation and final Round1 are complete; valid C/S/X deep Gemini gates passed. The independently confirmed raw XR1 edge was closed in the single permitted fix batch and verified by owned filesystem smoke, four boundary tests, 25 API tests, typecheck and packaged build. No accepted code finding remains open; D18-D19 retain exact UI probe limits and D30 retains review-runner write limitations. Pre-review affected gate D28 passed with one isolated shell-path rerun. Next: commit final evidence and XR1, perform the once-before-land catch-up/read incoming decisions, then detach and queue.ts land m5-ledger. The queue-owned full merge gate has not yet run, so this is ready for integration, not a landed-item claim.

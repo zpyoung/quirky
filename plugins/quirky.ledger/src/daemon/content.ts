@@ -168,8 +168,9 @@ export function editableFieldsOf(type: LedgerType): string[] {
 
 export function canonicalPathForEvidence(root: string, path: string): string | null {
   const absolutePath = isAbsolute(path) ? resolve(path) : resolve(root, path)
-  const realRoot = canonicalExisting(root) ?? resolve(root)
-  if (!inside(realRoot, absolutePath)) return null
+  const lexicalRoot = resolve(root)
+  const realRoot = canonicalExisting(root) ?? lexicalRoot
+  if (!inside(lexicalRoot, absolutePath) && !inside(realRoot, absolutePath)) return null
   const realPath = canonicalExisting(absolutePath)
   if (realPath) return inside(realRoot, realPath) ? realPath : null
   let parent = dirname(absolutePath)
