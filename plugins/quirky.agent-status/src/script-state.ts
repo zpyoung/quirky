@@ -13,8 +13,12 @@ export type ScriptStateResult = { state: ScriptState; kind?: BlockedKind; decide
 
 export type ScriptStateInput = { session: Session; row: AgentRow | null; verdict: Verdict | null; now: number }
 
-/** A row whose evidence is within the freshness window and that a restart hasn't left unconfirmed. */
-export const isFresh = (row: AgentRow, now: number): boolean => !row.restoredUnconfirmed && now - row.evidenceAt <= STALE_AFTER_MS
+/**
+ * Whether a script may trust a row: a done row always, since finished stays finished however old;
+ * any other row only within the freshness window and when a restart hasn't left it unconfirmed.
+ */
+export const isFresh = (row: AgentRow, now: number): boolean =>
+  row.state === 'done' || (!row.restoredUnconfirmed && now - row.evidenceAt <= STALE_AFTER_MS)
 
 function ofRow(row: AgentRow): ScriptStateResult {
   switch (row.state) {
@@ -31,7 +35,7 @@ function ofRow(row: AgentRow): ScriptStateResult {
  * The script state of a session, first applicable line winning: an exited process; a screen rule
  * that found an approval or question; a fresh hook or replay row; a screen rule that found
  * working or idle; a fresh title, OSC 7501 or inferred row; otherwise unknown. A stale or
- * unconfirmed row never reads as idle.
+ * unconfirmed working or blocked row reads unknown; a done row is never stale.
  */
 export function scriptState({ session, row, verdict, now }: ScriptStateInput): ScriptStateResult {
   if (session.status === 'exited') return { state: 'exited', decidedBy: 'session' }

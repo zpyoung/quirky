@@ -83,9 +83,14 @@ describe('script state precedence', () => {
     expect(scriptState({ session: running, row: null, verdict: null, now: NOW })).toEqual({ state: 'unknown', decidedBy: 'none' })
   })
 
-  test('a stale row with no verdict is unknown, not idle', () => {
-    const stale = row('done', 'hook', { evidenceAt: NOW - STALE_AFTER_MS - 1 })
+  test('a working row 31 minutes old with no verdict is unknown, not working', () => {
+    const stale = row('working', 'hook', { evidenceAt: NOW - 31 * 60_000 })
     expect(scriptState({ session: running, row: stale, verdict: null, now: NOW })).toEqual({ state: 'unknown', decidedBy: 'none' })
+  })
+
+  test.each(['hook', 'replay', 'title', 'program-status', 'inference'] as const)('a done %s row two hours old still reads idle', (source) => {
+    const old = row('done', source, { evidenceAt: NOW - 2 * 60 * 60_000 })
+    expect(scriptState({ session: running, row: old, verdict: null, now: NOW })).toEqual({ state: 'idle', decidedBy: 'row' })
   })
 
   test('a row is fresh at exactly 30 minutes and stale one millisecond later', () => {
