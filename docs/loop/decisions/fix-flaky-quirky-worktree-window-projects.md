@@ -77,5 +77,49 @@
 - **Revisit if:** Same-home CLI state disagrees with the real window.
 - **Source:** assumed — autonomous
 
+## D8: Keep headless HTTP globals out of the daemon smoke
+- **Question:** Why did the same-home CLI smoke still fail with “Expected a Response object”?
+- **Options:** Alter daemon response handling; retain native HTTP constructors in the throwaway in-process window smoke.
+- **Chose:** Save Bun's Response/Request/Headers before headless registration and restore them after mounting the window.
+- **Why:** happy-dom replaces global HTTP classes while the daemon still needs native Bun Response objects. The websocket-based regression scenario does not cross this HTTP boundary. This was smoke scaffolding, not the reported report race. With native constructors restored, actual DOM actions created a group and moved a second project into it, the real CLI read matching report project IDs, and the API returned the same persisted membership. Output printed SMOKE_OK and SMOKE_CLEANUP_OK, exit 0 (2.11 seconds).
+- **Evidence:** bg_8 failure, artifact://18; bg_9 success output: domProjects=2, matching reportProjectIds and persistedProjectIds. No source change. Teardown emitted React unmount and plugin-deactivated RPC warnings; these occurred after successful assertions and cleanup completed.
+- **Reversibility:** easy
+- **Confidence:** high for the named smoke flow; this is a headless UI/CLI/API smoke, not native-window visual verification.
+- **Revisit if:** The real separate-process application exhibits the HTTP-class error.
+- **Source:** assumed — autonomous
+
+## D9: Preserve operator ownership and catch up before final review
+- **Question:** How should the lane proceed after the operator restored the earlier structured-runner item?
+- **Options:** Land the earlier item again; leave it to the operator and finish this claimed fix.
+- **Chose:** Continue only fix-flaky-quirky-worktree-window-projects. Do not run land for m5-structured-runner.
+- **Why:** The operator explicitly took ownership of that landing. After committing this item's investigation, git merge build/roadmap brought only docs/loop/queue.json status changes; no new decision logs or product source arrived, so no decision contract changed.
+- **Evidence:** Operator interjection in this iteration; git merge build/roadmap output (one queue file changed).
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** Integration catches up with additional source/decision changes before this item's land.
+- **Source:** assumed — autonomous
+
+## D10: Verify the affected plugin and required gates without changing shipped behavior
+- **Question:** Which verification and documentation obligations apply when the exact repair already landed?
+- **Options:** Rebuild/reimplement the worktree feature; verify the existing repair, affected plugin and prescribed gates, then let land verify the whole merge result.
+- **Chose:** The existing SC-10 test remains the regression scenario, the controlled load run proves the old assertion fails, and the standalone daemon/CLI/window smoke checks the consumer path. Record results in this decision log; no duplicate product documentation, new UI scenario or native handoff.
+- **Why:** No runtime, exported API, caller, package or test source changed in this item. Fresh catch-up verification passed: bun test scripts (62 pass, 0 fail, 460 assertions), bun run typecheck (exit 0), and bun scripts/suite.ts plugins/quirky.worktree (25 files passed, 0 failed, no flaky reruns; 196.29 seconds). The standalone smoke verifies report/persistence agreement, not native visuals. queue.ts land owns full-suite verification on the eventual merge.
+- **Evidence:** bg_10, artifact://24; bg_11, suite-result {\"ok\":true,\"flaky\":[]}; D4/D6/D8. No new logic spec/UI/native scenarios because fix items skip specifications and shipped behavior is unchanged.
+- **Reversibility:** easy
+- **Confidence:** high for exercised paths
+- **Revisit if:** Final review or the merge-result gate exposes another defect.
+- **Source:** locked by docs/loop/LOOP.md
+
+## D11: Accept the final review and retain no duplicate implementation
+- **Question:** Does cross-family final review confirm that the existing repair plus new evidence closes this fix item?
+- **Options:** Add speculative source/test changes; accept the exact-fix reuse after review.
+- **Chose:** Accept the review: no findings, STATUS: PASS. No fix batch needed and no accepted findings remain open.
+- **Why:** The first Gemini invocation stopped after a read tool without final text/trailer (exit 6), so it supplied no verdict. Retried the same Round 1 as an evidence-bundled no-tools review containing the exact test/runtime excerpts, pre-fix failure, repaired load results, standalone smoke and fresh gates. It returned “No findings. STATUS: PASS” (exit 0). This was transport recovery, not another discovery round. The removed throwaway test and both external load/smoke scripts are not shipped.
+- **Evidence:** bg_12 (missing trailer), bg_13 (google/gemini-3.1-pro-preview:high, no findings, PASS); successful edit removal of /tmp/lane12-window-projects-{load,smoke}.ts. All owned workers, smoke daemons/homes, remote suite and reviewer have returned.
+- **Reversibility:** easy
+- **Confidence:** high for the confirmed timing race and existing fix; review used supplied evidence rather than independent tool execution.
+- **Revisit if:** Merge-result verification fails.
+- **Source:** assumed — autonomous
+
 ## Progress
-Root cause, pre-fix failure and existing repaired scenario validated under CPU load: 54 whole-file test passes plus ten focused SC-10 passes. The throwaway historical test is removed. Standalone API/window/CLI smoke is running (bg_6). Next: catch up with build/roadmap and read incoming decisions, run required scripts/typecheck/affected suite, one read-only cross-family final review, record evidence, commit and land through queue.ts. No product/test source changes needed unless fresh verification contradicts D3.
+Ready to land fix-flaky-quirky-worktree-window-projects only. CPU-load red/green, standalone DOM/API/CLI smoke, scripts (62 passes), typecheck and affected plugin (25 files, no flakes) passed. Final cross-family review: no findings, PASS; cleanup complete. No product/test changes because fce1b6a already repairs the confirmed race. Commit the completed decision log, detach and invoke queue.ts land for this fix item; operator owns m5-structured-runner landing. Full merge-result verification remains the land command's responsibility.
