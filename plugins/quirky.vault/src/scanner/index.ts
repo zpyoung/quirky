@@ -231,6 +231,7 @@ async function observeSubagentFiles(candidate: SourceCandidate): Promise<string[
 
 async function candidateForSubagent(parent: SourceCandidate, filePath: string): Promise<SourceCandidate | null> {
   try {
+    if (!await validateCurrentFile(parent)) return null
     const [info, real, realRoot] = await Promise.all([lstat(filePath, { bigint: true }), realpath(filePath), realpath(parent.root)])
     if (!info.isFile() || info.isSymbolicLink() || !isPathWithin(realRoot, real)) return null
     return {
@@ -279,6 +280,7 @@ export function createScanner(options: ScannerOptions): VaultScanner {
   }
   const cache = new ParseCache(normalized.dataDir)
   const knownCandidates = new Map<string, SourceCandidate>()
+  const registeredSubagents = new Map<string, string>()
   const invalidated = new Set<string>()
   let generation = 0
   let closed = false
@@ -303,6 +305,7 @@ export function createScanner(options: ScannerOptions): VaultScanner {
     if (closed) throw new Error('scanner-closed')
     throwIfAborted(signal)
     const id = stableSourceId(candidate)
+    const isSubagent = subagent || candidate.metadata?.subagent === true
     if (invalidated.has(id)) return null
     if (!await validateCurrentFile(candidate)) return null
     if (!onMessage && !capturePrompts) {
@@ -327,10 +330,10 @@ export function createScanner(options: ScannerOptions): VaultScanner {
     parsed.filePath = sqliteSourcePath(candidate)
     parsed.codexHome = candidate.codexHome
     parsed.presence = 'present'
-    if (!subagent && (candidate.agent === 'claude' || candidate.agent === 'omp')) {
+    if (!isSubagent && (candidate.agent === 'claude' || candidate.agent === 'omp')) {
       parsed.subagentTranscriptCount = (await observeSubagentFiles(candidate)).length
     }
-    if (subagent) parsed.subagent = true
+    if (isSubagent) parsed.subagent = true
     if (expectedGeneration === generation && !invalidated.has(id) && !onMessage && !capturePrompts) {
       await cache.set(id, candidate.signature, parsed, () => expectedGeneration === generation && !invalidated.has(id))
     }
@@ -340,7 +343,17 @@ export function createScanner(options: ScannerOptions): VaultScanner {
 
   async function currentCandidateById(id: string, signal?: AbortSignal): Promise<SourceCandidate | null> {
     const discovery = await discover(signal)
-    return discovery.candidates.find((candidate) => stableSourceId(candidate) === id) ?? null
+    const current = discovery.candidates.find((candidate) => stableSourceId(candidate) === id)
+    if (current) return current
+    const parentId = registeredSubagents.get(id)
+    if (!parentId) return null
+    const parent = discovery.candidates.find((candidate) => stableSourceId(candidate) === parentId)
+    if (!parent) return null
+    for (const filePath of await observeSubagentFiles(parent)) {
+      const child = await candidateForSubagent(parent, filePath)
+      if (child && stableSourceId(child) === id) return child
+    }
+    return null
   }
 
   return {
@@ -417,13 +430,17 @@ export function createScanner(options: ScannerOptions): VaultScanner {
     async subagents(id) {
       const parent = await currentCandidateById(id)
       if (!parent || (parent.agent !== 'claude' && parent.agent !== 'omp')) return []
+      const parentId = stableSourceId(parent)
       const paths = await observeSubagentFiles(parent)
       const sessions: VaultSession[] = []
       for (const filePath of paths) {
         const candidate = await candidateForSubagent(parent, filePath)
         if (!candidate) continue
         const session = await parseCandidate(candidate, undefined, undefined, generation, true, false)
-        if (session) sessions.push(session)
+        if (session) {
+          registeredSubagents.set(stableSourceId(candidate), parentId)
+          sessions.push(session)
+        }
       }
       return sessions
     },
@@ -461,6 +478,7 @@ export function createScanner(options: ScannerOptions): VaultScanner {
       closed = true
       cache.close()
       knownCandidates.clear()
+      registeredSubagents.clear()
       invalidated.clear()
     }
   }
