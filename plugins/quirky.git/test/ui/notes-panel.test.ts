@@ -350,6 +350,22 @@ describe('menus: submenus open on hover and ArrowRight and close on ArrowLeft an
     expect(menu.closed()).toBe(1)
     await menu.unmount()
   })
+  test('a mousedown or Escape inside an element that stops propagation, such as a terminal pane, still closes the menu', async () => {
+    const pane = document.createElement('div')
+    pane.addEventListener('mousedown', (event) => event.stopPropagation())
+    pane.addEventListener('keydown', (event) => event.stopPropagation())
+    pane.tabIndex = 0
+    document.body.append(pane)
+    const menu = await mountMenu()
+    await act(async () => void pane.dispatchEvent(new MouseEvent('mousedown', { bubbles: true })))
+    expect(menu.closed()).toBe(1)
+    await menu.unmount()
+    const again = await mountMenu()
+    await act(async () => void pane.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })))
+    expect(again.closed()).toBe(1)
+    await again.unmount()
+    pane.remove()
+  })
 })
 
 describe('NA-17: the send menu offers scopes, then targets', () => {

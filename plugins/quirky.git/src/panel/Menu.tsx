@@ -178,11 +178,12 @@ export function PopupMenu({ x, y, label, items, onClose }: Props) {
       buttons[(at + step + buttons.length) % buttons.length]!.focus()
       setOpen((prev) => prev.slice(0, level))
     }
-    window.addEventListener('mousedown', onDown)
-    window.addEventListener('keydown', onKey)
+    // capture: a terminal pane stops mousedown and keydown from bubbling, which would leave the menu open
+    window.addEventListener('mousedown', onDown, true)
+    window.addEventListener('keydown', onKey, true)
     return () => {
-      window.removeEventListener('mousedown', onDown)
-      window.removeEventListener('keydown', onKey)
+      window.removeEventListener('mousedown', onDown, true)
+      window.removeEventListener('keydown', onKey, true)
     }
   }, [])
 

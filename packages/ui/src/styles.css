@@ -474,6 +474,13 @@ textarea {
   min-width: 0;
 }
 
+.main-title strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .main-title .path {
   overflow: hidden;
   text-overflow: ellipsis;
@@ -2605,11 +2612,17 @@ select {
   left: 0;
   z-index: 30;
   width: 320px;
+  max-width: calc(100vw - 32px);
   background: var(--bg-raised);
   border: 1px solid var(--border);
   border-radius: 6px;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
   font-size: 12px;
+}
+
+.qgv-note-popover-end {
+  left: auto;
+  right: 0;
 }
 
 .qgv-note-popover-head {
