@@ -204,6 +204,62 @@ describe('NA-25: generating a message', () => {
     }
   })
 
+  test('a configured custom command runs from the sparkle with no catalog agent able to generate', async () => {
+    const { fake, element, unmount } = await open((f) => {
+      f.settings['ai-custom-command'] = 'my-gen'
+      f.on('quirky.agents/list', () => ({ defaultAgent: 'claude', agents: [] }))
+      f.on('quirky.git/aiRecipe', (params) => recipe(params.action as string, { agent: 'custom' }))
+    })
+    expect(sparkle(element)?.title).toBe('ai commit msg')
+    await click(sparkle(element))
+    expect(fake.views).toEqual([])
+    expect(fake.called('quirky.git/generateCommitMessage').map((c) => c.params)).toEqual([{ worktree: 'feat' }])
+    expect(message(element).value).toBe('Rename x to count\n\nClearer name.')
+    unmount()
+  })
+
+  test('with only a custom command and no recipe the dialog offers Custom command', async () => {
+    const { fake, element, unmount } = await open((f) => {
+      f.settings['ai-custom-command'] = 'my-gen'
+      f.on('quirky.agents/list', () => ({ defaultAgent: 'claude', agents: [] }))
+    })
+    await click(sparkle(element))
+    expect((byLabel(dialog()!, 'Agent') as HTMLSelectElement).value).toBe('custom')
+    await click(buttonText(dialog()!, 'Generate'))
+    expect(fake.called('quirky.git/generateCommitMessage')[0]?.params).toMatchObject({ agent: 'custom' })
+    unmount()
+  })
+
+  test('clicks while the recipe lookup is pending start one generation, and its controls stay', async () => {
+    const lookup = deferred()
+    const run = deferred()
+    let requests = 0
+    const { fake, element, unmount } = await open((f) => {
+      f.on('quirky.git/aiRecipe', () => lookup.promise)
+      f.on('quirky.git/generateCommitMessage', () => {
+        requests += 1
+        if (requests > 1) throw failure('A commit message is already being generated.', { reason: 'busy' })
+        return run.promise
+      })
+    })
+    const button = sparkle(element)
+    await click(button)
+    await click(button)
+    await act(async () => lookup.resolve(recipe('commitMessage', { agent: 'claude' })))
+    await settle()
+    await click(button)
+    expect(requests).toBe(1)
+    expect(fake.called('quirky.git/aiRecipe').length).toBe(1)
+    expect(fake.toasts).toEqual([])
+    expect(stop(element)).not.toBeNull()
+    expect(sparkle(element)?.disabled).toBe(true)
+    run.resolve({ message: 'First result' })
+    await settle()
+    expect(message(element).value).toBe('First result')
+    expect(stop(element)).toBeNull()
+    unmount()
+  })
+
   test('a failed run toasts the daemon message and leaves the box empty', async () => {
     const { fake, element, unmount } = await open((f) => {
       f.on('quirky.git/aiRecipe', (params) => recipe(params.action as string, { agent: 'claude' }))
@@ -460,6 +516,20 @@ describe('NA-37: Customize launch', () => {
     expect(dialog()?.textContent).toContain('No enabled agents')
     expect((buttonText(dialog()!, 'Start agent') as HTMLButtonElement).disabled).toBe(true)
     loading.unmount()
+  })
+
+  test('a saved agent that is unavailable with no enabled agents still shows No enabled agents and keeps Start disabled', async () => {
+    const { fake, unmount } = await openLaunch((f) => {
+      f.on('quirky.agents/list', () => ({ defaultAgent: 'claude', agents: [] }))
+      f.on('quirky.git/aiFixPreview', (params) => ({ prompt: 'Fix prompt', recipe: recipe(params.action as string, { agent: 'claude', sources: { agent: 'repo', args: 'default', template: 'default' } }) }))
+    })
+    expect(dialog()?.textContent).toContain('No enabled agents')
+    expect(byLabel(dialog()!, 'Agent')).toBeNull()
+    const start = buttonText(dialog()!, 'Start agent') as HTMLButtonElement
+    expect(start.disabled).toBe(true)
+    await click(start)
+    expect(fake.called('quirky.git/aiFix')).toEqual([])
+    unmount()
   })
 
   test('an edited launch reads "Save & start agent" and passes the scope, agent, arguments and template', async () => {

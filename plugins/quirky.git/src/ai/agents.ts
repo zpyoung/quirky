@@ -17,6 +17,15 @@ export function initialAgent(list: AgentList, choices: AgentInfo[]): string {
   return choices.find((agent) => agent.id === list.defaultAgent)?.id ?? choices[0]?.id ?? ''
 }
 
+/** Whether the custom command setting holds a command, so "Custom command" can run without any catalog agent. */
+export function hasCustomCommand(context: UiPluginContext): boolean {
+  try {
+    return String(context.getSetting('ai-custom-command') ?? '').trim() !== ''
+  } catch {
+    return false
+  }
+}
+
 export type Agents = {
   /** Null until the first read finishes, and after a read that failed. */
   list: AgentList | null

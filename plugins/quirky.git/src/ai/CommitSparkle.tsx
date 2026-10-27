@@ -1,7 +1,7 @@
 import { useRef, useState, type MutableRefObject } from 'react'
 import type { UiPluginContext } from '@quirky/protocol'
 import { messageOf } from '../panel/format'
-import { generators, useAgents } from './agents'
+import { generators, hasCustomCommand, useAgents } from './agents'
 import { GenerateDialog } from './GenerateDialog'
 import { sparkleState } from './sparkle'
 import { SparkleIcon } from './SparkleIcon'
@@ -26,14 +26,16 @@ type Run = { stopped: boolean }
  * The sparkle in the commit box: asks the commit message recipe's agent for a message for what
  * is staged. Without a recipe it opens the Generate dialog for the first run. A result lands only
  * if the box was not edited since the run began (typing then deleting counts) and Stop was not pressed.
+ * Clicks are ignored from the moment one starts (recipe lookup included) until its generation ends.
  */
 export function CommitSparkle({ context, worktree, staged, message, committing, edits, onResult }: Props) {
   const agents = useAgents(context, true)
   const [generating, setGenerating] = useState(false)
   const [dialog, setDialog] = useState(false)
   const current = useRef<Run | null>(null)
+  const busy = useRef(false)
 
-  const agentAvailable = agents.list === null || generators(agents.list).length > 0
+  const agentAvailable = agents.list === null || generators(agents.list).length > 0 || hasCustomCommand(context)
   const state = sparkleState({ staged, message, generating, committing, agentAvailable })
 
   const run = async (params: { agent?: string; template?: string }, editsAtStart: number) => {
@@ -55,15 +57,21 @@ export function CommitSparkle({ context, worktree, staged, message, committing, 
 
   const start = async () => {
     if (state.kind === 'no-agent') return context.openView(AI_SETTINGS_VIEW_ID, { worktree })
-    const editsAtClick = edits.current
-    let configured: boolean
+    if (busy.current) return
+    busy.current = true
     try {
-      configured = isConfigured((await context.call('quirky.git/aiRecipe', { worktree, action: 'commitMessage' })) as Recipe)
-    } catch (error) {
-      return context.toast('Could not read the commit message recipe', messageOf(error))
+      const editsAtClick = edits.current
+      let configured: boolean
+      try {
+        configured = isConfigured((await context.call('quirky.git/aiRecipe', { worktree, action: 'commitMessage' })) as Recipe)
+      } catch (error) {
+        return context.toast('Could not read the commit message recipe', messageOf(error))
+      }
+      if (configured) await run({}, editsAtClick)
+      else setDialog(true)
+    } finally {
+      busy.current = false
     }
-    if (configured) await run({}, editsAtClick)
-    else setDialog(true)
   }
 
   const stop = async () => {
@@ -105,7 +113,11 @@ export function CommitSparkle({ context, worktree, staged, message, committing, 
           onClose={() => setDialog(false)}
           onGenerate={(choice) => {
             setDialog(false)
-            void run(choice, edits.current)
+            if (busy.current) return
+            busy.current = true
+            void run(choice, edits.current).finally(() => {
+              busy.current = false
+            })
           }}
         />
       )}
