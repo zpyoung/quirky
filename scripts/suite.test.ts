@@ -2,7 +2,7 @@ import { afterEach, beforeEach, expect, test } from 'bun:test'
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { discover, macosOnly, runFiles, runSuite, usableSlots } from './suite'
+import { discover, macosOnly, runFiles, runSuite, slowestFirst, usableSlots } from './suite'
 
 let dir: string
 
@@ -118,9 +118,16 @@ test('a completed test run stops detached subprocess trees left by a test', asyn
   }
 }, 15_000)
 
-test('usableSlots leaves half the slots to a land while one runs', () => {
+test('usableSlots leaves all but one slot to a land while one runs', () => {
   expect(usableSlots(6, false, false)).toBe(6)
-  expect(usableSlots(6, false, true)).toBe(3)
+  expect(usableSlots(6, false, true)).toBe(1)
   expect(usableSlots(6, true, true)).toBe(6)
   expect(usableSlots(1, false, true)).toBe(1)
+})
+
+test('slowestFirst orders by the last logged time, with unlogged files first', () => {
+  const log = join(dir, 'durations.log')
+  writeFileSync(log, 'a.test.ts 100\nb.test.ts 900\na.test.ts 2000\n')
+  expect(slowestFirst(['a.test.ts', 'b.test.ts', 'new.test.ts'], log)).toEqual(['new.test.ts', 'a.test.ts', 'b.test.ts'])
+  expect(slowestFirst(['b.test.ts', 'a.test.ts'], join(dir, 'missing.log'))).toEqual(['b.test.ts', 'a.test.ts'])
 })
