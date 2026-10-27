@@ -1,0 +1,372 @@
+{
+  "id": "quirky.hosting",
+  "name": "GitHub Hosting",
+  "version": "0.1.0",
+  "description": "GitHub hosting operations over the user's authenticated gh CLI.",
+  "main": "main.ts",
+  "dependencies": ["quirky.worktree"],
+  "contributes": {
+    "method": [
+      {
+        "id": "repository",
+        "description": "Resolve the registered worktree's trusted GitHub origin, pull-request candidates, and issue source.",
+        "readOnly": true,
+        "params": {"type": "object", "properties": {"worktree": {"type": "string"}}},
+        "result": {"type": "object", "properties": {"worktreeId": {"type": "string"}, "origin": {"type": "object", "properties": {"host": {"type": "string"}, "owner": {"type": "string"}, "repo": {"type": "string"}}}, "head": {"type": "object"}, "repository": {"type": "object"}, "candidates": {"type": "array", "items": {"type": "object"}}, "issueRepository": {"type": "object"}, "issueSourcePreference": {"type": "string", "enum": ["auto", "origin", "upstream"]}, "issueSourceFellBack": {"type": "boolean"}}, "required": ["worktreeId", "origin", "head", "repository", "candidates", "issueRepository", "issueSourcePreference", "issueSourceFellBack"]}
+      },
+      {
+        "id": "diagnoseAuth",
+        "description": "Safely report GitHub CLI availability, authenticated accounts, and required host status.",
+        "readOnly": true,
+        "params": {"type": "object", "properties": {"worktree": {"type": "string"}}},
+        "result": {"type": "object", "properties": {"ghAvailable": {"type": "boolean"}, "activeAccount": {}, "accounts": {"type": "array", "items": {"type": "object"}}, "envTokenInProcess": {"type": "boolean"}, "missingScopes": {"type": "array", "items": {"type": "string"}}, "requiredScopes": {"type": "array", "items": {"type": "string"}}, "hasKeyringFallback": {"type": "boolean"}, "requiredHost": {"type": "string"}, "requiredHostAuthenticated": {"type": "boolean"}}, "required": ["ghAvailable", "accounts", "envTokenInProcess", "missingScopes", "requiredScopes", "hasKeyringFallback", "requiredHostAuthenticated"]}
+      },
+      {
+        "id": "viewer",
+        "description": "Return the authenticated viewer for the selected GitHub repository host.",
+        "readOnly": true,
+        "params": {"type": "object", "properties": {"worktree": {"type": "string"}}},
+        "result": {"type": "object", "properties": {"login": {"type": "string"}, "email": {}}
+      },
+      {
+        "id": "rateLimit",
+        "description": "Read the host- and account-scoped GitHub API rate-limit snapshot.",
+        "readOnly": true,
+        "params": {"type": "object", "properties": {"worktree": {"type": "string"}, "force": {"type": "boolean"}}},
+        "result": {"type": "object", "properties": {"core": {"type": "object", "properties": {"limit": {"type": "integer"}, "remaining": {"type": "integer"}, "resetAt": {"type": "number"}}}, "search": {"type": "object"}, "graphql": {"type": "object"}, "fetchedAt": {"type": "number"}}, "required": ["core", "search", "graphql", "fetchedAt"]}
+      },
+      {
+        "id": "accounts",
+        "description": "List authenticated accounts and identify keyring accounts that can be bound.",
+        "readOnly": true,
+        "params": {"type": "object", "properties": {"worktree": {"type": "string"}}},
+        "result": {"type": "object", "properties": {"requiredHost": {"type": "string"}, "accounts": {"type": "array", "items": {"type": "object", "properties": {"host": {"type": "string"}, "user": {"type": "string"}, "source": {"type": "string", "enum": ["keyring", "env"]}, "active": {"type": "boolean"}, "bindable": {"type": "boolean"}, "scopes": {"type": "array", "items": {"type": "string"}}}}}}, "required": ["accounts"]}
+      },
+      {
+        "id": "configure",
+        "description": "Persist the issue source preference and/or a keyring account binding for this repository.",
+        "params": {"type": "object", "properties": {"worktree": {"type": "string"}, "issueSourcePreference": {"type": "string", "enum": ["auto", "origin", "upstream"]}, "account": {}, "clearAccount": {"type": "boolean"}}},
+        "result": {"type": "object", "properties": {"ok": {"type": "boolean"}, "issueSourcePreference": {"type": "string", "enum": ["auto", "origin", "upstream"]}, "account": {}}
+      },
+      {
+        "id": "configuration",
+        "description": "Read the repository's persisted hosting preferences without exposing credentials.",
+        "readOnly": true,
+        "params": {"type": "object", "properties": {"worktree": {"type": "string"}}},
+        "result": {"type": "object", "properties": {"worktreeId": {"type": "string"}, "issueSourcePreference": {"type": "string", "enum": ["auto", "origin", "upstream"]}, "account": {}}
+      },
+      {
+        "id": "forBranch",
+        "description": "Find a pull request for the registered worktree branch, distinguishing absence from unavailable lookups.",
+        "readOnly": true,
+        "params": {"type": "object", "properties": {"worktree": {"type": "string"}, "branch": {"type": "string"}, "number": {"type": "integer", "minimum": 1}, "fallbackPRNumber": {"type": "integer", "minimum": 1}, "headOid": {"type": "string"}, "prRepo": {"type": "object", "properties": {"host": {"type": "string"}, "owner": {"type": "string"}, "repo": {"type": "string"}}, "required": ["host", "owner", "repo"]}}, "required": ["branch"]},
+        "result": {"type": "object", "properties": {"kind": {"type": "string", "enum": ["found", "no-review", "unavailable"]}, "review": {"type": "object"}, "reason": {"type": "string"}, "message": {"type": "string"}, "fetchedAt": {"type": "number"}, "retryDisabledUntil": {"type": "number"}}
+      },
+      {
+        "id": "review",
+        "description": "Read one pull request by number from a trusted GitHub candidate repository.",
+        "readOnly": true,
+        "params": {"type": "object", "properties": {"worktree": {"type": "string"}, "number": {"type": "integer", "minimum": 1}, "prRepo": {"type": "object", "properties": {"host": {"type": "string"}, "owner": {"type": "string"}, "repo": {"type": "string"}}, "required": ["host", "owner", "repo"]}}, "required": ["number"]},
+        "result": {"type": "object", "properties": {"provider": {"type": "string", "enum": ["github"]}, "number": {"type": "integer"}, "url": {"type": "string"}, "title": {"type": "string"}, "body": {"type": "string"}, "state": {"type": "string", "enum": ["open", "draft", "closed", "merged"]}, "headRefName": {"type": "string"}, "baseRefName": {"type": "string"}, "headRefOid": {"type": "string"}, "baseRefOid": {"type": "string"}, "mergeable": {"type": "string", "enum": ["MERGEABLE", "CONFLICTING", "UNKNOWN"]}, "checksStatus": {"type": "string", "enum": ["neutral", "pending", "success", "failure"]}, "reviewDecision": {"type": "string"}, "mergeStateStatus": {"type": "string"}, "autoMergeRequest": {}, "stack": {}, "mergeMethods": {}}
+      },
+      {
+        "id": "creationEligibility",
+        "description": "Recheck all GitHub pull-request creation blockers for the current worktree.",
+        "readOnly": true,
+        "params": {"type": "object", "properties": {"worktree": {"type": "string"}, "base": {"type": "string"}, "head": {"type": "string"}, "title": {"type": "string"}}},
+        "result": {"type": "object", "properties": {"eligible": {"type": "boolean"}, "reason": {"type": "string"}, "nextAction": {"type": "string"}, "blockers": {"type": "array", "items": {"type": "object", "properties": {"reason": {"type": "string"}, "nextAction": {"type": "string"}, "message": {"type": "string"}}, "required": ["reason", "nextAction", "message"]}}}, "required": ["eligible"]}
+      },
+      {
+        "id": "create",
+        "description": "Create one GitHub pull request after revalidating all creation blockers.",
+        "params": {"type": "object", "properties": {"worktree": {"type": "string"}, "base": {"type": "string"}, "head": {"type": "string"}, "title": {"type": "string"}, "body": {"type": "string"}, "draft": {"type": "boolean"}, "useTemplate": {"type": "boolean"}}, "required": ["base", "title"]},
+        "result": {"type": "object", "properties": {"number": {"type": "integer"}, "url": {"type": "string"}, "existing": {"type": "boolean"}}
+      },
+      {
+        "id": "createStacked",
+        "description": "Create a GitHub stacked pull request and register it with the stack API.",
+        "params": {"type": "object", "properties": {"worktree": {"type": "string"}, "base": {"type": "string"}, "head": {"type": "string"}, "title": {"type": "string"}, "body": {"type": "string"}, "draft": {"type": "boolean"}, "useTemplate": {"type": "boolean"}, "parentNumber": {"type": "integer", "minimum": 1}}, "required": ["base", "title", "parentNumber"]},
+        "result": {"type": "object", "properties": {"number": {"type": "integer"}, "url": {"type": "string"}, "existing": {"type": "boolean"}, "stackId": {"type": "integer"}}
+      },
+      {
+        "id": "merge",
+        "description": "Merge one pull request with a fresh head/protection check and one shared execution path.",
+        "destructive": true,
+        "confirm": "Merge GitHub pull request #{number}?",
+        "params": {"type": "object", "properties": {"worktree": {"type": "string"}, "number": {"type": "integer", "minimum": 1}, "expectedHead": {"type": "string", "pattern": "^(?:[a-fA-F0-9]{40}|[a-fA-F0-9]{64})$"}, "method": {"type": "string", "enum": ["squash", "merge", "rebase"]}, "action": {"type": "string", "enum": ["direct", "queue"]}}, "required": ["number", "expectedHead", "method", "action"]},
+        "result": {"type": "object", "properties": {"state": {"type": "string", "enum": ["merged", "enqueued", "pending"]}, "number": {"type": "integer"}, "head": {"type": "string"}, "operationId": {"type": "string"}}, "required": ["state", "number", "head"]}
+      },
+      {
+        "id": "autoMerge",
+        "description": "Enable or disable GitHub auto-merge for a pull request.",
+        "params": {"type": "object", "properties": {"worktree": {"type": "string"}, "number": {"type": "integer", "minimum": 1}, "action": {"type": "string", "enum": ["enable", "disable"]}, "expectedHead": {"type": "string"}, "method": {"type": "string", "enum": ["squash", "merge", "rebase"]}}, "required": ["number", "action"]},
+        "result": {"type": "object", "properties": {"number": {"type": "integer"}, "enabled": {"type": "boolean"}, "state": {"type": "string"}}
+      },
+      {
+        "id": "updateReview",
+        "description": "Edit, close, reopen, or mark a GitHub pull request ready for review.",
+        "params": {"type": "object", "properties": {"worktree": {"type": "string"}, "number": {"type": "integer", "minimum": 1}, "action": {"type": "string", "enum": ["edit", "close", "reopen", "ready"]}, "title": {"type": "string"}, "body": {"type": "string"}}, "required": ["number", "action"]},
+        "result": {"type": "object", "properties": {"number": {"type": "integer"}, "updated": {"type": "boolean"}, "state": {"type": "string"}}
+      },
+      {
+        "id": "reviewers",
+        "description": "Add or remove GitHub pull-request reviewers.",
+        "params": {"type": "object", "properties": {"worktree": {"type": "string"}, "number": {"type": "integer", "minimum": 1}, "action": {"type": "string", "enum": ["add", "remove"]}, "logins": {"type": "array", "items": {"type": "string"}, "minItems": 1}}, "required": ["number", "action", "logins"]},
+        "result": {"type": "object", "properties": {"number": {"type": "integer"}, "reviewers": {"type": "array", "items": {"type": "string"}}, "updated": {"type": "boolean"}}
+      },
+      {
+        "id": "checks",
+        "description": "List checks, legacy statuses, and approval-required suites for a pull request.",
+        "readOnly": true,
+        "params": {"type": "object", "properties": {"worktree": {"type": "string"}, "number": {"type": "integer", "minimum": 1}, "prRepo": {"type": "object", "properties": {"host": {"type": "string"}, "owner": {"type": "string"}, "repo": {"type": "string"}}, "required": ["host", "owner", "repo"]}, "noCache": {"type": "boolean"}}, "required": ["number"]},
+        "result": {"type": "object", "properties": {"number": {"type": "integer"}, "headSha": {}, "rollup": {"type": "string", "enum": ["neutral", "pending", "success", "failure", "unknown"]}, "checks": {"type": "array", "items": {"type": "object", "properties": {"kind": {"type": "string", "enum": ["check_run", "status", "approval"]}, "name": {"type": "string"}, "status": {"type": "string"}, "conclusion": {}, "url": {}, "checkRunId": {}, "workflowRunId": {}, "suiteId": {}}}}, "partial": {"type": "boolean"}, "partialFailures": {"type": "array", "items": {"type": "string"}}}, "required": ["number", "rollup", "checks", "partial", "partialFailures"]}
+      },
+      {
+        "id": "checkDetails",
+        "description": "Read check annotations, jobs, and bounded failed-job log tails.",
+        "readOnly": true,
+        "params": {"type": "object", "properties": {"worktree": {"type": "string"}, "number": {"type": "integer", "minimum": 1}, "prRepo": {"type": "object", "properties": {"host": {"type": "string"}, "owner": {"type": "string"}, "repo": {"type": "string"}}, "required": ["host", "owner", "repo"]}, "checkRunId": {"type": "integer", "minimum": 1}, "workflowRunId": {"type": "integer", "minimum": 1}, "jobName": {"type": "string"}}, "required": ["number", "checkRunId"]},
+        "result": {"type": "object", "properties": {"check": {"type": "object"}, "annotations": {"type": "array", "items": {"type": "object"}}, "jobs": {"type": "array", "items": {"type": "object"}}, "logTails": {"type": "array", "items": {"type": "object", "properties": {"jobId": {"type": "integer"}, "jobName": {"type": "string"}, "tail": {"type": "string"}}, "required": ["jobId", "jobName", "tail"]}}, "partialFailures": {"type": "array", "items": {"type": "string"}}, "truncated": {"type": "boolean"}}, "required": ["check", "annotations", "jobs", "logTails", "partialFailures", "truncated"]}
+      },
+      {
+        "id": "rerunChecks",
+        "description": "Rerun all or failed-only GitHub Actions checks, reporting partial starts honestly.",
+        "params": {"type": "object", "properties": {"worktree": {"type": "string"}, "number": {"type": "integer", "minimum": 1}, "prRepo": {"type": "object", "properties": {"host": {"type": "string"}, "owner": {"type": "string"}, "repo": {"type": "string"}}, "required": ["host", "owner", "repo"]}, "failedOnly": {"type": "boolean"}}, "required": ["number", "failedOnly"]},
+        "result": {"type": "object", "properties": {"started": {"type": "integer"}, "targetCount": {"type": "integer"}, "completedSteps": {"type": "array", "items": {"type": "string"}}}, "required": ["started", "targetCount", "completedSteps"]}
+      },
+      {
+        "id": "comments",
+        "description": "Read issue comments, reviews, review comments, and review threads for a pull request.",
+        "readOnly": true,
+        "params": {"type": "object", "properties": {"worktree": {"type": "string"}, "number": {"type": "integer", "minimum": 1}, "prRepo": {"type": "object", "properties": {"host": {"type": "string"}, "owner": {"type": "string"}, "repo": {"type": "string"}}, "required": ["host", "owner", "repo"]}, "noCache": {"type": "boolean"}}, "required": ["number"]},
+        "result": {"type": "object", "properties": {"number": {"type": "integer"}, "comments": {"type": "array", "items": {"type": "object"}}, "partial": {"type": "boolean"}, "partialFailures": {"type": "array", "items": {"type": "string"}}}, "required": ["number", "comments", "partial", "partialFailures"]}
+      },
+      {
+        "id": "reviewComment",
+        "description": "Add a current-head inline or range review comment, or reply to a review comment.",
+        "params": {"type": "object", "properties": {"worktree": {"type": "string"}, "number": {"type": "integer", "minimum": 1}, "prRepo": {"type": "object", "properties": {"host": {"type": "string"}, "owner": {"type": "string"}, "repo": {"type": "string"}}, "required": ["host", "owner", "repo"]}, "action": {"type": "string", "enum": ["inline", "reply"]}, "body": {"type": "string"}, "headSha": {"type": "string"}, "path": {"type": "string"}, "line": {"type": "integer", "minimum": 1}, "startLine": {"type": "integer", "minimum": 1}, "replyToId": {"type": "integer", "minimum": 1}}, "required": ["number", "action", "body"]},
+        "result": {"type": "object", "properties": {"number": {"type": "integer"}, "action": {"type": "string", "enum": ["inline", "reply"]}, "comment": {"type": "object", "properties": {"id": {"type": "integer"}, "path": {"type": "string"}, "line": {"type": "integer"}, "startLine": {"type": "integer"}, "body": {"type": "string"}}}}, "required": ["number", "action", "comment"]}
+      },
+      {
+        "id": "reaction",
+        "description": "Add or remove one supported reaction on a PR review subject.",
+        "params": {"type": "object", "properties": {"worktree": {"type": "string"}, "number": {"type": "integer", "minimum": 1}, "prRepo": {"type": "object", "properties": {"host": {"type": "string"}, "owner": {"type": "string"}, "repo": {"type": "string"}}, "required": ["host", "owner", "repo"]}, "subjectId": {"type": "string"}, "action": {"type": "string", "enum": ["add", "remove"]}, "content": {"type": "string", "enum": ["+1", "-1", "laugh", "confused", "heart", "hooray", "rocket", "eyes"]}}, "required": ["number", "subjectId", "action", "content"]},
+        "result": {"type": "object", "properties": {"subjectId": {"type": "string"}, "action": {"type": "string", "enum": ["add", "remove"]}, "content": {"type": "string"}, "changed": {"type": "boolean"}}, "required": ["subjectId", "action", "content", "changed"]}
+      },
+      {
+        "id": "resolveThread",
+        "description": "Resolve or unresolve a review thread on the selected pull request.",
+        "params": {"type": "object", "properties": {"worktree": {"type": "string"}, "number": {"type": "integer", "minimum": 1}, "prRepo": {"type": "object", "properties": {"host": {"type": "string"}, "owner": {"type": "string"}, "repo": {"type": "string"}}, "required": ["host", "owner", "repo"]}, "threadId": {"type": "string"}, "action": {"type": "string", "enum": ["resolve", "unresolve"]}}, "required": ["number", "threadId", "action"]},
+        "result": {"type": "object", "properties": {"threadId": {"type": "string"}, "action": {"type": "string", "enum": ["resolve", "unresolve"]}, "resolved": {"type": "boolean"}}, "required": ["threadId", "action", "resolved"]}
+      },
+      {
+        "id": "fileViewed",
+        "description": "Mark a changed pull-request file as viewed or unviewed.",
+        "params": {"type": "object", "properties": {"worktree": {"type": "string"}, "number": {"type": "integer", "minimum": 1}, "prRepo": {"type": "object", "properties": {"host": {"type": "string"}, "owner": {"type": "string"}, "repo": {"type": "string"}}, "required": ["host", "owner", "repo"]}, "path": {"type": "string"}, "viewed": {"type": "boolean"}}, "required": ["number", "path", "viewed"]},
+        "result": {"type": "object", "properties": {"number": {"type": "integer"}, "path": {"type": "string"}, "viewed": {"type": "boolean"}}, "required": ["number", "path", "viewed"]}
+      },
+      {
+        "id": "files",
+        "description": "List changed files and bounded patch coordinates for a pull request.",
+        "readOnly": true,
+        "params": {"type": "object", "properties": {"worktree": {"type": "string"}, "number": {"type": "integer", "minimum": 1}, "prRepo": {"type": "object", "properties": {"host": {"type": "string"}, "owner": {"type": "string"}, "repo": {"type": "string"}}, "required": ["host", "owner", "repo"]}, "limit": {"type": "integer", "minimum": 1, "maximum": 300}}, "required": ["number"]},
+        "result": {"type": "object", "properties": {"number": {"type": "integer"}, "files": {"type": "array", "items": {"type": "object"}}, "totalCount": {}, "truncated": {"type": "boolean"}, "filesUnavailable": {"type": "boolean"}, "partialFailures": {"type": "array", "items": {"type": "string"}}}, "required": ["number", "files", "truncated", "filesUnavailable", "partialFailures"]}
+      },
+      {
+        "id": "fileContents",
+        "description": "Read a raw file at the pull request's base or head commit with binary and size status.",
+        "readOnly": true,
+        "params": {"type": "object", "properties": {"worktree": {"type": "string"}, "number": {"type": "integer", "minimum": 1}, "prRepo": {"type": "object", "properties": {"host": {"type": "string"}, "owner": {"type": "string"}, "repo": {"type": "string"}}, "required": ["host", "owner", "repo"]}, "path": {"type": "string"}, "side": {"type": "string", "enum": ["base", "head"]}}, "required": ["number", "path", "side"]},
+        "result": {"type": "object", "properties": {"number": {"type": "integer"}, "path": {"type": "string"}, "side": {"type": "string", "enum": ["base", "head"]}, "sha": {"type": "string"}, "content": {}, "binary": {"type": "boolean"}, "tooLarge": {"type": "boolean"}, "unavailable": {"type": "boolean"}}, "required": ["number", "path", "side", "sha", "binary", "tooLarge", "unavailable"]}
+      },
+      {
+        "id": "listWorkItems",
+        "description": "List GitHub issues and pull requests with stable pagination and issue-source fallback metadata.",
+        "readOnly": true,
+        "params": {"type": "object", "properties": {"worktree": {"type": "string"}, "limit": {"type": "integer", "minimum": 1, "maximum": 100}, "page": {"type": "integer", "minimum": 1}, "query": {"type": "string", "maxLength": 8192}, "noCache": {"type": "boolean"}}},
+        "result": {"type": "object", "properties": {"items": {"type": "array", "items": {"type": "object", "properties": {"stateReason": {"type": "string", "enum": ["completed", "not_planned", "unknown"]}, "duplicateOf": {"type": "integer"}, "issueType": {"type": "object", "properties": {"id": {"type": "string"}, "name": {"type": "string"}}}}}}, "page": {"type": "integer"}, "limit": {"type": "integer"}, "totalCount": {}, "hasNextPage": {"type": "boolean"}, "issueSourceFellBack": {"type": "boolean"}, "sources": {"type": "array", "items": {"type": "string"}}, "errors": {"type": "array", "items": {"type": "string"}}, "partial": {"type": "boolean"}}, "required": ["items", "page", "limit", "hasNextPage", "issueSourceFellBack", "sources"]}
+      },
+      {
+        "id": "countWorkItems",
+        "description": "Count matching GitHub issues and pull requests with the configured issue source.",
+        "readOnly": true,
+        "params": {"type": "object", "properties": {"worktree": {"type": "string"}, "query": {"type": "string", "maxLength": 8192}}},
+        "result": {"type": "object", "properties": {"count": {"type": "integer"}}, "required": ["count"]}
+      },
+      {
+        "id": "workItem",
+        "description": "Read one GitHub issue or pull request, rejecting configured-reference mismatches.",
+        "readOnly": true,
+        "params": {"type": "object", "properties": {"worktree": {"type": "string"}, "number": {"type": "integer", "minimum": 1}, "kind": {"type": "string", "enum": ["issue", "pullRequest"]}, "reference": {"type": "string", "maxLength": 8192}}},
+        "result": {"type": "object", "properties": {"number": {"type": "integer"}, "kind": {"type": "string", "enum": ["issue", "pullRequest"]}, "title": {"type": "string"}, "body": {"type": "string"}, "state": {"type": "string"}, "stateReason": {"type": "string", "enum": ["completed", "not_planned", "unknown"]}, "duplicateOf": {"type": "integer"}, "url": {"type": "string"}, "repository": {"type": "object"}, "issueType": {"type": "object", "properties": {"id": {"type": "string"}, "name": {"type": "string"}}}}
+      },
+      {
+        "id": "workItemDetails",
+        "description": "Read bounded issue or pull-request participants, timeline, and linked review details.",
+        "readOnly": true,
+        "params": {"type": "object", "properties": {"worktree": {"type": "string"}, "number": {"type": "integer", "minimum": 1}, "kind": {"type": "string", "enum": ["issue", "pullRequest"]}, "reference": {"type": "string", "maxLength": 8192}, "page": {"type": "integer", "minimum": 1}, "limit": {"type": "integer", "minimum": 1, "maximum": 100}}},
+        "result": {"type": "object", "properties": {"item": {"type": "object", "properties": {"stateReason": {"type": "string", "enum": ["completed", "not_planned", "unknown"]}, "duplicateOf": {"type": "integer"}, "issueType": {"type": "object", "properties": {"id": {"type": "string"}, "name": {"type": "string"}}}}}, "participants": {"type": "array", "items": {"type": "object"}}, "timeline": {"type": "array", "items": {"type": "object"}}, "partialFailures": {"type": "array", "items": {"type": "string"}}, "truncated": {"type": "boolean"}}, "required": ["item", "participants", "timeline", "partialFailures", "truncated"]}
+      },
+      {
+        "id": "createIssue",
+        "description": "Create a GitHub issue with explicit configured repository identity.",
+        "params": {"type": "object", "properties": {"worktree": {"type": "string"}, "title": {"type": "string", "minLength": 1}, "body": {"type": "string", "maxLength": 65536}, "labels": {"type": "array", "items": {"type": "string"}}, "assignees": {"type": "array", "items": {"type": "string"}}}, "required": ["title"]},
+        "result": {"type": "object", "properties": {"number": {"type": "integer"}, "url": {"type": "string"}, "title": {"type": "string"}, "state": {"type": "string"}}
+      },
+      {
+        "id": "updateIssue",
+        "description": "Update issue fields, state, labels, assignees, or duplicate relationship.",
+        "params": {"type": "object", "properties": {"worktree": {"type": "string"}, "number": {"type": "integer", "minimum": 1}, "title": {"type": "string"}, "body": {"type": "string", "maxLength": 65536}, "state": {"type": "string", "enum": ["open", "closed"]}, "stateReason": {"type": "string", "enum": ["completed", "not_planned"]}, "duplicateOf": {"type": "integer", "minimum": 1}, "addLabels": {"type": "array", "items": {"type": "string"}}, "removeLabels": {"type": "array", "items": {"type": "string"}}, "addAssignees": {"type": "array", "items": {"type": "string"}}, "removeAssignees": {"type": "array", "items": {"type": "string"}}}, "required": ["number"]},
+        "result": {"type": "object", "properties": {"number": {"type": "integer"}, "updated": {"type": "boolean"}, "warning": {"type": "string"}}
+      },
+      {
+        "id": "issueComment",
+        "description": "Add a comment to a GitHub issue.",
+        "params": {"type": "object", "properties": {"worktree": {"type": "string"}, "number": {"type": "integer", "minimum": 1}, "body": {"type": "string", "minLength": 1, "maxLength": 65536}}, "required": ["number", "body"]},
+        "result": {"type": "object", "properties": {"number": {"type": "integer"}, "comment": {"type": "object"}, "created": {"type": "boolean"}}
+      },
+      {
+        "id": "labels",
+        "description": "List GitHub labels available for the configured repository.",
+        "readOnly": true,
+        "params": {"type": "object", "properties": {"worktree": {"type": "string"}, "query": {"type": "string", "maxLength": 8192}, "limit": {"type": "integer", "minimum": 1, "maximum": 100}}},
+        "result": {"type": "object", "properties": {"items": {"type": "array", "items": {"type": "object"}}, "hasNextPage": {"type": "boolean"}, "truncated": {"type": "boolean"}}, "required": ["items", "hasNextPage", "truncated"]}
+      },
+      {
+        "id": "assignees",
+        "description": "List GitHub users assignable to the configured repository.",
+        "readOnly": true,
+        "params": {"type": "object", "properties": {"worktree": {"type": "string"}, "query": {"type": "string", "maxLength": 8192}, "limit": {"type": "integer", "minimum": 1, "maximum": 100}}},
+        "result": {"type": "object", "properties": {"items": {"type": "array", "items": {"type": "object"}}, "hasNextPage": {"type": "boolean"}, "truncated": {"type": "boolean"}}, "required": ["items", "hasNextPage", "truncated"]}
+      },
+      {
+        "id": "projects",
+        "description": "Discover accessible GitHub Projects v2 projects with partial organization failures explicit.",
+        "readOnly": true,
+        "params": {"type": "object", "properties": {"worktree": {"type": "string"}, "host": {"type": "string"}, "limit": {"type": "integer", "minimum": 1, "maximum": 100}}},
+        "result": {"type": "object", "properties": {"projects": {"type": "array", "items": {"type": "object"}}, "partialFailures": {"type": "array", "items": {"type": "string"}}, "truncated": {"type": "boolean"}}, "required": ["projects", "partialFailures", "truncated"]}
+      },
+      {
+        "id": "projectRef",
+        "description": "Resolve a configured GitHub Projects v2 URL or owner/reference into a project identity.",
+        "readOnly": true,
+        "params": {"type": "object", "properties": {"worktree": {"type": "string"}, "input": {"type": "string", "maxLength": 8192}, "host": {"type": "string"}}, "required": ["input"]},
+        "result": {"type": "object", "properties": {"id": {"type": "string"}, "number": {"type": "integer"}, "owner": {"type": "string"}, "ownerType": {"type": "string", "enum": ["user", "organization"]}, "url": {"type": "string"}}, "required": ["id", "number", "owner", "ownerType", "url"]}
+      },
+      {
+        "id": "projectViews",
+        "description": "List project views for an accessible GitHub Projects v2 user or organization project.",
+        "readOnly": true,
+        "params": {"type": "object", "properties": {"worktree": {"type": "string"}, "owner": {"type": "string"}, "ownerType": {"type": "string", "enum": ["user", "organization"]}, "projectNumber": {"type": "integer", "minimum": 1}, "host": {"type": "string"}}, "required": ["owner", "ownerType", "projectNumber"]},
+        "result": {"type": "object", "properties": {"views": {"type": "array", "items": {"type": "object"}}, "truncated": {"type": "boolean"}, "parentFieldDropped": {"type": "boolean"}}, "required": ["views", "truncated", "parentFieldDropped"]}
+      },
+      {
+        "id": "projectTable",
+        "description": "Read a bounded project view table, board, or roadmap with pagination and layout metadata.",
+        "readOnly": true,
+        "params": {"type": "object", "properties": {"worktree": {"type": "string"}, "owner": {"type": "string"}, "ownerType": {"type": "string", "enum": ["user", "organization"]}, "projectNumber": {"type": "integer", "minimum": 1}, "viewId": {"type": "string"}, "viewNumber": {"type": "integer", "minimum": 1}, "viewName": {"type": "string"}, "queryOverride": {"type": "string", "maxLength": 8192}, "host": {"type": "string"}, "limit": {"type": "integer", "minimum": 1, "maximum": 500}, "page": {"type": "integer", "minimum": 1}}, "required": ["owner", "ownerType", "projectNumber"]},
+        "result": {"type": "object", "properties": {"project": {"type": "object"}, "view": {"type": "object"}, "layout": {"type": "string"}, "items": {"type": "array", "items": {"type": "object"}}, "fields": {"type": "array", "items": {"type": "object"}}, "page": {"type": "integer"}, "limit": {"type": "integer"}, "hasNextPage": {"type": "boolean"}, "totalCount": {}, "truncated": {"type": "boolean"}, "parentFieldDropped": {"type": "boolean"}, "partialFailures": {"type": "array", "items": {"type": "string"}}, "boardColumns": {"type": "array", "items": {"type": "object"}}, "roadmap": {"type": "object"}}, "required": ["items", "layout", "truncated"]}
+      },
+      {
+        "id": "projectField",
+        "description": "Set or clear a supported GitHub Projects v2 field value.",
+        "params": {"type": "object", "properties": {"worktree": {"type": "string"}, "projectId": {"type": "string"}, "itemId": {"type": "string"}, "fieldId": {"type": "string"}, "value": {}, "clear": {"type": "boolean"}, "host": {"type": "string"}}, "required": ["projectId", "itemId", "fieldId"]},
+        "result": {"type": "object", "properties": {"projectId": {"type": "string"}, "itemId": {"type": "string"}, "fieldId": {"type": "string"}, "host": {"type": "string"}, "updated": {"type": "boolean"}, "cleared": {"type": "boolean"}, "value": {}}}
+      },
+      {
+        "id": "projectItemMutation",
+        "description": "Edit an issue or pull request, comment, or issue type from a GitHub Project.",
+        "params": {"type": "object", "properties": {"worktree": {"type": "string"}, "action": {"type": "string", "enum": ["editIssue", "editReview", "addComment", "updateComment", "deleteComment", "updateIssueType"]}, "projectId": {"type": "string"}, "itemId": {"type": "string"}, "number": {"type": "integer", "minimum": 1}, "kind": {"type": "string", "enum": ["issue", "pullRequest"]}, "body": {"type": "string", "maxLength": 65536}, "commentId": {"type": "integer", "minimum": 1}, "title": {"type": "string"}, "state": {"type": "string", "enum": ["open", "closed"]}, "stateReason": {"type": "string", "enum": ["completed", "not_planned"]}, "labels": {"type": "array", "items": {"type": "string"}}, "assignees": {"type": "array", "items": {"type": "string"}}, "issueTypeId": {"type": "string"}, "issueTypeName": {"type": "string"}, "host": {"type": "string"}}, "required": ["action"]},
+        "result": {"type": "object", "properties": {"action": {"type": "string"}, "host": {"type": "string"}, "updated": {"type": "boolean"}, "id": {"type": "string"}, "number": {"type": "integer"}, "kind": {"type": "string", "enum": ["issue", "pullRequest"]}, "url": {"type": "string"}, "changed": {"type": "boolean"}, "issueTypes": {"type": "array", "items": {"type": "object"}}}
+      },
+      {
+        "id": "refresh",
+        "description": "Run a direct GitHub pull-request refresh for the supplied candidate.",
+        "connection": true,
+        "params": {"type": "object", "properties": {"candidate": {"type": "object", "properties": {"worktree": {"type": "string"}, "branch": {"type": "string"}, "number": {"type": "integer", "minimum": 1}, "headOid": {"type": "string"}, "active": {"type": "boolean"}}, "required": ["worktree"]}, "reason": {"type": "string", "enum": ["visible", "active", "post-push", "manual", "swr"]}, "priority": {"type": "integer"}}, "required": ["candidate", "reason"]},
+        "result": {"type": "object", "properties": {"kind": {"type": "string", "enum": ["found", "no-review", "unavailable"]}, "review": {"type": "object"}, "reason": {"type": "string"}, "fetchedAt": {"type": "number"}}
+      },
+      {
+        "id": "enqueueRefresh",
+        "description": "Enqueue a validated GitHub pull-request refresh candidate.",
+        "connection": true,
+        "params": {"type": "object", "properties": {"candidate": {"type": "object", "properties": {"worktree": {"type": "string"}, "branch": {"type": "string"}, "number": {"type": "integer", "minimum": 1}, "headOid": {"type": "string"}, "active": {"type": "boolean"}}, "required": ["worktree"]}, "reason": {"type": "string", "enum": ["visible", "active", "post-push", "manual", "swr"]}, "priority": {"type": "integer"}}, "required": ["candidate", "reason"]},
+        "result": {"type": "object", "properties": {"kind": {"type": "string", "enum": ["queued", "skipped"]}, "skippedReason": {"type": "string"}}, "required": ["kind"]}
+      },
+      {
+        "id": "visibleRefreshCandidates",
+        "description": "Replace the calling connection's visible/active GitHub pull-request candidate set.",
+        "connection": true,
+        "params": {"type": "object", "properties": {"generation": {"type": "integer", "minimum": 0}, "candidates": {"type": "array", "maxItems": 1000, "items": {"type": "object", "properties": {"worktree": {"type": "string"}, "branch": {"type": "string"}, "number": {"type": "integer", "minimum": 1}, "headOid": {"type": "string"}, "active": {"type": "boolean"}}, "required": ["worktree"]}}}, "required": ["generation", "candidates"]},
+        "result": {"type": "object", "properties": {"accepted": {"type": "boolean"}, "generation": {"type": "integer"}, "candidates": {"type": "integer"}}, "required": ["accepted", "generation", "candidates"]}
+      },
+      {
+        "id": "refreshState",
+        "description": "Report bounded background refresh queue state for the selected worktree.",
+        "connection": true,
+        "readOnly": true,
+        "params": {"type": "object", "properties": {"worktree": {"type": "string"}}},
+        "result": {"type": "object", "properties": {"queued": {"type": "integer"}, "inFlight": {"type": "integer"}, "visibleCandidates": {"type": "integer"}, "budgets": {"type": "object", "properties": {"backgroundStarts": {"type": "integer"}, "activeStarts": {"type": "integer"}}}, "owners": {"type": "integer"}}, "required": ["queued", "inFlight", "visibleCandidates", "budgets", "owners"]}
+      }
+    ],
+    "event": [
+      {
+        "id": "changed",
+        "description": "A confirmed GitHub hosting mutation invalidated the affected repository reads.",
+        "data": {"type": "object", "properties": {"worktreeId": {"type": "string"}, "repoId": {"type": "string"}, "host": {"type": "string"}, "owner": {"type": "string"}, "repo": {"type": "string"}, "sequence": {"type": "integer"}, "partial": {"type": "boolean"}, "completedSteps": {"type": "array", "items": {"type": "string"}}}, "required": ["worktreeId", "repoId", "sequence"]}
+      },
+      {
+        "id": "refresh",
+        "description": "A GitHub pull-request refresh was queued, paused, skipped, or completed.",
+        "data": {"type": "object", "properties": {"worktreeId": {"type": "string"}, "repoId": {"type": "string"}, "sequence": {"type": "integer"}, "status": {"type": "string"}, "reason": {"type": "string"}, "outcome": {"type": "object"}, "pausedUntil": {"type": "number"}}, "required": ["worktreeId", "repoId", "sequence"]}
+      }
+    ],
+    "cli-command": [
+      {"id": "repository", "method": "repository", "summary": "resolve the selected worktree's trusted GitHub repositories"},
+      {"id": "diagnose-auth", "method": "diagnoseAuth", "summary": "diagnose GitHub CLI authentication safely"},
+      {"id": "viewer", "method": "viewer", "summary": "show the authenticated GitHub viewer"},
+      {"id": "rate-limit", "method": "rateLimit", "summary": "show GitHub API rate-limit budgets"},
+      {"id": "accounts", "method": "accounts", "summary": "list authenticated GitHub accounts"},
+      {"id": "configure", "method": "configure", "summary": "set repository issue source or GitHub account binding"},
+      {"id": "configuration", "method": "configuration", "summary": "show repository hosting configuration"},
+      {"id": "for-branch", "method": "forBranch", "summary": "find the pull request for a branch"},
+      {"id": "review", "method": "review", "summary": "read a pull request by number"},
+      {"id": "creation-eligibility", "method": "creationEligibility", "summary": "check pull request creation blockers"},
+      {"id": "create", "method": "create", "summary": "create a GitHub pull request"},
+      {"id": "create-stacked", "method": "createStacked", "summary": "create and register a stacked pull request"},
+      {"id": "merge", "method": "merge", "summary": "head-guard and merge a pull request"},
+      {"id": "auto-merge", "method": "autoMerge", "summary": "enable or disable pull request auto-merge"},
+      {"id": "update-review", "method": "updateReview", "summary": "edit or update pull request state"},
+      {"id": "reviewers", "method": "reviewers", "summary": "add or remove pull request reviewers"},
+      {"id": "checks", "method": "checks", "summary": "list pull request checks and status rollup"},
+      {"id": "check-details", "method": "checkDetails", "summary": "read check annotations, jobs, and log tails"},
+      {"id": "rerun-checks", "method": "rerunChecks", "summary": "rerun pull request checks"},
+      {"id": "comments", "method": "comments", "summary": "read pull request comments and review threads"},
+      {"id": "review-comment", "method": "reviewComment", "summary": "add an inline review comment or reply"},
+      {"id": "reaction", "method": "reaction", "summary": "add or remove a review reaction"},
+      {"id": "resolve-thread", "method": "resolveThread", "summary": "resolve or unresolve a review thread"},
+      {"id": "file-viewed", "method": "fileViewed", "summary": "mark a changed pull request file viewed or unviewed"},
+      {"id": "files", "method": "files", "summary": "list pull request files and patch coordinates"},
+      {"id": "file-contents", "method": "fileContents", "summary": "read a file from a pull request base or head commit"},
+      {"id": "list-work-items", "method": "listWorkItems", "summary": "list GitHub issues and pull requests"},
+      {"id": "count-work-items", "method": "countWorkItems", "summary": "count GitHub issues and pull requests"},
+      {"id": "work-item", "method": "workItem", "summary": "read a GitHub issue or pull request"},
+      {"id": "work-item-details", "method": "workItemDetails", "summary": "read work item participants and timeline"},
+      {"id": "create-issue", "method": "createIssue", "summary": "create a GitHub issue"},
+      {"id": "update-issue", "method": "updateIssue", "summary": "update a GitHub issue"},
+      {"id": "issue-comment", "method": "issueComment", "summary": "comment on a GitHub issue"},
+      {"id": "labels", "method": "labels", "summary": "list repository labels"},
+      {"id": "assignees", "method": "assignees", "summary": "list assignable GitHub users"},
+      {"id": "projects", "method": "projects", "summary": "discover accessible GitHub Projects v2 projects"},
+      {"id": "project-ref", "method": "projectRef", "summary": "resolve a GitHub project reference"},
+      {"id": "project-views", "method": "projectViews", "summary": "list views of a GitHub Project"},
+      {"id": "project-table", "method": "projectTable", "summary": "read a bounded project view table"},
+      {"id": "project-field", "method": "projectField", "summary": "set or clear a project field"},
+      {"id": "project-item-mutation", "method": "projectItemMutation", "summary": "edit a project issue, pull request, comment, or issue type"},
+      {"id": "refresh", "method": "refresh", "summary": "refresh a pull request directly"},
+      {"id": "enqueue-refresh", "method": "enqueueRefresh", "summary": "enqueue a pull request refresh"},
+      {"id": "visible-refresh-candidates", "method": "visibleRefreshCandidates", "summary": "report visible pull request refresh candidates"},
+      {"id": "refresh-state", "method": "refreshState", "summary": "show pull request refresh queue state"}
+    ]
+  }
+}
