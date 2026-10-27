@@ -589,5 +589,25 @@
 - **Confidence:** high
 - **Source:** locked by docs/loop/LOOP.md
 
+## D59: Merge build/roadmap again before the final gate, and run the whole suite only through `bun run test` from now on
+- **Question:** an operator note: build/roadmap gained a remote test runner, and `bun run test` now sends the suite to the test host (docs/loop/README.md "Where the tests run")
+- **Options:** n/a
+- **Chose:** after the descriptor task's full-suite run returned, `git merge build/roadmap` (bringing m2-source-control-core and the runner; two add/add conflicts kept both sides: `packages/ui/src/styles.css` rules and two new `describe` blocks in `plugins/quirky.worktree/test/metadata.test.ts`), then every later full gate runs through `bun run test` only
+- **Why:** the operator asked for exactly this; the runner also keeps lanes off this Mac's CPU
+- **Evidence:** merge 0c1e6b0; docs/loop/README.md "Where the tests run"
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** operator note
+
+## D60: The descriptor fix lives in `startHarness`, shared by every symlink-only built-in directory
+- **Question:** how D55's descriptor task brought the single-process suite back under the limit
+- **Options:** memoise each plugin's support file; share in the daemon test helper
+- **Chose:** `packages/daemon/test/helpers.ts` `startHarness` starts a daemon from one shared directory per distinct set of plugin symlinks, made once per process; directories holding real files pass through unchanged, restarts keep their own path. Measured: per-file descriptor totals fell from about 22,400 to 15,900, and the single-process `bun run test` passed 6454/6454 (1 skip) with no `EBADF`, peak about 3,275 descriptors. The window-presence test's fake UI model gained `overlays: []` after the m1-term-ui merge.
+- **Why:** one change covers the session, worktree, agent-status, ask, git, agents and structured harnesses without touching protected paths
+- **Evidence:** merge 01d7abc
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** supersedes m1-term-ui D51
+
 ## Progress
-W1–W3 and both checkpoint fix batches merged; caught up with build/roadmap (m1-term-ui) at 9fcea51. In flight: the term-ui obligations task (bell in the terminal strip, `visibleSessions` from the terminal view and floating overlay) and the descriptor task (shared harness directories, window-presence fake). Next: merge both, full gate green, Final Round 1 (C, S, X deep over d325202..HEAD without docs), its fix batch, gate, the like-a-user web pass (SC-6, SC-46 to SC-50), docs/loop/native/m1-notifications.json, land. Briefs and run journal: session scratchpad sdd/; review drivers cp1/run_cp.py.
+All waves, both checkpoint fix batches, Final Round 1 and its fix batch merged; UI pass passed (D57); native file written (D58); merged build/roadmap again (0c1e6b0, D59). Next: final gate through `bun run test`, `bun test scripts`, `bun run typecheck`; any open finding goes to BLOCKERS.md; then `git switch --detach` and `bun scripts/build-loop/queue.ts land m1-notifications`.
