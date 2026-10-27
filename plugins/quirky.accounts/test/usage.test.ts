@@ -14,6 +14,11 @@ const services: UsageService[] = []
 const envBefore = new Map<string, string | undefined>()
 const nativeFetch = globalThis.fetch
 const nativeDateNow = Date.now
+type FetchMockImplementation = (...args: Parameters<typeof fetch>) => Promise<Response>
+
+function fetchMock(implementation: FetchMockImplementation): typeof fetch {
+  return Object.assign(implementation, { preconnect: nativeFetch.preconnect })
+}
 
 function setEnv(name: string, value: string): void {
   if (!envBefore.has(name)) envBefore.set(name, process.env[name])
@@ -145,11 +150,11 @@ describe('UsageService', () => {
     const response = Promise.withResolvers<Response>()
     const started = Promise.withResolvers<void>()
     let calls = 0
-    globalThis.fetch = async () => {
+    globalThis.fetch = fetchMock(async () => {
       calls += 1
       started.resolve()
       return response.promise
-    }
+    })
     const service = createService(root, async () => target)
     const first = service.refresh({ provider: 'claude', force: true })
     const second = service.refresh({ provider: 'claude', force: true })
@@ -170,10 +175,10 @@ describe('UsageService', () => {
     let current = accountA
     const response = Promise.withResolvers<Response>()
     const started = Promise.withResolvers<void>()
-    globalThis.fetch = async () => {
+    globalThis.fetch = fetchMock(async () => {
       started.resolve()
       return response.promise
-    }
+    })
     const service = createService(root, async () => current)
     const pending = service.refresh({ provider: 'claude', force: true })
     await started.promise
@@ -197,7 +202,7 @@ describe('UsageService', () => {
     let now = Date.parse('2026-10-27T12:00:00.000Z')
     Date.now = () => now
     const results = [claudeResponse(75), new Response('', { status: 500 }), new Response('', { status: 500 })]
-    globalThis.fetch = async () => results.shift() ?? new Response('', { status: 500 })
+    globalThis.fetch = fetchMock(async () => results.shift() ?? new Response('', { status: 500 }))
     const service = createService(root, async () => target)
     await service.refresh({ provider: 'claude', force: true })
     now += 1_000
@@ -222,11 +227,11 @@ describe('UsageService', () => {
     const home = target.find((item) => item.provider === 'claude')?.home
     if (!home) throw new Error('Claude fixture home is missing')
     putClaudeCredential(home, 'test-token-persisted')
-    globalThis.fetch = async () => claudeResponse(43)
+    globalThis.fetch = fetchMock(async () => claudeResponse(43))
     const first = createService(root, async () => target)
     await first.refresh({ provider: 'claude', force: true })
     first.shutdown()
-    globalThis.fetch = async () => new Response('', { status: 500 })
+    globalThis.fetch = fetchMock(async () => new Response('', { status: 500 }))
     const second = createService(root, async () => target)
     const state = await second.refresh({ provider: 'claude', force: true })
     const snapshot = state.providers.find((item) => item.provider === 'claude')
@@ -240,10 +245,10 @@ describe('UsageService', () => {
     const root = fixtureRoot()
     const credential = putGeminiCredentialFixture(root, Date.now() - 1_000)
     let calls = 0
-    globalThis.fetch = async () => {
+    globalThis.fetch = fetchMock(async () => {
       calls += 1
       return Response.json({ access_token: 'unexpected-token', expires_in: 3600 })
-    }
+    })
     const service = createService(root, async () => accountTargets(root))
     const state = await service.refresh({ provider: 'gemini', force: true })
     expect(state.providers.find((snapshot) => snapshot.provider === 'gemini')).toMatchObject({
@@ -258,7 +263,7 @@ describe('UsageService', () => {
     const root = fixtureRoot()
     const credential = putGeminiCredentialFixture(root, Date.now() - 1_000)
     const urls: string[] = []
-    globalThis.fetch = async (input) => {
+    globalThis.fetch = fetchMock(async (input) => {
       const url = String(input)
       urls.push(url)
       if (url === 'https://oauth2.googleapis.com/token') {
@@ -268,7 +273,7 @@ describe('UsageService', () => {
         return Response.json({ cloudaicompanionProject: 'fixture-project' })
       }
       return Response.json({ buckets: [{ modelId: 'gemini-2.5-pro', remainingFraction: 0.4, resetTime: '2026-10-27T13:00:00.000Z' }] })
-    }
+    })
     const service = createService(root, async () => accountTargets(root), { 'gemini-cli-oauth-enabled': true })
     const state = await service.refresh({ provider: 'gemini', force: true })
     expect(urls).toEqual([
@@ -300,7 +305,7 @@ describe('UsageService', () => {
       new Response('', { status: 429, headers: { 'Retry-After': new Date(now + 60_000).toUTCString() } }),
       new Response('', { status: 429, headers: { 'Retry-After': '1' } })
     ]
-    globalThis.fetch = async () => results.shift() ?? new Response('', { status: 429 })
+    globalThis.fetch = fetchMock(async () => results.shift() ?? new Response('', { status: 429 }))
     const service = createService(root, async () => target)
     await service.refresh({ provider: 'claude', force: true })
     now += 5_000
@@ -364,7 +369,7 @@ describe('UsageService', () => {
     service.setCredential({ provider: 'zcode', kind: 'api-key', value: 'zcode-key' })
     service.setCredential({ provider: 'zcode', kind: 'base-url', value: 'https://api.z.ai' })
     const urls: string[] = []
-    globalThis.fetch = async (input) => {
+    globalThis.fetch = fetchMock(async (input) => {
       const url = String(input)
       urls.push(url)
       if (url.includes('minimax.io')) {
@@ -377,7 +382,7 @@ describe('UsageService', () => {
         return Response.json({ success: true, code: 200, data: { limits: [{ type: 'TOKENS_LIMIT', unit: 6, number: 1, usage: 100, currentValue: 40 }] } })
       }
       throw new Error('Unexpected provider URL')
-    }
+    })
     for (const provider of ['minimax', 'opencode-go', 'zcode']) {
       const state = await service.refresh({ provider, force: true })
       expect(state.providers.find((snapshot) => snapshot.provider === provider)?.status).toBe('ok')
@@ -390,7 +395,7 @@ describe('UsageService', () => {
     service.clearCredential({ provider: 'opencode-go', kind: 'api-key' })
     service.clearCredential({ provider: 'zcode', kind: 'api-key' })
     service.clearCredential({ provider: 'zcode', kind: 'base-url' })
-    globalThis.fetch = async () => { throw new Error('No credential should make a network request') }
+    globalThis.fetch = fetchMock(async () => { throw new Error('No credential should make a network request') })
     for (const provider of ['minimax', 'opencode-go', 'zcode']) {
       const state = await service.refresh({ provider, force: true })
       expect(state.providers.find((snapshot) => snapshot.provider === provider)?.status).toBe('unavailable')
@@ -417,11 +422,11 @@ describe('UsageService', () => {
     writeFileSync(opencode, '#!/bin/sh\nprintf \'opencode v2.0.0\\n\'\n', { mode: 0o700 })
     chmodSync(opencode, 0o700)
     let authorization = ''
-    globalThis.fetch = async (input, init) => {
+    globalThis.fetch = fetchMock(async (input, init) => {
       expect(String(input)).toContain('opencode.ai/zen/go/v1/usage')
       authorization = new Headers(init?.headers).get('Authorization') ?? ''
       return Response.json({ usage: { rolling: { percent: 15 }, weekly: { percent: 27 } } })
-    }
+    })
     const service = createService(root, async () => accountTargets(root))
     const state = await service.refresh({ provider: 'opencode-go', force: true })
     expect(authorization).toBe('Bearer native-opencode-key')
@@ -441,7 +446,7 @@ describe('UsageService', () => {
     const security = join(root, 'bin', 'security')
     writeFileSync(security, '#!/bin/sh\necho keychain locked >&2\nexit 1\n', { mode: 0o700 })
     chmodSync(security, 0o700)
-    globalThis.fetch = async () => Response.json({ isUnlimited: true, membershipType: 'pro' })
+    globalThis.fetch = fetchMock(async () => Response.json({ isUnlimited: true, membershipType: 'pro' }))
     const service = createService(root, async () => accountTargets(root))
     const state = await service.refresh({ provider: 'cursor', force: true })
     expect(state.providers.find((snapshot) => snapshot.provider === 'cursor')).toMatchObject({
@@ -466,7 +471,7 @@ describe('UsageService', () => {
     database.prepare('INSERT INTO ItemTable (key, value) VALUES (?, ?)').run('cursorAuth/cachedEmail', 'fixture@example.invalid')
     database.prepare('INSERT INTO ItemTable (key, value) VALUES (?, ?)').run('cursorAuth/stripeMembershipType', 'pro')
     database.close()
-    globalThis.fetch = async () => Response.json({ isUnlimited: true, membershipType: 'pro' })
+    globalThis.fetch = fetchMock(async () => Response.json({ isUnlimited: true, membershipType: 'pro' }))
     const service = createService(root, async () => accountTargets(root))
     const state = await service.refresh({ provider: 'cursor', force: true })
     expect(state.providers.find((snapshot) => snapshot.provider === 'cursor')).toMatchObject({
@@ -497,11 +502,11 @@ describe('UsageService', () => {
     const service = createService(root, async () => current)
     let requests = 0
     let authUsed = ''
-    globalThis.fetch = async (_input, init) => {
+    globalThis.fetch = fetchMock(async (_input, init) => {
       requests += 1
       authUsed = new Headers(init?.headers).get('Authorization') ?? ''
       return Response.json({ code: 'reset' })
-    }
+    })
     const firstState = await service.refresh({ provider: 'codex', force: true })
     const firstOffer = firstState.providers.find((snapshot) => snapshot.provider === 'codex')
     const firstScope = firstOffer?.rateLimitResetCredits?.expectedScope
