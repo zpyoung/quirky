@@ -439,5 +439,15 @@
 - **Confidence:** medium
 - **Source:** locked by docs/loop/LOOP.md
 
+## D44: The first land conflicted with m2-source-control-notes-ai; both sides' quirky.agents methods are kept
+- **Question:** LOOP.md step 7.3 after `queue.ts land` reported a conflict
+- **Options:** merge build/roadmap and keep both; rework
+- **Chose:** merged build/roadmap: `quirky.agents` keeps this item's `submitPlan`, `deliver {ready}` and the fake-agent outbox beside m2-source-control-notes-ai's `generate` and `cancelGenerate` (their `created` naming in main.ts, their per-process e2e cleanup). Read the decision logs it brought in (m2-source-control-notes-ai, m2-sidebar-extras, fix-ask-regex-budget-20261027, fix-test-process-leaks, sa-browser-agent): none conflicts with this item. m2-source-control-notes-ai D13 checks agent status itself before sending review notes and says to switch to this item's `quirky.agent-status/send` once it lands; that switch is that plugin's follow-up.
+- **Why:** both sides only added methods
+- **Evidence:** docs/loop/decisions/m2-source-control-notes-ai.md D13
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** assumed — autonomous
+
 ## Progress
 Step 7 (land). Build, Final Round 1, its fix batch and the final gate are done (head 2d20a80 plus this note). No UI or native scenarios (D25). If this iteration stopped before landing: run `bun install`, the gate (`bun run test && bun test scripts && bun run typecheck`), commit, `git switch --detach`, check `pgrep -fl "queue.ts land"` is empty, then `bun scripts/build-loop/queue.ts land m1-agent-status-scripting`.
