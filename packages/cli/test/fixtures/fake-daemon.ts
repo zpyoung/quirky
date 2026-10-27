@@ -72,6 +72,7 @@ export class FakeDaemon {
     sidebarSections: [],
     panels: [],
     views: [],
+    overlays: [],
     commands: [],
     keybindings: [],
     settings: [],
@@ -289,7 +290,14 @@ export class FakeDaemon {
       module: null,
       ...overrides
     }
-    const list = kind === 'sidebar-section' ? this.ui.sidebarSections : kind === 'panel' ? this.ui.panels : this.ui.views
+    const list =
+      kind === 'sidebar-section'
+        ? this.ui.sidebarSections
+        : kind === 'panel'
+          ? this.ui.panels
+          : kind === 'overlay'
+            ? this.ui.overlays
+            : this.ui.views
     list.push(entry)
     return entry
   }

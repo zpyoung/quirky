@@ -1,4 +1,6 @@
 import { afterEach, expect, test } from 'bun:test'
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { bootWindow, closeWindows, installUiPlugin, provide, type WindowEnv } from './fixtures/window-env'
 
 afterEach(closeWindows)
@@ -210,4 +212,94 @@ test('a toast from a notify event opens its view through the daemon', async () =
   await win.click('.toast')
   await win.waitFor(() => win.document.querySelector(slot(OTHER))?.textContent === 'other {"from":"toast"}')
   expect(win.document.querySelector('.toast')).toBeNull()
+})
+
+const HUD = 'overlay:acme.hud/hud'
+const QUIET = 'overlay:acme.hud/quiet'
+const overlayLayer = (env: WindowEnv) => env.win.document.querySelector('.overlay-layer')
+const overlayBody = (env: WindowEnv, id: string) => env.win.document.querySelector(`.overlay-layer [data-plugin-overlay="${id}"]`)
+const slotStates = async (env: WindowEnv) =>
+  ((await env.agent.callAny('ui.state', {})) as { slots: { id: string; kind: string; shown: boolean; report?: unknown }[] }).slots
+
+/** A plugin with two overlays: `hud` reports its own state, `quiet` never reports. */
+function writeOverlayPlugin(installed: string): void {
+  installUiPlugin(
+    installed,
+    'acme.hud',
+    {
+      overlay: [
+        { id: 'hud', title: 'Hud', order: 1 },
+        { id: 'quiet', title: 'Quiet', order: 2 }
+      ]
+    },
+    [
+      provide(
+        HUD,
+        `const b = document.createElement('button'); b.id = 'hud-hide'; b.textContent = 'Hide'
+         b.onclick = () => props.report({ label: 'hud', shown: false })
+         element.append(b)
+         props.report({ label: 'hud', shown: true })`
+      ),
+      provide(QUIET, `element.id = 'quiet-body'; element.textContent = 'quiet'`)
+    ].join('\n')
+  )
+}
+
+test('SC-67: the window mounts each overlay in a full-window layer after the layout', async () => {
+  const env = await bootWindow(writeOverlayPlugin)
+  await env.win.waitFor(() => overlayBody(env, HUD)?.querySelector('#hud-hide'))
+  await env.win.waitFor(() => overlayBody(env, QUIET)?.textContent === 'quiet')
+
+  const layer = overlayLayer(env)!
+  expect(layer.parentElement).toBe(env.win.document.querySelector('.app'))
+  expect(env.win.document.querySelector('.layout')!.nextElementSibling).toBe(layer)
+  expect([...layer.children].map((child) => child.getAttribute('data-plugin-overlay'))).toEqual([HUD, QUIET])
+  expect(env.win.host.getState().slots[HUD]).toEqual({ status: 'mounted' })
+})
+
+test('SC-67: the layer lets clicks through and sits below the dialogs', () => {
+  const css = readFileSync(join(import.meta.dir, '..', 'src', 'styles.css'), 'utf8')
+  const rule = /\.overlay-layer\s*\{([^}]*)\}/.exec(css)![1]
+  expect(rule).toContain('position: fixed')
+  expect(rule).toContain('inset: 0')
+  expect(rule).toContain('pointer-events: none')
+  const zOf = (selector: string) => Number(new RegExp(`\\${selector}\\s*\\{[^}]*z-index:\\s*(\\d+)`).exec(css)![1])
+  expect(Number(/z-index:\s*(\d+)/.exec(rule)![1])).toBeLessThan(zOf('.overlay'))
+})
+
+test('SC-67: ui state lists the overlays with their reports, and a silent overlay is shown with an empty report', async () => {
+  const env = await bootWindow(writeOverlayPlugin)
+  await env.win.waitFor(async () => (await slotStates(env)).find((slot) => slot.id === HUD)?.report !== undefined)
+
+  const slots = (await slotStates(env)).filter((slot) => slot.kind === 'overlay')
+  expect(slots.map((slot) => slot.id)).toEqual([HUD, QUIET])
+  expect(slots.find((slot) => slot.id === HUD)).toMatchObject({ shown: true, report: { label: 'hud', shown: true } })
+  await env.win.waitFor(async () => (await slotStates(env)).find((slot) => slot.id === QUIET)?.shown === true)
+  expect((await slotStates(env)).find((slot) => slot.id === QUIET)!.report).toEqual({})
+})
+
+test('SC-67: the overlay reporting shown false turns shown off in ui state, and a click inside it still reaches the plugin', async () => {
+  const env = await bootWindow(writeOverlayPlugin)
+  await env.win.waitFor(() => overlayBody(env, HUD)?.querySelector('#hud-hide'))
+  await env.win.waitFor(async () => (await slotStates(env)).find((slot) => slot.id === HUD)?.shown === true)
+
+  await env.win.click('#hud-hide')
+  await env.win.waitFor(async () => (await slotStates(env)).find((slot) => slot.id === HUD)?.shown === false)
+  expect((await slotStates(env)).find((slot) => slot.id === HUD)!.report).toEqual({ label: 'hud', shown: false })
+})
+
+test('SC-67: disabling the plugin removes the overlays from the window and from ui state', async () => {
+  const env = await bootWindow(writeOverlayPlugin)
+  await env.win.waitFor(() => overlayBody(env, HUD)?.querySelector('#hud-hide'))
+
+  await env.agent.callAny('plugin.disable', { id: 'acme.hud' })
+  await env.win.waitFor(() => overlayBody(env, HUD) === null && overlayBody(env, QUIET) === null)
+  await env.win.waitFor(async () => !(await slotStates(env)).some((slot) => slot.kind === 'overlay'))
+})
+
+test('SC-67: a window with no overlays still has an empty layer, and the layout is untouched', async () => {
+  const env = await bootWindow(writeShellPlugin)
+  await env.win.waitFor(() => env.win.host.getState().slots[SECTION]?.status === 'mounted')
+  expect(overlayLayer(env)!.children).toHaveLength(0)
+  expect(env.win.document.querySelector(`${region('sidebar')} ${slot(SECTION)}`)).not.toBeNull()
 })

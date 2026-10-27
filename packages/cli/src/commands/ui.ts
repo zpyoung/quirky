@@ -33,6 +33,7 @@ function renderModel(model: UiModel): string {
     ['SIDEBAR', model.sidebarSections, () => slotTable(model.sidebarSections)],
     ['PANELS', model.panels, () => slotTable(model.panels)],
     ['VIEWS', model.views, () => slotTable(model.views)],
+    ['OVERLAYS', model.overlays, () => slotTable(model.overlays)],
     ['COMMANDS', model.commands, () => commandTable(model.commands)],
     [
       'KEYBINDINGS',
