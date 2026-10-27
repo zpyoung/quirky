@@ -40,7 +40,7 @@ export type CreateParams = {
   noParent?: boolean
   setup?: 'run' | 'skip' | 'inherit'
   trustSetup?: boolean
-  agent?: Exclude<AgentKind, 'shell'>
+  agent?: AgentKind
   prompt?: string
   allowLocalBaseFallback?: boolean
   activate?: boolean
@@ -215,6 +215,7 @@ type Created = {
 
 /** Creates a workspace: a git worktree on a branch, or a folder workspace for a folder project or a group. */
 export async function createWorkspace(env: CreateEnv, params: CreateParams, identity: CallerIdentity): Promise<WorktreeCreateResult> {
+  if (params.agent === 'shell') throw env.fail('invalid-params', 'agent must be an agent ID, not shell')
   const createdBy = params.createdBy ?? 'api'
   if (params.parent !== undefined && params.noParent === true) throw env.fail('invalid-params', 'parent and noParent cannot be used together')
   if (params.branch !== undefined && params.branchName !== undefined) throw env.fail('invalid-params', 'pass either a branch or a branch name, not both')

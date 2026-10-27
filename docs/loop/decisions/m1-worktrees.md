@@ -737,5 +737,16 @@
 - **Revisit if:** never
 - **Source:** assumed — autonomous
 
+## D68: Create takes any installed agent ID, as `quirky.session/create` does after m1-providers
+- **Question:** the catch-up merge brought `quirky.agents`, whose session create accepts any agent ID, while worktree create still had a fixed four-agent enum
+- **Options:** keep the enum; drop it and list agents from `quirky.agents/list`
+- **Chose:** drop the enum; create refuses `shell` itself (a create starts an agent, not a shell), and the create dialog lists the installed, enabled agents from `quirky.agents/list`, falling back to the four built-ins when that plugin isn't loaded; model and effort stay out of create, as the logic spec's non-goals say
+- **Why:** two lists of agents would drift, and a fixed enum would refuse an agent the session plugin can start
+- **Evidence:** plugins/quirky.agents (from build/roadmap), plugins/quirky.worktree/src/daemon/create.ts, src/CreateDialog.tsx
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** quirky.agents adds per-agent launch options a create should carry
+- **Source:** assumed — autonomous
+
 ## Progress
-Step 5: W1-W3 merged on `build/m1-worktrees` (W2 checkpoint fixed). W3 checkpoint review running (scratchpad cp3); W4 chain running in scratch worktree `sdd/m1wt/w4-t9` (T9a dispatched, then T9b dialogs, T9c project/group/delete dialogs). If stopped early: rerun the W3 checkpoint on `12b47d9..722c08a`, redo W4 from tech.md "Window" if its worktree is gone, then catch up with build/roadmap, Final Round 1, verify, land.
+Step 5 done through catch-up: W1-W4 merged on `build/m1-worktrees` with W2 and W3 checkpoints fixed; build/roadmap merged in (e11a136) and its agent change adopted (D68). Next: full gate, Final Round 1 over `98a5625..HEAD` with one fix batch, then verify (tests per SC, web UI scenarios on a temp QUIRKY_HOME) and land.

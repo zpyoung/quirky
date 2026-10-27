@@ -4,7 +4,25 @@ import { createWorkspace, type CreateHooks } from './actions'
 import { Dialog } from './Dialog'
 import { repoLabel, workspaceOption } from './report'
 
-const AGENTS = ['claude', 'codex', 'opencode', 'gemini'] as const
+/** Offered when `quirky.agents` isn't there to say which agents are installed. */
+const FALLBACK_AGENTS = [
+  { id: 'claude', label: 'Claude' },
+  { id: 'codex', label: 'Codex' },
+  { id: 'opencode', label: 'OpenCode' },
+  { id: 'gemini', label: 'Gemini' }
+]
+
+type AgentChoice = { id: string; label: string }
+
+/** The installed, enabled agents `quirky.agents` reports, else the fallback list. */
+async function loadAgents(context: UiPluginContext): Promise<AgentChoice[]> {
+  try {
+    const listed = (await context.call('quirky.agents/list')) as { agents?: { id: string; label: string; installed: boolean; enabled: boolean }[] }
+    return (listed.agents ?? []).filter((a) => a.installed && a.enabled).map((a) => ({ id: a.id, label: a.label }))
+  } catch {
+    return FALLBACK_AGENTS
+  }
+}
 
 type Props = {
   context: UiPluginContext
@@ -39,6 +57,7 @@ export function CreateDialog({ context, repos, worktrees, repoId, onRepoChange, 
   const [base, setBase] = useState('')
   const [branch, setBranch] = useState('')
   const [agent, setAgent] = useState('')
+  const [agents, setAgents] = useState<AgentChoice[]>([])
   const [prompt, setPrompt] = useState('')
   const [advanced, setAdvanced] = useState(false)
   const [displayName, setDisplayName] = useState('')
@@ -68,6 +87,14 @@ export function CreateDialog({ context, repos, worktrees, repoId, onRepoChange, 
       live = false
     }
   }, [context, repoId])
+
+  useEffect(() => {
+    let live = true
+    void loadAgents(context).then((loaded) => live && setAgents(loaded))
+    return () => {
+      live = false
+    }
+  }, [context])
 
   useEffect(() => {
     let live = true
@@ -174,9 +201,9 @@ export function CreateDialog({ context, repos, worktrees, repoId, onRepoChange, 
           <span>Agent</span>
           <select value={agent} onChange={(event) => setAgent(event.target.value)}>
             <option value="">None</option>
-            {AGENTS.map((kind) => (
-              <option key={kind} value={kind}>
-                {kind}
+            {agents.map((choice) => (
+              <option key={choice.id} value={choice.id}>
+                {choice.label}
               </option>
             ))}
           </select>

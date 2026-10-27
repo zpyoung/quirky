@@ -197,13 +197,7 @@
             },
             "agent": {
               "type": "string",
-              "description": "An agent to start in the new worktree once it exists (after setup when the project says to wait).",
-              "enum": [
-                "claude",
-                "codex",
-                "opencode",
-                "gemini"
-              ]
+              "description": "An agent ID (any but shell) to start in the new worktree once it exists, after setup when the project says to wait."
             },
             "prompt": {
               "type": "string",
