@@ -10,6 +10,7 @@ import type { EvaluateInput, Evaluation, LineMatch, Origin, RuleFile, Verdict } 
 
 const BASE_BUDGET_MS = 250
 const START_TIMEOUT_MS = 5000
+const SHUT_DOWN: Unavailable = { unavailable: 'the matcher was shut down' }
 const ENTRY = fileURLToPath(new URL('./matcher-worker.ts', import.meta.url))
 
 export type TimedOut = { timedOut: true }
@@ -40,6 +41,7 @@ export class Matcher {
   private readonly budgetMs: number
   private readonly command: string[]
   private child: Child | null = null
+  private spawning: Child | null = null
   private starting: Promise<Child | Unavailable> | null = null
   private waiter: Waiter | null = null
   private tail: Promise<unknown> = Promise.resolve()
@@ -64,6 +66,8 @@ export class Matcher {
   /** Stops the matcher process; later calls report it unavailable. */
   dispose(): void {
     this.disposed = true
+    this.spawning?.kill('SIGKILL')
+    this.waiter?.settle(SHUT_DOWN)
     this.kill()
   }
 
@@ -75,8 +79,9 @@ export class Matcher {
   }
 
   private async execute(build: (id: number) => MatcherRequest): Promise<Reply> {
-    if (this.disposed) return { unavailable: 'the matcher was shut down' }
+    if (this.disposed) return SHUT_DOWN
     const started = await this.start()
+    if (this.disposed) return SHUT_DOWN
     if ('unavailable' in started) return started
     const child = started
     return new Promise<Reply>((resolve) => {
@@ -114,6 +119,7 @@ export class Matcher {
       let ready = false
       const fail = (reason: string) => {
         clearTimeout(timer)
+        if (this.spawning === child) this.spawning = null
         if (child && this.child === child) this.child = null
         child?.kill('SIGKILL')
         resolve({ unavailable: reason })
@@ -129,6 +135,12 @@ export class Matcher {
             if (message?.ready === true && !ready) {
               ready = true
               clearTimeout(timer)
+              this.spawning = null
+              if (this.disposed) {
+                child.kill('SIGKILL')
+                resolve(SHUT_DOWN)
+                return
+              }
               this.child = child
               resolve(child)
               return
@@ -144,6 +156,7 @@ export class Matcher {
           },
         })
         child.unref()
+        this.spawning = child
       } catch (error) {
         fail(`could not start the matcher process: ${error instanceof Error ? error.message : String(error)}`)
       }

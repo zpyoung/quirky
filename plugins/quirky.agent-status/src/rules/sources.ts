@@ -116,7 +116,12 @@ export class RuleSources {
   }
 
   private readFile(path: string, agent: string): { signature: string; result: ParseResult } | null {
-    const stat = statSync(path, { throwIfNoEntry: false })
+    let stat: ReturnType<typeof statSync>
+    try {
+      stat = statSync(path, { throwIfNoEntry: false })
+    } catch (error) {
+      return this.unreadable(path, '', error)
+    }
     if (stat === undefined) {
       this.files.delete(path)
       return null
@@ -124,19 +129,28 @@ export class RuleSources {
     const signature = signatureOf(stat)
     const cached = this.files.get(path)
     if (cached && cached.signature === signature) return cached
-    let result: ParseResult
     if (!stat.isFile()) {
-      result = { ok: false, reason: 'is not a file' }
-    } else {
-      try {
-        result = parseRuleFile(readFileSync(path, 'utf8'), agent)
-      } catch (error) {
-        result = { ok: false, reason: `cannot be read: ${error instanceof Error ? error.message : String(error)}` }
-      }
+      const read = { signature, result: { ok: false, reason: 'is not a file' } satisfies ParseResult }
+      this.files.set(path, read)
+      return read
     }
-    const read = { signature, result }
+    let text: string
+    try {
+      text = readFileSync(path, 'utf8')
+    } catch (error) {
+      return this.unreadable(path, signature, error)
+    }
+    const read = { signature, result: parseRuleFile(text, agent) }
     this.files.set(path, read)
     return read
+  }
+
+  /** A source the filesystem refused; never cached, so a fixed permission is picked up on the next call. */
+  private unreadable(path: string, signature: string, error: unknown): { signature: string; result: ParseResult } {
+    this.files.delete(path)
+    const code = (error as { code?: unknown } | null)?.code
+    const named = typeof code === 'string' ? code : error instanceof Error ? error.message : String(error)
+    return { signature: `${signature}:${named}`, result: { ok: false, reason: `cannot be read: ${named}` } }
   }
 
   private async candidates(agent: string): Promise<Candidate[]> {

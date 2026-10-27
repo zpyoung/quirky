@@ -84,6 +84,24 @@ describe('matcher process', () => {
     expect(result).toHaveProperty('unavailable')
   })
 
+  test('disposing while the process is starting kills it and answers every request unavailable', async () => {
+    const gone = new Matcher()
+    const first = gone.matchLines('a', false, ['a'])
+    const second = gone.matchLines('a', false, ['a'])
+    await Bun.sleep(1)
+    const internals = gone as unknown as { spawning: { exited: Promise<number>; killed: boolean } | null; child: unknown }
+    const starting = internals.spawning
+    expect(starting).not.toBeNull()
+    gone.dispose()
+    expect(await first).toEqual({ unavailable: 'the matcher was shut down' })
+    expect(await second).toEqual({ unavailable: 'the matcher was shut down' })
+    expect(await gone.matchLines('a', false, ['a'])).toEqual({ unavailable: 'the matcher was shut down' })
+    await starting!.exited
+    expect(starting!.killed).toBe(true)
+    expect(internals.child).toBeNull()
+    expect(internals.spawning).toBeNull()
+  })
+
   test('a matcher that cannot start reports why and gives no verdict', async () => {
     const broken = new Matcher({ command: ['/nonexistent/binary-for-test'] })
     try {
