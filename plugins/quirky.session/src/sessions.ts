@@ -169,12 +169,16 @@ export class SessionService {
     if (agent === 'shell' && Object.keys(picks).length > 0) {
       throw this.context.error('invalid-params', 'Agent shell does not support launch-time model selection.')
     }
-    const title = agent === 'shell' ? 'Shell' : (await this.agentInfo(agent)).label
+    const command = params.command as string | undefined
+    if (command !== undefined && agent !== 'shell') {
+      throw this.context.error('invalid-params', 'command is only allowed with agent shell')
+    }
+    const title = (params.title as string | undefined) ?? (agent === 'shell' ? 'Shell' : (await this.agentInfo(agent)).label)
     const session = this.newRecord(worktree, 'terminal', agent, title)
     const launched = await this.start(session, worktree.repoId, params, prompt, async (additions) => {
       if (agent === 'shell') {
         return {
-          argv: this.context.launch.shellArgv(),
+          argv: command === undefined ? this.context.launch.shellArgv() : this.context.launch.commandArgv(command),
           envPatch: additions.env,
           launch: null,
           launchSettings: null,

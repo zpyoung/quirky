@@ -127,7 +127,7 @@ test('SC-35: ui state shows the layout and what the sidebar and the session view
     focus: 'view'
   })
   expect(slotOf(state, SIDEBAR)?.report).toMatchObject({
-    repos: [{ id: repo.id, name: 'api', worktrees: [{ id: main.id, name: main.name, selected: true }] }]
+    projects: [{ id: repo.id, name: 'api', worktrees: [{ id: main.id, name: main.name, selected: true }] }]
   })
   const report = slotOf(state, SESSION_VIEW)?.report as { worktree?: string; tabs?: unknown[]; active?: string }
   expect(report.worktree).toBe(main.id)
