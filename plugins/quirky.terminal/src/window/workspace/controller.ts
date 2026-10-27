@@ -70,6 +70,7 @@ export type ControllerState = {
   rename: { kind: 'tab' | 'pane'; id: string } | null
   preview: Preview | null
   dragging: boolean
+  focusFlash: { pane: string; token: number } | null
   paneStates: Readonly<Record<string, PaneReport>>
   tabDrag: { tab: string; over: TabDrop | null } | null
   paneDrag: { pane: string; target: PaneDropTarget | null } | null
@@ -99,6 +100,8 @@ export type ViewReport = {
   layout: Workspace | null
   focusedPane: string | null
   panes: PaneStateReport[]
+  /** Mounted terminal accessory contribution IDs by pane ID. */
+  mountedAccessories: Record<string, string[]>
   menu: { kind: string; target: string | null; items: { label: string; key: string | null; enabled: boolean; separator: boolean }[] } | null
   dialog: { kind: string; title: string } | null
 }
@@ -133,6 +136,8 @@ export class WorkspaceController {
   private state: ControllerState
   private listeners = new Set<() => void>()
   private handles = new Map<string, TerminalPaneHandle>()
+  private pendingFocusPane: string | null = null
+  private focusFlashToken = 0
   private unsubscribes: (() => void)[] = []
   private settingOverrides: Record<string, unknown> = {}
   private stopped = false
@@ -144,6 +149,7 @@ export class WorkspaceController {
   private startSession: string | undefined
   private didFocusInput = false
   private lastReport = ''
+  private mountedAccessories: Record<string, string[]> = {}
   /** Receives the view report whenever it changes. */
   onReport: ((report: ViewReport) => void) | null = null
 
@@ -170,6 +176,7 @@ export class WorkspaceController {
       preview: null,
       dragging: false,
       paneStates: {},
+      focusFlash: null,
       tabDrag: null,
       paneDrag: null
     }
@@ -220,6 +227,7 @@ export class WorkspaceController {
 
   stop(): void {
     this.stopped = true
+    this.pendingFocusPane = null
     for (const unsubscribe of this.unsubscribes.splice(0)) unsubscribe()
     this.listeners.clear()
     this.handles.clear()
@@ -378,6 +386,7 @@ export class WorkspaceController {
   private apply(workspace: Workspace): void {
     const held = this.state.workspace
     if (held && workspace.revision < held.revision) return
+    if (this.pendingFocusPane !== null && !locatePane(workspace, this.pendingFocusPane)) this.pendingFocusPane = null
     this.set({ workspace, status: 'ready', preview: null })
     this.afterWorkspace(workspace)
   }
@@ -402,11 +411,22 @@ export class WorkspaceController {
     return target === undefined ? undefined : this.handles.get(target)
   }
 
+  /** Completes a queued terminal focus after the active pane view has mounted. */
+  focusPendingPane(paneId: string): void {
+    if (this.pendingFocusPane !== paneId) return
+    const handle = this.handleOf(paneId)
+    if (!handle) return
+    this.pendingFocusPane = null
+    handle.focus()
+    handle.scrollToBottom()
+  }
+
   /** Gives keyboard focus back to the focused pane after the layout changed under it; a text field that holds focus keeps it. */
   refocus(): void {
     const { menu, dialog, rename } = this.state
     if (menu || dialog || rename || !this.ws) return
     const active = this.root?.ownerDocument.activeElement
+    if (this.floating && (!active || active === this.root?.ownerDocument.body)) return
     if (active && active !== this.root?.ownerDocument.body && !this.root?.contains(active)) return
     if (active && isEditableControl(active)) return
     this.handleOf()?.focus()
@@ -519,6 +539,18 @@ export class WorkspaceController {
     const shown = loc.tab.expandedPane === null || loc.tab.expandedPane === paneId
     if (loc.tab.activePane === paneId && loc.group.activeTab === loc.tab.id && ws.activeGroup === loc.group.id && shown) return
     await this.run('focusPane', { pane: paneId }, 'focus the pane')
+  }
+
+  /** Activates a pane through the daemon, then requests native focus, a scroll to bottom and a visible flash. */
+  async focusPaneForCommand(paneId: string): Promise<boolean> {
+    const workspace = await this.run('focusPane', { pane: paneId }, 'focus the pane')
+    if (!workspace) return false
+    const loc = locatePane(workspace, paneId)
+    if (!loc || this.state.sessions[loc.leaf.session]?.kind === 'structured') return false
+    this.pendingFocusPane = paneId
+    this.set({ focusFlash: { pane: paneId, token: ++this.focusFlashToken } })
+    this.focusPendingPane(paneId)
+    return true
   }
 
   private async cycleFocus(offset: 1 | -1): Promise<void> {
@@ -1112,6 +1144,18 @@ export class WorkspaceController {
 
   // ---- report
 
+  setMountedAccessories(paneId: string, ids: string[]): void {
+    if (this.stopped) return
+    const current = this.mountedAccessories[paneId]
+    if (current && current.length === ids.length && current.every((id, index) => id === ids[index])) return
+    if (current === undefined && ids.length === 0) return
+    const next = { ...this.mountedAccessories }
+    if (ids.length === 0) delete next[paneId]
+    else next[paneId] = [...ids]
+    this.mountedAccessories = next
+    this.publish()
+  }
+
   /** What `ui state` shows for this workspace. */
   report(): ViewReport {
     const ws = this.ws
@@ -1126,6 +1170,7 @@ export class WorkspaceController {
       layout: ws,
       focusedPane: focused?.leaf.id ?? null,
       panes: ws ? panesReport(ws, this.state.paneStates, this.state.settings['font-size']) : [],
+      mountedAccessories: this.mountedAccessories,
       menu: menu
         ? {
             kind: menu.kind,

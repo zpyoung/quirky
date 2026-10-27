@@ -128,7 +128,7 @@ function messageOf(error: unknown): string {
 }
 
 function findSlot(model: UiModel, id: string): UiSlotEntry | undefined {
-  return [...model.sidebarSections, ...model.panels, ...model.views, ...model.overlays].find((entry) => entry.id === id)
+  return [...model.sidebarSections, ...model.statusBars, ...model.panels, ...model.views, ...model.overlays].find((entry) => entry.id === id)
 }
 
 /** Context keys the kernel gives meaning to: with both true, terminal keys go to the terminal first. */
@@ -870,7 +870,12 @@ export class WindowPluginHost {
     if (event.type === 'ui.command.request') void this.answerCommand(event.requestId, event.id, event.args)
     if (event.type === 'setting.changed') this.applySetting(event.id, event.value)
     if (event.type === 'plugin.changed' || event.type === 'theme.changed') {
-      this.refresh().catch((error) => this.deps.log(`refresh failed: ${messageOf(error)}`))
+      const deliver = () => setTimeout(() => this.deliver(event), 0)
+      void this.refresh().then(deliver, (error) => {
+        this.deps.log(`refresh failed: ${messageOf(error)}`)
+        deliver()
+      })
+      return
     }
     setTimeout(() => this.deliver(event), 0)
   }

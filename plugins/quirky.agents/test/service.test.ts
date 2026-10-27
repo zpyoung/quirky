@@ -683,16 +683,17 @@ describe('plans', () => {
     expect(pasted).toMatchObject({ promptDelivery: 'pending', paste: { text: 'hello', submit: true } })
   })
 
-  test('prepareLaunch orders the command as saved args, hook args, then the prompt', async () => {
+  test('prepareLaunch orders saved args and hook settings before the prompt', async () => {
     const t = await start()
+    const settings = { hooks: { Stop: ['managed'] } }
     const launch = await t.call(A('prepareLaunch'), {
       agent: 'claude',
       cwd: t.userHome,
       prompt: 'go',
-      hookArgs: ['--settings', '/tmp/s.json'],
+      hookArgs: ['--settings', JSON.stringify(settings)],
       hookEnv: {}
     })
-    expect(launch.command).toBe("claude --dangerously-skip-permissions --settings /tmp/s.json 'go'")
+    expect(launch.command).toBe(`claude --dangerously-skip-permissions --settings '${JSON.stringify(settings)}' 'go'`)
     expect(launch.record).toEqual({ command: 'claude', args: '--dangerously-skip-permissions', env: {} })
     expect(await failure(t.call(A('prepareLaunch'), { agent: 'nope', cwd: '/', hookArgs: [], hookEnv: {} }))).toMatchObject({
       code: RpcErrorCode.NotFound
@@ -738,6 +739,74 @@ describe('plans', () => {
   })
 })
 
+describe('settingsOverlay', () => {
+  test('returns current CLI JSON and file settings without launching or adding hook settings', async () => {
+    const t = await start({ installed: ['claude'] })
+    writeFileSync(join(t.userHome, 'cli-settings.json'), JSON.stringify({ statusLine: { command: 'file', padding: 2 }, hooks: { Stop: ['file'] } }))
+    await t.call(A('configure'), {
+      agent: 'claude',
+      args: `--settings cli-settings.json --settings='${JSON.stringify({ statusLine: { format: 'cli' }, hooks: { Stop: ['cli'] } })}'`
+    })
+
+    const result = await t.call(A('settingsOverlay'), {
+      agent: 'claude',
+      cwd: t.userHome,
+      model: 'opus',
+      options: { effort: 'high' },
+      extraArgs: '--add-dir docs'
+    })
+
+    expect(result).toEqual({
+      settings: { statusLine: { command: 'file', padding: 2, format: 'cli' }, hooks: { Stop: ['cli'] } }
+    })
+    expect(t.h.pty.requests.filter((request) => request.type === 'create')).toEqual([])
+  })
+
+  test('uses the supplied replay record instead of current configuration', async () => {
+    const t = await start({ installed: ['claude'] })
+    writeFileSync(join(t.userHome, 'recorded.json'), JSON.stringify({ statusLine: { command: 'recorded', style: 'file' } }))
+    await t.call(A('configure'), { agent: 'claude', args: `--settings='${JSON.stringify({ statusLine: { command: 'current' } })}'` })
+    const record = {
+      command: 'claude',
+      args: `--settings recorded.json --settings '${JSON.stringify({ statusLine: { padding: 4 } })}'`,
+      env: {}
+    }
+
+    const result = await t.call(A('settingsOverlay'), { agent: 'claude', cwd: t.userHome, record })
+
+    expect(result).toEqual({ settings: { statusLine: { command: 'recorded', style: 'file', padding: 4 } } })
+  })
+
+  test('reports malformed settings files as invalid params without changing the file or configuration', async () => {
+    const t = await start({ installed: ['claude'] })
+    const path = join(t.userHome, 'broken.json')
+    const bytes = '{ broken'
+    writeFileSync(path, bytes)
+    await t.call(A('configure'), { agent: 'claude', args: '--settings broken.json' })
+
+    const error = await failure(t.call(A('settingsOverlay'), { agent: 'claude', cwd: t.userHome }))
+
+    expect(error).toMatchObject({ code: RpcErrorCode.InvalidParams })
+    expect(error.message).toContain('broken.json')
+    const launchError = await failure(t.call(A('prepareLaunch'), { agent: 'claude', cwd: t.userHome, hookArgs: [], hookEnv: {} }))
+    expect(launchError).toMatchObject({ code: RpcErrorCode.InvalidParams })
+    const resumeError = await failure(
+      t.call(A('prepareResume'), {
+        agent: 'claude',
+        cwd: t.userHome,
+        record: { command: 'claude', args: '--settings broken.json', env: {} },
+        providerSession: { id: 'provider', transcriptPath: null },
+        fork: false,
+        hookArgs: [],
+        hookEnv: {}
+      })
+    )
+    expect(resumeError).toMatchObject({ code: RpcErrorCode.InvalidParams })
+    expect(readFileSync(path, 'utf8')).toBe(bytes)
+    expect((await t.call(A('get'), { agent: 'claude' })).args).toBe('--settings broken.json')
+  })
+})
+
 describe('workspace trust', () => {
   test('SC-36: prepareLaunch pre-writes the trust record into the user home when the setting is on', async () => {
     const t = await start({ installed: ['claude', 'copilot', 'codex'], trust: true })
@@ -756,6 +825,61 @@ describe('workspace trust', () => {
       await t.call('setting.set', { id: 'setting:quirky.agents/workspace-trust', value: false })
       await t.call(A('prepareLaunch'), { agent: 'codex', cwd: folder, hookArgs: [], hookEnv: {} })
       expect(existsSync(join(t.userHome, '.codex'))).toBe(false)
+    } finally {
+      rmSync(folder, { recursive: true, force: true })
+    }
+  })
+
+  test('uses prepared provider homes for Claude and Codex trust writes', async () => {
+    const t = await start({ installed: ['claude', 'codex'], trust: true })
+    const folder = realpathSync(mkdtempSync('/tmp/qag-wt-'))
+    const claudeHome = join(t.userHome, 'managed-claude')
+    const codexHome = join(t.userHome, 'managed-codex')
+    mkdirSync(claudeHome)
+    mkdirSync(codexHome)
+    const defaultClaude = join(t.userHome, '.claude.json')
+    writeFileSync(defaultClaude, '{"theme":"default"}\n')
+    const defaultClaudeBefore = readFileSync(defaultClaude, 'utf8')
+    try {
+      await t.call(A('prepareLaunch'), {
+        agent: 'claude',
+        cwd: folder,
+        hookArgs: [],
+        hookEnv: { CLAUDE_CONFIG_DIR: claudeHome }
+      })
+      const managedClaude = JSON.parse(readFileSync(join(claudeHome, '.claude.json'), 'utf8'))
+      expect(managedClaude.projects[folder].hasTrustDialogAccepted).toBe(true)
+      expect(readFileSync(defaultClaude, 'utf8')).toBe(defaultClaudeBefore)
+
+      await t.call(A('prepareLaunch'), {
+        agent: 'codex',
+        cwd: folder,
+        hookArgs: [],
+        hookEnv: { CODEX_HOME: codexHome }
+      })
+      expect(readFileSync(join(codexHome, 'config.toml'), 'utf8')).toContain(`[projects."${folder}"]`)
+      expect(existsSync(join(t.userHome, '.codex'))).toBe(false)
+    } finally {
+      rmSync(folder, { recursive: true, force: true })
+    }
+  })
+
+  test('a failed provider-home trust write does not log the private home path', async () => {
+    const t = await start({ installed: ['claude'], trust: true })
+    const folder = realpathSync(mkdtempSync('/tmp/qag-wt-'))
+    const claudeHome = join(t.userHome, 'managed-private-home')
+    writeFileSync(claudeHome, 'not a directory')
+    try {
+      const launch = await t.call(A('prepareLaunch'), {
+        agent: 'claude',
+        cwd: folder,
+        hookArgs: [],
+        hookEnv: { CLAUDE_CONFIG_DIR: claudeHome }
+      })
+      expect(launch.command.startsWith('claude')).toBe(true)
+      const failure = t.logs.find((line) => line.includes('trust for claude failed: '))
+      expect(failure).toBeDefined()
+      expect(failure).not.toContain(claudeHome)
     } finally {
       rmSync(folder, { recursive: true, force: true })
     }
@@ -1011,16 +1135,17 @@ describe('launch settings', () => {
 
   test('prepareLaunch and plan carry a pick into the command, the record and launchSettings', async () => {
     const t = await start()
+    const hookSettings = JSON.stringify({ source: 'hook' })
     const launch = await t.call(A('prepareLaunch'), {
       agent: 'claude',
       cwd: t.userHome,
       prompt: 'go',
       model: 'opus',
       options: { effort: 'high' },
-      hookArgs: ['--settings', '/tmp/s.json'],
+      hookArgs: ['--settings', hookSettings],
       hookEnv: {}
     })
-    expect(launch.command).toBe("claude --dangerously-skip-permissions --model opus --effort high --settings /tmp/s.json 'go'")
+    expect(launch.command).toBe(`claude --dangerously-skip-permissions --model opus --effort high --settings '${hookSettings}' 'go'`)
     expect(launch.record.args).toBe('--dangerously-skip-permissions --model opus --effort high')
     expect(launch.launchSettings.summary).toBe('Claude · Opus · Effort: high')
 

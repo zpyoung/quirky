@@ -396,6 +396,17 @@
 - **Revisit if:** a functional cleanup assertion fails or a case exhausts its integration bound
 - **Source:** assumed — autonomous
 
+## D37: Repair the controller-reported moving-tip conflict on the item branch
+- **Question:** What can finish landing after the roadmap advances and the controller rejects an actual merge conflict?
+- **Options:** discard either feature set; force or edit the controller worktree; resolve the reported conflict on the item branch
+- **Chose:** after the single planned catch-up, repair only the concrete concurrent-tip rejection by merging pinned 1c73fb19ceffd0ae6a0cd5b16b7a4a5cf23ec4ce on build/m2-editor. Read all six newly landed/updated logs and preserve account status-bar, terminal-accessory, session/hosting, guardian and editor contracts. No protected or foreign integration state is edited.
+- **Why:** the second land attempt stopped before verification because of conflicts, not an editor failure. A conflict repair is required to preserve both branches and complete the authorized land; it is not an optional repeated catch-up or a reason to drop hosted views.
+- **Evidence:** bg_79; pinned conflict-repair record; full reads of fix-flaky-quirky-git-files-scenarios, fix-flaky-quirky-worktree-window-projects, m3-accounts, m3-session-info, m4-hosting-api-github and updated m5-structured-runner; five reported source/test conflicts
+- **Reversibility:** medium
+- **Confidence:** high
+- **Revisit if:** the controller reports another concrete conflict or verification defect
+- **Source:** locked by docs/loop/LOOP.md step 7 conflict recovery
+
 ## Progress
 Step 7 retry ready: the controller's concrete failures are repaired without another catch-up or protected-loop changes. Current-checkout frozen dependency bootstrap and its real workspace test pass; the syntax-aware fence, deterministic worktree/structured fixtures, host ordering regression, scoped combined-diff controls and AI defaults file pass. Latest scripts and typecheck pass. Original core/API/real-kernel/browser proof and the queued completion boundary remain unchanged. Next: commit/detach and retry queue land, which alone decides whether the full merge result is accepted.
 

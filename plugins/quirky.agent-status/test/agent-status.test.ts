@@ -1,5 +1,4 @@
 import { afterEach, describe, expect, test } from 'bun:test'
-import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { HOOK_TOKEN_HEADER } from '@quirky/protocol'
 import { removeTempDirs } from '../../../packages/daemon/test/plugins/fixtures'
@@ -591,10 +590,17 @@ describe('rows and sessions', () => {
 })
 
 describe('launch hook', () => {
-  const eventsIn = (file: string) => Object.keys((JSON.parse(readFileSync(file, 'utf8')) as { hooks: object }).hooks).sort()
-  const dataDir = () => join(rig.h.home, 'plugin-data', 'quirky.agent-status')
+  function settingsFrom(args: string[]): { hooks: Record<string, unknown[]> } {
+    const at = args.indexOf('--settings')
+    expect(at).toBeGreaterThanOrEqual(0)
+    const value = args[at + 1]
+    if (value === undefined) throw new Error('launch omitted the --settings value')
+    return JSON.parse(value) as { hooks: Record<string, unknown[]> }
+  }
 
-  test('SC-28: Claude gets a --settings file with the events its version knows', async () => {
+  const eventsIn = (args: string[]) => Object.keys(settingsFrom(args).hooks).sort()
+
+  test('SC-28: Claude gets one inline settings object with the events its version knows', async () => {
     rig = await Rig.start()
     const full = [
       'PermissionRequest',
@@ -620,19 +626,18 @@ describe('launch hook', () => {
     for (const [version, events] of cases) {
       await rig.fakeClaude(version ?? 'no version here', version === null ? 1 : 0)
       const args = await rig.launchArgs('claude')
+      expect(args.filter((argument) => argument === '--settings')).toHaveLength(1)
       expect(args[0]).toBe('--settings')
-      expect(args[1]!.startsWith(dataDir())).toBe(true)
-      expect(eventsIn(args[1]!)).toEqual(events)
+      expect(eventsIn(args)).toEqual(events)
     }
   })
 
-  test('the settings hooks run the quirky-hook shim for claude', async () => {
+  test('the inline settings hooks run the quirky-hook shim for claude', async () => {
     rig = await Rig.start()
     await rig.fakeClaude('2.1.300')
-    const [, file] = await rig.launchArgs('claude')
-    const settings = JSON.parse(readFileSync(file!, 'utf8')) as { hooks: Record<string, { matcher?: string; hooks: { command: string }[] }[]> }
-    expect(settings.hooks.PreToolUse![0]!.matcher).toBe('*')
-    expect(settings.hooks.Stop![0]!.hooks[0]!.command).toContain('/bin/quirky-hook" claude')
+    const settings = settingsFrom(await rig.launchArgs('claude'))
+    expect((settings.hooks.PreToolUse![0] as { matcher: string }).matcher).toBe('*')
+    expect(((settings.hooks.Stop![0] as { hooks: { command: string }[] }).hooks[0]!).command).toContain('/bin/quirky-hook" claude')
   })
 
   test('claude-agent-teams gets the same settings as claude', async () => {
@@ -653,9 +658,8 @@ describe('launch hook', () => {
 
   test('a missing quirky.agents leaves Claude on the default event set', async () => {
     rig = await Rig.start()
-    await rig.client.callAny('quirky.agents/setCommand', { command: '/nonexistent/claude' })
-    const [, file] = await rig.launchArgs('claude')
-    expect(eventsIn(file!)).toContain('SessionStart')
-    expect(eventsIn(file!)).not.toContain('SessionEnd')
+    const args = await rig.launchArgs('claude')
+    expect(eventsIn(args)).toContain('SessionStart')
+    expect(eventsIn(args)).not.toContain('SessionEnd')
   })
 })

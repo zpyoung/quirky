@@ -50,6 +50,7 @@ describe('the built-ins as the window sees them', () => {
     expect(model.views.find((entry) => entry.id === 'view:quirky.session/structured')?.plugin).toBe('quirky.session')
   })
 
+
 })
 
 describe('the pane methods over the daemon', () => {

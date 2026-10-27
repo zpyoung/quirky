@@ -194,6 +194,7 @@ export function App() {
 
   if (state.connection === 'no-token') return <NoToken />
 
+  const statusBars = model?.statusBars ?? []
   return (
     <div className="app">
       <ConnectionBanner />
@@ -231,6 +232,11 @@ export function App() {
           />
         )}
       </div>
+      {statusBars.length > 0 && (
+        <div className="plugin-status-bar" data-region="status-bar" aria-label="Plugin status bar">
+          {statusBars.map((entry) => <PluginSlot key={entry.id} id={entry.id} />)}
+        </div>
+      )}
       <OverlayLayer />
       {paletteOpen && <CommandPalette onClose={() => setPaletteOpen(false)} />}
       <Toasts />
