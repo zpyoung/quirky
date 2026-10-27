@@ -263,7 +263,7 @@
         "worktrees.md"
       ],
       "deps": [],
-      "status": "blocked"
+      "status": "todo"
     },
     {
       "id": "m3-terminal-dock",
