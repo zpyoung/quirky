@@ -141,10 +141,26 @@ async function closeSessions(env: Env, repo: Repo): Promise<void> {
   }
 }
 
+export async function guardLedgerRemoval(
+  context: PluginContext,
+  removal: { repoIds?: string[]; groupIds?: string[]; expectedLedgers?: { ledgerId: string; revision: number }[] }
+): Promise<void> {
+  try {
+    await context.call('quirky.ledger/removal-preview', { removal })
+  } catch (error) {
+    if (!isMethodNotFound(error)) throw error
+  }
+}
+
 /** Forgets the project and its settings and group membership; its folders stay on disk. */
-export async function removeRepo(env: Env, selector: string): Promise<{ ok: true }> {
+export async function removeRepo(
+  env: Env,
+  selector: string,
+  expectedLedgers?: { ledgerId: string; revision: number }[]
+): Promise<{ ok: true }> {
   const repo = env.resolve(selector)
   await closeSessions(env, repo)
+  await guardLedgerRemoval(env.context, { repoIds: [repo.id], ...(expectedLedgers !== undefined ? { expectedLedgers } : {}) })
   env.store.transaction(() => {
     env.store.run('DELETE FROM trusted_hooks WHERE repo_id = ?', repo.id)
     env.store.run('DELETE FROM repos WHERE id = ?', repo.id)

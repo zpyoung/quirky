@@ -53,7 +53,7 @@ test(
     const { h } = f
     await until(f, button)
     expect(panel()).toBeNull()
-    expect(button()).not.toBeNull()
+    await until(f, button)
 
     expect((await press('mod+alt+a')).defaultPrevented).toBe(true)
     await until(f, panel)

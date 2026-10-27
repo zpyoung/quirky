@@ -87,9 +87,12 @@ export async function importFolder(context: UiPluginContext, path: string, group
 }
 
 /** Forgets the project (its folders stay); true on success, else a toast says why. */
-export async function removeProject(context: UiPluginContext, repoId: string): Promise<boolean> {
+export async function removeProject(context: UiPluginContext, repoId: string, expectedLedgers?: { ledgerId: string; revision: number }[]): Promise<boolean> {
   try {
-    await context.call('quirky.repo/remove', { repo: repoId })
+    await context.call('quirky.repo/remove', {
+      repo: repoId,
+      ...(expectedLedgers === undefined ? {} : { expectedLedgers })
+    })
     return true
   } catch (error) {
     context.toast('Could not remove project', messageOf(error))

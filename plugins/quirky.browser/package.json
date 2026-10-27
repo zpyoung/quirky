@@ -1,0 +1,28 @@
+{
+  "name": "@quirky/plugin-browser",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@quirky/protocol": "workspace:*",
+    "agent-browser": "0.27.0"
+  },
+  "devDependencies": {
+    "@quirky/git": "workspace:*"
+  },
+  "quirky": {
+    "assets": [
+      {
+        "dependency": "agent-browser",
+        "source": "bin/agent-browser-{platform}-{arch}",
+        "destination": "bin/agent-browser",
+        "executable": true
+      },
+      {
+        "dependency": "agent-browser",
+        "source": "LICENSE",
+        "destination": "licenses/agent-browser-LICENSE"
+      }
+    ]
+  }
+}

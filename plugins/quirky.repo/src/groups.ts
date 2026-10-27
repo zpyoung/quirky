@@ -1,5 +1,6 @@
 import type { ProjectGroup } from '@quirky/protocol'
 import type { Env } from './env'
+import { guardLedgerRemoval } from './projects'
 
 const randomId = (): string => crypto.randomUUID().replaceAll('-', '').slice(0, 12)
 
@@ -57,8 +58,12 @@ export function groupRename(env: Env, params: { group: string; name: string }): 
   return load(env, group.id)
 }
 
-export function groupDelete(env: Env, params: { group: string }): { ok: true } {
+export async function groupDelete(
+  env: Env,
+  params: { group: string; expectedLedgers?: { ledgerId: string; revision: number }[] }
+): Promise<{ ok: true }> {
   const group = env.resolveGroup(params.group)
+  await guardLedgerRemoval(env.context, { groupIds: [group.id], ...(params.expectedLedgers !== undefined ? { expectedLedgers: params.expectedLedgers } : {}) })
   env.store.transaction(() => {
     env.store.run('UPDATE repos SET group_id = NULL WHERE group_id = ?', group.id)
     env.store.run('DELETE FROM groups WHERE id = ?', group.id)

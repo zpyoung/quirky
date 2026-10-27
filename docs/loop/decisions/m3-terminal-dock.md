@@ -506,5 +506,27 @@
 - **Revisit if:** a genuine module form escapes the fence or valid source text is again misclassified
 - **Source:** assumed — autonomous (concrete authoritative landing blocker)
 
+## D47: Keep the protected verification budget under authorized maintenance
+- **Question:** the next authoritative landing passed the application suite, then two protected queue tests exceeded their5-second default
+- **Options:** edit protected tests or bypass their gate; attribute the environment and notify the authorized maintainer
+- **Chose:** preserve the clean application result and the failed scripts result separately. Inspect only: Mac load41.36/57.62/56.15,29GB free, no Git hook/fsmonitor override and gpgsign false. Notify the maintenance agent without terminal input/draft overwrite. Follow the operator's explicit checkpoint to retry land behind build-loop/test-timeouts, whose authorized budget is30seconds.
+- **Why:** all515remote files and2macOS files passed with no flakes; outer scripts60pass/2fail were6.17/6.21-second cumulative Git workflows. The operator confirms this is the harness default under load, not the item. No protected timeout/source was edited by this lane, no other process was killed and no validation result was fabricated.
+- **Evidence:** bg68 full landing output; protected lanes.test.ts:100-125; df/uptime/Git-config facts; accepted maintenance status messages; direct operator checkpoint in this iteration
+- **Reversibility:** easy
+- **Confidence:** high for separate application/harness outcomes and operator authority
+- **Revisit if:** a concrete non-timeout scripts failure remains after authorized maintenance
+- **Source:** operator decision — protected maintenance owns the budget; supersedes the temporary external verification wait
+
+## D48: Adopt the already-landed canonical AST scanner without losing regressions
+- **Question:** operator-directed retry encountered the independently landed ledger/browser scanner repair
+- **Options:** retain competing scanners; revert the syntax fix; use the canonical equivalent implementation
+- **Chose:** keep integration's TypeScript AST scanner with explicit TS/TSX parsing and preserve both lanes' regression cases. Read complete updated m5-ledger and sa-browser-agent logs; retain public API ownership, existing AST module forms and browser identity/no-replay boundaries.
+- **Why:** both fixes address the same regex false positives. A single implementation avoids a second convention; this is not removal or renaming of /import. The merge also preserves prior owners' removal of incidental scan-count pins.
+- **Evidence:** one explicit scanner conflict resolved to integration implementation; merged import-fence7pass/7assertions and full typecheck passed (16.91seconds). No runtime production behavior was changed by the scanner merge.
+- **Reversibility:** easy
+- **Confidence:** high for verified canonical parser and retained coverage
+- **Revisit if:** actual import syntax escapes the public fence
+- **Source:** locked by m5-ledger D24/D27 and operator failed-land recovery
+
 ## Progress
-Approved core, registered follow-up, final review and conflict repairs are complete. Latest runtime/schema/terminal checks, full typecheck,16-plugin build and actual keyboard-focus/PONG smoke pass. The full landing suite exposed a false-positive import-fence parser; that test-only root defect is repaired with positive/negative syntax regressions and actual whole-plugin scan proof. Original noncore flows/C1 remain open. Commit the narrow parser repair, detach and retry queue.ts land; do not claim authoritative full-suite/scripts/types success until that command succeeds.
+Approved core, registered follow-up, final review and concrete merge/parser repairs are complete. Authoritative application suite passed515remote+2macOS with no flakes; protected scripts timeouts are under operator-authorized30-second maintenance. The canonical merged import fence and full typecheck pass; real focus/PONG and earlier geometry/draft runtime proofs remain recorded. Original noncore gaps/C1 stay open. Commit this merge, detach and retry queue.ts land behind the authorized fix; do not claim final scripts/types/landing success before its result.
