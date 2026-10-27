@@ -151,20 +151,6 @@
       "status": "done"
     },
     {
-      "id": "m1-agent-status-scripting",
-      "milestone": "M1",
-      "title": "Agent status for scripts: explain a state's source, detection rules as data, never type into an agent waiting for approval, waits for state and output pattern, named sessions",
-      "docs": [
-        "agent-status.md",
-        "cli.md"
-      ],
-      "deps": [
-        "m1-agent-status"
-      ],
-      "status": "in-progress",
-      "lane": 1
-    },
-    {
       "id": "m2-source-control-core",
       "milestone": "M2",
       "title": "Source control: remote operations, discard, branch compare, history, conflicts",
@@ -189,6 +175,183 @@
         "m1-agent-status"
       ],
       "status": "done"
+    },
+    {
+      "id": "m2-ask-parity",
+      "milestone": "M2",
+      "title": "orca ask parity: number and date questions, defaults, timeouts, credential refusal, drafts, fresh seq for a queued second ask",
+      "docs": [
+        "ask.md"
+      ],
+      "deps": [
+        "gate-m0"
+      ],
+      "status": "done"
+    },
+    {
+      "id": "fix-test-process-leaks",
+      "milestone": "M1",
+      "title": "Fix leaked test processes: test runs and UI passes leave quirkyd daemons and pty-host processes running after the test ends, timed out, or was killed (97 found on 2026-10-27, about 1.9 GB, under the lane worktrees, the integration worktree, agent worktrees and /tmp test folders; pty-hosts outlive their daemon with parent PID 1). Find which harnesses start them without a guaranteed stop (packages/daemon/test/helpers.ts, plugins/*/test support, the e2e harnesses, the like-a-user web pass), make every start paired with a kill of the whole process tree on any exit, make a pty-host exit when its daemon goes away, and add a test that fails if a run leaves one behind",
+      "docs": [
+        "term-daemon.md"
+      ],
+      "deps": [],
+      "status": "done"
+    },
+    {
+      "id": "fix-ask-regex-budget-20261027",
+      "milestone": "M2",
+      "title": "Fix required remote suite: plugins/quirky.ask/test/core/spec.test.ts accepts unanchored a*a*a*b with a 200-character nonmatching default but validation takes 103-118 ms and violates its 100 ms budget even in isolated runs; investigate bounded regex validation without suppressing the assertion or changing matching semantics",
+      "docs": [],
+      "deps": [],
+      "status": "done"
+    },
+    {
+      "id": "fix-sc31-first-shell-race",
+      "milestone": "M1",
+      "title": "Fix the SC-31 race in plugins/quirky.worktree/test/window-create.test.ts: after a create that skips setup, the window sometimes opens a first shell for the new worktree before the test checks it has no sessions (6 of 10 runs on the Linux test host). Decide whether the window or the test is wrong, fix it, and remove its line from scripts/test-on-macos.txt",
+      "docs": [
+        "worktrees.md"
+      ],
+      "deps": [],
+      "status": "done"
+    },
+    {
+      "id": "m5-structured-runner",
+      "milestone": "M5",
+      "title": "Shared seams: Codex structured runner over app-server, structured resume, model and effort on structured launches, checks runner",
+      "docs": [
+        "automations.md",
+        "fork-loops.md",
+        "launch-settings.md"
+      ],
+      "deps": [
+        "m1-launch-settings",
+        "m1-agent-status"
+      ],
+      "status": "in-progress",
+      "lane": 12
+    },
+    {
+      "id": "m6-orchestration-core",
+      "milestone": "M6",
+      "title": "Scope: all of the parts below together; a \"Not ...\" note in one part excludes only what no other part here covers. Part 1: Orchestration core: runs and tasks (orchestration.md 'The database', 'Task model and DAG semantics', 'CLI reference' Runs and Tasks, 'Caller identity and authority', 'Mutation idempotency and request IDs', 'Reset', 'Constants and limits'): Runs bound to a coordinator, Tasks with dependency promotion, Dispatch and worker state graphs with compare-and-set transitions, circuit breaker, nesting depth cap of 1 by default, `quirky orchestration` run-* and task-* commands. Not messaging, worker start, federation or legacy compatibility Part 2: Orchestration mailbox, questions and gates (orchestration.md 'Messaging', 'Blocking ask and reply', 'Decision gates', 'The coordinator loop' steps 4 and 6): mailboxes and addresses, send, check with waiting, Deliveries and acks, inbox, nudge pointer line to idle agents, ask and reply with timeout and resume, gate-create, gate-resolve, gate-list",
+      "docs": [
+        "orchestration.md"
+      ],
+      "deps": [
+        "m5-structured-runner",
+        "m1-worktrees",
+        "m1-agent-status"
+      ],
+      "status": "todo",
+      "early": true
+    },
+    {
+      "id": "m6-orchestration-workers",
+      "milestone": "M6",
+      "title": "Scope: all of the parts below together; a \"Not ...\" note in one part excludes only what no other part here covers. Part 1: Orchestration worker start and done (orchestration.md 'Starting a worker', 'Worker modes (terminal vs chat)', 'How a worker reports completion', 'The injected preamble', 'Low-level dispatch', 'The worker side'): worker-start admission, placement, launch, readiness, preamble delivery, turn observation and receipts, terminal or structured chat worker, worker_done and heartbeat settlement, dispatch and dispatch-show. Not stop, release or fleet projection Part 2: Orchestration worker lifecycle and fleet (orchestration.md 'Follow up, stop, retain, release, retry', 'Process exit, stop, abandon', 'Terminal resource ownership, retain and release', 'Reading worker output', 'Fleet projection'): worker-stop and worker-abandon, unexpected exit handling, retry, retain and release, user takeover of a terminal, worker-read, worker-list and worker-show with liveness, attention and nextAction",
+      "docs": [
+        "orchestration.md"
+      ],
+      "deps": [
+        "m6-orchestration-core"
+      ],
+      "status": "todo",
+      "early": true
+    },
+    {
+      "id": "m6-heimdall-core",
+      "milestone": "M6",
+      "title": "Heimdall kernel core, without leases, remote fleets or the judgment layer (heimdall.md 'Kernel pieces' through 'Parking, terminal, stop predicates', 'Workers and mailbox', 'Shutdown'): kind contract and registry, enrollment with refusals and re-arm, kernel database and journal with retention and tick traces, scheduling and pacing, one tick, action loop with generic gate and write-ahead attempts, budgets and active time, parking and stop predicates, orchestration adapter. Not control commands, CLI, fleet page or owner layer",
+      "docs": [
+        "heimdall.md"
+      ],
+      "deps": [
+        "m6-orchestration-workers"
+      ],
+      "status": "todo",
+      "early": true
+    },
+    {
+      "id": "m6-heimdall-control",
+      "milestone": "M6",
+      "title": "Scope: all of the parts below together; a \"Not ...\" note in one part excludes only what no other part here covers. Part 1: Heimdall controls and CLI (heimdall.md 'Act on a watcher', 'Command results', 'CLI', 'Debug report', 'Notifications', fleet and detail read methods): pause, resume, disarm, delete, approve, adjust-budget, set-concurrency, answer-question, answer-escalation and stop-worker serialized per watcher with refusal reasons, fleet and detail snapshots with push updates, `quirky heimdall` command group, debug report, the two notifications. Not the fleet page Part 2: Heimdall fleet page (heimdall.md 'Where to find it', 'Read the fleet', 'Inspect one watcher', 'Decision trace'): sidebar entry with bucket counts, fleet table ordered by urgency, header summary and refresh banner, detail pane with owner controls, approval cards and status pills, decision trace, watcher activity feed, per-worktree glyph, Copy debug report. Not the New objective sheet",
+      "docs": [
+        "heimdall.md"
+      ],
+      "deps": [
+        "m6-heimdall-core"
+      ],
+      "status": "todo",
+      "early": true
+    },
+    {
+      "id": "m6-heimdall-owner",
+      "milestone": "M6",
+      "title": "Heimdall owner layer (heimdall.md 'The owner layer (optional)'): owner agent config, deviation hand-off from kinds, owner interventions, idle-worker and stall detection. Not the judgment layer",
+      "docs": [
+        "heimdall.md"
+      ],
+      "deps": [
+        "m6-heimdall-core"
+      ],
+      "status": "todo",
+      "early": true
+    },
+    {
+      "id": "fix-flaky-quirky-worktree-window-projects",
+      "milestone": "M1",
+      "title": "Fix the flaky plugins/quirky.worktree/test/window-projects.test.ts: it failed under load in 3 full-suite runs on the test host and passed each time it was rerun alone (see <git common dir>/build-loop/flakes.log). Find the timing assumption or shared state with quirk:systematic-debugging, reproduce it under CPU load, and fix the test or the code it exposes",
+      "docs": [
+        "worktrees.md"
+      ],
+      "deps": [],
+      "status": "todo"
+    },
+    {
+      "id": "fix-flaky-pty-host-host",
+      "milestone": "M1",
+      "title": "Fix the flaky packages/pty-host/test/host.test.ts: it failed under load in 3 full-suite runs on the test host and passed each time it was rerun alone (see <git common dir>/build-loop/flakes.log). Under load, many tests time out at 5 s, and startHost fails with 'could not start process scope guardian' when the guardian isn't ready within 4 s. Reproduce it under CPU load with quirk:systematic-debugging, and fix the timing assumptions in the test helpers or the code they expose",
+      "docs": [
+        "term-daemon.md"
+      ],
+      "deps": [],
+      "status": "todo"
+    },
+    {
+      "id": "fix-flaky-quirky-git-files-scenarios",
+      "milestone": "M2",
+      "title": "Fix the flaky plugins/quirky.git/test/scenarios/files.test.ts: it failed under load in 3 full-suite runs on the test host and passed each time it was rerun alone (see <git common dir>/build-loop/flakes.log). Find the timing assumption or shared state with quirky.git:systematic-debugging, reproduce it under CPU load, and fix the test or the code it exposes",
+      "docs": [
+        "source-control.md"
+      ],
+      "deps": [],
+      "status": "todo"
+    },
+    {
+      "id": "fix-test-cost",
+      "milestone": "M1",
+      "title": "Make the test suite cheaper to run. Today every test file starts a real daemon, a pty-host and a login zsh (`zsh -l`), and on the 8-vCPU test host that keeps the load near 21 while four files run. Measure per-file wall time and CPU with `bun run test`, then cut the cost without losing coverage: start non-login shells (`zsh -f`, `bash --noprofile --norc`) in tests that don't exercise shell integration or the login environment, share one daemon and pty-host per test file (beforeAll) where tests don't depend on a fresh one, and drop fixed sleeps in favour of waiting on the event. Keep every scenario test that checks shell integration on a real login shell. Report the before and after suite times in the decision log",
+      "docs": [
+        "term-daemon.md"
+      ],
+      "deps": [],
+      "status": "todo"
+    },
+    {
+      "id": "m1-agent-status-scripting",
+      "milestone": "M1",
+      "title": "Agent status for scripts: explain a state's source, detection rules as data, never type into an agent waiting for approval, waits for state and output pattern, named sessions",
+      "docs": [
+        "agent-status.md",
+        "cli.md"
+      ],
+      "deps": [
+        "m1-agent-status"
+      ],
+      "status": "in-progress",
+      "lane": 1
     },
     {
       "id": "m2-editor",
@@ -219,18 +382,6 @@
       "lane": 7
     },
     {
-      "id": "m2-ask-parity",
-      "milestone": "M2",
-      "title": "orca ask parity: number and date questions, defaults, timeouts, credential refusal, drafts, fresh seq for a queued second ask",
-      "docs": [
-        "ask.md"
-      ],
-      "deps": [
-        "gate-m0"
-      ],
-      "status": "done"
-    },
-    {
       "id": "m3-session-info",
       "milestone": "M3",
       "title": "Session info panel",
@@ -242,34 +393,6 @@
       ],
       "status": "in-progress",
       "lane": 6
-    },
-    {
-      "id": "fix-test-process-leaks",
-      "milestone": "M1",
-      "title": "Fix leaked test processes: test runs and UI passes leave quirkyd daemons and pty-host processes running after the test ends, timed out, or was killed (97 found on 2026-10-27, about 1.9 GB, under the lane worktrees, the integration worktree, agent worktrees and /tmp test folders; pty-hosts outlive their daemon with parent PID 1). Find which harnesses start them without a guaranteed stop (packages/daemon/test/helpers.ts, plugins/*/test support, the e2e harnesses, the like-a-user web pass), make every start paired with a kill of the whole process tree on any exit, make a pty-host exit when its daemon goes away, and add a test that fails if a run leaves one behind",
-      "docs": [
-        "term-daemon.md"
-      ],
-      "deps": [],
-      "status": "done"
-    },
-    {
-      "id": "fix-ask-regex-budget-20261027",
-      "milestone": "M2",
-      "title": "Fix required remote suite: plugins/quirky.ask/test/core/spec.test.ts accepts unanchored a*a*a*b with a 200-character nonmatching default but validation takes 103-118 ms and violates its 100 ms budget even in isolated runs; investigate bounded regex validation without suppressing the assertion or changing matching semantics",
-      "docs": [],
-      "deps": [],
-      "status": "done"
-    },
-    {
-      "id": "fix-sc31-first-shell-race",
-      "milestone": "M1",
-      "title": "Fix the SC-31 race in plugins/quirky.worktree/test/window-create.test.ts: after a create that skips setup, the window sometimes opens a first shell for the new worktree before the test checks it has no sessions (6 of 10 runs on the Linux test host). Decide whether the window or the test is wrong, fix it, and remove its line from scripts/test-on-macos.txt",
-      "docs": [
-        "worktrees.md"
-      ],
-      "deps": [],
-      "status": "done"
     },
     {
       "id": "m3-terminal-dock",
@@ -330,21 +453,6 @@
       "lane": 11
     },
     {
-      "id": "m5-structured-runner",
-      "milestone": "M5",
-      "title": "Shared seams: Codex structured runner over app-server, structured resume, model and effort on structured launches, checks runner",
-      "docs": [
-        "automations.md",
-        "fork-loops.md",
-        "launch-settings.md"
-      ],
-      "deps": [
-        "m1-launch-settings",
-        "m1-agent-status"
-      ],
-      "status": "blocked"
-    },
-    {
       "id": "m3-vault",
       "milestone": "M3",
       "title": "AI vault: browse and resume sessions across agents, opt-in full-text search",
@@ -367,7 +475,7 @@
       "deps": [
         "m4-hosting-api-github"
       ],
-      "status": "todo"
+      "status": "blocked"
     },
     {
       "id": "m4-hosting-api-bitbucket-gitea-azure",
@@ -379,7 +487,7 @@
       "deps": [
         "m4-hosting-api-github"
       ],
-      "status": "todo"
+      "status": "blocked"
     },
     {
       "id": "m4-hosting-ui-tasks",
@@ -417,7 +525,7 @@
         "m4-hosting-ui-tasks",
         "m4-hosting-api-gitlab"
       ],
-      "status": "todo"
+      "status": "blocked"
     },
     {
       "id": "m4-worktrees-create-from-github",
@@ -444,7 +552,7 @@
         "m4-worktrees-create-from-github",
         "m4-hosting-api-gitlab"
       ],
-      "status": "todo"
+      "status": "blocked"
     },
     {
       "id": "m4-sidebar-review-filters",
@@ -596,32 +704,6 @@
       "lane": 3
     },
     {
-      "id": "m6-orchestration-core",
-      "milestone": "M6",
-      "title": "Scope: all of the parts below together; a \"Not ...\" note in one part excludes only what no other part here covers. Part 1: Orchestration core: runs and tasks (orchestration.md 'The database', 'Task model and DAG semantics', 'CLI reference' Runs and Tasks, 'Caller identity and authority', 'Mutation idempotency and request IDs', 'Reset', 'Constants and limits'): Runs bound to a coordinator, Tasks with dependency promotion, Dispatch and worker state graphs with compare-and-set transitions, circuit breaker, nesting depth cap of 1 by default, `quirky orchestration` run-* and task-* commands. Not messaging, worker start, federation or legacy compatibility Part 2: Orchestration mailbox, questions and gates (orchestration.md 'Messaging', 'Blocking ask and reply', 'Decision gates', 'The coordinator loop' steps 4 and 6): mailboxes and addresses, send, check with waiting, Deliveries and acks, inbox, nudge pointer line to idle agents, ask and reply with timeout and resume, gate-create, gate-resolve, gate-list",
-      "docs": [
-        "orchestration.md"
-      ],
-      "deps": [
-        "m5-structured-runner",
-        "m1-worktrees",
-        "m1-agent-status"
-      ],
-      "status": "todo"
-    },
-    {
-      "id": "m6-orchestration-workers",
-      "milestone": "M6",
-      "title": "Scope: all of the parts below together; a \"Not ...\" note in one part excludes only what no other part here covers. Part 1: Orchestration worker start and done (orchestration.md 'Starting a worker', 'Worker modes (terminal vs chat)', 'How a worker reports completion', 'The injected preamble', 'Low-level dispatch', 'The worker side'): worker-start admission, placement, launch, readiness, preamble delivery, turn observation and receipts, terminal or structured chat worker, worker_done and heartbeat settlement, dispatch and dispatch-show. Not stop, release or fleet projection Part 2: Orchestration worker lifecycle and fleet (orchestration.md 'Follow up, stop, retain, release, retry', 'Process exit, stop, abandon', 'Terminal resource ownership, retain and release', 'Reading worker output', 'Fleet projection'): worker-stop and worker-abandon, unexpected exit handling, retry, retain and release, user takeover of a terminal, worker-read, worker-list and worker-show with liveness, attention and nextAction",
-      "docs": [
-        "orchestration.md"
-      ],
-      "deps": [
-        "m6-orchestration-core"
-      ],
-      "status": "todo"
-    },
-    {
       "id": "m6-orchestration-ui",
       "milestone": "M6",
       "title": "Orchestration skill and UI (orchestration.md 'Install the orchestration skill', 'Change how deep workers may nest', 'Ask an agent to coordinate', 'Click a task ID, take over a worker terminal', 'UI'): skill install pane with agent coverage and usage examples, nested worker depth setting, task ID terminal links, nested worker rows in the sidebar, takeover reporting, generated agent skill text",
@@ -630,42 +712,6 @@
       ],
       "deps": [
         "m6-orchestration-workers"
-      ],
-      "status": "todo"
-    },
-    {
-      "id": "m6-heimdall-core",
-      "milestone": "M6",
-      "title": "Heimdall kernel core, without leases, remote fleets or the judgment layer (heimdall.md 'Kernel pieces' through 'Parking, terminal, stop predicates', 'Workers and mailbox', 'Shutdown'): kind contract and registry, enrollment with refusals and re-arm, kernel database and journal with retention and tick traces, scheduling and pacing, one tick, action loop with generic gate and write-ahead attempts, budgets and active time, parking and stop predicates, orchestration adapter. Not control commands, CLI, fleet page or owner layer",
-      "docs": [
-        "heimdall.md"
-      ],
-      "deps": [
-        "m6-orchestration-workers"
-      ],
-      "status": "todo"
-    },
-    {
-      "id": "m6-heimdall-control",
-      "milestone": "M6",
-      "title": "Scope: all of the parts below together; a \"Not ...\" note in one part excludes only what no other part here covers. Part 1: Heimdall controls and CLI (heimdall.md 'Act on a watcher', 'Command results', 'CLI', 'Debug report', 'Notifications', fleet and detail read methods): pause, resume, disarm, delete, approve, adjust-budget, set-concurrency, answer-question, answer-escalation and stop-worker serialized per watcher with refusal reasons, fleet and detail snapshots with push updates, `quirky heimdall` command group, debug report, the two notifications. Not the fleet page Part 2: Heimdall fleet page (heimdall.md 'Where to find it', 'Read the fleet', 'Inspect one watcher', 'Decision trace'): sidebar entry with bucket counts, fleet table ordered by urgency, header summary and refresh banner, detail pane with owner controls, approval cards and status pills, decision trace, watcher activity feed, per-worktree glyph, Copy debug report. Not the New objective sheet",
-      "docs": [
-        "heimdall.md"
-      ],
-      "deps": [
-        "m6-heimdall-core"
-      ],
-      "status": "todo"
-    },
-    {
-      "id": "m6-heimdall-owner",
-      "milestone": "M6",
-      "title": "Heimdall owner layer (heimdall.md 'The owner layer (optional)'): owner agent config, deviation hand-off from kinds, owner interventions, idle-worker and stall detection. Not the judgment layer",
-      "docs": [
-        "heimdall.md"
-      ],
-      "deps": [
-        "m6-heimdall-core"
       ],
       "status": "todo"
     },
@@ -681,7 +727,7 @@
         "m6-heimdall-control",
         "m4-hosting-api-github"
       ],
-      "status": "todo"
+      "status": "blocked"
     },
     {
       "id": "m6-objective-execute",
@@ -693,22 +739,7 @@
       "deps": [
         "m6-objective-plan"
       ],
-      "status": "todo"
-    },
-    {
-      "id": "m6-objective-landing",
-      "milestone": "M6",
-      "title": "Objective review, landing and owner interventions (heimdall-objective.md 'Review by tier', 'Landing and evidence', 'Stop and park rules', 'Pacing', 'Owner interventions for objectives', and the hosted-review hand-off that enrolls a derived sitter): Express, Standard and Full review, reviewer and integrator verdicts, landing ladder record-landing, commit, push and open hosted review, stop predicates, pacing, owner deviations",
-      "docs": [
-        "heimdall-objective.md",
-        "hosted-review-sitter.md"
-      ],
-      "deps": [
-        "m6-objective-execute",
-        "m6-heimdall-owner",
-        "m6-sitter-github"
-      ],
-      "status": "todo"
+      "status": "blocked"
     },
     {
       "id": "m6-sitter-github",
@@ -723,7 +754,22 @@
         "m6-heimdall-owner",
         "m4-hosting-api-github"
       ],
-      "status": "todo"
+      "status": "blocked"
+    },
+    {
+      "id": "m6-objective-landing",
+      "milestone": "M6",
+      "title": "Objective review, landing and owner interventions (heimdall-objective.md 'Review by tier', 'Landing and evidence', 'Stop and park rules', 'Pacing', 'Owner interventions for objectives', and the hosted-review hand-off that enrolls a derived sitter): Express, Standard and Full review, reviewer and integrator verdicts, landing ladder record-landing, commit, push and open hosted review, stop predicates, pacing, owner deviations",
+      "docs": [
+        "heimdall-objective.md",
+        "hosted-review-sitter.md"
+      ],
+      "deps": [
+        "m6-objective-execute",
+        "m6-heimdall-owner",
+        "m6-sitter-github"
+      ],
+      "status": "blocked"
     },
     {
       "id": "m6-sitter-gitlab",
@@ -736,7 +782,7 @@
         "m6-sitter-github",
         "m4-hosting-api-gitlab"
       ],
-      "status": "todo"
+      "status": "blocked"
     },
     {
       "id": "m6-sitter-fix-ui",
@@ -749,7 +795,7 @@
         "m6-sitter-github",
         "m4-hosting-ui-reviews"
       ],
-      "status": "todo"
+      "status": "blocked"
     },
     {
       "id": "sb-mobile-daemon",
@@ -789,16 +835,6 @@
       "status": "todo"
     },
     {
-      "id": "fix-flaky-quirky-git-files-scenarios",
-      "milestone": "M2",
-      "title": "Fix the flaky plugins/quirky.git/test/scenarios/files.test.ts: it failed under load in 3 full-suite runs on the test host and passed each time it was rerun alone (see <git common dir>/build-loop/flakes.log). Find the timing assumption or shared state with quirky.git:systematic-debugging, reproduce it under CPU load, and fix the test or the code it exposes",
-      "docs": [
-        "source-control.md"
-      ],
-      "deps": [],
-      "status": "todo"
-    },
-    {
       "id": "m4-editor-drop-open-in-place",
       "milestone": "M4",
       "title": "Finder drops into the editor open a file in place when it is inside the worktree and import it otherwise, as Orca does (editor SC-9). m2-editor imports every drop, by user ruling, because Electrobun 2.0.4 gives the page no source path for a dropped file (see docs/loop/decisions/m2-editor.md). Get the dropped paths through a supported Electrobun API or a newer Electrobun release and route them through the shell's typed RPC as a public event. Block with a BLOCKERS.md entry if that needs a native patch or fork, which the user hasn't approved",
@@ -811,44 +847,168 @@
       "status": "todo"
     },
     {
-      "id": "fix-flaky-quirky-worktree-window-projects",
-      "milestone": "M1",
-      "title": "Fix the flaky plugins/quirky.worktree/test/window-projects.test.ts: it failed under load in 3 full-suite runs on the test host and passed each time it was rerun alone (see <git common dir>/build-loop/flakes.log). Find the timing assumption or shared state with quirk:systematic-debugging, reproduce it under CPU load, and fix the test or the code it exposes",
+      "id": "m3-accounts-remaining-flows",
+      "milestone": "M3",
+      "title": "Finish operator-deferred Accounts flows: durable Compact/Detailed and Used/Remaining/provider-visibility preferences across restart; complete provider drill-ins and inactive-account refresh; UI native-login link/cancel, reauthentication and Needs sign-in selection refusal; Claude Ask/Keep/Always/Never and busy-idle/superseding-switch restart choices; Codex Keep-old/Restart pane flow and focus plus native A→B→remove-A→C continuation; destructive removal Cancel/confirm/System-default fallback; masked MiniMax/OpenCode Go/ZCode configure/clear; scoped/idempotent Codex reset-credit confirmation and stale-offer refusal; retained Codex settings warning UI; native-only clipboard/browser, Keychain denial and window/pane-focus scenarios. These flows have implementation/API coverage but their complete user-surface acceptance was not finished under the operator's one-hour landing deadline; use the m3-accounts BLOCKERS entry and reports to distinguish completed core proof from remaining verification, fix confirmed defects, and finish each named flow.",
       "docs": [
+        "accounts.md"
+      ],
+      "deps": [
+        "m3-accounts"
+      ],
+      "status": "todo"
+    },
+    {
+      "id": "m7-sweep-terminal",
+      "milestone": "M7",
+      "docs": [
+        "ask.md",
+        "cli.md",
+        "agent-status.md",
+        "launch-settings.md",
+        "notifications.md",
+        "providers.md",
+        "term-daemon.md",
+        "term-ui.md",
         "worktrees.md"
       ],
-      "deps": [],
-      "status": "todo"
-    },
-    {
-      "id": "fix-flaky-pty-host-host",
-      "milestone": "M1",
-      "title": "Fix the flaky packages/pty-host/test/host.test.ts: it failed under load in 3 full-suite runs on the test host and passed each time it was rerun alone (see <git common dir>/build-loop/flakes.log). Under load, many tests time out at 5 s, and startHost fails with 'could not start process scope guardian' when the guardian isn't ready within 4 s. Reproduce it under CPU load with quirk:systematic-debugging, and fix the timing assumptions in the test helpers or the code they expose",
-      "docs": [
-        "term-daemon.md"
-      ],
-      "deps": [],
-      "status": "todo"
-    },
-    {
-      "id": "fix-test-cost",
-      "milestone": "M1",
-      "title": "Make the test suite cheaper to run. Today every test file starts a real daemon, a pty-host and a login zsh (`zsh -l`), and on the 8-vCPU test host that keeps the load near 21 while four files run. Measure per-file wall time and CPU with `bun run test`, then cut the cost without losing coverage: start non-login shells (`zsh -f`, `bash --noprofile --norc`) in tests that don't exercise shell integration or the login environment, share one daemon and pty-host per test file (beforeAll) where tests don't depend on a fresh one, and drop fixed sleeps in favour of waiting on the event. Keep every scenario test that checks shell integration on a real login shell. Report the before and after suite times in the decision log",
-      "docs": [
-        "term-daemon.md"
-      ],
-      "deps": [],
-      "status": "todo"
-    },
-    {
-      "id": "m7-parity-sweep",
-      "milestone": "M7",
-      "title": "Parity sweep: every remaining flow in the 28 feature docs",
-      "docs": [],
+      "status": "todo",
+      "title": "Parity sweep for ask.md, cli.md, agent-status.md, launch-settings.md, notifications.md, providers.md, term-daemon.md, term-ui.md, worktrees.md: every remaining flow in these feature docs, except the GitLab, Bitbucket, Gitea/Forgejo and Azure DevOps flows, the Objective runner and the PR sitter, which the user deferred. Find what earlier items left out or deferred, build or fix it, and record anything too large as a follow-up item",
       "deps": [
-        "*"
+        "m0-scripting",
+        "m0-core",
+        "m1-term-daemon",
+        "m1-providers",
+        "m1-launch-settings",
+        "m1-agent-status",
+        "m1-notifications",
+        "m1-worktrees",
+        "m1-term-ui",
+        "m1-agent-status-scripting",
+        "m2-ask-parity",
+        "fix-test-process-leaks",
+        "fix-sc31-first-shell-race",
+        "m5-structured-runner",
+        "m4-worktrees-create-from-github",
+        "fix-flaky-quirky-worktree-window-projects",
+        "fix-flaky-pty-host-host",
+        "fix-test-cost"
+      ]
+    },
+    {
+      "id": "m7-sweep-editor-source-control",
+      "milestone": "M7",
+      "docs": [
+        "editor.md",
+        "sidebar-extras.md",
+        "source-control.md"
       ],
-      "status": "todo"
+      "status": "todo",
+      "title": "Parity sweep for editor.md, sidebar-extras.md, source-control.md: every remaining flow in these feature docs, except the GitLab, Bitbucket, Gitea/Forgejo and Azure DevOps flows, the Objective runner and the PR sitter, which the user deferred. Find what earlier items left out or deferred, build or fix it, and record anything too large as a follow-up item",
+      "deps": [
+        "m2-source-control-core",
+        "m2-source-control-notes-ai",
+        "m2-editor",
+        "m2-sidebar-extras",
+        "m4-sidebar-review-filters",
+        "fix-flaky-quirky-git-files-scenarios",
+        "m4-editor-drop-open-in-place"
+      ]
+    },
+    {
+      "id": "m7-sweep-sessions",
+      "milestone": "M7",
+      "docs": [
+        "accounts.md",
+        "ai-vault.md",
+        "handoff.md",
+        "session-info.md",
+        "terminal-dock.md"
+      ],
+      "status": "todo",
+      "title": "Parity sweep for accounts.md, ai-vault.md, handoff.md, session-info.md, terminal-dock.md: every remaining flow in these feature docs, except the GitLab, Bitbucket, Gitea/Forgejo and Azure DevOps flows, the Objective runner and the PR sitter, which the user deferred. Find what earlier items left out or deferred, build or fix it, and record anything too large as a follow-up item",
+      "deps": [
+        "m3-session-info",
+        "m3-terminal-dock",
+        "m3-handoff",
+        "m3-accounts",
+        "m3-vault",
+        "m3-accounts-remaining-flows"
+      ]
+    },
+    {
+      "id": "m7-sweep-hosting",
+      "milestone": "M7",
+      "docs": [
+        "hosting-api.md",
+        "hosting-ui.md"
+      ],
+      "status": "todo",
+      "title": "Parity sweep for hosting-api.md, hosting-ui.md: every remaining flow in these feature docs, except the GitLab, Bitbucket, Gitea/Forgejo and Azure DevOps flows, the Objective runner and the PR sitter, which the user deferred. Find what earlier items left out or deferred, build or fix it, and record anything too large as a follow-up item",
+      "deps": [
+        "m4-hosting-api-github",
+        "m4-hosting-ui-tasks",
+        "m4-hosting-ui-reviews",
+        "m4-worktrees-create-from-github"
+      ]
+    },
+    {
+      "id": "m7-sweep-automation",
+      "milestone": "M7",
+      "docs": [
+        "automations.md",
+        "fork-loops.md",
+        "ledger.md"
+      ],
+      "status": "todo",
+      "title": "Parity sweep for automations.md, fork-loops.md, ledger.md: every remaining flow in these feature docs, except the GitLab, Bitbucket, Gitea/Forgejo and Azure DevOps flows, the Objective runner and the PR sitter, which the user deferred. Find what earlier items left out or deferred, build or fix it, and record anything too large as a follow-up item",
+      "deps": [
+        "m5-structured-runner",
+        "m5-automations-core",
+        "m5-automations-dispatch",
+        "m5-automations-ui",
+        "m5-loops-core",
+        "m5-loops-presets",
+        "m5-loops-ui",
+        "m5-ledger"
+      ]
+    },
+    {
+      "id": "m7-sweep-browser-mobile",
+      "milestone": "M7",
+      "docs": [
+        "browser.md",
+        "mobile.md"
+      ],
+      "status": "todo",
+      "title": "Parity sweep for browser.md, mobile.md: every remaining flow in these feature docs, except the GitLab, Bitbucket, Gitea/Forgejo and Azure DevOps flows, the Objective runner and the PR sitter, which the user deferred. Find what earlier items left out or deferred, build or fix it, and record anything too large as a follow-up item",
+      "deps": [
+        "sa-browser-agent",
+        "sa-browser-pane",
+        "sa-browser-profiles-settings",
+        "sa-browser-design-mode",
+        "sb-mobile-daemon",
+        "sb-mobile-app",
+        "sb-mobile-app-panels"
+      ]
+    },
+    {
+      "id": "m7-sweep-orchestration",
+      "milestone": "M7",
+      "docs": [
+        "orchestration.md",
+        "heimdall.md"
+      ],
+      "status": "todo",
+      "title": "Parity sweep for orchestration.md, heimdall.md: every remaining flow in these feature docs, except the GitLab, Bitbucket, Gitea/Forgejo and Azure DevOps flows, the Objective runner and the PR sitter, which the user deferred. Find what earlier items left out or deferred, build or fix it, and record anything too large as a follow-up item",
+      "deps": [
+        "m6-orchestration-core",
+        "m6-orchestration-workers",
+        "m6-orchestration-ui",
+        "m6-heimdall-core",
+        "m6-heimdall-control",
+        "m6-heimdall-owner"
+      ]
     },
     {
       "id": "m7-api-freeze",
@@ -856,7 +1016,49 @@
       "title": "Plugin API 1.0: freeze and version the API, manifests declare their API version, publish an example distro",
       "docs": [],
       "deps": [
-        "m7-parity-sweep"
+        "m7-sweep-terminal",
+        "m7-sweep-editor-source-control",
+        "m7-sweep-sessions",
+        "m7-sweep-hosting",
+        "m7-sweep-automation",
+        "m7-sweep-browser-mobile",
+        "m7-sweep-orchestration"
+      ],
+      "status": "todo"
+    },
+    {
+      "id": "m4-hosting-api-github-parity",
+      "milestone": "M4",
+      "title": "Finish user-owned Projects issue-type discovery/changes and same-tick batched, cursor-reused work-item search; deferred to land core hosting by the operator deadline",
+      "docs": [
+        "hosting-api.md"
+      ],
+      "deps": [
+        "m4-hosting-api-github"
+      ],
+      "status": "todo"
+    },
+    {
+      "id": "fix-terminal-dock-unfinished-flows-20261027",
+      "milestone": "M3",
+      "title": "Complete deferred terminal-dock flows: SC14/15 visible Low effort opens model picker and safely refuses (API session-only path passes); SC16 question collapse/answer/dismiss controls are occluded and answered-card refresh lags; SC06/08 restore active composer focus after feature re-enable and verify final disable/auto-open behavior; SC04 exact 3..15 row bounds and SC05 exact hysteresis thresholds lacked visual measurement; SC09/20/21 visible slow-turn Stop/Escape preserving newer draft not attempted; SC12 Attach/native chooser plus paste/drop/chip removal not completed due modal driver limit (native scenario pending); SC02 plain-shell PANE context-menu negative not verified (tab-menu negative passed); SC03 direct hook lead.ended and whole-PTY exit lifecycle assertions still need public-flow coverage. Deferred by operator deadline; retain full specs, reproduce recorded web findings, repair nonblocking defects and finish end-to-end verification.",
+      "docs": [
+        "terminal-dock.md"
+      ],
+      "deps": [
+        "m3-terminal-dock"
+      ],
+      "status": "todo"
+    },
+    {
+      "id": "m3-vault-parity-completion",
+      "milestone": "M3",
+      "title": "Finish vault parity after operator-authorized core landing (details: docs/loop/BLOCKERS.md m3-vault open review findings): SC-02 positive Workspace/Project defaults and scoped depth, because the two API/UI fixtures remain unresolved (unexpected-comma response and missing primary-worktree assumption); SC-03 all view controls/reset/show-more, because only persistence/unlimited API boundaries were exercised; SC-06 narrow/large grouped history and selection stability, because core smoke uses a small fixture; SC-08 Settings polling/degraded status/sidebar focus, because the bounded core smoke does not cover every state; SC-10/11 exhaustive cross-format mutation/holdout/schema/worker recovery, because component and selected API checks do not prove the full campaign; SC-15/16 stale-page replacement and every degraded/limit/retry UI, because API outcomes lack complete visible multi-page/failure fixtures; SC-18 all inspection/copy/log/live-pane/worktree/folder actions plus child lookup after Worker restart, because only prompt/registered-child API selection is proven and child rediscovery currently needs its parent list; SC-19 confirmation/cancel/symlink-swap/concurrent deletion UI, because private-APFS file/directory Trash proof is not that combined consumer flow; SC-20 real-browser keyboard and nonactive-group drag with actual fake-provider process, because mounted-window security/placement tests are not browser proof; SC-21 Session Info preselection and enabled handoff, because installed dependency integration remains unexercised while honest unavailable behavior is covered; SC-22 every inspect/resume/action/UI CLI subcommand, because core CLI and all25 copied commands are not the exhaustive action matrix; SC-23 all-host/enable-all/authenticated-web controls, because two-daemon API identity/redaction proof is not visible UI proof; SC-24 long-idle/deactivate/crash packaged lifecycle, because bounded packaged core smoke cannot prove every recovery transition; finish nightly native SC-17 focus and SC-18 Finder/clipboard handoffs, because unattended lanes must not take foreground. Fix only findings blocking those flows; preserve explicit consent, unknown-scope bounds, source ownership and original transcripts.",
+      "docs": [
+        "ai-vault.md"
+      ],
+      "deps": [
+        "m3-vault"
       ],
       "status": "todo"
     }
