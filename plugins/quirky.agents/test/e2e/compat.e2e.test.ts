@@ -166,7 +166,7 @@ describe('SC-38: v1 sessions and commands keep working', () => {
       const started = await startOf('claude', created.id)
       const settings = started.argv.indexOf('--settings')
       expect(settings).toBeGreaterThanOrEqual(0)
-      expect(started.argv[settings + 1]).toEndWith('claude-settings.json')
+      expect(started.argv[settings + 1]).toMatch(/claude-settings-[^/]+\.json$/)
       expect(started.argv.at(-1)).toBe('hi')
       expect(settings).toBeLessThan(started.argv.length - 1)
 

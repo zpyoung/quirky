@@ -207,3 +207,29 @@ test('SC-62: the open dialog is reported', () => {
   expect(buildReport(input({ dialog: { kind: 'create', repoId: 'r1' } })).dialog).toEqual({ kind: 'create', repoId: 'r1' })
   expect(buildReport(input({})).dialog).toBeNull()
 })
+
+test('a worktree drawn from an agent summary also reports its display and label', () => {
+  const summary = {
+    state: 'waiting' as const,
+    display: 'permission' as const,
+    label: 'Needs attention',
+    detail: '',
+    progress: null,
+    stateStartedAt: 1000,
+    evidenceAt: 1000,
+    restoredUnconfirmed: false
+  }
+  const report = buildReport(
+    input({
+      repos: [repo('r1', 'api')],
+      worktrees: [worktree('w1', 'r1', 'main'), worktree('w2', 'r1', 'fix')],
+      sessions: [{ ...session('s1', 'w1', 'waiting'), agentStatus: summary }, session('s2', 'w2', 'working')],
+      now: 2000
+    })
+  )
+  const [main, fix] = report.projects[0]!.worktrees
+  expect(main).toMatchObject({ id: 'w1', status: 'waiting', display: 'permission', label: 'Needs attention' })
+  expect(fix).toMatchObject({ id: 'w2', status: 'working' })
+  expect(fix).not.toHaveProperty('display')
+  expect(fix).not.toHaveProperty('label')
+})

@@ -93,30 +93,152 @@ export function buildSessionEnv(options: {
   }
 }
 
+/** Seconds the stdin reader waits for the first byte, and for more after one, before it gives up. */
+const HOOK_STDIN_FIRST_BYTE_SECONDS = 5
+const HOOK_STDIN_IDLE_SECONDS = 1.5
+/** A spool file past this size takes no more lines. */
+const HOOK_SPOOL_MAX_BYTES = 5_242_880
+
 /**
- * The hook shim agents call. It posts to the daemon's current port from `$QUIRKY_HOME/runtime.json`
- * so sessions that outlive a restart still reach it, falling back to the URL in their environment.
- * Always exits 0 so a hook failure never disturbs the agent.
+ * Reads stdin until the first complete JSON value arrives and writes it unchanged to stdout.
+ * Grok and Antigravity keep stdin open after the payload, so reading to EOF would hang until the
+ * agent's own hook timeout. A non-zero exit means stdin was never read.
+ */
+const HOOK_JSON_STDIN_PYTHON = [
+  'import codecs, json, os, select',
+  'text = ""',
+  'try:',
+  '    decoder = codecs.getincrementaldecoder("utf-8")("replace")',
+  `    timeout = ${HOOK_STDIN_FIRST_BYTE_SECONDS}.0`,
+  '    while 1:',
+  '        if not select.select([0], [], [], timeout)[0]:',
+  '            text += decoder.decode(b"", True)',
+  '            break',
+  '        chunk = os.read(0, 65536)',
+  '        if not chunk:',
+  '            text += decoder.decode(b"", True)',
+  '            break',
+  `        timeout = ${HOOK_STDIN_IDLE_SECONDS}`,
+  '        text += decoder.decode(chunk)',
+  '        value = text.lstrip()',
+  '        if not value:',
+  '            continue',
+  '        try:',
+  '            end = json.JSONDecoder().raw_decode(value)[1]',
+  '        except ValueError:',
+  '            continue',
+  '        text = value[:end]',
+  '        break',
+  'except Exception:',
+  '    pass',
+  'try:',
+  '    data = text.encode("utf-8")',
+  '    written = 0',
+  '    while written < len(data):',
+  '        written += os.write(1, data[written:])',
+  'except Exception:',
+  '    pass'
+].join('\n')
+
+/**
+ * The hook shim agents call as `quirky-hook <source>`. It answers the agent's hook on stdout first,
+ * then posts the payload to the daemon's current port from `$QUIRKY_HOME/runtime.json` (falling
+ * back to the URL in the environment) so sessions that outlive a restart still reach it. When the
+ * daemon is down it spools the payload for replay at the next start, except tool events. Does
+ * nothing outside a Quirky session. Always exits 0 so a hook failure never disturbs the agent.
  */
 export const QUIRKY_HOOK_SCRIPT = `#!/bin/sh
-agent="$1"
+exec 2>/dev/null
+src="$1"
+event="$QUIRKY_HOOK_EVENT"
+answer=""
+case "$src" in
+  claude|openclaude|qoder|qoder-cn|qwen-code|codebuddy|droid|devin|muse|zcode|kimi|command-code)
+    answer='{}' ;;
+  cursor)
+    case "$event" in
+      preToolUse|beforeShellExecution|beforeMCPExecution) answer='{"permission":"allow"}' ;;
+      beforeSubmitPrompt) answer='{"continue":true}' ;;
+      *) answer='{}' ;;
+    esac ;;
+  antigravity)
+    case "$event" in
+      PreToolUse) answer='{"decision":"ask"}' ;;
+      Stop) answer='{"decision":""}' ;;
+      *) answer='{}' ;;
+    esac ;;
+esac
+[ -z "$answer" ] || printf '%s\\n' "$answer"
+if [ -z "$QUIRKY_SESSION_ID" ] || [ -n "$CLAUDE_JOB_DIR" ]; then
+  exit 0
+fi
+case "$src" in
+  codex)
+    if [ "$#" -gt 1 ]; then
+      for last; do :; done
+      payload="$last"
+    else
+      payload="$({ command -p cat || cat; })"
+    fi ;;
+  grok|antigravity)
+    { command -v python3 || command -p -v python3; } >/dev/null 2>&1 || exit 0
+    py='${HOOK_JSON_STDIN_PYTHON}'
+    payload="$({ [ -d "\${HOME:-}" ] || unset HOME; command -p python3 -c "$py" || python3 -c "$py"; })" ;;
+  *)
+    payload="$({ command -p cat || cat; })" ;;
+esac
+[ -n "$payload" ] || exit 0
 url="$QUIRKY_HOOK_URL"
 if [ -n "$QUIRKY_HOME" ] && [ -r "$QUIRKY_HOME/runtime.json" ]; then
   port="$(sed -n 's/.*"port": *\\([0-9][0-9]*\\).*/\\1/p' "$QUIRKY_HOME/runtime.json" | head -n 1)"
   [ -n "$port" ] && url="http://127.0.0.1:$port/hook"
 fi
 [ -n "$url" ] || exit 0
-if [ "$agent" = "codex" ]; then
-  for last; do :; done
-  payload="$last"
-else
-  payload="$(cat)"
+pid="$QUIRKY_HOOK_AGENT_PID"
+case "$pid" in ''|*[!0-9]*) pid="" ;; esac
+pstart=""
+if [ -n "$pid" ]; then
+  pstart="$(TZ=UTC0 LC_ALL=C /bin/ps -p "$pid" -o lstart= | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
 fi
-printf '%s' "$payload" | curl -s -m 5 -o /dev/null -X POST \\
+urlenc() {
+  printf '%s' "$1" | sed -e 's/%/%25/g' -e 's/ /%20/g' -e 's/:/%3A/g' -e 's/&/%26/g' -e 's/+/%2B/g' -e 's/#/%23/g' -e 's/?/%3F/g' -e 's/=/%3D/g'
+}
+query="session=$QUIRKY_SESSION_ID"
+[ -z "$pid" ] || query="$query&pid=$pid"
+[ -z "$pstart" ] || query="$query&pstart=$(urlenc "$pstart")"
+[ -z "$event" ] || query="$query&event=$(urlenc "$event")"
+b64() {
+  printf '%s' "$1" | base64 | tr -d '\\n'
+}
+spool() {
+  [ -n "$QUIRKY_HOME" ] || return 0
+  case "$QUIRKY_SESSION_ID" in */*) return 0 ;; esac
+  case "$event" in PreToolUse|PostToolUse|PostToolUseFailure) return 0 ;; esac
+  if printf '%s' "$payload" | tr '\\n\\r' '  ' | grep -Eq '"(hook_event_name|hookEventName)"[[:space:]]*:[[:space:]]*"(PreToolUse|PostToolUse|PostToolUseFailure)"'; then
+    return 0
+  fi
+  dir="$QUIRKY_HOME/hook-spool"
+  file="$dir/$QUIRKY_SESSION_ID.jsonl"
+  umask 077
+  mkdir -p "$dir" || return 0
+  chmod 700 "$dir"
+  if [ -f "$file" ]; then
+    size="$(wc -c < "$file" | tr -d ' ')"
+    [ "$size" -le ${HOOK_SPOOL_MAX_BYTES} ] || return 0
+  fi
+  pstart64="-"
+  [ -z "$pstart" ] || pstart64="$(b64 "$pstart")"
+  case "$event" in ''|*[!A-Za-z0-9_.:-]*) spool_event="-" ;; *) spool_event="$event" ;; esac
+  printf '%s %s %s %s %s\\n' "$src" "\${pid:--}" "$pstart64" "$spool_event" "$(b64 "$payload")" >> "$file" || return 0
+  chmod 600 "$file"
+}
+if ! printf '%s' "$payload" | curl -s --connect-timeout 0.5 -m 1.5 --noproxy 127.0.0.1 -o /dev/null -X POST \\
   -H "x-quirky-hook-token: $QUIRKY_HOOK_TOKEN" \\
   -H 'content-type: application/json' \\
   --data-binary @- \\
-  "$url/$agent?session=$QUIRKY_SESSION_ID" >/dev/null 2>&1
+  "$url/$src?$query" >/dev/null 2>&1; then
+  spool
+fi
 exit 0
 `
 

@@ -158,6 +158,53 @@ describe('OutputScanner facts', () => {
   })
 })
 
+describe('OutputScanner program status (OSC 7501)', () => {
+  test('reports the text after 7501; for both terminators and passes the bytes through', () => {
+    const r = scan(`${ESC}]7501;v=1;state=working${BEL}x${ESC}]7501;v=1;state=idle${ST}`)
+    expect(r.facts).toEqual([
+      { kind: 'program-status', body: 'v=1;state=working' },
+      { kind: 'program-status', body: 'v=1;state=idle' }
+    ])
+    expect(dec(r.bytes)).toBe(`${ESC}]7501;v=1;state=working${BEL}x${ESC}]7501;v=1;state=idle${ST}`)
+  })
+
+  test('the query body is reported as ?', () => {
+    expect(scan(`${ESC}]7501;?${BEL}`).facts).toEqual([{ kind: 'program-status', body: '?' }])
+  })
+
+  test('a multibyte body is decoded', () => {
+    expect(scan(`${ESC}]7501;msg=café${BEL}`).facts).toEqual([{ kind: 'program-status', body: 'msg=café' }])
+  })
+
+  test('a body that is not repeated is reported every time', () => {
+    const r = scan(`${ESC}]7501;?${BEL}${ESC}]7501;?${BEL}`)
+    expect(r.facts).toHaveLength(2)
+  })
+
+  test('an over-cap payload is ignored', () => {
+    const r = scan(`${ESC}]7501;${'a'.repeat(5000)}${BEL}`)
+    expect(r.facts).toEqual([])
+  })
+
+  test('every two-way split and byte-at-a-time scanning give the unsplit facts and bytes', () => {
+    const input = enc(`a${ESC}]7501;v=1;state=blocked;kind=permission${BEL}b${ESC}]7501;?${ST}${MARKER}c`)
+    const whole = scanAll([input])
+    expect(whole.facts).toEqual([
+      { kind: 'program-status', body: 'v=1;state=blocked;kind=permission' },
+      { kind: 'program-status', body: '?' },
+      { kind: 'ready' }
+    ])
+    for (let i = 0; i <= input.length; i++) {
+      const r = scanAll([input.subarray(0, i), input.subarray(i)])
+      expect(r.facts).toEqual(whole.facts)
+      expect(r.bytes).toEqual(whole.bytes)
+    }
+    const bytewise = byteWise(input)
+    expect(bytewise.facts).toEqual(whole.facts)
+    expect(bytewise.bytes).toEqual(whole.bytes)
+  })
+})
+
 describe('OutputScanner split safety', () => {
   test('the ready marker is removed whole when split at every byte position', () => {
     const input = enc(`pre${MARKER}post`)

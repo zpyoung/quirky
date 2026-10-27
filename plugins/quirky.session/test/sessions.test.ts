@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 import { Database } from 'bun:sqlite'
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { RpcErrorCode, QuirkyClient, type QuirkyEvent, type RpcError, type Session } from '@quirky/protocol'
+import { RpcErrorCode, QuirkyClient, type AgentStatusSummary, type QuirkyEvent, type RpcError, type Session } from '@quirky/protocol'
 import { rpcUrl } from '@quirky/protocol/node'
 import { makeTempHome, waitFor, waitForAsync, type Harness } from '../../../packages/daemon/test/helpers'
 import {
@@ -539,6 +539,65 @@ describe('quirky.session/setStatus', () => {
     expect(await call(client, 'quirky.session/get', { session: session.id })).toMatchObject({ status: 'working' })
   })
 
+  test('stores an agent status summary, emits changed only when the summary or status differs, and omitted leaves it', async () => {
+    const summary: AgentStatusSummary = {
+      state: 'working',
+      display: 'working',
+      label: 'Working',
+      detail: 'Editing',
+      progress: null,
+      stateStartedAt: 1,
+      evidenceAt: 2,
+      restoredUnconfirmed: false
+    }
+    const session = await createSession(client, { worktree: 'id:wt_main', agent: 'claude' })
+    expect(session.agentStatus).toBeNull()
+    await waitFor(() => changedTo('running'))
+    const count = () => eventsOf('quirky.session/changed').length
+    const before = count()
+
+    const stored = await call<Session>(client, 'quirky.session/setStatus', { session: session.id, status: 'running', agentStatus: summary })
+    expect(stored.agentStatus).toEqual(summary)
+    await waitFor(() => count() === before + 1 || undefined)
+
+    await call(client, 'quirky.session/setStatus', { session: session.id, status: 'running', agentStatus: { ...summary } })
+    await Bun.sleep(40)
+    expect(count()).toBe(before + 1)
+
+    const kept = await call<Session>(client, 'quirky.session/setStatus', { session: session.id, status: 'running' })
+    expect(kept.agentStatus).toEqual(summary)
+    await Bun.sleep(40)
+    expect(count()).toBe(before + 1)
+
+    const next = { ...summary, display: 'monitoring', label: 'Monitoring background tasks' }
+    await call(client, 'quirky.session/setStatus', { session: session.id, status: 'running', agentStatus: next })
+    await waitFor(() => count() === before + 2 || undefined)
+    expect(await call(client, 'quirky.session/get', { session: session.id })).toMatchObject({ agentStatus: next })
+
+    await call(client, 'quirky.session/setStatus', { session: session.id, status: 'running', agentStatus: null })
+    await waitFor(() => count() === before + 3 || undefined)
+    expect(await call(client, 'quirky.session/get', { session: session.id })).toMatchObject({ agentStatus: null })
+  })
+
+  test('exit clears the agent status summary', async () => {
+    const session = await createSession(client, { worktree: 'id:wt_main', agent: 'claude' })
+    const summary = { state: 'done', display: 'done', label: 'Done', detail: '', progress: null, stateStartedAt: 1, evidenceAt: 2, restoredUnconfirmed: false }
+    await call(client, 'quirky.session/setStatus', { session: session.id, status: 'done', agentStatus: summary })
+    expect(await call(client, 'quirky.session/get', { session: session.id })).toMatchObject({ agentStatus: summary })
+    const exited = await call<Session>(client, 'quirky.session/setStatus', { session: session.id, status: 'exited', exitCode: 0, agentStatus: summary })
+    expect(exited).toMatchObject({ status: 'exited', agentStatus: null })
+    expect(await call(client, 'quirky.session/get', { session: session.id })).toMatchObject({ agentStatus: null })
+  })
+
+  test('a summary that is not an object or null is InvalidParams', async () => {
+    const session = await createSession(client, { worktree: 'id:wt_main', agent: 'claude' })
+    for (const agentStatus of ['working', 3, [1]]) {
+      expect(await code(call(client, 'quirky.session/setStatus', { session: session.id, status: 'running', agentStatus }))).toBe(
+        RpcErrorCode.InvalidParams
+      )
+    }
+  })
+
   test('exited records the exit code once', async () => {
     const session = await createSession(client, { worktree: 'id:wt_main', agent: 'shell' })
     await call(client, 'quirky.session/setStatus', { session: session.id, status: 'exited', exitCode: 7 })
@@ -666,7 +725,8 @@ describe('the session store migration', () => {
         providerSession: null,
         promptDelivery: null,
         launchSettings: null,
-        resumedFrom: null
+        resumedFrom: null,
+        agentStatus: null
       }
     ])
   })
