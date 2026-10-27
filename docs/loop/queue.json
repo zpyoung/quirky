@@ -1061,6 +1061,16 @@
         "m3-vault"
       ],
       "status": "todo"
+    },
+    {
+      "id": "fix-flaky-daemon-pty-client",
+      "milestone": "M1",
+      "title": "Fix packages/daemon/test/pty-client.test.ts 'retiring an older host gives up within the wait so a current host can take over': on a loaded test host (load ~35) it fails even alone, with silent.shutdowns() 2 instead of 1. Under load the client sends shutdown to the silent old host twice. Find out with quirk:systematic-debugging whether the client retries the retire (a real race: reconnecting to the old socket before the new host binds) or the test's expectation is too strict, reproduce under CPU load, and fix the code or the test",
+      "docs": [
+        "term-daemon.md"
+      ],
+      "deps": [],
+      "status": "todo"
     }
   ]
 }
