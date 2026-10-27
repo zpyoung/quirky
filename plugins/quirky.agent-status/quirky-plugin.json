@@ -301,6 +301,27 @@
     ],
     "cli-command": [
       {
+        "id": "get",
+        "words": "get",
+        "summary": "show a session's agent status row, or null when it has none",
+        "positionals": [
+          {
+            "name": "session",
+            "description": "the session",
+            "required": true
+          }
+        ],
+        "flags": {
+          "at": {
+            "type": "number",
+            "description": "compute the display state at this time, in ms since the epoch (default: now)"
+          }
+        },
+        "methods": [
+          "quirky.agent-status/get"
+        ]
+      },
+      {
         "id": "hooks-status",
         "words": "hooks status",
         "summary": "show whether agent status hooks are installed for each agent",

@@ -20,8 +20,7 @@ type Row = {
 
 const claude = (event: string, extra: Record<string, unknown> = {}) => ({ hook_event_name: event, ...extra })
 
-/** `agent-status get` takes the session as `--session`; there is no positional form. */
-const getArgs = (session: string) => ['agent-status', 'get', '--session', session]
+const getArgs = (session: string) => ['agent-status', 'get', session]
 
 /** The `--resume` pair a resumed claude was started with. */
 const resumeArgs = (argv: string[]) => argv.slice(argv.indexOf('--resume'), argv.indexOf('--resume') + 2)

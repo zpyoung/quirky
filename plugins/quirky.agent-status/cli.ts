@@ -24,6 +24,14 @@ function agentArg(positionals: string[]): { agent: string } | Record<string, nev
 }
 
 export const commands: CliModule['commands'] = {
+  async get(args, ctx) {
+    const session = args.positionals[0]
+    if (session === undefined) throw ctx.usage('missing <session>')
+    const at = args.flags.at
+    const row = await ctx.call('quirky.agent-status/get', { session, ...(typeof at === 'number' ? { at } : {}) })
+    ctx.out.result(row, () => (row === null ? 'no agent status' : JSON.stringify(row, null, 2)))
+  },
+
   async 'hooks-status'(_args, ctx) {
     const entries = (await ctx.call('quirky.agent-status/hooksStatus', {})) as StatusEntry[]
     ctx.out.result(entries, () => entries.map((entry) => agentLine(entry.agent, entry.status, entry.message)).join('\n'))
