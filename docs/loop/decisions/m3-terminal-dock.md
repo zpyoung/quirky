@@ -418,5 +418,38 @@
 - **Revisit if:** final user-surface resize proof or land exposes a core regression
 - **Source:** assumed — autonomous (observed gate blockers); operator D33 fixes-only scope
 
+## D39: Perform the single final catch-up and preserve incoming status/PTY ownership
+- **Question:** operator requires one integration catch-up immediately before landing
+- **Options:** repeat discovery or rebase; merge build/roadmap once and check the actual shared seams
+- **Chose:** one final merge after the repaired-path gates. Read the imported updated LOOP and complete m1-agent-status-scripting, m5-ledger and m5-structured-runner logs. Preserve script-rule-versus-status-dot separation, authenticated provenance, blocked-rule precedence, bounded killable matchers, public plugin calls and acknowledged-write certainty. No private cross-plugin imports or canonical session identity rewrite.
+- **Why:** shared PTY/protocol files auto-merged; read-only seam inspection found no confirmed receipt conflict. Post-merge full typecheck exited0. M5 logs preserve their own blocked/partial outcomes and are not proof those products shipped. Imported night mode supersedes older full-preflight sequencing; do not edit its protected files.
+- **Evidence:** final merge output; DockFinalCatchupContracts read all three logs and public writeAccepted chain; post-merge typecheck exit0 in54.19seconds; docs/loop/LOOP.md:56-83
+- **Reversibility:** medium
+- **Confidence:** high for checked type/receipt seams
+- **Revisit if:** land reports a concrete merge-result regression
+- **Source:** locked by imported decision logs and operator single-catch-up instruction
+
+## D40: Keep the unfinished noncore flows explicit and independently runnable
+- **Question:** which original flows remain outside this operator-approved core landing
+- **Options:** imply full acceptance; delete original requirements; retain them with named dependent work
+- **Chose:** keep the full23-scenario specs and registered dependent fix-terminal-dock-unfinished-flows-20261027. Its title names visible native Low completion; question-card collapse/answer/dismiss/refresh; feature-toggle focus/final settings; exact geometry thresholds; visible Stop/Escape with newer draft; attachment/paste/drop/native chooser; shell-pane menu proof; and direct hook-ended/whole-PTY lifecycle assertions, with each observed limit or missing proof. BLOCKERS.md retains C1 and exact report anchors.
+- **Why:** the deadline explicitly authorizes these deferred flows. Native picker behavior is uncertain, card hit targets/focus need repairs, some goals were unattempted, and the chooser is a driver/native limitation. No unsupported native action or fabricated pass is substituted.
+- **Evidence:** queue.ts add exit0 before landing; scratch follow-up.json; BLOCKERS.md open findings; pending native scenario; guarded reports20261027T180029-52a7 and20261027T190614-d4f8
+- **Reversibility:** easy
+- **Confidence:** high for the named gaps; no claim about unperformed outcomes
+- **Revisit if:** the dependent item supplies actual repaired end-to-end evidence
+- **Source:** deferred: native options, question cards, feature-toggle focus, exact geometry, interruption proof, acquisition and additional lifecycle signals — explicit operator decision
+
+## D41: Observe actual PTY geometry and sending after the fit repair
+- **Question:** verify changed user-facing resize behavior beyond passing tests
+- **Options:** rely only on tests/CSS movement; inspect the built web surface and real child PTY dimensions
+- **Chose:** guarded web/yours/unattended run20261027T213825-c337 against a fresh private two-agent scene. The private TUI executes stty size: visible output changed29rows/62columns to29/72 after the center-divider drag; right draft remained, then real PONG appeared. Parent independently read before/after/PONG screenshots. Preserve the helper's formal partial status: send probes returned NO_EFFECT and a follow-up observe reported unknown_goal; do not relabel its report passed.
+- **Why:** the observed numeric change proves the child PTY—not just CSS—received final geometry. Separate drafts and subsequent sending survived. This closes the concrete fit regression's runtime proof without claiming exact drag counts/bounds or every deferred flow.
+- **Evidence:** .quirk/using-apps-like-a-user/runs/20261027T213825-c337/{report.md,report.json}; obs-13.png,obs-16.png,obs-18.png. Browser closed by helper; parent stopped only the owned fixture. Private settings sentinel comparison returned true.
+- **Reversibility:** easy
+- **Confidence:** high for screenshot-observed geometry/draft/PONG; helper result remains partial
+- **Revisit if:** the guarded driver gains reliable goal-observation reporting or an actual app regression appears
+- **Source:** assumed — autonomous (runtime proof); locked by LOOP tool-limitation reporting
+
 ## Progress
-Core and recorded blocker repairs pass typecheck, packaged build and the five previously failing files; scripts49pass/223assertions remain valid. Final review and dependent follow-up registration are complete; noncore UI/native flows and C1 remain explicitly open. Focused built-web resize/actual-PTY-size smoke is running. Commit these repairs, perform the operator's single final build/roadmap catch-up/read incoming decisions, then commit/detach and queue.ts land. No complete post-fix208-file suite or landing is claimed yet.
+Approved core and concrete gate repairs are verified; final review, registered dependent follow-up and the single final catch-up are complete. Scripts49pass/223assertions, full typecheck, packaged build and all five repaired-path files passed. Built-web screenshots show real PTY columns62→72, preserved other-pane draft and PONG; formal tool partial status is retained in D41. The caught-up packaged build passed in15.23seconds and the final private scene home was removed. Commit/detach and queue.ts land next for authoritative merge-result full-suite/scripts/types validation. Original full acceptance and a complete post-fix208-file preflight are not claimed; noncore gaps/C1 remain open.
