@@ -507,3 +507,22 @@ scenario('SC-42: an ended session attaches read only after a host restart', asyn
   await Bun.sleep(300)
   expect(pane.streamText()).toBe('')
 })
+
+scenario('cleanup removes a host and shells that a SIGKILLed quirkyd left running, and the home', async () => {
+  const h = await start()
+  // created without the harness helper so cleanup is the first thing to learn about the host
+  const session = await h.json<Session>(['session', 'new', '--agent', 'shell', '--worktree', 'main'])
+  const shell = await h.shellPid(session.id)
+  const host = h.hostPid()
+  const home = h.home
+
+  process.kill(h.daemonPid, 'SIGKILL')
+  await waitFor('the daemon to die', () => !isAlive(h.daemonPid))
+  expect(isAlive(host)).toBe(true)
+  expect(isAlive(shell)).toBe(true)
+
+  await h.cleanup()
+
+  await waitFor('the host and shell to die', () => !isAlive(host) && !isAlive(shell))
+  expect(existsSync(home)).toBe(false)
+})
