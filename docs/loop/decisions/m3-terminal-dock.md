@@ -99,5 +99,16 @@
 - **Revisit if:** a public terminal-addon contract requires a different composition boundary
 - **Source:** assumed — autonomous
 
+## D10: Resume under the explicit dock-local scope ruling
+- **Question:** whether D8 still blocks after the item was requeued
+- **Options:** preserve the obsolete block; follow the user's recorded scope ruling
+- **Chose:** exclude dictation and input-quarantine refusal; include slash commands and dock-local skill selection, without a standalone skills catalog. D8 is resolved by this binding ruling.
+- **Why:** the integration branch records the user's 2026-10-27 ruling in BLOCKERS.md and amendments in roadmap M3. Merged build/roadmap before further design.
+- **Evidence:** docs/roadmap.md:175-181; docs/loop/BLOCKERS.md m3-terminal-dock ruling
+- **Reversibility:** medium
+- **Confidence:** high
+- **Revisit if:** the scope source is amended again
+- **Source:** supersedes m3-terminal-dock D8; locked by docs/roadmap.md
+
 ## Progress
-Blocked at LOOP.md step 3, before logic/tech specification approval and implementation. All scouts, context researchers, option researchers and both independent scope reviewers have returned. No workers or background commands remain running. Research found ordinary implementable API gaps and a safe Claude session-only effort path, but the dock-local dictation/skills/quarantine scope conflicts with the dropped-feature boundary (D8). Preserve this log on `blocked/m3-terminal-dock`; `queue.ts block` records the exact source conflict and requested scope ruling in BLOCKERS.md. Resume only after that ruling is recorded and the item is requeued: settle D8, finish gray-area answers, author both specs, run Codex spec review, then implement through the recorded cross-family pairing. No production files changed; no application build/test/UI completion is claimed.
+Resumed step 3 under D10. Prior context/option research remains recorded in D6/D7/D9. Current scouts are refreshing backend and window implementation anchors after the integration merge. Next: finish gray-area decisions, author logic.md and tech.md, run Codex spec review, implement through omp task subagents with Gemini review (Opus remains unavailable), verify and land. No implementation is claimed yet.
