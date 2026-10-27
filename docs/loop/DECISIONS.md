@@ -119,6 +119,10 @@ files, not this one.
 | medium | high | [m1-worktrees D14](decisions/m1-worktrees.md) | The base is the requested one, else the project's saved base, else the detected default | locked by research/orca-features/worktrees.md |
 | medium | high | [m1-worktrees D49](decisions/m1-worktrees.md) | Project settings are a `quirky.repo` record, set with `repo set` and shown with `repo show` | supersedes nothing; works within m0-ui-api D17 |
 | medium | high | [m1-worktrees D52](decisions/m1-worktrees.md) | Platform-specific parts are logged and built for macOS only | deferred: platform |
+| medium | high | [fix-test-process-leaks D1](decisions/fix-test-process-leaks.md) | Treat test subprocess ownership as the fix boundary | locked by docs/architecture.md |
+| medium | high | [fix-test-process-leaks D4](decisions/fix-test-process-leaks.md) | Own disposable runs with an external process-scope guardian | assumed — autonomous |
+| medium | high | [fix-test-process-leaks D7](decisions/fix-test-process-leaks.md) | The test guardian requires POSIX process inspection | deferred: platform |
+| medium | high | [fix-test-process-leaks D10](decisions/fix-test-process-leaks.md) | Guardian control state must outlive the resource home | assumed — autonomous |
 | medium | high | [m1-agent-status D14](decisions/m1-agent-status.md) | The fold keeps a finished lead `working` while children or background work live | locked by research/orca-features/agent-status.md |
 | medium | high | [m1-notifications D5](decisions/m1-notifications.md) | A new built-in plugin, `quirky.notifications`, owns the policy; other plugins only report events | supersedes m0-core D12 |
 | medium | high | [m1-notifications D6](decisions/m1-notifications.md) | Producers emit settled and notification events; boundaries and replays still emit nothing | assumed — autonomous |
@@ -214,6 +218,7 @@ files, not this one.
 | easy | medium | [m1-worktrees D61](decisions/m1-worktrees.md) | W3 starts while W2's checkpoint review runs | assumed — autonomous |
 | easy | medium | [m1-worktrees D65](decisions/m1-worktrees.md) | W4 starts while W3's checkpoint review runs, and owns only the manifest's UI keys | assumed — autonomous |
 | easy | medium | [m1-worktrees D71](decisions/m1-worktrees.md) | SC-27 is run with base `origin/main` on both sides, because a create with no base never falls back | assumed — autonomous |
+| easy | medium | [fix-test-process-leaks D9](decisions/fix-test-process-leaks.md) | Final cross-family review returned no actionable findings | assumed — autonomous |
 | easy | medium | [m1-agent-status D1](decisions/m1-agent-status.md) | This item covers the dot, the hooks, provider capture and the fallbacks; the Activity view and the Agent Dashboard are out | assumed — autonomous |
 | easy | medium | [m1-agent-status D7](decisions/m1-agent-status.md) | Codex hooks go into `~/.codex/hooks.json` and the user approves them once in Codex | assumed — autonomous |
 | easy | medium | [m1-agent-status D13](decisions/m1-agent-status.md) | Cold-restore resume stays out | supersedes m1-providers D27 |
@@ -443,6 +448,13 @@ files, not this one.
 | easy | high | [m1-worktrees D69](decisions/m1-worktrees.md) | Final Round 1: accept all eight findings, which collapse to seven defects, and fix them in one batch | assumed — autonomous |
 | easy | high | [m1-worktrees D70](decisions/m1-worktrees.md) | The UI scenarios run as three web batches, each on its own daemon, temp HOME and fixture world | assumed — autonomous |
 | easy | high | [m1-worktrees D72](decisions/m1-worktrees.md) | The UI scenarios pass as a user, with SC-59's tooltip checked by its test because the tool can't hover | assumed — autonomous |
+| easy | high | [fix-test-process-leaks D2](decisions/fix-test-process-leaks.md) | Use OpenAI implementers and Gemini review | assumed — autonomous |
+| easy | high | [fix-test-process-leaks D3](decisions/fix-test-process-leaks.md) | Fix item skips brainstorming and specs | locked by docs/loop/LOOP.md |
+| easy | high | [fix-test-process-leaks D5](decisions/fix-test-process-leaks.md) | Add an owned CLI launch for unattended web passes | assumed — autonomous |
+| easy | high | [fix-test-process-leaks D6](decisions/fix-test-process-leaks.md) | Keep UI and native product behavior unchanged | assumed — autonomous |
+| easy | high | [fix-test-process-leaks D8](decisions/fix-test-process-leaks.md) | Preserve incoming integration decisions | locked by docs/loop/decisions/fix-sc31-first-shell-race.md |
+| easy | high | [fix-test-process-leaks D11](decisions/fix-test-process-leaks.md) | Scope every suite subprocess, including transport commands | assumed — autonomous |
+| easy | high for the observed result; no claim of eliminating the unrelated load sensitivity | [fix-test-process-leaks D12](decisions/fix-test-process-leaks.md) | Retain the runner's existing isolated-rerun policy | locked by scripts/suite.ts |
 | easy | high | [m1-agent-status D5](decisions/m1-agent-status.md) | Every hook source in the doc gets a normalizer with Orca's event mapping | locked by research/orca-features/agent-status.md |
 | easy | high | [m1-agent-status D8](decisions/m1-agent-status.md) | Installers merge only their own entries, keep the file byte-identical on a rerun, and never write a file they can't parse | locked by research/orca-features/agent-status.md |
 | easy | high | [m1-agent-status D9](decisions/m1-agent-status.md) | Claude's settings file lists only the events the installed Claude knows | locked by research/orca-features/agent-status.md |
