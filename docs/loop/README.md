@@ -1,6 +1,6 @@
 # Build loop
 
-Six unattended Orca loops, called lanes, build [the roadmap](../roadmap.md) in parallel, one work
+Ten unattended Orca loops, called lanes, all running omp, build [the roadmap](../roadmap.md) in parallel, one work
 item per iteration each. Their work lands on the `build/roadmap` branch. They never touch `main` and
 never push. [LOOP.md](LOOP.md) is what each iteration follows, and [NATIVE.md](NATIVE.md) is what
 the nightly native run follows.
@@ -28,10 +28,8 @@ tests leaves `build/roadmap` unchanged.
 
 | Worktree | Runs |
 | --- | --- |
-| `~/orca/workspaces/quirky/build-roadmap` | lane 1 (the loop "quirky build") |
-| `~/orca/workspaces/quirky/build-lane-2` | lane 2 |
-| `~/orca/workspaces/quirky/build-lane-3` | lane 3 |
-| `~/orca/workspaces/quirky/build-lane-4` to `build-lane-6` | lanes 4 to 6, on omp |
+| `~/orca/workspaces/quirky/build-roadmap` | lane 1 |
+| `~/orca/workspaces/quirky/build-lane-<n>` | lane n, for lanes 2 to 10 |
 | `~/orca/workspaces/quirky/native-qa` | the nightly native run, 23:30 America/Chicago |
 
 ## Where the tests run
@@ -58,7 +56,7 @@ Run `queue.ts` from any lane worktree.
 
 - **Progress:**
   - `bun scripts/build-loop/queue.ts status` shows the counts, and which lane holds what.
-  - `orca loop list` shows the six loops. Each loop's tab shows its rail.
+  - `orca loop list` shows the loops, named "quirky build lane <n>". Each loop's tab shows its rail.
 - **Unblock an item:**
   1. Fix or decide what its BLOCKERS.md entry asks.
   2. Run `bun scripts/build-loop/queue.ts set <id> todo`.

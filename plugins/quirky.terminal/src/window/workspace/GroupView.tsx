@@ -9,7 +9,7 @@ import type { ControllerState, WorkspaceController } from './controller'
 import { activeTabOf, byPaneId, groupRects, px } from './model'
 import type { GroupDividerRect } from './model'
 import { InlineField, PaneLayer } from './PaneLayer'
-import { StatusGlyph, useNow } from './StatusGlyph'
+import { StatusGlyph, UnreadBell, useNow } from './StatusGlyph'
 import { useBoxSize } from './useBoxSize'
 
 type Common = { controller: WorkspaceController; state: ControllerState }
@@ -20,6 +20,7 @@ function TabItem({ controller, state, group, tab, index, others, now }: Common &
   const leaves = paneLeaves(tab.root)
   const lead = leaves.find((leaf) => leaf.id === tab.activePane) ?? leaves[0]
   const session = lead ? state.sessions[lead.session] : undefined
+  const unread = leaves.map((leaf) => state.sessions[leaf.session]?.unread).find((reason) => reason)
   const title = displayTitle(tab)
   const renaming = state.rename?.kind === 'tab' && state.rename.id === tab.id
   const drag = state.tabDrag
@@ -75,7 +76,7 @@ function TabItem({ controller, state, group, tab, index, others, now }: Common &
         void controller.dropTab({ kind: 'strip', group: group.id, index: indexFor(event) })
       }}
     >
-      <StatusGlyph session={session} now={now} />
+      {unread ? <UnreadBell reason={unread} /> : <StatusGlyph session={session} now={now} />}
       {renaming ? (
         <InlineField label="Tab title" initial={displayTitle(tab)} className="qt-rename" onCommit={(value) => void controller.commitRename(value)} onCancel={() => controller.cancelRename()} />
       ) : (

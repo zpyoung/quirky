@@ -156,7 +156,7 @@ describe('rendering from the daemon workspace', () => {
   test('a missing worktree input shows the muted pick text and reports an empty view', async () => {
     const view = await mount(fakeDaemon(simpleWorkspace()), { input: {} })
     expect(view.element.textContent).toBe('Pick a worktree to see its sessions.')
-    expect(view.last()).toEqual({ worktree: null, tabs: [], active: null })
+    expect(view.last()).toEqual({ worktree: null, tabs: [], active: null, visibleSessions: [] })
     expect(view.fake.callsTo('quirky.terminal/workspace')).toHaveLength(0)
   })
 

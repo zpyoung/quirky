@@ -21,6 +21,19 @@ export function browserWindowFocus(): NonNullable<HostDeps['windowFocus']> {
   }
 }
 
+/** User input in the window as the browser reports it: pointer, key and wheel events. */
+export function browserWindowActivity(): NonNullable<HostDeps['windowActivity']> {
+  const types = ['pointerdown', 'pointermove', 'keydown', 'wheel'] as const
+  return {
+    subscribe(listener) {
+      for (const type of types) window.addEventListener(type, listener, true)
+      return () => {
+        for (const type of types) window.removeEventListener(type, listener, true)
+      }
+    }
+  }
+}
+
 export type ShellOptions = {
   /** Where the daemon is and the token to use; defaults to the page's location. */
   where?: { hash: string; host: string }
@@ -28,6 +41,7 @@ export type ShellOptions = {
   importModule(url: string): Promise<unknown>
   log(message: string): void
   windowFocus?: HostDeps['windowFocus']
+  windowActivity?: HostDeps['windowActivity']
   /** Delay before the first reconnect attempt. */
   initialDelayMs?: number
 }
@@ -48,7 +62,8 @@ export function createShell(options: ShellOptions): AppContextValue {
     confirm: confirmForPlugin,
     toast: (title, body, kind) => store.dispatch({ type: 'toast', toast: { kind, title, body } }),
     log: options.log,
-    windowFocus: options.windowFocus
+    windowFocus: options.windowFocus,
+    windowActivity: options.windowActivity
   })
   connection.onConnected(() => {
     plugins.connected().catch((error) => options.log(`plugin refresh failed: ${error}`))

@@ -32,6 +32,7 @@ files, not this one.
 | hard | high | [m1-worktrees D7](decisions/m1-worktrees.md) | Worktree IDs stay v1's path hash; extra folder workspaces get random IDs | assumed — autonomous |
 | hard | high | [m1-agent-status D2](decisions/m1-agent-status.md) | The status row is keyed by Quirky session, and the session ID from the hook's environment is the pane identity | assumed — autonomous |
 | hard | high | [m1-agent-status D4](decisions/m1-agent-status.md) | Orca's four states, its derived display states and its labels are kept as they are | locked by docs/roadmap.md |
+| hard | high | [m1-notifications D40](decisions/m1-notifications.md) | Approach: a daemon policy plugin that listens to producers, with markers on their records and the shell rendering | assumed — autonomous |
 | hard | high | [m0-daemon-api D7](decisions/m0-daemon-api.md) | The four kinds are `method`, `event`, `job` and `launch-hook` | assumed — autonomous |
 | hard | high | [m0-daemon-api D13](decisions/m0-daemon-api.md) | Choose declared contributions with provided implementations | supersedes nothing; extends m0-registry D23 |
 | hard | high | [m0-ui-api D4](decisions/m0-ui-api.md) | The seven UI kinds are `view`, `panel`, `sidebar-section`, `command`, `keybinding`, `setting` and `theme` | assumed — autonomous |
@@ -63,6 +64,9 @@ files, not this one.
 | medium | medium | [m1-agent-status D11](decisions/m1-agent-status.md) | A different provider session in a live row is a nested agent and is ignored, which fixes Orca's helper-overwrite defect | assumed — autonomous |
 | medium | medium | [m1-agent-status D22](decisions/m1-agent-status.md) | OSC 7501 is parsed in the PTY host, answered there, and yields to hooks for 2 minutes | locked by docs/roadmap.md |
 | medium | medium | [m1-agent-status D33](decisions/m1-agent-status.md) | Approach A (global installers) over per-launch overlays or a manual-only command | assumed — autonomous |
+| medium | medium | [m1-notifications D9](decisions/m1-notifications.md) | Unread is a marker on the session and on its worktree, written before delivery and whatever the switches say | locked by research/orca-features/notifications.md |
+| medium | medium | [m1-notifications D10](decisions/m1-notifications.md) | Viewing means a focused window whose person is present and whose view shows the session | locked by research/orca-features/notifications.md |
+| medium | medium | [m1-notifications D35](decisions/m1-notifications.md) | The session record carries its unread reason; the worktree keeps its `unread` flag | assumed — autonomous |
 | medium | medium | [m0-daemon-api D6](decisions/m0-daemon-api.md) | Plugin events arrive as `{ type: "<pluginId>/<name>", data }` | assumed — autonomous |
 | medium | medium | [m0-daemon-api D15](decisions/m0-daemon-api.md) | Jobs run on a fixed delay, at least one second apart, never overlapping | assumed — autonomous |
 | medium | medium | [m0-daemon-api D19](decisions/m0-daemon-api.md) | Launch hooks are a sequential pipeline in contribution-ID order | assumed — autonomous |
@@ -116,6 +120,11 @@ files, not this one.
 | medium | high | [m1-worktrees D49](decisions/m1-worktrees.md) | Project settings are a `quirky.repo` record, set with `repo set` and shown with `repo show` | supersedes nothing; works within m0-ui-api D17 |
 | medium | high | [m1-worktrees D52](decisions/m1-worktrees.md) | Platform-specific parts are logged and built for macOS only | deferred: platform |
 | medium | high | [m1-agent-status D14](decisions/m1-agent-status.md) | The fold keeps a finished lead `working` while children or background work live | locked by research/orca-features/agent-status.md |
+| medium | high | [m1-notifications D5](decisions/m1-notifications.md) | A new built-in plugin, `quirky.notifications`, owns the policy; other plugins only report events | supersedes m0-core D12 |
+| medium | high | [m1-notifications D6](decisions/m1-notifications.md) | Producers emit settled and notification events; boundaries and replays still emit nothing | assumed — autonomous |
+| medium | high | [m1-notifications D7](decisions/m1-notifications.md) | The old "Notify when agents finish" switch becomes Agent Task Complete, and its value carries over | supersedes m0-core D13 |
+| medium | high | [m1-notifications D11](decisions/m1-notifications.md) | The window reports input activity, and focus and presence changes reach plugins as an event | assumed — autonomous |
+| medium | high | [m1-notifications D28](decisions/m1-notifications.md) | The PTY host recognises OSC 9, OSC 99 and OSC 777 notifications | assumed — autonomous |
 | medium | high | [m0-daemon-api D8](decisions/m0-daemon-api.md) | Method results and errors | assumed — autonomous |
 | medium | high | [m0-daemon-api D10](decisions/m0-daemon-api.md) | Stores migrate forward only, by an ordered list, and refuse a downgrade | assumed — autonomous |
 | medium | high | [m0-daemon-api D24](decisions/m0-daemon-api.md) | Plugin methods use the daemon's token, and any client may call any method | locked by docs/roadmap.md |
@@ -222,6 +231,25 @@ files, not this one.
 | easy | medium | [m1-agent-status D49](decisions/m1-agent-status.md) | The PTY host memory test is a load flake, not a regression | assumed — autonomous |
 | easy | medium | [m1-agent-status D51](decisions/m1-agent-status.md) | W3 starts while the W2 checkpoint review runs | assumed — autonomous |
 | easy | medium | [m1-agent-status D62](decisions/m1-agent-status.md) | The post-fix gate's one failure is a terminal timing flake under load | assumed — autonomous |
+| easy | medium | [m1-notifications D4](decisions/m1-notifications.md) | In scope are the roadmap's five bullets, the OSC sequences, flows 1 to 5 of the doc and the dock badge; phone, machines, hidden-workspace mutes, the permission card and Windows are out | assumed — autonomous |
+| easy | medium | [m1-notifications D12](decisions/m1-notifications.md) | The worktree view reports which sessions it shows; until it does, the active session counts | assumed — autonomous |
+| easy | medium | [m1-notifications D17](decisions/m1-notifications.md) | Status words: needs input, failed, stopped, finished | assumed — autonomous |
+| easy | medium | [m1-notifications D18](decisions/m1-notifications.md) | A notify event, and so a toast, goes out only for a delivered banner | assumed — autonomous |
+| easy | medium | [m1-notifications D19](decisions/m1-notifications.md) | Built-in sounds are short tones generated in the repo, played by afplay after delivery | assumed — autonomous |
+| easy | medium | [m1-notifications D20](decisions/m1-notifications.md) | A custom sound is a typed path, checked by the daemon; the Custom line shows only while it is selected | assumed — autonomous |
+| easy | medium | [m1-notifications D23](decisions/m1-notifications.md) | No permission card, probe or startup registration | deferred: platform |
+| easy | medium | [m1-notifications D24](decisions/m1-notifications.md) | The tray shows an amber dot while the window is hidden and something wants attention; its menu gains Settings | locked by research/orca-features/notifications.md |
+| easy | medium | [m1-notifications D25](decisions/m1-notifications.md) | The dock badge counts unread worktrees plus pending asks, and the daemon computes it | supersedes m2-ask-parity D16 |
+| easy | medium | [m1-notifications D29](decisions/m1-notifications.md) | A program's banner is titled with its worktree, so it can't pose as Quirky | assumed — autonomous |
+| easy | medium | [m1-notifications D31](decisions/m1-notifications.md) | Every live settle notifies, including those from titles and OSC 7501, and a working agent is never announced | locked by research/orca-features/notifications.md |
+| easy | medium | [m1-notifications D33](decisions/m1-notifications.md) | Asks keep their text and go through Enable Notifications, Suppress While Focused and the cooldown | locked by research/orca-features/notifications.md |
+| easy | medium | [m1-notifications D36](decisions/m1-notifications.md) | Markers look like Orca's: an amber bell on the tab and in place of the card's dot, and a bold name | locked by research/orca-features/notifications.md |
+| easy | medium | [m1-notifications D37](decisions/m1-notifications.md) | The Orca defects this item tests against | locked by research/orca-features/notifications.md |
+| easy | medium | [m1-notifications D39](decisions/m1-notifications.md) | Electrobun gives silent banners and window state, but no badge, sound or click | assumed — autonomous |
+| easy | medium | [m1-notifications D42](decisions/m1-notifications.md) | The tray's dot is an amber dot image beside the "Q", not a dot drawn into a glyph | assumed — autonomous |
+| easy | medium | [m1-notifications D45](decisions/m1-notifications.md) | Opening a worktree from its card counts as Mark Read | locked by research/orca-features/notifications.md |
+| easy | medium | [m1-notifications D50](decisions/m1-notifications.md) | The W1 gate's 65 `EBADF` failures are the suite's descriptor exhaustion, not a regression | assumed — autonomous |
+| easy | medium | [m1-notifications D55](decisions/m1-notifications.md) | The suite is over the descriptor limit after the catch-up; this item moves the remaining harnesses to shared plugin directories | supersedes m1-term-ui D51 |
 | easy | medium | [m0-daemon-api D22](decisions/m0-daemon-api.md) | A launch hook that fails or times out is skipped | assumed — autonomous |
 | easy | medium | [m0-daemon-api D23](decisions/m0-daemon-api.md) | Launch hooks apply to terminal sessions only | assumed — autonomous |
 | easy | medium | [m0-daemon-api D25](decisions/m0-daemon-api.md) | No rate limits on plugin events or method calls, and no event filters yet | assumed — autonomous |
@@ -451,6 +479,46 @@ files, not this one.
 | easy | high | [m1-agent-status D59](decisions/m1-agent-status.md) | Final Round 1: accept all six findings, which collapse to four defects; none stays open | assumed — autonomous |
 | easy | high | [m1-agent-status D60](decisions/m1-agent-status.md) | The UI pass: SC-34 to SC-37 all pass | assumed — autonomous |
 | easy | high | [m1-agent-status D61](decisions/m1-agent-status.md) | No native-only scenarios | assumed — autonomous |
+| easy | high | [m1-notifications D1](decisions/m1-notifications.md) | Classify the item as Visual, API, CLI and Integration work, and run research phases A and B | assumed — autonomous |
+| easy | high | [m1-notifications D2](decisions/m1-notifications.md) | Skip the visual companion and the adhd offer; use the standard gray-area set | locked by docs/loop/LOOP.md |
+| easy | high | [m1-notifications D3](decisions/m1-notifications.md) | Select every gray area that matters | locked by docs/loop/LOOP.md |
+| easy | high | [m1-notifications D8](decisions/m1-notifications.md) | Orca's notification settings, labels and defaults, plus Terminal Notifications and Show Menu Bar Icon | locked by research/orca-features/notifications.md |
+| easy | high | [m1-notifications D13](decisions/m1-notifications.md) | Gates run in Orca's order and the result says which one stopped the banner | locked by research/orca-features/notifications.md |
+| easy | high | [m1-notifications D14](decisions/m1-notifications.md) | The cooldown is 5 seconds per worktree, shared by every source, 50 keys, test exempt | locked by research/orca-features/notifications.md |
+| easy | high | [m1-notifications D15](decisions/m1-notifications.md) | Suppress While Focused looks at the worktree and window focus, not presence | locked by research/orca-features/notifications.md |
+| easy | high | [m1-notifications D16](decisions/m1-notifications.md) | Banner text follows Orca's builder, with Quirky's names | locked by research/orca-features/notifications.md |
+| easy | high | [m1-notifications D21](decisions/m1-notifications.md) | Settings > Notifications is a view of the notifications plugin; the generic Settings dialog shows the same settings | assumed — autonomous |
+| easy | high | [m1-notifications D22](decisions/m1-notifications.md) | Send Test Notification always answers with a toast | locked by research/orca-features/notifications.md |
+| easy | high | [m1-notifications D26](decisions/m1-notifications.md) | Clicking a banner only brings Quirky forward; the toast still opens the session | deferred: platform |
+| easy | high | [m1-notifications D27](decisions/m1-notifications.md) | Reading a marker doesn't remove the OS banner | deferred: platform |
+| easy | high | [m1-notifications D30](decisions/m1-notifications.md) | A bell marks unread at once; its banner waits 250 ms and yields to a completion | locked by research/orca-features/notifications.md |
+| easy | high | [m1-notifications D32](decisions/m1-notifications.md) | Structured sessions notify through the same policy | locked by research/orca-features/notifications.md |
+| easy | high | [m1-notifications D34](decisions/m1-notifications.md) | The CLI group is `quirky notifications` with status, send, test and preview | locked by docs/roadmap.md |
+| easy | high | [m1-notifications D38](decisions/m1-notifications.md) | Platform work deferred | deferred: platform |
+| easy | high | [m1-notifications D41](decisions/m1-notifications.md) | Design sections self-reviewed and accepted without a pause | locked by docs/loop/LOOP.md |
+| easy | high | [m1-notifications D43](decisions/m1-notifications.md) | Every decision is an event, and two environment variables make time and sound testable | assumed — autonomous |
+| easy | high | [m1-notifications D44](decisions/m1-notifications.md) | The Codex adversarial review of both specs replaces the separate tech-spec reviewer | locked by docs/loop/LOOP.md |
+| easy | high | [m1-notifications D46](decisions/m1-notifications.md) | Spec review: fix all four Codex findings; the two refuted ones stay as written | locked by docs/loop/LOOP.md |
+| easy | high | [m1-notifications D47](decisions/m1-notifications.md) | Build with Claude subagents implementing and Codex reviewing, in three waves | locked by docs/loop/LOOP.md |
+| easy | high | [m1-notifications D48](decisions/m1-notifications.md) | W1 landed as six components; two one-line test fixes outside their scopes were applied by the orchestrator | assumed — autonomous |
+| easy | high | [m1-notifications D49](decisions/m1-notifications.md) | W2 starts while the W1 gate finishes; its two failures belong to W2 | assumed — autonomous |
+| easy | high | [m1-notifications D51](decisions/m1-notifications.md) | W2 landed as two components; the W1 checkpoint ran over W1 alone | assumed — autonomous |
+| easy | high | [m1-notifications D52](decisions/m1-notifications.md) | W3 landed; the settings view ran in the main tree after its worktree was reclaimed | assumed — autonomous |
+| easy | high | [m1-notifications D53](decisions/m1-notifications.md) | W2 checkpoint: accept all five findings, which collapse to three defects | assumed — autonomous |
+| easy | high | [m1-notifications D54](decisions/m1-notifications.md) | Catching up with m1-term-ui moves the unread bell into the terminal workspace and widens what counts as visible | assumed — autonomous |
+| easy | high | [m1-notifications D56](decisions/m1-notifications.md) | Final Round 1: accept five of six findings; SC-33's ESC case is amended instead | assumed — autonomous |
+| easy | high | [m1-notifications D57](decisions/m1-notifications.md) | The UI pass: SC-6 and SC-46 to SC-50 all pass | assumed — autonomous |
+| easy | high | [m1-notifications D58](decisions/m1-notifications.md) | Six native-only scenarios go to the nightly run | locked by docs/loop/LOOP.md |
+| easy | high | [m1-notifications D59](decisions/m1-notifications.md) | Merge build/roadmap again before the final gate, and run the whole suite only through `bun run test` from now on | operator note |
+| easy | high | [m1-notifications D60](decisions/m1-notifications.md) | The descriptor fix lives in `startHarness`, shared by every symlink-only built-in directory | supersedes m1-term-ui D51 |
+| easy | high | [m1-notifications D61](decisions/m1-notifications.md) | The final gate passes; nothing goes to BLOCKERS.md | locked by docs/loop/LOOP.md |
+| easy | high | [m1-notifications D62](decisions/m1-notifications.md) | The first land failed on the integration tree's missing package links for the new plugin; they were copied in, as m1-term-daemon D49 did | assumed — autonomous |
+| easy (workflow only) | high | [fix-sc31-first-shell-race D1](decisions/fix-sc31-first-shell-race.md) | Follow the fix-item workflow without new feature specs | locked by docs/loop/LOOP.md |
+| easy (test-only correction) | high | [fix-sc31-first-shell-race D2](decisions/fix-sc31-first-shell-race.md) | Skipping setup does not suppress the window's normal first shell | locked by /Users/zpyoung/PycharmProjects/PERSONAL/quirky/research/orca-features/worktrees.md |
+| easy (test synchronization only) | high | [fix-sc31-first-shell-race D3](decisions/fix-sc31-first-shell-race.md) | Wait for the terminal override's ensured shell before asserting setup was skipped | locked by docs/loop/decisions/m1-term-ui.md |
+| easy | high | [fix-sc31-first-shell-race D4](decisions/fix-sc31-first-shell-race.md) | Keep the fake PTY boundary explicit in the script side-effect assertion | assumed — autonomous |
+| easy | high | [fix-sc31-first-shell-race D5](decisions/fix-sc31-first-shell-race.md) | Record the guarded browser smoke as tool-blocked, not passed | assumed — autonomous |
+| easy (restore the preserved branch once the gate is repaired) | high for the gate failure; medium for its cause | [fix-sc31-first-shell-race D6](decisions/fix-sc31-first-shell-race.md) | Preserve the repaired item and block on the failing required full-suite gate | locked by docs/loop/LOOP.md |
 | easy | high | [m0-daemon-api D1](decisions/m0-daemon-api.md) | Classify the item as an API design, and run both research phases | assumed — autonomous |
 | easy | high | [m0-daemon-api D2](decisions/m0-daemon-api.md) | Skip the visual companion and the adhd offer, use the standard gray-area set | locked by docs/loop/LOOP.md |
 | easy | high | [m0-daemon-api D3](decisions/m0-daemon-api.md) | Select every gray area that matters for the daemon plugin API | assumed — autonomous |

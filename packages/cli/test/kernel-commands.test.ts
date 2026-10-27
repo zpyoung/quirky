@@ -19,7 +19,7 @@ const LAYOUT: UiLayout = { view: { id: 'view:quirky.session/worktree', input: { 
 describe('ui commands', () => {
   test('ui state prints the layout and one line per shown slot', async () => {
     const state: UiState = {
-      windows: [{ connId: 3, name: 'window', focused: true }],
+      windows: [{ connId: 3, name: 'window', focused: true, inputAt: null, present: false }],
       layout: LAYOUT,
       slots: [
         { id: 'sidebar-section:quirky.worktree/worktrees', kind: 'sidebar-section', plugin: 'quirky.worktree', title: 'Worktrees', shown: true, report: { repos: 1 } },
@@ -45,7 +45,7 @@ describe('ui commands', () => {
 
   test('SC-67: ui state prints a shown overlay with its report, and ui contributions lists the OVERLAYS table', async () => {
     const state: UiState = {
-      windows: [{ connId: 3, name: 'window', focused: true }],
+      windows: [{ connId: 3, name: 'window', focused: true, inputAt: null, present: false }],
       layout: LAYOUT,
       slots: [
         { id: 'overlay:quirky.terminal/floating', kind: 'overlay', plugin: 'quirky.terminal', title: 'Floating', shown: true, report: { open: false } },

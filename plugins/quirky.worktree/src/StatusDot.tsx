@@ -31,3 +31,8 @@ export function StatusDot({ glyph }: { glyph: WorktreeGlyph | null }) {
   const status: DisplayStatus = glyph.status
   return <span className={`dot dot-${status}`} title={status} role="img" aria-label={status} />
 }
+
+/** The card's glyph for a worktree marked unread: a filled amber bell. */
+export function UnreadBell() {
+  return <span className="glyph glyph-unread" title="Unread" role="img" aria-label="Unread" />
+}

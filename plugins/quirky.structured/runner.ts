@@ -13,7 +13,7 @@ export type NewStructuredMessage = {
 export type StructuredContext = {
   /** Stores the message and emits `quirky.structured/message`. */
   appendMessage(msg: NewStructuredMessage): StructuredMessage
-  /** Reports the session's status to `quirky.session`; done and waiting also notify. */
+  /** Reports the session's status to `quirky.session`; done and waiting also settle the session. */
   setStatus(sessionId: string, status: SessionStatus): void
   /** Creates an ask and resolves with its final envelope once it is answered or cancelled. */
   createAsk(spec: AskSpec, sessionId: string): Promise<AskEnvelope>

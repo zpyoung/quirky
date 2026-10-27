@@ -62,3 +62,19 @@ function bundledEnv(resources: string): RuntimeEnv {
     QUIRKY_BUILTIN_PLUGINS_DIR: join(resources, 'plugins')
   }
 }
+
+/**
+ * Where the amber tray dot image lives: the checkout's `assets/` in development, the copy under
+ * `resources/assets/` otherwise. Resolves the repo root the same way `resolveRuntimeEnv` does.
+ */
+export function trayDotPath(options: {
+  packaged: boolean
+  moduleDir: string
+  env: Record<string, string | undefined>
+  exists: (path: string) => boolean
+}): string {
+  const { packaged, moduleDir, env, exists } = options
+  const root = packaged ? null : (env.QUIRKY_REPO_ROOT || findRepoRoot(moduleDir, exists))
+  if (root) return join(root, 'apps', 'desktop', 'assets', 'tray-dot.png')
+  return join(dirname(moduleDir), 'resources', 'assets', 'tray-dot.png')
+}

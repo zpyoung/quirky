@@ -32,6 +32,10 @@ export type HostDeps = {
   log(message: string): void
   /** Window focus, reported to the daemon so it can pick the window a routed command runs in. */
   windowFocus?: { hasFocus(): boolean; subscribe(listener: (focused: boolean) => void): () => void }
+  /** User input in the window (pointer, key, wheel), reported to the daemon so it knows someone is at the machine. */
+  windowActivity?: { subscribe(listener: () => void): () => void }
+  /** The clock for activity throttling; defaults to `Date.now`. */
+  now?: () => number
   /** Covers a plugin's import plus `activate`; defaults to 10000. */
   activationTimeoutMs?: number
 }
@@ -59,6 +63,8 @@ export type HostState = {
   /** `--<token>` to color for every theme token of the active theme. */
   themeVariables: Record<string, string>
 }
+
+const ACTIVITY_REPORT_INTERVAL_MS = 15_000
 
 type KeyEventLike = Parameters<typeof chordFromKeyEvent>[0] & { preventDefault?(): void }
 
@@ -180,6 +186,9 @@ export class WindowPluginHost {
   private readonly contextOwners = new Map<string, Session>()
   private readonly unsubscribeEvents: () => void
   private readonly unsubscribeFocus: (() => void) | undefined
+  private readonly unsubscribeActivity: (() => void) | undefined
+  private lastInputAt: number | null = null
+  private lastActivityReportAt: number | null = null
   private refreshChain: Promise<unknown> = Promise.resolve()
   /** `setting.changed` values seen while a refresh fetches; they are newer than that refresh's snapshot. */
   private settingsSeenDuringFetch: Map<string, boolean | number | string> | null = null
@@ -188,6 +197,7 @@ export class WindowPluginHost {
   constructor(private readonly deps: HostDeps) {
     this.unsubscribeEvents = deps.onEvent((event) => this.handleEvent(event))
     this.unsubscribeFocus = deps.windowFocus?.subscribe((focused) => this.reportFocus(focused))
+    this.unsubscribeActivity = deps.windowActivity?.subscribe(() => this.noteInput())
   }
 
   getState = (): HostState => this.state
@@ -198,11 +208,14 @@ export class WindowPluginHost {
   }
 
   /**
-   * Runs after each (re)connect: tells the daemon whether this window has focus, sends the
+   * Runs after each (re)connect: tells the daemon whether this window has focus and, if there was
+   * input in the last 15 seconds, that someone is here (the daemon forgets both with the old
+   * connection), sends the
    * mounted slots' reports again (the daemon drops them with the old connection), then refreshes.
    */
   async connected(): Promise<void> {
     if (this.deps.windowFocus?.hasFocus()) this.reportFocus(true)
+    if (this.lastInputAt !== null && this.now() - this.lastInputAt < ACTIVITY_REPORT_INTERVAL_MS) this.reportActivity()
     for (const handle of this.mounts) {
       if (handle.report && !handle.released) this.sendReport(handle, handle.report.state)
     }
@@ -349,6 +362,7 @@ export class WindowPluginHost {
     this.stopped = true
     this.unsubscribeEvents()
     this.unsubscribeFocus?.()
+    this.unsubscribeActivity?.()
     for (const handle of [...this.mounts]) this.release(handle)
     for (const handle of [...this.embedded]) this.releaseEmbedded(handle)
     for (const pluginId of this.runtimes.keys()) void this.deactivate(pluginId)
@@ -885,6 +899,23 @@ export class WindowPluginHost {
   private reportFocus(focused: boolean): void {
     // the daemon forgets focus with the connection, so a blur that fails to send costs nothing
     this.deps.call('ui.window.focused', { focused }).catch(() => undefined)
+  }
+
+  private now(): number {
+    return (this.deps.now ?? Date.now)()
+  }
+
+  private noteInput(): void {
+    this.lastInputAt = this.now()
+    if (this.lastActivityReportAt === null || this.lastInputAt - this.lastActivityReportAt >= ACTIVITY_REPORT_INTERVAL_MS) {
+      this.reportActivity()
+    }
+  }
+
+  private reportActivity(): void {
+    this.lastActivityReportAt = this.now()
+    // the daemon forgets presence with the connection, so a report that fails to send costs nothing
+    this.deps.call('ui.window.activity', {}).catch(() => undefined)
   }
 
   private sendReport(handle: MountHandle, state: unknown): void {
