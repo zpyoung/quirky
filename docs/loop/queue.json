@@ -1106,6 +1106,18 @@
         "m3-session-info"
       ],
       "status": "todo"
+    },
+    {
+      "id": "m2-editor-complete-remaining-flows",
+      "milestone": "M2",
+      "title": "Complete editor follow-through: rich details/toggles and document-link insertion round trips (currently safe-rejected); true untitled creation/Save As and filesystem-permission UX (not delivered); Preview-to-Rich routing and own-write shared-draft warnings (observed UI defects); finish SC3-6 conflict/autosave/restart/mixed-close GUI, SC7-11 Explorer/file operations/copy/import/drag and advanced search GUI, SC13-15 rich controls/templates/PDF-export/review-note GUI, SC17-18 consented Python setup and kernel-output recovery, and SC19-22 full CSV/media/PDF/clipboard/rebound-shortcut/disable-remount acceptance (not completed under operator deadline). Exact evidence and boundaries: docs/loop/BLOCKERS.md, m2-editor open review findings. Excludes the operator-owned Finder open-in-place follow-up.",
+      "docs": [
+        "editor.md"
+      ],
+      "deps": [
+        "m2-editor"
+      ],
+      "status": "todo"
     }
   ]
 }
