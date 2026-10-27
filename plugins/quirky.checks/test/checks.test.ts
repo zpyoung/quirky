@@ -154,7 +154,7 @@ describe('quirky.checks daemon API', () => {
     })
     expect(result.checkId).toBeTruthy()
     expect(result.durationMs).toBeGreaterThanOrEqual(0)
-    expect(await call(client, 'quirky.session/list', {})).toEqual([])
+    expect(await call<unknown[]>(client, 'quirky.session/list', {})).toEqual([])
   })
 
   test('preserves exact short output for a nonzero exit', async () => {
@@ -212,7 +212,7 @@ describe('quirky.checks daemon API', () => {
 
     for (const cwd of [join(home, 'missing'), file, 'relative/path']) {
       const error = await rejected(call(client, 'quirky.checks/run', { command, cwd }))
-      expect([RpcErrorCode.InvalidParams, RpcErrorCode.NotFound]).toContain(error.code)
+      expect(error.code === RpcErrorCode.InvalidParams || error.code === RpcErrorCode.NotFound).toBe(true)
     }
     expect(existsSync(marker)).toBe(false)
   })
@@ -269,10 +269,10 @@ describe('quirky.checks daemon API', () => {
 
   test('returns false for unknown and completed IDs and permits completed-ID reuse', async () => {
     const { client, home } = await start()
-    expect(await call(client, 'quirky.checks/cancel', { checkId: 'unknown-check' })).toEqual({ cancelled: false })
+    expect(await call<{ cancelled: boolean }>(client, 'quirky.checks/cancel', { checkId: 'unknown-check' })).toEqual({ cancelled: false })
     const first = await call<CheckResult>(client, 'quirky.checks/run', { command: 'true', cwd: home, checkId: 'reuse-me' })
     expect(first).toMatchObject({ pass: true, stdoutTail: '', stderrTail: '', stdoutTruncated: false, stderrTruncated: false })
-    expect(await call(client, 'quirky.checks/cancel', { checkId: 'reuse-me' })).toEqual({ cancelled: false })
+    expect(await call<{ cancelled: boolean }>(client, 'quirky.checks/cancel', { checkId: 'reuse-me' })).toEqual({ cancelled: false })
     const second = await call<CheckResult>(client, 'quirky.checks/run', { command: 'true', cwd: home, checkId: 'reuse-me' })
     expect(second.pass).toBe(true)
   })
@@ -294,7 +294,7 @@ describe('quirky.checks daemon API', () => {
     }))
     expect(duplicate.code).toBe(RpcErrorCode.Conflict)
 
-    expect(await call(client, 'quirky.checks/cancel', { checkId: 'one-active-check' })).toEqual({ cancelled: true })
+    expect(await call<{ cancelled: boolean }>(client, 'quirky.checks/cancel', { checkId: 'one-active-check' })).toEqual({ cancelled: true })
     const result = await running
     expect(result).toMatchObject({ ran: true, pass: false, aborted: true, timedOut: false })
     await expectProcessGone(pid)
@@ -314,7 +314,7 @@ describe('quirky.checks daemon API', () => {
     const shellPid = await pidAt(shellPidFile)
     const pid = await pidAt(pidFile)
     await expectProcessGone(shellPid)
-    expect(await call(client, 'quirky.checks/cancel', { checkId: 'exit-race-check' })).toEqual({ cancelled: true })
+    expect(await call<{ cancelled: boolean }>(client, 'quirky.checks/cancel', { checkId: 'exit-race-check' })).toEqual({ cancelled: true })
     const result = await running
     expect(result).toMatchObject({ ran: true, pass: false, aborted: true })
     await expectProcessGone(pid)

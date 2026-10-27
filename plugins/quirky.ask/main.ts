@@ -87,6 +87,12 @@ export function activate(context: PluginContext): void {
 
   context.provide('method:quirky.ask/create', async (params: Record<string, unknown>, caller: PluginCaller) => {
     const client = caller.role === 'plugin' ? undefined : caller
+    // Kernel confirmations also use role "plugin", but have no lifecycle-owned registry entry.
+    let ownerPluginId: string | undefined
+    if (caller.role === 'plugin') {
+      const plugins = (await context.call('plugin.list')) as PluginInfo[]
+      if (plugins.some((plugin) => plugin.id === caller.pluginId)) ownerPluginId = caller.pluginId
+    }
     const ask = asks.create(
       params.spec,
       str(params, 'session') ?? client?.sessionId ?? null,
@@ -94,7 +100,7 @@ export function activate(context: PluginContext): void {
       {
         ...(typeof params.timeoutMs === 'number' ? { timeoutMs: params.timeoutMs } : {}),
         checkCredentialText: caller.role !== 'plugin',
-        ...(caller.role === 'plugin' ? { ownerPluginId: caller.pluginId } : {})
+        ...(ownerPluginId === undefined ? {} : { ownerPluginId })
       }
     )
     if (!ask.queued && ask.envelope.status === 'pending') await openQuestionsPanel(context)

@@ -162,6 +162,7 @@ Implementation wave: T1 structured/session/catalog, T2 checks plugin, T3 ask own
 - **Chose:** approvalPolicy on-request and sandbox workspace-write. The scripted app-server rejects invalid enum spellings so request acceptance tests detect the real failure.
 - **Why:** actual generated ThreadStartParams schema lists these spellings. The stronger fixture failed before the source fix with -32602; after the fix provider/API acceptance passed. No model invocation or credentials were used.
 - **Evidence:** env HOME=/tmp/m5-runner-KYwwFv/native-home CODEX_HOME=... codex app-server generate-json-schema --out /tmp/m5-runner-KYwwFv/native-schema; v2/ThreadStartParams.json definitions AskForApproval/SandboxMode; red artifact88, green94
+- **Native smoke:** the installed Codex binary accepted initialize and thread/start with these enums in an isolated HOME/CODEX_HOME, then closed cleanly. Printed NATIVE_PROTOCOL_SMOKE_PASS; no turn or model invocation. Scripted real-daemon/CLI smoke separately exercised approvals and full resumed turns. Throwaway smoke scripts were removed.
 - **Reversibility:** easy
 - **Confidence:** high
 - **Source:** assumed — autonomous
@@ -186,5 +187,25 @@ Implementation wave: T1 structured/session/catalog, T2 checks plugin, T3 ask own
 - **Confidence:** high
 - **Source:** locked by docs/loop/decisions/fix-test-process-leaks.md
 
+## D19: Lifecycle ownership excludes kernel confirmations
+- **Question:** the first full required suite failed the existing destructive-confirmation flow
+- **Options:** exempt the literal kernel ID; change dispatcher identity globally; classify lifecycle owners through the public plugin registry
+- **Chose:** only registered plugin callers own asks. Kernel confirmations share role plugin but have no plugin.list entry, so they retain manual confirmation persistence. No special-case caller string or private kernel import.
+- **Why:** the new cleanup incorrectly cancelled the synthetic kernel caller's confirmation on plugin.changed. The remote suite and its isolated rerun reproduced the missing pending ask; existing confirmation tests pass after the registry classification fix. Targeted ownership tests still pass.
+- **Evidence:** final-round1/check.stdout: 409 remote files,408 passed,1 failed; check.stderr isolated confirmation failure; confirmation.test.ts now2pass, asks.test.ts36pass; scripts48pass; typecheck clean after typed fixture response/SQLite query corrections
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** assumed — autonomous
+
+## D20: Preserve the full gate and record slow-suite cost without changing runner configuration
+- **Question:** required prepass took1613seconds and failed before script/type checks could run
+- **Options:** skip or narrow the suite; tune protected runner mid-item; fix the owned regression and rerun the exact gate
+- **Chose:** retain full remote suite, scripts and typecheck. No review over a red gate. Advisory: investigate remote-run concurrency and browser-context reuse where applicable; pytest-xdist is not applicable to this Bun repository. No runner configuration change.
+- **Why:** all required checks must pass on the final source; the failed suite is evidence, not a pass. The native binary smoke used no model calls and no real home.
+- **Evidence:** final-round1/check.json duration_ms1613188; full logs outside repo; subsequent targeted confirmations, ownership, migration and checks all pass with clean typecheck
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** locked by docs/loop/LOOP.md
+
 ## Progress
-Three components implemented, scope-audited, targeted acceptance verified and merged. Integration caught up at 1f65c0d; all imported decisions read. Real daemon/CLI smoke proved create, approval, stop/resume/immediate continuation with saved model/effort, and shared checks. User docs/spec pointers updated. Next: commit integration repairs/docs, run required full prepass and three Gemini final lenses, adjudicate one fix batch, rerun required checks/build, then queue land. No UI/native scenarios.
+Three components merged and actual CLI/native protocol smokes passed. First full gate found one owned kernel-confirmation regression; repaired classification and test typing, targeted checks/typecheck pass. No final model review has started because the full gate must be green first. Next: commit repairs, catch up any new integration decisions, rerun exact full prepass, then three Gemini final lenses, one accepted fix batch, required checks/build and queue land. No UI/native scenarios or running smoke services.

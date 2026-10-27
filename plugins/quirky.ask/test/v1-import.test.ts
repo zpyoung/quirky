@@ -169,6 +169,6 @@ describe('migration 3', () => {
       { id: 'ask_pending', owner_plugin_id: null }
     ])
     store.run('UPDATE asks SET owner_plugin_id = ? WHERE id = ?', 'quirky.ask-owner', 'ask_pending')
-    expect(store.get('SELECT owner_plugin_id FROM asks WHERE id = ?', 'ask_pending')).toEqual({ owner_plugin_id: 'quirky.ask-owner' })
+    expect(store.get<{ owner_plugin_id: string }>('SELECT owner_plugin_id FROM asks WHERE id = ?', 'ask_pending')).toEqual({ owner_plugin_id: 'quirky.ask-owner' })
   })
 })
