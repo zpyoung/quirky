@@ -54,19 +54,23 @@ describe('focus across a layout revision', () => {
 })
 
 describe('authoritative terminal focus reporting', () => {
-  test('reports the main workspace when it receives focus and keeps it when an external panel receives focus', async () => {
+  test('reports a workspace only when its terminal input receives focus', async () => {
     mounted = await mountFixture(fakeDaemon(simpleWorkspace()), {
       extra: { 'quirky.terminal/focusContext': (params) => ({ workspace: params.workspace ?? null }) }
     })
     const pane = mounted.q('[data-pane="pane-1"]')!
+    const textarea = mounted.q<HTMLTextAreaElement>('[data-pane="pane-1"] textarea.xterm-helper-textarea')!
     const focusCalls = () => mounted!.fake.callsTo('quirky.terminal/focusContext').map((call) => call.params)
-    await fire(pane, mouse('mousedown', { button: 0 }))
-    expect(focusCalls().at(-1)).toEqual({ workspace: 'wt-main' })
-    expect(focusCalls().every((params) => params.workspace === 'wt-main')).toBe(true)
-
     const panel = document.createElement('button')
     panel.dataset.sessionInfoPanel = 'true'
     document.body.appendChild(panel)
+    await act(async () => void panel.focus())
+    const callsBeforeMouseDown = focusCalls().length
+    await fire(pane, mouse('mousedown', { button: 0 }))
+    expect(focusCalls()).toHaveLength(callsBeforeMouseDown)
+    await act(async () => void textarea.focus())
+    expect(focusCalls()).toHaveLength(callsBeforeMouseDown + 1)
+    expect(focusCalls().at(-1)).toEqual({ workspace: 'wt-main' })
     const callsBeforePanelFocus = focusCalls().length
     await act(async () => void panel.focus())
     expect(focusCalls()).toHaveLength(callsBeforePanelFocus)

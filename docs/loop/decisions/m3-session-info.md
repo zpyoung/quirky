@@ -242,5 +242,27 @@
 - **Revisit if:** The nightly native run reports failures.
 - **Source:** locked by docs/loop/LOOP.md
 
+## D23: Preserve floating keyboard focus and remove incidental catalog snapshots
+- **Question:** The first full gate failed three terminal test files after isolated retries.
+- **Options:** Re-pin complete lists or suppress the timeout; restore actual focus behavior and remove incidental assertions.
+- **Chose:** Restored active-terminal focus on mount, including floating panes. Session-info focusContext now follows an actual xterm helper textarea receiving focus; general workspace focus still drives keyboard routing. Removed exact event/keyless-command lists and a wording-only title test rather than adding new APIs to snapshots.
+- **Why:** The session-info change had gated focus-on-mount off for floating panes; Cmd+T could create a floating terminal without giving its xterm input focus. Metadata provenance must not break established keyboard behavior.
+- **Evidence:** Full gate: 414/417 remote files pass and 2/2 macOS-only local files pass; SC-58 times out both normally and isolated. After repair, all seven targeted terminal/focus/session-info e2e files pass and typecheck passes. Logs: /tmp/quirky-session-info.TBh9Q4/full-gate-repair-targeted/checks.json.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** The repeated full gate or focused real-web supplement reports a focus regression.
+- **Source:** assumed — autonomous
+
+## D24: Record the slow full-suite advisory without changing the shared runner
+- **Question:** The first full suite took 1,053,021 ms, exceeding the SDD slow-suite threshold.
+- **Options:** Change shared scheduling mid-item; record optimization guidance and retain isolation.
+- **Chose:** Keep the required remote per-file Bun runner and its isolated-rerun policy. Investigate fixture/startup cost and browser-context reuse per worker only where ownership and isolation remain intact; pytest-xdist is not an applicable command for this Bun repository.
+- **Why:** This lane must not modify protected build-loop/test orchestration or trade correctness for concurrency.
+- **Evidence:** gates-before-review/full-suite logs and gate-check.json; docs/loop/decisions/fix-test-process-leaks.md; scripts/suite.ts.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** A dedicated test-performance item is authorized.
+- **Source:** assumed — autonomous
+
 ## Progress
-Post-dogfood Usage Retry repair passes UI tests/typecheck/build. Second all-scenario web run is active on fresh isolated fixture service sessionInfoDogfood6f; the prior fixture/browser were stopped and its temporary home removed. Native handoff and user docs are written. Next: full-tree gates on a clean committed snapshot, final deep Gemini C/S/X round plus one accepted fix batch, record/rerun web evidence, then queue land. Never end while the fixture or worker is live.
+Second official web run remains active on its fixed built snapshot; source floating-focus repair and incidental-test cleanup pass seven targeted files and typecheck. Do not rebuild assets until that run ends. Then rebuild, run a focused actual-web floating/keyboard supplement, commit report results, and repeat full-tree gates. Final Gemini review and queue landing have not run.

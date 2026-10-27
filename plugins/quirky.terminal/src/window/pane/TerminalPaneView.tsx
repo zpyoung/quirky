@@ -73,8 +73,6 @@ export type TerminalPaneProps = {
   settings: PaneSettings
   /** Whether this is the focused pane of its tab; the pane takes keyboard focus when it becomes active. */
   active: boolean
-  /** Whether an initially active pane may take focus as it mounts; later activation still focuses it. */
-  focusOnMount?: boolean
   /** False once the process has exited, so keystrokes are not sent to a dead session. */
   interactive: boolean
   /** True while a divider or panel drag is resizing the pane; the shell is told the final size once the drag ends. */
@@ -168,14 +166,13 @@ let focusOwner: object | null = null
  * addon for OSC 52. The workspace keys it by pane ID so a layout change never remounts it.
  */
 export function TerminalPaneView(props: TerminalPaneProps) {
-  const { context, sessionId, settings, active, focusOnMount = true, dragging, themeSource, ref } = props
+  const { context, sessionId, settings, active, dragging, themeSource, ref } = props
   const hostRef = useRef<HTMLDivElement>(null)
   const screenRef = useRef<HTMLDivElement>(null)
   const searchInputRef = useRef<HTMLInputElement>(null)
   const runtime = useRef<Runtime | null>(null)
   const latest = useRef(props)
   latest.current = props
-  const initialActivation = useRef(true)
 
   const [search, setSearchState] = useState<SearchState | null>(null)
   const searchRef = useRef<SearchState | null>(null)
@@ -643,7 +640,7 @@ export function TerminalPaneView(props: TerminalPaneProps) {
       if (event.type === 'theme.changed') applyTheme()
     })
 
-    if (latest.current.active && latest.current.focusOnMount !== false) term.focus()
+    if (latest.current.active) term.focus()
 
     return () => {
       disposed = true
@@ -736,9 +733,8 @@ export function TerminalPaneView(props: TerminalPaneProps) {
   }, [settings['allow-osc52']])
 
   useEffect(() => {
-    if (active && (focusOnMount || !initialActivation.current)) runtime.current?.term.focus()
-    initialActivation.current = false
-  }, [active, focusOnMount])
+    if (active) runtime.current?.term.focus()
+  }, [active])
 
   const wasDragging = useRef(dragging)
   useEffect(() => {

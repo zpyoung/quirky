@@ -181,17 +181,17 @@ describe('SC-59: the floating button', () => {
     expect(panel(view)).toBeNull()
   })
 
-  test('showing the floating panel does not claim terminal focus until its workspace is focused', async () => {
-    const view = await mountOverlay({ floatingWorkspace: oneTab() })
-    expect(view.calls('focusContext')).toEqual([])
-    await click(button(view))
-    await settle()
-    await settle()
+  test('opening an empty floating panel does not report terminal focus', async () => {
+    const view = await mountOverlay({ state: { open: true } })
     expect(panel(view)).not.toBeNull()
     expect(view.fake.contextValue('floatingFocus')).toBe(true)
     expect(view.calls('focusContext')).toEqual([])
+  })
 
-    await fire(view.q('[data-pane="pane-3"]'), mouse('mousedown', { button: 0 }))
+  test('focusing a floating terminal reports its workspace', async () => {
+    const view = await mountOverlay({ state: { open: true }, floatingWorkspace: oneTab() })
+    const textarea = view.q<HTMLTextAreaElement>('[data-pane="pane-3"] textarea.xterm-helper-textarea')!
+    expect(document.activeElement).toBe(textarea)
     expect(view.calls('focusContext')).toEqual([{ workspace: 'floating' }])
   })
 

@@ -330,7 +330,6 @@ export function PaneLayer({ controller, state, group, tab }: Props) {
                 sessionId={leaf.session}
                 cwd={cwds[leaf.session] ?? session.cwd ?? ''}
                 settings={settings}
-                focusOnMount={!controller.floating}
                 active={focused}
                 interactive={leaf.exit === null && session.status !== 'exited'}
                 dragging={state.dragging}
