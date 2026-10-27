@@ -1,4 +1,4 @@
-import type { PtySessionInfo } from './pty'
+import type { ExitCause, PtyFact, PtyHistoryPage, PtySessionInfo, PtySnapshot, PtySubscription } from './pty'
 import type { ClientRole, QuirkyEvent } from './rpc'
 
 /** Where a plugin was found: shipped with Quirky, or installed by the user. */
@@ -82,19 +82,43 @@ export type PluginPty = {
   readonly connected: boolean
   spawn(
     sessionId: string,
-    options: { argv: string[]; cwd: string; env: Record<string, string>; cols: number; rows: number }
-  ): Promise<{ pid: number }>
+    options: {
+      argv: string[]
+      cwd: string
+      env: Record<string, string>
+      cols: number
+      rows: number
+      shellReady?: boolean
+      /** Restart the stored session of this id; `cwd`, `cols` and `rows` are fallbacks for what the host recovered. */
+      restore?: boolean
+    }
+  ): Promise<{ pid: number; restored: boolean; cwd: string; cols: number; rows: number }>
   write(sessionId: string, data: string | Uint8Array): void
   resize(sessionId: string, cols: number, rows: number): Promise<void>
   read(sessionId: string, lines: number): Promise<{ lines: string[]; cols: number; rows: number; alt: boolean }>
-  kill(sessionId: string, signal?: string): Promise<void>
+  /** A `reason` records the exit as requested (cause `killed`) and defaults the signal to SIGKILL. */
+  kill(sessionId: string, signal?: string, options?: { reason?: 'killed' }): Promise<void>
   forget(sessionId: string): Promise<void>
   list(): Promise<PtySessionInfo[]>
-  /** `replay` is base64 of recent output ending exactly at `offset`. */
-  subscribe(sessionId: string): Promise<{ replay: string; offset: number }>
+  /** `replay` is base64 ending exactly at `offset`; see `PtySubscription`. */
+  subscribe(sessionId: string, options?: { mode?: 'screen' | 'raw'; historyLines?: number }): Promise<PtySubscription>
+  snapshot(sessionId: string): Promise<PtySnapshot>
+  history(
+    sessionId: string,
+    options?: { lines?: number; before?: string; format?: 'text' | 'ansi' }
+  ): Promise<PtyHistoryPage>
+  /** Replaces the PTY host process and returns the new host's pid. */
+  restartHost(): Promise<{ pid: number }>
   unsubscribe(sessionId: string): Promise<void>
   onData(listener: (sessionId: string, bytes: Uint8Array) => void): () => void
-  onExit(listener: (sessionId: string, exitCode: number | null) => void): () => void
+  onExit(
+    listener: (
+      sessionId: string,
+      exitCode: number | null,
+      exit: { exitSignal: string | null; exitCause: ExitCause }
+    ) => void
+  ): () => void
+  onFact(listener: (sessionId: string, fact: PtyFact) => void): () => void
   onReconnect(listener: () => void): () => void
 }
 
@@ -122,6 +146,8 @@ export type PluginLaunch = {
     envPatch?: Record<string, string | null>
   }): Record<string, string>
   shellArgv(): string[]
+  /** True when the configured shell gets Quirky's ready-marker wrapper (zsh or bash). */
+  shellReady(): boolean
   commandArgv(command: string): string[]
   /** Runs the launch hooks for a session about to start. */
   hooks(input: {

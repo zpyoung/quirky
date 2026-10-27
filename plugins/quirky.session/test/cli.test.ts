@@ -5,6 +5,7 @@ import { runCli } from '../../../packages/cli/test/fixtures/fake-daemon'
 import type { Harness } from '../../../packages/daemon/test/helpers'
 import { makeTempDir, removeTempDirs } from '../../../packages/daemon/test/plugins/fixtures'
 import { commands } from '../cli'
+import { waitForAsync } from '../../../packages/daemon/test/helpers'
 import { fakeAgents, resetFakeAgents } from './fakes/quirky.agents/main'
 import { call, createSession, SESSION_PLUGINS, startPluginHarness, testCliContext } from './support'
 
@@ -244,6 +245,45 @@ describe('session close', () => {
   })
 })
 
+describe('session restore', () => {
+  test('restores a session lost with the host and prints the line', async () => {
+    const session = await createSession(client, { worktree: 'id:wt_main', agent: 'shell' })
+    h.pty.exit(session.id, null, { exitCause: 'host-restart' })
+    await waitForAsync(async () => (await call<Session>(client, 'quirky.session/get', { session: session.id })).restorable)
+    const { ctx, lines } = testCliContext(client)
+    await run('restore', ctx, [session.id])
+    expect(lines).toEqual([`restored ${session.id}`])
+    expect(await call(client, 'quirky.session/get', { session: session.id })).toMatchObject({ status: 'running', restorable: false })
+
+    lines.length = 0
+    await run('restore', ctx, [session.id])
+    expect(lines).toEqual([`${session.id} is already running`])
+    expect(h.pty.requests.filter((r) => r.type === 'create' && r.restore === true)).toHaveLength(1)
+  })
+
+  test('--json prints the session', async () => {
+    const session = await createSession(client, { worktree: 'id:wt_main', agent: 'shell' })
+    const { ctx, lines } = testCliContext(client, { json: true })
+    await run('restore', ctx, [session.id])
+    expect(JSON.parse(lines[0]!)).toEqual(session)
+  })
+
+  test('a session that ended normally fails with the conflict', async () => {
+    const session = await createSession(client, { worktree: 'id:wt_main', agent: 'shell' })
+    h.pty.exit(session.id, 0)
+    await waitForAsync(async () => (await call<Session>(client, 'quirky.session/get', { session: session.id })).status === 'exited')
+    const { ctx } = testCliContext(client)
+    expect((await failure(run('restore', ctx, [session.id]))).message).toBe(
+      `session ${session.id} ended normally and can't be restored`
+    )
+  })
+
+  test('needs a session', async () => {
+    const { ctx } = testCliContext(client)
+    expect((await failure(run('restore', ctx))).message).toBe('missing <session>')
+  })
+})
+
 describe('the CLI catalog', () => {
   test('SC-17: lists the session group, its commands and its methods under quirky.session/', async () => {
     const api = (await call<ApiDescription>(client, 'api.describe')) as ApiDescription
@@ -254,13 +294,14 @@ describe('the CLI catalog', () => {
       'session get',
       'session list',
       'session new',
+      'session restore',
       'session resume',
       'session set-provider-session'
     ])
     expect(own.every((c) => c.module?.endsWith('/quirky.session/cli.ts'))).toBe(true)
     expect(own.find((c) => c.words === 'session new')!.methods).toEqual(['quirky.session/create', 'quirky.structured/create'])
     const names = api.methods.map((m) => m.name)
-    for (const name of ['list', 'get', 'create', 'resume', 'setProviderSession', 'register', 'close', 'setStatus']) expect(names).toContain(`quirky.session/${name}`)
+    for (const name of ['list', 'get', 'create', 'resume', 'setProviderSession', 'register', 'close', 'setStatus', 'restore']) expect(names).toContain(`quirky.session/${name}`)
     expect(own.find((c) => c.words === 'session resume')!.methods).toEqual(['quirky.session/resume'])
     expect(own.find((c) => c.words === 'session set-provider-session')!.methods).toEqual(['quirky.session/setProviderSession'])
     expect(own.find((c) => c.words === 'session new')!.flags.map((f) => f.name).sort()).toEqual([
@@ -431,6 +472,9 @@ const sessionWith = (launchSettings: LaunchSettings | null): Session => ({
   createdAt: 1,
   lastActivityAt: 1,
   exitCode: null,
+  exitSignal: null,
+  exitCause: null,
+  restorable: false,
   promptDelivery: null,
   launchSettings
 })

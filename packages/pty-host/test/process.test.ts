@@ -1,42 +1,31 @@
 import { afterEach, describe, expect, test } from 'bun:test'
 import { existsSync, readFileSync, statSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { PtyClient } from '../src/client'
-import { onCleanup, runCleanups, tempHome, waitFor } from './helpers'
+import { base64ToBytes, encodePtyJson, PTY_PROTOCOL_VERSION, PtyFrameDecoder } from '@quirky/protocol'
+import type { PtyClient } from '../src/client'
+import { ready, runCleanups, startProcess, tempHome, text, waitFor } from './helpers'
 
 afterEach(runCleanups)
 
-const ENTRY = new URL('../src/main.ts', import.meta.url).pathname
+const SHELL_ENV = { PATH: '/usr/bin:/bin' }
 
-function startProcess(home: string) {
-  const proc = Bun.spawn([process.execPath, ENTRY], {
-    env: { ...process.env, QUIRKY_HOME: home },
-    stdout: 'pipe',
-    stderr: 'pipe'
-  })
-  onCleanup(() => {
-    proc.kill('SIGKILL')
-  })
-  return proc
+function params(sessionId: string, argv: string[]) {
+  return { sessionId, cwd: '/tmp', argv, env: SHELL_ENV, cols: 80, rows: 24 }
 }
 
-async function ready(home: string): Promise<{ client: PtyClient; token: string }> {
-  const token = await waitFor(
-    () => (existsSync(join(home, 'pty.sock')) && existsSync(join(home, 'pty.token')) ? readFileSync(join(home, 'pty.token'), 'utf8') : ''),
-    10000,
-    'host to listen'
-  )
-  for (let attempt = 0; ; attempt++) {
-    try {
-      const c = await PtyClient.connect(join(home, 'pty.sock'))
-      onCleanup(() => c.close())
-      await c.hello(token)
-      return { client: c, token }
-    } catch (error) {
-      if (attempt > 100) throw error
-      await Bun.sleep(50)
-    }
-  }
+function collect(client: PtyClient, sessionId: string) {
+  const parts: string[] = []
+  client.onData((id, bytes) => {
+    if (id === sessionId) parts.push(text(bytes))
+  })
+  return () => parts.join('')
+}
+
+/** Starts a host on `home` that replaces one killed earlier, and connects to it. */
+async function restart(home: string) {
+  const proc = startProcess(home)
+  await waitFor(() => existsSync(join(home, 'pty.pid')) && readFileSync(join(home, 'pty.pid'), 'utf8') === String(proc.pid), 10000, 'new host pid')
+  return { proc, ...(await ready(home)) }
 }
 
 describe('quirky-pty process', () => {
@@ -150,5 +139,95 @@ describe('quirky-pty process', () => {
     const list = await again.client.request('list', {})
     expect(list.map((s) => s.sessionId)).toEqual(['a'])
     expect(proc.exitCode).toBeNull()
+  })
+
+  test('a session keeps its output when the client leaves, and a second client gets the replay', async () => {
+    const home = tempHome()
+    startProcess(home)
+    const first = await ready(home)
+    await first.client.request('create', params('a', ['/bin/cat']))
+    await first.client.request('subscribe', { sessionId: 'a' })
+    const seen = collect(first.client, 'a')
+    first.client.sendInput('a', new TextEncoder().encode('alpha\n'))
+    await waitFor(() => seen().includes('alpha\r\nalpha'), 5000, 'echo')
+    first.client.close()
+
+    const second = await ready(home)
+    const sub = await second.client.request('subscribe', { sessionId: 'a' })
+    expect(sub.live).toBe(true)
+    expect(text(base64ToBytes(sub.replay))).toContain('alpha')
+    const live = collect(second.client, 'a')
+    second.client.sendInput('a', new TextEncoder().encode('beta\n'))
+    await waitFor(() => live().includes('beta'), 5000, 'output after reattach')
+  })
+
+  test('the subscribe response precedes the first DATA frame of a busy session', async () => {
+    const home = tempHome()
+    startProcess(home)
+    const { client, token } = await ready(home)
+    await client.request('create', params('busy', ['/bin/sh', '-c', 'while :; do echo tick; done']))
+    await Bun.sleep(100)
+
+    const order: string[] = []
+    const decoder = new PtyFrameDecoder()
+    const socket = await Bun.connect({
+      unix: join(home, 'pty.sock'),
+      socket: {
+        data(_socket, chunk) {
+          for (const frame of decoder.push(chunk)) {
+            if (frame.kind === 'data') order.push('data')
+            else order.push(`id:${(frame.message as { id: number }).id}`)
+          }
+        }
+      }
+    })
+    try {
+      socket.write(encodePtyJson({ id: 1, type: 'hello', token, version: PTY_PROTOCOL_VERSION }))
+      socket.write(encodePtyJson({ id: 2, type: 'subscribe', sessionId: 'busy' }))
+      await waitFor(() => order.filter((o) => o === 'data').length >= 5, 5000, 'data frames')
+      expect(order.indexOf('id:2')).toBeGreaterThanOrEqual(0)
+      expect(order.indexOf('id:2')).toBeLessThan(order.indexOf('data'))
+    } finally {
+      socket.end()
+    }
+  })
+
+  test('a killed host leaves its sessions restorable as host-lost, and restore brings back their text', async () => {
+    const home = tempHome()
+    const first = startProcess(home)
+    const one = await ready(home)
+    await one.client.request('create', params('s', ['/bin/sh', '-c', 'echo marker-before-crash; exec cat']))
+    await waitFor(async () => (await one.client.request('read', { sessionId: 's', lines: 10 })).lines.join('\n').includes('marker-before-crash'), 5000, 'marker')
+    await Bun.sleep(500)
+    first.kill('SIGKILL')
+    await first.exited
+
+    const two = await restart(home)
+    const [info] = await two.client.request('list', {})
+    expect(info).toMatchObject({ sessionId: 's', state: 'restorable', exitCause: 'host-lost', alive: false })
+
+    const restored = await two.client.request('create', { ...params('s', ['/bin/cat']), restore: true })
+    expect(restored.restored).toBe(true)
+    const snap = await two.client.request('snapshot', { sessionId: 's' })
+    expect(snap.ansi).toContain('marker-before-crash')
+    const [after] = await two.client.request('list', {})
+    expect(after).toMatchObject({ sessionId: 's', state: 'running', alive: true })
+  })
+
+  test('a host that was shut down leaves its sessions restorable as host-restart', async () => {
+    const home = tempHome()
+    const first = startProcess(home)
+    const one = await ready(home)
+    await one.client.request('create', params('s', ['/bin/sh', '-c', 'echo marker-before-stop; exec cat']))
+    await waitFor(async () => (await one.client.request('read', { sessionId: 's', lines: 10 })).lines.join('\n').includes('marker-before-stop'), 5000, 'marker')
+    await one.client.request('shutdown', {})
+    expect(await first.exited).toBe(0)
+
+    const two = await restart(home)
+    const [info] = await two.client.request('list', {})
+    expect(info).toMatchObject({ sessionId: 's', state: 'restorable', exitCause: 'host-restart' })
+    const sub = await two.client.request('subscribe', { sessionId: 's' })
+    expect(sub.live).toBe(false)
+    expect(text(base64ToBytes(sub.replay))).toContain('marker-before-stop')
   })
 })

@@ -45,6 +45,14 @@
         }
       },
       {
+        "id": "restore",
+        "params": {
+          "type": "object",
+          "properties": { "session": { "type": "string" } },
+          "required": ["session"]
+        }
+      },
+      {
         "id": "close",
         "params": {
           "type": "object",

@@ -8,6 +8,7 @@ function stubClient(options: { failUnsubscribe?: boolean } = {}) {
     connected: true,
     onData() {},
     onExit() {},
+    onFact() {},
     onReconnect() {},
     async request(type: string, params: { sessionId: string }) {
       requests.push({ type, sessionId: params.sessionId })
@@ -93,6 +94,7 @@ describe('PTY subscription holds', () => {
       connected: true,
       onData() {},
       onExit() {},
+      onFact() {},
       onReconnect() {},
       request(type: string) {
         requests.push(type)
@@ -118,6 +120,7 @@ describe('PTY subscription holds', () => {
       connected: true,
       onData() {},
       onExit() {},
+      onFact() {},
       onReconnect() {},
       request(type: string) {
         requests.push(type)

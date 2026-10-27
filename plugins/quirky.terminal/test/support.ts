@@ -57,7 +57,10 @@ export function seedSessions(home: string, ids: string[]): void {
     status: 'running',
     createdAt: index + 1,
     lastActivityAt: index + 1,
-    exitCode: null
+    exitCode: null,
+    exitSignal: null,
+    exitCause: null,
+    restorable: false
   }))
   writeFileSync(join(dir, 'sessions.json'), JSON.stringify(sessions))
 }

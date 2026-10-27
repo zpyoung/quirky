@@ -19,7 +19,10 @@ const session = (id: string, status: Session['status']): Session => ({
   status,
   createdAt: 0,
   lastActivityAt: 0,
-  exitCode: null
+  exitCode: null,
+  exitSignal: null,
+  exitCause: null,
+  restorable: false
 })
 
 const ask = (id: string): Ask => ({

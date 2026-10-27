@@ -3,16 +3,27 @@ export class TailBuffer {
   private readonly buffer: Uint8Array
   private writePos = 0
   private filled = 0
-  /** Total bytes ever appended, including those that have been overwritten. */
-  total = 0
+  /** Output position after the newest byte: `startTotal` plus every byte appended, overwritten or not. */
+  total: number
+  private readonly base: number
 
-  constructor(readonly capacity: number) {
+  /**
+   * `startTotal` is the output position the first appended byte will have, for a session that
+   * continues earlier output. Those earlier bytes are not this buffer's to have kept, so they
+   * never count as dropped.
+   */
+  constructor(
+    readonly capacity: number,
+    startTotal = 0
+  ) {
     this.buffer = new Uint8Array(capacity)
+    this.total = startTotal
+    this.base = startTotal
   }
 
-  /** True once earlier bytes have been dropped. */
+  /** True once bytes appended to this buffer have been overwritten. */
   get wrapped(): boolean {
-    return this.total > this.capacity
+    return this.total - this.base > this.capacity
   }
 
   append(bytes: Uint8Array): void {
