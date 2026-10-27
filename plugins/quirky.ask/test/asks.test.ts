@@ -39,7 +39,7 @@ const noHooks: AskServiceHooks = { created: () => {}, surfaced: () => {}, update
 const call = (method: string, params: Record<string, unknown> = {}) => client.callAny(`quirky.ask/${method}`, params) as Promise<any>
 
 describe('asks', () => {
-  test('create stores a pending ask, emits created and notify', async () => {
+  test('create stores a pending ask and emits created, with no notify', async () => {
     const { askId } = await call('create', { spec })
     expect(askId).toMatch(/^ask_/)
     const [ask] = await call('list', { pendingOnly: true })
@@ -56,12 +56,8 @@ describe('asks', () => {
     expect(ask.seq).toBe(1)
     const created = await waitFor(() => events.find((e) => e.type === 'quirky.ask/created'))
     expect(created).toMatchObject({ data: { ask: { id: askId }, seq: 1 } })
-    expect(events.find((e) => e.type === 'notify')).toMatchObject({ title: 'Deploy?', body: 'Which environment?' })
-  })
-
-  test('a spec without a title notifies as Question', async () => {
-    await call('create', { spec: { questions: [{ id: 'a', type: 'text', question: 'Name?' }] } })
-    expect(await waitFor(() => events.find((e) => e.type === 'notify'))).toMatchObject({ title: 'Question', body: 'Name?' })
+    expect(events.filter((e) => e.type === 'notify')).toEqual([])
+    expect(h.notifications).toEqual([])
   })
 
   test('session and worktree default from the caller and params override them', async () => {
@@ -72,9 +68,9 @@ describe('asks', () => {
     const byId = new Map(asks.map((ask) => [ask.id, ask]))
     expect(byId.get((first as any).askId)).toMatchObject({ sessionId: 'sess_7', worktreeId: 'wt_7' })
     expect(byId.get((second as any).askId)).toMatchObject({ sessionId: 'sess_8', worktreeId: 'wt_8' })
-    const notify = events.filter((e) => e.type === 'notify')
-    await waitFor(() => events.filter((e) => e.type === 'notify').length === 2)
-    expect(notify[0]).toMatchObject({ sessionId: 'sess_7', worktreeId: 'wt_7' })
+    const created = () => events.filter((e) => e.type === 'quirky.ask/created') as { data: { ask: { sessionId: string; worktreeId: string } } }[]
+    await waitFor(() => created().length === 2)
+    expect(created()[0]!.data.ask).toMatchObject({ sessionId: 'sess_7', worktreeId: 'wt_7' })
   })
 
   test('answer resolves a waiting long-poll immediately', async () => {
@@ -456,7 +452,7 @@ describe('the queue', () => {
     expect(asks.map((ask) => [ask.id, ask.queued])).toEqual([[a, false], [b, true]])
     const createdB = await waitFor(() => eventsOf(window.events, 'created').find((event) => event.data.ask.id === b))
     expect(createdB.data.ask.queued).toBe(true)
-    expect(h.notifications).toEqual([{ title: 'Deploy?', body: 'Which environment?' }])
+    expect(h.notifications).toEqual([])
     expect(((await client.call('ui.state', {})) as any).layout.panel).toBeNull()
     expect(eventsOf(window.events, 'surfaced')).toEqual([])
   })
@@ -474,10 +470,8 @@ describe('the queue', () => {
     expect(askEvents(window.events)).toEqual([['created', 1], ['created', 2], ['resolved', 3], ['surfaced', 4]])
     expect(eventsOf(window.events, 'surfaced')[0].data).toMatchObject({ ask: { id: b, queued: false, seq: 4 }, seq: 4 })
     expect(await asksOf(client, true)).toMatchObject([{ id: b, queued: false, seq: 4 }])
-    expect(h.notifications).toEqual([
-      { title: 'Deploy?', body: 'Which environment?' },
-      { title: 'Second', body: 'Which environment?' }
-    ])
+    expect(h.notifications).toEqual([])
+    expect(window.events.filter((e) => e.type === 'notify')).toEqual([])
 
     const envelope = await call('answer', { askId: b, answers: { env: { value: 'prod', source: 'option' }, why: { value: 'go', source: 'input' } } })
     expect(await waitingOnB).toEqual(envelope)
@@ -489,7 +483,7 @@ describe('the queue', () => {
     for (const asker of clients) await asker.callAny('quirky.ask/create', { spec })
     const asks = await asksOf(client, true)
     expect(asks.map((ask) => ask.queued)).toEqual([false, false, false, false])
-    expect(h.notifications).toHaveLength(4)
+    expect(h.notifications).toEqual([])
   })
 
   test('SC-18: timing out a queued ask leaves the head alone, and so does cancelling one', async () => {
@@ -504,7 +498,7 @@ describe('the queue', () => {
 
     expect((await asksOf(client, true)).map((ask) => [ask.id, ask.queued])).toEqual([[a, false]])
     expect(eventsOf(window.events, 'surfaced')).toEqual([])
-    expect(h.notifications).toHaveLength(1)
+    expect(h.notifications).toEqual([])
   })
 
   test('SC-18: asks that are both overdue at startup end timed out and the queued one is never surfaced or announced', async () => {

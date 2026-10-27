@@ -1,12 +1,9 @@
-import { Database } from 'bun:sqlite'
 import { afterEach, describe, expect, test } from 'bun:test'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { HOOK_TOKEN_HEADER } from '@quirky/protocol'
 import { removeTempDirs } from '../../../packages/daemon/test/plugins/fixtures'
-import { makeTempHome, Rig, startOf, waitFor } from './support'
-
-const NOTIFICATIONS = 'setting:quirky.agent-status/notifications'
+import { Rig, startOf, waitFor } from './support'
 
 let rig: Rig
 
@@ -50,9 +47,10 @@ describe('SC-1: a Claude turn', () => {
     expect(seen[4]!.row).toMatchObject({ detail: 'Bash: npm test', display: 'waiting' })
     expect(seen[6]!.row).toMatchObject({ outcome: 'success', lastAssistantMessage: 'All green', display: 'done', detail: 'All green' })
 
-    await rig.waitForNotifies(2)
+    await rig.waitForSettles(2)
     await rig.settle()
-    expect(rig.notifies().map((n) => (n as { body: string }).body)).toEqual(['Claude needs input', 'Claude finished'])
+    expect(rig.settles().map((s) => s.state)).toEqual(['waiting', 'done'])
+    expect(rig.notifies()).toEqual([])
   })
 
   test('each row change reaches the session as a summary, and the summary tracks the row', async () => {
@@ -143,8 +141,8 @@ describe('SC-5: the fold', () => {
 
     await rig.hook('claude', claude('SubagentStop', { agent_id: 'a1' }))
     expect(await rig.row()).toMatchObject({ state: 'done', outcome: 'success', children: [] })
-    await rig.waitForNotifies(2)
-    expect(rig.notifies().map((n) => (n as { body: string }).body)).toEqual(['Claude needs input', 'Claude finished'])
+    await rig.waitForSettles(2)
+    expect(rig.settles().map((s) => s.state)).toEqual(['waiting', 'done'])
   })
 })
 
@@ -214,7 +212,7 @@ describe('SC-11: malformed hooks', () => {
     await rig.settle()
     expect(await rig.list()).toEqual([])
     expect(await rig.statusCalls()).toEqual([])
-    expect(rig.notifies()).toHaveLength(0)
+    expect(rig.settles()).toHaveLength(0)
   })
 
   test('a wrong hook token is refused and changes nothing', async () => {
@@ -235,7 +233,7 @@ describe('SC-11: malformed hooks', () => {
     await rig.post('claude', claude('Stop'), { session: 's2' })
     await rig.settle()
     expect(await rig.statusCalls()).toEqual([])
-    expect(rig.notifies()).toHaveLength(0)
+    expect(rig.settles()).toHaveLength(0)
   })
 
   test('an event that says nothing about status leaves the row and the session alone', async () => {
@@ -317,7 +315,7 @@ describe('SC-13: a helper agent in the session', () => {
     await rig.hook('claude', claude('SessionStart', { source: 'startup', session_id: 'abc' }), identity)
     await rig.hook('claude', claude('UserPromptSubmit', { prompt: 'fix the tests', session_id: 'abc' }), identity)
     await rig.hook('claude', claude('Stop', { session_id: 'abc', last_assistant_message: 'ok' }), identity)
-    await rig.waitForNotifies(1)
+    await rig.waitForSettles(1)
     return (await rig.statusCalls()).length
   }
 
@@ -334,7 +332,7 @@ describe('SC-13: a helper agent in the session', () => {
     expect(await rig.row()).toMatchObject({ state: 'done', prompt: 'fix the tests', lead: { providerSession: 'abc' } })
     expect((await rig.providerCalls()).map((c) => c.id)).toEqual(['abc'])
     expect((await rig.session()).providerSession?.id).toBe('abc')
-    expect(rig.notifies()).toHaveLength(1)
+    expect(rig.settles()).toHaveLength(1)
     expect(await rig.statusCalls()).toHaveLength(callsBefore)
   })
 
@@ -435,92 +433,122 @@ describe('SC-32: readable details', () => {
   })
 })
 
-describe('notifications', () => {
-  test('waiting and done open the session, name the worktree and run the OS notifier without a desktop client', async () => {
+describe('settled events', () => {
+  test('waiting and done name the session, its worktree and agent, and send no notify', async () => {
     rig = await Rig.start()
     await play([['UserPromptSubmit', { prompt: 'go' }], ['PermissionRequest', bash('ls')]])
-    await rig.waitForNotifies(1)
+    await rig.waitForSettles(1)
     await play([['Stop']])
-    await rig.waitForNotifies(2)
-    const open = { view: 'view:quirky.session/worktree', input: { worktree: 'wt1', session: 's1' } }
-    expect(rig.notifies()).toEqual([
-      { type: 'notify', title: 'main', body: 'Claude needs input', sessionId: 's1', worktreeId: 'wt1', open, desktop: true },
-      { type: 'notify', title: 'main', body: 'Claude finished', sessionId: 's1', worktreeId: 'wt1', open, desktop: true }
+    await rig.waitForSettles(2)
+    await rig.settle()
+    expect(rig.settles()).toMatchObject([
+      { sessionId: 's1', worktreeId: 'wt1', agent: 'claude', state: 'waiting' },
+      { sessionId: 's1', worktreeId: 'wt1', agent: 'claude', state: 'done' }
     ])
-    expect(rig.h.notifications).toEqual([
-      { title: 'main', body: 'Claude needs input' },
-      { title: 'main', body: 'Claude finished' }
-    ])
+    expect(rig.notifies()).toEqual([])
+    expect(rig.h.notifications).toEqual([])
   })
 
-  test('the title is the session worktree name and the body uses the session title', async () => {
-    rig = await Rig.start({ sessions: [{ worktreeId: 'wt2', title: 'Claude 2' }] })
+  test('the event carries the worktree of its session and the agent that owns the row', async () => {
+    rig = await Rig.start({ sessions: [{ worktreeId: 'wt2', agent: 'codex', title: 'Codex' }] })
+    await rig.hook('codex', { type: 'agent-turn-complete', 'thread-id': 'th2', 'last-assistant-message': 'all set' })
+    await rig.waitForSettles(1)
+    expect(rig.settles()[0]).toMatchObject({ worktreeId: 'wt2', agent: 'codex', state: 'done', lastAssistantMessage: 'all set' })
+  })
+
+  test('a done carries the turn: prompt, outcome, message and the last tool', async () => {
+    rig = await Rig.start()
+    const before = Date.now()
+    await play([
+      ['UserPromptSubmit', { prompt: 'fix the tests' }],
+      ['PreToolUse', bash('npm test', { tool_use_id: 't1' })],
+      ['Stop', { last_assistant_message: 'All green' }]
+    ])
+    await rig.waitForSettles(1)
+    const [done] = rig.settles()
+    expect(done).toMatchObject({
+      state: 'done',
+      outcome: 'success',
+      interrupted: false,
+      prompt: 'fix the tests',
+      toolName: 'Bash',
+      toolInput: 'npm test',
+      lastAssistantMessage: 'All green'
+    })
+    expect(done!.at).toBeGreaterThanOrEqual(before)
+    expect(done!.at).toBeLessThanOrEqual(Date.now())
+  })
+
+  test('a waiting carries the tool it asks about, with a readable input', async () => {
+    rig = await Rig.start()
+    await play([['UserPromptSubmit', { prompt: 'go' }], ['PermissionRequest', bash("printf 'x' >> README.md", { tool_use_id: 't1' })]])
+    await rig.waitForSettles(1)
+    expect(rig.settles()[0]).toMatchObject({
+      state: 'waiting',
+      outcome: null,
+      toolName: 'Bash',
+      toolInput: "printf 'x' >> README.md",
+      lastAssistantMessage: null
+    })
+  })
+
+  test('a failed turn and an interrupted turn carry their verdicts', async () => {
+    rig = await Rig.start({ sessions: [{}, { id: 's2' }] })
+    for (const session of ['s1', 's2']) await rig.hook('claude', claude('UserPromptSubmit', { prompt: 'go' }), { session })
+    await rig.hook('claude', claude('StopFailure'), { session: 's1' })
+    await rig.hook('claude', claude('Stop', { is_interrupt: true }), { session: 's2' })
+    await rig.waitForSettles(2)
+    const bySession = Object.fromEntries(rig.settles().map((s) => [s.sessionId, s]))
+    expect(bySession.s1).toMatchObject({ state: 'done', outcome: 'failure', interrupted: false })
+    expect(bySession.s2).toMatchObject({ state: 'done', interrupted: true })
+  })
+
+  test('a field the row lacks is null', async () => {
+    rig = await Rig.start()
     await play([['Stop']])
-    await rig.waitForNotifies(1)
-    expect(rig.notifies()[0]).toMatchObject({ title: 'feature', body: 'Claude 2 finished', worktreeId: 'wt2' })
+    await rig.waitForSettles(1)
+    expect(rig.settles()[0]).toMatchObject({ state: 'done', prompt: null, toolName: null, toolInput: null, lastAssistantMessage: null })
   })
 
-  test('working does not notify, and a repeated Stop notifies once', async () => {
-    rig = await Rig.start()
-    await play([['UserPromptSubmit', { prompt: 'go' }], ['Stop'], ['Stop']])
-    await rig.settle()
-    expect(rig.notifies()).toHaveLength(1)
-  })
-
-  test('a session boundary does not notify', async () => {
-    rig = await Rig.start()
-    await play([['SessionStart', { source: 'startup' }]])
-    await rig.settle()
-    expect(rig.notifies()).toHaveLength(0)
-  })
-
-  test('blocked reads as needing input', async () => {
+  test('blocked stays distinct from waiting', async () => {
     rig = await Rig.start({ sessions: [{ agent: 'copilot', title: 'Copilot' }] })
     await rig.hook('copilot', { prompt: 'go' }, { event: 'userPromptSubmitted' })
     await rig.hook('copilot', { notification_type: 'permission_prompt' }, { event: 'notification' })
     expect(await rig.state()).toBe('blocked')
-    await rig.waitForNotifies(1)
-    expect(rig.notifies()[0]).toMatchObject({ body: 'Copilot needs input' })
+    await rig.waitForSettles(1)
+    expect(rig.settles()[0]).toMatchObject({ agent: 'copilot', state: 'blocked' })
   })
 
-  test('SC-25: it is a boolean setting that defaults to true', async () => {
+  test('SC-16: working raises nothing, and a repeated Stop settles once', async () => {
     rig = await Rig.start()
-    const info = (await rig.client.callAny('setting.get', { id: NOTIFICATIONS })) as Record<string, unknown>
-    expect(info).toMatchObject({ type: 'boolean', title: 'Notify when agents finish', default: true, value: true })
-  })
-
-  test('off keeps the toast but suppresses the OS notification', async () => {
-    rig = await Rig.start()
-    await rig.client.callAny('setting.set', { id: NOTIFICATIONS, value: false })
-    await play([['Stop']])
-    await rig.waitForNotifies(1)
-    expect(rig.notifies()[0]).toMatchObject({ desktop: false })
+    await play([['UserPromptSubmit', { prompt: 'go' }], ['Stop'], ['Stop']])
     await rig.settle()
-    expect(rig.h.notifications).toEqual([])
+    expect(rig.settles()).toHaveLength(1)
   })
 
-  test('a connected desktop client suppresses the daemon notifier', async () => {
+  test('SC-16: a session boundary raises nothing', async () => {
     rig = await Rig.start()
-    await rig.h.connect('desktop')
-    await play([['Stop']])
-    await rig.waitForNotifies(1)
-    expect(rig.notifies()[0]).toMatchObject({ desktop: true })
+    await play([['SessionStart', { source: 'startup' }]])
     await rig.settle()
-    expect(rig.h.notifications).toEqual([])
+    expect(rig.settles()).toHaveLength(0)
   })
 
-  test("a v1 home's notifications value carries over once", async () => {
-    const home = makeTempHome('qas-h-')
-    const v1 = new Database(join(home, 'quirky.db'))
-    v1.exec('CREATE TABLE settings (key TEXT PRIMARY KEY, value TEXT NOT NULL)')
-    v1.query('INSERT INTO settings (key, value) VALUES (?, ?)').run('notifications', 'false')
-    v1.close()
-    rig = await Rig.start({ home })
-    expect(((await rig.client.callAny('setting.get', { id: NOTIFICATIONS })) as { value: unknown }).value).toBe(false)
+  test('SC-17: a Stop while a subagent still runs settles nothing until the row is done', async () => {
+    rig = await Rig.start()
+    await play([['UserPromptSubmit', { prompt: 'go' }], ['SubagentStart', { agent_id: 'a1' }]])
+    await rig.hook('claude', claude('Stop', { last_assistant_message: 'started it' }))
+    await rig.settle()
+    expect(await rig.state()).toBe('working')
+    expect(rig.settles()).toEqual([])
 
-    await rig.client.callAny('setting.set', { id: NOTIFICATIONS, value: true })
-    rig = await rig.restart()
-    expect(((await rig.client.callAny('setting.get', { id: NOTIFICATIONS })) as { value: unknown }).value).toBe(true)
+    await rig.hook('claude', claude('SubagentStop', { agent_id: 'a1' }))
+    await rig.waitForSettles(1)
+    expect(rig.settles()).toMatchObject([{ state: 'done', lastAssistantMessage: 'started it' }])
+  })
+
+  test('the setting the plugin used to own is gone', async () => {
+    rig = await Rig.start()
+    await expect(rig.client.callAny('setting.get', { id: 'setting:quirky.agent-status/notifications' })).rejects.toThrow()
   })
 })
 

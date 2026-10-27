@@ -1,4 +1,4 @@
-import type { Ask, PluginCaller, PluginContext, UiState } from '@quirky/protocol'
+import type { PluginCaller, PluginContext, UiState } from '@quirky/protocol'
 import { AskService } from './asks'
 import { askQueueMigration } from './store-migrations'
 import { ClaudeVersionGate, commandProbe, suppressionHook } from './suppression'
@@ -23,15 +23,6 @@ async function openQuestionsPanel(context: PluginContext): Promise<void> {
   }
 }
 
-function announce(context: PluginContext, ask: Ask): void {
-  context.notify({
-    title: ask.spec.title ?? 'Question',
-    body: ask.spec.questions[0].question,
-    ...(ask.sessionId !== null ? { sessionId: ask.sessionId } : {}),
-    ...(ask.worktreeId !== null ? { worktreeId: ask.worktreeId } : {})
-  })
-}
-
 let service: AskService | undefined
 
 /** Provides the ask methods, the deadline job and the Claude launch hook; the CLI commands and the panel's window module live elsewhere. */
@@ -45,13 +36,9 @@ export function activate(context: PluginContext): void {
       conflict: (message) => context.error('conflict', message)
     },
     {
-      created: (ask, seq) => {
-        context.emit('created', { ask, seq })
-        if (!ask.queued && asks.get(ask.id).envelope.status === 'pending') announce(context, ask)
-      },
+      created: (ask, seq) => void context.emit('created', { ask, seq }),
       surfaced: (ask, seq) => {
         context.emit('surfaced', { ask, seq })
-        announce(context, ask)
         void openQuestionsPanel(context)
       },
       updated: (askId, partial, seq) => void context.emit('updated', { askId, partial, seq }),
