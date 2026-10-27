@@ -1,0 +1,380 @@
+{
+  "id": "quirky.vault",
+  "name": "Agent Session History",
+  "version": "0.1.0",
+  "description": "Browse agent-owned sessions and opt in to local transcript search.",
+  "main": "main.ts",
+  "ui": "dist/ui.js",
+  "cli": "cli.ts",
+  "activation": "lazy",
+  "dependencies": [
+    "quirky.repo",
+    "quirky.worktree",
+    "quirky.agents",
+    "quirky.session",
+    "quirky.terminal"
+  ],
+  "workers": {
+    "scanner": "src/worker.ts"
+  },
+  "contributes": {
+    "method": [
+      {
+        "id": "list",
+        "description": "Lists locally discovered or host-aggregated agent history.",
+        "readOnly": true,
+        "params": {
+          "type": "object",
+          "properties": {
+            "agents": { "type": "array", "items": { "type": "string" } },
+            "scopePaths": { "type": "array", "items": { "type": "string" } },
+            "limit": { "type": "integer", "minimum": 1, "maximum": 5000 },
+            "unlimited": { "type": "boolean" },
+            "force": { "type": "boolean" },
+            "requestToken": { "type": "string" },
+            "sort": { "type": "string", "enum": ["updated", "created"] },
+            "hideEmpty": { "type": "boolean" },
+            "host": { "type": "string" },
+            "within": {
+              "type": "object",
+              "properties": { "worktree": { "type": "string" }, "repo": { "type": "string" } }
+            }
+          }
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "sessions": { "type": "array", "items": { "type": "object" } },
+            "issues": { "type": "array", "items": { "type": "object" } },
+            "hosts": { "type": "array", "items": { "type": "object" } },
+            "scannedFiles": { "type": "integer" },
+            "scannedAt": { "type": "number" },
+            "hasMore": { "type": "boolean" },
+            "total": { "type": "integer" }
+          },
+          "required": ["sessions", "issues", "hosts", "scannedFiles", "scannedAt", "hasMore", "total"]
+        }
+      },
+      {
+        "id": "cancelList",
+        "description": "Cancels only the scan caller named by requestToken.",
+        "params": {
+          "type": "object",
+          "properties": { "requestToken": { "type": "string" } },
+          "required": ["requestToken"]
+        },
+        "result": {
+          "type": "object",
+          "properties": { "cancelled": { "type": "boolean" } },
+          "required": ["cancelled"]
+        }
+      },
+      {
+        "id": "get",
+        "description": "Returns the current local source metadata for a host-qualified session ID, or null when it is gone.",
+        "readOnly": true,
+        "params": { "type": "object", "properties": { "id": { "type": "string" } }, "required": ["id"] },
+        "result": { "description": "A HostedSession or null." }
+      },
+      {
+        "id": "firstPrompt",
+        "description": "Reads the full first user prompt on demand for a local session.",
+        "readOnly": true,
+        "params": { "type": "object", "properties": { "id": { "type": "string" } }, "required": ["id"] },
+        "result": {
+          "type": "object",
+          "properties": { "prompt": { "description": "The prompt text, or null when none exists." } },
+          "required": ["prompt"]
+        }
+      },
+      {
+        "id": "subagents",
+        "description": "Returns child transcripts supported by the source agent parser.",
+        "readOnly": true,
+        "params": { "type": "object", "properties": { "id": { "type": "string" } }, "required": ["id"] },
+        "result": { "type": "array", "items": { "type": "object" } }
+      },
+      {
+        "id": "search",
+        "description": "Searches the consented local index or compatible effective vault hosts.",
+        "readOnly": true,
+        "params": {
+          "type": "object",
+          "properties": {
+            "query": { "type": "string" },
+            "scope": { "type": "string", "enum": ["conversation", "all"] },
+            "freshness": { "type": "string", "enum": ["indexed", "wait-until-current"] },
+            "limit": { "type": "integer", "minimum": 1, "maximum": 100 },
+            "cursor": { "type": "string" },
+            "filters": { "type": "object" },
+            "within": {
+              "type": "object",
+              "properties": { "worktree": { "type": "string" }, "repo": { "type": "string" } }
+            },
+            "debug": { "type": "boolean" },
+            "host": { "type": "string" }
+          },
+          "required": ["query"]
+        },
+        "result": { "type": "object" }
+      },
+      {
+        "id": "searchStatus",
+        "description": "Search index status and per-host outcomes.",
+        "readOnly": true,
+        "params": { "type": "object", "properties": { "host": { "type": "string" } } },
+        "result": {
+          "type": "object",
+          "properties": { "status": { "type": "object" }, "hosts": { "type": "array", "items": { "type": "object" } } },
+          "required": ["status", "hosts"]
+        }
+      },
+      {
+        "id": "setSearchEnabled",
+        "description": "Changes local search consent and retention policy, then applies it to the index worker.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "historyDays": { "description": "Null keeps all history; otherwise an integer from 1 to 3650." },
+            "host": { "type": "string" }
+          },
+          "required": ["enabled"]
+        },
+        "result": {
+          "type": "object",
+          "properties": { "status": { "type": "object" }, "hosts": { "type": "array", "items": { "type": "object" } } },
+          "required": ["status", "hosts"]
+        }
+      },
+      {
+        "id": "clearSearchIndex",
+        "description": "Turns search off before clearing only the disposable local search database.",
+        "destructive": true,
+        "confirm": "Turn off search and clear the searchable copy of agent transcripts? Original transcripts are not changed.",
+        "params": { "type": "object", "properties": {} },
+        "result": {
+          "type": "object",
+          "properties": {
+            "cleared": { "type": "boolean" },
+            "status": { "type": "object" },
+            "hosts": { "type": "array", "items": { "type": "object" } },
+            "reason": { "type": "string" }
+          },
+          "required": ["cleared", "status", "hosts"]
+        }
+      },
+      {
+        "id": "getView",
+        "description": "Returns daemon-owned stable view preferences and process-local scope/query state.",
+        "readOnly": true,
+        "params": { "type": "object", "properties": {} },
+        "result": { "type": "object" }
+      },
+      {
+        "id": "setView",
+        "description": "Sets a flat partial ViewState; stable preferences persist and query/context fields do not.",
+        "params": { "type": "object" },
+        "result": { "type": "object" }
+      },
+      {
+        "id": "resetView",
+        "description": "Restores stable view defaults and resets transient filters.",
+        "params": { "type": "object", "properties": {} },
+        "result": { "type": "object" }
+      },
+      {
+        "id": "prepareResume",
+        "description": "Returns the provider's configured resume plan for a present, resumable local source without launching it.",
+        "readOnly": true,
+        "params": {
+          "type": "object",
+          "properties": { "id": { "type": "string" }, "fork": { "type": "boolean" } },
+          "required": ["id"]
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "command": { "type": "string" },
+            "env": { "type": "object" },
+            "record": { "type": "object" }
+          },
+          "required": ["command", "env", "record"]
+        }
+      },
+      {
+        "id": "resume",
+        "description": "Resumes a present local source through quirky.session and optionally adopts it into an explicit terminal group.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "id": { "type": "string" },
+            "group": { "type": "string" },
+            "worktree": { "type": "string" },
+            "fork": { "type": "boolean" }
+          },
+          "required": ["id"]
+        },
+        "result": { "type": "object", "description": "The actual new quirky.session Session." }
+      },
+      {
+        "id": "deleteSession",
+        "description": "Moves validated local agent source files to macOS Trash after confirmation; never deletes originals directly.",
+        "destructive": true,
+        "confirm": "Move this agent session transcript to Trash? Original session data may be shared with the agent.",
+        "params": { "type": "object", "properties": { "id": { "type": "string" } }, "required": ["id"] },
+        "result": {
+          "type": "object",
+          "properties": {
+            "deleted": { "type": "boolean" },
+            "trashed": { "type": "integer" },
+            "alreadyMissing": { "type": "boolean" },
+            "reason": { "type": "string" }
+          },
+          "required": ["deleted", "trashed", "alreadyMissing"]
+        }
+      },
+      {
+        "id": "openSource",
+        "description": "Opens or reveals the selected local transcript using quirky.terminal/openExternal.",
+        "readOnly": true,
+        "params": {
+          "type": "object",
+          "properties": {
+            "id": { "type": "string" },
+            "mode": { "type": "string", "enum": ["view", "open", "reveal"] }
+          },
+          "required": ["id"]
+        },
+        "result": { "type": "object", "properties": { "ok": { "type": "boolean" } }, "required": ["ok"] }
+      },
+      {
+        "id": "openWorkingDirectory",
+        "description": "Opens a present local source working directory using quirky.terminal/openExternal.",
+        "readOnly": true,
+        "params": { "type": "object", "properties": { "id": { "type": "string" } }, "required": ["id"] },
+        "result": { "type": "object", "properties": { "ok": { "type": "boolean" } }, "required": ["ok"] }
+      },
+      {
+        "id": "jump",
+        "description": "Focuses a live source-owned session pane or reports that the original identity is unavailable.",
+        "params": {
+          "type": "object",
+          "properties": { "id": { "type": "string" }, "target": { "type": "string", "enum": ["pane", "worktree", "folder"] } },
+          "required": ["id", "target"]
+        },
+        "result": { "type": "object", "properties": { "available": { "type": "boolean" }, "reason": { "type": "string" }, "workspace": { "type": "string" } }, "required": ["available"] }
+      },
+      {
+        "id": "handoff",
+        "description": "Routes the selected source to an effective public handoff owner, or reports it unavailable.",
+        "params": { "type": "object", "properties": { "id": { "type": "string" } }, "required": ["id"] },
+        "result": { "type": "object", "properties": { "available": { "type": "boolean" }, "reason": { "type": "string" }, "result": {} }, "required": ["available"] }
+      }
+    ],
+    "event": [
+      {
+        "id": "scanProgress",
+        "data": {
+          "type": "object",
+          "properties": {
+            "phase": { "type": "string", "enum": ["discovering", "reading", "complete"] },
+            "scannedFiles": { "type": "integer" },
+            "parsedFiles": { "type": "integer" },
+            "current": { "type": "string" }
+          },
+          "required": ["phase", "scannedFiles", "parsedFiles"]
+        }
+      },
+      {
+        "id": "searchStatus",
+        "data": { "type": "object" }
+      },
+      {
+        "id": "viewChanged",
+        "data": { "type": "object", "properties": { "view": { "type": "object" } }, "required": ["view"] }
+      }
+    ],
+    "setting": [
+      {
+        "id": "search-enabled",
+        "type": "boolean",
+        "title": "Enable transcript search",
+        "description": "Build a local searchable copy from full unredacted agent conversations and up to 3,072 characters per tool output. Authenticated clients can search this computer's index.",
+        "default": false
+      }
+    ],
+    "panel": [
+      { "id": "history", "title": "Agent Session History", "description": "Resume past sessions.", "order": 30 }
+    ],
+    "settings-section": [
+      { "id": "search", "title": "Agent Session Search", "description": "Search transcripts stored on this computer.", "order": 90 }
+    ],
+    "view": [
+      { "id": "search-settings", "title": "Agent Session Search", "description": "Local transcript search status and controls." }
+    ],
+    "command": [
+      {
+        "id": "open",
+        "title": "Open Session History",
+        "args": {
+          "type": "object",
+          "properties": { "agent": { "type": "string" }, "sessionId": { "type": "string" } }
+        }
+      },
+      { "id": "settings", "title": "Open Session Search Settings" },
+      {
+        "id": "resume",
+        "title": "Resume Agent Session",
+        "args": {
+          "type": "object",
+          "properties": { "id": { "type": "string" }, "group": { "type": "string" }, "worktree": { "type": "string" } },
+          "required": ["id"]
+        }
+      }
+    ],
+    "cli-command": [
+      {
+        "id": "list",
+        "summary": "list agent sessions",
+        "flags": {
+          "agent": { "type": "string", "description": "Only these agent IDs.", "repeatable": true },
+          "path": { "type": "string", "description": "Limit to these cwd paths.", "repeatable": true },
+          "limit": { "type": "integer", "description": "Maximum sessions." },
+          "unlimited": { "type": "boolean", "description": "Scan all matching history." },
+          "force": { "type": "boolean", "description": "Refresh source metadata." },
+          "sort": { "type": "string", "description": "updated or created.", "enum": ["updated", "created"] },
+          "hide-empty": { "type": "boolean", "description": "Hide sessions without messages." },
+          "host": { "type": "string", "description": "local, all, or an effective host ID." }
+        }
+      },
+      {
+        "id": "search",
+        "summary": "search agent transcripts",
+        "positionals": [{ "name": "query", "description": "Words to search for.", "required": false }],
+        "flags": {
+          "index-status": { "type": "boolean", "description": "Show index status instead of searching." },
+          "scope": { "type": "string", "description": "conversation or all.", "enum": ["conversation", "all"] },
+          "fresh": { "type": "boolean", "description": "Wait for a current index pass." },
+          "limit": { "type": "integer", "description": "Results per page." },
+          "cursor": { "type": "string", "description": "Opaque page cursor." },
+          "agent": { "type": "string", "description": "Limit to these agent IDs.", "repeatable": true },
+          "path": { "type": "string", "description": "Literal cwd path filters.", "repeatable": true },
+          "since": { "type": "string", "description": "ISO 8601 timestamp with an offset." },
+          "sort": { "type": "string", "description": "relevance or newest.", "enum": ["relevance", "newest"] },
+          "debug": { "type": "boolean", "description": "Include planner diagnostics." },
+          "host": { "type": "string", "description": "local, all, or an effective host ID." }
+        }
+      },
+      { "id": "search-status", "summary": "show transcript search status", "flags": { "host": { "type": "string", "description": "local, all, or an effective host ID." } } },
+      { "id": "enable", "summary": "enable local transcript search", "flags": { "history-days": { "type": "integer", "description": "Retain this many days; omit for all history." } } },
+      { "id": "clear", "summary": "turn off search and clear its disposable index" },
+      { "id": "get", "summary": "inspect one agent session", "positionals": [{ "name": "id", "description": "Host-qualified vault session ID.", "required": true }] },
+      { "id": "resume", "summary": "resume a local agent session", "positionals": [{ "name": "id", "description": "Host-qualified vault session ID.", "required": true }], "flags": { "group": { "type": "string", "description": "Explicit terminal tab group." }, "worktree": { "type": "string", "description": "Destination workspace selector." }, "fork": { "type": "boolean", "description": "Fork the provider session." } } },
+      { "id": "delete", "summary": "move a local agent session to macOS Trash", "positionals": [{ "name": "id", "description": "Host-qualified vault session ID.", "required": true }] },
+      { "id": "view", "summary": "read or update daemon-owned vault view preferences", "flags": { "group": { "type": "string", "description": "project, folder or agent." }, "browse-sort": { "type": "string", "description": "updated or created.", "enum": ["updated", "created"] }, "search-sort": { "type": "string", "description": "relevance or newest.", "enum": ["relevance", "newest"] }, "hide-empty-sessions": { "type": "boolean", "description": "Hide empty sessions." }, "session-limit": { "type": "integer", "description": "250, 500, 1000 or 0 for unlimited." }, "host": { "type": "string", "description": "local, all, or host ID." }, "scope": { "type": "string", "description": "workspace, project or all.", "enum": ["workspace", "project", "all"] }, "query": { "type": "string", "description": "Transient query." } } },
+      { "id": "open", "summary": "open Agent Session History", "flags": { "agent": { "type": "string", "description": "Pre-filter by agent." }, "session": { "type": "string", "description": "Preselect a provider session ID." }, "query": { "type": "string", "description": "Focus with this query." } } },
+      { "id": "settings", "summary": "open Agent Session Search settings" }
+    ]
+  }
+}
