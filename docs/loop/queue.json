@@ -188,8 +188,7 @@
         "m1-launch-settings",
         "m1-agent-status"
       ],
-      "status": "in-progress",
-      "lane": 3
+      "status": "done"
     },
     {
       "id": "m2-editor",
@@ -216,7 +215,8 @@
         "m2-source-control-core",
         "m1-agent-status"
       ],
-      "status": "blocked"
+      "status": "in-progress",
+      "lane": 7
     },
     {
       "id": "m2-ask-parity",
@@ -259,8 +259,7 @@
       "title": "Fix required remote suite: plugins/quirky.ask/test/core/spec.test.ts accepts unanchored a*a*a*b with a 200-character nonmatching default but validation takes 103-118 ms and violates its 100 ms budget even in isolated runs; investigate bounded regex validation without suppressing the assertion or changing matching semantics",
       "docs": [],
       "deps": [],
-      "status": "in-progress",
-      "lane": 7
+      "status": "done"
     },
     {
       "id": "fix-sc31-first-shell-race",
@@ -418,7 +417,8 @@
       "deps": [
         "m1-worktrees"
       ],
-      "status": "todo"
+      "status": "in-progress",
+      "lane": 5
     },
     {
       "id": "sa-browser-ui",
@@ -467,7 +467,8 @@
       "deps": [
         "gate-m0"
       ],
-      "status": "todo"
+      "status": "in-progress",
+      "lane": 3
     },
     {
       "id": "m6-orchestration",
@@ -540,6 +541,48 @@
       "title": "Fix the flaky plugins/quirky.git/test/scenarios/files.test.ts: it failed under load in 3 full-suite runs on the test host and passed each time it was rerun alone (see <git common dir>/build-loop/flakes.log). Find the timing assumption or shared state with quirky.git:systematic-debugging, reproduce it under CPU load, and fix the test or the code it exposes",
       "docs": [
         "source-control.md"
+      ],
+      "deps": [],
+      "status": "todo"
+    },
+    {
+      "id": "m4-editor-drop-open-in-place",
+      "milestone": "M4",
+      "title": "Finder drops into the editor open a file in place when it is inside the worktree and import it otherwise, as Orca does (editor SC-9). m2-editor imports every drop, by user ruling, because Electrobun 2.0.4 gives the page no source path for a dropped file (see docs/loop/decisions/m2-editor.md). Get the dropped paths through a supported Electrobun API or a newer Electrobun release and route them through the shell's typed RPC as a public event. Block with a BLOCKERS.md entry if that needs a native patch or fork, which the user hasn't approved",
+      "docs": [
+        "editor.md"
+      ],
+      "deps": [
+        "m2-editor"
+      ],
+      "status": "todo"
+    },
+    {
+      "id": "fix-flaky-quirky-worktree-window-projects",
+      "milestone": "M1",
+      "title": "Fix the flaky plugins/quirky.worktree/test/window-projects.test.ts: it failed under load in 3 full-suite runs on the test host and passed each time it was rerun alone (see <git common dir>/build-loop/flakes.log). Find the timing assumption or shared state with quirk:systematic-debugging, reproduce it under CPU load, and fix the test or the code it exposes",
+      "docs": [
+        "worktrees.md"
+      ],
+      "deps": [],
+      "status": "todo"
+    },
+    {
+      "id": "fix-flaky-pty-host-host",
+      "milestone": "M1",
+      "title": "Fix the flaky packages/pty-host/test/host.test.ts: it failed under load in 3 full-suite runs on the test host and passed each time it was rerun alone (see <git common dir>/build-loop/flakes.log). Under load, many tests time out at 5 s, and startHost fails with 'could not start process scope guardian' when the guardian isn't ready within 4 s. Reproduce it under CPU load with quirk:systematic-debugging, and fix the timing assumptions in the test helpers or the code they expose",
+      "docs": [
+        "term-daemon.md"
+      ],
+      "deps": [],
+      "status": "todo"
+    },
+    {
+      "id": "fix-test-cost",
+      "milestone": "M1",
+      "title": "Make the test suite cheaper to run. Today every test file starts a real daemon, a pty-host and a login zsh (`zsh -l`), and on the 8-vCPU test host that keeps the load near 21 while four files run. Measure per-file wall time and CPU with `bun run test`, then cut the cost without losing coverage: start non-login shells (`zsh -f`, `bash --noprofile --norc`) in tests that don't exercise shell integration or the login environment, share one daemon and pty-host per test file (beforeAll) where tests don't depend on a fresh one, and drop fixed sleeps in favour of waiting on the event. Keep every scenario test that checks shell integration on a real login shell. Report the before and after suite times in the decision log",
+      "docs": [
+        "term-daemon.md"
       ],
       "deps": [],
       "status": "todo"

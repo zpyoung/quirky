@@ -185,6 +185,12 @@ describe('buildSubmission messages', () => {
     expect(message(pattern, { text: 'abc' })).toBeUndefined()
   })
 
+  test('rejects a pattern input missing its required literal', () => {
+    const question: AskQuestion = { id: 'q', type: 'text', question: 'Q', pattern: '^a*a*a*b$' }
+    expect(message(question, { text: `${'a'.repeat(199)}c` })).toBe("Doesn't match the expected format.")
+  })
+
+
   test('text over 200 characters is refused when a pattern applies, as the daemon does', () => {
     const pattern: AskQuestion = { id: 'q', type: 'text', question: 'Q', pattern: '^a+$' }
     expect(message(pattern, { text: 'a'.repeat(200) })).toBeUndefined()
