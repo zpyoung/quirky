@@ -78,7 +78,7 @@ export type AgentStatusSummary = {
   display: AgentDisplayState
   label: string
   detail: string
-  /** 0 to 1, or null when the agent reports none. */
+  /** A percentage from 0 to 100, or null when the program reports none. */
   progress: number | null
   stateStartedAt: number
   evidenceAt: number
