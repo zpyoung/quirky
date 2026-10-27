@@ -161,6 +161,39 @@ textarea {
   grid-template-columns: 44px minmax(0, 1fr) minmax(360px, 50%);
 }
 
+.layout.with-activity-items {
+  grid-template-columns: 240px minmax(0, 1fr) 44px;
+}
+
+.layout.with-activity-items.with-panel {
+  grid-template-columns: 240px minmax(0, 1fr) 44px minmax(360px, 50%);
+}
+
+.layout.no-sidebar.with-activity-items {
+  grid-template-columns: 44px minmax(0, 1fr) 44px;
+}
+
+.layout.no-sidebar.with-activity-items.with-panel {
+  grid-template-columns: 44px minmax(0, 1fr) 44px minmax(360px, 50%);
+}
+
+.activity-items {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 8px 0;
+  border-left: 1px solid var(--border);
+  background: var(--bg-raised);
+}
+
+.activity-items > .plugin-slot {
+  width: 100%;
+  flex: 0 0 auto;
+}
+
 [data-region]:focus {
   outline: none;
 }
@@ -1005,6 +1038,19 @@ textarea {
   padding: 0 4px;
   color: var(--muted);
   font-size: 11px;
+}
+
+.settings-section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.settings-section-title {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
 }
 
 select {

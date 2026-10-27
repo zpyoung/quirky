@@ -70,6 +70,7 @@ export class FakeDaemon {
   readonly jobRuns = new Map<string, JobRun>()
   readonly ui: UiModel = {
     sidebarSections: [],
+    activityItems: [],
     panels: [],
     views: [],
     overlays: [],
@@ -293,11 +294,13 @@ export class FakeDaemon {
     const list =
       kind === 'sidebar-section'
         ? this.ui.sidebarSections
-        : kind === 'panel'
-          ? this.ui.panels
-          : kind === 'overlay'
-            ? this.ui.overlays
-            : this.ui.views
+        : kind === 'activity-item'
+          ? this.ui.activityItems
+          : kind === 'panel'
+            ? this.ui.panels
+            : kind === 'overlay'
+              ? this.ui.overlays
+              : this.ui.views
     list.push(entry)
     return entry
   }
@@ -326,7 +329,15 @@ export class FakeDaemon {
       ...overrides
     }
     this.settings.push(setting)
-    this.ui.settings.push({ id: setting.id, plugin, type: setting.type, title: setting.title, default: setting.default })
+    this.ui.settings.push({
+      id: setting.id,
+      plugin,
+      type: setting.type,
+      title: setting.title,
+      default: setting.default,
+      ...(setting.category !== undefined ? { category: setting.category } : {}),
+      ...(setting.section !== undefined ? { section: setting.section } : {})
+    })
     return setting
   }
 

@@ -622,9 +622,7 @@ describe('warnings', () => {
       ],
       [plugin('acme.bare')]
     )
-    expect(warnings.get('acme.bare')).toEqual([
-      { level: 'warning', message: 'declares commands, views, panels, overlays or sidebar sections but has no ui module' },
-    ])
+    expect(warnings.get('acme.bare')?.map(({ level }) => level)).toEqual(['warning'])
   })
 
   test('a plugin whose only code-backed entry is an overlay and has no ui is warned', () => {

@@ -11,6 +11,7 @@ import { OverlayLayer } from './plugins/OverlayLayer'
 import { PluginSlot } from './plugins/PluginSlot'
 import { useRegion } from './plugins/useRegion'
 import { useThemeVariables } from './plugins/useThemeVariables'
+import { ActivityItems } from './plugins/ActivityItems'
 
 function NoToken() {
   return (
@@ -43,12 +44,16 @@ export function App() {
   if (state.connection === 'no-token') return <NoToken />
 
   const panel = layout.panel !== null && model?.panels.some((candidate) => candidate.id === layout.panel) ? layout.panel : null
+  const hasActivityItems = (model?.activityItems.length ?? 0) > 0
   return (
     <div className="app">
       <ConnectionBanner />
-      <div className={`layout${panel !== null ? ' with-panel' : ''}${layout.sidebar ? '' : ' no-sidebar'}`}>
+      <div
+        className={`layout${panel !== null ? ' with-panel' : ''}${layout.sidebar ? '' : ' no-sidebar'}${hasActivityItems ? ' with-activity-items' : ''}`}
+      >
         <Sidebar />
         <MainArea />
+        {hasActivityItems && <ActivityItems />}
         {panel !== null && <PanelColumn id={panel} />}
       </div>
       <OverlayLayer />
