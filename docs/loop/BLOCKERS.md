@@ -211,3 +211,11 @@ Registration update: `bun scripts/build-loop/queue.ts add /tmp/quirky-session-in
 - **Bootstrap proof:** an owned isolated checkout with Accounts node_modules deliberately removed passed the new `bun run typecheck` in 30.62 seconds, restoring dependency resolution. Product behavior is unchanged; prior consumer tests and fresh real-PTY content smoke remain applicable. The next authoritative landing must verify the final merge result.
 
 - **Protected script load sensitivity:** the next local scripts run had 59 pass/3 five-second timeouts in the Git-based lanes fixture. The unchanged affected file then passed alone: 23 tests/60 assertions; the self-contained current-tree typecheck also passed. No timeout cap/assertion or protected infrastructure file was changed. Preserve this as runner reliability evidence, not a hidden green full-scripts claim.
+
+## fix-flaky-quirky-worktree-create: additional remote gate evidence
+
+- **Severity:** medium; existing queued item `fix-flaky-quirky-worktree-create` owns this file.
+- **Observed while verifying fix-flaky-pty-host-host:** the full remote run passed 454 of 455 files plus both macOS-only files. The sole failed file was `plugins/quirky.worktree/test/create.test.ts`.
+- **First failure:** SC-20's existing remote-tracking base refresh timed out at the wait in `create.test.ts:367`; quirkyd logged that it could not refresh origin/main in the background.
+- **Isolated retry:** a different case, “a remote base that moves after the hooks were read does not change the commit checked out”, failed `git fetch -q origin` with `cannot lock ref refs/remotes/origin/main: is at 5549f0f4044fc0bd6207c2f67aa3ace59af0f97c but expected f85218387be054f4435ae642b09ba319f631971a`.
+- **Evidence:** `bun run test`, remote snapshot `runs/1793142204136-90736`, artifact://51. No worktree implementation or test was edited in the PTY item, and this failure was not suppressed. The corrected PTY package separately passed two complete 14-file remote runs with no flaky reruns.

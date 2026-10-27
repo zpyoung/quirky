@@ -829,6 +829,8 @@ export class SessionManager {
     session.alive = false
     try {
       this.recordExit(session)
+      // EOF ends output delivery but Bun retains the native PTY until it is explicitly closed.
+      session.proc.terminal.close()
       if (session.holders > 0) await new Promise<void>((resolve) => session.onRelease.push(resolve))
       session.barrier.dispose()
       if (session.metaTimer) clearTimeout(session.metaTimer)
