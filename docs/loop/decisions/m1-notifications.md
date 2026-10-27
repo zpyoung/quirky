@@ -497,5 +497,26 @@
 - **Confidence:** high
 - **Source:** assumed — autonomous
 
+## D50: The W1 gate's 65 `EBADF` failures are the suite's descriptor exhaustion, not a regression
+- **Question:** the W1 full gate ended 4948 pass, 67 fail; 65 of the failures are `EBADF: bad file descriptor, posix_spawn` in `plugins/quirky.agents` tests, all in one stretch of the run
+- **Options:** treat as a regression; treat as the known single-process descriptor leak
+- **Chose:** the known leak: `bun test plugins/quirky.agents` alone passes 869/869 on the same tree. m1-term-ui D51 measured it: under `bun test`, every dynamic import from a new path keeps about four descriptors, and in-process harness daemons importing plugins from fresh temp directories add up. This item's notifications rig starts its daemons from the repo's fixed `plugins/` directory (its implementer measured 249 descriptors before and 242 after its suite). The two other failures are D49's.
+- **Why:** an isolated rerun is the evidence; the fix that matters for landing is keeping this item's harnesses off fresh plugin paths, which m1-term-ui's landing also reduces
+- **Evidence:** sdd/gate-w1.log in the session scratchpad; build/m1-term-ui docs/loop/decisions/m1-term-ui.md D51
+- **Reversibility:** easy
+- **Confidence:** medium
+- **Revisit if:** the post-W2 gate fails with EBADF again; then this item's harnesses (agent-status's `builtinDir()` makes a fresh directory per start) need the shared-directory treatment
+- **Source:** assumed — autonomous
+
+## D51: W2 landed as two components; the W1 checkpoint ran over W1 alone
+- **Question:** W2's results, and the W1 checkpoint review
+- **Options:** n/a
+- **Chose:** accept N (plugin core: policy, methods, CLI, migration, `PluginContext.storedSettingValue`) and D (shell), merged at 25319b9. Recorded choices: N adds a test-only `QUIRKY_NOTIFICATION_COOLDOWN_MS`, cuts `send` text to 256, retries the migration until `setting.set` succeeds, passes the full environment to the player, and leaves SC-16's spooled-replay case and SC-18's structured source to unit level; D samples window visibility at each attention event, plays nothing for a `sound` event with no file, clamps afplay's volume to 0..1, and resolves the dot image through `trayDotPath`. One N run used the real `HOME` before its rig set a temporary one; the agent-status installer's guard skipped writing, and `~/.codex/hooks.json`, `~/.gemini/settings.json` and `~/.cursor/hooks.json` are unchanged since 01:34 with no Quirky entries. The W1 checkpoint (C, S, X at standard over `d325202..a889dca` without docs; pre-pass typecheck plus the new modules' tests, both green) found 7, collapsing to 4 defects: OSC/title settles bypassed the child fold and boundary rule (C1 HIGH, C2); OSC 99 accepted malformed base64 padding (C3, S1, X1); a window drop cleared reports without `ui.report.changed` (S2); an empty custom path had an off-contract reason (S3). All accepted; four fixers dispatched.
+- **Why:** each finding was reproduced by the refute stage and contradicts the contract it cites
+- **Evidence:** cp1/{C,S,X}-gate.json in the session scratchpad
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** assumed — autonomous
+
 ## Progress
-Specs written (logic.md, tech.md). Spec review done and fixed (D46). Next: subagent-driven development W1 (K, P, R, M, S), W2 (N, D, N6), W3 (e2e and UI tests), catch-up, Final Round 1, UI pass, land.
+W1 and W2 merged (25319b9); the W1 checkpoint's four fixes are in flight. Next: merge the fixes, full gate, W2 checkpoint (C, S, X standard over ee9d1d9..HEAD), W3 (settings view N6 with the manifest's view/command/ui entries; e2e CLI scenarios on a daemon subprocess in plugins/quirky.notifications/test/e2e/), then catch up with build/roadmap (m1-term-ui obligations in tech.md), Final Round 1, the like-a-user web pass (SC-6, SC-46 to SC-50), docs/loop/native/m1-notifications.json, land. Briefs and run journal: session scratchpad sdd/.
