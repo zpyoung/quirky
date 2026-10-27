@@ -455,5 +455,25 @@
 - **Confidence:** high
 - **Source:** locked by docs/loop/LOOP.md
 
+## D45: Build in four waves, with the shared types written before W1
+- **Question:** the decomposition (writing-plans rubric, run in context)
+- **Options:** one task per tech-spec module; layer waves with pure units first; vertical slices per agent
+- **Chose:** W1, seven parallel components: protocol/host/kernel/terminal (T1), the shim (T2), pure display/fold/OSC/title units (T3), Claude-family normalizers and capture (T4a), the other normalizers (T4b), JSON installers (T5a), Claude settings (T6). W2: the agent-status core chain (apply, store, identity, list/get, launch hook, then fallbacks, inference, presence, spool), the TOML/YAML/plugin-file installers, and the session summary with the window dots. W3: the installer registry, hooks methods, CLI and the setting. W4: end-to-end CLI scenarios. Before W1 the orchestrator committed `src/types.ts` and `src/hook-command.ts` (the tech spec's schemas and the installed command) so parallel tasks share one definition. The width cap was raised from 6 to 7 for W1 so it runs as one lockstep batch.
+- **Why:** no two concurrent tasks share a file; normalizers and installers split by family keep each task reviewable; registries and wiring wait for the parts they list
+- **Evidence:** docs/quirk/specs/2026-10-26-m1-agent-status/tech.md "Plugin layout"; commit 736ce9d
+- **Reversibility:** easy
+- **Confidence:** medium
+- **Source:** assumed — autonomous
+
+## D46: W1 landed as seven components, all in scope and green
+- **Question:** the W1 wave-end barrier
+- **Options:** accept; stop on a violation
+- **Chose:** accept: HEADs unchanged, every diff inside its scope, main tree clean, every acceptance command green (T1 377, T2 58, T3 200, T4a 79, T4b 59, T5a 55, T6 19 tests). Implementer choices carried to W2: `normalizeQoder` serves qoder and qoder-cn; child events carry full text fields (apply replaces rather than merges); `coarseStatus(display, state)` needs the state for decayed rows; `projectRoot` maps OSC idle to a done boundary, as Orca does; a `msg` outside the value alphabet is skipped while invalid base64 voids a report (Orca's rule); the shim also skips spooling tool events named only by `QUIRKY_HOOK_EVENT`; installers leave zcode's `hooks.enabled` and cursor/copilot `version` when the file holds other user content.
+- **Why:** the barrier passed
+- **Evidence:** merge 15b64bf
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** assumed — autonomous
+
 ## Progress
-Step 5 (build) starting: specs reviewed and fixed. Next: decompose into waves (W1 contracts and leaf units, W2 agent-status integration and the session summary/dots, W3 end-to-end scenarios) and dispatch W1.
+Step 5 (build): W1 merged at 15b64bf. Next: W1 gate, W1 checkpoint review (3 lenses, standard, codex), fixes, then W2 (agent-status core chain T7a→T7b, installers T5b, session summary and dots T8), W3 (registry, hooks CLI, setting), W4 (end-to-end).
