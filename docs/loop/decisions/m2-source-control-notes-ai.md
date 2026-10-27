@@ -451,5 +451,16 @@
 - **Revisit if:** saves need arrival-order semantics
 - **Source:** assumed — autonomous
 
+## D42: Catching up with build/roadmap needed one CSS merge and no design change
+- **Question:** LOOP.md step 5's catch-up before the final review
+- **Options:** n/a
+- **Chose:** merged build/roadmap at f4ff5ea (m1-notifications, m3-vault, m3-accounts, m3-terminal-dock, fix items, the pty kill-test fix, remote flake logging). The only conflict was both sides appending to `packages/ui/src/styles.css`; both kept, the AI hint rule closed, and roadmap's removal of `.unread-mark` kept. The decision logs it brought (m1-notifications, fix-sc31-first-shell-race, m3-terminal-dock) touch nothing this item decided
+- **Why:** the logs are about notification switches, unread markers and the terminal dock's composer
+- **Evidence:** merge commit 4051428; docs/loop/decisions/m1-notifications.md, m3-terminal-dock.md
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** m3-terminal-dock's per-PTY send queue lands and note sends should use it
+- **Source:** assumed — autonomous
+
 ## Progress
-Building. W1 and W2 merged; catalog test updated; W2 gate running; W3 (T7, AI window) dispatched from WAVE_BASE_3. Next: merge W3, gate, Final Round 1 (three Codex lenses, deep), one fix batch, then step 6.
+All three waves merged (W3 at ec31808), caught up with build/roadmap (D42). Post-catch-up gate running. Next: Final Round 1 (C, S, X lenses, Codex, deep) over f4ff5ea..HEAD, one fix batch, gate, then step 6 (UI pass).
