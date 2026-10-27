@@ -4,7 +4,7 @@
 
 Status: Design accepted by unattended defaults under LOOP.md; tech spec required (plugin/UI/launch subsystem boundary). Combined Codex promote/refute review completed; confirmed contract findings corrected before implementation.
 
-**Amendments:** 2026-10-27 — clarified custom-home precedence, queued-restart supersession, credential configuration, shared session-info statusline ownership and reset-credit authorization scope after spec review. Implementation coverage review made the documented Gemini OAuth opt-in and retained Codex settings/config warnings explicit (AC18). No feature-flow scope removed.
+**Amendments:** 2026-10-27 — clarified custom-home precedence, queued-restart supersession, credential configuration, shared session-info statusline ownership and reset-credit authorization scope after spec review. Implementation coverage review made Gemini OAuth opt-in and retained Codex settings/config warnings explicit (AC18), and required actual prior conversation data—not merely a repeated provider ID—for cross-account resume. No feature-flow scope removed.
 
 ## Conceptual model
 
@@ -86,6 +86,8 @@ Before: saved signed-out account. It is visibly Needs sign-in and cannot be sele
 
 Before: account A selected and shell already open. Select B, launch next Claude/Codex from that shell and through session create/resume: B's private home is used; existing processes remain A. Select System default: inherited custom/default home restored. Explicit non-injected user home overrides in per-agent launch config or inside the shell win; record the actual custom identity, not B. A missing selected Claude home fails before spawn. An unreadable Codex home preserves selection and refuses launch; an untrusted marker/path is never followed or deleted. Symlink replacement cannot target real user homes.
 
+Conversation availability is part of preparation: a Codex resume into another home must safely bridge the captured local rollout before starting the CLI. Missing, mismatched or untrusted source data fails actionably rather than opening an empty chat. Claude accounts and System default share the same history even when the first managed profile predates the default history directories; creating another account later cannot strand the first account's conversations.
+
 ### AC11: Claude running-session policy
 
 Before: running Claude A with captured provider conversation ID. Select B with Ask: Switched to B identifies affected sessions and choices. Keep as is leaves process A. Restart continues same conversation in B; busy session waits for idle. If C is selected before idle, the B-authorized intention is invalidated and choices recomputed under the current policy, never silently retargeted. Don't ask again selects Always restart. Never restart changes only future launches. A failed restart preserves a visible actionable old-session state.
@@ -93,6 +95,8 @@ Before: running Claude A with captured provider conversation ID. Select B with A
 ### AC12: Codex stale-session chip
 
 Before: running Codex A. Select B: pane shows Account switched, current old identity, Keep old account and Restart; Usage drill-in reports stale-session count. Keeping does not relabel A as B. Restart resumes same provider conversation/cwd under B and removes the old stale indicator. The new session/tab receives focus through scriptable UI state.
+
+The prior conversation's persisted contents are available in the selected home before the resumed provider starts. Tests and real-daemon fixture smoke must read that prior content under the new home; identical ID/argv/session-record assertions alone do not establish continuation.
 
 ### AC13: Remove accounts
 

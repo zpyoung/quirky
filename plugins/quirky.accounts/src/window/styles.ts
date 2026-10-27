@@ -15,7 +15,7 @@ export const ACCOUNTS_CSS = `
 .accounts-ui .account-stack{display:flex;flex-direction:column;gap:12px;min-height:0}
 .accounts-ui .account-header,.accounts-ui .section-heading,.accounts-ui .row-heading,.accounts-ui .usage-heading,.accounts-ui .usage-footer,.accounts-ui .usage-controls,.accounts-ui .credential-row,.accounts-ui .login-actions,.accounts-ui .dialog-actions{align-items:center;display:flex;gap:8px;justify-content:space-between}
 .accounts-ui .section-heading{margin-bottom:8px}
-.accounts-ui .section-card,.accounts-ui .usage-popover,.accounts-ui .provider-details,.accounts-ui .usage-cta,.accounts-ui .login-notice,.accounts-ui .reset-confirm,.accounts-ui .switch-dialog{background:var(--bg-raised,#1d2027);border:1px solid var(--border,#2b2f3a);border-radius:9px;padding:12px}
+.accounts-ui .section-card,.accounts-ui .usage-popover,.accounts-ui .provider-details,.accounts-ui.provider-details,.accounts-ui .usage-cta,.accounts-ui .login-notice,.accounts-ui .reset-confirm,.accounts-ui .switch-dialog{background:var(--bg-raised,#1d2027);border:1px solid var(--border,#2b2f3a);border-radius:9px;padding:12px}
 .accounts-ui .account-list,.accounts-ui .provider-list,.accounts-ui .usage-window-list,.accounts-ui .stale-list{display:flex;flex-direction:column;gap:7px}
 .accounts-ui .account-row,.accounts-ui .provider-row,.accounts-ui .stale-row{align-items:center;background:var(--bg,#16181d);border:1px solid var(--border,#2b2f3a);border-radius:7px;display:flex;gap:10px;justify-content:space-between;padding:9px}
 .accounts-ui .account-row-main,.accounts-ui .provider-row-main{display:flex;flex:1;flex-direction:column;gap:2px;min-width:0}
@@ -36,7 +36,7 @@ export const ACCOUNTS_CSS = `
 .accounts-ui .credential-row{border-bottom:1px solid var(--border,#2b2f3a);padding:9px 0}
 .accounts-ui .credential-entry{display:flex;flex:1;gap:8px;min-width:0}
 .accounts-ui .credential-entry input{flex:1}
-.accounts-ui .usage-status-bar{align-items:center;display:flex;flex:1 1 auto;gap:6px;max-width:100%;min-width:0;position:relative;white-space:nowrap}
+.accounts-ui.usage-status-bar{align-items:center;display:flex;flex:1 1 auto;gap:6px;max-width:100%;min-width:0;position:relative;white-space:nowrap}
 .accounts-ui .usage-status-cta{max-width:min(520px,calc(100vw - 48px));min-width:0;white-space:normal}
 .accounts-ui .usage-measure{display:flex;gap:5px;left:0;pointer-events:none;position:absolute;top:0;visibility:hidden;width:max-content}
 .accounts-ui .usage-trigger,.accounts-ui .usage-refresh{align-items:center;display:inline-flex;gap:5px;padding:4px 7px}
@@ -63,7 +63,8 @@ export const ACCOUNTS_CSS = `
 .accounts-ui .usage-footer{border-top:1px solid var(--border,#2b2f3a);margin-top:9px;padding-top:9px}
 .accounts-ui .usage-cta{margin:6px 0}
 .accounts-ui .usage-cta p{margin:5px 0 10px}
-.accounts-ui .provider-details{margin-top:8px}
+.accounts-ui .provider-details,.accounts-ui.provider-details{margin-top:8px}
+.accounts-ui.provider-details{display:flex;flex-direction:column;gap:6px}
 .accounts-ui .info-line{align-items:baseline;display:flex;gap:6px;justify-content:space-between;padding:4px 0}
 .accounts-ui .status-error{color:var(--amber,#f0b429)}
 .accounts-ui .status-danger{color:var(--danger,#e5534b)}
@@ -73,7 +74,7 @@ export const ACCOUNTS_CSS = `
 .accounts-ui .context-menu label,.accounts-ui .checkbox-row{align-items:center;display:flex;gap:8px;padding:5px 3px}
 .accounts-ui .login-notice{margin-top:9px}
 .accounts-ui .reset-confirm{border-color:var(--amber,#f0b429);margin-top:8px}
-.accounts-ui .switch-overlay{align-items:center;background:#0008;display:flex;inset:0;justify-content:center;position:fixed;z-index:10000}
+.accounts-ui.switch-overlay{align-items:center;background:#0008;display:flex;inset:0;justify-content:center;pointer-events:auto;position:fixed;z-index:10000}
 .accounts-ui .switch-dialog{box-shadow:0 16px 48px #000a;max-height:80vh;max-width:560px;overflow:auto;width:min(560px,calc(100vw - 32px))}
 .accounts-ui .dialog-actions{justify-content:flex-end;margin-top:12px}
 .accounts-ui .stale-row{align-items:flex-start;flex-direction:column}
