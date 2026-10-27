@@ -129,8 +129,8 @@ function selectedRange(host: EditorServices, buffer: EditorBuffer, value: unknow
     if (from < 0 || to <= from || to > selectedSource.length) throw host.context.error('invalid-params', 'Selection must be a non-empty source range inside the current Markdown document.')
     excerpt = selectedSource.slice(from, to)
   } else if (rich && typeof selection.text === 'string' && Number.isInteger(selection.startLine) && Number.isInteger(selection.endLine)) {
-    const normalized = selectedSource.replace(/\\r\\n/g, '\\n')
-    const lines = normalized.split('\\n')
+    const normalized = selectedSource.replace(/\r\n/g, '\n')
+    const lines = normalized.split('\n')
     const startLine = selection.startLine!
     const endLine = selection.endLine!
     if (startLine < 1 || endLine < startLine || endLine > lines.length) throw host.context.error('invalid-params', 'Rich selection line span is outside the Markdown document.')
@@ -138,7 +138,7 @@ function selectedRange(host: EditorServices, buffer: EditorBuffer, value: unknow
     for (let i = 0; i < normalized.length; i += 1) if (normalized.charCodeAt(i) === 10) starts.push(i + 1)
     const normalizedFrom = starts[startLine - 1]!
     const normalizedTo = endLine < starts.length ? starts[endLine]! - 1 : normalized.length
-    const text = selection.text.replace(/\\r\\n/g, '\\n')
+    const text = selection.text.replace(/\r\n/g, '\n')
     const matchAt = normalized.indexOf(text, normalizedFrom)
     if (text === '' || matchAt < normalizedFrom || matchAt + text.length > normalizedTo) {
       throw host.context.error('invalid-params', 'Selected rich text does not match the document lines.')
@@ -147,7 +147,7 @@ function selectedRange(host: EditorServices, buffer: EditorBuffer, value: unknow
       let sourceOffset = 0
       let current = 0
       while (current < normalizedOffset && sourceOffset < selectedSource.length) {
-        if (selectedSource[sourceOffset] === '\\r' && selectedSource[sourceOffset + 1] === '\\n') sourceOffset += 1
+        if (selectedSource[sourceOffset] === '\r' && selectedSource[sourceOffset + 1] === '\n') sourceOffset += 1
         sourceOffset += 1
         current += 1
       }
