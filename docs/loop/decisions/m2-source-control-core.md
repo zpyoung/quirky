@@ -517,5 +517,27 @@
 - **Revisit if:** the final round finds defects in W1's code
 - **Source:** assumed — autonomous
 
+## D48: W2 starts while W1's full suite is still running
+- **Question:** whether W2 waits for W1's full-suite gate, which takes about 14 minutes on this machine
+- **Options:** wait; start W2 on the merged tip once typecheck and the scripts suite pass, and fix any red test on the integration branch before W2 merges
+- **Chose:** start W2. Typecheck first failed on a duplicate `NotAllowedError` export from two W1 tasks, which the orchestrator fixed in its own commit; `bun test scripts` passed; the full suite was running with no failures when W2 was dispatched
+- **Why:** W2's trees fork from the fixed tip and W1's tests were each accepted in their own trees, so only a cross-task interaction could turn the gate red, and that fix would land on `build/m2-source-control-core` before W2 merges; m1-worktrees D61 overlapped waves the same way
+- **Evidence:** scratchpad w1-gate.txt; commit `fix(git): one NotAllowedError for every working-tree refusal`
+- **Reversibility:** easy
+- **Confidence:** medium
+- **Revisit if:** the W1 gate fails in code W2 builds on
+- **Source:** assumed — autonomous
+
+## D49: The diff view's CSS starts in the view and moves to `styles.css` in W3
+- **Question:** the panel and the view both need CSS, and all plugin CSS lives in `packages/ui/src/styles.css`, which only one parallel task may own
+- **Options:** chain the panel and the view; give the panel task `styles.css` and let the view task keep its rules in a `<style>` element inside its own root until W3 moves them
+- **Chose:** the second
+- **Why:** it keeps the two biggest window tasks parallel; the view's style element is inside its own slot, so no other UI is affected meanwhile
+- **Evidence:** packages/ui/src/styles.css (shared plugin CSS); D46
+- **Reversibility:** easy
+- **Confidence:** medium
+- **Revisit if:** never; W3 removes the style element
+- **Source:** assumed — autonomous
+
 ## Progress
-Specs written, reviewed (D42) and committed. Building (D44–D47): scaffold committed; W1 (T1–T6) dispatched in worktrees under the session scratchpad. If this iteration stops, the next one restarts W1's unfinished tasks from build/m2-source-control-core's tip (the worktrees are lost with the scratchpad), then W2 (daemon T7, panel T8, view T9), W3 integration, final round, verify, land.
+W1 merged on build/m2-source-control-core (git primitives, kernel growths, pure window modules). W2 dispatched: daemon part 1 (T7a, then T7b in the same tree), panel (T8), view and commands (T9). If this iteration stops, restart W2's unfinished tasks from the branch tip (the scratch worktrees are lost), then W2 checkpoint, W3 integration (move view CSS into styles.css, window scenarios), final round, verify, land.
