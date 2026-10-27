@@ -319,5 +319,16 @@
 - **Revisit if:** Queue land reports a new conflict or failure.
 - **Source:** locked by docs/loop/LOOP.md
 
+## D30: Accept the observed post-fix gates and hand off to queue land
+- **Question:** Can the loop integrator land the completed item after the capped final batch?
+- **Options:** Land on targeted checks alone; require the full post-fix gate.
+- **Chose:** All four required commands returned 0 on committed A1 snapshot aaf01bb: build, bun run test, bun test scripts and typecheck. The suite covered 418 remote files plus two macOS-only local files. Ask core spec and worktree window-projects initially failed under load, then both passed alone under the locked runner policy. Script tests report 48 pass and zero fail.
+- **Why:** This verifies the final safety change in the complete tree without inventing another final review round or concealing isolated retries.
+- **Evidence:** /tmp/quirky-session-info.TBh9Q4/gates-after-final-batch/gate-check.json and full-suite stderr clearance. The same FIFO smoke now promptly rejects, and all targeted resource-bound/API tests pass. Web reports and native handoff remain as recorded in D25 and D22.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** Queue land reports an integration conflict or failing command.
+- **Source:** locked by docs/loop/LOOP.md
+
 ## Progress
-All actual web runs and the deep final C/S/X round are complete; the sole official web partial is a documented transient-feedback sampling/failure-setup limitation, with actual copying and label/reset independently proved. The single supplemental A1 fix batch passes targeted API/boundary tests, the same FIFO smoke now rejects promptly, and typecheck passes. No app/browser fixture or reviewer remains live. Next: commit A1 and these results, rerun build/full suite/scripts/typecheck under the capped protocol, then queue land. No second final review round.
+Step 7 ready: implementation, specs, user docs, capped deep review, single supplemental A1 batch, actual web verification and post-fix full gates are complete. Native-only SC-5/7/9 remain pending in the required nightly handoff; the official short-copy-feedback tool partial is documented with independent positive label/reset and clipboard evidence. Next: commit this verification record, detach and run queue.ts land m3-session-info. If interrupted before land, resume that operation; queue status is the authority for whether it landed.
