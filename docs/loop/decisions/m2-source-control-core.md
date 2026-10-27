@@ -594,5 +594,16 @@
 - **Revisit if:** a later lane's decision touches source control
 - **Source:** assumed — autonomous
 
+## D55: The Source Control window tests run in a second `bun test` process
+- **Question:** after the catch-up merge, the full suite failed 225 tests with `EBADF: bad file descriptor, posix_spawn` starting at the first `plugins/quirky.git/test/window` file, while every directory passed on its own
+- **Options:** cut the window tests; find and close a leak; run the window tests in their own process
+- **Chose:** the root `test` script runs `bun test packages apps plugins` with `plugins/quirky.git/test/window/**` ignored, then `bun test plugins/quirky.git/test/window`
+- **Why:** `Bun.spawnSync` fails with EBADF once the process holds more than about 10,000 descriptors (a scratch script opening N descriptors then spawning git passed at 10,000 and failed at 12,000). The window tests alone hold a flat ~1,300 across files, about 1,145 of them directory handles Bun keeps for module resolution, so they don't leak; the single-process suite as a whole simply crossed Bun's ceiling once they were added. A second process keeps both under it, and every test still runs in `bun run test`, which `queue.ts land` uses.
+- **Evidence:** scratchpad final-test.txt (first EBADF at plugins/quirky.git/test/window/conflicts.test.ts), bisect/*.txt (each part alone passes), fdexp/t.ts
+- **Reversibility:** easy
+- **Confidence:** medium
+- **Revisit if:** the main process hits the ceiling again as other items add tests; the suite would then need splitting per plugin
+- **Source:** assumed — autonomous
+
 ## Progress
 W1–W3 merged and caught up with build/roadmap. Next: post-merge full gate, Final Round 1 (three deep Codex lenses over merge-base(build/roadmap)..HEAD), one fix batch, rerun the suites, verify (UI scenarios with quirk:using-apps-like-a-user on a built daemon), land. If this iteration stops, start at the gate.
