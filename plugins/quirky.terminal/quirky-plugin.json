@@ -2420,6 +2420,816 @@
         "methods": [
           "quirky.terminal/restartHost"
         ]
+      },
+      {
+        "id": "layout",
+        "words": "layout",
+        "summary": "print the tab and pane tree of a worktree's terminal workspace; --json prints the workspace",
+        "flags": {
+          "worktree": {
+            "type": "string",
+            "description": "the worktree (a selector, or `floating`); default the caller's"
+          }
+        },
+        "methods": [
+          "quirky.terminal/workspace"
+        ]
+      },
+      {
+        "id": "tab-new",
+        "words": "tab new",
+        "summary": "open a new tab",
+        "flags": {
+          "worktree": {
+            "type": "string",
+            "description": "the worktree (a selector, or `floating`); default the caller's"
+          },
+          "workspace": {
+            "type": "string",
+            "description": "the workspace, e.g. `floating` (same as --worktree)"
+          },
+          "agent": {
+            "type": "string",
+            "description": "the agent to start (default: shell)"
+          },
+          "cwd": {
+            "type": "string",
+            "description": "an existing absolute directory to start in"
+          },
+          "title": {
+            "type": "string",
+            "description": "the tab's default title"
+          }
+        },
+        "methods": [
+          "quirky.terminal/newTab"
+        ]
+      },
+      {
+        "id": "tab-close",
+        "words": "tab close",
+        "summary": "close a tab and end its sessions (asks first when something is running; --yes skips the question)",
+        "positionals": [
+          {
+            "name": "tab",
+            "description": "the tab ID",
+            "required": true
+          }
+        ],
+        "methods": [
+          "quirky.terminal/closeTab",
+          "quirky.terminal/describeClose"
+        ]
+      },
+      {
+        "id": "tab-close-others",
+        "words": "tab close-others",
+        "summary": "close every other tab of the group, keeping pinned tabs",
+        "positionals": [
+          {
+            "name": "tab",
+            "description": "the tab ID",
+            "required": true
+          }
+        ],
+        "methods": [
+          "quirky.terminal/closeTabs",
+          "quirky.terminal/describeClose"
+        ]
+      },
+      {
+        "id": "tab-close-right",
+        "words": "tab close-right",
+        "summary": "close the tabs to the right of a tab, keeping pinned tabs",
+        "positionals": [
+          {
+            "name": "tab",
+            "description": "the tab ID",
+            "required": true
+          }
+        ],
+        "methods": [
+          "quirky.terminal/closeTabs",
+          "quirky.terminal/describeClose"
+        ]
+      },
+      {
+        "id": "tab-close-left",
+        "words": "tab close-left",
+        "summary": "close the tabs to the left of a tab, keeping pinned tabs",
+        "positionals": [
+          {
+            "name": "tab",
+            "description": "the tab ID",
+            "required": true
+          }
+        ],
+        "methods": [
+          "quirky.terminal/closeTabs",
+          "quirky.terminal/describeClose"
+        ]
+      },
+      {
+        "id": "tab-rename",
+        "words": "tab rename",
+        "summary": "set a tab's title; an empty title clears it",
+        "positionals": [
+          {
+            "name": "tab",
+            "description": "the tab ID",
+            "required": true
+          },
+          {
+            "name": "title",
+            "description": "the new title (at most 200 characters)",
+            "required": true
+          }
+        ],
+        "methods": [
+          "quirky.terminal/renameTab"
+        ]
+      },
+      {
+        "id": "tab-color",
+        "words": "tab color",
+        "summary": "set a tab's colour",
+        "positionals": [
+          {
+            "name": "tab",
+            "description": "the tab ID",
+            "required": true
+          },
+          {
+            "name": "color",
+            "description": "none, blue, purple, pink, red, orange, yellow, green, teal or gray",
+            "required": true
+          }
+        ],
+        "methods": [
+          "quirky.terminal/setTabColor"
+        ]
+      },
+      {
+        "id": "tab-pin",
+        "words": "tab pin",
+        "summary": "pin a tab",
+        "positionals": [
+          {
+            "name": "tab",
+            "description": "the tab ID",
+            "required": true
+          }
+        ],
+        "methods": [
+          "quirky.terminal/pinTab"
+        ]
+      },
+      {
+        "id": "tab-unpin",
+        "words": "tab unpin",
+        "summary": "unpin a tab",
+        "positionals": [
+          {
+            "name": "tab",
+            "description": "the tab ID",
+            "required": true
+          }
+        ],
+        "methods": [
+          "quirky.terminal/pinTab"
+        ]
+      },
+      {
+        "id": "tab-reopen",
+        "words": "tab reopen",
+        "summary": "reopen the most recently closed tab with a fresh session",
+        "flags": {
+          "worktree": {
+            "type": "string",
+            "description": "the worktree (a selector, or `floating`); default the caller's"
+          }
+        },
+        "methods": [
+          "quirky.terminal/reopenTab"
+        ]
+      },
+      {
+        "id": "tab-move",
+        "words": "tab move",
+        "summary": "move a tab to a group, or into a new group beside one",
+        "positionals": [
+          {
+            "name": "tab",
+            "description": "the tab ID",
+            "required": true
+          }
+        ],
+        "flags": {
+          "group": {
+            "type": "string",
+            "description": "the group to move to"
+          },
+          "index": {
+            "type": "integer",
+            "description": "the position in that group"
+          },
+          "split": {
+            "type": "string",
+            "description": "make a new group on this side",
+            "enum": [
+              "right",
+              "left",
+              "down",
+              "up"
+            ]
+          },
+          "of": {
+            "type": "string",
+            "description": "the group to put the new group beside (default: the tab's own)"
+          }
+        },
+        "methods": [
+          "quirky.terminal/moveTab"
+        ]
+      },
+      {
+        "id": "tab-activate",
+        "words": "tab activate",
+        "summary": "activate a tab, or the tab at a 1-based position in a group",
+        "positionals": [
+          {
+            "name": "tab",
+            "description": "the tab ID"
+          }
+        ],
+        "flags": {
+          "index": {
+            "type": "integer",
+            "description": "the 1-based position"
+          },
+          "group": {
+            "type": "string",
+            "description": "the group for --index (default: the active group)"
+          }
+        },
+        "methods": [
+          "quirky.terminal/activateTab"
+        ]
+      },
+      {
+        "id": "tab-next",
+        "words": "tab next",
+        "summary": "activate the next tab of the active group",
+        "methods": [
+          "quirky.terminal/activateTab"
+        ]
+      },
+      {
+        "id": "tab-previous",
+        "words": "tab previous",
+        "summary": "activate the previous tab of the active group",
+        "methods": [
+          "quirky.terminal/activateTab"
+        ]
+      },
+      {
+        "id": "pane-split",
+        "words": "pane split",
+        "summary": "split a pane; the new shell starts in its directory",
+        "positionals": [
+          {
+            "name": "pane",
+            "description": "the pane, or a session ID (default: the pane showing QUIRKY_SESSION_ID)"
+          }
+        ],
+        "flags": {
+          "direction": {
+            "type": "string",
+            "description": "where the new pane goes",
+            "required": true,
+            "enum": [
+              "right",
+              "down"
+            ]
+          }
+        },
+        "methods": [
+          "quirky.terminal/splitPane"
+        ]
+      },
+      {
+        "id": "pane-close",
+        "words": "pane close",
+        "summary": "close a pane and end its session (asks first when something is running; --yes skips the question)",
+        "positionals": [
+          {
+            "name": "pane",
+            "description": "the pane, or a session ID (default: the pane showing QUIRKY_SESSION_ID)"
+          }
+        ],
+        "methods": [
+          "quirky.terminal/closePane",
+          "quirky.terminal/describeClose"
+        ]
+      },
+      {
+        "id": "pane-restart",
+        "words": "pane restart",
+        "summary": "start a fresh shell in a pane whose session has ended",
+        "positionals": [
+          {
+            "name": "pane",
+            "description": "the pane, or a session ID (default: the pane showing QUIRKY_SESSION_ID)"
+          }
+        ],
+        "methods": [
+          "quirky.terminal/restartPane"
+        ]
+      },
+      {
+        "id": "pane-focus",
+        "words": "pane focus",
+        "summary": "focus a pane, or the next or previous pane of the active tab",
+        "positionals": [
+          {
+            "name": "pane",
+            "description": "the pane, or a session ID"
+          }
+        ],
+        "flags": {
+          "next": {
+            "type": "boolean",
+            "description": "focus the next pane"
+          },
+          "previous": {
+            "type": "boolean",
+            "description": "focus the previous pane"
+          }
+        },
+        "methods": [
+          "quirky.terminal/focusPane"
+        ]
+      },
+      {
+        "id": "pane-title",
+        "words": "pane title",
+        "summary": "set a pane's title; an empty title clears it",
+        "positionals": [
+          {
+            "name": "pane",
+            "description": "the pane, or a session ID (default: the pane showing QUIRKY_SESSION_ID)"
+          },
+          {
+            "name": "title",
+            "description": "the new title (at most 200 characters); the only argument when the pane is implied"
+          }
+        ],
+        "methods": [
+          "quirky.terminal/setPaneTitle"
+        ]
+      },
+      {
+        "id": "pane-expand",
+        "words": "pane expand",
+        "summary": "expand a pane to fill its tab",
+        "positionals": [
+          {
+            "name": "pane",
+            "description": "the pane, or a session ID (default: the pane showing QUIRKY_SESSION_ID)"
+          }
+        ],
+        "methods": [
+          "quirky.terminal/expandPane"
+        ]
+      },
+      {
+        "id": "pane-collapse",
+        "words": "pane collapse",
+        "summary": "return an expanded pane to its place",
+        "positionals": [
+          {
+            "name": "pane",
+            "description": "the pane, or a session ID (default: the pane showing QUIRKY_SESSION_ID)"
+          }
+        ],
+        "methods": [
+          "quirky.terminal/expandPane"
+        ]
+      },
+      {
+        "id": "pane-equalize",
+        "words": "pane equalize",
+        "summary": "give every pane of a tab the same share",
+        "flags": {
+          "tab": {
+            "type": "string",
+            "description": "the tab (default: the tab of the pane showing QUIRKY_SESSION_ID)"
+          }
+        },
+        "methods": [
+          "quirky.terminal/equalize",
+          "quirky.terminal/paneOf"
+        ]
+      },
+      {
+        "id": "pane-resize",
+        "words": "pane resize",
+        "summary": "set a pane's share of its parent split",
+        "positionals": [
+          {
+            "name": "pane",
+            "description": "the pane, or a session ID (default: the pane showing QUIRKY_SESSION_ID)"
+          }
+        ],
+        "flags": {
+          "ratio": {
+            "type": "number",
+            "description": "the pane's share, strictly between 0 and 1",
+            "required": true
+          }
+        },
+        "methods": [
+          "quirky.terminal/resizeSplit"
+        ]
+      },
+      {
+        "id": "pane-move",
+        "words": "pane move",
+        "summary": "move a pane beside another pane, or into another tab",
+        "positionals": [
+          {
+            "name": "pane",
+            "description": "the pane, or a session ID",
+            "required": true
+          }
+        ],
+        "flags": {
+          "to-pane": {
+            "type": "string",
+            "description": "the pane to move beside"
+          },
+          "edge": {
+            "type": "string",
+            "description": "the side of --to-pane",
+            "enum": [
+              "left",
+              "right",
+              "top",
+              "bottom"
+            ]
+          },
+          "to-tab": {
+            "type": "string",
+            "description": "the tab to move into"
+          }
+        },
+        "methods": [
+          "quirky.terminal/movePane"
+        ]
+      },
+      {
+        "id": "pane-clear",
+        "words": "pane clear",
+        "summary": "clear a pane's screen and scrollback",
+        "positionals": [
+          {
+            "name": "pane",
+            "description": "the pane, or a session ID (default: the pane showing QUIRKY_SESSION_ID)"
+          }
+        ],
+        "methods": [
+          "quirky.terminal/clearPane"
+        ]
+      },
+      {
+        "id": "pane-reset",
+        "words": "pane reset",
+        "summary": "reset a pane's terminal modes (mouse, bracketed paste, application cursor)",
+        "positionals": [
+          {
+            "name": "pane",
+            "description": "the pane, or a session ID (default: the pane showing QUIRKY_SESSION_ID)"
+          }
+        ],
+        "methods": [
+          "quirky.terminal/resetPane"
+        ]
+      },
+      {
+        "id": "pane-get",
+        "words": "pane get",
+        "summary": "show a pane's session, tab, title and exit",
+        "positionals": [
+          {
+            "name": "pane",
+            "description": "the pane, or a session ID (default: the pane showing QUIRKY_SESSION_ID)"
+          }
+        ],
+        "flags": {
+          "worktree": {
+            "type": "string",
+            "description": "the worktree to look in (default: the caller's, then the floating workspace)"
+          }
+        },
+        "methods": [
+          "quirky.terminal/workspace",
+          "quirky.terminal/paneOf"
+        ]
+      },
+      {
+        "id": "group-close",
+        "words": "group close",
+        "summary": "close a tab group; its tabs join the neighbouring group",
+        "positionals": [
+          {
+            "name": "group",
+            "description": "the group ID",
+            "required": true
+          }
+        ],
+        "methods": [
+          "quirky.terminal/closeGroup"
+        ]
+      },
+      {
+        "id": "group-resize",
+        "words": "group resize",
+        "summary": "set a tab group's share of its parent split (0.15 to 0.85), or a split's first-child share with --split",
+        "positionals": [
+          {
+            "name": "group",
+            "description": "the group ID"
+          }
+        ],
+        "flags": {
+          "ratio": {
+            "type": "number",
+            "description": "the share",
+            "required": true
+          },
+          "split": {
+            "type": "string",
+            "description": "a split ID; --ratio is then its first child's share"
+          }
+        },
+        "methods": [
+          "quirky.terminal/resizeSplit"
+        ]
+      },
+      {
+        "id": "quick-command-list",
+        "words": "quick-command list",
+        "summary": "list quick commands visible to this worktree",
+        "flags": {
+          "all": {
+            "type": "boolean",
+            "description": "list every quick command"
+          }
+        },
+        "methods": [
+          "quirky.terminal/quickCommands"
+        ]
+      },
+      {
+        "id": "quick-command-add",
+        "words": "quick-command add",
+        "summary": "save a quick command",
+        "flags": {
+          "label": {
+            "type": "string",
+            "description": "the name shown in menus (at most 80 characters)",
+            "required": true
+          },
+          "command": {
+            "type": "string",
+            "description": "the command or prompt (at most 4000 characters)",
+            "required": true
+          },
+          "kind": {
+            "type": "string",
+            "description": "terminal (default) or agent",
+            "enum": [
+              "terminal",
+              "agent"
+            ]
+          },
+          "agent": {
+            "type": "string",
+            "description": "the agent of an agent command"
+          },
+          "no-enter": {
+            "type": "boolean",
+            "description": "type the command into a pane without pressing Enter"
+          },
+          "scope": {
+            "type": "string",
+            "description": "global (default) or repo",
+            "enum": [
+              "global",
+              "repo"
+            ]
+          },
+          "repo": {
+            "type": "string",
+            "description": "the repo of a repo command (default: this worktree's)"
+          }
+        },
+        "methods": [
+          "quirky.terminal/addQuickCommand"
+        ]
+      },
+      {
+        "id": "quick-command-update",
+        "words": "quick-command update",
+        "summary": "change fields of a quick command",
+        "positionals": [
+          {
+            "name": "id",
+            "description": "the quick command ID",
+            "required": true
+          }
+        ],
+        "flags": {
+          "label": {
+            "type": "string",
+            "description": "the name shown in menus"
+          },
+          "command": {
+            "type": "string",
+            "description": "the command or prompt"
+          },
+          "kind": {
+            "type": "string",
+            "description": "terminal or agent",
+            "enum": [
+              "terminal",
+              "agent"
+            ]
+          },
+          "agent": {
+            "type": "string",
+            "description": "the agent of an agent command"
+          },
+          "enter": {
+            "type": "boolean",
+            "description": "press Enter after typing the command into a pane"
+          },
+          "no-enter": {
+            "type": "boolean",
+            "description": "type the command into a pane without pressing Enter"
+          },
+          "scope": {
+            "type": "string",
+            "description": "global or repo",
+            "enum": [
+              "global",
+              "repo"
+            ]
+          },
+          "repo": {
+            "type": "string",
+            "description": "the repo of a repo command"
+          }
+        },
+        "methods": [
+          "quirky.terminal/updateQuickCommand"
+        ]
+      },
+      {
+        "id": "quick-command-remove",
+        "words": "quick-command remove",
+        "summary": "remove a quick command (asks first; --yes skips the question)",
+        "positionals": [
+          {
+            "name": "id",
+            "description": "the quick command ID",
+            "required": true
+          }
+        ],
+        "methods": [
+          "quirky.terminal/removeQuickCommand"
+        ]
+      },
+      {
+        "id": "quick-command-run",
+        "words": "quick-command run",
+        "summary": "run a quick command in a new tab, or type it into a pane",
+        "positionals": [
+          {
+            "name": "id",
+            "description": "the quick command ID",
+            "required": true
+          }
+        ],
+        "flags": {
+          "pane": {
+            "type": "string",
+            "description": "the pane, or a session ID, to type the command into"
+          }
+        },
+        "methods": [
+          "quirky.terminal/runQuickCommand"
+        ]
+      },
+      {
+        "id": "floating-state",
+        "words": "floating state",
+        "summary": "show whether the floating workspace is open, maximized and where it sits",
+        "methods": [
+          "quirky.terminal/floating"
+        ]
+      },
+      {
+        "id": "floating-show",
+        "words": "floating show",
+        "summary": "open the floating workspace",
+        "methods": [
+          "quirky.terminal/setFloating"
+        ]
+      },
+      {
+        "id": "floating-hide",
+        "words": "floating hide",
+        "summary": "close the floating workspace panel (its sessions keep running)",
+        "methods": [
+          "quirky.terminal/setFloating"
+        ]
+      },
+      {
+        "id": "floating-toggle",
+        "words": "floating toggle",
+        "summary": "open the floating workspace if closed, else close it",
+        "methods": [
+          "quirky.terminal/floating",
+          "quirky.terminal/setFloating"
+        ]
+      },
+      {
+        "id": "floating-maximize",
+        "words": "floating maximize",
+        "summary": "maximize the floating workspace",
+        "methods": [
+          "quirky.terminal/setFloating"
+        ]
+      },
+      {
+        "id": "floating-restore",
+        "words": "floating restore",
+        "summary": "return the floating workspace to its normal size",
+        "methods": [
+          "quirky.terminal/setFloating"
+        ]
+      },
+      {
+        "id": "floating-bounds",
+        "words": "floating bounds",
+        "summary": "place the floating workspace (window-relative CSS px; at least 420x280)",
+        "flags": {
+          "x": {
+            "type": "number",
+            "description": "left edge",
+            "required": true
+          },
+          "y": {
+            "type": "number",
+            "description": "top edge",
+            "required": true
+          },
+          "width": {
+            "type": "number",
+            "description": "width, at least 420",
+            "required": true
+          },
+          "height": {
+            "type": "number",
+            "description": "height, at least 280",
+            "required": true
+          }
+        },
+        "methods": [
+          "quirky.terminal/setFloating"
+        ]
+      },
+      {
+        "id": "open-link",
+        "words": "open-link",
+        "summary": "open a URL (http, https, mailto) or an absolute path in the system; --reveal shows a path in Finder",
+        "positionals": [
+          {
+            "name": "url-or-path",
+            "description": "the URL or absolute path",
+            "required": true
+          }
+        ],
+        "flags": {
+          "reveal": {
+            "type": "boolean",
+            "description": "reveal the path in Finder instead of opening it"
+          }
+        },
+        "methods": [
+          "quirky.terminal/openExternal"
+        ]
       }
     ],
     "panel": [
