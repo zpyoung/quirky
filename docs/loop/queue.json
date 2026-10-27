@@ -417,7 +417,7 @@
       "deps": [
         "m1-worktrees"
       ],
-      "status": "blocked"
+      "status": "todo"
     },
     {
       "id": "sa-browser-ui",
