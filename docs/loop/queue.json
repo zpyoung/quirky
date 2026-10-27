@@ -216,8 +216,7 @@
         "m2-source-control-core",
         "m1-agent-status"
       ],
-      "status": "in-progress",
-      "lane": 5
+      "status": "blocked"
     },
     {
       "id": "m2-ask-parity",
