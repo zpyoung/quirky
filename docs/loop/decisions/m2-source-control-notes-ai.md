@@ -385,5 +385,27 @@
 - **Revisit if:** a W2 or W3 task finds a W1 defect that a checkpoint would have caught
 - **Source:** assumed — autonomous
 
+## D36: `quirky.git` keeps `quirky.worktree` as its only declared dependency
+- **Question:** T4 returned BLOCKED: declaring `quirky.agents`, `quirky.session` and `quirky.terminal` as dependencies (tech.md) made `quirky.git` invalid in every existing harness that doesn't install them
+- **Options:** widen T4's scope to every harness; drop the three dependencies
+- **Chose:** drop them; tech.md amended. `context.call` activates the target plugin lazily, which T4's scenario tests confirmed (NA-16, NA-18 pass)
+- **Why:** the dependency list only orders activation; the calls already work without it, and changing five harnesses buys nothing
+- **Evidence:** packages/daemon/src/plugins/host.ts (dependencies activate first); T4 acceptance run, 39 pass
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** a distro disables one of the three and the failure should be a load-time error
+- **Source:** assumed — autonomous
+
+## D37: W1 implementation choices accepted as built
+- **Question:** choices T1, T3 and T4 made where the contract was open
+- **Options:** accept; send back
+- **Chose:** accept: `oneShot.args` items are literal strings or `{when, args}` (model not default, thinking, thinking=level), plus an optional `command` for muse and dsh; a singleton user flag replaces Orca's in place; Claude's singleton groups include `--effort` and `--settings`; agents without `oneShot` fail `cannot-generate` before the install check; a login-shell exit 126/127 maps to `not-started`; one-shot runs drop `QUIRKY_SESSION_ID` and the hook variables; the failure detail uses Orca's excerpt (240 characters); `stagedPatch` spawns git itself because `runGit` has no output cap; the three fix prompts take no custom-instruction argument because the template wraps `{basePrompt}`; `describeClearNotes` returns the title string (the kernel's describe contract); note paths in prompts lose every control character, bodies keep LF and CR for escaping; a note deleted while held counts as sent; the CLI flag is `--start-line`
+- **Why:** each follows Orca or an existing Quirky contract, and each is tested
+- **Evidence:** W1 implementer reports; scratchpad journal.md
+- **Reversibility:** easy
+- **Confidence:** medium
+- **Revisit if:** a review finds one of them contradicts the logic spec
+- **Source:** assumed — autonomous
+
 ## Progress
-Building. W1 dispatched (T1-T4) in scratchpad worktrees from 19e520f. If this stops: discard the scratch worktrees, re-create W1 per D34 and redispatch.
+Building. W1 (T1-T4) merged at fe961bf; its gate is running. W2 (T5, T6a then T6b) next per D34.

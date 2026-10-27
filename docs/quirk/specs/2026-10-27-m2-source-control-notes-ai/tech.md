@@ -32,8 +32,9 @@ Libraries: `@codemirror/view` (`gutter`, `GutterMarker`, `WidgetType`, `Decorati
 `block: true` from a `StateField`), `@codemirror/state` (`StateField`, `StateEffect`), React 19.
 
 Small cross-plugin growths (API unstable until M7):
-- `quirky.git`'s manifest `dependencies` adds `quirky.agents`, `quirky.session` and
-  `quirky.terminal`, so they activate before notes and AI calls (`QG/quirky-plugin.json:9-11`).
+- `quirky.git`'s manifest `dependencies` stays `quirky.worktree` only: `context.call` activates
+  `quirky.agents`, `quirky.session` and `quirky.terminal` lazily, and declaring them would make the
+  plugin invalid in every harness that doesn't install them (D36).
 - `quirky.terminal/newTab` params gain `extraArgs` (string).
 - `quirky.agents/list` entries gain `canGenerate: boolean`.
 
@@ -177,7 +178,7 @@ addNote({worktree?, path, line, startLine?, body}) -> {note: Note}
 editNote({worktree?, id, body}) -> {note: Note}                    sets updatedAt
 deleteNote({worktree?, id}) -> {ok: true}
 clearNotes({worktree?, path?}) -> {cleared: number}                destructive; describe: describeClearNotes
-describeClearNotes({worktree?, path?}) -> {title, body?, confirmLabel}   readOnly
+describeClearNotes({worktree?, path?}) -> string /* the dialog title */   readOnly
 formatNotes({worktree?, ids?, path?}) -> {text: string, count}     readOnly; all notes when neither given
 noteTargets({worktree?}) -> {sessions: NoteTarget[], agents: {id, label}[]}   readOnly
 sendNotes({worktree?, scope: 'note'|'file'|'all', id?, path?, session?, agent?})
@@ -190,8 +191,9 @@ sendNotes({worktree?, scope: 'note'|'file'|'all', id?, path?, session?, agent?})
   file can carry notes). All `invalid-params`.
 - `id` unknown in that worktree: `not-found`.
 - Every mutation emits `notesChanged {worktreeId}` (new manifest event).
-- `describeClearNotes`: path given → title `Clear N note(s) from <path>?`; else `Clear N note(s)
-  from this workspace?`; `confirmLabel` "Clear". Pluralization: "1 note", "N notes".
+- `describeClearNotes` returns the title string, as the kernel's `describe` contract requires:
+  path given → `Clear N note(s) from <path>?`; else `Clear N note(s) from this workspace?`. The
+  window's confirm button reads "Clear". Pluralization: "1 note", "N notes".
 - `sendNotes`:
   - exactly one of `session` and `agent`; scope `note` needs `id`, `file` needs `path`.
   - picks notes in scope minus held ones; none at all in scope → `conflict` reason
