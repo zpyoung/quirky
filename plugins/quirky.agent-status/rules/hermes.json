@@ -1,0 +1,32 @@
+{
+  "agent": "hermes",
+  "description": "Hermes detection rules, from its ready status row above or below the composer.",
+  "rules": [
+    {
+      "id": "composer-ready",
+      "why": "Hermes paints a `ready` status row directly above an empty composer after startup and each completed turn, and replaces it while running; the row's clock keeps repainting, so quiet is not asked.",
+      "state": "idle",
+      "region": "screen",
+      "lastLines": 6,
+      "all": [
+        {
+          "regex": "^─ (?:(?:⚡|🔋) \\d{1,3}% │ )?ready [│|][^\\n]*\\n(?:[a-z0-9][a-z0-9_-]{0,63} )?(?:❯|⚔|Ψ|◉|✦)(?: Ask me anything…| Try \"/help\" for commands| Try \"(?:explain this codebase|write a test for…|refactor the auth module|fix the lint errors|how does the config loader work\\?)\")?[ \\t]*$",
+          "ignoreCase": true
+        }
+      ]
+    },
+    {
+      "id": "composer-ready-statusbar-bottom",
+      "why": "With `display.tui_statusbar: bottom` Hermes paints the same ready row directly below the empty composer.",
+      "state": "idle",
+      "region": "screen",
+      "lastLines": 6,
+      "all": [
+        {
+          "regex": "^(?:[a-z0-9][a-z0-9_-]{0,63} )?(?:❯|⚔|Ψ|◉|✦)(?: Ask me anything…| Try \"/help\" for commands| Try \"(?:explain this codebase|write a test for…|refactor the auth module|fix the lint errors|how does the config loader work\\?)\")?[ \\t]*\\n─ (?:(?:⚡|🔋) \\d{1,3}% │ )?ready [│|][^\\n]*",
+          "ignoreCase": true
+        }
+      ]
+    }
+  ]
+}

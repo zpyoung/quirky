@@ -1,0 +1,14 @@
+title: Cursor Agent
+ ⬢ Cursor Agent
+
+ → run the install
+
+
+ $ npm install left-pad
+
+ Run this command?
+ Not in allowlist: npm install left-pad
+ → Run (once) (y)
+   Add Shell(npm) to allowlist? (tab)
+   Run Everything (shift+tab)
+   Skip & Tell the Agent What to Do (esc or n)
