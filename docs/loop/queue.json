@@ -1083,6 +1083,16 @@
         "m3-vault"
       ],
       "status": "todo"
+    },
+    {
+      "id": "fix-bash53-shell-integration",
+      "milestone": "M1",
+      "title": "Bash 5.3 shell integration reports an extra exit code: packages/daemon/test/shell-path.test.ts 'bash shell integration > reports readiness once, each command exit code, the cwd, and keeps the exit status' expects finishedCodes [0, 1, 7, 0] but bash 5.3 (Ubuntu 26.04, Homebrew bash on macOS) gives [0, 1, 1, 7, 0]: the empty line reports the previous status again. Passes on bash 5.2. Make the bash wrapper skip reports for empty commands on 5.3 too, and run the test against bash 5.3 as well as 5.2 so both stay covered.",
+      "docs": [
+        "term-daemon.md"
+      ],
+      "deps": [],
+      "status": "todo"
     }
   ]
 }
