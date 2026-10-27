@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { add, block, claim, land, locate, merge, withLock, type Repo } from './lanes'
+import { add, block, claim, land, locate, merge, requestLand, withLock, type Repo } from './lanes'
 import { load, save, type Item } from './queue'
 
 const item = (id: string, deps: string[] = []): Item => ({ id, milestone: 'M1', title: id, docs: [], deps, status: 'todo' })
@@ -111,6 +111,79 @@ describe('land', () => {
 
   test('refuses an item that is not in progress', async () => {
     await expect(land(repo, 'a', [['true']])).rejects.toThrow('a is todo, not in-progress')
+  })
+})
+
+describe('batched land', () => {
+  // a verify command that counts its runs in a file outside the integration worktree
+  let runs: string
+  const counted = (check = 'true') => [['sh', '-c', `echo run >> ${runs} && ${check}`]]
+  const runCount = () => (existsSync(runs) ? readFileSync(runs, 'utf8').split('\n').filter(Boolean).length : 0)
+  const statusOf = (id: string) => queue().find((entry) => entry.id === id)?.status
+
+  beforeEach(async () => {
+    runs = join(mkdtempSync(join(tmpdir(), 'runs-')), 'count')
+    await claim(repo, 1)
+    await claim(repo, 2)
+  })
+
+  test("lands another lane's waiting item in the same verified run", async () => {
+    branch('a', 'a.txt', 'a\n')
+    branch('b', 'b.txt', 'b\n')
+    requestLand(repo, 'b')
+    await land(repo, 'a', counted())
+    expect(runCount()).toBe(1)
+    expect([statusOf('a'), statusOf('b')]).toEqual(['done', 'done'])
+    expect(git(repo.integration, 'log', '--format=%s', '-2')).toBe('chore(build): finish b\nchore(build): finish a')
+    await land(repo, 'b', counted())
+    expect(runCount()).toBe(1)
+  })
+
+  test('leaves a waiting item that conflicts for its own lane', async () => {
+    branch('a', 'shared.txt', 'from a\n')
+    branch('b', 'shared.txt', 'from b\n')
+    requestLand(repo, 'b')
+    await land(repo, 'a', counted())
+    expect([statusOf('a'), statusOf('b')]).toEqual(['done', 'in-progress'])
+    expect(git(repo.integration, 'status', '--porcelain')).toBe('')
+    await expect(land(repo, 'b', counted())).rejects.toThrow('conflicts with build/roadmap')
+  })
+
+  test('verifies its own item alone when the batch fails, and makes the other land alone', async () => {
+    branch('a', 'a.txt', 'a\n')
+    branch('b', 'b.txt', 'b\n')
+    requestLand(repo, 'b')
+    const check = 'test ! -f b.txt'
+    await land(repo, 'a', counted(check))
+    expect(runCount()).toBe(2)
+    expect([statusOf('a'), statusOf('b')]).toEqual(['done', 'in-progress'])
+    expect(readFileSync(join(repo.lands, 'b'), 'utf8')).toContain('"solo":true')
+    await expect(land(repo, 'b', counted(check))).rejects.toThrow('failed on the merge result')
+    expect(runCount()).toBe(3)
+    expect(existsSync(join(repo.lands, 'b'))).toBe(false)
+  })
+
+  test('skips a waiting item whose branch moved after it asked to land', async () => {
+    branch('a', 'a.txt', 'a\n')
+    branch('b', 'b.txt', 'b\n')
+    requestLand(repo, 'b')
+    git(dir, 'checkout', '-q', 'build/b')
+    writeFileSync(join(dir, 'b2.txt'), 'more\n')
+    git(dir, 'add', 'b2.txt')
+    git(dir, 'commit', '-q', '-m', 'more')
+    git(dir, 'checkout', '-q', '--detach')
+    await land(repo, 'a', counted())
+    expect([statusOf('a'), statusOf('b')]).toEqual(['done', 'in-progress'])
+  })
+
+  test('ignores a request whose process has died', async () => {
+    branch('a', 'a.txt', 'a\n')
+    branch('b', 'b.txt', 'b\n')
+    mkdirSync(repo.lands, { recursive: true })
+    writeFileSync(join(repo.lands, 'b'), JSON.stringify({ pid: Bun.spawnSync(['true']).pid, head: git(dir, 'rev-parse', 'build/b') }))
+    await land(repo, 'a', counted())
+    expect([statusOf('a'), statusOf('b')]).toEqual(['done', 'in-progress'])
+    expect(existsSync(join(repo.lands, 'b'))).toBe(false)
   })
 })
 
