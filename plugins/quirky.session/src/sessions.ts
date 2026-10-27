@@ -79,6 +79,129 @@ export function providerSessionIdProblem(id: string): string | null {
 const isPlainObject = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value)
 
+type HomeOverride = { value: string | null; source: 'explicit' | 'inherited' | 'injected' | 'absent' }
+type HomeOverrides = { claude: HomeOverride; codex: HomeOverride }
+type AccountPreparation = {
+  env: Record<string, string | null>
+  shellInit: string | null
+  account: { provider: 'claude' | 'codex'; id: string | null; label: string; source: 'managed' | 'default' | 'custom' } | null
+  resumeTranscriptPath?: string
+}
+type AccountPreparationRequest = {
+  agent: string
+  sessionId: string
+  worktreeId: string
+  cwd: string
+  homeOverrides: HomeOverrides
+  resume?: {
+    sourceSessionId: string
+    providerSession: { id: string; transcriptPath: string | null }
+  }
+}
+
+const ACCOUNT_PREPARE_METHOD = 'method:quirky.accounts/prepare'
+
+function hasAccountPreparation(value: unknown): boolean {
+  if (!Array.isArray(value)) throw new Error('plugin.contributions returned an invalid list')
+  return value.some(
+    (entry) =>
+      isPlainObject(entry) &&
+      entry.kind === 'method' &&
+      entry.id === ACCOUNT_PREPARE_METHOD &&
+      entry.status === 'effective'
+  )
+}
+
+function environmentOf(value: unknown, method: string): Record<string, string | null> {
+  if (!isPlainObject(value)) throw new Error(`${method} returned an invalid environment`)
+  const env: Record<string, string | null> = {}
+  for (const [name, entry] of Object.entries(value)) {
+    if (entry !== null && typeof entry !== 'string') throw new Error(`${method} returned an invalid environment value for ${name}`)
+    env[name] = entry
+  }
+  return env
+}
+
+function plannedEnvironmentOf(value: unknown): Record<string, string | null> {
+  if (!isPlainObject(value) || !isPlainObject(value.record)) throw new Error('quirky.agents/plan returned an invalid launch record')
+  return environmentOf(value.record.env, 'quirky.agents/plan')
+}
+
+function homeOverrideOf(
+  name: string,
+  userEnv: Record<string, string | null>,
+  hookEnv: Record<string, string | null>
+): HomeOverride {
+  if (Object.hasOwn(hookEnv, name)) return { value: hookEnv[name] ?? null, source: 'explicit' }
+  if (Object.hasOwn(userEnv, name)) return { value: userEnv[name] ?? null, source: 'explicit' }
+  const inherited = process.env[name]
+  return inherited === undefined ? { value: null, source: 'absent' } : { value: inherited, source: 'inherited' }
+}
+
+function homeOverridesOf(userEnv: Record<string, string | null>, hookEnv: Record<string, string | null>): HomeOverrides {
+  return {
+    claude: homeOverrideOf('CLAUDE_CONFIG_DIR', userEnv, hookEnv),
+    codex: homeOverrideOf('CODEX_HOME', userEnv, hookEnv)
+  }
+}
+
+function accountPreparationOf(value: unknown): AccountPreparation {
+  if (!isPlainObject(value)) throw new Error('quirky.accounts/prepare returned an invalid result')
+  const env = environmentOf(value.env, 'quirky.accounts/prepare')
+  if (value.shellInit !== null && typeof value.shellInit !== 'string') {
+    throw new Error('quirky.accounts/prepare returned an invalid shell init path')
+  }
+  if (typeof value.shellInit === 'string' && !isAbsolute(value.shellInit)) {
+    throw new Error('quirky.accounts/prepare returned a non-absolute shell init path')
+  }
+  let resumeTranscriptPath: string | undefined
+  if (Object.hasOwn(value, 'resumeTranscriptPath')) {
+    if (typeof value.resumeTranscriptPath !== 'string') {
+      throw new Error('quirky.accounts/prepare returned an invalid resume transcript path')
+    }
+    if (!isAbsolute(value.resumeTranscriptPath)) {
+      throw new Error('quirky.accounts/prepare returned a non-absolute resume transcript path')
+    }
+    resumeTranscriptPath = value.resumeTranscriptPath
+  }
+  let account: AccountPreparation['account'] = null
+  if (value.account !== null) {
+    const candidate = value.account
+    if (!isPlainObject(candidate)) throw new Error('quirky.accounts/prepare returned an invalid account')
+    const provider = candidate.provider
+    const id = candidate.id
+    const source = candidate.source
+    if (
+      (provider !== 'claude' && provider !== 'codex') ||
+      (id !== null && typeof id !== 'string') ||
+      typeof candidate.label !== 'string' ||
+      (source !== 'managed' && source !== 'default' && source !== 'custom')
+    ) {
+      throw new Error('quirky.accounts/prepare returned an invalid account')
+    }
+    account = { provider, id, label: candidate.label, source }
+  }
+  return {
+    env,
+    shellInit: value.shellInit,
+    account,
+    ...(resumeTranscriptPath === undefined ? {} : { resumeTranscriptPath })
+  }
+}
+
+function preparedHookEnv(
+  hooks: Record<string, string | null>,
+  userEnv: Record<string, string | null>,
+  prepared: AccountPreparation | null
+): Record<string, string | null> {
+  if (prepared === null) return hooks
+  const env: Record<string, string | null> = {}
+  for (const [name, value] of Object.entries(prepared.env)) {
+    if (!Object.hasOwn(userEnv, name) && !Object.hasOwn(hooks, name)) env[name] = value
+  }
+  return { ...env, ...hooks }
+}
+
 /**
  * Checks a caller-supplied `launchSettings` against the `LaunchSettings` shape and returns a copy
  * built from the checked fields; the string is the first thing found wrong.
@@ -134,6 +257,7 @@ type AgentInfo = { label: string; resumable: boolean; canFork: boolean }
 type LaunchSpec = {
   argv: string[]
   envPatch: Record<string, string | null>
+  shellInit?: string
   launch: SessionLaunch | null
   launchSettings: LaunchSettings | null
   promptDelivery: PromptDeliveryState | null
@@ -202,12 +326,30 @@ export class SessionService {
       throw this.context.error('invalid-params', 'command is only allowed with agent shell')
     }
     const title = (params.title as string | undefined) ?? (agent === 'shell' ? 'Shell' : (await this.agentInfo(agent)).label)
+    const accountPrepare = await this.accountPreparationAvailable()
+    const userEnv =
+      accountPrepare && agent !== 'shell'
+        ? plannedEnvironmentOf(
+            await this.context.call('quirky.agents/plan', {
+              agent,
+              cwd: worktree.path,
+              ...(prompt === undefined ? {} : { prompt }),
+              submitPrompt,
+              ...picks
+            })
+          )
+        : {}
     const session = { ...this.newRecord(worktree, 'terminal', agent, title), name }
     const launched = await this.start(session, worktree.repoId, params, prompt, async (additions) => {
+      const prepared = accountPrepare
+        ? await this.prepareAccount(session, agent, worktree.path, userEnv, additions.env)
+        : null
+      const hookEnv = preparedHookEnv(additions.env, userEnv, prepared)
       if (agent === 'shell') {
         return {
           argv: command === undefined ? this.context.launch.shellArgv() : this.context.launch.commandArgv(command),
-          envPatch: additions.env,
+          envPatch: hookEnv,
+          ...(prepared?.shellInit ? { shellInit: prepared.shellInit } : {}),
           launch: null,
           launchSettings: null,
           promptDelivery: null,
@@ -222,7 +364,7 @@ export class SessionService {
         submitPrompt,
         ...picks,
         hookArgs: additions.args,
-        hookEnv: additions.env
+        hookEnv
       })) as LaunchPlan
       return {
         argv: this.context.launch.commandArgv(plan.command),
@@ -238,11 +380,30 @@ export class SessionService {
   }
 
   /**
-   * Starts a new terminal session that resumes an agent session in the old session's folder,
-   * replaying the old launch record, whose launch settings carry over. The old record is untouched.
+   * Resumes a terminal agent through its CLI, or delegates a structured provider conversation to
+   * `quirky.structured`. The original session remains untouched.
    */
   resume = async (params: Record<string, unknown>): Promise<Session> => {
     const old = this.require(params.session as string)
+    if (old.kind === 'structured') {
+      if (params.fork !== undefined) throw this.context.error('conflict', 'structured sessions do not support fork')
+      if (params.providerSession !== undefined) {
+        throw this.context.error('invalid-params', 'structured sessions do not support providerSession overrides')
+      }
+      if (params.transcriptPath !== undefined) {
+        throw this.context.error('invalid-params', 'structured sessions do not support transcriptPath overrides')
+      }
+      const unsupported = Object.keys(params).find((key) => key !== 'session' && key !== 'prompt')
+      if (unsupported !== undefined) throw this.context.error('invalid-params', `structured resume does not support ${unsupported}`)
+      if (params.prompt !== undefined && typeof params.prompt !== 'string') {
+        throw this.context.error('invalid-params', 'prompt must be a string')
+      }
+      return (await this.context.call('quirky.structured/resume', {
+        session: old.id,
+        ...(params.prompt === undefined ? {} : { prompt: params.prompt })
+      })) as Session
+    }
+    if (params.prompt !== undefined) throw this.context.error('invalid-params', 'prompt is only supported when resuming a structured session')
     if (old.kind !== 'terminal') throw this.context.error('conflict', `session ${old.id} is not a terminal session`)
     if (old.agent === 'shell') throw this.context.error('conflict', `session ${old.id} is a shell, not an agent`)
     const info = await this.agentInfo(old.agent)
@@ -266,15 +427,29 @@ export class SessionService {
       launchSettings: old.launchSettings ?? null,
       resumedFrom: old.id
     }
+    const accountPrepare = await this.accountPreparationAvailable()
+    const userEnv = old.launch?.env ?? {}
     const launched = await this.start(session, this.records.repoIdOf(old.id), params, undefined, async (additions) => {
+      const accountResume =
+        old.agent === 'claude' || old.agent === 'codex'
+          ? { sourceSessionId: old.id, providerSession }
+          : undefined
+      const prepared = accountPrepare
+        ? await this.prepareAccount(session, old.agent, old.cwd, userEnv, additions.env, accountResume)
+        : null
+      const preparedProviderSession =
+        prepared?.resumeTranscriptPath === undefined
+          ? providerSession
+          : { ...providerSession, transcriptPath: prepared.resumeTranscriptPath }
+      const hookEnv = preparedHookEnv(additions.env, userEnv, prepared)
       const resumed = (await this.context.call('quirky.agents/prepareResume', {
         agent: old.agent,
         cwd: old.cwd,
         record: old.launch ?? null,
-        providerSession,
+        providerSession: preparedProviderSession,
         fork,
         hookArgs: additions.args,
-        hookEnv: additions.env
+        hookEnv
       })) as { command: string; env: Record<string, string | null>; record: SessionLaunch }
       return {
         argv: this.context.launch.commandArgv(resumed.command),
@@ -283,7 +458,7 @@ export class SessionService {
         launchSettings: old.launchSettings ?? null,
         promptDelivery: null,
         paste: null,
-        providerSession: fork ? null : providerSession
+        providerSession: fork ? null : preparedProviderSession
       }
     })
     return this.deliverAfterLaunch(launched, false)
@@ -319,16 +494,26 @@ export class SessionService {
   }
 
   /**
-   * Records a session that runs without a terminal; its owner reports progress through `setStatus`
-   * and may pass the `launchSettings` its launch applied.
+   * Records a structured session, optionally in its original directory and linked to the session it
+   * resumes. The owner reports progress through `setStatus`.
    */
   register = async (params: Record<string, unknown>, caller: PluginCaller): Promise<Session> => {
     const checked = params.launchSettings === undefined || params.launchSettings === null ? null : checkLaunchSettings(params.launchSettings)
     if (typeof checked === 'string') throw this.context.error('invalid-params', `launchSettings is malformed: ${checked}`)
-    const worktree = await this.resolveWorktree(params.worktree, caller)
+    const cwd = this.startCwd(params.cwd)
+    const resolved = await this.resolveWorktree(params.worktree, caller, cwd)
+    const worktree = cwd === undefined ? resolved : { ...resolved, path: cwd }
+    const resumedFrom = params.resumedFrom
+    if (resumedFrom !== undefined) {
+      if (typeof resumedFrom !== 'string' || resumedFrom.length === 0) {
+        throw this.context.error('invalid-params', 'resumedFrom must be a non-empty session ID')
+      }
+      if (!this.records.get(resumedFrom)) throw this.context.error('not-found', `no such resumed session: ${resumedFrom}`)
+    }
     const session = {
       ...this.newRecord(worktree, 'structured', params.agent as AgentKind, params.title as string),
-      launchSettings: checked?.settings ?? null
+      launchSettings: checked?.settings ?? null,
+      ...(resumedFrom === undefined ? {} : { resumedFrom })
     }
     this.records.insert(session, worktree.repoId)
     return this.publish(session)
@@ -463,6 +648,9 @@ export class SessionService {
         cwd: session.cwd,
         agent: 'shell'
       })
+      const accountPrepare = await this.accountPreparationAvailable()
+      const prepared = accountPrepare ? await this.prepareAccount(session, 'shell', session.cwd, {}, additions.env) : null
+      const envPatch = preparedHookEnv(additions.env, {}, prepared)
       await this.context.pty.spawn(session.id, {
         argv: this.context.launch.shellArgv(),
         cwd: session.cwd,
@@ -470,7 +658,8 @@ export class SessionService {
           sessionId: session.id,
           worktreeId: session.worktreeId,
           agent: 'shell',
-          envPatch: additions.env as Record<string, string>
+          envPatch,
+          ...(prepared?.shellInit ? { shellInit: prepared.shellInit } : {})
         }),
         cols: 80,
         rows: 24,
@@ -581,6 +770,29 @@ export class SessionService {
     }
   }
 
+  private async accountPreparationAvailable(): Promise<boolean> {
+    const contributions = await this.context.call('plugin.contributions', { kind: 'method' })
+    return hasAccountPreparation(contributions)
+  }
+
+  private async prepareAccount(
+    session: Session,
+    agent: string,
+    cwd: string,
+    userEnv: Record<string, string | null>,
+    hookEnv: Record<string, string | null>,
+    resume?: AccountPreparationRequest['resume']
+  ): Promise<AccountPreparation> {
+    const request: AccountPreparationRequest = {
+      agent,
+      sessionId: session.id,
+      worktreeId: session.worktreeId,
+      cwd,
+      homeOverrides: homeOverridesOf(userEnv, hookEnv),
+      ...(resume === undefined ? {} : { resume })
+    }
+    return accountPreparationOf(await this.context.call('quirky.accounts/prepare', request))
+  }
   private async pickAgent(): Promise<string> {
     return ((await this.context.call('quirky.agents/pick', {})) as { agent: string }).agent
   }
@@ -627,12 +839,12 @@ export class SessionService {
       await this.context.pty.spawn(session.id, {
         argv: spec.argv,
         cwd: session.cwd,
-        // a null in the patch removes the name; launch.env applies it though its type says string
         env: this.context.launch.env({
           sessionId: session.id,
           worktreeId: session.worktreeId,
           agent: session.agent,
-          envPatch: spec.envPatch as Record<string, string>
+          envPatch: spec.envPatch,
+          ...(session.agent === 'shell' && spec.shellInit !== undefined ? { shellInit: spec.shellInit } : {})
         }),
         cols: (params.cols as number | undefined) ?? 80,
         rows: (params.rows as number | undefined) ?? 24,

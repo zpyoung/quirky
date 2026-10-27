@@ -2160,7 +2160,8 @@
                 ],
                 "valuePrefix": "model="
               }
-            ]
+            ],
+            "structured": "model"
           },
           "options": [
             {
@@ -2214,7 +2215,8 @@
                   ],
                   "valuePrefix": "model_reasoning_effort="
                 }
-              ]
+              ],
+              "structured": "effort"
             }
           ],
           "models": [

@@ -105,7 +105,7 @@ export type Methods = {
     result: Ok
   }
 
-  /** The window's view of plugin UI: slots, commands, keybindings, settings, themes and module URLs. */
+  /** The window's view of plugin UI: status bars, slots, commands, keybindings, settings, themes and module URLs. */
   'ui.contributions': { params: Record<string, never>; result: UiModel }
   /** Every plugin setting with its current value, or only those of plugin `pluginId`. */
   'setting.list': { params: { pluginId?: string }; result: SettingInfo[] }

@@ -17,7 +17,7 @@ import type { ClientConn } from '../types'
 import { Confirmations, type ConfirmStore, type ConfirmTarget, type KernelDescriber } from './confirm'
 import type { PluginHost } from './host'
 import { RequestLog, requestDigest, type RequestStore } from './requests'
-import { openStream } from './streams'
+import { onConnectionClose, openStream } from './streams'
 
 /**
  * Where a call comes from: a client connection, a plugin, or the kernel itself. Kernel calls are
@@ -224,7 +224,7 @@ function callerOf(from: DispatchSource, withConnection: boolean): PluginCaller {
     ...(sessionId !== undefined ? { sessionId } : {}),
     ...(worktreeId !== undefined ? { worktreeId } : {}),
     ...(withConnection
-      ? { connection: { id: from.conn.id, transport: from.conn.transport, openStream: () => openStream(from.conn) } }
+      ? { connection: { id: from.conn.id, transport: from.conn.transport, onClose: (callback) => onConnectionClose(from.conn, callback), openStream: () => openStream(from.conn) } }
       : {})
   }
 }

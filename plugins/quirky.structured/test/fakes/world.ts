@@ -1,7 +1,6 @@
 import type { Ask, AskEnvelope, Session, SessionStatus, Worktree } from '@quirky/protocol'
 
 const WORKTREE_DEFAULTS = {
-  kind: 'git',
   displayName: null,
   comment: '',
   status: 'in-progress',
@@ -18,6 +17,13 @@ const WORKTREE_DEFAULTS = {
 
 type PluginCtx = { error(kind: 'invalid-params' | 'not-found' | 'conflict', message: string): Error }
 
+type FakeAccountPreparation = {
+  env: Record<string, string | null>
+  shellInit: string | null
+  account: { provider: 'claude' | 'codex'; id: string | null; label: string; source: 'managed' | 'default' | 'custom' } | null
+  resumeTranscriptPath?: string
+}
+
 /**
  * The in-memory state behind the fake `quirky.session`, `quirky.worktree` and `quirky.ask`
  * plugins. Tests publish an instance on `globalThis.__structuredFakes` before the daemon starts.
@@ -30,6 +36,7 @@ export class FakeWorld {
     branch: 'main',
     head: 'abc123',
     isMain: true,
+    kind: 'git',
     name: 'main',
     ...WORKTREE_DEFAULTS
   }
@@ -39,8 +46,13 @@ export class FakeWorld {
   readonly registerCalls: Record<string, unknown>[] = []
   readonly resolveLaunchCalls: Record<string, unknown>[] = []
   readonly askCreateCalls: Record<string, unknown>[] = []
+  readonly planCalls: Record<string, unknown>[] = []
+  readonly accountPrepareCalls: Record<string, unknown>[] = []
+  agentPlanEnv: Record<string, string | null> = {}
+  accountPreparationResult: FakeAccountPreparation = { env: {}, shellInit: null, account: null }
+  accountPreparationFailure: string | null = null
   /** Replaces the fake `quirky.agents/resolveLaunch` answer; it may throw to refuse the pick. */
-  resolveLaunchOverride: ((params: any, context: PluginCtx) => unknown) | null = null
+  resolveLaunchOverride: ((params: Record<string, unknown>, context: PluginCtx) => unknown) | null = null
   readonly asks = new Map<string, Ask>()
   /** How long a fake `wait` holds before returning the ask still pending. */
   askWaitCapMs = 25
@@ -59,7 +71,7 @@ export class FakeWorld {
         kind: params.kind,
         agent: params.agent,
         worktreeId: this.worktree.id,
-        cwd: this.worktree.path,
+        cwd: params.cwd ?? this.worktree.path,
         title: params.title,
         status: 'starting',
         createdAt: now,
@@ -67,9 +79,17 @@ export class FakeWorld {
         exitCode: null,
         exitSignal: null,
         exitCause: null,
-        restorable: false
+        restorable: false,
+        launchSettings: params.launchSettings ?? null,
+        providerSession: null,
+        resumedFrom: params.resumedFrom ?? null
       }
       this.sessions.set(session.id, session)
+      return session
+    },
+    setProviderSession: (params: any, context: PluginCtx) => {
+      const session = this.require(params.session, context)
+      session.providerSession = { id: params.id, transcriptPath: params.transcriptPath ?? null }
       return session
     },
     setStatus: (params: any, context: PluginCtx) => {
@@ -90,14 +110,35 @@ export class FakeWorld {
   }
 
   readonly agents = {
-    resolveLaunch: (params: any, context: PluginCtx) => {
+    resolveLaunch: (params: Record<string, unknown>, context: PluginCtx) => {
       this.resolveLaunchCalls.push(params)
       if (this.resolveLaunchOverride) return this.resolveLaunchOverride(params, context)
       const structured: Record<string, string | boolean> = {}
-      if (params.model) structured.model = params.model
-      Object.assign(structured, params.options)
+      const model = params.model
+      if (typeof model === 'string' || typeof model === 'boolean') structured.model = model
+      const options = params.options
+      if (typeof options === 'object' && options !== null && !Array.isArray(options)) {
+        for (const key of Object.keys(options)) {
+          const value = Reflect.get(options, key)
+          if (typeof value === 'string' || typeof value === 'boolean') structured[key] = value
+        }
+      }
       return { added: [], args: '', structured, shadowed: [], launchSettings: null }
+    },
+    plan: (params: Record<string, unknown>) => {
+      this.planCalls.push(params)
+      const env = { ...this.agentPlanEnv }
+      const record = { command: 'claude', args: '', env }
+      return { agent: 'claude', command: 'claude', env, record, promptDelivery: null, paste: null, launchSettings: null }
     }
+  }
+
+  prepareAccount(params: Record<string, unknown>, context: PluginCtx): FakeAccountPreparation {
+    this.accountPrepareCalls.push(params)
+    if (this.accountPreparationFailure !== null) throw context.error('conflict', this.accountPreparationFailure)
+    const result = { ...this.accountPreparationResult, env: { ...this.accountPreparationResult.env } }
+    if (params.resume === undefined) delete result.resumeTranscriptPath
+    return result
   }
 
   readonly ask = {

@@ -15,6 +15,7 @@ let messages: StructuredMessage[]
 let statuses: SessionStatus[]
 let asks: { spec: AskSpec; sessionId: string; resolve: (envelope: AskEnvelope) => void }[]
 let queries: FakeQuery[]
+let providerSessions: { sessionId: string; id: string; transcriptPath?: string | null }[]
 let runner: StructuredRunner
 let session: Session
 
@@ -29,9 +30,19 @@ function makeContext(): StructuredContext {
       statuses.push(status)
     },
     createAsk(spec, sessionId) {
-      return new Promise((resolve) => asks.push({ spec, sessionId, resolve }))
+      const { promise, resolve } = Promise.withResolvers<AskEnvelope>()
+      asks.push({ spec, sessionId, resolve })
+      return promise
     },
-    resolveClaudePath: async () => '/usr/local/bin/claude'
+    async setProviderSession(sessionId, providerSession) {
+      providerSessions.push({
+        sessionId,
+        id: providerSession.id,
+        transcriptPath: providerSession.transcriptPath
+      })
+    },
+    resolveClaudePath: async () => '/usr/local/bin/claude',
+    resolveCodexPath: async () => '/not-used/codex'
   }
 }
 
@@ -56,6 +67,7 @@ beforeEach(() => {
   statuses = []
   asks = []
   queries = []
+  providerSessions = []
   session = {
     id: 's_1',
     kind: 'structured',
@@ -106,6 +118,38 @@ describe('start', () => {
     await runner.start(session, 'again')
     expect(queries[1].params.options).not.toHaveProperty('model')
     expect(queries[1].params.options).not.toHaveProperty('effort')
+  })
+
+  test('persists its native ID before the first turn and resumes without creating a new conversation', async () => {
+    await runner.start(session, 'first prompt')
+    expect(providerSessions).toEqual([{ sessionId: 's_1', id: expect.any(String), transcriptPath: null }])
+
+    const resumedSession = {
+      ...session,
+      id: 's_2',
+      providerSession: { id: 'native-claude-id', transcriptPath: '/tmp/native.jsonl' }
+    }
+    await runner.start(resumedSession, undefined, {
+      model: 'sonnet',
+      providerSession: { id: 'native-claude-id', transcriptPath: '/tmp/native.jsonl' }
+    })
+    expect(queries[1].params.options?.resume).toBe('native-claude-id')
+    expect(queries[1].params.options).not.toHaveProperty('sessionId')
+    expect(queries[1].params.options?.model).toBe('sonnet')
+    expect(providerSessions.at(-1)).toEqual({
+      sessionId: 's_2',
+      id: 'native-claude-id',
+      transcriptPath: '/tmp/native.jsonl'
+    })
+    await runner.send('s_2', 'continue later')
+    await until(() => queries[1].written.length === 1)
+    expect(queries[1].written[0]).toMatchObject({ session_id: 'native-claude-id', message: { content: 'continue later' } })
+  })
+
+  test('passes the prepared account environment to Claude Code', async () => {
+    await runner.start(session, 'hello', { env: { CLAUDE_CONFIG_DIR: '/managed/claude' } })
+
+    expect(queries[0]?.params.options?.env).toMatchObject({ CLAUDE_CONFIG_DIR: '/managed/claude' })
   })
 
   test('journals the prompt, sets working and returns before the session ends', async () => {
@@ -220,6 +264,13 @@ describe('status', () => {
     expect(statuses).toEqual(['working', 'done', 'working'])
   })
 
+
+  test('failed results exit without publishing a successful done state', async () => {
+    const query = await begin()
+    query.emit({ type: 'result', subtype: 'error_api_error', result: 'provider failed', is_error: true })
+    await until(() => statuses.includes('exited'))
+    expect(statuses).not.toContain('done')
+  })
   test('exited when the query ends', async () => {
     const query = await begin()
     query.end()

@@ -20,3 +20,8 @@ export function askQueueMigration(store: PluginStore): void {
   })
   store.run('INSERT INTO ask_seq (id, value) VALUES (1, ?)', rows.length)
 }
+
+/** The plugin's third store migration: nullable private ownership for plugin-created asks. */
+export function askOwnershipMigration(store: PluginStore): void {
+  store.exec('ALTER TABLE asks ADD COLUMN owner_plugin_id TEXT;')
+}
