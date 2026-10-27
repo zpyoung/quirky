@@ -69,6 +69,8 @@ function parseWorkerEvent(value: object): WorkerEvent | null {
 }
 
 type Pending = { resolve(value: unknown): void; reject(error: Error): void }
+type QueuedRequest = { op: string; args: Record<string, unknown>; pending: Pending }
+type Retirement = { worker: Worker; promise: Promise<void> }
 
 export class WorkerRequestError extends Error {
   constructor(readonly kind: string, message: string) {
@@ -82,8 +84,11 @@ export class WorkerRequestError extends Error {
 export class VaultWorkerClient {
   private worker: Worker | undefined
   private readonly pending = new Map<number, Pending>()
+  private readonly queued: QueuedRequest[] = []
   private nextId = 1
   private idleTimer: ReturnType<typeof setTimeout> | undefined
+  private retirement: Retirement | undefined
+  private closePromise: Promise<void> | undefined
   private keepAlive = false
   private closed = false
 
@@ -104,64 +109,64 @@ export class VaultWorkerClient {
 
   request<T>(op: string, args: Record<string, unknown> = {}): Promise<T> {
     if (this.closed) return Promise.reject(new WorkerRequestError('worker-closed', 'vault worker is closed'))
-    const worker = this.ensureWorker()
-    const id = this.nextId++
     const deferred = Promise.withResolvers<T>()
-    this.pending.set(id, {
+    const pending: Pending = {
       resolve: (value) => deferred.resolve(value as T),
       reject: deferred.reject
-    })
-    try {
-      const request: WorkerRequest = { id, op, args }
-      worker.postMessage(request)
-      this.touchIdleTimer()
-    } catch (error) {
-      this.pending.delete(id)
-      deferred.reject(asError(error))
     }
+    if (this.retirement) this.queued.push({ op, args, pending })
+    else this.sendRequest(op, args, pending)
     return deferred.promise
   }
 
   async close(): Promise<void> {
-    if (this.closed) return
+    if (this.closePromise) return this.closePromise
     this.closed = true
     this.clearIdleTimer()
-    const worker = this.worker
-    this.worker = undefined
-    if (!worker) return
+    const error = new WorkerRequestError('worker-closed', 'vault worker is shutting down')
+    this.rejectQueued(error)
+    if (this.retirement) {
+      this.closePromise = this.retirement.promise
+      return this.closePromise
+    }
 
-    for (const [id, pending] of this.pending) {
-      this.pending.delete(id)
-      pending.reject(new WorkerRequestError('worker-closed', 'vault worker is shutting down'))
+    const worker = this.worker
+    if (!worker) {
+      this.closePromise = Promise.resolve()
+      return
     }
-    const id = this.nextId++
-    const deferred = Promise.withResolvers<void>()
-    this.pending.set(id, { resolve: () => deferred.resolve(), reject: () => deferred.resolve() })
+    this.rejectPending(error)
+    this.closePromise = this.closeWorker(worker)
+    return this.closePromise
+  }
+
+  private sendRequest(op: string, args: Record<string, unknown>, pending: Pending): void {
+    let id: number | undefined
     try {
-      worker.postMessage({ id, op: 'close', args: {} } satisfies WorkerRequest)
-    } catch {
-      this.pending.delete(id)
-      deferred.resolve()
+      const worker = this.ensureWorker()
+      id = this.nextId++
+      this.pending.set(id, pending)
+      worker.postMessage({ id, op, args } satisfies WorkerRequest)
+      this.touchIdleTimer()
+    } catch (error) {
+      if (id !== undefined) this.pending.delete(id)
+      pending.reject(asError(error))
     }
-    const timer = setTimeout(() => deferred.resolve(), CLOSE_TIMEOUT_MS)
-    await deferred.promise
-    clearTimeout(timer)
-    this.pending.delete(id)
-    worker.terminate()
   }
 
   private ensureWorker(): Worker {
     if (this.worker) return this.worker
     if (this.closed) throw new WorkerRequestError('worker-closed', 'vault worker is closed')
     const worker = new Worker(this.entrypoint, { type: 'module' })
-    worker.addEventListener('message', (event: MessageEvent<unknown>) => this.receive(event.data))
-    worker.addEventListener('error', (event: ErrorEvent) => this.failWorker(event.message || 'vault worker failed'))
-    worker.addEventListener('messageerror', () => this.failWorker('vault worker sent an unreadable message'))
+    worker.addEventListener('message', (event: MessageEvent<unknown>) => this.receive(worker, event.data))
+    worker.addEventListener('error', (event: ErrorEvent) => this.failWorker(worker, event.message || 'vault worker failed'))
+    worker.addEventListener('messageerror', () => this.failWorker(worker, 'vault worker sent an unreadable message'))
     this.worker = worker
     return worker
   }
 
-  private receive(value: unknown): void {
+  private receive(worker: Worker, value: unknown): void {
+    if (this.worker !== worker) return
     if (typeof value !== 'object' || value === null || Array.isArray(value)) return
     if ('event' in value && typeof value.event === 'string') {
       const event = parseWorkerEvent(value)
@@ -187,11 +192,11 @@ export class VaultWorkerClient {
     this.touchIdleTimer()
   }
 
-  private failWorker(message: string): void {
-    const worker = this.worker
+  private failWorker(worker: Worker, message: string): void {
+    if (this.worker !== worker) return
     this.worker = undefined
     this.clearIdleTimer()
-    worker?.terminate()
+    worker.terminate()
     for (const [id, pending] of this.pending) {
       this.pending.delete(id)
       pending.reject(new WorkerRequestError('worker-failed', message))
@@ -200,25 +205,71 @@ export class VaultWorkerClient {
 
   private touchIdleTimer(): void {
     this.clearIdleTimer()
-    if (this.closed || this.keepAlive || !this.worker) return
+    if (this.closed || this.keepAlive || this.retirement || !this.worker) return
     this.idleTimer = setTimeout(() => {
       this.idleTimer = undefined
-      void this.retireIfIdle()
+      this.retireIfIdle()
     }, IDLE_WORKER_MS)
   }
 
-  private async retireIfIdle(): Promise<void> {
+  private retireIfIdle(): void {
     const worker = this.worker
     if (!worker || this.closed || this.keepAlive || this.pending.size > 0) return
+    const completion = Promise.withResolvers<void>()
+    const retirement: Retirement = { worker, promise: completion.promise }
+    this.retirement = retirement
+    void this.finishRetirement(retirement).then(completion.resolve, completion.reject)
+  }
+
+  private async finishRetirement(retirement: Retirement): Promise<void> {
     try {
-      await this.request('close')
+      await this.closeWorker(retirement.worker)
     } catch {
       // An idle worker is disposable; a later request creates a new one.
     }
-    if (this.worker === worker) {
-      this.worker = undefined
+    this.clearIdleTimer()
+    if (this.retirement === retirement) this.retirement = undefined
+    if (this.closed) {
+      this.rejectQueued(new WorkerRequestError('worker-closed', 'vault worker is shutting down'))
+      return
+    }
+    for (const queued of this.queued) this.sendRequest(queued.op, queued.args, queued.pending)
+    this.queued.length = 0
+  }
+
+  private async closeWorker(worker: Worker): Promise<void> {
+    const id = this.nextId++
+    const deferred = Promise.withResolvers<void>()
+    this.pending.set(id, { resolve: () => deferred.resolve(), reject: () => deferred.resolve() })
+    try {
+      worker.postMessage({ id, op: 'close', args: {} } satisfies WorkerRequest)
+    } catch {
+      this.pending.delete(id)
+      deferred.resolve()
+    }
+    const timer = setTimeout(() => deferred.resolve(), CLOSE_TIMEOUT_MS)
+    try {
+      await deferred.promise
+    } finally {
+      clearTimeout(timer)
+      this.pending.delete(id)
       this.clearIdleTimer()
-      worker.terminate()
+      if (this.worker === worker) {
+        this.worker = undefined
+        worker.terminate()
+      }
+    }
+  }
+
+  private rejectQueued(error: Error): void {
+    for (const { pending } of this.queued) pending.reject(error)
+    this.queued.length = 0
+  }
+
+  private rejectPending(error: Error): void {
+    for (const [id, pending] of this.pending) {
+      this.pending.delete(id)
+      pending.reject(error)
     }
   }
 
