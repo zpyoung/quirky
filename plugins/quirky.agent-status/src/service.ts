@@ -16,7 +16,7 @@ import {
   type Baseline,
   type InterruptIntent
 } from './inference'
-import { coarseStatus, displayOf, readableDetail, summaryOf } from './model'
+import { coarseStatus, displayOf, readableDetail, summaryOf, toolOf } from './model'
 import { normalize } from './normalize'
 import { parseProgramStatusBody, ProgramStatusRecords, type ProgramStatusReport } from './program-status'
 import { classifyTitle, type TitleStatus } from './title'
@@ -52,6 +52,9 @@ export function timingFrom(env: Record<string, string | undefined>): Timing {
   const factor = Number.isFinite(scale) && scale > 0 ? scale : 1
   return { settleMs: SETTLE_MS * factor, hookSilenceMs: HOOK_SILENCE_MS * factor }
 }
+
+/** The states a row can settle into: the ones worth telling a user about. */
+type SettledState = 'done' | 'waiting' | 'blocked'
 
 const validProviderId = (id: string) => id.length >= 1 && id.length <= MAX_PROVIDER_ID && !id.startsWith('-') && !CONTROL_CHARACTERS.test(id)
 
@@ -253,7 +256,7 @@ export class AgentStatusService {
     this.caches.set(session.id, cache)
 
     const starts = verdict === 'replace'
-    const { row, notify } = applyEvent(starts ? null : known, normalized, {
+    const { row, settled } = applyEvent(starts ? null : known, normalized, {
       sessionId: session.id,
       source: input.source,
       at: input.at ?? now,
@@ -270,7 +273,7 @@ export class AgentStatusService {
     else this.caches.delete(session.id)
     await this.commit(session, row)
     if (row) this.watchProgram(session.id, row)
-    if (notify) await this.notify(session, notify)
+    if (row && settled) this.emitSettled(session, row, settled)
   }
 
   /** Stores a row (null removes it), sets the session's status and summary, and announces the change. */
@@ -294,7 +297,10 @@ export class AgentStatusService {
     const session = await this.liveSession(sessionId)
     if (!session) return
     const row = titleEvidence(prev, status, { sessionId, agent: session.agent, at })
-    if (row !== prev) await this.commit(session, row)
+    if (row === prev) return
+    await this.commit(session, row)
+    // a title that starts a row only says what the terminal shows, not that anything finished
+    if (prev) this.emitIfSettled(session, prev, row)
   }
 
   private async handleReport(sessionId: string, report: ProgramStatusReport): Promise<void> {
@@ -319,7 +325,9 @@ export class AgentStatusService {
     const prev = this.rows.get(session.id)
     const decision = programEvidence(prev, records.root(), this.programContext(session.id, session.agent))
     this.scheduleProgramRetry(session.id, decision.retryAt)
-    if (decision.row !== prev) await this.commit(session, decision.row)
+    if (decision.row === prev) return
+    await this.commit(session, decision.row)
+    if (decision.row) this.emitIfSettled(session, prev, decision.row)
   }
 
   /** Arranges the takeover a hook row owes the program once its hooks have been silent long enough. */
@@ -462,23 +470,25 @@ export class AgentStatusService {
     await this.context.call('quirky.session/setStatus', { session: session.id, status, agentStatus: summary })
   }
 
-  private async notify(session: Session, kind: 'done' | 'waiting'): Promise<void> {
-    let title = session.title
-    try {
-      const worktree = (await this.context.call('quirky.worktree/resolve', { selector: `id:${session.worktreeId}` })) as {
-        name: string
-      }
-      title = worktree.name
-    } catch {
-      // the worktree may be gone; the session title still says what finished
-    }
-    this.context.notify({
-      title,
-      body: kind === 'done' ? `${session.title} finished` : `${session.title} needs input`,
+  private emitIfSettled(session: Session, prev: AgentRow | null, row: AgentRow): void {
+    if (prev?.state !== row.state && row.state !== 'working') this.emitSettled(session, row, row.state)
+  }
+
+  /** Announces that a row settled into done, waiting or blocked, with what a banner would say about it. */
+  private emitSettled(session: Session, row: AgentRow, state: SettledState): void {
+    const tool = toolOf(row)
+    this.context.emit('settled', {
       sessionId: session.id,
       worktreeId: session.worktreeId,
-      open: { view: 'view:quirky.session/worktree', input: { worktree: session.worktreeId, session: session.id } },
-      desktop: this.context.getSetting('notifications') !== false
+      agent: session.agent,
+      state,
+      outcome: row.outcome ?? null,
+      interrupted: row.interrupted === true,
+      prompt: row.prompt || null,
+      toolName: tool.name,
+      toolInput: tool.input,
+      lastAssistantMessage: row.lastAssistantMessage ?? null,
+      at: this.now()
     })
   }
 }

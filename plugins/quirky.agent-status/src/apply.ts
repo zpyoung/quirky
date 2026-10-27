@@ -21,8 +21,8 @@ export type ApplyEvent = {
 export type ApplyResult = {
   /** The row after the event; null when there is none (the agent's process ended, or the event can't start a row). */
   row: AgentRow | null
-  /** What to tell the user, if anything: `waiting` also covers `blocked`. */
-  notify: 'done' | 'waiting' | null
+  /** The state the row just settled into, when that is worth announcing: a real change into done, waiting or blocked that is not a replay or a session boundary. */
+  settled: 'done' | 'waiting' | 'blocked' | null
 }
 
 type Held = NonNullable<AgentRow['heldPermission']>
@@ -182,9 +182,9 @@ function recordEvidence(draft: AgentRow, ev: ApplyEvent): void {
  * clock moves only when the folded state does. Pure: the caller stores the row and announces it.
  */
 export function applyEvent(prev: AgentRow | null, n: Normalized, ev: ApplyEvent): ApplyResult {
-  if (n.endsProcess) return { row: null, notify: null }
-  if (isInert(n)) return { row: prev, notify: null }
-  if (prev === null && (n.state === null || n.agentId !== undefined)) return { row: null, notify: null }
+  if (n.endsProcess) return { row: null, settled: null }
+  if (isInert(n)) return { row: prev, settled: null }
+  if (prev === null && (n.state === null || n.agentId !== undefined)) return { row: null, settled: null }
 
   const draft: AgentRow = prev ? { ...prev, lead: { ...prev.lead }, children: [...prev.children] } : newRow(ev)
   const leadEvent = isLeadEvent(n)
@@ -202,7 +202,7 @@ export function applyEvent(prev: AgentRow | null, n: Normalized, ev: ApplyEvent)
     // the approval is still pending: an unrelated tool of the same owner is evidence only
     recordEvidence(draft, ev)
     draft.detail = readableDetail(draft)
-    return { row: draft, notify: null }
+    return { row: draft, settled: null }
   }
   if (held && releasesHold(held, n)) held = undefined
 
@@ -259,7 +259,6 @@ export function applyEvent(prev: AgentRow | null, n: Normalized, ev: ApplyEvent)
   recordEvidence(draft, ev)
   draft.detail = readableDetail(draft)
 
-  const settled = draft.state === 'done' ? 'done' : draft.state === 'waiting' || draft.state === 'blocked' ? 'waiting' : null
-  const notify = stateChanged && settled && !ev.replay && n.sessionBoundary !== true ? settled : null
-  return { row: draft, notify }
+  const settled = draft.state === 'working' ? null : draft.state
+  return { row: draft, settled: stateChanged && !ev.replay && n.sessionBoundary !== true ? settled : null }
 }

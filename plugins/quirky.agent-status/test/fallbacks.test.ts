@@ -38,6 +38,21 @@ describe('SC-21: terminal titles fill in where hooks are silent', () => {
     expect(rig.notifies()).toEqual([])
   })
 
+  test('a title that moves a row into waiting or done settles it; the row a title starts and a repeated title do not', async () => {
+    rig = await Rig.start()
+    await rig.title('✳ Claude Code')
+    expect(await rig.row()).toMatchObject({ state: 'done', source: 'title' })
+    await rig.title('⠋ Working on it')
+    await rig.title('✋ gemini')
+    await rig.title('✋ gemini')
+    await rig.title('✳ Claude Code')
+    expect(rig.settles()).toMatchObject([
+      { sessionId: 's1', worktreeId: 'wt1', agent: 'claude', state: 'waiting', outcome: null, interrupted: false },
+      { sessionId: 's1', worktreeId: 'wt1', agent: 'claude', state: 'done' }
+    ])
+    expect(rig.notifies()).toEqual([])
+  })
+
   test('a fresh hook row ignores the same titles', async () => {
     rig = await Rig.start()
     await prompt()
@@ -90,6 +105,11 @@ describe('SC-22: OSC 7501 reports and the probe', () => {
     expect(await rig.row()).toBeNull()
     expect((await rig.session()).status).toBe('running')
     expect(rig.notifies()).toEqual([])
+    expect(rig.settles().map((s) => [s.state, s.outcome])).toEqual([
+      ['waiting', null],
+      ['blocked', null],
+      ['done', 'success']
+    ])
   })
 
   test('a report with a bad state, bad base64 in msg, or over 4096 bytes is ignored', async () => {
@@ -163,6 +183,7 @@ describe('SC-23: hooks outrank OSC 7501 until they fall silent', () => {
     await waitForAsync(async () => (await rig.state()) === 'done', 2000)
     expect(await rig.row()).toMatchObject({ state: 'done', source: 'program-status', display: 'done' })
     expect(rig.notifies()).toEqual([])
+    expect(rig.settles()).toMatchObject([{ state: 'done', agent: 'claude' }])
 
     await prompt()
     expect(await rig.row()).toMatchObject({ state: 'working', source: 'hook' })
