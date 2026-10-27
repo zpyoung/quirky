@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import { findOptionOccurrence, hasOption, removeConflicts, removeOption, terminatorIndex } from '../../src/core/arg-occurrence'
+import { findOptionOccurrence, hasOption, hasOptionAnywhere, removeConflicts, removeOption, terminatorIndex } from '../../src/core/arg-occurrence'
 import type { Conflict } from '../../src/core/types'
 
 const MODEL: Conflict = { flags: ['-m', '--model'] }
@@ -137,5 +137,22 @@ describe('removeConflicts', () => {
     const out = removeConflicts(tokens, [])
     expect(out).toEqual(tokens)
     expect(out).not.toBe(tokens)
+  })
+})
+
+describe('hasOptionAnywhere', () => {
+  test('finds a flag past a -- that hasOption stops at', () => {
+    const tokens = ['env', '--', 'claude', '--model', 'x']
+    expect(hasOption(tokens, MODEL)).toBe(false)
+    expect(hasOptionAnywhere(tokens, MODEL)).toBe(true)
+  })
+
+  test('honors the conflict value prefix across occurrences', () => {
+    expect(hasOptionAnywhere(['-c', 'x=1', '--', '-c', 'model=b'], CODEX_MODEL)).toBe(true)
+    expect(hasOptionAnywhere(['-c', 'x=1'], CODEX_MODEL)).toBe(false)
+  })
+
+  test("skips a value flag's value", () => {
+    expect(hasOptionAnywhere(['--append-system-prompt', '--model'], MODEL, CLAUDE_VALUE_FLAGS)).toBe(false)
   })
 })

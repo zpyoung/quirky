@@ -72,6 +72,20 @@ export function hasOption(tokens: readonly string[], conflict: Conflict, valueFl
   return removeOption(tokens, conflict, valueFlags).length < tokens.length
 }
 
+/**
+ * Whether any occurrence of the conflict's flags appears in `tokens`, past a `--` too. For a
+ * command override, where a wrapper's own terminator doesn't end the agent's arguments.
+ */
+export function hasOptionAnywhere(tokens: readonly string[], conflict: Conflict, valueFlags: readonly string[] = []): boolean {
+  const { flags, valuePrefix } = conflict
+  let rest = tokens
+  for (let found = findOptionOccurrence(rest, flags, false, valueFlags); found; found = findOptionOccurrence(rest, flags, false, valueFlags)) {
+    if (valuePrefix === undefined || (found.value?.startsWith(valuePrefix) ?? false)) return true
+    rest = rest.slice(found.index + found.consumed)
+  }
+  return false
+}
+
 /** Applies each conflict's removal in turn. */
 export function removeConflicts(tokens: readonly string[], conflicts: readonly Conflict[], valueFlags: readonly string[] = []): string[] {
   return conflicts.reduce<string[]>((current, conflict) => removeOption(current, conflict, valueFlags), [...tokens])

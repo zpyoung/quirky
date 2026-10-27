@@ -1,4 +1,4 @@
-import { hasOption, removeConflicts, terminatorIndex } from './arg-occurrence'
+import { hasOption, hasOptionAnywhere, removeConflicts, terminatorIndex } from './arg-occurrence'
 import { COMPOSE_RULES } from './compose'
 import { SelectionError } from './selection'
 import { joinCommand } from './shell'
@@ -148,7 +148,7 @@ export function resolveLaunch(input: ResolveInput): Resolution {
     const own = commandTokens.slice(1)
     const setsModel = (selection !== null && !modelShadowed) || (extras?.kinds.has('model') ?? false) || extrasSet(modelConflicts)
     const setsEffort = flagged.some(({ option }) => option.id === 'effort') || (extras?.kinds.has('effort') ?? false) || extrasSet(effortConflicts)
-    const contradicts = (conflicts: Conflict[]) => conflicts.some((conflict) => hasOption(own, conflict, valueFlags))
+    const contradicts = (conflicts: Conflict[]) => conflicts.some((conflict) => hasOptionAnywhere(own, conflict, valueFlags))
     if ((setsModel && contradicts(modelConflicts)) || (setsEffort && contradicts(effortConflicts))) {
       throw new SelectionError(COMMAND_OVERRIDE_CONFLICT)
     }

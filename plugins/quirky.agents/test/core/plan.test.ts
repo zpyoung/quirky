@@ -729,6 +729,15 @@ describe('launch settings in plans', () => {
     ])
   })
 
+  test("a flag's value of -- is not taken as the arguments' terminator", () => {
+    const result = buildLaunchPlan({
+      entry: { ...claude, launchOptions: { ...catalog, valueFlags: ['--append-system-prompt'] } },
+      config: config({ args: '--append-system-prompt -- --verbose' }),
+      hookArgs: ['--settings', 'x']
+    })
+    expect(words(result.command)).toEqual(['claude', '--append-system-prompt', '--', '--verbose', '--settings', 'x'])
+  })
+
   test('the prompt still follows the arguments', () => {
     const result = buildLaunchPlan({ entry: claude, config: config({ args: '' }), selection: picks, prompt: 'hi' })
     expect(words(result.command)).toEqual(['claude', '--model', 'opus', '--effort', 'high', 'hi'])

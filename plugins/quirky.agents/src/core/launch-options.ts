@@ -200,7 +200,7 @@ export function parseLaunchOptions(value: unknown): LaunchCatalog {
         : 'refuse'
       : oneOf(data.unlisted, `${ROOT}.unlisted`, ['accept', 'refuse'] as const)
   const unlistedOptions = data.unlistedOptions === undefined ? [] : optionUses(data.unlistedOptions, `${ROOT}.unlistedOptions`, declared)
-  if (unlistedOptions.length > 0 && unlisted === 'refuse') fail(`${ROOT}.unlistedOptions`, 'need unlisted "accept"')
+  if (data.unlistedOptions !== undefined && unlisted === 'refuse') fail(`${ROOT}.unlistedOptions`, 'need unlisted "accept"')
 
   return {
     model: modelDecl,

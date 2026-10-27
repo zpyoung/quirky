@@ -131,6 +131,12 @@ describe('validateSelection results', () => {
 })
 
 describe('SC-9: refusals', () => {
+  test('a model ID that starts with "-" is refused because an agent CLI would read it as a flag', () => {
+    for (const model of ['--', '-x', '--settings']) {
+      expect(refusal(claude, { model })).toBe('invalid launch selection: the model can\'t start with "-"')
+    }
+  })
+
   test('SC-9: options without a model need a model', () => {
     expect(refusal(claude, { options: { effort: 'low' } })).toBe('effort requires a model')
     expect(refusal(claude, { options: { effort: 'low', speed: 'fast' } })).toBe('effort requires a model')
