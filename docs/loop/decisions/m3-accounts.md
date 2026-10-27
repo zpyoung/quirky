@@ -341,5 +341,27 @@
 - **Revisit if:** independent follow-up produces a reproducible core defect
 - **Source:** locked by operator decision
 
+## D32: Fix the authoritative landing failures instead of claiming completion
+- **Question:** Which failures blocked the first integration verification?
+- **Options:** ignore the Linux failures and generic-agent regressions; repair the actual boundaries and fixture interpreter
+- **Chose:** attach account-only resume metadata only for Claude/Codex; preserve unchanged-home and pre-account System-default native Codex resume; retain strict recorded-provenance bridging for cross-home moves and reject unknown sources into managed targets. Generate fake provider executables with the running Bun's absolute interpreter instead of PATH-dependent node.
+- **Why:** the first land reached 448 Linux files on the new GCP host but timed out after exposing real invalid-params and over-applied rollout-policy regressions. The new host also lacks node on its noninteractive PATH. The operator deadline was missed during queue contention and verification; no on-time or landed claim is made.
+- **Evidence:** landing output artifact 333; fix ca55659; Mac consumer acceptance 135 tests/752 assertions including 37 resume/fork E2Es (artifact 346); updated build, scripts 62/458, typecheck and focused Linux 12 files passed without flaky reruns (artifact 351)
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** retry landing exposes another blocking core failure
+- **Source:** assumed — autonomous
+
+## D33: Retain proof and unexpected local state while cleaning owned worktrees
+- **Question:** How should temporary implementation trees and evidence be cleaned after the retry fixes?
+- **Options:** force-delete dirty state and evidence; remove merged clean trees and preserve unexpected state outside /tmp
+- **Chose:** remove eleven clean merged accounts worktrees; move the remaining lifecycle tree with its modified bun.lock and untracked .serena intact under the loop notes directory. Archive spec/source-review and transcript smoke evidence there before temporary-directory cleanup.
+- **Why:** the updated loop requires disk cleanup, but unexpected local changes must not be discarded. A fresh built-runtime smoke after the fixes again proved both providers read A's transcript bytes in B, matched digests and appended continuation markers; all owned runtime groups/homes were stopped/removed.
+- **Evidence:** loop notes worktree-cleanup.json and preserved-lifecycle-worktree; evidence/post-fix-smoke.json (source 86ff0426, run 7104041d-e953-4b29-b8d8-80c4114295db); supplemental m3-accounts-overflow-verification registration exited 0 under the updated short-lock queue
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** a preserved file needs restoring or a named evidence artifact is missing
+- **Source:** locked by docs/loop/LOOP.md
+
 ## Progress
-Core landing ready under the operator's explicit cutoff. Production source 291f2f8 is built and actual CLI/daemon/PTY and core UI proof passed; 48 core tests/295 assertions, post-catch-up scripts 49/417 and typecheck pass. The broad affected-package run timed out and final independent review is NOT_REVIEWABLE overall (D29/D31), not a pass. Deferred user-surface flows, review coverage and unconfirmed S1 are recorded in BLOCKERS.md and the registered dependent completion item; native scenarios remain pending. Final roadmap catch-up is complete and changed docs only. All owned smoke/review processes are stopped. Next: commit this exact evidence, detach and run queue.ts land, whose whole-suite result is authoritative. Fix a named landing failure rather than claiming success without it.
+Ready to retry authoritative landing after actual blocking repairs ca55659 and updated-loop catch-up 86ff0426. Source is built; Mac consumer regressions passed 135 tests/752 assertions; scripts passed 62/458, typecheck passed, and all 12 focused Linux files passed with no flaky rerun. Fresh real-daemon/PTY smoke again verified Claude/Codex prior-content continuation A→B and cleaned every owned runtime process/home. Independent review remains partial/NOT_REVIEWABLE; S1 and extended UI/native verification stay open in BLOCKERS and dependent items m3-accounts-remaining-flows plus m3-accounts-overflow-verification. The one-hour deadline was missed, not retroactively claimed. Evidence is archived under the loop notes directory; eleven clean merged worktrees removed and one dirty lifecycle tree preserved intact. Next: commit these amendments, detach and retry queue.ts land; only its verified result marks the item done.
