@@ -23,7 +23,7 @@ type Props = {
 export function NotesPreview({ context, worktree, notes }: Props) {
   const [open, setOpen] = useState(false)
   const [copied, setCopied] = useState(false)
-  const [alignRight, setAlignRight] = useState(false)
+  const [place, setPlace] = useState<{ alignRight: boolean; width: number }>({ alignRight: false, width: POPOVER_WIDTH })
   const anchor = useRef<HTMLSpanElement>(null)
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -85,14 +85,17 @@ export function NotesPreview({ context, worktree, notes }: Props) {
         onClick={() => {
           const box = anchor.current?.getBoundingClientRect()
           const bound = anchor.current?.closest('.qgv-root')?.getBoundingClientRect()
-          setAlignRight(box !== undefined && box.left + POPOVER_WIDTH > (bound?.right ?? window.innerWidth))
+          const right = bound?.right ?? window.innerWidth
+          const left = bound?.left ?? 0
+          const width = Math.max(160, Math.min(POPOVER_WIDTH, right - left - 16))
+          setPlace({ alignRight: box !== undefined && box.left + width > right, width })
           setOpen((value) => !value)
         }}
       >
         <NotesPillContent count={notes.length} />
       </button>
       {open && (
-        <div className={`qgv-note-popover${alignRight ? ' qgv-note-popover-end' : ''}`} role="dialog" aria-label="AI notes">
+        <div className={`qgv-note-popover${place.alignRight ? ' qgv-note-popover-end' : ''}`} style={{ width: place.width }} role="dialog" aria-label="AI notes">
           <div className="qgv-note-popover-head">
             <span className="qgv-note-popover-title">
               AI notes <span className="qgv-note-count">{notes.length}</span>
