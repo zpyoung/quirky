@@ -518,5 +518,25 @@
 - **Confidence:** high
 - **Source:** assumed — autonomous
 
+## D52: W3 landed; the settings view ran in the main tree after its worktree was reclaimed
+- **Question:** W3's results and how they were gated
+- **Options:** n/a
+- **Chose:** accept V (Settings > Notifications view, its manifest entries, and the React dependencies it needed, a scope widening the orchestrator granted because no other task touched `package.json` or `bun.lock`) and E (27 end-to-end tests in `plugins/quirky.notifications/test/e2e/` on daemon subprocesses with temp homes, a sound recorder and a fake `osascript`). V's original worktree had been removed by the time it was resumed, so it worked in this lane's main tree; its diff stayed inside its scope and was committed as 4fc241f, but the post-W2 gate that was running in that tree saw a mix, so the gate is rerun after the W2 checkpoint fixes. Recorded choices: V copies labels into `src/window/copy.ts` with a test against the manifest, uses a disabled dashes option as the separator, and adds a "Change" button for a stored custom file; E runs terminal scenarios through `quirky terminal send` on a plain shell session (the terminal harness can't take the sound recorder), never shortens the cooldown, and seeds SC-51's old setting by rewinding a live home with `bun:sqlite`.
+- **Why:** both tasks' acceptance passed; the main-tree incident changed no file outside V's scope
+- **Evidence:** commits 4fc241f, 48bfbfe
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** assumed — autonomous
+
+## D53: W2 checkpoint: accept all five findings, which collapse to three defects
+- **Question:** the W2 checkpoint (C, S, X at standard over `ee9d1d9..9eafe3a` without docs)
+- **Options:** fix; reject
+- **Chose:** fix all: (1) a `notify` without `sound` (an invalid custom file) made an audible desktop banner (C1, S1 HIGH, X1); (2) after an OSC 7501 done took over while a child ran, the child's completion never settled, because the OSC path stored an unfolded `done` (C2); (3) a never-answering lookup in another plugin stalled the notifications queue forever (X2). Three fixers dispatched.
+- **Why:** each was reproduced by the refute stage
+- **Evidence:** cp2/{C,S,X}-gate.json in the session scratchpad
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** assumed — autonomous
+
 ## Progress
 W1 and W2 merged (25319b9); the W1 checkpoint's four fixes are in flight. Next: merge the fixes, full gate, W2 checkpoint (C, S, X standard over ee9d1d9..HEAD), W3 (settings view N6 with the manifest's view/command/ui entries; e2e CLI scenarios on a daemon subprocess in plugins/quirky.notifications/test/e2e/), then catch up with build/roadmap (m1-term-ui obligations in tech.md), Final Round 1, the like-a-user web pass (SC-6, SC-46 to SC-50), docs/loop/native/m1-notifications.json, land. Briefs and run journal: session scratchpad sdd/.
