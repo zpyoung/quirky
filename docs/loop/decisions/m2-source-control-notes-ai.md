@@ -473,5 +473,27 @@
 - **Revisit if:** a fix reopens a passing scenario
 - **Source:** assumed — autonomous
 
+## D44: The fix batch closes all six Final Round 1 defects, each with a test; nothing goes to BLOCKERS.md
+- **Question:** LOOP.md step 5: one fix batch, then rerun build and tests instead of Final Rounds 2-5; open findings go to BLOCKERS.md
+- **Options:** n/a
+- **Chose:** FA: the sparkle counts a custom command as runnable and takes a synchronous in-flight guard; the launch dialog shows "No enabled agents" and disables Start whenever no agent is usable (C1/S1, C3, S2, four new window tests). FB: activation pruning removed, NA-23's test rewritten to show notes survive activation and are dropped only when their worktree's own resolve fails; the diff budget, fair share and omission count use UTF-8 bytes (X1, C2, two new tests). FC: a stopped one-shot run settles only once its process group is gone (X2, a SIGTERM-resistant child test). Gate after the merge: typecheck 0, script tests 0, full suite 421 of 421 files
+- **Why:** each fixer closed its finding with a regression test and the whole gate is green
+- **Evidence:** commits 53bf226, a88a51a, dde54e1; scratchpad gate/fix1.*
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** the UI pass shows one of them still open
+- **Source:** assumed — autonomous
+
+## D45: No native-only scenarios
+- **Question:** LOOP.md step 6: scenarios only the real window can show go to docs/loop/native/<id>.json
+- **Options:** write a native file; none
+- **Chose:** none: every (UI) scenario lives in the web window (diffs, panel, menus, dialogs, toasts, clipboard through the page); the item adds no window-frame, menu-bar, tray, OS-dialog or system-banner behavior
+- **Why:** the native run exists for what the web surface can't show, and nothing here is that
+- **Evidence:** docs/quirk/specs/2026-10-27-m2-source-control-notes-ai/logic.md (UI) scenarios
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** the native run finds clipboard copy differs in the real window
+- **Source:** assumed — autonomous
+
 ## Progress
-Final Round 1 done (D43); fix batch FA/FB/FC running in scratch worktrees from FIX1_BASE. Next: audit, merge, gate, then step 6 (UI pass, native file), then land.
+Built, reviewed (Final Round 1, D43) and fixed (D44); gate green. Next: step 6 UI pass (scratchpad uiv/setup.sh worlds N1, N2, A1, A2 with fake agents), then land.
