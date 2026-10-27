@@ -6,7 +6,8 @@
  *
  *   bun scripts/build-loop/queue.ts claim --lane <n>   this lane's item, as JSON (claims a new one if it has none)
  *   bun scripts/build-loop/queue.ts wait --lane <n>    claim, retrying while other lanes hold the only ready work
- *   bun scripts/build-loop/queue.ts land <id>          merge build/<id> into build/roadmap, verify, mark it done
+ *   bun scripts/build-loop/queue.ts land <id>          merge build/<id> into build/roadmap, verify, mark it done;
+ *                                                      other lanes' waiting items may land in the same run
  *   bun scripts/build-loop/queue.ts merge <branch>     merge a non-item branch into build/roadmap, verified
  *   bun scripts/build-loop/queue.ts add <items.json>   add todo items, ahead of the parity sweep
  *   bun scripts/build-loop/queue.ts block <id> <file>  mark it blocked, with <file> as its BLOCKERS.md entry

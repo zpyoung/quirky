@@ -118,9 +118,13 @@ it or block the item. Never silently diverge.
    - Every recorded Orca defect has a test showing Quirky doesn't have it.
    - The feature ships as a built-in plugin that uses only the public plugin API. Its plugin
      exposes the feature's API methods and CLI command group.
-   - `bun run test`, `bun test scripts` and `bun run typecheck` all pass. Run the whole suite only
-     with `bun run test`: it runs the tests on the remote test host, so lanes don't compete for
-     this Mac. A single file runs here with `bun test <file>`.
+   - `bun test scripts` and `bun run typecheck` pass, and so do the tests of every package, app and
+     plugin the item changed or that imports one it changed. Run those with
+     `bun scripts/suite.ts <dir> <dir> ...`, which runs them on the remote test host so lanes don't
+     compete for this Mac. A single file runs here with `bun test <file>`. Leave the whole suite to
+     `queue.ts land`, which runs `bun run test` on the merge result. Run it yourself only when the
+     item changes code most of the repo imports, such as `packages/protocol` or
+     `scripts/test-support`.
    - **The UI scenarios pass when used like a user.** If the logic spec has scenarios a person sees
      in the UI, run `bun run build`, start `quirkyd` on a fresh temporary `QUIRKY_HOME`, and run
      `quirk:using-apps-like-a-user` with `--surface web --owner yours --unattended` against the
@@ -138,9 +142,11 @@ it or block the item. Never silently diverge.
 7. **Land.**
    1. Commit everything on `build/<id>` and run `git switch --detach`.
    2. Run `bun scripts/build-loop/queue.ts land <id>`. It merges `build/<id>` into `build/roadmap`,
-      runs the three commands from step 6 on the result, marks the item done, rebuilds
-      `DECISIONS.md`, and deletes the branch. On a conflict or a failure it leaves `build/roadmap`
-      as it was.
+      runs `bun run test`, `bun test scripts` and `bun run typecheck` on the result, marks the item
+      done, rebuilds `DECISIONS.md`, and deletes the branch. On a conflict or a failure it leaves
+      `build/roadmap` as it was. Other lanes' items waiting to land are merged and verified in the
+      same run when they can be; if it prints that your item was landed with another lane's, it's
+      done.
    3. If it failed, run `git switch build/<id>` and `git merge build/roadmap`, fix what it named,
       rerun the tests, commit, and go back to 7.1.
    4. End the turn.
@@ -194,7 +200,8 @@ the question yourself and record the answer as a decision:
   - A question the locked decisions answer: follow them.
   - Record either one with Source `locked by <file>`.
 - **When a rubric says a headless run must halt** (for example, the tech spec's feasibility
-  escalation against a locked decision), block the item.
+  escalation against a locked decision), block the item, or defer just the flow it concerns as
+  [Blocking an item](#blocking-an-item) describes.
 
 Every answer gets an entry in the item's decision log, including the obvious ones. The reviewer
 decides what was obvious.
@@ -226,6 +233,16 @@ this format:
 and `queue.ts block` rebuild it.
 
 ## Blocking an item
+
+Block the whole item only when its core can't ship. When one flow can't be built, because of an
+outside limit or a question the docs and locked decisions don't settle, but the rest works without
+it, land the rest instead:
+- Record the gap as a decision with Source `deferred: <flow>`, saying what's missing and why.
+- Before landing, add a follow-up item with `queue.ts add` that depends on this one. Its title
+  names the flow, the limit, and what would unblock it. If unblocking it needs a person's ruling,
+  the lane that claims the follow-up blocks it.
+
+Otherwise, block it:
 
 1. Commit whatever is on `build/<id>`, rename it with `git branch -m blocked/<id>` so the work
    stays reviewable, and run `git switch --detach`.

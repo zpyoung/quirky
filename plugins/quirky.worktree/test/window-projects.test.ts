@@ -278,7 +278,12 @@ test('SC-10: groups are made, filled, renamed, collapsed and deleted from the wi
   expect(item('No group')).toBeUndefined()
   await choose(w.win, 'backend')
   await w.win.waitFor(() => groupSection('backend')?.querySelectorAll('section.repo').length === 2)
-  expect((await report(w.agent)).groups[0].projects.map((p: { id: string }) => p.id).sort()).toEqual([api.repo.id, web.repo.id].sort())
+  // the window pushes its report after it renders, so the report can trail the DOM
+  const filled = await w.win.waitFor(async () => {
+    const next = await report(w.agent)
+    return next?.groups?.[0]?.projects?.length === 2 ? next : undefined
+  })
+  expect(filled.groups[0].projects.map((p: { id: string }) => p.id).sort()).toEqual([api.repo.id, web.repo.id].sort())
 
   await openGroupMenu(w.win, 'backend')
   await choose(w.win, 'Rename…')
