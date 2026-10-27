@@ -167,17 +167,25 @@ export const commands: CliModule['commands'] = {
   },
 
   async prepare(args, context) {
+    const resume = objectFlag(args, context, 'resume', false)
     const result = await context.call('quirky.accounts/prepare', {
       agent: stringFlag(args, context, 'agent'),
       sessionId: stringFlag(args, context, 'session-id'),
       worktreeId: stringFlag(args, context, 'worktree-id'),
       cwd: stringFlag(args, context, 'cwd'),
-      homeOverrides: objectFlag(args, context, 'home-overrides', true)
+      homeOverrides: objectFlag(args, context, 'home-overrides', true),
+      ...(resume === undefined ? {} : { resume })
     })
     if (typeof result === 'object' && result !== null && !Array.isArray(result)) {
       const record = result as Record<string, unknown>
       const env = typeof record.env === 'object' && record.env !== null ? Object.keys(record.env) : []
-      output(context, { account: record.account, shellInit: record.shellInit !== null, environmentKeys: env })
+      const summary: Record<string, unknown> = {
+        account: record.account,
+        shellInit: record.shellInit !== null,
+        environmentKeys: env
+      }
+      if (typeof record.resumeTranscriptPath === 'string') summary.resumeTranscriptPath = record.resumeTranscriptPath
+      output(context, summary)
       return
     }
     output(context, result)

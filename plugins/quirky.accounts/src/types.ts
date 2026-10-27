@@ -97,12 +97,17 @@ export type PrepareInput = {
   worktreeId: string
   cwd: string
   homeOverrides: Record<ManagedProvider, HomeOverride>
+  resume?: {
+    sourceSessionId: string
+    providerSession: { id: string; transcriptPath: string | null }
+  }
 }
 
 export type AccountPrepareResult = {
   env: Record<string, string | null>
   shellInit: string | null
   account: AccountIdentity | null
+  resumeTranscriptPath?: string
 }
 
 export type AccountRecord = AccountSummary & {
