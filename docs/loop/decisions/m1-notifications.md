@@ -457,5 +457,15 @@
 - **Confidence:** medium
 - **Source:** locked by research/orca-features/notifications.md
 
+## D46: Spec review: fix all four Codex findings; the two refuted ones stay as written
+- **Question:** what to do with the adversarial review of both specs (LOOP.md step 4)
+- **Options:** fix each confirmed finding; record why not
+- **Chose:** one `quirk:adversarial-review` run over `d56dd7c..134914d` restricted to the spec directory with `--diff-file`, profile spec-design, depth deep, reviewer codex gpt-6.1-sol (independence full), criteria = roadmap bullets, milestone rules, LOOP.md steps 4 and 6 and the feature doc verbatim. Gate NEEDS_FIXES with 4 MEDIUM, 2 suppressed, none contested. Fixed: (SR1) Mark Read cleared sessions only on a true-to-false worktree change, so sessions under an already-read worktree could never be cleared; `quirky.worktree/changed` now carries `unread` when `set` asked for it and N clears on any `unread: false` that isn't its own; (SR2) report changes broadcast nothing, so a newly visible session could stay unread; the kernel now delivers `ui.report.changed` to plugins; (SR3) the test's own `notify` made a toast beside the view's acknowledgment; `notify` gains `toast: false`, used by the test; (SR4) OSC 99 chunks had no aggregate bound; each pending id's fields are capped at 4096 characters. Refuted and left: SR5 (badge counts asks, which D25 decides) and SR6 (on-screen bell with Suppress While Focused off). The pre-pass's unresolved references name planned files, plugin event IDs and SDK paths outside the repo, and its missing headings are not in the writing-specs rubrics; rejected, as m1-agent-status D43 did.
+- **Why:** LOOP.md: fix every confirmed finding or record why not
+- **Evidence:** review bundle in the session scratchpad (sr1/SR-gate.json, sr1/SR-manifest.json); logic.md amendments
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** locked by docs/loop/LOOP.md
+
 ## Progress
-Specs written (logic.md, tech.md). Next: the Codex adversarial review of both specs, fix findings, then subagent-driven development W1 (K, P, R, M, S), W2 (N, D, N6), W3 (e2e and UI tests), catch-up, Final Round 1, UI pass, land.
+Specs written (logic.md, tech.md). Spec review done and fixed (D46). Next: subagent-driven development W1 (K, P, R, M, S), W2 (N, D, N6), W3 (e2e and UI tests), catch-up, Final Round 1, UI pass, land.

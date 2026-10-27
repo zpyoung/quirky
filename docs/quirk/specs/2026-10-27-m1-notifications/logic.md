@@ -4,7 +4,11 @@
 
 **Status:** Approved (headless build loop; decisions in [m1-notifications.md](../../../loop/decisions/m1-notifications.md)). Tech spec: requested.
 
-**Amendments:** none yet.
+**Amendments:**
+- 2026-10-27, Codex spec review: Mark Read clears a worktree's session markers even when the worktree
+  itself was already read (SC-7); a change in what the window reports as visible triggers the same
+  re-check as a focus change (Data flow 7); the test notification makes no toast of its own, so the
+  settings view's acknowledgment is the only one (SC-50); OSC 99 chunk state is bounded.
 
 ## Conceptual model
 
@@ -150,7 +154,7 @@ are relative to the first event.
    - **Given** B unread with S1 and S2 unread
    - **When** `quirky wt set B --read`, then `quirky wt set B --unread`
    - **Then** after `--read`, B, S1 and S2 are all cleared and the badge drops by one; after
-     `--unread`, B is unread, S1 and S2 stay cleared, and the badge rises by one
+     `--unread`, B is unread, S1 and S2 stay cleared, and the badge rises by one; and with B already read but S1 unread (SC-3's state), `--read` still clears S1
 
 8. **SC-8: markers are written even when notifications are off** (API)
    - **Given** Enable Notifications off; S in a background worktree B

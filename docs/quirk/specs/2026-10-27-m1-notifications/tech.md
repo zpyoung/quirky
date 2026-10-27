@@ -113,11 +113,13 @@ Back-link: [Conceptual model, viewing](logic.md#conceptual-model); D10, D11.
 rpc 'ui.window.activity': { params: Record<string, never>; result: Ok }   // role 'ui' only; a CONNECTION_METHOD
 UiWindowInfo = { connId: number; name?: string; focused: boolean; inputAt: number | null; present: boolean }
 event { type: 'ui.window.changed'; windows: UiWindowInfo[] }
+event { type: 'ui.report.changed'; slot: string; connId: number }   // plugins only
 const DESKTOP_AWAY_MS = 180_000   // exported from @quirky/protocol
 ```
 
 - `ui.window.activity` sets `conn.inputAt = Date.now()`. Non-window connection: `invalidParams`, as `windowFocused`.
 - `present` is `inputAt !== null && now - inputAt < awayMs`. `awayMs` is `DESKTOP_AWAY_MS` unless the daemon was started with `QUIRKY_DESKTOP_AWAY_MS` (a positive integer; for tests).
+- `ui.report.changed {slot: string; connId: number}` is delivered to plugins only (like `hook.received`, never to clients) when a window's report for a slot changes by value (deep compare) or is cleared.
 - `ui.window.changed` is broadcast when a window's `focused` value changes, when an activity report turns a window from not present to present, and when a window connection drops. Not on every activity report.
 - Window side: `HostDeps.windowActivity?: { subscribe(listener: () => void): () => void }`; `shell.ts` provides it from `pointerdown`, `pointermove`, `keydown` and `wheel` on `window` (capture). The host calls `ui.window.activity` on the first input and then at most once per 15 s while input continues (leading edge), and once on (re)connect if input happened in the last 15 s. Errors are swallowed like `reportFocus`.
 
@@ -127,12 +129,13 @@ Back-link: [Data flow 5](logic.md#data-flow); D18, D19.
 
 `CONTRACT:`
 ```
-PluginNotification += { sound?: { file: string | null; volume: number } }
-notify event       += { sound?: { file: string | null; volume: number } }   // schema: optional
+PluginNotification += { sound?: { file: string | null; volume: number }; toast?: boolean }
+notify event       += { sound?: { file: string | null; volume: number }; toast?: boolean }   // schema: optional
 Notifier = (n: { title: string; body: string; sound?: { file: string | null; volume: number } }) => void
 ```
 
 - `file: null` means the system sound; `volume` is 0-100. Absent `sound` means silent.
+- `toast: false` means the webview shows no toast for this event (`packages/ui/src/lib/state.ts` reducer); absent means a toast, as today. N sends `toast: false` only for the test notification, whose acknowledgment toast comes from the settings view (SC-50).
 - `osascriptNotifier` adds `sound name "default"` only when `sound.file === null`; it never plays files (N does, P-independent).
 - `sendNotification` passes the whole notification to the notifier. Existing behaviour (broadcast always; notifier only with `desktop !== false` and no desktop client) is unchanged.
 
@@ -151,7 +154,7 @@ Parsing in `reportOsc` (code is the text before the first `;`):
 
 - **9:** the rest is the text. `REGEX:` `^\d+(;|$)` on the rest means a ConEmu subcommand: no fact. Otherwise `{title: null, body: clean(rest)}`.
 - **777:** the rest must start `notify;`; title is the field after it, body the remainder (may contain `;`). Other 777 payloads: no fact. `MARKER` handling in `finishOsc` is unchanged and runs first.
-- **99:** `99;<metadata>;<payload>`; metadata is `:`-separated `k=v`. Keys used: `i` (id, default none), `d` (`0` = more chunks, anything else done; default done), `e` (`1` = base64 UTF-8), `p` (`title` default, `body`; any other value: ignore the sequence entirely), `o` (`always` default, `unfocused`, `invisible`; anything else: `always`). Unknown keys ignored. Chunks with the same `i` and `d=0` accumulate title and body (concatenated per field) until a chunk with done; a chunk without `i` completes on its own. Pending ids are capped at 16 per session (oldest dropped). Invalid base64: drop the chunk. Nothing is written back to the PTY.
+- **99:** `99;<metadata>;<payload>`; metadata is `:`-separated `k=v`. Keys used: `i` (id, default none), `d` (`0` = more chunks, anything else done; default done), `e` (`1` = base64 UTF-8), `p` (`title` default, `body`; any other value: ignore the sequence entirely), `o` (`always` default, `unfocused`, `invisible`; anything else: `always`). Unknown keys ignored. Chunks with the same `i` and `d=0` accumulate title and body (concatenated per field) until a chunk with done; a chunk without `i` completes on its own. Pending ids are capped at 16 per session (oldest dropped), and each pending id's raw title and body are each capped at 4096 characters: text beyond the cap is discarded as it arrives, so the host never holds more than 16 × 8192 characters of chunk state per session. Invalid base64: drop the chunk. Nothing is written back to the PTY.
 - `clean(text)`: remove U+0000-U+001F, U+007F and U+0080-U+009F (tabs and newlines become spaces first), collapse runs of whitespace to one space, trim, cut to 256 code points with a trailing `…`, never splitting a surrogate pair. A fact needs a non-empty body or title; if only a title, body is `''`.
 - Bytes are not stripped or held; they pass through as today. `MAX_OSC_PAYLOAD` still applies.
 - `applyFact` emits `notification` facts like other facts. No PTY protocol version change unless the host handshake rejects unknown fact kinds (check `packages/pty-host/src/server.ts` and the daemon's PTY client; if it does, bump as m1-term-daemon did).
@@ -188,6 +191,7 @@ method quirky.session/setUnread: params { session: string; unread: 'agent' | 'be
 - Migration 6 adds `unread TEXT` (null). `setUnread` NotFound for an unknown session; emits `changed {session}` only when the value changes. `quirky session` text output shows `unread <reason>` when set.
 - `SessionViewReport += { visibleSessions: string[] }` — today `[active]` or `[]`.
 - Tab: when `session.unread` is set, `SessionTabs` renders a bell glyph in place of `StatusDot`: `role="img"`, `className` includes `glyph-unread`, `aria-label` "Unread agent completion" | "Unread bell" | "Unread notification". Amber (`#f59e0b` family, a theme token if one exists).
+- `quirky.worktree/changed` data gains `unread?: boolean` (manifest schema and `set.ts`'s `env.changed` call), set to the requested value whenever `set` was called with `unread`, even if unchanged; every other emitter omits it.
 - Card: `Tree.tsx` renders the same bell (`aria-label="Unread"`) in place of `StatusDot` when `worktree.unread`, adds a bold class to `.worktree-name`, and drops `.unread-mark` (and its CSS). `open()` keeps clearing `unread` through `quirky.worktree/set` (N treats it as Mark Read, below).
 
 ### N1: the plugin
@@ -235,7 +239,7 @@ UI: `view:quirky.notifications/settings` (title "Notifications") and `command:qu
 
 #### N2: viewed
 
-- On each decision and on `ui.window.changed`, `ui.state.changed`, `quirky.session/changed`, `quirky.session/removed`, N reads `ui.state`.
+- On each decision and on `ui.window.changed`, `ui.state.changed`, `ui.report.changed` for the worktree view's slot, `quirky.session/changed` and `quirky.session/removed`, N reads `ui.state`.
 - Focused window: `windows.find(w => w.focused)`. Attended: focused and `present`.
 - Shown worktree: `layout.view.id === 'view:quirky.session/worktree'` → `input.worktree`. Visible sessions: the focused window's report for that slot, `visibleSessions` when its `worktree` equals the shown worktree, plus `input.session` when set.
 - Session viewed = attended and in visible sessions. Worktree viewed = attended and shown. Worktree open in a focused window (for `suppressed-focus`) = focused (presence not required) and shown.
@@ -250,12 +254,12 @@ Sources: `quirky.agent-status/settled` and `quirky.structured/settled` → agent
 3. `attention` event (agent, bell, program).
 4. Bell only: hold 250 ms; if an agent event for the same session is decided in that time, `decided: superseded` and stop.
 5. Gates in order (D13): `enabled` false → disabled; source switch (agent: `agentTaskComplete`; bell: `terminalBell`; program: `terminalNotifications`; ask and test: none) → source-disabled; `suppressWhenFocused` and the event's worktree is open in a focused window (not for test) → suppressed-focus; cooldown (not for test) → cooldown.
-6. Delivered: `context.notify({title, body, sessionId?, worktreeId?, open: {view: 'view:quirky.session/worktree', input: {worktree, session}} when both exist, sound})`. When no client with role `desktop` is connected (`status.get`), N also plays the file itself (N5).
+6. Delivered: `context.notify({title, body, sessionId?, worktreeId?, toast: false for test only, open: {view: 'view:quirky.session/worktree', input: {worktree, session}} when both exist, sound})`. When no client with role `desktop` is connected (`status.get`), N also plays the file itself (N5).
 7. Emit `decided` with the result. `send` and `test` return it.
 
 Cooldown: `Map<string, number>` keyed by worktree id or `'global'`, 5000 ms from the last delivered banner, max 50 keys (drop the oldest), reserved at delivery time.
 
-Mark Read: on `quirky.worktree/changed` for W, N re-reads W; if its `unread` went from true to false and the change is not one of N's own pending writes (track ids written and consume one on the next observed change), clear every session of W with `setUnread(null)`.
+Mark Read: `quirky.worktree/changed` gains `unread?: boolean`, present when the `set` call that caused it included `unread` (M1). On a `changed` with `unread: false` for W that is not one of N's own pending writes (track ids written and consume one on the next matching event), N clears every session of W with `setUnread(null)`, whether or not W was unread before. Other worktree changes never clear sessions.
 
 Migration: on first activation (a store flag), if `setting:quirky.agent-status/notifications` has a stored `false` (read the settings store row; the setting is no longer declared) or the v1 settings file has `notifications: false` (`packages/daemon/src/v1-settings.ts`), set `agentTaskComplete` false. If the kernel offers no way to read an undeclared setting's stored value, add one to the kernel (read-only, plugin-scoped) rather than reading SQLite directly.
 
