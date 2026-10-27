@@ -12,6 +12,7 @@ import {
   type PtySnapshot
 } from '@quirky/protocol'
 import { ShellReadyBarrier } from './barrier'
+import { descendantsOf } from './descendants'
 import { writeCheckpoint } from './history/checkpoint'
 import { DEFAULT_SEGMENT_BYTES, HistoryLog } from './history/log'
 import { type SessionMeta, writeMeta } from './history/meta'
@@ -199,15 +200,17 @@ export class SessionManager {
   }
 
   /**
-   * Signals the session's process group. With `reason: 'killed'` the signal defaults to SIGKILL and
-   * the exit that follows is recorded as requested, so it is not offered for restore.
+   * Signals the session's process group. With `reason: 'killed'` the signal defaults to SIGKILL, also
+   * reaches every descendant (jobs run in their own groups), and the exit that follows is recorded
+   * as requested, so it is not offered for restore.
    */
   kill(sessionId: string, signal?: string, reason?: 'killed'): void {
     const { live } = this.locate(sessionId)
     const name = normalizeSignal(signal ?? (reason ? 'SIGKILL' : 'SIGTERM'))
     if (!live?.alive) return
     if (reason) live.killRequested = true
-    signalGroup(live.proc, name)
+    if (reason) signalTree(live.proc, name)
+    else signalGroup(live.proc, name)
   }
 
   /** Drops a session's state and history, live or stored, killing its process first if it is running. */
@@ -219,7 +222,7 @@ export class SessionManager {
     }
     live.forgotten = true
     for (const pending of live.pendingSubs) pending.cancelled = true
-    if (live.alive) signalGroup(live.proc, 'SIGKILL')
+    if (live.alive) signalTree(live.proc, 'SIGKILL')
     this.sessions.delete(sessionId)
     this.teardown(live)
     rmSync(live.dir, { recursive: true, force: true })
@@ -861,6 +864,20 @@ function signalGroup(proc: PtyProcess, signal: string): void {
       process.kill(proc.pid, signal)
     } catch {
       // already gone
+    }
+  }
+}
+
+function signalTree(proc: PtyProcess, signal: string): void {
+  const descendants = descendantsOf(proc.pid)
+  signalGroup(proc, signal)
+  for (const pid of descendants) {
+    for (const target of [-pid, pid]) {
+      try {
+        process.kill(target, signal)
+      } catch {
+        // gone, or not ours
+      }
     }
   }
 }

@@ -524,6 +524,40 @@ describe('exit', () => {
     expect(readMeta(dirOf(home, 'k'))).toMatchObject({ exitCause: 'killed', restorable: false })
   })
 
+  test('a kill with a reason also ends background jobs that run in their own process group', async () => {
+    const { manager } = newManager()
+    const exits = exitEvents(manager)
+    await manager.create(params('bg', sh('set -m; sleep 7777 & echo bg=$!; wait')))
+    let bgPid = 0
+    try {
+      const seen = await readUntil(manager, 'bg', 0, (lines) => lines.some((line) => /^bg=\d+$/.test(line)))
+      bgPid = Number(seen.lines.find((line) => /^bg=\d+$/.test(line))!.slice(3))
+      expect(() => process.kill(bgPid, 0)).not.toThrow()
+      manager.kill('bg', undefined, 'killed')
+      await waitFor(() => exits.length > 0, 2000, 'exit event')
+      await waitFor(
+        () => {
+          try {
+            process.kill(bgPid, 0)
+            return false
+          } catch {
+            return true
+          }
+        },
+        2500,
+        'background job to be killed'
+      )
+    } finally {
+      if (bgPid) {
+        try {
+          process.kill(bgPid, 'SIGKILL')
+        } catch {
+          // already gone
+        }
+      }
+    }
+  })
+
   test('a plain kill sends SIGTERM and is not a requested kill', async () => {
     const { manager } = newManager()
     const exits = exitEvents(manager)
