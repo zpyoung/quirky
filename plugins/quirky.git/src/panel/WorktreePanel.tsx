@@ -1,5 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { GitBusyOp, GitChange, GitCommit, GitStatus, GitStatusEntry, UiPluginContext } from '@quirky/protocol'
+import { NotesShelf } from '../notes/NotesShelf'
+import { noteViewInput } from '../notes/open-note'
+import { noteCounts, useNotes } from '../notes/useNotes'
 import { DIFF_VIEW_ID, PANEL_ID, type DiffViewInput } from '../shared/view-input'
 import { discardText } from '../shared/discard-text'
 import type { ScmReport } from '../scm'
@@ -93,23 +96,27 @@ const asText = (value: unknown): string | null => (typeof value === 'string' && 
 
 const rowKey = (entry: GitStatusEntry): string => `${entry.area}:${entry.path}`
 
-const toItem = (entry: GitStatusEntry): RowItem => ({
+type NoteCounts = ReadonlyMap<string, number>
+
+const toItem = (entry: GitStatusEntry, notes?: NoteCounts): RowItem => ({
   key: rowKey(entry),
   path: entry.path,
   oldPath: entry.oldPath,
   status: entry.status,
   added: entry.added,
   removed: entry.removed,
-  entry
+  entry,
+  notes: notes?.get(entry.path)
 })
 
-const changeToItem = (change: GitChange): RowItem => ({
+const changeToItem = (change: GitChange, notes?: NoteCounts): RowItem => ({
   key: `branch:${change.path}`,
   path: change.path,
   oldPath: change.oldPath,
   status: change.status,
   added: change.added,
-  removed: change.removed
+  removed: change.removed,
+  notes: notes?.get(change.path)
 })
 
 /** Everything the Source Control panel shows and does for one worktree. */
@@ -124,6 +131,8 @@ export function WorktreePanel({ context, worktree, report, notify, drafts, offer
   const compareData = useCompare(context, worktree, compareTrigger, polled !== null)
   const { compare } = compareData
   const worktreePath = useWorktreePath(context, worktree)
+  const notes = useNotes(context, worktree)
+  const counts = useMemo(() => noteCounts(notes), [notes])
 
   const [filter, setFilter] = useState('')
   const [filterOpen, setFilterOpen] = useState(false)
@@ -131,6 +140,8 @@ export function WorktreePanel({ context, worktree, report, notify, drafts, offer
   const selectionRef = useRef(selection)
   const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(new Set())
   const [historyOpen, setHistoryOpen] = useState(false)
+  const [notesCollapsed, setNotesCollapsed] = useState(false)
+  const [notesReveal, setNotesReveal] = useState(0)
   const [message, setMessageState] = useState(() => drafts.get(worktree))
   const [committing, setCommitting] = useState(false)
   const [remoteError, setRemoteError] = useState<string | null>(null)
@@ -175,14 +186,14 @@ export function WorktreePanel({ context, worktree, report, notify, drafts, offer
   )
   const compareReady = compare?.status === 'ready'
   const branchItems = useMemo(
-    () => (compareReady ? compare.entries.filter((c) => query === '' || matchesFilter(c.path, query)).map(changeToItem) : []),
-    [compare, compareReady, query]
+    () => (compareReady ? compare.entries.filter((c) => query === '' || matchesFilter(c.path, query)).map((c) => changeToItem(c, counts)) : []),
+    [compare, compareReady, query, counts]
   )
   const tooLarge = applyFilter([], filter).state === 'too-large'
 
   const order = useMemo(() => {
     if (tooLarge) return []
-    return sections.flatMap((s) => displayPaths(visibleEntries(s).map(toItem), viewMode, s.id, collapsed))
+    return sections.flatMap((s) => displayPaths(visibleEntries(s).map((e) => toItem(e)), viewMode, s.id, collapsed))
   }, [sections, visibleEntries, viewMode, collapsed, tooLarge])
   const orderKey = order.join('\n')
 
@@ -627,6 +638,8 @@ export function WorktreePanel({ context, worktree, report, notify, drafts, offer
     return buttons
   }
 
+  const openNote = (note: { id: string; path: string }) => open(noteViewInput(note.path, note.id, entries, compare))
+
   const openCommit = (commit: GitCommit) => open({ mode: 'combined', commit: commit.oid, title: commitTitle(commit.oid, commit.subject) })
   const openCommitFile = (commit: GitCommit, change: GitChange) =>
     open({ mode: 'file', source: 'commit', commit: commit.oid, path: change.path, ...(change.oldPath === undefined ? {} : { oldPath: change.oldPath }) })
@@ -694,8 +707,25 @@ export function WorktreePanel({ context, worktree, report, notify, drafts, offer
         onViewMode={setViewMode}
         onChangeBase={() => setDialog({ kind: 'base' })}
         onRefreshCompare={() => void compareData.refresh()}
+        notes={notes.length}
+        onNotes={() => {
+          setNotesCollapsed(false)
+          setNotesReveal((n) => n + 1)
+        }}
       />
       {status && <BranchRow status={status} compare={compare} onChangeBase={() => setDialog({ kind: 'base' })} />}
+      {notes.length > 0 && (
+        <NotesShelf
+          context={context}
+          worktree={worktree}
+          notes={notes}
+          collapsed={notesCollapsed}
+          onToggle={() => setNotesCollapsed((collapsed) => !collapsed)}
+          revealTick={notesReveal}
+          onOpenNote={openNote}
+          ask={ask}
+        />
+      )}
       {data.error && <div className="scm-error">{data.error}</div>}
       <div className="scm-body">
         {status === null && data.error === null && <p className="muted pad">Loading…</p>}
@@ -768,7 +798,7 @@ export function WorktreePanel({ context, worktree, report, notify, drafts, offer
             >
               <Rows
                 scope={section.id}
-                items={rows.map(toItem)}
+                items={rows.map((row) => toItem(row, counts))}
                 viewMode={viewMode}
                 collapsedDirs={collapsed}
                 onToggleDir={sectionToggle}
