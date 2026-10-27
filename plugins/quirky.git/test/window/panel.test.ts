@@ -2,7 +2,7 @@ import { afterEach, expect, test } from 'bun:test'
 import { chmodSync, mkdirSync } from 'node:fs'
 import { join } from 'node:path'
 import type { Repo, Worktree } from '@quirky/protocol'
-import { isolateGitConfig } from '../../../quirky.repo/test/git-fixtures'
+import { isolateGitConfig, makeRepo } from '../../../quirky.repo/test/git-fixtures'
 import { buttonText, byLabel, click, dialogNamed, press, q, qa, rowOf, sectionHeadings, text, type } from './dom'
 import { boot, DIFF_VIEW, openView, SESSION_VIEW, sc1, shutdown, type World } from './world'
 
@@ -172,5 +172,27 @@ test('quirky.git/changed events refresh the panel and an open diff before the ne
   expect((await w.cli(['git', 'discard', '--paths', 'math.ts', '--yes']).done).code).toBe(0)
   await quickly(() => !rowOf('math.ts'))
   await quickly(() => q('.qgv-file') && (byLabel('Next change') as HTMLButtonElement).disabled)
+  expect(w.problems()).toEqual([])
+}, SLOW)
+
+test('SC-7: a dirty submodule row expands to its read-only changes from the daemon', async () => {
+  const w = await boot(scratch)
+  const lib = makeRepo(join(scratch(), 'lib'), { 'x.c': 'int x;\n' })
+  w.git('-c', 'protocol.file.allow=always', 'submodule', 'add', '-q', lib, 'vendor/lib')
+  w.git('commit', '-q', '-m', 'add submodule')
+  w.write('vendor/lib/x.c', 'int y;\n')
+  await w.win.waitFor(() => rowOf('vendor/lib', 'unstaged'))
+  expect(text(rowOf('vendor/lib'))).toContain('Stage inside submodule')
+  expect(qa('.scm-row-actions button', rowOf('vendor/lib')!.parentElement!)).toHaveLength(0)
+
+  await click(byLabel('Expand vendor/lib'))
+  await w.win.waitFor(() => qa('.scm-sub-entry').length === 1)
+  expect(text(q('.scm-sub-entry .scm-row-name'))).toBe('x.c')
+  expect(text(q('.scm-sub-entry .scm-letter'))).toBe('M')
+  expect(qa('.scm-sub-entry button')).toHaveLength(0)
+  expect((await openView(w))?.id).not.toBe(DIFF_VIEW)
+
+  await click(byLabel('Collapse vendor/lib'))
+  expect(qa('.scm-sub-entry')).toHaveLength(0)
   expect(w.problems()).toEqual([])
 }, SLOW)

@@ -1710,6 +1710,30 @@ select {
   color: var(--green);
 }
 
+.scm-row-chevron {
+  flex: none;
+  width: 18px;
+  padding: 0;
+  background: transparent;
+  border: none;
+  color: var(--muted);
+}
+
+.scm-sub-list {
+  padding-left: 22px;
+}
+
+.scm-sub-note {
+  margin: 0;
+  padding: 2px 10px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.scm-sub-entry .scm-row-name {
+  font-weight: 400;
+}
+
 .scm-row-actions {
   display: none;
   flex: none;

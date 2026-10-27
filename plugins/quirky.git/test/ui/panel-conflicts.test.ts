@@ -68,6 +68,26 @@ describe('SC-41: conflicts lead to Continue', () => {
     unmount()
   })
 
+  test('conflicts beyond the first 50 are checked too, at most 8 reads at a time', async () => {
+    let inFlight = 0
+    let widest = 0
+    const paths = Array.from({ length: 60 }, (_, i) => `f${String(i + 1).padStart(2, '0')}.ts`)
+    const { element, unmount } = await open((f) => {
+      f.status = statusOf(paths.map((path) => conflict(path)), { operation: 'merge' })
+      f.on('quirky.git/conflictFile', async (params) => {
+        inFlight++
+        widest = Math.max(widest, inFlight)
+        await Promise.resolve()
+        inFlight--
+        return { path: params.path, content: params.path === 'f55.ts' ? 'resolved\n' : '<<<<<<< ours\none\n=======\ntwo\n>>>>>>> theirs\n' }
+      })
+    })
+    expect(byLabel(element, 'Stage f55.ts')).not.toBeNull()
+    expect(byLabel(element, 'Stage f54.ts')).toBeNull()
+    expect(widest).toBeLessThanOrEqual(8)
+    unmount()
+  })
+
   test('a conflict whose file is gone counts as marker-free; one whose read fails stays blocked', async () => {
     const { element, unmount } = await open((f) => {
       f.status = statusOf([conflict('gone.ts', 'deleted_by_them'), conflict('broken.ts')], { operation: 'merge' })
