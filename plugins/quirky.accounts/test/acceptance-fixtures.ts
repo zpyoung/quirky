@@ -62,6 +62,20 @@ export function writePrivateJson(path: string, value: unknown): void {
   chmodSync(path, 0o600)
 }
 
+export function writeCursorCliCredential(home: string, token: string): void {
+  let cliDirectory: string
+  if (process.platform === 'darwin') {
+    cliDirectory = join(home, '.cursor')
+  } else if (process.platform === 'win32') {
+    const root = process.env.APPDATA?.trim() || join(home, 'AppData', 'Roaming')
+    cliDirectory = join(root, 'Cursor')
+  } else {
+    const root = process.env.XDG_CONFIG_HOME?.trim() || join(home, '.config')
+    cliDirectory = join(root, 'cursor')
+  }
+  writePrivateJson(join(cliDirectory, 'auth.json'), { accessToken: token })
+}
+
 export function writeAntigravityCli(fakeBin: string): void {
   const path = join(fakeBin, 'agy')
   const response = {

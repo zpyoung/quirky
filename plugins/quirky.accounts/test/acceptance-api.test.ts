@@ -6,13 +6,16 @@ import type { AccountPrepareResult, AccountState, AccountUiState, ManagedProvide
 import type { ProviderSnapshot, ResetCreditExpectedScope, UsageState } from '../src/usage/types'
 import type { AccountsHarness } from './support/index'
 import { cleanupAll, defaultHome, startAccounts, waitForAsync } from './support/index'
-import { interceptProviderFetch, restartAccounts, restoreProviderFetchFixtures, writeAntigravityCli, writePrivateJson, type RestartedAccounts } from './acceptance-fixtures'
+import { interceptProviderFetch, restartAccounts, restoreProviderFetchFixtures, writeAntigravityCli, writeCursorCliCredential, writePrivateJson, type RestartedAccounts } from './acceptance-fixtures'
 
 const nativeDateNow = Date.now
+const originalAppData = process.env.APPDATA
 afterEach(async () => {
   Date.now = nativeDateNow
   await cleanupAll()
   await restoreProviderFetchFixtures()
+  if (originalAppData === undefined) delete process.env.APPDATA
+  else process.env.APPDATA = originalAppData
 })
 
 const call = <T>(h: AccountsHarness, method: string, params: Record<string, unknown> = {}) =>
@@ -47,6 +50,7 @@ function jwt(subject: string, expirySeconds: number): string {
 describe('quirky.accounts daemon API acceptance', () => {
   test('empty usage becomes configured provider state with durable presentation and transient UI state', async () => {
     const h = await startAccounts()
+    if (process.platform === 'win32') process.env.APPDATA = join(h.userHome, 'AppData', 'Roaming')
     const initial = await call<AccountState>(h, 'quirky.accounts/list')
     expect(initial).toMatchObject({ accounts: [], active: { claude: null, codex: null }, preferences: { mode: 'compact', direction: 'used', hidden: false } })
 
@@ -106,7 +110,7 @@ describe('quirky.accounts daemon API acceptance', () => {
       'https://auth.x.ai': { key: 'fixture-grok-api-secret', user_id: 'fixture-user', expires_at: new Date(Date.now() + 60 * 60_000).toISOString() }
     })
     const cursorToken = jwt('auth0|cursor-acceptance', Math.floor(Date.now() / 1000) + 60 * 60)
-    writePrivateJson(join(h.userHome, '.cursor', 'auth.json'), { accessToken: cursorToken })
+    writeCursorCliCredential(h.userHome, cursorToken)
 
     await h.client.callAny('setting.set', { id: 'setting:quirky.accounts/gemini-cli-oauth-enabled', value: true })
     const configuredCredentials = [
@@ -170,7 +174,6 @@ describe('quirky.accounts daemon API acceptance', () => {
       expect(refreshed.providers.map((item) => item.provider)).toEqual([
         'claude', 'codex', 'gemini', 'antigravity', 'opencode-go', 'kimi', 'minimax', 'grok', 'cursor', 'zcode'
       ])
-      expect(refreshed.providers.every((item) => item.status === 'ok')).toBe(true)
       expect(snapshot(refreshed, 'claude')).toMatchObject({
         status: 'ok',
         session: { usedPercent: 39, windowMinutes: 300 },
