@@ -297,6 +297,28 @@
 - **Revisit if:** the dependency query returns ready
 - **Source:** locked by docs/loop/LOOP.md:79-83
 
+## D28: Implement against the dependency branch under the current early-item rule
+- **Question:** whether repeated pending-dependency checkpoints still match the integration protocol
+- **Options:** repeat the old checkpoint; follow the current dependency-branch workflow
+- **Chose:** merge build/m5-structured-runner and implement now; wait for ready only before landing. Preserve unrelated .serena metadata without including it in item commits; implementers use clean external worktrees.
+- **Why:** the current `git show build/roadmap:docs/loop/LOOP.md` explicitly prohibits ending the turn merely because an early dependency is pending. The old readiness-only interpretation no longer applies.
+- **Evidence:** iteration16 queue wait returned the held item; queue status shows m5 in progress on lane12, not blocked; git merge build/m5-structured-runner succeeded. Current LOOP Night mode early-item steps1–4.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** the prerequisite becomes blocked or its contract changes
+- **Source:** supersedes m6-orchestration-core D13,D16–D27 (execution gate only)
+
+## D29: Use OpenAI implementers with the verified Gemini review fallback
+- **Question:** unattended implementation backend preflight
+- **Options:** omp tasks with Opus; omp tasks with reachable Gemini
+- **Chose:** IMPLEMENTER=omp-task, AUTHOR_FAMILY=openai, REVIEWER_ALIAS=gemini; maximum three implementers, disjoint external worktrees. Combined logic spec's technical section remains the night-mode implementation contract.
+- **Why:** pi-watch --check resolves Gemini to google/gemini-3.1-pro-preview:high; Opus and Sonnet have no authenticated shipping models. The fallback retains cross-family independence.
+- **Evidence:** iteration16 pi-watch --check from /tmp; existing source/type contracts committed before implementation.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** reviewer dispatch fails
+- **Source:** assumed — autonomous
+
 ## Early preparation verification
 - `bun run typecheck`: exit0 on the final contracts, no diagnostics.
 - Actual Bun import of contracts.ts: `CONTRACT_MODULE_INERT_OK`; the module exports no runtime values. No daemon, model, process, real user state or placeholder contribution was started/installed.
@@ -304,4 +326,4 @@
 - No runtime acceptance claim: AC1–AC13, cross-family review, UI pointer dogfood and queue-controlled landing remain gated on implementation after dependency readiness.
 
 ## Progress
-Iteration 15 rechecked the held item: `ready:false`, pending `m5-structured-runner`. Early preparation remains complete through the combined spec and inert shared contracts; runtime implementation is not installed. Per LOOP.md:79-83, end this iteration at the committed checkpoint. Next iteration: resume this item, read this log and logic.md, and run deps again. If false, preserve the checkpoint; if true, merge build/roadmap, read incoming decisions and implement all three specified slices. Resolve public runtime attestation and idempotent safe-send seams before trusting worker identity or pointer outcomes. AC1–AC13, product verification, dogfood, cross-family review and landing remain unexecuted. Both queue commands completed; no subagents or background work remain from iteration 15. No terminal marker: wait returned item, not done or stuck.
+Iteration16 resumed actual implementation under current early-item rules. Merged build/m5-structured-runner; status reports it in progress, not blocked. D28 supersedes the stale preparation-only gate. Resolve independent runtime caller attestation and idempotent safe-send seams, dispatch at most three disjoint implementers, then verify all AC1–AC13. Before landing, merge pending dependency updates, wait for queue deps ready, catch up integration once and read incoming decisions. Product verification, dogfood, final cross-family review and landing are not yet complete.
