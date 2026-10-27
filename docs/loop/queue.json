@@ -307,7 +307,8 @@
         "worktrees.md"
       ],
       "deps": [],
-      "status": "todo"
+      "status": "in-progress",
+      "lane": 12
     },
     {
       "id": "fix-flaky-pty-host-host",
