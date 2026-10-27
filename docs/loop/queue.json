@@ -188,8 +188,7 @@
         "m1-launch-settings",
         "m1-agent-status"
       ],
-      "status": "in-progress",
-      "lane": 3
+      "status": "done"
     },
     {
       "id": "m2-editor",

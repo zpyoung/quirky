@@ -8,6 +8,7 @@ files, not this one.
 | --- | --- | --- | --- | --- |
 | hard | medium | [m0-scripting D10](decisions/m0-scripting.md) | A plugin's methods become `quirky <group> <method>`, where the group is the plugin ID without the `quirky.` prefix | assumed — autonomous |
 | hard | medium | [m0-scripting D12](decisions/m0-scripting.md) | Each param is a kebab-case flag, objects take JSON, and `--params` passes the whole object | assumed — autonomous |
+| hard | medium | [m2-source-control-notes-ai D15](decisions/m2-source-control-notes-ai.md) | Approach: one-shot invocations are agent data in `quirky.agents`; prompts, recipes and notes stay in `quirky.git` | assumed — autonomous |
 | hard | medium | [m0-core D5](decisions/m0-core.md) | v1 moves into eight built-in plugins, one per roadmap feature | assumed — autonomous |
 | hard | medium | [m0-core D9](decisions/m0-core.md) | Plugins ship CLI commands as `cli-command` contributions, with an optional CLI module for custom run code | assumed — autonomous |
 | hard | medium | [m0-core D11](decisions/m0-core.md) | The plugin API grows by six members so the built-ins need nothing private | assumed — autonomous |
@@ -44,6 +45,9 @@ files, not this one.
 | hard | high | [m1-providers D9](decisions/m1-providers.md) | Agent IDs, labels and table values are Orca's | locked by docs/architecture.md |
 | medium | medium | [m0-scripting D6](decisions/m0-scripting.md) | The daemon validates every call's params against the method's schema, and leaves results and event data unchecked | assumed — autonomous |
 | medium | medium | [m0-scripting D29](decisions/m0-scripting.md) | Tech-spec mechanisms: one shared validator in protocol, validation in the dispatcher, declarative command specs, a JSON-mode pre-scan | assumed — autonomous |
+| medium | medium | [m2-source-control-notes-ai D4](decisions/m2-source-control-notes-ai.md) | Markdown notes and Changes mode stay with m2-editor; the Notes shelf lists diff notes | assumed — autonomous |
+| medium | medium | [m2-source-control-notes-ai D7](decisions/m2-source-control-notes-ai.md) | Notes are anchored by path and line numbers, as in Orca, and show in every diff of their path | assumed — autonomous |
+| medium | medium | [m2-source-control-notes-ai D16](decisions/m2-source-control-notes-ai.md) | The one-shot shapes, default models and limits are Orca's, for every agent Orca supports, plus a custom command | assumed — autonomous |
 | medium | medium | [m2-source-control-core D3](decisions/m2-source-control-core.md) | The slice is all of source-control.md except diff notes, AI actions and hosted review | locked by docs/loop/queue.json (the titles); assumed — autonomous (the exact cut) |
 | medium | medium | [m2-source-control-core D23](decisions/m2-source-control-core.md) | Diffs open in a `quirky.git/diff` view in the main area, and closing it returns to the worktree's sessions | assumed — autonomous |
 | medium | medium | [m2-source-control-core D25](decisions/m2-source-control-core.md) | Diffs render with `@codemirror/merge`, editable only for unstaged changes, saved with a disk precondition | locked by docs/architecture.md (CodeMirror); assumed — autonomous (the save method) |
@@ -117,6 +121,10 @@ files, not this one.
 | medium | high | [m2-sidebar-extras D18](decisions/m2-sidebar-extras.md) | Accept confirmed spec defects and reject planned-artifact reference false positives | assumed — autonomous |
 | medium | high | [m2-sidebar-extras D20](decisions/m2-sidebar-extras.md) | Preserve accepted W1 components and repair only observed integration defects | assumed — autonomous |
 | medium | high | [m2-sidebar-extras D21](decisions/m2-sidebar-extras.md) | Preserve notification unread semantics when catching up | locked by docs/loop/decisions/m1-notifications.md |
+| medium | high | [m2-source-control-notes-ai D3](decisions/m2-source-control-notes-ai.md) | The slice is diff notes, every Source Control AI action, and their settings | supersedes nothing; bound by m2-source-control-core D6 |
+| medium | high | [m2-source-control-notes-ai D6](decisions/m2-source-control-notes-ai.md) | Notes live in a `quirky.git` plugin store keyed by worktree ID and survive a restart | assumed — autonomous |
+| medium | high | [m2-source-control-notes-ai D14](decisions/m2-source-control-notes-ai.md) | Notes are scriptable: `quirky git` gains note commands, which Orca lacks | assumed — autonomous |
+| medium | high | [m2-source-control-notes-ai D19](decisions/m2-source-control-notes-ai.md) | Recipes are stored by `quirky.git` per action, globally and per repository, and the repository one wins | assumed — autonomous |
 | medium | high | [m2-source-control-core D8](decisions/m2-source-control-core.md) | The status record grows additively, read from porcelain v2 | assumed — autonomous |
 | medium | high | [m2-source-control-core D20](decisions/m2-source-control-core.md) | The compare base is the worktree's base, else the project's, else the detected default, and Change Base Ref writes where the base came from | locked by research/orca-features/source-control.md |
 | medium | high | [m0-core D8](decisions/m0-core.md) | v1's CLI words stay, with `wt` and `term` as group aliases | assumed — autonomous |
@@ -193,6 +201,19 @@ files, not this one.
 | easy | medium | [m0-scripting D32](decisions/m0-scripting.md) | Build in four waves after a type scaffold: protocol and CLI specs, then validation and generated commands, then discovery and the skill, then scenario tests | assumed — autonomous |
 | easy | medium | [m0-scripting D33](decisions/m0-scripting.md) | Skip wave 1's checkpoint review | assumed — autonomous |
 | easy | medium | [m0-scripting D35](decisions/m0-scripting.md) | Implementers' judgment calls kept: group suggestions only as a fallback, `skill show --json` wraps the text, `quirky help <words>` acts like `--help` | assumed — autonomous |
+| easy | medium | [m2-source-control-notes-ai D10](decisions/m2-source-control-notes-ai.md) | Line 0 (whole file) notes are refused | assumed — autonomous |
+| easy | medium | [m2-source-control-notes-ai D13](decisions/m2-source-control-notes-ai.md) | Sends go to a sendable agent session in the same worktree, or to a new agent tab | assumed — autonomous |
+| easy | medium | [m2-source-control-notes-ai D17](decisions/m2-source-control-notes-ai.md) | Model choice is the spec's default model, overridable through the recipe's CLI arguments; no model discovery or model memory | assumed — autonomous |
+| easy | medium | [m2-source-control-notes-ai D20](decisions/m2-source-control-notes-ai.md) | The recipes get a "Source Control AI" view opened from a command, in place of Orca's Settings > Git section | assumed — autonomous |
+| easy | medium | [m2-source-control-notes-ai D21](decisions/m2-source-control-notes-ai.md) | The repository on/off override of AI actions waits for the parity sweep | assumed — autonomous |
+| easy | medium | [m2-source-control-notes-ai D22](decisions/m2-source-control-notes-ai.md) | The daemon remembers each worktree's last commit and push failure for AI Fix | assumed — autonomous |
+| easy | medium | [m2-source-control-notes-ai D25](decisions/m2-source-control-notes-ai.md) | The sparkle runs directly when a commit message recipe is configured, else opens the Generate dialog | assumed — autonomous |
+| easy | medium | [m2-source-control-notes-ai D26](decisions/m2-source-control-notes-ai.md) | Prompts from diffs and failures are data; nothing is scanned for secrets | assumed — autonomous |
+| easy | medium | [m2-source-control-notes-ai D30](decisions/m2-source-control-notes-ai.md) | A shelf note whose path has no diff opens the file's diff against HEAD | assumed — autonomous |
+| easy | medium | [m2-source-control-notes-ai D35](decisions/m2-source-control-notes-ai.md) | Skip the checkpoint reviews after W1 and W2 | assumed — autonomous |
+| easy | medium | [m2-source-control-notes-ai D37](decisions/m2-source-control-notes-ai.md) | W1 implementation choices accepted as built | assumed — autonomous |
+| easy | medium | [m2-source-control-notes-ai D38](decisions/m2-source-control-notes-ai.md) | W2 implementation choices accepted as built | assumed — autonomous |
+| easy | medium | [m2-source-control-notes-ai D46](decisions/m2-source-control-notes-ai.md) | The UI pass: every scenario's visible behavior passes; four app defects were found and fixed, and the partials are the tool's limits | assumed — autonomous |
 | easy | medium | [m2-source-control-core D6](decisions/m2-source-control-core.md) | AI Fix, Resolve with AI and the Source Control AI settings belong to `m2-source-control-notes-ai` | assumed — autonomous |
 | easy | medium | [m2-source-control-core D9](decisions/m2-source-control-core.md) | "Resolved locally" is tracked by the daemon for conflict files opened through `quirky.git` | assumed — autonomous |
 | easy | medium | [m2-source-control-core D16](decisions/m2-source-control-core.md) | Rebase from base fetches the base's branch and rebases onto it | locked by research/orca-features/source-control.md |
@@ -371,6 +392,32 @@ files, not this one.
 | easy | high | [m2-sidebar-extras D22](decisions/m2-sidebar-extras.md) | Do not advance past the red required W1 suite gate | locked by docs/loop/LOOP.md (verification); assumed — autonomous (repair routing) |
 | easy | high | [m2-sidebar-extras D23](decisions/m2-sidebar-extras.md) | Keep measured passing checks separate from the failing full suite | locked by docs/loop/LOOP.md |
 | easy | high for exercised behavior; no claim on unexercised save/reopen | [m2-sidebar-extras D24](decisions/m2-sidebar-extras.md) | Smoke the completed W1 paths without calling them full sidebar-extras parity | assumed — autonomous |
+| easy | high | [m2-source-control-notes-ai D1](decisions/m2-source-control-notes-ai.md) | Classify the item as Visual, API, CLI and Integration work, and run research phases A and B | assumed — autonomous |
+| easy | high | [m2-source-control-notes-ai D2](decisions/m2-source-control-notes-ai.md) | Skip the visual companion and the adhd offer, use the standard gray-area set | locked by docs/loop/LOOP.md |
+| easy | high | [m2-source-control-notes-ai D5](decisions/m2-source-control-notes-ai.md) | Select every gray area that matters for notes and AI actions | assumed — autonomous |
+| easy | high | [m2-source-control-notes-ai D8](decisions/m2-source-control-notes-ai.md) | A note body is trimmed, must be non-blank, and is capped at 64 KiB in the daemon as well as the window | assumed — autonomous |
+| easy | high | [m2-source-control-notes-ai D9](decisions/m2-source-control-notes-ai.md) | Edits set `updatedAt`; there is no `sentAt` and no Sent chip | assumed — autonomous |
+| easy | high | [m2-source-control-notes-ai D11](decisions/m2-source-control-notes-ai.md) | The note prompt is Orca's `formatDiffComments` text, with control characters removed | assumed — autonomous |
+| easy | high | [m2-source-control-notes-ai D12](decisions/m2-source-control-notes-ai.md) | A send deletes the delivered notes whose snapshot still matches, and holds them out of other sends while it runs | assumed — autonomous |
+| easy | high | [m2-source-control-notes-ai D18](decisions/m2-source-control-notes-ai.md) | The commit message prompt, diff budget and parsing are Orca's | assumed — autonomous |
+| easy | high | [m2-source-control-notes-ai D23](decisions/m2-source-control-notes-ai.md) | AI Fix and Resolve with AI open a new agent tab with the prompt submitted once the agent is ready | assumed — autonomous |
+| easy | high | [m2-source-control-notes-ai D24](decisions/m2-source-control-notes-ai.md) | One generation runs per worktree; a second is refused, and cancel kills the run | assumed — autonomous |
+| easy | high | [m2-source-control-notes-ai D27](decisions/m2-source-control-notes-ai.md) | The two shortcuts: Add Review Note on Mod+Shift+A, Send Review Notes to Agent with no chord | assumed — autonomous |
+| easy | high | [m2-source-control-notes-ai D28](decisions/m2-source-control-notes-ai.md) | Fast-track the remaining questions with the recommended defaults | locked by docs/loop/LOOP.md |
+| easy | high | [m2-source-control-notes-ai D29](decisions/m2-source-control-notes-ai.md) | Skip Phase C deep research | assumed — autonomous |
+| easy | high | [m2-source-control-notes-ai D31](decisions/m2-source-control-notes-ai.md) | The logic spec is markdown, self-reviewed, and approved headless | locked by docs/loop/LOOP.md |
+| easy | high | [m2-source-control-notes-ai D32](decisions/m2-source-control-notes-ai.md) | Spec review: fix the three standing findings; dismiss the prepass reference and heading checks | assumed — autonomous |
+| easy | high | [m2-source-control-notes-ai D33](decisions/m2-source-control-notes-ai.md) | Build with Claude subagents implementing and Codex reviewing | locked by docs/loop/LOOP.md |
+| easy | high | [m2-source-control-notes-ai D34](decisions/m2-source-control-notes-ai.md) | Build in three waves: agents, terminal, pure modules and the notes daemon; then the AI daemon and the notes window; then the AI window | assumed — autonomous |
+| easy | high | [m2-source-control-notes-ai D36](decisions/m2-source-control-notes-ai.md) | `quirky.git` keeps `quirky.worktree` as its only declared dependency | assumed — autonomous |
+| easy | high | [m2-source-control-notes-ai D39](decisions/m2-source-control-notes-ai.md) | Four scenario details move to match the CLI and the daemon, found while building | assumed — autonomous |
+| easy | high | [m2-source-control-notes-ai D40](decisions/m2-source-control-notes-ai.md) | The orchestrator updated the SC-66 catalog test as the wave-gate fixer | assumed — autonomous |
+| easy | high | [m2-source-control-notes-ai D41](decisions/m2-source-control-notes-ai.md) | The concurrent-save test accepts either save winning | assumed — autonomous |
+| easy | high | [m2-source-control-notes-ai D42](decisions/m2-source-control-notes-ai.md) | Catching up with build/roadmap needed one CSS merge and no design change | assumed — autonomous |
+| easy | high | [m2-source-control-notes-ai D43](decisions/m2-source-control-notes-ai.md) | Final Round 1: accept all seven findings, which collapse to six defects, and fix them in one batch | assumed — autonomous |
+| easy | high | [m2-source-control-notes-ai D44](decisions/m2-source-control-notes-ai.md) | The fix batch closes all six Final Round 1 defects, each with a test; nothing goes to BLOCKERS.md | assumed — autonomous |
+| easy | high | [m2-source-control-notes-ai D45](decisions/m2-source-control-notes-ai.md) | No native-only scenarios | assumed — autonomous |
+| easy | high | [m2-source-control-notes-ai D47](decisions/m2-source-control-notes-ai.md) | The post-UI-fix gate's four failures are load flakes in files this item doesn't touch | assumed — autonomous |
 | easy | high | [m2-source-control-core D1](decisions/m2-source-control-core.md) | Classify the item as a Visual, API, CLI and Integration design, and run research phases A and B | assumed — autonomous |
 | easy | high | [m2-source-control-core D2](decisions/m2-source-control-core.md) | Skip the visual companion and the adhd offer, use the standard gray-area set | locked by docs/loop/LOOP.md |
 | easy | high | [m2-source-control-core D4](decisions/m2-source-control-core.md) | Select every gray area that matters for source control | assumed — autonomous |
