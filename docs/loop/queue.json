@@ -512,6 +512,16 @@
       "status": "todo"
     },
     {
+      "id": "fix-test-process-leaks",
+      "milestone": "M1",
+      "title": "Fix leaked test processes: test runs and UI passes leave quirkyd daemons and pty-host processes running after the test ends, timed out, or was killed (97 found on 2026-10-27, about 1.9 GB, under the lane worktrees, the integration worktree, agent worktrees and /tmp test folders; pty-hosts outlive their daemon with parent PID 1). Find which harnesses start them without a guaranteed stop (packages/daemon/test/helpers.ts, plugins/*/test support, the e2e harnesses, the like-a-user web pass), make every start paired with a kill of the whole process tree on any exit, make a pty-host exit when its daemon goes away, and add a test that fails if a run leaves one behind",
+      "docs": [
+        "term-daemon.md"
+      ],
+      "deps": [],
+      "status": "todo"
+    },
+    {
       "id": "m7-parity-sweep",
       "milestone": "M7",
       "title": "Parity sweep: every remaining flow in the 28 feature docs",
