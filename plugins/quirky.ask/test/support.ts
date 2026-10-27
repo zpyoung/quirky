@@ -1,10 +1,13 @@
+import { Database } from 'bun:sqlite'
 import { mkdtempSync, rmSync, symlinkSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
-import { QuirkyClient, type AskSpec, type ClientRole, type CliContext, type QuirkyEvent } from '@quirky/protocol'
+import { QuirkyClient, type AskSpec, type ClientRole, type CliContext, type PluginStore, type QuirkyEvent } from '@quirky/protocol'
 import { rpcUrl } from '@quirky/protocol/node'
 import { makeTempHome, startHarness, type Harness } from '../../../packages/daemon/test/helpers'
+import { askQueueMigration } from '../store-migrations'
+import { v1AsksMigration } from '../v1-import'
 
 export const PLUGIN_DIR = resolve(import.meta.dir, '..')
 
@@ -123,4 +126,50 @@ export async function openWindow(harness: Harness, name = 'window'): Promise<{ c
   client.onEvent((event) => events.push(event))
   await client.call('events.subscribe', {})
   return { client, events }
+}
+
+/** A `PluginStore` over an in-memory database with no tables, enough to run a migration function. */
+export function memoryStore(): PluginStore & { db: Database } {
+  const db = new Database(':memory:')
+  return {
+    db,
+    version: 0,
+    run: (sql, ...params) => {
+      const result = db.query(sql).run(...(params as never[]))
+      return { changes: Number(result.changes), lastInsertRowid: Number(result.lastInsertRowid) }
+    },
+    get: (sql, ...params) => (db.query(sql).get(...(params as never[])) as never) ?? null,
+    all: (sql, ...params) => db.query(sql).all(...(params as never[])) as never,
+    exec: (sql) => db.exec(sql),
+    transaction: (work) => db.transaction(work)()
+  }
+}
+
+/** An in-memory store carrying both of the plugin's migrations, as `main.ts` opens it. */
+export function migratedStore(home: string = makeTempHome('qa-')): PluginStore {
+  const store = memoryStore()
+  v1AsksMigration(home)(store)
+  askQueueMigration(store)
+  return store
+}
+
+/** The deploy spec from the logic spec's examples. */
+export const deploy: AskSpec = {
+  title: 'Deploy',
+  questions: [
+    {
+      id: 'env',
+      type: 'select',
+      question: 'Which environment?',
+      required: true,
+      options: [
+        { value: 'prod', label: 'Prod' },
+        { value: 'dev', label: 'Dev' }
+      ],
+      default: 'dev'
+    },
+    { id: 'replicas', type: 'number', question: 'How many replicas?', integer: true, min: 1, max: 10 },
+    { id: 'ship', type: 'date', question: 'Ship date?', header: 'Ship' },
+    { id: 'go', type: 'confirm', question: 'Go ahead?', default: true }
+  ]
 }

@@ -1,7 +1,17 @@
-import type { Ask, AskAnswer, AskEnvelope, AskQuestion, AskSpec, PluginStore } from '@quirky/protocol'
+import type { Ask, AskAnswer, AskEnvelope, AskPartial, AskSpec, PluginStore } from '@quirky/protocol'
+import { buildSummary, validateAnswerSubmission } from './src/core/answers'
+import { validatePartial } from './src/core/partial'
+import { formatSpecErrors, validateAskSpec } from './src/core/spec'
+import { buildTimeoutResult } from './src/core/timeout'
 
 /** Longest a single `wait` holds the connection. */
 export const MAX_WAIT_MS = 60000
+
+/** Largest epoch-ms value a `Date` represents; deadlines are clamped to it. */
+const MAX_DEADLINE_MS = 8640000000000000
+
+/** Largest delay `setTimeout` honours; longer deadlines re-arm in steps of this size. */
+const MAX_TIMER_DELAY_MS = 2147483647
 
 /** Builds the errors the RPC layer reports as InvalidParams, NotFound and Conflict. */
 export type AskErrors = {
@@ -10,41 +20,17 @@ export type AskErrors = {
   conflict(message: string): Error
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
+/** The time source of an `AskService`; tests substitute one they can move by hand. */
+export type AskClock = {
+  now(): number
+  setTimeout(run: () => void, ms: number): unknown
+  clearTimeout(handle: unknown): void
 }
 
-/** Validates an untrusted ask spec and returns it in canonical form. */
-export function parseAskSpec(value: unknown, errors: Pick<AskErrors, 'invalidParams'>): AskSpec {
-  const invalid = errors.invalidParams
-  if (!isRecord(value)) throw invalid('spec must be an object')
-  if (!Array.isArray(value.questions) || value.questions.length === 0) {
-    throw invalid('spec.questions must be a non-empty array')
-  }
-  if (value.title !== undefined && typeof value.title !== 'string') throw invalid('spec.title must be a string')
-  const seen = new Set<string>()
-  const questions = value.questions.map((raw, index): AskQuestion => {
-    if (!isRecord(raw)) throw invalid(`spec.questions[${index}] must be an object`)
-    const { id, type, question } = raw
-    if (typeof id !== 'string' || id === '') throw invalid(`spec.questions[${index}].id must be a string`)
-    if (seen.has(id)) throw invalid(`duplicate question id: ${id}`)
-    seen.add(id)
-    if (typeof question !== 'string') throw invalid(`spec.questions[${index}].question must be a string`)
-    if (type === 'select' || type === 'multiselect') {
-      if (!Array.isArray(raw.options) || raw.options.length === 0) {
-        throw invalid(`spec.questions[${index}].options must be a non-empty array`)
-      }
-      for (const option of raw.options) {
-        if (!isRecord(option) || typeof option.value !== 'string' || typeof option.label !== 'string') {
-          throw invalid(`spec.questions[${index}].options need string value and label`)
-        }
-      }
-    } else if (type !== 'text' && type !== 'confirm') {
-      throw invalid(`spec.questions[${index}].type must be select, multiselect, text or confirm`)
-    }
-    return raw as AskQuestion
-  })
-  return { ...(value.title !== undefined ? { title: value.title as string } : {}), questions }
+const systemClock: AskClock = {
+  now: () => Date.now(),
+  setTimeout: (run, ms) => setTimeout(run, ms),
+  clearTimeout: (handle) => clearTimeout(handle as ReturnType<typeof setTimeout>)
 }
 
 type AskRow = {
@@ -56,9 +42,14 @@ type AskRow = {
   status: AskEnvelope['status']
   answers: string
   skipped: string
+  partial: string
+  expires_at: number | null
+  summary: string
+  seq: number
+  created_seq: number
 }
 
-function toAsk(row: AskRow): Ask {
+function toAsk(row: AskRow, queued: boolean): Ask {
   return {
     id: row.id,
     spec: JSON.parse(row.spec) as AskSpec,
@@ -70,77 +61,100 @@ function toAsk(row: AskRow): Ask {
       askId: row.id,
       answers: JSON.parse(row.answers),
       skipped: JSON.parse(row.skipped),
-      summary: ''
+      summary: row.summary
     },
-    seq: 0,
-    queued: false,
-    partial: {},
-    expiresAt: null
+    seq: row.seq,
+    queued,
+    partial: JSON.parse(row.partial) as AskPartial,
+    expiresAt: row.expires_at
   }
 }
 
-/** What an `AskService` tells the rest of the daemon. */
+/**
+ * What an `AskService` tells the rest of the daemon, each call carrying the `seq` the change was
+ * stamped with. `surfaced` fires only when a queued ask becomes its session's live question; an ask
+ * that is live from the start is announced through `created`.
+ */
 export type AskServiceHooks = {
-  created(ask: Ask): void
-  resolved(askId: string, envelope: AskEnvelope): void
+  created(ask: Ask, seq: number): void
+  surfaced(ask: Ask, seq: number): void
+  updated(askId: string, partial: AskPartial, seq: number): void
+  resolved(askId: string, envelope: AskEnvelope, seq: number): void
 }
 
-type Waiter = { resolve(envelope: AskEnvelope): void; reject(error: Error): void; timer: ReturnType<typeof setTimeout> }
+type Waiter = { resolve(envelope: AskEnvelope): void; reject(error: Error): void; timer: unknown }
 
-/** Asks persisted in the plugin's store, with long-poll waiters held in memory. */
+/**
+ * Asks persisted in the plugin's store, with long-poll waiters and deadline timers held in memory.
+ * Every change takes the next value of the store-wide `seq` counter inside the same transaction as
+ * its row change, so a window can order events and a promoted ask never reuses an old value.
+ */
 export class AskService {
   private readonly waiters = new Map<string, Set<Waiter>>()
+  private readonly deadlines = new Map<string, unknown>()
   private stopped = false
 
   constructor(
     private readonly store: PluginStore,
     private readonly errors: AskErrors,
-    private readonly hooks: AskServiceHooks
+    private readonly hooks: AskServiceHooks,
+    private readonly clock: AskClock = systemClock
   ) {}
 
-  /** Stores a pending ask for a validated spec and announces it. */
-  create(specInput: unknown, sessionId: string | null, worktreeId: string | null): Ask {
-    const spec = parseAskSpec(specInput, this.errors)
-    const id = `ask_${crypto.randomUUID().replaceAll('-', '').slice(0, 12)}`
-    const ask: Ask = {
-      id,
-      spec,
-      sessionId,
-      worktreeId,
-      createdAt: Date.now(),
-      envelope: { status: 'pending', askId: id, answers: {}, skipped: [], summary: '' },
-      seq: 0,
-      queued: false,
-      partial: {},
-      expiresAt: null
+  /**
+   * Stores a pending ask for a spec and arms its deadline. `checkCredentialText` is false for asks a
+   * plugin registers on the person's behalf, whose wording the plugin doesn't control.
+   */
+  create(
+    specInput: unknown,
+    sessionId: string | null,
+    worktreeId: string | null,
+    options: { timeoutMs?: number; checkCredentialText: boolean }
+  ): Ask {
+    const checked = validateAskSpec(specInput, { checkCredentialText: options.checkCredentialText })
+    if (!checked.ok) throw this.errors.invalidParams(formatSpecErrors(checked.errors))
+    const { timeoutMs } = options
+    if (timeoutMs !== undefined && (!Number.isInteger(timeoutMs) || timeoutMs < 1)) {
+      throw this.errors.invalidParams('timeoutMs must be an integer of at least 1')
     }
-    this.store.run(
-      'INSERT INTO asks (id, spec, session_id, worktree_id, created_at, status, answers, skipped) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-      ask.id,
-      JSON.stringify(spec),
-      sessionId,
-      worktreeId,
-      ask.createdAt,
-      'pending',
-      '{}',
-      '[]'
-    )
-    this.hooks.created(ask)
+    const id = `ask_${crypto.randomUUID().replaceAll('-', '').slice(0, 12)}`
+    const createdAt = this.clock.now()
+    const expiresAt = timeoutMs === undefined ? null : Math.min(createdAt + timeoutMs, MAX_DEADLINE_MS)
+    const seq = this.store.transaction(() => {
+      const next = this.nextSeq()
+      this.store.run(
+        `INSERT INTO asks (id, spec, session_id, worktree_id, created_at, status, answers, skipped, partial, expires_at, summary, seq, created_seq)
+         VALUES (?, ?, ?, ?, ?, 'pending', '{}', '[]', '{}', ?, '', ?, ?)`,
+        id,
+        JSON.stringify(checked.spec),
+        sessionId,
+        worktreeId,
+        createdAt,
+        expiresAt,
+        next,
+        next
+      )
+      return next
+    })
+    this.armDeadline(id, expiresAt)
+    const ask = this.get(id)
+    this.hooks.created(ask, seq)
     return ask
   }
 
+  /** The ask with its deadline applied; NotFound for an unknown ID. */
   get(askId: string): Ask {
-    const row = this.store.get<AskRow>('SELECT * FROM asks WHERE id = ?', askId)
-    if (!row) throw this.errors.notFound(`no such ask: ${askId}`)
-    return toAsk(row)
+    const row = this.settle(askId)
+    return toAsk(row, this.isQueued(row))
   }
 
   /** Every ask in creation order, optionally only those still pending. */
   list(pendingOnly: boolean): Ask[] {
+    this.settleOverdue(true)
     const rows = this.store.all<AskRow>(
-      pendingOnly ? "SELECT * FROM asks WHERE status = 'pending' ORDER BY created_at, id" : 'SELECT * FROM asks ORDER BY created_at, id'
+      pendingOnly ? "SELECT * FROM asks WHERE status = 'pending' ORDER BY created_seq, id" : 'SELECT * FROM asks ORDER BY created_seq, id'
     )
-    return rows.map(toAsk)
+    return rows.map((row) => toAsk(row, this.isQueued(row)))
   }
 
   /**
@@ -156,14 +170,14 @@ export class AskService {
     return new Promise((resolve, reject) => {
       const waiter: Waiter = {
         resolve: (envelope) => {
-          clearTimeout(waiter.timer)
+          this.clock.clearTimeout(waiter.timer)
           resolve(envelope)
         },
         reject: (error) => {
-          clearTimeout(waiter.timer)
+          this.clock.clearTimeout(waiter.timer)
           reject(error)
         },
-        timer: setTimeout(() => {
+        timer: this.clock.setTimeout(() => {
           this.removeWaiter(askId, waiter)
           try {
             resolve(this.get(askId).envelope)
@@ -176,54 +190,213 @@ export class AskService {
     })
   }
 
-  /** Clears every wait timer and rejects each pending waiter; call before the store closes. */
+  /** Clears every timer and rejects each pending waiter; call before the store closes. */
   shutdown(): void {
     this.stopped = true
+    for (const handle of this.deadlines.values()) this.clock.clearTimeout(handle)
+    this.deadlines.clear()
     const pending = [...this.waiters.values()].flatMap((set) => [...set])
     this.waiters.clear()
     for (const waiter of pending) waiter.reject(new Error('quirky.ask shut down while the wait was pending'))
   }
 
+  /**
+   * Arms every pending deadline and resolves the ones that passed while nothing was running,
+   * without surfacing or announcing an overdue ask; call once after construction.
+   */
+  start(): void {
+    this.sweep()
+    const rows = this.store.all<AskRow>("SELECT * FROM asks WHERE status = 'pending' AND expires_at IS NOT NULL")
+    for (const row of rows) this.armDeadline(row.id, row.expires_at)
+  }
+
+  /**
+   * Resolves every overdue pending ask, oldest first and without promoting, then promotes each
+   * session whose live question was among them. A queued ask that is overdue is therefore timed
+   * out before it could ever be surfaced.
+   */
+  sweep(): void {
+    if (this.stopped) return
+    const sessions = this.settleOverdue(false)
+    for (const sessionId of sessions) this.promote(sessionId)
+  }
+
+  /** Validates and records an answer; NotFound, Conflict when finished, InvalidParams when refused. */
   answer(askId: string, answersInput: unknown, skippedInput: unknown): AskEnvelope {
     const ask = this.get(askId)
-    if (!isRecord(answersInput)) throw this.errors.invalidParams('answers must be an object')
-    if (
-      skippedInput !== undefined &&
-      (!Array.isArray(skippedInput) || skippedInput.some((id) => typeof id !== 'string'))
-    ) {
-      throw this.errors.invalidParams('skipped must be an array of question ids')
-    }
     if (ask.envelope.status !== 'pending') throw this.errors.conflict(`ask ${askId} is already ${ask.envelope.status}`)
-    const skipped = (skippedInput as string[] | undefined) ?? []
-    return this.resolve(ask, skipped.length > 0 ? 'partial' : 'answered', answersInput as Record<string, AskAnswer>, skipped)
+    const checked = validateAnswerSubmission(ask.spec, answersInput, skippedInput)
+    if (!checked.ok) throw this.errors.invalidParams(checked.message)
+    return this.resolve(ask, {
+      status: checked.skipped.length > 0 ? 'partial' : 'answered',
+      answers: checked.answers,
+      skipped: checked.skipped,
+      summary: buildSummary(ask.spec, checked.answers)
+    })
   }
 
   /** Declines a pending ask; an ask that already finished is returned unchanged. */
   cancel(askId: string): AskEnvelope {
     const ask = this.get(askId)
     if (ask.envelope.status !== 'pending') return ask.envelope
-    return this.resolve(ask, 'declined', {}, [])
+    return this.resolve(ask, { status: 'declined', answers: {}, skipped: [], summary: '' })
+  }
+
+  /** Times a pending ask out now, exactly as its deadline would; a finished ask is returned unchanged. */
+  expire(askId: string): AskEnvelope {
+    const ask = this.get(askId)
+    if (ask.envelope.status !== 'pending') return ask.envelope
+    return this.timeOut(ask, true)
+  }
+
+  /** Replaces a pending ask's draft; `ok` is false for an ask that already finished. */
+  updatePartial(askId: string, partialInput: unknown): { ok: boolean } {
+    const ask = this.get(askId)
+    if (ask.envelope.status !== 'pending') return { ok: false }
+    const checked = validatePartial(ask.spec, partialInput)
+    if (!checked.ok) throw this.errors.invalidParams(checked.message)
+    const seq = this.store.transaction(() => {
+      const next = this.nextSeq()
+      this.store.run("UPDATE asks SET partial = ?, seq = ? WHERE id = ? AND status = 'pending'", JSON.stringify(checked.partial), next, askId)
+      return next
+    })
+    this.hooks.updated(askId, checked.partial, seq)
+    return { ok: true }
+  }
+
+  private nextSeq(): number {
+    this.store.run('UPDATE ask_seq SET value = value + 1 WHERE id = 1')
+    return this.store.get<{ value: number }>('SELECT value FROM ask_seq WHERE id = 1')!.value
+  }
+
+  private overdue(row: AskRow): boolean {
+    return row.status === 'pending' && row.expires_at !== null && row.expires_at <= this.clock.now()
+  }
+
+  private isQueued(row: AskRow): boolean {
+    if (row.status !== 'pending' || row.session_id === null) return false
+    return (
+      this.store.get(
+        "SELECT 1 FROM asks WHERE status = 'pending' AND session_id = ? AND created_seq < ? LIMIT 1",
+        row.session_id,
+        row.created_seq
+      ) !== null
+    )
+  }
+
+  /** The row for an ask, after timing it out if its deadline has passed. */
+  private settle(askId: string): AskRow {
+    const row = this.store.get<AskRow>('SELECT * FROM asks WHERE id = ?', askId)
+    if (!row) throw this.errors.notFound(`no such ask: ${askId}`)
+    if (!this.overdue(row)) return row
+    this.timeOut(toAsk(row, this.isQueued(row)), true)
+    return this.store.get<AskRow>('SELECT * FROM asks WHERE id = ?', askId)!
+  }
+
+  /**
+   * Times out every overdue pending ask, oldest first, re-reading each so one already timed out by
+   * a promotion is not resolved twice. Returns the sessions whose live question was resolved,
+   * which the caller promotes when it asked for `promote: false`.
+   */
+  private settleOverdue(promote: boolean): Set<string> {
+    const sessions = new Set<string>()
+    const candidates = this.store.all<{ id: string }>(
+      "SELECT id FROM asks WHERE status = 'pending' AND expires_at IS NOT NULL AND expires_at <= ? ORDER BY created_seq",
+      this.clock.now()
+    )
+    for (const { id } of candidates) {
+      const row = this.store.get<AskRow>('SELECT * FROM asks WHERE id = ?', id)
+      if (!row || !this.overdue(row)) continue
+      const queued = this.isQueued(row)
+      this.timeOut(toAsk(row, queued), promote)
+      if (!promote && !queued && row.session_id !== null) sessions.add(row.session_id)
+    }
+    return sessions
+  }
+
+  private timeOut(ask: Ask, promote: boolean): AskEnvelope {
+    const result = buildTimeoutResult(ask.spec, ask.partial)
+    return this.resolve(ask, { status: 'timed_out', ...result }, promote)
   }
 
   private resolve(
     ask: Ask,
-    status: AskEnvelope['status'],
-    answers: Record<string, AskAnswer>,
-    skipped: string[]
+    outcome: Pick<AskEnvelope, 'status' | 'answers' | 'skipped' | 'summary'>,
+    promote = true
   ): AskEnvelope {
-    const envelope: AskEnvelope = { status, askId: ask.id, answers, skipped, summary: '' }
-    this.store.run(
-      'UPDATE asks SET status = ?, answers = ?, skipped = ? WHERE id = ?',
-      status,
-      JSON.stringify(answers),
-      JSON.stringify(skipped),
-      ask.id
-    )
-    this.hooks.resolved(ask.id, envelope)
+    const envelope: AskEnvelope = { ...outcome, askId: ask.id }
+    const wasLive = ask.sessionId !== null && !ask.queued
+    const seq = this.store.transaction(() => {
+      const next = this.nextSeq()
+      this.store.run(
+        "UPDATE asks SET status = ?, answers = ?, skipped = ?, summary = ?, seq = ? WHERE id = ? AND status = 'pending'",
+        envelope.status,
+        JSON.stringify(envelope.answers),
+        JSON.stringify(envelope.skipped),
+        envelope.summary,
+        next,
+        ask.id
+      )
+      return next
+    })
+    this.disarmDeadline(ask.id)
+    this.hooks.resolved(ask.id, envelope, seq)
     const waiting = this.waiters.get(ask.id)
     this.waiters.delete(ask.id)
     for (const waiter of waiting ?? []) waiter.resolve(envelope)
+    if (promote && wasLive) this.promote(ask.sessionId!)
     return envelope
+  }
+
+  /** Surfaces the session's earliest pending ask under a fresh `seq`, timing out any overdue ones first. */
+  private promote(sessionId: string): void {
+    for (;;) {
+      const row = this.store.get<AskRow>(
+        "SELECT * FROM asks WHERE status = 'pending' AND session_id = ? ORDER BY created_seq LIMIT 1",
+        sessionId
+      )
+      if (!row) return
+      if (this.overdue(row)) {
+        this.timeOut(toAsk(row, false), false)
+        continue
+      }
+      const seq = this.store.transaction(() => {
+        const next = this.nextSeq()
+        this.store.run('UPDATE asks SET seq = ? WHERE id = ?', next, row.id)
+        return next
+      })
+      this.hooks.surfaced(this.get(row.id), seq)
+      return
+    }
+  }
+
+  private armDeadline(askId: string, expiresAt: number | null): void {
+    this.disarmDeadline(askId)
+    if (expiresAt === null || this.stopped) return
+    const remaining = Math.max(0, expiresAt - this.clock.now())
+    const handle = this.clock.setTimeout(() => this.fireDeadline(askId, expiresAt), Math.min(remaining, MAX_TIMER_DELAY_MS))
+    this.deadlines.set(askId, handle)
+  }
+
+  private fireDeadline(askId: string, expiresAt: number): void {
+    this.deadlines.delete(askId)
+    if (this.stopped) return
+    if (expiresAt > this.clock.now()) {
+      this.armDeadline(askId, expiresAt)
+      return
+    }
+    try {
+      this.settle(askId)
+    } catch {
+      // the host may close the store between the timer firing and this read
+    }
+  }
+
+  private disarmDeadline(askId: string): void {
+    const handle = this.deadlines.get(askId)
+    if (handle === undefined) return
+    this.clock.clearTimeout(handle)
+    this.deadlines.delete(askId)
   }
 
   private addWaiter(askId: string, waiter: Waiter): void {
