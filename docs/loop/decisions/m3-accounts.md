@@ -319,5 +319,27 @@
 - **Revisit if:** final scripts or landing verification still fail
 - **Source:** locked by operator decision
 
+## D30: Finish the final catch-up without changing production source
+- **Question:** Did the operator's final integration catch-up invalidate the exercised core implementation?
+- **Options:** infer compatibility; inspect incoming paths and rerun the repaired scripts gate
+- **Chose:** merge current build/roadmap once; read the complete incoming m5-ledger decision log; retain the unchanged production source
+- **Why:** incoming changes were only BLOCKERS, DECISIONS, queue and the ledger log. The repaired queue order cleared scripts: 49 tests/417 assertions passed; typecheck also passed.
+- **Evidence:** final catch-up after 25c072e; full m5-ledger log including line 224; verification output artifact 330 (67.83 seconds including typecheck)
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** landing verification fails on its merge result
+- **Source:** locked by operator decision
+
+## D31: Record incomplete independent review rather than invent clearance
+- **Question:** Can the final code review be called complete at the operator's landing cutoff?
+- **Options:** equate silence with a clean review; keep the exact partial verdict and open coverage
+- **Chose:** record NOT_REVIEWABLE overall; no three-lens clearance. The S gate returned PASS with zero survivors; C and X each reached Gemini but hit the 180-second watchdog without valid output.
+- **Why:** the initial Node transport failed on missing libllhttp before model dispatch; Bun-hosted recovery made real requests. The S candidate claimed hook-injected homes are treated as explicit (sessions.ts:130-138); refute upheld HIGH, but the evidence gate suppressed its citation as falsified. That does not establish the consumer behavior safe or broken, so keep S1 HIGH/unconfirmed for the follow-up. No confirmed blocking source finding was produced.
+- **Evidence:** scratch/final-review/round1.partial.json; runs/S/{claims,gate,manifest}.json; actual accounts-api prepass passed in 13.44 seconds on frozen cd45c294..291f2f8; C/X watchdog exits 143
+- **Reversibility:** easy
+- **Confidence:** high for the execution result; no confidence claim for unreviewed correctness/security
+- **Revisit if:** independent follow-up produces a reproducible core defect
+- **Source:** locked by operator decision
+
 ## Progress
-Operator-approved core landing (D27). Production source 291f2f8 is built and core runtime/UI proof passed (D28), with 48 core tests/295 assertions and typecheck green. Extended UI/native verification and broad-suite timeout are explicitly deferred in BLOCKERS.md to registered dependent item m3-accounts-remaining-flows. The frozen feature-only Gemini Final Round 1 is being executed; transport initially found a broken Homebrew Node runtime, not a product finding. Next: record actual review output without claiming unreceived clearance, fix blocking findings only, commit evidence/native handoff, perform the operator's single final roadmap catch-up, rerun scripts against repaired queue ordering, detach and queue.ts land. The land command owns whole-suite verification. No standalone pre-land whole-suite pass or unexercised flow is claimed.
+Core landing ready under the operator's explicit cutoff. Production source 291f2f8 is built and actual CLI/daemon/PTY and core UI proof passed; 48 core tests/295 assertions, post-catch-up scripts 49/417 and typecheck pass. The broad affected-package run timed out and final independent review is NOT_REVIEWABLE overall (D29/D31), not a pass. Deferred user-surface flows, review coverage and unconfirmed S1 are recorded in BLOCKERS.md and the registered dependent completion item; native scenarios remain pending. Final roadmap catch-up is complete and changed docs only. All owned smoke/review processes are stopped. Next: commit this exact evidence, detach and run queue.ts land, whose whole-suite result is authoritative. Fix a named landing failure rather than claiming success without it.
