@@ -557,5 +557,15 @@
 - **Revisit if:** host.test.ts fails on build/roadmap's own gate
 - **Source:** assumed — autonomous
 
+## D56: Wave 1 checkpoint: fix setBadge's envelope and the focused-window toast list; wave 2 started alongside
+- **Question:** the wave 1 checkpoint review (SDD step 8) and whether wave 2 waits for it
+- **Options:** fix each accepted finding; start wave 2 only after the fixes, or alongside with a narrowed scope
+- **Chose:** three lenses (C, S, X) over `67a4224..166fb23`, depth standard, codex gpt-6.1-sol, pre-pass checks `bun run typecheck` and `bun test scripts` (D55). X passed; C and S both found `quirky.session/setBadge` returning a bare Session instead of `{session}` (C1/S1, accepted) and C found `ui.state.toasts` falling back to a background window when the focused one had never reported (C3, accepted). One fixer closed both; acceptance green. Wave 2's H1 was dispatched while the checkpoint ran, with the core and probe files removed from its scope so a fix there could not collide.
+- **Why:** LOOP.md: fix every confirmed finding; the parallel start only overlapped on files the checkpoint could not touch
+- **Evidence:** session scratchpad cp1/*-gate.json
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** assumed — autonomous
+
 ## Progress
 Wave 1 (K toasts, M menu-item, B badges, T newTab, C core, P probe) merged; gate green apart from the remote pty-host flake (D55). Next: wave 1 checkpoint review (3 lenses, standard), fixes, then wave 2 (H1 then H2 chain, task briefs in the session scratchpad are re-derivable from tech.md H1/H2), wave 3 (W window + manifest UI contributions), catch-up merge with build/roadmap, Final Round 1, UI pass, land.
