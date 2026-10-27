@@ -1,6 +1,8 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 import { rmSync } from 'node:fs'
-import { QuirkyClient, RpcErrorCode, type QuirkyEvent, type RpcError, type Session } from '@quirky/protocol'
+import { join } from 'node:path'
+import { Database } from 'bun:sqlite'
+import { QuirkyClient, RpcErrorCode, type LaunchSettings, type QuirkyEvent, type RpcError, type Session } from '@quirky/protocol'
 import { rpcUrl } from '@quirky/protocol/node'
 import type { Harness } from '../../../packages/daemon/test/helpers'
 import { makeTempHome, waitFor } from '../../../packages/daemon/test/helpers'
@@ -159,6 +161,30 @@ describe('SC-31: resume replays the launch record, in the original folder', () =
     expect(again).toMatchObject({ resumedFrom: resumed.id, launch: { command: 'claude', args: '--model haiku', env: {} } })
     expect(spawnedArgv(again.id)).toContain('claude --model haiku')
     expect(spawnedArgv(again.id)).not.toContain('--dangerously-skip-permissions')
+  })
+
+  test('SC-21: resume and fork keep the old session\'s launchSettings, and the old record is untouched', async () => {
+    const settings: LaunchSettings = {
+      agent: 'codex',
+      options: { model: { value: 'gpt-5.5', source: 'explicit' }, effort: { value: 'low', source: 'explicit' } },
+      summary: 'Codex · GPT-5.5 · Effort: low'
+    }
+    const first = await start('codex')
+    await setProviderSession({ session: first.id, id: 'abc' })
+    const db = new Database(join(h.home, 'plugin-data', 'quirky.session', 'store.db'))
+    try {
+      db.query('UPDATE sessions SET launch_settings = ? WHERE id = ?').run(JSON.stringify(settings), first.id)
+    } finally {
+      db.close()
+    }
+
+    const resumed = await resume({ session: first.id })
+    const forked = await resume({ session: first.id, fork: true })
+
+    expect(resumed.launchSettings).toEqual(settings)
+    expect(forked.launchSettings).toEqual(settings)
+    expect((await call<Session>(client, 'quirky.session/get', { session: resumed.id })).launchSettings).toEqual(settings)
+    expect((await call<Session>(client, 'quirky.session/get', { session: first.id })).launchSettings).toEqual(settings)
   })
 
   test('SC-31: a session with no launch record resumes with the catalog command and records that', async () => {
