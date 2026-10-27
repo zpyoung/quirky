@@ -242,7 +242,29 @@
 - **Revisit if:** a trustworthy pre-smoke snapshot becomes available
 - **Source:** assumed — autonomous
 
+## D23: Keep editor declarations within the binding flat schema subset
+- **Question:** How should integration repair the editor manifest's unsupported union and constraint keywords?
+- **Options:** expand the shared schema language; remove constraints without documenting them; project declarations faithfully into the supported subset and retain explicit service guards
+- **Chose:** honor m0-scripting D4. Use supported scalar/object/array schemas and enums where representable; describe nullable/heterogeneous variants and conditional requirements precisely where the subset needs `{}`. Keep action-specific requirements, lengths and bounds enforced by editor services. Do not add shared schema keywords.
+- **Why:** the combined source typechecks, but all 22 core API tests fail because registration rejects the manifest before invocation. This is a declaration incompatibility, not 22 independent missing methods. D4 explicitly permits descriptive schemas for unions.
+- **Evidence:** packages/protocol/src/schema.ts; docs/loop/decisions/m0-scripting.md D4-D6; combined core.test.ts run: 0 pass, 22 fail; diagnostic harness reports quirky.editor invalid with unsupported keyword/type diagnostics
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** an approved later item changes the shared schema language
+- **Source:** locked by docs/loop/decisions/m0-scripting.md D4-D6
+
+## D24: Preserve integration checkpoints and isolate repair ownership
+- **Question:** How should the implementation wave recover from incomplete handoffs and integration failures?
+- **Options:** discard the implementation; hide missing flows; retain explicit checkpoints and assign bounded completion/repair slices
+- **Chose:** finish original component handoffs with replacement owners, audit scopes, assemble the complete source, and checkpoint compiler repairs before two disjoint manifest/command repair tasks. The main item branch now contains the assembled source. No checkpoint claims runtime completion.
+- **Why:** the initial assembly exposed parser defects and 100 semantic diagnostics; five isolated repair slices returned, their changes were scope-audited, and combined typecheck passed. The subsequent core runtime run exposed D23. Earlier accidental relative-path/root-file writes were restored or relocated before assembly; generated Serena scaffolds were removed.
+- **Evidence:** assembly checkpoint fccb94a; typed repair checkpoint 20cd578; /tmp/m2-editor-sdd.bnKf9F/type-fix-journal.json; main merge of build/m2-editor-wavecheck-i2
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** a scope audit finds an unowned change
+- **Source:** supersedes m2-editor D18
+
 ## Progress
-Step 5: six implementation snapshots assembled and scoped-audited; component sources and API tests are present. The assembly checkpoint is `fccb94a496ccdc97ce321408236c737174ce0015` on an auxiliary verification branch, not a completion claim. Resource/geometry API, CLI and browser smoke are verified; 98 primitive terminal tests pass. Combined installation succeeded; parser defects were repaired, and 100 semantic diagnostics are being fixed in five disjoint worktrees. Next: merge audited compiler repairs, expose the remaining official view commands through declared API/CLI/window routes, run every acceptance and UI scenario, catch up with build/roadmap, perform the cross-family final review/fix batch, and land. No queue block or extra follow-up item is authorized.
+Step 5: all six component snapshots and five audited compiler repairs are committed on build/m2-editor; combined typecheck passes. Resource/geometry API, CLI and browser smoke are verified; 98 primitive terminal tests pass. The first combined core run has 22 registration failures caused by unsupported manifest schemas (D23), not a passing runtime claim. Two isolated repair owners are adapting the manifest/guards and completing official API/CLI/window commands, focus lifetime and Finder-import routing. Next: integrate those audited deltas, run every acceptance and UI scenario, catch up with build/roadmap and read incoming decisions, perform the cross-family final review/fix batch, and land. Do not run queue block or add a follow-up over SC-9.
 
 Last SC-9 point: Finder drops import copies under D19, including in-worktree sources. Native SC-9 stays pending for the nightly run. Open-in-place is owned by the operator's `m4-editor-drop-open-in-place`, not an m2-editor blocker.
