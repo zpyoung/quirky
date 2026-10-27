@@ -451,7 +451,18 @@
 - **Revisit if:** integrated landing gate exposes an interaction absent from the affected run
 - **Source:** assumed — autonomous
 
+## D42: Catch up once and preserve incoming decision ownership
+- **Question:** Did the final integration catch-up introduce a binding conflict?
+- **Options:** repeatedly merge/re-review; merge once and reconcile every incoming decision log
+- **Chose:** merged build/roadmap once at a0cae4b without conflicts. Read-only IncomingDecisionBindings read all nine incoming logs completely: fix-flaky-quirky-git-files-scenarios, fix-flaky-quirky-worktree-window-projects, m1-agent-status-scripting, m3-accounts, m3-handoff, m3-session-info, m4-hosting-api-github, m5-ledger and m5-structured-runner. No browser/native-asset contract conflict.
+- **Why:** public plugin APIs, owned process scope and identity boundaries remain compatible. Handoff D64's retry after proven non-delivery does not change browser mutation no-replay; structured-runner ownership is separate. This was required decision reconciliation, not the skipped code-review round.
+- **Evidence:** catch-up merge a0cae4b; IncomingDecisionBindings complete nine-log report; core commit1de2011 merged into this branch and its clean component worktree removed without force
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** integrated landing tests expose a concrete interaction
+- **Source:** assumed — autonomous
+
 ## Progress
 Iteration6 holds exactly sa-browser-agent. Core affected tests, scripts and typecheck passed (D41). Full pre-cutover work is preserved at1d05b63/build/sa-browser-agent-full-snapshot; queued sa-browser-agent-extras owns every deferred flow. Review and additional dogfood were not started, per D40. Original parent metadata and copied metadata stash remain untouched.
 
-Next: commit/merge component into build/sa-browser-agent, remove its clean worktree, catch up once/read incoming decisions, detach and queue.ts land; wait for its integrated gate. No second item and no whole-queue completion claim.
+Core committed1de2011, merged into build/sa-browser-agent; component worktree removed. Single catch-up a0cae4b completed, all nine incoming decision logs reconciled (D42). Next: detach and queue.ts land sa-browser-agent; wait for the integrated gate. No second item and no whole-queue completion claim.
