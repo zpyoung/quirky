@@ -28,7 +28,7 @@ Libraries: React 19 (external, shared through the import map), `@xterm/xterm` 5.
 - `packages/protocol/test/ui.test.ts:261-268` pins the kind lists; update to eight kinds, five code-backed.
 - `packages/daemon/src/plugins/ui-kinds.ts`: `ALLOWED_FIELDS` :16-24 (`keybinding` gains `when`; new `overlay: ['title','description','order']`), `TITLE_REQUIRED` :28 gains `overlay`, `checkKeybinding` :48-64 validates `when` with `parseWhen`.
 - `packages/daemon/src/plugins/ui-model.ts`: `resolveKeybindings` :99-171 groups by `chord + '\0' + canonicalWhen` instead of chord; reserved-chord shadowing (:148) applies to every group; distro bindings (:151, no `when`) shadow only the group with no `when`. The model literal :267-277 gains `overlays` (built like `panels`). The missing-ui warning :219 names overlays too.
-- `packages/daemon/src/plugins/layout.ts`: `state()` :81-102 adds overlays to `slots` with `shown: true` while any window reports for them, else false; `report()` :147 accepts overlay IDs.
+- `packages/daemon/src/plugins/layout.ts`: `state()` :81-102 adds overlays to `slots` (`shown` per the Overlay slot contract; the window tells the daemon an overlay is mounted by reporting for it); `report()` :147 accepts overlay IDs.
 - `packages/cli/src/commands/ui.ts:31-35` (`renderModel`) lists OVERLAYS.
 - `packages/ui/src/plugins/host.ts`: `findSlot` :110 includes overlays; `runMount` :404 passes `input` only to views (unchanged) and `{report}` to overlays; `handleKey` :246 evaluates `when`; `contextFor` :636-702 adds `setContext` and `mountView` (tracked, cleaned on revoke like `setPanelBadge` :691).
 - `packages/ui/src/App.tsx:35-58`: renders `<OverlayLayer/>` after `.layout` and before the palette, toasts and confirm host.
@@ -74,12 +74,12 @@ UiPluginContext.mountView(viewId: string, element: HTMLElement, input?: unknown)
 ```
 
 - `setContext` keys are window-global; a key set by a plugin is cleared when that plugin's UI session is revoked. Key names are free; the kernel gives two keys meaning: `terminalFocus` and `terminalKeysFirst`.
-- `handleKey` picks, among `active` bindings for the event's chord, those whose `when` is absent or evaluates true. If several match, the first in registry precedence wins. **Terminal-first rule:** when `terminalKeysFirst` and `terminalFocus` are both true, a binding fires only if `whenMentions(when, 'terminalFocus')`; otherwise `handleKey` returns false so the key reaches the focused element.
+- `ui.contributions` lists `keybindings` in registry precedence order (the order `resolveKeybindings`' `beats()` ranks them, distro bindings first). `handleKey` takes the `active` bindings for the event's chord whose `when` is absent or evaluates true; a binding with a `when` beats one without; otherwise the first in list order wins. **Terminal-first rule:** when `terminalKeysFirst` and `terminalFocus` are both true, a binding fires only if `whenMentions(when, 'terminalFocus')`; otherwise the binding is skipped: `handleKey` calls `preventDefault()` (so the webview's own default for that chord, such as reload on `⌘R`, never runs) but not `stopPropagation()`, and reports the event as not consumed, so xterm still receives the key. `useShortcuts.ts:27` must not stop propagation in that case.
 - `mountView` mounts an effective `view` contribution (lazily loading its plugin) into `element` with `{input}` and no `report`; the mount is not registered in the host's `slots` status and never sends `ui.report`. The returned function unmounts; revoking the caller unmounts too. A missing view throws `no contribution <id>`.
 
 ### Overlay slot ([SC-67](logic.md#plugin-api-growth))
 
-- An `overlay` contribution is code-backed and mounted by the host for every effective overlay at window start (and after model refresh), into its own `div` inside a fixed full-window layer (`pointer-events: none` on the layer, the plugin's own content opts in). Mount props `{report}`. `ui.state` lists it in `slots` with `kind: 'overlay'`; `shown` is true while a window has it mounted.
+- An `overlay` contribution is code-backed and mounted by the host for every effective overlay at window start (and after model refresh), into its own `div` inside a fixed full-window layer (`pointer-events: none` on the layer, the plugin's own content opts in). Mount props `{report}`. `ui.state` lists it in `slots` with `kind: 'overlay'`; `shown` is `report.shown` when the latest report is an object with a boolean `shown`, else true, while a window has it mounted, and false otherwise.
 
 ### Conditional confirmation ([logic: SC-14](logic.md#tabs))
 
@@ -87,7 +87,7 @@ UiPluginContext.mountView(viewId: string, element: HTMLElement, input?: unknown)
 
 ### PTY host `clear` and `resetModes` ([SC-34](logic.md#panes-and-splits))
 
-- `clear(sessionId)`: inside `atRest`, the host's emulator runs xterm's `clear()` (the cursor's line becomes the first line, scrollback emptied), the log appends a `clear` record at the current output offset, the hot tail is replaced with the serialized cleared screen, and a checkpoint is written. Afterwards `history` returns only rows after the clear, `snapshot` and attach replay show only the kept line, and a cold restore restores only post-clear output. Offsets stay monotonic. Unknown session: the existing not-found error. An exited session can be cleared.
+- `clear(sessionId)`: inside `atRest`, the host's emulator runs xterm's `clear()` (the cursor's line becomes the first line, scrollback emptied), the log appends a `clear` record at the current output offset, the hot tail is replaced with the serialized cleared screen, and a checkpoint is written; every subscriber stream receives `ESC[H ESC[2J ESC[3J` followed by the serialized cleared screen, in order with live output, so every attached pane shows the cleared screen at once. Afterwards `history` returns only rows after the clear, `snapshot` and attach replay show only the kept line, and a cold restore restores only post-clear output. Offsets stay monotonic. Unknown session: the existing not-found error. An exited session can be cleared.
 - `resetModes(sessionId)`: writes the mode-reset part of `GROUND` (mouse modes 1000/1002/1003/1006 off, bracketed paste off, application cursor off, cursor visible; not `?1049l`, not SGR) to the emulator, appends it to the log as output and sends it to subscribers, so every attached pane and a later restore see the modes off. Nothing is written to the process.
 - Protocol 3 hosts answer both; the daemon treats a protocol 2 host as older and retires it the way it already does for older hosts (`packages/daemon/src/pty-client.ts:269-311`).
 
@@ -120,22 +120,24 @@ Target resolution: `workspace?` (a worktree selector or `floating`; default the 
 | `reopenTab` | `{workspace?}` | not-found `no closed tab to reopen in <name>` |
 | `splitPane` | `{pane, direction: 'right'\|'down'}` | shell in the source cwd (D15) |
 | `closePane` | `{pane, revision?}` | destructive, `describe: describeClose` |
-| `restartPane` | `{pane}` | fresh shell bound to the same pane, same cwd |
-| `focusPane` | `{pane} \| {tab?, offset: 1\|-1}` | collapses an expanded pane first |
+| `restartPane` | `{pane}` | only for a pane whose session has ended (status `exited`), else conflict `pane <id> is still running`; closes the old session and binds a fresh shell in its cwd to the same pane |
+| `focusPane` | `{pane} \| {tab?, offset: 1\|-1}` | collapses an expanded pane first; `{pane}` also makes the pane's tab active in its group and that group the workspace's active group |
 | `setPaneTitle` | `{pane, title}` | `""` clears; ≤ 200 chars |
 | `expandPane` | `{pane, expanded}` | invalid-params with one pane |
 | `equalize` | `{tab}` | |
-| `resizeSplit` | `{split, ratio, revision?}` | ratio is the first child's share; pane splits 0.05–0.95, group splits 0.15–0.85, else invalid-params |
+| `resizeSplit` | `{split, ratio, revision?} \| {pane, share, revision?} \| {group, share, revision?}` | `ratio` is the first child's share; `pane`/`group` forms resolve the target's parent split and set the target's share; pane splits accept any value strictly between 0 and 1 (the window enforces the 50 px minimum when drawing and dragging), group splits 0.15–0.85, else invalid-params "a group divider stays between 0.15 and 0.85" |
 | `movePane` | `{pane, toPane, edge: 'left'\|'right'\|'top'\|'bottom'} \| {pane, toTab}` | invalid-params for the last pane of a tab or a pane onto itself |
-| `closeGroup` | `{group}` | moves its tabs into the sibling group (D17); invalid-params for the only group |
+| `closeGroup` | `{group}` | appends its tabs, in order, to the first group of its sibling subtree (depth-first, `first` child first), makes the closed group's active tab active there, and replaces the parent split with the sibling (D17); invalid-params for the only group |
 | `clearPane` / `resetPane` | `{pane}` | call `pty.clear` / `pty.resetModes` |
 | `paneOf` | `{session}` | readOnly; `{workspace, tab, pane}` |
 | `floating` | `{}` | readOnly; `FloatingState` |
 | `setFloating` | `{open?, maximized?, bounds?, button?}` | returns `FloatingState`; emits `floating` |
 | `openExternal` | `{target, reveal?}` | URL (http/https/mailto only) or absolute path; runs `open` / `open -R`; with env `QUIRKY_TEST_OPEN_LOG` set it appends `{target, reveal}` JSON lines there instead |
 
+**One serial queue.** Every mutating method and every reconciliation pass runs through one async queue in `LayoutService` (FIFO, one at a time). `newTab`, `splitPane`, `restartPane` and quick-command runs call `quirky.session/create` inside their queue slot and bind the returned session before the slot ends; the `quirky.session/changed` event for that session is handled in a later slot, finds it bound, and does nothing. An external session therefore can't be adopted twice, and a revision check and its change can't interleave with another call.
+
 Reconciliation (D10, D14, D35) runs on plugin start, on `quirky.session/changed` and `quirky.session/removed`, and after `pty.onReconnect`:
-- A terminal or structured session of worktree W (or `floating`) held by no pane gets a new tab at the end of W's active group, unless a `newTab`/`splitPane`/`restartPane` call has the session in flight (the service marks it before calling `create` returns).
+- A terminal or structured session of worktree W (or `floating`) held by no pane gets a new tab at the end of W's active group, (the queue guarantees sessions created by this plugin are already bound).
 - A removed session's pane is removed (sibling promoted; first remaining pane active); an empty tab is removed (not offered for reopen); an empty group other than the last is removed.
 - A session that becomes `exited` with exit code 0 and cause `exited`: its pane closes and the session is closed through `quirky.session/close`, unless it is a tab's only pane and never received driving input through `quirky.terminal/write` (then it stays). Any other exit keeps the pane; the workspace's pane entry carries `exit: {code, signal}` for the overlay. Cause `host-restart`/`host-lost` changes nothing (cold restore).
 - Closed tabs record `{title (custom), color, cwd (start cwd), agent: 'shell'|<id>, closedAt}`, ten per workspace, newest first; tabs removed by a shell exit are not recorded.
@@ -149,8 +151,10 @@ Running-child detection (`QPT/src/processes.ts`): `runningChildOf(pid): {command
 ### Window ([logic: Behavior & scenarios](logic.md#behavior--scenarios))
 
 - `QPT/src/ui.tsx` `activate` provides: `view:quirky.session/worktree` (the workspace view), `panel:quirky.terminal/quick-commands`, `overlay:quirky.terminal/floating`, every `command:` in the manifest, plus the overridden `command:quirky.session/*` entries.
+- **View input** `{worktree, session?}`: on mount and whenever the input changes, a `session` that some pane of the workspace shows is focused through `focusPane {pane}` (which also activates its group and tab); an unknown session is ignored. The view never rewrites the layout's input.
 - **View report** (`SCHEMA:` below) is sent after every render that changes it.
-- **Pane** (`QPT/src/window/pane/`): one component per mounted pane keyed by pane ID (not by tree position), so a tree reshape moves it without disposing the xterm; it refocuses the active pane after any reshape. It attaches with `quirky.terminal/attach {session, cols, rows, historyLines: scrollback}` and writes the replay through the ported input gate. Addons: fit, unicode11 (activated before the first write), search, web-links (custom handler), clipboard (OSC 52 when the setting allows; reads refused), WebGL while fewer than 12 panes hold a context (a module-level counter; three losses in 60 s keep that pane on DOM). It sets `terminalFocus` on textarea focus/blur. Resize: ResizeObserver plus rAF fit; PTY `resize` is sent only when cols/rows change and not while a drag is in progress (the workspace holds a "dragging" flag; on drag end each pane sends its final size once).
+- **Pane layer** (`QPT/src/window/workspace/`): a tab's panes render as siblings in one flat container keyed by pane ID, each absolutely positioned from rectangles computed from the pane tree; the split tree renders only dividers. A split, close or move changes rectangles, never a pane's parent element, so no reshape remounts or reparents an xterm; the active pane is refocused after every reshape. Panes moved to another tab do remount (their tab changes) and reattach from the host.
+- **Pane** (`QPT/src/window/pane/`): one component per mounted pane. It attaches with `quirky.terminal/attach {session, cols, rows, historyLines: scrollback}` and writes the replay through the ported input gate. Addons: fit, unicode11 (activated before the first write), search, web-links (custom handler), clipboard (OSC 52 when the setting allows; reads refused), WebGL while fewer than 12 panes hold a context (a module-level counter; on unmount the pane calls `WEBGL_lose_context.loseContext()` on its canvas's context before disposing the addon, and only then decrements; three losses in 60 s keep that pane on DOM). It sets `terminalFocus` on its xterm textarea's focus/blur only; the search box handles Enter, Shift+Enter, `⌘G`, `⌘⇧G` and Escape in its own keydown handler, since `terminalFocus` is false while it has focus. Resize: ResizeObserver plus rAF fit; PTY `resize` is sent only when cols/rows change and not while a drag is in progress (the workspace holds a "dragging" flag; on drag end each pane sends its final size once).
 - **Keys inside the pane** (`attachCustomKeyEventHandler`): only the byte translations of D26 are handled there (returning false after writing the bytes); everything else passes to xterm. App shortcuts never reach xterm because the host's capture listener runs first.
 - **Paste**: the pane handles `paste` events itself (prevents xterm's default), normalizes newlines to `\r`, wraps in `ESC[200~`/`ESC[201~` only when `term.modes.bracketedPasteMode`, and writes ≤ 64 KiB at once or 16 KiB chunks awaiting each `write`; > 16 MiB is refused with a toast; 30 s overall timeout.
 - **Links**: a link provider for file paths (absolute, or relative to the pane's cwd from the `cwd` event or the session cwd) whose existence is checked through a batched daemon call `quirky.terminal/pathsExist {paths}` (readOnly, ≤ 50 paths, returns `{exists: boolean[]}`), wrapped so a throw returns no links; web-links for URLs; xterm's `linkHandler` for OSC 8.
@@ -166,7 +170,7 @@ Workspace = { id: string /* worktree id or 'floating' */, revision: integer,
 GroupNode = { kind: 'group', id: 'grp-<n>', tabs: Tab[], activeTab: string | null,
               recent: string[] /* tab ids, most recent first */, lastQuickCommand: string | null }
           | { kind: 'split', id: 'split-<n>', direction: 'right' | 'down', ratio: number, first: GroupNode, second: GroupNode }
-Tab = { id: 'tab-<n>', defaultTitle: string, customTitle: string | null, liveTitle: string | null,
+Tab = { id: 'tab-<n>', defaultTitle: string, customTitle: string | null, liveTitle: string | null /* the active pane's latest OSC title */,
         color: 'none'|'blue'|'purple'|'pink'|'red'|'orange'|'yellow'|'green'|'teal'|'gray',
         pinned: boolean, root: PaneNode, activePane: string, expandedPane: string | null, createdAt: string }
 PaneNode = { kind: 'pane', id: 'pane-<n>', session: string, title: string | null,
@@ -206,7 +210,8 @@ QuickCommand = { id: string, label: string, kind: 'terminal' | 'agent', agent: s
   panes: [{ pane: string, session: string, cols: number, rows: number, fontSize: number, webgl: boolean,
             search: { query: string, regex: boolean, caseSensitive: boolean, current: number, total: number, more: boolean } | null,
             exitOverlay: boolean }],
-  menu: string | null /* id of an open menu or dialog, for UI tests */ }
+  menu: { kind: string, target: string | null, items: [{ label: string, key: string | null, enabled: boolean, separator: boolean }] } | null,
+  dialog: { kind: string, title: string } | null }
 ```
 `tabs` lists one entry per pane of every tab in visual order (v1 callers read `tabs[i].session`). The floating overlay reports `{ state: FloatingState, layout: Workspace | null, focusedPane, panes }` with the same `panes` shape.
 
@@ -236,13 +241,13 @@ settings (id: type default [min..max] / values):
 ```
 mod+c copy [T]; mod+a select-all [T]; mod+v paste [T]; mod+f search [T]; mod+g search-next [T];
 mod+shift+g search-previous [T]; mod+k clear [T]; mod+] focus-next-pane [T]; mod+[ focus-previous-pane [T];
-mod+shift+enter toggle-expand-pane [T]; mod+d split-right [T]; mod+shift+d split-down [T];
+mod+shift+enter toggle-expand-pane [T]; mod+w close-pane [T]; mod+d split-right [T]; mod+shift+d split-down [T];
 mod+= zoom-in [T]; mod+shift+= zoom-in [T]; mod+- zoom-out [T]; mod+0 zoom-reset [T];
 mod+r rename-tab; mod+shift+t reopen-tab; mod+alt+] next-tab; mod+alt+[ previous-tab;
 mod+shift+] next-tab; mod+shift+[ previous-tab; ctrl+tab recent-tab; ctrl+pagedown next-tab;
 ctrl+pageup previous-tab; ctrl+1..ctrl+9 select-tab-N; mod+alt+a toggle-floating; mod+alt+shift+a maximize-floating
 ```
-`mod+t` (`new-shell`), `mod+w` (`close-session`) and `mod+1..9` (`select-tab-N`) stay `quirky.session`'s bindings, now running `quirky.terminal`'s overriding commands: `new-shell` opens a tab in the focused workspace (floating when `floatingFocus`), `close-session` closes the focused pane (or the tab when it has one pane). Commands without keys: `equalize`, `set-pane-title`, `clear-pane-title`, `reset-terminal`, `toggle-quick-commands`, `search-close`, `manage-quick-commands`, `minimize-floating`. Window-only commands take args where an agent needs them: `search {query?, regex?, caseSensitive?}`, `zoom-in|zoom-out|zoom-reset {pane?}`.
+`mod+t` (`new-shell`), `mod+w` (`close-session`) and `mod+1..9` (`select-tab-N`) stay `quirky.session`'s bindings, now running `quirky.terminal`'s overriding commands: `new-shell` opens a tab in the focused workspace (floating when `floatingFocus`), `close-session` closes the focused pane (or the tab when it has one pane). Commands without keys: `equalize`, `set-pane-title`, `clear-pane-title`, `reset-terminal`, `toggle-quick-commands`, `search-close`, `manage-quick-commands`, `minimize-floating`. Window-only commands take args where an agent needs them and return results as JSON: `search {query?, regex?, caseSensitive?}`, `zoom-in|zoom-out|zoom-reset {pane?}`, `copy {pane?}` → `{text}`, `select-all {pane?}`, `paste {text, pane?}` (the same chunked path as a real paste), `open-menu {kind: 'tab'|'pane'|'plus'|'quick-commands', target?}` and `close-menu` (the report's `menu` then lists the open menu's items).
 
 `CONFIG:` CLI words (group `terminal`, alias `term`)
 ```
@@ -256,7 +261,7 @@ pane split [pane] --direction right|down | pane close [pane] | pane restart [pan
 pane focus <pane> | pane focus --next|--previous | pane title [pane] <title>
 pane expand [pane] | pane collapse [pane] | pane equalize --tab T | pane resize [pane] --ratio R
 pane move <pane> (--to-pane P --edge left|right|top|bottom | --to-tab T) | pane clear [pane] | pane reset [pane] | pane get [pane]
-group split <group> ... (alias of tab move --split) | group close <group> | group resize <split> --ratio R
+group close <group> | group resize <group> --ratio R (the group's share) | group resize --split S --ratio R
 quick-command list [--all] | add --label L --command C [--kind terminal|agent] [--agent A] [--no-enter] [--scope global|repo]
 quick-command update <id> [...] | remove <id> | run <id> [--pane P]
 floating state | show | hide | toggle | maximize | restore | bounds --x --y --width --height
@@ -310,6 +315,7 @@ open-link <url-or-path> [--reveal]
 - `QPT/test/window/*.test.ts` (happy-dom with a fake context in `QPT/test/ui-fake.ts`, modelled on `QPS/test/ui-fake.ts`): pane (attach, addons, search counts, paste chunking, link clicks, byte translations, zoom), workspace (menus, dialogs, drags, report shape).
 - `QPT/test/e2e/*.test.ts` (real daemon and PTY host via `QPT/test/e2e-support.ts`, headless window from `packages/ui/test/fixtures/headless-window.ts` where a scenario is (UI)): one named test per SC-1…SC-75, named `SC-<n>: <title>`.
 - `packages/ui/test/exit.e2e.test.ts`: still passes (SC-35 of m0-core reads `worktree`, `active`, `tabs`).
+- Agent-launching tests use the fake agent CLIs and isolated `PATH` from `plugins/quirky.agents/test/support/e2e.ts` (`startAgentsE2E`).
 - Acceptance bar: `bun run test`, `bun test scripts`, `bun run typecheck` pass; every SC has a test; the like-a-user web pass covers the (UI) scenarios.
 
 ## Non-goals

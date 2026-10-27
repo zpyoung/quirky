@@ -4,7 +4,8 @@
 
 **Status:** Approved (headless build loop; decisions in [m1-term-ui.md](../../../loop/decisions/m1-term-ui.md)). Tech spec: requested.
 
-**Amendments:** none yet.
+**Amendments:**
+- 2026-10-26, spec review (Codex adversarial review, D43): the view's `session` input focuses that session's pane (new SC-76); a split tab's live title is its active pane's (SC-10); Terminal first never lets a bound chord reach the webview's own default (SC-61); Restart is only for an ended pane (SC-33); "Close Split Pane" moves tabs into the nearest group of the sibling side (SC-48); an overlay's `shown` comes from its report (SC-67); SC-70 now tests the override chain instead of a per-contribution disable the registry doesn't offer; every (UI) scenario also has its CLI/API path (Behavior intro); agent scenarios use fake agent CLIs (SC-53).
 
 ## Conceptual model
 
@@ -81,6 +82,13 @@ Every scenario runs against a fresh temporary `QUIRKY_HOME` with a real `quirkyd
 and the web window for the like-a-user pass) and checked through `quirky ui state`. Shells are
 `/bin/zsh` without the user's startup files. Fixtures are illustrative.
 
+Every (UI) scenario's test also reaches the same outcome through the CLI or the daemon API: a
+daemon method for layout changes, or a window command run with `quirky ui run` for view-only
+actions (copy, paste, select all, search, zoom, opening a menu), with the result read back from
+`quirky ui state`. Pointer-only gestures (drags, hover, clicks) are performed in the headless
+window and checked the same way. Scenarios that start an agent use the fake agent CLIs of
+`quirky.agents`' test harness on an isolated `PATH`, never a real agent.
+
 Scenarios use repo **api** with worktree **main** at `/tmp/w/api`. "The view" is the worktree view
 for **main**. Keys are macOS keys (`⌘` is Mod).
 
@@ -156,7 +164,7 @@ for **main**. Keys are macOS keys (`⌘` is Mod).
 10. **SC-10: a tab's live title shows until it gets a custom one** (CLI)
     - **Given** tab "Terminal 1" with no custom title
     - **When** its shell prints `printf '\033]0;deploy\007'`
-    - **Then** the tab reads "deploy"; after `quirky terminal tab rename tab-1 ""` clears a custom title the live title shows again
+    - **Then** the tab reads "deploy"; after `quirky terminal tab rename tab-1 ""` clears a custom title the live title shows again; in a split tab the title follows the active pane's latest title
 
 11. **SC-11: clicking a tab activates it and it is remembered** (UI)
     - **Given** tabs "Terminal 1" and "Build", "Build" active
@@ -293,7 +301,7 @@ for **main**. Keys are macOS keys (`⌘` is Mod).
 33. **SC-33: a non-zero exit keeps the pane with an overlay** (UI, CLI)
     - **Given** pane-3 whose shell runs `exit 3`
     - **When** the shell ends
-    - **Then** pane-3 stays with its output and an overlay "Terminal exited" — "The shell process ended with exit code 3. Its output is preserved." — with Close and Restart; `quirky terminal layout --json` shows the pane with exit code 3; Restart starts a fresh shell in the same pane and directory; Close closes the pane
+    - **Then** pane-3 stays with its output and an overlay "Terminal exited" — "The shell process ended with exit code 3. Its output is preserved." — with Close and Restart; `quirky terminal layout --json` shows the pane with exit code 3; Restart (`quirky terminal pane restart pane-3`) starts a fresh shell in the same pane and directory; Close closes the pane; restarting a pane whose process is still running fails with conflict "pane pane-3 is still running"
 
 34. **SC-34: clear and reset** (UI, CLI)
     - **Given** pane-3 has 500 lines of output and a program left mouse reporting on
@@ -388,7 +396,7 @@ for **main**. Keys are macOS keys (`⌘` is Mod).
 48. **SC-48: a group goes away with its last tab, and "Close Split Pane" keeps tabs** (UI, CLI)
     - **Given** grp-1 ["Terminal 1"] | grp-2 ["Hello", "Logs"]
     - **When** (a) the person closes "Terminal 1"; (b) instead picks Close Split Pane in grp-2's "…" menu, or the agent runs `quirky terminal group close grp-2`
-    - **Then** (a) grp-1 is removed and grp-2 fills the area; (b) "Hello" and "Logs" move into grp-1 and grp-2 is removed, with every session still running; the last group of a workspace is never removed
+    - **Then** (a) grp-1 is removed and grp-2 fills the area; (b) "Hello" and "Logs" move to the end of grp-1 and grp-2 is removed, with every session still running, and grp-2's active tab becomes grp-1's active tab; when the sibling side is itself split, the tabs go to its first group (leftmost, then topmost); the last group of a workspace is never removed
 
 ### Quick commands
 
@@ -459,7 +467,7 @@ for **main**. Keys are macOS keys (`⌘` is Mod).
 61. **SC-61: the shortcut policy** (UI)
     - **Given** pane-3 focused
     - **When** the setting "Shortcuts in Terminal" is App first and the person presses `⌘T`; then it is Terminal first and the person presses `⌘T`, `⌘⇧T` and `⌘D`
-    - **Then** under App first `⌘T` opens a tab; under Terminal first `⌘T` and `⌘⇧T` go to the shell as keys, while terminal actions (search, clear, select all, split, close pane) still work
+    - **Then** under App first `⌘T` opens a tab; under Terminal first `⌘T` and `⌘⇧T` run no app action and go to the terminal as keys (for `⌘` chords the shell receives nothing, as in any macOS terminal), while terminal actions (search, clear, select all, split, close pane) still work; in either mode a bound chord such as `⌘R` never reaches the webview's own default (reload)
 
 62. **SC-62: byte translations** (UI)
     - **Given** pane-3 running `cat -v`
@@ -495,7 +503,7 @@ for **main**. Keys are macOS keys (`⌘` is Mod).
 67. **SC-67: a plugin overlay slot** (UI, CLI)
     - **Given** a test plugin declaring an `overlay` contribution
     - **When** the window starts and the agent runs `quirky ui state --json`
-    - **Then** the overlay is mounted over the whole window, listed in `slots` with `kind: overlay`, `shown` as its report says, and its report; disabling the plugin removes it
+    - **Then** the overlay is mounted over the whole window and listed in `slots` with `kind: overlay` and its report; `shown` is the report's `shown` value (true until it reports otherwise) while a window has it mounted, else false; disabling the plugin removes it
 
 68. **SC-68: keybinding `when`** (UI, CLI)
     - **Given** a test plugin with bindings `mod+j` when `terminalFocus` and `mod+j` when `!terminalFocus` to two commands
@@ -507,10 +515,15 @@ for **main**. Keys are macOS keys (`⌘` is Mod).
     - **When** the tab is shown
     - **Then** its pane shows `quirky.session`'s structured view inside the pane, and switching away unmounts it
 
-70. **SC-70: the override can be turned off** (CLI)
-    - **Given** a distro that disables `quirky.terminal`'s override of the worktree view
-    - **When** the agent opens the view and runs `quirky ui state --json`
-    - **Then** the view is `quirky.session`'s simple tabbed view, which still works, and every other caller of `view:quirky.session/worktree` reaches it the same way
+70. **SC-70: the worktree view stays replaceable** (CLI)
+    - **Given** (a) the built-ins only; (b) a test plugin that depends on `quirky.terminal` and overrides `view:quirky.session/worktree` again; (c) `quirky.session` installed without `quirky.terminal` (its own test set)
+    - **When** the agent opens the view and runs `quirky ui state --json` and `quirky ui contributions --json`
+    - **Then** (a) the view is `quirky.terminal`'s workspace; (b) the test plugin's view wins, as the registry's override rule says; (c) `quirky.session`'s simple tabbed view still works; in every case callers keep opening `view:quirky.session/worktree`
+
+76. **SC-76: opening the view with a session focuses its pane** (CLI)
+    - **Given** the workspace from the conceptual model, with tab-1 active
+    - **When** the agent (or a notification, or the Sessions panel) runs `quirky ui open-view view:quirky.session/worktree --input '{"worktree":"main","session":"<s-3>"}'`
+    - **Then** grp-1 becomes the active group, tab-2 its active tab and pane-3 the active pane, and the report's `active` is s-3; a session that no pane shows is ignored and the workspace keeps its active pane
 
 ### Orca defects
 
