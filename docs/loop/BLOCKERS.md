@@ -15,3 +15,11 @@ Final Round 1's fix batch closed every finding with a test except the one below,
 - **What:** under `bun test` (Bun 1.4.0), every dynamic `import()` of a module from a path not imported before keeps about four file descriptors open until the process exits. In-process daemon harnesses (`packages/daemon/test/helpers.ts` `startHarness` with a per-test `builtinPluginsDir`, as in `plugins/quirky.session/test/support.ts`, `plugins/quirky.worktree/test/`, `packages/daemon/test/`) import each plugin's `main.ts` from a fresh temp path on every start. After enough starts, `posix_spawn` fails with `EBADF` for the rest of `bun run test` (177 failures at the m1-term-ui catch-up merge).
 - **Done here:** `plugins/quirky.terminal/test/support.ts` now reuses one built-in directory per process (D51), which brought the suite back under the limit.
 - **A person should decide:** either make `queue.ts land` / `bun run test` run each package or plugin in its own `bun test` process (`scripts/build-loop/` and the root `package.json` script), or move the other harnesses to shared built-in directories the same way.
+
+## m1-term-ui: open review findings
+The item landed with these low-severity findings from the like-a-user pass and the fix workers left open. None breaks a scenario.
+
+- **LOW, Settings dialog:** Save and Cancel scroll with the form instead of staying pinned, so on a short window you scroll to the bottom to reach them (`packages/ui/src/styles.css` `.dialog`, which now scrolls; D56). Found in runs/20261027T101826-fd23 (obs-31, obs-32).
+- **LOW, focus after Settings closes:** keyboard focus doesn't go back to the terminal pane, so typing is lost until the pane is clicked. Found in runs/20261027T100045-4ea7 (obs-118).
+- **LOW, narrow tab area:** with the Quick Commands side panel open at 1280 px, the header buttons wrap and Questions overlaps the Worktree title, and a third tab shrinks to a dot under the + and quick-command buttons. Found in runs/20261027T100045-4ea7 (obs-37, obs-52, obs-54).
+- **LOW, test fragility:** the final fix batch's worker reported that the quick-commands window tests sharing `plugins/quirky.terminal/test/window/qc-support.tsx` depend on the order the test files run in. The gate has never failed on it.

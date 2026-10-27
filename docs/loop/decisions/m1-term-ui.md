@@ -551,5 +551,25 @@
 - **Confidence:** high
 - **Source:** assumed — autonomous
 
+## D55: Like-a-user pass: 25 scenarios pass, SC-21 and SC-24 partial because of the tool
+- **Question:** the web UI pass (quirk:using-apps-like-a-user, `--surface web --owner yours --unattended`, throwaway QUIRKY_HOME) over SC-1, 8, 9, 13, 17, 19, 20, 21, 22, 23, 24, 27, 30, 33, 39, 40, 42, 45, 48, 49, 51, 52, 55, 56, 64, plus a recheck of SC-19's menu keys, SC-24 and SC-64 after the fixes in D56
+- **Options:** —
+- **Chose:** accept. Every goal passes except two partials, both caused by the tool. SC-21: the tool sends Ctrl+Tab as a single press and release, and the switcher commits on Ctrl release, so the list is never on screen to see; the recent-tab order itself worked. SC-24: the first run's coordinate double-click sends two single clicks, which a browser never turns into `dblclick` (the terminal-text double-click failed the same way). The recheck double-clicked the divider by its ref, and the screenshots show the drag moving it and the double-click restoring equal halves (obs-8, obs-9). The tool still reported `NO_EFFECT`, because its screen hash doesn't register a 3 px divider moving and the divider carries no tree state.
+- **Why:** LOOP.md asks every goal to pass and a tool-caused partial to be recorded with its report. Both scenarios also have UI scenario tests (`test/e2e-ui`) and window tests that pass.
+- **Evidence:** .quirk/using-apps-like-a-user/runs/20261027T100041-f7e3/report.md, runs/20261027T100045-4ea7/report.md, runs/20261027T101826-fd23/report.md (obs-8.png, obs-9.png)
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** assumed — autonomous
+
+## D56: Fixes from the UI pass
+- **Question:** the pass found three app defects: Escape in a tab menu's submenu left focus nowhere, so a second Escape didn't close the menu; the Settings dialog was taller than a 1280×720 window with no scroll, so Save was out of reach; and pane dividers had no role or name, so nothing outside a mouse could address them. Gate f1 also failed SC-58's UI scenario test.
+- **Options:** —
+- **Chose:** closing a submenu hands focus back to its parent menu; `.dialog` caps its height to the window and scrolls; pane dividers are `separator` elements named "Resize panes" (group dividers "Resize groups") with an orientation. SC-58's test still pressed Cmd+W a third time on an empty panel, but D53's A-C2 makes closing the last floating tab minimize the panel, so that third press reached the main view and closed its tab. The test now expects the panel to minimize when the last tab closes, as SC-58 says.
+- **Why:** each fix makes a stated scenario work the way logic.md describes it; the SC-58 test was out of date with an accepted fix.
+- **Evidence:** test/window/workspace-menus.test.ts "Escape in a submenu hands focus back"; test/window/workspace-panes.test.ts "a pane divider is a labelled separator"; packages/ui/test/layout-shell.test.ts "a dialog taller than the window scrolls"; test/e2e-ui/features-floating.test.ts SC-58
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** assumed — autonomous
+
 ## Progress
-Final fix batch merged (67eb574) and the import-map fix (D54) committed; UI pass batches A and B rerunning (scratchpad uiv/). Next: record the UI pass results, fix any app failure, gate, land.
+Final fix batch, the import-map fix (D54) and the UI pass fixes (D56) are committed; the UI pass is recorded (D55). Next: gate f2, then land.
