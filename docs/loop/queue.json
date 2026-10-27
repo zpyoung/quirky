@@ -245,6 +245,26 @@
       "lane": 6
     },
     {
+      "id": "fix-test-process-leaks",
+      "milestone": "M1",
+      "title": "Fix leaked test processes: test runs and UI passes leave quirkyd daemons and pty-host processes running after the test ends, timed out, or was killed (97 found on 2026-10-27, about 1.9 GB, under the lane worktrees, the integration worktree, agent worktrees and /tmp test folders; pty-hosts outlive their daemon with parent PID 1). Find which harnesses start them without a guaranteed stop (packages/daemon/test/helpers.ts, plugins/*/test support, the e2e harnesses, the like-a-user web pass), make every start paired with a kill of the whole process tree on any exit, make a pty-host exit when its daemon goes away, and add a test that fails if a run leaves one behind",
+      "docs": [
+        "term-daemon.md"
+      ],
+      "deps": [],
+      "status": "todo"
+    },
+    {
+      "id": "fix-sc31-first-shell-race",
+      "milestone": "M1",
+      "title": "Fix the SC-31 race in plugins/quirky.worktree/test/window-create.test.ts: after a create that skips setup, the window sometimes opens a first shell for the new worktree before the test checks it has no sessions (6 of 10 runs on the Linux test host). Decide whether the window or the test is wrong, fix it, and remove its line from scripts/test-on-macos.txt",
+      "docs": [
+        "worktrees.md"
+      ],
+      "deps": [],
+      "status": "todo"
+    },
+    {
       "id": "m3-terminal-dock",
       "milestone": "M3",
       "title": "Terminal dock with its own composer",
@@ -499,26 +519,6 @@
         "m1-term-daemon",
         "m1-agent-status"
       ],
-      "status": "todo"
-    },
-    {
-      "id": "fix-sc31-first-shell-race",
-      "milestone": "M1",
-      "title": "Fix the SC-31 race in plugins/quirky.worktree/test/window-create.test.ts: after a create that skips setup, the window sometimes opens a first shell for the new worktree before the test checks it has no sessions (6 of 10 runs on the Linux test host). Decide whether the window or the test is wrong, fix it, and remove its line from scripts/test-on-macos.txt",
-      "docs": [
-        "worktrees.md"
-      ],
-      "deps": [],
-      "status": "todo"
-    },
-    {
-      "id": "fix-test-process-leaks",
-      "milestone": "M1",
-      "title": "Fix leaked test processes: test runs and UI passes leave quirkyd daemons and pty-host processes running after the test ends, timed out, or was killed (97 found on 2026-10-27, about 1.9 GB, under the lane worktrees, the integration worktree, agent worktrees and /tmp test folders; pty-hosts outlive their daemon with parent PID 1). Find which harnesses start them without a guaranteed stop (packages/daemon/test/helpers.ts, plugins/*/test support, the e2e harnesses, the like-a-user web pass), make every start paired with a kill of the whole process tree on any exit, make a pty-host exit when its daemon goes away, and add a test that fails if a run leaves one behind",
-      "docs": [
-        "term-daemon.md"
-      ],
-      "deps": [],
       "status": "todo"
     },
     {
