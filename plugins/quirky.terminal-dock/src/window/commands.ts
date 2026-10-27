@@ -90,6 +90,10 @@ export function registerDockCommands(context: UiPluginContext, handles: HandleMa
   }
 
   context.provide(`command:${PLUGIN_METHOD}settings`, () => context.openView(SETTINGS_VIEW))
+  context.provide(`command:${PLUGIN_METHOD}set`, (raw?: unknown) => {
+    if (!record(raw)) return fail('Command arguments must be an object.')
+    return context.call(`${PLUGIN_METHOD}set`, raw)
+  })
   context.provide(`command:${PLUGIN_METHOD}focus`, async (raw?: unknown) => {
     const target = await resolve(raw)
     if ('ok' in target) return target
