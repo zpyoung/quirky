@@ -235,6 +235,37 @@ describe('quirky.git editable file diff', () => {
     expect(fake.callsTo('quirky.git/save').map((c) => c.params.expected)).toEqual(['hash-1', 'hash-2'])
   })
 
+  test('SC-61: text typed while a save is pending stays unsaved, saves next, and survives a layout switch', async () => {
+    const { element, report } = await open(editableDiff())
+    let finish!: (result: { hash: string }) => void
+    fake.handlers['quirky.git/save'] = () => new Promise((resolve) => (finish = resolve))
+    edit(element, 'draft A\n')
+    let saving!: Promise<unknown>
+    await act(async () => {
+      saving = fake.run('save')
+    })
+    edit(element, 'draft B\n')
+    await act(async () => {
+      finish({ hash: 'hash-2' })
+      await saving
+    })
+    await settle()
+    expect(report().dirty).toBe(true)
+    expect(s.modifiedEditor(element).state.sliceDoc()).toBe('draft B\n')
+
+    await click(byLabel(element, 'Switch to side-by-side diff'))
+    expect(s.modifiedEditor(element).state.sliceDoc()).toBe('draft B\n')
+
+    fake.handlers['quirky.git/save'] = () => ({ hash: 'hash-3' })
+    await act(async () => void (await fake.run('save')))
+    await settle()
+    expect(fake.callsTo('quirky.git/save').map((c) => [c.params.content, c.params.expected])).toEqual([
+      ['draft A\n', 'hash-1'],
+      ['draft B\n', 'hash-2']
+    ])
+    expect(report().dirty).toBe(false)
+  })
+
   test('SC-61: the save command does nothing when there is nothing to save', async () => {
     await open(editableDiff())
     await act(async () => void (await fake.run('save')))

@@ -129,8 +129,9 @@ function TextPane({ context, worktree, diff, editable, settings, variant, onStat
         ...(!force && hash !== undefined ? { expected: hash } : {})
       })) as { hash: string }
       base.current = { text: content, hash: result.hash }
-      dirtyRef.current = false
-      setDirty(false)
+      const now = mergeRef.current?.getModified() ?? draft.current ?? content
+      dirtyRef.current = now !== content
+      setDirty(dirtyRef.current)
       setStale(false)
       onSaved(content, result.hash)
     } catch (error) {

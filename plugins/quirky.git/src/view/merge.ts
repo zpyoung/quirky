@@ -59,20 +59,26 @@ export type MergeHandle = {
 
 const TRIM_ONLY = /^[ \t]*$/
 
+/** Whether `text[from, to)` is blanks inside the indentation or the trailing run of its line. */
+function atLineEdge(text: string, from: number, to: number): boolean {
+  if (!TRIM_ONLY.test(text.slice(from, to))) return false
+  const lineStart = text.lastIndexOf('\n', from - 1) + 1
+  const newline = text.indexOf('\n', to)
+  const lineEnd = newline === -1 ? text.length : newline
+  return TRIM_ONLY.test(text.slice(lineStart, to)) || TRIM_ONLY.test(text.slice(from, lineEnd))
+}
+
 /**
- * Drops character changes that only add or remove spaces and tabs inside a line, which is how
- * "show whitespace" off hides trim-whitespace differences. A change touching a line break stays.
+ * Drops character changes that only add or remove leading or trailing spaces and tabs, which is
+ * how "show whitespace" off hides trim-whitespace differences. Blanks between other characters,
+ * string literals included, and any change touching a line break stay.
  */
 function ignoreTrimWhitespace(): DiffConfig {
   return {
     scanLimit: 500,
     override: (a, b) =>
       diff(a, b, { scanLimit: 500 }).filter(
-        (change) =>
-          !(
-            TRIM_ONLY.test(a.slice(change.fromA, change.toA)) &&
-            TRIM_ONLY.test(b.slice(change.fromB, change.toB))
-          )
+        (change) => !(atLineEdge(a, change.fromA, change.toA) && atLineEdge(b, change.fromB, change.toB))
       )
   }
 }
