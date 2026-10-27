@@ -619,5 +619,15 @@
 - **Confidence:** high
 - **Source:** locked by docs/loop/LOOP.md
 
+## D62: The first land failed on the integration tree's missing package links for the new plugin; they were copied in, as m1-term-daemon D49 did
+- **Question:** `queue.ts land` failed `bun run typecheck` on the merge result with 42 errors, all in `plugins/quirky.notifications/` ("Cannot find module 'react' / '@quirky/protocol' / '@happy-dom/global-registrator'"): the integration tree had no `plugins/quirky.notifications/node_modules`, because `land` doesn't run `bun install`
+- **Options:** block until a person installs in the integration tree; copy the links, as m1-providers D51 and m1-term-daemon D49 did
+- **Chose:** copy them: this worktree's `plugins/quirky.notifications/node_modules` (symlinks to `@quirky/protocol`, `@quirky/git`, `react`, `react-dom`, `@types/react`, `@types/react-dom`, `@happy-dom/global-registrator`) went into the integration tree; every target already existed in its `node_modules/.bun` store, and the directory is git-ignored, so its tree stays clean. The branch merged build/roadmap again (only docs and queue changes since the gate), then land again.
+- **Why:** the loop script that would install after merging is protected
+- **Evidence:** land output in the session scratchpad (land.log)
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** assumed — autonomous
+
 ## Progress
 Done and verified (D61). Landing with `bun scripts/build-loop/queue.ts land m1-notifications`.
