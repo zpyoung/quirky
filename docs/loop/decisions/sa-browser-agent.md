@@ -330,7 +330,73 @@
 - **Revisit if:** browser credential storage no longer honors this test switch
 - **Source:** assumed — autonomous
 
-## Progress
-Iteration 6: resumed the requeued D19 item, caught up with integration at d90625a and read incoming regex-budget decisions. Revised logic/tech contracts cover the authorized profile-helper model, exact API/CLI/import failures and schemas, native package assets, positive fresh-page identity, dialog control and browser-private clipboard. Actual required Codex standard promote/fresh-refute review completed; D27 preserves its raw NEEDS_FIXES and material-versus-heuristic adjudication. Material F1's scheduling fix has a logic-first amendment and actual 29-assertion dialog smoke; earlier native-transport smoke passed 158 assertions. All probe processes/homes cleaned and executable scaffolds removed. No implementation task or permanent acceptance/build/full suite has run.
+## D31: Preserve safe native exec navigation without permitting launch
+- **Question:** Does categorically rejecting exec open incorrectly exclude native scoped navigation?
+- **Options:** reject every open; forward native open including its launch form; normalize URL-bearing open/navigate to scoped goto
+- **Chose:** open/navigate with a required URL normalize through the existing typed goto handler; bare open and all targeting/lifecycle overrides remain rejected. Parent amended component logic first, then tech, before retry implementation.
+- **Why:** pinned commands.rs:261-299 maps open/goto/navigate with URL to the same navigate packet; native handlers call Page.navigate on the selected existing page. Bare open maps to launch at271-272. Positive normalization preserves vocabulary without exposing helper lifecycle.
+- **Evidence:** ProfileIdentityProbe source follow-up; pinned v0.27.0 cli/src/commands.rs:261-299; native/actions.rs:2205; native/browser.rs:652; component logic compatibility amendment and tech exec contract
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** pinned helper navigation grammar changes
+- **Source:** assumed — autonomous
 
-Next: commit these three specification/decision files before code. Create a clean external component worktree, observe a real pre-implementation tabCreate API red test, then dispatch the complete single-component feature implementation against the full contracts. Workers skip checks/commits; parent audits scope and runs targeted API/CLI/import/packaging checks, build, full remote suite, scripts and typecheck. Catch up/read incoming logs before final Gemini three-lens review, one fix batch, real scoped CLI smoke and queue landing. Preferred Opus unavailable; reachable Gemini maintains D10 cross-family implementation review. Inherited .serena/ remains untouched/uncommitted.
+## D32: Hand off OS focus rather than claiming a headless focus pass
+- **Question:** Does a backend-only item still need a native scenario for SC-02/DF-05?
+- **Options:** infer focus isolation from headless flags; run prohibited foreground UI in this lane; pending nightly native scenario
+- **Chose:** docs/loop/native/sa-browser-agent.json records the real-window focus goal as pending. Web dogfood remains inapplicable because no web UI is added.
+- **Why:** LOOP.md explicitly names focus among native-only scenarios. API/CLI behavior and no native Chrome window are separate observations; headless tests do not establish where actual macOS typing focus remains.
+- **Evidence:** docs/loop/LOOP.md:133-136; docs/loop/NATIVE.md:60-82; logic SC-02/DF-05; pending native scenario
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** nightly native run records an actual result
+- **Source:** locked by docs/loop/LOOP.md
+
+## D33: Retry the failed complete component without suppressing checks or coverage
+- **Question:** What did the first implementation handoff and parent checks establish?
+- **Options:** accept the worker report as complete; narrow tests/claim source-only success; retain work, audit, and repair the full component
+- **Chose:** retain the uncommitted source and use one fresh scoped repair implementer. No implementation completion, final review or landing is claimed. First return HEAD/scope audit passed: expected72be708, all34 changed paths in declared scope, parent main unchanged apart from its pre-existing metadata baseline.
+- **Why:** worker honestly returned FAILED/incomplete acceptance. Actual automation run failed before tests on missing @quirky/git/testing. Cookie-policy run was5pass/2fail (private suffix normalization and an incidental Safari leading-dot expectation). Typecheck reported45 diagnostics across7files: inconsistent runtime fields, duplicate methods, unsupported Schema additionalProperties values, unavailable Bun Database.backup, missing imports/types/test helper. Import acceptance is unrun because the same harness prerequisite is known. These are actionable assembly/coverage defects, not a missing platform prerequisite.
+- **Evidence:** parent actual targeted outputs; artifact://126 (policy), artifact://127 (full typecheck), audit journal /tmp/quirky-browser-lane5-v6-bZl06I/journal.json; BrowserFeatureImplementation FAILED report
+- **Reversibility:** easy (no source commit or integration)
+- **Confidence:** high
+- **Revisit if:** retry exposes an actual locked-decision conflict rather than repairable code
+- **Source:** assumed — autonomous
+
+## D34: Repair native packaging's import/schema causes and replace incidental wording checks
+- **Question:** Why did the new generic asset-copy tests fail, and did the packager need behavior changes?
+- **Options:** alter expected error prose; bypass package validation; restore imports and respect the existing schema subset
+- **Chose:** restore the missing node:path import; use boolean additionalProperties:true for dynamic dependency names and validate their string values at the named boundary. Delete the failing combined English-wording test and add distinct real boundary fixtures for existing outside-source bytes and a literal unknown-placeholder filename. Keep absolute-path negative fixtures inside the owned temp root.
+- **Why:** initial15fail all hit missing join; next8pass/7fail rejected valid dependencies because the public validator supports only boolean additionalProperties, not a schema object. After those fixes,14pass/1fail was solely the correct traversal error missing the incidental word path. No runtime error was suppressed or message re-pinned. Final actual packager run:16pass/0fail/37assertions; its intentionally missing-module fixture still prints its expected compiler error.
+- **Evidence:** artifact://125, artifact://129, artifact://131; final bun test apps/desktop/test/bundle-plugins.test.ts exit0/311ms; packages/protocol/src/schema.ts:4-15,168-183
+- **Reversibility:** easy
+- **Confidence:** high for generic copy/boundaries; real packaged helper smoke still pending
+- **Revisit if:** actual plugin build reveals a dependency asset provisioning issue
+- **Source:** assumed — autonomous
+
+## D35: Add the missing ordinal field instead of dropping nth locator parity
+- **Question:** Can the declared find nth locator be represented faithfully by locator/value/action/text alone?
+- **Options:** remove nth; invent an encoded selector/index string; add the native ordinal as an explicit field
+- **Chose:** find.index is a signed32-bit integer required only for nth; value remains its CSS selector, zero is first and negative values count from the end. Other locators reject index. CLI --index and native exec nth grammar map to the same method. Parent amended logic then tech before requesting a test-only continuation; implementation remains blocked on observing the correct red.
+- **Why:** pinned parser requires separate index and selector; upstream mapper emits only one value token and is itself defective. This supplies an existing declared locator's missing parameter, preserving all command families and D19 topology rather than shrinking scope or changing the conceptual model.
+- **Evidence:** pinned v0.27.0 cli/src/commands.rs:2145-2298; upstream external-chromium-command-arguments.ts:175-176; ProfileIdentityProbe source report; test-only SC-05 nth case in automation.test.ts. Actual targeted run after D36 reaches params.index is not allowed (-32602), proving the missing schema field rather than an import/syntax failure.
+- **Reversibility:** medium (public field addition while API is unstable)
+- **Confidence:** high
+- **Revisit if:** native ordinal semantics change
+- **Source:** assumed — autonomous
+
+## D36: Accept valid CDP event parameter maps without weakening envelope types
+- **Question:** Why did the repaired runtime still fail the fresh-page identity handshake before the nth regression could reach its request?
+- **Options:** suppress handshake failure; guess target identity; repair the transport's schema mismatch
+- **Chose:** keep params typed as object but explicitly allow its dynamic domain fields. Domain handlers still validate the fields they consume. No handshake bypass, target-order fallback or extra retry was added.
+- **Why:** the public validator rejects undeclared object properties unless additionalProperties is exactly true. Generic CDP params was declared only type:object, so the first valid Target/Debugger event failed the whole connection as a malformed envelope. An isolated real WebSocket peer reproduced CdpConnection rejecting a valid targetCreated event and dropping it. After the one-property fix, the actual daemon/owned-Chrome nth test progressed through page binding and eval to its expected missing-index rejection.
+- **Evidence:** src/runtime/cdp.ts MESSAGE_SCHEMA.params; actual pre-fix nth output browser_tab_changed; throwaway WebSocket probe result CDP response had a malformed envelope/events[]; actual post-fix targeted nth run params.index is not allowed (-32602). Native fresh-blank challenge mechanism is unchanged.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** CDP envelope shape changes or a domain handler assumes unvalidated parameter fields
+- **Source:** assumed — autonomous
+
+## Progress
+Iteration6 remains on exactly sa-browser-agent. Specs were committed72be708 before code. First full implementation task returned FAILED after writing source/tests; parent audited expected HEAD and every changed path, then observed actual acceptance/type failures (D33). Parent fixed and exercised generic native packaging to16pass/0fail, without claiming browser implementation complete. Component-only logic/tech amendments preserve safe native exec navigation and route OS focus to the pending native scenario (D31/D32). Error transport wording is clarified to BrowserReason: detail, not a literal reason: prefix.
+
+Next: fresh scoped complete repair in /tmp/quirky-browser-lane5-v6-bZl06I/component. Parent owns the four doc/native preparation paths, workers own only original implementation scope; expanded component union is journaled before edits. Main build/sa-browser-agent must remain72be708 during the wave. Retry must complete real per-method/API/CLI/import coverage, not claim injected memory-cookie transport as proof of live Chrome destination state. Then audit again, run all targeted checks/build/full suite/scripts/typecheck, catch up/read incoming logs, final Gemini review+one fix batch, actual prepared packaged CLI smoke, commit/detach/queue land. No review over red build; original .serena remains untouched, copied metadata stash preserved.

@@ -1,0 +1,14 @@
+{
+  "item": "sa-browser-agent",
+  "spec": "docs/quirk/specs/2026-10-27-sa-browser-agent/logic.md",
+  "scenarios": [
+    {
+      "id": "SC-02-DF-05-native-focus",
+      "title": "While the real Quirky window has a focused editor or terminal input, run scoped browser tab creation, snapshot, fill, keypress and mouse commands through the quirky CLI against an owned headless Chrome fixture page in another worktree. The browser commands affect only their scoped page; Quirky keeps native focus and subsequent typed text stays in the original focused input. Chrome does not reveal a native window or activate another app. Use a fresh temporary QUIRKY_HOME and --use-mock-keychain on the test-owned Chrome; never probe the system clipboard or real browser profiles.",
+      "status": "pending",
+      "lastRun": null,
+      "report": null,
+      "summary": null
+    }
+  ]
+}
