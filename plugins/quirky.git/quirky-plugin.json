@@ -1608,12 +1608,550 @@
             "ok"
           ]
         }
+      },
+      {
+        "id": "notes",
+        "description": "A worktree's diff notes, sorted by path, line, start line and creation time.",
+        "readOnly": true,
+        "params": {
+          "type": "object",
+          "properties": {
+            "worktree": {
+              "type": "string",
+              "description": "Worktree selector (id, name, branch, path: or current); defaults to the caller's worktree."
+            },
+            "path": {
+              "type": "string",
+              "description": "Only notes of this path, relative to the worktree root."
+            }
+          }
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "notes": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "worktreeId": {
+                    "type": "string"
+                  },
+                  "path": {
+                    "type": "string",
+                    "description": "Path relative to the worktree root."
+                  },
+                  "startLine": {
+                    "type": "integer",
+                    "description": "First line of the range, on the modified side."
+                  },
+                  "line": {
+                    "type": "integer",
+                    "description": "Last line of the range."
+                  },
+                  "body": {
+                    "type": "string"
+                  },
+                  "createdAt": {
+                    "type": "number"
+                  },
+                  "updatedAt": {
+                    "description": "When the note was last edited, or null."
+                  }
+                },
+                "required": [
+                  "id",
+                  "worktreeId",
+                  "path",
+                  "startLine",
+                  "line",
+                  "body",
+                  "createdAt",
+                  "updatedAt"
+                ]
+              }
+            }
+          },
+          "required": [
+            "notes"
+          ]
+        }
+      },
+      {
+        "id": "addNote",
+        "description": "Pins a note to a line (or a range of lines) of a path, on the modified side of its diff. The body is trimmed; blank, over 65,536 bytes, bad lines and paths outside the worktree are refused.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "worktree": {
+              "type": "string",
+              "description": "Worktree selector (id, name, branch, path: or current); defaults to the caller's worktree."
+            },
+            "path": {
+              "type": "string",
+              "description": "Path relative to the worktree root; it need not exist on disk."
+            },
+            "line": {
+              "type": "number",
+              "description": "Last line of the range, a whole number from 1."
+            },
+            "startLine": {
+              "type": "number",
+              "description": "First line of the range; defaults to line."
+            },
+            "body": {
+              "type": "string",
+              "description": "The note text."
+            }
+          },
+          "required": [
+            "path",
+            "line",
+            "body"
+          ]
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "note": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "worktreeId": {
+                  "type": "string"
+                },
+                "path": {
+                  "type": "string",
+                  "description": "Path relative to the worktree root."
+                },
+                "startLine": {
+                  "type": "integer",
+                  "description": "First line of the range, on the modified side."
+                },
+                "line": {
+                  "type": "integer",
+                  "description": "Last line of the range."
+                },
+                "body": {
+                  "type": "string"
+                },
+                "createdAt": {
+                  "type": "number"
+                },
+                "updatedAt": {
+                  "description": "When the note was last edited, or null."
+                }
+              },
+              "required": [
+                "id",
+                "worktreeId",
+                "path",
+                "startLine",
+                "line",
+                "body",
+                "createdAt",
+                "updatedAt"
+              ]
+            }
+          },
+          "required": [
+            "note"
+          ]
+        }
+      },
+      {
+        "id": "editNote",
+        "description": "Replaces a note's text and stamps updatedAt.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "worktree": {
+              "type": "string",
+              "description": "Worktree selector (id, name, branch, path: or current); defaults to the caller's worktree."
+            },
+            "id": {
+              "type": "string",
+              "description": "The note ID."
+            },
+            "body": {
+              "type": "string",
+              "description": "The new text, trimmed; blank or over 65,536 bytes is refused."
+            }
+          },
+          "required": [
+            "id",
+            "body"
+          ]
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "note": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "worktreeId": {
+                  "type": "string"
+                },
+                "path": {
+                  "type": "string",
+                  "description": "Path relative to the worktree root."
+                },
+                "startLine": {
+                  "type": "integer",
+                  "description": "First line of the range, on the modified side."
+                },
+                "line": {
+                  "type": "integer",
+                  "description": "Last line of the range."
+                },
+                "body": {
+                  "type": "string"
+                },
+                "createdAt": {
+                  "type": "number"
+                },
+                "updatedAt": {
+                  "description": "When the note was last edited, or null."
+                }
+              },
+              "required": [
+                "id",
+                "worktreeId",
+                "path",
+                "startLine",
+                "line",
+                "body",
+                "createdAt",
+                "updatedAt"
+              ]
+            }
+          },
+          "required": [
+            "note"
+          ]
+        }
+      },
+      {
+        "id": "deleteNote",
+        "description": "Deletes one note.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "worktree": {
+              "type": "string",
+              "description": "Worktree selector (id, name, branch, path: or current); defaults to the caller's worktree."
+            },
+            "id": {
+              "type": "string",
+              "description": "The note ID."
+            }
+          },
+          "required": [
+            "id"
+          ]
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "ok": {
+              "type": "boolean",
+              "description": "Always true."
+            }
+          },
+          "required": [
+            "ok"
+          ]
+        }
+      },
+      {
+        "id": "clearNotes",
+        "description": "Deletes every note of the worktree, or of one path. Cannot be undone.",
+        "destructive": true,
+        "confirm": "Clear these notes?",
+        "describe": "describeClearNotes",
+        "params": {
+          "type": "object",
+          "properties": {
+            "worktree": {
+              "type": "string",
+              "description": "Worktree selector (id, name, branch, path: or current); defaults to the caller's worktree."
+            },
+            "path": {
+              "type": "string",
+              "description": "Only notes of this path, relative to the worktree root."
+            }
+          }
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "cleared": {
+              "type": "integer",
+              "description": "How many notes were deleted."
+            }
+          },
+          "required": [
+            "cleared"
+          ]
+        }
+      },
+      {
+        "id": "describeClearNotes",
+        "description": "The question asked before clearNotes.",
+        "readOnly": true,
+        "params": {
+          "type": "object",
+          "properties": {
+            "worktree": {
+              "type": "string",
+              "description": "Worktree selector (id, name, branch, path: or current); defaults to the caller's worktree."
+            },
+            "path": {
+              "type": "string",
+              "description": "Only notes of this path, relative to the worktree root."
+            }
+          }
+        },
+        "result": {
+          "type": "string"
+        }
+      },
+      {
+        "id": "formatNotes",
+        "description": "The prompt a send would paste for the chosen notes: Orca's text, with control characters removed. All notes when neither ids nor path is given.",
+        "readOnly": true,
+        "params": {
+          "type": "object",
+          "properties": {
+            "worktree": {
+              "type": "string",
+              "description": "Worktree selector (id, name, branch, path: or current); defaults to the caller's worktree."
+            },
+            "ids": {
+              "type": "array",
+              "description": "Only these notes.",
+              "items": {
+                "type": "string"
+              }
+            },
+            "path": {
+              "type": "string",
+              "description": "Only notes of this path, relative to the worktree root."
+            }
+          }
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "text": {
+              "type": "string"
+            },
+            "count": {
+              "type": "integer"
+            }
+          },
+          "required": [
+            "text",
+            "count"
+          ]
+        }
+      },
+      {
+        "id": "noteTargets",
+        "description": "Where notes can go: the worktree's live agent sessions, each marked sendable or not with the reason, and the installed, enabled agents a new tab can start.",
+        "readOnly": true,
+        "params": {
+          "type": "object",
+          "properties": {
+            "worktree": {
+              "type": "string",
+              "description": "Worktree selector (id, name, branch, path: or current); defaults to the caller's worktree."
+            }
+          }
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "sessions": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "session": {
+                    "type": "string"
+                  },
+                  "agent": {
+                    "type": "string"
+                  },
+                  "label": {
+                    "type": "string"
+                  },
+                  "title": {
+                    "type": "string"
+                  },
+                  "status": {
+                    "type": "string"
+                  },
+                  "state": {
+                    "description": "The agent-status state (working, waiting, blocked, done), or null."
+                  },
+                  "lastActivityAt": {
+                    "type": "number"
+                  },
+                  "sendable": {
+                    "type": "boolean"
+                  },
+                  "reason": {
+                    "type": "string",
+                    "description": "Why the session cannot take notes; absent when sendable."
+                  }
+                },
+                "required": [
+                  "session",
+                  "agent",
+                  "label",
+                  "title",
+                  "status",
+                  "state",
+                  "lastActivityAt",
+                  "sendable"
+                ]
+              }
+            },
+            "agents": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "label": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "id",
+                  "label"
+                ]
+              }
+            }
+          },
+          "required": [
+            "sessions",
+            "agents"
+          ]
+        }
+      },
+      {
+        "id": "sendNotes",
+        "description": "Sends notes as one prompt to an agent session of the worktree, or to a new agent tab, and deletes the notes that were delivered unchanged. Notes already in a running send are skipped; a session that is starting, waiting for approval, blocked or exited is refused, and an undelivered or unconfirmed send keeps every note.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "worktree": {
+              "type": "string",
+              "description": "Worktree selector (id, name, branch, path: or current); defaults to the caller's worktree."
+            },
+            "scope": {
+              "type": "string",
+              "enum": [
+                "note",
+                "file",
+                "all"
+              ],
+              "description": "One note (needs id), one file's notes (needs path), or all notes."
+            },
+            "id": {
+              "type": "string",
+              "description": "The note, for scope note."
+            },
+            "path": {
+              "type": "string",
+              "description": "The file, for scope file."
+            },
+            "session": {
+              "type": "string",
+              "description": "A running agent session of this worktree; give this or agent."
+            },
+            "agent": {
+              "type": "string",
+              "description": "An installed, enabled agent to start in a new tab; give this or session."
+            }
+          },
+          "required": [
+            "scope"
+          ]
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "sent": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "IDs of the notes that were delivered and are gone."
+            },
+            "kept": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "IDs of delivered notes that stay because they changed during the send."
+            },
+            "target": {
+              "type": "object",
+              "properties": {
+                "session": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "session"
+              ]
+            },
+            "delivery": {
+              "type": "string",
+              "description": "pasted into a running session, or command-line / pasted for a new tab."
+            }
+          },
+          "required": [
+            "sent",
+            "kept",
+            "target",
+            "delivery"
+          ]
+        }
       }
     ],
     "event": [
       {
         "id": "changed",
         "description": "A worktree's git state changed.",
+        "data": {
+          "type": "object",
+          "properties": {
+            "worktreeId": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "worktreeId"
+          ]
+        }
+      },
+      {
+        "id": "notesChanged",
+        "description": "A worktree's diff notes changed.",
         "data": {
           "type": "object",
           "properties": {
