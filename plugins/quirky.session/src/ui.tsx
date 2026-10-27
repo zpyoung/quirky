@@ -34,7 +34,7 @@ export function activate(context: UiPluginContext): void {
     const root = createRoot(element)
     if (worktree === null) {
       root.render(<p className="muted pad">Pick a worktree to see its sessions.</p>)
-      report?.({ worktree: null, tabs: [], active: null })
+      report?.({ worktree: null, tabs: [], active: null, visibleSessions: [] })
       return () => root.unmount()
     }
     const store = new WorktreeSessions(context, worktree, session)

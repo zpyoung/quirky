@@ -101,6 +101,9 @@
               },
               "agentStatus": {
                 "description": "The agent-status summary ({state, display, label, detail, progress, stateStartedAt, evidenceAt, restoredUnconfirmed}) the window draws; null or absent when no agent has reported one."
+              },
+              "unread": {
+                "description": "Why the session is marked unread: `agent`, `bell` or `notification`; null or absent when it is not."
               }
             },
             "required": [
@@ -207,6 +210,9 @@
             },
             "agentStatus": {
               "description": "The agent-status summary ({state, display, label, detail, progress, stateStartedAt, evidenceAt, restoredUnconfirmed}) the window draws; null or absent when no agent has reported one."
+            },
+            "unread": {
+              "description": "Why the session is marked unread: `agent`, `bell` or `notification`; null or absent when it is not."
             }
           },
           "required": [
@@ -353,6 +359,9 @@
             },
             "agentStatus": {
               "description": "The agent-status summary ({state, display, label, detail, progress, stateStartedAt, evidenceAt, restoredUnconfirmed}) the window draws; null or absent when no agent has reported one."
+            },
+            "unread": {
+              "description": "Why the session is marked unread: `agent`, `bell` or `notification`; null or absent when it is not."
             }
           },
           "required": [
@@ -469,6 +478,9 @@
             },
             "agentStatus": {
               "description": "The agent-status summary ({state, display, label, detail, progress, stateStartedAt, evidenceAt, restoredUnconfirmed}) the window draws; null or absent when no agent has reported one."
+            },
+            "unread": {
+              "description": "Why the session is marked unread: `agent`, `bell` or `notification`; null or absent when it is not."
             }
           },
           "required": [
@@ -582,6 +594,9 @@
             },
             "agentStatus": {
               "description": "The agent-status summary ({state, display, label, detail, progress, stateStartedAt, evidenceAt, restoredUnconfirmed}) the window draws; null or absent when no agent has reported one."
+            },
+            "unread": {
+              "description": "Why the session is marked unread: `agent`, `bell` or `notification`; null or absent when it is not."
             }
           },
           "required": [
@@ -807,6 +822,9 @@
             },
             "agentStatus": {
               "description": "The agent-status summary ({state, display, label, detail, progress, stateStartedAt, evidenceAt, restoredUnconfirmed}) the window draws; null or absent when no agent has reported one."
+            },
+            "unread": {
+              "description": "Why the session is marked unread: `agent`, `bell` or `notification`; null or absent when it is not."
             }
           },
           "required": [
@@ -956,6 +974,120 @@
             },
             "agentStatus": {
               "description": "The agent-status summary ({state, display, label, detail, progress, stateStartedAt, evidenceAt, restoredUnconfirmed}) the window draws; null or absent when no agent has reported one."
+            },
+            "unread": {
+              "description": "Why the session is marked unread: `agent`, `bell` or `notification`; null or absent when it is not."
+            }
+          },
+          "required": [
+            "id",
+            "kind",
+            "agent",
+            "worktreeId",
+            "cwd",
+            "title",
+            "status",
+            "createdAt",
+            "lastActivityAt",
+            "exitCode"
+          ]
+        }
+      },
+      {
+        "id": "setUnread",
+        "description": "Sets or clears a session's unread reason; `changed` is emitted only when the value changes.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "session": {
+              "type": "string",
+              "description": "The session ID."
+            },
+            "unread": {
+              "description": "The reason (`agent`, `bell` or `notification`), or null to mark the session read."
+            }
+          },
+          "required": [
+            "session",
+            "unread"
+          ]
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "kind": {
+              "type": "string",
+              "enum": [
+                "terminal",
+                "structured"
+              ]
+            },
+            "agent": {
+              "type": "string",
+              "description": "`shell` or the ID of the agent the session runs."
+            },
+            "worktreeId": {
+              "type": "string"
+            },
+            "cwd": {
+              "type": "string"
+            },
+            "title": {
+              "type": "string"
+            },
+            "status": {
+              "type": "string",
+              "enum": [
+                "starting",
+                "running",
+                "working",
+                "waiting",
+                "done",
+                "exited"
+              ]
+            },
+            "createdAt": {
+              "type": "number"
+            },
+            "lastActivityAt": {
+              "type": "number"
+            },
+            "exitCode": {
+              "description": "The exit code, or null while the process is alive."
+            },
+            "exitSignal": {
+              "description": "The signal that ended the process, or null."
+            },
+            "exitCause": {
+              "description": "Why the session ended (exited, killed, host-restart or host-lost), or null while it is alive."
+            },
+            "restorable": {
+              "type": "boolean",
+              "description": "True when the session ended with the PTY host and can be restored."
+            },
+            "launch": {
+              "description": "What the session launched with ({command, args, env}); null for a shell or a session recorded before launches were kept."
+            },
+            "launchSettings": {
+              "description": "What the launch applied ({agent, options, args, summary}); null when it applied nothing."
+            },
+            "providerSession": {
+              "description": "The agent CLI's own session ({id, transcriptPath}) that resume passes back; null until one is stored."
+            },
+            "promptDelivery": {
+              "description": "How the first prompt reached the agent: null (no prompt), command-line, pending, pasted, unconfirmed or not-delivered."
+            },
+            "resumedFrom": {
+              "description": "The session this one was resumed or forked from; null otherwise."
+            },
+            "agentStatus": {
+              "description": "The agent-status summary ({state, display, label, detail, progress, stateStartedAt, evidenceAt, restoredUnconfirmed}) the window draws; null or absent when no agent has reported one."
+            },
+            "unread": {
+              "description": "Why the session is marked unread: `agent`, `bell` or `notification`; null or absent when it is not."
             }
           },
           "required": [
