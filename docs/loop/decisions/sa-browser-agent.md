@@ -462,7 +462,18 @@
 - **Revisit if:** integrated landing tests expose a concrete interaction
 - **Source:** assumed — autonomous
 
+## D43: Install merged workspace dependencies without changing protected verification
+- **Question:** Why did landing fail to load a declared test dependency despite passing own affected tests?
+- **Options:** change production dependencies/imports to mask it; edit protected loop code; supply the missing installation step through a temporary verifier-only command wrapper
+- **Chose:** keep source and all VERIFY commands unchanged. A temporary external bun wrapper runs real bun install --frozen-lockfile only when queue.ts launches bun run test in its exact verify directory, then execs the real command. The queue still owns the land lock, worktree and all checks. No external edit of the verify/integration tree, no suite exclusions and no protected path changes.
+- **Why:** prepareVerify installs the integration base at lanes.ts164, but land merges the feature only afterward at276. Browser package.json and bun.lock already declare @quirky/git; the new workspace's links were absent at test load. Production native helper dependencies need the same post-merge installation. The first full remote run passed all499 files after its normal isolated reruns, but macOS browser loading failed twice on the missing module, so landing correctly failed.
+- **Evidence:** failed land artifact://248; scripts/build-loop/lanes.ts:158-168,275-278; plugins/quirky.browser/package.json:6-12 and bun.lock browser workspace; external wrapper passed sh -n
+- **Reversibility:** easy (temporary wrapper is removed after landing)
+- **Confidence:** high for observed install-order cause; retry still must pass every integrated check
+- **Revisit if:** merged dependency installation or the unchanged landing checks fail
+- **Source:** assumed — autonomous
+
 ## Progress
 Iteration6 holds exactly sa-browser-agent. Core affected tests, scripts and typecheck passed (D41). Full pre-cutover work is preserved at1d05b63/build/sa-browser-agent-full-snapshot; queued sa-browser-agent-extras owns every deferred flow. Review and additional dogfood were not started, per D40. Original parent metadata and copied metadata stash remain untouched.
 
-Core committed1de2011, merged into build/sa-browser-agent; component worktree removed. Single catch-up a0cae4b completed, all nine incoming decision logs reconciled (D42). Next: detach and queue.ts land sa-browser-agent; wait for the integrated gate. No second item and no whole-queue completion claim.
+Core committed1de2011; one catch-up a0cae4b and nine-log reconciliation completed. First land failed at missing new-workspace dependency setup (D43), not a passing gate. Next: commit this record, detach and retry queue.ts land with frozen post-merge installation and unchanged checks. No additional catch-up, review, dogfood or second item.
