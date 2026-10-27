@@ -1,9 +1,10 @@
 import { lstat } from 'node:fs/promises'
 import { join } from 'node:path'
 import { gitApi } from '@quirky/git'
-import type { GitStatus, GitStatusEntry, PluginCaller, PluginContext, Worktree } from '@quirky/protocol'
+import type { GitStatus, GitStatusEntry, PluginCaller, PluginContext, PluginStore, Worktree } from '@quirky/protocol'
 import { createErrors, type Errors } from './errors'
 import { createLock, type WorktreeLock } from './lock'
+import { NoteHolds, NotesStore } from './notes'
 import { OpenedConflicts } from './opened'
 
 export type WorktreeParams = { worktree?: string }
@@ -17,6 +18,12 @@ export type DaemonEnv = {
   errors: Errors
   lock: WorktreeLock
   opened: OpenedConflicts
+  /** The plugin's SQLite store. */
+  store: PluginStore
+  /** Stored diff notes. */
+  notes: NotesStore
+  /** Notes that running sends have taken. */
+  holds: NoteHolds
   /** The worktree `params.worktree` selects for `caller`; folder workspaces are refused. */
   resolve(params: WorktreeParams, caller: PluginCaller): Promise<Worktree>
   /** Announces `quirky.git/changed` for a successful mutation. */
@@ -30,7 +37,7 @@ export type DaemonEnv = {
   sharedSymlinks(worktree: Worktree): Promise<string[]>
 }
 
-export function createEnv(context: PluginContext): DaemonEnv {
+export function createEnv(context: PluginContext, store: PluginStore): DaemonEnv {
   const errors = createErrors(context)
   const lock = createLock(errors)
   const opened = new OpenedConflicts()
@@ -103,6 +110,9 @@ export function createEnv(context: PluginContext): DaemonEnv {
     errors,
     lock,
     opened,
+    store,
+    notes: new NotesStore(store),
+    holds: new NoteHolds(),
     resolve,
     changed: (worktree) => context.emit('changed', { worktreeId: worktree.id }),
     readStatus,
