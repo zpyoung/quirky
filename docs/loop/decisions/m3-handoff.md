@@ -549,7 +549,7 @@
 ## D55: Wave 1 gate: host.test.ts failed on the remote runner and passes alone
 - **Question:** the wave 1 full suite failed `packages/pty-host/test/host.test.ts` (alternate-screen read, kill process group timeout) twice on the remote host and `plugins/quirky.worktree/test/window-projects.test.ts` SC-10 once
 - **Options:** treat as a regression; establish a flake by isolated reproduction
-- **Chose:** flake: wave 1 changed nothing in packages/pty-host or quirky.worktree, and both files pass alone on this Mac (32/32, 18/18). The suite is re-run before the checkpoint review.
+- **Chose:** pre-existing on the remote Linux host, not this item: wave 1 changed nothing in packages/pty-host or quirky.worktree; both files pass alone on this Mac (32/32, 18/18); on the untouched build/roadmap commit fa7e487 the remote run fails window-projects SC-10 again and host.test.ts fails 'reports alt when the alternate screen is active', and on this branch host.test.ts passed one of two remote runs alone. Checkpoint pre-passes use `bun run typecheck` and `bun test scripts` as ground truth, and the full suite is judged by its other 420 files.
 - **Why:** SDD step 7 accepts a flake only with an isolated reproduction; iteration 4 saw the same pty-host files flake under the remote runner
 - **Evidence:** session scratchpad gate1-test.log
 - **Reversibility:** easy
