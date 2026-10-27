@@ -261,9 +261,9 @@ export class AgentStatusService {
       ...(input.agentPid !== undefined ? { agentPid: input.agentPid } : {}),
       ...(input.agentStart !== undefined ? { agentStart: input.agentStart } : {})
     })
+    await this.capture(session, normalized)
     // an event that can't start a row leaves the row it would have replaced alone
     if (starts && row === null) return
-    await this.capture(session, normalized)
     if (row === known) return
 
     if (row) this.attachFacet(row)
