@@ -593,7 +593,8 @@
       "deps": [
         "gate-m0"
       ],
-      "status": "blocked"
+      "status": "in-progress",
+      "lane": 3
     },
     {
       "id": "m6-orchestration-core",
