@@ -10,6 +10,7 @@ export const CONNECTION_METHODS = [
   'events.subscribe',
   'ui.report',
   'ui.window.focused',
+  'ui.window.activity',
   'ui.command.reply'
 ] as const
 
@@ -183,9 +184,19 @@ const uiLayout = object(
   },
   ['view', 'panel', 'sidebar', 'focus']
 )
+const windowInfo = object(
+  {
+    connId: { type: 'integer' },
+    name: string(),
+    focused: boolean(),
+    inputAt: { description: 'Epoch milliseconds of the last reported input, or null.' },
+    present: boolean('Whether the last input is recent enough to count as at the machine.')
+  },
+  ['connId', 'focused', 'inputAt', 'present']
+)
 const uiState = object(
   {
-    windows: listOf(object({ connId: { type: 'integer' }, name: string(), focused: boolean() }, ['connId', 'focused'])),
+    windows: listOf(windowInfo),
     layout: uiLayout,
     slots: listOf({ type: 'object' })
   },
@@ -402,6 +413,11 @@ export const KERNEL_METHOD_SCHEMAS = {
     params: object({ focused: boolean() }, ['focused']),
     result: ok
   },
+  'ui.window.activity': {
+    description: 'A window reports user input, which keeps it present. Role `ui` only.',
+    params: noParams,
+    result: ok
+  },
   'ui.command.reply': {
     description: 'A window answers a `ui.command.request`. Role `ui` only.',
     params: object(
@@ -467,7 +483,15 @@ export const KERNEL_EVENT_SCHEMAS = {
         sessionId: string(),
         worktreeId: string(),
         open: object({ view: string(), input: { description: 'Passed to the view as its input.' } }, ['view']),
-        desktop: boolean('Whether the desktop shell shows a native notification.')
+        desktop: boolean('Whether the desktop shell shows a native notification.'),
+        sound: object(
+          {
+            file: { description: 'A sound file path, or null for the system sound.' },
+            volume: { type: 'integer', minimum: 0, maximum: 100, description: 'Playback volume, 0-100.' }
+          },
+          ['file', 'volume']
+        ),
+        toast: boolean('Whether the webview shows a toast; absent means it does.')
       },
       ['title', 'body', 'desktop']
     )
@@ -488,6 +512,14 @@ export const KERNEL_EVENT_SCHEMAS = {
       { requestId: string(), id: string(), args: { description: 'The command arguments.' } },
       ['requestId', 'id']
     )
+  },
+  'ui.window.changed': {
+    description: 'A window changed focus or presence, or a window connection dropped.',
+    data: object({ windows: listOf(windowInfo) }, ['windows'])
+  },
+  'ui.report.changed': {
+    description: "A window's report for a slot changed; delivered to plugin listeners only, never to clients.",
+    data: object({ slot: string(), connId: { type: 'integer' } }, ['slot', 'connId'])
   },
   'hook.received': {
     description: 'An agent hook arrived; delivered to plugin listeners only, never to clients.',

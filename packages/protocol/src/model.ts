@@ -187,6 +187,9 @@ export type AgentStatusSummary = {
   restoredUnconfirmed: boolean
 }
 
+/** Why a session is marked unread: an agent finished, a terminal bell rang, or a program posted a notification. */
+export type SessionUnread = 'agent' | 'bell' | 'notification'
+
 export type Session = {
   id: string
   kind: SessionKind
@@ -214,6 +217,8 @@ export type Session = {
   resumedFrom?: string | null
   /** Null or absent until the agent-status plugin has evidence; the coarse `status` then stands alone. */
   agentStatus?: AgentStatusSummary | null
+  /** Why the session is marked unread; null or absent when it is not. */
+  unread?: SessionUnread | null
 }
 
 export type GitFileStatus = {
@@ -226,17 +231,127 @@ export type GitFileStatus = {
   origPath?: string
 }
 
+/** Which Source Control section a row belongs to; `unstaged` is the "Changes" section. */
+export type GitArea = 'conflicts' | 'staged' | 'unstaged' | 'untracked'
+
+export type GitChangeStatus = 'modified' | 'added' | 'deleted' | 'renamed' | 'copied' | 'untracked'
+
+export type GitConflictKind =
+  | 'both_modified'
+  | 'both_added'
+  | 'both_deleted'
+  | 'added_by_us'
+  | 'added_by_them'
+  | 'deleted_by_us'
+  | 'deleted_by_them'
+
+/** The merge, rebase or cherry-pick in progress in a worktree, read from its git directory. */
+export type GitOperation = 'merge' | 'rebase' | 'cherry-pick' | 'none'
+
+/** An operation that holds a worktree's lock while it runs; at most one per worktree. */
+export type GitBusyOp = 'push' | 'force-push' | 'pull' | 'fast-forward' | 'fetch' | 'sync' | 'rebase' | 'continue' | 'abort'
+
+/** One row of the Source Control panel. A path both staged and changed has two entries. */
+export type GitStatusEntry = {
+  path: string
+  /** Source path of a rename or copy. */
+  oldPath?: string
+  area: GitArea
+  status: GitChangeStatus
+  /** Set only in the conflicts area; `resolved_locally` means opened in Quirky and no longer unmerged in git. */
+  conflict?: { kind: GitConflictKind; state: 'unresolved' | 'resolved_locally' }
+  /** Line counts; absent when unknown (binary, capped status, too large). */
+  added?: number
+  removed?: number
+  binary?: boolean
+  submodule?: { commitChanged: boolean; trackedChanges: boolean; untrackedChanges: boolean }
+}
+
+export type GitUpstreamStatus = {
+  hasUpstream: boolean
+  /** Short name such as `origin/zoe/feat`. */
+  name: string | null
+  /** The commit the remote-tracking ref points at, as last fetched. */
+  sha: string | null
+  ahead: number
+  behind: number
+  /** Whether every commit behind is patch-equivalent to one ahead; null when not computed (not diverged, or capped). */
+  behindPatchEquivalent: boolean | null
+}
+
 export type GitStatus = {
   branch: string | null
   upstream: string | null
   ahead: number
   behind: number
+  /** v1's porcelain-v1 view of the same snapshot; kept unchanged for existing readers. */
   files: GitFileStatus[]
+  head: string | null
+  detached: boolean
+  unborn: boolean
+  entries: GitStatusEntry[]
+  operation: GitOperation
+  /** True when the status stopped at its entry limit; line counts and the upstream probe are then skipped. */
+  capped: boolean
+  upstreamStatus: GitUpstreamStatus
+  busy: GitBusyOp | null
 }
+
+/** The v1 subset of `GitStatus`: what porcelain v1 gives. */
+export type GitStatusSummary = Pick<GitStatus, 'branch' | 'upstream' | 'ahead' | 'behind' | 'files'>
+
+/** The v1 subset of `GitDiff`: the two sides and whether either is binary. */
+export type GitDiffPair = Pick<GitDiff, 'path' | 'staged' | 'original' | 'modified' | 'binary'>
+
+/** A file changed between two commits (branch compare, a commit's files). */
+export type GitChange = {
+  path: string
+  oldPath?: string
+  status: GitChangeStatus
+  /** Null for binary files. */
+  added: number | null
+  removed: number | null
+  binary: boolean
+}
+
+/** Committed changes on the branch since its merge base with the base ref. Not-ready statuses carry `message`. */
+export type GitCompare = {
+  status: 'ready' | 'invalid-base' | 'unborn-head' | 'no-merge-base'
+  base: string | null
+  baseSource: 'worktree' | 'project' | 'detected' | 'upstream' | 'param' | null
+  message: string | null
+  baseOid: string | null
+  headOid: string | null
+  mergeBase: string | null
+  ahead: number
+  behind: number
+  entries: GitChange[]
+  added: number
+  removed: number
+}
+
+export type GitCommit = {
+  oid: string
+  parents: string[]
+  author: string
+  email: string
+  /** Milliseconds since the epoch. */
+  authoredAt: number
+  committedAt: number
+  subject: string
+  body: string
+  /** Shortened decorations, e.g. `HEAD -> zoe/feat`, `origin/main`, `tag: v1`. */
+  refs: string[]
+}
+
+export type GitHistory = { commits: GitCommit[]; hasMore: boolean }
+
+export type GitDiffSource = 'unstaged' | 'staged' | 'branch' | 'commit'
 
 /**
  * Both sides of a file diff. For `staged: true`, original is HEAD and modified is the index;
  * otherwise original is the index and modified is the working tree. Missing sides are ''.
+ * `kind: 'image'` sides hold base64 with `binary` true; a `tooLarge` text diff has empty bodies.
  */
 export type GitDiff = {
   path: string
@@ -244,6 +359,14 @@ export type GitDiff = {
   original: string
   modified: string
   binary: boolean
+  source: GitDiffSource
+  oldPath?: string
+  kind: 'text' | 'binary' | 'image'
+  mime?: string
+  /** sha-256 hex of the working file's bytes for unstaged diffs; null when the file is missing. */
+  modifiedHash?: string | null
+  modifiedDeleted?: boolean
+  tooLarge?: { originalLines: number; modifiedLines: number; characters: number; reason: 'lines' | 'characters' }
 }
 
 export type AskPreview = { format: 'markdown' | 'html'; content: string }

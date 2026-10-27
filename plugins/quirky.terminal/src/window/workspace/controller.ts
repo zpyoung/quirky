@@ -21,6 +21,7 @@ import {
   readWorkspaceSettings,
   switcherOrder,
   tabsReport,
+  visibleSessionsOf,
   terminalSettingName,
   type PaneStateReport,
   type TabReport,
@@ -92,6 +93,8 @@ export type ViewReport = {
   worktree: string | null
   active: string | null
   tabs: TabReport[]
+  /** The sessions of every pane the window mounts. */
+  visibleSessions: string[]
   layout: Workspace | null
   focusedPane: string | null
   panes: PaneStateReport[]
@@ -1078,6 +1081,7 @@ export class WorkspaceController {
       worktree: this.state.status === 'missing' ? null : this.workspaceId,
       active: focused?.leaf.session ?? null,
       tabs: ws ? tabsReport(ws, this.state.sessions) : [],
+      visibleSessions: ws ? visibleSessionsOf(ws) : [],
       layout: ws,
       focusedPane: focused?.leaf.id ?? null,
       panes: ws ? panesReport(ws, this.state.paneStates, this.state.settings['font-size']) : [],

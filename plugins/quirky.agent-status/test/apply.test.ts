@@ -177,9 +177,9 @@ describe('Claude permission hold', () => {
 
   test('an unrelated tool event leaves the row waiting and its detail alone', () => {
     let row = held()[2]!.row!
-    const { row: after, notify } = applyEvent(row, event(tool('Read', 'a.ts', { eventName: 'PostToolUse', fields: { toolName: 'Read', toolInput: 'a.ts', toolUseId: 't2' } })), { ...base, at: 9000 })
+    const { row: after, settled } = applyEvent(row, event(tool('Read', 'a.ts', { eventName: 'PostToolUse', fields: { toolName: 'Read', toolInput: 'a.ts', toolUseId: 't2' } })), { ...base, at: 9000 })
     expect(after).toMatchObject({ state: 'waiting', toolName: 'Bash', detail: 'Bash: npm test', evidenceAt: 9000 })
-    expect(notify).toBeNull()
+    expect(settled).toBeNull()
   })
 
   test('the approved tool resuming with the same id and input releases it', () => {
@@ -290,12 +290,12 @@ describe('Claude permission hold', () => {
   })
 })
 
-describe('notifications', () => {
-  const notifies = (steps: [Partial<Normalized>, Partial<ApplyEvent>?][]) => run(steps).map((r) => r.notify)
+describe('settled', () => {
+  const settles = (steps: [Partial<Normalized>, Partial<ApplyEvent>?][]) => run(steps).map((r) => r.settled)
 
-  test('the first row event, then waiting and the final done notify; a boundary and working do not', () => {
+  test('the first row event, then waiting and the final done settle; a boundary and working do not', () => {
     expect(
-      notifies([
+      settles([
         [{ eventName: 'SessionStart', state: 'done', newTurn: true, sessionBoundary: true }],
         [prompt()],
         [tool('Bash')],
@@ -306,29 +306,29 @@ describe('notifications', () => {
     ).toEqual([null, null, null, 'waiting', null, 'done'])
   })
 
-  test('a repeated done does not notify again', () => {
-    expect(notifies([[prompt()], [stop()], [stop()]])).toEqual([null, 'done', null])
+  test('a repeated done does not settle again', () => {
+    expect(settles([[prompt()], [stop()], [stop()]])).toEqual([null, 'done', null])
   })
 
-  test('a replay never notifies', () => {
-    expect(notifies([[prompt()], [stop(), { replay: true }]])).toEqual([null, null])
+  test('a replay never settles', () => {
+    expect(settles([[prompt()], [stop(), { replay: true }]])).toEqual([null, null])
   })
 
-  test('blocked notifies as waiting', () => {
-    expect(notifies([[prompt()], [{ state: 'blocked' }]])).toEqual([null, 'waiting'])
+  test('blocked stays blocked', () => {
+    expect(settles([[prompt()], [{ state: 'blocked' }]])).toEqual([null, 'blocked'])
   })
 
   test('waiting to blocked is a new change into an attention state', () => {
-    expect(notifies([[prompt()], [permission('Bash', 'ls')], [{ state: 'blocked' }]])).toEqual([null, 'waiting', 'waiting'])
+    expect(settles([[prompt()], [permission('Bash', 'ls')], [{ state: 'blocked' }]])).toEqual([null, 'waiting', 'blocked'])
   })
 
-  test('a Stop that starts a row notifies', () => {
-    expect(notifies([[stop()]])).toEqual(['done'])
+  test('a Stop that starts a row settles', () => {
+    expect(settles([[stop()]])).toEqual(['done'])
   })
 
-  test('a done reached when the last child ends notifies once', () => {
+  test('a done reached when the last child ends settles once, and the lead stopping first settles nothing', () => {
     expect(
-      notifies([
+      settles([
         [prompt()],
         [{ childOps: [{ op: 'start', id: 'a1', kind: 'agent' }] }],
         [stop()],
@@ -341,7 +341,7 @@ describe('notifications', () => {
 describe('what changes nothing', () => {
   test('an event that ends the process removes the row', () => {
     const [, ended] = run([[prompt()], [{ eventName: 'SessionEnd', endsProcess: true }]])
-    expect(ended).toEqual({ row: null, notify: null })
+    expect(ended).toEqual({ row: null, settled: null })
   })
 
   test('an event with no meaning leaves the row as it was', () => {

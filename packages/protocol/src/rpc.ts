@@ -1,7 +1,7 @@
 import type { ApiDescription } from './catalog'
 import type { DistroInfo, DistroInspection, PluginInspection } from './distro'
 import type { ContributionInfo, JobInfo, JobRun, PluginEvent, PluginInfo } from './plugins'
-import type { SettingInfo, ThemeList, UiLayout, UiModel, UiState } from './ui'
+import type { SettingInfo, ThemeList, UiLayout, UiModel, UiState, UiWindowInfo } from './ui'
 
 /** Bumped on any breaking change to `Methods`, `QuirkyEvent` or the frame layout. */
 export const PROTOCOL_VERSION = 2
@@ -97,6 +97,8 @@ export type Methods = {
   'ui.report': { params: { slot: string; state: unknown | null }; result: Ok }
   /** A window tells the daemon whether it has focus; role `ui` only. */
   'ui.window.focused': { params: { focused: boolean }; result: Ok }
+  /** A window reports user input (pointer, key or wheel); role `ui` only. */
+  'ui.window.activity': { params: Record<string, never>; result: Ok }
   /** A window answers a `ui.command.request`; role `ui` only. */
   'ui.command.reply': {
     params: { requestId: string; result?: unknown; error?: { message: string } }
@@ -133,12 +135,20 @@ export type QuirkyEvent =
       worktreeId?: string
       open?: { view: string; input?: unknown }
       desktop: boolean
+      /** The sound to play for this notification; absent means silent. `file: null` is the system sound; `volume` is 0-100. */
+      sound?: { file: string | null; volume: number }
+      /** Whether the webview shows a toast; absent means it does. */
+      toast?: boolean
     }
   | { type: 'plugin.changed' }
   | { type: 'setting.changed'; id: string; value: boolean | number | string }
   | { type: 'theme.changed'; chosen: string; active: string }
   | { type: 'ui.state.changed'; layout: UiLayout }
   | { type: 'ui.command.request'; requestId: string; id: string; args: unknown }
+  /** A window's focus or presence changed, or a window connection dropped. */
+  | { type: 'ui.window.changed'; windows: UiWindowInfo[] }
+  /** Delivered to plugin listeners only, never to clients: a window's report for `slot` changed. */
+  | { type: 'ui.report.changed'; slot: string; connId: number }
   /** Delivered to plugin listeners only, never to clients. */
   | {
       type: 'hook.received'

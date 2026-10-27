@@ -63,6 +63,7 @@ describe('SC-20: Esc and Ctrl+C infer an interrupt, per agent', () => {
     await settled()
     await expectInterrupted()
     expect(rig.notifies()).toEqual([])
+    expect(rig.settles()).toEqual([])
   })
 
   test('claude: Esc no', async () => {

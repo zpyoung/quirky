@@ -124,8 +124,7 @@
       "deps": [
         "m1-agent-status"
       ],
-      "status": "in-progress",
-      "lane": 2
+      "status": "done"
     },
     {
       "id": "m1-worktrees",
@@ -175,8 +174,7 @@
       "deps": [
         "m1-worktrees"
       ],
-      "status": "in-progress",
-      "lane": 3
+      "status": "done"
     },
     {
       "id": "m2-source-control-notes-ai",
@@ -190,7 +188,8 @@
         "m1-launch-settings",
         "m1-agent-status"
       ],
-      "status": "todo"
+      "status": "in-progress",
+      "lane": 3
     },
     {
       "id": "m2-editor",
@@ -217,7 +216,8 @@
         "m2-source-control-core",
         "m1-agent-status"
       ],
-      "status": "todo"
+      "status": "in-progress",
+      "lane": 5
     },
     {
       "id": "m2-ask-parity",
@@ -245,6 +245,28 @@
       "lane": 6
     },
     {
+      "id": "fix-test-process-leaks",
+      "milestone": "M1",
+      "title": "Fix leaked test processes: test runs and UI passes leave quirkyd daemons and pty-host processes running after the test ends, timed out, or was killed (97 found on 2026-10-27, about 1.9 GB, under the lane worktrees, the integration worktree, agent worktrees and /tmp test folders; pty-hosts outlive their daemon with parent PID 1). Find which harnesses start them without a guaranteed stop (packages/daemon/test/helpers.ts, plugins/*/test support, the e2e harnesses, the like-a-user web pass), make every start paired with a kill of the whole process tree on any exit, make a pty-host exit when its daemon goes away, and add a test that fails if a run leaves one behind",
+      "docs": [
+        "term-daemon.md"
+      ],
+      "deps": [],
+      "status": "in-progress",
+      "lane": 7
+    },
+    {
+      "id": "fix-sc31-first-shell-race",
+      "milestone": "M1",
+      "title": "Fix the SC-31 race in plugins/quirky.worktree/test/window-create.test.ts: after a create that skips setup, the window sometimes opens a first shell for the new worktree before the test checks it has no sessions (6 of 10 runs on the Linux test host). Decide whether the window or the test is wrong, fix it, and remove its line from scripts/test-on-macos.txt",
+      "docs": [
+        "worktrees.md"
+      ],
+      "deps": [],
+      "status": "in-progress",
+      "lane": 8
+    },
+    {
       "id": "m3-terminal-dock",
       "milestone": "M3",
       "title": "Terminal dock with its own composer",
@@ -257,7 +279,7 @@
         "m1-providers"
       ],
       "status": "in-progress",
-      "lane": 5
+      "lane": 9
     },
     {
       "id": "m3-handoff",
@@ -271,7 +293,8 @@
         "m1-worktrees",
         "m2-source-control-core"
       ],
-      "status": "todo"
+      "status": "in-progress",
+      "lane": 2
     },
     {
       "id": "m3-accounts",
@@ -499,16 +522,6 @@
         "m1-term-daemon",
         "m1-agent-status"
       ],
-      "status": "todo"
-    },
-    {
-      "id": "fix-sc31-first-shell-race",
-      "milestone": "M1",
-      "title": "Fix the SC-31 race in plugins/quirky.worktree/test/window-create.test.ts: after a create that skips setup, the window sometimes opens a first shell for the new worktree before the test checks it has no sessions (6 of 10 runs on the Linux test host). Decide whether the window or the test is wrong, fix it, and remove its line from scripts/test-on-macos.txt",
-      "docs": [
-        "worktrees.md"
-      ],
-      "deps": [],
       "status": "todo"
     },
     {

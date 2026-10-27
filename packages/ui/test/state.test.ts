@@ -24,6 +24,26 @@ test('a notify event adds a toast, and dismiss removes it', () => {
   expect(state.toasts).toHaveLength(0)
 })
 
+test('SC-50: a notify event with toast false makes no toast, and sound alone does not', () => {
+  const quiet = reduce(initialState(), {
+    type: 'event',
+    event: { type: 'notify', title: 'wt', body: 'test', desktop: true, toast: false, sound: { file: null, volume: 50 } }
+  })
+  expect(quiet.toasts).toEqual([])
+
+  const loud = reduce(initialState(), {
+    type: 'event',
+    event: { type: 'notify', title: 'wt', body: 'done', desktop: true, sound: { file: null, volume: 50 } }
+  })
+  expect(loud.toasts).toHaveLength(1)
+
+  const explicit = reduce(initialState(), {
+    type: 'event',
+    event: { type: 'notify', title: 'wt', body: 'done', desktop: true, toast: true }
+  })
+  expect(explicit.toasts).toHaveLength(1)
+})
+
 test('a notify event keeps the view its toast opens', () => {
   const state = reduce(initialState(), {
     type: 'event',

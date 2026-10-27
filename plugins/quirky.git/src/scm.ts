@@ -1,24 +1,5 @@
-import type { GitFileStatus, GitStatus, UiLayout } from '@quirky/protocol'
-
-export function splitFiles(files: GitFileStatus[]): { staged: GitFileStatus[]; unstaged: GitFileStatus[] } {
-  const staged: GitFileStatus[] = []
-  const unstaged: GitFileStatus[] = []
-  for (const file of files) {
-    if (file.untracked) {
-      unstaged.push(file)
-      continue
-    }
-    if (file.index !== ' ' && file.index !== '?') staged.push(file)
-    if (file.worktree !== ' ' && file.worktree !== '?') unstaged.push(file)
-  }
-  return { staged, unstaged }
-}
-
-/** One letter for a file row: the index letter on the staged side, the worktree letter otherwise. */
-export function statusLetter(file: GitFileStatus, staged: boolean): string {
-  if (file.untracked) return 'U'
-  return staged ? file.index : file.worktree
-}
+import type { GitBusyOp, GitOperation, UiLayout } from '@quirky/protocol'
+import type { SectionId } from './panel/sections'
 
 /** The worktree selector the open view was opened with, or null when no view shows a worktree. */
 export function worktreeOf(layout: UiLayout): string | null {
@@ -28,10 +9,38 @@ export function worktreeOf(layout: UiLayout): string | null {
   return typeof worktree === 'string' && worktree !== '' ? worktree : null
 }
 
-/** What the source-control slot reports to `ui.state`. */
-export type ScmReport = { worktree: string | null; branch: string | null; staged: number; unstaged: number }
+/** What the Source Control panel reports to `ui.state`; sections list counts, not rows. */
+export type ScmReport = {
+  worktree: string | null
+  branch: string | null
+  base: string | null
+  ahead: number
+  behind: number
+  operation: GitOperation
+  busy: GitBusyOp | null
+  capped: boolean
+  sections: Array<{ id: SectionId | 'branch'; count: number }>
+  primary: { label: string; enabled: boolean; title: string } | null
+  selection: string[]
+  filter: string
+  viewMode: 'list' | 'tree'
+  historyOpen: boolean
+}
 
-export function scmReport(worktree: string | null, status: GitStatus | null): ScmReport {
-  const { staged, unstaged } = splitFiles(status?.files ?? [])
-  return { worktree, branch: status?.branch ?? null, staged: staged.length, unstaged: unstaged.length }
+/** The report of a panel with no worktree to show. */
+export const EMPTY_REPORT: ScmReport = {
+  worktree: null,
+  branch: null,
+  base: null,
+  ahead: 0,
+  behind: 0,
+  operation: 'none',
+  busy: null,
+  capped: false,
+  sections: [],
+  primary: null,
+  selection: [],
+  filter: '',
+  viewMode: 'list',
+  historyOpen: false
 }
