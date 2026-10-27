@@ -198,7 +198,20 @@
 - **Revisit if:** the loop's locked test-runner policy changes
 - **Source:** locked by docs/loop/LOOP.md
 
+## D19: Build one agent-browser helper per profile (user ruling)
+- **Question:** Which page model replaces one helper session per page, which agent-browser 0.27.0 can't pin to a Chrome target (D14, the BLOCKERS.md entry)?
+- **Options:** one helper per profile with a tN-to-page map under a profile lock; a target-filtering CDP proxy in front of per-page sessions; drop agent-browser and drive CDP directly; leave the item blocked
+- **Chose:** one helper per profile. The helper creates every page, Quirky keeps the tN it returns mapped to the public page, and one profile lock serializes select-then-command. Specify how identity is recovered after a helper restart.
+- **Why:** the user ruled on 2026-10-27, through the build-loop operator, after reading the block
+- **Evidence:** docs/loop/BLOCKERS.md, sa-browser-agent entry; D14
+- **Reversibility:** medium
+- **Confidence:** high
+- **Revisit if:** agent-browser gains a supported way to pin a session to one Chrome target
+- **Source:** user ruling 2026-10-27
+
 ## Progress
+Requeued after the user ruling in D19. Next: amend logic.md with a dated decision for the one-helper-per-profile model, tighten tech.md, close F1 and F2, review the revised specs, then implement and run the item's full acceptance, build, remote suite and packaging workflow.
+
 Iteration 5: stopped at steps 4/5's headless technical-feasibility escalation before implementation. Claimed only sa-browser-agent. Brainstorming/parallel source and option research completed; logic/tech specs written; actual Codex standard promote/fresh-refute review completed with NEEDS_FIXES and documented independent evidence caveats. Live isolated Chrome/helper smoke demonstrates accepted-but-unpinned page websocket and rejection of actual Chrome target IDs by the helper tab command. D14 records the required block and the recommended one-helper-per-profile repair. D17 preserves open F1/F2 public error/import contract findings; F3 scope, CliContext pointer, single-file test command and native packaging wording amended, not represented as re-reviewed.
 
 No implementation task, permanent test, dependency installation, build, whole-suite run, UI run or native handoff was started; no product behavior changed. All research/review agents returned. Smoke helpers and Chrome closed; ProcessScope cleanup removed both temporary homes; executable smoke scaffold removed. Evidence reports remain outside the repo at /tmp/quirky-browser-lane5-target-smoke.json and /tmp/quirky-browser-lane5-spec-review-wkl_qmcv/. Next repository action is commit the three documentation files, rename build/sa-browser-agent to blocked/sa-browser-agent, detach, and invoke queue.ts block with the external blocker entry. Do not claim another item in this iteration. Inherited .serena/ remains untracked, unmodified and uncommitted.
