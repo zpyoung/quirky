@@ -36,6 +36,10 @@ Inside any Quirky terminal, the `quirky` command is on PATH: try `quirky status`
 macOS-only checks locally. Use `bun test <file>` for a targeted file, `bun test scripts` for the
 runner tests, and `bun run typecheck` for TypeScript.
 
+The root TypeScript configuration resolves both public `@quirky/protocol` entries directly to
+workspace source, so newly added plugins do not need generated per-plugin links for typechecking.
+Keep those mappings aligned with `packages/protocol/package.json` exports.
+
 ## Docs
 
 - [docs/v1.md](docs/v1.md): what v1 does and leaves out, and how the parts fit together.
