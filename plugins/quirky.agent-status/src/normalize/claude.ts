@@ -50,7 +50,7 @@ type ClaudeMemory = TurnMemory & {
   /** The child whose question or permission request holds the row. */
   childWait: string | null
   /** The tool the waiting child asked to run; absent while it waits on a question. */
-  childApproval: { toolName?: string; toolInput?: string } | null
+  childApproval: { toolName?: string; toolInput?: string; toolUseId?: string } | null
 }
 
 const newMemory = (): ClaudeMemory => ({ prompt: '', children: new Set(), question: null, childWait: null, childApproval: null })
@@ -205,7 +205,7 @@ function claudeFamily(source: string, payload: Record<string, unknown>, eventNam
     if (state === 'waiting') {
       const toolInput = toolInputSummary(payload.tool_input)
       mem.childWait = agentId
-      mem.childApproval = permissionRequest ? { toolName, toolInput } : null
+      mem.childApproval = permissionRequest ? { toolName, toolInput, toolUseId } : null
       addChild(mem.children, agentId)
       return {
         eventName,
@@ -223,7 +223,8 @@ function claudeFamily(source: string, payload: Record<string, unknown>, eventNam
     // a child waiting on a question resumes on any tool event; one waiting on a permission, only on the approved tool
     const toolInput = toolInputSummary(payload.tool_input)
     const approval = mem.childApproval
-    const resumed = mem.childWait === agentId && (approval === null || (approval.toolName === toolName && approval.toolInput === toolInput))
+    const sameUse = approval?.toolUseId === undefined || toolUseId === undefined || approval.toolUseId === toolUseId
+    const resumed = mem.childWait === agentId && (approval === null || (sameUse && approval.toolName === toolName && approval.toolInput === toolInput))
     if (resumed) clearChildWait(mem)
     // the resumed tool keeps its own identity so the permission hold can match it; the card falls back to the lead's fields
     return {

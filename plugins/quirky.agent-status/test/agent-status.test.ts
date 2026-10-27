@@ -94,6 +94,16 @@ describe('SC-2: the permission hold', () => {
     await rig.hook('claude', claude('UserPromptSubmit', { prompt: 'never mind' }), { session: 's3' })
     expect(await rig.row('s3')).toMatchObject({ state: 'working', prompt: 'never mind' })
   })
+
+  test('a child tool of the same name and input under another id leaves the hold, and the approved id still releases it', async () => {
+    rig = await Rig.start()
+    await play([['UserPromptSubmit', { prompt: 'go' }], ['SubagentStart', { agent_id: 'a1' }]])
+    await rig.hook('claude', claude('PermissionRequest', bash('ls', { agent_id: 'a1', tool_use_id: 't1' })))
+    await rig.hook('claude', claude('PreToolUse', bash('ls', { agent_id: 'a1', tool_use_id: 't2' })))
+    expect(await rig.state()).toBe('waiting')
+    await rig.hook('claude', claude('PostToolUse', bash('ls', { agent_id: 'a1', tool_use_id: 't1' })))
+    expect(await rig.state()).toBe('working')
+  })
 })
 
 describe('SC-3: a Claude question', () => {
@@ -276,6 +286,19 @@ describe('SC-12: provider capture', () => {
     await rig.hook('jcode', { session_id: 'j1' }, { event: 'session_start' })
     expect(await rig.row()).toBeNull()
     expect(await rig.providerCalls()).toEqual([{ session: 's1', id: 'j1' }])
+  })
+
+  test('an accepted hook that cannot replace a dead lead still stores the successor id', async () => {
+    rig = await Rig.start({ sessions: [{ agent: 'jcode' }] })
+    const sleeper = Bun.spawn(['sleep', '30'])
+    const identity = { pid: sleeper.pid, pstart: startOf(sleeper.pid) }
+    await rig.hook('jcode', { session_id: 'old' }, { event: 'turn_start', ...identity })
+    expect(await rig.row()).toMatchObject({ lead: { providerSession: 'old' } })
+    sleeper.kill()
+    await sleeper.exited
+    await rig.hook('jcode', { session_id: 'new' }, { event: 'session_start' })
+    expect((await rig.providerCalls()).map((c) => c.id)).toEqual(['old', 'new'])
+    expect(await rig.row()).toMatchObject({ lead: { providerSession: 'old' } })
   })
 
   test('an id that fails the stored-id rules is not stored', async () => {
