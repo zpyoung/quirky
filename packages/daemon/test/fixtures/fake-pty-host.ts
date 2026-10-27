@@ -201,6 +201,11 @@ export function startFakePtyHost(home: string, options: FakePtyHostOptions = {})
       case 'history':
         reply(socket, request.id, historyResult)
         return
+      case 'clear':
+      case 'resetModes':
+        if (!sessions.has(request.sessionId)) return fail(socket, request.id, `unknown session: ${request.sessionId}`)
+        reply(socket, request.id, {})
+        return
       case 'shutdown':
         reply(socket, request.id, {})
         options.onShutdown?.()

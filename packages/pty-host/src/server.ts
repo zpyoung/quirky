@@ -197,6 +197,10 @@ export function startPtyServer(options: PtyServerOptions): PtyServer {
         return manager.snapshot(request.sessionId)
       case 'history':
         return manager.history(request.sessionId, { lines: request.lines, before: request.before, format: request.format })
+      case 'clear':
+        return manager.clear(request.sessionId).then(() => ({}))
+      case 'resetModes':
+        return manager.resetModes(request.sessionId).then(() => ({}))
       case 'shutdown':
         return manager.shutdown().then(() => {
           void conn.writer.flushed().then(async () => {

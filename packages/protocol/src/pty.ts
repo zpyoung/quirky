@@ -7,7 +7,7 @@
  * `<QUIRKY_HOME>/pty.token`; anything else closes the connection.
  */
 
-export const PTY_PROTOCOL_VERSION = 2
+export const PTY_PROTOCOL_VERSION = 3
 
 /** Whether the shell has printed Quirky's ready marker; `unsupported` when the shell gets no wrapper. */
 export type ShellState = 'pending' | 'ready' | 'timed_out' | 'unsupported'
@@ -115,6 +115,13 @@ export type PtyRequest =
   | { id: number; type: 'snapshot'; sessionId: string }
   /** A page of scrollback ending just before the `before` cursor, or at the newest line when absent. */
   | { id: number; type: 'history'; sessionId: string; lines?: number; before?: string; format?: 'text' | 'ansi' }
+  /**
+   * Empties the scrollback and keeps only the cursor's line, for every viewer and for a later cold
+   * restore. Output before the clear stays out of `history` and replays.
+   */
+  | { id: number; type: 'clear'; sessionId: string }
+  /** Turns mouse tracking, bracketed paste and application cursor off and shows the cursor; the process is not written to. */
+  | { id: number; type: 'resetModes'; sessionId: string }
   /** Kills every session and exits; for tests and uninstall. */
   | { id: number; type: 'shutdown' }
 
@@ -130,6 +137,8 @@ export type PtyResults = {
   read: { lines: string[]; cols: number; rows: number; alt: boolean }
   snapshot: PtySnapshot
   history: PtyHistoryPage
+  clear: Record<string, never>
+  resetModes: Record<string, never>
   shutdown: Record<string, never>
 }
 
