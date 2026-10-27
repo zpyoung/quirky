@@ -5,16 +5,21 @@ import { NotificationsService } from '../src/service'
 import { NOT_VIEWING, sessionViewed, viewingOf, worktreeOpenInFocusedWindow, worktreeViewed } from '../src/viewed'
 
 const VIEW = 'view:quirky.session/worktree'
+const OVERLAY = 'overlay:quirky.terminal/floating'
 
 function uiState(over: {
   windows?: UiState['windows']
   view?: UiState['layout']['view']
   report?: unknown
+  overlay?: unknown
 }): UiState {
   return {
     windows: over.windows ?? [{ connId: 1, focused: true, inputAt: 1, present: true }],
     layout: { view: over.view ?? { id: VIEW, input: { worktree: 'w1' } }, panel: null, sidebar: true, focus: null },
-    slots: [{ id: VIEW, kind: 'view', plugin: 'quirky.session', title: 'Session', shown: true, ...(over.report === undefined ? {} : { report: over.report }) }]
+    slots: [
+      { id: VIEW, kind: 'view', plugin: 'quirky.session', title: 'Session', shown: true, ...(over.report === undefined ? {} : { report: over.report }) },
+      ...(over.overlay === undefined ? [] : [{ id: OVERLAY, kind: 'overlay' as const, plugin: 'quirky.terminal', title: 'Floating Workspace', shown: true, report: over.overlay }])
+    ]
   }
 }
 
@@ -30,6 +35,31 @@ describe('viewing', () => {
   test('the session the view was opened on counts as visible', () => {
     const viewing = viewingOf(uiState({ view: { id: VIEW, input: { worktree: 'w1', session: 's9' } } }))
     expect(sessionViewed(viewing, 's9')).toBe(true)
+  })
+
+  test('the sessions of the open floating panel are viewed beside the worktree view', () => {
+    const viewing = viewingOf(uiState({ report: { worktree: 'w1', visibleSessions: ['s1'] }, overlay: { shown: true, visibleSessions: ['f1', 'f2'] } }))
+    expect([...viewing.visibleSessions].sort()).toEqual(['f1', 'f2', 's1'])
+    expect(sessionViewed(viewing, 'f2')).toBe(true)
+  })
+
+  test('the floating panel counts whichever worktree view is shown, or none', () => {
+    const overlay = { shown: true, visibleSessions: ['f1'] }
+    expect(sessionViewed(viewingOf(uiState({ report: { worktree: 'w2', visibleSessions: ['s1'] }, overlay })), 'f1')).toBe(true)
+    const noView = { ...uiState({ overlay }), layout: { view: null, panel: null, sidebar: true, focus: null } } as UiState
+    const viewing = viewingOf(noView)
+    expect(sessionViewed(viewing, 'f1')).toBe(true)
+    expect(viewing.shownWorktree).toBeNull()
+  })
+
+  test('a minimized floating panel views nothing', () => {
+    expect(sessionViewed(viewingOf(uiState({ overlay: { shown: false, visibleSessions: ['f1'] } })), 'f1')).toBe(false)
+    expect(sessionViewed(viewingOf(uiState({ overlay: { visibleSessions: ['f1'] } })), 'f1')).toBe(false)
+  })
+
+  test('an away person views nothing in the floating panel either', () => {
+    const away = [{ connId: 1, focused: true, inputAt: null, present: false }]
+    expect(sessionViewed(viewingOf(uiState({ windows: away, overlay: { shown: true, visibleSessions: ['f1'] } })), 'f1')).toBe(false)
   })
 
   test('a report about another worktree shows nothing', () => {

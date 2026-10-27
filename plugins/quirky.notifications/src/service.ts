@@ -22,6 +22,7 @@ import {
 } from './text'
 import {
   NOT_VIEWING,
+  FLOATING_OVERLAY_ID,
   WORKTREE_VIEW_ID,
   sessionViewed,
   viewingOf,
@@ -174,7 +175,7 @@ export class NotificationsService {
         this.requestSync()
         return
       case 'ui.report.changed':
-        if (event.slot === WORKTREE_VIEW_ID) this.requestSync()
+        if (event.slot === WORKTREE_VIEW_ID || event.slot === FLOATING_OVERLAY_ID) this.requestSync()
         return
       case 'setting.changed':
         if (event.id.startsWith(SETTING_PREFIX)) this.requestSync()

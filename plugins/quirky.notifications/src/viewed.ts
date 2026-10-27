@@ -1,6 +1,7 @@
 import type { UiState } from '@quirky/protocol'
 
 export const WORKTREE_VIEW_ID = 'view:quirky.session/worktree'
+export const FLOATING_OVERLAY_ID = 'overlay:quirky.terminal/floating'
 
 /** What the people at the windows are looking at, read from one `ui.state`. */
 export type Viewing = {
@@ -10,7 +11,7 @@ export type Viewing = {
   attended: boolean
   /** The worktree whose session view is open, or null. */
   shownWorktree: string | null
-  /** The sessions on screen in the shown worktree. */
+  /** The sessions on screen: those of the shown worktree and of the open floating workspace. */
   visibleSessions: ReadonlySet<string>
 }
 
@@ -19,10 +20,12 @@ export const NOT_VIEWING: Viewing = { focused: false, attended: false, shownWork
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value)
 
+const sessionIds = (value: unknown): string[] => (Array.isArray(value) ? value.filter((id): id is string => typeof id === 'string') : [])
+
 /**
- * Works out what is on screen. The visible sessions come from the focused window's report for the
- * worktree view, honoured only while that report is about the worktree the layout shows, plus the
- * session the view was opened on.
+ * Works out what is on screen. The visible sessions are the union of the worktree view's report
+ * (honoured only while it is about the worktree the layout shows), the session the view was opened
+ * on, and the floating workspace's report while that panel is open, whichever worktree is shown.
  */
 export function viewingOf(state: UiState): Viewing {
   const window = state.windows.find((candidate) => candidate.focused)
@@ -31,11 +34,11 @@ export function viewingOf(state: UiState): Viewing {
   const visible = new Set<string>()
   if (shownWorktree !== null) {
     const report = state.slots.find((slot) => slot.id === WORKTREE_VIEW_ID)?.report
-    if (isRecord(report) && report.worktree === shownWorktree && Array.isArray(report.visibleSessions)) {
-      for (const id of report.visibleSessions) if (typeof id === 'string') visible.add(id)
-    }
+    if (isRecord(report) && report.worktree === shownWorktree) for (const id of sessionIds(report.visibleSessions)) visible.add(id)
     if (typeof input?.session === 'string') visible.add(input.session)
   }
+  const floating = state.slots.find((slot) => slot.id === FLOATING_OVERLAY_ID)?.report
+  if (isRecord(floating) && floating.shown === true) for (const id of sessionIds(floating.visibleSessions)) visible.add(id)
   return { focused: window !== undefined, attended: window?.present === true, shownWorktree, visibleSessions: visible }
 }
 
