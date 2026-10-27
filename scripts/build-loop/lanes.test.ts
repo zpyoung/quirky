@@ -124,6 +124,18 @@ describe('land', () => {
     expect(git(repo.integration, 'symbolic-ref', '--short', 'HEAD')).toBe('build/roadmap')
   })
 
+  test('lets queue commands run while a land is verified, and lands over their commits', async () => {
+    await claim(repo, 1)
+    branch('a', 'a.txt', 'a\n')
+    const out = join(mkdtempSync(join(tmpdir(), 'claim-')), 'claim.json')
+    const queueTs = join(import.meta.dir, 'queue.ts')
+    await land(repo, 'a', [['sh', '-c', `cd ${dir} && bun ${queueTs} claim --lane 2 > ${out}`]])
+    expect(JSON.parse(readFileSync(out, 'utf8'))).toMatchObject({ kind: 'item', item: { id: 'b', lane: 2 } })
+    expect(queue().map((entry) => [entry.id, entry.status])).toEqual([['a', 'done'], ['b', 'in-progress'], ['c', 'todo']])
+    expect(readFileSync(join(repo.integration, 'a.txt'), 'utf8')).toBe('a\n')
+    expect(git(repo.integration, 'status', '--porcelain')).toBe('')
+  }, 20_000)
+
   test('refuses an item that is not in progress', async () => {
     await expect(land(repo, 'a', [['true']])).rejects.toThrow('a is todo, not in-progress')
   })

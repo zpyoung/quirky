@@ -9,8 +9,8 @@
  * the run moves off this machine: the working tree is copied to a fresh folder there and each test
  * file runs in its own process, `jobs` at a time, each holding one of `slots` machine-wide locks there
  * so several runs at once share the host's cores (`slots` defaults to 8). Files start slowest first,
- * by the times logged in `~/test-slots/durations.log` there. A run from the integration
- * worktree is a land, which holds the queue lock while it runs, so it can use every slot while other
+ * by the times logged in `~/test-slots/durations.log` there. A run from the integration or verify
+ * worktree is a land, which holds the land lock while it runs, so it can use every slot while other
  * runs share one. Files listed in scripts/test-on-macos.txt still run
  * here, alongside. If the host can't be reached the whole run falls back to this machine.
  * `QUIRKY_TEST_LOCAL=1` skips the host.
@@ -285,7 +285,7 @@ async function main(argv: string[]): Promise<boolean> {
   const here = files.filter((file) => macos.has(file))
   const there = files.filter((file) => !macos.has(file))
   console.log(`running ${there.length} test files on ${remote.host} and ${here.length} macOS-only files here`)
-  const land = basename(cwd) === 'integration' && basename(dirname(cwd)) === 'build-loop'
+  const land = ['integration', 'verify'].includes(basename(cwd)) && basename(dirname(cwd)) === 'build-loop'
   const [away, local] = await Promise.all([runRemote(cwd, remote, there, flags, land), runFiles(cwd, here, flags, 1)])
   if (away) {
     if (away.flaky.length > 0) recordFlakes(cwd, away.flaky)

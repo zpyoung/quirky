@@ -73,6 +73,9 @@ After 4am, `docs/loop/BLOCKERS.md` lists the deferred items to requeue.
 - **Dogfood once,** at the end, only for the UI scenarios this item adds.
 - **Catch up once,** with `git merge build/roadmap`, just before landing.
 - **One final review round.** Fix only blocking findings; record the rest as open findings.
+- **Clean up as you go.** The Mac's disk is nearly full. Remove each implementer's worktree with
+  `git worktree remove --force <path>` once its branch is merged, and delete your temporary
+  directories under `/tmp` after the item lands.
 - **Early items.** An item marked `"early": true` can be claimed while its dependencies are still
   being built. Run `queue.ts deps <id>`. While it reports `"ready": false`, write the spec and
   commit the contracts against the dependencies' specs on their `build/<dep>` branches, then end
