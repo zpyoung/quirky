@@ -9,7 +9,11 @@
       { "id": "setCommand", "params": { "type": "object", "properties": { "command": { "type": "string" } }, "required": ["command"] } },
       { "id": "setAgents", "params": { "type": "object", "properties": { "agents": { "type": "array" } }, "required": ["agents"] } },
       { "id": "list", "readOnly": true, "params": { "type": "object" } },
-      { "id": "get", "readOnly": true, "params": { "type": "object", "properties": { "agent": { "type": "string" } }, "required": ["agent"] } }
+      { "id": "get", "readOnly": true, "params": { "type": "object", "properties": { "agent": { "type": "string" } }, "required": ["agent"] } },
+      { "id": "setPlan", "params": { "type": "object", "properties": { "agent": { "type": "string" }, "plan": {} }, "required": ["agent", "plan"] } },
+      { "id": "submitPlan", "readOnly": true, "params": { "type": "object", "properties": { "agent": { "type": "string" }, "text": { "type": "string" } }, "required": ["agent"] } },
+      { "id": "deliver", "params": { "type": "object", "additionalProperties": true } },
+      { "id": "delivered", "readOnly": true, "params": { "type": "object" } }
     ]
   }
 }

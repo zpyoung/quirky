@@ -25,10 +25,12 @@ import { Matcher } from './rules/matcher'
 import { RuleSources, type EffectiveRules } from './rules/sources'
 import type { RuleListing } from './rules/types'
 import { readScreen, ScreenSampler, type ScreenDeps, type ScreenReading } from './screen'
-import { scriptState, type ScriptStateResult } from './script-state'
+import { Sender, type SendResult } from './send'
+import { scriptState, type ScriptState, type ScriptStateResult } from './script-state'
 import { classifyTitle, type TitleStatus } from './title'
 import type { RowStore } from './store'
 import type { AgentRow, NormalizerCache, Normalized } from './types'
+import { Waits, type OutputWaitOptions, type OutputWaitResult, type WaitResult } from './waits'
 
 /** Rows older than this at startup are dropped instead of restored. */
 const RESTORE_MAX_AGE_MS = 7 * 24 * 3_600_000
@@ -83,6 +85,9 @@ export class AgentStatusService {
   private readonly escapes = new Map<string, { turn: string; count: number }>()
   private readonly titles = new Map<string, string>()
   private readonly commitListeners = new Map<string, Set<() => void>>()
+  private readonly sends = new Map<string, Promise<unknown>>()
+  private readonly sender: Sender
+  private readonly waits: Waits
   private readonly sources: RuleSources
   private readonly matcher = new Matcher()
   private readonly sampler: ScreenSampler
@@ -103,6 +108,25 @@ export class AgentStatusService {
     })
     this.sampler = new ScreenSampler(context.pty, (sessionId) => this.titles.get(sessionId), now, timing.scale)
     this.screen = { sources: this.sources, matcher: this.matcher, sampler: this.sampler, timeScale: timing.scale }
+    this.sender = new Sender({
+      context,
+      inspect: (sessionId) => this.inspect(sessionId),
+      row: (sessionId) => this.rows.get(sessionId) ?? null,
+      onCommit: (sessionId, listener) => this.onCommit(sessionId, listener),
+      nextCommit: (sessionId, timeoutMs) => this.nextCommit(sessionId, timeoutMs),
+      settled: (sessionId) => this.queues.get(sessionId) ?? Promise.resolve(),
+      now,
+      scale: timing.scale
+    })
+    this.waits = new Waits({
+      context,
+      matcher: this.matcher,
+      inspect: (sessionId) => this.inspect(sessionId),
+      session: (ref) => this.requireSession(ref),
+      onWake: (sessionId, listener) => this.onCommit(sessionId, listener),
+      now,
+      scale: timing.scale
+    })
   }
 
   /** Cancels the waits still pending and stops the matcher; the service takes no more work afterwards. */
@@ -177,7 +201,10 @@ export class AgentStatusService {
       this.sources.invalidateContributions()
     } else if (event.type === 'quirky.session/changed') {
       const session = (event.data as { session?: Session }).session
-      if (session?.status === 'exited') void this.drop(session.id)
+      if (session?.status === 'exited') {
+        this.wake(session.id)
+        void this.drop(session.id)
+      }
     } else if (event.type === 'quirky.session/removed') {
       void this.drop((event.data as { sessionId: string }).sessionId)
     }
@@ -250,6 +277,43 @@ export class AgentStatusService {
     return explanationOf(await this.inspect(ref, at))
   }
 
+  /**
+   * Types `text` into a session's agent unless the agent is waiting for a person, then waits for
+   * the agent to take it (see `Sender.send`). Sends to one session run one at a time, in order.
+   * Rejects `not-found` for an unknown session; `startTimeoutMs` defaults to five seconds.
+   */
+  async send(ref: string, text: string, startTimeoutMs?: number): Promise<SendResult> {
+    const { id } = await this.requireSession(ref)
+    const turn = (this.sends.get(id) ?? Promise.resolve()).then(() => this.sender.send(id, text, startTimeoutMs))
+    const tail = turn.then(
+      () => undefined,
+      () => undefined
+    )
+    this.sends.set(id, tail)
+    void tail.then(() => {
+      if (this.sends.get(id) === tail) this.sends.delete(id)
+    })
+    return turn
+  }
+
+  /**
+   * Resolves once the session's script state is one of `until`, or reports it pending after
+   * `timeoutMs` (see `Waits.wait`). Rejects `not-found` for an unknown session and `conflict`
+   * (`session-exited`) when it has exited and `exited` is not wanted.
+   */
+  wait(ref: string, until: ScriptState[], timeoutMs: number): Promise<WaitResult> {
+    return this.waits.wait(ref, until, timeoutMs)
+  }
+
+  /**
+   * Resolves once recent text of the session matches a pattern, or reports it pending after the
+   * timeout (see `Waits.waitOutput`). Rejects `invalid-params` for a bad, unsafe or too slow
+   * pattern and `conflict` (`session-exited`) when the session exited without a match.
+   */
+  waitOutput(ref: string, options: OutputWaitOptions): Promise<OutputWaitResult> {
+    return this.waits.waitOutput(ref, options)
+  }
+
   /** The effective rules of every agent that has a rule source, with the sources skipped. */
   rulesListing(): Promise<RuleListing[]> {
     return this.sources.list()
@@ -261,7 +325,7 @@ export class AgentStatusService {
     return effective ? { agent, ...effective } : null
   }
 
-  /** Calls `listener` after each commit of the session's row; the returned function stops it. */
+  /** Calls `listener` after each commit of the session's row and when the session exits; the returned function stops it. */
   onCommit(sessionId: string, listener: () => void): () => void {
     const listeners = this.commitListeners.get(sessionId) ?? new Set()
     listeners.add(listener)
@@ -384,7 +448,11 @@ export class AgentStatusService {
     else this.rows.delete(session.id)
     await this.publish(session, row)
     this.context.emit('changed', { sessionId: session.id, row })
-    for (const listener of [...(this.commitListeners.get(session.id) ?? [])]) listener()
+    this.wake(session.id)
+  }
+
+  private wake(sessionId: string): void {
+    for (const listener of [...(this.commitListeners.get(sessionId) ?? [])]) listener()
   }
 
   private async liveSession(sessionId: string): Promise<Session | null> {

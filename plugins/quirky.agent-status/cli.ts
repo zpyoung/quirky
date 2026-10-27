@@ -1,6 +1,9 @@
-import type { CliContext, CliModule } from '@quirky/protocol'
+import { RpcError, type CliArgs, type CliContext, type CliModule } from '@quirky/protocol'
 import type { Explanation } from './src/explain'
+import { unsafePatternReason } from './src/rules/safety'
 import type { Origin, RuleFile, RuleListing } from './src/rules/types'
+import type { SendResult } from './src/send'
+import type { OutputWaitResult, WaitResult } from './src/waits'
 
 type SetupEntry = { agent: string; status: string; changed: string[]; note?: string; message?: string }
 type RemoveEntry = { agent: string; changed: string[]; message?: string }
@@ -92,6 +95,58 @@ function describeRule(rule: RuleFile['rules'][number]): string {
   return `${rule.id}  ${rule.state}${rule.kind ? ` ${rule.kind}` : ''}  ${region}${extras.length > 0 ? `  ${extras.join('; ')}` : ''}`
 }
 
+/** The prompt a `send` was given: the positional text, or the contents of `--file` (`-` is stdin) without its trailing line break. */
+async function promptOf(args: CliArgs, ctx: CliContext): Promise<string> {
+  const text = args.positionals[1]
+  const file = args.flags.file
+  if ((text === undefined) === (file === undefined)) throw ctx.usage('give the prompt as <text> or --file, not both and not neither')
+  if (text !== undefined) return text
+  const path = String(file)
+  let body: string
+  try {
+    body = path === '-' ? await Bun.stdin.text() : await ctx.readFile(path)
+  } catch (error) {
+    throw ctx.usage(`--file: cannot read ${path}: ${(error as Error).message}`)
+  }
+  return body.replace(/(\r?\n)+$/, '')
+}
+
+const MAX_CALL_MS = 60_000
+const MAX_CONSECUTIVE_CONNECTION_FAILURES = 10
+
+/**
+ * Repeats `call` (one server-side wait of at most a minute) until it settles `matched` or the
+ * caller's `timeoutMs` is used up, in which case it returns the last `pending` result. A dropped
+ * connection is re-established and the wait continues; errors the daemon answered are rethrown.
+ */
+async function longPoll<T extends { status: string }>(ctx: CliContext, timeoutMs: number | undefined, call: (callMs: number) => Promise<T>): Promise<T> {
+  const startedAt = ctx.now()
+  let failures = 0
+  for (;;) {
+    const left = timeoutMs === undefined ? MAX_CALL_MS : Math.max(0, timeoutMs - (ctx.now() - startedAt))
+    let result: T
+    try {
+      result = await call(Math.min(MAX_CALL_MS, Math.ceil(left)))
+      failures = 0
+    } catch (error) {
+      if (error instanceof RpcError || ++failures > MAX_CONSECUTIVE_CONNECTION_FAILURES) throw error
+      await ctx.sleep(Math.min(500 * failures, 5000))
+      await ctx.reconnect().catch(() => {})
+      continue
+    }
+    if (result.status !== 'pending' || (timeoutMs !== undefined && ctx.now() - startedAt >= timeoutMs)) return result
+  }
+}
+
+const seconds = (ms: number) => `${Math.round(ms / 100) / 10}s`
+
+function timeoutFlag(args: CliArgs, ctx: CliContext): number | undefined {
+  const value = args.flags['timeout-ms']
+  if (value === undefined) return undefined
+  if (typeof value !== 'number' || !Number.isInteger(value) || value < 0) throw ctx.usage('--timeout-ms must be an integer of at least 0')
+  return value
+}
+
 export const commands: CliModule['commands'] = {
   async explain(args, ctx) {
     const session = args.positionals[0]
@@ -99,6 +154,70 @@ export const commands: CliModule['commands'] = {
     const at = args.flags.at
     const explained = (await ctx.call('quirky.agent-status/explain', { session, ...(typeof at === 'number' ? { at } : {}) })) as Explanation
     ctx.out.result(explained, () => explanationLines(explained, ctx).join('\n'))
+  },
+
+  async send(args, ctx) {
+    const session = args.positionals[0]
+    if (session === undefined) throw ctx.usage('missing <session>')
+    const text = await promptOf(args, ctx)
+    if (text === '') throw ctx.usage('the prompt is empty')
+    const timeout = args.flags['start-timeout-ms']
+    const sent = (await ctx.call('quirky.agent-status/send', {
+      session,
+      text,
+      ...(typeof timeout === 'number' ? { startTimeoutMs: timeout } : {})
+    })) as SendResult
+    ctx.out.result(sent, () => `${sent.session}: ${sent.state}${sent.state === 'blocked' && sent.kind ? ` (${sent.kind})` : ''}`)
+  },
+
+  async wait(args, ctx) {
+    const session = args.positionals[0]
+    if (session === undefined) throw ctx.usage('missing <session>')
+    const timeoutMs = timeoutFlag(args, ctx)
+    const output = args.flags.output
+    const until = args.flags.until
+    if (output !== undefined && until !== undefined) throw ctx.usage('give --until or --output, not both')
+
+    if (output !== undefined) {
+      const pattern = String(output)
+      const reason = unsafePatternReason(pattern)
+      if (reason !== null) throw ctx.usage(`--output pattern ${reason}`)
+      const lines = args.flags.lines
+      const found = await longPoll(
+        ctx,
+        timeoutMs,
+        (callMs) =>
+          ctx.call('quirky.agent-status/waitOutput', {
+            session,
+            pattern,
+            ...(args.flags['ignore-case'] === true ? { ignoreCase: true } : {}),
+            ...(typeof lines === 'number' ? { lines } : {}),
+            timeoutMs: callMs
+          }) as Promise<OutputWaitResult>
+      )
+      if (found.status === 'matched') {
+        ctx.out.result(found, () => [found.line, ...found.groups.map((group, index) => `group ${index + 1}: ${group}`)].join('\n'))
+        return
+      }
+      const text = `timed out after ${seconds(timeoutMs ?? 0)}; no line matched ${pattern}`
+      ctx.out.result({ status: 'timeout', pattern }, () => text)
+      throw ctx.fail(text)
+    }
+
+    const wanted = until === undefined ? undefined : String(until).split(',').map((state) => state.trim())
+    const reached = await longPoll(
+      ctx,
+      timeoutMs,
+      (callMs) => ctx.call('quirky.agent-status/wait', { session, ...(wanted !== undefined ? { until: wanted } : {}), timeoutMs: callMs }) as Promise<WaitResult>
+    )
+    const kind = reached.state === 'blocked' && reached.kind ? ` (${reached.kind})` : ''
+    if (reached.status === 'matched') {
+      ctx.out.result(reached, () => `${session}: ${reached.state}${kind}`)
+      return
+    }
+    const text = `timed out after ${seconds(timeoutMs ?? 0)}; ${session} is ${reached.state}${kind}`
+    ctx.out.result({ ...reached, status: 'timeout' }, () => text)
+    throw ctx.fail(text)
   },
 
   async 'rules-list'(_args, ctx) {
