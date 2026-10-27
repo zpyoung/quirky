@@ -35,7 +35,9 @@ export async function waitForAsk(ctx: CliContext, askId: string, limits: WaitLim
     const elapsed = ctx.now() - startedAt
     const timeoutLeft = limits.timeoutMs === undefined ? Infinity : limits.timeoutMs - elapsed
     const chunkLeft = limits.chunkMs === undefined ? Infinity : limits.chunkMs - elapsed
-    const expiring = timeoutLeft <= 0
+    // judged by which limit is smaller, not by what elapsed, so a failed call that overshoots both still honours the earlier one
+    const timeoutFirst = limits.timeoutMs !== undefined && limits.timeoutMs <= (limits.chunkMs ?? Infinity)
+    const expiring = timeoutFirst && timeoutLeft <= 0
     if (!expiring && chunkLeft <= 0) {
       ctx.out.jsonLine({ status: 'pending', askId, instruction: `quirky ask wait --id ${askId}` })
       return
