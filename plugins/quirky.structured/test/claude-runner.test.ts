@@ -93,6 +93,17 @@ describe('start', () => {
     expect(query.written[0]).toMatchObject({ type: 'user', message: { role: 'user', content: 'hello' } })
   })
 
+  test('SC-23: a model and effort pick reaches the query options, and no pick sets neither', async () => {
+    await runner.start(session, 'hello', { model: 'opus', effort: 'high' })
+    expect(queries[0].params.options?.model).toBe('opus')
+    expect(queries[0].params.options?.effort).toBe('high')
+
+    session = { ...session, id: 's_2' }
+    await runner.start(session, 'again')
+    expect(queries[1].params.options).not.toHaveProperty('model')
+    expect(queries[1].params.options).not.toHaveProperty('effort')
+  })
+
   test('journals the prompt, sets working and returns before the session ends', async () => {
     await begin('do it')
     expect(messages).toHaveLength(1)

@@ -21,9 +21,12 @@ export type StructuredContext = {
   resolveClaudePath(): Promise<string>
 }
 
+/** The structured launch keys a pick resolves to; values that are not strings are ignored. */
+export type StructuredLaunchOptions = { model?: string; effort?: string }
+
 /** Drives background (no PTY) agent sessions. One runner serves every structured session. */
 export interface StructuredRunner {
-  start(session: Session, prompt: string): Promise<void>
+  start(session: Session, prompt: string, options?: StructuredLaunchOptions): Promise<void>
   send(sessionId: string, text: string): Promise<void>
   stop(sessionId: string): Promise<void>
 }
