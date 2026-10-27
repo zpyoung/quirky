@@ -8,9 +8,14 @@ export class SelectorSyntaxError extends Error {}
 /** What `current` and relative `path:` selectors are read against. */
 export type CallerIdentity = { cwd?: string; worktreeId?: string }
 
-/** True when `text` is the workspace's name, or the folder name of a git worktree (its identity on disk). */
-function namedBy(worktree: Worktree, text: string): boolean {
-  return worktree.name === text || (worktree.kind === 'git' && basename(worktree.path) === text)
+/**
+ * The workspaces `text` names: those with that name, else those whose folder has that name (their
+ * identity on disk, which a display name doesn't hide). Folder workspaces of one project share a
+ * folder, so the exact name goes first or the primary's own name would turn ambiguous.
+ */
+function named(worktrees: Worktree[], text: string): Worktree[] {
+  const byName = worktrees.filter((worktree) => worktree.name === text)
+  return byName.length > 0 ? byName : worktrees.filter((worktree) => basename(worktree.path) === text)
 }
 
 function innermost(worktrees: Worktree[], path: string): Worktree[] {
@@ -35,8 +40,8 @@ function current(worktrees: Worktree[], identity: CallerIdentity): Worktree[] {
 /**
  * The worktrees a selector names: `id:`, `name:`, `branch:`, `path:` (the innermost worktree
  * containing the path), `current` or `active` (the session's worktree, else the one containing the
- * cwd), or a bare value matched as an exact ID, then a name, then a branch. A name also matches a
- * git worktree's folder name, so a display name doesn't hide it. Throws
+ * cwd), or a bare value matched as an exact ID, then a name, then a branch. A name with no exact match
+ * falls back to workspaces whose folder has that name, so a display name doesn't hide it. Throws
  * SelectorSyntaxError for an empty selector or value, or a relative `path:` with no cwd to read it against.
  */
 export function matchWorktrees(worktrees: Worktree[], selector: string, identity: CallerIdentity = {}): Worktree[] {
@@ -48,13 +53,13 @@ export function matchWorktrees(worktrees: Worktree[], selector: string, identity
   if (!prefixed) {
     const byId = worktrees.filter((worktree) => worktree.id === text)
     if (byId.length > 0) return byId
-    const byName = worktrees.filter((worktree) => namedBy(worktree, text))
+    const byName = named(worktrees, text)
     return byName.length > 0 ? byName : worktrees.filter((worktree) => worktree.branch === text)
   }
   const [, form, value] = prefixed
   if (value === '') throw new SelectorSyntaxError(`${form}: needs a value`)
   if (form === 'id') return worktrees.filter((worktree) => worktree.id === value)
-  if (form === 'name') return worktrees.filter((worktree) => namedBy(worktree, value!))
+  if (form === 'name') return named(worktrees, value!)
   if (form === 'branch') return worktrees.filter((worktree) => worktree.branch === value)
   if (!isAbsolute(value!) && !identity.cwd) throw new SelectorSyntaxError('path: needs an absolute path')
   return innermost(worktrees, resolve(identity.cwd ?? '/', value!))

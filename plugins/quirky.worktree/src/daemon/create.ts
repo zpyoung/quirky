@@ -20,7 +20,7 @@ import { BaseError, resolveBase, type ResolvedBase } from './base'
 import { carryFiles } from './carry'
 import { createFolderWorkspace, type FolderEnv } from './folder'
 import { dataRunnerPath, gitRunnerPath, runHookInDaemon, runnerCommand, writeRunner, type HookTarget } from './hooks-run'
-import { birthtimeOf, listProject } from './list'
+import { birthtimeOf, groupRepoId, listProject } from './list'
 import { InvalidNameError, NoFreeNameError, branchName as joinBranch, normalizePrefix, sanitizeName, walkCandidates } from './naming'
 import { pickGeneratedName } from './names'
 import type { KeyedQueue } from './queue'
@@ -108,7 +108,7 @@ async function resolveTarget(env: CreateEnv, params: CreateParams, identity: Cal
 }
 
 /** The worktree a new one nests under: the named one, else the caller's own in the same project; none for a window create. */
-async function resolveParent(env: CreateEnv, params: CreateParams, identity: CallerIdentity, createdBy: WorktreeCreatedBy, repoId: string | null): Promise<string | null> {
+async function resolveParent(env: CreateEnv, params: CreateParams, identity: CallerIdentity, createdBy: WorktreeCreatedBy, repoId: string): Promise<string | null> {
   if (params.noParent === true) return null
   if (params.parent !== undefined) return (await env.find(params.parent, identity)).worktree.id
   if (createdBy === 'window' || (!identity.worktreeId && !identity.cwd)) return null
@@ -219,7 +219,7 @@ export async function createWorkspace(env: CreateEnv, params: CreateParams, iden
   if (params.parent !== undefined && params.noParent === true) throw env.fail('invalid-params', 'parent and noParent cannot be used together')
   if (params.branch !== undefined && params.branchName !== undefined) throw env.fail('invalid-params', 'pass either a branch or a branch name, not both')
   const target = await resolveTarget(env, params, identity)
-  const parentId = await resolveParent(env, params, identity, createdBy, 'repo' in target ? target.repo.id : null)
+  const parentId = await resolveParent(env, params, identity, createdBy, 'repo' in target ? target.repo.id : groupRepoId(target.group.id))
 
   let created: Created
   if ('group' in target) created = await createFolder(env, target, params, createdBy, parentId)
@@ -238,7 +238,7 @@ async function createFolder(env: CreateEnv, target: Target, params: CreateParams
     hooks = details.hooks
     decision = decideSetup(env, target.repo, details.settings, hooks, params)
   }
-  const repoId = 'repo' in target ? target.repo.id : `group:${target.group.id}`
+  const repoId = 'repo' in target ? target.repo.id : groupRepoId(target.group.id)
   const worktree = await createFolderWorkspace(env, target, {
     ...(params.name !== undefined ? { name: params.name } : {}),
     createdBy,

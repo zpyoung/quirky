@@ -6,7 +6,7 @@ import { contains, resolveRealPath, worktreeIdForPath } from '../../paths'
 import { SelectorSyntaxError, matchWorktrees, type CallerIdentity } from '../../selector'
 import type { BranchCleaner, BranchOutcome } from './branches'
 import { gitRunnerPath, runHookScript } from './hooks-run'
-import { joinMetadata, listEverything, type ListEnv } from './list'
+import { birthtimeOf, joinMetadata, listEverything, type ListEnv } from './list'
 import { rowOf, type WorktreeRow } from './store'
 
 /** What `quirky.worktree/remove` and `describeRemove` accept. */
@@ -227,6 +227,8 @@ async function removeTree(env: RemoveEnv, scope: Scope, target: Worktree, option
   if (target.isMain) throw reasoned(env, 'conflict', 'primary', 'the primary worktree cannot be deleted; remove the project instead')
 
   const descendants = descendantsOf(scope.worktrees, target.id)
+  const primary = descendants.find((descendant) => descendant.isMain)
+  if (primary) throw reasoned(env, 'conflict', 'primary', `${primary.name} is a primary worktree nested under ${target.name} and cannot be deleted; remove the project instead`, { primary: primary.id })
   if (descendants.length > 0 && !options.withDescendants) {
     throw reasoned(env, 'conflict', 'has-descendants', `${target.name} has child workspaces: ${descendants.map((worktree) => worktree.name).join(', ')}. Remove them too with --with-descendants.`, {
       descendants: descendants.map((worktree) => worktree.id)
@@ -313,7 +315,7 @@ async function cleanBranch(env: RemoveEnv, repo: Repo, target: Worktree): Promis
   return outcome.status === 'kept' ? [{ name: outcome.name, head: outcome.head }] : []
 }
 
-/** A workspace git has lost track of: a missing folder is pruned and cleaned up; a leftover folder is refused or, forced, deleted if Quirky provably made it. */
+/** A workspace git has lost track of: a missing folder is pruned and cleaned up; a leftover folder is refused or, forced, deleted only if it is still the folder Quirky made. */
 async function removeOrphan(env: RemoveEnv, repo: Repo, target: Worktree, orphan: Orphan, options: Options): Promise<Piece> {
   if (orphan.kind === 'gone') {
     if (orphan.registration?.locked != null) throw lockedError(env, target, orphan.registration.locked)
@@ -331,6 +333,10 @@ async function removeOrphan(env: RemoveEnv, repo: Repo, target: Worktree, orphan
   const createdRoot = orphan.row?.created_root ? resolveRealPath(orphan.row.created_root) : null
   if (createdRoot === null || folder === createdRoot || !contains(createdRoot, folder)) {
     throw reasoned(env, 'conflict', 'unregistered', `${folder} is not a workspace Quirky created inside its worktrees folder, so it was left alone.`, { path: folder })
+  }
+  const recorded = orphan.row?.birthtime ?? null
+  if (recorded === null || birthtimeOf(folder) !== recorded) {
+    throw reasoned(env, 'conflict', 'unregistered', `${folder} is not the folder Quirky created for this workspace, so it was left alone.`, { path: folder })
   }
   const sessionErrors = await closeSessions(env, target, options)
   rmSync(folder, { recursive: true, force: true })

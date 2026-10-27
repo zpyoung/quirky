@@ -76,6 +76,30 @@ describe('runHookInDaemon', () => {
     expect(Date.now() - started).toBeLessThan(5000)
   })
 
+  test('a TERM-resistant child is killed after the grace period even when the script itself exits on TERM', async () => {
+    const pidFile = join(dir, 'resistant.pid')
+    const alive = (pid: number) => {
+      try {
+        process.kill(pid, 0)
+        return true
+      } catch {
+        return false
+      }
+    }
+    let pid = 0
+    try {
+      const result = await runHookScript(runner('resistant'), target, `(trap '' TERM; exec sh -c ${shellQuote(`echo $$ > ${pidFile}; exec sleep 30`)}) >/dev/null 2>&1 &\nsleep 30`, { timeoutMs: 500, killGraceMs: 800 })
+      expect(result.timedOut).toBe(true)
+      pid = Number(readFileSync(pidFile, 'utf8').trim())
+      expect(pid).toBeGreaterThan(0)
+      expect(alive(pid)).toBe(true)
+      for (let waited = 0; waited < 3000 && alive(pid); waited += 50) await Bun.sleep(50)
+      expect(alive(pid)).toBe(false)
+    } finally {
+      if (pid > 0 && alive(pid)) process.kill(pid, 'SIGKILL')
+    }
+  })
+
   test('output past the cap is dropped', async () => {
     const result = await runHookScript(runner('noisy'), target, 'head -c 50000 /dev/zero | tr "\\0" x', { maxOutputBytes: 1000 })
     expect(result.output.length).toBe(1000)
