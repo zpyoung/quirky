@@ -220,6 +220,11 @@ Given an in-flight send, when a write is rejected, cancellation occurs or delive
 - **Walkthrough:** 1. Body is accepted. 2. Delivery becomes uncertain.
 - **Data after:** **Draft** `first\n\nsecond`; one warning; only one body was written.
 
+The 200,000-character recoverable-text budget covers the current draft, all queued/in-flight snapshots and their restoration separators together. An edit or enqueue exceeding it is refused visibly without changing acknowledged text; an unsynchronized local edit remains displayed and copyable, never silently truncated. Attachment limits likewise include queued/in-flight chips. A recovery therefore always fits without losing either accepted draft.
+
+- **Boundary example:** **Send snapshot** 150,000 characters; **New draft** 49,998 characters; a blank-line restoration yields exactly 200,000. A further character is refused before acknowledgement, remains visible as an unsynchronized local edit, and cannot erase the stored draft.
+
+
 ### SC-21: Stop and queued cancellation
 
 Given a running agent, current send or queued send, when Stop/Escape cancels it, then queued work never begins, pending Enter is suppressed, and interrupt is sent according to the running agent's public terminal stop behavior. Current accepted bytes are not represented as undone. Cancel affects the selected pane, not another terminal. Terminal exit and plugin disposal cancel outstanding work and settle callers.
@@ -228,6 +233,9 @@ Given a running agent, current send or queued send, when Stop/Escape cancels it,
 - **Walkthrough:** 1. Person stops first. 2. Client cancels second.
 - **Data after:** **Terminal** no delayed Enter from either; both callers settle with recoverable drafts.
 
+Before waiting for completion, a client can supply its own unique send identifier and inspect queued identifiers. Cancelling the second queued identifier leaves the first operation running; an unknown identifier is an explicit not-found result.
+
+
 ### SC-22: Reconnect, restart and revision conflicts
 
 Given canonical dock state, when a renderer reconnects or daemon restarts, then live-pane state and draft are restored. A stale client revision cannot replace newer text and gets a conflict with current state. Different panes update independently; closing a pane prunes it while rehoming preserves its identity. Malformed persisted entries are ignored individually, unsafe keys rejected and bounded retention enforced.
@@ -235,6 +243,11 @@ Given canonical dock state, when a renderer reconnects or daemon restarts, then 
 - **Data before:** **Left draft** `new`, revision 2; **Right rows** 5.
 - **Walkthrough:** 1. Old client submits left revision 1. 2. Current client changes right to 7 rows. 3. Window reconnects.
 - **Data after:** **Left draft** `new`, stale update refused; **Right rows** 7, both restored.
+
+An explicit or revisionless stale clear is a replacement too and is refused. Recovery-only snapshots survive a daemon crash even with no renderer: a queued prompt and a body-awaiting-Enter prompt return to the draft in original order, with a check-terminal-before-retrying notice. Restart never replays either operation or schedules its old Enter.
+
+- **Crash example:** **In-flight snapshot** `first`; **Queued snapshot** `second`; **New draft** `third`. After crash/restart, **Draft** is `first\n\nsecond\n\nthird`, and **PTY writes from restart** are none.
+
 
 ### SC-23: Scriptable actions and inspectable state
 
@@ -263,6 +276,10 @@ Linux/Windows key encodings and ConPTY verification are recorded as platform wor
 
 ## Status & amendments
 
-Status: Draft for Codex review. Tech spec required by LOOP.md and subsystem-crossing complexity.
+Status: Autonomous approval after the required combined Codex review and confirmed-finding amendments; see item D17/D18. Tech spec required by LOOP.md and subsystem-crossing complexity.
 
 **Amendments:** 2026-10-27 — initial spec incorporates the user's dock-local scope ruling, superseding D8's block. Autonomous design/default approval follows LOOP.md; no human ask is issued.
+
+**Amendments:** 2026-10-27 — Codex spec review F2/F3/F5/F6/F7: all draft replacements require revisions; queued sends have early-known identifiers; write failures distinguish zero/possible acceptance; durable recovery-only snapshots never replay; combined recoverable-text/attachment budgets make restoration lossless. Shortcut-precedence F1 and provider-source F4 are recorded in the tech spec and item decision log.
+
+**Amendments:** 2026-10-27 — F1 requires completing D30's anticipated palette command/shortcut migration into an overridable contribution; shell rendering remains unchanged. Dock-context Mod+Shift+P performs passthrough only; outside that context it opens the palette. No dual dispatch or silent alternate chord is permitted.

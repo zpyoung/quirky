@@ -110,5 +110,104 @@
 - **Revisit if:** the scope source is amended again
 - **Source:** supersedes m3-terminal-dock D8; locked by docs/roadmap.md
 
+## D11: Adopt daemon authority and terminal-owned embedding
+- **Question:** choose and approve conceptual model/data flow after D10 unblocked design
+- **Options:** renderer-owned mirrored state; daemon-owned state with embedded view; terminal-kernel feature
+- **Chose:** D9's daemon state, per-PTY serialized send and terminal-plugin-owned host. Self-review accepts logic.md's conceptual model, data flow, behavior and non-goals without a human pause.
+- **Why:** only daemon authority serializes clients; public mountView supports independently replaceable UI.
+- **Evidence:** packages/protocol/src/ui.ts:238-242; plugins/quirky.terminal/src/window/workspace/PaneLayer.tsx:70-88; logic.md
+- **Reversibility:** medium
+- **Confidence:** high
+- **Revisit if:** review finds an unexpressible host lifecycle
+- **Source:** assumed — autonomous
+
+## D12: Lock feature-document geometry, lifecycle and focus defaults
+- **Question:** layout-style/interaction-style gray areas: placement, rows, drag, narrow panes, focus, mounting, passthrough, shortcuts and menu
+- **Options:** content-growing composer; fixed feature-document gutter and thresholds
+- **Chose:** 80+20*rows gutter, 3..15/default5 rows, 20 px drag steps/6 px handle; unmount below gutter+60/remount at gutter+100, frozen during drag; pane-scoped focus; shortcuts from terminal or composer; passthrough only while mounted, auto-exit on working-to-idle hooks/unmount/exit. Default-off/default-on auto-open; remember manual close, not exit. Kill switch hides/cancels without cleanup writes.
+- **Why:** explicit feature flows, not implementation preferences.
+- **Evidence:** terminal-dock.md:7-25,34-48,61,100-110; logic.md SC-01..SC-08
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** smoke shows threshold/focus regressions
+- **Source:** locked by terminal-dock.md
+
+## D13: Preserve editing through errors and expose every action as an API
+- **Question:** empty/error states, API response/errors, CLI flags/output and conflict/retry gray areas
+- **Options:** renderer-only edits and generic errors; shared schema methods with revisions and explicit states
+- **Chose:** existing kernel JSON/text/error conventions; revision-checked drafts and independent pane mutations; visible picker loading/empty/error states without draft loss; same daemon actions for CLI/API/window; no automatic retry of accepted input. Cursor/picker highlight remains local.
+- **Why:** roadmap requires scriptability; repeated sends duplicate agent work.
+- **Evidence:** docs/roadmap.md:31-38; terminal-dock.md:65-85,108-109; logic.md SC-09..SC-13,SC-17..SC-23
+- **Reversibility:** medium
+- **Confidence:** high
+- **Revisit if:** transport needs a different stale-draft conflict representation
+- **Source:** assumed — autonomous
+
+## D14: Use bounded canonical persistence instead of competing stores
+- **Question:** Data error-handling/idempotency and Integration sync-direction/data-mapping: authority, restart, corruption, caps, pruning, uploads
+- **Options:** reproduce three Orca copies; daemon-owned records and revisioned UI projections
+- **Chose:** daemon store, independent record validation, unsafe-key rejection, 64/tab retired-first pruning, 128 inactive scopes with mounted pinning, history 200 entries/200000 characters without consecutive duplicates. Retain pane identity on rehome/reconnect; prune real close. Acquire browser files under QUIRKY_HOME through public method, never fake browser paths.
+- **Why:** architecture has one state owner; feature requires bounded caches and recoverable drafts.
+- **Evidence:** terminal-dock.md:50-61,89-94; docs/architecture.md:61-82; logic.md SC-12,SC-13,SC-22
+- **Reversibility:** medium
+- **Confidence:** high
+- **Revisit if:** actual legacy Quirky dock data needs migration
+- **Source:** assumed — autonomous
+
+## D15: Use real provider evidence and refuse unsafe live controls
+- **Question:** option sources, stale questions, delivery evidence and three Orca defects
+- **Options:** transport acceptance as confirmation; actual provider/screen/status evidence with safe session-only actions
+- **Chose:** actual question/permission parsing and agent-aware TUI answers; no normal sends while request active; session-only controls with unknown/unconfirmed feedback; Claude picker s action only when observable. Matching positive delivery evidence wins over stale recognizer. Unknown never auto-resends. Local passthrough is not mobile ownership. No global writes.
+- **Why:** avoids all three feature-doc defects without fabricated confirmation.
+- **Evidence:** terminal-dock.md:21-22,75-85,131-134; D6; logic.md SC-14..SC-21
+- **Reversibility:** medium
+- **Confidence:** high
+- **Revisit if:** provider changes invalidate observable session-only actions
+- **Source:** locked by docs/roadmap.md; assumed — autonomous (evidence precedence)
+
+## D16: Reuse prior research and refresh exact implementation anchors
+- **Question:** repeated research and backend pairing after recovery
+- **Options:** repeat every prior swarm; retain documented findings and refresh changed code
+- **Chose:** retain completed patterns/pitfalls/three-option research in D6/D7/D9. Fresh backend/window and receipt/provider scouts map current source. Upstream adapter research confirms real formats/navigation. Fresh pi-watch check confirms OpenAI implementers + Gemini reviewer; Opus/Sonnet unavailable. Codex reviews combined specs as required.
+- **Why:** ruling resolves the sole scope block without changing architecture; merge changed anchors.
+- **Evidence:** DockBackendMap, DockWindowMap, DockReceiptMap, DockAdapterMap and DockUpstreamAdapters transcripts; pi-watch check; D4/D9
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** actual review dispatch fails
+- **Source:** assumed — autonomous
+
+## D17: Amend all seven substantive Codex specification findings
+- **Question:** the required combined adversarial review of logic.md and tech.md
+- **Options:** accept, reject or record each finding
+- **Chose:** accept F1..F7: migrate palette chord (D18); require revision on empty clears; expose caller-known/discoverable queued IDs; specify concrete existing status and per-provider transcript sources; discriminate zero/possible write acceptance; persist recovery-only snapshots without replay; bound draft plus snapshots/separators together. Amend both specs before implementation.
+- **Why:** each identifies materially divergent behavior or lost user input. The 34 deterministic reference reports are mostly planned new files, contribution IDs, package names and illustrative paths, not stale source. Corrected the one shortened existing harness path and the UI build discovery anchor; reject the remaining reference reports on those stated grounds.
+- **Evidence:** /tmp/quirky-dock-lane9.HXFO4d/spec-review/gate.json and manifest.json; original target 2e990ab^..2e990ab, restricted to specs. NEEDS_FIXES: 3 HIGH, 38 MEDIUM including 34 reference reports; one suppressed, no advisory/limitation/question. Codex promote/refute high effort; Gemini tiebreak upheld F4. Same-family Codex independence reduced as required by LOOP.md's mandated spec reviewer.
+- **Reversibility:** medium
+- **Confidence:** high
+- **Revisit if:** runtime reveals a missing data path or source mismatch
+- **Source:** assumed — autonomous
+
+## D18: Complete D30's anticipated palette contribution migration
+- **Question:** F1 found exact dock Mod+Shift+P collides with kernel reservation; does API growth permit a legal cutover?
+- **Options:** bypass reservation in capture; change dock chord; dual-dispatch; migrate palette command and binding into an overridable contribution
+- **Chose:** migration. Add public setPalette capability and daemon layout/API; built-in quirky.palette declares its unconditional command/binding. Remove hard-coded interception/reservation and obsolete warnings. Normal conditional precedence gives the focused mounted dock passthrough and gives other contexts the palette, one action per press.
+- **Why:** independent DockChordRuling found D30 explicitly anticipates overridable-contribution migration, and locked roadmap permits public API growth. Preserve m0-core D24's shell renderer. This completes the promised migration rather than adding a kernel-reservation exception.
+- **Evidence:** docs/loop/decisions/m0-ui-api.md:301-305; m0-core D24; docs/roadmap.md:25-29; DockChordRuling transcript; tech.md Canonical dock service palette cutover
+- **Reversibility:** medium
+- **Confidence:** high
+- **Revisit if:** another binding needs a precedence rule not supplied by existing conditional dispatch
+- **Source:** assumed — autonomous; completes m0-ui-api D30 transition, preserves m0-core D24
+
+## D19: Baseline suite passes with two runner-confirmed load flakes
+- **Question:** clean baseline before implementation and whether web validator is available
+- **Options:** run tests here; use the prescribed remote runner
+- **Chose:** bun run test through remote suite: exit 0 in 439.95s, 404/406 remote files passed first pass, all three macOS files passed; host alternate-screen read and terminal floating UI passed runner reruns alone. Typecheck exit 0. Web doctor ready with playwright-cli 0.1.22. No feature verification claimed.
+- **Why:** establishes actual baseline without competing local full-suite execution. Existing per-file remote parallelism is retained; no config changes for a slow suite.
+- **Evidence:** baseline bg_1 output, suite-result ok=true with two flaky paths; current typecheck and doctor outputs
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** a later gate repeats a failure outside load conditions
+- **Source:** assumed — autonomous
+
 ## Progress
-Resumed step 3 under D10. Prior context/option research remains recorded in D6/D7/D9. Current scouts are refreshing backend and window implementation anchors after the integration merge. Next: finish gray-area decisions, author logic.md and tech.md, run Codex spec review, implement through omp task subagents with Gemini review (Opus remains unavailable), verify and land. No implementation is claimed yet.
+Step 4 complete: both specs authored, combined Codex adversarial pass completed, confirmed findings amended, design approved autonomously (D17/D18). Step 5 next: commit reviewed specs, set up six disjoint component worktrees (receipt, palette cutover, dock backend, provider/pickers/attachments, composer, terminal host), dispatch omp implementers, audit and run checks once after the wave, merge build/roadmap before final Gemini reviews, then smoke/API/UI verification and land. All research/review jobs have returned; no implementation yet.
