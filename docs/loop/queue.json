@@ -1071,6 +1071,18 @@
       ],
       "deps": [],
       "status": "todo"
+    },
+    {
+      "id": "m3-vault-consent-tip-completion",
+      "milestone": "M3",
+      "title": "Complete the ancillary SC-07 enable-search marks-related-tip-seen flow after the operator-authorized vault core landing: explicit consent persistence/search work, but no related tip-seen bookkeeping or tip-owner integration exists in the vault source. Final review X2 was suppressed on the incorrect premise that this requirement was invented; the approved logic criterion explicitly names it. Establish the real tip owner/state and prove enabling marks it seen without indexing before consent. This is not a core privacy blocker; see docs/loop/BLOCKERS.md m3-vault open review findings. All other unfinished parity flows are named by m3-vault-parity-completion.",
+      "docs": [
+        "ai-vault.md"
+      ],
+      "deps": [
+        "m3-vault"
+      ],
+      "status": "todo"
     }
   ]
 }
