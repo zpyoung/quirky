@@ -172,9 +172,13 @@ All of these apply to every milestone:
 
 - [Session info](../research/orca-features/session-info.md): Claude's statusline is set per launch
   through `--settings`, so the user's `~/.claude` is never edited.
-- [Terminal dock](../research/orca-features/terminal-dock.md): it needs a composer of its own,
-  because Orca's comes from native chat, which Quirky dropped. Effort changes must not write to the
-  user's global Claude settings.
+- [Terminal dock](../research/orca-features/terminal-dock.md):
+  - It needs a composer of its own, because Orca's comes from native chat, which Quirky dropped.
+  - Effort changes must not write to the user's global Claude settings.
+  - Its slash-command and skill picker is in scope, though the standalone skills catalog stays
+    dropped.
+  - Dictation and the refusal to send during input quarantine are out of scope, because Quirky
+    dropped both.
 - [Session handoff](../research/orca-features/handoff.md).
 - [Accounts](../research/orca-features/accounts.md): read-only usage meters first, then Claude and
   Codex account switching.
