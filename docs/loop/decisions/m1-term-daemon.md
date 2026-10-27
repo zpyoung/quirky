@@ -416,5 +416,25 @@
 - **Confidence:** high
 - **Source:** assumed — autonomous
 
+## D42: A second catch-up merged m1-launch-settings; the exit columns become migration 4
+- **Question:** m1-launch-settings landed on build/roadmap after D41's merge and added `launch_settings` as session store migration 3
+- **Options:** —
+- **Chose:** merge again before the final review. The exit columns move to migration 4, a restored session also clears `launchSettings` (it now runs a shell), and test fixtures that build whole `Session` objects gained the exit fields. m1-launch-settings' decisions don't touch the PTY host or the terminal plugin.
+- **Why:** LOOP.md catches up before the final review, and a landed migration keeps its number
+- **Evidence:** merge commit 6ab6c3c; plugins/quirky.session/test/records.test.ts "session store migration 4"; docs/loop/decisions/m1-launch-settings.md read in full
+- **Reversibility:** medium
+- **Confidence:** high
+- **Source:** assumed — autonomous
+
+## D43: Final Round 1: accept all seven findings, which collapse to five defects, and name tests for three scenarios that lacked one
+- **Question:** adjudicating Final Round 1 (deep, three lenses, Codex gpt-6.1-sol, independence full, 0 suppressed). It reviewed the item's non-test source against build/roadmap, because the whole diff with tests (about 850 KB) is over a lens's budget. The pre-pass full suite passed.
+- **Options:** accept or reject each finding
+- **Chose:** accept all. The attach replay's final cursor move cancelled a pending wrap (C1/S1). Snapshots dropped an active scroll region (C2/S2). `--ansi` history pages lost colours set before the page's log window (S3). Vertical tabs in history could make a one-line page allocate over 100 MB (X1). A disk read error failed history and attach instead of degrading (X2). Step 6's mapping also found SC-3, SC-7 and SC-32 covered only by unit tests that don't carry their names, so the fix batch adds a named test for each.
+- **Why:** every finding came with a repro that the reviewer ran
+- **Evidence:** review bundle rev-final in the session scratchpad; fix commits on build/m1-term-daemon
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** assumed — autonomous
+
 ## Progress
 Step 5: W1-W4 merged; W1-W3 checkpoint-reviewed and fixed (D36-D39); the SC-23 kill defect fixed (D40); caught up with build/roadmap (D41). Next: Final Round 1 over the run, one fix batch, then step 6 verification.
