@@ -9,6 +9,7 @@ const processScopeModule = new URL('./test-support/process-scope.ts', import.met
 const homes = new Set<string>()
 const scopes: ProcessScope[] = []
 const sentinels: { child: IsolatedSubprocess; identity?: ProcessIdentity }[] = []
+const scopeTestProcesses: ProcessIdentity[] = []
 
 type ProcessIdentity = { pid: number; started: string; command: string }
 type IsolatedSubprocess = Bun.Subprocess<'ignore', 'ignore', 'ignore'>
@@ -46,6 +47,12 @@ async function waitForProcess(pid: number): Promise<ProcessIdentity> {
   }
   throw new Error(`process ${pid} did not appear in ps`)
 }
+async function rememberProcess(pid: number): Promise<ProcessIdentity> {
+  const identity = await waitForProcess(pid)
+  scopeTestProcesses.push(identity)
+  return identity
+}
+
 
 async function waitForHomeProcessesGone(home: string, pids: number[] = []): Promise<void> {
   for (let attempt = 0; attempt < 300; attempt++) {
@@ -57,6 +64,33 @@ async function waitForHomeProcessesGone(home: string, pids: number[] = []): Prom
   const remaining = [...processTable().values()].filter((row) => row.command.includes(home)).map((row) => `${row.pid} ${row.command}`)
   throw new Error(`processes still mention owned home ${home}: ${remaining.join('; ')}`)
 }
+async function waitForProcessesGone(identities: ProcessIdentity[]): Promise<void> {
+  for (let attempt = 0; attempt < 300; attempt++) {
+    const rows = processTable()
+    if (identities.every((identity) => !sameProcess(identity, rows.get(identity.pid)))) return
+    await Bun.sleep(20)
+  }
+  const remaining = identities
+    .filter((identity) => sameProcess(identity, processTable().get(identity.pid)))
+    .map((identity) => `${identity.pid} ${identity.command}`)
+  throw new Error(`processes still exist: ${remaining.join('; ')}`)
+}
+
+function scopeGuardians(): ProcessIdentity[] {
+  return [...processTable().values()].filter((row) =>
+    row.command.includes('process-scope.ts') && row.command.includes('--guardian')
+  )
+}
+
+async function waitForNewScopeGuardian(existingPids: Set<number>): Promise<ProcessIdentity> {
+  for (let attempt = 0; attempt < 100; attempt++) {
+    const guardian = scopeGuardians().find((row) => !existingPids.has(row.pid))
+    if (guardian) return guardian
+    await Bun.sleep(20)
+  }
+  throw new Error('process scope guardian did not appear in ps')
+}
+
 
 function killHomeProcesses(home: string): void {
   // Test-only backstop: kill only processes whose argv includes this unique temp home, after
@@ -75,7 +109,7 @@ function killHomeProcesses(home: string): void {
 
 function leafProgram(home: string, manifest: string, ready: string): string {
   return `
-    const fs = await import('node:fs')
+    import * as fs from 'node:fs'
     const home = ${JSON.stringify(home)}
     fs.appendFileSync(${JSON.stringify(manifest)}, String(process.pid) + '\\n')
     fs.writeFileSync(${JSON.stringify(ready)}, String(process.pid))
@@ -86,7 +120,7 @@ function leafProgram(home: string, manifest: string, ready: string): string {
 function branchProgram(home: string, manifest: string, branchReady: string, leafReady: string): string {
   const leaf = leafProgram(home, manifest, leafReady)
   return `
-    const fs = await import('node:fs')
+    import * as fs from 'node:fs'
     const home = ${JSON.stringify(home)}
     const leaf = Bun.spawn(['bun', '-e', ${JSON.stringify(leaf)}], {
       detached: true, stdin: 'ignore', stdout: 'ignore', stderr: 'ignore'
@@ -104,8 +138,8 @@ function hostProgram(home: string, manifest: string, ready: string): string {
   const leafReady = join(home, 'leaf.ready')
   const branch = branchProgram(home, manifest, branchReady, leafReady)
   return `
-    const fs = await import('node:fs')
-    const path = await import('node:path')
+    import * as fs from 'node:fs'
+    import * as path from 'node:path'
     const home = ${JSON.stringify(home)}
     if (process.env.QUIRKY_HOME !== home) process.exit(79)
     fs.writeFileSync(path.join(home, 'pty.pid'), String(process.pid))
@@ -159,6 +193,21 @@ afterEach(async () => {
       // Continue to the PID-identity-checked fallback below.
     }
   }
+  for (let attempt = 0; attempt < 300; attempt++) {
+    const rows = processTable()
+    const remaining = scopeTestProcesses.filter((identity) => sameProcess(identity, rows.get(identity.pid)))
+    if (remaining.length === 0) break
+    for (const identity of remaining) {
+      try {
+        process.kill(identity.pid, 'SIGKILL')
+      } catch {
+        // The process may have exited between the identity check and signal.
+      }
+    }
+    await Bun.sleep(20)
+  }
+  scopeTestProcesses.length = 0
+
   for (const home of homes) {
     for (let attempt = 0; attempt < 300; attempt++) {
       killHomeProcesses(home)
@@ -181,6 +230,43 @@ afterEach(async () => {
   for (const home of homes) rmSync(home, { recursive: true, force: true })
   homes.clear()
 })
+
+test('cleanup stops the full process tree and guardian after caller-home removal', async () => {
+  const home = mkdtempSync(join(tmpdir(), 'process-scope-home-removal-'))
+  homes.add(home)
+  const existingGuardians = new Set(scopeGuardians().map((identity) => identity.pid))
+  const scope = createProcessScope(home)
+  scopes.push(scope)
+  const guardian = await waitForNewScopeGuardian(existingGuardians)
+  scopeTestProcesses.push(guardian)
+  const descendantProgram = `setInterval(() => {}, 60_000)`
+  const rootProgram = `
+    const descendant = Bun.spawn(['bun', '-e', ${JSON.stringify(descendantProgram)}], {
+      detached: true, stdin: 'ignore', stdout: 'ignore', stderr: 'ignore'
+    })
+    process.stdout.write(JSON.stringify({ root: process.pid, descendant: descendant.pid }) + '\\n')
+    setInterval(() => {}, 60_000)
+  `
+  const root = scope.spawn(['bun', '-e', rootProgram], {
+    stdin: 'ignore',
+    stdout: 'pipe',
+    stderr: 'ignore'
+  })
+  if (!root.stdout) throw new Error('scope.spawn did not preserve the requested stdout pipe')
+  const tree = JSON.parse(await readLine(root.stdout)) as { root: number; descendant: number }
+  expect(tree.root).toBe(root.pid)
+  const rootIdentity = await rememberProcess(tree.root)
+  const descendantIdentity = await rememberProcess(tree.descendant)
+
+  rmSync(home, { recursive: true, force: true })
+  await scope.cleanup()
+
+  await waitForProcessesGone([rootIdentity, descendantIdentity, guardian])
+  const rows = processTable()
+  expect([rootIdentity, descendantIdentity, guardian].every((identity) =>
+    !sameProcess(identity, rows.get(identity.pid))
+  )).toBe(true)
+}, 15_000)
 
 test('scope.spawn keeps the real Bun process, owns nested detached trees, and cleanup is idempotent', async () => {
   const home = mkdtempSync(join(tmpdir(), 'process-scope-normal-'))
@@ -272,8 +358,8 @@ test('a guardian cleans a pty.pid process tree after owner SIGKILL without killi
   const hostReady = join(home, 'host.ready')
   const host = hostProgram(home, manifest, hostReady)
   const ownerSource = `
-    const fs = await import('node:fs')
-    const scopeModule = await import(${JSON.stringify(processScopeModule)})
+    import * as fs from 'node:fs'
+    import * as scopeModule from ${JSON.stringify(processScopeModule)}
     const home = ${JSON.stringify(home)}
     const scope = scopeModule.createProcessScope(home)
     fs.writeFileSync(${JSON.stringify(join(home, 'runtime.json'))}, JSON.stringify({ pid: process.pid }))

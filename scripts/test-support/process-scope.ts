@@ -11,10 +11,9 @@ import {
   writeFileSync
 } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { dirname, join } from 'node:path'
+import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-const PROCESS_SCOPE_DIRECTORY = '.test-process-scope'
 const CLAIM_FILES = ['runtime.json', 'pty.pid'] as const
 const POLL_INTERVAL_MS = 75
 const GRACEFUL_SHUTDOWN_MS = 250
@@ -408,11 +407,6 @@ function createGuardian(configPath: string, config: ScopeConfig, token: string):
 
 function removeScopeFiles(config: ScopeConfig): void {
   rmSync(config.scopeDirectory, { recursive: true, force: true })
-  try {
-    rmSync(dirname(config.scopeDirectory), { recursive: false })
-  } catch {
-    // Other scopes may still use the shared parent directory.
-  }
 }
 
 function signalGuardian(config: ScopeConfig, signal: NodeJS.Signals): void {
@@ -454,10 +448,8 @@ export function createProcessScope(home?: string): ProcessScope {
   const owner = identityFor(process.pid, ownerSnapshot)
   if (!owner) throw new Error(`could not identify process scope owner ${process.pid}`)
   const protectedPids = processAncestors(ownerSnapshot, process.pid)
-  const scopeId = randomUUID()
-  const scopeDirectory = join(scopeHome, PROCESS_SCOPE_DIRECTORY, scopeId)
+  const scopeDirectory = mkdtempSync(join(tmpdir(), 'quirky-test-process-scope-'))
   const recordsDirectory = join(scopeDirectory, 'processes')
-  mkdirSync(recordsDirectory, { recursive: true, mode: 0o700 })
 
   const config: ScopeConfig = {
     home: scopeHome,
@@ -477,15 +469,11 @@ export function createProcessScope(home?: string): ProcessScope {
   const env = { QUIRKY_HOME: scopeHome, QUIRKY_TEST_SCOPE: token }
   const configPath = join(scopeDirectory, 'scope.json')
   try {
+    mkdirSync(recordsDirectory, { recursive: true, mode: 0o700 })
     writeJsonAtomically(configPath, config)
     createGuardian(configPath, config, token)
   } catch (error) {
     rmSync(scopeDirectory, { recursive: true, force: true })
-    try {
-      rmSync(dirname(scopeDirectory), { recursive: false })
-    } catch {
-      // Other scopes may still use the shared parent directory.
-    }
     if (allocatedHome) rmSync(scopeHome, { recursive: true, force: true })
     throw error
   }
@@ -567,7 +555,7 @@ async function runGuardian(configPath: string): Promise<void> {
       writeFileSync(config.doneFile, String(Date.now()), { mode: 0o600 })
       if (!ownerAlive) {
         if (config.removeHomeOnOwnerDeath) rmSync(config.home, { recursive: true, force: true })
-        else removeScopeFiles(config)
+        removeScopeFiles(config)
       }
       return
     }

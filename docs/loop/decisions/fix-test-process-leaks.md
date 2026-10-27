@@ -77,5 +77,71 @@
 - **Revisit if:** Windows becomes a supported build/test platform.
 - **Source:** deferred: platform
 
+## D8: Preserve incoming integration decisions
+- **Question:** Do the catch-up changes alter this ownership repair?
+- **Options:** change the SC-31 contract or PTY collector repair; retain the landed changes.
+- **Chose:** retain all incoming changes without altering their contracts.
+- **Why:** Catch-up merged the SC-31 decision log and a repaired PTY kill-test replay race. Neither changes process ownership. SC-31 correctly allows the ordinary first shell while suppressing setup; its blocked full-suite evidence is not proof of a process-group bug.
+- **Evidence:** docs/loop/decisions/fix-sc31-first-shell-race.md D2-D6; docs/loop/BLOCKERS.md final unblocked note; merged packages/pty-host/test/host.test.ts.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** fresh suite output demonstrates a conflicting lifecycle contract.
+- **Source:** locked by docs/loop/decisions/fix-sc31-first-shell-race.md
+
+## D9: Final cross-family review returned no actionable findings
+- **Question:** Which Final Round 1 findings need a fix batch?
+- **Options:** accept evidence-backed findings; manufacture extra changes despite no findings.
+- **Chose:** no fix batch; rerun the build and required checks on the integrated branch.
+- **Why:** pi-watch Gemini reviewed build/roadmap...HEAD read-only and returned STATUS: PASS with no actionable file:line findings. This records the review outcome, not a completeness guarantee.
+- **Evidence:** actual pi-watch --check gemini and --alias gemini review dispatch, exit 0, STATUS: PASS; Opus availability failure recorded in D2.
+- **Reversibility:** easy
+- **Confidence:** medium
+- **Revisit if:** verification exposes a lifecycle race the review missed.
+- **Source:** assumed — autonomous
+
+## D10: Guardian control state must outlive the resource home
+- **Question:** Why did the first full-suite run fail the socket replacement scenario?
+- **Options:** reorder one test; suppress ENOENT; move guardian records/control files to an independent private temporary directory.
+- **Chose:** independent guardian state plus a regression that removes a caller-owned home before scope cleanup.
+- **Why:** Harness cleanup legitimately removes its home before an enclosing process scope ends. Keeping the only process identities and dispose channel under that home loses ownership state. The failure was reproduced as ENOENT at the dispose-file write; no error is suppressed.
+- **Evidence:** initial full suite: 407 remote files, 405 passed, 2 failed; socket.test.ts SC-4 and artifact://33; new state-lifetime regression failed at the same write before the fix. The other failure was the pre-catch-up PTY replay race, already repaired upstream and verified by a passing remote host.test.ts run.
+- **Reversibility:** medium
+- **Confidence:** high
+- **Revisit if:** deleting the disposable home can still erase ownership records or prevent guardian exit.
+- **Source:** assumed — autonomous
+
+## D11: Scope every suite subprocess, including transport commands
+- **Question:** Does the suite runner own only bun-test children?
+- **Options:** leave SSH/rsync subprocesses unowned; use the same process-scope boundary for every asynchronous exec.
+- **Chose:** make exec own a scope by default, including remote transport commands.
+- **Why:** A killed local suite must not leave its SSH transport running while test subprocess launches are protected. The remote worker retains its existing per-test ownership.
+- **Evidence:** scripts/suite.ts exec and runRemote.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** a transport requires a lifetime longer than its exec call.
+- **Source:** assumed — autonomous
+
+## D12: Retain the runner's existing isolated-rerun policy
+- **Question:** Does a load-only floating-window failure require another repair in this item?
+- **Options:** change the floating-window behavior; retain the runner's established one-file isolated rerun.
+- **Chose:** retain the existing policy and report the flake without claiming a first-pass clean run.
+- **Why:** The repaired full suite exited 0. Its one initial failure was SC-55's floating-workspace button under load; the runner's automatic isolated rerun passed all five tests. No test was excluded or suppressed.
+- **Evidence:** repaired bun run test, 407 remote files: 406 initially passed, 1 failed then passed alone; 3 macOS-only files passed. suite-result ok:true, flaky:[plugins/quirky.terminal/test/e2e-ui/features-floating.test.ts].
+- **Reversibility:** easy
+- **Confidence:** high for the observed result; no claim of eliminating the unrelated load sensitivity
+- **Revisit if:** the file fails its isolated rerun or a deterministic ownership regression appears.
+- **Source:** locked by scripts/suite.ts
+
+## Verification
+- `bun run test`: exit 0 after the guardian-state repair and integration catch-up. 407 remote files plus 3 macOS-only files; the floating-window file passed the runner's isolated rerun (D12).
+- `bun test scripts`: 48 pass, 0 fail, 217 assertions across 6 files. Inner suite fixtures intentionally print their own failed-test examples while the outer suite passes.
+- `bun run typecheck`: exit 0, no diagnostics.
+- `bun run build`: exit 0; packaged app built. Electrobun reported its optional missing icon source and unset release base URL.
+- Regression red/green: failed harness startup left its fake PTY socket bound before the fix; daemon-stop failure skipped fake-host cleanup before the fix; hard-killed real harness owner left daemon/host/shell alive before the fix; suite completion left a detached worker alive before the fix. All now pass.
+- Guardian state regression: deleting the registered caller home produced ENOENT at dispose before the fix; all 5 process-scope tests now pass, including full-tree and guardian exit after home removal.
+- Targeted remote checks: daemon socket.test.ts and PTY host.test.ts each passed without a flaky rerun after their respective repairs.
+- Actual CLI smoke repeated after the final guardian-state fix: start real quirkyd/quirky-pty through owned-run, run JSON status (exit 0), SIGKILL the wrapper, observe both services gone and the fresh home removed. No real profile used.
+- Final Round 1: cross-family Gemini read-only review returned no actionable findings. No unresolved review findings to append to BLOCKERS.md.
+
 ## Progress
-Implementation and targeted regression checks are complete. `bun test scripts` passed 47 tests; `bun run typecheck` passed. The real owned-run smoke ran JSON CLI status, SIGKILLed its wrapper, and observed real daemon/PTY exit plus home removal. `start-harness.test.ts` passed both failure-cleanup regressions; terminal hard-killed owner and CLI restart regressions passed. Full remote-aware suite is running. Next: catch up with build/roadmap, read incoming decisions, final Gemini review and accepted fix batch, final required checks, then land.
+Verified and ready to land this one item. All agents and verification commands have returned. Commit the final guardian-state repair, suite transport ownership and this log, detach, then run queue.ts land fix-test-process-leaks; its integration gate must pass before the item is marked done.

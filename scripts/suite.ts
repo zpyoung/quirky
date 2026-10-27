@@ -39,24 +39,24 @@ async function tee(stream: ReadableStream<Uint8Array>, out: NodeJS.WriteStream |
   }
 }
 
-async function exec(cmd: string[], cwd: string, echo = true, stdin?: string, scope?: ProcessScope): Promise<{ code: number; output: string }> {
+async function exec(cmd: string[], cwd: string, echo = true, stdin?: string, scope: ProcessScope = createProcessScope()): Promise<{ code: number; output: string }> {
   try {
     const options = {
       cwd,
-      env: { ...process.env, ...scope?.env },
+      env: { ...process.env, ...scope.env },
       stdin: stdin === undefined ? 'ignore' as const : new Blob([stdin]),
       stdout: 'pipe' as const,
       stderr: 'pipe' as const
     }
-    const child = scope ? scope.spawn(cmd, options) : Bun.spawn(cmd, options)
+    const child = scope.spawn(cmd, options)
     const streams = Promise.all([tee(child.stdout, echo ? process.stdout : null), tee(child.stderr, echo ? process.stderr : null)])
     const code = await child.exited
     // A leaked child may still hold a pipe open. Reap the tree before waiting for EOF.
-    await scope?.cleanup()
+    await scope.cleanup()
     const [out, err] = await streams
     return { code, output: out + err }
   } finally {
-    await scope?.cleanup()
+    await scope.cleanup()
   }
 }
 
