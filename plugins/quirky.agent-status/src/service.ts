@@ -478,7 +478,8 @@ export class AgentStatusService {
   private emitIfSettled(session: Session, prev: AgentRow | null, row: AgentRow): void {
     if (row.sessionBoundary) return
     const { state } = foldLead(row.lead.state, row.children, false)
-    if (prev?.state !== state && state !== 'working') this.emitSettled(session, row, state)
+    const before = prev ? foldLead(prev.lead.state, prev.children, false).state : null
+    if (before !== state && state !== 'working') this.emitSettled(session, row, state)
   }
 
   /** Announces that a row settled into done, waiting or blocked, with what a banner would say about it. */
