@@ -440,5 +440,16 @@
 - **Revisit if:** the pty-host test fails again on a later gate
 - **Source:** assumed — autonomous
 
+## D41: The concurrent-save test accepts either save winning
+- **Question:** W2's gate failed `concurrent saves` in `test/scenarios/files.test.ts`, which also fails 4 of 5 runs on this item's base (before any change here)
+- **Options:** leave it to the land gate's flake handling; fix the test; change `save` to serve calls in arrival order
+- **Chose:** fix the test: exactly one of two racing saves with the same expected hash succeeds, the other fails `changed-on-disk`, and the file holds the winner's content. The old test also required the first call to win
+- **Why:** two concurrent RPCs have no defined order, and the guarantee the scenario names (one wins, one refuses, nothing is lost) holds either way
+- **Evidence:** local runs on worktree T2 (base plus a terminal-only change): 4 of 5 failed with [rejected, fulfilled]
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** saves need arrival-order semantics
+- **Source:** assumed — autonomous
+
 ## Progress
 Building. W1 and W2 merged; catalog test updated; W2 gate running; W3 (T7, AI window) dispatched from WAVE_BASE_3. Next: merge W3, gate, Final Round 1 (three Codex lenses, deep), one fix batch, then step 6.
