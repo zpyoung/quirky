@@ -181,6 +181,20 @@ describe('staying quiet', () => {
     expect(hits).toHaveLength(0)
   })
 
+  test('no session id exits without reading stdin that stays open', async () => {
+    const env = baseEnv()
+    delete env.QUIRKY_SESSION_ID
+    const proc = Bun.spawn(['/bin/sh', scriptPath, 'claude'], {
+      env,
+      stdin: 'pipe',
+      stdout: 'pipe'
+    })
+    children.push(proc)
+    const code = await Promise.race([proc.exited, Bun.sleep(500).then(() => 'timeout' as const)])
+    expect(code).toBe(0)
+    expect(hits).toHaveLength(0)
+  })
+
   test('antigravity with CLAUDE_JOB_DIR returns at once while stdin stays open', async () => {
     const proc = Bun.spawn(['/bin/sh', scriptPath, 'antigravity'], {
       env: baseEnv({ CLAUDE_JOB_DIR: '/x', QUIRKY_HOOK_EVENT: 'Stop' }),
@@ -209,6 +223,15 @@ describe('posting', () => {
   test('codex posts its last argument', async () => {
     const payload = '{"type":"agent-turn-complete","thread-id":"t1"}'
     const r = await run('codex', { args: ['notify', payload], stdin: 'ignored' })
+    expect(r.code).toBe(0)
+    expect(hits).toHaveLength(1)
+    expect(hits[0].path).toBe('/hook/codex')
+    expect(hits[0].body).toBe(payload)
+  })
+
+  test('codex hooks.json invocation posts the stdin payload', async () => {
+    const payload = '{"hook_event_name":"Stop","session_id":"c1"}'
+    const r = await run('codex', { stdin: payload })
     expect(r.code).toBe(0)
     expect(hits).toHaveLength(1)
     expect(hits[0].path).toBe('/hook/codex')
