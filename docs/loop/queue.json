@@ -407,8 +407,7 @@
         "m1-agent-status",
         "m1-providers"
       ],
-      "status": "in-progress",
-      "lane": 9
+      "status": "done"
     },
     {
       "id": "m3-handoff",
