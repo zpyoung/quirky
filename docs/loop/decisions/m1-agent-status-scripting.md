@@ -359,5 +359,15 @@
 - **Confidence:** high
 - **Source:** assumed — autonomous
 
+## D36: Wave 1 checkpoint: accept all nine findings, which collapse to four defects
+- **Question:** how to rule on the Codex checkpoint review of wave 1 (three lenses, standard depth, 9 blocking, none suppressed)
+- **Options:** accept; reject
+- **Chose:** accept all: unwrapped reads dropped the space at a wrap point (C1, HIGH); disposing the matcher while its child starts leaves it running and answers after disposal (C2, S2, X2); a filesystem error on a rule source made `effective` reject instead of falling back (C3, S1, X1); creating a named session stripped an exited holder's name before a launch that might fail (X3). Fixed by FA, FB, FC beside T8.
+- **Why:** each came with a reproduction against the code
+- **Evidence:** scratchpad cp1/{C,S,X}/gate.json
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** assumed — autonomous
+
 ## Progress
-Step 4 (specs) done: logic.md and tech.md written, reviewed by Codex (D27) and amended. Next: step 5, build with subagent-driven development.
+Step 5 (build). Waves 1 and 2a (T4, T7) merged; wave 2b (T8 send, then T9 waits, beside checkpoint fixes FA-FD) running. Next: T9 in T8's tree, gate, checkpoint review of wave 2, wave 3 end-to-end tests (briefs in the iteration-12 scratchpad), catch-up merge, Final Round 1.
