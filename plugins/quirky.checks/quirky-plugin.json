@@ -1,0 +1,119 @@
+{
+  "id": "quirky.checks",
+  "name": "Checks",
+  "version": "0.1.0",
+  "description": "Runs bounded shell checks in a worktree or an explicit directory.",
+  "main": "main.ts",
+  "activation": "lazy",
+  "dependencies": [
+    "quirky.worktree"
+  ],
+  "contributes": {
+    "method": [
+      {
+        "id": "run",
+        "description": "Run a shell command in a worktree or explicit directory and return bounded output evidence.",
+        "params": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "command": {
+              "type": "string",
+              "description": "The shell command to execute."
+            },
+            "worktree": {
+              "type": "string",
+              "description": "A worktree selector; defaults to the caller's current worktree when cwd is omitted."
+            },
+            "cwd": {
+              "type": "string",
+              "description": "An absolute existing directory; mutually exclusive with worktree."
+            },
+            "timeoutSeconds": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 600,
+              "default": 60,
+              "description": "Execution timeout in seconds (1–600; default 60)."
+            },
+            "checkId": {
+              "type": "string",
+              "description": "Optional caller-selected ID; an active ID cannot be reused."
+            }
+          },
+          "required": [
+            "command"
+          ]
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "checkId": { "type": "string" },
+            "ran": { "type": "boolean" },
+            "pass": { "type": "boolean" },
+            "exitCode": { "description": "An integer process exit code, or null when no exit code is available." },
+            "timedOut": { "type": "boolean" },
+            "aborted": { "type": "boolean" },
+            "stdoutTail": { "type": "string" },
+            "stderrTail": { "type": "string" },
+            "stdoutTruncated": { "type": "boolean" },
+            "stderrTruncated": { "type": "boolean" },
+            "durationMs": { "type": "number" },
+            "error": { "type": "string" }
+          },
+          "required": [
+            "checkId",
+            "ran",
+            "pass",
+            "exitCode",
+            "timedOut",
+            "aborted",
+            "stdoutTail",
+            "stderrTail",
+            "stdoutTruncated",
+            "stderrTruncated",
+            "durationMs"
+          ]
+        }
+      },
+      {
+        "id": "cancel",
+        "description": "Cancel an active check by ID; completed or unknown IDs return cancelled false.",
+        "params": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "checkId": {
+              "type": "string",
+              "description": "The active check ID to cancel."
+            }
+          },
+          "required": [
+            "checkId"
+          ]
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "cancelled": { "type": "boolean" }
+          },
+          "required": ["cancelled"]
+        }
+      }
+    ],
+    "cli-command": [
+      {
+        "id": "run",
+        "words": "run",
+        "summary": "run a bounded shell check",
+        "method": "run"
+      },
+      {
+        "id": "cancel",
+        "words": "cancel",
+        "summary": "cancel an active shell check",
+        "method": "cancel"
+      }
+    ]
+  }
+}
