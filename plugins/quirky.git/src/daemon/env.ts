@@ -2,6 +2,9 @@ import { lstat } from 'node:fs/promises'
 import { join } from 'node:path'
 import { gitApi } from '@quirky/git'
 import type { GitStatus, GitStatusEntry, PluginCaller, PluginContext, PluginStore, Worktree } from '@quirky/protocol'
+import { GenerationLanes } from './ai-generate'
+import { HeldFailures } from './ai-fix'
+import { AiRecipes } from './ai-recipes'
 import { createErrors, type Errors } from './errors'
 import { createLock, type WorktreeLock } from './lock'
 import { NoteHolds, NotesStore } from './notes'
@@ -24,6 +27,12 @@ export type DaemonEnv = {
   notes: NotesStore
   /** Notes that running sends have taken. */
   holds: NoteHolds
+  /** Saved AI recipes. */
+  recipes: AiRecipes
+  /** Commit and push failures AI Fix can act on. */
+  failures: HeldFailures
+  /** Running commit message generations. */
+  lanes: GenerationLanes
   /** The worktree `params.worktree` selects for `caller`; folder workspaces are refused. */
   resolve(params: WorktreeParams, caller: PluginCaller): Promise<Worktree>
   /** Announces `quirky.git/changed` for a successful mutation. */
@@ -113,6 +122,9 @@ export function createEnv(context: PluginContext, store: PluginStore): DaemonEnv
     store,
     notes: new NotesStore(store),
     holds: new NoteHolds(),
+    recipes: new AiRecipes(store, context),
+    failures: new HeldFailures(),
+    lanes: new GenerationLanes(),
     resolve,
     changed: (worktree) => context.emit('changed', { worktreeId: worktree.id }),
     readStatus,
