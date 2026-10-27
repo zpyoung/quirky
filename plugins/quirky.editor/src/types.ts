@@ -91,14 +91,20 @@ export type EditorSurfaceBuffer = Omit<EditorBuffer, 'diskContent'> & {
   diskSignature: string | null
 }
 
+export type EditorSurfaceAction = 'find' | 'replace' | 'copy-context' | 'add-review-note' | 'zoom-in' | 'zoom-out' | 'reset-zoom'
+export type EditorSurfaceCommandHandler = (args?: Record<string, unknown>) => unknown | Promise<unknown>
+export type EditorSurfaceCommandHandlers = Partial<Record<EditorSurfaceAction, EditorSurfaceCommandHandler>> & {
+  flush?: () => void | Promise<void>
+}
 export type SurfaceProps = {
   context: UiPluginContext
   buffer: EditorSurfaceBuffer
+  fontSize: number
   onDraft(content: string): void
   onAction(method: string, params: Record<string, unknown>): Promise<unknown>
   onView(patch: Record<string, unknown>): void
+  registerCommandHandlers(handlers: EditorSurfaceCommandHandlers): () => void
 }
-
 export interface EditorServices {
   context: PluginContext
   store: PluginStore

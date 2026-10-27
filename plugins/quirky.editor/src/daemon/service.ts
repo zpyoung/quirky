@@ -25,7 +25,7 @@ import { EditorWatcher } from './watcher'
 import { WorktreePaths, type ResolvedWorktree } from './paths'
 import { ContentsSearch } from './search'
 import { ExplorerService } from './explorer'
-import { FileInventory, parseQuickOpenTarget, QUICK_OPEN_MAX_ENTRIES, QUICK_OPEN_MAX_RESULTS, QUICK_OPEN_QUERY_MAX_BYTES } from './inventory'
+import { FileInventory, normalizeRipgrepPath, parseQuickOpenTarget, QUICK_OPEN_MAX_ENTRIES, QUICK_OPEN_MAX_RESULTS, QUICK_OPEN_QUERY_MAX_BYTES } from './inventory'
 import { MAX_READ_BYTES, MAX_TEXT_FILE_BYTES, guardedWrite, hashText, readByteRange, readSnapshot, type FileSnapshot } from './files'
 import { KeyedQueue } from './queue'
 
@@ -721,6 +721,7 @@ export class EditorDaemon {
     const query = params.query ?? ''
     if (Buffer.byteLength(query, 'utf8') > QUICK_OPEN_QUERY_MAX_BYTES) return { results: [], truncated: false, history }
     const target = parseQuickOpenTarget(query)
+    const targetPath = normalizeRipgrepPath(target.path) ?? target.path
     if (target.path !== query && (target.path.startsWith(sep) || /^[A-Za-z]:[\\/]/.test(target.path))) {
       const absolute = await this.paths.path(worktree.id, target.path)
       const info = await stat(absolute.path)
@@ -728,13 +729,13 @@ export class EditorDaemon {
       return { results: [{ path: absolute.relativePath, name: basename(absolute.path), score: Number.MAX_SAFE_INTEGER, ...(target.line === undefined ? {} : { line: target.line }), ...(target.column === undefined ? {} : { column: target.column }) }], truncated: false, history }
     }
     const all = await this.inventory.list(worktree.path, this.setting('showGitIgnoredFiles', true), this.setting('followSymlinkedDirectories', false))
-    if (target.path !== query && all.paths.includes(target.path.replaceAll('\\\\', '/'))) {
-      const direct = await this.paths.path(worktree.id, target.path)
+    if (targetPath !== query && all.paths.includes(targetPath)) {
+      const direct = await this.paths.path(worktree.id, targetPath)
       const info = await stat(direct.path)
       if (info.isDirectory()) throw this.context.error('invalid-params', 'Choose a file rather than a directory.')
       return { results: [{ path: direct.relativePath, name: basename(direct.path), score: Number.MAX_SAFE_INTEGER, ...(target.line === undefined ? {} : { line: target.line }), ...(target.column === undefined ? {} : { column: target.column }) }], truncated: all.truncated, history }
     }
-    const ranked = this.inventory.searchPaths(all.paths, target.path, history, params.limit ?? QUICK_OPEN_MAX_RESULTS)
+    const ranked = this.inventory.searchPaths(all.paths, targetPath, history, params.limit ?? QUICK_OPEN_MAX_RESULTS)
     const authorized: { path: string; name: string; score: number; line?: number; column?: number }[] = []
     for (const item of ranked) {
       try {

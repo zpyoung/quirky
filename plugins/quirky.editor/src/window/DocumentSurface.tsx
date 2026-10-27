@@ -1,7 +1,7 @@
-import { Component, Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState, type DragEvent as ReactDragEvent, type ReactNode } from 'react'
+import { Component, Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState, type DragEvent as ReactDragEvent, type FocusEvent as ReactFocusEvent, type ReactNode } from 'react'
 import type { UiPluginContext } from '@quirky/protocol'
-import type { EditorBufferInfo, EditorSurfaceBuffer, SurfaceProps } from '../types'
-import { activeDocument, registerActiveDocument } from './activeDocument'
+import type { EditorBufferInfo, EditorSurfaceAction, EditorSurfaceBuffer, EditorSurfaceCommandHandler, EditorSurfaceCommandHandlers, SurfaceProps } from '../types'
+import { activeDocument, registerActiveDocument, type ActiveDocumentCommand, type ActiveDocumentRegistration } from './activeDocument'
 import { useEditorState, type EditorState } from './editorState'
 import { openExplorerSearch } from './explorerIntent'
 import { requestSingleClose } from './overlayState'
@@ -44,6 +44,13 @@ type ReadBufferResult = { buffer?: EditorBufferInfo }
 type Props = { context: UiPluginContext; input?: unknown }
 type BoundaryProps = { children: ReactNode; onRetry(): void }
 type BoundaryState = { error: string | null }
+type ActiveActions = {
+  flush(): Promise<void>
+  save(): Promise<void>
+  close(): Promise<boolean>
+  focus(): void
+  runCommand(command: ActiveDocumentCommand, args?: Record<string, unknown>): Promise<unknown>
+}
 
 class SurfaceErrorBoundary extends Component<BoundaryProps, BoundaryState> {
   state: BoundaryState = { error: null }
@@ -147,36 +154,24 @@ async function uploadFiles(context: UiPluginContext, worktree: string, destinati
   return imported
 }
 
-async function openDroppedUris(context: UiPluginContext, worktree: string, directory: string, uriList: string): Promise<string[]> {
+async function importDroppedUris(context: UiPluginContext, worktree: string, directory: string, uriList: string): Promise<string[]> {
   const paths = uriList.split(/\r?\n/).filter((line) => line !== '' && !line.startsWith('#')).map((line) => {
     const url = new URL(line)
     if (url.protocol !== 'file:') throw new Error(`Unsupported dropped URL: ${line}`)
     return decodeURIComponent(url.pathname)
   })
-  let metadataBytes = 0
-  for (const path of paths) {
-    metadataBytes += sizeOfName(path)
-    if (metadataBytes > MAX_UPLOAD_METADATA_BYTES) throw new Error('Dropped path names exceed the 256 KiB metadata limit.')
-  }
-  const opened: string[] = []
-  for (const path of paths) {
-    try {
-      await context.call('quirky.editor/open', { worktree, path, focus: true, preview: false })
-      opened.push(path)
-    } catch (openError) {
-      const imported = await context.call('quirky.editor/mutate', {
-        worktree,
-        action: 'import',
-        path: directory || '.',
-        sourcePaths: [path]
-      }) as ImportResult
-      const destination = imported.path ?? imported.paths?.[0]
-      if (!destination) throw openError
-      await context.call('quirky.editor/open', { worktree, path: destination, focus: true, preview: false })
-      opened.push(destination)
-    }
-  }
-  return opened
+  if (paths.length > MAX_UPLOADS) throw new Error(`Import is limited to ${MAX_UPLOADS} files.`)
+  const metadataBytes = paths.reduce((total, path) => total + sizeOfName(path), 0)
+  if (metadataBytes > MAX_UPLOAD_METADATA_BYTES) throw new Error('Dropped path names exceed the 256 KiB metadata limit.')
+  const result = await context.call('quirky.editor/mutate', {
+    worktree,
+    action: 'import',
+    path: directory || '.',
+    sourcePaths: paths
+  }) as ImportResult
+  const imported = result.paths ?? (result.path ? [result.path] : [])
+  if (imported.length === 0) throw new Error('The dropped files could not be imported.')
+  return imported
 }
 
 /** One session-free hosted document view inside the terminal workspace. */
@@ -204,16 +199,31 @@ function DocumentBody({ context, input }: { context: UiPluginContext; input: Doc
   const [undoReloadUntil, setUndoReloadUntil] = useState(0)
   const [renamePath, setRenamePath] = useState<string | null>(null)
   const sourceRef = useRef<SourceEditorHandle>(null)
+  const rootRef = useRef<HTMLDivElement>(null)
+  const activeRegistration = useRef<ActiveDocumentRegistration | null>(null)
+  const editorHasFocus = useRef(false)
+  const surfaceCommandHandlers = useRef(new Map<symbol, EditorSurfaceCommandHandlers>())
+  const registerCommandHandlers = useCallback((handlers: EditorSurfaceCommandHandlers) => {
+    const token = Symbol('editor-surface-command-handlers')
+    surfaceCommandHandlers.current.set(token, handlers)
+    return () => surfaceCommandHandlers.current.delete(token)
+  }, [])
+  const flushSurfaceEditors = useCallback(async () => {
+    let flushHandler: EditorSurfaceCommandHandlers['flush']
+    for (const handlers of surfaceCommandHandlers.current.values()) flushHandler = handlers.flush ?? flushHandler
+    await flushHandler?.()
+  }, [])
   const draftQueue = useRef<Promise<void>>(Promise.resolve())
   const ackRevision = useRef(info?.contentRevision ?? 0)
   const pendingDrafts = useRef(new Set<string>())
   const blockedDraft = useRef(false)
   const undoReloadTimer = useRef<number | undefined>(undefined)
-  const activeActions = useRef<{ flush(): Promise<void>; save(): Promise<void>; close(): Promise<boolean>; focus(): void }>({
+  const activeActions = useRef<ActiveActions>({
     flush: async () => {},
     save: async () => {},
     close: async () => false,
-    focus: () => {}
+    focus: () => { throw new Error('The editor surface is not ready.') },
+    runCommand: async () => { throw new Error('The editor surface is not ready.') }
   })
 
   useEffect(() => {
@@ -283,6 +293,10 @@ function DocumentBody({ context, input }: { context: UiPluginContext; input: Doc
     await draftQueue.current
     if (blockedDraft.current) throw new Error(draftConflict ?? 'Your local draft conflicts with a newer shared version.')
   }, [draftConflict])
+  const flushActiveDocument = useCallback(async () => {
+    await flushSurfaceEditors()
+    await flushDrafts()
+  }, [flushDrafts, flushSurfaceEditors])
 
   const submitDraft = useCallback((content: string) => {
     localTextRef.current = content
@@ -322,6 +336,7 @@ function DocumentBody({ context, input }: { context: UiPluginContext; input: Doc
   }, [context, input.bufferId])
 
   const save = useCallback(async (trigger: 'user' | 'overwrite' = 'user') => {
+    await flushSurfaceEditors()
     if (trigger === 'overwrite') {
       await draftQueue.current
       const currentText = localTextRef.current
@@ -348,7 +363,7 @@ function DocumentBody({ context, input }: { context: UiPluginContext; input: Doc
     }
     setUiError(null)
     refresh()
-  }, [context, flushDrafts, input.bufferId, refresh, writeLocalDraftAtLatest])
+  }, [context, flushDrafts, flushSurfaceEditors, input.bufferId, refresh, writeLocalDraftAtLatest])
   const runViewAction = useCallback(async (action: 'reload' | 'keep' | 'undoReload' | 'compare' | 'promote' | 'pin' | 'reveal', patch?: Record<string, unknown>) => {
     if (action === 'keep') {
       await draftQueue.current
@@ -418,7 +433,7 @@ function DocumentBody({ context, input }: { context: UiPluginContext; input: Doc
     void context.call('quirky.editor/view', { bufferId: input.bufferId, action: 'update', ...(tabId ? { tabId } : {}), patch }).catch((reason: unknown) => setUiError(messageOf(reason)))
   }, [context, input.bufferId, input.tabId])
   const actualTabId = input.tabId ?? buffer?.tabId ?? null
-  const actualMode = input.mode === 'preview' ? 'preview' : buffer?.mode ?? input.mode ?? 'source'
+  const actualMode = input.mode ?? buffer?.mode ?? 'source'
 
   const onAction = useCallback((method: string, params: Record<string, unknown>) => {
     const needsBuffer = BUFFER_METHODS[method] === true && params.bufferId === undefined
@@ -442,37 +457,159 @@ function DocumentBody({ context, input }: { context: UiPluginContext; input: Doc
     const surfaceBuffer = buffer.mode === actualMode && view === buffer.view
       ? buffer
       : { ...buffer, mode: actualMode, view }
-    return { context, buffer: surfaceBuffer, onDraft: submitDraft, onAction, onView: updateView }
-  }, [buffer, context, onAction, submitDraft, updateView, actualTabId, actualMode])
+    return {
+      context,
+      buffer: surfaceBuffer,
+      fontSize: Math.max(8, Math.min(32, 13 + settings.fontZoomLevel)),
+      onDraft: submitDraft,
+      onAction,
+      onView: updateView,
+      registerCommandHandlers
+    }
+  }, [actualMode, actualTabId, buffer, context, onAction, registerCommandHandlers, settings.fontZoomLevel, submitDraft, updateView])
 
   const reveal = input.line === undefined ? undefined : { line: input.line, column: input.column }
   const fontSize = Math.max(8, Math.min(32, 13 + settings.fontZoomLevel))
+  const runDocumentCommand = async (command: ActiveDocumentCommand, args?: Record<string, unknown>): Promise<unknown> => {
+    if (!buffer) throw new Error('There is no mounted editor document.')
+    if (command === 'markdown-preview') {
+      if (buffer.kind !== 'markdown') throw new Error('Markdown Preview is available only for Markdown documents.')
+      await activeActions.current.flush()
+      const opened = await context.call('quirky.editor/open', {
+        worktree: buffer.worktreeId,
+        path: buffer.relativePath,
+        mode: 'preview',
+        preview: false,
+        focus: true
+      }) as { openedTabId?: string }
+      return { opened: true, bufferId: buffer.id, tabId: opened.openedTabId ?? null }
+    }
+    if (command === 'toggle-word-wrap') {
+      if (!sourceRef.current) throw new Error('Word Wrap is available only in source-editor mode.')
+      const wordWrap = !settings.wordWrap
+      await setEditorSetting(context, 'editorWordWrap', wordWrap)
+      return { wordWrap }
+    }
+
+    const surfaceAction: EditorSurfaceAction | null =
+      command === 'find' || command === 'replace' || command === 'copy-context' ||
+      command === 'add-review-note' || command === 'zoom-in' || command === 'zoom-out' || command === 'reset-zoom'
+        ? command
+        : null
+    if (surfaceAction) {
+      let handler: EditorSurfaceCommandHandler | undefined
+      for (const handlers of surfaceCommandHandlers.current.values()) {
+        handler = handlers[surfaceAction] ?? handler
+      }
+      if (handler) return await handler(args)
+    }
+    if (sourceRef.current) {
+      if (command === 'find') return sourceRef.current.find(typeof args?.query === 'string' ? args.query : undefined)
+      if (command === 'replace') return sourceRef.current.replace(typeof args?.query === 'string' ? args.query : undefined)
+      if (command === 'copy-context') return sourceRef.current.copyContext()
+    }
+
+    if (command === 'zoom-in' || command === 'zoom-out' || command === 'reset-zoom') {
+      if (buffer.kind === 'image' || buffer.kind === 'pdf' || buffer.kind === 'audio' || buffer.kind === 'video' || buffer.kind === 'binary') {
+        throw new Error(`Zoom is not supported by the ${buffer.kind} viewer in its current state.`)
+      }
+      const fontZoomLevel = command === 'zoom-in'
+        ? Math.min(18, settings.fontZoomLevel + 1)
+        : command === 'zoom-out'
+          ? Math.max(-6, settings.fontZoomLevel - 1)
+          : 0
+      await setEditorSetting(context, 'editorFontZoomLevel', fontZoomLevel)
+      return { fontZoomLevel, fontSize: Math.max(8, Math.min(32, 13 + fontZoomLevel)) }
+    }
+    throw new Error(`${command} is not supported by the ${buffer.kind} ${actualMode} editor surface.`)
+  }
 
   activeActions.current = {
-    flush: flushDrafts,
+    flush: flushActiveDocument,
     save: () => save('user'),
     close: () => requestSingleClose(context, input.bufferId, actualTabId ?? undefined),
-    focus: () => sourceRef.current?.focus()
+    focus: () => {
+      if (sourceRef.current) sourceRef.current.focus()
+      else if (rootRef.current) rootRef.current.focus()
+      else throw new Error('The editor surface is not mounted.')
+    },
+    runCommand: runDocumentCommand
   }
 
   useEffect(() => {
     if (!buffer) return
-    const document = registerActiveDocument({
+    const registration = registerActiveDocument({
       bufferId: buffer.id,
       tabId: actualTabId,
       worktreeId: buffer.worktreeId,
       path: buffer.path,
+      mode: actualMode,
+      kind: buffer.kind,
       flush: () => activeActions.current.flush(),
       save: () => activeActions.current.save(),
       close: () => activeActions.current.close(),
-      focus: () => activeActions.current.focus()
+      focus: () => activeActions.current.focus(),
+      runCommand: (command, args) => activeActions.current.runCommand(command, args)
     })
-    context.setContext('editorFocus', true)
-    return () => {
-      document()
+    activeRegistration.current = registration
+    const hostedView = rootRef.current?.closest<HTMLElement>('.qt-hosted-view')
+    const group = rootRef.current?.closest<HTMLElement>('.qt-group')
+    const clearEditorFocus = () => {
+      if (!editorHasFocus.current) return
+      editorHasFocus.current = false
       context.setContext('editorFocus', undefined)
+      context.setContext('editorWorkspaceFocus', undefined)
     }
-  }, [actualTabId, buffer?.id, buffer?.path, buffer?.worktreeId, context])
+    const updateGroupFocus = () => {
+      if (group?.classList.contains('qt-active') && actualTabId !== null && hostedView?.dataset.hostedView === actualTabId) {
+        registration.focus()
+      } else {
+        registration.blur()
+        clearEditorFocus()
+      }
+    }
+    updateGroupFocus()
+    const observer = group ? new MutationObserver(updateGroupFocus) : undefined
+    if (group) observer?.observe(group, { attributes: true, attributeFilter: ['class'] })
+    return () => {
+      observer?.disconnect()
+      registration.unregister()
+      if (activeRegistration.current === registration) activeRegistration.current = null
+      clearEditorFocus()
+    }
+  }, [actualTabId, buffer?.id, context])
+
+  useEffect(() => {
+    if (!buffer) return
+    activeRegistration.current?.update({
+      bufferId: buffer.id,
+      tabId: actualTabId,
+      worktreeId: buffer.worktreeId,
+      path: buffer.path,
+      mode: actualMode,
+      kind: buffer.kind,
+      flush: () => activeActions.current.flush(),
+      save: () => activeActions.current.save(),
+      close: () => activeActions.current.close(),
+      focus: () => activeActions.current.focus(),
+      runCommand: (command, args) => activeActions.current.runCommand(command, args)
+    })
+  }, [actualMode, actualTabId, buffer?.id, buffer?.kind, buffer?.path, buffer?.worktreeId])
+
+  const activateSurface = () => activeRegistration.current?.focus()
+  const focusEditor = () => {
+    activeRegistration.current?.focus()
+    editorHasFocus.current = true
+    context.setContext('editorFocus', true)
+    context.setContext('editorWorkspaceFocus', true)
+  }
+  const blurEditor = (event: ReactFocusEvent<HTMLDivElement>) => {
+    if (event.relatedTarget instanceof Node && event.currentTarget.contains(event.relatedTarget)) return
+    if (!editorHasFocus.current) return
+    editorHasFocus.current = false
+    context.setContext('editorFocus', undefined)
+    context.setContext('editorWorkspaceFocus', undefined)
+  }
 
   const handleError = (reason: unknown) => {
     const message = messageOf(reason)
@@ -608,17 +745,20 @@ function DocumentBody({ context, input }: { context: UiPluginContext; input: Doc
       setUiError(null)
       return
     }
-    const uriList = event.dataTransfer.getData('text/uri-list')
-    if (uriList) {
-      event.preventDefault()
-      await openDroppedUris(context, buffer.worktreeId, parentDirectory(buffer.relativePath), uriList)
-      setUiError(null)
-      return
-    }
     const files = Array.from(event.dataTransfer.files)
     if (files.length > 0) {
       event.preventDefault()
       const imported = await uploadFiles(context, buffer.worktreeId, parentDirectory(buffer.relativePath), files)
+      for (let index = 0; index < imported.length; index++) {
+        await context.call('quirky.editor/open', { worktree: buffer.worktreeId, path: imported[index], focus: index === imported.length - 1, preview: false })
+      }
+      setUiError(null)
+      return
+    }
+    const uriList = event.dataTransfer.getData('text/uri-list')
+    if (uriList) {
+      event.preventDefault()
+      const imported = await importDroppedUris(context, buffer.worktreeId, parentDirectory(buffer.relativePath), uriList)
       for (let index = 0; index < imported.length; index++) {
         await context.call('quirky.editor/open', { worktree: buffer.worktreeId, path: imported[index], focus: index === imported.length - 1, preview: false })
       }
@@ -647,7 +787,19 @@ function DocumentBody({ context, input }: { context: UiPluginContext; input: Doc
   const pathTitle = buffer.relativePath || buffer.name
 
   return (
-    <div className="qe-document-surface" onDragOver={(event) => { if (event.dataTransfer.types.includes(WORKTREE_PATHS_MIME) || event.dataTransfer.files.length > 0) event.preventDefault() }} onDrop={(event) => { event.preventDefault(); void handleDrop(event).catch(handleError) }}>
+    <div
+      ref={rootRef}
+      tabIndex={-1}
+      className="qe-document-surface"
+      onPointerDownCapture={activateSurface}
+      onFocusCapture={focusEditor}
+      onBlurCapture={blurEditor}
+      onDragOver={(event) => {
+        const types = event.dataTransfer.types
+        if (types.includes(WORKTREE_PATHS_MIME) || types.includes('Files') || types.includes('text/uri-list')) event.preventDefault()
+      }}
+      onDrop={(event) => { event.preventDefault(); void handleDrop(event).catch(handleError) }}
+    >
       <header className="qe-document-header">
         <div className="qe-document-path-group">
           <button type="button" className="qe-document-path" title={buffer.path} onClick={() => void copyPath(false)}>{pathTitle}</button>
@@ -752,10 +904,9 @@ function DocumentBody({ context, input }: { context: UiPluginContext; input: Doc
             fontSize={fontSize}
             fontFamily={settings.fontFamily}
             onDraft={submitDraft}
-            onSave={() => save('user')}
             flushDraft={flushDrafts}
             onView={updateView}
-            onEditorFocus={() => context.setContext('editorFocus', true)}
+            onEditorFocus={focusEditor}
             onSearchInFiles={searchInFiles}
             reveal={reveal}
             error={sourceError}

@@ -151,7 +151,8 @@ function MarkdownPreview({
   openLink,
   markdownAnchor,
   onView,
-  onMissingAnchor
+  onMissingAnchor,
+  articleRef
 }: {
   source: string
   imageUrls: Readonly<Record<string, string>>
@@ -159,22 +160,21 @@ function MarkdownPreview({
   markdownAnchor: string | null
   onView(patch: Record<string, unknown>): void
   onMissingAnchor(anchor: string): void
+  articleRef: React.RefObject<HTMLElement | null>
 }): React.JSX.Element {
-  const article = useRef<HTMLElement | null>(null)
-
   useEffect(() => {
     if (!markdownAnchor) return
     const headingId = previewHeadingId(source, markdownAnchor)
     const safeRawId = markdownAnchor.startsWith('user-content-') ? markdownAnchor : `user-content-${markdownAnchor}`
-    const target = Array.from(article.current?.querySelectorAll('[id]') ?? [])
+    const target = Array.from(articleRef.current?.querySelectorAll('[id]') ?? [])
       .find((element) => element.id === headingId || element.id === safeRawId || element.id === markdownAnchor)
     if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' })
     else onMissingAnchor(markdownAnchor)
     onView({ markdownAnchor: null })
-  }, [markdownAnchor, onMissingAnchor, onView, source])
+  }, [articleRef, markdownAnchor, onMissingAnchor, onView, source])
 
   return (
-    <article ref={article} className="markdown-body" style={{ padding: '16px 24px', overflow: 'auto', lineHeight: 1.6 }}>
+    <article ref={articleRef} className="markdown-body" style={{ padding: '16px 24px', overflow: 'auto', lineHeight: 1.6 }}>
       <ReactMarkdown
         remarkPlugins={[remarkGfm, remarkMath]}
         rehypePlugins={MARKDOWN_PREVIEW_REHYPE_PLUGINS}
@@ -201,6 +201,7 @@ function MarkdownPreview({
     </article>
   )
 }
+
 
 function SourceSurface({ props }: { props: SurfaceProps }): React.JSX.Element {
   const content = sourceValue(props.buffer)
@@ -267,6 +268,8 @@ function PreviewSurface({ props }: { props: SurfaceProps }): React.JSX.Element {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [searchOpen, setSearchOpen] = useState(false)
+  const searchInput = useRef<HTMLInputElement>(null)
+  const previewArticle = useRef<HTMLElement | null>(null)
   const [query, setQuery] = useState('')
   const [searchResult, setSearchResult] = useState<{ total: number; matches: { from: number; to: number; line: number; text: string }[] } | null>(null)
   const [matchCase, setMatchCase] = useState(false)
@@ -342,6 +345,12 @@ function PreviewSurface({ props }: { props: SurfaceProps }): React.JSX.Element {
     }
   }, [props.buffer.id, props.buffer.worktreeId, props.context, props.onAction, props.onView])
 
+  const revealPreviewMatch = useCallback((match: { text: string }) => {
+    const root = previewArticle.current
+    const target = Array.from(root?.querySelectorAll('p,h1,h2,h3,h4,h5,h6,li,pre,blockquote,td,th') ?? [])
+      .find((element) => element.textContent?.includes(match.text))
+    target?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  }, [])
   const runSearch = useCallback(async () => {
     if (query === '') {
       setSearchResult(null)
@@ -356,20 +365,17 @@ function PreviewSurface({ props }: { props: SurfaceProps }): React.JSX.Element {
       })) as { total: number; matches: { from: number; to: number; line: number; text: string }[] }
       setSearchResult(result)
       setSearchIndex(0)
+      if (result.matches[0]) revealPreviewMatch(result.matches[0])
     } catch (cause) {
       setError(errorText(cause))
     }
-  }, [matchCase, wholeWord, props.buffer.id, props.onAction, query])
+  }, [matchCase, wholeWord, props.buffer.id, props.onAction, query, revealPreviewMatch])
   const movePreviewSearch = useCallback((delta: number) => {
     if (!searchResult || searchResult.matches.length === 0) return
     const next = (searchIndex + delta + searchResult.matches.length) % searchResult.matches.length
     setSearchIndex(next)
-    const match = searchResult.matches[next]!
-    const root = document.querySelector('.markdown-body')
-    const target = Array.from(root?.querySelectorAll('p,h1,h2,h3,h4,h5,h6,li,pre,blockquote,td,th') ?? [])
-      .find((element) => element.textContent?.includes(match.text))
-    target?.scrollIntoView({ behavior: 'smooth', block: 'center' })
-  }, [searchIndex, searchResult])
+    revealPreviewMatch(searchResult.matches[next]!)
+  }, [revealPreviewMatch, searchIndex, searchResult])
 
   const replacePreview = useCallback(async (all: boolean) => {
     try {
@@ -386,6 +392,34 @@ function PreviewSurface({ props }: { props: SurfaceProps }): React.JSX.Element {
       setError(`${result.replacements ?? 0} replacement(s)`)
     } catch (cause) { setError(errorText(cause)) }
   }, [matchCase, props.buffer.contentRevision, props.buffer.id, props.onAction, query, replaceText, wholeWord])
+  const openSearch = useCallback(async (replace: boolean, args?: Record<string, unknown>) => {
+    const requestedQuery = typeof args?.query === 'string' ? args.query : undefined
+    setSearchOpen(true)
+    setReplaceOpen(replace)
+    if (requestedQuery !== undefined) setQuery(requestedQuery)
+    window.requestAnimationFrame(() => searchInput.current?.focus())
+    if (requestedQuery === undefined || requestedQuery === '') return { opened: true, replace }
+    try {
+      const result = await props.onAction(MARKDOWN_METHOD, methodParams(props.buffer.id, {
+        action: 'search',
+        query: requestedQuery,
+        matchCase,
+        wholeWord
+      })) as { total: number; matches: { from: number; to: number; line: number; text: string }[] }
+      setSearchResult(result)
+      setSearchIndex(0)
+      if (result.matches[0]) revealPreviewMatch(result.matches[0])
+      return { opened: true, replace, query: requestedQuery, total: result.total }
+    } catch (cause) {
+      setError(errorText(cause))
+      throw cause
+    }
+  }, [matchCase, wholeWord, props.buffer.id, props.onAction, revealPreviewMatch])
+  useEffect(() => props.registerCommandHandlers({
+    find: (args) => openSearch(false, args),
+    replace: (args) => openSearch(true, args)
+  }), [openSearch, props.registerCommandHandlers])
+
 
   const openSource = () => props.context.call('quirky.editor/view', methodParams(props.buffer.id, { action: 'update', patch: { mode: 'source' } }))
   const reportMissingAnchor = useCallback((anchor: string) => {
@@ -393,7 +427,7 @@ function PreviewSurface({ props }: { props: SurfaceProps }): React.JSX.Element {
   }, [])
 
   return (
-    <div style={markdownStyle}>
+    <div style={{ ...markdownStyle, fontSize: props.fontSize }}>
       <div style={toolbarStyle}>
         <button type="button" style={buttonStyle} onClick={() => void openSource()}>Source</button>
         <button type="button" style={buttonStyle} onClick={() => setSearchOpen((open) => !open)}>Find in preview</button>
@@ -401,7 +435,7 @@ function PreviewSurface({ props }: { props: SurfaceProps }): React.JSX.Element {
         <span>Markdown Preview</span>
       </div>
       {searchOpen && <div style={toolbarStyle}>
-        <input aria-label="Find in preview" placeholder="Find in preview" value={query} onChange={(event) => setQuery(event.currentTarget.value)} onKeyDown={(event) => { if (event.key === 'Enter') void runSearch() }} />
+        <input ref={searchInput} aria-label="Find in preview" placeholder="Find in preview" value={query} onChange={(event) => setQuery(event.currentTarget.value)} onKeyDown={(event) => { if (event.key === 'Enter') void runSearch() }} />
         <label><input type="checkbox" aria-label="Match case" checked={matchCase} onChange={(event) => setMatchCase(event.currentTarget.checked)} /> Match case</label>
         <label><input type="checkbox" aria-label="Match whole word" checked={wholeWord} onChange={(event) => setWholeWord(event.currentTarget.checked)} /> Match whole word</label>
         <button type="button" style={buttonStyle} onClick={() => void runSearch()}>Find</button>
@@ -426,6 +460,7 @@ function PreviewSurface({ props }: { props: SurfaceProps }): React.JSX.Element {
         markdownAnchor={typeof props.buffer.view.markdownAnchor === 'string' ? props.buffer.view.markdownAnchor : null}
         onView={props.onView}
         onMissingAnchor={reportMissingAnchor}
+        articleRef={previewArticle}
       />}
       {!busy && !preview && error && <div role="alert">Preview failed. <button type="button" style={buttonStyle} onClick={() => void refresh()}>Retry</button><button type="button" style={buttonStyle} onClick={() => void openSource()}>Open source</button></div>}
     </div>
@@ -450,6 +485,7 @@ function RichSurface({ props }: { props: SurfaceProps }): React.JSX.Element {
   const [emojiPickerError, setEmojiPickerError] = useState<string | null>(null)
   const [moreOpen, setMoreOpen] = useState(false)
   const [searchOpen, setSearchOpen] = useState(false)
+  const searchInput = useRef<HTMLInputElement>(null)
   const [searchReplace, setSearchReplace] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
   const [matchCase, setMatchCase] = useState(false)
@@ -463,6 +499,7 @@ function RichSurface({ props }: { props: SurfaceProps }): React.JSX.Element {
   const [frontMatterVisible, setFrontMatterVisible] = useState(buffer.view.markdownFrontmatterVisible === true)
   const [notes, setNotes] = useState<MarkdownReviewNote[]>([])
   const [noteComposer, setNoteComposer] = useState(false)
+  const noteInput = useRef<HTMLTextAreaElement>(null)
   const [noteBody, setNoteBody] = useState('')
   const [noteEdit, setNoteEdit] = useState<string | null>(null)
   const [sendMenu, setSendMenu] = useState(false)
@@ -518,36 +555,15 @@ function RichSurface({ props }: { props: SurfaceProps }): React.JSX.Element {
       attributes: { class: 'quirky-markdown-prosemirror', 'aria-label': 'Rich Markdown editor' },
       handleKeyDown: (_view, event) => {
         const currentEditor = editorRef.current
-        if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 's') {
-          event.preventDefault()
-          void flushRef.current().then(() => context.call('quirky.editor/save', { bufferId: buffer.id, trigger: 'user' })).catch((cause) => setFlushError(errorText(cause)))
-          return true
-        }
         if ((event.metaKey || event.ctrlKey) && event.shiftKey && event.key.toLowerCase() === 'x') {
           event.preventDefault()
           currentEditor?.chain().focus().toggleStrike().run()
-          return true
-        }
-        if ((event.metaKey || event.ctrlKey) && ['f', 'h'].includes(event.key.toLowerCase())) {
-          event.preventDefault()
-          setSearchOpen(true)
-          setSearchReplace(event.key.toLowerCase() === 'h' || event.altKey)
-          return true
-        }
-        if ((event.metaKey || event.ctrlKey) && event.shiftKey && event.key.toLowerCase() === 'a') {
-          event.preventDefault()
-          setNoteComposer(true)
           return true
         }
         if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
           event.preventDefault()
           setLinkValue(String(currentEditor?.getAttributes('link').href ?? ''))
           setLinkBubble(true)
-          return true
-        }
-        if ((event.metaKey || event.ctrlKey) && event.shiftKey && event.key.toLowerCase() === 'v') {
-          event.preventDefault()
-          void context.call('quirky.editor/open', { worktree: `id:${buffer.worktreeId}`, path: buffer.relativePath, mode: 'preview', focus: false })
           return true
         }
         if (event.key === 'Escape' && slashRef.current) {
@@ -949,6 +965,21 @@ function RichSurface({ props }: { props: SurfaceProps }): React.JSX.Element {
       if (position) editor?.chain().focus().setTextSelection(position).scrollIntoView().run()
     } catch (cause) { setFeedback(errorText(cause)) }
   }, [call, editor, matchCase, wholeWord, searchQuery])
+  const openSearch = useCallback(async (replace: boolean, args?: Record<string, unknown>) => {
+    if (!editor) throw new Error('The rich Markdown editor is not ready.')
+    const requestedQuery = typeof args?.query === 'string' ? args.query : undefined
+    setSearchOpen(true)
+    setSearchReplace(replace)
+    if (requestedQuery !== undefined) setSearchQuery(requestedQuery)
+    window.requestAnimationFrame(() => searchInput.current?.focus())
+    if (requestedQuery === undefined || requestedQuery === '') return { opened: true, replace }
+    const result = await call(MARKDOWN_METHOD, { action: 'search', query: requestedQuery, matchCase, wholeWord }) as { matches: { from: number; to: number; line: number; text: string }[]; total: number }
+    setSearchResult(result)
+    setSearchIndex(0)
+    const position = result.matches[0] ? findTextPosition(editor, requestedQuery) : null
+    if (position) editor.chain().focus().setTextSelection(position).scrollIntoView().run()
+    return { opened: true, replace, query: requestedQuery, total: result.total }
+  }, [call, editor, matchCase, wholeWord])
 
   const moveSearch = useCallback((direction: number) => {
     if (!editor || !searchResult || searchResult.matches.length === 0) return
@@ -1100,6 +1131,28 @@ function RichSurface({ props }: { props: SurfaceProps }): React.JSX.Element {
       await loadNotes()
     } catch (cause) { setFeedback(errorText(cause)) }
   }, [call, loadNotes, noteBody, noteEdit, selection])
+  const startReviewNote = useCallback(() => {
+    if (!selection) throw new Error('Select Markdown text before adding a review note.')
+    setNoteEdit(null)
+    setNoteBody('')
+    setNoteComposer(true)
+    window.requestAnimationFrame(() => noteInput.current?.focus())
+    return { opened: true, startLine: selection.startLine, endLine: selection.endLine }
+  }, [selection])
+  const copyMarkdownContext = useCallback(async () => {
+    if (!selection) throw new Error('Select Markdown text before copying context.')
+    if (!navigator.clipboard) throw new Error('Clipboard access is unavailable.')
+    const lines = selection.startLine === selection.endLine ? `${selection.startLine}` : `${selection.startLine}-${selection.endLine}`
+    await navigator.clipboard.writeText(`${buffer.relativePath}:${lines}\n${selection.text}`)
+    return { copied: true, path: buffer.relativePath, lines }
+  }, [buffer.relativePath, selection])
+  useEffect(() => props.registerCommandHandlers({
+    find: (args) => openSearch(false, args),
+    replace: (args) => openSearch(true, args),
+    'copy-context': copyMarkdownContext,
+    'add-review-note': startReviewNote,
+    flush
+  }), [copyMarkdownContext, flush, openSearch, props.registerCommandHandlers, startReviewNote])
 
   const copyNotes = useCallback(async () => {
     try {
@@ -1166,7 +1219,7 @@ function RichSurface({ props }: { props: SurfaceProps }): React.JSX.Element {
   )
 
   return (
-    <div style={{ ...markdownStyle, overflow: 'hidden' }}>
+    <div style={{ ...markdownStyle, overflow: 'hidden', fontSize: props.fontSize }}>
       <div style={toolbarStyle} role="toolbar" aria-label="Markdown formatting">
         <button type="button" style={buttonStyle} onMouseDown={(event) => event.preventDefault()} onClick={() => insertToolbarFormat('body')}>Body text</button>
         {[1, 2, 3].map((level) => <button key={level} type="button" style={buttonStyle} onMouseDown={(event) => event.preventDefault()} onClick={() => insertToolbarFormat(`heading${level}` as MarkdownFormat)}>H{level}</button>)}
@@ -1218,7 +1271,7 @@ function RichSurface({ props }: { props: SurfaceProps }): React.JSX.Element {
         <summary>Front Matter (edit in source mode)</summary><pre style={{ maxHeight: '8rem', overflow: 'auto', whiteSpace: 'pre-wrap' }}>{frontmatter}</pre>
       </details>}
       {searchOpen && <div style={toolbarStyle}>
-        <input aria-label="Find in rich editor" placeholder="Find in rich editor" value={searchQuery} onChange={(event) => setSearchQuery(event.currentTarget.value)} onKeyDown={(event) => { if (event.key === 'Enter') void updateSearch() }} />
+        <input ref={searchInput} aria-label="Find in rich editor" placeholder="Find in rich editor" value={searchQuery} onChange={(event) => setSearchQuery(event.currentTarget.value)} onKeyDown={(event) => { if (event.key === 'Enter') void updateSearch() }} />
         <label><input type="checkbox" aria-label="Match case" checked={matchCase} onChange={(event) => setMatchCase(event.currentTarget.checked)} /> Match case</label>
         <label><input type="checkbox" aria-label="Match whole word" checked={wholeWord} onChange={(event) => setWholeWord(event.currentTarget.checked)} /> Match whole word</label>
         <button type="button" style={buttonStyle} onClick={() => void updateSearch()}>Find</button>
@@ -1336,7 +1389,7 @@ function RichSurface({ props }: { props: SurfaceProps }): React.JSX.Element {
           </div>}
           {noteComposer && <div role="dialog" aria-label="Add note for the AI">
             <p>{selection?.text ? `Selected text: ${selection.text}` : 'Add note for the AI'}</p>
-            <textarea aria-label="Add note for the AI" rows={3} maxLength={MAX_NOTE_BODY_BYTES} value={noteBody} onChange={(event) => setNoteBody(event.currentTarget.value)} />
+            <textarea ref={noteInput} aria-label="Add note for the AI" rows={3} maxLength={MAX_NOTE_BODY_BYTES} value={noteBody} onChange={(event) => setNoteBody(event.currentTarget.value)} />
             <button type="button" style={buttonStyle} onClick={() => void addNote()}>{noteEdit ? 'Save note' : 'Add note'}</button>
             <button type="button" style={buttonStyle} onClick={() => { setNoteComposer(false); setNoteEdit(null); setNoteBody('') }}>Cancel</button>
           </div>}

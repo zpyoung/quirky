@@ -1,6 +1,6 @@
 import { spawn } from 'node:child_process'
 import { lstat } from 'node:fs/promises'
-import { join, relative, sep } from 'node:path'
+import { isAbsolute, join } from 'node:path'
 import type { PluginContext } from '@quirky/protocol'
 
 export const QUICK_OPEN_MAX_ENTRIES = 20_001
@@ -16,6 +16,14 @@ export type Inventory = { paths: string[]; truncated: boolean }
 export type RankedPath = { path: string; name: string; score: number; line?: number; column?: number }
 
 type SpawnResult = { bytes: Buffer; code: number; stderr: string; truncated: boolean }
+
+export function normalizeRipgrepPath(path: string): string | null {
+  let normalized = path
+  while (normalized.startsWith('./')) normalized = normalized.slice(2)
+  if (normalized === '' || normalized.includes('\0') || isAbsolute(normalized)) return null
+  if (normalized.split('/').some((segment) => segment === '' || segment === '.' || segment === '..')) return null
+  return normalized
+}
 
 export class FileInventory {
   private cache = new Map<string, { expires: number; promise: Promise<Inventory> }>()
@@ -87,7 +95,12 @@ export class FileInventory {
       throw this.context.error('not-found', `ripgrep (rg) could not list worktree files: ${result.stderr.trim() || `exit ${result.code}`}`)
     }
     const names = result.bytes.toString('utf8').split('\0').filter(Boolean)
-    const limited = names.slice(0, QUICK_OPEN_MAX_ENTRIES)
+    const count = Math.min(names.length, QUICK_OPEN_MAX_ENTRIES)
+    const limited: string[] = []
+    for (let index = 0; index < count; index++) {
+      const path = normalizeRipgrepPath(names[index]!)
+      if (path !== null) limited.push(path)
+    }
     const filtered = await this.excludeNestedWorktrees(root, limited)
     return { paths: filtered, truncated: result.truncated || names.length > QUICK_OPEN_MAX_ENTRIES }
   }
@@ -108,7 +121,7 @@ export class FileInventory {
       return false
     }
     const keep: string[] = []
-    for (const name of names) if (!(await isNested(name))) keep.push(name.replaceAll(sep, '/'))
+    for (const name of names) if (!(await isNested(name))) keep.push(name)
     return keep
   }
 }

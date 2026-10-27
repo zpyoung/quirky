@@ -679,6 +679,7 @@
             },
             "input": {
               "type": "object",
+              "additionalProperties": true,
               "description": "The input passed to the mounted view."
             },
             "title": {
@@ -711,6 +712,7 @@
             },
             "closeParams": {
               "type": "object",
+              "additionalProperties": true,
               "description": "Parameters passed to closeMethod and closeCommand with the actual tabId added."
             },
             "revision": {
@@ -771,6 +773,7 @@
                   },
                   "input": {
                     "type": "object",
+                    "additionalProperties": true,
                     "description": "The new mounted view input."
                   },
                   "title": {

@@ -620,7 +620,19 @@
           "additionalProperties": false
         },
         "result": { "description": "Confirmation text for install and venv; null for every other notebook action." }
-      }
+      },
+      {"id":"find","description":"Open Find on the focused editor surface.","params":{"type":"object","properties":{"query":{"type":"string"}},"additionalProperties":false},"result":{"type":"object","properties":{"result":{"description":"Surface-specific union: source {opened:true,query?}; rich Markdown {opened:true,replace:false,query?,total?}; notebook {opened:true} or {opened:true,query,matches,truncated}; CSV {opened:true} or {filtered:true,query}; PDF {opened:true} or {found,page,totalPages}."}},"required":["result"],"additionalProperties":false}},
+      {"id":"replace","description":"Open Replace on the focused editor surface.","params":{"type":"object","properties":{"query":{"type":"string"}},"additionalProperties":false},"result":{"type":"object","properties":{"result":{"description":"Surface-specific union: source {opened:true,query?}; rich/preview Markdown {opened:true,replace:true,query?,total?}."}},"required":["result"],"additionalProperties":false}},
+      {"id":"markdown-preview","description":"Open the focused Markdown document in Preview.","params":{"type":"object","properties":{},"additionalProperties":false},"result":{"type":"object","properties":{"result":{"description":"{opened:true,bufferId,tabId|null}."}},"required":["result"],"additionalProperties":false}},
+      {"id":"toggle-word-wrap","description":"Toggle word wrap in the focused source editor.","params":{"type":"object","properties":{},"additionalProperties":false},"result":{"type":"object","properties":{"result":{"description":"{wordWrap:boolean}."}},"required":["result"],"additionalProperties":false}},
+      {"id":"copy-context","description":"Copy the focused selection with its document path and line range.","params":{"type":"object","properties":{},"additionalProperties":false},"result":{"type":"object","properties":{"result":{"description":"{copied:true,path,lines}."}},"required":["result"],"additionalProperties":false}},
+      {"id":"add-review-note","description":"Open a review note for the focused Markdown selection.","params":{"type":"object","properties":{},"additionalProperties":false},"result":{"type":"object","properties":{"result":{"description":"{opened:true,startLine,endLine}."}},"required":["result"],"additionalProperties":false}},
+      {"id":"zoom-in","description":"Zoom in on the focused editor or viewer.","params":{"type":"object","properties":{},"additionalProperties":false},"result":{"type":"object","properties":{"result":{"description":"Image/PDF {zoom:number}; document text {fontZoomLevel:number,fontSize:number}."}},"required":["result"],"additionalProperties":false}},
+      {"id":"zoom-out","description":"Zoom out on the focused editor or viewer.","params":{"type":"object","properties":{},"additionalProperties":false},"result":{"type":"object","properties":{"result":{"description":"Image/PDF {zoom:number}; document text {fontZoomLevel:number,fontSize:number}."}},"required":["result"],"additionalProperties":false}},
+      {"id":"reset-zoom","description":"Reset zoom on the focused editor or viewer.","params":{"type":"object","properties":{},"additionalProperties":false},"result":{"type":"object","properties":{"result":{"description":"Image {zoom:number}; PDF {zoom:'page-width'}; document text {fontZoomLevel:0,fontSize:13}."}},"required":["result"],"additionalProperties":false}},
+      {"id":"toggle-right-sidebar","description":"Toggle the editor Explorer panel in the right-side panel area.","params":{"type":"object","properties":{},"additionalProperties":false},"result":{"type":"object","properties":{"result":{"description":"UiLayout object returned by ui.panel.open or ui.panel.close."}},"required":["result"],"additionalProperties":false}},
+      {"id":"new-markdown","description":"Open the template picker to create a Markdown document.","params":{"type":"object","properties":{"worktree":{"type":"string"}},"additionalProperties":false},"result":{"type":"object","properties":{"result":{"description":"{opened:true,dialog:'new-markdown'}."}},"required":["result"],"additionalProperties":false}},
+      {"id":"open-markdown","description":"Open a Markdown document from the active worktree.","params":{"type":"object","properties":{"worktree":{"type":"string"}},"additionalProperties":false},"result":{"type":"object","properties":{"result":{"description":"{opened:true,dialog:'open-markdown'}."}},"required":["result"],"additionalProperties":false}}
     ],
     "event": [
       { "id": "changed", "description": "Editor state changed; clients should re-fetch authoritative state.", "data": { "type": "object", "properties": { "revision": { "type": "integer", "minimum": 0 } }, "required": ["revision"], "additionalProperties": false } }
@@ -662,7 +674,19 @@
       { "id": "close-all", "title": "Close All Editor Tabs", "description": "Close editor tabs with per-buffer dirty decisions." },
       { "id": "reopen", "title": "Reopen Closed Editor Tab", "description": "Reopen the last eligible closed editor tab." },
       { "id": "explorer", "title": "Show Explorer", "description": "Open the Explorer sidebar panel." },
-      { "id": "source-control", "title": "Show Source Control", "description": "Open the public Source Control contribution." }
+      { "id": "source-control", "title": "Show Source Control", "description": "Open the public Source Control contribution." },
+      {"id":"find","title":"Find","description":"Open Find on the focused editor surface.","args":{"type":"object","properties":{"query":{"type":"string"}},"additionalProperties":false}},
+      {"id":"replace","title":"Replace","description":"Open Replace on the focused editor surface.","args":{"type":"object","properties":{"query":{"type":"string"}},"additionalProperties":false}},
+      {"id":"markdown-preview","title":"Markdown Preview","description":"Open the focused Markdown document in Preview."},
+      {"id":"toggle-word-wrap","title":"Toggle Word Wrap","description":"Toggle word wrap in the focused source editor."},
+      {"id":"copy-context","title":"Copy Context","description":"Copy the focused selection with its document path and line range."},
+      {"id":"add-review-note","title":"Add Review Note","description":"Open a review note for the focused Markdown selection."},
+      {"id":"zoom-in","title":"Zoom In","description":"Zoom in on the focused editor or viewer."},
+      {"id":"zoom-out","title":"Zoom Out","description":"Zoom out on the focused editor or viewer."},
+      {"id":"reset-zoom","title":"Reset Zoom","description":"Reset zoom on the focused editor or viewer."},
+      {"id":"toggle-right-sidebar","title":"Toggle Right Sidebar","description":"Toggle the editor Explorer panel in the right-side panel area."},
+      {"id":"new-markdown","title":"New Markdown","description":"Open the template picker to create a Markdown document.","args":{"type":"object","properties":{"worktree":{"type":"string"}},"additionalProperties":false}},
+      {"id":"open-markdown","title":"Open Markdown","description":"Open a Markdown document from the active worktree.","args":{"type":"object","properties":{"worktree":{"type":"string"}},"additionalProperties":false}}
     ],
     "keybinding": [
       { "id": "quick-open", "key": "mod+p", "command": "quick-open", "description": "Go to File", "when": "editorWorkspaceFocus" },
@@ -672,7 +696,19 @@
       { "id": "close", "key": "mod+w", "command": "close", "description": "Close Editor Tab", "when": "editorFocus" },
       { "id": "close-all", "key": "mod+alt+w", "command": "close-all", "description": "Close All Editor Tabs", "when": "editorFocus" },
       { "id": "reopen", "key": "mod+shift+t", "command": "reopen", "description": "Reopen Closed Editor Tab", "when": "editorWorkspaceFocus" },
-      { "id": "source-control", "key": "mod+shift+g", "command": "source-control", "description": "Show Source Control", "when": "editorWorkspaceFocus" }
+      { "id": "source-control", "key": "mod+shift+g", "command": "source-control", "description": "Show Source Control", "when": "editorWorkspaceFocus" },
+      {"id":"find","key":"mod+f","command":"find","description":"Find in the focused editor surface.","when":"editorFocus"},
+      {"id":"replace","key":"mod+alt+f","command":"replace","description":"Replace in the focused editor surface.","when":"editorFocus"},
+      {"id":"markdown-preview","key":"mod+shift+v","command":"markdown-preview","description":"Open Markdown Preview.","when":"editorFocus"},
+      {"id":"toggle-word-wrap","key":"alt+z","command":"toggle-word-wrap","description":"Toggle Word Wrap.","when":"editorFocus"},
+      {"id":"copy-context","key":"mod+alt+c","command":"copy-context","description":"Copy Selection Context.","when":"editorFocus"},
+      {"id":"add-review-note","key":"mod+shift+a","command":"add-review-note","description":"Add Review Note.","when":"editorFocus"},
+      {"id":"zoom-in","key":"mod+shift+=","command":"zoom-in","description":"Zoom In.","when":"editorFocus"},
+      {"id":"zoom-out","key":"mod+-","command":"zoom-out","description":"Zoom Out.","when":"editorFocus"},
+      {"id":"reset-zoom","key":"mod+0","command":"reset-zoom","description":"Reset Zoom.","when":"editorFocus"},
+      {"id":"toggle-right-sidebar","key":"mod+l","command":"toggle-right-sidebar","description":"Toggle Right Sidebar.","when":"editorWorkspaceFocus"},
+      {"id":"new-markdown","key":"mod+shift+m","command":"new-markdown","description":"Create a Markdown document.","when":"editorWorkspaceFocus"},
+      {"id":"open-markdown","key":"mod+shift+o","command":"open-markdown","description":"Open a Markdown document.","when":"editorWorkspaceFocus"}
     ],
     "cli-command": [
       { "id": "open", "words": "open", "summary": "open an authorized worktree file", "positionals": [{ "name": "path", "description": "worktree-relative or authorized absolute file path", "required": true }], "method": "open" },
@@ -693,7 +729,19 @@
       { "id": "markdown", "words": "markdown", "summary": "run a source-preserving Markdown action", "method": "markdown" },
       { "id": "notes", "words": "notes", "summary": "manage Markdown review notes", "method": "notes" },
       { "id": "notebook", "words": "notebook", "summary": "inspect or operate a notebook", "method": "notebook" },
-      { "id": "viewer", "words": "viewer", "summary": "inspect or operate a file viewer", "method": "viewer" }
+      { "id": "viewer", "words": "viewer", "summary": "inspect or operate a file viewer", "method": "viewer" },
+      {"id":"find","words":"find","summary":"Open Find on the focused editor surface","method":"find"},
+      {"id":"replace","words":"replace","summary":"Open Replace on the focused editor surface","method":"replace"},
+      {"id":"markdown-preview","words":"markdown-preview","summary":"Open the focused Markdown document in Preview","method":"markdown-preview"},
+      {"id":"toggle-word-wrap","words":"toggle-word-wrap","summary":"Toggle word wrap in the focused source editor","method":"toggle-word-wrap"},
+      {"id":"copy-context","words":"copy-context","summary":"Copy the focused selection with its document path and line range","method":"copy-context"},
+      {"id":"add-review-note","words":"add-review-note","summary":"Open a review note for the focused Markdown selection","method":"add-review-note"},
+      {"id":"zoom-in","words":"zoom-in","summary":"Zoom in on the focused editor or viewer","method":"zoom-in"},
+      {"id":"zoom-out","words":"zoom-out","summary":"Zoom out on the focused editor or viewer","method":"zoom-out"},
+      {"id":"reset-zoom","words":"reset-zoom","summary":"Reset zoom on the focused editor or viewer","method":"reset-zoom"},
+      {"id":"toggle-right-sidebar","words":"toggle-right-sidebar","summary":"Toggle the editor Explorer panel","method":"toggle-right-sidebar"},
+      {"id":"new-markdown","words":"new-markdown","summary":"Open the template picker to create a Markdown document","method":"new-markdown"},
+      {"id":"open-markdown","words":"open-markdown","summary":"Open a Markdown document from the active worktree","method":"open-markdown"}
     ]
   }
 }

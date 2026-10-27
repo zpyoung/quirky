@@ -5,6 +5,7 @@ import type { PluginCaller, PluginContext } from '@quirky/protocol'
 import type { EditorSearchState, SearchFile } from '../types'
 import { join } from 'node:path'
 import { WorktreePaths } from './paths'
+import { normalizeRipgrepPath } from './inventory'
 
 export const SEARCH_MAX_RESULTS = 2000
 export const SEARCH_MAX_INPUT_BYTES = 8192
@@ -153,9 +154,11 @@ export class ContentsSearch {
       }
       if (event.type !== 'match' || event.data === undefined) return
       const data = event.data
-      const relativePath = data.path?.text
+      const rawPath = data.path?.text
       const lineText = data.lines?.text
-      if (relativePath === undefined || lineText === undefined || data.line_number === undefined) return
+      if (rawPath === undefined || lineText === undefined || data.line_number === undefined) return
+      const relativePath = normalizeRipgrepPath(rawPath)
+      if (relativePath === null) return
       const line = lineText.replace(/[\r\n]+$/, '')
       let file = byPath.get(relativePath)
       if (file === undefined) {
@@ -243,7 +246,7 @@ export class ContentsSearch {
   }
 
   private arguments(params: SearchOptions, query: string, includePattern: string, excludePattern: string): string[] {
-    const args = ['--no-config', '--json', '--hidden', `--max-filesize=${SEARCH_MAX_FILE_BYTES}`]
+    const args = ['--no-config', '--json', '--hidden', '--path-separator', '/', `--max-filesize=${SEARCH_MAX_FILE_BYTES}`]
     args.push('--glob', '!**/.git/**', '--glob', '!**/node_modules/**')
     if (params.caseSensitive !== true) args.push('--ignore-case')
     if (params.wholeWord === true) args.push('--word-regexp')

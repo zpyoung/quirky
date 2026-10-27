@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState, type CSSProperties } from 'react'
+import { useCallback, useEffect, useId, useRef, useState, type CSSProperties } from 'react'
 import { GlobalWorkerOptions, getDocument, type PDFDocumentProxy } from 'pdfjs-dist'
 import type { SurfaceProps } from '../types'
 import DOMPurify from 'dompurify'
@@ -97,6 +97,7 @@ function CsvSurface({ props, sourceMode }: { props: SurfaceProps; sourceMode: bo
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [changed, setChanged] = useState(false)
+  const filterInput = useRef<HTMLInputElement>(null)
 
   const refresh = async (targetPage = page) => {
     setLoading(true)
@@ -163,6 +164,18 @@ function CsvSurface({ props, sourceMode }: { props: SurfaceProps; sourceMode: bo
       setError(cause instanceof Error ? cause.message : String(cause))
     }
   }
+  const findRows = useCallback(async (args?: Record<string, unknown>) => {
+    if (buffer.readOnly || metadata?.paged === true) throw new Error('Find is unavailable in read-only paged CSV previews.')
+    const query = typeof args?.query === 'string' ? args.query : undefined
+    filterInput.current?.focus()
+    if (query === undefined) return { opened: true }
+    await call(props, 'filter', { query })
+    setFilter(query)
+    setPage(0)
+    await refresh(0)
+    return { filtered: true, query }
+  }, [props])
+  useEffect(() => props.registerCommandHandlers({ find: findRows }), [findRows, props.registerCommandHandlers])
 
   const sortColumn = async (column: number) => {
     const order = sort?.column === column && sort.order === 'asc' ? 'desc' : 'asc'
@@ -249,7 +262,7 @@ function CsvSurface({ props, sourceMode }: { props: SurfaceProps; sourceMode: bo
   const readOnly = metadata?.paged === true || buffer.readOnly
   const changedBanner = changed && <p role="status">CSV changed on disk. Reload the file to refresh the preview. <button type="button" onClick={() => void reload()} disabled={loading}>Reload</button></p>
 
-  return <section className="viewer-csv" aria-label={metadata?.paged ? 'Paged CSV preview' : 'CSV table'}>
+  return <section className="viewer-csv" aria-label={metadata?.paged ? 'Paged CSV preview' : 'CSV table'} style={{ fontSize: props.fontSize }}>
     <header className="viewer-toolbar">
       <span>{metadata?.paged ? 'Read-only paged preview' : `${metadata?.rows ?? rows.length} rows · ${metadata?.columns ?? header.length} columns`}</span>
       {!readOnly && <>
@@ -263,7 +276,7 @@ function CsvSurface({ props, sourceMode }: { props: SurfaceProps; sourceMode: bo
         }}>
           <option value=",">Comma</option><option value="\t">Tab</option><option value=";">Semicolon</option><option value="|">Pipe</option>
         </select>
-        <label>Filter rows <input aria-label="Filter rows" value={filter} onChange={(event) => void changeFilter(event.currentTarget.value)} /></label>
+        <label>Filter rows <input ref={filterInput} aria-label="Filter rows" value={filter} onChange={(event) => void changeFilter(event.currentTarget.value)} /></label>
         <textarea aria-label="Paste CSV cells" value={pasteText} onChange={(event) => setPasteText(event.currentTarget.value)} placeholder="Paste CSV or tab-separated cells" />
         <label>Paste row <input type="number" min="0" value={pasteAt.row} onChange={(event) => setPasteAt((old) => ({ ...old, row: Number(event.currentTarget.value) }))} /></label>
         <label>Paste column <input type="number" min="0" value={pasteAt.column} onChange={(event) => setPasteAt((old) => ({ ...old, column: Number(event.currentTarget.value) }))} /></label>
@@ -333,10 +346,23 @@ function ImageViewer({ props, metadata, url, error, retry }: { props: SurfacePro
     setZoom(typeof metadata.zoom === 'number' ? metadata.zoom : number(object(props.buffer.view.viewer).zoom) ?? 1)
     setLoadError(false)
   }, [metadata.zoom, props.buffer.id, url])
-  const setScale = async (value: number) => {
+  const setScale = useCallback(async (value: number) => {
     const result = object(await call(props, 'zoom', { scale: value }))
-    setZoom(typeof result.zoom === 'number' ? result.zoom : Math.min(8, Math.max(0.25, value)))
-  }
+    const nextZoom = typeof result.zoom === 'number' ? result.zoom : Math.min(8, Math.max(0.25, value))
+    setZoom(nextZoom)
+    return { zoom: nextZoom }
+  }, [props])
+  const zoomCommand = useCallback((value: number) => {
+    if (!metadata.previewable || error || loadError) {
+      throw new Error(error ?? (loadError ? 'Image preview could not be loaded.' : metadata.error ?? 'Image preview is not ready to zoom.'))
+    }
+    return setScale(value)
+  }, [error, loadError, metadata.error, metadata.previewable, setScale])
+  useEffect(() => props.registerCommandHandlers({
+    'zoom-in': () => zoomCommand(zoom * 1.25),
+    'zoom-out': () => zoomCommand(zoom / 1.25),
+    'reset-zoom': () => zoomCommand(1)
+  }), [props.registerCommandHandlers, zoom, zoomCommand])
   const retryImage = () => {
     setLoadError(false)
     retry()
@@ -388,6 +414,7 @@ function PdfViewer({ props, url, error, retry }: { props: SurfaceProps; url: str
   const container = useRef<HTMLDivElement | null>(null)
   const canvas = useRef<HTMLCanvasElement | null>(null)
   const scrollTimer = useRef<number | undefined>(undefined)
+  const searchInput = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     if (!url) return
@@ -444,12 +471,13 @@ function PdfViewer({ props, url, error, retry }: { props: SurfaceProps; url: str
     return () => { if (scrollTimer.current !== undefined) window.clearTimeout(scrollTimer.current) }
   }, [pdf, props.buffer.id])
 
-  const search = async () => {
+  const search = useCallback(async (searchQuery = query) => {
     setSearchMessage(null)
-    if (!pdf || !query.trim()) return
+    if (!pdf) throw new Error('PDF preview is still loading.')
+    if (!searchQuery.trim()) throw new Error('Enter text to find in the PDF.')
     try {
-      await call(props, 'find', { query })
-      const needle = query.toLocaleLowerCase()
+      await call(props, 'find', { query: searchQuery })
+      const needle = searchQuery.toLocaleLowerCase()
       for (let index = 1; index <= pdf.numPages; index++) {
         const pdfPage = await pdf.getPage(index)
         const content = await pdfPage.getTextContent()
@@ -458,20 +486,48 @@ function PdfViewer({ props, url, error, retry }: { props: SurfaceProps; url: str
           setPage(index)
           await call(props, 'page', { page: index })
           setSearchMessage(`Found on page ${index} of ${pdf.numPages}.`)
-          return
+          return { found: true, page: index, totalPages: pdf.numPages }
         }
       }
       setSearchMessage('No results')
+      return { found: false, totalPages: pdf.numPages }
     } catch (cause) {
       setSearchMessage(cause instanceof Error ? cause.message : 'PDF search failed.')
+      throw cause
     }
-  }
+  }, [pdf, props, query])
 
-  const changeScale = async (next: number | 'page-width') => {
-    setScale(next)
+  const changeScale = useCallback(async (next: number | 'page-width') => {
+    if (!pdf) throw new Error('PDF preview is not ready to zoom.')
     if (typeof next === 'number') await call(props, 'zoom', { scale: next })
-    else await props.onView({ viewer: { ...object(props.buffer.view.viewer), zoom: 'page-width' } })
-  }
+    else await props.onAction('view', {
+      bufferId: props.buffer.id,
+      action: 'update',
+      patch: { viewer: { ...object(props.buffer.view.viewer), zoom: 'page-width' } }
+    })
+    setScale(next)
+    return { zoom: next }
+  }, [pdf, props])
+  const openFind = useCallback(async (args?: Record<string, unknown>) => {
+    const findError = localError || error
+    if (findError) throw new Error(findError)
+    const requestedQuery = typeof args?.query === 'string' ? args.query : undefined
+    if (requestedQuery === undefined || requestedQuery === '') {
+      if (requestedQuery === '') setQuery('')
+      searchInput.current?.focus()
+      return { opened: true }
+    }
+    setQuery(requestedQuery)
+    return search(requestedQuery)
+  }, [error, localError, search])
+  useEffect(() => props.registerCommandHandlers({
+    find: openFind,
+    'zoom-in': () => changeScale(scale === 'page-width' ? 1.25 : Math.min(5, scale * 1.25)),
+    'zoom-out': () => changeScale(scale === 'page-width' ? 0.8 : Math.max(0.25, scale / 1.25)),
+    'reset-zoom': () => changeScale('page-width')
+  }), [changeScale, openFind, props.registerCommandHandlers, scale])
+
+
 
   const goToPage = async (next: number) => {
     if (!pdf || next < 1 || next > pdf.numPages) return
@@ -492,8 +548,8 @@ function PdfViewer({ props, url, error, retry }: { props: SurfaceProps; url: str
       <button type="button" onClick={() => void changeScale('page-width')}>Page width</button>
       <button type="button" onClick={() => void changeScale(scale === 'page-width' ? 1.25 : Math.min(5, scale * 1.25))}>Zoom in</button>
       <span>{scale === 'page-width' ? 'Page width' : `${Math.round(scale * 100)}%`}</span>
-      <label>Find in PDF <input value={query} onChange={(event) => setQuery(event.currentTarget.value)} onKeyDown={(event) => { if (event.key === 'Enter') void search() }} /></label>
-      <button type="button" onClick={() => void search()} disabled={!query.trim()}>Find</button>
+      <label>Find in PDF <input ref={searchInput} value={query} onChange={(event) => setQuery(event.currentTarget.value)} onKeyDown={(event) => { if (event.key === 'Enter') void search().catch(() => {}) }} /></label>
+      <button type="button" onClick={() => { void search().catch(() => {}) }} disabled={!query.trim()}>Find</button>
       <button type="button" onClick={() => void goToPage(page - 1)} disabled={page <= 1}>Previous page</button>
       <span>{page}{pdf ? ` / ${pdf.numPages}` : ''}</span>
       <button type="button" onClick={() => void goToPage(page + 1)} disabled={!pdf || page >= pdf.numPages}>Next page</button>
@@ -613,7 +669,7 @@ export function ViewerSurface(props: SurfaceProps) {
 
   if (buffer.size > MAX_FILE_BYTES) return <section role="alert"><p>File is too large to preview.</p><button type="button" onClick={retry}>Retry</button></section>
 
-  return <section className="quirky-viewer-surface" aria-label={`${buffer.kind} viewer`}>
+  return <section className="quirky-viewer-surface" aria-label={`${buffer.kind} viewer`} style={{ fontSize: props.fontSize }}>
     <header className="viewer-toolbar">
       <strong>{buffer.name}</strong>
       {canToggleSource && <button type="button" aria-pressed={sourceMode} onClick={() => onView({ mode: sourceMode ? 'rich' : 'source' })}>{sourceMode ? 'Table / Preview' : 'Source'}</button>}

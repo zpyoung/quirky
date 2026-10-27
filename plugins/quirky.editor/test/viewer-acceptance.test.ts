@@ -304,7 +304,7 @@ describe('viewer and notebook API acceptance', () => {
       expect(saved.nbformat_minor as number).toBeGreaterThanOrEqual(5)
       expect(saved.metadata).toEqual(rootMetadata)
       const savedCell = records(saved.cells, 'saved notebook cells')[0]!
-      expect(requiredString(savedCell, 'id')).toBe(executedCell.id)
+      expect(requiredString(savedCell, 'id')).toBe(requiredString(executedCell, 'id'))
       expect(savedCell.metadata).toEqual(cellMetadata)
       expect(records(savedCell.outputs, 'saved cell outputs').map(outputText).join('\n')).toContain('executed-cell-output')
     } finally {

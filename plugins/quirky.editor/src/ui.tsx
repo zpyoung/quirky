@@ -4,10 +4,10 @@ import type { UiPluginContext } from '@quirky/protocol'
 import { CloseOverlay } from './window/CloseOverlay'
 import { DocumentSurface } from './window/DocumentSurface'
 import { ExplorerPanel } from './window/ExplorerPanel'
-import { activeDocument } from './window/activeDocument'
+import { activeDocument, type ActiveDocumentCommand } from './window/activeDocument'
 import { openExplorerSearch } from './window/explorerIntent'
 import { type EditorState, worktreeFromLayout } from './window/editorState'
-import { clearOverlayRequests, requestCloseAll, requestSingleClose, showQuickOpen } from './window/overlayState'
+import { clearOverlayRequests, requestCloseAll, requestSingleClose, showMarkdownOpen, showNewMarkdown, showQuickOpen } from './window/overlayState'
 import { QuickOpenOverlay } from './window/QuickOpenOverlay'
 
 type MountProps = { input?: unknown; report?(state: unknown): void }
@@ -182,6 +182,8 @@ const editorStyles = `
 .qe-document-content { position: relative; display: flex; flex: 1 1 auto; min-width: 0; min-height: 0; overflow: auto; }
 .qe-source-editor { position: relative; display: flex; flex: 1 1 auto; flex-direction: column; min-width: 0; min-height: 0; overflow: hidden; }
 .qe-source-editor-main { display: flex; flex: 1 1 auto; min-width: 0; min-height: 0; overflow: hidden; }
+.qe-source-search { display: flex; flex: 0 0 auto; align-items: center; flex-wrap: wrap; gap: 6px; padding: 6px 9px; border-bottom: 1px solid var(--border, #2b2f3a); background: var(--bg-raised, #1d2027); }
+.qe-source-search input { flex: 1 1 180px; }
 .qe-codemirror-host { flex: 1 1 auto; min-width: 0; min-height: 0; overflow: hidden; }
 .qe-codemirror-host .cm-editor { height: 100%; color: var(--text, #d7dae0); background: var(--bg, #16181d); }
 .qe-codemirror-host .cm-scroller { overflow: auto; font-family: var(--terminal-font-family, ui-monospace, SFMono-Regular, monospace); }
@@ -341,6 +343,12 @@ async function closeTarget(context: UiPluginContext, rawArgs: unknown): Promise<
   return requestSingleClose(context, bufferId, tabId)
 }
 
+function runActiveDocumentCommand(command: ActiveDocumentCommand, rawArgs?: unknown): Promise<unknown> {
+  const active = activeDocument()
+  if (!active) throw new Error(`There is no focused editor document for ${command}.`)
+  return active.runCommand(command, asRecord(rawArgs))
+}
+
 function commandHandlers(context: UiPluginContext): Record<string, (args?: unknown) => unknown> {
   return {
     open: async (rawArgs?: unknown) => {
@@ -350,12 +358,14 @@ function commandHandlers(context: UiPluginContext): Record<string, (args?: unkno
     'quick-open': (rawArgs?: unknown) => {
       const args = asRecord(rawArgs)
       showQuickOpen(context, worktreeFor(context, args), typeof args.query === 'string' ? args.query : '')
+      return { opened: true }
     },
     search: (rawArgs?: unknown) => {
       const args = asRecord(rawArgs)
       const worktree = worktreeFor(context, args)
       if (worktree && typeof args.query === 'string' && args.query !== '') openExplorerSearch(worktree, args.query)
       context.togglePanel(EXPLORER_PANEL, true)
+      return { panel: EXPLORER_PANEL, opened: true }
     },
     save: async (rawArgs?: unknown) => {
       const bufferId = nonEmptyString(asRecord(rawArgs).bufferId)
@@ -378,8 +388,37 @@ function commandHandlers(context: UiPluginContext): Record<string, (args?: unkno
       if (result === null) context.toast('Nothing to reopen', 'There are no recently closed editor files.')
       return result
     },
-    explorer: () => context.togglePanel(EXPLORER_PANEL, true),
-    'source-control': () => context.togglePanel(SOURCE_CONTROL_PANEL, true)
+    explorer: () => {
+      context.togglePanel(EXPLORER_PANEL, true)
+      return { panel: EXPLORER_PANEL, opened: true }
+    },
+    'source-control': () => {
+      context.togglePanel(SOURCE_CONTROL_PANEL, true)
+      return { panel: SOURCE_CONTROL_PANEL, opened: true }
+    },
+    find: (args?: unknown) => runActiveDocumentCommand('find', args),
+    replace: (args?: unknown) => runActiveDocumentCommand('replace', args),
+    'markdown-preview': (args?: unknown) => runActiveDocumentCommand('markdown-preview', args),
+    'toggle-word-wrap': (args?: unknown) => runActiveDocumentCommand('toggle-word-wrap', args),
+    'copy-context': (args?: unknown) => runActiveDocumentCommand('copy-context', args),
+    'add-review-note': (args?: unknown) => runActiveDocumentCommand('add-review-note', args),
+    'zoom-in': (args?: unknown) => runActiveDocumentCommand('zoom-in', args),
+    'zoom-out': (args?: unknown) => runActiveDocumentCommand('zoom-out', args),
+    'reset-zoom': (args?: unknown) => runActiveDocumentCommand('reset-zoom', args),
+    'toggle-right-sidebar': () => {
+      const layout = context.getLayout()
+      return layout.panel === EXPLORER_PANEL
+        ? context.call('ui.panel.close', {})
+        : context.call('ui.panel.open', { id: EXPLORER_PANEL })
+    },
+    'new-markdown': (rawArgs?: unknown) => {
+      showNewMarkdown(context, worktreeFor(context, asRecord(rawArgs)))
+      return { opened: true, dialog: 'new-markdown' }
+    },
+    'open-markdown': (rawArgs?: unknown) => {
+      showMarkdownOpen(context, worktreeFor(context, asRecord(rawArgs)))
+      return { opened: true, dialog: 'open-markdown' }
+    }
   }
 }
 

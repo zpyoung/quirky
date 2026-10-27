@@ -26,6 +26,7 @@ export const editorMigrations: StoreMigration[] = [
       draft TEXT,
       draft_bytes INTEGER,
       draft_length INTEGER,
+      baseline TEXT,
       size INTEGER NOT NULL,
       read_only INTEGER NOT NULL,
       dirty INTEGER NOT NULL,
