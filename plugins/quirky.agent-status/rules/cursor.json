@@ -1,0 +1,60 @@
+{
+  "agent": "cursor",
+  "description": "Cursor Agent detection rules. It has no approval hook, so its key-bound menu is read from the screen.",
+  "rules": [
+    {
+      "id": "approval-menu",
+      "why": "The run-this-command menu is the only sign Cursor is waiting; it is bounded to the last 8 lines because an answered menu stays in scrollback, and its choices must end in a key hint (and the last line too) because narration can repeat the wording.",
+      "state": "blocked",
+      "kind": "approval",
+      "region": "screen",
+      "lastLines": 8,
+      "all": [
+        {
+          "contains": "run this command?"
+        },
+        {
+          "regex": "(?:run \\(once\\)|to allowlist\\?|run everything|skip & tell the agent)[^\\n]*\\((?:shift\\+tab|ctrl\\+[a-z]|esc(?: or [a-z])?|tab|enter|return|space|[a-z]|[↵⇧↹⎋⏎]{1,3})\\)[ \\t]*\\n[\\s\\S]*\\((?:shift\\+tab|ctrl\\+[a-z]|esc(?: or [a-z])?|tab|enter|return|space|[a-z]|[↵⇧↹⎋⏎]{1,3})\\)[ \\t]*(?![\\s\\S])",
+          "ignoreCase": true
+        }
+      ]
+    },
+    {
+      "id": "prompt-busy",
+      "why": "Under the Cursor Agent banner the persistent `→` prompt with a braille spinner frame means a turn is running; a closed-form version of Orca's last-banner anchor.",
+      "state": "working",
+      "region": "screen",
+      "all": [
+        {
+          "contains": "cursor agent"
+        },
+        {
+          "contains": "→"
+        },
+        {
+          "regex": "[⠀-⣿]"
+        }
+      ]
+    },
+    {
+      "id": "prompt-idle",
+      "why": "The same `→` prompt with no spinner frame is the rest screen, but the prompt stays painted between spinner frames, so the screen must be quiet.",
+      "state": "idle",
+      "region": "screen",
+      "all": [
+        {
+          "contains": "cursor agent"
+        },
+        {
+          "contains": "→"
+        }
+      ],
+      "none": [
+        {
+          "regex": "[⠀-⣿]"
+        }
+      ],
+      "quietMs": 1000
+    }
+  ]
+}

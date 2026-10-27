@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { add, block, claim, land, locate, merge, withLock, type Repo } from './lanes'
+import { add, block, claim, land, locate, merge, requestLand, waitForDeps, withLock, type Repo } from './lanes'
 import { load, save, type Item } from './queue'
 
 const item = (id: string, deps: string[] = []): Item => ({ id, milestone: 'M1', title: id, docs: [], deps, status: 'todo' })
@@ -109,8 +109,122 @@ describe('land', () => {
     expect(git(repo.integration, 'status', '--porcelain')).toBe('')
   })
 
+  test('moves build/roadmap only after verification passes', async () => {
+    await claim(repo, 1)
+    branch('a', 'a.txt', 'a\n')
+    const before = head()
+    const seen = join(mkdtempSync(join(tmpdir(), 'seen-')), 'ref')
+    const recordRef = (ok: boolean) => [['sh', '-c', `git rev-parse build/roadmap > ${seen} && ${ok}`]]
+    await expect(land(repo, 'a', recordRef(false))).rejects.toThrow('failed on the merge result')
+    expect(readFileSync(seen, 'utf8').trim()).toBe(before)
+    expect(git(repo.integration, 'symbolic-ref', '--short', 'HEAD')).toBe('build/roadmap')
+    await land(repo, 'a', recordRef(true))
+    expect(readFileSync(seen, 'utf8').trim()).toBe(before)
+    expect(git(repo.integration, 'log', '-1', '--format=%s', 'build/roadmap')).toBe('chore(build): finish a')
+    expect(git(repo.integration, 'symbolic-ref', '--short', 'HEAD')).toBe('build/roadmap')
+  })
+
+  test('lets queue commands run while a land is verified, and lands over their commits', async () => {
+    await claim(repo, 1)
+    branch('a', 'a.txt', 'a\n')
+    const out = join(mkdtempSync(join(tmpdir(), 'claim-')), 'claim.json')
+    const queueTs = join(import.meta.dir, 'queue.ts')
+    await land(repo, 'a', [['sh', '-c', `cd ${dir} && bun ${queueTs} claim --lane 2 > ${out}`]])
+    expect(JSON.parse(readFileSync(out, 'utf8'))).toMatchObject({ kind: 'item', item: { id: 'b', lane: 2 } })
+    expect(queue().map((entry) => [entry.id, entry.status])).toEqual([['a', 'done'], ['b', 'in-progress'], ['c', 'todo']])
+    expect(readFileSync(join(repo.integration, 'a.txt'), 'utf8')).toBe('a\n')
+    expect(git(repo.integration, 'status', '--porcelain')).toBe('')
+  }, 20_000)
+
   test('refuses an item that is not in progress', async () => {
     await expect(land(repo, 'a', [['true']])).rejects.toThrow('a is todo, not in-progress')
+  })
+})
+
+describe('batched land', () => {
+  // a verify command that counts its runs in a file outside the integration worktree
+  let runs: string
+  const counted = (check = 'true') => [['sh', '-c', `echo run >> ${runs} && ${check}`]]
+  const runCount = () => (existsSync(runs) ? readFileSync(runs, 'utf8').split('\n').filter(Boolean).length : 0)
+  const statusOf = (id: string) => queue().find((entry) => entry.id === id)?.status
+
+  beforeEach(async () => {
+    runs = join(mkdtempSync(join(tmpdir(), 'runs-')), 'count')
+    await claim(repo, 1)
+    await claim(repo, 2)
+  })
+
+  test("lands another lane's waiting item in the same verified run", async () => {
+    branch('a', 'a.txt', 'a\n')
+    branch('b', 'b.txt', 'b\n')
+    requestLand(repo, 'b')
+    await land(repo, 'a', counted())
+    expect(runCount()).toBe(1)
+    expect([statusOf('a'), statusOf('b')]).toEqual(['done', 'done'])
+    expect(git(repo.integration, 'log', '--format=%s', '-2')).toBe('chore(build): finish b\nchore(build): finish a')
+    await land(repo, 'b', counted())
+    expect(runCount()).toBe(1)
+  })
+
+  test('leaves a waiting item that conflicts for its own lane', async () => {
+    branch('a', 'shared.txt', 'from a\n')
+    branch('b', 'shared.txt', 'from b\n')
+    requestLand(repo, 'b')
+    await land(repo, 'a', counted())
+    expect([statusOf('a'), statusOf('b')]).toEqual(['done', 'in-progress'])
+    expect(git(repo.integration, 'status', '--porcelain')).toBe('')
+    await expect(land(repo, 'b', counted())).rejects.toThrow('conflicts with build/roadmap')
+  })
+
+  test('verifies its own item alone when the batch fails, and makes the other land alone', async () => {
+    branch('a', 'a.txt', 'a\n')
+    branch('b', 'b.txt', 'b\n')
+    requestLand(repo, 'b')
+    const check = 'test ! -f b.txt'
+    await land(repo, 'a', counted(check))
+    expect(runCount()).toBe(2)
+    expect([statusOf('a'), statusOf('b')]).toEqual(['done', 'in-progress'])
+    expect(readFileSync(join(repo.lands, 'b'), 'utf8')).toContain('"solo":true')
+    await expect(land(repo, 'b', counted(check))).rejects.toThrow('failed on the merge result')
+    expect(runCount()).toBe(3)
+    expect(existsSync(join(repo.lands, 'b'))).toBe(false)
+  })
+
+  test('skips a waiting item whose branch moved after it asked to land', async () => {
+    branch('a', 'a.txt', 'a\n')
+    branch('b', 'b.txt', 'b\n')
+    requestLand(repo, 'b')
+    git(dir, 'checkout', '-q', 'build/b')
+    writeFileSync(join(dir, 'b2.txt'), 'more\n')
+    git(dir, 'add', 'b2.txt')
+    git(dir, 'commit', '-q', '-m', 'more')
+    git(dir, 'checkout', '-q', '--detach')
+    await land(repo, 'a', counted())
+    expect([statusOf('a'), statusOf('b')]).toEqual(['done', 'in-progress'])
+  })
+
+  test('takes an early item into the batch ahead of older requests', async () => {
+    const items = queue()
+    save([...items, { ...item('d'), status: 'in-progress', lane: 3, early: true }], join(repo.integration, 'docs/loop/queue.json'))
+    git(repo.integration, 'commit', '-qam', 'early d')
+    branch('a', 'a.txt', 'a\n')
+    branch('b', 'b.txt', 'b\n')
+    branch('d', 'd.txt', 'd\n')
+    requestLand(repo, 'b')
+    await Bun.sleep(20)
+    requestLand(repo, 'd')
+    await land(repo, 'a', counted())
+    expect(git(repo.integration, 'log', '--format=%s', '-3')).toBe('chore(build): finish b\nchore(build): finish d\nchore(build): finish a')
+  })
+
+  test('ignores a request whose process has died', async () => {
+    branch('a', 'a.txt', 'a\n')
+    branch('b', 'b.txt', 'b\n')
+    mkdirSync(repo.lands, { recursive: true })
+    writeFileSync(join(repo.lands, 'b'), JSON.stringify({ pid: Bun.spawnSync(['true']).pid, head: git(dir, 'rev-parse', 'build/b') }))
+    await land(repo, 'a', counted())
+    expect([statusOf('a'), statusOf('b')]).toEqual(['done', 'in-progress'])
+    expect(existsSync(join(repo.lands, 'b'))).toBe(false)
   })
 })
 
@@ -149,6 +263,14 @@ describe('add', () => {
     await expect(add(repo, [item('a')])).rejects.toThrow('already in the queue')
     await expect(add(repo, [item('z', ['nope'])])).rejects.toThrow('unknown "nope"')
   })
+})
+
+test('waitForDeps reports the dependencies still pending', async () => {
+  await claim(repo, 1)
+  expect(await waitForDeps(repo, 'c', 0)).toEqual({ ready: false, pending: ['a'] })
+  branch('a', 'a.txt', 'a\n')
+  await land(repo, 'a', [['true']])
+  expect(await waitForDeps(repo, 'c', 0)).toEqual({ ready: true, pending: [] })
 })
 
 describe('withLock', () => {

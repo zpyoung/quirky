@@ -36,6 +36,7 @@ type Row = {
   resumed_from: string | null
   launch_settings: string | null
   agent_status: string | null
+  name: string | null
   unread: Session['unread']
   badges: string | null
 }
@@ -74,6 +75,7 @@ const toSession = (row: Row): Session => ({
   launchSettings: parseJson<LaunchSettings>(row.launch_settings),
   resumedFrom: row.resumed_from,
   agentStatus: parseJson<AgentStatusSummary>(row.agent_status),
+  name: row.name,
   unread: row.unread,
   ...badgesOf(row.badges)
 })
@@ -158,6 +160,9 @@ export function sessionMigrations(home: string): StoreMigration[] {
       store.exec('ALTER TABLE sessions ADD COLUMN unread TEXT')
     },
     (store) => {
+      store.exec('ALTER TABLE sessions ADD COLUMN name TEXT')
+    },
+    (store) => {
       store.exec('ALTER TABLE sessions ADD COLUMN badges TEXT')
     }
   ]
@@ -180,6 +185,16 @@ export class SessionRecords {
     return row ? toSession(row) : null
   }
 
+  /** Every record holding `name` (already lowercase), in any status, oldest first. */
+  byName(name: string): Session[] {
+    return this.store.all<Row>('SELECT * FROM sessions WHERE name = ? ORDER BY created_at, rowid', name).map(toSession)
+  }
+
+  /** Runs `work` as one store transaction. */
+  transaction<T>(work: () => T): T {
+    return this.store.transaction(work)
+  }
+
   /** True when some record, in any state, belongs to the worktree ID. */
   hasWorktree(worktreeId: string): boolean {
     return this.store.get('SELECT 1 FROM sessions WHERE worktree_id = ? LIMIT 1', worktreeId) !== null
@@ -193,8 +208,8 @@ export class SessionRecords {
   insert(session: Session, repoId: string | null): void {
     this.store.run(
       `INSERT OR IGNORE INTO sessions (id, kind, agent, worktree_id, cwd, title, status, created_at, last_activity_at, exit_code, repo_id,
-        launch, provider_session, prompt_delivery, resumed_from, launch_settings, exit_signal, exit_cause, restorable, agent_status)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        launch, provider_session, prompt_delivery, resumed_from, launch_settings, exit_signal, exit_cause, restorable, agent_status, name)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       session.id,
       session.kind,
       session.agent,
@@ -214,7 +229,8 @@ export class SessionRecords {
       session.exitSignal,
       session.exitCause,
       session.restorable ? 1 : 0,
-      jsonOrNull(session.agentStatus)
+      jsonOrNull(session.agentStatus),
+      session.name ?? null
     )
   }
 
@@ -237,6 +253,7 @@ export class SessionRecords {
       promptDelivery?: PromptDeliveryState | null
       launchSettings?: LaunchSettings | null
       agentStatus?: AgentStatusSummary | null
+      name?: string | null
       unread?: Session['unread']
       badges?: Record<string, SessionBadge> | null
     }
@@ -254,6 +271,7 @@ export class SessionRecords {
     if (fields.promptDelivery !== undefined) columns.push(['prompt_delivery', fields.promptDelivery])
     if (fields.launchSettings !== undefined) columns.push(['launch_settings', jsonOrNull(fields.launchSettings)])
     if (fields.agentStatus !== undefined) columns.push(['agent_status', jsonOrNull(fields.agentStatus)])
+    if (fields.name !== undefined) columns.push(['name', fields.name])
     if (fields.unread !== undefined) columns.push(['unread', fields.unread])
     if (fields.badges !== undefined) columns.push(['badges', fields.badges && Object.keys(fields.badges).length > 0 ? JSON.stringify(fields.badges) : null])
     if (columns.length > 0) {

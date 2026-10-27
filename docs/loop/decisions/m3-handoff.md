@@ -728,5 +728,26 @@ Cleanup: the corrected run ended with no kept-open windows or cleanup errors. It
 - **Confidence:** high
 - **Source:** locked by docs/loop/LOOP.md
 
+## D72: Remove a transient landing candidate captured by catch-up
+- **Question:** why the landing retry sees M5 native-runner/checks source in the handoff branch but not in current integration
+- **Options:** ship that source under the handoff item; drop the whole catch-up; remove only the accidentally captured candidate while retaining handoff and current integration
+- **Chose:** the last option. Read-only ancestry/tree investigation established catch-up `b9eb60e` merged transient roadmap candidate `38a4f23` (the M5 structured-runner landing merge), which is not an ancestor of current `build/roadmap`. The M5 decision log says its source remains blocked, not landed. Reconcile the current merge, then reverse only that candidate's contribution, preserving the current M5 decision history and handoff's independent source.
+- **Why:** one item must not accidentally ship another lane's blocked source. Reverting the entire catch-up would also discard legitimate integration changes, so that is rejected.
+- **Evidence:** catch-up parents `fdaea04` and `38a4f23`; `38a4f23` first-parent diff lists 39 candidate paths; incoming `m5-structured-runner.md` D34/Progress; current roadmap lacks native Codex/checks implementation
+- **Reversibility:** medium
+- **Confidence:** high
+- **Revisit if:** M5 lands through its own queue item
+- **Source:** locked by docs/loop/LOOP.md
+
+## D73: Incoming evidence identifies the missing provider-fixture prerequisite
+- **Question:** whether D70's undetermined initial provider-ID timeout now has independent environment evidence
+- **Options:** retain only the local observations; incorporate the other lane's direct failing interpreter probe and host provisioning record
+- **Chose:** incorporate incoming `m5-structured-runner.md` D33. That lane reproduced the fixture shebang failing with exit 127 because Node was absent on the replacement host, installed Node, and then passed the unchanged affected suite. Our later `/usr/bin/node` v18.19.1 check and passing isolated/final runs occurred after that provisioning.
+- **Why:** this explains the environment repair without pretending this lane changed or fixed provider code. It also removes the apparent contradiction between the first failures and later passing diagnostics.
+- **Evidence:** incoming M5 D33 and its resumed verification; this lane's SSH Node-version check and D70 results
+- **Reversibility:** easy
+- **Confidence:** high for the independently reproduced missing prerequisite
+- **Source:** supersedes m3-handoff D70
+
 ## Progress
 Implementation, checkpoint reviews and Final Round 1 are complete. Latest integration decisions are reconciled (D64). Guarded UI scenarios SC-1, 3, 21, 24, 33, 36, 50, 53, 54, 58 and 59 pass; SC-40 has only the permitted hover-tool limitation, with marker/count/cost verified. Every UI run, smoke container and owned daemon/temporary home is closed. The operator's night-mode affected-package gate passes (242 remote files plus 2 macOS-only files, one reported terminal divider-sizing flake passed alone), scripts pass 49 tests, typecheck/build pass (D71). Diagnostic-only edits were removed; no product changes were needed this iteration. Next: commit this verification log, detach and `queue.ts land m3-handoff`; land retains its whole-suite integration gate. Do not start another item.

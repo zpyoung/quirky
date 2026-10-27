@@ -384,7 +384,7 @@ describe('read', () => {
     const host = startHost()
     const client = await host.connect()
     await client.request('create', createParams('alt', sh(`printf '\\033[?1049h'; printf 'in-alt'; sleep 5`)))
-    const result = await readUntil(client, 'alt', 0, (r) => r.alt)
+    const result = await readUntil(client, 'alt', 0, (r) => r.alt && r.lines.includes('in-alt'))
     expect(result.alt).toBe(true)
     expect(result.lines).toContain('in-alt')
   })

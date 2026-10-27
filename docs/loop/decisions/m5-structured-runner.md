@@ -259,5 +259,122 @@ Implementation wave: T1 structured/session/catalog, T2 checks plugin, T3 ask own
 - `bun run test`: exit0;425remote files plus2macOS-only files. Initial remote result423pass/2fail; isolated reruns passed pty-client.test.ts (9tests) and window-projects.test.ts (18tests). Final suite-result ok:true with these two flaky paths. No exclusions or test weakening.
 - Targeted/native proof and Final Round1 outcomes are recorded above. No UI/native scenarios added, and no open accepted review findings.
 
+## D25: Resolve public workspace types directly rather than requiring generated plugin links
+- **Question:** the first queue land passed426remote files,2macOS files and49script tests, then integration typecheck could not resolve the new checks plugin's protocol imports
+- **Options:** edit the protected queue to install dependencies; install during every typecheck; map the public workspace source entries explicitly
+- **Chose:** root tsconfig paths for exactly the two existing public package exports: @quirky/protocol -> packages/protocol/src/index.ts and @quirky/protocol/node -> packages/protocol/src/node/index.ts. No private wildcard mapping, type suppression, runtime fallback or per-plugin special case. Preserve package exports and every consumer import.
+- **Why:** the source graph is present in every worktree, but queue merge verification does not regenerate per-plugin node_modules links. These mappings select the same public modules as package.json and fully typecheck them without installer side effects. Do not modify the integration worktree or protected loop.
+- **Evidence:** failed land output:426remote+2mac files pass without retries,49scripts pass, only3 missing-module TypeScript errors; lanes.ts mergeVerified verify sequence has no install; package exports lines7–8. Isolated fresh worktree with checks/node_modules removed: typecheck exit0, checks16pass, packaged build exit0. Commit3470472; scope audit changed only tsconfig.json.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** protocol public exports change; keep source mappings aligned with them
+- **Source:** assumed — autonomous
+
+## D26: Preserve the final catch-up's regex semantics and browser feasibility block
+- **Question:** failed-land catch-up brought fix-ask-regex-budget-20261027 and sa-browser-agent decision logs
+- **Options:** alter their contracts; preserve them and verify compatibility
+- **Chose:** read both complete logs. Retain sound mandatory-literal prefilter plus original JavaScript regex semantics, unchanged100ms budget and runner retry policy. Browser agent remains blocked before implementation on target binding; no browser code or helper is introduced here. Neither changes creating-plugin ask ownership or the structured/check API.
+- **Why:** these are independent contracts. The regex owner changed only matching predicates; the browser entry records no implementation. The caught-up merge introduced no source conflict. No new final discovery round is needed for the compiler's equivalent public-entry mapping.
+- **Evidence:** fix-ask-regex-budget-20261027 D1–D7; sa-browser-agent D1–D18 and Progress; catch-up integration979b524dd2de7e3204d2fa30e14045ddf83a3f8c
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** locked by docs/loop/decisions/fix-ask-regex-budget-20261027.md
+
+## D27: Preserve the implemented item and block on the protected queue-order gate
+- **Question:** second queue land passed runtime verification but failed the queue's own dependency-order test
+- **Options:** edit protected queue/test paths; suppress the gate; retry unchanged; formally block with the completed source preserved
+- **Chose:** block at step7. No product flow is being deferred or stubbed: the complete core cannot be shipped through its mandatory integration gate until queue maintenance fixes the ordering.
+- **Why:** m6-objective-landing is at zero-based queue index56 and depends on m6-sitter-github at57. scripts/build-loop/queue.test.ts:82-87 requires every dependency earlier in the file. Both queue.json and loop scripts are protected; supported CLI operations add items or change status, not reorder existing items. Latest integration has no pending queue/loop repair. Do not bypass or weaken the check.
+- **Evidence:** second land:426remote files and2macOS files pass after window-projects' successful isolated rerun; then scripts48pass/1fail at queue.test.ts:85. Static queue query returns exactly the56->57 forward dependency. Current typecheck passes after catch-up. Latest integration9f15461fa22c0510b9e2ed0342cfe4553acf415a; updated LOOP.md and queue CLI read completely.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** authorized maintenance restores the queue's topological order and the scripts gate passes
+- **Source:** locked by docs/loop/LOOP.md
+
+## D28: Resume after the operator's authorized queue-order repair
+- **Question:** whether D27's protected infrastructure blocker still prevents landing
+- **Options:** remain blocked; change protected infrastructure locally; resume the restored branch against the operator's repaired integration branch
+- **Chose:** resume build/m5-structured-runner, merge build/roadmap, leave the operator's build-loop commits untouched, rerun verification and land only through queue.ts.
+- **Why:** the operator explicitly identified the authorized ordering repair as 4cf9720 and restored the branch and lane claim. queue.ts wait returned m5-structured-runner in-progress for lane12. The catch-up merged only shared queue/index/blocker state and the m5-ledger decision log, not product source.
+- **Evidence:** operator interjection; queue.ts wait --lane12 output; successful git switch/merge; incoming m5-ledger D1–D20 and Progress read completely.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** the required scripts gate still fails or the queue landing reports a new conflict
+- **Source:** supersedes m5-structured-runner D27 (infrastructure blocker resolved by operator)
+
+## D29: Preserve incoming ledger contracts without treating its blocked implementation as shipped
+- **Question:** whether the incoming m5-ledger decisions conflict with the structured/check seams
+- **Options:** revise the seams; preserve independent public-plugin contracts and the ledger's explicit blocked status
+- **Chose:** retain the ledger's public SQLite/API ownership, authenticated actor provenance, revision/import semantics and exact partial visual evidence. Its D17 queue-order limitation has the same operator repair; its own final-review and landing work remain owned by that lane.
+- **Why:** the merge brought the ledger's decision record, not ledger product source. None of D1–D20 changes native conversation ownership, ask cleanup, structured launch picks or checks execution. No second final discovery round or product edit is needed here.
+- **Evidence:** docs/loop/decisions/m5-ledger.md:1–224; catch-up merge file list.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** future ledger source changes a shared public contract
+- **Source:** locked by docs/loop/decisions/m5-ledger.md
+
+## D30: Diagnose the scripts fixture timeout without weakening its assertion or budget
+- **Question:** why the first resumed gate failed after the queue-order repair
+- **Options:** edit the scripts test or extend its budget; block on one timing failure; isolate the failing test and rerun the unchanged complete gate
+- **Chose:** isolate the exact failed test, then rerun the complete unchanged gate. No code, timeout or assertion changes.
+- **Why:** typecheck passed and the queue-order test no longer failed. scripts/suite.test.ts:54 timed out at5002ms; its afterEach removed the fixture cwd while rerunAlone continued, producing the secondary git spawn ENOENT. The exact isolated test passed in4.37seconds with its intended nested fail-then-pass behavior. This supports a load-sensitive timeout, not a product regression.
+- **Evidence:** first resumed gate artifact://5:54pass/1fail/1error; scripts/suite.test.ts:9–14,54–58; scripts/suite.ts:82–101; isolated run artifact://7:1pass/0fail/12filtered. The first gate stopped before build/full suite.
+- **Reversibility:** easy
+- **Confidence:** medium
+- **Revisit if:** the unchanged full gate repeats the failure or queue landing cannot pass it
+- **Source:** assumed — autonomous
+
+## D31: Preserve partial verification and clean the exact timed-out remote run
+- **Question:** how to proceed after the outer3600second command deadline interrupted full-suite verification
+- **Options:** claim the partial suite passed; leave remote processes running; clean only the identified run, verify affected consumers without an outer deadline, and retain queue landing's complete gate
+- **Chose:** preserve the incomplete run as no verdict. Typecheck, scripts55pass/303assertions and packaged build passed. The two macOS files passed; the426file remote run did not finish. Terminated only the named worker/process-scope groups after checking their commands, removed its exact remote copy, and started affected-consumer verification with no outer deadline. queue.ts land remains the authoritative full-suite gate.
+- **Why:** full output reported one SC-29 git window waitFor failure (other5tests passed), then the outer deadline terminated the local command before the runner's final rerun/verdict. Ownership inspection found worker4052114 and guardian2015192 under only /home/quirkyci/runs/1793129625748-96573; cleanup verified both absent. No foreign queue lock, lane process, tests or timeout budgets were changed.
+- **Evidence:** bg_4 full output; successful cleanup exit0; no-deadline command covers structured/checks/ask/session/agents/daemon/CLI/protocol plus the exact SC-29 file.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** affected verification or queue landing reports a repeatable failure
+- **Source:** assumed — autonomous
+
+## D32: Repeat affected verification on the operator's replacement host
+- **Question:** whether the operator-stopped old-host affected-suite run establishes a product failure
+- **Options:** act on overloaded-host timings; repeat the exact command on the operator's new idle16core host
+- **Chose:** repeat the identical affected-consumer command without code or test-budget changes and retain the stopped run as inconclusive.
+- **Why:** the operator reported old-host load35, stopped that run, and instructed the exact retry against the updated remote configuration. The old run ended137 after timing-sensitive failures and a process-scope guardian start failure; it has no successful suite verdict. Its runRemote finally reached cleanup before announcing local fallback.
+- **Evidence:** operator interjection; bg_5 output for runs/1793133181848-37851; identical command restarted as bg_6 with no outer deadline.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** the replacement-host run reproduces a failure
+- **Source:** assumed — autonomous (operator-directed environment repair)
+
+## D33: Supply the scripted native fixture's existing Node prerequisite on the replacement host
+- **Question:** why Codex tests fail immediately and consistently on the otherwise working replacement host
+- **Options:** change the production transport or fixture interpreter; provision the host's missing existing prerequisite
+- **Chose:** install Ubuntu nodejs through noninteractive sudo on quirkyci@34.122.38.64, verify /usr/bin/env node --version, then repeat unchanged affected verification.
+- **Why:** the fixture is an executable JavaScript app-server with #!/usr/bin/env node. NativeStartupFix's throwaway shebang probe reproduced exit127 because node was absent from the suite PATH; Bun was present. No transport request could occur. Host installation completed successfully and node reports v18.19.1. No source/test assertion or timeout change is justified by that missing interpreter.
+- **Evidence:** NativeStartupFix diagnosis/history; replacement-host affected suite162files158pass4fail, isolated resume failure persists; apt-get update/install exit0 and /usr/bin/env node --version v18.19.1 (artifact://19).
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** post-install native tests still reproduce stdout closure
+- **Source:** assumed — autonomous
+
+## Resumed verification after host provisioning
+- `bun run typecheck`: exit0, no diagnostics.
+- `bun test scripts`:55pass,0fail,303assertions across6files. The earlier timed-out fixture run remains recorded in D30.
+- `bun run build`: exit0; packaged Quirky.app, with unchanged optional icon/release.baseUrl warnings.
+- `bun scripts/suite.ts plugins/quirky.structured plugins/quirky.checks plugins/quirky.ask plugins/quirky.session plugins/quirky.agents packages/daemon packages/cli packages/protocol plugins/quirky.git/test/window/remote.test.ts`: exit0 on quirkyci@34.122.38.64;162files passed,0failed,flaky:[],129.59seconds. This includes all affected native/API/resume/check/approval paths and the prior SC-29 failure.
+- No product source changed during resumption. The earlier real daemon/CLI/native-process smoke and single final-review/fix batch remain applicable. No new UI/native scenarios.
+- Next mandatory gate is queue.ts land's full merge-result verification; interrupted/old-host runs are not represented as passes.
+
+## D34: Preserve verified source when foreign dirty integration state prevents both landing and blocking
+- **Question:** how to finish the mandatory queue landing after its clean-worktree precondition fails
+- **Options:** alter the integration queue manually; force a commit of foreign entries; preserve the verified source and register an infrastructure blocker through the supported API
+- **Chose:** never modify the integration worktree or its queue. Preserve the verified item and attempt formal block registration through queue.ts, retaining any registration failure as evidence.
+- **Why:** land exited1 before running merge verification because integration docs/loop/queue.json is modified. Read-only investigation found only appended race-item and active-item entries; their origin is unknown. One process snapshot found no live queue owner. The source contains neither identifier under scripts. All queue mutations, including block, use the same requireClean guard; no supported command removes/reconciles these entries.
+- **Evidence:** queue.ts land output after2525760; LandingStateScout inspection of integration diff, lanes.ts:78–83,218–224,278–350 and process snapshot; literal scripts search returned no matches. Implementation remains unchanged and all162affected test files pass.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** authorized owner reconciles the dirty integration queue; then restore/requeue as needed and retry landing without rebuilding the implementation
+- **Source:** locked by docs/loop/LOOP.md
+
 ## Progress
-Verified and ready to land. Final code, specs, public method schemas, generated CLI surface, consumer tests and user docs are complete. All agents/check jobs returned and smoke processes/homes were cleaned. Commit this final evidence, detach and run queue.ts land m5-structured-runner; its integration gate must pass before the queue marks the item done. Then end this iteration without claiming another item.
+Step7 landing is blocked before merge verification by foreign uncommitted integration docs/loop/queue.json (D34), not by product verification. Fresh typecheck/scripts55pass/build and affected162file remote suite pass. Source and decision log are preserved; formal queue block registration is attempted only through queue.ts. Authorized owner must reconcile the dirty integration queue; no protected-path edit, foreign commit, force cleanup or test weakening is permitted. After reconciliation, restore build/m5-structured-runner/requeue if formal block completed, catch up/read incoming decisions, and queue.ts land without an outer deadline. No product edits or open accepted review findings.

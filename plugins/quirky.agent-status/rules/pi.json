@@ -1,0 +1,45 @@
+{
+  "agent": "pi",
+  "description": "Pi detection rules, from the state marker in its `π` title.",
+  "rules": [
+    {
+      "id": "blocked-title",
+      "why": "Pi writes `π ! <label>` (or `<name> - action required`) into its title when it waits on the user.",
+      "state": "blocked",
+      "kind": "approval",
+      "region": "title",
+      "all": [
+        {
+          "regex": "(?:^|[\\s|])(?:π|Pi|OMP)[ \\t]+!(?=\\s|$)|^\\s*(?:[⠀-⣿]\\s+)?(?:[Pp][Ii]|[Oo][Mm][Pp])\\s+-\\s+action required\\s*$"
+        }
+      ]
+    },
+    {
+      "id": "working-title",
+      "why": "Pi writes `π : <label>` or a braille spinner after the prefix into its title while a turn runs.",
+      "state": "working",
+      "region": "title",
+      "all": [
+        {
+          "regex": "(?:^|[\\s|])(?:π|Pi|OMP)[ \\t]+:(?=\\s|$)|^\\s*π[ \\t]+[⠀-⣿]|^\\s*[⠀-⣿]\\s+(?:[Pp][Ii]|[Oo][Mm][Pp])\\s*$"
+        }
+      ]
+    },
+    {
+      "id": "rest-title",
+      "why": "Pi titles the pane `π - <session>` (or `π > <label>`) at rest, an explicit marker it writes itself.",
+      "state": "idle",
+      "region": "title",
+      "all": [
+        {
+          "regex": "^\\s*(?:π|Pi|OMP)(?::|[ \\t]+[>-])(?=\\s|$)"
+        }
+      ],
+      "none": [
+        {
+          "contains": "action required"
+        }
+      ]
+    }
+  ]
+}
