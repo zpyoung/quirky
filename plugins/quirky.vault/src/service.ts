@@ -279,7 +279,7 @@ export class VaultService {
     return this.enqueuePolicy(async () => {
       try {
         if (this.searchEnabled()) await this.context.call('setting.set', { id: SEARCH_SETTING, value: false })
-        this.worker.setKeepAlive(false)
+        await this.applySearchPolicy({ enabled: false, historyDays: this.historyDays() })
         const database = `${this.context.dataDir}/${SEARCH_DATABASE}`
         if (this.worker.started || existsSync(database)) await this.workerRequest('clearSearchIndex', {})
         this.appliedPolicy = undefined
