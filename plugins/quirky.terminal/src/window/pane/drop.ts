@@ -1,3 +1,5 @@
+import { shellEscapePaths } from '../../shell-escape'
+
 type DroppedFile = { path?: unknown }
 
 /** The slice of a `DataTransfer` the drop handler reads. */
@@ -29,4 +31,9 @@ export function pathsFromDrop(data: DropData): string[] {
     }
   }
   return [...new Set(found)].filter((path) => path.startsWith('/') && !/[\u0000-\u001f\u007f]/.test(path))
+}
+
+/** The text typed at a prompt for a drop: its file paths, shell-escaped; empty when the drop carries none. */
+export function dropText(data: DropData): string {
+  return shellEscapePaths(pathsFromDrop(data))
 }

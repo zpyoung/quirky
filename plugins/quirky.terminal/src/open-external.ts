@@ -3,7 +3,6 @@ import { isAbsolute } from 'node:path'
 
 const SCHEME = /^[A-Za-z][A-Za-z0-9+.-]*:/
 const ALLOWED_PROTOCOLS = new Set(['http:', 'https:', 'mailto:'])
-const SAFE_PATH = /^[A-Za-z0-9_./-]+$/
 
 function protocolOf(url: string): string {
   try {
@@ -43,10 +42,4 @@ export function openExternal(request: { target: string; reveal?: boolean }, env:
   Bun.spawn(argv, { stdin: 'ignore', stdout: 'ignore', stderr: 'ignore' }).unref()
 }
 
-/**
- * The text typed at a prompt when files are dropped on a pane: paths made of safe characters
- * stay bare, any other path is single-quoted (an embedded quote becomes `'\''`), joined by spaces.
- */
-export function shellEscapePaths(paths: readonly string[]): string {
-  return paths.map((path) => (SAFE_PATH.test(path) ? path : `'${path.replaceAll("'", `'\\''`)}'`)).join(' ')
-}
+export { shellEscapePaths } from './shell-escape'
