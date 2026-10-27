@@ -469,5 +469,15 @@
 - **Confidence:** high
 - **Source:** assumed — autonomous
 
+## D47: Retry landing after the protected queue tests pass unchanged
+- **Question:** the first resumed land failed in `bun test scripts` after its product suite passed
+- **Options:** modify the protected queue tests; merge upstream loop updates and verify unchanged
+- **Chose:** merged `build/roadmap` cleanly and read the updated LOOP.md, including night mode. No new item decision logs or product code came with this merge. The rejected land's product suite was successful (shell-path passed its isolated retry); its script failures were two 5-second timeout failures in `scripts/build-loop/lanes.test.ts`. After catch-up, `bun test scripts && bun run typecheck` exited 0: 62 script tests passed, no failures. No protected file was manually edited.
+- **Why:** the same script gate passes without a code fix; the observed timeout failures do not justify changing protected loop code. Leave the complete suite to the next land as the updated instructions require.
+- **Evidence:** resumed land output; clean catch-up merge; subsequent script gate 62 pass, 0 fail, typecheck exit 0
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** locked by docs/loop/LOOP.md
+
 ## Progress
-Step 7 (land). Iteration 2 resumed the completed branch, installed dependencies, reran the full gate successfully and exercised the guarded-send CLI flow on fresh temporary homes (D46). Next: commit this decision, detach, and run `bun scripts/build-loop/queue.ts land m1-agent-status-scripting`. If land fails, follow LOOP.md step 7.3.
+Step 7 (land). Iteration 2 completed fresh verification and a live CLI smoke (D46), then caught up after a script-test timeout rejected the land. The script gate and typecheck pass unchanged (D47). Next: commit this note, detach and retry `bun scripts/build-loop/queue.ts land m1-agent-status-scripting`.
