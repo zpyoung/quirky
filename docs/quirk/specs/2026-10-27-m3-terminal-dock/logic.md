@@ -14,9 +14,9 @@ Non-goals: native chat or its structured interactive UI; standalone skills-catal
 
 ## Conceptual model
 
-A pane has a remembered dock choice, gutter size, draft, history and attachments. Recognition identifies its live agent; a latch retains that identity while docked through transient status loss. The daemon owns durable choices and sending. The terminal plugin owns its pane and the lifecycle of an embedded dock view. The independently replaceable dock plugin owns the composer and feature policy.
+A pane has a remembered dock choice, gutter size, draft, history and attachments. Recognition resolves supported terminal agents against the live public catalog without changing canonical `Session.agent`; a persisted identity may bridge transient evidence loss only while the dock remains requested and no confirmed exit exists. The daemon owns durable choices and sending. The terminal plugin owns its pane and the lifecycle of an embedded dock view. The independently replaceable dock plugin owns the composer and feature policy.
 
-A dock being requested is distinct from it being mounted: insufficient pane height temporarily removes the composer without treating that as a manual close. Passthrough exists only while mounted. A send has a queue position, cancellable preparation/body/submit phases and a final delivery outcome; cancellation never retracts bytes already accepted.
+A dock being requested is distinct from it being mounted: insufficient pane height temporarily removes the composer without treating that as a manual close. Passthrough exists only while mounted and belongs to the active window reporting that pane's focused host. A send has a queue position, cancellable preparation/body/submit phases and a final delivery outcome; cancellation never retracts bytes already accepted.
 
 ## Data flow
 
@@ -38,6 +38,8 @@ Positive evidence of delivery wins over a stale screen recognizer. Transport acc
 - Closing is remembered; agent exit is not a manual close. Feature-off is a no-write kill switch — locked by feature doc.
 - Focus changes only in the active pane; passthrough dims but does not erase the composer — locked by feature doc.
 - Empty draft uses the documented placeholder; picker loading/empty/error states are visible and leave the draft intact — assumed — fast-tracked.
+
+- Pickers and question/permission cards appear above the composer, are bounded by the pane's available height, and leave the compact default five-row editor usable.
 
 ### API, CLI and concurrency
 
@@ -78,7 +80,7 @@ Given a recognized agent, when Mod+Shift+K or its context menu toggles the dock,
 
 ### SC-03: Agent exit, relaunch and transient status
 
-Given a docked agent, when status momentarily disappears, then the latched composer remains. Confirmed terminal/agent exit undocks and leaves passthrough without setting manual close; relaunching a supported agent reopens it when auto-open is enabled.
+Given a supported terminal agent, when status momentarily disappears, then the requested dock's identity latch preserves the composer and draft. Eligibility comes from public `quirky.agents/list({all:true})` catalog membership, regardless of installed/enabled state, and applies only to terminal sessions. Identity priority is fresh non-restored status-hook `row.agent` or explicit `programStatus.app`, then managed-launch metadata, then a strict catalog-backed terminal title, then the persisted `record.agent` latch only while requested and without confirmed exit. Ignore restored identity and never mutate canonical `Session.agent`. A confirmed agent/terminal exit clears the latch and undocks without setting manual close; fresh evidence from a relaunch can auto-open when enabled. Transient evidence loss preserves the manual-close choice and draft.
 
 - **Data before:** **Pane** docked with recognized Claude.
 - **Walkthrough:** 1. Status disappears. 2. Agent exit is confirmed. 3. A new agent starts.
@@ -110,7 +112,7 @@ Given two docked splits, when a background split mounts or changes state, then f
 
 ### SC-07: Passthrough and its Orca notice defect
 
-Given a mounted composer, when Mod+Shift+P enters passthrough, then keyboard focus goes to terminal, composer is dimmed and reads `Passthrough active — terminal has keyboard focus`. No mobile-device/Take back warning appears unless a real foreign driver owns input. Toggling returns focus. Working-to-waiting/blocked/done hook transitions, unmount and agent exit clear passthrough.
+Given a mounted composer, when Mod+Shift+P enters passthrough, then keyboard focus goes to terminal, composer is dimmed and reads `Passthrough active — terminal has keyboard focus`. No mobile-device/Take back warning appears unless a real foreign driver owns input. Passthrough belongs to the active window reporting this mounted, focused pane; explicit `set.passthrough` true/false values are absolute, not toggles. Toggling returns focus. Working-to-waiting/blocked/done hook transitions, unmount and agent exit clear passthrough.
 
 - **Data before:** **Pane** mounted, no foreign driver.
 - **Walkthrough:** 1. Person toggles passthrough. 2. Hook reports working then waiting.
@@ -134,7 +136,7 @@ Given a mounted composer, when typing, Shift+Enter inserts a newline and emphasi
 
 ### SC-10: Slash commands and skills
 
-Given a supported agent and locally discoverable commands/skills, when `/` opens the picker, then it filters agent-appropriate slash commands and skills, supports keyboard selection and inserts the chosen invocation. No skills is an explicit empty result, not an error; discovery failure is shown and never destroys the draft. Escape dismisses. Sending a chosen command uses the same acknowledged, serialized terminal send lifecycle.
+Given a supported agent and locally discoverable commands/skills, when `/` opens the picker, then it filters agent-appropriate slash commands and skills, supports keyboard selection and inserts the chosen invocation. No skills is an explicit empty result, not an error; discovery failure is shown and never destroys the draft. The picker overlays above the composer, is bounded by available pane height, and leaves the compact default five-row editor usable. Escape dismisses. Sending a chosen command uses the same acknowledged, serialized terminal send lifecycle.
 
 - **Data before:** **Draft** `/rev`; **Skill** `review` available in the agent's workspace.
 - **Walkthrough:** 1. Person opens picker. 2. Selects review skill. 3. Sends it.
@@ -166,7 +168,7 @@ Given per-pane history, when Up is pressed on an empty draft or during browsing,
 
 ### SC-14: Session option controls and context usage
 
-Given an agent whose options can be reported, when opening permission/model/effort controls, then available choices and context usage come from that session's provider/status/transcript, not another pane or a fabricated confirmed value. A supported change uses the session-specific TUI flow; while awaiting evidence it reads `Sent to the agent — not confirmed`. Unsupported choices are explicitly unavailable with a reason. No control silently changes global defaults.
+Given an agent whose options can be reported, when opening permission/model/effort controls, then available choices and context usage come from that session's provider/status/transcript, not another pane or a fabricated confirmed value. Preserve the reported `model` even when it is absent from the preset choices; do not replace it with null or a default. A supported change uses the session-specific TUI/option-key bridge; native `/effort` handling remains scoped to the selected session, and while awaiting evidence it reads `Sent to the agent — not confirmed`. Unsupported choices are explicitly unavailable with a reason. No control silently changes global defaults.
 
 - **Data before:** **Session** reports model and context usage.
 - **Walkthrough:** 1. Person opens model/effort picker. 2. Chooses an available session option.
@@ -182,7 +184,7 @@ Given a Claude session and a sentinel global settings file, when selecting Low e
 
 ### SC-16: Question and permission cards
 
-Given a transcript-supported agent that asks a user question or permission, when the request appears, then an overlay above the dock displays the actual question, choices and collapse/dismiss controls; collapsed state has a strip; send is disabled while a card is active. Answering uses that agent's real terminal interaction, including sequential questions, and does not send a normal prompt. Dismiss hides only the card, not permission enforcement or the actual pending request. Stale answers are refused; closed/answered requests do not reappear as new cards.
+Given a transcript-supported agent that asks a user question or permission, when the request appears, then an overlay above the composer displays the actual question, choices and collapse/dismiss controls; collapsed state has a strip; send is disabled while a card is active. The card is bounded by available pane height and its actions remain usable without covering the compact default five-row editor. Answering uses that agent's real terminal interaction, including sequential questions, and does not send a normal prompt. Dismiss hides only the card, not permission enforcement or the actual pending request. Stale answers are refused; closed/answered requests do not reappear as new cards.
 
 - **Data before:** **Agent question** choose A/B; **Draft** `next prompt`.
 - **Walkthrough:** 1. Person collapses and expands the card. 2. Answers B.
@@ -207,6 +209,8 @@ Given two rapid sends to one terminal, when they execute, then all clear/body/su
 ### SC-19: Delivery evidence and Codex false-warning defect
 
 Given a verified Claude/OpenClaude/Codex send, when positive screen, matching prompt/status or transcript evidence proves it was consumed, then outcome is observed-cleared and the old prompt is not restored, even if a stale screen recognizer misses. Without evidence, poll up to four times immediately then at 900 ms intervals; four misses mean may-not-have-sent. Other agents use unobservable without a false failure warning. Never auto-resend.
+
+Catalog-recognized agents without one of the eight provider transcript adapters still use the acknowledged generic send path and return `unobservable`, not a false delivery failure. Missing an adapter withholds provider-specific transcript controls; it does not disqualify the terminal from dock recognition or generic sends.
 
 - **Data before:** **Codex draft** `Reply with only PONG`.
 - **Walkthrough:** 1. Send is accepted. 2. Codex echoes prompt and answers PONG while an old composer glyph remains on screen.
@@ -251,7 +255,7 @@ An explicit or revisionless stale clear is a replacement too and is refused. Rec
 
 ### SC-23: Scriptable actions and inspectable state
 
-Given a running daemon and window, when a CLI/API client configures, toggles, edits, queries pickers, attaches, browses history, resizes, changes passthrough, reads/answers cards, changes a session option, sends or cancels, then it exercises the same daemon methods the UI uses. The state report includes dock request/mount state, rows, passthrough, draft/attachments, recognized agent, disabled reason, active send and question/options. Window-targeted commands fail explicitly without a matching window instead of claiming a UI action occurred.
+Given a running daemon and window, when a CLI/API client configures, toggles, edits, queries pickers, attaches, browses history, resizes, changes passthrough, reads/answers cards, changes a session option, sends or cancels, then it exercises the same daemon methods the UI uses. The state report includes dock request/mount state, rows, passthrough, draft/attachments, recognized agent, disabled reason, active send and question/options. A non-UI composite `set` containing `passthrough` routes through public `ui.command.run` and `command:quirky.terminal-dock/set` before any mutation; its true/false value is absolute and is checked against the active window's own pane host. Focus resolution uses the exact report fields `focused`, `focusSequence` and `focusedPane` (never `focusWithin`): prefer focused reports, then a unique highest nonzero sequence, then a sole pane candidate; ambiguity or missing window fails explicitly without mutation.
 
 - **Data before:** **Pane** recognized, dock closed.
 - **Walkthrough:** 1. CLI opens dock and sets a draft. 2. API reads state. 3. Window applies the state.
@@ -283,3 +287,5 @@ Status: Autonomous approval after the required combined Codex review and confirm
 **Amendments:** 2026-10-27 — Codex spec review F2/F3/F5/F6/F7: all draft replacements require revisions; queued sends have early-known identifiers; write failures distinguish zero/possible acceptance; durable recovery-only snapshots never replay; combined recoverable-text/attachment budgets make restoration lossless. Shortcut-precedence F1 and provider-source F4 are recorded in the tech spec and item decision log.
 
 **Amendments:** 2026-10-27 — F1 requires completing D30's anticipated palette command/shortcut migration into an overridable contribution; shell rendering remains unchanged. Dock-context Mod+Shift+P performs passthrough only; outside that context it opens the palette. No dual dispatch or silent alternate chord is permitted.
+
+**Amendments:** 2026-10-27 — final contract sync records dynamic full-catalog terminal recognition and its evidence/latch boundaries; exact public command routing, focus-report fields and pane/window ownership; compact-editor overlay bounds; reported-model preservation and the session-local native effort bridge. All 23 scenarios and all three Orca-defect requirements remain normative; this amendment is not an implementation-pass claim.

@@ -209,5 +209,159 @@
 - **Revisit if:** a later gate repeats a failure outside load conditions
 - **Source:** assumed — autonomous
 
+## D20: Build six disjoint components and validate their combined implementation before committing
+- **Question:** execution decomposition, shared contracts and acceptance ownership
+- **Options:** one broad worker; shared-file concurrent edits; six isolated components with frozen interfaces
+- **Chose:** receipt, palette cutover, dock authority/send, provider/picker/attachments, composer, and terminal-host components; width cap six, no overlapping files or dependency demotions. Workers wrote tests but ran no checks or commits. The parent assembled audited source in a separate validation tree because the new plugin's modules must coexist for runtime checks.
+- **Why:** this preserves single-file ownership without committing modules that were tested only against missing peer implementations.
+- **Evidence:** scratch wave1.json, dispatch-snapshots.json, scopes.json, component-trees.json, barrier/fix audits; component commits 0b33e78,82c8deb,ba2cad6,372a044,b765926,18b2fa3
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** a new shared contract requires serial implementation
+- **Source:** assumed — autonomous
+
+## D21: Recover exact misplaced edits and preserve unattributed tooling state
+- **Question:** the scope audit found wrong-worktree edits and unexpected metadata
+- **Options:** ignore contamination; reset whole files; stop, attribute and move only the preserved edits
+- **Chose:** stop the wave when relative edit headers changed thirteen main-lane tests/fakes. The worker identified its exact edits; the parent preserved a binary patch, checked forward application in its assigned tree and reverse application in main, then moved those hunks. Require absolute edit/write paths thereafter. Preserve unattributed .serena files in backend/layout trees and exclude them from explicit feature staging.
+- **Why:** resetting files could discard user work. Tool metadata is not feature source and its provenance was not proved.
+- **Evidence:** ownership-incident.md, palette-main-contamination.patch, external-artifacts.json; main diff returned empty and all component HEADs remained at their dispatch base
+- **Reversibility:** easy
+- **Confidence:** high for preserved source; metadata provenance unknown
+- **Revisit if:** an actual out-of-scope source edit appears
+- **Source:** assumed — autonomous
+
+## D22: Repair observed failures at their source and keep verification claims bounded
+- **Question:** initial acceptance found compiler and runtime failures, not a passing implementation
+- **Options:** trust worker DONE reports; weaken tests; investigate and repair the demonstrated causes
+- **Chose:** restore accidentally lost operation/record/pane fields; use the shell-ready fact instead of waiting for its stripped marker; fix actual React fixture events and dropped-file target; preserve pending remount focus and reuse the existing focused-controller registry for transient body focus after a menu closes. Correct fixture-only plain-sh readiness, floating selector, OS-focus and selection-count assumptions. Delete incidental wording/key-list pins.
+- **Why:** missing history caused records to be rejected; missing pane context/session IDs broke real rendering. The focus failure was reproduced and traced through a throwaway actual-window diagnostic before changing its ownership guard.
+- **Evidence:** acceptance-failures.md, fix1..fix8 audits/patches; targeted commands observed K12,Z4,B8,P38,U14,H5 passing at their accepted source versions; TypeScript clean after repairs. Actual CLI/PTY smoke observed PONG, observed-cleared, empty draft, rows7/manual-close across daemon restart and owned-home removal.
+- **Reversibility:** medium
+- **Confidence:** high for exercised paths, not whole-suite completion
+- **Revisit if:** the integrated suite or actual web surface exposes another defect
+- **Source:** assumed — autonomous
+
+## D23: Route non-UI passthrough through its real window owner and publish valid state schemas
+- **Question:** plugin validation found namespaced scripting and schema defects
+- **Options:** allow CLI to fabricate UI reports; special-case only the CLI; route the whole canonical request through a declared window command
+- **Chose:** add command:quirky.terminal-dock/set with the canonical set arguments. A non-UI passthrough mutation routes through ui.command.run before any mutation; the UI connection then passes the original mounted/focused/active-window checks. Preserve absolute true/false and composite mutation behavior. Declare populated nullable DockState/nested result and event objects, not closed empty objects.
+- **Why:** CLI and direct API must drive the same window action. The repository's schema dialect rejects extra fields in a bare object schema even though the dispatcher does not currently validate results.
+- **Evidence:** DockPluginValidation findings; 9c92187; CLI regression two tests/eighteen assertions passing in its own real-window test file; actual result/event schema regression passing; typecheck and packaged build passed in the contracts tree
+- **Reversibility:** medium
+- **Confidence:** high
+- **Revisit if:** window-targeted operations need a public explicit-window selector
+- **Source:** assumed — autonomous
+
+## D24: Keep default editor space and above-dock overlays without inventing selected models
+- **Question:** early guarded web smoke found inaccessible default-height editing and misleading option display
+- **Options:** increase the default gutter; leave the editor hidden behind chrome; compact fixed chrome and position overlays outside it
+- **Chose:** retain five rows/180px, combine controls into one bounded footer, keep full reasons accessible without wrapping away editor space, and place picker/question overlays above the composer within pane bounds. Include reported native values in select options so the browser cannot display first-choice Fable when the actual model is claude-haiku-4-5. Match advertised Claude family aliases conservatively for capability lookup while retaining the raw reported identity.
+- **Why:** enlarging the gutter would hide the defect and break locked geometry. Haiku's advertised options are empty; Sonnet/Fable/Opus advertise effort, so no effort is invented for Haiku.
+- **Evidence:** web run 20261027T180029-52a7 obs-10/26 and findings F1-F3; owned API model snapshot and claude-catalog.json; 03dcb20,d8b54ff; UI sixteen tests and provider thirty-two tests passed separately, combined typecheck/build passed
+- **Reversibility:** easy
+- **Confidence:** high for source/unit evidence; real layout rerun still required
+- **Revisit if:** the new web run finds editor or overlay clipping
+- **Source:** locked by terminal-dock.md geometry/placement; assumed — autonomous (compact arrangement)
+
+## D25: Recognize all catalog terminal agents, not only the eight transcript adapters
+- **Question:** source investigation found a documented recognition flow missing from the first implementation
+- **Options:** limit docks to managed transcript-agent launches; falsely change canonical session.agent; project recognized identity from public catalog/status/title evidence
+- **Chose:** implement public-catalog support without a separate dock allow-list. Use known live hook/program identity, managed launch metadata, strict verified branded titles, then the requested-dock latch; keep canonical session ownership unchanged. Other terminal CLIs use the input/unobservable tier. Preserve manual-close, transient-loss, confirmed-exit/relaunch and disabled-write invariants.
+- **Why:** the feature explicitly includes live-status/title recognition and any TuiAgent. Existing session metadata remains shell for manually started CLIs; title status classification alone supplies no agent identity.
+- **Evidence:** DockRecognitionScout; terminal-dock.md:18-19,60; service.ts original supported/reconcile paths; public PluginPty title/facts/list and quirky.agents/list; isolated DockRecognitionImpl is implementing and testing this requirement
+- **Reversibility:** medium
+- **Confidence:** high for requirement/gap; implementation acceptance pending
+- **Revisit if:** title evidence is ambiguous or a stale identity reopens an exited agent
+- **Source:** locked by terminal-dock.md
+
+## D26: Exercise the two delivery/settings defects through real daemon APIs and PTYs
+- **Question:** direct bridge tests did not alone satisfy the roadmap's public-flow proof
+- **Options:** rely only on module tests; add consumer-visible public API regressions
+- **Chose:** actual private-HOME fake Codex consumes Enter, writes a matching rollout and displays PONG with stale composer evidence; the public send must not restore a duplicate. Actual private-HOME fake Claude's live picker treats persistent commands/default-saving Enter as a settings side effect, while s changes only its session; public options must confirm Low and preserve sentinel bytes/draft.
+- **Why:** these tests catch the documented consumer-visible regressions across service serialization, provider observation and real child input, not just forwarding.
+- **Evidence:** 90e1f83; defects.e2e.test.ts two tests/twenty-six assertions passed; full typecheck passed. An unnecessary Claude hooksRemove setup was removed because Claude hooks are per-launch, not in the file-installer registry.
+- **Reversibility:** easy
+- **Confidence:** high for the deterministic API/PTY paths
+- **Revisit if:** provider wire formats or session-only actions change
+- **Source:** locked by docs/roadmap.md acceptance
+
+## D27: Bound and own verification without changing the shared runner
+- **Question:** an outer timeout interrupted the first required full-suite attempt
+- **Options:** call the incomplete run passing; kill shared host jobs; alter protected runner/config; preserve evidence and use an owned streaming wrapper
+- **Chose:** record no suite outcome from the initial 3600-second outer timeout. Exact local command scan found no surviving matching runner; unrelated PIDs were not killed. A new external wrapper uses the landed ProcessScope guardian, streams logs from command start, retains SSH HOME, gives each command an explicit bounded lifetime and records actual exit/results. Keep the prescribed remote suite and its isolated-rerun policy unchanged.
+- **Why:** captured-in-memory logs were lost when the outer process died. Read-only host probes showed four live other-run test holders with turnover, not stale locks or proof this item's tests failed.
+- **Evidence:** gate-initial empty; DockGateTimeoutScout and targeted process fingerprints; run-owned-gate.ts, gate-owned logs/record; fix-test-process-leaks decisions
+- **Reversibility:** easy
+- **Confidence:** high for observed timeout/ownership facts; full-suite result pending
+- **Revisit if:** a concrete failing file or owned-run deadline supplies new evidence
+- **Source:** locked by docs/loop/LOOP.md test routing; assumed — autonomous (external ownership wrapper)
+
+## D28: Preserve the browser chooser limitation and hand its OS dialog to native verification
+- **Question:** the web driver's file chooser stopped later UI goals
+- **Options:** bypass Attach with an API and claim a UI pass; repeat the known modal failure; record partial and verify remaining goals in a fresh owned scene
+- **Chose:** preserve the guarded report and its attachment partial; do not call unperformed later goals passing. Close only the owned browser session after end reported cleanup failure. Add the run-created-file OS chooser/chip flow as pending native scenario and run remaining web goals without reopening that chooser.
+- **Why:** browser_snapshot and Escape both returned that the tool does not handle the modal state. The app's native chooser was opened, but no chip was observed; this is not attachment success.
+- **Evidence:** web run 20261027T180029-52a7 report, obs-54/F4; owned browser close succeeded; docs/loop/native/m3-terminal-dock.json; new seven-goal rerun in progress
+- **Reversibility:** easy
+- **Confidence:** high for tool limitation; native scenario remains pending
+- **Revisit if:** the guarded driver gains file-chooser support or native verification finds an app defect
+- **Source:** locked by docs/loop/LOOP.md native/tool-limitation handling
+
+## D29: Record and contain the accidental default-profile diagnostic
+- **Question:** one diagnostic CLI call omitted its temporary HOME binding
+- **Options:** hide the mistake; reset unknown user files; attribute only owned processes and preserve profile data
+- **Chose:** disclose the isolation failure. The read-only dock get returned not-found but autostarted the default ~/.quirky daemon from the unique contracts worktree at 2026-10-27T18:19:27.917Z. Verify PID/start/command fingerprints, gracefully stop only daemon10234 and its owned empty PTY host10238, and leave default profile data/logs in place because there is no before image. Bind every later diagnostic to explicit owned runtime metadata.
+- **Why:** deleting or reverting unknown user data would compound the mistake. No mutating RPC was requested, but startup can initialize/migrate profile state; therefore do not claim the real home was untouched.
+- **Evidence:** default-daemon-incident.json, default-host-incident.json and identity-checked SIGTERM results in scratch; host had zero child processes. Metadata-only checks show Claude settings and Codex config/hooks mtime/ctime predate the incident; no token/settings contents were printed, and no byte-identical baseline claim is made.
+- **Reversibility:** medium for startup metadata; process lifetime contained
+- **Confidence:** high for ownership/cleanup facts; previous profile contents unknown
+- **Revisit if:** the operator finds an unexpected default-profile change requiring comparison with their own backup
+- **Source:** assumed — autonomous (incident containment, not authorization to touch normal profiles)
+
+## D30: Review the complete item diff against the caught-up integration baseline
+- **Question:** fixed final-review scope after merging unrelated lane implementations
+- **Options:** include unrelated imported features as this item's work; hide selected item files; review all item source/tests/callers relative to the caught-up roadmap
+- **Chose:** fix the code-review campaign baseline before the first review to the caught-up roadmap merge-base; exclude docs and the generated lockfile explicitly, retain every item code/test/callsite change, and use three deep Gemini lenses with shared deterministic prepass. No review has started before the required green gate.
+- **Why:** the original execution base predates incoming notes/AI and independent repairs; including their implementations would misattribute unrelated findings. This is not a re-scope after findings.
+- **Evidence:** final-review-input.json and final-item.diff staging; initial caught-up baseline deae391c60ba3a66c64d1a92fe7ba9d94d95e049; incoming decision logs read for all six imported items
+- **Reversibility:** easy before review; campaign scope stays fixed once dispatched
+- **Confidence:** high
+- **Revisit if:** another integration catch-up occurs before the review begins
+- **Source:** assumed — autonomous
+
+## D31: Accept catalog/manual recognition after actual daemon/PTy regression
+- **Question:** whether the formerly managed-only support gate now satisfies the recognized-agent core flow
+- **Options:** accept worker text; exercise the actual public methods and child input; retain the unsupported restriction
+- **Chose:** accept ea31259 after the real recognition E2E passed two tests/twenty-two assertions and full typecheck passed. The generic disabled-Gemini case consumed PTY bytes; the manual Claude case preserved canonical shell identity, manual-close/draft latch, confirmed command-finished exit and fresh relaunch.
+- **Why:** first execution exposed a duplicate local declaration; after the narrow rename, execution exposed missing Claude Code native-brand evidence. Fixed the shared title/app alias only when Claude exists in the effective catalog and corrected hook-versus-program/title provenance. Neither failing run was called passing.
+- **Evidence:** recognition.e2e.test.ts; ea31259; parent command outputs; separate hook lead.ended/whole-PTY assertions are explicitly listed as unfinished in BLOCKERS.md
+- **Reversibility:** medium
+- **Confidence:** high for exercised public flows
+- **Revisit if:** another native brand is ambiguous or a stale signal reopens an exited foreground agent
+- **Source:** supersedes m3-terminal-dock D25 implementation-pending status
+
+## D32: Preserve the second guarded web report and its incomplete flows
+- **Question:** how to report actual browser results without replacing failed/unattempted actions with API evidence
+- **Options:** call the report broadly passing; hide findings; preserve exact observed successes and open flows
+- **Chose:** report default-five-row editing/current model/PONG, above-composer slash/file pickers, draft hide/show, independent split drafts, and qualitative short-pane hide/growth restoration as observed. Keep the report's option/card/focus failures, unmeasured geometry, incomplete shell-pane menu, unattempted Stop/final-settings goals and native acquisition limitations open.
+- **Why:** visible Low safely refused; card buttons were occluded despite actual-terminal answering; Settings re-enable restored drafts but left focus null. These are not complete acceptance passes. The private settings sentinel remained unchanged. Closed only owned browser 20261027T190614-d4f8 and stopped the owned fixture.
+- **Evidence:** .quirk/using-apps-like-a-user/runs/20261027T190614-d4f8/report.md and report.json; corresponding screenshots; privateSettingsSentinelUnchanged:true in parent diagnostic; BLOCKERS.md open review findings
+- **Reversibility:** easy
+- **Confidence:** high for recorded observations; no pass for unperformed goals
+- **Revisit if:** the dependent completion item obtains new runtime evidence
+- **Source:** assumed — autonomous (evidence reporting); operator-authorized deferred delivery in D33
+
+## D33: Follow the operator's deadline and explicitly defer nonblocking flows
+- **Question:** operator interjection requires this item to land within the next hour and limits fixes to blocking core-flow findings
+- **Options:** continue the original full-flow/full-suite preflight; silently omit work; land the exercised core with explicit dependent completion work
+- **Chose:** stop the owned superseded whole-suite preflight without claiming a result. Run bun test scripts, bun run typecheck and bun scripts/suite.ts over affected package/plugin directories; queue land runs the full suite. Catch up build/roadmap once before land. Record nonblocking findings in BLOCKERS.md and add fix-terminal-dock-unfinished-flows-20261027 depending on this item before landing. Full specs remain the follow-up acceptance contract, not a statement that unfinished UI flows passed.
+- **Why:** this is explicit user approval to reduce this delivery slice, not an autonomous waiver. Safe sending, draft retention, public API/CLI ownership, default usable composer, picker and persisted/manual lifecycle core flows have direct runtime evidence. Deferred option/card/settings/interruption/acquisition/measurement flows and missing lifecycle-signal assertions are named individually in the dependent item.
+- **Evidence:** operator message in this iteration; scratch follow-up.json; BLOCKERS.md; scoped gate and final review records to be appended from actual results
+- **Reversibility:** medium
+- **Confidence:** high for the instruction; final validation/landing still pending
+- **Revisit if:** a finding blocks safe core sending, loses drafts or writes global settings
+- **Source:** supersedes m3-terminal-dock D30 green-full-preflight sequencing and original all-flow delivery requirement, by explicit operator decision
+
 ## Progress
-Step 4 complete: both specs authored, combined Codex adversarial pass completed, confirmed findings amended, design approved autonomously (D17/D18). Step 5 next: commit reviewed specs, set up six disjoint component worktrees (receipt, palette cutover, dock backend, provider/pickers/attachments, composer, terminal host), dispatch omp implementers, audit and run checks once after the wave, merge build/roadmap before final Gemini reviews, then smoke/API/UI verification and land. All research/review jobs have returned; no implementation yet.
+Core implementation and catalog/manual recognition are integrated in the visible branch; original full acceptance is explicitly reduced for this landing by operator D33. Preserve named unfinished flows in BLOCKERS.md and dependent queue item. Finish final core review and prescribed scripts/types/affected-directory suites, commit/integrate documentation, catch up build/roadmap once/read new decisions, then commit/detach and queue.ts land (which runs the whole suite). The superseded whole-suite preflight was cancelled with no result. No final review, final scoped-suite result or landing is claimed yet.
