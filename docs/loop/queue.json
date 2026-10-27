@@ -567,6 +567,16 @@
       "status": "todo"
     },
     {
+      "id": "fix-flaky-pty-host-host",
+      "milestone": "M1",
+      "title": "Fix the flaky packages/pty-host/test/host.test.ts: it failed under load in 3 full-suite runs on the test host and passed each time it was rerun alone (see <git common dir>/build-loop/flakes.log). Under load, many tests time out at 5 s, and startHost fails with 'could not start process scope guardian' when the guardian isn't ready within 4 s. Reproduce it under CPU load with quirk:systematic-debugging, and fix the timing assumptions in the test helpers or the code they expose",
+      "docs": [
+        "term-daemon.md"
+      ],
+      "deps": [],
+      "status": "todo"
+    },
+    {
       "id": "m7-parity-sweep",
       "milestone": "M7",
       "title": "Parity sweep: every remaining flow in the 28 feature docs",
