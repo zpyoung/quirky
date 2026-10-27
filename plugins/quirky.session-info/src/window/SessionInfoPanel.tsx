@@ -109,19 +109,22 @@ function IdentityContent({ state, copied, action }: { state: PanelState; copied:
   )
 }
 
-function UsageContent({ usage }: { usage: Usage }) {
+function UsageContent({ usage, busy, onRetry }: { usage: Usage; busy: boolean; onRetry(): void }) {
   if (usage.status === 'waiting') return <p role="status" style={MUTED_STYLE}>Waiting for the first completed turn…</p>
   const values: [string, number | undefined][] = [
     ['Total tokens', usage.totalTokens], ['Turns', usage.turnCount], ['Input', usage.input], ['Output', usage.output], ['Cache read', usage.cacheRead], ['Cache write', usage.cacheWrite]
   ]
   const timestamp = formatTimestamp(usage.updatedAt)
+  const refreshing = busy || usage.freshness === 'refreshing'
+  const canRetry = usage.freshness === 'stale' || usage.error !== undefined
   return (
-    <div>
-      {usage.freshness === 'refreshing' && <p role="status">Refreshing usage…</p>}
+    <div aria-busy={refreshing}>
+      {refreshing && <p role="status">Refreshing usage…</p>}
       {usage.freshness === 'stale' && <p role="status">Stale{timestamp ? ` · As of ${timestamp}` : ''}</p>}
       {values.filter(([, value]) => value !== undefined).map(([label, value]) => <Row key={label} label={label}>{formatCount(value) ?? value}</Row>)}
       {usage.error && <p role="alert">{usage.error}</p>}
       {usage.freshness === 'fresh' && timestamp && <p style={MUTED_STYLE}>As of {timestamp}</p>}
+      {canRetry && <button type="button" aria-label="Retry usage" onClick={onRetry} disabled={refreshing} style={BUTTON_STYLE}>Retry</button>}
     </div>
   )
 }
@@ -239,6 +242,7 @@ export function SessionInfoPanel({ context, report }: Props) {
   const [actionError, setActionError] = useState<string | null>(null)
   const [inspectionError, setInspectionError] = useState<string | null>(null)
   const [inspectionBusy, setInspectionBusy] = useState(false)
+  const [retryBusy, setRetryBusy] = useState(false)
   const [enableBusy, setEnableBusy] = useState(false)
   const [nextLaunchEffect, setNextLaunchEffect] = useState<string | null>(null)
   const [copied, setCopied] = useState<CopyFeedback | null>(null)
@@ -423,13 +427,14 @@ export function SessionInfoPanel({ context, report }: Props) {
     setActionError(null)
     setLoadError(null)
     const current = projectionRef.current
-    if (current?.session && hooksOpen) {
-      await inspect(current.session, true)
+    setRetryBusy(true)
+    try {
+      if (current?.session) await inspect(current.session, true)
       await reload()
-      return
+    } finally {
+      if (aliveRef.current) setRetryBusy(false)
     }
-    await reload()
-  }, [hooksOpen, inspect, reload])
+  }, [inspect, reload])
 
   const setTelemetry = useCallback(async (enabled: boolean) => {
     const session = projectionRef.current?.session
@@ -485,7 +490,7 @@ export function SessionInfoPanel({ context, report }: Props) {
           return hasHooksSection
         }).map(({ id, title }) => <AccordionSection key={id} id={id} title={title} open={openSections.includes(id)} onToggle={() => toggle(id)}>
           {id === 'identity' && <IdentityContent state={projection} copied={copied} action={runAction} />}
-          {id === 'usage' && info.usage && <UsageContent usage={info.usage} />}
+          {id === 'usage' && info.usage && <UsageContent usage={info.usage} busy={retryBusy || inspectionBusy} onRetry={() => void retry()} />}
           {id === 'liveActivity' && <LiveActivityContent activity={info.liveActivity} />}
           {id === 'context' && info.context && <ContextContent detail={info.context} />}
           {id === 'filesTouched' && info.filesTouched && <FilesContent files={info.filesTouched} />}

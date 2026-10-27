@@ -190,6 +190,75 @@ describe('Session Info UI contributions', () => {
     panel.unmount()
   })
 
+  test('retains stale Usage on retry failure and recovers with Hooks & MCP closed', async () => {
+    let currentUsage: NonNullable<SessionInfo['usage']> = {
+      status: 'ready', freshness: 'stale', totalTokens: 100, turnCount: 2, input: 70, output: 20, cacheRead: 5, cacheWrite: 5,
+      updatedAt: 1_700_000_060_000, error: 'ENOENT: transcript missing'
+    }
+    const firstInspection = Promise.withResolvers<unknown>()
+    let inspectCount = 0
+    const fake = makeContext({
+      'quirky.session-info/get': () => state(info({ usage: currentUsage }), { openSections: ['liveActivity', 'usage'] }),
+      'quirky.session-info/inspect': () => {
+        inspectCount++
+        if (inspectCount === 1) {
+          currentUsage = { ...currentUsage, freshness: 'stale', error: 'ENOENT: transcript missing' }
+          return firstInspection.promise
+        }
+        currentUsage = {
+          status: 'ready', freshness: 'fresh', totalTokens: 200, turnCount: 3, input: 120, output: 40, cacheRead: 30, cacheWrite: 10,
+          updatedAt: 1_700_000_060_001
+        }
+        return {
+          hooks: { state: 'installed', detail: 'Hooks ready' },
+          statusline: { state: 'available', detail: 'Custom statusline detected' },
+          mcp: [], updatedAt: 1_700_000_060_001
+        }
+      },
+      'quirky.session-info/sections': ({ open }) => ({ open })
+    })
+    activate(fake.context)
+    const panel = fake.mount('panel:quirky.session-info/info')
+    await waitForUi()
+
+    const usage = () => panel.element.querySelector('#session-info-section-usage') as HTMLElement
+    expect(usage().textContent).toContain('100')
+    expect(usage().textContent).toContain('ENOENT: transcript missing')
+    expect(button(panel.element, 'Hooks & MCP').getAttribute('aria-expanded')).toBe('false')
+    expect(inspectCount).toBe(0)
+
+    await click(button(panel.element, 'Retry usage'))
+    await waitForUi()
+    expect(button(panel.element, 'Retry usage').disabled).toBe(true)
+    expect(usage().textContent).toContain('Refreshing usage…')
+    expect(usage().textContent).toContain('100')
+
+    firstInspection.resolve({
+      hooks: { state: 'installed', detail: 'Hooks ready' },
+      statusline: { state: 'available', detail: 'Custom statusline detected' },
+      mcp: [], updatedAt: 1_700_000_060_001
+    })
+    await waitForUi()
+
+    expect(inspectCount).toBe(1)
+    expect(button(panel.element, 'Hooks & MCP').getAttribute('aria-expanded')).toBe('false')
+    expect(usage().textContent).toContain('100')
+    expect(usage().textContent).toContain('ENOENT: transcript missing')
+    expect(button(panel.element, 'Retry usage').disabled).toBe(false)
+
+    await click(button(panel.element, 'Retry usage'))
+    await waitForUi()
+
+    expect(inspectCount).toBe(2)
+    expect(button(panel.element, 'Hooks & MCP').getAttribute('aria-expanded')).toBe('false')
+    expect(usage().textContent).toContain('200')
+    expect(usage().textContent).not.toContain('100')
+    expect(usage().textContent).not.toContain('Stale')
+    expect(usage().textContent).not.toContain('ENOENT')
+    expect(usage().textContent).not.toContain('Refreshing usage…')
+    panel.unmount()
+  })
+
   test('keeps waiting values absent and shows actionable Retry errors', async () => {
     let attempts = 0
     const fake = makeContext({

@@ -220,5 +220,27 @@
 - **Revisit if:** Another catch-up occurs before the first final review; pin that integration parent instead.
 - **Source:** assumed — autonomous
 
+## D21: Fix stale Usage recovery and distinguish short feedback from driver sampling
+- **Question:** The first real web pass reported missing Usage Retry and unobserved Copy ID feedback.
+- **Options:** Ignore the missing action/stretch the copied label for the driver; repair recovery and verify the transient independently.
+- **Chose:** Added accessible stale/error Usage Retry, busy state and inspect-then-reload independent of the Hooks & MCP accordion. A behavioral test proves retained stale 100-token values after another failure, then visible fresh 200-token recovery with the error removed. The twelve UI tests, typecheck and full app build pass.
+- **Why:** A reload of the cached snapshot was not a transcript refresh. Copy ID was a different issue: official action sampling took 4.3–4.5 seconds, longer than the specified 1.5-second feedback.
+- **Evidence:** Official report .quirk/using-apps-like-a-user/runs/20261027T152456-7b53/report.md: nine pass, one partial, two fail. Its F3 is fixed in code and awaits the second web pass. An independent immediate real-browser capture shows Copied and then Copy ID reset: /tmp/quirky-session-info.TBh9Q4/copy-feedback-visible.png and copy-feedback-reset.png. This proves the label exists; the original report remains unchanged. The rerun also verifies actual copying through UI paste.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** The repaired real web scenario or clipboard-paste verification fails.
+- **Source:** assumed — autonomous
+
+## D22: Keep native-only effects in the nightly handoff
+- **Question:** Web verification cannot establish macOS clipboard delivery, application-window activation or Finder selection.
+- **Options:** Claim headless browser effects prove native behavior; hand off actual OS scenarios.
+- **Chose:** docs/loop/native/m3-session-info.json contains pending SC-5, SC-7 and SC-9 scenarios with no claimed run/results. Web pane focus, read-only transcript and visible feedback are independently exercised.
+- **Why:** Native effects require the real Electrobun window and OS surfaces, which this unattended lane must not foreground.
+- **Evidence:** docs/loop/LOOP.md native-only scenario rule; first web report g8/g9 and immediate clipboard-label screenshots.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** The nightly native run reports failures.
+- **Source:** locked by docs/loop/LOOP.md
+
 ## Progress
-Tested implementation merged, then caught up with build/roadmap at 8c348238967449d44c6dfd4cd07092032f91d780. All six new logs read; process-ownership test adoption passes. Build/typecheck pass after catch-up. Real web dogfood is running on isolated fixture service sessionInfoDogfood6d; final full gates/review/landing remain pending. Never end while the fixture or dogfood worker is live.
+Post-dogfood Usage Retry repair passes UI tests/typecheck/build. Second all-scenario web run is active on fresh isolated fixture service sessionInfoDogfood6f; the prior fixture/browser were stopped and its temporary home removed. Native handoff and user docs are written. Next: full-tree gates on a clean committed snapshot, final deep Gemini C/S/X round plus one accepted fix batch, record/rerun web evidence, then queue land. Never end while the fixture or worker is live.
