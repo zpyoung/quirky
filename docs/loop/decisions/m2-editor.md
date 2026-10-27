@@ -341,7 +341,18 @@
 - **Revisit if:** post-merge typecheck or the land verification exposes a concrete integration defect
 - **Source:** locked by docs/loop/LOOP.md and the incoming decision logs
 
+## D32: Apply the retained isolated-retry policy to loaded loop tests
+- **Question:** How should three default-five-second batch-land test timeouts be classified after catch-up?
+- **Options:** edit protected tests or raise their limits; ignore the failures; run the failed file alone under the retained retry policy
+- **Chose:** keep the protected loop/tests and their timeout unchanged; rerun only `scripts/build-loop/lanes.test.ts` in isolation. It passed. Preserve the full-run failure and isolated result as load-sensitive evidence, not a source fix.
+- **Why:** the full scripts run had 60 passes and three timeouts in the same file; all isolated cases completed successfully with the original bound. Incoming decisions explicitly retain isolated retries for contention.
+- **Evidence:** catchup-scripts.log; catchup-loop-isolated.log, exit 0; post-catch-up typecheck and the five-file resource/geometry/lifecycle/hosted-tab/link boundary suite also passed
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** the same case fails in isolation or land verification reports a reproducible defect
+- **Source:** locked by docs/loop/decisions/fix-test-process-leaks.md
+
 ## Progress
-Step 7 preparation: core acceptance is complete under D25, the dependent completion item is queued, and all owned UI/browser/shell fixtures are stopped and removed after proof. The single catch-up is committed as 0a86532; all twelve incoming decision logs were read and the five-file merged resource/geometry/lifecycle/hosted-tab/link boundary suite passed. Post-merge typecheck/scripts are the last local confirmation before detaching and running queue land, whose verification runs the whole suite. If this branch remains after an interrupted attempt, resume at that land/check result rather than claim another item or add another follow-up.
+Ready for step 7: the single catch-up is committed, all twelve incoming decision logs are read, post-merge typecheck and boundary tests pass, and the loaded scripts failure passes the retained isolated-file retry policy (D32). Core/API/real-kernel/browser evidence and the queued completion boundary remain in D25–D30. All owned UI/browser/shell fixtures are stopped and removed. Next: commit this record, detach and run queue land; land runs the whole suite. If the branch remains after an interrupted attempt, resume from the land result rather than claim another item or add another follow-up.
 
 Last SC-9 point: Finder drops import copies under D19, including in-worktree sources. Native SC-9 stays pending for the nightly run. Open-in-place is owned by the operator's `m4-editor-drop-open-in-place`, not an m2-editor blocker.
