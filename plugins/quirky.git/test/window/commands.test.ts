@@ -52,7 +52,8 @@ test('SC-64: the manifest declares exactly the commands the window provides', as
   expect(manifest.contributes.keybinding.map((binding) => [binding.key, binding.command])).toEqual([
     ['mod+shift+g', 'show'],
     ['f7', 'next-change'],
-    ['shift+f7', 'previous-change']
+    ['shift+f7', 'previous-change'],
+    ['mod+shift+a', 'add-review-note']
   ])
 }, SLOW)
 
