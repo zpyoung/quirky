@@ -12,7 +12,9 @@ afterEach(async () => {
 const METHODS = [
   'status', 'diff', 'stage', 'unstage', 'discard', 'describeDiscard', 'commit', 'push', 'forcePush', 'describeForcePush',
   'pull', 'fastForward', 'fetch', 'sync', 'rebaseFromBase', 'continue', 'abort', 'describeAbort', 'compare', 'setBase',
-  'branches', 'history', 'commitFiles', 'conflictFile', 'save', 'submoduleStatus', 'hugeFolders', 'ignoreFolder', 'reveal'
+  'branches', 'history', 'commitFiles', 'conflictFile', 'save', 'submoduleStatus', 'hugeFolders', 'ignoreFolder', 'reveal',
+  'notes', 'addNote', 'editNote', 'deleteNote', 'clearNotes', 'describeClearNotes', 'formatNotes', 'noteTargets', 'sendNotes',
+  'generateCommitMessage', 'cancelGenerate', 'aiFix', 'aiFixPreview', 'aiRecipe', 'setAiRecipe'
 ]
 
 describe('SC-66: the API lists every method with its schema (CLI)', () => {
@@ -32,6 +34,7 @@ describe('SC-66: the API lists every method with its schema (CLI)', () => {
     }
     expect(git.filter((method) => method.destructive).map((method) => method.name).sort()).toEqual([
       'quirky.git/abort',
+      'quirky.git/clearNotes',
       'quirky.git/discard',
       'quirky.git/forcePush'
     ])
@@ -61,14 +64,15 @@ describe('SC-66: the API lists every method with its schema (CLI)', () => {
     const ofKind = (kind: string) => contributions.filter((c) => c.kind === kind)
     expect(ofKind('view').map((c) => [c.name, c.data.title])).toEqual([['diff', 'Diff']])
     expect(ofKind('keybinding').map((c) => [c.name, c.data.key, c.data.command]).sort()).toEqual([
+      ['add-review-note', 'mod+shift+a', 'add-review-note'],
       ['next-change', 'f7', 'next-change'],
       ['previous-change', 'shift+f7', 'previous-change'],
       ['show', 'mod+shift+g', 'show']
     ])
     expect(ofKind('command').map((c) => c.name).sort()).toEqual([
-      'collapse-all', 'load-diff', 'next-change', 'next-conflict', 'open-branch-changes', 'open-changes', 'open-commit', 'open-diff',
+      'add-review-note', 'collapse-all', 'load-diff', 'next-change', 'next-conflict', 'open-branch-changes', 'open-changes', 'open-commit', 'open-diff',
       'overwrite', 'previous-change', 'previous-conflict', 'refresh-compare', 'reload-from-disk', 'revert-change', 'review-conflicts',
-      'save', 'select', 'set-filter', 'show', 'toggle-history'
+      'save', 'select', 'send-review-notes', 'set-filter', 'show', 'toggle-history'
     ])
     const settings = Object.fromEntries(ofKind('setting').map((c) => [c.name, c.data.default]))
     expect(settings).toEqual({
@@ -79,7 +83,9 @@ describe('SC-66: the API lists every method with its schema (CLI)', () => {
       diffWordWrap: false,
       diffShowWhitespace: false,
       diffCollapseUnchanged: false,
-      combinedDiffFileTree: 'hidden'
+      combinedDiffFileTree: 'hidden',
+      'ai-enabled': true,
+      'ai-custom-command': ''
     })
     expect(ofKind('setting').find((c) => c.name === 'groupOrder')!.data).toMatchObject({
       title: 'Source Control Group Order',
