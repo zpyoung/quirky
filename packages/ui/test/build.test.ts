@@ -11,10 +11,11 @@ let plugins = ''
 /** Source of a plugin UI module that imports React bare and a sibling file, as the built-ins do. */
 const FIXTURE_UI = [
   "import { useState } from 'react'",
+  "import { createPortal } from 'react-dom'",
   "import { jsx } from 'react/jsx-runtime'",
   "import { greeting } from './greeting'",
   'export function activate(context: { provide(id: string, impl: unknown): void }) {',
-  "  context.provide('view:acme.fixture/page', () => jsx('p', { children: [greeting, typeof useState] }))",
+  "  context.provide('view:acme.fixture/page', () => jsx('p', { children: [greeting, typeof useState, typeof createPortal] }))",
   '}',
   ''
 ].join('\n')
@@ -56,10 +57,16 @@ describe("SC-29: plugin UI modules share the window's React", () => {
 
     const match = html.match(/<script type="importmap">([\s\S]*?)<\/script>/)
     const map = JSON.parse(match![1]!) as { imports: Record<string, string> }
-    expect(Object.keys(map.imports).sort()).toEqual(['react', 'react-dom/client', 'react/jsx-runtime'])
+    expect(Object.keys(map.imports).sort()).toEqual(['react', 'react-dom', 'react-dom/client', 'react/jsx-runtime'])
     for (const target of Object.values(map.imports)) {
       expect(Bun.file(join(out, target)).size).toBeGreaterThan(0)
     }
+  })
+
+  test('a plugin importing react-dom bare gets the window\'s createPortal through the map', async () => {
+    const dom = await load('vendor/react-dom.js')
+    expect(typeof dom.createPortal).toBe('function')
+    expect(typeof dom.flushSync).toBe('function')
   })
 
   test('main.js imports React bare and carries no copy of it', () => {
@@ -119,6 +126,7 @@ describe('plugin UI modules are bundled beside their plugins', () => {
   test('the bundle keeps React bare, inlines local imports and is minified', () => {
     const text = readFileSync(bundle(), 'utf8')
     expect(text).toMatch(/from\s*"react"/)
+    expect(text).toMatch(/from\s*"react-dom"/)
     expect(text).toMatch(/from\s*"react\/jsx-runtime"/)
     expect(text).not.toContain('react.transitional.element')
     expect(text).toContain('hello from the bundle')

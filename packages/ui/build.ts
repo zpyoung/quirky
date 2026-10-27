@@ -23,9 +23,9 @@ const app = await Bun.build({
   define
 })
 
-// one splitting build so the three vendor entries share a single React chunk
+// one splitting build so the vendor entries share a single React chunk
 const vendor = await Bun.build({
-  entrypoints: ['react.ts', 'react-dom-client.ts', 'jsx-runtime.ts'].map(name => join(root, 'src/vendor', name)),
+  entrypoints: ['react.ts', 'react-dom.ts', 'react-dom-client.ts', 'jsx-runtime.ts'].map(name => join(root, 'src/vendor', name)),
   target: 'browser',
   minify: true,
   splitting: true,
