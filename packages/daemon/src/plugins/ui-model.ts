@@ -288,6 +288,7 @@ export function buildUiModel(input: {
       title: stringField(declaration.data, 'title') ?? declaration.name,
       order: typeof declaration.data.order === 'number' ? declaration.data.order : DEFAULT_ORDER,
       module: moduleOf(declaration.plugin),
+      ...(kind === 'view' && declaration.data.settings === true ? { settings: true } : {}),
     }))
   const byOrder = (a: UiSlotEntry, b: UiSlotEntry) => a.order - b.order || compare(a.id, b.id)
 

@@ -91,3 +91,18 @@ and review actions, file contents, issues, work-item searches, Projects v2, and
 connection-owned refreshes. Use `quirky api --json` for the live method, parameter,
 result, and event contracts. Fixed-cap reads report truncation, partial results, or a limit error;
 only work-item search exposes client `--page` and `--limit`.
+
+## Plugin settings pages
+
+A UI plugin can opt a declared view into the shell's **Settings → Plugin settings**
+navigation with `"settings": true`:
+
+```json
+{"view": [{"id": "settings", "title": "Hosting settings", "settings": true}]}
+```
+
+Provide the view through the normal public UI API. The Settings link opens its
+effective view ID through `ui.view.open`; it does not import feature code into the
+shell. Disabled or overridden-away views have no link. A view with no active UI
+module is shown disabled, and failed navigation leaves Settings open with an error.
+Ordinary views remain outside Settings unless they explicitly opt in.
