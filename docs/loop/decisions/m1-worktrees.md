@@ -726,5 +726,16 @@
 - **Revisit if:** never
 - **Source:** assumed — autonomous
 
+## D67: T9a's one-line edit to the window exit test is accepted as a scope widening
+- **Question:** T9a changed `packages/ui/test/exit.e2e.test.ts`, outside its declared scope, because that test asserted the old `repos` report shape the contract replaces
+- **Options:** reject and re-dispatch; accept as a recorded re-plan
+- **Chose:** accept: the change is the single assertion `repos` → `projects`, W4 has one component, and no concurrent tree (the W3 fixer works only on daemon files) owns that file
+- **Why:** the audit's purpose is to stop concurrent edits colliding, and none can here; D63 did the same
+- **Evidence:** `git diff 938b91d -- packages/ui/test/exit.e2e.test.ts` in the W4 tree
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** never
+- **Source:** assumed — autonomous
+
 ## Progress
 Step 5: W1-W3 merged on `build/m1-worktrees` (W2 checkpoint fixed). W3 checkpoint review running (scratchpad cp3); W4 chain running in scratch worktree `sdd/m1wt/w4-t9` (T9a dispatched, then T9b dialogs, T9c project/group/delete dialogs). If stopped early: rerun the W3 checkpoint on `12b47d9..722c08a`, redo W4 from tech.md "Window" if its worktree is gone, then catch up with build/roadmap, Final Round 1, verify, land.
