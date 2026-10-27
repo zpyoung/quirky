@@ -19,7 +19,7 @@ Root for all anchors: `/Users/zpyoung/orca/workspaces/quirky/build-lane-6/`.
 - `packages/protocol/src/plugins.ts:229-247`: `LaunchHookInput`, `LaunchPatch`, `LaunchHook`; extend with composable JSON args.
 - `packages/daemon/src/plugins/launch-hooks.ts:55-119`: `runLaunchHooks`; ordered patches and validation.
 - `plugins/quirky.agent-status/main.ts:12-29`: `agentHooks`; migrate Claude settings contribution, retaining version gate and Codex notify.
-- `plugins/quirky.agent-status/src/claude-settings.ts:65-104`: `claudeSettings`, `writeClaudeSettings`; reuse pure version-aware hooks and remove newly obsolete file writer only after resolving references.
+- `plugins/quirky.agent-status/src/claude-settings.ts`: `claudeSettings`; retain the pure version-aware hook builder. The obsolete settings-file writer is removed by the inline JSON cutover.
 - `plugins/quirky.session/src/sessions.ts:190-286`: create/resume run launch hooks and pass hookArgs into prepareLaunch/prepareResume; callsites remain compatible.
 - `packages/daemon/src/server.ts:49-70`: authenticated `hook.received` event. Use source `session-info-claude`; no new HTTP server/endpoint.
 - `packages/protocol/src/model.ts:149-217`: Session and provider session identity.
@@ -46,6 +46,8 @@ Extend public PluginLaunch.hooks input/LaunchHookInput with optional `record` (S
 
 ### Authoritative terminal workspace focus
 Add public quirky.terminal/focusContext, params `{workspace?:string|null}`, result `{workspace:string|null}`, and a declared focusContextChanged event. A supplied workspace records the last terminal workspace actually focused (worktree ID or floating); null clears it. Omitted workspace only reads. This is daemon-owned, transient focus authority; reset invalid/closed floating targets rather than retain phantom focus. Main workspace pane focus and explicit focusPane APIs update it; FloatingOverlay reports true terminal focus into it. Clicking the Session Info panel must not erase the last terminal focus. Producers must report actual terminal focus, not infer focus from overlay visibility. Session-info consumes this public state, validates the active view/floating visibility, then resolves that workspace's authoritative active group/tab/pane. Native focus/scroll-to-bottom effects stay routed through existing terminal UI commands.
+
+Integration prerequisites for SC-7 and SC-32: `command:quirky.terminal/focus-pane` accepts `{pane:string,workspace?:string}`, activates the exact group/tab/pane, opens the terminal view, then focuses/flashes and scrolls that mounted pane to bottom. `quirky.terminal/openSession` accepts `{session:string,workspace?:string}` and returns `{workspace:Workspace,pane:string}`; it idempotently locates an existing session leaf or places the already-running local terminal session into a new tab without spawning a process. `command:quirky.terminal/open-session` uses that method then the focus-pane command. Session-info uses open-session after public session/resume returns. Nullable focusContext schema fields use Quirky's existing description-only schema convention with explicit handler validation; the public schema engine does not support a type array.
 
 ### Public plugin methods
 All methods are declared in `plugins/quirky.session-info/quirky-plugin.json` with params/results and matching CLI commands. Namespace `quirky.session-info/*`, CLI group `session-info`.

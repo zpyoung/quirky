@@ -143,5 +143,38 @@
 - **Revisit if:** A declared scope proves incomplete; stop and re-plan that component.
 - **Source:** assumed — autonomous
 
+## D14: Explicitly own missing integration primitives and scope corrections
+- **Question:** Implementation exposed missing exact-pane focus and resumed-session placement APIs, and one unapproved registration edit.
+- **Options:** Private DOM/workspace access; duplicate session spawn; public terminal primitives and explicit integration ownership.
+- **Chose:** Public terminal focus-pane command and idempotent openSession/open-session primitive. Session-info consumes them. Launch worker restored its out-of-scope agents/main.ts change; the parent owns the one-line settingsOverlay registration. Other necessary scope additions were approved before edits and recorded in scratch scope-amendments.md. Generated Serena project scaffolds were removed, never landed.
+- **Why:** Existing resume creates a PTY record but not a terminal leaf; opening a view alone cannot show it. Exact focus/bottom was absent. Public operations preserve scriptability and avoid a duplicate process.
+- **Evidence:** Original worker API surveys; /tmp/quirky-session-info.TBh9Q4/integration-corrections.md; wave-1-audit.json; tech.md Authoritative terminal workspace focus.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** Terminal layout gains a broader session placement contract.
+- **Source:** assumed — autonomous
+
+## D15: Validate linked components in a combined acceptance tree before committing
+- **Question:** Backend/UI tests need the new peer APIs, absent from isolated component trees.
+- **Options:** Pretend each isolated component passes; commit unchecked pieces; assemble audited changes for combined acceptance.
+- **Chose:** All original worker HEADs remained fixed and scope audits passed. Applied their audited diffs into /tmp/quirky-session-info.TBh9Q4/acceptance, then added the explicit registration and workspace lock update. Parent runs acceptance there, and only that tested combined tree is eligible for commit/merge. Preserved source trees are audit artifacts, not delivery trees.
+- **Why:** Fixed interfaces allow parallel authorship, but do not make linked runtime tests independent. This corrects D13's overly broad claim about independent acceptance without weakening the pre-commit gate.
+- **Evidence:** wave-1-audit.json; gate-fix-before.json and gate-fix-audit.json; package workspace linking required force-frozen install after lockfile-only update.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** Future work can provide independently runnable vertical slices.
+- **Source:** supersedes m3-session-info D13
+
+## D16: Repair root causes found by the first combined gate
+- **Question:** The first typecheck/API run and thirty targeted files exposed integration defects.
+- **Options:** Suppress failures; correct the source and retain behavioral acceptance.
+- **Chose:** Restore session insertion before hooks, missing imports/predicates and fixture declarations, sound nullable UI boundaries, valid public schemas, and actual throttle/focus behavior. Remove incidental escaped-source/mock-forwarding assertions rather than pin new implementation text.
+- **Why:** Session creation was universally failing; terminal's unsupported nullable type arrays invalidated its manifest and transitively session-info. The failures are real gates, not reasons to reduce scope.
+- **Evidence:** /tmp/quirky-session-info.TBh9Q4/narrow-1/checks.json (21 files pass, nine fail); actual plugin.list probe reports three focusContext schema errors; compiler artifacts 50 and 58.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** Required acceptance still fails; investigate before further changes.
+- **Source:** assumed — autonomous
+
 ## Progress
-Step 4 complete: both specs written, self-reviewed, Codex adversarial review completed and accepted findings fixed. Next: commit specs, implement the four scoped components, audit/merge, catch up with build/roadmap, run gates, final three-lens Gemini review and one fix batch, UI dogfood, land.
+Step 5 combined acceptance: original four components authored and audited; integration tree assembled, first red-gate corrections underway. No implementation commit, final review, UI dogfood or landing yet. Next: finish scoped gate fixes, pass acceptance/typecheck, commit tested tree, catch up with build/roadmap and read new decisions, run full gates, final three-lens Gemini review and one fix batch, UI dogfood, land.

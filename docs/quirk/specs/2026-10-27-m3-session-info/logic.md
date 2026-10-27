@@ -7,6 +7,8 @@ Status: Approved autonomously under LOOP.md; tech spec required (public launch c
 
 **Amendments:** 2026-10-27 — Accepted spec-review F1/F2/A1: publish main/floating focus authority; include user CLI --settings files/JSON in launch and resume precedence/consent; add the missing public resume-command projection in session-info.
 
+**Amendments:** 2026-10-27 — Integration anchoring: SC-7 needs a new exact-pane focus command; SC-32 needs a public operation that places the already-resumed session into terminal layout without spawning a second process. These fill missing API prerequisites without changing the visible flows.
+
 ## Conceptual model
 Session Info inspects the agent in the focused terminal pane. The daemon joins session identity and live agent status with optional, session-correlated Claude telemetry. The UI and scripts consume the same projection. A shell pane, non-terminal view, missing pane or missing agent yields an explicit empty state rather than the last inspected agent.
 
