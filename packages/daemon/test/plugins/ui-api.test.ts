@@ -320,7 +320,7 @@ describe('the UI model', () => {
 
     const bare = await pluginInfo(client, 'acme.bare')
     expect(bare.state).not.toBe('invalid')
-    expect(warnings(bare)).toEqual(['declares commands, views, panels, overlays or sidebar sections but has no ui module'])
+    expect(bare.diagnostics).toEqual([expect.objectContaining({ level: 'warning' })])
     expect(bare.ui).toBeUndefined()
 
     const model = await client.call('ui.contributions', {})

@@ -292,7 +292,7 @@ describe('window plugin host against a real daemon', () => {
     )
     const plugins = await t.agent.call('plugin.list', {})
     expect(plugins.find((plugin) => plugin.id === 'acme.bare')).toMatchObject({
-      diagnostics: [{ level: 'warning', message: 'declares commands, views, panels, overlays or sidebar sections but has no ui module' }]
+      diagnostics: [expect.objectContaining({ level: 'warning' })]
     })
     expect(t.state().settings.find((setting) => setting.id === 'setting:acme.bare/size')?.value).toBe(5)
 

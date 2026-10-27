@@ -8,6 +8,7 @@ const layout: UiLayout = { view: null, panel: null, sidebar: true, focus: null }
 const model: UiModel = {
   sidebarSections: [],
   panels: [],
+  settingsSections: [],
   views: [],
   overlays: [],
   commands: [],

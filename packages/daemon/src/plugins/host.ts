@@ -1,5 +1,6 @@
 import { mkdirSync, rmSync, symlinkSync } from 'node:fs'
 import { join } from 'node:path'
+import { pathToFileURL } from 'node:url'
 import {
   formatContributionId,
   isPluginId,
@@ -530,7 +531,7 @@ export class PluginHost {
           throw new Error(`${id}: context.${member} is not available`)
         }
       })
-    const defaults: Omit<ExtensionMembers, 'storedSettingValue'> & Pick<PluginContext, 'storedSettingValue'> = {
+    const defaults: Omit<ExtensionMembers, 'storedSettingValue'> & Pick<PluginContext, 'storedSettingValue' | 'workerEntrypoint'> = {
       dataDir: '',
       home: '',
       pty: unavailableObject<PluginContext['pty']>('pty'),
@@ -554,7 +555,16 @@ export class PluginHost {
       storedSettingValue: () => {
         throw new Error(`${id}: context.storedSettingValue is not available`)
       },
-      error: (_kind, message) => new Error(message)
+      error: (_kind, message) => new Error(message),
+      workerEntrypoint: (name) => {
+        if (attempt.revoked) throw new Error(`${id} is no longer active`)
+        const workers = manifest.workers
+        const workerPath = workers?.[name]
+        if (workers === undefined || workerPath === undefined || !Object.hasOwn(workers, name)) {
+          throw new Error(`${id}: undeclared worker '${name}'`)
+        }
+        return pathToFileURL(join(this.importRootOf(entry), workerPath)).href
+      },
     }
     return {
       pluginId: id,
