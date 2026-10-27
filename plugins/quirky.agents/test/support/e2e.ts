@@ -14,6 +14,8 @@ export type FakeBehavior = {
   steps?: { afterMs: number; write: string }[]
   exitAfterMs?: number
   exitCode?: number
+  /** Answers a bare `--version` with `stdout` and exits with `exitCode` (default 0) at once. */
+  version?: { stdout: string; exitCode?: number }
 }
 
 export type FakeEvent =
