@@ -1,7 +1,6 @@
 import {
   CODE_BACKED_KINDS,
   DEFAULT_THEME,
-  RESERVED_CHORDS,
   parseChord,
   parseContributionId,
   parseWhen,
@@ -168,13 +167,11 @@ function resolveKeybindings(
   for (const binding of distro.bindings) {
     const base = { id: binding.id, plugin: distro.id, key: binding.chord, command: binding.command }
     if (!effectiveCommands.has(binding.command)) result.push({ ...base, status: 'unbound' })
-    else if (RESERVED_CHORDS.includes(binding.chord)) result.push({ ...base, status: 'shadowed', shadowedBy: 'kernel' })
     else distroByChord.set(binding.chord, binding)
   }
 
   for (const bindings of byGroup.values()) {
     const { chord, when } = bindings[0]
-    const reserved = RESERVED_CHORDS.includes(chord)
     const distroBinding = when === '' ? distroByChord.get(chord) : undefined
     const maxima = bindings.filter(
       (candidate) => !bindings.some((other) => other !== candidate && beats(other.declaration, candidate.declaration))
@@ -192,10 +189,7 @@ function resolveKeybindings(
         command: binding.command,
         ...(when !== '' ? { when } : {}),
       }
-      if (reserved) {
-        result.push({ ...base, status: 'shadowed', shadowedBy: 'kernel' })
-        addWarning(warnings, declaration.plugin, `${declaration.id} is shadowed by the window's own shortcut ${chord}`)
-      } else if (distroBinding) {
+      if (distroBinding) {
         result.push({ ...base, status: 'shadowed', shadowedBy: distroBinding.id })
         addWarning(warnings, declaration.plugin, `${declaration.id} is shadowed by ${distroBinding.id} on ${chord}`)
       } else if (binding === winner) {
