@@ -109,6 +109,21 @@ describe('land', () => {
     expect(git(repo.integration, 'status', '--porcelain')).toBe('')
   })
 
+  test('moves build/roadmap only after verification passes', async () => {
+    await claim(repo, 1)
+    branch('a', 'a.txt', 'a\n')
+    const before = head()
+    const seen = join(mkdtempSync(join(tmpdir(), 'seen-')), 'ref')
+    const recordRef = (ok: boolean) => [['sh', '-c', `git rev-parse build/roadmap > ${seen} && ${ok}`]]
+    await expect(land(repo, 'a', recordRef(false))).rejects.toThrow('failed on the merge result')
+    expect(readFileSync(seen, 'utf8').trim()).toBe(before)
+    expect(git(repo.integration, 'symbolic-ref', '--short', 'HEAD')).toBe('build/roadmap')
+    await land(repo, 'a', recordRef(true))
+    expect(readFileSync(seen, 'utf8').trim()).toBe(before)
+    expect(git(repo.integration, 'log', '-1', '--format=%s', 'build/roadmap')).toBe('chore(build): finish a')
+    expect(git(repo.integration, 'symbolic-ref', '--short', 'HEAD')).toBe('build/roadmap')
+  })
+
   test('refuses an item that is not in progress', async () => {
     await expect(land(repo, 'a', [['true']])).rejects.toThrow('a is todo, not in-progress')
   })

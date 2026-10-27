@@ -156,6 +156,23 @@ function deleteBranch(repo: Repo, branch: string): void {
   }
 }
 
+/**
+ * Runs `fn` on a detached copy of `build/roadmap` and moves the branch to the result only when `fn`
+ * returns, so a lane that merges `build/roadmap` never picks up a merge still being verified.
+ */
+function staged<T>(repo: Repo, fn: () => T): T {
+  requireClean(repo)
+  git(repo.integration, 'switch', '-q', '--detach')
+  try {
+    const result = fn()
+    git(repo.integration, 'switch', '-q', '-C', 'build/roadmap')
+    return result
+  } catch (error) {
+    git(repo.integration, 'switch', '-q', '-f', 'build/roadmap')
+    throw error
+  }
+}
+
 /** The most items one land verifies together. */
 export const BATCH = 4
 
@@ -218,8 +235,7 @@ function landAlone(repo: Repo, id: string): void {
 export async function land(repo: Repo, id: string, verify = VERIFY): Promise<void> {
   const own = requestLand(repo, id)
   try {
-    await withLock(repo.lock, () => {
-      requireClean(repo)
+    await withLock(repo.lock, () => staged(repo, () => {
       const items = load(queuePath(repo))
       const item = items.find((entry) => entry.id === id)
       if (item?.status === 'done') {
@@ -253,7 +269,7 @@ export async function land(repo: Repo, id: string, verify = VERIFY): Promise<voi
       }
       for (const done of batch) deleteBranch(repo, `build/${done}`)
       if (batch.length > 1) console.log(`landed ${batch.join(', ')} in one verified run`)
-    })
+    }))
   } finally {
     rmSync(own, { force: true })
   }
@@ -261,11 +277,12 @@ export async function land(repo: Repo, id: string, verify = VERIFY): Promise<voi
 
 /** Lands a branch that isn't a queue item, such as a nightly native run's results. */
 export function merge(repo: Repo, branch: string, verify = VERIFY): Promise<void> {
-  return withLock(repo.lock, () => {
-    requireClean(repo)
-    mergeVerified(repo, branch, verify)
-    deleteBranch(repo, branch)
-  })
+  return withLock(repo.lock, () =>
+    staged(repo, () => {
+      mergeVerified(repo, branch, verify)
+      deleteBranch(repo, branch)
+    })
+  )
 }
 
 /** Adds todo items ahead of the first `*` item, so the parity sweep still waits for them. */
