@@ -1,0 +1,12 @@
+title: ~/repo
+• Proposed Plan
+
+  1. Extract the parser
+  2. Add tests
+
+  Implement this plan?
+
+› 1. Yes, implement this plan   Switch to Default and start coding.
+  2. No, stay in Plan mode      Continue planning with the model.
+
+  enter select · esc back

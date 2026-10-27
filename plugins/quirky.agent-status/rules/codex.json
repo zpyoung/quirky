@@ -1,0 +1,44 @@
+{
+  "agent": "codex",
+  "description": "Codex detection rules. Its hooks end a Plan-mode turn before the menu that waits on the user.",
+  "rules": [
+    {
+      "id": "plan-implement-menu",
+      "why": "A Plan-mode turn ends in the Implement this plan? menu, which owns the keyboard; the key row must end the screen because the answered menu stays in scrollback, and spaces are optional because Codex paints by cell diff.",
+      "state": "blocked",
+      "kind": "question",
+      "region": "screen",
+      "lastLines": 12,
+      "all": [
+        {
+          "regex": "implement\\s*this\\s*plan\\?[\\s\\S]*no,\\s*stay\\s*in\\s*plan\\s*mode[\\s\\S]*enter\\s*select\\s*·\\s*esc\\s*back\\s*(?![\\s\\S])",
+          "ignoreCase": true
+        }
+      ]
+    },
+    {
+      "id": "header-ready",
+      "why": "The startup header with its model and directory labels stays painted at rest, so a quiet screen under a loaded header (not the provisional `model: loading`) is idle; a closed-form version of Orca's code predicate, which also checks nothing blocks below the header.",
+      "state": "idle",
+      "region": "screen",
+      "all": [
+        {
+          "contains": "openai codex"
+        },
+        {
+          "contains": "model:"
+        },
+        {
+          "contains": "directory:"
+        }
+      ],
+      "none": [
+        {
+          "regex": "model:\\s+loading",
+          "ignoreCase": true
+        }
+      ],
+      "quietMs": 1000
+    }
+  ]
+}
