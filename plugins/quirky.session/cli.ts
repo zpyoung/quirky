@@ -11,8 +11,9 @@ const recordRows = (session: Session): [string, string][] => [
 /** What the launch applied, as record rows; none when the session recorded nothing. */
 const launchRows = (session: Session): [string, string][] => {
   const settings = session.launchSettings
-  if (!settings) return []
-  return [['launch', settings.summary], ...(settings.args ? [['launch args', settings.args.value] as [string, string]] : [])]
+  if (typeof settings?.summary !== 'string') return []
+  const args = settings.args?.value
+  return [['launch', settings.summary], ...(typeof args === 'string' ? [['launch args', args] as [string, string]] : [])]
 }
 
 type Flags = Record<string, unknown>

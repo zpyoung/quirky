@@ -32,6 +32,47 @@ export function providerSessionIdProblem(id: string): string | null {
   return null
 }
 
+const isPlainObject = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null && !Array.isArray(value)
+
+/**
+ * Checks a caller-supplied `launchSettings` against the `LaunchSettings` shape and returns a copy
+ * built from the checked fields; the string is the first thing found wrong.
+ */
+export function checkLaunchSettings(value: unknown): { settings: LaunchSettings } | string {
+  if (!isPlainObject(value)) return 'must be an object'
+  const extra = Object.keys(value).find((key) => !['agent', 'options', 'args', 'summary'].includes(key))
+  if (extra !== undefined) return `unknown key "${extra}"`
+  if (typeof value.agent !== 'string' || value.agent === '') return 'agent must be a non-empty string'
+  if (typeof value.summary !== 'string') return 'summary must be a string'
+  if (!isPlainObject(value.options)) return 'options must be an object'
+
+  const options: LaunchSettings['options'] = {}
+  for (const [key, use] of Object.entries(value.options)) {
+    if (!isPlainObject(use)) return `option "${key}" must be an object`
+    if (use.source !== 'explicit' && use.source !== 'extra-args') return `option "${key}" source must be 'explicit' or 'extra-args'`
+    if (use.value !== undefined && typeof use.value !== 'string' && typeof use.value !== 'boolean') {
+      return `option "${key}" value must be a string or boolean`
+    }
+    Object.defineProperty(options, key, {
+      value: { ...(use.value === undefined ? {} : { value: use.value }), source: use.source },
+      enumerable: true,
+      writable: true,
+      configurable: true
+    })
+  }
+
+  const settings: LaunchSettings = { agent: value.agent, options, summary: value.summary }
+  if (value.args !== undefined) {
+    const args = value.args
+    if (!isPlainObject(args)) return 'args must be an object'
+    if (typeof args.value !== 'string') return 'args.value must be a string'
+    if (args.source !== 'explicit' && args.source !== 'inherited') return "args.source must be 'explicit' or 'inherited'"
+    settings.args = { value: args.value, source: args.source }
+  }
+  return { settings }
+}
+
 /** What `quirky.agents/prepareLaunch` returns (see plugins/quirky.agents/src/core/types.ts). */
 type LaunchPlan = {
   command: string
@@ -209,10 +250,12 @@ export class SessionService {
    * and may pass the `launchSettings` its launch applied.
    */
   register = async (params: Record<string, unknown>, caller: PluginCaller): Promise<Session> => {
+    const checked = params.launchSettings === undefined || params.launchSettings === null ? null : checkLaunchSettings(params.launchSettings)
+    if (typeof checked === 'string') throw this.context.error('invalid-params', `launchSettings is malformed: ${checked}`)
     const worktree = await this.resolveWorktree(params.worktree, caller)
     const session = {
       ...this.newRecord(worktree, 'structured', params.agent as AgentKind, params.title as string),
-      launchSettings: (params.launchSettings as LaunchSettings | undefined) ?? null
+      launchSettings: checked?.settings ?? null
     }
     this.records.insert(session, worktree.repoId)
     return this.publish(session)

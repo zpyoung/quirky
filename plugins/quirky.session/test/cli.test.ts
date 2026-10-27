@@ -376,6 +376,12 @@ describe('session get', () => {
     expect(lines[0]!.split('\n').slice(-1)).toEqual(['launch: Claude · Opus · Effort: high'])
   })
 
+  test('a stored launchSettings without a string summary prints the record without a launch row', async () => {
+    const { ctx, lines } = stubbed(sessionWith({ agent: 'claude', options: {}, summary: undefined, args: { value: 7 } } as unknown as LaunchSettings))
+    await run('get', ctx, ['s_x'])
+    expect(lines[0]).toBe(['id: s_x', 'agent: claude', 'kind: terminal', 'status: running', 'worktree: wt_main'].join('\n'))
+  })
+
   test('--json prints the Session with its launchSettings', async () => {
     const registered = await call<Session>(client, 'quirky.session/register', {
       worktree: 'id:wt_main',
