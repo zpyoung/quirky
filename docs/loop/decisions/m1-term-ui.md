@@ -571,5 +571,15 @@
 - **Confidence:** high
 - **Source:** assumed — autonomous
 
+## D57: Gate f2 is green apart from one load flake in quirky.ask
+- **Question:** gate f2 (after D56): 6143 pass, 1 fail, `bun test scripts` 30 pass, tsc clean. The failure is `commandProbe > a probe that ignores SIGTERM ...` in `plugins/quirky.ask/test/suppression.test.ts`, where the probe shell was killed at its 400 ms timeout before it wrote its pid file (ENOENT)
+- **Options:** —
+- **Chose:** treat it as a load flake and land. The test passes 5/5 alone. This branch doesn't change `plugins/quirky.ask`, and D48 records another timing flake in the same plugin under a full-suite load.
+- **Why:** the failure is a race between the probe's timeout and process start under load, in code this item didn't touch.
+- **Evidence:** scratchpad gate-f2.log, gate-f2-t.log; `git diff build/roadmap...HEAD -- plugins/quirky.ask` is empty
+- **Reversibility:** easy
+- **Confidence:** medium
+- **Source:** assumed — autonomous
+
 ## Progress
-Final fix batch, the import-map fix (D54) and the UI pass fixes (D56) are committed; the UI pass is recorded (D55). Next: gate f2, then land.
+All fixes are committed and gate f2 is green apart from D57's flake. Next: land.
