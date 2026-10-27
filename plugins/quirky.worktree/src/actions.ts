@@ -108,8 +108,8 @@ export async function changeGroup(context: UiPluginContext, failure: string, ste
   }
 }
 
-/** What the trust dialog needs to ask about an untrusted shared setup script. */
-export type TrustRequest = { repoId: string; script: string; changed: boolean }
+/** What the trust dialog needs to ask about an untrusted shared setup or issue command. */
+export type TrustRequest = { repoId: string; kind: 'setup' | 'issue'; script: string; changed: boolean }
 
 /** The person's answer: run it this once, don't run it, trust it from now on, or abandon the create. */
 export type TrustChoice = 'run' | 'skip' | 'always' | 'cancel'
@@ -124,10 +124,10 @@ export const SETUP_CHOICE_NEEDED = 'setup-choice-needed'
 
 /**
  * Creates a workspace from the window. The new workspace opens only when the open view is still the
- * one the person submitted from, else a toast names it. An untrusted shared setup script is put to
- * the person and the create retried with their answer. Returns the result, `SETUP_CHOICE_NEEDED`
- * when the daemon wants a run-or-skip answer the form can still collect, or null after a toast
- * says why nothing was created (or the person backed out of the trust question).
+ * one the person submitted from, else a toast names it. An untrusted shared setup script or issue
+ * command is put to the person and the create retried with their answer. Returns the result,
+ * `SETUP_CHOICE_NEEDED` when the daemon wants a run-or-skip answer the form can still collect, or
+ * null after a toast says why nothing was created (or the person backed out of the trust question).
  */
 export async function createWorkspace(
   context: UiPluginContext,
@@ -135,6 +135,7 @@ export async function createWorkspace(
   hooks: CreateHooks
 ): Promise<WorktreeCreateResult | typeof SETUP_CHOICE_NEEDED | null> {
   const viewAtSubmit = JSON.stringify(context.getLayout().view)
+  const choices: { trustSetup?: true; trustIssueCommand?: true; setup?: 'skip'; issueCommand?: 'skip' } = {}
   let attempt = fields
   for (;;) {
     try {
@@ -149,24 +150,27 @@ export async function createWorkspace(
         context.toast('Could not create worktree', messageOf(error))
         return null
       }
-      const data = (error as { data?: { repo?: unknown; script?: unknown; changed?: unknown; ref?: unknown } }).data ?? {}
+      const data = (error as { data?: { repo?: unknown; script?: unknown; changed?: unknown; ref?: unknown; kind?: unknown } }).data ?? {}
+      const kind = data.kind === 'issue' ? 'issue' : 'setup'
+      const kindLabel = kind === 'issue' ? 'issue command' : 'setup'
       const choice = await hooks.askTrust({
         repoId: typeof data.repo === 'string' ? data.repo : String(fields.repo),
+        kind,
         script: typeof data.script === 'string' ? data.script : '',
         changed: data.changed === true
       })
       if (choice === 'cancel') return null
-      if (choice === 'run') attempt = { ...fields, trustSetup: true }
-      else if (choice === 'skip') attempt = { ...fields, setup: 'skip' }
+      if (choice === 'run') choices[kind === 'issue' ? 'trustIssueCommand' : 'trustSetup'] = true
+      else if (choice === 'skip') choices[kind === 'issue' ? 'issueCommand' : 'setup'] = 'skip'
       else {
         try {
-          await context.call('quirky.repo/trustHooks', { repo: String(fields.repo), kind: 'setup', ...(typeof data.ref === 'string' ? { ref: data.ref } : {}) })
+          await context.call('quirky.repo/trustHooks', { repo: String(fields.repo), kind, ...(typeof data.ref === 'string' ? { ref: data.ref } : {}) })
         } catch (trustError) {
-          context.toast('Could not trust setup', messageOf(trustError))
+          context.toast(`Could not trust ${kindLabel}`, messageOf(trustError))
           return null
         }
-        attempt = fields
       }
+      attempt = { ...fields, ...choices }
     }
   }
 }
