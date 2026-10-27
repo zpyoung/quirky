@@ -281,6 +281,26 @@ describe('events through createPtyApi', () => {
     expect(sent[4]).toMatchObject({ signal: 'SIGTERM', reason: 'killed' })
   })
 
+  test('read forwards unwrap to the host only when it is true', async () => {
+    const dir = home()
+    const host = startFakePtyHost(dir)
+    cleanups.push(() => host.stop())
+    const client = newClient(dir)
+    const { api } = createPtyApi(client, 'acme.unwrap')
+    await api.spawn('s1', { argv: ['sh'], cwd: '/tmp', env: {}, cols: 80, rows: 24 })
+
+    await api.read('s1', 5)
+    await api.read('s1', 6, { unwrap: false })
+    await api.read('s1', 7, { unwrap: true })
+
+    const reads = host.requests.filter((r) => r.type === 'read')
+    expect(reads).toEqual([
+      { id: expect.any(Number), type: 'read', sessionId: 's1', lines: 5 },
+      { id: expect.any(Number), type: 'read', sessionId: 's1', lines: 6 },
+      { id: expect.any(Number), type: 'read', sessionId: 's1', lines: 7, unwrap: true }
+    ])
+  })
+
   test('SC-34: clear and resetModes go to the host by session id and reject for an unknown one', async () => {
     const dir = home()
     const host = startFakePtyHost(dir)

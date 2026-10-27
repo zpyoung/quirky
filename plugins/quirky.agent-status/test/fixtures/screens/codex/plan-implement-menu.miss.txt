@@ -1,0 +1,13 @@
+title: ~/repo
+  Implement this plan?
+
+  1. Yes, implement this plan   Switch to Default and start coding.
+› 2. No, stay in Plan mode      Continue planning with the model.
+
+  enter select · esc back
+
+• Staying in Plan mode. What should the plan cover next?
+  - the migration order
+  - rollback
+
+› Ask Codex to do anything

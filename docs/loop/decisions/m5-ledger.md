@@ -286,5 +286,16 @@
 - **Revisit if:** the normal gate still fails, in which case preserve diagnostics and continue root investigation
 - **Source:** assumed — autonomous
 
+## D27: Preserve the latest integration contracts and reuse its one import scanner
+- **Question:** how to resolve the pre-review integration conflicts without losing either lane's work
+- **Options:** retain competing scanner implementations or drop one workspace; keep the canonical incoming scanner and additive workspace records
+- **Chose:** keep integration's TypeScript AST scanner, retaining both lanes' regression cases and removing the duplicate TypeScript import. Preserve both hosting and ledger workspace/package entries in bun.lock. Frozen-lock installation and all five fence tests pass. Pin final discovery baseline 7908a04424c755c712c673d0474c6d255b81a220, replacing D21's earlier pre-discovery baseline.
+- **Why:** both scanner designs enforce the same import boundary; one incoming implementation avoids a second convention. The complete new m1-agent-status-scripting, m3-vault, m4-hosting-api-github, m5-structured-runner and ledger logs were read by LedgerNewDecisionSurvey. Their public-API/auth/worker/source-identity contracts do not conflict with ledger ownership: vault indexing remains its own lazy Worker, hosting owns host authorization, session naming/resume methods remain additive, and ledger retains its own store/provenance/import semantics.
+- **Evidence:** merge from 7908a044; bun.lock and plugins/test/imports.test.ts conflict resolutions; frozen-lock install exit0 and fence5pass; incoming vault D9,D11,D12,D15,D19,D29,D38,D44,D45; agent-status-scripting D20–D22,D38; hosting D5–D6,D8,D13,D19; runner D29
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** a new public owner API contract conflicts with ledger callers
+- **Source:** supersedes m5-ledger D21 (final-review baseline only, before discovery)
+
 ## Progress
-The D25 recovery fix passes its original failing-before API smoke: same ledger retained and only bug-1 after replay. Import/CLI regression suite now passes 12 tests, ledger API 25, and typecheck exits0. Temporary shell guardian tracing passed both narrowed and complete remote shell-path runs without a shell/guardian code change; scaffold removed, normal gate remains required. Next: commit recovery/evidence, catch up integration and read new decisions, freeze a new review artifact, run the uninstrumented affected gate on the new host, then the required one Gemini C/S/X discovery round and one accepted-finding fix batch. No final review or complete gate clearance yet.
+Recovery identity smoke and ledger API/CLI regressions pass (25 API, 12 CLI/import); current integration catch-up is being finalized under D27. Both independent AST changes were consolidated into the incoming scanner with five retained regression tests; hosting/ledger lock entries preserved. Shell diagnostics passed without a production or guardian change, but the next gate must run normally without tracing. Next: complete merge/type validation, freeze the new final artifact at the D27 integration baseline, run the affected gate on the new host, then the single deep Gemini C/S/X final discovery/fix batch and queue.ts landing. No final clearance yet.

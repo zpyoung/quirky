@@ -1,8 +1,8 @@
-import * as ts from 'typescript'
 import { describe, expect, test } from 'bun:test'
 import { builtinModules } from 'node:module'
 import { readdirSync, readFileSync, statSync } from 'node:fs'
 import { dirname, join, relative, resolve, sep } from 'node:path'
+import ts from 'typescript'
 
 const PLUGINS_ROOT = resolve(import.meta.dir, '..')
 const SKIPPED_DIRS = new Set(['test', 'node_modules', 'dist'])
@@ -42,49 +42,36 @@ function isRuntimeBuiltin(specifier: string): boolean {
  * built-ins, `@quirky/protocol`, nor in `declared`.
  */
 export function scanImports(source: string, file: string, pluginDir: string, declared: ReadonlySet<string>): ImportViolation[] {
-  const sourceFile = ts.createSourceFile(
-    file,
-    source,
-    ts.ScriptTarget.Latest,
-    true,
-    file.endsWith('.tsx') ? ts.ScriptKind.TSX : ts.ScriptKind.TS
-  )
+  const syntax = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, false, file.endsWith('.tsx') ? ts.ScriptKind.TSX : ts.ScriptKind.TS)
   const violations: ImportViolation[] = []
-
-  const inspect = (specifierNode: ts.Node | undefined, importNode: ts.Node) => {
-    if (!specifierNode || (!ts.isStringLiteral(specifierNode) && !ts.isNoSubstitutionTemplateLiteral(specifierNode))) return
-
-    const specifier = specifierNode.text
-    const line = sourceFile.getLineAndCharacterOfPosition(importNode.getStart(sourceFile)).line + 1
-    const flag = (reason: string) => violations.push({ file, line, specifier, reason })
-    if (specifier.startsWith('.')) {
-      const target = resolve(dirname(file), specifier)
-      if (target !== pluginDir && !target.startsWith(pluginDir + sep)) flag('relative path leaves the plugin')
-    } else if (specifier.startsWith('/')) {
-      flag('absolute path')
-    } else if (!isRuntimeBuiltin(specifier) && packageOf(specifier) !== '@quirky/protocol' && !declared.has(packageOf(specifier))) {
-      flag('package is not declared in the plugin package.json')
-    }
-  }
-
   const visit = (node: ts.Node): void => {
+    let module: ts.Expression | undefined
     if (ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) {
-      inspect(node.moduleSpecifier, node)
+      module = node.moduleSpecifier
     } else if (ts.isImportEqualsDeclaration(node) && ts.isExternalModuleReference(node.moduleReference)) {
-      inspect(node.moduleReference.expression, node)
-    } else if (ts.isImportTypeNode(node)) {
-      inspect(ts.isLiteralTypeNode(node.argument) ? node.argument.literal : undefined, node)
-    } else if (ts.isCallExpression(node)) {
-      if (node.expression.kind === ts.SyntaxKind.ImportKeyword) {
-        inspect(node.arguments[0], node)
-      } else if (ts.isIdentifier(node.expression) && node.expression.text === 'require') {
-        inspect(node.arguments[0], node)
+      module = node.moduleReference.expression
+    } else if (ts.isImportTypeNode(node) && ts.isLiteralTypeNode(node.argument) && ts.isStringLiteralLike(node.argument.literal)) {
+      module = node.argument.literal
+    } else if (ts.isCallExpression(node) && (node.expression.kind === ts.SyntaxKind.ImportKeyword ||
+      (ts.isIdentifier(node.expression) && node.expression.text === 'require'))) {
+      module = node.arguments[0]
+    }
+    if (module && ts.isStringLiteralLike(module)) {
+      const specifier = module.text
+      const line = syntax.getLineAndCharacterOfPosition(module.getStart(syntax)).line + 1
+      const flag = (reason: string) => violations.push({ file, line, specifier, reason })
+      if (specifier.startsWith('.')) {
+        const target = resolve(dirname(file), specifier)
+        if (target !== pluginDir && !target.startsWith(pluginDir + sep)) flag('relative path leaves the plugin')
+      } else if (specifier.startsWith('/')) {
+        flag('absolute path')
+      } else if (!isRuntimeBuiltin(specifier) && packageOf(specifier) !== '@quirky/protocol' && !declared.has(packageOf(specifier))) {
+        flag('package is not declared in the plugin package.json')
       }
     }
     ts.forEachChild(node, visit)
   }
-
-  visit(sourceFile)
+  visit(syntax)
   return violations
 }
 
@@ -166,6 +153,38 @@ describe('import fence', () => {
       [14, 'left-pad'],
       [15, '../../../packages/type-equals'],
       [16, 'not-declared/import-type']
+    ])
+  })
+
+  test('non-module text and member import calls do not cross the import fence', () => {
+    const dir = join(PLUGINS_ROOT, 'quirky.sample')
+    const source = [
+      "const native = `ObjC.import('Foundation');`",
+      "const text = \"require('not-a-package')\";",
+      "const regex = /from 'not-a-package'/;",
+      "// import('not-a-package')",
+      "ObjC.import('Foundation')"
+    ].join('\n')
+    expect(scanImports(source, join(dir, 'src', 'a.ts'), dir, new Set())).toEqual([])
+  })
+
+  test('type-only, export, require and interpolated dynamic imports retain the fence', () => {
+    const dir = join(PLUGINS_ROOT, 'quirky.sample')
+    const source = [
+      "import type { Private } from '../../../packages/daemon/src/private'",
+      "type Other = import('../../quirky.repo/main').Private",
+      "import legacy = require('../../../packages/daemon/src/legacy')",
+      "export { secret } from '../../quirky.repo/main'",
+      "const required = require('../../../packages/ui/src/private')",
+      "const content = `${await import('../../../packages/git/src/private')}`"
+    ].join('\n')
+    expect(scanImports(source, join(dir, 'src', 'a.ts'), dir, new Set()).sort((a, b) => a.line - b.line).map(({ line, specifier }) => [line, specifier])).toEqual([
+      [1, '../../../packages/daemon/src/private'],
+      [2, '../../quirky.repo/main'],
+      [3, '../../../packages/daemon/src/legacy'],
+      [4, '../../quirky.repo/main'],
+      [5, '../../../packages/ui/src/private'],
+      [6, '../../../packages/git/src/private']
     ])
   })
 })

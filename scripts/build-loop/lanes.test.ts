@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { add, block, claim, land, locate, merge, requestLand, withLock, type Repo } from './lanes'
+import { add, block, claim, land, locate, merge, requestLand, waitForDeps, withLock, type Repo } from './lanes'
 import { load, save, type Item } from './queue'
 
 const item = (id: string, deps: string[] = []): Item => ({ id, milestone: 'M1', title: id, docs: [], deps, status: 'todo' })
@@ -109,6 +109,33 @@ describe('land', () => {
     expect(git(repo.integration, 'status', '--porcelain')).toBe('')
   })
 
+  test('moves build/roadmap only after verification passes', async () => {
+    await claim(repo, 1)
+    branch('a', 'a.txt', 'a\n')
+    const before = head()
+    const seen = join(mkdtempSync(join(tmpdir(), 'seen-')), 'ref')
+    const recordRef = (ok: boolean) => [['sh', '-c', `git rev-parse build/roadmap > ${seen} && ${ok}`]]
+    await expect(land(repo, 'a', recordRef(false))).rejects.toThrow('failed on the merge result')
+    expect(readFileSync(seen, 'utf8').trim()).toBe(before)
+    expect(git(repo.integration, 'symbolic-ref', '--short', 'HEAD')).toBe('build/roadmap')
+    await land(repo, 'a', recordRef(true))
+    expect(readFileSync(seen, 'utf8').trim()).toBe(before)
+    expect(git(repo.integration, 'log', '-1', '--format=%s', 'build/roadmap')).toBe('chore(build): finish a')
+    expect(git(repo.integration, 'symbolic-ref', '--short', 'HEAD')).toBe('build/roadmap')
+  })
+
+  test('lets queue commands run while a land is verified, and lands over their commits', async () => {
+    await claim(repo, 1)
+    branch('a', 'a.txt', 'a\n')
+    const out = join(mkdtempSync(join(tmpdir(), 'claim-')), 'claim.json')
+    const queueTs = join(import.meta.dir, 'queue.ts')
+    await land(repo, 'a', [['sh', '-c', `cd ${dir} && bun ${queueTs} claim --lane 2 > ${out}`]])
+    expect(JSON.parse(readFileSync(out, 'utf8'))).toMatchObject({ kind: 'item', item: { id: 'b', lane: 2 } })
+    expect(queue().map((entry) => [entry.id, entry.status])).toEqual([['a', 'done'], ['b', 'in-progress'], ['c', 'todo']])
+    expect(readFileSync(join(repo.integration, 'a.txt'), 'utf8')).toBe('a\n')
+    expect(git(repo.integration, 'status', '--porcelain')).toBe('')
+  }, 20_000)
+
   test('refuses an item that is not in progress', async () => {
     await expect(land(repo, 'a', [['true']])).rejects.toThrow('a is todo, not in-progress')
   })
@@ -176,6 +203,20 @@ describe('batched land', () => {
     expect([statusOf('a'), statusOf('b')]).toEqual(['done', 'in-progress'])
   })
 
+  test('takes an early item into the batch ahead of older requests', async () => {
+    const items = queue()
+    save([...items, { ...item('d'), status: 'in-progress', lane: 3, early: true }], join(repo.integration, 'docs/loop/queue.json'))
+    git(repo.integration, 'commit', '-qam', 'early d')
+    branch('a', 'a.txt', 'a\n')
+    branch('b', 'b.txt', 'b\n')
+    branch('d', 'd.txt', 'd\n')
+    requestLand(repo, 'b')
+    await Bun.sleep(20)
+    requestLand(repo, 'd')
+    await land(repo, 'a', counted())
+    expect(git(repo.integration, 'log', '--format=%s', '-3')).toBe('chore(build): finish b\nchore(build): finish d\nchore(build): finish a')
+  })
+
   test('ignores a request whose process has died', async () => {
     branch('a', 'a.txt', 'a\n')
     branch('b', 'b.txt', 'b\n')
@@ -222,6 +263,14 @@ describe('add', () => {
     await expect(add(repo, [item('a')])).rejects.toThrow('already in the queue')
     await expect(add(repo, [item('z', ['nope'])])).rejects.toThrow('unknown "nope"')
   })
+})
+
+test('waitForDeps reports the dependencies still pending', async () => {
+  await claim(repo, 1)
+  expect(await waitForDeps(repo, 'c', 0)).toEqual({ ready: false, pending: ['a'] })
+  branch('a', 'a.txt', 'a\n')
+  await land(repo, 'a', [['true']])
+  expect(await waitForDeps(repo, 'c', 0)).toEqual({ ready: true, pending: [] })
 })
 
 describe('withLock', () => {

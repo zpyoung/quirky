@@ -49,6 +49,8 @@ export type ContributionInfo = {
 export type PluginContext = {
   readonly pluginId: string
   readonly dir: string
+  /** Absolute file URL for a worker entrypoint declared by name in `workers`; throws for undeclared names. */
+  workerEntrypoint(name: string): string
   /** The plugin's private data directory, `<home>/plugin-data/<pluginId>`; it exists (mode 0700). */
   readonly dataDir: string
   /** Writes to the daemon log, prefixed with the plugin ID. */
@@ -97,7 +99,11 @@ export type PluginPty = {
   ): Promise<{ pid: number; restored: boolean; cwd: string; cols: number; rows: number }>
   write(sessionId: string, data: string | Uint8Array): void
   resize(sessionId: string, cols: number, rows: number): Promise<void>
-  read(sessionId: string, lines: number): Promise<{ lines: string[]; cols: number; rows: number; alt: boolean }>
+  /**
+   * The visible screen plus up to `lines` of scrollback, as text. `unwrap` joins rows the terminal
+   * wrapped into logical lines; a line that starts above the `lines` cutoff may be cut.
+   */
+  read(sessionId: string, lines: number, options?: { unwrap?: boolean }): Promise<{ lines: string[]; cols: number; rows: number; alt: boolean }>
   /** A `reason` records the exit as requested (cause `killed`) and defaults the signal to SIGKILL. */
   kill(sessionId: string, signal?: string, options?: { reason?: 'killed' }): Promise<void>
   forget(sessionId: string): Promise<void>
@@ -184,6 +190,8 @@ export type ClientStream = {
 export type CallerConnection = {
   id: number
   transport: 'websocket' | 'socket'
+  /** Registers transport-neutral cleanup for disconnect, invoking immediately if already closed. */
+  onClose(callback: () => void): () => void
   /** Throws InvalidParams on a socket connection. */
   openStream(): ClientStream
 }
@@ -322,6 +330,8 @@ export type PluginManifest = {
   ui?: string
   /** Relative path of the CLI module. */
   cli?: string
+  /** Worker name to root-relative entrypoint, bundled and rewritten to its packaged path by the desktop bundler. */
+  workers?: Record<string, string>
   /** Extra words that reach this plugin's CLI group. */
   cliAliases?: string[]
   /** Defaults to `lazy`. */

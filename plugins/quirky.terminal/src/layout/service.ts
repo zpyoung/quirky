@@ -88,6 +88,8 @@ export class LayoutService {
   /** The RPC methods of the plugin's layout half, by method name. */
   readonly methods: Record<string, MethodHandler> = {
     workspace: (params, caller) => this.queued(() => this.workspace(params, caller)),
+    groupInfo: (params) => this.queued(() => this.groupInfo(params)),
+    adoptSession: (params) => this.queued(() => this.adoptSession(params)),
     newTab: (params, caller) => this.queued(() => this.newTab(params, caller)),
     closeTab: (params) => this.queued(() => this.closeTab(params)),
     closeTabs: (params) => this.queued(() => this.closeTabs(params)),
@@ -209,6 +211,41 @@ export class LayoutService {
   /** Starts a session and binds it as a new tab in one queue slot. */
   createTab(workspaceId: string, spec: NewTabSpec): Promise<{ workspace: Workspace; session: Session }> {
     return this.queued(() => this.addTab(workspaceId, spec))
+  }
+  private groupInfo(params: Params): { workspace: string } {
+    const group = params.group as string
+    return { workspace: this.ownerOf('group', group).id }
+  }
+
+  private async adoptSession(params: Params): Promise<{ workspace: Workspace }> {
+    const groupId = params.group as string
+    const workspace = this.ownerOf('group', groupId)
+    const session = await this.session(params.session as string)
+    if (!isTabbed(session)) throw this.context.error('conflict', `session ${session.id} cannot be placed in a terminal tab`)
+    if (session.worktreeId !== workspace.id) {
+      throw this.context.error('conflict', `session ${session.id} belongs to ${session.worktreeId}, not workspace ${workspace.id}`)
+    }
+
+    let bound: { groupId: string; tabId: string } | undefined
+    for (const current of this.workspaces.values()) {
+      const location = ops.locateSession(current, session.id)
+      if (!location) continue
+      if (bound) throw this.context.error('conflict', `session ${session.id} is already present in multiple tabs`)
+      if (current.id !== workspace.id) {
+        throw this.context.error('conflict', `session ${session.id} is already bound to workspace ${current.id}`)
+      }
+      bound = { groupId: location.group.id, tabId: location.tab.id }
+    }
+
+    if (bound?.groupId === groupId) return { workspace }
+    const ids = this.ids()
+    if (bound) {
+      const moved = this.unwrap(ops.moveTabToGroup(workspace, bound.tabId, groupId))
+      return { workspace: this.commit(workspace, moved, ids) }
+    }
+    const tab = ops.makeTab(ids, { defaultTitle: session.title, session: session.id, now: this.now() })
+    const appended = this.unwrap(ops.appendTab(workspace, groupId, tab))
+    return { workspace: this.commit(workspace, appended, ids) }
   }
 
   private queued<T>(work: () => T | Promise<T>): Promise<T> {

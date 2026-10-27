@@ -152,6 +152,7 @@ const uiModel = object(
   {
     sidebarSections: listOf({ type: 'object' }),
     panels: listOf({ type: 'object' }),
+    settingsSections: listOf({ type: 'object' }),
     views: listOf({ type: 'object' }),
     overlays: listOf({ type: 'object' }),
     commands: listOf({ type: 'object' }),
@@ -161,7 +162,7 @@ const uiModel = object(
     theme: object({ chosen: string(), active: string() }, ['chosen', 'active']),
     modules: { type: 'object', additionalProperties: true }
   },
-  ['sidebarSections', 'panels', 'views', 'overlays', 'commands', 'keybindings', 'settings', 'themes', 'theme', 'modules']
+  ['sidebarSections', 'panels', 'settingsSections', 'views', 'overlays', 'commands', 'keybindings', 'settings', 'themes', 'theme', 'modules']
 )
 const apiDescription = object(
   {

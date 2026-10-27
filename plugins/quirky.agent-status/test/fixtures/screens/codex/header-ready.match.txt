@@ -1,0 +1,9 @@
+title: ~/repo
+╭──────────────────────────────────────────────╮
+│ >_ OpenAI Codex (v0.157.0)                   │
+│                                              │
+│ model:     gpt-5.5   /model to change        │
+│ directory: ~/repo                            │
+╰──────────────────────────────────────────────╯
+
+› Ask Codex to do anything
