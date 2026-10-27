@@ -511,7 +511,8 @@
         "m4-hosting-api-github",
         "m4-hosting-ui-tasks"
       ],
-      "status": "todo"
+      "status": "todo",
+      "early": true
     },
     {
       "id": "m4-hosting-ui-gitlab",
@@ -565,7 +566,8 @@
         "m4-hosting-api-github",
         "m2-sidebar-extras"
       ],
-      "status": "todo"
+      "status": "todo",
+      "early": true
     },
     {
       "id": "sa-browser-agent",
@@ -601,7 +603,8 @@
       "deps": [
         "sa-browser-pane"
       ],
-      "status": "todo"
+      "status": "todo",
+      "early": true
     },
     {
       "id": "sa-browser-design-mode",
@@ -613,7 +616,8 @@
       "deps": [
         "sa-browser-pane"
       ],
-      "status": "todo"
+      "status": "todo",
+      "early": true
     },
     {
       "id": "m5-automations-core",
@@ -626,7 +630,8 @@
         "m5-structured-runner",
         "m1-worktrees"
       ],
-      "status": "todo"
+      "status": "todo",
+      "early": true
     },
     {
       "id": "m5-automations-dispatch",
@@ -638,7 +643,8 @@
       "deps": [
         "m5-automations-core"
       ],
-      "status": "todo"
+      "status": "todo",
+      "early": true
     },
     {
       "id": "m5-automations-ui",
@@ -650,7 +656,8 @@
       "deps": [
         "m5-automations-core"
       ],
-      "status": "todo"
+      "status": "todo",
+      "early": true
     },
     {
       "id": "m5-loops-core",
@@ -662,7 +669,8 @@
       "deps": [
         "m5-structured-runner"
       ],
-      "status": "todo"
+      "status": "todo",
+      "early": true
     },
     {
       "id": "m5-loops-presets",
@@ -674,7 +682,8 @@
       "deps": [
         "m5-loops-core"
       ],
-      "status": "todo"
+      "status": "todo",
+      "early": true
     },
     {
       "id": "m5-loops-ui",
@@ -687,7 +696,8 @@
         "m5-loops-core",
         "m5-loops-presets"
       ],
-      "status": "todo"
+      "status": "todo",
+      "early": true
     },
     {
       "id": "m5-ledger",
@@ -711,7 +721,8 @@
       "deps": [
         "m6-orchestration-workers"
       ],
-      "status": "todo"
+      "status": "todo",
+      "early": true
     },
     {
       "id": "m6-objective-plan",
@@ -819,7 +830,8 @@
       "deps": [
         "sb-mobile-daemon"
       ],
-      "status": "todo"
+      "status": "todo",
+      "early": true
     },
     {
       "id": "sb-mobile-app-panels",
@@ -831,7 +843,8 @@
       "deps": [
         "sb-mobile-app"
       ],
-      "status": "todo"
+      "status": "todo",
+      "early": true
     },
     {
       "id": "m4-editor-drop-open-in-place",
@@ -843,7 +856,8 @@
       "deps": [
         "m2-editor"
       ],
-      "status": "todo"
+      "status": "todo",
+      "early": true
     },
     {
       "id": "m3-accounts-remaining-flows",
@@ -1023,7 +1037,8 @@
         "m7-sweep-browser-mobile",
         "m7-sweep-orchestration"
       ],
-      "status": "todo"
+      "status": "todo",
+      "early": true
     },
     {
       "id": "m4-hosting-api-github-parity",
@@ -1047,7 +1062,8 @@
       "deps": [
         "m3-terminal-dock"
       ],
-      "status": "todo"
+      "status": "todo",
+      "early": true
     },
     {
       "id": "m3-vault-parity-completion",
@@ -1059,7 +1075,8 @@
       "deps": [
         "m3-vault"
       ],
-      "status": "todo"
+      "status": "todo",
+      "early": true
     },
     {
       "id": "fix-flaky-daemon-pty-client",
@@ -1081,7 +1098,8 @@
       "deps": [
         "m3-vault"
       ],
-      "status": "todo"
+      "status": "todo",
+      "early": true
     },
     {
       "id": "fix-bash53-shell-integration",
@@ -1116,7 +1134,8 @@
       "deps": [
         "m2-editor"
       ],
-      "status": "todo"
+      "status": "todo",
+      "early": true
     },
     {
       "id": "m3-accounts-overflow-verification",
@@ -1162,7 +1181,8 @@
       "deps": [
         "m2-sidebar-extras"
       ],
-      "status": "todo"
+      "status": "todo",
+      "early": true
     },
     {
       "id": "fix-flaky-quirky-worktree-create",
