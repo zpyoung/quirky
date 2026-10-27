@@ -384,7 +384,7 @@
       },
       {
         "id": "resume",
-        "description": "Starts a new terminal session that resumes an agent session in its original folder with the launch it recorded; `fork` opens a copy for agents that fork by argument. The old session is untouched.",
+        "description": "Resumes a terminal session using its recorded launch, or delegates a structured session to quirky.structured; structured sessions accept an optional first-turn prompt but reject forks and provider overrides.",
         "params": {
           "type": "object",
           "properties": {
@@ -399,6 +399,10 @@
             "transcriptPath": {
               "type": "string",
               "description": "The transcript file, for agents that resume from one."
+            },
+            "prompt": {
+              "type": "string",
+              "description": "Optional first prompt when resuming a structured session."
             },
             "fork": {
               "type": "boolean",
@@ -627,6 +631,10 @@
               "type": "string",
               "description": "Worktree selector, or `floating` for the workspace outside any repository; default: the caller's current worktree."
             },
+            "cwd": {
+              "type": "string",
+              "description": "Original absolute directory for a structured resumed session; it must still exist."
+            },
             "agent": {
               "type": "string",
               "description": "`shell` or the ID of the agent the session runs."
@@ -639,6 +647,10 @@
             },
             "title": {
               "type": "string"
+            },
+            "resumedFrom": {
+              "type": "string",
+              "description": "The earlier session this structured record resumes."
             },
             "launchSettings": {
               "type": "object",

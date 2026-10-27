@@ -1,7 +1,6 @@
 import type { Ask, AskEnvelope, Session, SessionStatus, Worktree } from '@quirky/protocol'
 
 const WORKTREE_DEFAULTS = {
-  kind: 'git',
   displayName: null,
   comment: '',
   status: 'in-progress',
@@ -30,6 +29,7 @@ export class FakeWorld {
     branch: 'main',
     head: 'abc123',
     isMain: true,
+    kind: 'git',
     name: 'main',
     ...WORKTREE_DEFAULTS
   }
@@ -59,7 +59,7 @@ export class FakeWorld {
         kind: params.kind,
         agent: params.agent,
         worktreeId: this.worktree.id,
-        cwd: this.worktree.path,
+        cwd: params.cwd ?? this.worktree.path,
         title: params.title,
         status: 'starting',
         createdAt: now,
@@ -67,9 +67,17 @@ export class FakeWorld {
         exitCode: null,
         exitSignal: null,
         exitCause: null,
-        restorable: false
+        restorable: false,
+        launchSettings: params.launchSettings ?? null,
+        providerSession: null,
+        resumedFrom: params.resumedFrom ?? null
       }
       this.sessions.set(session.id, session)
+      return session
+    },
+    setProviderSession: (params: any, context: PluginCtx) => {
+      const session = this.require(params.session, context)
+      session.providerSession = { id: params.id, transcriptPath: params.transcriptPath ?? null }
       return session
     },
     setStatus: (params: any, context: PluginCtx) => {
