@@ -352,5 +352,38 @@
 - **Revisit if:** blind pastes prove reliable enough that keeping notes causes duplicate sends
 - **Source:** assumed — autonomous
 
+## D33: Build with Claude subagents implementing and Codex reviewing
+- **Question:** subagent-driven-development's preflight backend pairing
+- **Options:** claude-task + codex; claude-task + gemini; pi-codex + opus; same-family pairs
+- **Chose:** claude-task + codex. `pi-watch --check codex` passed (openai-codex/gpt-6.1-sol); the tree was clean on `build/m2-source-control-notes-ai` at 19e520f (RUN_BASE); the gate commands are `bun run typecheck`, `bun test scripts` and `bun run test`
+- **Why:** LOOP.md names this pairing for a Claude Code lane, and the skill marks it recommended
+- **Evidence:** docs/loop/LOOP.md step 5; scratchpad journal.md
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** Codex becomes unreachable mid-run
+- **Source:** locked by docs/loop/LOOP.md
+
+## D34: Build in three waves: agents, terminal, pure modules and the notes daemon; then the AI daemon and the notes window; then the AI window
+- **Question:** subagent-driven-development's decomposition into waves
+- **Options:** one task per layer; waves by dependency with disjoint file scopes
+- **Chose:** W1: T1 `quirky.agents` one-shot runner, T2 `newTab` extraArgs, T3 pure prompt and output modules plus `stagedPatch`, T4 notes daemon (store, methods, send, scenario harness with real agents, session and terminal). W2: T5 AI daemon (recipes, generation, fixes, held failures, settings, the notes commands and keybinding in the manifest), T6 notes window (CodeMirror extension, cards, shelf, counts, menus, commands). W3: T7 AI window (sparkle, dialogs, fix buttons, the AI settings view). The manifest is owned by one task per wave; T5 declares the commands T6 provides, so the provided-equals-declared test passes once both merge
+- **Why:** every wave's components have disjoint file scopes; the daemon methods land before the window that calls them
+- **Evidence:** docs/quirk/specs/2026-10-27-m2-source-control-notes-ai/tech.md Architecture
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** a component needs a file another one owns
+- **Source:** assumed — autonomous
+
+## D35: Skip the checkpoint reviews after W1 and W2
+- **Question:** the checkpoint review after a non-final wave
+- **Options:** run them; skip them and let Final Round 1 review the whole branch at deep depth
+- **Chose:** skip both; Final Round 1 runs right after W3 over RUN_BASE..HEAD
+- **Why:** m2-source-control-core skipped both (D47, D52) with the same shape; each checkpoint costs three Codex reviews and the final round re-examines everything
+- **Evidence:** docs/loop/decisions/m2-source-control-core.md D47, D52
+- **Reversibility:** easy
+- **Confidence:** medium
+- **Revisit if:** a W2 or W3 task finds a W1 defect that a checkpoint would have caught
+- **Source:** assumed — autonomous
+
 ## Progress
-Specs written, reviewed (D32) and committed. Next: quirk:subagent-driven-development against tech.md (preflight pairing claude-task + codex, record it), waves per tech.md Architecture.
+Building. W1 dispatched (T1-T4) in scratchpad worktrees from 19e520f. If this stops: discard the scratch worktrees, re-create W1 per D34 and redispatch.
