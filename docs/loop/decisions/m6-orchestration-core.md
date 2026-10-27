@@ -209,6 +209,17 @@
 - **Revisit if:** the dependency query returns ready
 - **Source:** locked by docs/loop/LOOP.md:79-83
 
+## D20: Iteration 8 preserves the dependency-gated checkpoint
+- **Question:** whether this iteration can start runtime implementation
+- **Options:** bypass readiness; block the item; preserve the early checkpoint
+- **Chose:** preserve the checkpoint and lane ownership; no runtime changes, integration merge, landing or queue block.
+- **Why:** the prerequisite remains pending. The early-item rule requires ending the iteration after preparation while readiness is false.
+- **Evidence:** iteration 8 `queue.ts wait --lane 1` returned the held early item; `queue.ts deps m6-orchestration-core` completed after 510.58 seconds with `{"ready":false,"pending":["m5-structured-runner"]}`.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** the dependency query returns ready
+- **Source:** locked by docs/loop/LOOP.md:79-83
+
 ## Early preparation verification
 - `bun run typecheck`: exit0 on the final contracts, no diagnostics.
 - Actual Bun import of contracts.ts: `CONTRACT_MODULE_INERT_OK`; the module exports no runtime values. No daemon, model, process, real user state or placeholder contribution was started/installed.
@@ -216,4 +227,4 @@
 - No runtime acceptance claim: AC1–AC13, cross-family review, UI pointer dogfood and queue-controlled landing remain gated on implementation after dependency readiness.
 
 ## Progress
-Iteration 7 rechecked the held item: `ready:false`, pending `m5-structured-runner`. Early preparation remains complete through the combined spec and inert shared contracts; runtime implementation is not installed. Per LOOP.md:79-83, end this iteration at the committed checkpoint. Next iteration: resume this item, read this log and logic.md, and run deps again. If false, preserve the checkpoint; if true, merge build/roadmap, read incoming decisions and implement all three specified slices. Resolve public runtime attestation and idempotent safe-send seams before trusting worker identity or pointer outcomes. AC1–AC13, product verification, dogfood, cross-family review and landing remain unexecuted. Both queue commands completed; no subagents or background work remain from iteration 7. No terminal marker: wait returned item, not done or stuck.
+Iteration 8 rechecked the held item: `ready:false`, pending `m5-structured-runner`. Early preparation remains complete through the combined spec and inert shared contracts; runtime implementation is not installed. Per LOOP.md:79-83, end this iteration at the committed checkpoint. Next iteration: resume this item, read this log and logic.md, and run deps again. If false, preserve the checkpoint; if true, merge build/roadmap, read incoming decisions and implement all three specified slices. Resolve public runtime attestation and idempotent safe-send seams before trusting worker identity or pointer outcomes. AC1–AC13, product verification, dogfood, cross-family review and landing remain unexecuted. Both queue commands completed; no subagents or background work remain from iteration 8. No terminal marker: wait returned item, not done or stuck.
