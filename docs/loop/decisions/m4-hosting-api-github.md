@@ -352,7 +352,7 @@
 - **Options:** ignore the selected cost field; debit its additional spend before releasing admission.
 - **Chose:** retain the one-point reservation and apply larger reported cost to the same host/account budget before queued requests resume. Parse once and reuse the decoded response.
 - **Why:** the current runner ignored data.rateLimit.cost. The API regression reported51 points from a99-point bucket, then incorrectly allowed a second search instead of applying the safe50-point floor. Other buckets must remain usable.
-- **Evidence:** hosting-api.md:304,316; runtime-runner.ts:170,405-410; new GH08 daemon API regression failed with partial:false instead of a rate_limited PR source; captured request bodies contain the requested rateLimit cost field.
+- **Evidence:** hosting-api.md:304,316; runtime-runner.ts:170,405-410. Captured pre-fix requests included both first-cost-probe and second-cost-probe GraphQL searches; post-fix requests include only first-cost-probe. The permanent regression checks no further GraphQL spawn and continued REST usability, not an assumed fallback-result shape.
 - **Reversibility:** easy
 - **Confidence:** high
 - **Revisit if:** GitHub replaces reported query cost with another authoritative budget mechanism.
@@ -400,6 +400,17 @@
 - **Reversibility:** easy
 - **Confidence:** high
 - **Revisit if:** GitHub changes the documented async response envelope.
+- **Source:** locked by hosting-api.md
+
+## D37: Preserve standalone budget warm-up and the CLI resource boundary
+- **Question:** should a cold standalone lookup/count/comment flow bypass the source's quota guard, and which bucket does gh PR reading consume?
+- **Options:** rely on UI callers to prime budgets and charge all CLI commands to core; preserve guarded callsite warm-up and GraphQL CLI-read accounting.
+- **Chose:** warm snapshots for source-guarded github.com PR lookup, comments and count flows, cache both successful and failed probes for30 seconds per account, and fail open for unknown probe data. Charge gh PR reads to GraphQL; unrelated REST remains usable.
+- **Why:** original guard-only calls allow unknown snapshots, but these standalone paths explicitly probe first. The current implementation had no such path, and incorrectly charged gh pr reads to core. Do not add blanket probing to every unrelated action.
+- **Evidence:** original client/lookup/pr-lookup-rate-limit.ts:25-69; client/fetch/get-pr-comments.ts:22-33; client/list/count-work-items.ts:79-108; rate-limit.ts:76-117,278-328. Parent cold-lookup regression returned upstream_unavailable after provider reads, and the exhausted-GraphQL CLI regression returned complete data instead of refusing the PR source.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** gh changes the resource used by these read commands.
 - **Source:** locked by hosting-api.md
 
 ## Progress
