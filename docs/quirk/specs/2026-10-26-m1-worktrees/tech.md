@@ -536,7 +536,9 @@ Back-link: [SC-3](logic.md#projects), [SC-25](logic.md#create)–[SC-28](logic.m
   trust dialog; Run hooks retries with `trustSetup: true`, Always trust calls `quirky.repo/trustHooks`
   with the error's `ref` then retries, Don't run retries with `setup: 'skip'`.
 - The setup choice shows when `quirky.repo/hooks` for the project reports a setup script and the
-  policy is ask; Create is disabled until chosen; the source badge is `quirky.yaml`, `orca.yaml`,
+  policy is ask, or when a create is refused with `setup-decision-required` (the chosen base or
+  branch has a setup the project's `HEAD` lacks; the dialog opens Advanced and resubmits with the
+  answer, with no error toast); Create is disabled until chosen; the source badge is `quirky.yaml`, `orca.yaml`,
   `local settings`, or the joined form for run-both.
 - Name placeholder: `quirky.worktree/suggestName`, refreshed when the dialog opens and after each
   create.

@@ -938,6 +938,26 @@ test('any other create failure toasts and keeps the dialog open', async () => {
   expect(h.opened).toEqual([])
 })
 
+test('a setup-decision-required refusal opens the setup choice instead of a toast, and the answer goes with the retry', async () => {
+  const h = setup()
+  h.world.createFailures = [new RpcLike('Setup decision required', RpcErrorCode.Conflict, { reason: 'setup-decision-required', repo: 'r1' })]
+  await submitNamed(h, 'branchy')
+  expect(h.toasts).toEqual([])
+  expect(dialogTitles()).toEqual(['New workspace'])
+  const create = () => document.querySelector('[role="dialog"] button[type="submit"]') as HTMLButtonElement
+  expect(dialogButton('Run setup now')).toBeDefined()
+  expect(create().disabled).toBe(true)
+
+  await click(dialogButton('Skip for now'))
+  expect(create().disabled).toBe(false)
+  await act(async () => void create().click())
+  expect(h.callsTo('quirky.worktree/create')).toEqual([
+    { repo: 'r1', name: 'branchy', createdBy: 'window' },
+    { repo: 'r1', name: 'branchy', createdBy: 'window', setup: 'skip' }
+  ])
+  expect(dialogTitles()).toEqual([])
+})
+
 test('SC-20: a base fallback is shown in its own dialog with Got it', async () => {
   const h = setup()
   h.world.createExtra = { baseFallback: { requestedRef: 'origin/main', localRef: 'main', message: 'used local main' } }

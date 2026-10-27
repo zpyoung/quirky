@@ -119,17 +119,21 @@ export type CreateHooks = {
   showFallback(worktreeId: string, message: string): void
 }
 
+/** What `createWorkspace` returns when the chosen start point has a setup script the form never offered a choice for. */
+export const SETUP_CHOICE_NEEDED = 'setup-choice-needed'
+
 /**
  * Creates a workspace from the window. The new workspace opens only when the open view is still the
  * one the person submitted from, else a toast names it. An untrusted shared setup script is put to
- * the person and the create retried with their answer. Returns the result, or null after a toast
+ * the person and the create retried with their answer. Returns the result, `SETUP_CHOICE_NEEDED`
+ * when the daemon wants a run-or-skip answer the form can still collect, or null after a toast
  * says why nothing was created (or the person backed out of the trust question).
  */
 export async function createWorkspace(
   context: UiPluginContext,
   fields: Record<string, unknown>,
   hooks: CreateHooks
-): Promise<WorktreeCreateResult | null> {
+): Promise<WorktreeCreateResult | typeof SETUP_CHOICE_NEEDED | null> {
   const viewAtSubmit = JSON.stringify(context.getLayout().view)
   let attempt = fields
   for (;;) {
@@ -140,6 +144,7 @@ export async function createWorkspace(
       if (result.baseFallback) hooks.showFallback(result.worktree.id, result.baseFallback.message)
       return result
     } catch (error) {
+      if (reasonOf(error) === 'setup-decision-required') return SETUP_CHOICE_NEEDED
       if (reasonOf(error) !== 'hooks-untrusted') {
         context.toast('Could not create worktree', messageOf(error))
         return null
