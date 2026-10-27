@@ -43,9 +43,15 @@ export function App() {
   if (state.connection === 'no-token') return <NoToken />
 
   const panel = layout.panel !== null && model?.panels.some((candidate) => candidate.id === layout.panel) ? layout.panel : null
+  const statusBars = model?.statusBars ?? []
   return (
     <div className="app">
       <ConnectionBanner />
+      {statusBars.length > 0 && (
+        <div className="plugin-status-bar" data-region="status-bar" aria-label="Plugin status bar">
+          {statusBars.map((entry) => <PluginSlot key={entry.id} id={entry.id} />)}
+        </div>
+      )}
       <div className={`layout${panel !== null ? ' with-panel' : ''}${layout.sidebar ? '' : ' no-sidebar'}`}>
         <Sidebar />
         <MainArea />
