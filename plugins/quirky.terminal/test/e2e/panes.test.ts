@@ -289,7 +289,6 @@ test(
     const pane = panesOf(restarted.workspace).find((candidate) => candidate.id === ended.pane.id)!
     expect(pane.exit).toBeNull()
     expect(pane.session).not.toBe(ended.session)
-    h.noteProcesses()
     await waitReady(h, pane.session)
     expect(await pwdOf(h, pane.session)).toBe(web)
     await waitFor('the ended session to be closed', async () => !(await h.sessionRecords()).some((session) => session.id === ended.session))

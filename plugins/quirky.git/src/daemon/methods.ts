@@ -1,11 +1,16 @@
+import { aiFix, aiFixPreview } from './ai-fix'
+import { cancelGenerate, generateCommitMessage } from './ai-generate'
+import { aiRecipe, setAiRecipe } from './ai-recipes'
 import type { DaemonEnv, Handler } from './env'
 import { commit } from './commit'
 import { branches, compare, setBase } from './compare'
 import { abort, conflictFile, continueOperation, describeAbort } from './conflicts'
 import { diff, hugeFolders, ignoreFolder, reveal, save, submoduleStatus } from './files'
 import { commitFiles, history } from './history'
+import { addNote, clearNotes, deleteNote, describeClearNotes, editNote, formatNotes, notes } from './notes'
 import { describeForcePush, fastForward, fetchRemote, forcePush, pull, push, rebaseFromBase, sync } from './remote'
 import { describeDiscard, discard, stage, unstage } from './staging'
+import { noteTargets, sendNotes } from './targets'
 
 /**
  * Every method `quirky.git` provides, by manifest name. A handler that throws has its git,
@@ -42,7 +47,22 @@ export function methodTable(env: DaemonEnv): Record<string, Handler> {
     setBase: setBase(env),
     branches: branches(env),
     history: history(env),
-    commitFiles: commitFiles(env)
+    commitFiles: commitFiles(env),
+    notes: notes(env),
+    addNote: addNote(env),
+    editNote: editNote(env),
+    deleteNote: deleteNote(env),
+    clearNotes: clearNotes(env),
+    describeClearNotes: describeClearNotes(env),
+    formatNotes: formatNotes(env),
+    noteTargets: noteTargets(env),
+    sendNotes: sendNotes(env),
+    generateCommitMessage: generateCommitMessage(env),
+    cancelGenerate: cancelGenerate(env),
+    aiFix: aiFix(env),
+    aiFixPreview: aiFixPreview(env),
+    aiRecipe: aiRecipe(env),
+    setAiRecipe: setAiRecipe(env)
   }
   return Object.fromEntries(
     Object.entries(table).map(([name, handler]) => [

@@ -18,6 +18,8 @@ import {
   type DiffConfig
 } from '@codemirror/merge'
 import { withoutTrailingNewline } from '../diffText'
+import { notesExtension, revealNote, setNotesModel, type NotesExtensionOptions, type NotesModel } from '../notes/extension'
+import { selectionLineRange, type LineRange } from '../notes/line-range'
 import { lineBreakExtension, shellTheme, syntaxExtensions } from './theme'
 
 export type MergeOptions = {
@@ -38,6 +40,8 @@ export type MergeOptions = {
   /** The selection or the set of changes changed. */
   onUpdate?(): void
   onFocus?(): void
+  /** Draws notes on the modified side and reports the gestures that ask for one. */
+  notes?: NotesExtensionOptions
 }
 
 /** A mounted diff editor: navigation over its changes and access to the modified text. */
@@ -55,6 +59,12 @@ export type MergeHandle = {
   revertChange(): boolean
   getModified(): string
   focus(): void
+  /** Replaces the notes the modified side draws; a no-op unless `options.notes` was given. */
+  setNotes(model: NotesModel): void
+  /** Scrolls the card of note `id` into view; false when it is not drawn. */
+  revealNote(id: string): boolean
+  /** The lines the modified side's selection covers, for a note. */
+  selectionRange(): LineRange
 }
 
 const TRIM_ONLY = /^[ \t]*$/
@@ -95,6 +105,7 @@ function hostExtensions(options: MergeOptions, host: Element, side: 'a' | 'b'): 
   if (options.showWhitespace) extensions.push(highlightWhitespace(), highlightTrailingWhitespace())
   if (!editable) extensions.push(EditorState.readOnly.of(true), EditorView.editable.of(false))
   if (side === 'b') {
+    if (options.notes) extensions.push(notesExtension(options.notes))
     extensions.push(
       EditorView.updateListener.of((update) => {
         if (update.docChanged) options.onDocChange?.()
@@ -232,6 +243,11 @@ export function createMerge(parent: HTMLElement, options: MergeOptions): MergeHa
       return true
     },
     getModified: () => editor.state.sliceDoc(),
-    focus: () => editor.focus()
+    focus: () => editor.focus(),
+    setNotes: (model) => {
+      if (options.notes) setNotesModel(editor, model)
+    },
+    revealNote: (id) => (options.notes ? revealNote(editor, id) : false),
+    selectionRange: () => selectionLineRange(editor.state)
   }
 }

@@ -2,7 +2,7 @@ import { afterEach, beforeEach, expect, test } from 'bun:test'
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { discover, macosOnly, runFiles, runSuite } from './suite'
+import { discover, macosOnly, runFiles, runSuite, slowestFirst, usableSlots } from './suite'
 
 let dir: string
 
@@ -87,4 +87,47 @@ test('macosOnly reads the first word of each line and skips comments and blanks'
   writeFileSync(join(dir, 'list.txt'), '# why\n\npkg/a.test.ts  needs zsh\npkg/b.test.ts\n')
   expect(macosOnly(join(dir, 'list.txt'))).toEqual(new Set(['pkg/a.test.ts', 'pkg/b.test.ts']))
   expect(macosOnly(join(dir, 'missing.txt'))).toEqual(new Set())
+})
+
+test('a completed test run stops detached subprocess trees left by a test', async () => {
+  const pidFile = join(dir, 'leftover.pid')
+  write('leftover.test.ts', `test('starts a detached worker', () => {
+    const child = Bun.spawn(['sleep', '60'], { detached: true, stdout: 'ignore', stderr: 'ignore' })
+    writeFileSync(${JSON.stringify(pidFile)}, String(child.pid))
+    writeFileSync((process.env.QUIRKY_HOME ?? ${JSON.stringify(dir)}) + '/pty.pid', String(child.pid))
+    expect(child.pid).toBeGreaterThan(0)
+  })`)
+  let pid: number | undefined
+  try {
+    const result = await runSuite(dir, ['pkg'])
+    pid = Number(await Bun.file(pidFile).text())
+    expect(result.ok).toBe(true)
+    const deadline = Date.now() + 5000
+    const alive = () => {
+      try { process.kill(pid!, 0); return true } catch { return false }
+    }
+    // Native process exit is observed by the OS; fake timers cannot drive it.
+    while (alive() && Date.now() < deadline) await Bun.sleep(25)
+    expect(alive()).toBe(false)
+  } finally {
+    pid ??= Number(await Bun.file(pidFile).text().catch(() => '0'))
+    if (pid) {
+      try { process.kill(-pid, 'SIGKILL') } catch {}
+      try { process.kill(pid, 'SIGKILL') } catch {}
+    }
+  }
+}, 15_000)
+
+test('usableSlots leaves all but one slot to a land while one runs', () => {
+  expect(usableSlots(6, false, false)).toBe(6)
+  expect(usableSlots(6, false, true)).toBe(1)
+  expect(usableSlots(6, true, true)).toBe(6)
+  expect(usableSlots(1, false, true)).toBe(1)
+})
+
+test('slowestFirst orders by the last logged time, with unlogged files first', () => {
+  const log = join(dir, 'durations.log')
+  writeFileSync(log, 'a.test.ts 100\nb.test.ts 900\na.test.ts 2000\n')
+  expect(slowestFirst(['a.test.ts', 'b.test.ts', 'new.test.ts'], log)).toEqual(['new.test.ts', 'a.test.ts', 'b.test.ts'])
+  expect(slowestFirst(['b.test.ts', 'a.test.ts'], join(dir, 'missing.log'))).toEqual(['b.test.ts', 'a.test.ts'])
 })

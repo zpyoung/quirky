@@ -1,10 +1,10 @@
 import { afterEach, describe, expect, test } from 'bun:test'
-import { existsSync, readFileSync, statSync } from 'node:fs'
+import { existsSync, readFileSync, rmSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import { QuirkyClient } from '@quirky/protocol'
 import { isDaemonAlive, readRuntime, rpcUrl } from '@quirky/protocol/node'
+import { createProcessScope, type ProcessScope } from '../../../scripts/test-support/process-scope'
 import { startDaemon } from '../src/daemon'
-import { startFakePtyHost } from './fixtures/fake-pty-host'
 import { makeTempHome, waitFor } from './helpers'
 import { makeTempDir, removeTempDirs, writeModulePlugin } from './plugins/fixtures'
 
@@ -13,13 +13,46 @@ const FAKE_HOST_MAIN = join(import.meta.dir, 'fixtures', 'fake-pty-host.ts')
 
 const cleanups: (() => Promise<void> | void)[] = []
 afterEach(async () => {
-  for (const cleanup of cleanups.splice(0).reverse()) await cleanup()
-  removeTempDirs()
+  let failed = false
+  let firstError: unknown
+  for (const cleanup of cleanups.splice(0).reverse()) {
+    try {
+      await cleanup()
+    } catch (error) {
+      if (!failed) firstError = error
+      failed = true
+    }
+  }
+  try {
+    removeTempDirs()
+  } catch (error) {
+    if (!failed) firstError = error
+    failed = true
+  }
+  if (failed) throw firstError
 })
+
+function scopedHome() {
+  const home = makeTempHome()
+  const scope = createProcessScope(home)
+  cleanups.push(() => rmSync(home, { recursive: true, force: true }))
+  cleanups.push(() => scope.cleanup())
+  return { home, scope }
+}
+async function withScopeToken<T>(scope: ProcessScope, action: () => Promise<T>): Promise<T> {
+  const previous = process.env.QUIRKY_TEST_SCOPE
+  process.env.QUIRKY_TEST_SCOPE = scope.env.QUIRKY_TEST_SCOPE
+  try {
+    return await action()
+  } finally {
+    if (previous === undefined) delete process.env.QUIRKY_TEST_SCOPE
+    else process.env.QUIRKY_TEST_SCOPE = previous
+  }
+}
 
 describe('pty host startup', () => {
   test('spawns the host when nothing answers and works through it', async () => {
-    const home = makeTempHome()
+    const { home, scope } = scopedHome()
     writeModulePlugin(
       join(home, 'plugins'),
       join(makeTempDir(), 'marker.log'),
@@ -34,7 +67,7 @@ describe('pty host startup', () => {
         })`
       }
     )
-    const daemon = await startDaemon({
+    const daemon = await withScopeToken(scope, () => startDaemon({
       home,
       port: 0,
       builtinPluginsDir: null,
@@ -42,21 +75,16 @@ describe('pty host startup', () => {
       notifier: () => {},
       uiDir: '/none',
       ptyHostEntry: FAKE_HOST_MAIN
-    })
+    }))
     cleanups.push(() => daemon.stop())
     const client = await QuirkyClient.connect(rpcUrl(daemon.runtime), { role: 'cli' })
+    cleanups.push(() => client.close())
     const status = await client.call('status.get', {})
     expect(status.ptyHost.alive).toBe(true)
     const hostPid = status.ptyHost.pid as number
+    scope.track(hostPid)
     expect(hostPid).toBeGreaterThan(0)
     expect(hostPid).not.toBe(process.pid)
-    cleanups.push(() => {
-      try {
-        process.kill(hostPid)
-      } catch {
-        return
-      }
-    })
     expect(existsSync(join(home, 'logs', 'pty-host.log'))).toBe(true)
     expect(statSync(join(home, 'logs', 'pty-host.log')).mode & 0o777).toBe(0o600)
 
@@ -66,7 +94,7 @@ describe('pty host startup', () => {
   })
 
   test('still starts when the host cannot be started', async () => {
-    const home = makeTempHome()
+    const { home } = scopedHome()
     const daemon = await startDaemon({
       home,
       port: 0,
@@ -79,6 +107,7 @@ describe('pty host startup', () => {
     })
     cleanups.push(() => daemon.stop())
     const client = await QuirkyClient.connect(rpcUrl(daemon.runtime), { role: 'cli' })
+    cleanups.push(() => client.close())
     expect((await client.call('status.get', {})).ptyHost.alive).toBe(false)
     client.close()
   })
@@ -86,9 +115,7 @@ describe('pty host startup', () => {
 
 describe('single instance per home', () => {
   test('a second daemon on the same home exits 0 and leaves the first running', async () => {
-    const home = makeTempHome()
-    const pty = startFakePtyHost(home)
-    cleanups.push(() => pty.stop())
+    const { home, scope } = scopedHome()
     const env = {
       ...process.env,
       QUIRKY_HOME: home,
@@ -96,15 +123,17 @@ describe('single instance per home', () => {
       QUIRKY_UI_DIR: join(home, 'none'),
       QUIRKY_PTY_HOST_ENTRY: FAKE_HOST_MAIN
     }
-    const first = Bun.spawn([process.execPath, MAIN], { env, stdout: 'ignore', stderr: 'ignore' })
-    cleanups.push(() => {
-      first.kill()
-    })
+    const first = scope.spawn([process.execPath, MAIN], { env, stdout: 'ignore', stderr: 'ignore' })
     const info = await waitFor(() => readRuntime(home), 10000)
     expect(info.pid).toBe(first.pid)
     expect(await isDaemonAlive(info)).toBe(true)
+    const hostPid = await waitFor(
+      () => (existsSync(join(home, 'pty.pid')) ? Number(readFileSync(join(home, 'pty.pid'), 'utf8')) : undefined),
+      10000
+    )
+    scope.track(hostPid)
 
-    const second = Bun.spawn([process.execPath, MAIN], { env, stdout: 'ignore', stderr: 'ignore' })
+    const second = scope.spawn([process.execPath, MAIN], { env, stdout: 'ignore', stderr: 'ignore' })
     expect(await second.exited).toBe(0)
     expect(readRuntime(home)?.pid).toBe(first.pid)
     expect(await isDaemonAlive(readRuntime(home))).toBe(true)
@@ -116,10 +145,8 @@ describe('single instance per home', () => {
   })
 
   test('does not print the rpc token and points at runtime.json', async () => {
-    const home = makeTempHome()
-    const pty = startFakePtyHost(home)
-    cleanups.push(() => pty.stop())
-    const proc = Bun.spawn([process.execPath, MAIN], {
+    const { home, scope } = scopedHome()
+    const proc = scope.spawn([process.execPath, MAIN], {
       env: {
         ...process.env,
         QUIRKY_HOME: home,
@@ -130,10 +157,12 @@ describe('single instance per home', () => {
       stdout: 'pipe',
       stderr: 'ignore'
     })
-    cleanups.push(() => {
-      proc.kill()
-    })
     const info = await waitFor(() => readRuntime(home), 10000)
+    const hostPid = await waitFor(
+      () => (existsSync(join(home, 'pty.pid')) ? Number(readFileSync(join(home, 'pty.pid'), 'utf8')) : undefined),
+      10000
+    )
+    scope.track(hostPid)
     proc.kill('SIGTERM')
     await proc.exited
     const output = await new Response(proc.stdout).text()

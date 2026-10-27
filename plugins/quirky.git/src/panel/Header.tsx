@@ -14,16 +14,20 @@ type HeaderProps = {
   onViewMode(mode: ViewMode): void
   onChangeBase(): void
   onRefreshCompare(): void
+  /** How many notes the worktree has; the overflow menu lists a Notes item only when above 0. */
+  notes?: number
+  onNotes?(): void
 }
 
 /** The panel's title bar: the filter toggle and the "More source control actions" menu, with the filter box under it. */
-export function Header({ filter, filterOpen, onFilterOpen, onFilter, viewMode, onViewMode, onChangeBase, onRefreshCompare }: HeaderProps) {
+export function Header({ filter, filterOpen, onFilterOpen, onFilter, viewMode, onViewMode, onChangeBase, onRefreshCompare, notes = 0, onNotes }: HeaderProps) {
   const more = useRef<HTMLButtonElement>(null)
   const [menuAt, setMenuAt] = useState<{ x: number; y: number } | null>(null)
   const entries: MenuEntry[] = [
     viewMode === 'list' ? { label: 'View as tree', onSelect: () => onViewMode('tree') } : { label: 'View as list', onSelect: () => onViewMode('list') },
     { label: 'Change Base Ref…', onSelect: onChangeBase },
-    { label: 'Refresh branch compare', onSelect: onRefreshCompare }
+    { label: 'Refresh branch compare', onSelect: onRefreshCompare },
+    ...(notes > 0 ? [{ label: `Notes ${notes}`, onSelect: onNotes }] : [])
   ]
   const close = () => {
     onFilter('')

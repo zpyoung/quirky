@@ -41,6 +41,7 @@ function entry(id: string, over: Partial<AgentEntry> = {}): AgentEntry {
     homepage: null,
     install: null,
     launchOptions: null,
+    oneShot: null,
     ...over
   }
 }
