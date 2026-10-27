@@ -451,7 +451,18 @@
 - **Revisit if:** frozen installation or packaging cannot resolve a declared private asset
 - **Source:** locked by docs/loop/decisions/sa-browser-agent.md and docs/loop/decisions/m5-ledger.md
 
+## D42: Preserve approved dock hosting and daemon-owned palette state
+- **Question:** How should the concrete dock/PTY moving-tip rejection combine the shell contracts?
+- **Options:** keep obsolete local palette interception; drop editor geometry/views; combine the approved additive state and embedding contracts
+- **Chose:** resolve pinned 88d6a5e2b85b918ddcd65d1d52944373207b5682 after full reads of updated m3-terminal-dock D1–D48 and fix-flaky-pty-host-host D1–D15. Keep panel widths/activity-bar position plus optional daemon-owned palette; remove obsolete local paletteOpen interception. Preserve status bars, accessories, snapshot freshness and actual-tabId view mounts. Dock pane state stays in its plugin, and DockHost receives real terminal sessions only.
+- **Why:** the dock's D10 ruling supersedes its old block; the approved scope excludes dictation/quarantine but includes its documented core. Global palette state is distinct from per-pane dock sizing/state. These are additive contracts, not competing workspace owners.
+- **Evidence:** bg_92 rejection; KernelDockMerge/ShellDockMerge/TerminalDockMerge and complete DockDecisionRead; parent retained distinct parser-regression syntax edges and removed obsolete contribution-copy tests
+- **Reversibility:** medium
+- **Confidence:** high
+- **Revisit if:** palette broadcasts, pane-scoped focus or hosted-view isolation fail the merged verification
+- **Source:** locked by docs/loop/decisions/m3-terminal-dock.md and docs/loop/decisions/fix-flaky-pty-host-host.md
+
 ## Progress
-Step 7 resubmission ready: the reported browser/ledger conflict is resolved in e394b9a plus the pin-preserving lock correction. Both updated logs were fully read. Frozen install, typecheck, full packaged-app build and the combined import fence pass; editor/real-handoff/core and earlier full-controller repair proofs remain intact. Commit/detach and resubmit without optional scope changes. The controller still decides complete merge acceptance; do not claim landed or alter protected/foreign integration state.
+Step 7 resubmission ready: required dock/PTy conflict repair is committed as dd48a59. Both incoming logs were fully read; panel geometry, daemon palette, real-session dock/accessories and hosted views coexist. Frozen installation and typecheck pass on the 568-package graph. All prior core, real handoff, packaged assets, syntax fence, scripts and browser proofs remain recorded. Commit/detach and resubmit; no protected or foreign integration edits and no success claim before controller acceptance.
 
 Last SC-9 point: Finder drops import copies under D19, including in-worktree sources. Native SC-9 stays pending for the nightly run. Open-in-place is owned by the operator's `m4-editor-drop-open-in-place`, not an m2-editor blocker.
