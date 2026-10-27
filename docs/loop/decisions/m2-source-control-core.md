@@ -1,0 +1,400 @@
+# m2-source-control-core decisions
+
+## D1: Classify the item as a Visual, API, CLI and Integration design, and run research phases A and B
+- **Question:** which domains the gray-area catalog draws from, and whether the research swarms run (quirk:brainstorming, checklist steps 2 and 7)
+- **Options:** one domain; several; skip research
+- **Chose:** Visual (the Source Control panel, diff, combined diff and conflict views), API (the grown `quirky.git` methods and records), CLI (the generated `quirky git` commands) and Integration (spawning git against remotes). Phase A ran two web-research agents (git client patterns; non-interactive git pitfalls). Phase B ran one on each technical choice the approaches differ on (CodeMirror merge views for many diffs; a daemon-side sync with an explicit lease). Phase C was skipped because the approach extends an existing plugin.
+- **Why:** a person uses the panel and an agent drives the same flows through the CLI, and every flow ends in a git process
+- **Evidence:** docs/loop/queue.json m2-source-control-core; research/orca-features/source-control.md
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** a review finding traces to a research gap
+- **Source:** assumed — autonomous
+
+## D2: Skip the visual companion and the adhd offer, use the standard gray-area set
+- **Question:** brainstorming's visual companion offer and its Step 0 adhd offer
+- **Options:** run them; skip them
+- **Chose:** skip both
+- **Why:** LOOP.md says to skip the parts that assume a person is there
+- **Evidence:** docs/loop/LOOP.md "Skip the parts that assume a person is there"
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** never for headless runs
+- **Source:** locked by docs/loop/LOOP.md
+
+## D3: The slice is all of source-control.md except diff notes, AI actions and hosted review
+- **Question:** which of source-control.md's flows this item covers (brainstorming scope check; LOOP.md step 3)
+- **Options:** only the five things the title names, read narrowly (remote operations, discard, branch compare, history, conflicts); the whole doc minus what the sibling item `m2-source-control-notes-ai` and M4 name; the whole doc
+- **Chose:** the whole doc minus diff notes and AI actions (the sibling item) and hosted review (M4). In scope: the status snapshot and its sections, staging, discard, committing and its failure cards, the primary action and its menu, every remote operation and its errors, branch compare and the base ref, history, conflicts and the conflict views, huge repositories, the single-file, combined, branch and commit diffs with their display settings and size limits, and the panel's filter, tree view, selection, group order and row menu.
+- **Why:** the queue has two source-control items, and the milestone is done only when every flow in a shipped feature's doc passes. The sibling's title names notes and AI commit messages, so everything else in the doc has to land here or nowhere. The doc's diff viewers are part of source control in Orca (they open from its rows), not of the editor doc.
+- **Evidence:** docs/loop/queue.json (m2-source-control-core, m2-source-control-notes-ai); docs/roadmap.md "When a milestone is done"; source-control.md "What the user can do"
+- **Reversibility:** medium
+- **Confidence:** medium
+- **Revisit if:** the M2 exit test shows a flow assigned to neither item
+- **Source:** locked by docs/loop/queue.json (the titles); assumed — autonomous (the exact cut)
+
+## D4: Select every gray area that matters for source control
+- **Question:** which gray areas to drill into (brainstorming Gray Areas Step 1)
+- **Options:** Visual: layout-style, information-density, loading-pattern, empty-state, error-state, interaction-style; API: response-format, error-responses, versioning, pagination; CLI: output-format, flag-design, progress-reporting, error-recovery, exit-codes; Integration: sync-direction, conflict-resolution, retry-policy, data-mapping, auth-method
+- **Chose:** layout-style, loading-pattern, empty-state, error-state and interaction-style (panel, diff views, conflict views); response-format, error-responses and versioning (the grown status, diff and compare records, error reasons); flag-design and output-format (generated `quirky git` commands); error-recovery (failed pushes, pulls, commits); sync-direction, conflict-resolution and retry-policy (sync, divergence, force push, merge and rebase conflicts); auth-method (non-interactive credentials); pagination (history)
+- **Why:** LOOP.md asks for every area that matters. Information density follows Orca's rows. Progress reporting is the in-flight state each remote call shows while it runs, covered under interaction-style. Exit codes stay 0, 1 and 2 (m0-scripting D15). Data-mapping is the status and diff records, covered under response-format.
+- **Evidence:** docs/loop/LOOP.md "Gray areas"
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** an area left out produces a review finding
+- **Source:** assumed — autonomous
+
+## D5: Extend `quirky.git` in place, with every composite (sync, discard-all, stage-all) in the daemon
+- **Question:** the approach (brainstorming step 8)
+- **Options:** extend `quirky.git` and `@quirky/git` in place, with composites as daemon methods; split into several plugins (status and staging, remotes, diff viewer); keep Orca's split, where Sync and discard-all are composed in the window from smaller calls
+- **Chose:** extend `quirky.git` in place. Composite actions are single daemon methods, so `quirky git sync` does exactly what the window's Sync does.
+- **Why:** the roadmap requires every flow to be scriptable through the CLI, and Orca's renderer-side Sync (`git-remote-sync.ts`) is only reachable from its window. Splitting into plugins adds manifests and cross-plugin calls with no distro asking to replace one part; a distro can still disable or override each contribution by ID (m0-registry).
+- **Evidence:** source-control.md "Git commands" (Sync is a renderer composite); docs/roadmap.md "Everything is scriptable"; plugins/quirky.git/main.ts
+- **Reversibility:** hard
+- **Confidence:** high
+- **Revisit if:** a distro needs to replace remote operations without replacing status
+- **Source:** assumed — autonomous
+
+## D6: AI Fix, Resolve with AI and the Source Control AI settings belong to `m2-source-control-notes-ai`
+- **Question:** where the doc's AI actions land (brainstorming scope)
+- **Options:** here, with conflicts and commit failures; in the sibling item with AI commit messages
+- **Chose:** the sibling. This item shows the "Commit blocked", "Push blocked" and conflict cards without their AI buttons, and the sibling adds the buttons, the launch dialog and the `sourceControlAi` settings.
+- **Why:** every AI action shares one recipe model (agent, CLI arguments, command template, "Save for"), the same settings the sibling needs for commit messages. Splitting the model across two items would build it twice.
+- **Evidence:** source-control.md "AI actions" and "Settings" (`sourceControlAi.actions[actionId]` covers commitMessage, fixCommitFailure, fixPushFailure, resolveConflicts)
+- **Reversibility:** easy
+- **Confidence:** medium
+- **Revisit if:** the sibling's brainstorm reads its title narrowly and drops the fix and conflict prompts; it is bound by this decision
+- **Source:** assumed — autonomous
+
+## D7: Hosted review is out until M4
+- **Question:** what to do with the ladder rows and menu items that depend on a PR (brainstorming scope)
+- **Options:** build them against a stub; leave them out
+- **Chose:** leave out the Create PR header button and composer, ladder rows 1, 5, 6 and 15, the PR states of row 11 (loading, merged, linked review), push targets from a PR, the fork push notice and the menu's Create PR and Push before PR rows. Row 11 here is only "detached" or "Publish Branch".
+- **Why:** M4 owns the hosting API and PR pages, and a stub would fix an interface before its provider exists
+- **Evidence:** docs/roadmap.md M4; source-control.md "Primary action decision ladder"
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** never; M4 adds the rows
+- **Source:** locked by docs/roadmap.md
+
+## D8: The status record grows additively, read from porcelain v2
+- **Question:** response-format and versioning of `quirky.git/status`
+- **Options:** replace v1's `files` with Orca's entries; keep `files` and add the new fields beside it
+- **Chose:** keep `branch`, `upstream`, `ahead`, `behind` and `files` exactly as v1 returns them, and add `head`, `detached`, `unborn`, `entries` (one per row Orca shows: path, old path, area, status, conflict kind and state, line counts, submodule flags), `operation` (`merge`, `rebase`, `cherry-pick` or `none`), `capped`, `upstreamStatus` (with patch equivalence) and `busy`
+- **Why:** other plugins and v1 tests read `files`; the API stays unstable until M7 but an additive change costs nothing here
+- **Evidence:** packages/protocol/src/model.ts GitStatus; source-control.md "Status snapshot and refresh"
+- **Reversibility:** medium
+- **Confidence:** high
+- **Revisit if:** M7's API freeze wants one list
+- **Source:** assumed — autonomous
+
+## D9: "Resolved locally" is tracked by the daemon for conflict files opened through `quirky.git`
+- **Question:** where Orca's session-local `resolved_locally` state lives (conflict-resolution)
+- **Options:** in the window, as Orca does; in the daemon, per worktree
+- **Chose:** the daemon records each conflicted path read through the conflict-file method while an operation is in progress. A recorded path that git no longer lists as unmerged shows as "Resolved locally" until the operation ends or the daemon restarts.
+- **Why:** the roadmap puts what the window shows in the daemon so agents can read it; a window-only state would make the CLI's status differ from the panel
+- **Evidence:** source-control.md "Conflicts and in-progress operations"; docs/roadmap.md "Layout and focus live in the daemon"
+- **Reversibility:** easy
+- **Confidence:** medium
+- **Revisit if:** two windows on one daemon need separate resolved sets
+- **Source:** assumed — autonomous
+
+## D10: One remote operation runs at a time per worktree, and status says which
+- **Question:** what a second push, pull, fetch, sync or rebase does while one runs (interaction-style, error-responses)
+- **Options:** let git's own locks decide; queue it; refuse it
+- **Chose:** refuse it with a conflict error naming the running operation, and report the running one as `busy` in status, so every window and the CLI shows "Push in progress…"
+- **Why:** Orca tracks in-flight operations per window, so a CLI push leaves the window's buttons live; a daemon lock makes every client agree, and queuing would run a stale decision (a sync after a push already happened)
+- **Evidence:** source-control.md ladder row 3
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** users want queued remote work
+- **Source:** assumed — autonomous
+
+## D11: Discard, force push and abort are destructive methods
+- **Question:** which calls confirm through the kernel (docs/roadmap.md "Agent access")
+- **Options:** every mutation; only those that can't be undone
+- **Chose:** `discard`, `forcePush` and `abort` declare `destructive` with a `describe` method that returns Orca's dialog text. The window shows Orca's own dialogs (`Discard changes to "<name>"?`, `Delete 4 untracked files?`, `Abort merge?`) and passes `yes`. Stage, unstage, commit, push, pull, fetch, sync, continue and rebase don't confirm.
+- **Why:** discarding deletes work, a forced push drops remote commits and an abort drops resolutions; the rest can be undone with git (reflog, reset, revert)
+- **Evidence:** packages/daemon/src/plugins/dispatch.ts (destructive, confirm, describe); source-control.md "Discarding", "Conflicts"
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** rebase from base loses work in practice
+- **Source:** locked by docs/roadmap.md
+
+## D12: Push always sets the upstream, and Publish Branch is a push with no upstream
+- **Question:** sync-direction for push and publish
+- **Options:** separate publish and push methods; one push that sets upstream
+- **Chose:** one `push` that runs `push --set-upstream <remote> HEAD:<branch>`, where the remote is `branch.<b>.pushRemote`, then `remote.pushDefault`, then `branch.<b>.remote`, then `origin`. The window labels it "Publish Branch" when there is no upstream.
+- **Why:** Orca's push sets upstream on every call and accepts but ignores `publish`; one method keeps the CLI small
+- **Evidence:** source-control.md "Git commands" Push row and the `git:push` payload note
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** M4's push targets need a separate path
+- **Source:** locked by research/orca-features/source-control.md
+
+## D13: Force push leases on the upstream commit the decision was made on
+- **Question:** sync-direction for force push (supersedes Orca's bare `--force-with-lease`)
+- **Options:** Orca's bare `--force-with-lease`; an explicit `--force-with-lease=refs/heads/<b>:<sha>`; `--force`
+- **Chose:** the explicit form, with the sha of the upstream that status reported. A call can pass the sha it saw; otherwise the daemon reads the remote-tracking ref without fetching.
+- **Why:** git's docs warn that a background fetch defeats the bare form, because it then leases on whatever was last fetched; Sync fetches right before it force-pushes
+- **Evidence:** https://git-scm.com/docs/git-push (force-with-lease); https://israynotarray.com/en/git/2026/02/26/git-push-force-with-lease-better-than-force/
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** a remote rejects the explicit form
+- **Source:** assumed — autonomous
+
+## D14: Pull, fast-forward and fetch follow Orca's arguments
+- **Question:** sync-direction and retry-policy for pull, fast-forward and fetch
+- **Options:** Orca's (`pull`, retry `--no-rebase` on the divergent-policy error; `pull --ff-only`; `fetch --prune`); always pass `--rebase`
+- **Chose:** Orca's
+- **Why:** the user's `pull.rebase` is respected when set, and an unset policy no longer fails the call
+- **Evidence:** source-control.md "Git commands"; https://www.git-tower.com/learn/git/faq/you-have-divergent-branches
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** users want a rebase pull without setting `pull.rebase`
+- **Source:** locked by research/orca-features/source-control.md
+
+## D15: Sync is one daemon method: fetch, then force push under the lease rule, else pull and push
+- **Question:** sync-direction and conflict-resolution for Sync
+- **Options:** Orca's renderer composite; one daemon method doing the same steps
+- **Chose:** `quirky.git/sync` fetches, rereads the upstream status, force-pushes with the lease of D13 when the branch is ahead and behind with only patch-equivalent commits behind, otherwise pulls, rereads, and pushes only if still ahead. A pull that stops on conflicts ends the sync with that error.
+- **Why:** D5
+- **Evidence:** source-control.md "Sync is a renderer composite"
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** never
+- **Source:** locked by research/orca-features/source-control.md (the steps); assumed — autonomous (the placement)
+
+## D16: Rebase from base fetches the base's branch and rebases onto it
+- **Question:** what "Rebase from <base>" does (conflict-resolution)
+- **Options:** Orca's fork-point rebase onto a fetched temporary ref; a plain `rebase <remote>/<branch>` after a fetch
+- **Chose:** Orca's: fetch the base's branch, find the fork point against the remote-tracking ref, rebase onto the fetched commit (`--onto` when a fork point exists), fast-forward an unborn HEAD, and refuse a base that isn't a remote branch (no `/`)
+- **Why:** the fork point keeps commits the upstream itself rewrote from being replayed twice
+- **Evidence:** source-control.md "Git commands" Rebase from base row
+- **Reversibility:** easy
+- **Confidence:** medium
+- **Revisit if:** the fork point picks wrong commits in practice
+- **Source:** locked by research/orca-features/source-control.md
+
+## D17: Quirky adds Continue for a merge, rebase or cherry-pick once no conflicts are unresolved
+- **Question:** how a person finishes a merge or rebase in the panel (conflict-resolution; an Orca defect)
+- **Options:** Orca's Abort-only panel; add Continue; show the commit box during a merge
+- **Chose:** add `quirky.git/continue` and a "Continue merge" / "Continue rebase" / "Continue cherry-pick" button that shows when the operation has no unresolved conflicts. It runs git's continue command without opening an editor. A rebase that stops again shows the next conflicts.
+- **Why:** Orca's pull toast says "Resolve them in Source Control, then commit the merge" while its commit box is hidden during a merge and nothing continues a rebase, so the person must leave for a terminal; the M2 exit test is reviewing and committing without leaving Quirky
+- **Evidence:** source-control.md "Committing" (commit box hidden during any merge, rebase or cherry-pick), "Remote actions" (the pull toast), "Conflicts" ("There is no Continue action")
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** never
+- **Source:** assumed — autonomous
+
+## D18: The daemon normalises remote errors and gives each a reason; the window frames them per action
+- **Question:** error-responses and error-recovery for remote operations
+- **Options:** pass git's stderr through; Orca's two layers (main normalises, renderer re-frames)
+- **Chose:** Orca's two layers. Each failed remote call is an error whose message is Orca's normalised text with credentials stripped from URLs and whose `data.reason` is one of `non-fast-forward`, `stale-lease`, `auth`, `network`, `no-upstream`, `divergent-policy`, `local-changes`, `untracked-overwrite`, `conflicts`, `hook` or `failed`. The window turns the reason into Orca's per-action toast.
+- **Why:** an agent branches on `reason`, a person reads the toast, and neither sees a token in a URL
+- **Evidence:** source-control.md "Remote actions and normalised errors"
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** a git version words an error the matcher misses
+- **Source:** locked by research/orca-features/source-control.md
+
+## D19: Commit and push failures carry Orca's classification; the cards ship without AI buttons
+- **Question:** error-state for commit and push hooks
+- **Options:** a toast with stderr; Orca's "Commit blocked" and "Push blocked" cards
+- **Chose:** the cards. A failed commit's error data has `reason` (`lint`, `hook` or `failed`), Orca's summary and the raw output; a hook-failed push has the same with `hook`. The window shows the card with its pill, summary and Details dialog. The AI Fix split button waits for D6's item.
+- **Why:** Orca's summaries name the fix; the AI half shares the recipe model of D6
+- **Evidence:** source-control.md "Commit and push failures"
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** never
+- **Source:** locked by research/orca-features/source-control.md
+
+## D20: The compare base is the worktree's base, else the project's, else the detected default, and Change Base Ref writes where the base came from
+- **Question:** data-mapping for the base ref (branch compare)
+- **Options:** store a separate compare base in `quirky.git`; reuse the worktree's `baseRef` and the project's `defaultBase`
+- **Chose:** reuse them, as Orca does: the effective base is the worktree's `baseRef`, else `quirky.repo`'s `defaultBase`, else `detectDefaultBase`. With the "Default Compare Base" setting on "Branch upstream" the compare uses the upstream when there is one. Change Base Ref writes the worktree's `baseRef` when the worktree has one and the project's `defaultBase` otherwise; Use Primary clears it. `quirky.worktree/set` grows a `baseRef` param for this.
+- **Why:** one base drives compare, rebase and the M4 PR target, and m1-worktrees already records it at create
+- **Evidence:** source-control.md "Branch compare"; plugins/quirky.worktree/src/daemon/set.ts; plugins/quirky.repo/src/settings.ts
+- **Reversibility:** medium
+- **Confidence:** high
+- **Revisit if:** m1-worktrees' base semantics change
+- **Source:** locked by research/orca-features/source-control.md
+
+## D21: Branch compare shows committed changes from the merge base, with Orca's statuses
+- **Question:** response-format and error-state of compare
+- **Options:** include uncommitted changes; committed only
+- **Chose:** committed only, merge-base to HEAD, with `ready`, `invalid-base`, `unborn-head` and `no-merge-base` and Orca's messages; the result carries the line totals the branch row chip shows
+- **Why:** the uncommitted sections already show the rest
+- **Evidence:** source-control.md "Branch compare"
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** never
+- **Source:** locked by research/orca-features/source-control.md
+
+## D22: History returns 50 commits by default and at most 200, from HEAD, with a has-more flag
+- **Question:** pagination for history
+- **Options:** cursor pagination; Orca's limit
+- **Chose:** Orca's limit with `hasMore`; the dock's "Load more" asks for a larger limit up to 200
+- **Why:** the dock shows recent work, and 200 is Orca's server cap
+- **Evidence:** source-control.md "History dock"
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** someone needs older commits in the dock
+- **Source:** locked by research/orca-features/source-control.md
+
+## D23: Diffs open in a `quirky.git/diff` view in the main area, and closing it returns to the worktree's sessions
+- **Question:** layout-style for diffs, since Quirky has one main view and no editor tabs yet
+- **Options:** keep v1's diff inside the panel; a main-area view; a separate window
+- **Chose:** a main-area view whose input carries the worktree, so the panel keeps following that worktree. Clicking a row replaces the view's content (Orca's preview tab). The view's Close button reopens the worktree's sessions view. Preview versus permanent tabs and split groups wait for editor tabs (m2-editor).
+- **Why:** a combined diff doesn't fit in the right column, and Orca opens every diff in the editor area
+- **Evidence:** packages/protocol/src/ui.ts UiLayout (one view); plugins/quirky.git/src/scm.ts worktreeOf; source-control.md "Opening a diff"
+- **Reversibility:** medium
+- **Confidence:** medium
+- **Revisit if:** m2-editor adds tabs; it can host the diff view in a tab
+- **Source:** assumed — autonomous
+
+## D24: Diff content follows Orca's sources and limits
+- **Question:** response-format of `quirky.git/diff`
+- **Options:** v1's text-or-binary pair; Orca's sources, kinds and limits
+- **Chose:** sources `unstaged`, `staged`, `branch` and `commit` with Orca's left and right sides; results of kind `text`, `binary` or `image` (base64 for `.png .jpg .jpeg .gif .svg .webp .bmp .ico .pdf`), a 10 MiB per-blob cap, Orca's render limit (120,000 lines a side or 6,000,000 characters) returned as `tooLarge` with empty bodies, and `modifiedDeleted` for a deleted working file. v1's `staged` param keeps working.
+- **Why:** the limits keep huge bodies off the wire; images get a preview
+- **Evidence:** source-control.md "Large and binary diffs", "Diff content"
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** never
+- **Source:** locked by research/orca-features/source-control.md
+
+## D25: Diffs render with `@codemirror/merge`, editable only for unstaged changes, saved with a disk precondition
+- **Question:** interaction-style of the diff editor
+- **Options:** read-only diffs; Orca's editable unstaged side
+- **Chose:** side-by-side `MergeView` or inline `unifiedMergeView` by the Default Diff View setting; the modified side is editable only for unstaged diffs, and Mod+S saves through `quirky.git/save`, which refuses when the file changed on disk since it was read and the view then offers Reload from Disk or Overwrite
+- **Why:** CodeMirror is locked; Orca's editable diff is a flow, and a save without a precondition loses an agent's concurrent edit
+- **Evidence:** docs/architecture.md Decisions ("CodeMirror 6 instead of Monaco"); source-control.md "Reading and editing in the single-file diff"
+- **Reversibility:** medium
+- **Confidence:** medium
+- **Revisit if:** m2-editor's disk precondition uses a different token; the save method should then share it
+- **Source:** locked by docs/architecture.md (CodeMirror); assumed — autonomous (the save method)
+
+## D26: The combined diff loads sections lazily and on demand past 10,000 changed lines
+- **Question:** loading-pattern for View all
+- **Options:** load every section; Orca's eager six, lazy rest, on-demand large
+- **Chose:** Orca's: the first six sections load at once, the rest as they scroll near, and sections over 10,000 changed lines (or of unknown size) show "Load diff"; unresolved conflicts are left out with Orca's notice and a Review conflicts button
+- **Why:** many CodeMirror merge views on one page cost memory, and the research found lazy mounting is the usual answer
+- **Evidence:** source-control.md "Combined diff", "Large and binary diffs"; Phase B research on @codemirror/merge
+- **Reversibility:** easy
+- **Confidence:** medium
+- **Revisit if:** a 200-file combined diff breaks the memory budget
+- **Source:** locked by research/orca-features/source-control.md
+
+## D27: The conflict review and conflict file views live in this plugin, without accept buttons
+- **Question:** conflict-resolution in the window
+- **Options:** wait for m2-editor's editor; build a conflict file editor here
+- **Chose:** build here: a conflict review view (files with Unresolved, Resolved and Gone badges, a snapshot time, Refresh and the all-resolved state) and a conflict file view (an editable CodeMirror with Orca's marker decorations and labels, the conflict banner, an N / M counter and previous and next buttons), saved through the same `quirky.git/save`. Like Orca there is no Accept Current, Incoming or Both.
+- **Why:** conflicts are this item's, and m2-editor doesn't depend on it; without an editor the person leaves Quirky to resolve
+- **Evidence:** source-control.md "Conflict review"
+- **Reversibility:** medium
+- **Confidence:** medium
+- **Revisit if:** m2-editor's editor should take over conflict files; it can override the view by ID
+- **Source:** assumed — autonomous
+
+## D28: Huge repositories cap the status at 1,000 entries, with Orca's banner and ignore offer
+- **Question:** performance-mode and error-state for huge repos
+- **Options:** no cap; Orca's cap
+- **Chose:** Orca's: stop reading past 1,000 entries, report `capped`, skip line counts and the upstream probe, show "Too many changes detected. Only the first 1000 are shown." with Stage All and Retry, stage by scope (`all` or `tracked`), and once per worktree offer to add `node_modules`, `.next`, `dist`, `build`, `target` or `vendor` to `.gitignore`
+- **Why:** a full status of a huge tree blocks the panel
+- **Evidence:** source-control.md "Huge repositories"
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** never
+- **Source:** locked by research/orca-features/source-control.md
+
+## D29: The panel keeps Orca's filter, tree view, selection, group order and row menu, without "Open in"
+- **Question:** interaction-style of rows
+- **Options:** all of Orca's row affordances; a subset
+- **Chose:** filter, list or tree, Orca's selection (with the defect fix of D33), the bulk bar, group order, hover actions, drag, and a row menu of View, Copy Path, Copy Relative Path and Reveal in Finder. "Open in" and its app list wait, as in m1-worktrees D3, for an item that adds open-in applications.
+- **Why:** Quirky has no open-in application list yet
+- **Evidence:** source-control.md "Sections and rows"; docs/loop/decisions/m1-worktrees.md D3
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** m7-parity-sweep adds open-in applications
+- **Source:** assumed — autonomous
+
+## D30: The panel polls status every 3 seconds while shown and branch compare every 30 seconds, and nothing fetches on a timer
+- **Question:** loading-pattern for refresh
+- **Options:** Orca's event-driven scheduler with a 60 s safety poll; v1's 3 s poll plus `quirky.git/changed`
+- **Chose:** v1's 3 s status poll while the panel is mounted, refresh on `quirky.git/changed` and after every action, Orca's 30 s compare poll (immediately on a HEAD or upstream change), and no automatic fetch
+- **Why:** Quirky has no file watcher yet (m2-editor adds one); the 3 s poll already meets the panel's needs at v1's cost
+- **Evidence:** plugins/quirky.git/src/SourceControl.tsx POLL_MS; source-control.md "Polling"
+- **Reversibility:** easy
+- **Confidence:** medium
+- **Revisit if:** the memory probe or CPU shows the poll matters, or m2-editor's watcher lands
+- **Source:** assumed — autonomous
+
+## D31: The panel toggle shows the uncommitted count as its badge
+- **Question:** how the window shows Orca's dirty dot and "N uncommitted changes" title
+- **Options:** nothing; the kernel's panel badge
+- **Chose:** `setPanelBadge` with the count (capped status shows the cap) and none when clean
+- **Why:** it is the slot the UI API gives for this; the worktree row's dirty marker belongs to m2-sidebar-extras
+- **Evidence:** packages/protocol/src/ui.ts setPanelBadge; docs/loop/queue.json m2-sidebar-extras
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** never
+- **Source:** assumed — autonomous
+
+## D32: Commands, keybindings and settings follow Orca's, as `quirky.git` contributions
+- **Question:** flag-design and output-format for the window's commands and the settings
+- **Options:** Orca's set; a smaller set
+- **Chose:** a "Show Source Control" command on Mod+Shift+G, "Go to Next Change" on F7 and "Go to Previous Change" on Shift+F7, Mod+Enter commits in the panel, Mod+S saves in a diff or conflict view, plus commands to open each diff kind and the conflict review. Settings: Source Control Group Order, Default Compare Base, view mode, Default Diff View, Diff Word Wrap, Diff Show Whitespace, Collapse Unchanged Regions and Default Diff File Tree, with Orca's defaults.
+- **Why:** parity; every window action is also an API command (docs/roadmap.md)
+- **Evidence:** source-control.md "Where to find it", "Settings", "Diff display options"
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** a chord clashes with a later plugin
+- **Source:** locked by research/orca-features/source-control.md
+
+## D33: The Orca defects tested are the unreachable selection, the dead-end merge and the swallowed diff errors
+- **Question:** which Orca defects the logic spec tests (LOOP.md step 4)
+- **Options:** each behaviour the doc records as broken or contradictory in this slice
+- **Chose:** (1) Shift-click and Cmd-click open a split instead of selecting, so range and toggle selection are unreachable; Quirky selects. (2) After a pull stops on conflicts, Orca says to commit the merge but hides the commit box and offers no Continue; Quirky continues (D17). (3) Branch and commit diffs swallow read errors into an empty diff; Quirky shows the error. The notes defects (`sentAt` never set, line-0 notes, no re-anchoring) belong to the sibling item.
+- **Why:** each is recorded in the doc and touches this slice
+- **Evidence:** source-control.md "Sections and rows" (click behaviour), "Verified in the app" (Shift-click), "Committing", "Conflicts", "Diff content" (`branchDiff`/`commitDiff` swallow errors)
+- **Reversibility:** easy
+- **Confidence:** medium
+- **Revisit if:** a reviewer finds another recorded defect in this slice
+- **Source:** assumed — autonomous
+
+## D34: Platform-specific parts are logged and built for macOS only
+- **Question:** what will need Linux or Windows work (LOOP.md platforms rule)
+- **Options:** build portable now; macOS only and log
+- **Chose:** macOS only for Reveal in Finder (`open -R`), the `Mod` = Cmd mapping, `GIT_SSH_COMMAND='ssh -o BatchMode=yes'`, and Orca's Windows command-line and WSL paths (none built)
+- **Why:** LOOP.md
+- **Evidence:** docs/loop/LOOP.md "Platforms"
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** Linux or Windows support starts
+- **Source:** deferred: platform
+
+## D35: Changes mode, Markdown diff preview, preview tabs, split groups and "Open in" are out
+- **Question:** which flows of the doc this item leaves to others (scope)
+- **Options:** build them here; leave them to the items that own their surfaces
+- **Chose:** Changes mode on edit tabs and the Markdown diff preview go to m2-editor (edit tabs and rich Markdown), preview versus permanent tabs and split-group opening wait for editor tabs (D23), "Open in" waits for open-in applications (D29), WSL, SSH and runtime hosts don't exist in Quirky
+- **Why:** each needs a surface this item doesn't own
+- **Evidence:** docs/roadmap.md M2 (editor slices); source-control.md "Opening a diff"
+- **Reversibility:** easy
+- **Confidence:** medium
+- **Revisit if:** m2-editor's brainstorm doesn't pick them up; it is bound by this decision
+- **Source:** assumed — autonomous
+
+## D36: Fast-track the remaining defaults
+- **Question:** brainstorming's remaining clarifying questions once the essential six were covered
+- **Options:** ask each; take the stated defaults
+- **Chose:** take Orca's behaviour from source-control.md for every question it answers, and the recommended option elsewhere; each one that changes an observable result is listed above
+- **Why:** LOOP.md treats the user as having elected the fast-track; purpose, consumers, success criteria, constraints, scope and primary behaviour are all set by the roadmap and the feature doc
+- **Evidence:** docs/loop/LOOP.md "Answering a skill's questions"
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** never
+- **Source:** locked by docs/loop/LOOP.md
+
+## Progress
+Brainstorming done (D1–D36). Next: write docs/quirk/specs/2026-10-27-m2-source-control-core/logic.md and tech.md, run one Codex adversarial review over both, commit, then build.
