@@ -206,6 +206,20 @@
         "@types/react-dom": "^19.3.0",
       },
     },
+    "plugins/quirky.session-info": {
+      "name": "@quirky/plugin-session-info",
+      "version": "0.1.0",
+      "dependencies": {
+        "@quirky/protocol": "workspace:*",
+        "react": "19.2.0",
+        "react-dom": "19.2.0",
+      },
+      "devDependencies": {
+        "@happy-dom/global-registrator": "20.14.6",
+        "@types/react": "^19.3.0",
+        "@types/react-dom": "^19.3.0",
+      },
+    },
     "plugins/quirky.structured": {
       "name": "@quirky/plugin-structured",
       "version": "0.1.0",
@@ -368,6 +382,8 @@
     "@quirky/plugin-repo": ["@quirky/plugin-repo@workspace:plugins/quirky.repo"],
 
     "@quirky/plugin-session": ["@quirky/plugin-session@workspace:plugins/quirky.session"],
+
+    "@quirky/plugin-session-info": ["@quirky/plugin-session-info@workspace:plugins/quirky.session-info"],
 
     "@quirky/plugin-structured": ["@quirky/plugin-structured@workspace:plugins/quirky.structured"],
 

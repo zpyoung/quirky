@@ -1257,6 +1257,66 @@
         }
       },
       {
+        "id": "focusContext",
+        "description": "Reads or updates the daemon's last focused terminal workspace. Omit workspace to read; use null to clear.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "workspace": {
+              "description": "A focused worktree ID or floating; null clears the focus context."
+            }
+          }
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "workspace": {
+              "description": "The last focused terminal workspace, or null."
+            }
+          },
+          "required": [
+            "workspace"
+          ]
+        }
+      },
+      {
+        "id": "openSession",
+        "description": "Opens an existing local terminal session in its worktree, or activates its existing pane, without creating or restoring a process.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "session": {
+              "type": "string",
+              "description": "The ID of an existing running local terminal session."
+            },
+            "workspace": {
+              "type": "string",
+              "description": "The worktree ID or floating; defaults to the session's worktree."
+            }
+          },
+          "required": [
+            "session"
+          ]
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "workspace": {
+              "type": "object",
+              "description": "The workspace with the session's pane active."
+            },
+            "pane": {
+              "type": "string",
+              "description": "The pane for the opened session."
+            }
+          },
+          "required": [
+            "workspace",
+            "pane"
+          ]
+        }
+      },
+      {
         "id": "setPaneTitle",
         "description": "Sets a pane's title; the empty string clears it.",
         "params": {
@@ -2188,6 +2248,21 @@
           },
           "required": [
             "state"
+          ]
+        }
+      },
+      {
+        "id": "focusContextChanged",
+        "description": "The last focused terminal workspace changed.",
+        "data": {
+          "type": "object",
+          "properties": {
+            "workspace": {
+              "description": "The last focused terminal workspace, or null when no workspace is focused."
+            }
+          },
+          "required": [
+            "workspace"
           ]
         }
       }
@@ -3553,6 +3628,46 @@
       {
         "id": "focus-previous-pane",
         "title": "Focus Previous Pane"
+      },
+      {
+        "id": "focus-pane",
+        "title": "Focus Terminal Pane",
+        "args": {
+          "type": "object",
+          "properties": {
+            "pane": {
+              "type": "string",
+              "description": "The pane ID to activate, focus and scroll to bottom."
+            },
+            "workspace": {
+              "type": "string",
+              "description": "The worktree ID or floating; inferred from the pane when omitted."
+            }
+          },
+          "required": [
+            "pane"
+          ]
+        }
+      },
+      {
+        "id": "open-session",
+        "title": "Open Existing Session",
+        "args": {
+          "type": "object",
+          "properties": {
+            "session": {
+              "type": "string",
+              "description": "The ID of an existing terminal session."
+            },
+            "workspace": {
+              "type": "string",
+              "description": "The worktree ID or floating; defaults to the session's worktree."
+            }
+          },
+          "required": [
+            "session"
+          ]
+        }
       },
       {
         "id": "toggle-expand-pane",

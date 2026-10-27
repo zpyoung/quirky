@@ -1,5 +1,6 @@
 import type { ExitCause, PtyFact, PtyHistoryPage, PtySessionInfo, PtySnapshot, PtySubscription } from './pty'
 import type { ClientRole, QuirkyEvent } from './rpc'
+import type { SessionLaunch } from './model'
 
 /** Where a plugin was found: shipped with Quirky, or installed by the user. */
 export type PluginSource = 'builtin' | 'installed'
@@ -177,6 +178,11 @@ export type PluginLaunch = {
     cwd: string
     agent: string
     prompt?: string
+    /** Replay launch context; absent on create. */
+    record?: SessionLaunch
+    model?: string
+    options?: Record<string, string | boolean>
+    extraArgs?: string
   }): Promise<{ env: Record<string, string | null>; args: string[] }>
 }
 
@@ -250,16 +256,27 @@ export type LaunchHookInput = {
   cwd: string
   agent: string
   prompt?: string
+  /** Replay launch context; absent on create. */
+  record?: SessionLaunch
+  model?: string
+  options?: Record<string, string | boolean>
+  extraArgs?: string
   /** Additions from earlier hooks only. */
   env: Readonly<Record<string, string>>
   /** Extra args from earlier hooks. */
   args: readonly string[]
+  /** Deeply frozen JSON-valued arguments accumulated from earlier hooks. */
+  jsonArgs: Readonly<Record<string, Readonly<Record<string, unknown>>>>
 }
 
-/** What a launch hook changes: env additions (null removes a name) and extra agent args. */
-export type LaunchPatch = { env?: Record<string, string | null>; args?: string[] }
+/** What a launch hook changes: env additions, extra agent args and JSON-valued long options. */
+export type LaunchPatch = {
+  env?: Record<string, string | null>
+  args?: string[]
+  jsonArgs?: Record<string, Record<string, unknown>>
+}
 
-/** Adjusts a session's launch environment and args before the agent starts. */
+/** Adjusts a session's launch environment, args and JSON args before the agent starts. */
 export type LaunchHook = (launch: LaunchHookInput) => LaunchPatch | void | Promise<LaunchPatch | void>
 
 export type JobRunStatus = 'running' | 'ok' | 'failed' | 'timed-out'

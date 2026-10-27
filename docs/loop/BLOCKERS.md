@@ -136,6 +136,19 @@ Source anchors for the completion findings above: SC-02 `75445e6:plugins/quirky.
 
 - **LOW — X2 / SC-07, related consent tip-seen bookkeeping** (`plugins/quirky.vault/src/service.ts:92`, logic criterion `docs/quirk/specs/2026-10-27-m3-vault/logic.md:80-83`). The security gate suppressed this claim as an invented requirement because no tip implementation exists. The criterion explicitly requires marking the related tip seen, and case-insensitive source search found no such bookkeeping. Core consent/search works, but that ancillary flow remains unfinished; it gets a separate dependent completion item because the first parity item was already queued.
 - **Review assurance limitation:** the final security promote/refute round suppressed2/2 claims. X1's missing-caller authorization claim is contradicted by the locked shared authenticated API model; X2's requirement interpretation is not accepted as closure above. This round is not a clean security bill of health. The evidence-gated output and raw traces remain in the recorded X review directory. The unsandboxed reviewer created and removed traced repository probes; it also ran `mkdir -p /tmp/-foo`, whose prior ownership is unknown, so that path was not deleted.
+## m3-session-info: open review findings
+
+Operator-authorized nonblocking follow-up; the core Session Info flows are implemented and exercised.
+
+- **LOW — native clipboard and real denial feedback:** `docs/loop/native/m3-session-info.json:6`. Browser copy/paste and immediate Copied/reset screenshots pass, and deterministic UI tests cover a denied clipboard. Real Electrobun/macOS clipboard delivery and a real denied-permission UI case were not exercised because this lane used unattended headless web verification; its settled sampler also misses the 1.5-second label.
+- **LOW — native window activation/focus:** `docs/loop/native/m3-session-info.json:14`. Exact web-pane focus, scrolling, floating Cmd+T input and main-pane restoration pass. OS-window activation and native flash/focus still need the real-window run.
+- **LOW — Finder reveal:** `docs/loop/native/m3-session-info.json:22`. The captured-path reveal API is covered; actual Finder selection was not exercised because this lane forbids foreground/native automation.
+- **LOW — narrow-width control discoverability:** `.quirk/using-apps-like-a-user/runs/20261027T160654-487b/report.md` F1/F2/F3/F5. Visibility guards found occluded tab/Terminal Sessions controls and opacity-hidden xterm refs. Core flows passed through visible overflow/collapse/prompt routes; a dedicated narrow-width accessibility/discoverability audit remains.
+- **MEDIUM — local one-shot timeout verification:** `plugins/quirky.agents/test/generate.test.ts:305`. In the catch-up check, NA-29 returned the requested timeout at 311 ms but the test expected at least 2,000 ms for a SIGTERM-resistant group. The test stopped before its descendant-gone assertion. Startup/grace/platform behavior remains unconfirmed; this is not a Session Info core-flow failure, and no production timeout or cleanup assertion was weakened. Evidence: `/tmp/quirky-session-info.TBh9Q4/land-catchup-targeted/1-plugins_quirky.agents_test_generate.test.ts.txt`.
+
+Required follow-up: `followup-m3-session-info-parity-20261027`, depending on `m3-session-info`; register it through queue.ts before landing.
+
+Registration update: `bun scripts/build-loop/queue.ts add /tmp/quirky-session-info.TBh9Q4/operator-followup.json` returned 0 before landing. `followup-m3-session-info-parity-20261027` is registered with dependency `m3-session-info` and names the unfinished flows and their verification limits above.
 ## Deferred past the 4am target
 
 - **Decided by:** the user, 2026-10-27, to land everything else by 4am on 2026-10-28.
