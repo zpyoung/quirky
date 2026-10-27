@@ -393,8 +393,7 @@
       "deps": [
         "m1-agent-status"
       ],
-      "status": "in-progress",
-      "lane": 6
+      "status": "done"
     },
     {
       "id": "m3-terminal-dock",
