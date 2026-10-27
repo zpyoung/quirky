@@ -499,6 +499,16 @@
       "status": "todo"
     },
     {
+      "id": "fix-sc31-first-shell-race",
+      "milestone": "M1",
+      "title": "Fix the SC-31 race in plugins/quirky.worktree/test/window-create.test.ts: after a create that skips setup, the window sometimes opens a first shell for the new worktree before the test checks it has no sessions (6 of 10 runs on the Linux test host). Decide whether the window or the test is wrong, fix it, and remove its line from scripts/test-on-macos.txt",
+      "docs": [
+        "worktrees.md"
+      ],
+      "deps": [],
+      "status": "todo"
+    },
+    {
       "id": "m7-parity-sweep",
       "milestone": "M7",
       "title": "Parity sweep: every remaining flow in the 28 feature docs",
