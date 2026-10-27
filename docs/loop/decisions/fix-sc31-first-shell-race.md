@@ -68,7 +68,51 @@
 
 The PTY failure diagnosis is [INFERENCE]: the collector sees live DATA only, while the test discards subscribe's replay. Output printed between create and subscribe can be in replay but absent from the collector. The timeout occurs before the test issues kill; it does not demonstrate a process-group termination failure. `/bin/sh` is explicit, so no evidence supports a login-shell environment workaround.
 
-## Verification
+## D7: Resume the preserved correction after integration repairs
+- **Question:** Does the current integration change SC-31's contract or require a new implementation?
+- **Options:** repeat the repair; retain it and rerun the required gate after catch-up.
+- **Chose:** retain the test-only correction and merge `build/roadmap`.
+- **Why:** the catch-up includes the PTY replay fix and process-scope ownership repair. Read both incoming logs: fix-test-process-leaks preserves normal terminal lifetimes and SC-31's first-shell contract; m2-sidebar-extras is blocked with its implementation unlanded. Neither changes the setup choice. The scout independently traced the ensured-shell path and found no new repair needed.
+- **Evidence:** integration merge output (44 files); docs/loop/decisions/fix-test-process-leaks.md D8, D10-D12; docs/loop/decisions/m2-sidebar-extras.md D22-D24; Sc31Contract investigation.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** the caught-up regression or required suite fails.
+- **Source:** locked by docs/loop/decisions/fix-test-process-leaks.md
+
+## D8: Use Gemini for the resumed final review
+- **Question:** Which independent reviewer is reachable, and which findings need a fix batch?
+- **Options:** Opus; the next reachable cross-family reviewer.
+- **Chose:** Gemini through pi-watch; no fix batch because the narrow test review returned no actionable findings.
+- **Why:** Opus preflight returned exit 5; Gemini resolved google/gemini-3.1-pro-preview:high and returned STATUS: PASS. Its statement that catch-up changed only queue/README repeats the old log and is stale; D7 records the actual incoming files and decisions. The inspected SC-31 code and fake-PTY boundary were current.
+- **Evidence:** actual pi-watch preflights and read-only final review, exit 0; plugins/quirky.worktree/test/window-create.test.ts:310-352.
+- **Reversibility:** easy
+- **Confidence:** medium (review is not runtime proof)
+- **Revisit if:** verification exposes a missed integration issue.
+- **Source:** assumed — autonomous
+
+## D9: Prove the skip/ordinary-shell contract with real CLI and PTY processes
+- **Question:** What runtime smoke covers the repaired assertion without another permanent test?
+- **Options:** rely only on the headless regression; exercise the public CLI with real quirkyd and an owned temporary home.
+- **Chose:** create a Git project, set setup policy to ask with a sentinel script, create through `quirky wt create --setup skip`, ensure the terminal workspace through the public API, and inspect sessions.
+- **Why:** the smoke observed an ordinary shell in the created worktree, no Setup session, and no sentinel. ProcessScope cleanup removed the private home and owned processes. No product UI changes were made; D5's guarded web report remains tool-blocked rather than being relabeled as passing.
+- **Evidence:** isolated smoke exit 0: worktree wt_ad89b5a84901, shell s_4ce87cdafecc, setupSession:false, setupSentinel:false, cleaned:true; resumed SC-31 test 1 pass/0 fail/11 assertions. The throwaway script was removed.
+- **Reversibility:** easy
+- **Confidence:** high for the exercised CLI/API path; the guarded visual limitation remains D5.
+- **Revisit if:** setup choice or first-shell behavior changes.
+- **Source:** assumed — autonomous
+
+## D10: Retain the suite's existing isolated-rerun policy
+- **Question:** Can the repaired item land when an unrelated file passes only its built-in isolated rerun?
+- **Options:** change unrelated PTY behavior; retain the runner's existing policy and report the load-sensitive failure.
+- **Chose:** retain the policy; proceed to the landing gate without exclusions or timeout changes.
+- **Why:** `bun run test` exited 0. Of 408 remote files, 407 passed initially; PTY manager's raw-attach test timed out under load, then the whole file passed all 50 tests alone. Both macOS-only files passed. The SC-31 file now runs remotely, not in the macOS exception list.
+- **Evidence:** resumed required suite, 442.85 seconds; suite-result {"ok":true,"flaky":["packages/pty-host/test/manager.test.ts"]}; artifact://17.
+- **Reversibility:** easy
+- **Confidence:** high for the observed result; no claim that the independent load sensitivity is fixed.
+- **Revisit if:** the file fails the runner's isolated rerun.
+- **Source:** locked by scripts/suite.ts
+
+## Verification before the initial block
 - `bun test plugins/quirky.worktree/test/window-create.test.ts --test-name-pattern 'SC-31'`: 1 pass, 0 fail, 15 filtered, 11 assertions. Exercises the real daemon API and rendered headless window, automatic first-shell creation, run-script sentinel and skip behavior. React emitted synchronous-unmount warnings during harness teardown.
 - `bun run build`: exit 0; packaged app built. Electrobun reported the missing optional icon source and unset release base URL.
 - Integration catch-up: `git merge build/roadmap` fast-forwarded to `9af0ad4`; only docs/loop/README.md and queue.json changed, no new decision logs.
@@ -77,5 +121,13 @@ The PTY failure diagnosis is [INFERENCE]: the collector sees live DATA only, whi
 - Read-only final review (`ReviewSkipRepair`): no actionable findings; approved the fake-PTY runner pattern, explicit activation/ordinary-shell barrier and removal of the macOS exception. No fix batch needed.
 - `bun scripts/suite.ts plugins/quirky.worktree/test/window-create.test.ts`: 1 file passed on the Linux host, 0 failed, 0 macOS-only files, no flaky rerun (`suite-result {"ok":true,"flaky":[]}`).
 
+## Verification after resuming
+- `bun test plugins/quirky.worktree/test/window-create.test.ts --test-name-pattern SC-31`: 1 pass, 0 fail, 11 assertions; real daemon and mounted headless window. React teardown synchronous-unmount warnings remain.
+- `bun run test`: exit 0; 408 remote files and 2 macOS-only files. PTY manager passed its isolated rerun (D10). SC-31's file passed remotely.
+- `bun test scripts && bun run typecheck`: exit 0; scripts 48 pass, 0 fail, 217 assertions; TypeScript no diagnostics. Inner script-runner fixtures intentionally printed failed-test examples.
+- `bun run build`: exit 0; packaged macOS app. Optional missing icon source and unset release base URL warnings remain.
+- Real public CLI/PTY smoke: normal first shell exists after explicit setup skip; no Setup session or sentinel; fresh home removed after owned cleanup (D9).
+- Final Round 1: Gemini read-only review returned STATUS: PASS and no actionable findings (D8). No fix batch or unresolved review findings.
+
 ## Progress
-Blocked at step 6 by required full-suite failure; SC-31 correction is implemented and verified locally and remotely. Preserve commits on `blocked/fix-sc31-first-shell-race`, detach, and register the blocker with queue.ts. To resume after gate remediation, restore the preserved branch to `build/fix-sc31-first-shell-race`, merge current integration decisions, rerun required checks and land. No production API/callsite changes and no open review findings.
+Step 6 passed after integration catch-up; ready for step 7. Commit this log, detach, then run `queue.ts land fix-sc31-first-shell-race`; its integration gate must pass before the item is marked done. All agents and verification jobs have returned, smoke processes were stopped and temporary files/home removed. No production API/callsite changes or open review findings. The inherited `.serena/` directory remains uncommitted and untouched.

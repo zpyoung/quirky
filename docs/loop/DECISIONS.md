@@ -267,6 +267,7 @@ files, not this one.
 | easy | medium | [m1-notifications D45](decisions/m1-notifications.md) | Opening a worktree from its card counts as Mark Read | locked by research/orca-features/notifications.md |
 | easy | medium | [m1-notifications D50](decisions/m1-notifications.md) | The W1 gate's 65 `EBADF` failures are the suite's descriptor exhaustion, not a regression | assumed — autonomous |
 | easy | medium | [m1-notifications D55](decisions/m1-notifications.md) | The suite is over the descriptor limit after the catch-up; this item moves the remaining harnesses to shared plugin directories | supersedes m1-term-ui D51 |
+| easy | medium (review is not runtime proof) | [fix-sc31-first-shell-race D8](decisions/fix-sc31-first-shell-race.md) | Use Gemini for the resumed final review | assumed — autonomous |
 | easy | medium | [m0-daemon-api D22](decisions/m0-daemon-api.md) | A launch hook that fails or times out is skipped | assumed — autonomous |
 | easy | medium | [m0-daemon-api D23](decisions/m0-daemon-api.md) | Launch hooks apply to terminal sessions only | assumed — autonomous |
 | easy | medium | [m0-daemon-api D25](decisions/m0-daemon-api.md) | No rate limits on plugin events or method calls, and no event filters yet | assumed — autonomous |
@@ -555,6 +556,9 @@ files, not this one.
 | easy | high | [fix-sc31-first-shell-race D4](decisions/fix-sc31-first-shell-race.md) | Keep the fake PTY boundary explicit in the script side-effect assertion | assumed — autonomous |
 | easy | high | [fix-sc31-first-shell-race D5](decisions/fix-sc31-first-shell-race.md) | Record the guarded browser smoke as tool-blocked, not passed | assumed — autonomous |
 | easy (restore the preserved branch once the gate is repaired) | high for the gate failure; medium for its cause | [fix-sc31-first-shell-race D6](decisions/fix-sc31-first-shell-race.md) | Preserve the repaired item and block on the failing required full-suite gate | locked by docs/loop/LOOP.md |
+| easy | high | [fix-sc31-first-shell-race D7](decisions/fix-sc31-first-shell-race.md) | Resume the preserved correction after integration repairs | locked by docs/loop/decisions/fix-test-process-leaks.md |
+| easy | high for the exercised cli/api path; the guarded visual limitation remains d5. | [fix-sc31-first-shell-race D9](decisions/fix-sc31-first-shell-race.md) | Prove the skip/ordinary-shell contract with real CLI and PTY processes | assumed — autonomous |
+| easy | high for the observed result; no claim that the independent load sensitivity is fixed. | [fix-sc31-first-shell-race D10](decisions/fix-sc31-first-shell-race.md) | Retain the suite's existing isolated-rerun policy | locked by scripts/suite.ts |
 | easy | high | [m0-daemon-api D1](decisions/m0-daemon-api.md) | Classify the item as an API design, and run both research phases | assumed — autonomous |
 | easy | high | [m0-daemon-api D2](decisions/m0-daemon-api.md) | Skip the visual companion and the adhd offer, use the standard gray-area set | locked by docs/loop/LOOP.md |
 | easy | high | [m0-daemon-api D3](decisions/m0-daemon-api.md) | Select every gray area that matters for the daemon plugin API | assumed — autonomous |
