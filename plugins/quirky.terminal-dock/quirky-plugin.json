@@ -46,7 +46,7 @@
         },
         "result": {
           "type": "object",
-          "description": "DockState including request/mount state, revision, draft, attachments, queued sends, question, options and disabled reason.",
+          "description": "The complete canonical DockState, including mounted/passthrough status and the nested attachment, send, question and option records.",
           "properties": {
             "pane": { "type": "string" },
             "session": { "type": "string" },
@@ -54,22 +54,124 @@
             "revision": { "type": "integer" },
             "enabled": { "type": "boolean" },
             "supported": { "type": "boolean" },
-            "agent": {},
+            "agent": { "description": "The active agent ID, or null when no agent is available." },
             "docked": { "type": "boolean" },
             "userUndocked": { "type": "boolean" },
             "gutterRows": { "type": "integer" },
             "mounted": { "type": "boolean" },
             "passthrough": { "type": "boolean" },
             "draft": { "type": "string" },
-            "attachments": { "type": "array", "items": { "type": "object" } },
-            "disabledReason": {},
-            "activeSend": {},
-            "queuedSends": { "type": "array", "items": { "type": "object" } },
-            "question": {},
-            "options": { "type": "object" },
-            "notice": {}
+            "attachments": {
+              "type": "array",
+              "description": "Attachment chips selected for the current draft.",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": { "type": "string" },
+                  "name": { "type": "string" },
+                  "path": { "type": "string" },
+                  "mime": { "type": "string" },
+                  "image": { "type": "boolean" }
+                },
+                "required": ["id", "name", "path", "mime", "image"],
+                "additionalProperties": false
+              }
+            },
+            "disabledReason": { "description": "Why dock actions are unavailable, or null when no reason is active." },
+            "activeSend": {
+              "description": "The active send, or null when the pane has no running send.",
+              "properties": {
+                "id": { "type": "string" },
+                "phase": { "type": "string" }
+              },
+              "required": ["id", "phase"],
+              "additionalProperties": false
+            },
+            "queuedSends": {
+              "type": "array",
+              "description": "Pending sends for this pane, in queue order.",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": { "type": "string" },
+                  "phase": { "type": "string" }
+                },
+                "required": ["id", "phase"],
+                "additionalProperties": false
+              }
+            },
+            "question": {
+              "description": "The pending agent question or permission request, or null.",
+              "properties": {
+                "id": { "type": "string" },
+                "kind": { "type": "string", "enum": ["question", "permission"] },
+                "title": { "type": "string" },
+                "questions": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "prompt": { "type": "string" },
+                      "choices": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "label": { "type": "string" },
+                            "value": { "type": "string" }
+                          },
+                          "required": ["label", "value"],
+                          "additionalProperties": false
+                        }
+                      },
+                      "multiple": { "type": "boolean" }
+                    },
+                    "required": ["prompt", "choices", "multiple"],
+                    "additionalProperties": false
+                  }
+                },
+                "collapsed": { "type": "boolean" },
+                "dismissed": { "type": "boolean" }
+              },
+              "required": ["id", "kind", "title", "questions", "collapsed", "dismissed"],
+              "additionalProperties": false
+            },
+            "options": {
+              "type": "object",
+              "description": "Session-reported model, effort, permission, choices, context and notice.",
+              "properties": {
+                "model": { "description": "The reported model, or null when unavailable." },
+                "effort": { "description": "The reported effort, or null when unavailable." },
+                "permission": { "description": "The reported permission mode, or null when unavailable." },
+                "choices": {
+                  "type": "object",
+                  "properties": {
+                    "model": { "type": "array", "items": { "type": "string" } },
+                    "effort": { "type": "array", "items": { "type": "string" } },
+                    "permission": { "type": "array", "items": { "type": "string" } }
+                  },
+                  "required": ["model", "effort", "permission"],
+                  "additionalProperties": false
+                },
+                "context": {
+                  "description": "Reported context usage and limit, or null when unavailable.",
+                  "properties": {
+                    "used": { "type": "number" },
+                    "limit": { "type": "number" }
+                  },
+                  "required": ["used", "limit"],
+                  "additionalProperties": false
+                },
+                "notice": { "description": "An option-change notice, or null when absent." }
+              },
+              "required": ["model", "effort", "permission", "choices", "context", "notice"],
+              "additionalProperties": false
+            },
+            "notice": { "description": "A dock notice, or null when absent." },
+            "driverOwner": { "description": "The active foreign input-driver owner, or null when no owner is reported; omitted when no lease exists." }
           },
-          "required": ["pane", "session", "tab", "revision", "enabled", "supported", "agent", "docked", "userUndocked", "gutterRows", "mounted", "passthrough", "draft", "attachments", "disabledReason", "activeSend", "queuedSends", "question", "options", "notice"]
+          "required": ["pane", "session", "tab", "revision", "enabled", "supported", "agent", "docked", "userUndocked", "gutterRows", "mounted", "passthrough", "draft", "attachments", "disabledReason", "activeSend", "queuedSends", "question", "options", "notice"],
+          "additionalProperties": false
         }
       },
       {
@@ -79,8 +181,143 @@
         "params": { "type": "object", "properties": {}, "additionalProperties": false },
         "result": {
           "type": "object",
-          "properties": { "panes": { "type": "array", "items": { "type": "object" } } },
-          "required": ["panes"]
+          "description": "Live pane states using the full canonical DockState shape.",
+          "properties": {
+            "panes": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "description": "The complete canonical DockState.",
+                "properties": {
+                  "pane": { "type": "string" },
+                  "session": { "type": "string" },
+                  "tab": { "type": "string" },
+                  "revision": { "type": "integer" },
+                  "enabled": { "type": "boolean" },
+                  "supported": { "type": "boolean" },
+                  "agent": { "description": "The active agent ID, or null when no agent is available." },
+                  "docked": { "type": "boolean" },
+                  "userUndocked": { "type": "boolean" },
+                  "gutterRows": { "type": "integer" },
+                  "mounted": { "type": "boolean" },
+                  "passthrough": { "type": "boolean" },
+                  "draft": { "type": "string" },
+                  "attachments": {
+                    "type": "array",
+                    "description": "Attachment chips selected for the current draft.",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "id": { "type": "string" },
+                        "name": { "type": "string" },
+                        "path": { "type": "string" },
+                        "mime": { "type": "string" },
+                        "image": { "type": "boolean" }
+                      },
+                      "required": ["id", "name", "path", "mime", "image"],
+                      "additionalProperties": false
+                    }
+                  },
+                  "disabledReason": { "description": "Why dock actions are unavailable, or null when no reason is active." },
+                  "activeSend": {
+                    "description": "The active send, or null when the pane has no running send.",
+                    "properties": {
+                      "id": { "type": "string" },
+                      "phase": { "type": "string" }
+                    },
+                    "required": ["id", "phase"],
+                    "additionalProperties": false
+                  },
+                  "queuedSends": {
+                    "type": "array",
+                    "description": "Pending sends for this pane, in queue order.",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "id": { "type": "string" },
+                        "phase": { "type": "string" }
+                      },
+                      "required": ["id", "phase"],
+                      "additionalProperties": false
+                    }
+                  },
+                  "question": {
+                    "description": "The pending agent question or permission request, or null.",
+                    "properties": {
+                      "id": { "type": "string" },
+                      "kind": { "type": "string", "enum": ["question", "permission"] },
+                      "title": { "type": "string" },
+                      "questions": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "prompt": { "type": "string" },
+                            "choices": {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "label": { "type": "string" },
+                                  "value": { "type": "string" }
+                                },
+                                "required": ["label", "value"],
+                                "additionalProperties": false
+                              }
+                            },
+                            "multiple": { "type": "boolean" }
+                          },
+                          "required": ["prompt", "choices", "multiple"],
+                          "additionalProperties": false
+                        }
+                      },
+                      "collapsed": { "type": "boolean" },
+                      "dismissed": { "type": "boolean" }
+                    },
+                    "required": ["id", "kind", "title", "questions", "collapsed", "dismissed"],
+                    "additionalProperties": false
+                  },
+                  "options": {
+                    "type": "object",
+                    "description": "Session-reported model, effort, permission, choices, context and notice.",
+                    "properties": {
+                      "model": { "description": "The reported model, or null when unavailable." },
+                      "effort": { "description": "The reported effort, or null when unavailable." },
+                      "permission": { "description": "The reported permission mode, or null when unavailable." },
+                      "choices": {
+                        "type": "object",
+                        "properties": {
+                          "model": { "type": "array", "items": { "type": "string" } },
+                          "effort": { "type": "array", "items": { "type": "string" } },
+                          "permission": { "type": "array", "items": { "type": "string" } }
+                        },
+                        "required": ["model", "effort", "permission"],
+                        "additionalProperties": false
+                      },
+                      "context": {
+                        "description": "Reported context usage and limit, or null when unavailable.",
+                        "properties": {
+                          "used": { "type": "number" },
+                          "limit": { "type": "number" }
+                        },
+                        "required": ["used", "limit"],
+                        "additionalProperties": false
+                      },
+                      "notice": { "description": "An option-change notice, or null when absent." }
+                    },
+                    "required": ["model", "effort", "permission", "choices", "context", "notice"],
+                    "additionalProperties": false
+                  },
+                  "notice": { "description": "A dock notice, or null when absent." },
+                  "driverOwner": { "description": "The active foreign input-driver owner, or null when no owner is reported; omitted when no lease exists." }
+                },
+                "required": ["pane", "session", "tab", "revision", "enabled", "supported", "agent", "docked", "userUndocked", "gutterRows", "mounted", "passthrough", "draft", "attachments", "disabledReason", "activeSend", "queuedSends", "question", "options", "notice"],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": ["panes"],
+          "additionalProperties": false
         }
       },
       {
@@ -101,7 +338,135 @@
           "required": ["pane"],
           "additionalProperties": false
         },
-        "result": { "type": "object", "description": "DockState" }
+        "result": {
+          "type": "object",
+          "description": "The complete canonical DockState, including mounted/passthrough status and the nested attachment, send, question and option records.",
+          "properties": {
+            "pane": { "type": "string" },
+            "session": { "type": "string" },
+            "tab": { "type": "string" },
+            "revision": { "type": "integer" },
+            "enabled": { "type": "boolean" },
+            "supported": { "type": "boolean" },
+            "agent": { "description": "The active agent ID, or null when no agent is available." },
+            "docked": { "type": "boolean" },
+            "userUndocked": { "type": "boolean" },
+            "gutterRows": { "type": "integer" },
+            "mounted": { "type": "boolean" },
+            "passthrough": { "type": "boolean" },
+            "draft": { "type": "string" },
+            "attachments": {
+              "type": "array",
+              "description": "Attachment chips selected for the current draft.",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": { "type": "string" },
+                  "name": { "type": "string" },
+                  "path": { "type": "string" },
+                  "mime": { "type": "string" },
+                  "image": { "type": "boolean" }
+                },
+                "required": ["id", "name", "path", "mime", "image"],
+                "additionalProperties": false
+              }
+            },
+            "disabledReason": { "description": "Why dock actions are unavailable, or null when no reason is active." },
+            "activeSend": {
+              "description": "The active send, or null when the pane has no running send.",
+              "properties": {
+                "id": { "type": "string" },
+                "phase": { "type": "string" }
+              },
+              "required": ["id", "phase"],
+              "additionalProperties": false
+            },
+            "queuedSends": {
+              "type": "array",
+              "description": "Pending sends for this pane, in queue order.",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": { "type": "string" },
+                  "phase": { "type": "string" }
+                },
+                "required": ["id", "phase"],
+                "additionalProperties": false
+              }
+            },
+            "question": {
+              "description": "The pending agent question or permission request, or null.",
+              "properties": {
+                "id": { "type": "string" },
+                "kind": { "type": "string", "enum": ["question", "permission"] },
+                "title": { "type": "string" },
+                "questions": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "prompt": { "type": "string" },
+                      "choices": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "label": { "type": "string" },
+                            "value": { "type": "string" }
+                          },
+                          "required": ["label", "value"],
+                          "additionalProperties": false
+                        }
+                      },
+                      "multiple": { "type": "boolean" }
+                    },
+                    "required": ["prompt", "choices", "multiple"],
+                    "additionalProperties": false
+                  }
+                },
+                "collapsed": { "type": "boolean" },
+                "dismissed": { "type": "boolean" }
+              },
+              "required": ["id", "kind", "title", "questions", "collapsed", "dismissed"],
+              "additionalProperties": false
+            },
+            "options": {
+              "type": "object",
+              "description": "Session-reported model, effort, permission, choices, context and notice.",
+              "properties": {
+                "model": { "description": "The reported model, or null when unavailable." },
+                "effort": { "description": "The reported effort, or null when unavailable." },
+                "permission": { "description": "The reported permission mode, or null when unavailable." },
+                "choices": {
+                  "type": "object",
+                  "properties": {
+                    "model": { "type": "array", "items": { "type": "string" } },
+                    "effort": { "type": "array", "items": { "type": "string" } },
+                    "permission": { "type": "array", "items": { "type": "string" } }
+                  },
+                  "required": ["model", "effort", "permission"],
+                  "additionalProperties": false
+                },
+                "context": {
+                  "description": "Reported context usage and limit, or null when unavailable.",
+                  "properties": {
+                    "used": { "type": "number" },
+                    "limit": { "type": "number" }
+                  },
+                  "required": ["used", "limit"],
+                  "additionalProperties": false
+                },
+                "notice": { "description": "An option-change notice, or null when absent." }
+              },
+              "required": ["model", "effort", "permission", "choices", "context", "notice"],
+              "additionalProperties": false
+            },
+            "notice": { "description": "A dock notice, or null when absent." },
+            "driverOwner": { "description": "The active foreign input-driver owner, or null when no owner is reported; omitted when no lease exists." }
+          },
+          "required": ["pane", "session", "tab", "revision", "enabled", "supported", "agent", "docked", "userUndocked", "gutterRows", "mounted", "passthrough", "draft", "attachments", "disabledReason", "activeSend", "queuedSends", "question", "options", "notice"],
+          "additionalProperties": false
+        }
       },
       {
         "id": "report",
@@ -118,7 +483,135 @@
           "required": ["pane", "mounted"],
           "additionalProperties": false
         },
-        "result": { "type": "object", "description": "DockState" }
+        "result": {
+          "type": "object",
+          "description": "The complete canonical DockState, including mounted/passthrough status and the nested attachment, send, question and option records.",
+          "properties": {
+            "pane": { "type": "string" },
+            "session": { "type": "string" },
+            "tab": { "type": "string" },
+            "revision": { "type": "integer" },
+            "enabled": { "type": "boolean" },
+            "supported": { "type": "boolean" },
+            "agent": { "description": "The active agent ID, or null when no agent is available." },
+            "docked": { "type": "boolean" },
+            "userUndocked": { "type": "boolean" },
+            "gutterRows": { "type": "integer" },
+            "mounted": { "type": "boolean" },
+            "passthrough": { "type": "boolean" },
+            "draft": { "type": "string" },
+            "attachments": {
+              "type": "array",
+              "description": "Attachment chips selected for the current draft.",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": { "type": "string" },
+                  "name": { "type": "string" },
+                  "path": { "type": "string" },
+                  "mime": { "type": "string" },
+                  "image": { "type": "boolean" }
+                },
+                "required": ["id", "name", "path", "mime", "image"],
+                "additionalProperties": false
+              }
+            },
+            "disabledReason": { "description": "Why dock actions are unavailable, or null when no reason is active." },
+            "activeSend": {
+              "description": "The active send, or null when the pane has no running send.",
+              "properties": {
+                "id": { "type": "string" },
+                "phase": { "type": "string" }
+              },
+              "required": ["id", "phase"],
+              "additionalProperties": false
+            },
+            "queuedSends": {
+              "type": "array",
+              "description": "Pending sends for this pane, in queue order.",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": { "type": "string" },
+                  "phase": { "type": "string" }
+                },
+                "required": ["id", "phase"],
+                "additionalProperties": false
+              }
+            },
+            "question": {
+              "description": "The pending agent question or permission request, or null.",
+              "properties": {
+                "id": { "type": "string" },
+                "kind": { "type": "string", "enum": ["question", "permission"] },
+                "title": { "type": "string" },
+                "questions": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "prompt": { "type": "string" },
+                      "choices": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "label": { "type": "string" },
+                            "value": { "type": "string" }
+                          },
+                          "required": ["label", "value"],
+                          "additionalProperties": false
+                        }
+                      },
+                      "multiple": { "type": "boolean" }
+                    },
+                    "required": ["prompt", "choices", "multiple"],
+                    "additionalProperties": false
+                  }
+                },
+                "collapsed": { "type": "boolean" },
+                "dismissed": { "type": "boolean" }
+              },
+              "required": ["id", "kind", "title", "questions", "collapsed", "dismissed"],
+              "additionalProperties": false
+            },
+            "options": {
+              "type": "object",
+              "description": "Session-reported model, effort, permission, choices, context and notice.",
+              "properties": {
+                "model": { "description": "The reported model, or null when unavailable." },
+                "effort": { "description": "The reported effort, or null when unavailable." },
+                "permission": { "description": "The reported permission mode, or null when unavailable." },
+                "choices": {
+                  "type": "object",
+                  "properties": {
+                    "model": { "type": "array", "items": { "type": "string" } },
+                    "effort": { "type": "array", "items": { "type": "string" } },
+                    "permission": { "type": "array", "items": { "type": "string" } }
+                  },
+                  "required": ["model", "effort", "permission"],
+                  "additionalProperties": false
+                },
+                "context": {
+                  "description": "Reported context usage and limit, or null when unavailable.",
+                  "properties": {
+                    "used": { "type": "number" },
+                    "limit": { "type": "number" }
+                  },
+                  "required": ["used", "limit"],
+                  "additionalProperties": false
+                },
+                "notice": { "description": "An option-change notice, or null when absent." }
+              },
+              "required": ["model", "effort", "permission", "choices", "context", "notice"],
+              "additionalProperties": false
+            },
+            "notice": { "description": "A dock notice, or null when absent." },
+            "driverOwner": { "description": "The active foreign input-driver owner, or null when no owner is reported; omitted when no lease exists." }
+          },
+          "required": ["pane", "session", "tab", "revision", "enabled", "supported", "agent", "docked", "userUndocked", "gutterRows", "mounted", "passthrough", "draft", "attachments", "disabledReason", "activeSend", "queuedSends", "question", "options", "notice"],
+          "additionalProperties": false
+        }
       },
       {
         "id": "history",
@@ -136,9 +629,138 @@
           "type": "object",
           "properties": {
             "entries": { "type": "array", "items": { "type": "string" } },
-            "state": { "type": "object", "description": "DockState" }
+            "state": {
+              "type": "object",
+              "description": "The full canonical DockState after reading or navigating prompt history.",
+              "properties": {
+                "pane": { "type": "string" },
+                "session": { "type": "string" },
+                "tab": { "type": "string" },
+                "revision": { "type": "integer" },
+                "enabled": { "type": "boolean" },
+                "supported": { "type": "boolean" },
+                "agent": { "description": "The active agent ID, or null when no agent is available." },
+                "docked": { "type": "boolean" },
+                "userUndocked": { "type": "boolean" },
+                "gutterRows": { "type": "integer" },
+                "mounted": { "type": "boolean" },
+                "passthrough": { "type": "boolean" },
+                "draft": { "type": "string" },
+                "attachments": {
+                  "type": "array",
+                  "description": "Attachment chips selected for the current draft.",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": { "type": "string" },
+                      "name": { "type": "string" },
+                      "path": { "type": "string" },
+                      "mime": { "type": "string" },
+                      "image": { "type": "boolean" }
+                    },
+                    "required": ["id", "name", "path", "mime", "image"],
+                    "additionalProperties": false
+                  }
+                },
+                "disabledReason": { "description": "Why dock actions are unavailable, or null when no reason is active." },
+                "activeSend": {
+                  "description": "The active send, or null when the pane has no running send.",
+                  "properties": {
+                    "id": { "type": "string" },
+                    "phase": { "type": "string" }
+                  },
+                  "required": ["id", "phase"],
+                  "additionalProperties": false
+                },
+                "queuedSends": {
+                  "type": "array",
+                  "description": "Pending sends for this pane, in queue order.",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": { "type": "string" },
+                      "phase": { "type": "string" }
+                    },
+                    "required": ["id", "phase"],
+                    "additionalProperties": false
+                  }
+                },
+                "question": {
+                  "description": "The pending agent question or permission request, or null.",
+                  "properties": {
+                    "id": { "type": "string" },
+                    "kind": { "type": "string", "enum": ["question", "permission"] },
+                    "title": { "type": "string" },
+                    "questions": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "prompt": { "type": "string" },
+                          "choices": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "label": { "type": "string" },
+                                "value": { "type": "string" }
+                              },
+                              "required": ["label", "value"],
+                              "additionalProperties": false
+                            }
+                          },
+                          "multiple": { "type": "boolean" }
+                        },
+                        "required": ["prompt", "choices", "multiple"],
+                        "additionalProperties": false
+                      }
+                    },
+                    "collapsed": { "type": "boolean" },
+                    "dismissed": { "type": "boolean" }
+                  },
+                  "required": ["id", "kind", "title", "questions", "collapsed", "dismissed"],
+                  "additionalProperties": false
+                },
+                "options": {
+                  "type": "object",
+                  "description": "Session-reported model, effort, permission, choices, context and notice.",
+                  "properties": {
+                    "model": { "description": "The reported model, or null when unavailable." },
+                    "effort": { "description": "The reported effort, or null when unavailable." },
+                    "permission": { "description": "The reported permission mode, or null when unavailable." },
+                    "choices": {
+                      "type": "object",
+                      "properties": {
+                        "model": { "type": "array", "items": { "type": "string" } },
+                        "effort": { "type": "array", "items": { "type": "string" } },
+                        "permission": { "type": "array", "items": { "type": "string" } }
+                      },
+                      "required": ["model", "effort", "permission"],
+                      "additionalProperties": false
+                    },
+                    "context": {
+                      "description": "Reported context usage and limit, or null when unavailable.",
+                      "properties": {
+                        "used": { "type": "number" },
+                        "limit": { "type": "number" }
+                      },
+                      "required": ["used", "limit"],
+                      "additionalProperties": false
+                    },
+                    "notice": { "description": "An option-change notice, or null when absent." }
+                  },
+                  "required": ["model", "effort", "permission", "choices", "context", "notice"],
+                  "additionalProperties": false
+                },
+                "notice": { "description": "A dock notice, or null when absent." },
+                "driverOwner": { "description": "The active foreign input-driver owner, or null when no owner is reported; omitted when no lease exists." }
+              },
+              "required": ["pane", "session", "tab", "revision", "enabled", "supported", "agent", "docked", "userUndocked", "gutterRows", "mounted", "passthrough", "draft", "attachments", "disabledReason", "activeSend", "queuedSends", "question", "options", "notice"],
+              "additionalProperties": false
+            }
           },
-          "required": ["entries", "state"]
+          "required": ["entries", "state"],
+          "additionalProperties": false
         }
       },
       {
@@ -192,7 +814,135 @@
           "required": ["pane"],
           "additionalProperties": false
         },
-        "result": { "type": "object", "description": "DockState" }
+        "result": {
+          "type": "object",
+          "description": "The complete canonical DockState, including mounted/passthrough status and the nested attachment, send, question and option records.",
+          "properties": {
+            "pane": { "type": "string" },
+            "session": { "type": "string" },
+            "tab": { "type": "string" },
+            "revision": { "type": "integer" },
+            "enabled": { "type": "boolean" },
+            "supported": { "type": "boolean" },
+            "agent": { "description": "The active agent ID, or null when no agent is available." },
+            "docked": { "type": "boolean" },
+            "userUndocked": { "type": "boolean" },
+            "gutterRows": { "type": "integer" },
+            "mounted": { "type": "boolean" },
+            "passthrough": { "type": "boolean" },
+            "draft": { "type": "string" },
+            "attachments": {
+              "type": "array",
+              "description": "Attachment chips selected for the current draft.",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": { "type": "string" },
+                  "name": { "type": "string" },
+                  "path": { "type": "string" },
+                  "mime": { "type": "string" },
+                  "image": { "type": "boolean" }
+                },
+                "required": ["id", "name", "path", "mime", "image"],
+                "additionalProperties": false
+              }
+            },
+            "disabledReason": { "description": "Why dock actions are unavailable, or null when no reason is active." },
+            "activeSend": {
+              "description": "The active send, or null when the pane has no running send.",
+              "properties": {
+                "id": { "type": "string" },
+                "phase": { "type": "string" }
+              },
+              "required": ["id", "phase"],
+              "additionalProperties": false
+            },
+            "queuedSends": {
+              "type": "array",
+              "description": "Pending sends for this pane, in queue order.",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": { "type": "string" },
+                  "phase": { "type": "string" }
+                },
+                "required": ["id", "phase"],
+                "additionalProperties": false
+              }
+            },
+            "question": {
+              "description": "The pending agent question or permission request, or null.",
+              "properties": {
+                "id": { "type": "string" },
+                "kind": { "type": "string", "enum": ["question", "permission"] },
+                "title": { "type": "string" },
+                "questions": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "prompt": { "type": "string" },
+                      "choices": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "label": { "type": "string" },
+                            "value": { "type": "string" }
+                          },
+                          "required": ["label", "value"],
+                          "additionalProperties": false
+                        }
+                      },
+                      "multiple": { "type": "boolean" }
+                    },
+                    "required": ["prompt", "choices", "multiple"],
+                    "additionalProperties": false
+                  }
+                },
+                "collapsed": { "type": "boolean" },
+                "dismissed": { "type": "boolean" }
+              },
+              "required": ["id", "kind", "title", "questions", "collapsed", "dismissed"],
+              "additionalProperties": false
+            },
+            "options": {
+              "type": "object",
+              "description": "Session-reported model, effort, permission, choices, context and notice.",
+              "properties": {
+                "model": { "description": "The reported model, or null when unavailable." },
+                "effort": { "description": "The reported effort, or null when unavailable." },
+                "permission": { "description": "The reported permission mode, or null when unavailable." },
+                "choices": {
+                  "type": "object",
+                  "properties": {
+                    "model": { "type": "array", "items": { "type": "string" } },
+                    "effort": { "type": "array", "items": { "type": "string" } },
+                    "permission": { "type": "array", "items": { "type": "string" } }
+                  },
+                  "required": ["model", "effort", "permission"],
+                  "additionalProperties": false
+                },
+                "context": {
+                  "description": "Reported context usage and limit, or null when unavailable.",
+                  "properties": {
+                    "used": { "type": "number" },
+                    "limit": { "type": "number" }
+                  },
+                  "required": ["used", "limit"],
+                  "additionalProperties": false
+                },
+                "notice": { "description": "An option-change notice, or null when absent." }
+              },
+              "required": ["model", "effort", "permission", "choices", "context", "notice"],
+              "additionalProperties": false
+            },
+            "notice": { "description": "A dock notice, or null when absent." },
+            "driverOwner": { "description": "The active foreign input-driver owner, or null when no owner is reported; omitted when no lease exists." }
+          },
+          "required": ["pane", "session", "tab", "revision", "enabled", "supported", "agent", "docked", "userUndocked", "gutterRows", "mounted", "passthrough", "draft", "attachments", "disabledReason", "activeSend", "queuedSends", "question", "options", "notice"],
+          "additionalProperties": false
+        }
       },
       {
         "id": "removeAttachment",
@@ -206,7 +956,135 @@
           "required": ["pane", "attachment"],
           "additionalProperties": false
         },
-        "result": { "type": "object", "description": "DockState" }
+        "result": {
+          "type": "object",
+          "description": "The complete canonical DockState, including mounted/passthrough status and the nested attachment, send, question and option records.",
+          "properties": {
+            "pane": { "type": "string" },
+            "session": { "type": "string" },
+            "tab": { "type": "string" },
+            "revision": { "type": "integer" },
+            "enabled": { "type": "boolean" },
+            "supported": { "type": "boolean" },
+            "agent": { "description": "The active agent ID, or null when no agent is available." },
+            "docked": { "type": "boolean" },
+            "userUndocked": { "type": "boolean" },
+            "gutterRows": { "type": "integer" },
+            "mounted": { "type": "boolean" },
+            "passthrough": { "type": "boolean" },
+            "draft": { "type": "string" },
+            "attachments": {
+              "type": "array",
+              "description": "Attachment chips selected for the current draft.",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": { "type": "string" },
+                  "name": { "type": "string" },
+                  "path": { "type": "string" },
+                  "mime": { "type": "string" },
+                  "image": { "type": "boolean" }
+                },
+                "required": ["id", "name", "path", "mime", "image"],
+                "additionalProperties": false
+              }
+            },
+            "disabledReason": { "description": "Why dock actions are unavailable, or null when no reason is active." },
+            "activeSend": {
+              "description": "The active send, or null when the pane has no running send.",
+              "properties": {
+                "id": { "type": "string" },
+                "phase": { "type": "string" }
+              },
+              "required": ["id", "phase"],
+              "additionalProperties": false
+            },
+            "queuedSends": {
+              "type": "array",
+              "description": "Pending sends for this pane, in queue order.",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": { "type": "string" },
+                  "phase": { "type": "string" }
+                },
+                "required": ["id", "phase"],
+                "additionalProperties": false
+              }
+            },
+            "question": {
+              "description": "The pending agent question or permission request, or null.",
+              "properties": {
+                "id": { "type": "string" },
+                "kind": { "type": "string", "enum": ["question", "permission"] },
+                "title": { "type": "string" },
+                "questions": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "prompt": { "type": "string" },
+                      "choices": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "label": { "type": "string" },
+                            "value": { "type": "string" }
+                          },
+                          "required": ["label", "value"],
+                          "additionalProperties": false
+                        }
+                      },
+                      "multiple": { "type": "boolean" }
+                    },
+                    "required": ["prompt", "choices", "multiple"],
+                    "additionalProperties": false
+                  }
+                },
+                "collapsed": { "type": "boolean" },
+                "dismissed": { "type": "boolean" }
+              },
+              "required": ["id", "kind", "title", "questions", "collapsed", "dismissed"],
+              "additionalProperties": false
+            },
+            "options": {
+              "type": "object",
+              "description": "Session-reported model, effort, permission, choices, context and notice.",
+              "properties": {
+                "model": { "description": "The reported model, or null when unavailable." },
+                "effort": { "description": "The reported effort, or null when unavailable." },
+                "permission": { "description": "The reported permission mode, or null when unavailable." },
+                "choices": {
+                  "type": "object",
+                  "properties": {
+                    "model": { "type": "array", "items": { "type": "string" } },
+                    "effort": { "type": "array", "items": { "type": "string" } },
+                    "permission": { "type": "array", "items": { "type": "string" } }
+                  },
+                  "required": ["model", "effort", "permission"],
+                  "additionalProperties": false
+                },
+                "context": {
+                  "description": "Reported context usage and limit, or null when unavailable.",
+                  "properties": {
+                    "used": { "type": "number" },
+                    "limit": { "type": "number" }
+                  },
+                  "required": ["used", "limit"],
+                  "additionalProperties": false
+                },
+                "notice": { "description": "An option-change notice, or null when absent." }
+              },
+              "required": ["model", "effort", "permission", "choices", "context", "notice"],
+              "additionalProperties": false
+            },
+            "notice": { "description": "A dock notice, or null when absent." },
+            "driverOwner": { "description": "The active foreign input-driver owner, or null when no owner is reported; omitted when no lease exists." }
+          },
+          "required": ["pane", "session", "tab", "revision", "enabled", "supported", "agent", "docked", "userUndocked", "gutterRows", "mounted", "passthrough", "draft", "attachments", "disabledReason", "activeSend", "queuedSends", "question", "options", "notice"],
+          "additionalProperties": false
+        }
       },
       {
         "id": "send",
@@ -246,7 +1124,135 @@
           "required": ["pane"],
           "additionalProperties": false
         },
-        "result": { "type": "object", "description": "DockState" }
+        "result": {
+          "type": "object",
+          "description": "The complete canonical DockState, including mounted/passthrough status and the nested attachment, send, question and option records.",
+          "properties": {
+            "pane": { "type": "string" },
+            "session": { "type": "string" },
+            "tab": { "type": "string" },
+            "revision": { "type": "integer" },
+            "enabled": { "type": "boolean" },
+            "supported": { "type": "boolean" },
+            "agent": { "description": "The active agent ID, or null when no agent is available." },
+            "docked": { "type": "boolean" },
+            "userUndocked": { "type": "boolean" },
+            "gutterRows": { "type": "integer" },
+            "mounted": { "type": "boolean" },
+            "passthrough": { "type": "boolean" },
+            "draft": { "type": "string" },
+            "attachments": {
+              "type": "array",
+              "description": "Attachment chips selected for the current draft.",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": { "type": "string" },
+                  "name": { "type": "string" },
+                  "path": { "type": "string" },
+                  "mime": { "type": "string" },
+                  "image": { "type": "boolean" }
+                },
+                "required": ["id", "name", "path", "mime", "image"],
+                "additionalProperties": false
+              }
+            },
+            "disabledReason": { "description": "Why dock actions are unavailable, or null when no reason is active." },
+            "activeSend": {
+              "description": "The active send, or null when the pane has no running send.",
+              "properties": {
+                "id": { "type": "string" },
+                "phase": { "type": "string" }
+              },
+              "required": ["id", "phase"],
+              "additionalProperties": false
+            },
+            "queuedSends": {
+              "type": "array",
+              "description": "Pending sends for this pane, in queue order.",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": { "type": "string" },
+                  "phase": { "type": "string" }
+                },
+                "required": ["id", "phase"],
+                "additionalProperties": false
+              }
+            },
+            "question": {
+              "description": "The pending agent question or permission request, or null.",
+              "properties": {
+                "id": { "type": "string" },
+                "kind": { "type": "string", "enum": ["question", "permission"] },
+                "title": { "type": "string" },
+                "questions": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "prompt": { "type": "string" },
+                      "choices": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "label": { "type": "string" },
+                            "value": { "type": "string" }
+                          },
+                          "required": ["label", "value"],
+                          "additionalProperties": false
+                        }
+                      },
+                      "multiple": { "type": "boolean" }
+                    },
+                    "required": ["prompt", "choices", "multiple"],
+                    "additionalProperties": false
+                  }
+                },
+                "collapsed": { "type": "boolean" },
+                "dismissed": { "type": "boolean" }
+              },
+              "required": ["id", "kind", "title", "questions", "collapsed", "dismissed"],
+              "additionalProperties": false
+            },
+            "options": {
+              "type": "object",
+              "description": "Session-reported model, effort, permission, choices, context and notice.",
+              "properties": {
+                "model": { "description": "The reported model, or null when unavailable." },
+                "effort": { "description": "The reported effort, or null when unavailable." },
+                "permission": { "description": "The reported permission mode, or null when unavailable." },
+                "choices": {
+                  "type": "object",
+                  "properties": {
+                    "model": { "type": "array", "items": { "type": "string" } },
+                    "effort": { "type": "array", "items": { "type": "string" } },
+                    "permission": { "type": "array", "items": { "type": "string" } }
+                  },
+                  "required": ["model", "effort", "permission"],
+                  "additionalProperties": false
+                },
+                "context": {
+                  "description": "Reported context usage and limit, or null when unavailable.",
+                  "properties": {
+                    "used": { "type": "number" },
+                    "limit": { "type": "number" }
+                  },
+                  "required": ["used", "limit"],
+                  "additionalProperties": false
+                },
+                "notice": { "description": "An option-change notice, or null when absent." }
+              },
+              "required": ["model", "effort", "permission", "choices", "context", "notice"],
+              "additionalProperties": false
+            },
+            "notice": { "description": "A dock notice, or null when absent." },
+            "driverOwner": { "description": "The active foreign input-driver owner, or null when no owner is reported; omitted when no lease exists." }
+          },
+          "required": ["pane", "session", "tab", "revision", "enabled", "supported", "agent", "docked", "userUndocked", "gutterRows", "mounted", "passthrough", "draft", "attachments", "disabledReason", "activeSend", "queuedSends", "question", "options", "notice"],
+          "additionalProperties": false
+        }
       },
       {
         "id": "interaction",
@@ -262,7 +1268,135 @@
           "required": ["pane", "request", "action"],
           "additionalProperties": false
         },
-        "result": { "type": "object", "description": "DockState" }
+        "result": {
+          "type": "object",
+          "description": "The complete canonical DockState, including mounted/passthrough status and the nested attachment, send, question and option records.",
+          "properties": {
+            "pane": { "type": "string" },
+            "session": { "type": "string" },
+            "tab": { "type": "string" },
+            "revision": { "type": "integer" },
+            "enabled": { "type": "boolean" },
+            "supported": { "type": "boolean" },
+            "agent": { "description": "The active agent ID, or null when no agent is available." },
+            "docked": { "type": "boolean" },
+            "userUndocked": { "type": "boolean" },
+            "gutterRows": { "type": "integer" },
+            "mounted": { "type": "boolean" },
+            "passthrough": { "type": "boolean" },
+            "draft": { "type": "string" },
+            "attachments": {
+              "type": "array",
+              "description": "Attachment chips selected for the current draft.",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": { "type": "string" },
+                  "name": { "type": "string" },
+                  "path": { "type": "string" },
+                  "mime": { "type": "string" },
+                  "image": { "type": "boolean" }
+                },
+                "required": ["id", "name", "path", "mime", "image"],
+                "additionalProperties": false
+              }
+            },
+            "disabledReason": { "description": "Why dock actions are unavailable, or null when no reason is active." },
+            "activeSend": {
+              "description": "The active send, or null when the pane has no running send.",
+              "properties": {
+                "id": { "type": "string" },
+                "phase": { "type": "string" }
+              },
+              "required": ["id", "phase"],
+              "additionalProperties": false
+            },
+            "queuedSends": {
+              "type": "array",
+              "description": "Pending sends for this pane, in queue order.",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": { "type": "string" },
+                  "phase": { "type": "string" }
+                },
+                "required": ["id", "phase"],
+                "additionalProperties": false
+              }
+            },
+            "question": {
+              "description": "The pending agent question or permission request, or null.",
+              "properties": {
+                "id": { "type": "string" },
+                "kind": { "type": "string", "enum": ["question", "permission"] },
+                "title": { "type": "string" },
+                "questions": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "prompt": { "type": "string" },
+                      "choices": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "label": { "type": "string" },
+                            "value": { "type": "string" }
+                          },
+                          "required": ["label", "value"],
+                          "additionalProperties": false
+                        }
+                      },
+                      "multiple": { "type": "boolean" }
+                    },
+                    "required": ["prompt", "choices", "multiple"],
+                    "additionalProperties": false
+                  }
+                },
+                "collapsed": { "type": "boolean" },
+                "dismissed": { "type": "boolean" }
+              },
+              "required": ["id", "kind", "title", "questions", "collapsed", "dismissed"],
+              "additionalProperties": false
+            },
+            "options": {
+              "type": "object",
+              "description": "Session-reported model, effort, permission, choices, context and notice.",
+              "properties": {
+                "model": { "description": "The reported model, or null when unavailable." },
+                "effort": { "description": "The reported effort, or null when unavailable." },
+                "permission": { "description": "The reported permission mode, or null when unavailable." },
+                "choices": {
+                  "type": "object",
+                  "properties": {
+                    "model": { "type": "array", "items": { "type": "string" } },
+                    "effort": { "type": "array", "items": { "type": "string" } },
+                    "permission": { "type": "array", "items": { "type": "string" } }
+                  },
+                  "required": ["model", "effort", "permission"],
+                  "additionalProperties": false
+                },
+                "context": {
+                  "description": "Reported context usage and limit, or null when unavailable.",
+                  "properties": {
+                    "used": { "type": "number" },
+                    "limit": { "type": "number" }
+                  },
+                  "required": ["used", "limit"],
+                  "additionalProperties": false
+                },
+                "notice": { "description": "An option-change notice, or null when absent." }
+              },
+              "required": ["model", "effort", "permission", "choices", "context", "notice"],
+              "additionalProperties": false
+            },
+            "notice": { "description": "A dock notice, or null when absent." },
+            "driverOwner": { "description": "The active foreign input-driver owner, or null when no owner is reported; omitted when no lease exists." }
+          },
+          "required": ["pane", "session", "tab", "revision", "enabled", "supported", "agent", "docked", "userUndocked", "gutterRows", "mounted", "passthrough", "draft", "attachments", "disabledReason", "activeSend", "queuedSends", "question", "options", "notice"],
+          "additionalProperties": false
+        }
       },
       {
         "id": "options",
@@ -277,7 +1411,135 @@
           "required": ["pane"],
           "additionalProperties": false
         },
-        "result": { "type": "object", "description": "DockState" }
+        "result": {
+          "type": "object",
+          "description": "The complete canonical DockState, including mounted/passthrough status and the nested attachment, send, question and option records.",
+          "properties": {
+            "pane": { "type": "string" },
+            "session": { "type": "string" },
+            "tab": { "type": "string" },
+            "revision": { "type": "integer" },
+            "enabled": { "type": "boolean" },
+            "supported": { "type": "boolean" },
+            "agent": { "description": "The active agent ID, or null when no agent is available." },
+            "docked": { "type": "boolean" },
+            "userUndocked": { "type": "boolean" },
+            "gutterRows": { "type": "integer" },
+            "mounted": { "type": "boolean" },
+            "passthrough": { "type": "boolean" },
+            "draft": { "type": "string" },
+            "attachments": {
+              "type": "array",
+              "description": "Attachment chips selected for the current draft.",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": { "type": "string" },
+                  "name": { "type": "string" },
+                  "path": { "type": "string" },
+                  "mime": { "type": "string" },
+                  "image": { "type": "boolean" }
+                },
+                "required": ["id", "name", "path", "mime", "image"],
+                "additionalProperties": false
+              }
+            },
+            "disabledReason": { "description": "Why dock actions are unavailable, or null when no reason is active." },
+            "activeSend": {
+              "description": "The active send, or null when the pane has no running send.",
+              "properties": {
+                "id": { "type": "string" },
+                "phase": { "type": "string" }
+              },
+              "required": ["id", "phase"],
+              "additionalProperties": false
+            },
+            "queuedSends": {
+              "type": "array",
+              "description": "Pending sends for this pane, in queue order.",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": { "type": "string" },
+                  "phase": { "type": "string" }
+                },
+                "required": ["id", "phase"],
+                "additionalProperties": false
+              }
+            },
+            "question": {
+              "description": "The pending agent question or permission request, or null.",
+              "properties": {
+                "id": { "type": "string" },
+                "kind": { "type": "string", "enum": ["question", "permission"] },
+                "title": { "type": "string" },
+                "questions": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "prompt": { "type": "string" },
+                      "choices": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "label": { "type": "string" },
+                            "value": { "type": "string" }
+                          },
+                          "required": ["label", "value"],
+                          "additionalProperties": false
+                        }
+                      },
+                      "multiple": { "type": "boolean" }
+                    },
+                    "required": ["prompt", "choices", "multiple"],
+                    "additionalProperties": false
+                  }
+                },
+                "collapsed": { "type": "boolean" },
+                "dismissed": { "type": "boolean" }
+              },
+              "required": ["id", "kind", "title", "questions", "collapsed", "dismissed"],
+              "additionalProperties": false
+            },
+            "options": {
+              "type": "object",
+              "description": "Session-reported model, effort, permission, choices, context and notice.",
+              "properties": {
+                "model": { "description": "The reported model, or null when unavailable." },
+                "effort": { "description": "The reported effort, or null when unavailable." },
+                "permission": { "description": "The reported permission mode, or null when unavailable." },
+                "choices": {
+                  "type": "object",
+                  "properties": {
+                    "model": { "type": "array", "items": { "type": "string" } },
+                    "effort": { "type": "array", "items": { "type": "string" } },
+                    "permission": { "type": "array", "items": { "type": "string" } }
+                  },
+                  "required": ["model", "effort", "permission"],
+                  "additionalProperties": false
+                },
+                "context": {
+                  "description": "Reported context usage and limit, or null when unavailable.",
+                  "properties": {
+                    "used": { "type": "number" },
+                    "limit": { "type": "number" }
+                  },
+                  "required": ["used", "limit"],
+                  "additionalProperties": false
+                },
+                "notice": { "description": "An option-change notice, or null when absent." }
+              },
+              "required": ["model", "effort", "permission", "choices", "context", "notice"],
+              "additionalProperties": false
+            },
+            "notice": { "description": "A dock notice, or null when absent." },
+            "driverOwner": { "description": "The active foreign input-driver owner, or null when no owner is reported; omitted when no lease exists." }
+          },
+          "required": ["pane", "session", "tab", "revision", "enabled", "supported", "agent", "docked", "userUndocked", "gutterRows", "mounted", "passthrough", "draft", "attachments", "disabledReason", "activeSend", "queuedSends", "question", "options", "notice"],
+          "additionalProperties": false
+        }
       },
       {
         "id": "driver",
@@ -292,7 +1554,135 @@
           "required": ["pane"],
           "additionalProperties": false
         },
-        "result": { "type": "object", "description": "DockState" }
+        "result": {
+          "type": "object",
+          "description": "The complete canonical DockState, including mounted/passthrough status and the nested attachment, send, question and option records.",
+          "properties": {
+            "pane": { "type": "string" },
+            "session": { "type": "string" },
+            "tab": { "type": "string" },
+            "revision": { "type": "integer" },
+            "enabled": { "type": "boolean" },
+            "supported": { "type": "boolean" },
+            "agent": { "description": "The active agent ID, or null when no agent is available." },
+            "docked": { "type": "boolean" },
+            "userUndocked": { "type": "boolean" },
+            "gutterRows": { "type": "integer" },
+            "mounted": { "type": "boolean" },
+            "passthrough": { "type": "boolean" },
+            "draft": { "type": "string" },
+            "attachments": {
+              "type": "array",
+              "description": "Attachment chips selected for the current draft.",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": { "type": "string" },
+                  "name": { "type": "string" },
+                  "path": { "type": "string" },
+                  "mime": { "type": "string" },
+                  "image": { "type": "boolean" }
+                },
+                "required": ["id", "name", "path", "mime", "image"],
+                "additionalProperties": false
+              }
+            },
+            "disabledReason": { "description": "Why dock actions are unavailable, or null when no reason is active." },
+            "activeSend": {
+              "description": "The active send, or null when the pane has no running send.",
+              "properties": {
+                "id": { "type": "string" },
+                "phase": { "type": "string" }
+              },
+              "required": ["id", "phase"],
+              "additionalProperties": false
+            },
+            "queuedSends": {
+              "type": "array",
+              "description": "Pending sends for this pane, in queue order.",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": { "type": "string" },
+                  "phase": { "type": "string" }
+                },
+                "required": ["id", "phase"],
+                "additionalProperties": false
+              }
+            },
+            "question": {
+              "description": "The pending agent question or permission request, or null.",
+              "properties": {
+                "id": { "type": "string" },
+                "kind": { "type": "string", "enum": ["question", "permission"] },
+                "title": { "type": "string" },
+                "questions": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "prompt": { "type": "string" },
+                      "choices": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "label": { "type": "string" },
+                            "value": { "type": "string" }
+                          },
+                          "required": ["label", "value"],
+                          "additionalProperties": false
+                        }
+                      },
+                      "multiple": { "type": "boolean" }
+                    },
+                    "required": ["prompt", "choices", "multiple"],
+                    "additionalProperties": false
+                  }
+                },
+                "collapsed": { "type": "boolean" },
+                "dismissed": { "type": "boolean" }
+              },
+              "required": ["id", "kind", "title", "questions", "collapsed", "dismissed"],
+              "additionalProperties": false
+            },
+            "options": {
+              "type": "object",
+              "description": "Session-reported model, effort, permission, choices, context and notice.",
+              "properties": {
+                "model": { "description": "The reported model, or null when unavailable." },
+                "effort": { "description": "The reported effort, or null when unavailable." },
+                "permission": { "description": "The reported permission mode, or null when unavailable." },
+                "choices": {
+                  "type": "object",
+                  "properties": {
+                    "model": { "type": "array", "items": { "type": "string" } },
+                    "effort": { "type": "array", "items": { "type": "string" } },
+                    "permission": { "type": "array", "items": { "type": "string" } }
+                  },
+                  "required": ["model", "effort", "permission"],
+                  "additionalProperties": false
+                },
+                "context": {
+                  "description": "Reported context usage and limit, or null when unavailable.",
+                  "properties": {
+                    "used": { "type": "number" },
+                    "limit": { "type": "number" }
+                  },
+                  "required": ["used", "limit"],
+                  "additionalProperties": false
+                },
+                "notice": { "description": "An option-change notice, or null when absent." }
+              },
+              "required": ["model", "effort", "permission", "choices", "context", "notice"],
+              "additionalProperties": false
+            },
+            "notice": { "description": "A dock notice, or null when absent." },
+            "driverOwner": { "description": "The active foreign input-driver owner, or null when no owner is reported; omitted when no lease exists." }
+          },
+          "required": ["pane", "session", "tab", "revision", "enabled", "supported", "agent", "docked", "userUndocked", "gutterRows", "mounted", "passthrough", "draft", "attachments", "disabledReason", "activeSend", "queuedSends", "question", "options", "notice"],
+          "additionalProperties": false
+        }
       }
     ],
     "event": [
@@ -303,9 +1693,138 @@
           "type": "object",
           "properties": {
             "pane": { "type": "string" },
-            "state": { "type": "object", "description": "DockState" }
+            "state": {
+              "type": "object",
+              "description": "The full canonical DockState for this pane.",
+              "properties": {
+                "pane": { "type": "string" },
+                "session": { "type": "string" },
+                "tab": { "type": "string" },
+                "revision": { "type": "integer" },
+                "enabled": { "type": "boolean" },
+                "supported": { "type": "boolean" },
+                "agent": { "description": "The active agent ID, or null when no agent is available." },
+                "docked": { "type": "boolean" },
+                "userUndocked": { "type": "boolean" },
+                "gutterRows": { "type": "integer" },
+                "mounted": { "type": "boolean" },
+                "passthrough": { "type": "boolean" },
+                "draft": { "type": "string" },
+                "attachments": {
+                  "type": "array",
+                  "description": "Attachment chips selected for the current draft.",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": { "type": "string" },
+                      "name": { "type": "string" },
+                      "path": { "type": "string" },
+                      "mime": { "type": "string" },
+                      "image": { "type": "boolean" }
+                    },
+                    "required": ["id", "name", "path", "mime", "image"],
+                    "additionalProperties": false
+                  }
+                },
+                "disabledReason": { "description": "Why dock actions are unavailable, or null when no reason is active." },
+                "activeSend": {
+                  "description": "The active send, or null when the pane has no running send.",
+                  "properties": {
+                    "id": { "type": "string" },
+                    "phase": { "type": "string" }
+                  },
+                  "required": ["id", "phase"],
+                  "additionalProperties": false
+                },
+                "queuedSends": {
+                  "type": "array",
+                  "description": "Pending sends for this pane, in queue order.",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": { "type": "string" },
+                      "phase": { "type": "string" }
+                    },
+                    "required": ["id", "phase"],
+                    "additionalProperties": false
+                  }
+                },
+                "question": {
+                  "description": "The pending agent question or permission request, or null.",
+                  "properties": {
+                    "id": { "type": "string" },
+                    "kind": { "type": "string", "enum": ["question", "permission"] },
+                    "title": { "type": "string" },
+                    "questions": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "prompt": { "type": "string" },
+                          "choices": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "label": { "type": "string" },
+                                "value": { "type": "string" }
+                              },
+                              "required": ["label", "value"],
+                              "additionalProperties": false
+                            }
+                          },
+                          "multiple": { "type": "boolean" }
+                        },
+                        "required": ["prompt", "choices", "multiple"],
+                        "additionalProperties": false
+                      }
+                    },
+                    "collapsed": { "type": "boolean" },
+                    "dismissed": { "type": "boolean" }
+                  },
+                  "required": ["id", "kind", "title", "questions", "collapsed", "dismissed"],
+                  "additionalProperties": false
+                },
+                "options": {
+                  "type": "object",
+                  "description": "Session-reported model, effort, permission, choices, context and notice.",
+                  "properties": {
+                    "model": { "description": "The reported model, or null when unavailable." },
+                    "effort": { "description": "The reported effort, or null when unavailable." },
+                    "permission": { "description": "The reported permission mode, or null when unavailable." },
+                    "choices": {
+                      "type": "object",
+                      "properties": {
+                        "model": { "type": "array", "items": { "type": "string" } },
+                        "effort": { "type": "array", "items": { "type": "string" } },
+                        "permission": { "type": "array", "items": { "type": "string" } }
+                      },
+                      "required": ["model", "effort", "permission"],
+                      "additionalProperties": false
+                    },
+                    "context": {
+                      "description": "Reported context usage and limit, or null when unavailable.",
+                      "properties": {
+                        "used": { "type": "number" },
+                        "limit": { "type": "number" }
+                      },
+                      "required": ["used", "limit"],
+                      "additionalProperties": false
+                    },
+                    "notice": { "description": "An option-change notice, or null when absent." }
+                  },
+                  "required": ["model", "effort", "permission", "choices", "context", "notice"],
+                  "additionalProperties": false
+                },
+                "notice": { "description": "A dock notice, or null when absent." },
+                "driverOwner": { "description": "The active foreign input-driver owner, or null when no owner is reported; omitted when no lease exists." }
+              },
+              "required": ["pane", "session", "tab", "revision", "enabled", "supported", "agent", "docked", "userUndocked", "gutterRows", "mounted", "passthrough", "draft", "attachments", "disabledReason", "activeSend", "queuedSends", "question", "options", "notice"],
+              "additionalProperties": false
+            }
           },
-          "required": ["pane", "state"]
+          "required": ["pane", "state"],
+          "additionalProperties": false
         }
       }
     ],
@@ -322,6 +1841,25 @@
       }
     ],
     "command": [
+      {
+        "id": "set",
+        "title": "Set Terminal Dock State",
+        "description": "Set pane preferences or replace its draft and attachment selection through the active UI window.",
+        "args": {
+          "type": "object",
+          "properties": {
+            "pane": { "type": "string" },
+            "revision": { "type": "integer", "minimum": 0 },
+            "docked": { "type": "boolean" },
+            "gutterRows": { "type": "integer", "minimum": 3, "maximum": 15 },
+            "passthrough": { "type": "boolean" },
+            "draft": { "type": "string" },
+            "attachments": { "type": "array", "items": { "type": "string" } }
+          },
+          "required": ["pane"],
+          "additionalProperties": false
+        }
+      },
       {
         "id": "toggle",
         "title": "Toggle Terminal Dock",

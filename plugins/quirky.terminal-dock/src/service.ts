@@ -624,6 +624,13 @@ export class DockService {
   }
 
   private async set(params: Record<string, unknown>, caller: PluginCaller): Promise<DockState> {
+    if (Object.hasOwn(params, 'passthrough') && caller.role !== 'ui') {
+      const response = await this.context.call('ui.command.run', {
+        id: 'command:quirky.terminal-dock/set',
+        args: params
+      }) as { result: DockState }
+      return response.result
+    }
     const binding = await this.resolveBinding({ pane: params.pane })
     await this.ensureRecovered()
     if (!this.enabled()) throw this.context.error('invalid-params', 'Terminal dock is disabled')

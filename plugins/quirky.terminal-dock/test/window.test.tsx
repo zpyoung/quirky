@@ -581,6 +581,31 @@ describe('terminal dock composer behavior', () => {
     expect(fake.opened.at(-1)?.id).toBe(SETTINGS_VIEW)
   })
 
+  test('canonical set command forwards the whole mutation and absolute passthrough values', async () => {
+    const fake = fakeContext()
+    activate(fake.context)
+    const set = fake.provided.get('command:quirky.terminal-dock/set') as CommandHandler
+    const mutation = {
+      pane: 'pane-a',
+      revision: 1,
+      docked: true,
+      gutterRows: 9,
+      passthrough: true,
+      draft: 'preserve the composite update',
+      attachments: []
+    }
+    let result: unknown
+    await act(async () => { result = await set(mutation) })
+    expect(fake.callsTo(`${PLUGIN_METHOD}set`).at(-1)?.params).toEqual(mutation)
+    expect(result).toMatchObject({ docked: true, gutterRows: 9, passthrough: true, draft: 'preserve the composite update' })
+
+    for (const passthrough of [true, true, false, false]) {
+      await act(async () => { await set({ pane: 'pane-a', passthrough }) })
+      expect(fake.callsTo(`${PLUGIN_METHOD}set`).at(-1)?.params).toEqual({ pane: 'pane-a', passthrough })
+      expect(fake.state.passthrough).toBe(passthrough)
+    }
+  })
+
   test('routes main and floating panes by focus ownership and preserves focus order when the palette owns focus', async () => {
     const toggleWithoutPane = async (fake: Fake) => {
       activate(fake.context)

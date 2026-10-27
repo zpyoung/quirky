@@ -753,7 +753,7 @@ export function Composer({ context, pane, session, registerActions }: Props) {
           className="qtd-editor"
           aria-label="Message to agent"
           aria-describedby={disabledReason !== null && state !== null ? 'qtd-disabled-reason' : undefined}
-          placeholder="Message to agent… (Shift+Enter for a new line)"
+          placeholder="Ask anything, @ to mention files, / for commands"
           value={draft}
           rows={3}
           onChange={onDraftChange}
