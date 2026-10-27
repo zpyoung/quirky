@@ -20,7 +20,7 @@ function requestUrl(input: RequestInfo | URL): URL {
 export function interceptProviderFetch(handler: ProviderHandler): FetchFixture {
   const upstream = globalThis.fetch
   const pending = new Set<Promise<ProviderResponse>>()
-  installed = Object.assign(
+  const installed = Object.assign(
     async (input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
       const url = requestUrl(input)
       if (url.protocol === 'http:' && ['localhost', '127.0.0.1', '::1', '[::1]'].includes(url.hostname)) {
