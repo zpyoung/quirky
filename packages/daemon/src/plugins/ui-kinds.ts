@@ -18,7 +18,7 @@ const ALLOWED_FIELDS: Record<string, readonly string[]> = {
   'status-bar': ['title', 'description', 'order'],
   'sidebar-section': ['title', 'description', 'order'],
   panel: ['title', 'description', 'order'],
-  view: ['title', 'description'],
+  view: ['title', 'description', 'settings'],
   overlay: ['title', 'description', 'order'],
   command: ['title', 'description', 'args'],
   keybinding: ['key', 'command', 'description', 'when'],
@@ -190,6 +190,9 @@ export function checkUiKindEntry(kind: string, label: string, entry: Entry, erro
   }
   if (allowed.includes('order') && entry.order !== undefined && !isFiniteNumber(entry.order)) {
     errors.push(`${label}: order must be a number`)
+  }
+  if (kind === 'view' && entry.settings !== undefined && typeof entry.settings !== 'boolean') {
+    errors.push(`${label}: settings must be a boolean`)
   }
   if (kind === 'command' && entry.args !== undefined) {
     for (const problem of checkSchemaDeclaration(entry.args, 'args', { object: true })) errors.push(`${label}: ${problem}`)

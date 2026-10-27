@@ -78,6 +78,8 @@ export type UiSlotEntry = {
   order: number
   /** URL of the owning plugin's UI module; null when it has none. */
   module: string | null
+  /** Views opting into Settings navigation; ignored for every other slot kind. */
+  settings?: boolean
 }
 
 export type UiCommandEntry = {

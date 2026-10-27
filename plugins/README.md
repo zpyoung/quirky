@@ -113,3 +113,18 @@ conflicting paths from existing local commit objects without changing HEAD, refs
 the index or working files. It never fetches or executes a custom merge driver.
 An unavailable preview reports a reason rather than presenting changed files as
 conflicts. Git may add immutable merge-tree objects to its object database.
+
+## Plugin settings pages
+
+A UI plugin can opt a declared view into the shell's **Settings → Plugin settings**
+navigation with `"settings": true`:
+
+```json
+{"view": [{"id": "settings", "title": "Hosting settings", "settings": true}]}
+```
+
+Provide the view through the normal public UI API. The Settings link opens its
+effective view ID through `ui.view.open`; it does not import feature code into the
+shell. Disabled or overridden-away views have no link. A view with no active UI
+module is shown disabled, and failed navigation leaves Settings open with an error.
+Ordinary views remain outside Settings unless they explicitly opt in.
