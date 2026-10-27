@@ -5,6 +5,7 @@ import type { Rect } from '../../layout/tree'
 import type { Group, GroupNode, GroupSplit, PaneLeaf, Tab, Workspace } from '../../layout/types'
 import { DEFAULT_PANE_SETTINGS, readPaneSettings, type PaneSettings } from '../pane/settings'
 import type { PaneReport } from '../pane/TerminalPaneView'
+import type { DockState } from '../dock/types'
 
 export const STRUCTURED_VIEW_ID = 'view:quirky.session/structured'
 
@@ -194,12 +195,18 @@ export type PaneStateReport = {
   webgl: boolean
   search: PaneReport['search']
   exitOverlay: boolean
+  dock?: DockState
 }
 
-export function panesReport(ws: Workspace, states: Readonly<Record<string, PaneReport>>, fontSize: number): PaneStateReport[] {
+export function panesReport(
+  ws: Workspace,
+  states: Readonly<Record<string, PaneReport>>,
+  fontSize: number,
+  dockStates?: Readonly<Record<string, DockState>>
+): PaneStateReport[] {
   return mountedPanes(ws).map(({ leaf }) => {
     const state = states[leaf.id]
-    return {
+    const row: PaneStateReport = {
       pane: leaf.id,
       session: leaf.session,
       cols: state?.cols ?? 0,
@@ -209,6 +216,9 @@ export function panesReport(ws: Workspace, states: Readonly<Record<string, PaneR
       search: state?.search ?? null,
       exitOverlay: leaf.exit !== null
     }
+    const dock = dockStates?.[leaf.id]
+    if (dock) row.dock = dock
+    return row
   })
 }
 

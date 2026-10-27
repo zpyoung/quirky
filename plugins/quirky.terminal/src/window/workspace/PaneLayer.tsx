@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from 
 import { paneLeaves, paneRects, roundRatio } from '../../layout/tree'
 import type { DividerRect, PaneRect } from '../../layout/tree'
 import type { Edge, Group, PaneLeaf, PaneNode, Tab } from '../../layout/types'
-import { TerminalPaneView } from '../pane/TerminalPaneView'
+import { DockHost } from '../dock/DockHost'
 import { CollapseIcon, CloseIcon, ExpandIcon, GripIcon } from './icons'
 import type { ControllerState, PaneDropTarget, WorkspaceController } from './controller'
 import { STRUCTURED_VIEW_ID, byPaneId, px } from './model'
@@ -319,16 +319,19 @@ export function PaneLayer({ controller, state, group, tab }: Props) {
             ) : session.kind === 'structured' ? (
               <StructuredHost controller={controller} session={leaf.session} />
             ) : (
-              <TerminalPaneView
-                key={state.epoch}
-                ref={(handle) => controller.registerHandle(leaf.id, handle)}
+              <DockHost
+                controller={controller}
                 context={controller.context}
+                paneId={leaf.id}
                 sessionId={leaf.session}
                 cwd={cwds[leaf.session] ?? session.cwd ?? ''}
                 settings={settings}
                 active={focused}
                 interactive={leaf.exit === null && session.status !== 'exited'}
                 dragging={state.dragging}
+                terminalEpoch={state.epoch}
+                availableHeight={rect.height}
+                onHandle={(handle) => controller.registerHandle(leaf.id, handle)}
                 onFocus={() => void controller.focusPane(leaf.id)}
                 onState={(report) => controller.setPaneState(leaf.id, report)}
                 themeSource={controller.options.themeSource ?? controller.root ?? undefined}
