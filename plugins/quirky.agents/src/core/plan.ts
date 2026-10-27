@@ -1,5 +1,14 @@
+import { resolveLaunch } from './resolve'
 import { joinCommand, quote, tokenize } from './shell'
-import type { AgentConfig, AgentEntry, LaunchPlan, LaunchRecord, ProviderSession } from './types'
+import type {
+  AgentConfig,
+  AgentEntry,
+  LaunchPlan,
+  LaunchRecord,
+  ParsedExtras,
+  ProviderSession,
+  ValidSelection
+} from './types'
 
 /** A launch or resume that can't be planned; the message is the text shown to the user. */
 export class PlanError extends Error {}
@@ -237,6 +246,10 @@ export type LaunchPlanInput = {
   hookEnv?: Record<string, string | null>
   /** Absolute path for a bare command name found outside the launch shell's PATH, or null. */
   resolveExecutable?: Resolve
+  /** A pick already validated against the entry's catalog. */
+  selection?: ValidSelection | null
+  /** Extra arguments already validated against the entry's allowlist. */
+  extras?: ParsedExtras | null
 }
 
 function blank(text: string | null | undefined): boolean {
@@ -245,8 +258,10 @@ function blank(text: string | null | undefined): boolean {
 
 /**
  * Plans one agent launch: the command string the launch shell will exec, the environment to
- * apply, the record a later resume replays, and how the first prompt travels. Pure; throws
- * `PlanError` for text that doesn't tokenize or a prompt containing NUL.
+ * apply, the record a later resume replays, and how the first prompt travels. With a selection
+ * or extras the record holds the resolved arguments, so resume replays them. Pure; throws
+ * `PlanError` for text that doesn't tokenize or a prompt containing NUL, and `SelectionError`
+ * when a command override contradicts the pick.
  */
 export function buildLaunchPlan(input: LaunchPlanInput): LaunchPlan {
   const { entry, config } = input
@@ -257,15 +272,29 @@ export function buildLaunchPlan(input: LaunchPlanInput): LaunchPlan {
   const argsText = config.args ?? entry.yolo ?? ''
   const userEnv = config.env ?? entry.yoloEnv ?? {}
   const base = commandTokens(commandText, input.resolveExecutable)
-  const userArgs = argTokens(argsText, entry)
+  const configuredArgs = argTokens(argsText, entry)
+  const resolution = resolveLaunch({
+    entry,
+    commandTokens: blank(config.command) ? [] : base,
+    configuredArgs,
+    selection: input.selection ?? null,
+    extras: input.extras ?? null,
+    structured: false
+  })
+  const resolved = Boolean(input.selection || input.extras)
+  const userArgs = resolved ? resolution.args : configuredArgs
   const env = mergeEnv(entry.env, userEnv, input.hookEnv ?? {})
-  const record: LaunchRecord = { command: commandText, args: argsText, env: { ...userEnv } }
+  const record: LaunchRecord = {
+    command: commandText,
+    args: resolved ? joinCommand(userArgs) : argsText,
+    env: { ...userEnv }
+  }
   const finish = (
     command: string,
     promptDelivery: LaunchPlan['promptDelivery'],
     paste: LaunchPlan['paste'],
     planEnv = env
-  ): LaunchPlan => ({ agent: entry.id, command, env: planEnv, record, promptDelivery, paste, launchSettings: null })
+  ): LaunchPlan => ({ agent: entry.id, command, env: planEnv, record, promptDelivery, paste, launchSettings: resolution.launchSettings })
 
   const terminator = userArgs.indexOf('--')
   const head =
