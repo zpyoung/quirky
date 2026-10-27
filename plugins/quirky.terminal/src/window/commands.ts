@@ -1,6 +1,6 @@
-import type { UiPluginContext } from '@quirky/protocol'
+import { TERMINAL_PANE_MENU, type Session, type UiMenuItemEntry, type UiModel, type UiPluginContext } from '@quirky/protocol'
 import { findGroup } from '../layout/tree'
-import type { FloatingState, QuickCommand, Workspace } from '../layout/types'
+import type { FloatingState, PaneLeaf, QuickCommand, Workspace } from '../layout/types'
 import { FLOATING_WORKSPACE } from '../layout/types'
 import { isQuickCommandComplete } from '../quick-commands/normalize'
 import { paneQuickCommandItems } from './quick-commands'
@@ -397,4 +397,58 @@ export function paneMenuQuickCommands(context: UiPluginContext, source: QuickCom
     const row: MenuItem = { label: item.label, key: item.hint ?? null, enabled: item.enabled, onSelect: () => void item.onSelect() }
     return item.separatorBefore ? [SEPARATOR, row] : [row]
   })
+}
+
+/** The `menu-item` contributions in effect, kept current for the pane menu, which reads them synchronously when it opens. */
+export type MenuContributionSource = {
+  items(): UiMenuItemEntry[]
+  dispose(): void
+}
+
+export function watchMenuContributions(context: UiPluginContext): MenuContributionSource {
+  let items: UiMenuItemEntry[] = []
+  let live = true
+  let latest = 0
+  const load = async () => {
+    const mine = ++latest
+    try {
+      const model = (await context.call('ui.contributions')) as UiModel
+      if (live && mine === latest) items = model.menuItems ?? []
+    } catch {
+      // the menus list no contributed rows until the next change brings them
+    }
+  }
+  void load()
+  const unsubscribe = context.subscribe((event) => {
+    if (event.type === 'plugin.changed') void load()
+  })
+  const stopConnection = context.onConnection((status) => {
+    if (status === 'connected') void load()
+  })
+  return {
+    items: () => items,
+    dispose() {
+      live = false
+      unsubscribe()
+      stopConnection()
+    }
+  }
+}
+
+/**
+ * The pane menu rows other plugins contribute for `pane`. An item conditioned on `agent: 'any'`
+ * applies only when the pane's session runs an agent; choosing a row runs its command with the session.
+ */
+export function paneMenuContributions(context: UiPluginContext, source: MenuContributionSource, pane: PaneLeaf, session: Session | undefined): MenuItem[] {
+  const runsAgent = session !== undefined && session.agent !== 'shell'
+  return source
+    .items()
+    .filter((item) => item.menu === TERMINAL_PANE_MENU && (item.when?.agent !== 'any' || runsAgent))
+    .map((item) => ({
+      label: item.title,
+      onSelect: () =>
+        void context.executeCommand(item.command, { session: pane.session }).catch((error: unknown) => {
+          context.toast(item.title, error instanceof Error ? error.message : String(error))
+        })
+    }))
 }

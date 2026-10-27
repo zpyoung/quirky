@@ -51,6 +51,7 @@ describe('the built-ins as the window sees them', () => {
   })
 
 
+
 })
 
 describe('the pane methods over the daemon', () => {

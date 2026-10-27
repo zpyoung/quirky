@@ -132,6 +132,11 @@ export type AccountSessionRecord = {
   error: string | null
 }
 
+export type SessionHomeResult = {
+  provider: ManagedProvider | null
+  home: string | null
+}
+
 export type RestartIntention = {
   sessionId: string
   targetId: string | null

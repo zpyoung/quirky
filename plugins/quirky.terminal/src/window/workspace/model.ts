@@ -162,6 +162,8 @@ export type TabReport = {
   pane: string
   display?: AgentDisplayState
   label?: string
+  /** Present for a pane whose session carries badges. */
+  badges?: { key: string; label: string }[]
 }
 
 export function tabsReport(ws: Workspace, sessions: Readonly<Record<string, Session>>, now: number = Date.now()): TabReport[] {
@@ -171,6 +173,7 @@ export function tabsReport(ws: Workspace, sessions: Readonly<Record<string, Sess
       if (!isTerminalTab(tab)) continue
       for (const leaf of paneLeaves(tab.root)) {
         const session = sessions[leaf.session]
+        const badges = Object.entries(session?.badges ?? {}).map(([key, badge]) => ({ key, label: badge.label }))
         rows.push({
           session: leaf.session,
           title: displayTitle(tab),
@@ -179,7 +182,8 @@ export function tabsReport(ws: Workspace, sessions: Readonly<Record<string, Sess
           tab: tab.id,
           group: group.id,
           pane: leaf.id,
-          ...(session?.agentStatus ? windowDisplay(session.agentStatus, now, session.status !== 'exited') : {})
+          ...(session?.agentStatus ? windowDisplay(session.agentStatus, now, session.status !== 'exited') : {}),
+          ...(badges.length > 0 ? { badges } : {})
         })
       }
     }

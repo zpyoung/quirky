@@ -84,6 +84,8 @@ export type WorkspaceOptions = {
   stripExtras?: (group: Group) => ReactNode
   /** The rows of the pane menu's Quick Commands submenu. */
   paneMenuExtras?: (pane: PaneLeaf) => MenuItem[]
+  /** Rows other plugins contribute to the pane menu, shown right after the Quick Commands row. */
+  paneMenuContributions?: (pane: PaneLeaf, session: Session | undefined) => MenuItem[]
   /** Menus beyond `tab`, `pane`, `plus` and `actions`, opened by `openMenu(kind, target)`. */
   extraMenus?: Record<string, (target: string | null) => MenuItem[]>
   /** The element carrying the theme's custom properties; defaults to the mount element. */
@@ -927,11 +929,13 @@ export class WorkspaceController {
     const { tab, leaf } = loc
     const split = paneLeaves(tab.root).length > 1
     const quick = this.options.paneMenuExtras?.(leaf) ?? []
+    const contributed = this.options.paneMenuContributions?.(leaf, this.state.sessions[leaf.session]) ?? []
     const items: MenuItem[] = [
       { label: 'Copy', key: '⌘C', onSelect: () => this.copy(paneId) },
       { label: 'Select All', key: '⌘A', onSelect: () => this.selectAll(paneId) },
       { label: 'Paste', key: '⌘V', onSelect: () => void this.pasteFromClipboard(paneId) },
       { label: 'Quick Commands', submenu: quick.length > 0 ? quick : [{ label: 'No quick commands', enabled: false }] },
+      ...contributed,
       SEPARATOR,
       { label: 'Split Terminal Right', key: '⌘D', onSelect: () => void this.splitRight(paneId) },
       { label: 'Split Terminal Down', key: '⌘⇧D', onSelect: () => void this.splitDown(paneId) }
