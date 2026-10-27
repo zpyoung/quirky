@@ -73,12 +73,12 @@ export function AskCard({ ask, context, onResolved }: Props) {
       <h3>{ask.spec.title ?? ASK_FALLBACK_TITLE}</h3>
       {ask.spec.questions.map((question) => (
         <fieldset key={question.id} data-question={question.id}>
-          {question.header && (
-            <div>
-              <strong>{question.header}</strong>
-            </div>
-          )}
-          <legend style={{ whiteSpace: 'pre-wrap' }}>{question.question}</legend>
+          <legend>
+            {question.header && <strong style={{ display: 'block' }}>{question.header}</strong>}
+            <span data-question-text style={{ display: 'block', whiteSpace: 'pre-wrap', fontWeight: question.header ? 400 : undefined }}>
+              {question.question}
+            </span>
+          </legend>
           {!question.required && <small className="muted">(optional)</small>}
           <QuestionField question={question} draft={drafts[question.id]!} onChange={(draft) => change(question.id, draft)} />
           {errors[question.id] && (

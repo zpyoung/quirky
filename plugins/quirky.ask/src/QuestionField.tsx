@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, type CSSProperties } from 'react'
 import type { AskOption, AskQuestion } from '@quirky/protocol'
 import type { QuestionDraft } from './core/submission'
 
@@ -9,6 +9,8 @@ type Props = {
 }
 
 const OWN_ANSWER = 'Add your own answer'
+
+const PRESSED_STYLE: CSSProperties = { background: 'var(--accent)', borderColor: 'var(--accent)', color: '#fff', fontWeight: 600 }
 
 /** The controls for one question, edited through its `QuestionDraft`. */
 export function QuestionField({ question, draft, onChange }: Props) {
@@ -67,6 +69,7 @@ export function QuestionField({ question, draft, onChange }: Props) {
               type="button"
               className={draft.confirm === value ? 'active' : undefined}
               aria-pressed={draft.confirm === value}
+              style={draft.confirm === value ? PRESSED_STYLE : undefined}
               onClick={() => onChange({ ...draft, confirm: value })}
             >
               {value ? 'Yes' : 'No'}
@@ -82,7 +85,7 @@ function OptionRow({ option, pressed, onPress }: { option: AskOption; pressed: b
   return (
     <div>
       <div className="options inline" style={{ gap: 6 }}>
-        <button type="button" className={pressed ? 'active' : undefined} aria-pressed={pressed} onClick={onPress} style={{ flex: 1, textAlign: 'left' }}>
+        <button type="button" className={pressed ? 'active' : undefined} aria-pressed={pressed} onClick={onPress} style={{ flex: 1, textAlign: 'left', ...(pressed ? PRESSED_STYLE : {}) }}>
           {option.label}
           {option.description && <small className="muted"> {option.description}</small>}
         </button>

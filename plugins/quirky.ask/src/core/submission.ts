@@ -1,6 +1,9 @@
 import type { AskAnswer, AskPartial, AskPartialQuestionDraft, AskQuestion, AskSpec } from '@quirky/protocol'
 import { FORMAT_PATTERNS, isValidIsoDate, nonBlank } from './values'
 
+// mirrors the daemon's bound in answers.ts, which refuses longer text when a pattern applies
+const MAX_PATTERN_TEST_LENGTH = 200
+
 /** The window's working state for one question, before it is parsed against the question's type. */
 export type QuestionDraft = {
   /** Option values picked: 0 or 1 for a select, any number for a multiselect. */
@@ -89,6 +92,7 @@ function resolveText(question: AskQuestion & { type: 'text' }, draft: QuestionDr
   if (question.format === 'email' && !FORMAT_PATTERNS.email.test(value)) return error('Enter a valid email address.')
   if (question.format === 'url' && !FORMAT_PATTERNS.url.test(value)) return error('Enter a valid URL.')
   if (question.pattern) {
+    if (value.length > MAX_PATTERN_TEST_LENGTH) return error("Doesn't match the expected format.")
     let matches = true
     try {
       matches = new RegExp(question.pattern).test(value)
