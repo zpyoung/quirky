@@ -24,7 +24,7 @@ test('SC-05/07: transcript content becomes searchable only after explicit consen
     const db = join(home, 'plugin-data/quirky.vault/session-search.sqlite')
     expect(existsSync(db)).toBe(false)
     const disabled = await client.call('quirky.vault/search' as never, { query: 'privatezebramarker' } as never) as { kind: string; reason?: string }
-    expect(disabled).toEqual({ kind: 'unavailable', reason: 'disabled' })
+    expect(disabled).toMatchObject({ kind: 'unavailable', reason: 'disabled' })
     await client.call('quirky.vault/setSearchEnabled' as never, { enabled: true } as never)
     const matches = await client.call('quirky.vault/search' as never, { query: 'privatezebramarker', freshness: 'wait-until-current' } as never) as { kind: string; hits: { sessionId: string }[] }
     expect(matches.kind).toBe('results')

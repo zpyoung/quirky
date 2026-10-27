@@ -96,6 +96,8 @@ API method names and CLI group are vault-owned, not Orca `aiVault:*` aliases. CL
 
 `CONTRACT:` Public result envelopes are canonical, not guessed compatibility variants. get returns HostedSession|null directly; firstPrompt returns `{prompt:string|null}`; subagents returns HostedSession[] directly. getView/setView(flat Partial<ViewState>)/resetView return ViewState directly. searchStatus/setSearchEnabled return `{status:SearchStatus,hosts:HostOutcome[]}`. clearSearchIndex returns `{cleared:boolean,status:SearchStatus,hosts:HostOutcome[],reason?:string}`. resume returns Session directly. openSource accepts `{id,mode:'view'|'open'|'reveal'}` and returns `{ok:true}`. deleteSession returns `{deleted:boolean,trashed:number,alreadyMissing:boolean,reason?:string}`; trashed is a count, not source paths. Schemas and renderer must use these exact envelopes; no wrapper/raw fallbacks.
 
+Every public SearchResponse variant may include a typed hosts outcome list, including unavailable and stale/malformed cursors. Worker-local responses omit that transport metadata; callers must not confuse an honest per-host unavailable result with an untyped extra-field error.
+
 Host input is `local`, `all` or an effective host contribution identity. Local/All without hosts both use local data. Optional `vault-host` contributions declare label and a public method prefix to forward compatible list/search/status/enable actions; validate capability/response schemas. Host failures remain partial failures with identity. Remote results never return local source paths/resume commands/root paths; never resume or delete a remote source locally. Pairing/E2EE/listener implementation is fenced to its roadmap owner.
 
 ## Data models and schemas

@@ -214,6 +214,19 @@
         "@types/react-dom": "^19.3.0",
       },
     },
+    "plugins/quirky.vault": {
+      "name": "@quirky/plugin-vault",
+      "version": "0.1.0",
+      "dependencies": {
+        "@quirky/protocol": "workspace:*",
+        "react": "19.2.0",
+        "react-dom": "19.2.0",
+      },
+      "devDependencies": {
+        "@types/react": "^19.3.0",
+        "@types/react-dom": "^19.3.0",
+      },
+    },
     "plugins/quirky.worktree": {
       "name": "@quirky/plugin-worktree",
       "version": "0.1.0",
@@ -334,6 +347,8 @@
     "@quirky/plugin-structured": ["@quirky/plugin-structured@workspace:plugins/quirky.structured"],
 
     "@quirky/plugin-terminal": ["@quirky/plugin-terminal@workspace:plugins/quirky.terminal"],
+
+    "@quirky/plugin-vault": ["@quirky/plugin-vault@workspace:plugins/quirky.vault"],
 
     "@quirky/plugin-worktree": ["@quirky/plugin-worktree@workspace:plugins/quirky.worktree"],
 

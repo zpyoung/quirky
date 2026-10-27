@@ -1144,6 +1144,7 @@ export class VaultService {
           const wrapped = this.publicSearchResponse(response, target.contribution!, [])
           if (wrapped.kind === 'results') response = wrapped
         }
+      }
       hostOutcomes.push(hostOutcome)
       if (response.kind === 'stale-cursor') return { kind: 'stale-cursor', hosts: hostOutcomes }
       if (response.kind === 'malformed-cursor') return { kind: 'malformed-cursor', hosts: hostOutcomes }

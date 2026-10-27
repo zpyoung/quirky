@@ -127,9 +127,10 @@ export type SearchResults = {
   hosts?: HostOutcome[]
   debug?: Record<string, unknown>
 }
-export type SearchResponse = SearchResults | { kind: 'stale-cursor' } | { kind: 'malformed-cursor' } | {
+export type SearchResponse = SearchResults | { kind: 'stale-cursor'; hosts?: HostOutcome[] } | { kind: 'malformed-cursor'; hosts?: HostOutcome[] } | {
   kind: 'unavailable'
   reason: 'disabled' | 'not-ready' | 'no-service' | 'scope-unknown' | 'unsupported-agent'
+  hosts?: HostOutcome[]
 }
 export type SearchStatus = {
   enabled: boolean
