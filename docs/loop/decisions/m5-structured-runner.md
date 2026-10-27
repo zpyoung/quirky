@@ -365,5 +365,16 @@ Implementation wave: T1 structured/session/catalog, T2 checks plugin, T3 ask own
 - No product source changed during resumption. The earlier real daemon/CLI/native-process smoke and single final-review/fix batch remain applicable. No new UI/native scenarios.
 - Next mandatory gate is queue.ts land's full merge-result verification; interrupted/old-host runs are not represented as passes.
 
+## D34: Preserve verified source when foreign dirty integration state prevents both landing and blocking
+- **Question:** how to finish the mandatory queue landing after its clean-worktree precondition fails
+- **Options:** alter the integration queue manually; force a commit of foreign entries; preserve the verified source and register an infrastructure blocker through the supported API
+- **Chose:** never modify the integration worktree or its queue. Preserve the verified item and attempt formal block registration through queue.ts, retaining any registration failure as evidence.
+- **Why:** land exited1 before running merge verification because integration docs/loop/queue.json is modified. Read-only investigation found only appended race-item and active-item entries; their origin is unknown. One process snapshot found no live queue owner. The source contains neither identifier under scripts. All queue mutations, including block, use the same requireClean guard; no supported command removes/reconciles these entries.
+- **Evidence:** queue.ts land output after2525760; LandingStateScout inspection of integration diff, lanes.ts:78–83,218–224,278–350 and process snapshot; literal scripts search returned no matches. Implementation remains unchanged and all162affected test files pass.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** authorized owner reconciles the dirty integration queue; then restore/requeue as needed and retry landing without rebuilding the implementation
+- **Source:** locked by docs/loop/LOOP.md
+
 ## Progress
-Ready for step7 landing after operator queue-order repair and replacement-host prerequisite provisioning. Caught up and read incoming decisions; fresh typecheck/scripts55pass/build and affected162file remote suite all pass. No product edits or open accepted review findings. Commit this record, detach and run queue.ts land m5-structured-runner without an outer deadline. Preserve operator protected build-loop commits.
+Step7 landing is blocked before merge verification by foreign uncommitted integration docs/loop/queue.json (D34), not by product verification. Fresh typecheck/scripts55pass/build and affected162file remote suite pass. Source and decision log are preserved; formal queue block registration is attempted only through queue.ts. Authorized owner must reconcile the dirty integration queue; no protected-path edit, foreign commit, force cleanup or test weakening is permitted. After reconciliation, restore build/m5-structured-runner/requeue if formal block completed, catch up/read incoming decisions, and queue.ts land without an outer deadline. No product edits or open accepted review findings.
