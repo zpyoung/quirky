@@ -53,6 +53,8 @@ files, not this one.
 | medium | medium | [m0-registry D8](decisions/m0-registry.md) | Override precedence is installed over built-in, then dependent over dependency, then a reported conflict | assumed — autonomous |
 | medium | medium | [m0-registry D10](decisions/m0-registry.md) | Enable and disable apply live, without a restart | assumed — autonomous |
 | medium | medium | [m0-registry D16](decisions/m0-registry.md) | The manifest is `quirky-plugin.json` in the plugin's directory | assumed — autonomous |
+| medium | medium | [m2-ask-parity D13](decisions/m2-ask-parity.md) | Asks from one session queue, and asks with no session never do | supersedes m0-core D25 |
+| medium | medium | [m2-ask-parity D15](decisions/m2-ask-parity.md) | Events: `created`, `surfaced`, `updated` and `resolved`, each with `seq`; only surfacing notifies | assumed — autonomous |
 | medium | medium | [m1-launch-settings D4](decisions/m1-launch-settings.md) | This item builds the catalog, its resolution into argv and structured options, the launch snapshot, the extra-arguments allowlist, and their use by session and structured launches | assumed — autonomous |
 | medium | medium | [m1-launch-settings D11](decisions/m1-launch-settings.md) | Precedence: per-launch extra arguments beat picks, and picks beat the agent's configured arguments; a beaten flag is removed, never repeated | assumed — autonomous |
 | medium | medium | [m1-launch-settings D21](decisions/m1-launch-settings.md) | API: `quirky.agents/options` lists an agent's catalog and `quirky.agents/resolveLaunch` previews a resolution | assumed — autonomous |
@@ -61,6 +63,10 @@ files, not this one.
 | medium | medium | [m1-providers D21](decisions/m1-providers.md) | Paste-after-ready follows Orca's renderer path: a per-agent ready signal, a deadline, then a blind paste reported as unconfirmed | assumed — autonomous |
 | medium | medium | [m1-providers D25](decisions/m1-providers.md) | Resume starts a new session in the original session's folder, from a recorded or given provider session | assumed — autonomous |
 | medium | medium | [m1-providers D40](decisions/m1-providers.md) | Session and agents talk through four `quirky.agents` methods, and `deliver` settles before it returns | assumed — autonomous |
+| medium | medium | [m1-term-daemon D7](decisions/m1-term-daemon.md) | History pages with an opaque cursor, as text by default and ANSI on request | assumed — autonomous |
+| medium | medium | [m1-term-daemon D10](decisions/m1-term-daemon.md) | Cold restore starts a shell, lazily on attach or on an explicit restore | locked by term-daemon.md |
+| medium | medium | [m1-term-daemon D17](decisions/m1-term-daemon.md) | The PTY protocol goes to 2; an older host is retired on upgrade, a newer one is refused | assumed — autonomous |
+| medium | medium | [m1-term-daemon D31](decisions/m1-term-daemon.md) | Tech-spec mechanisms: the host renders history windows through a scratch emulator, composes the attach replay by overlaying the live snapshot, and the wrappers report through hooks | assumed — autonomous |
 | medium | high | [m0-scripting D5](decisions/m0-scripting.md) | Methods declare `params` and `result`, events declare `data`, UI commands declare `args` | assumed — autonomous |
 | medium | high | [m0-scripting D7](decisions/m0-scripting.md) | Kernel methods and events get schemas too, in one table checked against the protocol types | assumed — autonomous |
 | medium | high | [m0-scripting D9](decisions/m0-scripting.md) | One command table drives parsing, validation, help, suggestions and the catalog | locked by research/orca-features/cli.md |
@@ -85,6 +91,11 @@ files, not this one.
 | medium | high | [m0-registry D6](decisions/m0-registry.md) | A plugin's own contributions use short names, overrides use full IDs | assumed — autonomous |
 | medium | high | [m0-registry D9](decisions/m0-registry.md) | Disable works by plugin ID or contribution ID, before any code loads, and persists | locked by docs/roadmap.md (disable by ID); assumed — autonomous (cascade and persistence) |
 | medium | high | [m0-registry D11](decisions/m0-registry.md) | Plugins activate lazily on first use by default, or at startup when the manifest says so | locked by docs/roadmap.md (lazy); assumed — autonomous (trigger set) |
+| medium | high | [m2-ask-parity D5](decisions/m2-ask-parity.md) | The question schema is Orca's, plus Quirky's optional `title` | locked by research/orca-features/ask.md |
+| medium | high | [m2-ask-parity D9](decisions/m2-ask-parity.md) | The deadline lives in the daemon, is stored, and survives a restart | locked by research/orca-features/ask.md |
+| medium | high | [m2-ask-parity D12](decisions/m2-ask-parity.md) | Drafts are Orca's per-question partial, saved by the window 500 ms after typing stops | locked by research/orca-features/ask.md |
+| medium | high | [m2-ask-parity D14](decisions/m2-ask-parity.md) | One persisted counter stamps every ask change, and a promotion gets the next value | locked by research/orca-features/ask.md |
+| medium | high | [m2-ask-parity D20](decisions/m2-ask-parity.md) | Approach: extend `quirky.ask` in place with Orca's pure modules ported beside it | assumed — autonomous |
 | medium | high | [m1-launch-settings D8](decisions/m1-launch-settings.md) | A selection is `{model?, options?}`, with Orca's bounds | locked by research/orca-features/launch-settings.md |
 | medium | high | [m1-launch-settings D12](decisions/m1-launch-settings.md) | The snapshot comes from the same resolution as the command, so it can't misreport provenance | assumed — autonomous |
 | medium | high | [m1-launch-settings D16](decisions/m1-launch-settings.md) | A session stores its snapshot, and resume and fork replay the resolved arguments | assumed — autonomous |
@@ -94,6 +105,13 @@ files, not this one.
 | medium | high | [m1-providers D20](decisions/m1-providers.md) | The prompt reaches the agent the way its entry says, using Orca's builders | locked by research/orca-features/providers.md |
 | medium | high | [m1-providers D22](decisions/m1-providers.md) | The launch result says how the prompt was delivered, on the session record, and `--wait` blocks for it | assumed — autonomous |
 | medium | high | [m1-providers D24](decisions/m1-providers.md) | A launch records its command, arguments and environment, and resume replays only those | locked by research/orca-features/providers.md |
+| medium | high | [m1-term-daemon D5](decisions/m1-term-daemon.md) | Attach returns one ready-to-write replay: recent history rows followed by an exact screen snapshot | assumed — autonomous |
+| medium | high | [m1-term-daemon D11](decisions/m1-term-daemon.md) | Exit codes are the process's own status; a signal death reports 128+n and names the signal | assumed — autonomous |
+| medium | high | [m1-term-daemon D16](decisions/m1-term-daemon.md) | The host reports bells, command finishes, titles and cwd as `quirky.terminal` events, whether or not a pane is open | assumed — autonomous |
+| medium | high | [m1-term-daemon D23](decisions/m1-term-daemon.md) | Linux and Windows work is deferred | deferred: platform |
+| medium | high | [m1-term-daemon D24](decisions/m1-term-daemon.md) | History is rendered on read by replaying a bounded window of the log, not stored as rows | locked by docs/architecture.md |
+| medium | high | [m1-term-daemon D41](decisions/m1-term-daemon.md) | Catching up with build/roadmap (m1-providers) keeps both sides; the exit columns become migration 3 | assumed — autonomous |
+| medium | high | [m1-term-daemon D42](decisions/m1-term-daemon.md) | A second catch-up merged m1-launch-settings; the exit columns become migration 4 | assumed — autonomous |
 | easy | medium | [m0-scripting D14](decisions/m0-scripting.md) | Generated commands print a generic text form, and `--json` prints the raw result | assumed — autonomous |
 | easy | medium | [m0-scripting D19](decisions/m0-scripting.md) | The agent skill is generated from the live catalog and shown or installed through `quirky skill` | assumed — autonomous |
 | easy | medium | [m0-scripting D27](decisions/m0-scripting.md) | No closure review round on the logic spec | assumed — autonomous |
@@ -126,6 +144,15 @@ files, not this one.
 | easy | medium | [m0-registry D24](decisions/m0-registry.md) | Built-in plugins live in a top-level `plugins/` directory, and packaging them waits for m0-port-v1 | assumed — autonomous |
 | easy | medium | [m0-registry D25](decisions/m0-registry.md) | Activation failures surface as Conflict errors, unknown IDs as NotFound | assumed — autonomous |
 | easy | medium | [m0-registry D30](decisions/m0-registry.md) | No closure review round on the specs | assumed — autonomous |
+| easy | medium | [m2-ask-parity D3](decisions/m2-ask-parity.md) | The Claude suppression flags land here, as a launch hook in `quirky.ask` | locked by docs/loop/decisions/m1-providers.md D35 |
+| easy | medium | [m2-ask-parity D7](decisions/m2-ask-parity.md) | Credential refusal is Orca's two checks, and plugin-registered asks skip the text check | assumed — autonomous |
+| easy | medium | [m2-ask-parity D8](decisions/m2-ask-parity.md) | The daemon validates answers, and an omitted question counts as skipped | assumed — autonomous |
+| easy | medium | [m2-ask-parity D10](decisions/m2-ask-parity.md) | `quirky ask wait --timeout-ms` stays and times the ask out with the same rules | assumed — autonomous |
+| easy | medium | [m2-ask-parity D16](decisions/m2-ask-parity.md) | The window refetches on events and drops any event at or below its watermark | assumed — autonomous |
+| easy | medium | [m2-ask-parity D17](decisions/m2-ask-parity.md) | Option previews are kept and shown as plain text | assumed — autonomous |
+| easy | medium | [m2-ask-parity D22](decisions/m2-ask-parity.md) | A `deadlines` job wakes the plugin after a restart | assumed — autonomous |
+| easy | medium | [m2-ask-parity D26](decisions/m2-ask-parity.md) | The suppression hook reads the current configuration, even for a resume | assumed — autonomous |
+| easy | medium | [m2-ask-parity D32](decisions/m2-ask-parity.md) | Patterns are screened more strictly than Orca does | assumed — autonomous |
 | easy | medium | [m1-launch-settings D10](decisions/m1-launch-settings.md) | A model ID the catalog doesn't list is accepted when the agent declares options for unknown models or lists no models at all | assumed — autonomous |
 | easy | medium | [m1-launch-settings D17](decisions/m1-launch-settings.md) | Model discovery and retirement wait for the first item that saves picks | assumed — autonomous |
 | easy | medium | [m1-launch-settings D19](decisions/m1-launch-settings.md) | The catalog yields structured options, and `quirky.structured/create` uses them | assumed — autonomous |
@@ -146,6 +173,13 @@ files, not this one.
 | easy | medium | [m1-providers D46](decisions/m1-providers.md) | Wave 1 implementation choices accepted as built | assumed — autonomous |
 | easy | medium | [m1-providers D48](decisions/m1-providers.md) | Review rounds: what was accepted, rejected and fixed | assumed — autonomous |
 | easy | medium | [m1-providers D51](decisions/m1-providers.md) | The integration tree got the new package's dependency links by hand before landing | assumed — autonomous |
+| easy | medium | [m1-term-daemon D22](decisions/m1-term-daemon.md) | Out of scope: launchd and TCC, Linux scopes, Windows, spawn admission, legacy adapters, two-socket framing, background thinning, foreground process tracking, seed chunking | assumed — autonomous |
+| easy | medium | [m1-term-daemon D25](decisions/m1-term-daemon.md) | Pin @xterm/headless 5.5.0 and add @xterm/addon-serialize 0.13.0, and test the snapshot's known weak spots | assumed — autonomous |
+| easy | medium | [m1-term-daemon D26](decisions/m1-term-daemon.md) | Skip Phase C deep research | assumed — autonomous |
+| easy | medium | [m1-term-daemon D35](decisions/m1-term-daemon.md) | Build in four waves: contracts and host units, history and session records, host integration and the terminal plugin, then the window and the end-to-end scenarios | assumed — autonomous |
+| easy | medium | [m1-term-daemon D44](decisions/m1-term-daemon.md) | The fix batch closed every Final Round 1 finding; two fixer notes are accepted as limits | assumed — autonomous |
+| easy | medium | [m1-term-daemon D48](decisions/m1-term-daemon.md) | The e2e harness kills what it started even when a run dies; a daemon lock test leaks fake hosts | assumed — autonomous |
+| easy | medium | [m1-term-daemon D49](decisions/m1-term-daemon.md) | The first land failed in the integration tree; the new package links were copied in by hand, as m1-providers D51 did | assumed — autonomous |
 | easy | high | [m0-scripting D1](decisions/m0-scripting.md) | Classify the item as a CLI and API design, and run both research phases | assumed — autonomous |
 | easy | high | [m0-scripting D2](decisions/m0-scripting.md) | Skip the visual companion and the adhd offer, use the standard gray-area set | locked by docs/loop/LOOP.md |
 | easy | high | [m0-scripting D3](decisions/m0-scripting.md) | Select every gray area that matters for the scripting surface | assumed — autonomous |
@@ -257,6 +291,26 @@ files, not this one.
 | easy | high | [m0-registry D32](decisions/m0-registry.md) | Wave 2 checkpoint findings: fix all four defects | assumed — autonomous |
 | easy | high | [m0-registry D33](decisions/m0-registry.md) | A long QUIRKY_HOME breaks the PTY host's socket; logged, not fixed here | deferred: platform |
 | easy | high | [m0-registry D34](decisions/m0-registry.md) | The final review loop closed after three rounds with no open finding | assumed — autonomous |
+| easy | high | [m2-ask-parity D1](decisions/m2-ask-parity.md) | In scope: the roadmap's five ask-parity points plus what they need to be testable | locked by docs/roadmap.md |
+| easy | high | [m2-ask-parity D2](decisions/m2-ask-parity.md) | Out of scope: hand-off, liveness, the wait cap, the 3-minute notification, rich previews, attention markers | locked by docs/roadmap.md |
+| easy | high | [m2-ask-parity D4](decisions/m2-ask-parity.md) | Brainstorming runs headless with the standard gray areas, all selected | locked by docs/loop/LOOP.md |
+| easy | high | [m2-ask-parity D6](decisions/m2-ask-parity.md) | One shared validator, run by the CLI and again by the daemon, with Orca's messages | assumed — autonomous |
+| easy | high | [m2-ask-parity D11](decisions/m2-ask-parity.md) | `--chunk-ms` is accepted, and without it the CLI still waits to the end | assumed — autonomous |
+| easy | high | [m2-ask-parity D18](decisions/m2-ask-parity.md) | The card follows Orca's controls and client-side messages | locked by research/orca-features/ask.md |
+| easy | high | [m2-ask-parity D19](decisions/m2-ask-parity.md) | Terminal envelopes carry Orca's `summary` | locked by research/orca-features/ask.md |
+| easy | high | [m2-ask-parity D21](decisions/m2-ask-parity.md) | Tests drive the daemon API, the CLI's command functions and the window module | locked by docs/loop/LOOP.md |
+| easy | high | [m2-ask-parity D23](decisions/m2-ask-parity.md) | Overdue asks are resolved before anything else touches them, and never surface | assumed — autonomous |
+| easy | high | [m2-ask-parity D24](decisions/m2-ask-parity.md) | A multiselect's free text is saved as `other` whether or not options are picked | assumed — autonomous |
+| easy | high | [m2-ask-parity D25](decisions/m2-ask-parity.md) | The version probe runs the configured command as quoted words | assumed — autonomous |
+| easy | high | [m2-ask-parity D27](decisions/m2-ask-parity.md) | Spec review: answer refusals use Orca's text; the prepass reference and heading checks are dismissed | assumed — autonomous |
+| easy | high | [m2-ask-parity D28](decisions/m2-ask-parity.md) | Build pairing `claude-task + codex`, four waves, no checkpoint after wave 1 | locked by docs/loop/LOOP.md |
+| easy | high | [m2-ask-parity D29](decisions/m2-ask-parity.md) | The fake agent answers `--version` as a probe, not a launch | assumed — autonomous |
+| easy | high | [m2-ask-parity D30](decisions/m2-ask-parity.md) | `surfaced` is emitted only for promotions | assumed — autonomous |
+| easy | high | [m2-ask-parity D31](decisions/m2-ask-parity.md) | Question ids `__proto__`, `constructor` and `prototype` are refused | assumed — autonomous |
+| easy | high | [m2-ask-parity D33](decisions/m2-ask-parity.md) | Final Round 1: accept all ten findings, which collapse to six defects, and fix them in one batch | assumed — autonomous |
+| easy | high | [m2-ask-parity D34](decisions/m2-ask-parity.md) | UI scenarios pass in the web window; two goals were limited by the tool, not the app | assumed — autonomous |
+| easy | high | [m2-ask-parity D35](decisions/m2-ask-parity.md) | Catching up with build/roadmap (m1-term-daemon) needed no change here | assumed — autonomous |
+| easy | high | [m2-ask-parity D36](decisions/m2-ask-parity.md) | No native-only scenarios | assumed — autonomous |
 | easy | high | [m1-launch-settings D1](decisions/m1-launch-settings.md) | Classify the item as Data, API, CLI and Integration work, and run research phases A and B | assumed — autonomous |
 | easy | high | [m1-launch-settings D2](decisions/m1-launch-settings.md) | Skip the visual companion and the adhd offer, and use the standard gray-area set | locked by docs/loop/LOOP.md |
 | easy | high | [m1-launch-settings D3](decisions/m1-launch-settings.md) | Select every gray area that matters: data-mapping, input-format, conflict-resolution, error-handling, output-format and flag-design | locked by docs/loop/LOOP.md |
@@ -301,3 +355,34 @@ files, not this one.
 | easy | high | [m1-providers D47](decisions/m1-providers.md) | Trust writes skip the real home in test runs, after one test run wrote to it | assumed — autonomous |
 | easy | high | [m1-providers D49](decisions/m1-providers.md) | The UI scenarios passed in the web window; one visual defect was fixed | assumed — autonomous |
 | easy | high | [m1-providers D50](decisions/m1-providers.md) | No native-only scenarios | assumed — autonomous |
+| easy | high | [m1-term-daemon D1](decisions/m1-term-daemon.md) | Classify the item as API, CLI and Data design, and run every research phase | assumed — autonomous |
+| easy | high | [m1-term-daemon D2](decisions/m1-term-daemon.md) | Skip the visual companion and the adhd offer, use the standard gray-area set | locked by docs/loop/LOOP.md |
+| easy | high | [m1-term-daemon D3](decisions/m1-term-daemon.md) | Keep m1-term-daemon as one item, and put the Manage Sessions flows in it as a panel | locked by docs/loop/LOOP.md |
+| easy | high | [m1-term-daemon D4](decisions/m1-term-daemon.md) | Select every gray area that matters: response shape, errors, versioning, paging, CLI output and flags, exit codes, recovery, retention | locked by docs/loop/LOOP.md |
+| easy | high | [m1-term-daemon D6](decisions/m1-term-daemon.md) | Attach history depth is the pane's scrollback setting, 2,000 lines by default | locked by docs/architecture.md |
+| easy | high | [m1-term-daemon D8](decisions/m1-term-daemon.md) | `quirky.terminal/snapshot` returns the screen as structured JSON for agents and tests | assumed — autonomous |
+| easy | high | [m1-term-daemon D9](decisions/m1-term-daemon.md) | Errors: writing to an ended session fails, and a restorable session says how to restore it | assumed — autonomous |
+| easy | high | [m1-term-daemon D12](decisions/m1-term-daemon.md) | Kill one and kill all force-quit immediately and confirm unless `--yes` | locked by term-daemon.md |
+| easy | high | [m1-term-daemon D13](decisions/m1-term-daemon.md) | Restart host ends every session as restorable and starts a fresh host | locked by term-daemon.md |
+| easy | high | [m1-term-daemon D14](decisions/m1-term-daemon.md) | The Terminal Sessions panel mirrors Orca's Manage Sessions | locked by term-daemon.md |
+| easy | high | [m1-term-daemon D15](decisions/m1-term-daemon.md) | The shell-ready barrier holds input for wrapped zsh and bash shells until the first prompt, 15 s at most | locked by term-daemon.md |
+| easy | high | [m1-term-daemon D18](decisions/m1-term-daemon.md) | History lives until the session is closed, capped at two 16 MiB log segments, checkpointed every 5 s while output changes | locked by docs/architecture.md |
+| easy | high | [m1-term-daemon D19](decisions/m1-term-daemon.md) | Damaged history degrades step by step and never blocks the terminal | locked by term-daemon.md |
+| easy | high | [m1-term-daemon D20](decisions/m1-term-daemon.md) | The host keeps no scrollback in memory: a screen-only emulator and a 256 KiB tail per session | locked by docs/architecture.md |
+| easy | high | [m1-term-daemon D21](decisions/m1-term-daemon.md) | Two Orca defects get tests: masked exit codes, and unbounded per-session scrollback memory | locked by docs/loop/LOOP.md |
+| easy | high | [m1-term-daemon D27](decisions/m1-term-daemon.md) | All six essentials are covered; fast-track the remaining defaults | locked by docs/loop/LOOP.md |
+| easy | high | [m1-term-daemon D28](decisions/m1-term-daemon.md) | The design sections pass self-review without changes to the decisions above | locked by docs/loop/LOOP.md |
+| easy | high | [m1-term-daemon D29](decisions/m1-term-daemon.md) | Methods and events follow the plugins' camelCase naming; CLI words keep hyphens | assumed — autonomous |
+| easy | high | [m1-term-daemon D30](decisions/m1-term-daemon.md) | The panel confirms in the window and calls with `yes`; CLI and agents confirm through the kernel's ask | assumed — autonomous |
+| easy | high | [m1-term-daemon D32](decisions/m1-term-daemon.md) | One adversarial-review pass over both specs as one artifact, deep depth, Codex reviewing, tech-spec reviewer folded in | locked by docs/loop/LOOP.md |
+| easy | high | [m1-term-daemon D33](decisions/m1-term-daemon.md) | Spec review: fix all five Codex findings and the two misnamed test files; reject the rest of the pre-pass | assumed — autonomous |
+| easy | high | [m1-term-daemon D34](decisions/m1-term-daemon.md) | Build with Claude subagents implementing and Codex reviewing | locked by docs/loop/LOOP.md |
+| easy | high | [m1-term-daemon D36](decisions/m1-term-daemon.md) | Two W1 tasks hit one-line test assertions outside their scope; widen the owning chain or fix at the wave gate | assumed — autonomous |
+| easy | high | [m1-term-daemon D37](decisions/m1-term-daemon.md) | W1 checkpoint: accept all eleven findings, which collapse to five defects | assumed — autonomous |
+| easy | high | [m1-term-daemon D38](decisions/m1-term-daemon.md) | W2 checkpoint: accept all eight findings, which collapse to five defects; accept one fixer's out-of-scope test file | assumed — autonomous |
+| easy | high | [m1-term-daemon D39](decisions/m1-term-daemon.md) | W3 checkpoint: accept all eight findings, which collapse to six defects; accept one fixer's widening into the terminal manifest | assumed — autonomous |
+| easy | high | [m1-term-daemon D40](decisions/m1-term-daemon.md) | W4's end-to-end suite found that killing a session left its background jobs running; the kill now reaches every descendant | assumed — autonomous |
+| easy | high | [m1-term-daemon D43](decisions/m1-term-daemon.md) | Final Round 1: accept all seven findings, which collapse to five defects, and name tests for three scenarios that lacked one | assumed — autonomous |
+| easy | high | [m1-term-daemon D45](decisions/m1-term-daemon.md) | The UI pass found that a restored pane lost its old output; GROUND no longer moves the cursor | assumed — autonomous |
+| easy | high | [m1-term-daemon D46](decisions/m1-term-daemon.md) | All UI scenarios passed in the web window, across three passes | assumed — autonomous |
+| easy | high | [m1-term-daemon D47](decisions/m1-term-daemon.md) | No native-only scenarios | assumed — autonomous |

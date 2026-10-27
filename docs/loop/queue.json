@@ -75,8 +75,7 @@
       "deps": [
         "gate-m0"
       ],
-      "status": "in-progress",
-      "lane": 2
+      "status": "done"
     },
     {
       "id": "m1-providers",
