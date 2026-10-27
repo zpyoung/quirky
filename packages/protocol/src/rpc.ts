@@ -140,7 +140,18 @@ export type QuirkyEvent =
   | { type: 'ui.state.changed'; layout: UiLayout }
   | { type: 'ui.command.request'; requestId: string; id: string; args: unknown }
   /** Delivered to plugin listeners only, never to clients. */
-  | { type: 'hook.received'; agent: string; sessionId: string; payload: unknown }
+  | {
+      type: 'hook.received'
+      agent: string
+      sessionId: string
+      payload: unknown
+      /** The agent process that ran the hook, when the shim reported it. */
+      agentPid?: number
+      /** That process's start time (`ps lstart`, UTC), to tell a reused pid from the agent. */
+      agentStart?: string
+      /** The hook event name when the payload carries none. */
+      event?: string
+    }
   | PluginEvent
 
 export type RpcRequest = { jsonrpc: '2.0'; id: number; method: string; params?: unknown; requestId?: string }

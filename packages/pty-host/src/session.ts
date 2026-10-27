@@ -118,6 +118,10 @@ type StartInit = {
 
 type Located = { live: Session; stored?: undefined } | { live?: undefined; stored: StoredSession }
 
+/** The OSC 7501 capability reply a program gets when it asks `?`; no spaces, ST-terminated. */
+const PROGRAM_STATUS_REPLY = new TextEncoder().encode(
+  '\x1b]7501;?:states=idle,working,done,blocked,error:kinds=permission,question,auth\x1b\\'
+)
 const SESSION_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/
 const PTY_CLOSE_GRACE_MS = 500
 const META_WRITE_DELAY_MS = 250
@@ -575,9 +579,11 @@ export class SessionManager {
       case 'ready':
         session.barrier.ready()
         return
-      case 'prompt':
       case 'command-start':
         return
+      case 'program-status':
+        if (fact.body.trim() === '?' && session.alive) session.barrier.input(PROGRAM_STATUS_REPLY)
+        break
       case 'title':
         session.title = fact.title
         break

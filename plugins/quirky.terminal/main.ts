@@ -26,8 +26,8 @@ export async function activate(context: PluginContext): Promise<void> {
 
   context.pty.onData(terminal.onData)
   context.pty.onFact((sessionId, fact) => {
-    const { name, data } = factEvent(sessionId, fact)
-    context.emit(name, data)
+    const event = factEvent(sessionId, fact)
+    if (event) context.emit(event.name, event.data)
   })
   context.pty.onReconnect(() => void terminal.onReconnect())
   context.subscribe(terminal.onEvent)
