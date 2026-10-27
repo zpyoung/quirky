@@ -597,5 +597,15 @@
 - **Confidence:** medium
 - **Source:** assumed — autonomous
 
+## D60: Catch-up with build/roadmap merged cleanly and conflicts with no decision
+- **Question:** LOOP.md step 5 catch-up before the final review
+- **Options:** merge and reconcile
+- **Chose:** merged build/roadmap at e7155ed (m2-source-control-notes-ai, fix-test-process-leaks, fix-sc31-first-shell-race, m2-sidebar-extras block) with no conflicts. `quirky.terminal/newTab` gained `extraArgs` alongside this item's `activate` and ids; both stand. Read the four decision logs: m2-source-control-notes-ai D26 (its diff and failure prompts aren't scanned for secrets) governs those prompts only, so handoff keeps D31; its D23 opens AI Fix tabs with the same ready-gated delivery this item uses; fix-test-process-leaks D4/D5/D11 scope test subprocesses and add an owned CLI launch that the UI pass uses.
+- **Why:** LOOP.md "What is already decided": later decisions bind; none contradicts this item
+- **Evidence:** docs/loop/decisions/m2-source-control-notes-ai.md, fix-test-process-leaks.md
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** assumed — autonomous
+
 ## Progress
 All three waves merged with both checkpoints fixed (D56, D58). Next: catch-up merge with build/roadmap (LOOP.md step 5) and its tests, Final Round 1 (three lenses, deep) with one fix batch, UI pass with quirk:using-apps-like-a-user (SC-1, 3, 21, 24, 33, 36, 40, 50, 53, 54, 58, 59), then land.
