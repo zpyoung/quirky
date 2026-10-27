@@ -406,12 +406,12 @@ export class VaultService {
     const disabled = new Set(view.disabledAgents)
     const enabledAgents = HISTORY_AGENTS.filter((agent) => !disabled.has(agent))
     const agents = request.agents ?? (enabledAgents.length === HISTORY_AGENTS.length ? undefined : enabledAgents)
-    const unlimited = request.unlimited ?? view.sessionLimit === null
+    const unlimited = request.unlimited ?? (request.limit === undefined && view.sessionLimit === null)
     return {
       ...(agents === undefined ? {} : { agents }),
       ...(scopePaths === undefined ? {} : { scopePaths }),
       ...(request.limit === undefined ? (unlimited ? {} : { limit: view.sessionLimit ?? DEFAULT_LIMIT }) : { limit: request.limit }),
-      ...(request.unlimited === undefined ? {} : { unlimited: request.unlimited }),
+      unlimited,
       ...(request.force === undefined ? {} : { force: request.force }),
       ...(request.requestToken === undefined ? {} : { requestToken: request.requestToken }),
       sort: request.sort ?? view.browseSort,

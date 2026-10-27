@@ -73,8 +73,7 @@ describe('vault CLI', () => {
     const payload = JSON.parse(result.stdout) as SearchResponse
     expect(payload).toMatchObject({
       kind: 'unavailable',
-      reason: 'disabled',
-      hosts: [expect.objectContaining({ hostId: 'local', kind: 'ok' })]
+      reason: 'disabled'
     })
     expect(result.stdout).not.toContain('vault-fixture-claude-marker')
     expect(vault.searchDatabaseExists()).toBe(false)

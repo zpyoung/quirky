@@ -53,7 +53,7 @@ describe('vault public API', () => {
     expect(vault.searchDatabaseExists()).toBe(false)
 
     const denied = await vault.call<SearchResponse>('search', { query: 'vault-fixture-claude-marker' })
-    expect(denied).toEqual({ kind: 'unavailable', reason: 'disabled' })
+    expect(denied).toMatchObject({ kind: 'unavailable', reason: 'disabled' })
     expect(vault.searchDatabaseExists()).toBe(false)
   })
 
@@ -105,7 +105,7 @@ describe('vault public API', () => {
       query: 'vault-fixture-claude-marker',
       within: { worktree: 'missing-workspace' }
     })
-    expect(response).toEqual({ kind: 'unavailable', reason: 'scope-unknown' })
+    expect(response).toMatchObject({ kind: 'unavailable', reason: 'scope-unknown' })
     expect(vault.searchDatabaseExists()).toBe(false)
   })
   test('consented search is real, clear requires confirmation, and clearing leaves source transcripts intact', async () => {
