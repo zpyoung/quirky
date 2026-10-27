@@ -435,5 +435,16 @@
 - **Revisit if:** a consumer-visible contract needs a new behavioral regression.
 - **Source:** assumed — autonomous
 
+## D40: Apply the single catch-up and bound real subprocess test workflows
+- **Question:** how to clear the actual scripts-gate failures without changing hosting scope or product deadlines?
+- **Options:** alter protected queue code or suppress tests; take the existing integration fix and give the two real-process test workflows finite native bounds.
+- **Chose:** merged build/roadmap once at0152c82cf691a1067fab693222033429de17eb55, bringing document-only ledger/runner decisions and the corrected dependency order. Read m5-ledger D1-D20 and m5-structured-runner D1-D27; no hosting compatibility conflict. Set20-second native deadlines only on the two failing multi-process runFiles test cases.
+- **Why:** the stale local queue placed m6-objective-landing before its dependency; integration had already corrected it. The next scripts run passed that ordering check but two subprocess workflows hit Bun's incidental5-second test deadline. Their assertions remain unchanged, as do all product deadlines and the explicit process-exit bound. [INFERENCE] subsequent missing-cwd errors arose when afterEach removed the temporary directory while the timed-out workflow was still unwinding.
+- **Evidence:** caught-up merge output; FinalIncomingDecisions report; scripts-gate output shows5003/5002ms timeouts after child results and the later missing-cwd spawn. scripts/suite.test.ts:54-64 starts multiple real child/guardian processes, while its process-exit regression retains its own bound.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** a workflow exceeds its finite20-second deadline or a product latency requirement is introduced.
+- **Source:** assumed — autonomous; operator-required blocking-gate repair
+
 ## Progress
-Core-first landing under the operator ruling. All source workers are finished. Fresh scoped core checks are running after real provider-wire, quota, consent and Projects fixes; complete scripts/typecheck/affected-directory checks, one final cross-family review with blocking fixes only, catch up once and land. Follow-up queue add is in progress; confirm its result before landing. No whole-suite preflight.
+The single operator-requested catch-up is complete and incoming decisions are compatible. Core CLI smokes, authoritative schema/runtime-request validation, all35 runtime tests and four repaired Projects blockers passed. The stale queue-order scripts failure is corrected by integration; two real-process scripts test cases now have finite native bounds. Run the scoped checks on this frozen tree, one final cross-family review with blocking fixes only, confirm the dependent queue add, and land without another catch-up or whole-suite preflight.
