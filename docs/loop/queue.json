@@ -329,8 +329,7 @@
         "source-control.md"
       ],
       "deps": [],
-      "status": "in-progress",
-      "lane": 10
+      "status": "done"
     },
     {
       "id": "fix-test-cost",
