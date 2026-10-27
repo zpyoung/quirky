@@ -418,7 +418,29 @@
 - **Revisit if:** a handoff append steals focus or an unguarded destructive view mutation is introduced
 - **Source:** locked by docs/loop/decisions/m3-handoff.md
 
+## D39: Select one optional editor fixture and await published autosave completion
+- **Question:** What remained after the full controller run reached 506/509 passing files?
+- **Options:** skip handoff coverage; alter the real editor to satisfy a fake; select one fixture implementation and synchronize actual completion
+- **Chose:** the handoff rig excludes the optional real editor when constructing its controlled built-ins, then installs exactly the requested fake editor for that boundary case. The editor autosave test waits for both disk bytes and the published clean buffer before asserting completion; its five-second bound is unchanged.
+- **Why:** the new real editor collided with the old fixture's symlink at the same ID. Separately, an autosave may publish disk bytes before acknowledging the clean buffer snapshot; observing that intermediate state is not evidence the save failed. The host timeout case passed the existing isolated retry and its production/test deadlines stay unchanged.
+- **Evidence:** bg_85 full verification; plugins/quirky.handoff/test/support.ts; core-acceptance autosave condition
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** the optional real integration is incompatible or disk and published buffer do not converge
+- **Source:** assumed — autonomous
+
+## D40: Migrate handoff's optional editor consumer to real tab/buffer metadata
+- **Question:** Does fixing the optional fixture collision also prove that handoff reads the new editor correctly?
+- **Options:** keep the fake-only documents response; add a legacy shim to the editor; migrate the consumer and prove the real public integration
+- **Chose:** consume `quirky.editor/state` through its actual `buffers` and `tabs`, joining tab buffer IDs, deduplicating live documents and retaining the existing root/path caps. Change the controlled fixture to that shape and add a real-editor daemon case; do not add a nonexistent legacy documents response to the producer.
+- **Why:** the audit found the RPC name/request matched but handoff required a top-level documents array, which the real metadata-only editor never returns. A passing fake-only case would conceal a missing live document listing.
+- **Evidence:** HandoffEditorContract; handoff source.ts readEditorTabs; editor state metadata contract and fakeEditor response
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** a tabless retained draft is listed as open or content hydration is required for a paths-only block
+- **Source:** assumed — autonomous
+
 ## Progress
-Step 7 retry: the reported handoff conflict is resolved in ba9718c; the complete new log was read, and only incoming terminal-only test accesses needed explicit Tab narrowing. Final typecheck/targeted append verification precede commit/detach and controller resubmission. All first-land blocker repairs and the queued completion boundary remain intact. No protected or foreign integration state is edited, and no land success is claimed until the controller accepts it.
+Step 7 retry ready: full controller verification reached 506/509 passing files; the host-timeout and autosave cases passed isolated retries, and the remaining optional-editor fixture collision is fixed. The actual handoff consumer is now migrated to live buffer/tab metadata, with real-editor paths/dedup/close coverage; its full content file and editor core-acceptance file pass, and latest typecheck passes. No new catch-up is needed for this concrete repair. Commit/detach and resubmit; keep the queued completion boundary and SC-9 ruling intact, and claim no success until the controller accepts the complete result.
 
 Last SC-9 point: Finder drops import copies under D19, including in-worktree sources. Native SC-9 stays pending for the nightly run. Open-in-place is owned by the operator's `m4-editor-drop-open-in-place`, not an m2-editor blocker.

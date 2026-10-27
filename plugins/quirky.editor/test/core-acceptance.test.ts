@@ -5,7 +5,7 @@ import { basename, dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs'
 import type { QuirkyClient } from '@quirky/protocol'
-import { builtinsDir, makeHomeWithoutAutoHooks, startHarness, type Harness } from '../../../packages/daemon/test/helpers'
+import { builtinsDir, makeHomeWithoutAutoHooks, startHarness, waitForAsync, type Harness } from '../../../packages/daemon/test/helpers'
 import type { EditorBufferInfo, EditorOpenResult } from '../src/types'
 
 type Fixture = {
@@ -321,9 +321,13 @@ test('SC-4/6: quiet autosave saves ordinary drafts but never recreates a deleted
     expectedRevision: quiet.contentRevision
   })
   const quietPath = join(fixture.root, 'quiet.ts')
-  // Autosave runs in the daemon process, so client-side fake timers cannot drive it; poll real disk state with a bound.
-  await waitFor('quiet autosave to update disk', () => existsSync(quietPath) && readFileSync(quietPath, 'utf8') === 'saved after quiet delay\n')
-  expect(await bufferOf(fixture, quiet.id)).toMatchObject({ draft: null, dirty: false })
+  // Disk publication precedes the acknowledged buffer update; wait for both observable completion conditions.
+  const autosaved = await waitForAsync(async () => {
+    if (!existsSync(quietPath) || readFileSync(quietPath, 'utf8') !== 'saved after quiet delay\n') return false
+    const current = await bufferOf(fixture, quiet.id)
+    return !current.dirty && current.draft === null ? current : false
+  }, 5_000)
+  expect(autosaved).toMatchObject({ content: 'saved after quiet delay\n', draft: null, dirty: false })
 
   writeFixture(fixture, 'deleted.ts', 'before deletion\n')
   const deleted = await open(fixture, 'deleted.ts', { mode: 'source', focus: false })
