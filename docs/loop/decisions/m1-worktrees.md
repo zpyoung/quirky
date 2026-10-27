@@ -704,5 +704,16 @@
 - **Revisit if:** a gate finds them again
 - **Source:** locked by docs/loop/LOOP.md
 
+## D65: W4 starts while W3's checkpoint review runs, and owns only the manifest's UI keys
+- **Question:** whether the window chain waits for the W3 checkpoint's fix batch
+- **Options:** wait; start W4 on W3's merged tip, owning only UI files, the manifest's `command` and `keybinding` arrays and appended CSS
+- **Chose:** start W4 at once on `938b91d` with that ownership; W3 fixers keep the daemon files and the manifest's method schemas, and the W4 tree merges their batch before its wave-end gate
+- **Why:** the two touch different files except the manifest, where they touch different keys; D61 did the same
+- **Evidence:** docs/loop/decisions/m1-worktrees.md D61
+- **Reversibility:** easy
+- **Confidence:** medium
+- **Revisit if:** a W3 fix changes a method contract the window calls
+- **Source:** assumed — autonomous
+
 ## Progress
-Step 5, W3 in progress in the scratch worktree `sdd/m1wt/w3-t7` (T7a and T7a2 accepted, uncommitted; T7b dispatched; T7c next). W1, W2 and the W2 checkpoint fixes are merged on `build/m1-worktrees`. If stopped early: if that worktree is gone, rerun W3 from D59 against tech.md; then W3 checkpoint, W4 (window), Final Round 1.
+Step 5: W1-W3 merged on `build/m1-worktrees` (W2 checkpoint fixed). W3 checkpoint review running (scratchpad cp3); W4 chain running in scratch worktree `sdd/m1wt/w4-t9` (T9a dispatched, then T9b dialogs, T9c project/group/delete dialogs). If stopped early: rerun the W3 checkpoint on `12b47d9..722c08a`, redo W4 from tech.md "Window" if its worktree is gone, then catch up with build/roadmap, Final Round 1, verify, land.
