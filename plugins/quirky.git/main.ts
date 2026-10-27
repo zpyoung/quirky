@@ -1,7 +1,6 @@
 import { formatContributionId, type PluginContext } from '@quirky/protocol'
 import { createEnv } from './src/daemon/env'
 import { methodTable } from './src/daemon/methods'
-import { pruneNotes } from './src/daemon/notes'
 import { migrations } from './src/daemon/store'
 
 /**
@@ -14,5 +13,4 @@ export function activate(context: PluginContext): void {
   for (const [name, handler] of Object.entries(methodTable(env))) {
     context.provide(formatContributionId('method', context.pluginId, name), handler)
   }
-  void pruneNotes(env)
 }
