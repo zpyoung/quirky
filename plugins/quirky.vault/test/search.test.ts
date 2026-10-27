@@ -326,11 +326,17 @@ test('three same-mtime failures are held out and unverifiable roots do not erase
   const failed = item.search.status()
   expect(failed.filesFailed).toBe(1)
 
-  item.controls.rootPresence = 'unverifiable'
-  await item.search.reconcile({ full: true })
-  const result = isResults(await item.search.search({ query: 'stablemarker' }))
-  expect(result.hits[0]?.source.presence).toBe('unverifiable')
-  expect(item.search.status().degradedRoots).toContainEqual({ root: item.sources, reason: 'fixture root unavailable' })
+  const unavailableRoot = join(item.home, 'sources.unavailable')
+  renameSync(item.sources, unavailableRoot)
+  try {
+    item.controls.rootPresence = 'unverifiable'
+    await item.search.reconcile({ full: true })
+    const result = isResults(await item.search.search({ query: 'stablemarker' }))
+    expect(result.hits[0]?.source.presence).toBe('unverifiable')
+    expect(item.search.status().degradedRoots).toContainEqual({ root: item.sources, reason: 'fixture root unavailable' })
+  } finally {
+    renameSync(unavailableRoot, item.sources)
+  }
 })
 
 test('unknown scopes never widen, apply serializes consent, and clear removes only closed derived files', async () => {
