@@ -33,6 +33,11 @@ async function claudeCommand(context: PluginContext): Promise<string> {
   return DEFAULT_CLAUDE_COMMAND
 }
 
+function requireString(context: PluginContext, value: unknown, name: string): string {
+  if (typeof value !== 'string' || value === '') throw context.error('invalid-params', `${name} must be a non-empty string`)
+  return value
+}
+
 let service: AgentStatusService | undefined
 
 /** Wires the agent-status service: hook events in, rows and session summaries out. */
@@ -48,6 +53,13 @@ export async function activate(context: PluginContext): Promise<void> {
   )
   context.provide('method:quirky.agent-status/get', (params: Record<string, unknown>) =>
     active.get(params.session as string, typeof params.at === 'number' ? params.at : undefined)
+  )
+  context.provide('method:quirky.agent-status/explain', (params: Record<string, unknown>) =>
+    active.explain(requireString(context, params.session, 'session'), typeof params.at === 'number' ? params.at : undefined)
+  )
+  context.provide('method:quirky.agent-status/rules', () => active.rulesListing())
+  context.provide('method:quirky.agent-status/ruleSet', (params: Record<string, unknown>) =>
+    active.ruleSet(requireString(context, params.agent, 'agent'))
   )
   context.provide('method:quirky.agent-status/hooksStatus', () => installer.status())
   context.provide('method:quirky.agent-status/hooksSetup', (params: Record<string, unknown>) =>
