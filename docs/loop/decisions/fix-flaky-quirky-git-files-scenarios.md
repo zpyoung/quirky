@@ -55,5 +55,27 @@
 - **Revisit if:** Future asynchronous mutation events require a different explicit completion signal.
 - **Source:** assumed — autonomous
 
+## D6: Verify the existing surface without adding UI or feature scope
+- **Question:** What runtime proof and integration catch-up apply to a test-only repair?
+- **Options:** Rebuild/dogfood unrelated UI; exercise the actual daemon/PTY/CLI file flows and leave product/UI unchanged.
+- **Chose:** A standalone smoke used a fresh temporary QUIRKY_HOME and HOME, actual daemon and PTY host, real Git, and real CLI save/stale-save/ignoreFolder operations. Caught up once with build/roadmap before final checks/review; the merge brought only queue additions, no new decisions.
+- **Why:** The smoke observed one event after a successful save, no event or write after stale save, and one after ignore-folder, using the same subscriber barrier. No runtime/UI code changes are needed. Existing UI/native acceptance stays intentionally unchanged.
+- **Evidence:** evidence-git-flake/runtime-smoke.json beside lane 10 notes; implementation commit 2681291; catch-up merge output lists only docs/loop/queue.json. All owned runtime homes/processes were cleaned; cancelled local load's empty home removed; throwaway probes/smoke scripts removed after preserving results.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** Final review or verification reveals a product defect.
+- **Source:** assumed — autonomous
+
+## D7: Final verification and cross-family review clear the test-only repair
+- **Question:** Does the completed fix satisfy the item's verification and review gate?
+- **Options:** Land after observed scoped checks and review; retain as incomplete.
+- **Chose:** Land the tested synchronization repair with historical attribution explicitly limited to the available evidence.
+- **Why:** The changed Git plugin suite passed all 67 files on the busy test host with no flakes; scripts passed 62 tests / 462 assertions; frozen-install typecheck passed. Gemini's one final review round returned STATUS: PASS with no correctness, regression or security blockers, confirming synchronous broadcast/FIFO receipt and idempotent subscription. Runtime smoke and delayed-subscriber red/green proof were already observed.
+- **Evidence:** `bun scripts/suite.ts plugins/quirky.git`: 67 passed, 0 failed, flaky []; `bun test scripts`: 62 passed, 0 failed, 462 assertions; `bun run typecheck`: exit 0. Gemini google/gemini-3.1-pro-preview:high via pi-watch, exit 0, STATUS: PASS; archived evidence-git-flake/review-round1.json beside notes.
+- **Reversibility:** easy
+- **Confidence:** high for repair/verification; medium for exact attribution to original filename-only flake reports
+- **Revisit if:** A future files.test.ts failure identifies another timing assumption or shared-state cause.
+- **Source:** assumed — autonomous
+
 ## Progress
-The two delayed-subscriber scenarios now pass after the previously failing save assertion. Standalone real daemon/PTY/CLI smoke is running without load workers. Next: catch up once, run scoped plugin tests/scripts/typecheck, cross-family final review, fix blocking findings, and land. No product/UI scenario is changed; UI dogfood is intentionally unchanged for this test-only repair.
+Implementation, controlled delayed-subscriber red/green proof, actual daemon/PTY/CLI smoke, scoped 67-file remote suite, 62-test scripts suite and typecheck all passed. Catch-up completed once (queue-only merge). Cross-family final review passed with no reported findings. All owned background jobs/subagents returned and runtime/probe scaffolds were cleaned. Next: commit this verification log, detach, and run queue.ts land fix-flaky-quirky-git-files-scenarios; landing owns whole-suite verification.
