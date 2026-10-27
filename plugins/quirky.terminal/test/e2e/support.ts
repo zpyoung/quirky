@@ -121,7 +121,6 @@ export function waitForLayout(h: E2eHarness, what: string, check: (ws: Workspace
 /** The workspace after making sure it has its first tab, as the window does when it opens. */
 export async function ensureWorkspace(h: E2eHarness, selector = 'main'): Promise<Workspace> {
   const { workspace } = await h.call<{ workspace: Workspace }>('quirky.terminal/workspace', { workspace: selector, ensure: true })
-  h.noteProcesses()
   return workspace
 }
 
@@ -142,7 +141,6 @@ export async function openTab(h: E2eHarness, extra: string[] = [], options: { re
   const { workspace } = await h.json<{ workspace: Workspace }>(['terminal', 'tab', 'new', ...extra])
   const tab = tabsOf(workspace).find((candidate) => !before.has(candidate.id))!
   const pane = leavesOf(tab.root)[0]!
-  h.noteProcesses()
   if (options.ready !== false) await waitReady(h, pane.session)
   return { tab, pane, session: pane.session, workspace }
 }
@@ -152,7 +150,6 @@ export async function splitPane(h: E2eHarness, pane: string, direction: 'right' 
   const known = new Set(panesOf(await layoutOf(h, 'main')).map((candidate) => candidate.id))
   const { workspace } = await h.json<{ workspace: Workspace }>(['terminal', 'pane', 'split', pane, '--direction', direction])
   const created = panesOf(workspace).find((candidate) => !known.has(candidate.id))!
-  h.noteProcesses()
   await waitReady(h, created.session)
   return { pane: created, workspace }
 }

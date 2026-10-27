@@ -3,7 +3,8 @@ import { chmodSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, 
 import { join, resolve } from 'node:path'
 import { QuirkyClient, base64ToBytes, type QuirkyEvent, type Session } from '@quirky/protocol'
 import { isDaemonAlive, readRuntime, rpcUrl } from '@quirky/protocol/node'
-import { runCli, spawnCli, type CliResult } from '../../../packages/cli/test/fixtures/fake-daemon'
+import { spawnCli, type CliResult } from '../../../packages/cli/test/fixtures/fake-daemon'
+import { createProcessScope, type ProcessScope } from '../../../scripts/test-support/process-scope'
 
 const DAEMON_ENTRY = resolve(import.meta.dir, '../../../packages/daemon/src/main.ts')
 const ANSI = /\x1b\[[0-?]*[ -/]*[@-~]|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)|\x1b[()][A-Za-z0-9]|\x1b[=>78]/g
@@ -110,32 +111,6 @@ export type Attached = {
 }
 
 const live = new Set<E2eHarness>()
-let exitHooksInstalled = false
-
-function killLiveHarnessesNow(): void {
-  for (const harness of [...live]) {
-    try {
-      harness.killNow()
-    } catch {
-      // best effort while the process is going down
-    }
-  }
-}
-
-/** Once per process, so a killed or crashed `bun test` still takes its daemons, hosts and shells with it. */
-function installExitHooks(): void {
-  if (exitHooksInstalled) return
-  exitHooksInstalled = true
-  process.on('exit', killLiveHarnessesNow)
-  for (const signal of ['SIGINT', 'SIGTERM'] as const) {
-    const onSignal = () => {
-      killLiveHarnessesNow()
-      process.off(signal, onSignal)
-      process.kill(process.pid, signal)
-    }
-    process.on(signal, onSignal)
-  }
-}
 
 /** Stops everything every harness of this process started and removes its directories. */
 export async function cleanupAll(): Promise<void> {
@@ -152,7 +127,6 @@ export class E2eHarness {
   readonly events: QuirkyEvent[] = []
   private daemon: ReturnType<typeof Bun.spawn> | undefined
   private client: QuirkyClient | undefined
-  private readonly tracked = new Map<number, string>()
   private sentinel = 0
   private cleaning: Promise<void> | undefined
 
@@ -160,29 +134,53 @@ export class E2eHarness {
     readonly home: string,
     readonly repo: string,
     readonly shell: string,
-    private readonly scratch: string
+    private readonly scratch: string,
+    private readonly scope: ProcessScope
   ) {}
 
   /** Creates the temp home and repo, starts the daemon and registers the repo. */
   static async start(options: E2eOptions = {}): Promise<E2eHarness> {
-    const home = mkdtempSync('/tmp/qe-')
-    const scratch = mkdtempSync('/tmp/qr-')
-    const repo = join(realpathSync(scratch), 'api')
-    mkdirSync(repo)
-    const harness = new E2eHarness(home, repo, options.shell ?? '/bin/zsh', scratch)
-    live.add(harness)
-    installExitHooks()
+    const scope = createProcessScope()
+    let scratch: string | undefined
+    let harness: E2eHarness | undefined
     try {
+      scratch = mkdtempSync('/tmp/qr-')
+      const home = scope.home
+      const repo = join(realpathSync(scratch), 'api')
+      mkdirSync(repo)
+      harness = new E2eHarness(home, repo, options.shell ?? '/bin/zsh', scratch, scope)
+      live.add(harness)
       if (options.zshrc !== undefined) writeFileSync(join(home, '.zshrc'), options.zshrc)
       if (options.bashrc !== undefined) writeFileSync(join(home, '.bashrc'), options.bashrc)
       harness.initRepo()
       await harness.startDaemon()
       await harness.ok(['repo', 'add', repo])
+      return harness
     } catch (error) {
-      await harness.cleanup()
+      const cleanupErrors: unknown[] = []
+      if (harness) {
+        try {
+          await harness.cleanup()
+        } catch (cleanupError) {
+          cleanupErrors.push(cleanupError)
+        }
+      } else {
+        try {
+          await scope.cleanup()
+        } catch (cleanupError) {
+          cleanupErrors.push(cleanupError)
+        }
+        if (scratch) {
+          try {
+            rmSync(scratch, { recursive: true, force: true })
+          } catch (cleanupError) {
+            cleanupErrors.push(cleanupError)
+          }
+        }
+      }
+      if (cleanupErrors.length > 0) throw new AggregateError([error, ...cleanupErrors], 'E2E harness startup and cleanup failed')
       throw error
     }
-    return harness
   }
 
   private initRepo(): void {
@@ -208,13 +206,12 @@ export class E2eHarness {
   /** Starts `quirkyd` and waits until it answers; the PTY host is the one it spawns itself. */
   async startDaemon(): Promise<void> {
     const before = readRuntime(this.home)?.pid
-    const proc = Bun.spawn([process.execPath, DAEMON_ENTRY], {
-      env: this.daemonEnv(),
+    const proc = this.scope.spawn([process.execPath, DAEMON_ENTRY], {
+      env: { ...this.daemonEnv(), ...this.scope.env },
       stdout: Bun.file(join(this.scratch, 'daemon.log')),
       stderr: Bun.file(join(this.scratch, 'daemon.log'))
     })
     this.daemon = proc
-    this.tracked.set(proc.pid, commandOf(proc.pid) ?? '')
     await waitFor('quirkyd to start', async () => {
       const info = readRuntime(this.home)
       return info && info.pid === proc.pid && info.pid !== before && (await isDaemonAlive(info)) ? info : undefined
@@ -241,7 +238,6 @@ export class E2eHarness {
     if (!proc) return
     this.client?.close()
     this.client = undefined
-    this.noteProcesses()
     proc.kill(signal)
     await Promise.race([proc.exited, Bun.sleep(10_000)])
     if (isAlive(proc.pid) && signal !== 'SIGKILL') {
@@ -258,53 +254,36 @@ export class E2eHarness {
 
   /** Kills the PTY host with SIGKILL and returns its pid. */
   killHost(): number {
-    this.noteProcesses()
     const pid = this.hostPid()
     process.kill(pid, 'SIGKILL')
     return pid
   }
 
-  /** Remembers the daemon, the host and everything below them so cleanup can kill sessions the host no longer owns. */
-  noteProcesses(): void {
-    let table: ProcessRow[]
-    try {
-      table = processTable()
-    } catch {
-      return
-    }
-    const roots: ProcessRow[] = []
-    const daemon = this.daemon && table.find((row) => row.pid === this.daemon!.pid)
-    if (daemon) roots.push(daemon)
-    try {
-      // a stale pty.pid may name a recycled pid, so only a process running the host entry counts
-      const host = table.find((row) => row.pid === this.hostPid() && row.command.includes('pty-host/'))
-      if (host) roots.push(host)
-    } catch {
-      // no host running yet
-    }
-    for (const root of roots) {
-      this.tracked.set(root.pid, root.command)
-      for (const row of descendantsIn(table, root.pid)) this.tracked.set(row.pid, row.command)
-    }
-  }
 
-  /** Has cleanup kill `pid` too, for a process that may outlive the host that started it. */
+  /** Registers a process that may outlive the host that started it with this harness's scope. */
   track(pid: number): void {
-    this.tracked.set(pid, commandOf(pid) ?? '')
+    this.scope.track(pid)
   }
 
-  cli(args: string[], options: { cwd?: string } = {}): Promise<CliResult> {
-    return runCli(args, {
+  async cli(args: string[], options: { cwd?: string } = {}): Promise<CliResult> {
+    const proc = this.spawnCli(args, options)
+    const [stdout, stderr, code] = await Promise.all([
+      new Response(proc.stdout).text(),
+      new Response(proc.stderr).text(),
+      proc.exited
+    ])
+    return { code, stdout, stderr }
+  }
+
+  spawnCli(args: string[], options: { cwd?: string } = {}) {
+    const proc = spawnCli(args, {
       home: this.home,
       cwd: options.cwd ?? this.repo,
-      env: { SHELL: this.shell, QUIRKY_TEST_ENTER_DELAY_MS: '20' }
+      env: { SHELL: this.shell, QUIRKY_TEST_ENTER_DELAY_MS: '20', ...this.scope.env }
     })
+    this.scope.track(proc.pid)
+    return proc
   }
-
-  spawnCli(args: string[]) {
-    return spawnCli(args, { home: this.home, cwd: this.repo, env: { SHELL: this.shell, QUIRKY_TEST_ENTER_DELAY_MS: '20' } })
-  }
-
   /** Runs a CLI command that must succeed and returns its stdout. */
   async ok(args: string[]): Promise<string> {
     const result = await this.cli(args)
@@ -335,7 +314,6 @@ export class E2eHarness {
   /** Creates a session through the CLI (`session new`) and returns its record. */
   async newSession(agent = 'shell'): Promise<Session> {
     const session = await this.json<Session>(['session', 'new', '--agent', agent, '--worktree', 'main'])
-    this.noteProcesses()
     return session
   }
 
@@ -447,7 +425,6 @@ export class E2eHarness {
       }
     }
     try {
-      await step(() => this.noteProcesses())
       await step(() => {
         try {
           this.client?.close()
@@ -455,10 +432,10 @@ export class E2eHarness {
           this.client = undefined
         }
       })
-      await step(() => this.killDaemon())
-      await step(() => this.noteProcesses())
-      await step(() => this.killTracked())
-      await step(() => rmSync(this.home, { recursive: true, force: true }))
+      await step(() => {
+        this.daemon = undefined
+        return this.scope.cleanup()
+      })
       await step(() => rmSync(this.scratch, { recursive: true, force: true }))
     } finally {
       live.delete(this)
@@ -466,64 +443,6 @@ export class E2eHarness {
     if (errors.length > 0) throw errors[0]
   }
 
-  private async killDaemon(): Promise<void> {
-    const proc = this.daemon
-    if (!proc) return
-    try {
-      proc.kill('SIGTERM')
-      await Promise.race([proc.exited, Bun.sleep(5000)])
-    } finally {
-      try {
-        if (isAlive(proc.pid)) proc.kill('SIGKILL')
-      } finally {
-        this.daemon = undefined
-      }
-    }
-  }
-
-  /** The tracked pids that still run the command seen earlier, plus everything below them. */
-  private livePids(): number[] {
-    let table: ProcessRow[]
-    try {
-      table = processTable()
-    } catch {
-      return [...this.tracked.keys()]
-    }
-    // a recycled pid must not be killed: only a process still running the command seen earlier counts
-    const current = new Map(table.map((row) => [row.pid, row.command]))
-    const mine = [...this.tracked].filter(([pid, command]) => current.get(pid) === command).map(([pid]) => pid)
-    const all = new Set(mine)
-    for (const pid of mine) for (const row of descendantsIn(table, pid)) all.add(row.pid)
-    return [...all]
-  }
-
-  private async killTracked(): Promise<void> {
-    const pids = this.livePids()
-    for (const signal of ['SIGTERM', 'SIGKILL'] as const) {
-      for (const pid of pids) {
-        try {
-          process.kill(pid, signal)
-        } catch {
-          // already gone
-        }
-      }
-      if (signal === 'SIGTERM') await Bun.sleep(300)
-    }
-  }
-
-  /** Synchronous last resort for process exit and signals: SIGKILL everything tracked and remove the directories. */
-  killNow(): void {
-    this.noteProcesses()
-    for (const pid of this.livePids()) {
-      try {
-        process.kill(pid, 'SIGKILL')
-      } catch {
-        // already gone
-      }
-    }
-    rmSync(this.home, { recursive: true, force: true })
-    rmSync(this.scratch, { recursive: true, force: true })
-  }
 }
 
 export type HostRow = {

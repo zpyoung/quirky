@@ -1,19 +1,60 @@
 import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { createProcessScope, type ProcessScope } from '../../../scripts/test-support/process-scope'
 import { PtyClient } from '../src/client'
+import { type CreateParams, SessionManager } from '../src/session'
 import { startPtyServer, type PtyServer, type PtyServerOptions } from '../src/server'
 
 const ENTRY = new URL('../src/main.ts', import.meta.url).pathname
 
 const cleanups: Array<() => Promise<void> | void> = []
+const scopes = new Map<string, ProcessScope>()
 
 export function onCleanup(fn: () => Promise<void> | void): void {
   cleanups.push(fn)
 }
 
 export async function runCleanups(): Promise<void> {
-  while (cleanups.length > 0) await cleanups.pop()!()
+  let failed = false
+  let firstError: unknown
+  while (cleanups.length > 0) {
+    try {
+      await cleanups.pop()!()
+    } catch (error) {
+      if (!failed) firstError = error
+      failed = true
+    }
+  }
+  if (failed) throw firstError
+}
+
+export function scopeForHome(home: string): ProcessScope {
+  let scope = scopes.get(home)
+  if (!scope) {
+    scope = createProcessScope(home)
+    scopes.set(home, scope)
+    onCleanup(async () => {
+      scopes.delete(home)
+      await scope!.cleanup()
+    })
+  }
+  return scope
+}
+
+export function trackSessionProcesses(manager: SessionManager, scope: ProcessScope): void {
+  const create = manager.create.bind(manager)
+  manager.create = async (params: CreateParams) => {
+    const result = await create({ ...params, env: { ...params.env, ...scope.env } })
+    scope.track(result.pid)
+    return result
+  }
+}
+export async function createScopedSession(client: PtyClient, home: string, params: CreateParams) {
+  const scope = scopeForHome(home)
+  const result = await client.request('create', { ...params, env: { ...params.env, ...scope.env } })
+  scope.track(result.pid)
+  return result
 }
 
 /** Unix socket paths are capped near 104 bytes on macOS, so the home must be short. */
@@ -27,7 +68,9 @@ export type TestHost = { home: string; server: PtyServer; connect: () => Promise
 
 export function startHost(options: Partial<PtyServerOptions> = {}): TestHost {
   const home = options.home ?? tempHome()
+  const scope = scopeForHome(home)
   const server = startPtyServer({ ...options, home })
+  trackSessionProcesses(server.manager, scope)
   onCleanup(() => server.stop())
   const connect = async () => {
     const client = await PtyClient.connect(server.socketPath)
@@ -64,17 +107,14 @@ export function concat(parts: Uint8Array[]): Uint8Array {
 
 export const text = (bytes: Uint8Array) => new TextDecoder().decode(bytes)
 
-/** Runs the real host entry on `home`; killed when the test ends. */
+/** Runs the real host entry on `home`; its scope owns the host and its process tree. */
 export function startProcess(home: string) {
-  const proc = Bun.spawn([process.execPath, ENTRY], {
+  const scope = scopeForHome(home)
+  return scope.spawn([process.execPath, ENTRY], {
     env: { ...process.env, QUIRKY_HOME: home },
     stdout: 'pipe',
     stderr: 'pipe'
   })
-  onCleanup(() => {
-    proc.kill('SIGKILL')
-  })
-  return proc
 }
 
 /** Waits for the host on `home` to listen, then returns an authenticated client and the token. */
