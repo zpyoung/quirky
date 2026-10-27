@@ -370,7 +370,7 @@
 ## D37: The first land was cut off by this iteration's own timeout, after its merge; land runs again once lane 2's land finishes
 - **Question:** step 7: `queue.ts land` merged the branch into build/roadmap (5ab70cd) and was then killed by a 900 s `timeout` wrapper this iteration put around it, before its checks finished, so the queue still shows the item in progress. Lane 2's re-land of m1-term-daemon (its D49) started in the same integration tree while those checks ran, and both suites failing terminal e2e tests in that window came from the two runs sharing the tree.
 - **Options:** mark it done by hand (queue.json is off limits); run land again after lane 2's land ends
-- **Chose:** wait for lane 2's land to finish, fast-forward this branch to build/roadmap, and run `land` again with no timeout, so it re-merges (a no-op), runs the three checks alone and marks the item done
+- **Chose:** wait for lane 2's land to finish, run `land` again with no timeout, so it re-merges (a no-op), runs the three checks alone and marks the item done
 - **Why:** only `queue.ts` changes the queue; two lands in one integration tree interfere
 - **Evidence:** build/roadmap history (5ab70cd, b76853f, 62b783f); docs/loop/decisions/m1-term-daemon.md D49
 - **Reversibility:** easy
