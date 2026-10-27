@@ -1,10 +1,10 @@
 # Quirky
 
 Quirky is a memory-efficient rewrite of [Orca](https://github.com/zpyoung/orca) for running coding
-agents in git worktrees. v1 runs on macOS: you add repos, create worktrees, run shells and agents
+agents in git worktrees. Quirky runs on macOS: you add repos, create worktrees, run shells and agents
 in terminals that survive closing the app, see which agents are working, waiting or done, review
 and commit diffs, answer `quirky ask` questions, and run background Claude sessions with no
-terminal. Its daemon and PTY host together use about 43 MB with eight busy terminals
+terminal. The measured v1 daemon and PTY host together used about 43 MB with eight busy terminals
 (`research/memory-probe/quirky-v1-daemon.md`).
 
 ## Try it

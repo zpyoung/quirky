@@ -233,6 +233,14 @@ export function createHandlers(
     },
     'ui.focus': (params) => layout.focus(focusTarget(params)),
     'ui.command.run': (params) => layout.runCommand(str(params, 'id'), params.args),
+    'ui.toast.dismiss': async (params) => {
+      await layout.dismissToast(str(params, 'key'))
+      return OK
+    },
+    'ui.shell.report': (params, conn) => {
+      layout.reportToasts(conn, params.toasts)
+      return OK
+    },
     'ui.report': (params, conn) => {
       layout.report(conn, str(params, 'slot'), params.state ?? null)
       return OK

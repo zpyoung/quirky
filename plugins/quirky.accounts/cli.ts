@@ -120,6 +120,10 @@ export const commands: CliModule['commands'] = {
     output(context, await context.call('quirky.accounts/loginStatus', { id: stringFlag(args, context, 'id') }))
   },
 
+  async sessionHome(args, context) {
+    output(context, await context.call('quirky.accounts/sessionHome', { session: stringFlag(args, context, 'session') }))
+  },
+
   async cancelLogin(args, context) {
     output(context, await context.call('quirky.accounts/cancelLogin', { id: stringFlag(args, context, 'id') }))
   },

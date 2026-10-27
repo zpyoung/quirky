@@ -572,5 +572,16 @@
 - **Revisit if:** Controlled output is lost/duplicated or replay/live offsets disagree.
 - **Source:** assumed — autonomous, preserving the blocking consumer stream invariant
 
+## D53: Retain pane menus without widening the core landing
+- **Question:** How should the next Handoff merge coexist with Vault's shared UI and drag changes?
+- **Options:** Drop one contribution family; add compatibility payloads or a new archived-handoff bridge; merge the independent declarations and preserve the core scope.
+- **Chose:** Retain settingsSections, statusBars and menuItems with their distinct types. menu-item references a command and is not a code-backed slot. Preserve host-minted one-use drag authority; Handoff adds a pane menu, not a raw drag producer. Do not expand the already-deferred SC-21 bridge.
+- **Why:** The conflicts were additive model/schema/fixture insertion points. A raw command compatibility parser would undo the verified security fix, while archived-handoff integration is not needed for the operator's core browse/resume/search/clear slice.
+- **Evidence:** m3-handoff D1-D84 read completely. One scoped writer kept HEADf63f065 unchanged, parent resolved README to remote/single-file test guidance. Combined typecheck passes; remote CLI/daemon/protocol/UI/Handoff/Vault/terminal/session run passes256files plus2macOS-only files,flaky[]. Drop still consumes the host token before target-validation awaits.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** A valid contribution cannot render or an untrusted MIME payload dispatches a command.
+- **Source:** locked by the independent public UI contracts and operator-authorized core scope
+
 ## Progress
-Core and blocking integration changes are verified:266 remote affected files plus2macOS files, final4-goal core web smoke, active-account public regressions, current typecheck/build and focused replay/hook/UI gates. Obsolete forwarding/identity pins were removed, not repinned; stream assertions remain exact. Both completion items and open nonblocking findings are recorded. Whole-suite verification and final done status remain owned by queue.ts land.
+Core and blocking integration changes pass current typecheck and256 remote affected files plus2macOS-only files, alongside the final4-goal core UI smoke, active-account API regressions and exact replay boundary checks. Pane menus/settings/status declarations coexist and secure drag authority remains unchanged. Both completion items and precise open nonblocking findings are recorded. Whole-suite verification and final done status remain owned by queue.ts land.

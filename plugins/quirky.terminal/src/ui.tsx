@@ -2,7 +2,7 @@ import { useSyncExternalStore } from 'react'
 import { createRoot } from 'react-dom/client'
 import type { UiPluginContext } from '@quirky/protocol'
 import { SessionsPanel, type SessionsReport } from './window/SessionsPanel'
-import { paneMenuQuickCommands, reportQuickCommandsMenu, sessionCommands, terminalCommands, watchQuickCommands, type QuickCommandSource } from './window/commands'
+import { paneMenuContributions, paneMenuQuickCommands, reportQuickCommandsMenu, sessionCommands, terminalCommands, watchMenuContributions, watchQuickCommands, type MenuContributionSource, type QuickCommandSource } from './window/commands'
 import { mountFloatingOverlay } from './window/floating'
 import { QuickCommandsStripButton, mountQuickCommandsPanel } from './window/quick-commands'
 import { mountWorkspace, type WorkspaceOptions } from './window/workspace'
@@ -32,10 +32,11 @@ function StripQuickCommands({ context, workspace, group, source }: { context: Ui
 }
 
 /** The slots a workspace view fills beyond the tab area: the strip's quick-command button (not in the floating workspace) and the pane menu rows. */
-function workspaceSlots(context: UiPluginContext, workspace: string, source: QuickCommandSource): WorkspaceOptions {
+function workspaceSlots(context: UiPluginContext, workspace: string, source: QuickCommandSource, contributions: MenuContributionSource): WorkspaceOptions {
   return {
     ...(workspace === FLOATING_WORKSPACE ? {} : { stripExtras: (group: Group) => <StripQuickCommands context={context} workspace={workspace} group={group} source={source} /> }),
-    paneMenuExtras: (pane) => paneMenuQuickCommands(context, source, pane.id)
+    paneMenuExtras: (pane) => paneMenuQuickCommands(context, source, pane.id),
+    paneMenuContributions: (pane, session) => paneMenuContributions(context, contributions, pane, session)
   }
 }
 
@@ -50,6 +51,7 @@ function worktreeOf(input: unknown): string | null {
  * this plugin overrides. Keeps the `terminalKeysFirst` context key in step with the shortcut policy.
  */
 export function activate(context: UiPluginContext): void {
+  const menuContributions = watchMenuContributions(context)
   context.provide(PANEL_ID, (element: HTMLElement, props: { report?(state: unknown): void }) => {
     const root = createRoot(element)
     const report = (state: SessionsReport) => props.report?.(state)
@@ -62,7 +64,7 @@ export function activate(context: UiPluginContext): void {
     const worktree = worktreeOf(props.input)
     const source = worktree === null ? null : watchQuickCommands(context, worktree)
     const reporting = source ? reportQuickCommandsMenu(source, (state) => props.report?.(state)) : null
-    const unmount = mountWorkspace(context, element, reporting ? { ...props, report: reporting.report } : props, worktree !== null && source ? workspaceSlots(context, worktree, source) : {})
+    const unmount = mountWorkspace(context, element, reporting ? { ...props, report: reporting.report } : props, worktree !== null && source ? workspaceSlots(context, worktree, source, menuContributions) : {})
     return () => {
       unmount()
       reporting?.stop()
@@ -74,7 +76,7 @@ export function activate(context: UiPluginContext): void {
 
   context.provide(FLOATING_OVERLAY, (element: HTMLElement, props: MountProps) => {
     const source = watchQuickCommands(context, FLOATING_WORKSPACE)
-    const unmount = mountFloatingOverlay(context, element, props, () => workspaceSlots(context, FLOATING_WORKSPACE, source))
+    const unmount = mountFloatingOverlay(context, element, props, () => workspaceSlots(context, FLOATING_WORKSPACE, source, menuContributions))
     return () => {
       unmount()
       source.dispose()

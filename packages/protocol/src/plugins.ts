@@ -1,5 +1,6 @@
 import type { ExitCause, PtyFact, PtyHistoryPage, PtySessionInfo, PtySnapshot, PtySubscription } from './pty'
 import type { ClientRole, QuirkyEvent } from './rpc'
+import type { ToastAction, ToastKind } from './ui'
 import type { SessionLaunch } from './model'
 
 /** Where a plugin was found: shipped with Quirky, or installed by the user. */
@@ -151,6 +152,17 @@ export type PluginNotification = {
   sound?: { file: string | null; volume: number }
   /** Whether the webview shows a toast; defaults to true. */
   toast?: boolean
+  /** The toast's look; defaults to `info`. */
+  kind?: ToastKind
+  /** A new toast with the same key replaces the old one without dismissing it. */
+  key?: string
+  /** Keeps the toast until it is dismissed instead of after six seconds. */
+  persistent?: boolean
+  /** A second line under the body. */
+  detail?: string
+  actions?: ToastAction[]
+  /** A window command to run once when the toast is dismissed. */
+  onDismiss?: { command: string; args?: unknown }
 }
 
 /** The kernel half of launching a session. */

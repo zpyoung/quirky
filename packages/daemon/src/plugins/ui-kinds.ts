@@ -6,6 +6,7 @@ import {
   parseContributionId,
   parseWhen,
   THEME_COLOR_RE,
+  TERMINAL_PANE_MENU,
   THEME_TOKENS,
   UI_KINDS,
   type SettingDeclaration,
@@ -24,10 +25,11 @@ const ALLOWED_FIELDS: Record<string, readonly string[]> = {
   keybinding: ['key', 'command', 'description', 'when'],
   setting: ['type', 'default', 'title', 'description', 'minimum', 'maximum', 'values'],
   theme: ['title', 'appearance', 'colors', 'description'],
+  'menu-item': ['menu', 'title', 'command', 'when', 'after'],
 }
 
 const SETTING_TYPES = ['boolean', 'number', 'string', 'enum'] as const
-const TITLE_REQUIRED = new Set(['status-bar', 'sidebar-section', 'panel', 'settings-section', 'overlay', 'setting', 'theme'])
+const TITLE_REQUIRED = new Set(['status-bar', 'sidebar-section', 'panel', 'settings-section', 'overlay', 'setting', 'theme', 'menu-item'])
 
 function isNonEmptyString(value: unknown): value is string {
   return typeof value === 'string' && value !== ''
@@ -71,6 +73,27 @@ function checkKeybinding(label: string, entry: Entry, errors: string[]): void {
       if (!when.ok) errors.push(`${label}: when is invalid: ${when.error}`)
     }
   }
+}
+
+function checkMenuItem(label: string, entry: Entry, errors: string[]): void {
+  if (entry.menu === undefined) errors.push(`${label}: menu is required`)
+  else if (entry.menu !== TERMINAL_PANE_MENU) errors.push(`${label}: menu must be ${TERMINAL_PANE_MENU}`)
+
+  const command = entry.command
+  if (command === undefined) errors.push(`${label}: command is required`)
+  else if (typeof command !== 'string' || (!isContributionName(command) && parseContributionId(command)?.kind !== 'command')) {
+    errors.push(`${label}: command must be a command name or a full command ID`)
+  }
+
+  const when = entry.when
+  if (when !== undefined) {
+    if (!isRecord(when)) errors.push(`${label}: when must be an object`)
+    else {
+      for (const field of Object.keys(when)) if (field !== 'agent') errors.push(`${label}: unknown condition \`${field}\` in when`)
+      if (when.agent !== undefined && when.agent !== 'any') errors.push(`${label}: when.agent must be any`)
+    }
+  }
+  if (entry.after !== undefined && entry.after !== 'quick-commands') errors.push(`${label}: after must be quick-commands`)
 }
 
 function checkValues(label: string, values: unknown, errors: string[]): string[] | null {
@@ -175,4 +198,5 @@ export function checkUiKindEntry(kind: string, label: string, entry: Entry, erro
   if (kind === 'keybinding') checkKeybinding(label, entry, errors)
   if (kind === 'setting') checkSetting(label, entry, errors)
   if (kind === 'theme') checkTheme(label, entry, errors)
+  if (kind === 'menu-item') checkMenuItem(label, entry, errors)
 }

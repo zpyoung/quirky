@@ -1,0 +1,19 @@
+{
+  "name": "@quirky/plugin-handoff",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@quirky/protocol": "workspace:*",
+    "react": "19.2.0",
+    "react-dom": "19.2.0",
+    "@codemirror/state": "^6.7.6",
+    "@codemirror/view": "^6.43.15"
+  },
+  "devDependencies": {
+    "@quirky/git": "workspace:*",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@happy-dom/global-registrator": "20.14.6"
+  }
+}

@@ -82,6 +82,26 @@ function TabItem({ controller, state, group, tab, index, others, now }: Common &
       ) : (
         <span className="qt-tab-title">{title}</span>
       )}
+      {Object.entries(session?.badges ?? {}).map(([key, badge]) =>
+        badge.command ? (
+          <button
+            key={key}
+            type="button"
+            className="qt-badge"
+            title={badge.tooltip}
+            onClick={(event) => {
+              event.stopPropagation()
+              void controller.context.executeCommand(badge.command!, badge.args)
+            }}
+          >
+            {badge.label}
+          </button>
+        ) : (
+          <span key={key} className="qt-badge" title={badge.tooltip}>
+            {badge.label}
+          </span>
+        )
+      )}
       {tab.expandedPane !== null ? (
         <button
           type="button"

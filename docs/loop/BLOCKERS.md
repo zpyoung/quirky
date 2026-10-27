@@ -190,3 +190,7 @@ Registration update: `bun scripts/build-loop/queue.ts add /tmp/quirky-session-in
 ## m3-vault: remaining worktree gate timing
 
 - **LOW — background fetch/setup-gate test race** (`plugins/quirky.worktree/test/create.test.ts:367`, `:395`). A land run saw the background-refresh wait time out and a ref-lock conflict when the setup-gate test moved its remote base. The focused remote file first reproduced the ref-lock conflict, then its required isolated retry passed all40 cases140 assertions and returned ok with the file marked flaky. No worktree implementation, assertions, timeouts or retry policy were changed in the vault item.
+
+## m3-vault: SC-21 archived handoff bridge detail
+
+- **LOW — archived Vault handoff capability is not declared by the installed owner** (`plugins/quirky.vault/src/actions.ts:204-220`, `plugins/quirky.handoff/quirky-plugin.json:19-153`, `plugins/quirky.handoff/src/ui.tsx:68-77`). Vault looks for an effective handoff contribution; the current owner declares archived-source prepare plus a live-session-only open command, but no matching handoff contribution. The existing m3-vault-parity-completion item already names the unfinished enabled SC-21 flow; its implementation must reconcile that public archived-source contract, not substitute a live Quirky session ID or fake availability. Core scope retains the honest unavailable result.
