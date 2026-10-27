@@ -252,7 +252,8 @@
         "term-daemon.md"
       ],
       "deps": [],
-      "status": "todo"
+      "status": "in-progress",
+      "lane": 7
     },
     {
       "id": "fix-sc31-first-shell-race",
