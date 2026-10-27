@@ -1025,6 +1025,18 @@
         "m7-sweep-orchestration"
       ],
       "status": "todo"
+    },
+    {
+      "id": "m4-hosting-api-github-parity",
+      "milestone": "M4",
+      "title": "Finish user-owned Projects issue-type discovery/changes and same-tick batched, cursor-reused work-item search; deferred to land core hosting by the operator deadline",
+      "docs": [
+        "hosting-api.md"
+      ],
+      "deps": [
+        "m4-hosting-api-github"
+      ],
+      "status": "todo"
     }
   ]
 }
