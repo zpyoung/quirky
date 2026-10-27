@@ -71,6 +71,18 @@ type AccountPreparation = {
   env: Record<string, string | null>
   shellInit: string | null
   account: { provider: 'claude' | 'codex'; id: string | null; label: string; source: 'managed' | 'default' | 'custom' } | null
+  resumeTranscriptPath?: string
+}
+type AccountPreparationRequest = {
+  agent: string
+  sessionId: string
+  worktreeId: string
+  cwd: string
+  homeOverrides: HomeOverrides
+  resume?: {
+    sourceSessionId: string
+    providerSession: { id: string; transcriptPath: string | null }
+  }
 }
 
 const ACCOUNT_PREPARE_METHOD = 'method:quirky.accounts/prepare'
@@ -128,6 +140,16 @@ function accountPreparationOf(value: unknown): AccountPreparation {
   if (typeof value.shellInit === 'string' && !isAbsolute(value.shellInit)) {
     throw new Error('quirky.accounts/prepare returned a non-absolute shell init path')
   }
+  let resumeTranscriptPath: string | undefined
+  if (Object.hasOwn(value, 'resumeTranscriptPath')) {
+    if (typeof value.resumeTranscriptPath !== 'string') {
+      throw new Error('quirky.accounts/prepare returned an invalid resume transcript path')
+    }
+    if (!isAbsolute(value.resumeTranscriptPath)) {
+      throw new Error('quirky.accounts/prepare returned a non-absolute resume transcript path')
+    }
+    resumeTranscriptPath = value.resumeTranscriptPath
+  }
   let account: AccountPreparation['account'] = null
   if (value.account !== null) {
     const candidate = value.account
@@ -145,7 +167,12 @@ function accountPreparationOf(value: unknown): AccountPreparation {
     }
     account = { provider, id, label: candidate.label, source }
   }
-  return { env, shellInit: value.shellInit, account }
+  return {
+    env,
+    shellInit: value.shellInit,
+    account,
+    ...(resumeTranscriptPath === undefined ? {} : { resumeTranscriptPath })
+  }
 }
 
 function preparedHookEnv(
@@ -370,14 +397,21 @@ export class SessionService {
     const userEnv = old.launch?.env ?? {}
     const launched = await this.start(session, this.records.repoIdOf(old.id), params, undefined, async (additions) => {
       const prepared = accountPrepare
-        ? await this.prepareAccount(session, old.agent, old.cwd, userEnv, additions.env)
+        ? await this.prepareAccount(session, old.agent, old.cwd, userEnv, additions.env, {
+            sourceSessionId: old.id,
+            providerSession
+          })
         : null
+      const preparedProviderSession =
+        prepared?.resumeTranscriptPath === undefined
+          ? providerSession
+          : { ...providerSession, transcriptPath: prepared.resumeTranscriptPath }
       const hookEnv = preparedHookEnv(additions.env, userEnv, prepared)
       const resumed = (await this.context.call('quirky.agents/prepareResume', {
         agent: old.agent,
         cwd: old.cwd,
         record: old.launch ?? null,
-        providerSession,
+        providerSession: preparedProviderSession,
         fork,
         hookArgs: additions.args,
         hookEnv
@@ -389,7 +423,7 @@ export class SessionService {
         launchSettings: old.launchSettings ?? null,
         promptDelivery: null,
         paste: null,
-        providerSession: fork ? null : providerSession
+        providerSession: fork ? null : preparedProviderSession
       }
     })
     return this.deliverAfterLaunch(launched, false)
@@ -652,17 +686,18 @@ export class SessionService {
     agent: string,
     cwd: string,
     userEnv: Record<string, string | null>,
-    hookEnv: Record<string, string | null>
+    hookEnv: Record<string, string | null>,
+    resume?: AccountPreparationRequest['resume']
   ): Promise<AccountPreparation> {
-    return accountPreparationOf(
-      await this.context.call('quirky.accounts/prepare', {
-        agent,
-        sessionId: session.id,
-        worktreeId: session.worktreeId,
-        cwd,
-        homeOverrides: homeOverridesOf(userEnv, hookEnv)
-      })
-    )
+    const request: AccountPreparationRequest = {
+      agent,
+      sessionId: session.id,
+      worktreeId: session.worktreeId,
+      cwd,
+      homeOverrides: homeOverridesOf(userEnv, hookEnv),
+      ...(resume === undefined ? {} : { resume })
+    }
+    return accountPreparationOf(await this.context.call('quirky.accounts/prepare', request))
   }
   private async pickAgent(): Promise<string> {
     return ((await this.context.call('quirky.agents/pick', {})) as { agent: string }).agent
