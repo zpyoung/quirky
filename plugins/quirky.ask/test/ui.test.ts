@@ -31,7 +31,11 @@ const selectAsk = (id: string, title: string | undefined, createdAt: number): As
   sessionId: null,
   worktreeId: null,
   createdAt,
-  envelope: { status: 'pending', askId: id, answers: {}, skipped: [] }
+  envelope: { status: 'pending', askId: id, answers: {}, skipped: [], summary: '' },
+  seq: 0,
+  queued: false,
+  partial: {},
+  expiresAt: null
 })
 
 type Fake = ReturnType<typeof fakeContext>
@@ -274,7 +278,11 @@ describe('the Questions panel module', () => {
       sessionId: null,
       worktreeId: null,
       createdAt: 1,
-      envelope: { status: 'pending', askId: 'ask_9', answers: {}, skipped: [] }
+      envelope: { status: 'pending', askId: 'ask_9', answers: {}, skipped: [], summary: '' },
+      seq: 0,
+      queued: false,
+      partial: {},
+      expiresAt: null
     }
     const fake = fakeContext([ask])
     await activated(fake)

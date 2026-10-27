@@ -69,8 +69,13 @@ function toAsk(row: AskRow): Ask {
       status: row.status,
       askId: row.id,
       answers: JSON.parse(row.answers),
-      skipped: JSON.parse(row.skipped)
-    }
+      skipped: JSON.parse(row.skipped),
+      summary: ''
+    },
+    seq: 0,
+    queued: false,
+    partial: {},
+    expiresAt: null
   }
 }
 
@@ -103,7 +108,11 @@ export class AskService {
       sessionId,
       worktreeId,
       createdAt: Date.now(),
-      envelope: { status: 'pending', askId: id, answers: {}, skipped: [] }
+      envelope: { status: 'pending', askId: id, answers: {}, skipped: [], summary: '' },
+      seq: 0,
+      queued: false,
+      partial: {},
+      expiresAt: null
     }
     this.store.run(
       'INSERT INTO asks (id, spec, session_id, worktree_id, created_at, status, answers, skipped) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
@@ -202,7 +211,7 @@ export class AskService {
     answers: Record<string, AskAnswer>,
     skipped: string[]
   ): AskEnvelope {
-    const envelope: AskEnvelope = { status, askId: ask.id, answers, skipped }
+    const envelope: AskEnvelope = { status, askId: ask.id, answers, skipped, summary: '' }
     this.store.run(
       'UPDATE asks SET status = ?, answers = ?, skipped = ? WHERE id = ?',
       status,

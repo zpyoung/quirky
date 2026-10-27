@@ -20,6 +20,8 @@ export function emptyDraft(question: AskQuestion): Draft {
       return { type: 'text', text: '' }
     case 'confirm':
       return { type: 'confirm', value: null }
+    default:
+      return { type: 'text', text: '' }
   }
 }
 

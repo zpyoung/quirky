@@ -82,7 +82,7 @@ describe('quirky ask command module', () => {
     const cli = await cliFor()
     await run(cli, 'ask', { spec: specJson, 'timeout-ms': 300 })
     const [registered, timedOut] = cli.lines as [{ askId: string }, AskEnvelope]
-    expect(timedOut).toEqual({ status: 'timed_out', askId: registered.askId, answers: {}, skipped: [] })
+    expect(timedOut).toEqual({ status: 'timed_out', askId: registered.askId, answers: {}, skipped: [], summary: '' })
     const [ask] = (await (await connectAs(h)).callAny('quirky.ask/list', {})) as { envelope: AskEnvelope }[]
     expect(ask.envelope.status).toBe('declined')
   })
@@ -110,12 +110,12 @@ describe('quirky ask command module', () => {
     const { askId } = (await asker.callAny('quirky.ask/create', { spec: confirmSpec })) as { askId: string }
     const cli = await cliFor()
     await run(cli, 'wait', { id: askId, 'timeout-ms': 100 })
-    expect(cli.lines).toEqual([{ status: 'timed_out', askId, answers: {}, skipped: [] }])
+    expect(cli.lines).toEqual([{ status: 'timed_out', askId, answers: {}, skipped: [], summary: '' }])
 
     const second = ((await asker.callAny('quirky.ask/create', { spec: confirmSpec })) as { askId: string }).askId
     const cancelled = await cliFor()
     await run(cancelled, 'cancel', { id: second })
-    expect(cancelled.lines).toEqual([{ status: 'declined', askId: second, answers: {}, skipped: [] }])
+    expect(cancelled.lines).toEqual([{ status: 'declined', askId: second, answers: {}, skipped: [], summary: '' }])
   })
 
   test('SC-28: wait --id on an answered ask prints the same envelope at once', async () => {
@@ -134,7 +134,7 @@ describe('quirky ask command module', () => {
     const running = run(cli, 'wait', { id: askId })
     await asker.callAny('quirky.ask/answer', { askId, answers: {}, skipped: ['go'] })
     await running
-    expect(cli.lines).toEqual([{ status: 'partial', askId, answers: {}, skipped: ['go'] }])
+    expect(cli.lines).toEqual([{ status: 'partial', askId, answers: {}, skipped: ['go'], summary: '' }])
   })
 
   test('reconnects when the connection drops mid-wait', async () => {

@@ -79,7 +79,8 @@ describe('asks', () => {
       status: 'partial',
       askId,
       answers: { env: { value: 'dev', source: 'option' } },
-      skipped: ['why']
+      skipped: ['why'],
+      summary: ''
     })
   })
 

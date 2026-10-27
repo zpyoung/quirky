@@ -11,20 +11,42 @@
     "method": [
       {
         "id": "create",
-        "description": "Registers a question for the user and returns its ID. Session and worktree default to the caller's.",
+        "description": "Registers a question for the user and returns its ID. Session and worktree default to the caller's. With `timeoutMs`, the ask times out that long after registration, taking each question's default, else its draft.",
         "params": {
           "type": "object",
           "properties": {
-            "spec": { "type": "object", "additionalProperties": true, "description": "The ask: an optional title and its questions." },
-            "session": { "type": "string" },
-            "worktree": { "type": "string", "description": "A worktree ID." }
+            "spec": {
+              "type": "object",
+              "additionalProperties": true,
+              "description": "The ask: an optional title and its questions."
+            },
+            "session": {
+              "type": "string"
+            },
+            "worktree": {
+              "type": "string",
+              "description": "A worktree ID."
+            },
+            "timeoutMs": {
+              "type": "integer",
+              "minimum": 1,
+              "description": "Milliseconds until the ask times out."
+            }
           },
-          "required": ["spec"]
+          "required": [
+            "spec"
+          ]
         },
         "result": {
           "type": "object",
-          "properties": { "askId": { "type": "string" } },
-          "required": ["askId"]
+          "properties": {
+            "askId": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "askId"
+          ]
         }
       },
       {
@@ -33,18 +55,58 @@
         "readOnly": true,
         "params": {
           "type": "object",
-          "properties": { "askId": { "type": "string" }, "timeoutMs": { "type": "integer", "minimum": 0 } },
-          "required": ["askId"]
+          "properties": {
+            "askId": {
+              "type": "string"
+            },
+            "timeoutMs": {
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          "required": [
+            "askId"
+          ]
         },
         "result": {
           "type": "object",
           "properties": {
-            "status": { "type": "string", "enum": ["pending", "answered", "partial", "declined", "timed_out"] },
-            "askId": { "type": "string" },
-            "answers": { "type": "object", "additionalProperties": true, "description": "Answers by question ID." },
-            "skipped": { "type": "array", "items": { "type": "string" } }
+            "status": {
+              "type": "string",
+              "enum": [
+                "pending",
+                "answered",
+                "partial",
+                "declined",
+                "timed_out"
+              ]
+            },
+            "askId": {
+              "type": "string"
+            },
+            "answers": {
+              "type": "object",
+              "additionalProperties": true,
+              "description": "Answers by question ID."
+            },
+            "skipped": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "summary": {
+              "type": "string",
+              "description": "One line per answered question."
+            }
           },
-          "required": ["status", "askId", "answers", "skipped"]
+          "required": [
+            "status",
+            "askId",
+            "answers",
+            "skipped",
+            "summary"
+          ]
         }
       },
       {
@@ -53,21 +115,65 @@
         "params": {
           "type": "object",
           "properties": {
-            "askId": { "type": "string" },
-            "answers": { "type": "object", "additionalProperties": true, "description": "Answers by question ID." },
-            "skipped": { "type": "array", "items": { "type": "string" } }
+            "askId": {
+              "type": "string"
+            },
+            "answers": {
+              "type": "object",
+              "additionalProperties": true,
+              "description": "Answers by question ID."
+            },
+            "skipped": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
           },
-          "required": ["askId", "answers"]
+          "required": [
+            "askId",
+            "answers"
+          ]
         },
         "result": {
           "type": "object",
           "properties": {
-            "status": { "type": "string", "enum": ["pending", "answered", "partial", "declined", "timed_out"] },
-            "askId": { "type": "string" },
-            "answers": { "type": "object", "additionalProperties": true },
-            "skipped": { "type": "array", "items": { "type": "string" } }
+            "status": {
+              "type": "string",
+              "enum": [
+                "pending",
+                "answered",
+                "partial",
+                "declined",
+                "timed_out"
+              ]
+            },
+            "askId": {
+              "type": "string"
+            },
+            "answers": {
+              "type": "object",
+              "additionalProperties": true,
+              "description": "Answers by question ID."
+            },
+            "skipped": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "summary": {
+              "type": "string",
+              "description": "One line per answered question."
+            }
           },
-          "required": ["status", "askId", "answers", "skipped"]
+          "required": [
+            "status",
+            "askId",
+            "answers",
+            "skipped",
+            "summary"
+          ]
         }
       },
       {
@@ -75,18 +181,54 @@
         "description": "Declines an ask.",
         "params": {
           "type": "object",
-          "properties": { "askId": { "type": "string" } },
-          "required": ["askId"]
+          "properties": {
+            "askId": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "askId"
+          ]
         },
         "result": {
           "type": "object",
           "properties": {
-            "status": { "type": "string", "enum": ["pending", "answered", "partial", "declined", "timed_out"] },
-            "askId": { "type": "string" },
-            "answers": { "type": "object", "additionalProperties": true },
-            "skipped": { "type": "array", "items": { "type": "string" } }
+            "status": {
+              "type": "string",
+              "enum": [
+                "pending",
+                "answered",
+                "partial",
+                "declined",
+                "timed_out"
+              ]
+            },
+            "askId": {
+              "type": "string"
+            },
+            "answers": {
+              "type": "object",
+              "additionalProperties": true,
+              "description": "Answers by question ID."
+            },
+            "skipped": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "summary": {
+              "type": "string",
+              "description": "One line per answered question."
+            }
           },
-          "required": ["status", "askId", "answers", "skipped"]
+          "required": [
+            "status",
+            "askId",
+            "answers",
+            "skipped",
+            "summary"
+          ]
         }
       },
       {
@@ -95,33 +237,219 @@
         "readOnly": true,
         "params": {
           "type": "object",
-          "properties": { "pendingOnly": { "type": "boolean" } }
+          "properties": {
+            "pendingOnly": {
+              "type": "boolean"
+            }
+          }
         },
         "result": {
           "type": "array",
           "items": {
             "type": "object",
             "properties": {
-              "id": { "type": "string" },
-              "spec": { "type": "object", "additionalProperties": true },
-              "sessionId": { "description": "The asking session, or null." },
-              "worktreeId": { "description": "The asking worktree, or null." },
-              "createdAt": { "type": "number" },
-              "envelope": { "type": "object", "additionalProperties": true }
+              "id": {
+                "type": "string"
+              },
+              "spec": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "sessionId": {
+                "description": "The asking session, or null."
+              },
+              "worktreeId": {
+                "description": "The asking worktree, or null."
+              },
+              "createdAt": {
+                "type": "number"
+              },
+              "envelope": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "seq": {
+                "type": "integer"
+              },
+              "queued": {
+                "type": "boolean",
+                "description": "Waiting behind an earlier pending ask of the same session."
+              },
+              "partial": {
+                "type": "object",
+                "additionalProperties": true,
+                "description": "Drafts by question ID."
+              },
+              "expiresAt": {
+                "description": "Epoch ms of the deadline, or null."
+              }
             },
-            "required": ["id", "spec", "sessionId", "worktreeId", "createdAt", "envelope"]
+            "required": [
+              "id",
+              "spec",
+              "sessionId",
+              "worktreeId",
+              "createdAt",
+              "envelope",
+              "seq",
+              "queued",
+              "partial",
+              "expiresAt"
+            ]
           }
+        }
+      },
+      {
+        "id": "updatePartial",
+        "description": "Saves the window's draft answers for a pending ask; returns ok false for an ask that already finished.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "askId": {
+              "type": "string"
+            },
+            "partial": {
+              "type": "object",
+              "additionalProperties": true,
+              "description": "Drafts by question ID."
+            }
+          },
+          "required": [
+            "askId",
+            "partial"
+          ]
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "ok": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "ok"
+          ]
+        }
+      },
+      {
+        "id": "expire",
+        "description": "Times a pending ask out now, with the same defaults-then-drafts rule as its deadline; a finished ask is returned unchanged.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "askId": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "askId"
+          ]
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "status": {
+              "type": "string",
+              "enum": [
+                "pending",
+                "answered",
+                "partial",
+                "declined",
+                "timed_out"
+              ]
+            },
+            "askId": {
+              "type": "string"
+            },
+            "answers": {
+              "type": "object",
+              "additionalProperties": true,
+              "description": "Answers by question ID."
+            },
+            "skipped": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "summary": {
+              "type": "string",
+              "description": "One line per answered question."
+            }
+          },
+          "required": [
+            "status",
+            "askId",
+            "answers",
+            "skipped",
+            "summary"
+          ]
         }
       }
     ],
     "event": [
       {
         "id": "created",
-        "description": "A new ask is waiting for the user.",
+        "description": "A new ask was registered; `ask.queued` says whether it waits behind another ask of its session.",
         "data": {
           "type": "object",
-          "properties": { "ask": { "type": "object", "additionalProperties": true } },
-          "required": ["ask"]
+          "properties": {
+            "ask": {
+              "type": "object",
+              "additionalProperties": true
+            },
+            "seq": {
+              "type": "integer"
+            }
+          },
+          "required": [
+            "ask",
+            "seq"
+          ]
+        }
+      },
+      {
+        "id": "surfaced",
+        "description": "A queued ask became its session's live question.",
+        "data": {
+          "type": "object",
+          "properties": {
+            "ask": {
+              "type": "object",
+              "additionalProperties": true
+            },
+            "seq": {
+              "type": "integer"
+            }
+          },
+          "required": [
+            "ask",
+            "seq"
+          ]
+        }
+      },
+      {
+        "id": "updated",
+        "description": "A pending ask's draft was saved.",
+        "data": {
+          "type": "object",
+          "properties": {
+            "askId": {
+              "type": "string"
+            },
+            "partial": {
+              "type": "object",
+              "additionalProperties": true
+            },
+            "seq": {
+              "type": "integer"
+            }
+          },
+          "required": [
+            "askId",
+            "partial",
+            "seq"
+          ]
         }
       },
       {
@@ -130,43 +458,103 @@
         "data": {
           "type": "object",
           "properties": {
-            "askId": { "type": "string" },
-            "envelope": { "type": "object", "additionalProperties": true }
+            "askId": {
+              "type": "string"
+            },
+            "envelope": {
+              "type": "object",
+              "additionalProperties": true
+            },
+            "seq": {
+              "type": "integer"
+            }
           },
-          "required": ["askId", "envelope"]
+          "required": [
+            "askId",
+            "envelope",
+            "seq"
+          ]
         }
       }
     ],
-    "panel": [{ "id": "questions", "title": "Questions" }],
+    "panel": [
+      {
+        "id": "questions",
+        "title": "Questions"
+      }
+    ],
+    "launch-hook": [
+      {
+        "id": "claude-ask",
+        "description": "Turns off Claude's own question tool and points Claude at quirky ask.",
+        "agents": [
+          "claude"
+        ]
+      }
+    ],
     "cli-command": [
       {
         "id": "ask",
         "words": "",
-        "summary": "ask the user questions and wait for the answers (same output shape as `orca ask`); on --timeout-ms the ask is cancelled and printed as timed_out",
+        "summary": "ask the user questions and wait for the answers (same output shape as `orca ask`); --timeout-ms times the ask out with its defaults, --chunk-ms returns a pending envelope after that long",
         "flags": {
-          "spec": { "type": "string", "description": "ask spec as JSON, or @path to a file", "required": true },
-          "timeout-ms": { "type": "integer", "description": "give up after this many milliseconds" }
+          "spec": {
+            "type": "string",
+            "description": "ask spec as JSON, or @path to a file",
+            "required": true
+          },
+          "timeout-ms": {
+            "type": "integer",
+            "description": "time the ask out after this many milliseconds"
+          },
+          "chunk-ms": {
+            "type": "integer",
+            "description": "stop waiting after this many milliseconds and print a pending envelope"
+          }
         },
-        "methods": ["quirky.ask/create", "quirky.ask/wait", "quirky.ask/cancel"]
+        "methods": [
+          "quirky.ask/create",
+          "quirky.ask/wait"
+        ]
       },
       {
         "id": "wait",
         "words": "wait",
-        "summary": "resume waiting for an ask; on --timeout-ms the ask is cancelled and printed as timed_out",
+        "summary": "resume waiting for an ask; --timeout-ms times it out with its defaults, --chunk-ms returns a pending envelope after that long",
         "flags": {
-          "id": { "type": "string", "description": "the ask to resume", "required": true },
-          "timeout-ms": { "type": "integer", "description": "give up after this many milliseconds" }
+          "id": {
+            "type": "string",
+            "description": "the ask to resume",
+            "required": true
+          },
+          "timeout-ms": {
+            "type": "integer",
+            "description": "give up after this many milliseconds"
+          },
+          "chunk-ms": {
+            "type": "integer",
+            "description": "stop waiting after this many milliseconds and print a pending envelope"
+          }
         },
-        "methods": ["quirky.ask/wait", "quirky.ask/cancel"]
+        "methods": [
+          "quirky.ask/wait",
+          "quirky.ask/expire"
+        ]
       },
       {
         "id": "cancel",
         "words": "cancel",
         "summary": "cancel a pending ask and print its envelope",
         "flags": {
-          "id": { "type": "string", "description": "the ask to cancel", "required": true }
+          "id": {
+            "type": "string",
+            "description": "the ask to cancel",
+            "required": true
+          }
         },
-        "methods": ["quirky.ask/cancel"]
+        "methods": [
+          "quirky.ask/cancel"
+        ]
       }
     ]
   }

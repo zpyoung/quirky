@@ -23,7 +23,7 @@ function idFlag(args: CliArgs): string {
  */
 export async function waitForAsk(ctx: CliContext, askId: string, timeoutMs?: number): Promise<void> {
   const startedAt = ctx.now()
-  let last: AskEnvelope = { status: 'pending', askId, answers: {}, skipped: [] }
+  let last: AskEnvelope = { status: 'pending', askId, answers: {}, skipped: [], summary: '' }
   let failures = 0
   for (;;) {
     const remaining = timeoutMs === undefined ? Infinity : timeoutMs - (ctx.now() - startedAt)

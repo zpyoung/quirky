@@ -26,13 +26,17 @@ describe('SC-17/SC-18: quirky.ask as a built-in plugin', () => {
       'quirky.ask/answer',
       'quirky.ask/cancel',
       'quirky.ask/create',
+      'quirky.ask/expire',
       'quirky.ask/list',
+      'quirky.ask/updatePartial',
       'quirky.ask/wait'
     ])
     expect(methods.filter((method) => method.readOnly).map((method) => method.name)).toEqual(['quirky.ask/list', 'quirky.ask/wait'])
     expect(api.events.filter((event) => event.plugin === 'quirky.ask').map((event) => event.name)).toEqual([
       'quirky.ask/created',
-      'quirky.ask/resolved'
+      'quirky.ask/resolved',
+      'quirky.ask/surfaced',
+      'quirky.ask/updated'
     ])
     expect(api.cli.groups.find((group) => group.plugin === 'quirky.ask')).toEqual({ plugin: 'quirky.ask', words: 'ask', aliases: [] })
     expect(api.cli.commands.filter((command) => command.plugin === 'quirky.ask').map((command) => command.words).sort()).toEqual([

@@ -40,7 +40,8 @@ function envelope(status: AskEnvelope['status'], decision?: string): AskEnvelope
     status,
     askId: 'a_1',
     answers: decision ? { decision: { value: decision, source: 'option' } } : {},
-    skipped: decision ? [] : ['decision']
+    skipped: decision ? [] : ['decision'],
+    summary: ''
   }
 }
 
