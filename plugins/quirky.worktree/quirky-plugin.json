@@ -16,7 +16,7 @@
     "method": [
       {
         "id": "list",
-        "description": "Worktrees, optionally only those of one repository.",
+        "description": "Worktrees (workspaces), optionally only those of one project or one group's parent folder.",
         "readOnly": true,
         "params": {
           "type": "object",
@@ -24,6 +24,10 @@
             "repo": {
               "type": "string",
               "description": "A repo selector: id:, name: or path:, or a bare ID or name."
+            },
+            "group": {
+              "type": "string",
+              "description": "A group ID or exact name: its folder workspaces."
             }
           }
         },
@@ -36,13 +40,14 @@
                 "type": "string"
               },
               "repoId": {
-                "type": "string"
+                "type": "string",
+                "description": "The project's ID, or group:<groupId> for a workspace on a group's parent folder."
               },
               "path": {
                 "type": "string"
               },
               "branch": {
-                "description": "Short branch name, or null when HEAD is detached."
+                "description": "Short branch name, or null when HEAD is detached or the workspace is a folder."
               },
               "head": {
                 "type": "string"
@@ -51,7 +56,63 @@
                 "type": "boolean"
               },
               "name": {
+                "type": "string",
+                "description": "The display name when set, else the branch for a primary checkout and the folder name for the rest."
+              },
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "git",
+                  "folder"
+                ]
+              },
+              "displayName": {
+                "description": "User-chosen label, or null."
+              },
+              "comment": {
                 "type": "string"
+              },
+              "status": {
+                "type": "string",
+                "enum": [
+                  "todo",
+                  "in-progress",
+                  "in-review",
+                  "done"
+                ]
+              },
+              "pinned": {
+                "type": "boolean"
+              },
+              "unread": {
+                "type": "boolean"
+              },
+              "parentId": {
+                "description": "The workspace this one is nested under, or null."
+              },
+              "createdAt": {
+                "type": "number"
+              },
+              "createdBy": {
+                "type": "string",
+                "enum": [
+                  "window",
+                  "cli",
+                  "api",
+                  "external"
+                ]
+              },
+              "baseRef": {
+                "description": "The ref the branch was cut from, or null when unknown."
+              },
+              "keepBranch": {
+                "type": "boolean"
+              },
+              "removing": {
+                "type": "boolean"
+              },
+              "groupId": {
+                "description": "The group whose parent folder the workspace sits on, or null."
               }
             },
             "required": [
@@ -61,31 +122,334 @@
               "branch",
               "head",
               "isMain",
-              "name"
+              "name",
+              "kind",
+              "comment",
+              "status",
+              "pinned",
+              "unread",
+              "createdAt",
+              "createdBy",
+              "keepBranch",
+              "removing"
             ]
           }
         }
       },
       {
         "id": "create",
-        "description": "Creates branch `name` from `baseRef` (default: the repo's current HEAD) at `<worktreesRoot>/<repo>/<name>`.",
+        "description": "Creates a worktree on a new (or existing) branch at `<worktreesRoot>/<project>/<name>`, runs the project's setup, and can start an agent; on a folder project or a group's parent folder it registers a folder workspace instead, touching no files.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "repo": {
+              "type": "string",
+              "description": "A repo selector: id:, name: or path:, or a bare ID or name. Without repo or group the caller's own project is used."
+            },
+            "group": {
+              "type": "string",
+              "description": "A group ID or exact name: creates a folder workspace on its parent folder."
+            },
+            "name": {
+              "type": "string",
+              "description": "Folder name of the worktree (sanitised); blank or absent takes a generated name, or the branch name with branch."
+            },
+            "branch": {
+              "type": "string",
+              "description": "An existing local branch, or <remote>/<branch>, to check out; the worktree keeps the branch when deleted."
+            },
+            "branchName": {
+              "type": "string",
+              "description": "Explicit name for the new branch instead of <prefix>/<name>; reused only if it points at the base and is not checked out elsewhere."
+            },
+            "base": {
+              "type": "string",
+              "description": "Ref to cut the new branch from; default: the project's saved base, else the detected default branch."
+            },
+            "displayName": {
+              "type": "string",
+              "description": "Label shown in place of the name."
+            },
+            "comment": {
+              "type": "string",
+              "description": "A note about the worktree."
+            },
+            "parent": {
+              "type": "string",
+              "description": "A worktree selector for the workspace to nest the new one under; default: the caller's own worktree."
+            },
+            "noParent": {
+              "type": "boolean",
+              "description": "Do not nest the new worktree under the caller's worktree."
+            },
+            "setup": {
+              "type": "string",
+              "description": "Whether to run the project's setup script: run, skip, or inherit the project's policy (default).",
+              "enum": [
+                "run",
+                "skip",
+                "inherit"
+              ]
+            },
+            "trustSetup": {
+              "type": "boolean",
+              "description": "Run a shared setup script that has not been trusted, this once."
+            },
+            "agent": {
+              "type": "string",
+              "description": "An agent ID (any but shell) to start in the new worktree once it exists, after setup when the project says to wait."
+            },
+            "prompt": {
+              "type": "string",
+              "description": "Initial prompt for the agent."
+            },
+            "allowLocalBaseFallback": {
+              "type": "boolean",
+              "description": "Use the local branch when a remote base cannot be fetched (default true)."
+            },
+            "activate": {
+              "type": "boolean",
+              "description": "Open the new worktree in the window."
+            },
+            "createdBy": {
+              "type": "string",
+              "description": "The surface creating the workspace; defaults to api.",
+              "enum": [
+                "window",
+                "cli",
+                "api"
+              ]
+            }
+          }
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "worktree": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "repoId": {
+                  "type": "string",
+                  "description": "The project's ID, or group:<groupId> for a workspace on a group's parent folder."
+                },
+                "path": {
+                  "type": "string"
+                },
+                "branch": {
+                  "description": "Short branch name, or null when HEAD is detached or the workspace is a folder."
+                },
+                "head": {
+                  "type": "string"
+                },
+                "isMain": {
+                  "type": "boolean"
+                },
+                "name": {
+                  "type": "string",
+                  "description": "The display name when set, else the branch for a primary checkout and the folder name for the rest."
+                },
+                "kind": {
+                  "type": "string",
+                  "enum": [
+                    "git",
+                    "folder"
+                  ]
+                },
+                "displayName": {
+                  "description": "User-chosen label, or null."
+                },
+                "comment": {
+                  "type": "string"
+                },
+                "status": {
+                  "type": "string",
+                  "enum": [
+                    "todo",
+                    "in-progress",
+                    "in-review",
+                    "done"
+                  ]
+                },
+                "pinned": {
+                  "type": "boolean"
+                },
+                "unread": {
+                  "type": "boolean"
+                },
+                "parentId": {
+                  "description": "The workspace this one is nested under, or null."
+                },
+                "createdAt": {
+                  "type": "number"
+                },
+                "createdBy": {
+                  "type": "string",
+                  "enum": [
+                    "window",
+                    "cli",
+                    "api",
+                    "external"
+                  ]
+                },
+                "baseRef": {
+                  "description": "The ref the branch was cut from, or null when unknown."
+                },
+                "keepBranch": {
+                  "type": "boolean"
+                },
+                "removing": {
+                  "type": "boolean"
+                },
+                "groupId": {
+                  "description": "The group whose parent folder the workspace sits on, or null."
+                }
+              },
+              "required": [
+                "id",
+                "repoId",
+                "path",
+                "branch",
+                "head",
+                "isMain",
+                "name",
+                "kind",
+                "comment",
+                "status",
+                "pinned",
+                "unread",
+                "createdAt",
+                "createdBy",
+                "keepBranch",
+                "removing"
+              ]
+            },
+            "warnings": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "Problems that did not stop the create."
+            },
+            "baseFallback": {
+              "description": "Present when a remote base was unavailable and a local branch was used: { requestedRef, localRef, message }."
+            },
+            "setup": {
+              "type": "object",
+              "properties": {
+                "ran": {
+                  "type": "string",
+                  "description": "Where setup ran: a Setup terminal, the daemon, not at all (none), or it was skipped.",
+                  "enum": [
+                    "terminal",
+                    "daemon",
+                    "none",
+                    "skipped"
+                  ]
+                },
+                "sessionId": {
+                  "type": "string"
+                },
+                "exitCode": {
+                  "description": "Exit status of a setup run in the daemon; null when it was killed."
+                },
+                "timedOut": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "ran"
+              ]
+            },
+            "agentSessionId": {
+              "type": "string",
+              "description": "The agent session, when it was started."
+            },
+            "agentPending": {
+              "type": "boolean",
+              "description": "The agent starts when the Setup terminal exits."
+            }
+          },
+          "required": [
+            "worktree",
+            "warnings",
+            "setup"
+          ]
+        }
+      },
+      {
+        "id": "suggestName",
+        "description": "The generated name a create with no name in this project would use now; it is not reserved until a create takes it.",
+        "readOnly": true,
         "params": {
           "type": "object",
           "properties": {
             "repo": {
               "type": "string",
               "description": "A repo selector: id:, name: or path:, or a bare ID or name."
-            },
+            }
+          },
+          "required": [
+            "repo"
+          ]
+        },
+        "result": {
+          "type": "object",
+          "properties": {
             "name": {
-              "type": "string"
-            },
-            "baseRef": {
               "type": "string"
             }
           },
           "required": [
-            "repo",
             "name"
+          ]
+        }
+      },
+      {
+        "id": "set",
+        "description": "Changes a worktree's display name, note, status, pin, unread flag or parent.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "worktree": {
+              "type": "string",
+              "description": "A worktree selector: id:, name:, branch:, path:, current or active, or a bare ID, name or branch."
+            },
+            "displayName": {
+              "type": "string",
+              "description": "Label shown in place of the name; empty clears it."
+            },
+            "comment": {
+              "type": "string"
+            },
+            "status": {
+              "type": "string",
+              "enum": [
+                "todo",
+                "in-progress",
+                "in-review",
+                "done"
+              ]
+            },
+            "pinned": {
+              "type": "boolean"
+            },
+            "unread": {
+              "type": "boolean"
+            },
+            "parent": {
+              "type": "string",
+              "description": "A worktree selector for the workspace to nest under."
+            },
+            "noParent": {
+              "type": "boolean",
+              "description": "Clears the parent."
+            }
+          },
+          "required": [
+            "worktree"
           ]
         },
         "result": {
@@ -95,13 +459,14 @@
               "type": "string"
             },
             "repoId": {
-              "type": "string"
+              "type": "string",
+              "description": "The project's ID, or group:<groupId> for a workspace on a group's parent folder."
             },
             "path": {
               "type": "string"
             },
             "branch": {
-              "description": "Short branch name, or null when HEAD is detached."
+              "description": "Short branch name, or null when HEAD is detached or the workspace is a folder."
             },
             "head": {
               "type": "string"
@@ -110,7 +475,63 @@
               "type": "boolean"
             },
             "name": {
+              "type": "string",
+              "description": "The display name when set, else the branch for a primary checkout and the folder name for the rest."
+            },
+            "kind": {
+              "type": "string",
+              "enum": [
+                "git",
+                "folder"
+              ]
+            },
+            "displayName": {
+              "description": "User-chosen label, or null."
+            },
+            "comment": {
               "type": "string"
+            },
+            "status": {
+              "type": "string",
+              "enum": [
+                "todo",
+                "in-progress",
+                "in-review",
+                "done"
+              ]
+            },
+            "pinned": {
+              "type": "boolean"
+            },
+            "unread": {
+              "type": "boolean"
+            },
+            "parentId": {
+              "description": "The workspace this one is nested under, or null."
+            },
+            "createdAt": {
+              "type": "number"
+            },
+            "createdBy": {
+              "type": "string",
+              "enum": [
+                "window",
+                "cli",
+                "api",
+                "external"
+              ]
+            },
+            "baseRef": {
+              "description": "The ref the branch was cut from, or null when unknown."
+            },
+            "keepBranch": {
+              "type": "boolean"
+            },
+            "removing": {
+              "type": "boolean"
+            },
+            "groupId": {
+              "description": "The group whose parent folder the workspace sits on, or null."
             }
           },
           "required": [
@@ -120,13 +541,148 @@
             "branch",
             "head",
             "isMain",
-            "name"
+            "name",
+            "kind",
+            "comment",
+            "status",
+            "pinned",
+            "unread",
+            "createdAt",
+            "createdBy",
+            "keepBranch",
+            "removing"
+          ]
+        }
+      },
+      {
+        "id": "show",
+        "description": "A worktree with the IDs of its children.",
+        "readOnly": true,
+        "params": {
+          "type": "object",
+          "properties": {
+            "worktree": {
+              "type": "string",
+              "description": "A worktree selector: id:, name:, branch:, path:, current or active, or a bare ID, name or branch."
+            }
+          },
+          "required": [
+            "worktree"
+          ]
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "repoId": {
+              "type": "string",
+              "description": "The project's ID, or group:<groupId> for a workspace on a group's parent folder."
+            },
+            "path": {
+              "type": "string"
+            },
+            "branch": {
+              "description": "Short branch name, or null when HEAD is detached or the workspace is a folder."
+            },
+            "head": {
+              "type": "string"
+            },
+            "isMain": {
+              "type": "boolean"
+            },
+            "name": {
+              "type": "string",
+              "description": "The display name when set, else the branch for a primary checkout and the folder name for the rest."
+            },
+            "kind": {
+              "type": "string",
+              "enum": [
+                "git",
+                "folder"
+              ]
+            },
+            "displayName": {
+              "description": "User-chosen label, or null."
+            },
+            "comment": {
+              "type": "string"
+            },
+            "status": {
+              "type": "string",
+              "enum": [
+                "todo",
+                "in-progress",
+                "in-review",
+                "done"
+              ]
+            },
+            "pinned": {
+              "type": "boolean"
+            },
+            "unread": {
+              "type": "boolean"
+            },
+            "parentId": {
+              "description": "The workspace this one is nested under, or null."
+            },
+            "createdAt": {
+              "type": "number"
+            },
+            "createdBy": {
+              "type": "string",
+              "enum": [
+                "window",
+                "cli",
+                "api",
+                "external"
+              ]
+            },
+            "baseRef": {
+              "description": "The ref the branch was cut from, or null when unknown."
+            },
+            "keepBranch": {
+              "type": "boolean"
+            },
+            "removing": {
+              "type": "boolean"
+            },
+            "groupId": {
+              "description": "The group whose parent folder the workspace sits on, or null."
+            },
+            "children": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "IDs of the workspaces nested directly under this one."
+            }
+          },
+          "required": [
+            "id",
+            "repoId",
+            "path",
+            "branch",
+            "head",
+            "isMain",
+            "name",
+            "kind",
+            "comment",
+            "status",
+            "pinned",
+            "unread",
+            "createdAt",
+            "createdBy",
+            "keepBranch",
+            "removing",
+            "children"
           ]
         }
       },
       {
         "id": "remove",
-        "description": "Removes a worktree and closes its sessions.",
+        "description": "Removes a worktree: runs its archive script, closes its sessions, removes it with git and deletes its branch when it is merged.",
         "destructive": true,
         "confirm": "Remove worktree {worktree}?",
         "describe": "describeRemove",
@@ -138,7 +694,20 @@
               "description": "A worktree selector: id:, name:, branch:, path:, current or active, or a bare ID, name or branch."
             },
             "force": {
-              "type": "boolean"
+              "type": "boolean",
+              "description": "Remove even with uncommitted changes (never a locked worktree)."
+            },
+            "withDescendants": {
+              "type": "boolean",
+              "description": "Also remove every workspace nested under it, deepest first."
+            },
+            "skipArchive": {
+              "type": "boolean",
+              "description": "Do not run the archive script."
+            },
+            "allowFailedArchiveHook": {
+              "type": "boolean",
+              "description": "Remove even if the archive script fails."
             }
           },
           "required": [
@@ -150,10 +719,41 @@
           "properties": {
             "ok": {
               "type": "boolean"
+            },
+            "removed": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "The IDs removed, descendants first."
+            },
+            "keptBranch": {
+              "type": "object",
+              "description": "Set when the branch was kept because git cannot show it is merged.",
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "head": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "name",
+                "head"
+              ]
+            },
+            "sessionErrors": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "Sessions that could not be closed during a forced remove."
             }
           },
           "required": [
-            "ok"
+            "ok",
+            "removed"
           ]
         }
       },
@@ -169,7 +769,20 @@
               "description": "A worktree selector: id:, name:, branch:, path:, current or active, or a bare ID, name or branch."
             },
             "force": {
-              "type": "boolean"
+              "type": "boolean",
+              "description": "Remove even with uncommitted changes (never a locked worktree)."
+            },
+            "withDescendants": {
+              "type": "boolean",
+              "description": "Also remove every workspace nested under it, deepest first."
+            },
+            "skipArchive": {
+              "type": "boolean",
+              "description": "Do not run the archive script."
+            },
+            "allowFailedArchiveHook": {
+              "type": "boolean",
+              "description": "Remove even if the archive script fails."
             }
           },
           "required": [
@@ -178,6 +791,45 @@
         },
         "result": {
           "type": "string"
+        }
+      },
+      {
+        "id": "deleteBranch",
+        "description": "Deletes a branch only if it still points at the given commit.",
+        "destructive": true,
+        "confirm": "Delete branch {branch}?",
+        "params": {
+          "type": "object",
+          "properties": {
+            "repo": {
+              "type": "string",
+              "description": "A repo selector: id:, name: or path:, or a bare ID or name."
+            },
+            "branch": {
+              "type": "string",
+              "description": "The short branch name."
+            },
+            "head": {
+              "type": "string",
+              "description": "The commit the branch must still point at."
+            }
+          },
+          "required": [
+            "repo",
+            "branch",
+            "head"
+          ]
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "ok": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "ok"
+          ]
         }
       },
       {
@@ -208,13 +860,14 @@
               "type": "string"
             },
             "repoId": {
-              "type": "string"
+              "type": "string",
+              "description": "The project's ID, or group:<groupId> for a workspace on a group's parent folder."
             },
             "path": {
               "type": "string"
             },
             "branch": {
-              "description": "Short branch name, or null when HEAD is detached."
+              "description": "Short branch name, or null when HEAD is detached or the workspace is a folder."
             },
             "head": {
               "type": "string"
@@ -223,7 +876,63 @@
               "type": "boolean"
             },
             "name": {
+              "type": "string",
+              "description": "The display name when set, else the branch for a primary checkout and the folder name for the rest."
+            },
+            "kind": {
+              "type": "string",
+              "enum": [
+                "git",
+                "folder"
+              ]
+            },
+            "displayName": {
+              "description": "User-chosen label, or null."
+            },
+            "comment": {
               "type": "string"
+            },
+            "status": {
+              "type": "string",
+              "enum": [
+                "todo",
+                "in-progress",
+                "in-review",
+                "done"
+              ]
+            },
+            "pinned": {
+              "type": "boolean"
+            },
+            "unread": {
+              "type": "boolean"
+            },
+            "parentId": {
+              "description": "The workspace this one is nested under, or null."
+            },
+            "createdAt": {
+              "type": "number"
+            },
+            "createdBy": {
+              "type": "string",
+              "enum": [
+                "window",
+                "cli",
+                "api",
+                "external"
+              ]
+            },
+            "baseRef": {
+              "description": "The ref the branch was cut from, or null when unknown."
+            },
+            "keepBranch": {
+              "type": "boolean"
+            },
+            "removing": {
+              "type": "boolean"
+            },
+            "groupId": {
+              "description": "The group whose parent folder the workspace sits on, or null."
             }
           },
           "required": [
@@ -233,7 +942,16 @@
             "branch",
             "head",
             "isMain",
-            "name"
+            "name",
+            "kind",
+            "comment",
+            "status",
+            "pinned",
+            "unread",
+            "createdAt",
+            "createdBy",
+            "keepBranch",
+            "removing"
           ]
         }
       },
@@ -264,11 +982,14 @@
     "event": [
       {
         "id": "changed",
-        "description": "A worktree of a repository was created or removed.",
+        "description": "A worktree was created, changed or removed.",
         "data": {
           "type": "object",
           "properties": {
             "repoId": {
+              "type": "string"
+            },
+            "worktreeId": {
               "type": "string"
             }
           },
@@ -285,6 +1006,39 @@
         "title": "Worktrees folder",
         "description": "Folder under which new worktrees are created.",
         "default": "~/quirky/workspaces"
+      },
+      {
+        "id": "nestWorkspaces",
+        "type": "boolean",
+        "title": "Nest workspaces by project",
+        "description": "Put new worktrees in a folder named for their project under the worktrees folder.",
+        "default": true
+      },
+      {
+        "id": "branchPrefix",
+        "type": "enum",
+        "values": [
+          "git-username",
+          "custom",
+          "none"
+        ],
+        "title": "Branch name prefix",
+        "description": "What new branch names start with.",
+        "default": "git-username"
+      },
+      {
+        "id": "branchPrefixCustom",
+        "type": "string",
+        "title": "Custom branch prefix",
+        "description": "The prefix used when the branch name prefix is custom.",
+        "default": ""
+      },
+      {
+        "id": "confirmDelete",
+        "type": "boolean",
+        "title": "Confirm before deleting",
+        "description": "Ask before deleting a workspace.",
+        "default": true
       }
     ],
     "sidebar-section": [
@@ -292,6 +1046,27 @@
         "id": "worktrees",
         "title": "Worktrees",
         "order": 0
+      }
+    ],
+    "command": [
+      {
+        "id": "new-worktree",
+        "title": "New worktree",
+        "args": {
+          "type": "object",
+          "properties": {
+            "repo": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    ],
+    "keybinding": [
+      {
+        "id": "new-worktree",
+        "key": "mod+n",
+        "command": "new-worktree"
       }
     ],
     "cli-command": [
@@ -302,6 +1077,10 @@
           "repo": {
             "type": "string",
             "description": "only worktrees of this repository"
+          },
+          "group": {
+            "type": "string",
+            "description": "only folder workspaces of this group"
           }
         },
         "methods": [
@@ -314,23 +1093,166 @@
         "positionals": [
           {
             "name": "repo",
-            "description": "the repository",
-            "required": true
+            "description": "the project (with a name after it); with one argument that is the name",
+            "required": false
           },
           {
             "name": "name",
-            "description": "name for the worktree and branch",
-            "required": true
+            "description": "name for the worktree",
+            "required": false
           }
         ],
         "flags": {
+          "repo": {
+            "type": "string",
+            "description": "the project; default: the project of the worktree you are in"
+          },
+          "name": {
+            "type": "string",
+            "description": "name for the worktree; blank takes a generated name"
+          },
+          "group": {
+            "type": "string",
+            "description": "a project group: create a folder workspace on its parent folder"
+          },
           "base": {
             "type": "string",
             "description": "ref to branch from"
+          },
+          "branch": {
+            "type": "string",
+            "description": "check out this existing branch instead of making one"
+          },
+          "branch-name": {
+            "type": "string",
+            "description": "name for the new branch instead of <prefix>/<name>"
+          },
+          "display-name": {
+            "type": "string",
+            "description": "label shown in place of the name"
+          },
+          "comment": {
+            "type": "string",
+            "description": "note about the worktree"
+          },
+          "parent-worktree": {
+            "type": "string",
+            "description": "nest the new worktree under this one"
+          },
+          "no-parent": {
+            "type": "boolean",
+            "description": "do not nest the new worktree under the one you are in"
+          },
+          "setup": {
+            "type": "string",
+            "description": "run or skip the setup script, or inherit the project policy",
+            "enum": [
+              "run",
+              "skip",
+              "inherit"
+            ]
+          },
+          "trust-setup": {
+            "type": "boolean",
+            "description": "run an untrusted shared setup script this once"
+          },
+          "agent": {
+            "type": "string",
+            "description": "start this agent in the new worktree",
+            "enum": [
+              "claude",
+              "codex",
+              "opencode",
+              "gemini"
+            ]
+          },
+          "prompt": {
+            "type": "string",
+            "description": "initial prompt for the agent"
+          },
+          "no-fallback": {
+            "type": "boolean",
+            "description": "fail instead of using the local branch when the remote base cannot be fetched"
+          },
+          "activate": {
+            "type": "boolean",
+            "description": "open the new worktree in the window"
           }
         },
         "methods": [
           "quirky.worktree/create"
+        ]
+      },
+      {
+        "id": "set",
+        "summary": "change a worktree's display name, note, status, pin, unread flag or parent",
+        "positionals": [
+          {
+            "name": "worktree",
+            "description": "the worktree to change",
+            "required": true
+          }
+        ],
+        "flags": {
+          "display-name": {
+            "type": "string",
+            "description": "label shown in place of the name (empty clears)"
+          },
+          "comment": {
+            "type": "string",
+            "description": "note about the worktree"
+          },
+          "workspace-status": {
+            "type": "string",
+            "description": "where the worktree is in your flow",
+            "enum": [
+              "todo",
+              "in-progress",
+              "in-review",
+              "done"
+            ]
+          },
+          "pin": {
+            "type": "boolean",
+            "description": "pin the worktree"
+          },
+          "unpin": {
+            "type": "boolean",
+            "description": "unpin the worktree"
+          },
+          "unread": {
+            "type": "boolean",
+            "description": "mark the worktree unread"
+          },
+          "read": {
+            "type": "boolean",
+            "description": "mark the worktree read"
+          },
+          "parent-worktree": {
+            "type": "string",
+            "description": "nest the worktree under this one"
+          },
+          "no-parent": {
+            "type": "boolean",
+            "description": "take the worktree out of its parent"
+          }
+        },
+        "methods": [
+          "quirky.worktree/set"
+        ]
+      },
+      {
+        "id": "show",
+        "summary": "show a worktree's record and children",
+        "positionals": [
+          {
+            "name": "worktree",
+            "description": "the worktree to show",
+            "required": true
+          }
+        ],
+        "methods": [
+          "quirky.worktree/show"
         ]
       },
       {
@@ -346,11 +1268,48 @@
         "flags": {
           "force": {
             "type": "boolean",
-            "description": "remove even with uncommitted changes"
+            "description": "remove even with uncommitted changes (never a locked worktree)"
+          },
+          "with-descendants": {
+            "type": "boolean",
+            "description": "also remove the workspaces nested under it"
+          },
+          "skip-archive": {
+            "type": "boolean",
+            "description": "do not run the archive script"
+          },
+          "allow-failed-archive-hook": {
+            "type": "boolean",
+            "description": "remove even if the archive script fails"
           }
         },
         "methods": [
           "quirky.worktree/remove"
+        ]
+      },
+      {
+        "id": "delete-branch",
+        "summary": "delete a branch that a remove kept, if it has not moved",
+        "positionals": [
+          {
+            "name": "repo",
+            "description": "the project",
+            "required": true
+          },
+          {
+            "name": "branch",
+            "description": "the branch to delete",
+            "required": true
+          }
+        ],
+        "flags": {
+          "head": {
+            "type": "string",
+            "description": "the commit the branch must still point at"
+          }
+        },
+        "methods": [
+          "quirky.worktree/deleteBranch"
         ]
       }
     ]

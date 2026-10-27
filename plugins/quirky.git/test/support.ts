@@ -9,8 +9,33 @@ import { startHarness, type Harness } from '../../../packages/daemon/test/helper
 const PLUGIN_DIR = join(dirname(fileURLToPath(import.meta.url)), '..')
 const FAKES_DIR = join(dirname(fileURLToPath(import.meta.url)), 'fakes')
 
+const WORKTREE_DEFAULTS = {
+  kind: 'git',
+  displayName: null,
+  comment: '',
+  status: 'in-progress',
+  pinned: false,
+  unread: false,
+  parentId: null,
+  createdAt: 0,
+  createdBy: 'external',
+  baseRef: null,
+  keepBranch: false,
+  removing: false,
+  groupId: null
+} as const
+
 function worktree(id: string, path: string, name: string, isMain: boolean): Worktree {
-  return { id, repoId: 'repo_api', path, branch: name, head: id.padEnd(40, 'a'), isMain, name }
+  return {
+    id,
+    repoId: 'repo_api',
+    path,
+    branch: name,
+    head: id.padEnd(40, 'a'),
+    isMain,
+    name,
+    ...WORKTREE_DEFAULTS
+  }
 }
 
 export type GitHarness = {
@@ -23,6 +48,8 @@ export type GitHarness = {
   main: Worktree
   /** Worktree "fix-login", with a `src` directory to run the CLI in. */
   fixLogin: Worktree
+  /** Folder workspace "notes" (kind folder), which has no git. */
+  notes: Worktree
   events: QuirkyEvent[]
   cleanup(): Promise<void>
 }
@@ -44,7 +71,9 @@ export async function startGitHarness(
 
   const main = worktree('wt_main', join(root, 'api'), 'main', true)
   const fixLogin = worktree('wt_fix', join(root, 'api-worktrees', 'fix-login'), 'fix-login', false)
+  const notes: Worktree = { ...worktree('wt_notes', join(root, 'notes'), 'notes', true), kind: 'folder', branch: null, head: '' }
   mkdirSync(main.path)
+  mkdirSync(notes.path)
   mkdirSync(join(fixLogin.path, 'src'), { recursive: true })
 
   const git = (options.git as FakeGit | undefined) ?? createFakeGit()
@@ -53,7 +82,7 @@ export async function startGitHarness(
     restoreEnv = initRepo(main.path)
     useTestGit(null)
   } else useTestGit(git)
-  globalThis.__QUIRKY_TEST_WORKTREES__ = [main, fixLogin]
+  globalThis.__QUIRKY_TEST_WORKTREES__ = [main, fixLogin, notes]
   const h = await startHarness({ home: join(root, 'home'), builtinPluginsDir: builtin })
   const { client, events } = await h.connectWithEvents('cli')
   return {
@@ -63,6 +92,7 @@ export async function startGitHarness(
     call: (method, params) => client.callAny(method, params),
     main,
     fixLogin,
+    notes,
     events,
     async cleanup() {
       await h.cleanup()

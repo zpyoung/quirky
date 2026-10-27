@@ -158,6 +158,15 @@ function errorCode(error: unknown): string {
   return 'internal'
 }
 
+/** The machine-readable reason a plugin attached to an RPC error as `data.reason`, if it did. */
+function errorReason(error: unknown): string | undefined {
+  if (!(error instanceof RpcError)) return undefined
+  const data = error.data
+  if (typeof data !== 'object' || data === null) return undefined
+  const reason = (data as { reason?: unknown }).reason
+  return typeof reason === 'string' ? reason : undefined
+}
+
 /** Prints `error` the way the mode asks for and returns the exit code. */
 function report(error: unknown, out: Printer, writer: Writer): number {
   const message = error instanceof Error ? error.message : String(error)
@@ -168,7 +177,10 @@ function report(error: unknown, out: Printer, writer: Writer): number {
   }
   const suggestions = error instanceof UsageError ? error.suggestions : []
   if (out.json) {
-    out.jsonLine({ error: { code: errorCode(error), message, ...(suggestions.length ? { suggestions } : {}) } })
+    const reason = errorReason(error)
+    out.jsonLine({
+      error: { code: errorCode(error), message, ...(reason !== undefined ? { reason } : {}), ...(suggestions.length ? { suggestions } : {}) }
+    })
     return code
   }
   writer.stderr(`quirky: ${message}\n`)
