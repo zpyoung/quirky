@@ -1049,6 +1049,18 @@
         "m3-terminal-dock"
       ],
       "status": "todo"
+    },
+    {
+      "id": "m3-vault-parity-completion",
+      "milestone": "M3",
+      "title": "Finish vault parity after operator-authorized core landing (details: docs/loop/BLOCKERS.md m3-vault open review findings): SC-02 positive Workspace/Project defaults and scoped depth, because the two API/UI fixtures remain unresolved (unexpected-comma response and missing primary-worktree assumption); SC-03 all view controls/reset/show-more, because only persistence/unlimited API boundaries were exercised; SC-06 narrow/large grouped history and selection stability, because core smoke uses a small fixture; SC-08 Settings polling/degraded status/sidebar focus, because the bounded core smoke does not cover every state; SC-10/11 exhaustive cross-format mutation/holdout/schema/worker recovery, because component and selected API checks do not prove the full campaign; SC-15/16 stale-page replacement and every degraded/limit/retry UI, because API outcomes lack complete visible multi-page/failure fixtures; SC-18 all inspection/copy/log/live-pane/worktree/folder actions plus child lookup after Worker restart, because only prompt/registered-child API selection is proven and child rediscovery currently needs its parent list; SC-19 confirmation/cancel/symlink-swap/concurrent deletion UI, because private-APFS file/directory Trash proof is not that combined consumer flow; SC-20 real-browser keyboard and nonactive-group drag with actual fake-provider process, because mounted-window security/placement tests are not browser proof; SC-21 Session Info preselection and enabled handoff, because installed dependency integration remains unexercised while honest unavailable behavior is covered; SC-22 every inspect/resume/action/UI CLI subcommand, because core CLI and all25 copied commands are not the exhaustive action matrix; SC-23 all-host/enable-all/authenticated-web controls, because two-daemon API identity/redaction proof is not visible UI proof; SC-24 long-idle/deactivate/crash packaged lifecycle, because bounded packaged core smoke cannot prove every recovery transition; finish nightly native SC-17 focus and SC-18 Finder/clipboard handoffs, because unattended lanes must not take foreground. Fix only findings blocking those flows; preserve explicit consent, unknown-scope bounds, source ownership and original transcripts.",
+      "docs": [
+        "ai-vault.md"
+      ],
+      "deps": [
+        "m3-vault"
+      ],
+      "status": "todo"
     }
   ]
 }
