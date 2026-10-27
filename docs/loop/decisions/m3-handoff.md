@@ -577,5 +577,15 @@
 - **Confidence:** medium
 - **Source:** assumed — autonomous
 
+## D58: Wave 2 checkpoint: six defects fixed
+- **Question:** the wave 2 checkpoint review (SDD step 8)
+- **Options:** fix each accepted finding
+- **Chose:** three lenses over `bac2aea..d664cce`, depth standard, codex. Accepted all eight findings (six defects): Start without `--agent` lacked D15's first-agent fallback (C1/S1); a detached preview took `contextAvailable` from the discarded composition (C2/S2); delivery could miss a working event during its first status read, and a turn that started and ended before `deliver` returned read as unobservable (C3/X2); Start composed before creating the worktree (S3); a discard during the first delivery didn't stop the automatic retry (X1). One fixer closed them with a regression test each. The wave 2 suite had only the pre-existing remote SC-10 failure (D55); features-floating SC-55 failed once and passed alone.
+- **Why:** LOOP.md: fix every confirmed finding
+- **Evidence:** session scratchpad cp2/*-gate.json, gate2-test.log
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** assumed — autonomous
+
 ## Progress
 Waves 1 and 2 merged (kernel growth, core, probe, daemon service with start/delivery/lineage/CLI); wave 1 checkpoint fixed (D56). Next: wave 2 gate and checkpoint, wave 3 W (window: overlay dialog, settings view, commands, menu-item; brief re-derivable from tech.md W1), catch-up merge with build/roadmap, Final Round 1, UI pass, land.
