@@ -180,6 +180,7 @@ export const DESKTOP_AWAY_MS = 180_000
 export type UiSlotState = {
   id: string
   kind: 'status-bar' | 'sidebar-section' | 'panel' | 'view' | 'overlay'
+  plugin: string
   title: string
   shown: boolean
   report?: unknown

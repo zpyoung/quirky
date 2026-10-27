@@ -114,7 +114,8 @@ function terminalAccessoriesOf(contributions: unknown, model: unknown): Terminal
       continue
     }
     const id = raw.id
-    const parsedId = typeof id === 'string' ? parseContributionId(id) : null
+    if (typeof id !== 'string') continue
+    const parsedId = parseContributionId(id)
     if (parsedId?.kind !== 'terminal-accessory' || raw.kind !== 'terminal-accessory' || raw.status !== 'effective') continue
     if (typeof raw.plugin !== 'string') continue
     const data = raw.data
