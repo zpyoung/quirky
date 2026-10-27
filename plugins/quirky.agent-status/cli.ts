@@ -1,7 +1,7 @@
 import { RpcError, type CliArgs, type CliContext, type CliModule } from '@quirky/protocol'
 import type { Explanation } from './src/explain'
 import { unsafePatternReason } from './src/rules/safety'
-import type { Origin, RuleFile, RuleListing } from './src/rules/types'
+import type { Matcher, Origin, RuleFile, RuleListing } from './src/rules/types'
 import type { SendResult } from './src/send'
 import type { OutputWaitResult, WaitResult } from './src/waits'
 
@@ -89,10 +89,18 @@ export function listingLines(listings: RuleListing[], ctx: CliContext): string[]
   ])
 }
 
+const describeMatcher = (matcher: Matcher): string =>
+  'contains' in matcher ? `contains ${JSON.stringify(matcher.contains)}` : `regex /${matcher.regex}/${matcher.ignoreCase ? 'i' : ''}`
+
+/** One line per rule: id, state, region, quiet time, the `all` and `none` matchers, then why the rule exists. */
 function describeRule(rule: RuleFile['rules'][number]): string {
   const region = rule.region === 'screen' && rule.lastLines !== undefined ? `screen last ${rule.lastLines}` : rule.region
-  const extras = [rule.quietMs ? `quiet ${rule.quietMs}ms` : '', rule.why ?? ''].filter((part) => part !== '')
-  return `${rule.id}  ${rule.state}${rule.kind ? ` ${rule.kind}` : ''}  ${region}${extras.length > 0 ? `  ${extras.join('; ')}` : ''}`
+  const matchers = [
+    rule.all?.length ? `all: ${rule.all.map(describeMatcher).join(', ')}` : '',
+    rule.none?.length ? `none: ${rule.none.map(describeMatcher).join(', ')}` : ''
+  ].filter((part) => part !== '')
+  const extras = [rule.quietMs ? `quiet ${rule.quietMs}ms` : '', matchers.join('; '), rule.why ?? ''].filter((part) => part !== '')
+  return `${rule.id}  ${rule.state}${rule.kind ? ` ${rule.kind}` : ''}  ${region}${extras.length > 0 ? `  ${extras.join('  ')}` : ''}`
 }
 
 /** The prompt a `send` was given: the positional text, or the contents of `--file` (`-` is stdin) without its trailing line break. */

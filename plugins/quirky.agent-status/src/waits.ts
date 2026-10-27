@@ -103,7 +103,8 @@ export class Waits {
 
   /**
    * Resolves `matched` with the newest line of the session's recent text that matches the
-   * pattern, or `pending` after `timeoutMs`. Reads wrapped rows as one line and looks again only
+   * pattern, or `pending` after `timeoutMs`; a match request still queued at the matcher when
+   * that time is up counts as no match. Reads wrapped rows as one line and looks again only
    * when the session's output has grown. A session that has exited gets one last read: its final
    * text is matched before the exit counts, and only then does this reject `conflict` with
    * reason `session-exited`. Rejects `invalid-params` for an unsafe pattern or one that runs too long.
@@ -124,8 +125,8 @@ export class Waits {
           seenOffset = offset
           const text = await this.read(id, lines, exited)
           if (text !== null) {
-            const found = await this.host.matcher.matchLines(pattern, ignoreCase, text)
-            if (found !== null) {
+            const found = await this.host.matcher.matchLines(pattern, ignoreCase, text, deadline)
+            if (found !== null && !('expired' in found)) {
               if ('timedOut' in found) throw this.host.context.error('invalid-params', `pattern is too slow: ${pattern}`)
               if ('unavailable' in found) throw new Error(`cannot match the pattern: ${found.unavailable}`)
               return { status: 'matched', ...found, at: this.host.now() }

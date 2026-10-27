@@ -76,13 +76,15 @@ export type ScreenReading = {
 export type ScreenDeps = { sources: RuleSources; matcher: Matcher; sampler: ScreenSampler; timeScale: number; now: () => number }
 
 const QUIET_MARGIN_MS = 10
+const EXPIRED_REASON = 'the matcher was busy past the deadline, so the screen rules were not run'
 
 /**
  * Reads `agent`'s rules against the session's screen. Without a rule file the screen is not
  * read. When a rule matches except for quiet, waits out the missing quiet time once and looks
  * again, so a caller never answers "no verdict" for a screen that is merely too new to judge.
  * With a `deadline` (epoch ms) it never sleeps past it: when the quiet can't be established by
- * then, the reading carries `pendingQuiet` and nothing from that rule.
+ * then, the reading carries `pendingQuiet` and nothing from that rule. A rule evaluation still
+ * queued at the matcher when the deadline passes gives no verdict and says so in `unavailable`.
  */
 export async function readScreen(deps: ScreenDeps, sessionId: string, agent: string | null, deadline?: number): Promise<ScreenReading> {
   const { sources, matcher, sampler, timeScale, now } = deps
@@ -96,7 +98,7 @@ export async function readScreen(deps: ScreenDeps, sessionId: string, agent: str
   } catch (error) {
     return { origin: null, verdict: null, ignored: await ignoredOf(), unavailable: `could not read the screen: ${error instanceof Error ? error.message : String(error)}`, sample: null }
   }
-  let judged = await evaluateForAgent(sources, matcher, agent, sample)
+  let judged = await evaluateForAgent(sources, matcher, agent, sample, deadline)
   if (judged.pendingQuiet !== undefined && judged.verdict?.state !== 'blocked' && judged.source) {
     const needed = judged.source.set.rules.find((rule) => rule.id === judged.pendingQuiet)?.quietMs ?? 0
     const missing = needed - (sample.quietForMs ?? 0)
@@ -105,7 +107,7 @@ export async function readScreen(deps: ScreenDeps, sessionId: string, agent: str
       await Bun.sleep(sleepMs)
       try {
         sample = await sampler.sample(sessionId)
-        judged = await evaluateForAgent(sources, matcher, agent, sample)
+        judged = await evaluateForAgent(sources, matcher, agent, sample, deadline)
       } catch {
         // the first look stands
       }
@@ -116,7 +118,7 @@ export async function readScreen(deps: ScreenDeps, sessionId: string, agent: str
     verdict: judged.verdict,
     ...(judged.pendingQuiet !== undefined ? { pendingQuiet: judged.pendingQuiet } : {}),
     ignored: await ignoredOf(),
-    ...(judged.unavailable !== undefined ? { unavailable: judged.unavailable } : {}),
+    ...(judged.unavailable !== undefined ? { unavailable: judged.unavailable } : judged.expired ? { unavailable: EXPIRED_REASON } : {}),
     sample
   }
 }

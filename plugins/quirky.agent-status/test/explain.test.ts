@@ -3,7 +3,7 @@ import { unlinkSync } from 'node:fs'
 import { join } from 'node:path'
 import { RpcErrorCode, type CliContext } from '@quirky/protocol'
 import { removeTempDirs } from '../../../packages/daemon/test/plugins/fixtures'
-import { explanationLines, listingLines } from '../cli'
+import { commands, explanationLines, listingLines } from '../cli'
 import { ScreenSampler } from '../src/screen'
 import { Rig } from './support'
 
@@ -380,10 +380,53 @@ describe('SC-12: rules list and show', () => {
     await expect(rig.client.callAny('quirky.agent-status/ruleSet', {})).rejects.toMatchObject({ code: RpcErrorCode.InvalidParams })
   })
 
+  test('the text of show lists each rule with its matchers, last lines and quiet time', async () => {
+    const rules = {
+      agent: 'cursor',
+      rules: [
+        {
+          id: 'approval-menu',
+          why: 'no hook',
+          state: 'blocked',
+          kind: 'approval',
+          region: 'screen',
+          lastLines: 8,
+          all: [{ contains: 'allow this?' }, { regex: '\\(y/n\\)\\s*$', ignoreCase: true }],
+          none: [{ contains: 'esc to cancel' }]
+        },
+        { id: 'composer', state: 'idle', region: 'title', all: [{ regex: '^ready' }], quietMs: 1000 }
+      ]
+    }
+    rig = await Rig.start({ builtinRules: { cursor: rules } })
+    const printed: string[] = []
+    const shown = { ...ctx, call: (method: string, params?: Record<string, unknown>) => rig.client.callAny(method, params ?? {}), out: { json: false, result: (_value: unknown, text: () => string) => printed.push(text()) } }
+
+    await commands['rules-show']!({ positionals: ['cursor'], flags: {} } as never, shown as unknown as CliContext)
+
+    const lines = printed[0]!.split('\n')
+    expect(lines[1]).toBe('approval-menu  blocked approval  screen last 8  all: contains "allow this?", regex /\\(y/n\\)\\s*$/i; none: contains "esc to cancel"  no hook')
+    expect(lines[2]).toBe('composer  idle  title  quiet 1000ms  all: regex /^ready/')
+  })
+
   test('the built-in rules are read from the rules folder of the plugin directory', async () => {
     rig = await Rig.start({ builtinRules: { cursor: approvalMenu } })
     const set = (await rig.client.callAny('quirky.agent-status/ruleSet', { agent: 'cursor' })) as { origin: { path: string } }
     expect(set.origin.path.endsWith(join('quirky.agent-status', 'rules', 'cursor.json'))).toBe(true)
+  })
+})
+
+describe('a session that exits while its screen is being read', () => {
+  test('is exited, not unknown or idle from the row it had', async () => {
+    scaled('0.1')
+    const idleAfterQuiet = { agent: 'claude', rules: [{ id: 'composer', state: 'idle', region: 'screen', all: [{ contains: '> ' }], quietMs: 1000 }] }
+    rig = await Rig.start({ builtinRules: { claude: idleAfterQuiet } })
+    await rig.hook('claude', claude('UserPromptSubmit', { prompt: 'earlier' }))
+    await rig.hook('claude', claude('Stop', { last_assistant_message: 'ok' }))
+    rig.show(['> '])
+    // the reading waits out the missing quiet; the process ends during that wait
+    rig.onRead(() => void rig.exit())
+
+    expect(await rig.explain()).toMatchObject({ state: 'exited', decidedBy: 'session' })
   })
 })
 

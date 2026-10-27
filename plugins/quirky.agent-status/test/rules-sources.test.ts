@@ -342,7 +342,7 @@ describe('sources whose patterns ran too long', () => {
     put(user, body('codex', rule('slow', 'x')), 1_000_000)
     const rules = sources()
     const found = await rules.effective('codex')
-    rules.reportTimeout(found!.origin)
+    rules.reportTimeout(found!.origin, found!.version)
 
     const after = await rules.effective('codex')
     expect(after?.origin.kind).toBe('built-in')
@@ -355,11 +355,37 @@ describe('sources whose patterns ran too long', () => {
     expect((await rules.listing('codex'))?.ignored).toEqual([])
   })
 
+  test('a timeout reported for an older version of the file does not blame the newer one', async () => {
+    put(join(builtinDir, 'codex.json'), body('codex', rule('builtin', 'a')))
+    const user = join(userDir, 'codex.json')
+    put(user, body('codex', rule('slow', 'x')), 1_000_000)
+    const rules = sources()
+    const evaluated = await rules.effective('codex')
+
+    put(user, body('codex', rule('corrected', 'y')), 1_000_100)
+    expect((await rules.effective('codex'))?.set.rules[0]?.id).toBe('corrected')
+    rules.reportTimeout(evaluated!.origin, evaluated!.version)
+
+    const after = await rules.effective('codex')
+    expect(after?.origin.kind).toBe('user')
+    expect(after?.set.rules[0]?.id).toBe('corrected')
+    expect((await rules.listing('codex'))?.ignored).toEqual([])
+  })
+
+  test('a timeout reported for contributions from before an invalidation is ignored', async () => {
+    contributions = [contribution('aider', { rules: [rule('r', 'x')] })]
+    const rules = sources()
+    const evaluated = await rules.effective('aider')
+    rules.invalidateContributions()
+    rules.reportTimeout(evaluated!.origin, evaluated!.version)
+    expect((await rules.effective('aider'))?.origin.kind).toBe('plugin')
+  })
+
   test('a timed-out contribution stays ignored until contributions are invalidated', async () => {
     contributions = [contribution('aider', { rules: [rule('r', 'x')] })]
     const rules = sources()
     const found = await rules.effective('aider')
-    rules.reportTimeout(found!.origin)
+    rules.reportTimeout(found!.origin, found!.version)
     expect(await rules.effective('aider')).toBeNull()
     expect((await rules.listing('aider'))?.ignored[0]!.reason).toBe(TIMED_OUT_REASON)
     rules.invalidateContributions()
@@ -370,7 +396,8 @@ describe('sources whose patterns ran too long', () => {
     const user = join(userDir, 'codex.json')
     put(user, body('codex', rule('slow', 'x')))
     const rules = sources()
-    rules.reportTimeout((await rules.effective('codex'))!.origin)
+    const slow = (await rules.effective('codex'))!
+    rules.reportTimeout(slow.origin, slow.version)
     await rules.effective('codex')
     await rules.list()
     expect(logs.filter((line) => line.includes(TIMED_OUT_REASON))).toHaveLength(1)

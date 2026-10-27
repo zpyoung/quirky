@@ -8,7 +8,7 @@
     "method": [
       { "id": "setCommand", "params": { "type": "object", "properties": { "command": { "type": "string" } }, "required": ["command"] } },
       { "id": "setAgents", "params": { "type": "object", "properties": { "agents": { "type": "array" } }, "required": ["agents"] } },
-      { "id": "setDeliverDelay", "params": { "type": "object", "properties": { "ms": { "type": "number" } }, "required": ["ms"] } },
+      { "id": "setPlanDelay", "params": { "type": "object", "properties": { "ms": { "type": "number" } }, "required": ["ms"] } },
       { "id": "list", "readOnly": true, "params": { "type": "object" } },
       { "id": "get", "readOnly": true, "params": { "type": "object", "properties": { "agent": { "type": "string" } }, "required": ["agent"] } },
       { "id": "setPlan", "params": { "type": "object", "properties": { "agent": { "type": "string" }, "plan": {} }, "required": ["agent", "plan"] } },

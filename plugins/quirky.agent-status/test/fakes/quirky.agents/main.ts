@@ -10,8 +10,8 @@ const PASTE = (text: string) => `\x1b[200~${text.replace(/\r?\n/g, '\r').replace
 /**
  * Stand-in for quirky.agents: `get` returns the command a test set with `setCommand`, `list` the
  * agents a test set with `setAgents`, `submitPlan` the plan a test set with `setPlan` (claude,
- * codex and cursor have the default one, any other agent is unknown), and `deliver` pastes into the
- * session like the real one and records the call.
+ * codex and cursor have the default one, any other agent is unknown) after the delay a test set with
+ * `setPlanDelay`, and `deliver` pastes into the session like the real one and records the call.
  */
 export function activate(context: PluginContext): void {
   let command = '/usr/bin/false'
@@ -19,7 +19,7 @@ export function activate(context: PluginContext): void {
   let agents: FakeAgent[] = JSON.parse(process.env.QUIRKY_TEST_FAKE_AGENTS ?? '[]')
   const plans = new Map<string, Plan>(['claude', 'codex', 'cursor'].map((agent) => [agent, DEFAULT_PLAN]))
   const delivered: DeliverCall[] = []
-  let deliverDelayMs = 0
+  let planDelayMs = 0
   context.provide('method:quirky.agents/setCommand', (params: Record<string, unknown>) => {
     command = String(params.command)
     return true
@@ -33,8 +33,8 @@ export function activate(context: PluginContext): void {
     else plans.set(String(params.agent), { ...DEFAULT_PLAN, ...(params.plan as Partial<Plan>) })
     return true
   })
-  context.provide('method:quirky.agents/setDeliverDelay', (params: Record<string, unknown>) => {
-    deliverDelayMs = Number(params.ms)
+  context.provide('method:quirky.agents/setPlanDelay', (params: Record<string, unknown>) => {
+    planDelayMs = Number(params.ms)
     return true
   })
   context.provide('method:quirky.agents/get', (params: Record<string, unknown>) => {
@@ -42,7 +42,8 @@ export function activate(context: PluginContext): void {
     return { id: 'claude', command, args: '' }
   })
   context.provide('method:quirky.agents/list', () => ({ agents }))
-  context.provide('method:quirky.agents/submitPlan', (params: Record<string, unknown>) => {
+  context.provide('method:quirky.agents/submitPlan', async (params: Record<string, unknown>) => {
+    if (planDelayMs > 0) await Bun.sleep(planDelayMs)
     const plan = plans.get(String(params.agent))
     if (!plan) throw context.error('not-found', `no agent ${params.agent}`)
     return plan
@@ -60,7 +61,6 @@ export function activate(context: PluginContext): void {
     if (!alive) return { delivery: 'not-delivered' }
     const plan = plans.get(call.agent) ?? DEFAULT_PLAN
     context.pty.write(call.sessionId, PASTE(call.text) + (call.submit && plan.enterWithPaste ? '\r' : ''))
-    if (deliverDelayMs > 0) await Bun.sleep(deliverDelayMs)
     return { delivery: 'pasted' }
   })
   context.provide('method:quirky.agents/delivered', () => delivered)

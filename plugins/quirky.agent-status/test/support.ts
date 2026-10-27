@@ -181,8 +181,8 @@ export class Rig {
     this.readWatchers.push(action)
   }
 
-  /** Makes the fake `quirky.agents` hold each `deliver` call for `ms` after it has written, as a slow delivery would. */
-  holdDelivery = (ms: number) => this.client.callAny('quirky.agents/setDeliverDelay', { ms })
+  /** Makes the fake `quirky.agents` hold each `submitPlan` answer for `ms`, as a slow plugin call would. */
+  holdPlan = (ms: number) => this.client.callAny('quirky.agents/setPlanDelay', { ms })
 
   /** Sets how the fake `quirky.agents` says `agent` submits a prompt; null makes the agent unknown to it. */
   plan = (agent: string, plan: SubmitPlan | null) => this.client.callAny('quirky.agents/setPlan', { agent, plan })
