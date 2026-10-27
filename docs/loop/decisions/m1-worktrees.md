@@ -759,5 +759,16 @@
 - **Revisit if:** never
 - **Source:** assumed — autonomous
 
+## D70: The UI scenarios run as three web batches, each on its own daemon, temp HOME and fixture world
+- **Question:** how to run the twenty UI scenarios with `quirk:using-apps-like-a-user` (LOOP.md step 6)
+- **Options:** one long run on one daemon; three isolated batches in parallel
+- **Chose:** three batches (projects and groups; create; metadata and delete), each built by one fixture script that sets HOME and QUIRKY_HOME to a temp dir, puts a fake `claude` first on PATH, and makes the repos the scenarios name (an `apps` folder holds `front` and `cli`, since `web` is already a project; SC-60 uses `web`; SC-43 uses `docs` and `child`); the agent and setup steps inside a scenario (SC-33's changed script, SC-62's `ui run`, SC-27's CLI create) run from the CLI between goals
+- **Why:** a temp HOME keeps the default worktrees folder, git config and any agent's state off the real home, and separate worlds keep one batch's deletes from changing another's starting data
+- **Evidence:** scratchpad uiv/setup.sh, uiv/goals-{A,B,C}.tmpl.json, uiv/brief.md
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** a scenario's result depends on the renamed fixtures
+- **Source:** assumed — autonomous
+
 ## Progress
-Step 5 done through catch-up: W1-W4 merged on `build/m1-worktrees` with W2 and W3 checkpoints fixed; build/roadmap merged in (e11a136) and its agent change adopted (D68). Next: full gate, Final Round 1 over `98a5625..HEAD` with one fix batch, then verify (tests per SC, web UI scenarios on a temp QUIRKY_HOME) and land.
+Step 5 done: Final Round 1 fixed (D69) and the suite is green after it. Step 6 running: UI batches A-C (D70). Next: record the UI report summaries, fix any failing scenario, then land with `git switch --detach` and `bun scripts/build-loop/queue.ts land m1-worktrees`.
