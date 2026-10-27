@@ -28,7 +28,7 @@ All GitHub portions of flows 1–7 in hosting-api.md are in scope, including acc
 
 ### Authentication and identity
 - Every call pins github.com too; ambient GH_HOST/GH_REPO cannot redirect it. Recognize exact two-segment remotes in SCP, HTTP(S), ssh, git and git+ssh forms; normalize ssh.github.com and resolve local SSH aliases. Enterprise hosts are accepted only from the local gh auth inventory. Never probe an arbitrary remote host with credentials.
-- API inputs select registered worktrees, not arbitrary filesystem paths. Explicit repository references must match configured remote identities.
+- API inputs select registered worktrees, not arbitrary filesystem paths. Pasted work-item references and explicit PR repository overrides must match configured remotes. Projects v2 is different: an item on a selected trusted project host may belong to another repository; its issue/PR/comment/type mutations use the repository supplied by GitHub's project item and the ambient login, without requiring that repository to be locally configured.
 - Account binding is repo-scoped. Require host match and usable keyring login; strip ambient token variables only in the bound child. Binding failures never fall back to ambient auth. Quirky stores no token.
 
 ### API and CLI
@@ -84,7 +84,7 @@ Every numbered scenario is exercised against the daemon API or real quirky CLI w
 | GH28 | Issue get/create/update/comments/labels/assignees | PR-shaped issue endpoint not mistaken for issue; state/reason/duplicate and field edits work; oversize-body partial save returns warning |
 | GH29 | Work item details, participants/timeline and pasted configured reference | Correct issue/PR details with bounded pagination and explicit partial availability; foreign repo refused |
 | GH30 | Projects discovery/ref resolve/views/table across user/org | Host-pinned ambient account; partial org failures; URL validation; pagination/caps; table/board/roadmap supported, unsupported layouts explicit |
-| GH31 | Project field set/clear and issue/PR/comment/type edits | Correct field-specific GraphQL/REST mutation; capability fallback for schema fields; auth/scope/schema/too-large errors distinct |
+| GH31 | Project field set/clear and issue/PR/comment/type edits, including an item from a repository absent from local remotes | Correct field-specific mutation on the selected trusted project host using ambient auth; cross-repository item changes read back correctly; foreign-host substitution refused; capability fallback and distinct auth/scope/schema/too-large errors |
 | GH32 | Generated hosting CLI and plugin disable/override | Same method behavior as API; schemas discoverable without activation; disabled methods disappear and consumers cannot bypass registry |
 
 ### Orca defect regressions
@@ -107,4 +107,4 @@ GHES: GitHub Enterprise Server. Head SHA: the exact reviewed commit whose merge 
 
 Status: Required joint Codex review completed; F1 HIGH and F2 MEDIUM accepted and resolved in the specifications before implementation. Tech spec required by LOOP.md and subsystem/file-count gate.
 
-**Amendments:** 2026-10-27 — specify per-authenticated-connection refresh ownership/generations/disconnect cleanup (F1), and invalidation plus partial-change notification for confirmed upstream steps even when aggregate mutations fail (F2).
+**Amendments:** 2026-10-27 — specify per-authenticated-connection refresh ownership/generations/disconnect cleanup (F1), and invalidation plus partial-change notification for confirmed upstream steps even when aggregate mutations fail (F2). Clarify Projects v2 cross-repository parity: configured-remote restriction applies to pasted work-item lookups, not repositories obtained from authenticated project items; verified against original project-row actions and by-slug handlers.
