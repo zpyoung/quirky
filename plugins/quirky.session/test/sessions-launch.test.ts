@@ -259,6 +259,53 @@ describe('SessionService.register launch settings', () => {
     expect(records.get(result.id)?.launchSettings).toEqual(settings)
   })
 
+  test('stores a copy built from the checked fields, not the caller\'s object', async () => {
+    const { service } = launchContext(() => {})
+    const given: LaunchSettings = { ...settings, args: { value: '--add-dir docs', source: 'inherited' } }
+
+    const result = await service.register({ agent: 'claude', kind: 'structured', title: 'Claude', launchSettings: given }, caller)
+
+    expect(result.launchSettings).toEqual(given)
+    expect(result.launchSettings).not.toBe(given)
+    expect(result.launchSettings!.options).not.toBe(given.options)
+  })
+
+  test('accepts boolean option values and options with no value', async () => {
+    const { service, records } = launchContext(() => {})
+    const given: LaunchSettings = { ...settings, options: { fast: { value: true, source: 'explicit' }, effort: { source: 'extra-args' } } }
+
+    const result = await service.register({ agent: 'claude', kind: 'structured', title: 'Claude', launchSettings: given }, caller)
+
+    expect(records.get(result.id)?.launchSettings).toEqual(given)
+  })
+
+  const malformed: [string, unknown][] = [
+    ['summary is not a string', { ...settings, summary: 42 }],
+    ['summary is missing', { agent: 'claude', options: {} }],
+    ['agent is empty', { ...settings, agent: '' }],
+    ['an option source is unknown', { ...settings, options: { model: { value: 'opus', source: 'guess' } } }],
+    ['an option value is a number', { ...settings, options: { model: { value: 3, source: 'explicit' } } }],
+    ['an option is not an object', { ...settings, options: { model: 'opus' } }],
+    ['options is not an object', { ...settings, options: 'opus' }],
+    ['options is an array', { ...settings, options: [] }],
+    ['args source is extra-args', { ...settings, args: { value: '--x', source: 'extra-args' } }],
+    ['args value is not a string', { ...settings, args: { value: 1, source: 'explicit' } }],
+    ['there is an extra top-level key', { ...settings, extra: true }],
+    ['it is an array', []],
+    ['it is a string', 'claude']
+  ]
+  for (const [what, bad] of malformed) {
+    test(`refuses launchSettings when ${what} and inserts no record`, async () => {
+      const { service, records } = launchContext(() => {})
+
+      await expect(
+        service.register({ agent: 'claude', kind: 'structured', title: 'Claude', launchSettings: bad }, caller)
+      ).rejects.toThrow('invalid-params: launchSettings is malformed:')
+
+      expect(records.list()).toEqual([])
+    })
+  }
+
   test('without launchSettings the record stores null', async () => {
     const { service, records } = launchContext(() => {})
 
