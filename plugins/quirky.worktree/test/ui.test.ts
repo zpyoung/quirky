@@ -404,7 +404,12 @@ test('SC-43: opening an unread worktree marks it read', async () => {
   const h = setup()
   h.world.worktrees[1] = wt('w2', 'r1', 'fix-login', { unread: true })
   await h.mountInto(host)
-  expect(rowOf('fix-login', 'api').querySelector('.unread-mark')).not.toBeNull()
+  const bell = rowOf('fix-login', 'api').querySelector('.glyph-unread')!
+  expect(bell.getAttribute('role')).toBe('img')
+  expect(bell.getAttribute('aria-label')).toBe('Unread')
+  expect(rowOf('fix-login', 'api').querySelector('.dot, .glyph:not(.glyph-unread)')).toBeNull()
+  expect(rowOf('fix-login', 'api').querySelector('.worktree-name')!.classList.contains('worktree-name-unread')).toBe(true)
+  expect(rowOf('fix-login', 'api').querySelector('.unread-mark')).toBeNull()
   await click(rowOf('fix-login', 'api').querySelector('.worktree-main')!)
   expect(h.opened).toEqual([{ id: SESSION_VIEW, input: { worktree: 'w2' } }])
   expect(h.callsTo('quirky.worktree/set')).toEqual([{ worktree: 'w2', unread: false }])

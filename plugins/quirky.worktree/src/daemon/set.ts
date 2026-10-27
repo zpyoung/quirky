@@ -14,7 +14,8 @@ export type SetEnv = {
   groups(): Promise<ProjectGroup[]>
   call(method: string, params: Record<string, unknown>): Promise<unknown>
   identitySource?: DirectoryIdentitySource
-  changed(data: { repoId: string; worktreeId: string }): void
+  /** `unread` is present only when the change came from a `set` that asked for it. */
+  changed(data: { repoId: string; worktreeId: string; unread?: boolean }): void
 }
 
 export type SetParams = {
@@ -190,7 +191,7 @@ export async function setWorktree(
     if (assignments.length > 0) env.store.run(`UPDATE worktrees SET ${assignments.join(', ')} WHERE id = ?`, ...values, worktree.id)
     return rowOf(env.store, worktree.id)!
   })
-  env.changed({ repoId: worktree.repoId, worktreeId: worktree.id })
+  env.changed({ repoId: worktree.repoId, worktreeId: worktree.id, ...(params.unread === undefined ? {} : { unread: params.unread }) })
   return joinMetadata(worktree, row, worktree.removing)
 }
 

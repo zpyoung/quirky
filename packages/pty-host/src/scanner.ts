@@ -8,6 +8,10 @@ export type ScanFact =
   | { kind: 'prompt' }
   | { kind: 'command-start' }
   | { kind: 'program-status'; body: string }
+  | { kind: 'notification'; title: string | null; body: string; occasion: NotificationOccasion }
+
+/** When a program asked for its notification to be shown (OSC 99's `o` key). */
+export type NotificationOccasion = 'always' | 'unfocused' | 'invisible'
 
 type State = 'ground' | 'esc' | 'esc-inter' | 'csi' | 'osc' | 'osc-esc' | 'string' | 'string-esc'
 
@@ -19,6 +23,11 @@ const BACKSLASH = 0x5c
 const RIGHT_BRACKET = 0x5d
 const MAX_OSC_PAYLOAD = 4096
 const MARKER = new TextEncoder().encode('777;quirky-shell-ready')
+const MAX_PENDING_NOTIFICATIONS = 16
+const MAX_PENDING_FIELD = 4096
+const MAX_NOTIFICATION_TEXT = 256
+
+type PendingNotification = { title: string; body: string; occasion: NotificationOccasion }
 
 const isAbort = (b: number): boolean => b === CAN || b === SUB
 
@@ -37,6 +46,7 @@ export class OutputScanner {
   private held: number[] = []
   private lastTitle: string | null = null
   private lastCwd: string | null = null
+  private readonly pendingNotifications = new Map<string, PendingNotification>()
   private out = new Uint8Array(0)
   private outLen = 0
   private facts: ScanFact[] = []
@@ -225,6 +235,66 @@ export class OutputScanner {
       this.reportPromptMark(rest)
     } else if (code === '7501') {
       this.facts.push({ kind: 'program-status', body: rest })
+    } else if (code === '9') {
+      if (!/^\d+(;|$)/.test(rest)) this.pushNotification(null, rest, 'always')
+    } else if (code === '777') {
+      if (rest.startsWith('notify;')) {
+        const fields = rest.slice('notify;'.length)
+        const split = fields.indexOf(';')
+        if (split === -1) this.pushNotification(fields, '', 'always')
+        else this.pushNotification(fields.slice(0, split), fields.slice(split + 1), 'always')
+      }
+    } else if (code === '99') {
+      this.reportKittyNotification(rest)
+    }
+  }
+
+  private pushNotification(title: string | null, body: string, occasion: NotificationOccasion): void {
+    const cleanTitle = title === null ? '' : cleanNotificationText(title)
+    const cleanBody = cleanNotificationText(body)
+    if (cleanTitle === '' && cleanBody === '') return
+    this.facts.push({ kind: 'notification', title: cleanTitle === '' ? null : cleanTitle, body: cleanBody, occasion })
+  }
+
+  /** One OSC 99 chunk: `<metadata>;<payload>`, with chunks of one notification joined by their `i` key. */
+  private reportKittyNotification(rest: string): void {
+    const split = rest.indexOf(';')
+    const metadata = split === -1 ? rest : rest.slice(0, split)
+    let text = split === -1 ? '' : rest.slice(split + 1)
+
+    const keys = new Map<string, string>()
+    for (const pair of metadata.split(':')) {
+      const eq = pair.indexOf('=')
+      if (eq > 0) keys.set(pair.slice(0, eq), pair.slice(eq + 1))
+    }
+    const kind = keys.get('p') ?? 'title'
+    if (kind !== 'title' && kind !== 'body') return
+    if (keys.get('e') === '1') {
+      const decoded = decodeBase64Utf8(text)
+      if (decoded === null) return
+      text = decoded
+    }
+
+    const id = keys.get('i')
+    const done = keys.get('d') !== '0'
+    const occasion = keys.get('o')
+    let entry = id === undefined ? undefined : this.pendingNotifications.get(id)
+    if (entry === undefined) {
+      entry = { title: '', body: '', occasion: 'always' }
+      if (id !== undefined && !done) {
+        if (this.pendingNotifications.size >= MAX_PENDING_NOTIFICATIONS) {
+          const oldest = this.pendingNotifications.keys().next().value
+          if (oldest !== undefined) this.pendingNotifications.delete(oldest)
+        }
+        this.pendingNotifications.set(id, entry)
+      }
+    }
+    if (occasion !== undefined) entry.occasion = occasion === 'unfocused' || occasion === 'invisible' ? occasion : 'always'
+    entry[kind] = capField(entry[kind] + text)
+
+    if (id === undefined || done) {
+      if (id !== undefined) this.pendingNotifications.delete(id)
+      this.pushNotification(entry.title, entry.body, entry.occasion)
     }
   }
 
@@ -262,4 +332,41 @@ function parseFileUrlPath(url: string): string | null {
   } catch {
     return rawPath
   }
+}
+
+/** Keeps the head of `text`, never ending on half of a surrogate pair. */
+function capField(text: string): string {
+  if (text.length <= MAX_PENDING_FIELD) return text
+  const cut = text.slice(0, MAX_PENDING_FIELD)
+  const last = cut.charCodeAt(cut.length - 1)
+  return last >= 0xd800 && last <= 0xdbff ? cut.slice(0, -1) : cut
+}
+
+/**
+ * Decodes an OSC 99 base64 payload as UTF-8, or null when it is not valid base64. Padding is
+ * optional, but when present it must be canonical: `=` only as the last one or two characters and
+ * only as many as the length needs to reach a multiple of four.
+ */
+function decodeBase64Utf8(text: string): string | null {
+  const match = /^([A-Za-z0-9+/]*)(={0,2})$/.exec(text)
+  if (match === null) return null
+  const [, data = '', padding = ''] = match
+  const remainder = data.length % 4
+  if (remainder === 1) return null
+  if (padding !== '' && padding.length !== (4 - remainder) % 4) return null
+  return Buffer.from(data, 'base64').toString('utf8')
+}
+
+/**
+ * Notification text safe to show in a banner: control characters gone, whitespace collapsed to
+ * single spaces, and at most 256 code points with a trailing ellipsis when it had to be cut.
+ */
+export function cleanNotificationText(text: string): string {
+  const cleaned = text
+    .replace(/[\t\n\r]/g, ' ')
+    .replace(/[\u0000-\u001f\u007f-\u009f]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+  const points = Array.from(cleaned)
+  return points.length <= MAX_NOTIFICATION_TEXT ? cleaned : `${points.slice(0, MAX_NOTIFICATION_TEXT - 1).join('')}…`
 }

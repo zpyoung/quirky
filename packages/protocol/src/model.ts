@@ -195,6 +195,9 @@ export type AgentStatusSummary = {
   restoredUnconfirmed: boolean
 }
 
+/** Why a session is marked unread: an agent finished, a terminal bell rang, or a program posted a notification. */
+export type SessionUnread = 'agent' | 'bell' | 'notification'
+
 export type Session = {
   id: string
   kind: SessionKind
@@ -222,6 +225,8 @@ export type Session = {
   resumedFrom?: string | null
   /** Null or absent until the agent-status plugin has evidence; the coarse `status` then stands alone. */
   agentStatus?: AgentStatusSummary | null
+  /** Why the session is marked unread; null or absent when it is not. */
+  unread?: SessionUnread | null
 }
 
 export type GitFileStatus = {

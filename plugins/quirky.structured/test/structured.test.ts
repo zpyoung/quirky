@@ -91,6 +91,16 @@ async function failure(promise: Promise<unknown>): Promise<RpcError> {
   throw new Error('expected the call to reject')
 }
 
+type Settled = {
+  sessionId: string
+  worktreeId: string
+  agent: string
+  state: 'done' | 'waiting'
+  lastAssistantMessage: string | null
+  at: number
+}
+const settledEvents = () => events.filter((e) => e.type === 'quirky.structured/settled').map((e) => (e as { data: Settled }).data)
+
 const structuredEvents = () =>
   events.filter((e) => e.type === 'quirky.structured/message') as { type: string; data: { message: StructuredMessage } }[]
 
@@ -138,15 +148,27 @@ describe('structured sessions with a runner', () => {
     expect(structuredEvents().map((e) => e.data.message.seq)).toEqual([1, 2])
   })
 
-  test('done notifies once and closing the session stops the runner and drops its journal', async () => {
+  test('done settles once and closing the session stops the runner and drops its journal', async () => {
     const session = await create('go')
     await waitFor(() => runner.started.length === 1)
+    runner.context.appendMessage({ sessionId: session.id, role: 'assistant', text: 'first take' })
+    runner.context.appendMessage({ sessionId: session.id, role: 'assistant', text: 'All done' })
+    runner.context.appendMessage({ sessionId: session.id, role: 'result', text: 'ok' })
     runner.context.setStatus(session.id, 'done')
     runner.context.setStatus(session.id, 'done')
-    await waitFor(() => h.notifications.length === 1)
-    expect(h.notifications[0]).toEqual({ title: 'main', body: 'Claude finished' })
+    await waitFor(() => settledEvents().length === 1)
+    expect(settledEvents()[0]).toEqual({
+      sessionId: session.id,
+      worktreeId: 'wt_1',
+      agent: 'claude',
+      state: 'done',
+      lastAssistantMessage: 'All done',
+      at: expect.any(Number)
+    })
     await Bun.sleep(50)
-    expect(h.notifications).toHaveLength(1)
+    expect(settledEvents()).toHaveLength(1)
+    expect(events.filter((e) => e.type === 'notify')).toEqual([])
+    expect(h.notifications).toEqual([])
 
     await call('quirky.session/close', { session: session.id })
     await waitFor(() => runner.stopped.length === 1)
@@ -160,12 +182,29 @@ describe('structured sessions with a runner', () => {
     }
   })
 
-  test('a runner needing input notifies as waiting', async () => {
+  test('a runner needing input settles as waiting, with no message when it has said nothing', async () => {
     const session = await create('go')
     await waitFor(() => runner.started.length === 1)
     runner.context.setStatus(session.id, 'waiting')
-    await waitFor(() => h.notifications.length === 1)
-    expect(h.notifications[0]).toEqual({ title: 'main', body: 'Claude needs input' })
+    await waitFor(() => settledEvents().length === 1)
+    expect(settledEvents()[0]).toMatchObject({ sessionId: session.id, state: 'waiting', agent: 'claude', lastAssistantMessage: null })
+    expect(events.filter((e) => e.type === 'notify')).toEqual([])
+  })
+
+  test('other statuses settle nothing, and each session keeps its own last message', async () => {
+    const first = await create('go')
+    const second = await create('go')
+    await waitFor(() => runner.started.length === 2)
+    runner.context.appendMessage({ sessionId: first.id, role: 'assistant', text: 'one' })
+    runner.context.appendMessage({ sessionId: second.id, role: 'assistant', text: 'two' })
+    runner.context.setStatus(first.id, 'working')
+    runner.context.setStatus(first.id, 'done')
+    runner.context.setStatus(second.id, 'done')
+    await waitFor(() => settledEvents().length === 2)
+    expect(settledEvents().map((e) => [e.sessionId, e.lastAssistantMessage])).toEqual([
+      [first.id, 'one'],
+      [second.id, 'two']
+    ])
   })
 
   test('runner asks become asks and resolve once answered, across wait timeouts', async () => {

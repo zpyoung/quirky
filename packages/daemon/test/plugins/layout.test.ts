@@ -147,7 +147,7 @@ describe('layout state', () => {
     await window.client.call('ui.window.focused', { focused: true })
 
     const state = await caller.call('ui.state', {})
-    expect(state.windows).toEqual([{ connId: expect.any(Number), name: 'main window', focused: true }])
+    expect(state.windows).toEqual([{ connId: expect.any(Number), name: 'main window', focused: true, inputAt: null, present: false }])
     expect(state.layout).toEqual({ view: { id: PAGE, input: { note: 'n1' } }, panel: null, sidebar: true, focus: 'view' })
     expect(slotOf(state, PAGE)).toEqual({ id: PAGE, kind: 'view', plugin: NOTES, title: 'Page', shown: true, report: { open: 'n1' } })
     expect(slotOf(state, LIST).report).toEqual({ notes: ['n1', 'n2'] })

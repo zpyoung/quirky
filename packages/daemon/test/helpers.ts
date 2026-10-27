@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { lstatSync, mkdirSync, mkdtempSync, readdirSync, readlinkSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { QuirkyClient, type ClientRole, type QuirkyEvent } from '@quirky/protocol'
@@ -28,6 +28,37 @@ export function makeTempHome(prefix = 'qd-'): string {
   return mkdtempSync(join(tmpdir(), prefix))
 }
 
+const sharedBuiltinDirs = new Map<string, string>()
+
+/**
+ * The same built-ins as `dir`, from one directory per distinct set of links for the whole test
+ * process. Under `bun test` every import of a plugin from a new path keeps about four file
+ * descriptors open until the process exits, so a fresh built-in directory per daemon start runs the
+ * single-process suite out of descriptors. A directory that holds anything but symlinks, or nothing,
+ * is returned as is.
+ */
+export function sharedBuiltinDir(dir: string): string {
+  let names: string[]
+  try {
+    names = readdirSync(dir).sort()
+  } catch {
+    return dir
+  }
+  if (names.length === 0 || names.some((name) => !lstatSync(join(dir, name)).isSymbolicLink())) return dir
+  const links = names.map((name) => [name, resolve(dir, readlinkSync(join(dir, name)))] as const)
+  const key = links.map(([name, target]) => `${name}>${target}`).join('\n')
+  let shared = sharedBuiltinDirs.get(key)
+  if (shared === undefined) {
+    const root = join(tmpdir(), `qbi-${process.pid}-${sharedBuiltinDirs.size}`)
+    if (sharedBuiltinDirs.size === 0) process.once('exit', () => { for (const d of sharedBuiltinDirs.values()) rmSync(join(d, '..'), { recursive: true, force: true }) })
+    shared = join(root, 'builtin')
+    mkdirSync(shared, { recursive: true })
+    for (const [name, target] of links) symlinkSync(target, join(shared, name))
+    sharedBuiltinDirs.set(key, shared)
+  }
+  return shared
+}
+
 export async function startHarness(options: Partial<DaemonOptions> = {}): Promise<Harness> {
   const home = options.home ?? makeTempHome()
   const pty = startFakePtyHost(home)
@@ -36,11 +67,12 @@ export async function startHarness(options: Partial<DaemonOptions> = {}): Promis
     home,
     port: 0,
     shell: '/bin/zsh',
-    notifier: (title, body) => notifications.push({ title, body }),
+    notifier: ({ title, body }) => notifications.push({ title, body }),
     cliEntry: '/opt/quirky/cli/main.ts',
     uiDir: join(home, 'no-ui'),
     builtinPluginsDir: null,
-    ...options
+    ...options,
+    ...(options.builtinPluginsDir ? { builtinPluginsDir: sharedBuiltinDir(options.builtinPluginsDir) } : {})
   })
   const clients: QuirkyClient[] = []
   const harness: Harness = {

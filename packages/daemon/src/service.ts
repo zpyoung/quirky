@@ -71,9 +71,9 @@ export class Core {
     conn.sendText(JSON.stringify({ jsonrpc: '2.0', method: 'event', params: event }))
   }
 
-  /** Sends `event` to every subscribed client and to plugin listeners; `hook.received` goes to plugins only. */
+  /** Sends `event` to every subscribed client and to plugin listeners; `hook.received` and `ui.report.changed` go to plugins only. */
   broadcast(event: QuirkyEvent): void {
-    if (event.type !== 'hook.received') {
+    if (event.type !== 'hook.received' && event.type !== 'ui.report.changed') {
       const text = JSON.stringify({ jsonrpc: '2.0', method: 'event', params: event })
       for (const conn of this.connected) {
         if (conn.subscribed) conn.sendText(text)

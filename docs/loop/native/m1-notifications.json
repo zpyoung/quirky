@@ -1,0 +1,54 @@
+{
+  "item": "m1-notifications",
+  "spec": "docs/quirk/specs/2026-10-27-m1-notifications/logic.md",
+  "scenarios": [
+    {
+      "id": "SC-19",
+      "title": "A finished claude agent in a background worktree shows a macOS banner titled \"<repo> / <worktree> - Claude finished\" with the last message as its body",
+      "status": "pending",
+      "lastRun": null,
+      "report": null,
+      "summary": null
+    },
+    {
+      "id": "SC-37",
+      "title": "With Notification Sound set to Bong the banner is silent and the Bong sound plays at the chosen volume; with System Default the banner plays the system sound",
+      "status": "pending",
+      "lastRun": null,
+      "report": null,
+      "summary": null
+    },
+    {
+      "id": "SC-44",
+      "title": "While the Quirky window is minimized, an agent finishing in any worktree puts an amber dot beside the menu bar \"Q\"; restoring or focusing the window removes it",
+      "status": "pending",
+      "lastRun": null,
+      "report": null,
+      "summary": null
+    },
+    {
+      "id": "SC-45",
+      "title": "The menu bar item's menu reads Show Quirky, Settings\u2026, Quit Quirky; Settings\u2026 brings the window forward on the Notifications view",
+      "status": "pending",
+      "lastRun": null,
+      "report": null,
+      "summary": null
+    },
+    {
+      "id": "SC-45b",
+      "title": "Turning Show Menu Bar Icon off in Settings > Notifications removes the menu bar item at once, and turning it on brings it back",
+      "status": "pending",
+      "lastRun": null,
+      "report": null,
+      "summary": null
+    },
+    {
+      "id": "SC-42",
+      "title": "The Dock badge shows the number of unread worktrees plus pending asks (empty at zero) and is cleared when Quirky quits",
+      "status": "pending",
+      "lastRun": null,
+      "report": null,
+      "summary": null
+    }
+  ]
+}

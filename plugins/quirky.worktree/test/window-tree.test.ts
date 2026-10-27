@@ -212,12 +212,14 @@ test('SC-43: status, pin and unread from the card menu', async () => {
   await agent.callAny('quirky.worktree/set', { worktree: docs!.id, unread: false })
   await openMenu(win, 'docs', 'api')
   await choose(win, 'Mark Unread')
-  await win.waitFor(() => card('docs', 'api')!.querySelector('.unread-mark'))
+  await win.waitFor(() => card('docs', 'api')!.querySelector('.glyph-unread[aria-label="Unread"]'))
+  expect(card('docs', 'api')!.querySelector('.worktree-name-unread')).not.toBeNull()
   expect((await listed(agent, docs!.id)).unread).toBe(true)
 
   card('docs', 'api')!.querySelector<HTMLElement>('.worktree-main')!.click()
   await win.waitFor(async () => (await listed(agent, docs!.id)).unread === false)
-  await win.waitFor(() => !card('docs', 'api')!.querySelector('.unread-mark'))
+  await win.waitFor(() => !card('docs', 'api')!.querySelector('.glyph-unread'))
+  expect(card('docs', 'api')!.querySelector('.worktree-name-unread')).toBeNull()
   const layout = ((await agent.callAny('ui.state', {})) as UiState).layout
   expect(layout.view).toEqual({ id: SESSION_VIEW, input: { worktree: docs!.id } })
 }, SLOW)

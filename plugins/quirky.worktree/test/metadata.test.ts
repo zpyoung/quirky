@@ -121,6 +121,26 @@ describe('SC-40: display name, note, status, pin and unread are set and listed',
   })
 })
 
+describe('the changed event carries unread only for a set that asked for it', () => {
+  test('set with unread emits it even when the value is unchanged; every other emitter omits it', async () => {
+    const { client, repoDir, repo, t } = await start()
+    addWorktrees(repoDir, 'fix-login')
+    const watcher = await t.h.connectWithEvents('cli')
+    const changes = () => watcher.events.filter((e) => e.type === 'quirky.worktree/changed').map((e) => (e as unknown as { data: { repoId: string; unread?: boolean } }).data)
+    const next = async (action: () => Promise<unknown>) => {
+      const before = changes().length
+      await action()
+      return (await waitFor(() => (changes().length > before ? changes().slice(before) : undefined)))[0]!
+    }
+
+    expect(await next(() => call(client, 'quirky.worktree/set', { worktree: 'fix-login', pinned: true }))).not.toHaveProperty('unread')
+    expect(await next(() => call(client, 'quirky.worktree/set', { worktree: 'fix-login', unread: true }))).toMatchObject({ repoId: repo.id, unread: true })
+    expect(await next(() => call(client, 'quirky.worktree/set', { worktree: 'fix-login', unread: true }))).toMatchObject({ unread: true })
+    expect(await next(() => call(client, 'quirky.worktree/set', { worktree: 'fix-login', unread: false }))).toMatchObject({ unread: false })
+    expect(await next(() => createWt(client, { repo: repo.id, name: 'second' }))).not.toHaveProperty('unread')
+  })
+})
+
 describe('set stores the worktree base ref', () => {
   test('a string is trimmed and stored, an empty or blank string or null clears it, and other types are refused', async () => {
     const { client, repoDir } = await start()

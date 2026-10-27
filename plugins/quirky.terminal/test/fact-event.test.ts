@@ -12,6 +12,17 @@ describe('factEvent', () => {
     })
   })
 
+  test('notification facts carry title, body and occasion', () => {
+    expect(factEvent('s1', { kind: 'notification', title: 'Build', body: 'done', occasion: 'unfocused' })).toEqual({
+      name: 'notification',
+      data: { sessionId: 's1', title: 'Build', body: 'done', occasion: 'unfocused' }
+    })
+    expect(factEvent('s1', { kind: 'notification', title: null, body: 'hi', occasion: 'always' })).toEqual({
+      name: 'notification',
+      data: { sessionId: 's1', title: null, body: 'hi', occasion: 'always' }
+    })
+  })
+
   test('prompt and program-status facts are not plugin events', () => {
     expect(factEvent('s1', { kind: 'prompt' })).toBeNull()
     expect(factEvent('s1', { kind: 'program-status', body: '?' })).toBeNull()
