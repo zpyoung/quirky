@@ -13,6 +13,30 @@ const underGit = (path: string): boolean => path === '.git' || path.startsWith('
 /** True for a relative path that cannot leave the directory it is joined to. */
 const staysInside = (path: string): boolean => !isAbsolute(path) && !path.split(/[\\/]/).includes('..')
 
+/** Why a shared-directory entry cannot be linked, or null when it is a relative path inside the repository and outside `.git`. */
+export function sharedEntryProblem(entry: string): string | null {
+  if (entry.trim() === '' || isAbsolute(entry)) return 'it is not a relative path'
+  if (!staysInside(entry)) return 'it is outside the repository'
+  if (underGit(entry.replace(/\/+$/, ''))) return 'it is inside .git'
+  return null
+}
+
+/**
+ * The first existing directory between `root` and `path` (exclusive of `root` and of `path`
+ * itself) that is a symlink, or null. A write through such a directory can land outside `root`.
+ */
+export function symlinkedAncestor(root: string, path: string): string | null {
+  const parts = path.split(/[\\/]+/).filter((part) => part !== '' && part !== '.')
+  let current = root
+  for (const part of parts.slice(0, -1)) {
+    current = join(current, part)
+    const stat = lstatOrNull(current)
+    if (stat === null) return null
+    if (stat.isSymbolicLink()) return current
+  }
+  return null
+}
+
 /**
  * Copies the primary checkout's ignored files that `.worktreeinclude` names into the new worktree.
  * Candidates are the untracked, ignored files that also match the include file's patterns; `.git`
@@ -42,6 +66,11 @@ async function copyIncluded(primary: string, worktree: string): Promise<string[]
     const from = join(primary, path)
     const to = join(worktree, path)
     try {
+      const linked = symlinkedAncestor(worktree, path)
+      if (linked !== null) {
+        warnings.push(`skipped ${path}: ${linked} is a symlink, so writing there could leave the worktree`)
+        continue
+      }
       if (lstatOrNull(to)) continue
       const stat = lstatSync(from)
       if (stat.isSymbolicLink()) {
@@ -76,16 +105,14 @@ async function linkShared(primary: string, worktree: string, entries: string[]):
   if (entries.length > MAX_SHARED_DIRECTORIES) warnings.push(`worktree.sharedDirectories lists ${entries.length} entries; only the first ${MAX_SHARED_DIRECTORIES} were used`)
   for (const entry of entries.slice(0, MAX_SHARED_DIRECTORIES)) {
     const skip = (why: string) => warnings.push(`shared directory "${entry}" was skipped: ${why}`)
-    if (entry.trim() === '' || isAbsolute(entry)) {
-      skip('it is not a relative path')
+    const problem = sharedEntryProblem(entry)
+    if (problem !== null) {
+      skip(problem)
       continue
     }
-    if (!staysInside(entry)) {
-      skip('it is outside the repository')
-      continue
-    }
-    if (underGit(entry.replace(/\/+$/, ''))) {
-      skip('it is inside .git')
+    const linkedAncestor = symlinkedAncestor(worktree, entry.replace(/\/+$/, ''))
+    if (linkedAncestor !== null) {
+      skip(`${linkedAncestor} is a symlink, so linking there could leave the worktree`)
       continue
     }
     const source = join(primary, entry)

@@ -16,6 +16,37 @@ function setup(ignored = ['.env*', 'cache/', 'build/']) {
   return { primary, target }
 }
 
+describe('carryFiles: symlinked destination ancestors', () => {
+  test('an included file is not copied through a symlinked directory of the worktree', async () => {
+    const { primary, target } = setup()
+    mkdirSync(join(primary, 'cache'))
+    writeFileSync(join(primary, 'cache', 'secret'), 's')
+    writeFileSync(join(primary, '.worktreeinclude'), 'cache/\n')
+    const outside = join(scratch(), 'outside')
+    mkdirSync(outside, { recursive: true })
+    symlinkSync(outside, join(target, 'cache'))
+
+    const warnings = await carryFiles(primary, target, [])
+    expect(existsSync(join(outside, 'secret'))).toBe(false)
+    expect(warnings).toHaveLength(1)
+    expect(warnings[0]).toContain('cache/secret')
+    expect(warnings[0]).toContain(join(target, 'cache'))
+  })
+
+  test('a shared directory is not linked through a symlinked directory of the worktree', async () => {
+    const { primary, target } = setup()
+    mkdirSync(join(primary, 'cache', 'deep'), { recursive: true })
+    const outside = join(scratch(), 'outside')
+    mkdirSync(outside, { recursive: true })
+    symlinkSync(outside, join(target, 'cache'))
+
+    const warnings = await carryFiles(primary, target, ['cache/deep'])
+    expect(existsSync(join(outside, 'deep'))).toBe(false)
+    expect(warnings).toHaveLength(1)
+    expect(warnings[0]).toContain('symlink')
+  })
+})
+
 describe('carryFiles: .worktreeinclude', () => {
   test('copies the ignored files its patterns match, keeps modes, and never overwrites', async () => {
     const { primary, target } = setup()
