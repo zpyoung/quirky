@@ -510,5 +510,16 @@
 - **Confidence:** medium
 - **Source:** assumed — autonomous
 
+## D51: Daemon test harnesses in `quirky.terminal` share one built-in plugins directory per process
+- **Question:** after the catch-up merge of m1-worktrees, `bun run test` failed 177 tests with `EBADF` from `posix_spawn`, every one after a point mid-run, reproducibly
+- **Options:** split the suite into several processes (the land command is protected); fix the descriptor leak where this item adds to it
+- **Chose:** under `bun test`, each dynamic `import()` of a module from a new path keeps about four descriptors open for the rest of the process (a 50-import probe went from 24 to 227 descriptors; plain `bun` doesn't leak). Every in-process harness daemon imports its plugins from a fresh temp directory, so the single-process suite exhausts descriptors once enough harness starts add up; this item's tests added about 1,000 descriptors and the m1-worktrees tests the rest. `quirky.terminal`'s test harness now starts every daemon from one shared built-in directory per plugin set, so imports hit the module cache (layout-service tests: 1,321 → 310 descriptors). Restarts still use the per-home directory.
+- **Why:** it removes this item's share without touching protected loop code or other plugins' tests. The underlying limit stays for every harness that imports plugins from per-test paths, which is logged in BLOCKERS.md for a person.
+- **Evidence:** scratchpad fdprobe/ (imp.test.ts probe, per-file lsof counts); gate-m1/m2 logs
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** a later Bun release stops leaking, or the suite starts failing with EBADF again
+- **Source:** assumed — autonomous
+
 ## Progress
 Waves 1–3 and the cp1 fix batch merged (350bc59 + test fix b16e767; gate green apart from the pinned word list, fixed). Wave 4 (D1 window wiring with overrides/commands/keybindings/panel/overlay and the floating overlay; D2 CLI/API scenario tests in test/e2e/) dispatched from b16e767 on sdd/termui/D1, D2. Checkpoint cp2 (d2bed5f..b16e767) running. Next: merge wave 4, fix cp2 findings, wave 5 (E1/E2 UI scenario tests in test/e2e-ui/ against a real daemon and the headless window; briefs in the session scratchpad), then catch-up merge of build/roadmap, Final Round 1, the like-a-user web pass, land.
