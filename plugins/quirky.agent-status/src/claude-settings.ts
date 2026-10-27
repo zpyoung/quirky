@@ -1,6 +1,3 @@
-import { createHash } from 'node:crypto'
-import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
-import { join } from 'node:path'
 import type { PluginContext } from '@quirky/protocol'
 import { hookCommand } from './hook-command'
 
@@ -76,29 +73,6 @@ export function claudeSettings(events: readonly string[]): { hooks: Record<strin
   return { hooks }
 }
 
-/**
- * Writes `<dataDir>/claude-settings-<key>.json` for the event set this version knows and returns its
- * path. One file serves every version with the same event set, and an up-to-date file is not rewritten.
- */
-export function writeClaudeSettings(dataDir: string, version: string | null): string {
-  const events = claudeEventsFor(version)
-  const key = createHash('sha1').update(events.join(',')).digest('hex').slice(0, 10)
-  const path = join(dataDir, `claude-settings-${key}.json`)
-  const content = `${JSON.stringify(claudeSettings(events), null, 2)}\n`
-  let current: string | null = null
-  try {
-    current = readFileSync(path, 'utf8')
-  } catch {
-    current = null
-  }
-  if (current !== content) {
-    mkdirSync(dataDir, { recursive: true })
-    const temp = `${path}.${process.pid}.tmp`
-    writeFileSync(temp, content)
-    renameSync(temp, path)
-  }
-  return path
-}
 
 /** The session a probe runs for; its environment is the one the agent would get. */
 export type ProbeIdentity = { sessionId: string; worktreeId: string }

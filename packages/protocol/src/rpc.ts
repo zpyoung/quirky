@@ -1,7 +1,17 @@
 import type { ApiDescription } from './catalog'
 import type { DistroInfo, DistroInspection, PluginInspection } from './distro'
 import type { ContributionInfo, JobInfo, JobRun, PluginEvent, PluginInfo } from './plugins'
-import type { SettingInfo, ThemeList, UiLayout, UiModel, UiState, UiWindowInfo } from './ui'
+import type {
+  SettingInfo,
+  ThemeList,
+  ToastAction,
+  ToastKind,
+  UiLayout,
+  UiModel,
+  UiState,
+  UiToastState,
+  UiWindowInfo
+} from './ui'
 
 /** Bumped on any breaking change to `Methods`, `QuirkyEvent` or the frame layout. */
 export const PROTOCOL_VERSION = 2
@@ -95,6 +105,10 @@ export type Methods = {
   'ui.focus': { params: { target: 'sidebar' | 'view' | 'panel' }; result: UiLayout }
   /** Runs a plugin UI command in one open window and returns its result. */
   'ui.command.run': { params: { id: string; args?: unknown }; result: { result: unknown } }
+  /** Dismisses the toast with `key` in the window that shows it and runs its `onDismiss`; NotFound for an unknown key, Conflict when no window is open. */
+  'ui.toast.dismiss': { params: { key: string }; result: Ok }
+  /** A window reports the toasts it shows, replacing its earlier list; role `ui` only. */
+  'ui.shell.report': { params: { toasts: UiToastState[] }; result: Ok }
   /** A window reports what a mounted slot shows (`null` clears it); role `ui` only. */
   'ui.report': { params: { slot: string; state: unknown | null }; result: Ok }
   /** A window tells the daemon whether it has focus; role `ui` only. */
@@ -141,6 +155,12 @@ export type QuirkyEvent =
       sound?: { file: string | null; volume: number }
       /** Whether the webview shows a toast; absent means it does. */
       toast?: boolean
+      kind?: ToastKind
+      key?: string
+      persistent?: boolean
+      detail?: string
+      actions?: ToastAction[]
+      onDismiss?: { command: string; args?: unknown }
     }
   | { type: 'plugin.changed' }
   | { type: 'setting.changed'; id: string; value: boolean | number | string }

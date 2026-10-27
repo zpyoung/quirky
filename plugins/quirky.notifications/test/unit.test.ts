@@ -16,7 +16,7 @@ function uiState(over: {
   return {
     windows: over.windows ?? [{ connId: 1, focused: true, inputAt: 1, present: true }],
     layout: { view: over.view ?? { id: VIEW, input: { worktree: 'w1' } }, panel: null, sidebar: true, focus: null },
-    slots: [
+    toasts: [], slots: [
       { id: VIEW, kind: 'view', plugin: 'quirky.session', title: 'Session', shown: true, ...(over.report === undefined ? {} : { report: over.report }) },
       ...(over.overlay === undefined ? [] : [{ id: OVERLAY, kind: 'overlay' as const, plugin: 'quirky.terminal', title: 'Floating Workspace', shown: true, report: over.overlay }])
     ]
@@ -144,7 +144,7 @@ function fakeContext(answers: Record<string, unknown>, settings: Record<string, 
   return { context, notifications, emitted, calls }
 }
 
-const idle: UiState = { windows: [], layout: { view: null, panel: null, sidebar: true, focus: null }, slots: [] }
+const idle: UiState = { windows: [], layout: { view: null, panel: null, sidebar: true, focus: null }, toasts: [], slots: [] }
 const settledEvent = (type: string, data: Record<string, unknown>) => ({ type, data }) as QuirkyEvent
 
 describe('structured sessions', () => {

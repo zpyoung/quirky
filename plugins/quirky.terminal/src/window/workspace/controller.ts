@@ -71,6 +71,7 @@ export type ControllerState = {
   rename: { kind: 'tab' | 'pane'; id: string } | null
   preview: Preview | null
   dragging: boolean
+  focusFlash: { pane: string; token: number } | null
   paneStates: Readonly<Record<string, PaneReport>>
   dockStates: Readonly<Record<string, DockState>>
   dockHosts: Readonly<Record<string, DockHostState>>
@@ -87,6 +88,8 @@ export type WorkspaceOptions = {
   stripExtras?: (group: Group) => ReactNode
   /** The rows of the pane menu's Quick Commands submenu. */
   paneMenuExtras?: (pane: PaneLeaf) => MenuItem[]
+  /** Rows other plugins contribute to the pane menu, shown right after the Quick Commands row. */
+  paneMenuContributions?: (pane: PaneLeaf, session: Session | undefined) => MenuItem[]
   /** Menus beyond `tab`, `pane`, `plus` and `actions`, opened by `openMenu(kind, target)`. */
   extraMenus?: Record<string, (target: string | null) => MenuItem[]>
   /** The element carrying the theme's custom properties; defaults to the mount element. */
@@ -155,6 +158,8 @@ export class WorkspaceController {
   private state: ControllerState
   private listeners = new Set<() => void>()
   private handles = new Map<string, TerminalPaneHandle>()
+  private pendingFocusPane: string | null = null
+  private focusFlashToken = 0
   private unsubscribes: (() => void)[] = []
   private settingOverrides: Record<string, unknown> = {}
   private stopped = false
@@ -211,6 +216,7 @@ export class WorkspaceController {
       paneStates: {},
       dockStates: {},
       dockHosts: {},
+      focusFlash: null,
       tabDrag: null,
       paneDrag: null
     }
@@ -262,6 +268,7 @@ export class WorkspaceController {
 
   stop(): void {
     this.stopped = true
+    this.pendingFocusPane = null
     for (const unsubscribe of this.unsubscribes.splice(0)) unsubscribe()
     this.listeners.clear()
     this.handles.clear()
@@ -427,6 +434,7 @@ export class WorkspaceController {
   private apply(workspace: Workspace): void {
     const held = this.state.workspace
     if (held && workspace.revision < held.revision) return
+    if (this.pendingFocusPane !== null && !locatePane(workspace, this.pendingFocusPane)) this.pendingFocusPane = null
     this.set({ workspace, status: 'ready', preview: null })
     this.afterWorkspace(workspace)
   }
@@ -494,6 +502,16 @@ export class WorkspaceController {
     return target === undefined ? undefined : this.handles.get(target)
   }
 
+  /** Completes a queued terminal focus after the active pane view has mounted. */
+  focusPendingPane(paneId: string): void {
+    if (this.pendingFocusPane !== paneId) return
+    const handle = this.handleOf(paneId)
+    if (!handle) return
+    this.pendingFocusPane = null
+    handle.focus()
+    handle.scrollToBottom()
+  }
+
   /** Gives keyboard focus back to the focused pane after the layout changed under it; a text field or dock owner keeps it. */
   refocus(): void {
     const { menu, dialog, rename } = this.state
@@ -503,6 +521,7 @@ export class WorkspaceController {
     const host = pane ? this.state.dockHosts[pane] : undefined
     if (dock?.enabled && dock.supported && dock.docked && dock.mounted && host?.mounted && !dock.passthrough) return
     const active = this.root?.ownerDocument.activeElement
+    if (this.floating && (!active || active === this.root?.ownerDocument.body)) return
     if (active && active !== this.root?.ownerDocument.body && !this.root?.contains(active)) return
     if (active && isEditableControl(active)) return
     this.handleOf()?.focus()
@@ -596,6 +615,18 @@ export class WorkspaceController {
     const shown = loc.tab.expandedPane === null || loc.tab.expandedPane === paneId
     if (loc.tab.activePane === paneId && loc.group.activeTab === loc.tab.id && ws.activeGroup === loc.group.id && shown) return
     await this.run('focusPane', { pane: paneId }, 'focus the pane')
+  }
+
+  /** Activates a pane through the daemon, then requests native focus, a scroll to bottom and a visible flash. */
+  async focusPaneForCommand(paneId: string): Promise<boolean> {
+    const workspace = await this.run('focusPane', { pane: paneId }, 'focus the pane')
+    if (!workspace) return false
+    const loc = locatePane(workspace, paneId)
+    if (!loc || this.state.sessions[loc.leaf.session]?.kind === 'structured') return false
+    this.pendingFocusPane = paneId
+    this.set({ focusFlash: { pane: paneId, token: ++this.focusFlashToken } })
+    this.focusPendingPane(paneId)
+    return true
   }
 
   private async cycleFocus(offset: 1 | -1): Promise<void> {
@@ -951,11 +982,13 @@ export class WorkspaceController {
     const { tab, leaf } = loc
     const split = paneLeaves(tab.root).length > 1
     const quick = this.options.paneMenuExtras?.(leaf) ?? []
+    const contributed = this.options.paneMenuContributions?.(leaf, this.state.sessions[leaf.session]) ?? []
     const items: MenuItem[] = [
       { label: 'Copy', key: '⌘C', onSelect: () => this.copy(paneId) },
       { label: 'Select All', key: '⌘A', onSelect: () => this.selectAll(paneId) },
       { label: 'Paste', key: '⌘V', onSelect: () => void this.pasteFromClipboard(paneId) },
       { label: 'Quick Commands', submenu: quick.length > 0 ? quick : [{ label: 'No quick commands', enabled: false }] },
+      ...contributed,
       SEPARATOR,
       { label: 'Split Terminal Right', key: '⌘D', onSelect: () => void this.splitRight(paneId) },
       { label: 'Split Terminal Down', key: '⌘⇧D', onSelect: () => void this.splitDown(paneId) }

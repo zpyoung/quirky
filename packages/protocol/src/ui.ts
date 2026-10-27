@@ -1,7 +1,7 @@
 import type { QuirkyEvent } from './rpc'
 
 /** The contribution kinds the UI plugin API adds. */
-export const UI_KINDS = ['status-bar', 'sidebar-section', 'panel', 'view', 'overlay', 'command', 'keybinding', 'setting', 'theme'] as const
+export const UI_KINDS = ['status-bar', 'sidebar-section', 'panel', 'view', 'overlay', 'command', 'keybinding', 'setting', 'theme', 'menu-item'] as const
 
 /** UI kinds whose implementation is code a plugin's UI module provides. */
 export const CODE_BACKED_KINDS = ['status-bar', 'view', 'panel', 'sidebar-section', 'overlay', 'command'] as const
@@ -88,6 +88,21 @@ export type UiCommandEntry = {
   module: string | null
 }
 
+/** The menu a `menu-item` contribution may target. */
+export const TERMINAL_PANE_MENU = 'quirky.terminal/pane'
+
+/** A row a plugin adds to a window menu; `command` is a full command ID run with `{ session }`. */
+export type UiMenuItemEntry = {
+  id: string
+  plugin: string
+  menu: typeof TERMINAL_PANE_MENU
+  title: string
+  command: string
+  /** `agent: 'any'` shows the row only on a pane whose session runs an agent other than the shell. */
+  when?: { agent?: 'any' }
+  after?: 'quick-commands'
+}
+
 export type UiKeybinding = {
   id: string
   plugin: string
@@ -146,6 +161,8 @@ export type UiModel = {
   keybindings: UiKeybinding[]
   /** ID ascending. */
   settings: UiSettingEntry[]
+  /** ID ascending. */
+  menuItems: UiMenuItemEntry[]
   /** The default theme first, then by title. */
   themes: ThemeInfo[]
   /** `chosen` and `active` are `default` or a theme ID. */
@@ -187,8 +204,39 @@ export type UiSlotState = {
   report?: unknown
 }
 
-/** What `ui.state` returns. */
-export type UiState = { windows: UiWindowInfo[]; layout: UiLayout; slots: UiSlotState[] }
+/** How a toast looks and what the person is told about it. */
+export type ToastKind = 'info' | 'success' | 'warning' | 'error'
+
+/** A button on a toast; it runs window command `command` with `args` and dismisses the toast unless `keepOpen`. */
+export type ToastAction = { label: string; command: string; args?: unknown; keepOpen?: boolean }
+
+/**
+ * What a plugin can ask of a toast. A toast with a `key` replaces the one already showing under
+ * that key without running its `onDismiss`; `persistent` skips the auto-dismiss timer; `onDismiss`
+ * runs once when the toast is dismissed by its close button, its timer or `ui.toast.dismiss`.
+ */
+export type ToastOptions = {
+  kind?: ToastKind
+  key?: string
+  persistent?: boolean
+  detail?: string
+  actions?: ToastAction[]
+  onDismiss?: { command: string; args?: unknown }
+}
+
+/** A toast the window shows, as `ui.state` lists it. */
+export type UiToastState = {
+  key: string | null
+  kind: ToastKind
+  title: string
+  body: string
+  detail: string | null
+  persistent: boolean
+  actions: { label: string; command: string; args?: unknown }[]
+}
+
+/** What `ui.state` returns; `toasts` is the focused window's list, else the latest window's. */
+export type UiState = { windows: UiWindowInfo[]; layout: UiLayout; slots: UiSlotState[]; toasts: UiToastState[] }
 
 /**
  * Renders a slot into `element`; the returned function cleans up. `report` sends a JSON summary
@@ -230,7 +278,8 @@ export type UiPluginContext = {
   onConnection(listener: (status: 'connected' | 'reconnecting') => void): () => void
   /** Shows a confirm dialog; resolves true when the person confirms. */
   confirm(options: { title: string; body?: string; confirmLabel?: string }): Promise<boolean>
-  toast(title: string, body: string): void
+  /** Shows a toast; `options` can make it a success or warning, keyed, persistent or actionable. */
+  toast(title: string, body: string, options?: ToastOptions): void
   /** Shows a count on the panel's toggle, with `title` as its tooltip (default "<count> waiting"); null clears it. */
   setPanelBadge(panelId: string, count: number | null, title?: string): void
   /**

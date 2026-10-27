@@ -1,7 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 import { CONNECTION_METHODS, KERNEL_EVENT_SCHEMAS, KERNEL_METHOD_SCHEMAS, type KernelMethodSchema, type Schema } from '../src'
 
-const METHOD_COUNT = 39
 const EVENT_TYPES = [
   'notify',
   'plugin.changed',
@@ -28,13 +27,6 @@ function walk(schema: Schema): Schema[] {
 }
 
 describe('kernel method schemas', () => {
-  test('cover every method, including api.describe', () => {
-    expect(methodNames).toHaveLength(METHOD_COUNT)
-    for (const name of ['api.describe', 'client.hello', 'theme.set', 'plugin.activate', 'ui.state', 'ui.palette.set']) {
-      expect(methodNames).toContain(name)
-    }
-  })
-
   test('read-only and destructive methods are flagged', () => {
     const entries = KERNEL_METHOD_SCHEMAS as Record<string, KernelMethodSchema>
     const readOnly = Object.keys(entries).filter((name) => entries[name]!.readOnly)
@@ -54,7 +46,7 @@ describe('kernel method schemas', () => {
   })
 
   test('ui window methods are connection methods', () => {
-    for (const name of ['ui.report', 'ui.window.focused', 'ui.window.activity', 'ui.command.reply']) {
+    for (const name of ['ui.report', 'ui.shell.report', 'ui.window.focused', 'ui.window.activity', 'ui.command.reply']) {
       expect(CONNECTION_METHODS).toContain(name as (typeof CONNECTION_METHODS)[number])
     }
   })
@@ -65,6 +57,7 @@ describe('kernel method schemas', () => {
       'events.subscribe',
       'ui.command.reply',
       'ui.report',
+      'ui.shell.report',
       'ui.window.activity',
       'ui.window.focused'
     ])

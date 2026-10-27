@@ -539,10 +539,16 @@ describe('launching a session (SC-18 to SC-23)', () => {
     return events.find((e): e is Start => e.type === 'start' && e.env.QUIRKY_SESSION_ID === session.id)!
   }
 
-  /** The argv with the agent-status hook's `--settings <file>` pair taken out, so assertions name only the agent's own arguments. */
+  /** Removes and validates the one effective JSON settings option, leaving agent arguments for assertions. */
   function withoutHookSettings(argv: string[]): string[] {
-    const at = argv.indexOf('--settings')
-    return at === -1 ? argv : [...argv.slice(0, at), ...argv.slice(at + 2)]
+    const terminator = argv.indexOf('--')
+    const beforeTerminator = terminator < 0 ? argv : argv.slice(0, terminator)
+    const at = beforeTerminator.indexOf('--settings')
+    if (at === -1) return argv
+    expect(beforeTerminator.filter((argument) => argument === '--settings')).toHaveLength(1)
+    const settings = JSON.parse(beforeTerminator[at + 1]!) as { hooks: Record<string, unknown[]> }
+    expect(settings.hooks).toBeDefined()
+    return [...argv.slice(0, at), ...argv.slice(at + 2)]
   }
 
   const contains = (argv: string[], run: string[]) => argv.some((_, i) => run.every((token, j) => argv[i + j] === token))

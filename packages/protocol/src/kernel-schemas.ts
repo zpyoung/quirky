@@ -9,6 +9,7 @@ export const CONNECTION_METHODS = [
   'client.hello',
   'events.subscribe',
   'ui.report',
+  'ui.shell.report',
   'ui.window.focused',
   'ui.window.activity',
   'ui.command.reply'
@@ -148,6 +149,18 @@ const uiKeybinding = object(
   },
   ['id', 'plugin', 'key', 'command', 'status']
 )
+const uiMenuItem = object(
+  {
+    id: string(),
+    plugin: string(),
+    menu: { type: 'string', enum: ['quirky.terminal/pane'] },
+    title: string(),
+    command: string('A full command ID, run with `{ session }`.'),
+    when: object({ agent: { type: 'string', enum: ['any'] } }),
+    after: { type: 'string', enum: ['quick-commands'] }
+  },
+  ['id', 'plugin', 'menu', 'title', 'command']
+)
 const uiModel = object(
   {
     sidebarSections: listOf({ type: 'object' }),
@@ -158,11 +171,12 @@ const uiModel = object(
     commands: listOf({ type: 'object' }),
     keybindings: listOf(uiKeybinding, 'Registry precedence order: distro bindings first, then plugin bindings.'),
     settings: listOf({ type: 'object' }),
+    menuItems: listOf(uiMenuItem),
     themes: listOf({ type: 'object' }),
     theme: object({ chosen: string(), active: string() }, ['chosen', 'active']),
     modules: { type: 'object', additionalProperties: true }
   },
-  ['sidebarSections', 'statusBars', 'panels', 'views', 'overlays', 'commands', 'keybindings', 'settings', 'themes', 'theme', 'modules']
+  ['sidebarSections', 'statusBars', 'panels', 'views', 'overlays', 'commands', 'keybindings', 'settings', 'menuItems', 'themes', 'theme', 'modules']
 )
 const apiDescription = object(
   {
@@ -196,13 +210,37 @@ const windowInfo = object(
   },
   ['connId', 'focused', 'inputAt', 'present']
 )
+const toastKind: Schema = { type: 'string', enum: ['info', 'success', 'warning', 'error'] }
+const toastCommand = (extra: Record<string, Schema> = {}): Record<string, Schema> => ({
+  command: string('A window command ID.'),
+  args: { description: "Passed to the command; checked against the command's args schema when it runs." },
+  ...extra
+})
+const toastAction = object(
+  { label: string(), ...toastCommand({ keepOpen: boolean('Keeps the toast showing after the action runs.') }) },
+  ['label', 'command']
+)
+const toastOnDismiss = object(toastCommand(), ['command'])
+const toastState = object(
+  {
+    key: { description: "The plugin's ID for the toast, or null." },
+    kind: toastKind,
+    title: string(),
+    body: string(),
+    detail: { description: 'The second line, or null.' },
+    persistent: boolean('Whether the toast stays until dismissed.'),
+    actions: listOf(object({ label: string(), ...toastCommand() }, ['label', 'command']))
+  },
+  ['key', 'kind', 'title', 'body', 'detail', 'persistent', 'actions']
+)
 const uiState = object(
   {
     windows: listOf(windowInfo),
     layout: uiLayout,
-    slots: listOf({ type: 'object' })
+    slots: listOf({ type: 'object' }),
+    toasts: listOf(toastState)
   },
-  ['windows', 'layout', 'slots']
+  ['windows', 'layout', 'slots', 'toasts']
 )
 const distroManifest: Schema = { type: 'object', additionalProperties: true }
 const pluginInspection = object(
@@ -373,7 +411,7 @@ export const KERNEL_METHOD_SCHEMAS = {
   },
 
   'ui.state': {
-    description: 'The layout, the connected windows and what each slot reports.',
+    description: 'The layout, the connected windows, what each slot reports and the toasts the focused window shows.',
     readOnly: true,
     params: noParams,
     result: uiState
@@ -409,6 +447,17 @@ export const KERNEL_METHOD_SCHEMAS = {
     description: 'Runs a plugin UI command in one open window and returns its result.',
     params: object({ id: string(), args: { description: "Checked against the command's args schema." } }, ['id']),
     result: object({ result: { description: "The command's return value." } }, ['result'])
+  },
+  'ui.toast.dismiss': {
+    description:
+      'Dismisses the toast with `key` in the window that shows it and runs its onDismiss command; NotFound for an unknown key.',
+    params: object({ key: string() }, ['key']),
+    result: ok
+  },
+  'ui.shell.report': {
+    description: 'A window reports the toasts it shows, replacing its earlier list. Role `ui` only.',
+    params: object({ toasts: listOf(toastState) }, ['toasts']),
+    result: ok
   },
   'ui.report': {
     description: 'A window reports what a mounted slot shows; null clears it. Role `ui` only.',
@@ -498,7 +547,13 @@ export const KERNEL_EVENT_SCHEMAS = {
           },
           ['file', 'volume']
         ),
-        toast: boolean('Whether the webview shows a toast; absent means it does.')
+        toast: boolean('Whether the webview shows a toast; absent means it does.'),
+        kind: toastKind,
+        key: string('A toast with this key replaces the one already showing under it.'),
+        persistent: boolean('Keeps the toast until it is dismissed.'),
+        detail: string('A second line under the body.'),
+        actions: listOf(toastAction),
+        onDismiss: toastOnDismiss
       },
       ['title', 'body', 'desktop']
     )

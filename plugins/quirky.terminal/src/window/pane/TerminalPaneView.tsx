@@ -49,6 +49,7 @@ export type SearchOptions = { regex?: boolean; caseSensitive?: boolean }
 /** The operations the workspace drives on a mounted pane. */
 export type TerminalPaneHandle = {
   focus(): void
+  scrollToBottom(): void
   /** The selected text (gutter-trimmed when the setting says so), also put on the clipboard; empty when nothing is selected. */
   copy(): string
   selectAll(): void
@@ -242,6 +243,7 @@ export function TerminalPaneView(props: TerminalPaneProps) {
     focus: () => {
       if (!latest.current.suppressAutoFocus) runtime.current?.term.focus()
     },
+    scrollToBottom: () => runtime.current?.term.scrollToBottom(),
     copy: () => runtime.current?.copy() ?? '',
     selectAll: () => runtime.current?.term.selectAll(),
     paste: (text) => runtime.current?.paste(text) ?? Promise.resolve(),

@@ -201,9 +201,10 @@ describe('command and environment', () => {
     expect(plan(OPENCODE).command).toBe('opencode')
   })
 
-  test('hook arguments follow the user arguments, quoted', () => {
-    expect(plan(CLAUDE, undefined, { hookArgs: ['--settings', '{"a": 1}'] }).command).toBe(
-      `claude --dangerously-skip-permissions --settings '{"a": 1}'`
+  test('hook settings follow user arguments and are rendered as JSON', () => {
+    const settings = JSON.stringify({ a: 1 })
+    expect(plan(CLAUDE, undefined, { hookArgs: ['--settings', settings] }).command).toBe(
+      `claude --dangerously-skip-permissions --settings '${settings}'`
     )
   })
 
@@ -335,19 +336,23 @@ describe('prompt delivery', () => {
     })
   })
 
-  test('hook arguments land before a -- in the user arguments, and the prompt still goes last', () => {
+  test('hook settings land before a -- in the user arguments, and the prompt still goes last', () => {
+    const settings = JSON.stringify({ hook: true })
     expect(
-      buildLaunchPlan({ entry: CLAUDE, config: config({ args: '--continue --model x -- extra' }), hookArgs: ['--settings', 'f.json'] })
-        .command
-    ).toBe('claude --continue --model x --settings f.json -- extra')
+      buildLaunchPlan({
+        entry: CLAUDE,
+        config: config({ args: '--continue --model x -- extra' }),
+        hookArgs: ['--settings', settings]
+      }).command
+    ).toBe(`claude --continue --model x --settings '${settings}' -- extra`)
     expect(
       buildLaunchPlan({
         entry: CLAUDE,
         config: config({ args: '--model x -- extra' }),
-        hookArgs: ['--settings', 'f.json'],
+        hookArgs: ['--settings', settings],
         prompt: 'hi'
       }).command
-    ).toBe(`claude --model x --settings f.json -- extra 'hi'`)
+    ).toBe(`claude --model x --settings '${settings}' -- extra 'hi'`)
   })
 
   test('SC-19: hook arguments sit before the prompt part', () => {
@@ -718,15 +723,15 @@ describe('launch settings in plans', () => {
   const extras = (text: string): ParsedExtras => ({ tokens: words(text), kinds: new Set(['repeatable']) })
   const claude = { ...CLAUDE, label: 'Claude', launchOptions: catalog }
 
-  test("a selection's flags land before the configured terminator and hook args keep their place", () => {
+  test("a selection's flags land before the configured terminator and JSON settings follow hook args", () => {
     const result = buildLaunchPlan({
       entry: claude,
       config: config({ args: '--verbose -- tail' }),
       selection: picks,
-      hookArgs: ['--settings', 'x']
+      hookArgs: ['--settings', '{"settings":true}']
     })
     expect(words(result.command)).toEqual([
-      'claude', '--verbose', '--model', 'opus', '--effort', 'high', '--settings', 'x', '--', 'tail'
+      'claude', '--verbose', '--model', 'opus', '--effort', 'high', '--settings', '{"settings":true}', '--', 'tail'
     ])
   })
 
@@ -734,9 +739,9 @@ describe('launch settings in plans', () => {
     const result = buildLaunchPlan({
       entry: { ...claude, launchOptions: { ...catalog, valueFlags: ['--append-system-prompt'] } },
       config: config({ args: '--append-system-prompt -- --verbose' }),
-      hookArgs: ['--settings', 'x']
+      hookArgs: ['--settings', '{"settings":true}']
     })
-    expect(words(result.command)).toEqual(['claude', '--append-system-prompt', '--', '--verbose', '--settings', 'x'])
+    expect(words(result.command)).toEqual(['claude', '--append-system-prompt', '--', '--verbose', '--settings', '{"settings":true}'])
   })
 
   test('the prompt still follows the arguments', () => {
@@ -815,5 +820,87 @@ describe('launch settings in plans', () => {
   test('a blank command override is not an override', () => {
     const result = buildLaunchPlan({ entry: claude, config: config({ command: '  ' }), selection: picks })
     expect(words(result.command).slice(0, 3)).toEqual(['claude', '--dangerously-skip-permissions', '--model'])
+  })
+  test('create keeps user CLI settings user-only in the record and emits one effective settings option before --', () => {
+    const inline = '{"statusLine":{"command":"inline","padding":1},"hooks":{"Stop":["inline"]},"theme":"dark"}'
+    const fileSettings = { statusLine: { padding: 2, format: 'file' }, hooks: { SessionStart: ['file'] }, list: ['file'] }
+    const managed = { statusLine: { command: 'managed', color: 'blue' }, hooks: { Stop: ['managed'] }, list: ['managed'] }
+    writeFileSync(join(scratch, 'user-settings.json'), JSON.stringify(fileSettings))
+    const rawArgs = `--settings '${inline}' --verbose --settings=user-settings.json -- terminal --settings '{"after":true}'`
+
+    const result = buildLaunchPlan({
+      entry: claude,
+      config: config({ args: rawArgs }),
+      cwd: scratch,
+      hookArgs: ['--notify', 'ready', '--settings', JSON.stringify(managed)]
+    })
+
+    const tokens = words(result.command)
+    const terminator = tokens.indexOf('--')
+    expect(tokens.slice(0, terminator).filter((token) => token === '--settings')).toHaveLength(1)
+    const settingsAt = tokens.indexOf('--settings')
+    expect(JSON.parse(tokens[settingsAt + 1]!)).toEqual({
+      statusLine: { command: 'managed', padding: 2, format: 'file', color: 'blue' },
+      hooks: { Stop: ['managed'], SessionStart: ['file'] },
+      theme: 'dark',
+      list: ['managed']
+    })
+    expect(tokens.slice(0, settingsAt)).toEqual(['claude', '--verbose', '--notify', 'ready'])
+    expect(tokens.slice(terminator)).toEqual(['--', 'terminal', '--settings', '{"after":true}'])
+    expect(result.record.args).toBe(rawArgs)
+    expect(result.record.args).not.toContain('managed')
+  })
+
+  test('resume overlays the recorded CLI settings with hooks without changing the replay record', () => {
+    const cliSettings = { statusLine: { command: 'user', padding: 5 }, permissions: { allow: ['Read'] } }
+    const managed = { statusLine: { command: 'wrapper' }, hooks: { Stop: ['managed'] } }
+    const record: LaunchRecord = { command: 'claude', args: `--settings='${JSON.stringify(cliSettings)}'`, env: { USER: '1' } }
+
+    const result = buildResumePlan({
+      entry: claude,
+      record,
+      providerSession: { id: 'p-1', transcriptPath: null },
+      fork: false,
+      cwd: scratch,
+      hookArgs: ['--settings', JSON.stringify(managed)]
+    })
+
+    const tokens = words(result.command)
+    expect(tokens.filter((token) => token === '--settings')).toHaveLength(1)
+    const settingsAt = tokens.indexOf('--settings')
+    expect(JSON.parse(tokens[settingsAt + 1]!)).toEqual({
+      statusLine: { command: 'wrapper', padding: 5 },
+      permissions: { allow: ['Read'] },
+      hooks: { Stop: ['managed'] }
+    })
+    expect(tokens).toContain('--resume')
+    expect(result.record).toEqual(record)
+  })
+
+  test('resume puts one effective settings option before -- and preserves later tokens', () => {
+    const cliSettings = { statusLine: { command: 'user' }, theme: 'user' }
+    const managed = { statusLine: { command: 'managed' } }
+    const record: LaunchRecord = {
+      command: 'claude',
+      args: `--settings='${JSON.stringify(cliSettings)}' -- --settings '{"after":true}'`,
+      env: {}
+    }
+
+    const result = buildResumePlan({
+      entry: claude,
+      record,
+      providerSession: { id: 'p-2', transcriptPath: null },
+      fork: false,
+      cwd: scratch,
+      hookArgs: ['--settings', JSON.stringify(managed)]
+    })
+
+    const tokens = words(result.command)
+    const terminator = tokens.indexOf('--')
+    expect(tokens.slice(0, terminator).filter((token) => token === '--settings')).toHaveLength(1)
+    const settingsAt = tokens.indexOf('--settings')
+    expect(JSON.parse(tokens[settingsAt + 1]!)).toEqual({ statusLine: { command: 'managed' }, theme: 'user' })
+    expect(tokens.slice(terminator)).toEqual(['--', '--settings', '{"after":true}'])
+    expect(result.record).toEqual(record)
   })
 })

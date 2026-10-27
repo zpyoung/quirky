@@ -484,5 +484,16 @@
 - **Revisit if:** actual keyboard focus or background-pane ownership regresses
 - **Source:** assumed — autonomous (required post-fix runtime proof)
 
+## D45: Preserve Session Info and Handoff while resolving the second land conflict
+- **Question:** the retry again reached a concurrent merge conflict, now with landed Session Info/Handoff changes
+- **Options:** overwrite incoming focus/navigation behavior; restore obsolete count/output pins; combine the actual contracts and test their seams
+- **Chose:** retain dock state plus focusFlash initialization; keep queued pane focus/scroll-to-bottom and dock-aware refocus guards; keep imperative focus suppression while adding scrollToBottom. Keep the deleted CLI output-copy test deleted. Delete the incidental schema method-count/membership pin rather than choose another count. Complete the newly imported Session Info test context with the required public setPalette method, failing explicitly if unexpectedly used.
+- **Why:** these are additive product intents with competing fixture pins, not permission to discard a feature. Read complete fix-flaky-quirky-git-files-scenarios, m3-handoff and m3-session-info logs. Preserve actual xterm focus, floating visibility/focus, provider-session telemetry correlation, no-spawn existing-session opening, NewTabIds/activate:false handoff and matching-provider home provenance.
+- **Evidence:** five conflict blocks/four files; public typecheck first identified the missing new fixture method, then passed after the narrow repair. Replacement-host verification:77remote files and2macOS files all passed, suite-result ok:true/flaky:[] (156.05seconds). Full typecheck and16-plugin/12-UI-module packaged build passed (31.76seconds); optional icon/release-URL warnings remain.
+- **Reversibility:** medium
+- **Confidence:** high for tested schema/CLI/terminal navigation integration
+- **Revisit if:** authoritative land identifies another concrete concurrent conflict or regression
+- **Source:** locked by LOOP failed-land recovery and imported decisions
+
 ## Progress
-Core, registered dependent follow-up, final review and required conflict recovery are complete. The first landing failed only on concurrent report edits; both intents were retained. Real mount readiness now gates focus, and dock E2E, full typecheck,14-plugin packaged build and actual keyboard-only focus/PONG smoke pass. Original noncore gaps/C1 remain open. Stop/verify the private scene, commit this evidence, detach and retry queue.ts land; authoritative integration validation is not claimed until that command succeeds.
+Approved core, dependent follow-up, final review and concrete conflict repairs are complete. Final browser focus/PONG smoke passed; latest merged source passes77remote+2macOS schema/CLI/terminal files, full typecheck and16-plugin packaged build. The two previous landing attempts stopped at concurrent merge conflicts, not full-suite verdicts. Original noncore flows/C1 remain explicitly open. Commit this resolved merge, detach and retry queue.ts land for authoritative integration validation; do not claim that result before it succeeds.

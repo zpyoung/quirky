@@ -25,11 +25,12 @@ const LAYOUT: UiLayout = {
 
 describe('ui commands', () => {
 
+
   test('SC-67: ui state prints a shown overlay with its report, and ui contributions lists the OVERLAYS table', async () => {
     const state: UiState = {
       windows: [{ connId: 3, name: 'window', focused: true, inputAt: null, present: false }],
       layout: LAYOUT,
-      slots: [
+      toasts: [], slots: [
         { id: 'overlay:quirky.terminal/floating', kind: 'overlay', plugin: 'quirky.terminal', title: 'Floating', shown: true, report: { open: false } },
         { id: 'overlay:acme.hud/hud', kind: 'overlay', plugin: 'acme.hud', title: 'Hud', shown: false }
       ]

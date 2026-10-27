@@ -77,6 +77,7 @@ async function mountOverlay(options: Options = {}) {
       'quirky.terminal/quickCommands': () => ({ commands: [] }),
       'quirky.worktree/resolve': () => ({ repoId: 'repo-1' }),
       'quirky.terminal/floating': () => (options.read ? options.read() : state),
+      'quirky.terminal/focusContext': (params) => ({ workspace: params.workspace ?? null }),
       'quirky.terminal/setFloating': (params) => {
         state = { ...state, ...params }
         for (const listener of [...listeners]) listener({ type: 'quirky.terminal/floating', data: { state } } as never)
@@ -178,6 +179,20 @@ describe('SC-59: the floating button', () => {
     await click(button(view))
     expect(view.calls('setFloating')).toEqual([{ open: true }, { open: false }])
     expect(panel(view)).toBeNull()
+  })
+
+  test('opening an empty floating panel does not report terminal focus', async () => {
+    const view = await mountOverlay({ state: { open: true } })
+    expect(panel(view)).not.toBeNull()
+    expect(view.fake.contextValue('floatingFocus')).toBe(true)
+    expect(view.calls('focusContext')).toEqual([])
+  })
+
+  test('focusing a floating terminal reports its workspace', async () => {
+    const view = await mountOverlay({ state: { open: true }, floatingWorkspace: oneTab() })
+    const textarea = view.q<HTMLTextAreaElement>('[data-pane="pane-3"] textarea.xterm-helper-textarea')!
+    expect(document.activeElement).toBe(textarea)
+    expect(view.calls('focusContext')).toEqual([{ workspace: 'floating' }])
   })
 
   test('dragging moves it with the mouse and stores the place once, on release', async () => {

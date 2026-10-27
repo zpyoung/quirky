@@ -422,6 +422,10 @@ export function PaneLayer({ controller, state, group, tab }: Props) {
     controller.refocus()
   }, [controller, workspace?.revision])
 
+  useEffect(() => {
+    if (state.focusFlash) controller.focusPendingPane(state.focusFlash.pane)
+  }, [controller, state.focusFlash?.token, state.sessions])
+
   const drag = state.paneDrag
   const preview = drag?.target?.kind === 'edge' && rectOf.has(drag.target.pane) ? halfOf(rectOf.get(drag.target.pane)!, drag.target.edge) : null
 
@@ -473,6 +477,7 @@ export function PaneLayer({ controller, state, group, tab }: Props) {
                 createWebgl={controller.options.createWebgl}
               />
             )}
+            {state.focusFlash?.pane === leaf.id ? <div key={state.focusFlash.token} className="qt-focus-flash" data-focus-flash={state.focusFlash.token} aria-hidden /> : null}
             {session ? <PaneAccessories controller={controller} sessionId={leaf.session} paneId={leaf.id} /> : null}
             {focused ? <PaneHeader controller={controller} state={state} tab={tab} leaf={leaf} multi={multi} onGrip={(event) => startPaneDrag(leaf.id, event)} /> : null}
             {leaf.exit ? <ExitOverlay controller={controller} leaf={leaf} /> : null}
