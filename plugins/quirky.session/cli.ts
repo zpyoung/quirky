@@ -79,9 +79,11 @@ const named: CliModule['commands'] = {
     const background = args.flags.background === true
     const wait = args.flags.wait === true
     const draft = args.flags.draft === true
+    const cwd = args.flags.cwd as string | undefined
     if (background && !prompt) throw ctx.usage('--background requires --prompt')
     if (background && agent === undefined) throw ctx.usage('--background requires --agent')
     if (background && (wait || draft)) throw ctx.usage('--wait and --draft do not apply to --background')
+    if (background && cwd !== undefined) throw ctx.usage('--cwd does not apply to --background')
     const target = worktree ? { worktree } : {}
     const picks = selectionParams(args.flags, ctx)
     const session = (await (background
@@ -89,6 +91,7 @@ const named: CliModule['commands'] = {
       : ctx.call('quirky.session/create', {
           ...target,
           ...(agent === undefined ? {} : { agent }),
+          ...(cwd === undefined ? {} : { cwd }),
           ...picks,
           ...(prompt ? { prompt } : {}),
           ...(wait ? { waitForPrompt: true } : {}),

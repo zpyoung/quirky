@@ -1,4 +1,5 @@
-import { existsSync } from 'node:fs'
+import { existsSync, statSync } from 'node:fs'
+import { isAbsolute } from 'node:path'
 import {
   RpcErrorCode,
   type AgentKind,
@@ -11,10 +12,15 @@ import {
   type Session,
   type SessionLaunch,
   type SessionProviderSession,
-  type SessionStatus,
-  type Worktree
+  type SessionStatus
 } from '@quirky/protocol'
 import type { SessionRecords } from './records'
+
+/** The workspace id of the synthetic worktree for sessions that belong to no repository. */
+const FLOATING = 'floating'
+
+/** What a session belongs to and starts in: a git worktree, or the synthetic floating one (no repository). */
+type SessionTarget = { id: string; name: string; path: string; repoId: string | null }
 
 const isNotFound = (error: unknown) => (error as { code?: unknown } | null)?.code === RpcErrorCode.NotFound
 const isRpcError = (error: unknown) => typeof (error as { code?: unknown } | null)?.code === 'number'
@@ -159,9 +165,12 @@ export class SessionService {
    * that exits before the spawn call returns leaves the session exited, not running. A prompt
    * the agent takes by paste is delivered after the call returns, unless `waitForPrompt` is set.
    * `model`, `options` and `extraArgs` go to `quirky.agents/prepareLaunch`; a shell takes none of them.
+   * `cwd` is where the session starts instead of the worktree's path; it must be an existing absolute directory.
    */
   create = async (params: Record<string, unknown>, caller: PluginCaller): Promise<Session> => {
-    const worktree = await this.resolveWorktree(params.worktree, caller)
+    const cwd = this.startCwd(params.cwd)
+    const resolved = await this.resolveWorktree(params.worktree, caller, cwd)
+    const worktree = cwd === undefined ? resolved : { ...resolved, path: cwd }
     const agent = (params.agent as string | undefined) ?? (await this.pickAgent())
     const prompt = params.prompt as string | undefined
     const submitPrompt = (params.submitPrompt as boolean | undefined) ?? true
@@ -584,11 +593,34 @@ export class SessionService {
     return this.publish(this.records.update(session.id, { promptDelivery: outcome }) as Session)
   }
 
-  private async resolveWorktree(selector: unknown, caller: PluginCaller): Promise<Worktree> {
+  /**
+   * The worktree a selector names, or the synthetic floating one for selector `floating` and for
+   * `current` (or none) from a floating caller; floating starts in `cwd`, else `$HOME`, and never
+   * asks `quirky.worktree`.
+   */
+  private async resolveWorktree(selector: unknown, caller: PluginCaller, cwd?: string): Promise<SessionTarget> {
+    const floatingCaller = identityOf(caller).worktreeId === FLOATING
+    if (selector === FLOATING || (floatingCaller && (selector === undefined || selector === 'current'))) {
+      return { id: FLOATING, name: 'Floating', path: cwd ?? this.floatingHome(), repoId: null }
+    }
     return (await this.context.call('quirky.worktree/resolve', {
       selector: selector ?? 'current',
       ...identityOf(caller)
-    })) as Worktree
+    })) as SessionTarget
+  }
+
+  private floatingHome(): string {
+    const home = process.env.HOME
+    if (!home) throw this.context.error('invalid-params', 'HOME is not set; pass cwd for a floating session')
+    return home
+  }
+
+  /** The caller's start folder, or undefined when none was given; anything but an existing absolute directory is refused. */
+  private startCwd(value: unknown): string | undefined {
+    if (value === undefined) return undefined
+    const isDirectory = typeof value === 'string' && isAbsolute(value) && existsSync(value) && statSync(value).isDirectory()
+    if (!isDirectory) throw this.context.error('invalid-params', 'cwd must be an existing directory')
+    return value
   }
 
   /** A listing may name a worktree that git no longer reports, as long as sessions still point at it. */
