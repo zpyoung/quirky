@@ -308,5 +308,27 @@
 - **Confidence:** high
 - **Source:** assumed — autonomous
 
+## D31: Selection bounds are enforced in `validateSelection`, not in method schemas
+- **Question:** SDD wave 2: the plugin manifest's schema subset has no `minLength`, `maxLength`, `maxProperties` or typed `additionalProperties`, and a manifest using them is skipped
+- **Options:** grow the kernel's schema subset; enforce the bounds in code
+- **Chose:** method schemas declare `model` as a string and `options` as an object, with the bounds in their descriptions; `validateSelection` refuses the rest as `invalid launch selection: <why>`
+- **Why:** growing the kernel schema is out of this item's scope, and every launch path goes through `validateSelection`
+- **Evidence:** packages/protocol/src/schema.ts `checkSchemaDeclaration`; plugins/quirky.agents/src/core/selection.ts
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** the schema subset grows length and size keywords (M7 API freeze)
+- **Source:** assumed — autonomous
+
+## D32: A structured launch for an agent other than claude keeps its existing refusal
+- **Question:** SDD wave 2: SC-24 expected "Agent X does not support launch-time model selection." for a structured agent without structured keys, but `quirky.structured/create` already refuses every agent but claude first
+- **Options:** move the check after resolution; keep the existing refusal
+- **Chose:** keep "structured sessions support only the claude agent" for non-claude agents; the catalog's structured-key refusal is tested at the resolution level (`resolveLaunch` with `structured: true`)
+- **Why:** claude is the only structured runner until m5-structured-runner, and the existing message is more accurate for the user
+- **Evidence:** plugins/quirky.structured/main.ts create; plugins/quirky.agents/test/core/resolve.test.ts
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** m5-structured-runner adds a Codex runner
+- **Source:** assumed — autonomous
+
 ## Progress
-Specs written, reviewed (D30) and committed; shared types committed. Next: build wave 1 (launch-options parser, arg-occurrence, manifest data, session records migration).
+Waves 1 and 2 merged (a8f76aa), gate green. Wave 3 (quirky.agents service, methods, CLI) and the checkpoint review of waves 1–2 in flight. Then wave 4 (e2e tests), catch-up merge of build/roadmap, Final Round 1, verify, land.

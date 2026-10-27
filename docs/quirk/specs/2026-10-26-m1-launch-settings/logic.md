@@ -16,6 +16,9 @@
   repeated `--option` key are refused (SC-9); the CLI message for effort without a model is Orca's
   `--effort requires --model` (SC-9); fork keeps picks like resume (SC-21); the shell-syntax rule
   for extras is Orca's (SC-17).
+- 2026-10-26, build ([D32](../../../loop/decisions/m1-launch-settings.md)): a structured launch for an
+  agent other than claude keeps the existing "structured sessions support only the claude agent"
+  refusal; the structured-key refusal of SC-24 is tested at the resolution level.
 
 ## Conceptual model
 
