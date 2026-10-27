@@ -495,5 +495,27 @@
 - **Revisit if:** the native run finds clipboard copy differs in the real window
 - **Source:** assumed — autonomous
 
+## D46: The UI pass: every scenario's visible behavior passes; four app defects were found and fixed, and the partials are the tool's limits
+- **Question:** LOOP.md step 6: run quirk:using-apps-like-a-user (web, owner yours, unattended) over the (UI) scenarios, fix fails, record tool-caused partials
+- **Options:** n/a
+- **Chose:** Four worlds with fake Claude and Codex (scratchpad uiv/setup.sh). Pass: NA-1, NA-6, NA-11, NA-12, NA-22, NA-25, NA-33, NA-35, NA-36, NA-37, NA-40. Partial, with every visible part passing and the rest out of the tool's reach: NA-2 (drag-then-Escape is one driver step), NA-3 (no IME, no pixel heights), NA-7 (no binary or 120 000-line fixture), NA-9/NA-10 (a staged-and-changed file, an untracked-only and a gone path can't be made through the UI), NA-13 (NO_EFFECT on an already-open menu), NA-17 (no session waiting for approval in the world), NA-18 (the next act after the launch returned NO_EFFECT; the log shows the note delivered and the note gone), NA-24 (no hover, so tooltips unread), NA-30 (stop lands inside a 3 s run). Defects found and fixed on the branch (e565660, 944e3f9): the sparkle icon's SVG path had a stray number and logged a console error; the combined notes preview clipped its Copy and Clear (now opens toward the side with room, sized to the pane); the overflow menu didn't close from a terminal pane because the terminal stops mousedown and keydown from bubbling (listeners now capture; regression test); a long view title wrapped into the panel toggles (now truncates). A re-check world passed NA-14 and all three fix checks. Not fixed: the shell's panel toggles take the top bar's width at 1280 px with the panel open, so any view title is cut short; that is the shell's layout, not this item's. The extra "Save this launch as the recipe" checkbox in Customize launch is kept (Orca has it)
+- **Why:** every fail was an app defect and is fixed; the partials are recorded with their reasons
+- **Evidence:** reports: /Users/zpyoung/orca/workspaces/quirky/build-lane-3/.quirk/using-apps-like-a-user/runs/20261027T145252-8d18 (N1), /Users/zpyoung/orca/workspaces/quirky/build-lane-3/.quirk/using-apps-like-a-user/runs/20261027T145257-24d8 (N2), scratchpad uiv/.quirk/.../20261027T145259-ce10 (A1), /Users/zpyoung/orca/workspaces/quirky/build-lane-3/.quirk/using-apps-like-a-user/runs/20261027T145305-92a8 (A2), scratchpad uiv/.quirk/.../20261027T151113-7d67 (re-check)
+- **Reversibility:** easy
+- **Confidence:** medium
+- **Revisit if:** the native run or a person finds a scenario part the web tool couldn't reach is broken
+- **Source:** assumed — autonomous
+
+## D47: The post-UI-fix gate's four failures are load flakes in files this item doesn't touch
+- **Question:** the gate after the UI fixes failed one test each in pty-host host and manager, quirky.ask spec timing and quirky.worktree window-create
+- **Options:** chase them; confirm in isolation
+- **Chose:** confirmed: each file passes alone here (32, 50, 110 and 16 tests), and the branch changes nothing under packages/pty-host, plugins/quirky.ask or plugins/quirky.worktree; the gate before (fix1) was 421 of 421. `queue.ts land` runs the whole gate again on the merged tree
+- **Why:** the shared test host now serves ten lanes, and these are timing tests
+- **Evidence:** scratchpad gate/ui.suite; git diff --stat f4ff5ea HEAD -- packages/pty-host plugins/quirky.ask plugins/quirky.worktree is empty
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** one of them fails again at land
+- **Source:** assumed — autonomous
+
 ## Progress
-Built, reviewed (D43), fixed (D44), gate green, app built. UI pass running: worlds N1, N2, A1, A2 from the scratchpad uiv/setup.sh with fake agents. If this stops: rebuild the worlds and rerun the pass, record it as D46, tear the worlds down, then land.
+Done through step 6: built, reviewed, fixed, UI pass recorded (D46), worlds torn down. Next: land (git switch --detach; bun scripts/build-loop/queue.ts land m2-source-control-notes-ai).
