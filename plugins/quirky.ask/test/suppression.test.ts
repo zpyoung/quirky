@@ -189,7 +189,7 @@ describe('commandProbe', () => {
     const output = await commandProbe(fake.context)(fake.launcher, { sessionId: 's1', worktreeId: 'w1' })
     expect(output).toBe('2.1.0 (Claude Code)\n')
     expect(fake.envInputs).toEqual([{ sessionId: 's1', worktreeId: 'w1', agent: 'claude' }])
-    expect(JSON.parse(fake.log().trim().split('\n')[0]!)).toMatchObject({ type: 'start', argv: ['--version'] })
+    expect(JSON.parse(fake.log().trim().split('\n')[0]!)).toMatchObject({ type: 'version', argv: ['--version'] })
   })
 
   test('a non-zero exit is null', async () => {
@@ -199,6 +199,7 @@ describe('commandProbe', () => {
 
   test('a probe that outlives the timeout is killed and returns null', async () => {
     const fake = installFake({})
+    writeFileSync(fake.launcher, '#!/bin/sh\nexec sleep 30\n')
     const started = Date.now()
     expect(await commandProbe(fake.context, { timeoutMs: 200 })(fake.launcher, { sessionId: 's1', worktreeId: 'w1' })).toBeNull()
     expect(Date.now() - started).toBeLessThan(2500)
@@ -232,6 +233,12 @@ describe('commandProbe', () => {
     const fake = installFake({ version: { stdout: '2.1.0' } })
     expect(await commandProbe(fake.context)(`${fake.launcher} "open`, { sessionId: 's1', worktreeId: 'w1' })).toBeNull()
     expect(existsSync(`${fake.launcher}.log.jsonl`)).toBe(false)
+  })
+
+  test('a bare --version is logged as a version event, never a start, and defaults to 0.0.0 (fake)', async () => {
+    const fake = installFake({})
+    expect(await commandProbe(fake.context)(fake.launcher, { sessionId: 's1', worktreeId: 'w1' })).toBe('0.0.0 (fake)')
+    expect(fake.log().trim().split('\n').map((line) => JSON.parse(line).type)).toEqual(['version'])
   })
 
   test('a missing command or a throwing context is null', async () => {
