@@ -76,6 +76,32 @@ describe('QuickCommandDialog', () => {
     expect($('[role="dialog"]')!.textContent).toContain('api')
   })
 
+  test('SC-49: Project is preselected when the repo arrives after the dialog opened', async () => {
+    const { fake } = qcFake()
+    const dialog = (repo: string | null) => createElement(qc().dialog.QuickCommandDialog, { context: fake.context, command: null, repo, onClose: () => {} }) as ReactElement
+    const view = await render(dialog(null))
+    expect(radio('scope', 'global')!.checked).toBe(true)
+    expect(radio('scope', 'repo')).toBeNull()
+    await view.rerender(dialog('api'))
+    expect(radio('scope', 'repo')!.checked).toBe(true)
+    expect(radio('scope', 'global')!.checked).toBe(false)
+    await fill(field<HTMLInputElement>('label'), 'Hello')
+    await fill(field<HTMLTextAreaElement>('command'), 'echo hello')
+    await click(save())
+    expect(fake.callsTo('quirky.terminal/addQuickCommand')[0]!.params).toMatchObject({ scope: 'repo', repo: 'api' })
+  })
+
+  test('a scope the person changed is kept when the repo is resolved again', async () => {
+    const { fake } = qcFake()
+    const dialog = (repo: string | null) => createElement(qc().dialog.QuickCommandDialog, { context: fake.context, command: null, repo, onClose: () => {} }) as ReactElement
+    const view = await render(dialog(null))
+    await view.rerender(dialog('api'))
+    await click(radio('scope', 'global')!)
+    await view.rerender(dialog('api'))
+    expect(radio('scope', 'global')!.checked).toBe(true)
+    expect(radio('scope', 'repo')!.checked).toBe(false)
+  })
+
   test('SC-55: with no repo (the floating workspace) there is no Project option and Global is chosen', async () => {
     await openDialog({ repo: null })
     expect(radio('scope', 'repo')).toBeNull()

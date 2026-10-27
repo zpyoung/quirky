@@ -47,7 +47,9 @@ export function QuickCommandDialog({ context, command, repo, onClose, onSaved }:
   const [agentText, setAgentText] = useState(command?.kind === 'agent' ? command.command : '')
   const [appendEnter, setAppendEnter] = useState(command?.kind === 'agent' ? true : (command?.appendEnter ?? true))
   const projectRepo = (command?.scope === 'repo' ? command.repo : null) ?? repo
-  const [scope, setScope] = useState<'global' | 'repo'>(command ? command.scope : projectRepo !== null ? 'repo' : 'global')
+  // null until the person picks one: the repo can arrive after the dialog opens, and Project is then the default
+  const [pickedScope, setScope] = useState<'global' | 'repo' | null>(command ? command.scope : null)
+  const scope = pickedScope === 'repo' && projectRepo === null ? 'global' : (pickedScope ?? (projectRepo !== null ? 'repo' : 'global'))
   const [advancedOpen, setAdvancedOpen] = useState(true)
   const [agents, setAgents] = useState<AgentOption[]>([])
   const [error, setError] = useState<string | null>(null)

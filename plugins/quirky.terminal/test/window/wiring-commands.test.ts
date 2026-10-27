@@ -285,23 +285,66 @@ describe('window commands route to the focused workspace', () => {
   })
 })
 
+const quickMenu = () => document.body.querySelector<HTMLElement>('.qc-menu')
+const quickRow = (id: string) => quickMenu()?.querySelector<HTMLElement>(`[role="menuitem"][data-command="${id}"]`) ?? null
+
 describe('the quick commands', () => {
-  test('toggle-quick-commands opens the menu with the repo command first, then closes it', async () => {
+  test('SC-51: toggle-quick-commands opens the strip menu (search, actions, + Command), lists it in the report, then closes it', async () => {
     const wired = await track()
     await wired.run('toggle-quick-commands')
-    expect(wired.last().menu.kind).toBe('quick-commands')
-    expect(wired.last().menu.items.map((item: any) => (item.separator ? '---' : item.label))).toEqual(['Test', 'Hello', '---', 'Manage Quick Commands'])
+    expect(quickMenu()).not.toBeNull()
+    expect(quickMenu()!.querySelector<HTMLInputElement>('input[type="search"]')!.placeholder).toBe('Search quick commands...')
+    expect(quickRow('test')!.querySelector('[aria-label="Edit Test"]')).not.toBeNull()
+    expect(quickRow('hello')!.querySelector('[aria-label="Copy Hello"]')).not.toBeNull()
+    expect(quickRow('hello')!.querySelector('[aria-label="Delete Hello"]')).not.toBeNull()
+    expect([...quickMenu()!.querySelectorAll('.qc-menu-footer button')].map((el) => el.textContent)).toEqual(['+ Command'])
+    expect(wired.last().menu).toEqual({
+      kind: 'quick-commands',
+      target: 'grp-1',
+      items: [
+        { label: 'Test', key: null, enabled: true, separator: false },
+        { label: 'Hello', key: null, enabled: true, separator: false },
+        { label: '+ Command', key: null, enabled: true, separator: false }
+      ]
+    })
+    expect(wired.element.querySelector('.qt-menu')).toBeNull()
     await wired.run('toggle-quick-commands')
+    expect(quickMenu()).toBeNull()
     expect(wired.last().menu).toBeNull()
   })
 
-  test('a row of that menu runs the command in the active group', async () => {
+  test('opening the menu with the chevron shows in the report, and open-menu and close-menu drive the same menu', async () => {
+    const wired = await track()
+    const chevron = wired.element.querySelector<HTMLElement>('button[aria-label="More quick commands"]')!
+    await act(async () => chevron.click())
+    await settle()
+    expect(quickMenu()).not.toBeNull()
+    expect(wired.last().menu).toMatchObject({ kind: 'quick-commands', target: 'grp-1' })
+    await wired.run('close-menu')
+    expect(quickMenu()).toBeNull()
+    expect(wired.last().menu).toBeNull()
+    expect(await wired.run('open-menu', { kind: 'quick-commands', target: 'grp-1' })).toEqual({ ok: true })
+    expect(quickMenu()).not.toBeNull()
+    expect(await wired.run('open-menu', { kind: 'pane' })).toEqual({ ok: true })
+    expect(quickMenu()).toBeNull()
+    expect(wired.last().menu).toMatchObject({ kind: 'pane' })
+  })
+
+  test('opening the quick-commands menu on a group that is not there is refused', async () => {
+    const wired = await track()
+    expect(await wired.run('open-menu', { kind: 'quick-commands', target: 'grp-99' })).toMatchObject({ ok: false })
+    expect(quickMenu()).toBeNull()
+    expect(wired.last().menu).toBeNull()
+  })
+
+  test('a row of that menu runs the command in the active group and closes the menu', async () => {
     const wired = await track()
     await wired.run('toggle-quick-commands')
-    const row = [...wired.element.querySelectorAll<HTMLElement>('[role="menuitem"]')].find((el) => el.textContent === 'Hello')!
-    await act(async () => row.click())
+    await act(async () => quickRow('hello')!.click())
     await settle()
     expect(wired.calls('runQuickCommand')).toEqual([{ id: 'hello', workspace: 'wt-main', group: 'grp-1' }])
+    expect(quickMenu()).toBeNull()
+    expect(wired.last().menu).toBeNull()
   })
 
   test('manage-quick-commands opens the panel', async () => {

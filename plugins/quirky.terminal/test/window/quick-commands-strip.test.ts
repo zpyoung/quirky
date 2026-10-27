@@ -238,4 +238,58 @@ describe('QuickCommandsStripButton', () => {
       expect($<HTMLInputElement>('input[name="scope"][value="repo"]')!.checked).toBe(true)
     })
   })
+
+  describe('when the owner keeps the menu state', () => {
+    async function mountControlled(init: Partial<World>, open: boolean) {
+      const changes: boolean[] = []
+      const { fake } = qcFake(init)
+      const element = (menuOpen: boolean) =>
+        createElement(qc().strip.QuickCommandsStripButton, {
+          context: fake.context,
+          workspace: 'wt_main',
+          group: group(),
+          repo: 'api',
+          menuOpen,
+          onMenuOpenChange: (next: boolean) => void changes.push(next)
+        })
+      const view = await render(element(open))
+      return { fake, changes, view, element }
+    }
+
+    test('SC-51: the menu shows when the owner says it is open, and the chevron asks the owner to toggle it', async () => {
+      const { changes, view, element } = await mountControlled({ commands: [hello, draft] }, false)
+      expect(menu()).toBeNull()
+      await click(button('More quick commands'))
+      expect(changes).toEqual([true])
+      expect(menu()).toBeNull()
+      await view.rerender(element(true))
+      expect(menu()).not.toBeNull()
+      expect(rows()).toEqual(['hello', 'draft'])
+      expect(button('More quick commands').getAttribute('aria-expanded')).toBe('true')
+      await click(button('More quick commands'))
+      expect(changes).toEqual([true, false])
+    })
+
+    test('running a row, Escape and a click outside ask the owner to close it', async () => {
+      const { fake, changes } = await mountControlled({ commands: [hello] }, true)
+      await key($<HTMLInputElement>('input[type="search"]')!, 'Escape')
+      await click($('[data-command="hello"]')!)
+      expect(changes).toEqual([false, false])
+      expect(fake.callsTo('quirky.terminal/runQuickCommand')).toHaveLength(1)
+    })
+
+    test('with no commands the menu still opens on request, anchored to the Command button, with + Command', async () => {
+      await mountControlled({}, true)
+      expect(menu()).not.toBeNull()
+      expect(menu()!.textContent).toContain('No commands')
+      await click(button('+ Command', menu()!))
+      expect($('[role="dialog"]')!.getAttribute('aria-label')).toBe('Add Quick Command')
+    })
+
+    test('a strip that goes away while its menu is open tells the owner to close it', async () => {
+      const { changes, view } = await mountControlled({ commands: [hello] }, true)
+      await view.unmount()
+      expect(changes).toEqual([false])
+    })
+  })
 })

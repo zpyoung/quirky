@@ -1,9 +1,10 @@
 import type { UiPluginContext } from '@quirky/protocol'
 import { findGroup } from '../layout/tree'
-import type { FloatingState, QuickCommand } from '../layout/types'
+import type { FloatingState, QuickCommand, Workspace } from '../layout/types'
 import { FLOATING_WORKSPACE } from '../layout/types'
+import { isQuickCommandComplete } from '../quick-commands/normalize'
 import { paneQuickCommandItems } from './quick-commands'
-import { runCommand } from './quick-commands/shared'
+import { repoFirst } from './quick-commands/search'
 import { SEPARATOR, controllerFor, focusedController, type MenuItem, type WorkspaceController } from './workspace'
 import { locatePane, locateTab } from './workspace/model'
 
@@ -98,16 +99,24 @@ function searchOptions(args: Args): { regex?: boolean; caseSensitive?: boolean }
   return Object.keys(options).length > 0 ? options : undefined
 }
 
-/** Puts a menu opened by command next to the strip button it belongs to, or the workspace corner when none is drawn. */
-function openMenu(controller: WorkspaceController, kind: string, target: string | undefined): void {
-  if (kind !== QUICK_COMMANDS_MENU) {
-    controller.openMenu(kind, target)
-    return
-  }
+/**
+ * Opens the searchable quick-commands menu the strip's chevron opens, on `group` (default: the
+ * active one). A failure when the workspace draws no such button, as the floating one does not.
+ */
+function openQuickCommandsMenu(controller: WorkspaceController, group: string | undefined): CommandFailure | undefined {
+  const source = quickSources.get(controller.workspaceId)
+  if (controller.floating || !source) return { ok: false, reason: 'this workspace has no quick-commands menu' }
   const workspace = controller.getSnapshot().workspace
-  const group = target ?? workspace?.activeGroup ?? null
-  const rect = group === null ? undefined : controller.root?.querySelector(`[data-plus="${group}"]`)?.getBoundingClientRect()
-  controller.openMenu(kind, group, rect ? { x: rect.right, y: rect.bottom } : undefined)
+  const target = group ?? workspace?.activeGroup ?? null
+  if (workspace === null || target === null || findGroup(workspace.root, target) === null) return { ok: false, reason: `no tab group ${target ?? ''} in this workspace` }
+  controller.closeMenu()
+  source.openMenu(target)
+}
+
+/** Closes what a command opened: the workspace's menu and the quick-commands menu. */
+function closeMenus(controller: WorkspaceController): void {
+  controller.closeMenu()
+  quickSources.get(controller.workspaceId)?.closeMenu()
 }
 
 async function changeFloating(context: UiPluginContext, change: (state: FloatingState) => Partial<FloatingState>): Promise<unknown> {
@@ -153,8 +162,9 @@ export function terminalCommands(context: UiPluginContext): Record<string, Comma
     'previous-tab': on(context, 'tab', (controller) => controller.previousTab()),
     'recent-tab': on(context, 'tab', (controller) => controller.recentTab()),
     'toggle-quick-commands': on(context, 'target', (controller, args) => {
-      if (controller.getSnapshot().menu?.kind === QUICK_COMMANDS_MENU) controller.closeMenu()
-      else openMenu(controller, QUICK_COMMANDS_MENU, textArg(args, 'target'))
+      const source = quickSources.get(controller.workspaceId)
+      if (source && source.menu() !== null) return source.closeMenu()
+      return openQuickCommandsMenu(controller, textArg(args, 'target'))
     }),
     'manage-quick-commands': () => {
       context.togglePanel(QUICK_COMMANDS_PANEL, true)
@@ -163,9 +173,11 @@ export function terminalCommands(context: UiPluginContext): Record<string, Comma
     'open-menu': on(context, 'target', (controller, args) => {
       const kind = textArg(args, 'kind')
       if (kind === undefined || !MENU_KINDS.includes(kind)) return { ok: false, reason: `kind must be one of ${MENU_KINDS.join(', ')}` } satisfies CommandFailure
-      openMenu(controller, kind, textArg(args, 'target'))
+      if (kind === QUICK_COMMANDS_MENU) return openQuickCommandsMenu(controller, textArg(args, 'target'))
+      closeMenus(controller)
+      controller.openMenu(kind, textArg(args, 'target'))
     }),
-    'close-menu': on(context, 'target', (controller) => controller.closeMenu()),
+    'close-menu': on(context, 'target', (controller) => closeMenus(controller)),
     'toggle-floating': () => changeFloating(context, (state) => ({ open: !state.open })),
     'maximize-floating': () => changeFloating(context, () => ({ open: true, maximized: true })),
     'minimize-floating': () => changeFloating(context, () => ({ open: false }))
@@ -202,19 +214,28 @@ export function sessionCommands(context: UiPluginContext): Record<string, Comman
 }
 
 /**
- * The quick commands a workspace sees and its repo, kept current for menus that must read them
- * synchronously. `dispose` stops listening.
+ * The quick commands a workspace sees, its repo and which group's quick-commands menu is open,
+ * kept current for views and window commands that must read them synchronously. The strip button
+ * draws the menu; the window commands open and close it through this. `dispose` stops listening.
  */
 export type QuickCommandSource = {
   commands(): QuickCommand[]
   repo(): string | null
+  /** The tab group whose quick-commands menu is open; null when none is. */
+  menu(): string | null
+  openMenu(group: string): void
+  /** Closes the open menu; with `group`, only when it is that group's. */
+  closeMenu(group?: string): void
   subscribe(listener: () => void): () => void
   dispose(): void
 }
 
+const quickSources = new Map<string, QuickCommandSource>()
+
 export function watchQuickCommands(context: UiPluginContext, workspace: string): QuickCommandSource {
   let commands: QuickCommand[] = []
   let repo: string | null = null
+  let menu: string | null = null
   let live = true
   const listeners = new Set<() => void>()
   const changed = () => listeners.forEach((listener) => listener())
@@ -245,18 +266,70 @@ export function watchQuickCommands(context: UiPluginContext, workspace: string):
   const unsubscribe = context.subscribe((event) => {
     if (event.type === QUICK_COMMANDS_EVENT) void load()
   })
-  return {
+  const source: QuickCommandSource = {
     commands: () => commands,
     repo: () => repo,
+    menu: () => menu,
+    openMenu(group) {
+      if (menu === group) return
+      menu = group
+      changed()
+    },
+    closeMenu(group) {
+      if (menu === null || (group !== undefined && menu !== group)) return
+      menu = null
+      changed()
+    },
     subscribe(listener) {
       listeners.add(listener)
       return () => listeners.delete(listener)
     },
     dispose() {
       live = false
+      menu = null
       unsubscribe()
       listeners.clear()
+      if (quickSources.get(workspace) === source) quickSources.delete(workspace)
     }
+  }
+  quickSources.set(workspace, source)
+  return source
+}
+
+type ReportedMenu = { kind: string; target: string | null; items: { label: string; key: string | null; enabled: boolean; separator: boolean }[] }
+
+function quickMenuReport(source: QuickCommandSource, group: string): ReportedMenu {
+  const items = repoFirst(source.commands()).map((entry) => ({ label: entry.label, key: null, enabled: isQuickCommandComplete(entry), separator: false }))
+  return { kind: QUICK_COMMANDS_MENU, target: group, items: [...items, { label: '+ Command', key: null, enabled: true, separator: false }] }
+}
+
+/**
+ * Wraps a workspace view's `report` so the open quick-commands menu, which the strip button draws
+ * and the workspace controller does not know, shows as the report's `menu`. Feed the controller's
+ * reports to `report`; `stop` ends the listening.
+ */
+export function reportQuickCommandsMenu(source: QuickCommandSource, publish: (state: unknown) => void): { report(state: unknown): void; stop(): void } {
+  let latest: Record<string, unknown> | null = null
+  let lastText = ''
+  const emit = () => {
+    if (latest === null) return
+    const group = source.menu()
+    const layout = latest.layout as Workspace | null | undefined
+    const open = group !== null && layout != null && findGroup(layout.root, group) !== null
+    const state = open ? { ...latest, menu: quickMenuReport(source, group) } : latest
+    const text = JSON.stringify(state)
+    if (text === lastText) return
+    lastText = text
+    publish(state)
+  }
+  const stop = source.subscribe(emit)
+  return {
+    report(state) {
+      if (typeof state !== 'object' || state === null) return publish(state)
+      latest = state as Record<string, unknown>
+      emit()
+    },
+    stop
   }
 }
 
@@ -266,17 +339,4 @@ export function paneMenuQuickCommands(context: UiPluginContext, source: QuickCom
     const row: MenuItem = { label: item.label, key: item.hint ?? null, enabled: item.enabled, onSelect: () => void item.onSelect() }
     return item.separatorBefore ? [SEPARATOR, row] : [row]
   })
-}
-
-/** The rows of the Quick Commands menu `toggle-quick-commands` opens: each command runs in a new tab of `group`. */
-export function stripQuickCommandItems(context: UiPluginContext, source: QuickCommandSource, workspace: string, group: string | null): MenuItem[] {
-  const all = source.commands().filter((entry) => entry.command.trim() !== '')
-  const ordered = [...all.filter((entry) => entry.scope === 'repo'), ...all.filter((entry) => entry.scope !== 'repo')]
-  const rows: MenuItem[] = ordered.map((entry) => ({
-    label: entry.label,
-    onSelect: () => void runCommand(context, { id: entry.id, workspace, ...(group === null ? {} : { group }) })
-  }))
-  if (rows.length === 0) rows.push({ label: 'No quick commands', enabled: false })
-  rows.push(SEPARATOR, { label: 'Manage Quick Commands', onSelect: () => context.togglePanel(QUICK_COMMANDS_PANEL, true) })
-  return rows
 }

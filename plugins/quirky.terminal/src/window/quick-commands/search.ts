@@ -42,3 +42,8 @@ export function searchQuickCommands(commands: readonly QuickCommand[], rawQuery:
     .sort((a, b) => a.rank - b.rank || a.index - b.index)
     .map((entry) => entry.command)
 }
+
+/** Repo commands first, then global ones, each kept in the order given. */
+export function repoFirst(commands: readonly QuickCommand[]): QuickCommand[] {
+  return [...commands.filter((entry) => entry.scope === 'repo'), ...commands.filter((entry) => entry.scope !== 'repo')]
+}
