@@ -51,6 +51,12 @@ export type Worktree = {
   /** True while a removal is in flight, so views can show the row as deleting. */
   removing: boolean
   groupId: string | null
+  /** Display-only membership in a project group; distinct from folder identity and repo ownership. */
+  projectGroupId: string | null
+  /** Greatest session lifecycle/activity timestamp observed for this workspace; zero when unknown. */
+  lastActivityAt: number
+  /** Filesystem-instance identity, distinct from the path-derived worktree ID. */
+  instanceId: string
 }
 
 /** A named, orderable collection of projects in the tree. */
@@ -63,6 +69,8 @@ export type ProjectGroup = {
   order: number
   createdFrom: 'manual' | 'folder-scan'
   repoIds: string[]
+  /** Parent project group, or null for a root group. */
+  parentId: string | null
 }
 
 /** Per-project preferences that override the global defaults. */

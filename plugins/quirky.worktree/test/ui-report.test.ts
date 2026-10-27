@@ -15,7 +15,9 @@ const WORKTREE_DEFAULTS = {
   baseRef: null,
   keepBranch: false,
   removing: false,
-  groupId: null
+  groupId: null,
+  projectGroupId: null,
+  lastActivityAt: 0
 } as const
 
 const repo = (id: string, name: string, extra: Partial<Repo> = {}): Repo => ({
@@ -37,6 +39,7 @@ const worktree = (id: string, repoId: string, name: string, extra: Partial<Workt
   head: 'abc',
   isMain: false,
   name,
+  instanceId: id,
   ...WORKTREE_DEFAULTS,
   ...extra
 })
@@ -48,6 +51,7 @@ const group = (id: string, name: string, repoIds: string[], extra: Partial<Proje
   collapsed: false,
   order: 0,
   createdFrom: 'manual',
+  parentId: null,
   repoIds,
   ...extra
 })

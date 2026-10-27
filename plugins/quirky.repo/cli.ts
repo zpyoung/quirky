@@ -205,8 +205,24 @@ const named: CliModule['commands'] = {
 
   async 'group-create'(args, ctx) {
     const [name] = args.positionals as [string]
-    const group = (await ctx.call('quirky.repo/groupCreate', { name, ...flagParams(args, { 'parent-path': 'parentPath' }) })) as ProjectGroup
+    const group = (await ctx.call('quirky.repo/groupCreate', { name, ...flagParams(args, { 'parent-path': 'parentPath', parent: 'parent' }) })) as ProjectGroup
     ctx.out.result(group, () => groupRecord(ctx, group))
+  },
+  async 'group-set-parent'(args, ctx) {
+    const [group] = args.positionals as [string]
+    const parentFlag = args.flags.parent
+    const clear = args.flags['no-parent'] === true
+    let parent: string | null
+    if (clear) {
+      if (parentFlag !== undefined) throw ctx.usage('--parent and --no-parent cannot be used together')
+      parent = null
+    } else if (typeof parentFlag === 'string') {
+      parent = parentFlag
+    } else {
+      throw ctx.usage('pass exactly one of --parent or --no-parent')
+    }
+    const updated = (await ctx.call('quirky.repo/groupSetParent', { group, parent })) as ProjectGroup
+    ctx.out.result(updated, () => groupRecord(ctx, updated))
   },
 
   async 'group-rename'(args, ctx) {

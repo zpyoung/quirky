@@ -113,6 +113,15 @@
               },
               "groupId": {
                 "description": "The group whose parent folder the workspace sits on, or null."
+              },
+              "projectGroupId": {
+                "description": "The display-only project-group membership, or null."
+              },
+              "lastActivityAt": {
+                "type": "number"
+              },
+              "instanceId": {
+                "type": "string"
               }
             },
             "required": [
@@ -131,7 +140,10 @@
               "createdAt",
               "createdBy",
               "keepBranch",
-              "removing"
+              "removing",
+              "projectGroupId",
+              "lastActivityAt",
+              "instanceId"
             ]
           }
         }
@@ -305,7 +317,16 @@
                 },
                 "groupId": {
                   "description": "The group whose parent folder the workspace sits on, or null."
-                }
+                },
+                "projectGroupId": {
+                  "description": "The display-only project-group membership, or null."
+                },
+                "lastActivityAt": {
+                  "type": "number"
+                },
+                "instanceId": {
+                  "type": "string"
+                  }
               },
               "required": [
                 "id",
@@ -323,7 +344,10 @@
                 "createdAt",
                 "createdBy",
                 "keepBranch",
-                "removing"
+                "removing",
+                "projectGroupId",
+                "lastActivityAt",
+                "instanceId"
               ]
             },
             "warnings": {
@@ -449,6 +473,16 @@
             },
             "baseRef": {
               "description": "The worktree's own base ref (compare and rebase target); an empty string or null clears it."
+            },
+            "projectGroupId": {
+              "description": "Display-only membership in a project group; null clears it."
+            },
+            "expectedInstanceId": {
+              "type": "string",
+              "description": "Optional compare-and-set instance token."
+            },
+            "expectedProjectGroupId": {
+              "description": "Optional compare-and-set membership; null expects no membership."
             }
           },
           "required": [
@@ -535,7 +569,16 @@
             },
             "groupId": {
               "description": "The group whose parent folder the workspace sits on, or null."
-            }
+            },
+              "projectGroupId": {
+                "description": "The display-only project-group membership, or null."
+              },
+              "lastActivityAt": {
+                "type": "number"
+              },
+              "instanceId": {
+                "type": "string"
+              }
           },
           "required": [
             "id",
@@ -553,7 +596,229 @@
             "createdAt",
             "createdBy",
             "keepBranch",
-            "removing"
+            "removing",
+            "projectGroupId",
+            "lastActivityAt",
+            "instanceId"
+          ]
+        }
+      },
+      {
+        "id": "createGroup",
+        "description": "Creates a project group through quirky.repo and conditionally assigns only the selected Git worktree.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "worktree": {
+              "type": "string",
+              "description": "A worktree selector."
+            },
+            "name": {
+              "type": "string",
+              "description": "Name for the new project group."
+            },
+            "expectedInstanceId": {
+              "type": "string",
+              "description": "The filesystem instance that must still occupy the selected worktree path."
+            },
+            "expectedProjectGroupId": {
+              "description": "The prior membership that must still be current; null means ungrouped."
+            }
+          },
+          "required": [
+            "worktree",
+            "name",
+            "expectedInstanceId",
+            "expectedProjectGroupId"
+          ]
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "group": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "parentPath": {
+                  "description": "Folder the group was scanned from; null for a hand-made group."
+                },
+                "parentId": {
+                  "description": "Parent project group, or null."
+                },
+                "collapsed": {
+                  "type": "boolean"
+                },
+                "order": {
+                  "type": "number"
+                },
+                "createdFrom": {
+                  "type": "string",
+                  "enum": [
+                    "manual",
+                    "folder-scan"
+                  ]
+                },
+                "repoIds": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              },
+              "required": [
+                "id",
+                "name",
+                "parentId",
+                "collapsed",
+                "order",
+                "createdFrom",
+                "repoIds"
+              ]
+            },
+            "worktree": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "repoId": {
+                  "type": "string"
+                },
+                "path": {
+                  "type": "string"
+                },
+                "branch": {},
+                "head": {
+                  "type": "string"
+                },
+                "isMain": {
+                  "type": "boolean"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "kind": {
+                  "type": "string",
+                  "enum": [
+                    "git",
+                    "folder"
+                  ]
+                },
+                "displayName": {},
+                "comment": {
+                  "type": "string"
+                },
+                "status": {
+                  "type": "string",
+                  "enum": [
+                    "todo",
+                    "in-progress",
+                    "in-review",
+                    "done"
+                  ]
+                },
+                "pinned": {
+                  "type": "boolean"
+                },
+                "unread": {
+                  "type": "boolean"
+                },
+                "parentId": {},
+                "createdAt": {
+                  "type": "number"
+                },
+                "createdBy": {
+                  "type": "string",
+                  "enum": [
+                    "window",
+                    "cli",
+                    "api",
+                    "external"
+                  ]
+                },
+                "baseRef": {},
+                "keepBranch": {
+                  "type": "boolean"
+                },
+                "removing": {
+                  "type": "boolean"
+                },
+                "groupId": {},
+                "projectGroupId": {},
+                "lastActivityAt": {
+                  "type": "number"
+                },
+                "instanceId": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id",
+                "repoId",
+                "path",
+                "branch",
+                "head",
+                "isMain",
+                "name",
+                "kind",
+                "comment",
+                "status",
+                "pinned",
+                "unread",
+                "createdAt",
+                "createdBy",
+                "keepBranch",
+                "removing",
+                "projectGroupId",
+                "lastActivityAt",
+                "instanceId"
+              ]
+            },
+            "assigned": {
+              "type": "boolean"
+            },
+            "reason": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "group",
+            "worktree",
+            "assigned"
+          ]
+        }
+      },
+      {
+        "id": "releaseGroups",
+        "description": "Clears display-only worktree membership for deleted project groups without changing other worktree metadata.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "groups": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          "required": [
+            "groups"
+          ]
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "ok": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "ok"
           ]
         }
       },
@@ -654,6 +919,15 @@
             "groupId": {
               "description": "The group whose parent folder the workspace sits on, or null."
             },
+            "projectGroupId": {
+              "description": "The display-only project-group membership, or null."
+            },
+            "lastActivityAt": {
+              "type": "number"
+            },
+            "instanceId": {
+              "type": "string"
+            },
             "children": {
               "type": "array",
               "items": {
@@ -679,6 +953,9 @@
             "createdBy",
             "keepBranch",
             "removing",
+            "projectGroupId",
+            "lastActivityAt",
+            "instanceId",
             "children"
           ]
         }
@@ -936,7 +1213,16 @@
             },
             "groupId": {
               "description": "The group whose parent folder the workspace sits on, or null."
-            }
+            },
+            "projectGroupId": {
+              "description": "The display-only project-group membership, or null."
+            },
+            "lastActivityAt": {
+              "type": "number"
+            },
+            "instanceId": {
+              "type": "string"
+              }
           },
           "required": [
             "id",
@@ -954,7 +1240,10 @@
             "createdAt",
             "createdBy",
             "keepBranch",
-            "removing"
+            "removing",
+            "projectGroupId",
+            "lastActivityAt",
+            "instanceId"
           ]
         }
       },
@@ -1188,7 +1477,7 @@
       },
       {
         "id": "set",
-        "summary": "change a worktree's display name, note, status, pin, unread flag or parent",
+        "summary": "change worktree metadata or project-group membership",
         "positionals": [
           {
             "name": "worktree",
@@ -1238,10 +1527,37 @@
           "no-parent": {
             "type": "boolean",
             "description": "take the worktree out of its parent"
+          },
+          "project-group": {
+            "type": "string",
+            "description": "assign the worktree to this project group ID"
+          },
+          "no-project-group": {
+            "type": "boolean",
+            "description": "clear project-group membership"
           }
         },
         "methods": [
           "quirky.worktree/set"
+        ]
+      },
+      {
+        "id": "create-group",
+        "summary": "create and assign a project group to one Git worktree",
+        "positionals": [
+          {
+            "name": "worktree",
+            "description": "the worktree to move",
+            "required": true
+          },
+          {
+            "name": "name",
+            "description": "name for the new project group",
+            "required": true
+          }
+        ],
+        "methods": [
+          "quirky.worktree/createGroup"
         ]
       },
       {
