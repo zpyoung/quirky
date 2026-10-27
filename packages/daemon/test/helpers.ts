@@ -36,7 +36,7 @@ export async function startHarness(options: Partial<DaemonOptions> = {}): Promis
     home,
     port: 0,
     shell: '/bin/zsh',
-    notifier: (title, body) => notifications.push({ title, body }),
+    notifier: ({ title, body }) => notifications.push({ title, body }),
     cliEntry: '/opt/quirky/cli/main.ts',
     uiDir: join(home, 'no-ui'),
     builtinPluginsDir: null,

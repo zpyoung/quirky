@@ -134,6 +134,10 @@ export type PluginNotification = {
   open?: { view: string; input?: unknown }
   /** Whether the desktop shell shows a native notification; defaults to true. */
   desktop?: boolean
+  /** A sound to play; `file: null` is the system sound, `volume` is 0-100. Absent means silent. */
+  sound?: { file: string | null; volume: number }
+  /** Whether the webview shows a toast; defaults to true. */
+  toast?: boolean
 }
 
 /** The kernel half of launching a session. */
