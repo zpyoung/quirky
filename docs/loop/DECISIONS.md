@@ -346,6 +346,7 @@ files, not this one.
 | easy | medium | [m0-daemon-api D38](decisions/m0-daemon-api.md) | Wave 2 checkpoint review: fix three defects, reject calling deactivate after a failed activate | assumed — autonomous |
 | easy | medium | [m0-daemon-api D40](decisions/m0-daemon-api.md) | The scenario tests are split by area, and each task may fix only its area's modules | assumed — autonomous |
 | easy | medium | [m0-daemon-api D42](decisions/m0-daemon-api.md) | Final round 1: fix four defects, and narrow the spec's promise about listener timing | assumed — autonomous |
+| easy | medium | [m5-structured-runner D30](decisions/m5-structured-runner.md) | Diagnose the scripts fixture timeout without weakening its assertion or budget | assumed — autonomous |
 | easy | medium | [m0-ui-api D11](decisions/m0-ui-api.md) | Commands run in the window, from a command palette or a keybinding | assumed — autonomous |
 | easy | medium | [m0-ui-api D14](decisions/m0-ui-api.md) | No `when` clauses yet | assumed — autonomous |
 | easy | medium | [m0-ui-api D20](decisions/m0-ui-api.md) | The active theme is chosen through `theme.list` and `theme.set`, and applies live | assumed — autonomous |
@@ -741,6 +742,12 @@ files, not this one.
 | easy | high | [m5-structured-runner D25](decisions/m5-structured-runner.md) | Resolve public workspace types directly rather than requiring generated plugin links | assumed — autonomous |
 | easy | high | [m5-structured-runner D26](decisions/m5-structured-runner.md) | Preserve the final catch-up's regex semantics and browser feasibility block | locked by docs/loop/decisions/fix-ask-regex-budget-20261027.md |
 | easy | high | [m5-structured-runner D27](decisions/m5-structured-runner.md) | Preserve the implemented item and block on the protected queue-order gate | locked by docs/loop/LOOP.md |
+| easy | high | [m5-structured-runner D28](decisions/m5-structured-runner.md) | Resume after the operator's authorized queue-order repair | supersedes m5-structured-runner D27 (infrastructure blocker resolved by operator) |
+| easy | high | [m5-structured-runner D29](decisions/m5-structured-runner.md) | Preserve incoming ledger contracts without treating its blocked implementation as shipped | locked by docs/loop/decisions/m5-ledger.md |
+| easy | high | [m5-structured-runner D31](decisions/m5-structured-runner.md) | Preserve partial verification and clean the exact timed-out remote run | assumed — autonomous |
+| easy | high | [m5-structured-runner D32](decisions/m5-structured-runner.md) | Repeat affected verification on the operator's replacement host | assumed — autonomous (operator-directed environment repair) |
+| easy | high | [m5-structured-runner D33](decisions/m5-structured-runner.md) | Supply the scripted native fixture's existing Node prerequisite on the replacement host | assumed — autonomous |
+| easy | high | [m5-structured-runner D34](decisions/m5-structured-runner.md) | Preserve verified source when foreign dirty integration state prevents both landing and blocking | locked by docs/loop/LOOP.md |
 | easy | high | [m5-ledger D3](decisions/m5-ledger.md) | Use omp implementers with the reachable Gemini reviewer fallback | assumed — autonomous |
 | easy | high | [m5-ledger D11](decisions/m5-ledger.md) | Build and verify macOS behavior without claiming other platforms | deferred: platform |
 | easy | high | [m5-ledger D13](decisions/m5-ledger.md) | Use two independent implementation components with one integration owner | assumed — autonomous |

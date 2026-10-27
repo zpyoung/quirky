@@ -91,3 +91,9 @@ The item landed with these low-severity findings from the like-a-user pass and t
 - **Decided by:** the user, 2026-10-27, to land everything else by 4am on 2026-10-28.
 - **Items:** m6-objective-plan, m6-objective-execute, m6-objective-landing, m6-sitter-github, m6-sitter-gitlab, m6-sitter-fix-ui, m4-hosting-api-gitlab, m4-hosting-api-bitbucket-gitea-azure, m4-hosting-ui-gitlab, m4-worktrees-create-from-gitlab.
 - **To resume:** `queue.ts set <id> todo` for each, after the 4am target.
+
+## m5-structured-runner: blocked
+- Stopped at LOOP step7: queue.ts land refused before merge verification because the integration worktree has uncommitted `M docs/loop/queue.json`.
+- Evidence: after decision commit2525760, land exited1 with that exact dirty path. Read-only LandingStateScout found only appended `race-item` and `active-item` entries, unknown origin; one process snapshot found no live queue operation. `requireClean` in scripts/build-loop/lanes.ts:78–83 gates land and all mutations, including block. No supported queue command removes existing entries. Neither identifier appears under this branch's scripts.
+- Tried: operator-authorized branch restore/catch-up; all incoming m5-ledger decisions read; clean typecheck, scripts55pass/303assertions, packaged build; affected remote162files all pass on replacement host with no flaky reruns. Diagnosed/provisioned missing Node fixture prerequisite on the new host. Committed all item work; no product changes needed during resume. Investigated dirty state without modifying integration, foreign commits, queue data, tests or protected scripts.
+- Required repair: an authorized owner must reconcile the integration queue's pending foreign entries, restoring a clean integration worktree. Then restore/requeue this preserved item if blocked and land via queue.ts. No product acceptance or review finding remains open.
