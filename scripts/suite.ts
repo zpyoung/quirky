@@ -11,8 +11,10 @@
  * so several runs at once share the host's cores (`slots` defaults to 8). Files start slowest first,
  * by the times logged in `~/test-slots/durations.log` there. A run from the integration or verify
  * worktree is a land, which holds the land lock while it runs, so it can use every slot while other
- * runs share one. Files listed in scripts/test-on-macos.txt still run
- * here, alongside. If the host can't be reached the whole run falls back to this machine.
+ *   runs share one. Files listed in scripts/test-on-macos.txt still run here, alongside. If the host
+ *   can't be reached the whole run falls back to this machine.
+ * Before local tests run, the CLI installs the current workspace's frozen dependencies; the remote
+ * worker already installs them in its fresh checkout.
  * `QUIRKY_TEST_LOCAL=1` skips the host.
  *
  *   bun scripts/suite.ts packages apps plugins
@@ -312,7 +314,10 @@ async function main(argv: string[]): Promise<boolean> {
     return result.ok
   }
   const remote = remoteConfig(cwd)
-  if (!remote) return (await runSuite(cwd, argv)).ok
+  if (!remote) {
+    if ((await exec(['bun', 'install', '--frozen-lockfile'], cwd)).code !== 0) return false
+    return (await runSuite(cwd, argv)).ok
+  }
   const flags = argv.filter((arg) => arg.startsWith('-'))
   const macos = macosOnly(join(cwd, MACOS_LIST))
   const files = discover(cwd, argv)
@@ -320,12 +325,21 @@ async function main(argv: string[]): Promise<boolean> {
   const there = files.filter((file) => !macos.has(file))
   console.log(`running ${there.length} test files on ${remote.host} and ${here.length} macOS-only files here`)
   const land = ['integration', 'verify'].includes(basename(cwd)) && basename(dirname(cwd)) === 'build-loop'
-  const [away, local] = await Promise.all([runRemote(cwd, remote, there, flags, land), runFiles(cwd, here, flags, 1)])
+  let localInstall: Promise<boolean> | undefined
+  const installLocal = () => localInstall ??= exec(['bun', 'install', '--frozen-lockfile'], cwd).then(({ code }) => code === 0)
+  const runLocal = async (files: string[]): Promise<SuiteResult> => {
+    if (files.length === 0) return { ok: true, flaky: [] }
+    if (!(await installLocal())) return { ok: false, flaky: [] }
+    return runFiles(cwd, files, flags, 1)
+  }
+  const [away, local] = await Promise.all([runRemote(cwd, remote, there, flags, land), runLocal(here)])
   if (away) {
     if (away.flaky.length > 0) recordFlakes(cwd, away.flaky)
     return away.ok && local.ok
   }
   console.error(`\n${remote.host} couldn't run the tests, so they run here instead`)
+  if (there.length === 0) return local.ok
+  if (!(await installLocal())) return false
   return (await runFiles(cwd, there, flags, 1)).ok && local.ok
 }
 

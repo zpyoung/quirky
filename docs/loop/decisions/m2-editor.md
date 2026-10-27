@@ -352,7 +352,51 @@
 - **Revisit if:** the same case fails in isolation or land verification reports a reproducible defect
 - **Source:** locked by docs/loop/decisions/fix-test-process-leaks.md
 
+## D33: Bootstrap candidate dependencies at the local test boundary
+- **Question:** Why did controller verification miss declared editor packages while the current checkout and remote tests resolved them?
+- **Options:** duplicate dependencies at the root; install by hand in the controller worktree; alter protected loop code; bootstrap the current checkout before local test execution
+- **Chose:** use the same unfiltered frozen root install at the suite CLI's local boundary that the remote-copy path already uses. Keep generic `runSuite`/`runFiles` fixture helpers independent of a package manifest. Do not edit protected prepareVerify or work manually in its tree.
+- **Why:** the controller installs before merging the candidate, then tests the merged source without a dependency refresh. React and Sanity are already runtime dependencies in the editor package and lockfile; the local failure was not an undeclared-package excuse.
+- **Evidence:** failed land bg_70; VerifyDependencyScout; protected lanes.ts install/merge order at 158-166 and 264-285; remote suite copy/install order
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** a clean candidate test process still cannot resolve a declared workspace dependency
+- **Source:** assumed — autonomous
+
+## D34: Reject stale fetched UI snapshots after a newer layout event
+- **Question:** Can an older in-flight UI snapshot overwrite a newer layout event during cross-feature navigation?
+- **Options:** raise view-test timeouts; disable editor startup; retain the newer event instead of applying an older in-flight snapshot
+- **Chose:** track UI-state event freshness in WindowPluginHost and ignore a fetched snapshot superseded while its request was in flight. Add a deterministic held-response/newer-event regression; keep daemon layout semantics and all plugin surfaces.
+- **Why:** the held-response regression establishes that ordering invariant independently. The two remaining Git waits did not mean their views never opened: one expected an unavailable host agent, and the other clicked the editor's global Collapse All instead of the combined-diff control. Those fixture corrections are separate from this host guard.
+- **Evidence:** LandLayoutRegressions; packages/ui/src/plugins/host.ts and its held-snapshot regression; exact controller wait predicates in ai.test.ts:190 and view-combined.test.ts:59
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** a newer event is lost or initial snapshot loading cannot complete
+- **Source:** assumed — autonomous
+
+## D35: Make environment and import-fence fixtures test their actual boundaries
+- **Question:** Which full-suite failures were invalid host/parser assumptions rather than missing feature implementations?
+- **Options:** restore real HOME; require installed/authenticated Claude; edit production text to evade a regex; use owned prerequisites and syntax-aware inspection
+- **Chose:** preserve HOME isolation; use a real temporary agent contribution for Create More, select the agent supplied by the AI-settings fixture, and remove the structured fake-runner test's unrelated host-Claude assertion. Scope combined-diff Collapse/Expand controls to their toolbar. Replace the import fence's raw-source regex with TypeScript syntax traversal, preserving type/runtime path and package rules.
+- **Why:** a quoted `import` string is not an import; isolated HOME must not depend on personal agent installations; multiple feature surfaces may legitimately expose the same button label. Keep actual ask, prompt, reset, recipe, collapse and public-boundary assertions rather than renaming production controls or restoring host state.
+- **Evidence:** exact controller wait predicates and fixture prerequisites; deterministic provider fixture; syntax-import-fence.log exit 0; bootstrap-suite-fixed.log exit 0
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** a real forbidden import escapes or a UI prerequisite still depends on host state
+- **Source:** assumed — autonomous
+
+## D36: Budget process-integration fixtures for awaited ownership cleanup
+- **Question:** How should the suite-runner tests account for several real Bun children and guardian teardown in one case?
+- **Options:** return before cleanup; remove isolation; use an outer integration-case bound while preserving functional cleanup assertions
+- **Chose:** 30-second bounds only on the unprotected suite-runner child-process integration cases. Keep the detached-process test's internal five-second cleanup assertion, production deadlines and protected loop-test bounds unchanged.
+- **Why:** default five-second case expiry deleted fixture directories while owned async children were still settling, producing collateral ENOENT errors. The fixtures must await their real child lifecycles rather than hide cleanup or depend on contention-free timing.
+- **Evidence:** bootstrap-suite-test.log; corrected recursive local-workspace fixture; bootstrap-suite-fixed.log exit 0 and repair-scripts.log exit 0
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** a functional cleanup assertion fails or a case exhausts its integration bound
+- **Source:** assumed — autonomous
+
 ## Progress
-Ready for step 7: the single catch-up is committed, all twelve incoming decision logs are read, post-merge typecheck and boundary tests pass, and the loaded scripts failure passes the retained isolated-file retry policy (D32). Core/API/real-kernel/browser evidence and the queued completion boundary remain in D25–D30. All owned UI/browser/shell fixtures are stopped and removed. Next: commit this record, detach and run queue land; land runs the whole suite. If the branch remains after an interrupted attempt, resume from the land result rather than claim another item or add another follow-up.
+Step 7 retry ready: the controller's concrete failures are repaired without another catch-up or protected-loop changes. Current-checkout frozen dependency bootstrap and its real workspace test pass; the syntax-aware fence, deterministic worktree/structured fixtures, host ordering regression, scoped combined-diff controls and AI defaults file pass. Latest scripts and typecheck pass. Original core/API/real-kernel/browser proof and the queued completion boundary remain unchanged. Next: commit/detach and retry queue land, which alone decides whether the full merge result is accepted.
 
 Last SC-9 point: Finder drops import copies under D19, including in-worktree sources. Native SC-9 stays pending for the nightly run. Open-in-place is owned by the operator's `m4-editor-drop-open-in-place`, not an m2-editor blocker.

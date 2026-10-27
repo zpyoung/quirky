@@ -219,7 +219,6 @@ describe('structured sessions with a runner', () => {
     await Bun.sleep(world.askWaitCapMs * 3)
     await call('quirky.ask/answer', { askId: ask.id, answers: { ok: { value: true, source: 'input' } } })
     expect((await pending).status).toBe('answered')
-    expect(await runner.context.resolveClaudePath()).toBeString()
   })
 
   test('closing a session declines its pending asks', async () => {
