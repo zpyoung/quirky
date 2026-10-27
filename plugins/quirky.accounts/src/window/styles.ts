@@ -25,7 +25,7 @@ export const ACCOUNTS_CSS = `
 .accounts-ui .badge.warning{background:color-mix(in srgb,var(--amber,#f0b429) 20%,transparent);color:var(--amber,#f0b429)}
 .accounts-ui .badge.danger{background:color-mix(in srgb,var(--danger,#e5534b) 20%,transparent);color:var(--danger,#e5534b)}
 .accounts-ui .empty-note{border:1px dashed var(--border,#2b2f3a);border-radius:7px;color:var(--muted,#8a909e);padding:12px}
-.accounts-ui .settings-shell{display:grid;grid-template-columns:minmax(150px,220px) minmax(0,1fr);height:100%;min-height:0}
+.accounts-ui.settings-shell{display:grid;grid-template-columns:minmax(150px,220px) minmax(0,1fr);height:100%;min-height:0}
 .accounts-ui .settings-nav{border-right:1px solid var(--border,#2b2f3a);display:flex;flex-direction:column;gap:4px;overflow:auto;padding:14px 10px}
 .accounts-ui .settings-nav button{text-align:left;background:transparent;border-color:transparent}
 .accounts-ui .settings-nav button[aria-current="page"]{background:var(--bg-active,#2d3240);border-color:var(--border,#2b2f3a)}
@@ -48,7 +48,7 @@ export const ACCOUNTS_CSS = `
 .accounts-ui .provider-letter{align-items:center;background:var(--bg-active,#2d3240);border-radius:4px;display:inline-flex;font-size:11px;font-weight:700;height:18px;justify-content:center;width:18px}
 .accounts-ui .meter{background:var(--border,#2b2f3a);border-radius:4px;height:6px;overflow:hidden;width:100%}
 .accounts-ui .meter>span{background:var(--meter-color,var(--accent,#4f8ff7));display:block;height:100%;width:var(--meter-width,0%)}
-.accounts-ui .usage-popover{box-shadow:0 12px 34px #0008;max-height:min(76vh,640px);min-width:340px;overflow:auto;position:absolute;right:0;top:calc(100% + 7px);width:min(440px,90vw);z-index:100}
+.accounts-ui .usage-popover{box-shadow:0 12px 34px #0008;bottom:calc(100% + 7px);max-height:min(76vh,640px);min-width:340px;overflow:auto;position:absolute;right:0;top:auto;width:min(440px,90vw);z-index:100}
 .accounts-ui .usage-popover-header{align-items:center;display:flex;justify-content:space-between;margin-bottom:10px}
 .accounts-ui .usage-controls{border-bottom:1px solid var(--border,#2b2f3a);margin-bottom:9px;padding-bottom:9px}
 .accounts-ui .segmented{background:var(--bg,#16181d);border:1px solid var(--border,#2b2f3a);border-radius:7px;display:inline-flex;padding:2px}
@@ -69,7 +69,7 @@ export const ACCOUNTS_CSS = `
 .accounts-ui .status-danger{color:var(--danger,#e5534b)}
 .accounts-ui .status-ready{color:var(--green,#3fb950)}
 .accounts-ui .status-loading{color:var(--muted,#8a909e)}
-.accounts-ui .context-menu{background:var(--bg-raised,#1d2027);border:1px solid var(--border,#2b2f3a);border-radius:8px;box-shadow:0 12px 34px #0008;display:flex;flex-direction:column;gap:4px;padding:8px;position:absolute;right:0;top:calc(100% + 4px);z-index:110}
+.accounts-ui .context-menu{background:var(--bg-raised,#1d2027);border:1px solid var(--border,#2b2f3a);border-radius:8px;box-shadow:0 12px 34px #0008;bottom:calc(100% + 4px);display:flex;flex-direction:column;gap:4px;padding:8px;position:absolute;right:0;top:auto;z-index:110}
 .accounts-ui .context-menu label,.accounts-ui .checkbox-row{align-items:center;display:flex;gap:8px;padding:5px 3px}
 .accounts-ui .login-notice{margin-top:9px}
 .accounts-ui .reset-confirm{border-color:var(--amber,#f0b429);margin-top:8px}
@@ -79,5 +79,5 @@ export const ACCOUNTS_CSS = `
 .accounts-ui .stale-row{align-items:flex-start;flex-direction:column}
 .accounts-ui .loading-indicator{animation:accounts-pulse 1.3s ease-in-out infinite}
 @keyframes accounts-pulse{50%{opacity:.45}}
-@media(max-width:640px){.accounts-ui .settings-shell{grid-template-columns:1fr}.accounts-ui .settings-nav{border-bottom:1px solid var(--border,#2b2f3a);border-right:0;flex-direction:row;overflow:auto}.accounts-ui .settings-content{padding:14px}.accounts-ui .account-row{align-items:flex-start;flex-direction:column}.accounts-ui .usage-popover{left:0;right:auto;min-width:min(340px,90vw)}}
+@media(max-width:640px){.accounts-ui.settings-shell{grid-template-columns:1fr}.accounts-ui .settings-nav{border-bottom:1px solid var(--border,#2b2f3a);border-right:0;flex-direction:row;overflow:auto}.accounts-ui .settings-content{padding:14px}.accounts-ui .account-row{align-items:flex-start;flex-direction:column}.accounts-ui .usage-popover{left:0;right:auto;min-width:min(340px,90vw)}}
 `
