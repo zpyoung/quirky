@@ -1,5 +1,5 @@
-import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
+import { BoundedConfigReadError, readBoundedConfig } from './bounded-read'
 import { isRecord } from './json'
 
 export type McpTransport = 'stdio' | 'http' | 'sse' | 'invalid'
@@ -73,10 +73,14 @@ export async function inspectMcp({ cwd, configDir }: { cwd: string; configDir: s
   for (const scope of scopes) {
     let contents: string
     try {
-      contents = await readFile(scope.path, 'utf8')
+      contents = (await readBoundedConfig(scope.path)).toString('utf8')
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
-        errors.push(`Could not read ${scope.label}`)
+        errors.push(
+          error instanceof BoundedConfigReadError
+            ? `Could not read ${scope.label}: ${error.message}`
+            : `Could not read ${scope.label}`
+        )
       }
       continue
     }
@@ -88,7 +92,6 @@ export async function inspectMcp({ cwd, configDir }: { cwd: string; configDir: s
       errors.push(`Malformed JSON in ${scope.label}`)
       continue
     }
-
     if (!isRecord(config)) {
       errors.push(`Invalid MCP config in ${scope.label}`)
       continue

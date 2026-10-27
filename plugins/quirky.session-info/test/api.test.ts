@@ -12,10 +12,13 @@ import {
   type StatusE2E
 } from '../../quirky.agent-status/test/e2e/support'
 import type { StartOptions } from '../../quirky.agents/test/support/e2e'
-import type { Session } from '@quirky/protocol'
+import type { PluginContext, Session } from '@quirky/protocol'
 
+import { resolveClaudeSettings } from '../src/claude-settings'
 import { isRecord } from '../src/json'
 import type { Inspection } from '../src/types'
+
+const MAX_SETTINGS_BYTES = 4 * 1024 * 1024
 type Identity = {
   agent: string
   sessionId: string
@@ -32,6 +35,31 @@ type Identity = {
   outputStyle?: string
   branch?: string
 }
+
+describe('Claude file-backed settings limits', () => {
+  test('accepts settings at 4 MiB and reports larger files without reading unbounded content', async () => {
+    const h = await start()
+    const configDir = join(h.userHome, 'bounded-config')
+    mkdirSync(configDir, { recursive: true })
+    const path = join(configDir, 'settings.json')
+    const prefix = '{"padding":"'
+    const suffix = '"}'
+    const atLimit = `${prefix}${'x'.repeat(MAX_SETTINGS_BYTES - prefix.length - suffix.length)}${suffix}`
+    const context = {
+      call: async (method: string) => method === 'quirky.agents/settingsOverlay' ? { settings: {} } : {},
+      error: (_code: string, message: string) => new Error(message)
+    } as unknown as PluginContext
+    const input = { cwd: h.repo, env: { CLAUDE_CONFIG_DIR: configDir } }
+
+    writeFileSync(path, atLimit)
+    const accepted = await resolveClaudeSettings(context, input)
+    expect((accepted.settings.padding as string).length).toBe(MAX_SETTINGS_BYTES - prefix.length - suffix.length)
+
+    writeFileSync(path, `${atLimit} `)
+    const rejected = await resolveClaudeSettings(context, input)
+    expect(rejected.errors.join(' ')).toContain(`exceeds ${MAX_SETTINGS_BYTES} bytes`)
+  })
+})
 
 type SessionInfo = {
   identity: Identity
@@ -265,6 +293,16 @@ async function callResult<T>(
   const result = await call(method, params)
   if (!guard(result)) throw new Error(`${method} returned an invalid result`)
   return result
+}
+
+async function withRemoteCallDeadline<T>(promise: Promise<T>, message: string): Promise<T> {
+  const timeout = Promise.withResolvers<never>()
+  const timer = setTimeout(() => timeout.reject(new Error(message)), 2_000)
+  try {
+    return await Promise.race([promise, timeout.promise])
+  } finally {
+    clearTimeout(timer)
+  }
 }
 
 function infoCall<Method extends keyof InfoRpcResults>(
@@ -652,6 +690,56 @@ describe('statusline settings, consent, and inspection', () => {
       statusLine: { type: 'command', command: expect.stringContaining('statusline-runner') }
     })
     expect(h.read('.claude/settings.json')).toBeNull()
+  }, 60_000)
+
+  test('rejects FIFO settings promptly and keeps the daemon and later MCP scopes responsive', async () => {
+    const h = await start()
+    const session = await newSession(h, 'claude')
+    const claudeDir = join(h.repo, '.claude')
+    mkdirSync(claudeDir, { recursive: true })
+    const settingsPath = join(claudeDir, 'settings.json')
+    const mkfifo = h.processScope.spawn(['/usr/bin/mkfifo', settingsPath], {
+      env: { HOME: h.userHome, PATH: '/usr/bin:/bin' },
+      stdout: 'ignore',
+      stderr: 'ignore'
+    })
+    expect(await mkfifo.exited).toBe(0)
+
+    // Real time bounds a remote RPC that can stall on FIFO I/O; fake timers cannot interrupt the daemon.
+    const overlayError = await withRemoteCallDeadline(
+      call('quirky.agents/settingsOverlay', {
+        agent: 'claude',
+        cwd: h.repo,
+        record: { command: 'claude', args: `--settings '${settingsPath}'`, env: {} }
+      }).then(
+        () => { throw new Error('settingsOverlay accepted a FIFO settings file') },
+        (error) => error as { code: number; message: string }
+      ),
+      'settingsOverlay blocked while reading a FIFO'
+    )
+    expect(overlayError).toMatchObject({ code: -32602 })
+    expect(overlayError.message).toContain('regular file')
+    expect(await call('quirky.agents/settingsOverlay', {
+      agent: 'claude',
+      cwd: h.repo,
+      record: { command: 'claude', args: '', env: {} }
+    })).toEqual({ settings: {} })
+
+    writeFileSync(join(h.repo, '.mcp.json'), JSON.stringify({
+      mcpServers: { workspace: { command: 'safe' } }
+    }))
+    writeFileSync(join(claudeDir, 'settings.local.json'), JSON.stringify({
+      mcpServers: { local: { command: 'safe' } }
+    }))
+    const inspection = await withRemoteCallDeadline(
+      infoCall('inspect', { session: session.id }),
+      'session inspection blocked while reading a FIFO'
+    )
+    expect(inspection.mcp).toEqual(expect.arrayContaining([
+      expect.objectContaining({ name: 'workspace', transport: 'stdio' }),
+      expect.objectContaining({ name: 'local', transport: 'stdio' })
+    ]))
+    expect(inspection.error).toContain('regular file')
   }, 60_000)
 
   test('SC-23/35: effective statusline reads CLAUDE_CONFIG_DIR and user --settings JSON, file and equals forms', async () => {

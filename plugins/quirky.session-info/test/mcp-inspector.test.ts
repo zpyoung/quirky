@@ -158,3 +158,16 @@ test('malformed and unreadable files report bounded errors without discarding ot
   expect(result.errors.join(' ')).not.toContain('malformed-secret')
   expect(result.errors.join(' ')).not.toContain('settings.local.json')
 })
+
+test('oversized workspace MCP config reports a visible error and preserves later scopes', async () => {
+  const fixture = makeFixture()
+  writeFileSync(join(fixture.cwd, '.mcp.json'), Buffer.alloc(4 * 1024 * 1024 + 1, 0x20))
+  writeConfig(join(fixture.cwd, '.claude', 'settings.json'), {
+    mcpServers: { validScope: { command: 'safe' } }
+  })
+
+  const result = await inspectMcp({ cwd: fixture.cwd, configDir: fixture.configDir })
+
+  expect(result.servers).toEqual([{ name: 'validScope', transport: 'stdio', state: 'enabled' }])
+  expect(result.errors.join(' ')).toContain('exceeds 4194304 bytes')
+})

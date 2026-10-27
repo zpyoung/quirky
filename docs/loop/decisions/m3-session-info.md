@@ -264,5 +264,60 @@
 - **Revisit if:** A dedicated test-performance item is authorized.
 - **Source:** assumed — autonomous
 
+## D25: Record repaired web flows and the remaining driver limitation
+- **Question:** The first web run found missing Usage Retry and could not sample the short copied label.
+- **Options:** Treat every missed transient as an app failure; distinguish observable behavior and the tool's sampling window.
+- **Chose:** The repaired primary run reports eleven pass and one partial. Usage Retry with Hooks & MCP closed visibly recovers 405 stale tokens to 810 fresh tokens and removes the error. Browser clipboard contents are proved by real UI paste. A fresh-browser supplement proves accordion persistence. After the floating keyboard repair and rebuild, both focused smoke goals pass: Cmd+T receives keyboard input without a prompt click, and exact main-pane focus restores the correct identity.
+- **Why:** These are actual visible effects, not mocked forwarding or a non-empty result. The official driver's multi-second settling misses a 1.5-second label; independent immediate screenshots show Copied and its reset. The denied-permission clipboard case was not exercised in the real browser; its UI error behavior is covered by the deterministic test, and native delivery remains pending.
+- **Evidence:** .quirk/using-apps-like-a-user/runs/20261027T160654-487b/report.md; 20261027T163909-5351/report.md; 20261027T164454-ab77/report.md. No console/network errors or test overrides. All browser sessions and fixture services ended; temporary homes removed.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** Native verification or another visible flow reports a failure.
+- **Source:** assumed — autonomous
+
+## D26: Complete one deep review round with an explicit security fallback
+- **Question:** The large prompt exceeded OS argv limits, then Gemini's security replies twice violated the required JSON shape.
+- **Options:** Repair reviewer output or call failure a pass; retain successful stages and use the documented fallback.
+- **Chose:** The full staged prompt is loaded in-process through the unchanged shipped pi-watch SDK entry, avoiding OS argv size limits. Successful resolve/prepass/model/criteria were reused unchanged. C and S completed deep promote/refute/gate/manifest with Gemini/high; X alone used Flash at its medium ceiling after Gemini's two format failures. No JSON was hand-repaired and no completed lens was rerun.
+- **Why:** All completed reviewers are Google-family, independent of OpenAI implementers. The native/aggregate final verdict is PASS with zero standing findings, advisories, limitations or contested claims. Only bun.lock (16 lines) was excluded by default diff hygiene.
+- **Evidence:** /tmp/quirky-session-info.TBh9Q4/final-review/run-20261027T173817Z-2c5670c8/report.md and combined-manifest.json; C/S native manifests in run-20261027T172738Z-26560287. The failed Gemini security attempt wrote three untracked probe scripts through Bash despite the read-only instruction; the tool trace attributes them, they were removed, and no remaining matching Bun probe process was found. That failed attempt is not used as clearance.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** A future review transport or permission boundary changes.
+- **Source:** assumed — autonomous
+
+## D27: Close supplemental final A1 with a real bounded-I/O fix
+- **Question:** A raw, nonconforming security response suggested an unbounded configuration-read risk; the parent independently tested it.
+- **Options:** Ignore it because the completed review found nothing; fix the confirmed resource boundary.
+- **Chose:** Accepted supplemental A1 (HIGH). An owned FIFO probe entered the actual synchronous settings parser and did not return within its deadline. The same parser is used by daemon planning; daemon-wide blocking is inferred from that synchronous call path. Agents settings, Claude settings and MCP inspection now open nonblocking, inspect the actual descriptor, require a regular file and bound reads to 4 MiB plus the one-byte growth check. Symlinks to regular files work; descriptors always close.
+- **Why:** Size checks after reading do not bound allocation, and path-level checks alone race replacement/growth. This fixes the mechanism rather than special-casing the probe filename. Ordinary settings/precedence and partial MCP results are preserved.
+- **Evidence:** /tmp/quirky-session-info.TBh9Q4/probe-settings-fifo.ts before: exited=false, ENTER_PARSE only; after: exited=true, REJECTED not-a-regular-file, exit0, owned cleanup awaited. All four targeted settings/bounded-read/MCP/API files pass, plus typecheck. final-adjudication.json preserves origin separately from native reviewer findings. The unrelated stdin-timeout hypothesis R1 is rejected: the provider supplies EOF and the specified watchdog bounds the chained command; no normal-flow failure was established.
+- **Reversibility:** medium
+- **Confidence:** high
+- **Revisit if:** A legitimate configuration needs a larger documented bound.
+- **Source:** assumed — autonomous
+
+## D28: Verify Windows file-opening semantics during its platform work
+- **Question:** Supplemental A1 uses nonblocking descriptor opening and POSIX FIFO regression fixtures.
+- **Options:** Pretend this proves every platform; retain the locked macOS scope and name the port check.
+- **Chose:** macOS validates this change here; the required post-fix gate also includes the remote runtime suite. Windows needs explicit O_NONBLOCK/special-file and symlink/FIFO-equivalent coverage when that platform is enabled. No silent fallback to unbounded reads is added.
+- **Why:** The loop explicitly builds/tests macOS and records places needing another platform's work.
+- **Evidence:** plugins/quirky.session-info/src/bounded-read.ts; plugins/quirky.agents/src/core/settings.ts; their boundary tests.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** Windows build/test work begins.
+- **Source:** deferred: platform
+
+## D29: Finish only through queue land after post-fix gates
+- **Question:** The finishing skill's merge, PR, keep or discard choice.
+- **Options:** Local integration; push/PR; keep unfinished; discard.
+- **Chose:** The loop's pre-authorized local integration path: commit, detach, queue.ts land. Never check out or modify main/build-roadmap directly, never push, and do not discard audit worktrees with destructive commands. Any land failure is handled by returning to the item branch, catching up and re-verifying.
+- **Why:** LOOP.md already chooses the workflow and forbids asking a person.
+- **Evidence:** docs/loop/LOOP.md steps 6–7.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** Queue land reports a new conflict or failure.
+- **Source:** locked by docs/loop/LOOP.md
+
 ## Progress
-Second official web run remains active on its fixed built snapshot; source floating-focus repair and incidental-test cleanup pass seven targeted files and typecheck. Do not rebuild assets until that run ends. Then rebuild, run a focused actual-web floating/keyboard supplement, commit report results, and repeat full-tree gates. Final Gemini review and queue landing have not run.
+All actual web runs and the deep final C/S/X round are complete; the sole official web partial is a documented transient-feedback sampling/failure-setup limitation, with actual copying and label/reset independently proved. The single supplemental A1 fix batch passes targeted API/boundary tests, the same FIFO smoke now rejects promptly, and typecheck passes. No app/browser fixture or reviewer remains live. Next: commit A1 and these results, rerun build/full suite/scripts/typecheck under the capped protocol, then queue land. No second final review round.

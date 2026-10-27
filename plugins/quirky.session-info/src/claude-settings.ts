@@ -1,11 +1,10 @@
 import { createHash } from 'node:crypto'
-import { readFile } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { isAbsolute, join, resolve } from 'node:path'
 import type { PluginContext } from '@quirky/protocol'
 import { isRecord } from './json'
+import { readBoundedConfig } from './bounded-read'
 
-const MAX_SETTINGS_BYTES = 4 * 1024 * 1024
 const MAX_ERROR_LENGTH = 500
 const SYSTEM_MANAGED_SETTINGS = '/Library/Application Support/ClaudeCode/managed-settings.json'
 
@@ -68,14 +67,10 @@ function mergeObjects(target: ObjectValue, source: ObjectValue): ObjectValue {
 async function readSettingsFile(path: string, errors: string[]): Promise<ObjectValue | null> {
   let content: Buffer
   try {
-    content = await readFile(path)
+    content = await readBoundedConfig(path)
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === 'ENOENT') return null
     errors.push(`${path}: ${safeError(error)}`)
-    return null
-  }
-  if (content.byteLength > MAX_SETTINGS_BYTES) {
-    errors.push(`${path}: settings file exceeds ${MAX_SETTINGS_BYTES} bytes`)
     return null
   }
   try {

@@ -35,6 +35,10 @@ Rich telemetry is accepted only for the captured active provider session; late t
 cannot populate another conversation. Claude hook health is based on observed, correlated
 per-launch hook evidence, not a claimed global installation. Transcript reads are bounded to
 16 MiB and accept only the recorded local path.
+Settings and MCP configuration files are limited to 4 MiB and must resolve to regular files;
+symlinks to regular files are supported. Oversized files, pipes and devices are rejected rather
+than read without a bound. Configured settings report an error; MCP inspection retains valid
+results from the other scopes.
 
 The API schemas are discoverable through `quirky api --json`.
 [Behavior and acceptance scenarios](../docs/quirk/specs/2026-10-27-m3-session-info/logic.md).

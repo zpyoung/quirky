@@ -1,11 +1,18 @@
 import { afterAll, describe, expect, test } from 'bun:test'
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { mergeSettings, parseSettingsArguments, SettingsError } from '../../src/core/settings'
 
 const cwd = mkdtempSync(join(tmpdir(), 'quirky-settings-'))
 afterAll(() => rmSync(cwd, { recursive: true, force: true }))
+const MAX_SETTINGS_BYTES = 4 * 1024 * 1024
+
+function jsonAtSettingsLimit(): string {
+  const prefix = '{"payload":"'
+  const suffix = '"}'
+  return `${prefix}${'x'.repeat(MAX_SETTINGS_BYTES - prefix.length - suffix.length)}${suffix}`
+}
 
 describe('parseSettingsArguments', () => {
   test('combines JSON and equals-form settings in argument order and removes their flags', () => {
@@ -36,6 +43,38 @@ describe('parseSettingsArguments', () => {
     expect(result.settings).toEqual({ hooks: { Stop: ['first'], SessionStart: ['second'] }, values: [2] })
   })
 
+  test('reads a valid settings file at the 4 MiB limit', () => {
+    const path = join(cwd, 'at-limit.json')
+    const contents = jsonAtSettingsLimit()
+    writeFileSync(path, contents)
+
+    const result = parseSettingsArguments(['--settings', path], cwd)
+
+    expect((result.settings.payload as string).length).toBe(MAX_SETTINGS_BYTES - '{"payload":"'.length - '"}'.length)
+  })
+
+  test('rejects settings files larger than the 4 MiB limit', () => {
+    const path = join(cwd, 'over-limit.json')
+    writeFileSync(path, `${jsonAtSettingsLimit()} `)
+
+    expect(() => parseSettingsArguments(['--settings', path], cwd)).toThrow(
+      `--settings file ${path} exceeds ${MAX_SETTINGS_BYTES} bytes`
+    )
+  })
+
+  test('follows symlinks to regular settings files', () => {
+    const target = join(cwd, 'symlink-target.json')
+    const link = join(cwd, 'symlink-settings.json')
+    writeFileSync(target, JSON.stringify({ linked: true }))
+    symlinkSync(target, link)
+
+    expect(parseSettingsArguments(['--settings', link], cwd).settings).toEqual({ linked: true })
+  })
+
+  test('rejects non-regular device settings files', () => {
+    expect(() => parseSettingsArguments(['--settings', '/dev/null'], cwd)).toThrow('regular file')
+  })
+
   test('does not treat arguments after the terminator as settings', () => {
     const after = join(cwd, 'after.json')
     writeFileSync(after, JSON.stringify({ after: true }))
@@ -61,6 +100,7 @@ describe('parseSettingsArguments', () => {
     const unsafe = '{"safe":true,"nested":{"constructor":{"prototype":{"polluted":true}}}}'
     expect(() => parseSettingsArguments(['--settings', unsafe], cwd)).toThrow(SettingsError)
   })
+
 })
 
 describe('mergeSettings', () => {

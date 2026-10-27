@@ -1,7 +1,9 @@
-import { readFileSync } from 'node:fs'
+import { closeSync, constants, fstatSync, openSync, readSync } from 'node:fs'
 import { isAbsolute, resolve } from 'node:path'
 
 export class SettingsError extends Error {}
+const MAX_SETTINGS_BYTES = 4 * 1024 * 1024
+const READ_CHUNK_BYTES = 64 * 1024
 
 export type ParsedSettingsArguments = {
   args: string[]
@@ -97,18 +99,47 @@ function parseJsonObject(text: string, source: string): Record<string, unknown> 
   return cloneJsonObject(value, source)
 }
 
+function readSettingsFile(path: string): string {
+  let descriptor: number | undefined
+  try {
+    descriptor = openSync(path, constants.O_RDONLY | constants.O_NONBLOCK)
+    const initialStat = fstatSync(descriptor)
+    if (!initialStat.isFile()) throw new SettingsError(`--settings file ${path} is not a regular file`)
+    if (initialStat.size > MAX_SETTINGS_BYTES) {
+      throw new SettingsError(`--settings file ${path} exceeds ${MAX_SETTINGS_BYTES} bytes`)
+    }
+
+    const chunks: Buffer[] = []
+    let totalBytes = 0
+    for (;;) {
+      const chunk = Buffer.allocUnsafe(Math.min(READ_CHUNK_BYTES, MAX_SETTINGS_BYTES + 1 - totalBytes))
+      const bytesRead = readSync(descriptor, chunk, 0, chunk.length, null)
+      if (bytesRead === 0) break
+      totalBytes += bytesRead
+      if (totalBytes > MAX_SETTINGS_BYTES) {
+        throw new SettingsError(`--settings file ${path} exceeds ${MAX_SETTINGS_BYTES} bytes`)
+      }
+      chunks.push(chunk.subarray(0, bytesRead))
+    }
+
+    if (fstatSync(descriptor).size > MAX_SETTINGS_BYTES) {
+      throw new SettingsError(`--settings file ${path} exceeds ${MAX_SETTINGS_BYTES} bytes`)
+    }
+    return Buffer.concat(chunks, totalBytes).toString('utf8')
+  } catch (error) {
+    if (error instanceof SettingsError) throw error
+    throw new SettingsError(`could not read --settings file ${path}: ${messageOf(error)}`)
+  } finally {
+    if (descriptor !== undefined) closeSync(descriptor)
+  }
+}
+
 function loadSettings(value: string, cwd: string): Record<string, unknown> {
   const trimmed = value.trim()
   if (trimmed.startsWith('{') || trimmed.startsWith('[')) return parseJsonObject(value, '--settings JSON')
 
   const path = isAbsolute(value) ? value : resolve(cwd, value)
-  let text: string
-  try {
-    text = readFileSync(path, 'utf8')
-  } catch (error) {
-    throw new SettingsError(`could not read --settings file ${path}: ${messageOf(error)}`)
-  }
-  return parseJsonObject(text, `--settings file ${path}`)
+  return parseJsonObject(readSettingsFile(path), `--settings file ${path}`)
 }
 
 /** Extracts all pre-terminator --settings JSON/files and returns the remaining tokens. */

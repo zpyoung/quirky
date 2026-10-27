@@ -1,6 +1,6 @@
 # Session Info technical specification
 
-Status: Ready for adversarial review. Complexity gate: crosses protocol/launch pipeline, built-in daemon plugin and UI. Behavioral authority: [logic.md](logic.md).
+Status: Implemented. Final deep Round 1 completed on snapshot 63a0169; supplemental A1 is addressed in the single post-review fix batch with targeted regression/smoke proof. Complexity gate: crosses protocol/launch pipeline, built-in daemon plugin and UI. Behavioral authority: [logic.md](logic.md).
 
 ## Architecture
 [Behavior](logic.md#conceptual-model), [data flow](logic.md#data-flow).
@@ -92,6 +92,11 @@ Generate private wrapper assets under plugin dataDir with restrictive modes; abs
 Subscribe to hook.received and status/session events. Lead Claude Stop (not sessionBoundary or subagent) triggers streaming/bounded transcript scan, filtering provider session and excluding sidechains; deduplicate streamed assistant updates by message identity so usage isn't counted twice. Keep last good values on errors, mark refreshing/stale, truncate errors to 500 chars. Fallback last assistant context estimates a 200000 window and is labeled estimated; statusline context takes precedence. Model precedence is statusline display_name, status row, transcript. Plan windows only from the same accepted payload, missing windows do not persist after a newer rate_limits object removes them.
 
 MCP inspection reads local known Claude configuration scopes (workspace .mcp.json, workspace Claude settings/local settings, user Claude config/settings, provider config where supported); deduplicate first scope by name. Identify stdio/http/sse or invalid entries; honor disabled/enabled server names. Never execute MCP server commands or read secrets into results. Independent parse errors remain visible without hiding successfully inspected components.
+
+### Configuration file resource boundary (supplemental A1)
+[Amendment](logic.md#status--amendments). `plugins/quirky.session-info/src/bounded-read.ts` provides private `readBoundedConfig(path: string): Promise<Buffer>` and a 4 MiB byte limit for settings/MCP files. It opens nonblocking, validates the actual opened descriptor as a regular file, and reads at most the limit plus one byte to detect growth; descriptors close on every path. Symlinks to regular files remain valid. `plugins/quirky.agents/src/core/settings.ts` implements the equivalent synchronous boundary for configured CLI settings without importing another plugin's private helper. Missing-file, JSON-error and partial MCP-result behavior stays intact. Oversized/non-regular configured settings reject through the existing invalid-params path; inspection failures remain visible without hiding other successful scopes.
+
+Tests: agents core settings, session-info bounded-read/MCP/API tests cover the exact size boundary, symlink behavior and FIFO rejection with the same daemon still responsive. The owned throwaway FIFO probe observes a blocked parse before the fix and prompt rejection afterward. No statusline-stdin timeout or new public API/setting is introduced.
 
 ## DO-NOT-CHANGE fences
 [Non-goals](logic.md#scope--non-goals).
