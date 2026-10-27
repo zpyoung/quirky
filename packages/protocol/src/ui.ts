@@ -204,8 +204,8 @@ export type UiPluginContext = {
   /** Shows a confirm dialog; resolves true when the person confirms. */
   confirm(options: { title: string; body?: string; confirmLabel?: string }): Promise<boolean>
   toast(title: string, body: string): void
-  /** Shows a count on the panel's toggle; null clears it. */
-  setPanelBadge(panelId: string, count: number | null): void
+  /** Shows a count on the panel's toggle, with `title` as its tooltip (default "<count> waiting"); null clears it. */
+  setPanelBadge(panelId: string, count: number | null, title?: string): void
 }
 
 /** The shape a plugin's UI module must export. */

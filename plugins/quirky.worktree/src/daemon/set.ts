@@ -21,12 +21,14 @@ export type SetParams = {
   unread?: boolean
   parent?: string
   noParent?: boolean
+  baseRef?: string | null
 }
 
 /**
  * Changes a workspace's metadata and returns the joined record. An empty `displayName` clears it;
  * `parent` names the workspace to nest under and `noParent` clears the link. A parent that is the
- * workspace itself or one of its descendants is refused as `parent-cycle`.
+ * workspace itself or one of its descendants is refused as `parent-cycle`. `baseRef` sets the
+ * workspace's own compare and rebase target; null or a blank string clears it.
  */
 export async function setWorktree(env: SetEnv, params: SetParams, identity: CallerIdentity): Promise<Worktree> {
   if (params.parent !== undefined && params.noParent === true) {
@@ -34,6 +36,9 @@ export async function setWorktree(env: SetEnv, params: SetParams, identity: Call
   }
   if (params.status !== undefined && !STATUSES.includes(params.status)) {
     throw env.fail('invalid-params', `status must be one of ${STATUSES.join(', ')}`)
+  }
+  if (params.baseRef !== undefined && params.baseRef !== null && typeof params.baseRef !== 'string') {
+    throw env.fail('invalid-params', 'baseRef must be a string or null')
   }
   const { worktree } = await env.find(params.worktree, identity)
 
@@ -48,6 +53,7 @@ export async function setWorktree(env: SetEnv, params: SetParams, identity: Call
   if (params.status !== undefined) assign('status', params.status)
   if (params.pinned !== undefined) assign('pinned', params.pinned ? 1 : 0)
   if (params.unread !== undefined) assign('unread', params.unread ? 1 : 0)
+  if (params.baseRef !== undefined) assign('base_ref', params.baseRef === null || params.baseRef.trim() === '' ? null : params.baseRef.trim())
   if (params.noParent === true) assign('parent_id', null)
   if (params.parent !== undefined) {
     const { worktree: parent } = await env.find(params.parent, identity)
