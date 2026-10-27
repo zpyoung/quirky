@@ -495,5 +495,16 @@
 - **Revisit if:** A supported module syntax bypasses the fence or valid non-module text is flagged.
 - **Source:** locked by the public-only plugin boundary and the operator's blocking-findings-only instruction
 
+## D46: Retry with the workspace present in the verifier's base
+- **Question:** Why did the land typecheck fail only for vault's protocol/React dependencies after tests and scripts passed?
+- **Options:** Add source-path shims or loosen types; edit the protected verifier; preserve the complete manifest/lockfile and retry against the newly published base containing the workspace.
+- **Chose:** The last option. No fake dependencies, tsconfig aliases, private imports or protected-loop edits.
+- **Why:** The actual verify worktree has no vault/node_modules; the feature worktree has all expected links. Manifest and lockfile declare protocol, React and both type packages. prepareVerify installs the base before tryMerge adds feature workspaces. The required catch-up now fast-forwards to7908a04, which already contains the vault workspace, so its next base install can materialize those links.
+- **Evidence:** land's whole test gate and scripts62pass succeeded, then typecheck reported missing modules only under quirky.vault. scripts/build-loop/lanes.ts:158-166,275-278; observed missing verify/plugins/quirky.vault/node_modules; package.json and bun.lock entries match. The incoming m4-hosting-api-github log was read completely; public onClose/lazy/confirmation contracts do not conflict with vault.
+- **Reversibility:** easy
+- **Confidence:** medium
+- **Revisit if:** The next base install still omits the workspace links; that is a verifier/install prerequisite, not permission to weaken types.
+- **Source:** assumed — autonomous, preserving protected loop and public module boundaries
+
 ## Progress
-Core implementation, packaged smoke, review/fix batch and affected gates are complete; both completion items are queued. The additive session conflict is resolved and144 integration files pass under runner policy. Land's whole gate found the import-fence false positive; D45 fixes it with4 passing regressions/typecheck. Runtime code is unchanged by that repair. Whole-suite success and done status remain owned by queue.ts land; no manual whole-suite run is claimed.
+Core implementation, packaged smoke, review/fix batch and affected gates are complete; both completion items are queued. The AST import fence passes. Land's whole suite and scripts62pass completed, but verifier typecheck lacked workspace links; D46 records the dependency-layout diagnosis and changed-base retry. No runtime or type-safety workaround was added. Final merged/done status remains owned by queue.ts land.
