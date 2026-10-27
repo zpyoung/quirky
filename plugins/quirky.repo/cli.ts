@@ -116,7 +116,7 @@ const named: CliModule['commands'] = {
 
   async rm(args, ctx) {
     const [repo] = args.positionals as [string]
-    const result = await ctx.call('quirky.repo/remove', { repo })
+    const result = await ctx.call('quirky.repo/remove', { repo, ...flagParams(args, { 'expected-ledgers': 'expectedLedgers' }) })
     ctx.out.result(result, () => `removed ${repo}`)
   },
 
@@ -217,7 +217,7 @@ const named: CliModule['commands'] = {
 
   async 'group-delete'(args, ctx) {
     const [group] = args.positionals as [string]
-    const result = await ctx.call('quirky.repo/groupDelete', { group })
+    const result = await ctx.call('quirky.repo/groupDelete', { group, ...flagParams(args, { 'expected-ledgers': 'expectedLedgers' }) })
     ctx.out.result(result, () => `deleted group ${group}`)
   },
 

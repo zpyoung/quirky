@@ -68,7 +68,7 @@ function locationOf(
   fail: Fail,
   externalHost?: string
 ): LedgerLocation {
-  const raw = typeof value === 'string' ? { ...parseRawPath(value, fail) } : isRecord(value) ? { ...value } : null
+  const raw: Record<string, unknown> | null = typeof value === 'string' ? { ...parseRawPath(value, fail) } : isRecord(value) ? { ...value } : null
   if (!raw) fail('invalid-request', 'location must be a path string or structured location')
   if (typeof raw.path !== 'string' || !raw.path.trim()) fail('invalid-request', 'location path must be a non-empty string')
   let base: LedgerLocation['base']

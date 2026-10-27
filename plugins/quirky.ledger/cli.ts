@@ -101,9 +101,9 @@ function filtersOf(args: CliArgs, operation: LedgerOperation): LedgerRequest['fi
     if (value !== undefined) filters[key] = value as never
   }
   const reviewed = args.flags.reviewed
-  if (reviewed === true || reviewed === false) filters.reviewed = reviewed
+  if (reviewed === 'true' || reviewed === 'false') filters.reviewed = reviewed === 'true'
   const stale = args.flags.stale
-  if (stale === true || stale === false) filters.stale = stale
+  if (stale === 'true' || stale === 'false') filters.stale = stale === 'true'
   const originWorkspace = optionalString(args, 'origin-workspace')
   const workspaceFilter = operation === 'list' && (args.flags.ledger !== undefined || args.flags.owner !== undefined) ? optionalString(args, 'workspace') : undefined
   const selected = originWorkspace ?? workspaceFilter
@@ -141,6 +141,7 @@ function requestOf(operation: LedgerOperation, args: CliArgs, ctx: CliContext): 
     'stale-after-days': 'staleAfterDays'
   }
   for (const [flag, key] of Object.entries(scalarFlags)) {
+    if ((operation === 'list' || operation === 'review') && (key === 'type' || key === 'state')) continue
     if (args.flags[flag] !== undefined) (request as Record<string, unknown>)[key] = args.flags[flag]
   }
   const content = contentOf(args, ctx)
@@ -227,8 +228,7 @@ async function run(operation: LedgerOperation, args: CliArgs, ctx: CliContext): 
   if (operation === 'delete-ledger' && request.ifLedgerRevision === undefined) throw ctx.usage('Missing required --if-ledger-revision')
   const { operation: _operation, ...params } = request
   const response = (await ctx.call(`quirky.ledger/${operation}`, params as Record<string, unknown>)) as LedgerResponse
-  const envelope = { id: 'ledger', ok: true, result: response, _meta: { runtimeId: response.runtime.runtimeId } }
-  ctx.out.result(envelope, () => textOf(operation, response))
+  ctx.out.result(response, () => textOf(operation, response))
   if (operation === 'import' && (response.importResult?.skipped.length ?? 0) > 0) {
     throw ctx.fail(`ledger import skipped ${response.importResult!.skipped.length} record${response.importResult!.skipped.length === 1 ? '' : 's'}`)
   }

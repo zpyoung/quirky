@@ -392,7 +392,6 @@
             },
             "expectedLedgers": {
               "type": "array",
-              "maxItems": 10000,
               "items": {
                 "type": "object",
                 "properties": {
@@ -1204,7 +1203,6 @@
             },
             "expectedLedgers": {
               "type": "array",
-              "maxItems": 10000,
               "items": {
                 "type": "object",
                 "properties": {

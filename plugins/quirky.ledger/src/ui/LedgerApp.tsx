@@ -74,7 +74,7 @@ function activeWorkspace(layout: UiLayout): string | null {
 }
 
 
-function repoName(repo: RepoInfo | undefined): string {
+function repoName(repo: RepoInfo | null | undefined): string {
   if (!repo) return 'Unknown project'
   return repo.displayName || repo.name || repo.id
 }
@@ -719,13 +719,14 @@ export function LedgerApp({
         if (!command.id) throw new Error('Ledger detail requires an entry id.')
         {
           const requestTarget = command.target ?? pageLedgerTarget
+          if (!requestTarget) throw new Error('Open a ledger before showing an entry.')
           const found = command.target ? undefined : entries.find((entry) => entry.id === command.id)
           if (found) await openDetail(found, requestTarget)
-          else if (requestTarget) {
+          else {
             const result = await ledgerRequest(context, { operation: 'show', target: requestTarget, id: command.id })
             if (!result.entry) throw new Error(`Ledger entry ${command.id} was not found.`)
             await openDetail(result.entry, requestTarget)
-          } else throw new Error('Open a ledger before showing an entry.')
+          }
         }
         break
       case 'new':
@@ -769,6 +770,7 @@ export function LedgerApp({
 
   useEffect(() => {
     return context.subscribe((event) => {
+      if (event.type === 'quirky.ledger/changed' || event.type === 'quirky.repo/changed' || event.type === 'quirky.worktree/changed') {
         void loadCatalog()
         void loadEntries()
         if (triageOpen) void loadCandidates()
@@ -862,6 +864,14 @@ export function LedgerApp({
   const renderPanel = () => {
     const noWorkspace = !workspaceId && !directory.loading
     const groupScope = scope === 'group' || workspaceFolder
+    const missingGroup = scope === 'group'
+      && panelTargetOverride === null
+      && workspaceId !== null
+      && workspace !== null
+      && workspaceGroup === null
+      && !directory.loading
+      && !directory.error
+      && !error
     return (
       <section className="ledger-root ledger-panel" aria-label="Ledger panel">
         <style>{LEDGER_CSS}</style>
@@ -888,7 +898,7 @@ export function LedgerApp({
         {error && <p role="alert" className="ledger-error">{error}<button type="button" onClick={refresh}>Retry</button></p>}
         {!directory.loading && !noWorkspace && !missingGroup && loading && <p className="ledger-state-message">Loading ledger…</p>}
         {!directory.loading && !noWorkspace && !missingGroup && !loading && !error && visibleRows.length === 0 && <div className="ledger-empty"><p>No entries match this view.</p><button type="button" onClick={beginNew}>New entry</button></div>}
-        {!directory.loading && !error && <ul className="ledger-entry-list">{visibleRows.map(renderRow)}</ul>}
+        {!directory.loading && !error && !missingGroup && <ul className="ledger-entry-list">{visibleRows.map(renderRow)}</ul>}
       </section>
     )
   }

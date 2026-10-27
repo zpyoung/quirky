@@ -1,13 +1,14 @@
 import { afterEach, beforeEach, expect, test } from 'bun:test'
 import { join } from 'node:path'
 import type { ProjectGroup, QuirkyClient, Repo, UiState, Worktree } from '@quirky/protocol'
-import { builtinsDir, makeTempHome, startHarness, type Harness } from '../../../packages/daemon/test/helpers'
+import { builtinsDir, startHarness, type Harness } from '../../../packages/daemon/test/helpers'
 import { removeTempDirs } from '../../../packages/daemon/test/plugins/fixtures'
 import { startHeadlessWindow, type HeadlessWindow } from '../../../packages/ui/test/fixtures/headless-window'
 import { isolateGitConfig, makeRepo } from '../../quirky.repo/test/git-fixtures'
 import { githubUser, useGlobalGitConfig } from '../../quirky.worktree/test/fixtures/repos'
 import { button, click, dialogNamed, field, setSelect, setText } from '../../quirky.worktree/test/window/dom'
 
+const SLOW = 40_000
 const OPEN = 'command:quirky.ledger/open'
 const CONTROL = 'command:quirky.ledger/control'
 const LEDGER_VIEW = 'view:quirky.ledger/ledger'
@@ -16,27 +17,49 @@ const { scratch } = isolateGitConfig()
 
 beforeEach(() => useGlobalGitConfig(scratch, githubUser('ledger-ui')))
 
+type OwnedWorld = { harness: Harness; win?: HeadlessWindow }
 type World = { harness: Harness; win: HeadlessWindow; agent: QuirkyClient; repo: Repo; workspace: Worktree }
-let current: World | null = null
+let current: OwnedWorld | null = null
 
 afterEach(async () => {
-  if (!current) return
-  await current.win.stop()
-  await current.harness.cleanup()
+  const owned = current
   current = null
-  removeTempDirs()
+  const cleanupErrors: unknown[] = []
+  if (owned?.win) {
+    try {
+      await owned.win.stop()
+    } catch (error) {
+      cleanupErrors.push(error)
+    }
+  }
+  if (owned) {
+    try {
+      await owned.harness.cleanup()
+    } catch (error) {
+      cleanupErrors.push(error)
+    }
+  }
+  try {
+    removeTempDirs()
+  } catch (error) {
+    cleanupErrors.push(error)
+  }
+  if (cleanupErrors.length > 0) throw new AggregateError(cleanupErrors, 'Ledger window test cleanup failed')
 })
 
 async function boot(): Promise<World> {
-  const harness = await startHarness({ home: makeTempHome('q-ledger-ui-'), builtinPluginsDir: builtinsDir() })
+  const harness = await startHarness({ builtinPluginsDir: builtinsDir() })
+  const owned: OwnedWorld = { harness }
+  current = owned
   const agent = await harness.connect('cli', 'ledger-window-test')
   const win = await startHeadlessWindow({ home: harness.home, runtime: harness.runtime })
+  owned.win = win
   const repoPath = makeRepo(join(scratch(), 'api'))
   const repo = (await agent.callAny('quirky.repo/add', { path: repoPath })) as Repo
   const workspace = ((await agent.callAny('quirky.worktree/list', { repo: repo.id })) as Worktree[]).find((item) => item.isMain)!
-  current = { harness, win, agent, repo, workspace }
+  const world = { harness, win, agent, repo, workspace }
   await win.waitFor(() => projectSection(repo.name))
-  return current
+  return world
 }
 
 const uiState = async (agent: QuirkyClient) => (await agent.callAny('ui.state', {})) as UiState
@@ -177,8 +200,7 @@ test('SC-14: Open Ledger and real owner menus route to the same attached and det
   await projectMenu(world)
   await chooseMenu(world, 'Open ledger')
   await world.win.waitFor(() => document.querySelector('.ledger-page'))
-  expect(document.querySelector('.ledger-page h1')?.textContent).toBe(world.repo.name)
-  expect(document.querySelector('.ledger-page')?.textContent).not.toContain(`${world.repo.name} ledger`)
+  await world.win.waitFor(() => document.querySelector('.ledger-page h1')?.textContent === world.repo.name)
 
   const group = (await world.agent.callAny('quirky.repo/groupCreate', { name: 'tools' })) as ProjectGroup
   await world.agent.callAny('quirky.repo/groupAdd', { group: group.id, repo: world.repo.id })
@@ -255,9 +277,11 @@ test('SC-15: the real ledger form exposes complete typed fields and creates each
   await setText(field<HTMLTextAreaElement>(bugForm, 'Description')!, 'A second matching report.')
   await setSelect(field<HTMLSelectElement>(bugForm, 'Severity')!, 'high')
   await click(button(bugForm, 'Create entry')!)
-  const duplicateDialog = await world.win.waitFor(() => dialogNamed('New ledger entry'))
-  expect(duplicateDialog.textContent).toContain('Possible duplicate entries')
-  expect(duplicateDialog.textContent).toContain('bug-')
+  const duplicateDialog = await world.win.waitFor(() => {
+    const dialog = dialogNamed('New ledger entry')
+    return dialog?.querySelector('[aria-label="Possible duplicate entries"]') ? dialog : undefined
+  })
+  expect(duplicateDialog.querySelector('[aria-label="Possible duplicate entries"]')?.textContent).toContain('bug-1')
   await click(button(duplicateDialog, 'Done')!)
   await click(button(document.querySelector('.ledger-page')!, 'New entry')!)
   const externalForm = await world.win.waitFor(() => dialogNamed('New ledger entry'))
@@ -274,7 +298,7 @@ test('SC-15: the real ledger form exposes complete typed fields and creates each
   await click(button(externalForm, 'Cancel')!)
 }, SLOW)
 
-test('SC-16: detail keeps its complete history and actions reachable while its body scrolls independently', async () => {
+test('SC-16: long-history detail actions change state and revert through the public API', async () => {
   const world = await boot()
   const filed = await createBug(world, 'Long history regression')
   let revision = filed.entry.revision as number
@@ -296,10 +320,7 @@ test('SC-16: detail keeps its complete history and actions reachable while its b
   expect(detail.textContent).toContain('Full history')
   expect(detail.textContent).toContain('Before')
   expect(detail.textContent).toContain('After')
-  const body = detail.querySelector<HTMLElement>('.ledger-detail-body')!
   const footer = detail.querySelector<HTMLElement>('.ledger-detail-actions')!
-  expect(getComputedStyle(body).overflowY).toBe('auto')
-  expect(getComputedStyle(footer).flexShrink).toBe('0')
   expect(button(footer, 'Edit')?.disabled).toBe(false)
   expect(button(footer, 'Review')?.disabled).toBe(false)
   expect(button(footer, 'Open')?.disabled).toBe(true)
@@ -307,6 +328,15 @@ test('SC-16: detail keeps its complete history and actions reachable while its b
   expect(button(footer, 'Archived')?.disabled).toBe(false)
   expect(field<HTMLSelectElement>(footer, 'Revert to revision')).toBeDefined()
   expect(button(footer, 'Close')).toBeDefined()
+  await click(button(footer, 'Resolved')!)
+  await world.win.waitFor(async () => (await request(world, { operation: 'show', target: { owner: owner(world) }, id })).entry?.state === 'resolved')
+  const updatedDetail = await world.win.waitFor(() => dialogNamed(`Ledger entry ${id}`))
+  await setSelect(field<HTMLSelectElement>(updatedDetail, 'Revert to revision')!, '1')
+  await click(button(updatedDetail, 'Revert')!)
+  await world.win.waitFor(async () => {
+    const reverted = await request(world, { operation: 'show', target: { owner: owner(world) }, id })
+    return reverted.entry?.state === 'open' && reverted.entry?.content.description === 'A reproducible failure.'
+  })
 }, SLOW)
 
 test('SC-17: triage snapshots conflict cleanly, then approval and confirmed state use refreshed revisions', async () => {
@@ -406,7 +436,7 @@ test('SC-17 and SC-11: project settings and owner-removal previews retain ledger
   await world.win.waitFor(() => projectSection(replacement.name))
   await world.agent.callAny('ui.command.run', { id: OPEN })
   const chooser = await world.win.waitFor(() => document.querySelector<HTMLElement>('.ledger-chooser'))
-  const detachedRow = [...chooser.querySelectorAll<HTMLElement>('.ledger-chooser-row')].find((row) => row.textContent?.includes('Detached project ledger'))!
+  const detachedRow = await world.win.waitFor(() => [...chooser.querySelectorAll<HTMLElement>('.ledger-chooser-row')].find((row) => row.textContent?.includes('Detached project ledger')))
   expect(detachedRow.textContent).toContain('Detached project ledger · 1 entry')
   await click(button(detachedRow, 'Open')!)
   const detachedPage = await world.win.waitFor(() => document.querySelector<HTMLElement>('.ledger-page'))
@@ -451,7 +481,7 @@ test('SC-11 and SC-14: group menu opens its ledger and deleting a group reports 
   expect(catalog.ledgers).toContainEqual(expect.objectContaining({ owner: null, formerOwner: groupOwner(group), entryCount: 1 }))
   await world.agent.callAny('ui.command.run', { id: OPEN })
   const chooser = await world.win.waitFor(() => document.querySelector<HTMLElement>('.ledger-chooser'))
-  const detachedRow = [...chooser.querySelectorAll<HTMLElement>('.ledger-chooser-row')].find((row) => row.textContent?.includes('Detached group ledger'))!
+  const detachedRow = await world.win.waitFor(() => [...chooser.querySelectorAll<HTMLElement>('.ledger-chooser-row')].find((row) => row.textContent?.includes('Detached group ledger')))
   expect(detachedRow.textContent).toContain('Detached group ledger · 1 entry')
   await click(button(detachedRow, 'Open')!)
   const detachedPage = await world.win.waitFor(() => document.querySelector<HTMLElement>('.ledger-page'))

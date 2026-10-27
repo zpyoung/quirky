@@ -107,10 +107,13 @@ export function ProjectSettingsDialog({ context, repo, onClose }: Props) {
     }
   }, [context, repo.id])
   useEffect(() => {
+    const element = ledgerSettingsMount.current
     if (repo.kind !== 'git' || !formReady || !element) return
     setLedgerMountError('')
     try {
-      return context.mountView('view:quirky.ledger/settings', element, { repoId: repo.id })
+      const unmount = context.mountView('view:quirky.ledger/settings', element, { repoId: repo.id })
+      // Let the dialog's unmount commit finish before tearing down the embedded React root.
+      return () => { queueMicrotask(unmount) }
     } catch (error) {
       setLedgerMountError(`Ledger Staleness is unavailable: ${messageOf(error)}`)
     }

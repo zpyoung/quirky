@@ -94,7 +94,7 @@ export function selectWorkspaceOwner(
       const byId = eligible.filter((item) => item.id === target.groupSelector)
       const matches = byId.length ? byId : eligible.filter((item) => item.name === target.groupSelector)
       const choices = eligible.map(({ id, name }) => ({ id, name }))
-      if (matches.length === 0) fail('group-missing', `no eligible group matches ${target.groupSelector}`, { eligible: choices })
+      if (matches.length === 0) fail('group-ambiguous', `${target.groupSelector} matches no eligible group`, { eligible: choices })
       if (matches.length > 1) fail('group-ambiguous', `${target.groupSelector} matches more than one eligible group`, { eligible: choices })
       const selected = matches[0]!
       return ownerFor(catalog, { tier: 'group', id: selected.id })
@@ -102,7 +102,8 @@ export function selectWorkspaceOwner(
     return ownerFor(catalog, { tier: 'group', id: membership.id })
   }
   if (workspace.repo.kind === 'folder') {
-    return workspace.group ? ownerFor(catalog, { tier: 'group', id: workspace.group.id }) : null
+    if (!workspace.group) fail('group-missing', 'workspace has no group')
+    return ownerFor(catalog, { tier: 'group', id: workspace.group.id })
   }
   return ownerFor(catalog, { tier: 'project', id: workspace.repo.id })
 }

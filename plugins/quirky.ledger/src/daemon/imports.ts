@@ -82,7 +82,7 @@ function tableRecords(lines: string[], type: LedgerType, sourcePath: string, sou
         const value = cells[cellIndex]
         if (value !== undefined && value !== '') content[key] = value
       }
-      const id = extractLegacyId(content.legacy_id) ?? extractLegacyId(content.title)?.id
+      const id = extractLegacyId(content.legacy_id) ?? extractLegacyId(content.title)
       const legacyId = id?.id
       if (!legacyId) {
         skipped.push({ sourcePath, reason: 'missing-legacy-id' })
@@ -112,10 +112,11 @@ function parseLabels(lines: string[]): Record<string, unknown> {
   const content: Record<string, unknown> = {}
   let current: string | null = null
   for (const raw of lines) {
-    const label = raw.match(/^\s*(?:[-*+]\s*)?(?:\*\*([^*]+?)\*\*\s*:?|([^:]+))\s*:\s*(.*)$/)
+    const label = raw.match(/^\s*(?:[-*+]\s*)?\*\*([^*]+?)(?::\*\*|\*\*\s*:)\s*(.*)$/)
+      ?? raw.match(/^\s*(?:[-*+]\s*)?([^:|]+)\s*:\s*(.*)$/)
     if (label) {
-      current = keyOf(label[1] ?? label[2] ?? '')
-      const value = cleanValue(label[3] ?? '')
+      current = keyOf(label[1] ?? '')
+      const value = cleanValue(label[2] ?? '')
       content[current] = value
       continue
     }
@@ -132,8 +133,7 @@ function headingRecords(text: string, type: LedgerType, sourcePath: string, sour
   for (let h = 0; h < headings.length; h += 1) {
     const item = headings[h]!
     const heading = item.match![2]!.trim()
-    const level = item.match![1]!.length
-    const end = headings.slice(h + 1).find((next) => next.match![1]!.length <= level)?.index ?? lines.length
+    const end = headings[h + 1]?.index ?? lines.length
     const content = parseLabels(lines.slice(item.index + 1, end))
     const explicit = extractLegacyId(heading)
     const fromField = extractLegacyId(content.legacy_id)
@@ -171,7 +171,7 @@ function adrRecord(text: string, sourcePath: string, sourceBase: LedgerLocation[
   const first = headings[0]
   const heading = first?.match?.[2]?.trim() ?? ''
   const id = extractLegacyId(heading) ?? extractLegacyId(values.legacy_id)
-  const titleFromHeading = id?.title
+  const titleFromHeading = id?.title ?? heading
   const content: Record<string, unknown> = { ...values }
   if (titleFromHeading && !content.title) content.title = titleFromHeading
   for (let h = 1; h < headings.length; h += 1) {
@@ -182,10 +182,9 @@ function adrRecord(text: string, sourcePath: string, sourceBase: LedgerLocation[
     const value = body.replace(/\r\n/g, '\n').split('\n').slice(item.index + 1, end).join('\n').trim()
     if (value) content[section] = value
   }
-  if (!id?.id) return { skipped: { sourcePath, reason: 'missing-legacy-id' } }
   if (typeof content.status === 'string') content.status = content.status.toLowerCase()
   delete content.legacy_id
-  return { record: { type: 'decision', content, sourcePath, sourceBase, legacyId: id.id } }
+  return { record: { type: 'decision', content, sourcePath, sourceBase, legacyId: id?.id ?? sourcePath } }
 }
 
 function normalizeEnumFields(type: LedgerType, content: Record<string, unknown>): void {
@@ -197,7 +196,7 @@ function normalizeEnumFields(type: LedgerType, content: Record<string, unknown>)
 export async function readLegacyImports(root: string, base: LedgerLocation['base']): Promise<{ records: ImportRecord[]; skipped: ImportSkip[] }> {
   const records: ImportRecord[] = []
   const skipped: ImportSkip[] = []
-  const paths = SOURCES.map(({ file, type }) => ({ file, type }))
+  const paths = SOURCES.map(({ file, type }) => ({ file: join(root, file), type }))
   let adrFiles: string[] = []
   const adrRoot = join(root, 'docs', 'adr')
   try {

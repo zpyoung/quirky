@@ -115,25 +115,26 @@ export function activate(context: UiPluginContext): void {
     return undefined
   }
 
+  // Slot cleanup may run during the shell's React commit; nested roots unmount afterward.
   context.provide(LEDGER_VIEW_ID, (element: HTMLElement, props: MountProps) => {
     const root = createRoot(element)
     root.render(<LedgerApp context={context} input={props.input} report={props.report} mode="page" registerControl={registerControl} />)
-    return () => root.unmount()
+    return () => queueMicrotask(() => root.unmount())
   })
   context.provide(LEDGER_PANEL_ID, (element: HTMLElement, props: MountProps) => {
     const root = createRoot(element)
     root.render(<LedgerApp context={context} input={props.input} report={props.report} mode="panel" registerControl={registerControl} />)
-    return () => root.unmount()
+    return () => queueMicrotask(() => root.unmount())
   })
   context.provide(LEDGER_SIDEBAR_ID, (element: HTMLElement, props: MountProps) => {
     const root = createRoot(element)
     root.render(<LedgerSidebarSection context={context} report={props.report} />)
-    return () => root.unmount()
+    return () => queueMicrotask(() => root.unmount())
   })
   context.provide(LEDGER_SETTINGS_VIEW_ID, (element: HTMLElement, props: MountProps) => {
     const root = createRoot(element)
     root.render(<LedgerSettings context={context} input={props.input} report={props.report} />)
-    return () => root.unmount()
+    return () => queueMicrotask(() => root.unmount())
   })
 
   context.provide('command:quirky.ledger/open', (args?: unknown) => context.openView(LEDGER_VIEW_ID, openArgs(args)))

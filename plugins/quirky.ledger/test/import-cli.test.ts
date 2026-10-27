@@ -14,7 +14,8 @@ type JsonEntry = {
   history?: { revision: number; actor?: Record<string, unknown> }[]
 }
 type JsonSummary = { ledgerId: string; tier: string; revision: number; entryCount: number; nextSequence: number; owner?: unknown }
-type JsonOutput = {
+type JsonError = { code: string; message?: string; data?: Record<string, unknown> }
+type JsonPayload = {
   schemaVersion?: number
   runtime?: { runtimeId: string; profileId: string }
   ledger?: JsonSummary | null
@@ -24,8 +25,9 @@ type JsonOutput = {
   ledgers?: JsonSummary[]
   candidates?: { entry: JsonEntry; stale: boolean; reason: string; evidence?: Record<string, unknown> }[]
   importResult?: { created: string[]; updated: string[]; alreadyPresent: string[]; skipped: { anchor?: string; reason: string; sourcePath?: string }[] }
-  error?: { code: string; message: string; data?: Record<string, unknown> }
+  removalPreview?: { ledgerId: string; revision: number; entryCount: number }[]
 }
+type JsonOutput = (JsonPayload & { error?: never }) | (Partial<JsonPayload> & { error: JsonError })
 type CliRunOptions = { cwd?: string; env?: Record<string, string> }
 
 let h: LedgerHarness | undefined
@@ -71,7 +73,7 @@ function sourcePathMatches(skip: { sourcePath?: string }, filename: string): boo
 }
 
 function expectSourcesUnchanged(root: string, before: Map<string, Buffer>): void {
-  for (const [path, bytes] of before) expect(readFileSync(join(root, path))).toEqual(bytes)
+  for (const [path, bytes] of before) expect(readFileSync(join(root, path)).equals(bytes)).toBe(true)
 }
 
 const bugFlags = ['--type', 'bug', '--title', 'CLI bug', '--file', 'src/main.ts:13', '--description', 'Filed by CLI', '--severity', 'high']
@@ -390,7 +392,7 @@ describe('Project ledger CLI: legacy import formats and replay safety', () => {
     expect(readFileSync(join(root, 'BUGS.md'))).toEqual(newerBytes)
   })
 
-  test('equivalent project attachment prevents an imported source anchor from colliding into a duplicate entry', async () => {
+  test('equivalent project attachment reuses a unique imported source anchor without creating a duplicate', async () => {
     const harness = await start()
     const original = harness.project
     const source = `## BUG-22: Same canonical source identity\nFile: src/main.ts:22\nDescription: Imported before attachment.\nSeverity: high\n`
@@ -411,15 +413,25 @@ describe('Project ledger CLI: legacy import formats and replay safety', () => {
     }, ui)
     writeSource(destination.path, 'BUGS.md', source)
 
-    const collision = await ledgerCli(harness, ['import', '--json'], { cwd: destination.path })
-    expect(collision.code).toBe(1)
-    const skips = jsonOutput(collision).importResult?.skipped ?? []
-    expect(skips).toHaveLength(1)
-    expect(skips[0]!).toMatchObject({ reason: 'canonical-anchor-collision' })
-    expect(sourcePathMatches(skips[0]!, 'BUGS.md')).toBe(true)
+    const repeated = jsonOutput(await successfulCli(harness, ['import', '--json'], { cwd: destination.path }))
+    expect(repeated.importResult?.created).toEqual([])
+    expect(repeated.importResult?.skipped).toEqual([])
+    expect([...(repeated.importResult?.updated ?? []), ...(repeated.importResult?.alreadyPresent ?? [])]).toEqual(['bug-1'])
     const list = jsonOutput(await successfulCli(harness, ['list', '--json'], { cwd: destination.path }))
     expect(list.entries?.map((entry) => entry.id)).toEqual(['bug-1'])
     expect(list.entries?.[0]?.content.title).toBe('Same canonical source identity')
     ui.close()
+  })
+  test('an ADR without an explicit legacy ID uses its source path as a stable import identity', async () => {
+    const harness = await start()
+    const source = '# Keep ledger history\n\n## Context\nEntries outlive checkouts.\n\n## Decision\nKeep durable history.\n\n## Consequences\nStorage grows with edits.\n\n## Status\naccepted\n'
+    writeSource(harness.project.path, 'docs/adr/retention.md', source)
+    const imported = jsonOutput(await successfulCli(harness, ['import', '--json']))
+    expect(imported.importResult).toEqual({ created: ['decision-1'], updated: [], alreadyPresent: [], skipped: [] })
+    const repeated = jsonOutput(await successfulCli(harness, ['import', '--json']))
+    expect(repeated.importResult).toEqual({ created: [], updated: [], alreadyPresent: ['decision-1'], skipped: [] })
+    const entry = jsonOutput(await successfulCli(harness, ['show', 'decision-1', '--json']))
+    expect(entry.entry?.content).toMatchObject({ title: 'Keep ledger history', decision: 'Keep durable history.', status: 'accepted' })
+    expect(readFileSync(join(harness.project.path, 'docs/adr/retention.md'), 'utf8')).toBe(source)
   })
 })

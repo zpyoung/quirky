@@ -1,4 +1,6 @@
-import { join } from 'node:path'
+import { mkdirSync } from 'node:fs'
+import type { LedgerResponse } from '../src/types'
+import { dirname, join } from 'node:path'
 import type { ClientRole, QuirkyClient, Repo, Worktree } from '@quirky/protocol'
 import { runCli as runCliProcess, type CliResult } from '../../../packages/cli/test/fixtures/fake-daemon'
 import { makeRepo, git } from '../../quirky.repo/test/git-fixtures'
@@ -14,8 +16,8 @@ export type LedgerHarness = {
   home: string
   project: LedgerProject
   connectAs(role?: ClientRole, project?: LedgerProject): Promise<QuirkyClient>
-  request(params: Record<string, unknown>, client?: QuirkyClient): Promise<unknown>
-  operation(operation: string, params: Record<string, unknown>, client?: QuirkyClient): Promise<unknown>
+  request(params: Record<string, unknown>, client?: QuirkyClient): Promise<LedgerResponse>
+  operation(operation: string, params: Record<string, unknown>, client?: QuirkyClient): Promise<LedgerResponse>
   addProject(name: string, options?: { files?: Record<string, string>; origin?: string }): Promise<LedgerProject>
   runCli(args: string[], options?: { cwd?: string; env?: Record<string, string> }): Promise<CliResult>
   restart(): Promise<void>
@@ -31,7 +33,11 @@ export async function startLedgerHarness(): Promise<LedgerHarness> {
     name: string,
     options: { files?: Record<string, string>; origin?: string } = {}
   ): Promise<LedgerProject> => {
-    const path = makeRepo(join(home, 'projects', name), options.files)
+    const requestedPath = join(home, 'projects', name)
+    for (const relativePath of Object.keys(options.files ?? {})) {
+      mkdirSync(join(requestedPath, dirname(relativePath)), { recursive: true })
+    }
+    const path = makeRepo(requestedPath, options.files)
     if (options.origin) git(path, 'remote', 'add', 'origin', options.origin)
     const repo = (await plugins.client.callAny('quirky.repo/add', { path })) as Repo
     const worktrees = (await plugins.client.callAny('quirky.worktree/list', { repo: repo.id })) as Worktree[]
@@ -59,10 +65,10 @@ export async function startLedgerHarness(): Promise<LedgerHarness> {
         return plugins.connectAs({ cwd: currentProject.path, worktreeId: currentProject.workspace.id }, role)
       },
       request(params, client = plugins.client) {
-        return client.callAny('quirky.ledger/request', params)
+        return client.callAny('quirky.ledger/request', params) as Promise<LedgerResponse>
       },
       operation(operationName, params, client = plugins.client) {
-        return client.callAny(`quirky.ledger/${operationName}`, params)
+        return client.callAny(`quirky.ledger/${operationName}`, params) as Promise<LedgerResponse>
       },
       addProject,
       runCli(args, options = {}) {

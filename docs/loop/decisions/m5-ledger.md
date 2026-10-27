@@ -143,5 +143,38 @@
 - **Revisit if:** a worker requires an out-of-scope shared file
 - **Source:** assumed — autonomous
 
+## D14: Enforce the actual public schema subset and canonical filesystem paths
+- **Question:** Why did the first integration gate fail (implementation/debugging)?
+- **Options:** bypass schema validation; use supported schemas and fix fixture preconditions
+- **Chose:** remove unsupported maxItems declarations while keeping handler bounds; explicitly describe closed target/filter objects and permit dynamic content; use the canonical path returned by makeRepo and create nested fixture parents
+- **Why:** plugin diagnostics proved malformed JSON and unsupported array keywords invalidated repo/worktree contributions; later real requests proved empty object schemas reject all properties. macOS /var aliases invalidated direct fixture path comparison. None are reasons to weaken the public validator.
+- **Evidence:** plugin.list diagnostic in iteration 2; packages/protocol/src/schema.ts:3-30,168-183; targeted ledger tests; docs/quirk/specs/2026-10-27-m5-ledger/tech.md
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** public schema vocabulary grows
+- **Source:** assumed — autonomous
+
+## D15: Test consumer invariants rather than SQLite bytes or asynchronous loading frames
+- **Question:** Which failing assertions were invalid assumptions rather than feature defects (verification)?
+- **Options:** change production behavior to satisfy every assertion; remove incidental checks and exercise meaningful transitions
+- **Chose:** remove raw database-byte equality, default-order assumptions, CSS-property assertions and premature loading-frame assertions; test preserved corrupt content, unordered filter membership, actual detail state/revert actions, and await rendered result states
+- **Why:** SQLite checkpoint headers legitimately change; collection filtering does not imply sequence order; happy-dom CSS values cannot prove a footer is visible. The built browser smoke remains the visual regression check. Canonical import matching with one equivalent anchor is replay, not a collision: original Orca code skips only when more than one anchor matches.
+- **Evidence:** /Users/zpyoung/PycharmProjects/orca/src/main/ledger/ledger-import-record.ts:25-31,54-91; plugins/quirky.ledger/test/{ledger,import-cli,window}.test.ts
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** browser evidence contradicts the reachable-footer requirement
+- **Source:** assumed — autonomous
+
+## D16: Correct import paths, value flags and Quirky JSON rather than copy Orca's transport envelope
+- **Question:** Which CLI/import failures changed consumer behavior (verification)?
+- **Options:** adapt tests to broken imports/envelopes; correct the feature to the reviewed contract
+- **Chose:** join legacy source names to the selected workspace root; parse both bold label forms and ADR source-path identity fallback; keep standard Quirky JSON results; make reviewed/stale value-taking true/false flags; route list type/state only into filters
+- **Why:** actual CLI imports had ignored legacy files relative to process cwd, boolean switches treated false as a positional, and an extra Orca envelope hid result fields. Added a failing-before/passing-after ADR identity test.
+- **Evidence:** plugins/quirky.ledger/src/daemon/imports.ts; plugins/quirky.ledger/cli.ts; CLI suite 11 pass; API suite 25 pass; window suite 7 pass; typecheck/build exited 0 before nested-root teardown correction
+- **Reversibility:** medium
+- **Confidence:** high
+- **Revisit if:** direct CLI/API scenario tests fail
+- **Source:** assumed — autonomous
+
 ## Progress
-Both specs authored and reviewed in one real Codex promote/refute pass (reduced same-family independence, mandated by LOOP.md); confirmed findings corrected. D12 records the NEEDS_FIXES gate and all adjudications; not a claimed clean gate. Next: commit specs/decisions; create disjoint daemon and UI component worktrees, implement, audit/integrate, run API/CLI/window and whole-suite checks, merge build/roadmap and read incoming decisions, run one Gemini final review/fix batch, built-web smoke, and land m5-ledger. No implementation yet.
+Implementation integrated from audited daemon/UI component worktrees. Parent restored out-of-scope repo CLI edits before initial integration; a later explicitly scoped repair added the required snapshot forwarding. Generated .serena scaffolding removed. Targeted checks: ledger API 25 pass, real CLI/import 11 pass, window 7 pass; typecheck and production build exited 0. Parent then deferred nested ledger React-root cleanup until after shell commit to fix observed lifecycle warnings. Next: commit integration repairs; merge build/roadmap and read all incoming decisions; run complete remote suite/scripts/typecheck/build; actual built-web smoke; one Gemini three-lens final review/fix batch; update evidence/docs and land m5-ledger. All implementation/repair workers have returned.

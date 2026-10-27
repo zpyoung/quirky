@@ -175,14 +175,14 @@ export class LedgerEngine {
       if (expected !== ledger.revision) this.fail('conflict', 'Ledger revision is stale', { currentRevision: ledger.revision })
       if (ledger.owner_id !== null) this.fail('attachment-refused', 'only a detached ledger can be attached')
       const attachTo = this.validateAttachTo(request.attachTo, ledger, resolved.catalog)
-      if (this.store!.get('SELECT 1 FROM ledgers WHERE tier = ? AND owner_id = ?', attachTo.tier, attachTo.id)) this.fail('attachment-refused', 'target owner already has a ledger')
+      if (this.store!.get('SELECT 1 FROM ledgers WHERE tier = ? AND owner_id = ?', attachTo.owner.tier, attachTo.owner.id)) this.fail('attachment-refused', 'target owner already has a ledger')
       const former = asFormerOwner(ledger)
       if (!former) this.fail('attachment-refused', 'detached ledger has no former owner metadata')
-      if (ledger.tier === 'project' && former.id !== attachTo.id) {
-        const equivalences = this.addEquivalence(parseJson<string[][]>(ledger.source_equivalences, 'source equivalences'), former.id, attachTo.id)
+      if (ledger.tier === 'project' && former.id !== attachTo.owner.id) {
+        const equivalences = this.addEquivalence(parseJson<string[][]>(ledger.source_equivalences, 'source equivalences'), former.id, attachTo.owner.id)
         if (this.hasCanonicalAnchorCollision(ledger.ledger_id, equivalences)) this.fail('attachment-refused', 'attachment would collapse import anchors')
       }
-      return `Attach detached ${ledger.tier} ledger ${ledger.ledger_id} at revision ${ledger.revision} to ${attachTo.tier} ${attachTo.id}.`
+      return `Attach detached ${ledger.tier} ledger ${ledger.ledger_id} at revision ${ledger.revision} to ${attachTo.owner.tier} ${attachTo.owner.id}.`
     }
     const selections = this.validateSelections(request.selections)
     const expectedRows = this.checkSelectionsCurrent(selections, ledger.ledger_id)
@@ -204,8 +204,10 @@ export class LedgerEngine {
     throw error
   }
 
-  private ensureHealthy(): asserts this is this & { store: PluginStore } {
-    if (!this.store || this.storeFailure) this.fail('incompatible-store', `Ledger service is unavailable: ${this.storeFailure ?? 'store unavailable'}`)
+  private ensureHealthy(): PluginStore {
+    const store = this.store
+    if (!store || this.storeFailure) this.fail('incompatible-store', `Ledger service is unavailable: ${this.storeFailure ?? 'store unavailable'}`)
+    return store
   }
 
   private async ensureCatalog(): Promise<OwnerCatalog> {
@@ -240,7 +242,7 @@ export class LedgerEngine {
   }
 
   private async performReconciliation(generation: number): Promise<void> {
-    this.ensureHealthy()
+    const store = this.ensureHealthy()
     this.unavailable = true
     let catalog: OwnerCatalog
     try {
@@ -252,26 +254,26 @@ export class LedgerEngine {
     const identities = new Map<string, string>()
     const projectRepos = catalog.repos.filter((repo) => repo.kind === 'git')
     for (const repo of projectRepos) {
-      const saved = this.store.get<{ identity_key: string }>('SELECT identity_key FROM repo_identities WHERE repo_id = ?', repo.id)?.identity_key
+      const saved = store.get<{ identity_key: string }>('SELECT identity_key FROM repo_identities WHERE repo_id = ?', repo.id)?.identity_key
       if (saved) identities.set(repo.id, saved)
       else {
-        const attached = this.store.get<LedgerRow>('SELECT * FROM ledgers WHERE tier = ? AND owner_id = ?', 'project', repo.id)
+        const attached = store.get<LedgerRow>('SELECT * FROM ledgers WHERE tier = ? AND owner_id = ?', 'project', repo.id)
         identities.set(repo.id, attached?.identity_key ?? await canonicalRepositoryIdentity(repo))
       }
     }
     if (generation !== this.generation) return
-    const changed = this.store.transaction(() => {
+    const changed = store.transaction(() => {
       let any = false
       const now = isoNow()
       for (const repo of projectRepos) {
         const identity = identities.get(repo.id)!
-        const existing = this.store.get<{ repo_id: string }>('SELECT repo_id FROM repo_identities WHERE repo_id = ?', repo.id)
-        if (existing) this.store.run('UPDATE repo_identities SET identity_key = ? WHERE repo_id = ?', identity, repo.id)
-        else this.store.run('INSERT INTO repo_identities (repo_id, identity_key) VALUES (?, ?)', repo.id, identity)
+        const existing = store.get<{ repo_id: string }>('SELECT repo_id FROM repo_identities WHERE repo_id = ?', repo.id)
+        if (existing) store.run('UPDATE repo_identities SET identity_key = ? WHERE repo_id = ?', identity, repo.id)
+        else store.run('INSERT INTO repo_identities (repo_id, identity_key) VALUES (?, ?)', repo.id, identity)
       }
       const groups = new Set(catalog.groups.map((group) => group.id))
       const repos = new Set(projectRepos.map((repo) => repo.id))
-      for (const row of this.store.all<LedgerRow>('SELECT * FROM ledgers WHERE owner_id IS NOT NULL')) {
+      for (const row of store.all<LedgerRow>('SELECT * FROM ledgers WHERE owner_id IS NOT NULL')) {
         const live = row.tier === 'project' ? repos.has(row.owner_id!) : groups.has(row.owner_id!)
         if (!live) {
           const before = { owner: asOwner(row), formerOwner: asFormerOwner(row), name: row.name }
@@ -281,7 +283,7 @@ export class LedgerEngine {
         } else {
           const currentOwner = { tier: row.tier, id: row.owner_id! } as LedgerOwner
           const current = ownerFor(catalog, currentOwner)
-          if (current) this.store.run('UPDATE ledgers SET name = ?, owner_path = ?, repo_id = ? WHERE ledger_id = ?', current.name, current.path ?? null, current.repoId ?? null, row.ledger_id)
+          if (current) store.run('UPDATE ledgers SET name = ?, owner_path = ?, repo_id = ? WHERE ledger_id = ?', current.name, current.path ?? null, current.repoId ?? null, row.ledger_id)
         }
       }
       const liveIdentityCounts = new Map<string, number>()
@@ -289,8 +291,8 @@ export class LedgerEngine {
       for (const repo of projectRepos) {
         const identity = identities.get(repo.id)!
         if (liveIdentityCounts.get(identity) !== 1) continue
-        if (this.store.get('SELECT 1 FROM ledgers WHERE tier = ? AND owner_id = ?', 'project', repo.id)) continue
-        const candidates = this.store.all<LedgerRow>('SELECT * FROM ledgers WHERE tier = ? AND owner_id IS NULL AND identity_key = ?', 'project', identity)
+        if (store.get('SELECT 1 FROM ledgers WHERE tier = ? AND owner_id = ?', 'project', repo.id)) continue
+        const candidates = store.all<LedgerRow>('SELECT * FROM ledgers WHERE tier = ? AND owner_id IS NULL AND identity_key = ?', 'project', identity)
         if (candidates.length !== 1) continue
         const candidate = candidates[0]!
         const owner = { tier: 'project', id: repo.id }
@@ -544,10 +546,12 @@ export class LedgerEngine {
   private origin(workspace: WorkspaceContext | undefined, owner: LedgerOwner): LedgerEntry['origin'] {
     const observedAt = isoNow()
     if (!workspace) return { owner, observedAt }
+    const branch = workspace.workspace.branch
+    const branchRef = branch === null ? null : branch.startsWith('refs/heads/') ? branch : `refs/heads/${branch}`
     return {
       workspaceId: workspace.workspace.id,
       owner,
-      ...(workspace.workspace.branch ? { branch: workspace.workspace.branch } : {}),
+      ...(branchRef ? { branch: branchRef } : {}),
       host: 'local',
       ...(workspace.workspace.head ? { revision: workspace.workspace.head } : {}),
       observedAt
@@ -643,13 +647,14 @@ export class LedgerEngine {
   private async revert(request: LedgerRequest, caller: PluginCaller, resolved: Resolved): Promise<Result> {
     const ifRevision = this.validateRevision(request)
     const toRevision = expectedRevision(request.toRevision, 'toRevision', this.fail.bind(this))
-    if (!request.id?.trim()) this.fail('invalid-request', 'revert requires an entry id')
-    if (!resolved.ledger) this.fail('not-found', `entry ${request.id} not found`)
+    const id = request.id
+    if (!id?.trim()) this.fail('invalid-request', 'revert requires an entry id')
+    if (!resolved.ledger) this.fail('not-found', `entry ${id} not found`)
     const changed = this.store!.transaction(() => {
-      const current = this.requireEntry(resolved.ledger!.ledger_id, request.id!)
+      const current = this.requireEntry(resolved.ledger!.ledger_id, id)
       this.checkEntryRevision(current, ifRevision)
-      const history = this.store!.get<HistoryRow>('SELECT * FROM history WHERE ledger_id = ? AND entry_id = ? AND revision = ?', resolved.ledger!.ledger_id, request.id, toRevision)
-      if (!history) this.fail('not-found', `revision ${toRevision} not found for ${request.id}`)
+      const history = this.store!.get<HistoryRow>('SELECT * FROM history WHERE ledger_id = ? AND entry_id = ? AND revision = ?', resolved.ledger!.ledger_id, id, toRevision)
+      if (!history) this.fail('not-found', `revision ${toRevision} not found for ${id}`)
       const target = parseJson<LedgerSnapshot>(history.after, 'history snapshot')
       const currentContent = parseJson<Record<string, unknown>>(current.content, 'entry content')
       const targetContent = target.content
@@ -663,7 +668,7 @@ export class LedgerEngine {
       return true
     })
     const ledger = this.store!.get<LedgerRow>('SELECT * FROM ledgers WHERE ledger_id = ?', resolved.ledger.ledger_id)!
-    const entry = this.requireEntry(ledger.ledger_id, request.id)
+    const entry = this.requireEntry(ledger.ledger_id, id)
     return { response: { ...this.response(ledger, resolved.catalog, true), entry: this.entry(entry) }, changed }
   }
 
@@ -901,7 +906,6 @@ export class LedgerEngine {
     this.requireConfirmation(request)
     if (!resolved.ledger) this.fail('not-found', 'ledger not found')
     const expected = expectedRevision(request.ifLedgerRevision, 'ifLedgerRevision', this.fail.bind(this), true)
-    const summary = this.summary(resolved.ledger, resolved.catalog, true)
     this.store!.transaction(() => {
       const current = this.store!.get<LedgerRow>('SELECT * FROM ledgers WHERE ledger_id = ?', resolved.ledger!.ledger_id)
       if (!current) this.fail('not-found', 'ledger not found')
@@ -911,7 +915,7 @@ export class LedgerEngine {
       this.store!.run('DELETE FROM anchors WHERE ledger_id = ?', current.ledger_id)
       this.store!.run('DELETE FROM ledgers WHERE ledger_id = ?', current.ledger_id)
     })
-    return { response: { ...this.response(null, resolved.catalog), ledger: summary }, changed: true }
+    return { response: this.response(null, resolved.catalog), changed: true }
   }
 
   private async settings(request: LedgerRequest, caller: PluginCaller, resolved: Resolved): Promise<Result> {
@@ -942,23 +946,23 @@ export class LedgerEngine {
       if (!current) this.fail('not-found', 'ledger not found')
       if (current.revision !== expected) this.fail('conflict', 'Ledger revision is stale', { currentRevision: current.revision })
       if (current.owner_id !== null) this.fail('attachment-refused', 'only a detached ledger can be attached')
-      if (current.tier !== attachTo.tier) this.fail('attachment-refused', 'ledger and owner tiers must match')
-      if (this.store!.get('SELECT 1 FROM ledgers WHERE tier = ? AND owner_id = ?', attachTo.tier, attachTo.id)) this.fail('attachment-refused', 'target owner already has a ledger')
+      if (current.tier !== attachTo.owner.tier) this.fail('attachment-refused', 'ledger and owner tiers must match')
+      if (this.store!.get('SELECT 1 FROM ledgers WHERE tier = ? AND owner_id = ?', attachTo.owner.tier, attachTo.owner.id)) this.fail('attachment-refused', 'target owner already has a ledger')
       let equivalences = parseJson<string[][]>(current.source_equivalences, 'source equivalences')
       const former = asFormerOwner(current)
       if (!former) this.fail('attachment-refused', 'detached ledger has no former owner metadata')
-      if (current.tier === 'project' && former.id !== attachTo.id) {
-        equivalences = this.addEquivalence(equivalences, former.id, attachTo.id)
+      if (current.tier === 'project' && former.id !== attachTo.owner.id) {
+        equivalences = this.addEquivalence(equivalences, former.id, attachTo.owner.id)
         if (this.hasCanonicalAnchorCollision(current.ledger_id, equivalences)) this.fail('attachment-refused', 'attachment would collapse import anchors')
       }
       const nextIdentity = current.tier === 'project'
-        ? this.store!.get<{ identity_key: string }>('SELECT identity_key FROM repo_identities WHERE repo_id = ?', attachTo.id)?.identity_key ?? null
+        ? this.store!.get<{ identity_key: string }>('SELECT identity_key FROM repo_identities WHERE repo_id = ?', attachTo.owner.id)?.identity_key ?? null
         : null
       if (current.tier === 'project' && !nextIdentity) this.fail('catalog-unavailable', 'project identity mapping is unavailable')
       const before = { owner: null, formerOwner: former, identityKey: current.identity_key, sourceEquivalences: parseJson<string[][]>(current.source_equivalences, 'source equivalences') }
-      const after = { owner: { tier: attachTo.tier, id: attachTo.id }, formerOwner: former, identityKey: nextIdentity, sourceEquivalences: equivalences }
+      const after = { owner: attachTo.owner, formerOwner: former, identityKey: nextIdentity, sourceEquivalences: equivalences }
       this.updateMetadata(current, 'attached', before, after, this.actor(caller), {
-        owner_id: attachTo.id,
+        owner_id: attachTo.owner.id,
         former_tier: former.tier,
         former_id: former.id,
         name: attachTo.name,
@@ -974,9 +978,9 @@ export class LedgerEngine {
 
   private validateAttachTo(value: LedgerOwner | undefined, ledger: LedgerRow, catalog: OwnerCatalog): LiveOwner {
     if (!value || (value.tier !== 'project' && value.tier !== 'group') || typeof value.id !== 'string' || !value.id.trim()) this.fail('invalid-request', 'attachTo must identify a project or group')
+    if (value.tier !== ledger.tier) this.fail('attachment-refused', 'ledger and owner tiers must match')
     const owner = ownerFor(catalog, value)
     if (!owner) this.fail('owner-missing', `attachment owner ${value.id} is not live`)
-    if (value.tier !== ledger.tier) this.fail('attachment-refused', 'ledger and owner tiers must match')
     return owner
   }
 

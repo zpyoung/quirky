@@ -3,6 +3,7 @@ import type { Repo, Session, UiPluginContext, Worktree } from '@quirky/protocol'
 import { removeProject } from './actions'
 import { expectedLedgerSnapshots, ledgerRetentionNotice, previewLedgerRemoval, type LedgerRemovalPreview } from './ledger'
 import { repoLabel } from './report'
+import { Dialog } from './Dialog'
 
 type Props = {
   context: UiPluginContext

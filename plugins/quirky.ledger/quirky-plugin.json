@@ -26,42 +26,42 @@
               "type": "object",
               "properties": {
                 "workspaceId": { "type": "string" },
-                "owner": { "type": "object", "properties": { "tier": { "type": "string" }, "id": { "type": "string" } }, "required": ["tier", "id"] },
+                "owner": { "type": "object", "properties": { "tier": { "type": "string", "enum": ["project", "group"] }, "id": { "type": "string" } }, "required": ["tier", "id"] },
                 "ledgerId": { "type": "string" },
                 "group": { "type": "boolean" },
                 "groupSelector": { "type": "string" }
               }
             },
-            "type": { "type": "string" },
-            "content": { "type": "object" },
+            "type": { "type": "string", "enum": ["bug", "deferred", "test-gap", "proposal", "decision"] },
+            "content": { "type": "object", "additionalProperties": true },
             "id": { "type": "string" },
             "ifRevision": { "type": "integer", "minimum": 1 },
             "toRevision": { "type": "integer", "minimum": 1 },
-            "state": { "type": "string" },
+            "state": { "type": "string", "enum": ["open", "resolved", "archived"] },
             "filters": {
               "type": "object",
               "properties": {
-                "type": { "type": "string" },
-                "state": { "type": "string" },
+                "type": { "type": "string", "enum": ["bug", "deferred", "test-gap", "proposal", "decision"] },
+                "state": { "type": "string", "enum": ["open", "resolved", "archived"] },
                 "reviewed": { "type": "boolean" },
                 "stale": { "type": "boolean" },
                 "workspaceId": { "type": "string" },
                 "branch": { "type": "string" },
                 "search": { "type": "string" },
-                "sort": { "type": "string" }
+                "sort": { "type": "string", "enum": ["activity", "sequence", "title"] }
               }
             },
-            "selections": { "type": "array", "maxItems": 10000, "items": { "type": "object", "properties": { "id": { "type": "string" }, "revision": { "type": "integer", "minimum": 1 } }, "required": ["id", "revision"] } },
+            "selections": { "type": "array", "items": { "type": "object", "properties": { "id": { "type": "string" }, "revision": { "type": "integer", "minimum": 1 } }, "required": ["id", "revision"] } },
             "ifLedgerRevision": { "type": "integer", "minimum": 0 },
-            "attachTo": { "type": "object", "properties": { "tier": { "type": "string" }, "id": { "type": "string" } }, "required": ["tier", "id"] },
+            "attachTo": { "type": "object", "properties": { "tier": { "type": "string", "enum": ["project", "group"] }, "id": { "type": "string" } }, "required": ["tier", "id"] },
             "confirmed": { "type": "boolean" },
             "staleAfterDays": { "type": "integer", "minimum": 0, "maximum": 3650 },
             "removal": {
               "type": "object",
               "properties": {
-                "repoIds": { "type": "array", "maxItems": 10000, "items": { "type": "string" } },
-                "groupIds": { "type": "array", "maxItems": 10000, "items": { "type": "string" } },
-                "expectedLedgers": { "type": "array", "maxItems": 10000, "items": { "type": "object", "properties": { "ledgerId": { "type": "string" }, "revision": { "type": "integer", "minimum": 0 } }, "required": ["ledgerId", "revision"] } }
+                "repoIds": { "type": "array", "items": { "type": "string" } },
+                "groupIds": { "type": "array", "items": { "type": "string" } },
+                "expectedLedgers": { "type": "array", "items": { "type": "object", "properties": { "ledgerId": { "type": "string" }, "revision": { "type": "integer", "minimum": 0 } }, "required": ["ledgerId", "revision"] } }
               }
             }
           },
@@ -73,58 +73,58 @@
         "id": "describe",
         "description": "Describes the exact destructive action and immutable revision snapshots for standard confirmation.",
         "readOnly": true,
-        "params": { "type": "object" },
+        "params": { "type": "object", "additionalProperties": true },
         "result": { "type": "string" }
       },
       {
         "id": "file",
         "description": "Files a typed observation in a project or group ledger.",
-        "params": { "type": "object", "properties": { "target": { "type": "object" }, "type": { "type": "string" }, "content": { "type": "object" } }, "required": ["type", "content"] },
+        "params": { "type": "object", "properties": { "target": { "type": "object", "properties": { "workspaceId": { "type": "string" }, "owner": { "type": "object", "properties": { "tier": { "type": "string", "enum": ["project", "group"] }, "id": { "type": "string" } }, "required": ["tier", "id"] }, "ledgerId": { "type": "string" }, "group": { "type": "boolean" }, "groupSelector": { "type": "string" } } }, "type": { "type": "string", "enum": ["bug", "deferred", "test-gap", "proposal", "decision"] }, "content": { "type": "object", "additionalProperties": true } }, "required": ["type", "content"] },
         "result": { "type": "object" }
       },
       {
         "id": "list",
         "description": "Lists entries in the selected ledger with origin, state, review and freshness filters.",
         "readOnly": true,
-        "params": { "type": "object", "properties": { "target": { "type": "object" }, "filters": { "type": "object" } } },
+        "params": { "type": "object", "properties": { "target": { "type": "object", "properties": { "workspaceId": { "type": "string" }, "owner": { "type": "object", "properties": { "tier": { "type": "string", "enum": ["project", "group"] }, "id": { "type": "string" } }, "required": ["tier", "id"] }, "ledgerId": { "type": "string" }, "group": { "type": "boolean" }, "groupSelector": { "type": "string" } } }, "filters": { "type": "object", "properties": { "type": { "type": "string", "enum": ["bug", "deferred", "test-gap", "proposal", "decision"] }, "state": { "type": "string", "enum": ["open", "resolved", "archived"] }, "reviewed": { "type": "boolean" }, "stale": { "type": "boolean" }, "workspaceId": { "type": "string" }, "branch": { "type": "string" }, "search": { "type": "string" }, "sort": { "type": "string", "enum": ["activity", "sequence", "title"] } } } } },
         "result": { "type": "object" }
       },
       {
         "id": "show",
         "description": "Shows one entry and its complete revision history.",
         "readOnly": true,
-        "params": { "type": "object", "properties": { "target": { "type": "object" }, "id": { "type": "string" } }, "required": ["id"] },
+        "params": { "type": "object", "properties": { "target": { "type": "object", "properties": { "workspaceId": { "type": "string" }, "owner": { "type": "object", "properties": { "tier": { "type": "string", "enum": ["project", "group"] }, "id": { "type": "string" } }, "required": ["tier", "id"] }, "ledgerId": { "type": "string" }, "group": { "type": "boolean" }, "groupSelector": { "type": "string" } } }, "id": { "type": "string" } }, "required": ["id"] },
         "result": { "type": "object" }
       },
       {
         "id": "edit",
         "description": "Merges and validates entry content with an optimistic revision precondition.",
-        "params": { "type": "object", "properties": { "target": { "type": "object" }, "id": { "type": "string" }, "ifRevision": { "type": "integer", "minimum": 1 }, "content": { "type": "object" } }, "required": ["id", "ifRevision", "content"] },
+        "params": { "type": "object", "properties": { "target": { "type": "object", "properties": { "workspaceId": { "type": "string" }, "owner": { "type": "object", "properties": { "tier": { "type": "string", "enum": ["project", "group"] }, "id": { "type": "string" } }, "required": ["tier", "id"] }, "ledgerId": { "type": "string" }, "group": { "type": "boolean" }, "groupSelector": { "type": "string" } } }, "id": { "type": "string" }, "ifRevision": { "type": "integer", "minimum": 1 }, "content": { "type": "object", "additionalProperties": true } }, "required": ["id", "ifRevision", "content"] },
         "result": { "type": "object" }
       },
       {
         "id": "state",
         "description": "Changes an entry state with an optimistic revision precondition.",
-        "params": { "type": "object", "properties": { "target": { "type": "object" }, "id": { "type": "string" }, "ifRevision": { "type": "integer", "minimum": 1 }, "state": { "type": "string" } }, "required": ["id", "ifRevision", "state"] },
+        "params": { "type": "object", "properties": { "target": { "type": "object", "properties": { "workspaceId": { "type": "string" }, "owner": { "type": "object", "properties": { "tier": { "type": "string", "enum": ["project", "group"] }, "id": { "type": "string" } }, "required": ["tier", "id"] }, "ledgerId": { "type": "string" }, "group": { "type": "boolean" }, "groupSelector": { "type": "string" } } }, "id": { "type": "string" }, "ifRevision": { "type": "integer", "minimum": 1 }, "state": { "type": "string", "enum": ["open", "resolved", "archived"] } }, "required": ["id", "ifRevision", "state"] },
         "result": { "type": "object" }
       },
       {
         "id": "review",
         "description": "Returns advisory triage candidates and safe filesystem/git evidence without changing entries.",
         "readOnly": true,
-        "params": { "type": "object", "properties": { "target": { "type": "object" }, "filters": { "type": "object" } } },
+        "params": { "type": "object", "properties": { "target": { "type": "object", "properties": { "workspaceId": { "type": "string" }, "owner": { "type": "object", "properties": { "tier": { "type": "string", "enum": ["project", "group"] }, "id": { "type": "string" } }, "required": ["tier", "id"] }, "ledgerId": { "type": "string" }, "group": { "type": "boolean" }, "groupSelector": { "type": "string" } } }, "filters": { "type": "object", "properties": { "type": { "type": "string", "enum": ["bug", "deferred", "test-gap", "proposal", "decision"] }, "state": { "type": "string", "enum": ["open", "resolved", "archived"] }, "reviewed": { "type": "boolean" }, "stale": { "type": "boolean" }, "workspaceId": { "type": "string" }, "branch": { "type": "string" }, "search": { "type": "string" }, "sort": { "type": "string", "enum": ["activity", "sequence", "title"] } } } } },
         "result": { "type": "object" }
       },
       {
         "id": "revert",
         "description": "Restores editable fields and state from a historical revision as a new revision.",
-        "params": { "type": "object", "properties": { "target": { "type": "object" }, "id": { "type": "string" }, "ifRevision": { "type": "integer", "minimum": 1 }, "toRevision": { "type": "integer", "minimum": 1 } }, "required": ["id", "ifRevision", "toRevision"] },
+        "params": { "type": "object", "properties": { "target": { "type": "object", "properties": { "workspaceId": { "type": "string" }, "owner": { "type": "object", "properties": { "tier": { "type": "string", "enum": ["project", "group"] }, "id": { "type": "string" } }, "required": ["tier", "id"] }, "ledgerId": { "type": "string" }, "group": { "type": "boolean" }, "groupSelector": { "type": "string" } } }, "id": { "type": "string" }, "ifRevision": { "type": "integer", "minimum": 1 }, "toRevision": { "type": "integer", "minimum": 1 } }, "required": ["id", "ifRevision", "toRevision"] },
         "result": { "type": "object" }
       },
       {
         "id": "import",
         "description": "Imports recognized legacy ledger records from the selected workspace without modifying source files.",
-        "params": { "type": "object", "properties": { "target": { "type": "object" } } },
+        "params": { "type": "object", "properties": { "target": { "type": "object", "properties": { "workspaceId": { "type": "string" }, "owner": { "type": "object", "properties": { "tier": { "type": "string", "enum": ["project", "group"] }, "id": { "type": "string" } }, "required": ["tier", "id"] }, "ledgerId": { "type": "string" }, "group": { "type": "boolean" }, "groupSelector": { "type": "string" } } } } },
         "result": { "type": "object" }
       },
       {
@@ -137,7 +137,7 @@
       {
         "id": "approve",
         "description": "Approves immutable entry revision snapshots and records review history.",
-        "params": { "type": "object", "properties": { "target": { "type": "object" }, "selections": { "type": "array", "maxItems": 10000, "items": { "type": "object", "properties": { "id": { "type": "string" }, "revision": { "type": "integer", "minimum": 1 } }, "required": ["id", "revision"] } } }, "required": ["selections"] },
+        "params": { "type": "object", "properties": { "target": { "type": "object", "properties": { "workspaceId": { "type": "string" }, "owner": { "type": "object", "properties": { "tier": { "type": "string", "enum": ["project", "group"] }, "id": { "type": "string" } }, "required": ["tier", "id"] }, "ledgerId": { "type": "string" }, "group": { "type": "boolean" }, "groupSelector": { "type": "string" } } }, "selections": { "type": "array", "items": { "type": "object", "properties": { "id": { "type": "string" }, "revision": { "type": "integer", "minimum": 1 } }, "required": ["id", "revision"] } } }, "required": ["selections"] },
         "result": { "type": "object" }
       },
       {
@@ -146,7 +146,7 @@
         "destructive": true,
         "confirm": "Confirm the displayed bulk ledger state change?",
         "describe": "describeBulkState",
-        "params": { "type": "object", "properties": { "target": { "type": "object" }, "state": { "type": "string" }, "selections": { "type": "array", "maxItems": 10000, "items": { "type": "object", "properties": { "id": { "type": "string" }, "revision": { "type": "integer", "minimum": 1 } }, "required": ["id", "revision"] } }, "confirmed": { "type": "boolean" } }, "required": ["state", "selections"] },
+        "params": { "type": "object", "properties": { "target": { "type": "object", "properties": { "workspaceId": { "type": "string" }, "owner": { "type": "object", "properties": { "tier": { "type": "string", "enum": ["project", "group"] }, "id": { "type": "string" } }, "required": ["tier", "id"] }, "ledgerId": { "type": "string" }, "group": { "type": "boolean" }, "groupSelector": { "type": "string" } } }, "state": { "type": "string", "enum": ["open", "resolved", "archived"] }, "selections": { "type": "array", "items": { "type": "object", "properties": { "id": { "type": "string" }, "revision": { "type": "integer", "minimum": 1 } }, "required": ["id", "revision"] } }, "confirmed": { "type": "boolean" } }, "required": ["state", "selections"] },
         "result": { "type": "object" }
       },
       {
@@ -155,7 +155,7 @@
         "destructive": true,
         "confirm": "Confirm deletion of the displayed ledger entries?",
         "describe": "describeDeleteEntries",
-        "params": { "type": "object", "properties": { "target": { "type": "object" }, "selections": { "type": "array", "maxItems": 10000, "items": { "type": "object", "properties": { "id": { "type": "string" }, "revision": { "type": "integer", "minimum": 1 } }, "required": ["id", "revision"] } }, "confirmed": { "type": "boolean" } }, "required": ["selections"] },
+        "params": { "type": "object", "properties": { "target": { "type": "object", "properties": { "workspaceId": { "type": "string" }, "owner": { "type": "object", "properties": { "tier": { "type": "string", "enum": ["project", "group"] }, "id": { "type": "string" } }, "required": ["tier", "id"] }, "ledgerId": { "type": "string" }, "group": { "type": "boolean" }, "groupSelector": { "type": "string" } } }, "selections": { "type": "array", "items": { "type": "object", "properties": { "id": { "type": "string" }, "revision": { "type": "integer", "minimum": 1 } }, "required": ["id", "revision"] } }, "confirmed": { "type": "boolean" } }, "required": ["selections"] },
         "result": { "type": "object" }
       },
       {
@@ -164,7 +164,7 @@
         "destructive": true,
         "confirm": "Confirm permanent project ledger deletion?",
         "describe": "describeDeleteLedger",
-        "params": { "type": "object", "properties": { "target": { "type": "object" }, "ifLedgerRevision": { "type": "integer", "minimum": 0 }, "confirmed": { "type": "boolean" } }, "required": ["ifLedgerRevision"] },
+        "params": { "type": "object", "properties": { "target": { "type": "object", "properties": { "workspaceId": { "type": "string" }, "owner": { "type": "object", "properties": { "tier": { "type": "string", "enum": ["project", "group"] }, "id": { "type": "string" } }, "required": ["tier", "id"] }, "ledgerId": { "type": "string" }, "group": { "type": "boolean" }, "groupSelector": { "type": "string" } } }, "ifLedgerRevision": { "type": "integer", "minimum": 0 }, "confirmed": { "type": "boolean" } }, "required": ["ifLedgerRevision"] },
         "result": { "type": "object" }
       },
       {
@@ -173,13 +173,13 @@
         "destructive": true,
         "confirm": "Confirm attachment of this detached ledger?",
         "describe": "describeAttach",
-        "params": { "type": "object", "properties": { "target": { "type": "object" }, "attachTo": { "type": "object", "properties": { "tier": { "type": "string" }, "id": { "type": "string" } }, "required": ["tier", "id"] }, "ifLedgerRevision": { "type": "integer", "minimum": 0 }, "confirmed": { "type": "boolean" } }, "required": ["attachTo", "ifLedgerRevision"] },
+        "params": { "type": "object", "properties": { "target": { "type": "object", "properties": { "workspaceId": { "type": "string" }, "owner": { "type": "object", "properties": { "tier": { "type": "string", "enum": ["project", "group"] }, "id": { "type": "string" } }, "required": ["tier", "id"] }, "ledgerId": { "type": "string" }, "group": { "type": "boolean" }, "groupSelector": { "type": "string" } } }, "attachTo": { "type": "object", "properties": { "tier": { "type": "string", "enum": ["project", "group"] }, "id": { "type": "string" } }, "required": ["tier", "id"] }, "ifLedgerRevision": { "type": "integer", "minimum": 0 }, "confirmed": { "type": "boolean" } }, "required": ["attachTo", "ifLedgerRevision"] },
         "result": { "type": "object" }
       },
       {
         "id": "settings",
         "description": "Reads or changes the per-ledger stale-after-days threshold.",
-        "params": { "type": "object", "properties": { "target": { "type": "object" }, "ifLedgerRevision": { "type": "integer", "minimum": 0 }, "staleAfterDays": { "type": "integer", "minimum": 0, "maximum": 3650 } } },
+        "params": { "type": "object", "properties": { "target": { "type": "object", "properties": { "workspaceId": { "type": "string" }, "owner": { "type": "object", "properties": { "tier": { "type": "string", "enum": ["project", "group"] }, "id": { "type": "string" } }, "required": ["tier", "id"] }, "ledgerId": { "type": "string" }, "group": { "type": "boolean" }, "groupSelector": { "type": "string" } } }, "ifLedgerRevision": { "type": "integer", "minimum": 0 }, "staleAfterDays": { "type": "integer", "minimum": 0, "maximum": 3650 } } },
         "result": { "type": "object" }
       },
       {
@@ -192,9 +192,9 @@
             "removal": {
               "type": "object",
               "properties": {
-                "repoIds": { "type": "array", "maxItems": 10000, "items": { "type": "string" } },
-                "groupIds": { "type": "array", "maxItems": 10000, "items": { "type": "string" } },
-                "expectedLedgers": { "type": "array", "maxItems": 10000, "items": { "type": "object", "properties": { "ledgerId": { "type": "string" }, "revision": { "type": "integer", "minimum": 0 } }, "required": ["ledgerId", "revision"] } }
+                "repoIds": { "type": "array", "items": { "type": "string" } },
+                "groupIds": { "type": "array", "items": { "type": "string" } },
+                "expectedLedgers": { "type": "array", "items": { "type": "object", "properties": { "ledgerId": { "type": "string" }, "revision": { "type": "integer", "minimum": 0 } }, "required": ["ledgerId", "revision"] } }
               }
             }
           },
@@ -206,28 +206,28 @@
         "id": "describeBulkState",
         "description": "Builds confirmation text for bulk-state snapshots.",
         "readOnly": true,
-        "params": { "type": "object" },
+        "params": { "type": "object", "additionalProperties": true },
         "result": { "type": "string" }
       },
       {
         "id": "describeDeleteEntries",
         "description": "Builds confirmation text for entry-deletion snapshots.",
         "readOnly": true,
-        "params": { "type": "object" },
+        "params": { "type": "object", "additionalProperties": true },
         "result": { "type": "string" }
       },
       {
         "id": "describeDeleteLedger",
         "description": "Builds confirmation text for ledger deletion snapshots.",
         "readOnly": true,
-        "params": { "type": "object" },
+        "params": { "type": "object", "additionalProperties": true },
         "result": { "type": "string" }
       },
       {
         "id": "describeAttach",
         "description": "Builds confirmation text for detached ledger attachment snapshots.",
         "readOnly": true,
-        "params": { "type": "object" },
+        "params": { "type": "object", "additionalProperties": true },
         "result": { "type": "string" }
       }
     ],
@@ -262,13 +262,13 @@
         "args": {
           "type": "object",
           "properties": {
-            "action": { "type": "string", "enum": ["scope", "filter", "sort", "selection", "detail", "new", "edit", "triage", "settings"] },
-            "scope": { "type": "string", "enum": ["worktree", "folder", "project", "group"] },
-            "filters": { "type": "object" },
+            "action": { "type": "string", "enum": ["scope", "filters", "sort", "selection", "detail", "new", "edit", "triage", "settings"] },
+            "scope": { "type": "string", "enum": ["worktree", "project", "group"] },
+            "filters": { "type": "object", "properties": { "type": { "type": "string", "enum": ["bug", "deferred", "test-gap", "proposal", "decision"] }, "state": { "type": "string", "enum": ["open", "resolved", "archived"] }, "reviewed": { "type": "boolean" }, "stale": { "type": "boolean" }, "workspaceId": { "type": "string" }, "branch": { "type": "string" }, "search": { "type": "string" } } },
             "sort": { "type": "string", "enum": ["activity", "sequence", "title"] },
-            "selections": { "type": "array", "maxItems": 10000, "items": { "type": "object", "properties": { "id": { "type": "string" }, "revision": { "type": "integer", "minimum": 1 } }, "required": ["id", "revision"] } },
+            "selections": { "type": "array", "items": { "type": "object", "properties": { "id": { "type": "string" }, "revision": { "type": "integer", "minimum": 1 } }, "required": ["id", "revision"] } },
             "id": { "type": "string" },
-            "target": { "type": "object", "properties": { "workspaceId": { "type": "string" }, "owner": { "type": "object", "properties": { "tier": { "type": "string", "enum": ["project", "group"] }, "id": { "type": "string" } }, "required": ["tier", "id"] }, "ledgerId": { "type": "string" }, "group": { "type": "boolean" }, "groupSelector": { "type": "string" } }
+            "target": { "type": "object", "properties": { "workspaceId": { "type": "string" }, "owner": { "type": "object", "properties": { "tier": { "type": "string", "enum": ["project", "group"] }, "id": { "type": "string" } }, "required": ["tier", "id"] }, "ledgerId": { "type": "string" }, "group": { "type": "boolean" }, "groupSelector": { "type": "string" } } }
           },
           "required": ["action"]
         }
@@ -311,8 +311,8 @@
         "flags": {
           "type": { "type": "string", "description": "filter by entry type" },
           "state": { "type": "string", "description": "filter by state" },
-          "reviewed": { "type": "boolean", "description": "filter review status" },
-          "stale": { "type": "boolean", "description": "filter staleness" },
+          "reviewed": { "type": "string", "enum": ["true", "false"], "description": "filter review status" },
+          "stale": { "type": "string", "enum": ["true", "false"], "description": "filter staleness" },
           "workspace": { "type": "string", "description": "target workspace or origin filter with --ledger/--owner" },
           "origin-workspace": { "type": "string", "description": "filter the recorded origin workspace" },
           "branch": { "type": "string", "description": "filter the origin branch" },
@@ -375,7 +375,7 @@
       {
         "id": "review",
         "summary": "review ledger candidates and safe evidence",
-        "flags": { "type": { "type": "string", "description": "filter type" }, "state": { "type": "string", "description": "filter state" }, "reviewed": { "type": "boolean", "description": "filter review status" }, "stale": { "type": "boolean", "description": "filter freshness" }, "workspace": { "type": "string", "description": "workspace target or origin filter with --ledger" }, "origin-workspace": { "type": "string", "description": "origin workspace filter" }, "branch": { "type": "string", "description": "origin branch filter" }, "search": { "type": "string", "description": "title or ID" }, "ledger": { "type": "string", "description": "ledger ID" }, "group": { "type": "boolean", "description": "select the workspace group ledger" }, "group-selector": { "type": "string", "description": "membership group ID or exact name" } },
+        "flags": { "type": { "type": "string", "description": "filter type" }, "state": { "type": "string", "description": "filter state" }, "reviewed": { "type": "string", "enum": ["true", "false"], "description": "filter review status" }, "stale": { "type": "string", "enum": ["true", "false"], "description": "filter freshness" }, "workspace": { "type": "string", "description": "workspace target or origin filter with --ledger" }, "origin-workspace": { "type": "string", "description": "origin workspace filter" }, "branch": { "type": "string", "description": "origin branch filter" }, "search": { "type": "string", "description": "title or ID" }, "ledger": { "type": "string", "description": "ledger ID" }, "group": { "type": "boolean", "description": "select the workspace group ledger" }, "group-selector": { "type": "string", "description": "membership group ID or exact name" } },
         "methods": ["quirky.ledger/review"]
       },
       {
