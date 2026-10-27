@@ -436,5 +436,56 @@
 - **Confidence:** high
 - **Source:** assumed — autonomous
 
+## D44: The fix batch closed every Final Round 1 finding; two fixer notes are accepted as limits
+- **Question:** what the fix batch left open
+- **Options:** —
+- **Chose:** all five defects are fixed with regression tests that failed first, and SC-3, SC-7 and SC-32 have named tests. Two limits are accepted. First, `--ansi` pages recover colours from at most 64 KiB before their log window, so a style set earlier than that is lost. Second, when a page window has no line break to cut at, the narrowing can split an escape sequence; only adversarial data has no breaks at all. Nothing goes to BLOCKERS.md.
+- **Why:** both bounds keep paging's memory and time fixed, and neither affects output that real shells print
+- **Evidence:** packages/pty-host/src/history/reader.ts LEAD_IN_BYTES and scratchControlRows; full gate after the batch 3323 pass, scripts 30 pass, typecheck clean
+- **Reversibility:** easy
+- **Confidence:** medium
+- **Source:** assumed — autonomous
+
+## D45: The UI pass found that a restored pane lost its old output; GROUND no longer moves the cursor
+- **Question:** LOOP.md step 6's UI check (quirk:using-apps-like-a-user, `--surface web --owner yours --unattended`, built UI, quirkyd on a temporary QUIRKY_HOME) failed SC-28. After a host restart, a session whose screen had scrolled kept only its top row above the new prompt.
+- **Options:** switch GROUND to `?1047l`; save the cursor (`ESC 7`) just before `?1049l`
+- **Chose:** `ESC 7` before `?1049l`. `?1049l` restores the cursor saved on entering the alternate screen, and it defaulted to home when nothing was saved. The new prompt's `ESC[J` then erased the old screen. Saving first keeps a normal-screen cursor where it was and still returns an alternate-screen program to its entry cursor. `?1047l` would leave the cursor wherever the full-screen program had it. A program that used `?47h` (rare) can still land at home in a live replay.
+- **Why:** a record-by-record replay of the real session log showed the cursor jump from row 24 to row 0 at the GROUND record. Earlier tests restored screens that had not scrolled, so the jump was invisible.
+- **Evidence:** packages/pty-host/src/history/restore.ts GROUND; restore.test.ts "keeps the cursor row of a screen that has scrolled"; manager.test.ts "SC-16, SC-28: a screen that had scrolled keeps its old lines above the new prompt after a restore"; tech.md restore step 2
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** assumed — autonomous
+
+## D46: All UI scenarios passed in the web window, across three passes
+- **Question:** the step 6 UI result
+- **Options:** —
+- **Chose:** passed SC-26, SC-27, SC-6, SC-42 and SC-29 in the first pass. SC-28 failed there (D45). After the fix, SC-28 passed in a second pass and SC-17 in a third. The second pass showed SC-17 restoring as well, but an observe failed before its click, so its verdict couldn't be recorded. The brief "Sessions (0)" state during a host restart passes before the screen settles, so `ui.test.ts` covers it rather than the web pass. SC-27 and SC-29 confirmed dialogs that end sessions this run created. Reports (local, ignored): `.quirk/using-apps-like-a-user/runs/20261027T020042-3a92/report.md`, `20261027T022447-4ec6/report.md` and `20261027T022642-f57f/report.md`. Both temporary homes and every process they started were removed.
+- **Why:** LOOP.md requires every UI goal to pass when used like a user
+- **Evidence:** the three run reports
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** assumed — autonomous
+
+## D47: No native-only scenarios
+- **Question:** LOOP.md step 6: scenarios only the real window can show go to docs/loop/native/<id>.json
+- **Options:** —
+- **Chose:** none. The panel, its dialogs and the panes live in the webview, which the web pass covers. No tray, menu bar, OS dialog or notification is involved.
+- **Why:** the native file is for what the web surface can't show
+- **Evidence:** logic.md "The window" scenarios SC-6, SC-17, SC-26 to SC-29, SC-42
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** assumed — autonomous
+
+## D48: The e2e harness kills what it started even when a run dies; a daemon lock test leaks fake hosts
+- **Question:** the UI setup found a live PTY host and shell from an earlier e2e run (QUIRKY_HOME `/tmp/qe-*`), plus fake PTY hosts from `packages/daemon/test/lock.test.ts` runs (QUIRKY_HOME `qd-lock-*`)
+- **Options:** —
+- **Chose:** the e2e harness now runs every cleanup step even when one throws, finds the host from `pty.pid` at cleanup time, and on exit, SIGINT or SIGTERM SIGKILLs what live harnesses tracked and removes their homes. A test kills quirkyd outside cleanup and checks that the orphaned host, its shells and the home are gone. The leaked processes from this lane were killed. The lock test leak predates this item: the test is unchanged here, and fake hosts from other trees, `build-roadmap` and the integration tree, are leaking the same way. So it's recorded here, not fixed.
+- **Why:** LOOP.md says every test kills what it started; the lock test belongs to the daemon's own item
+- **Evidence:** plugins/quirky.terminal/test/e2e-support.ts installExitHooks and cleanup; e2e.test.ts "cleanup removes a host and shells that a SIGKILLed quirkyd left running"; `ps` showed fake-pty-host processes with QUIRKY_HOME `qd-lock-*` from several trees
+- **Reversibility:** easy
+- **Confidence:** medium
+- **Revisit if:** a later item touches packages/daemon/test/lock.test.ts
+- **Source:** assumed — autonomous
+
 ## Progress
-Step 5: W1-W4 merged; W1-W3 checkpoint-reviewed and fixed (D36-D39); the SC-23 kill defect fixed (D40); caught up with build/roadmap (D41). Next: Final Round 1 over the run, one fix batch, then step 6 verification.
+Done. W1-W4 built, with checkpoint fix batches after W1-W3 (D36-D39), the SC-23 kill fix (D40), two catch-ups with build/roadmap (D41, D42), and Final Round 1 with its fix batch (D43, D44). The UI pass found and fixed the restore cursor defect, and every UI goal passed (D45, D46). There are no native scenarios (D47), and the e2e harness was hardened against leaks (D48). Verify: `bun run test` 3327 pass, `bun test scripts` 30 pass, `bun run typecheck` clean. SC-1 to SC-42 each have a named test, including the Orca defects SC-34 and SC-37. The feature ships as built-in plugins (`quirky.terminal`, `quirky.session`) on the public plugin API (SC-41). Nothing is left open in BLOCKERS.md.
