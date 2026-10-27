@@ -1,10 +1,10 @@
 # Sidebar extras technical specification
 
-Status: Specs accepted after mandatory Codex promote/refute review; execution blocked at the W1 required-suite gate. Logic: [logic.md](logic.md). W2 is not implemented. See the item decision log for exact verification, blocker and resume procedure.
+Status: Specs accepted after mandatory Codex promote/refute review; resumed on lane 7 after the independent W1 gate repairs landed. W2 is not implemented. See the item decision log for verification and progress.
 
 ## Architecture
 
-Implements [logic purpose and conceptual model](logic.md#purpose) and [data flow](logic.md#data-flow). Root is `/Users/zpyoung/orca/workspaces/quirky/build-lane-5`; paths below resolve against it, not the external Orca tree.
+Implements [logic purpose and conceptual model](logic.md#purpose) and [data flow](logic.md#data-flow). Root is the current `build/m2-sidebar-extras` worktree; paths below resolve against it, not the external Orca tree.
 
 - `packages/protocol/src/model.ts:25-66`: extend `Worktree` and `ProjectGroup` canonical records.
 - `plugins/quirky.worktree/main.ts:60-276`, `plugins/quirky.worktree/src/daemon/store.ts`, `plugins/quirky.worktree/src/daemon/list.ts`, `plugins/quirky.worktree/src/daemon/set.ts`: metadata migration/projection, display membership, activity and instance-safe assignment.
@@ -20,7 +20,7 @@ No generic row-decoration framework or second sidebar renderer is introduced. Ca
 
 Supports [logic decisions](logic.md#decisions-locked).
 
-Absolute source root: `/Users/zpyoung/orca/workspaces/quirky/build-lane-5/`.
+Source root: the current `build/m2-sidebar-extras` worktree (lane 7 on resume).
 
 | Relative path and live anchor | Responsibility |
 | --- | --- |
@@ -84,6 +84,17 @@ Entering Live only remembers the previous non-Live mode; toggling sleeping back 
 `projection` returns preferences, selected ID, `visibleIds`, `hiddenIds`, `hiddenCount`, `filterCount`, and per-workspace effective activity/liveness reasons sufficient to compare the drawn filter with API state. It reads canonical worktrees/repos/sessions/runtime facts, not caller-supplied fake rows. For All no cutoff; otherwise rolling cutoff `now - days*86_400_000` with overflow-safe arithmetic. Compare inclusive. Activity=max(canonical worktree/session activity, last visit, last exit), then positive creation, then repo addedAt. Active selected row is never hidden. Preserve main only for Live when exception true. Folder rows stay under Live.
 
 API clock uses runtime Date.now, with injectable clock only at construction/testing, never a public “set production time” test endpoint. UI refreshes projection on canonical/session/sidebar/settings/layout events and a 60s timer only while a time window is selected. Concurrent load tickets prevent stale preference/projection results. Coalesce refreshes to avoid event loops. `changed` events are emitted after preference/activation mutation, not on reads.
+
+#### Exact W2 JSON seam
+
+SCHEMA: `Preferences` contains `workspaceActivityWindow`, `workspaceActivityCustomDays`, `alwaysShowDefaultBranchWorkspace`, and `workspaceActivityWindowBeforeLiveOnly`, with the types/defaults defined above.
+
+SCHEMA: `State = {client:string, preferences:Preferences, active:{worktreeId:string,instanceId:string}|null, visits:Record<string,number>, exits:Record<string,number>}`. Visit/exit keys are canonical ID + `@` + instanceId; they never transfer to a replacement instance. `state`, `set`, and `activate` return State. Repeated activation of the same identity is idempotent and does not create a departure or reorder visits.
+
+SCHEMA: `Projection = State & {visibleIds:string[],hiddenIds:string[],hiddenCount:number,filterCount:number,workspaces:Array<{worktreeId:string,activityAt:number,live:boolean|null,reason:'selected'|'all'|'recent'|'old'|'live'|'sleeping'|'main'|'folder'|'unknown',error?:string}>}`. Hidden count includes only rows rejected by the activity filter. The renderer applies projection IDs to canonical records; it does not replace canonical records with projection rows.
+
+CONTRACT: `activate` and `set` are serial per client in call-arrival order, including async selector resolution. Layout observation must await activation before fetching projection for that layout; stale-response tickets are still required. No speculative UI defaults after an ordinary API failure. Optional absence is only MethodNotFound/disabled contribution, not arbitrary exceptions.
+
 
 `dirty` uses `quirky.git/status` for requested selector, or active workspace from daemon ui layout when omitted; explicit null is no active. Return `{worktreeId,count,capped,title,dirty,available,error?}`. Count `entries` (staged/unstaged/untracked/conflict panel rows) excluding any future `submoduleRoot` detail entries; never unique paths. No active/clean has stock Source Control title. Unavailable status clears decoration and reports unavailability/error rather than manufacturing cleanliness. Existing git status is not duplicated or persisted.
 

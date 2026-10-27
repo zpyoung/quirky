@@ -266,5 +266,16 @@ Reader: autonomous builders and later operator review — Decision: preserve the
 - **Revisit if:** the guarded driver gains ref-aware scrolling or W2 changes these surfaces
 - **Source:** assumed — autonomous
 
+## D25: Resume the preserved item after its independent repairs landed
+- **Question:** whether the returned existing branch should restart design or continue at the preserved gate
+- **Options:** discard accepted W1 work; resume the exact recorded checkpoint
+- **Chose:** resume W1 on lane 7; merge current integration, install frozen links, rerun required checks, then run the required three-lens Gemini checkpoint before W2. Preserve D17's OpenAI/Gemini binding; the resumed Gemini reachability probe passed. Incorporate the preserved exact W2 JSON seam into tech.md before dispatch.
+- **Why:** queue.ts returned the existing item and its branch; D22's regex/process prerequisites are landed. New notes/AI decisions preserve public ownership and add no sidebar scope conflict. The blocked browser item supplies no runtime browser liveness provider. ProcessScope remains the required owner for new process-starting verification.
+- **Evidence:** integration merge 0a186b8; docs/loop/decisions/fix-ask-regex-budget-20261027.md; fix-test-process-leaks.md; fix-sc31-first-shell-race.md; m2-source-control-notes-ai.md; sa-browser-agent.md; /tmp/quirky-sidebar-lane5-w2-api-contract.md; pi-watch --check gemini exit 0
+- **Reversibility:** easy (resume procedure and precise JSON contract)
+- **Confidence:** high
+- **Revisit if:** fresh gate or checkpoint reveals an integration defect
+- **Source:** locked by docs/loop/LOOP.md
+
 ## Progress
 Blocked at LOOP.md step 5, W1 mandatory suite gate; do not land. Both reviewed specs and W1 canonical/public-UI implementation are preserved. W2 presentation plugin and worktree-renderer integration were not started, so the four-feature item is not complete. All agents and finite/background commands have returned; smoke processes and browsers were stopped and temporary homes removed. Required prerequisite: repair fix-ask-regex-budget-20261027 and lane-7 PTY gate, restore this preserved branch to build/m2-sidebar-extras, merge current integration/read new decisions, install links, run the required gate; only then run the W1 three-lens Gemini checkpoint and proceed with W2. The resumable journal/plan/audits are in /tmp/quirky-sidebar-lane5-*; an exact W2 JSON seam draft is /tmp/quirky-sidebar-lane5-w2-api-contract.md and must be incorporated into tech.md before worker dispatch. Inherited .serena/ remains untouched/uncommitted.
