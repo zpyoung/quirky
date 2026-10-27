@@ -175,8 +175,7 @@
       "deps": [
         "m1-worktrees"
       ],
-      "status": "in-progress",
-      "lane": 3
+      "status": "done"
     },
     {
       "id": "m2-source-control-notes-ai",
@@ -190,7 +189,8 @@
         "m1-launch-settings",
         "m1-agent-status"
       ],
-      "status": "todo"
+      "status": "in-progress",
+      "lane": 3
     },
     {
       "id": "m2-editor",
@@ -217,7 +217,8 @@
         "m2-source-control-core",
         "m1-agent-status"
       ],
-      "status": "todo"
+      "status": "in-progress",
+      "lane": 5
     },
     {
       "id": "m2-ask-parity",
@@ -256,8 +257,7 @@
         "m1-agent-status",
         "m1-providers"
       ],
-      "status": "in-progress",
-      "lane": 5
+      "status": "blocked"
     },
     {
       "id": "m3-handoff",

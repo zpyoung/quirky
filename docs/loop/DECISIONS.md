@@ -24,6 +24,7 @@ files, not this one.
 | hard | medium | [m1-providers D36](decisions/m1-providers.md) | Approach: port Orca's pure launch code into `quirky.agents`, with the catalog as manifest data | assumed — autonomous |
 | hard | high | [m0-scripting D4](decisions/m0-scripting.md) | Schemas are a flat subset of JSON Schema | assumed — autonomous |
 | hard | high | [m0-scripting D24](decisions/m0-scripting.md) | Choose schemas declared in the manifest, a daemon catalog, and a CLI that builds plugin commands from it at run time | assumed — autonomous |
+| hard | high | [m2-source-control-core D5](decisions/m2-source-control-core.md) | Extend `quirky.git` in place, with every composite (sync, discard-all, stage-all) in the daemon | assumed — autonomous |
 | hard | high | [m0-core D6](decisions/m0-core.md) | v1's methods are renamed to their plugin's namespace, with no aliases, and the protocol version goes to 2 | supersedes m0-daemon-api D5 |
 | hard | high | [m0-core D7](decisions/m0-core.md) | v1's events become the plugins' events | assumed — autonomous |
 | hard | high | [m0-core D31](decisions/m0-core.md) | Port v1 for real, growing the public plugin API, rather than facades or raw RPC primitives | locked by docs/roadmap.md (built-ins use only the public API); assumed — autonomous (the approach) |
@@ -41,6 +42,10 @@ files, not this one.
 | hard | high | [m1-providers D9](decisions/m1-providers.md) | Agent IDs, labels and table values are Orca's | locked by docs/architecture.md |
 | medium | medium | [m0-scripting D6](decisions/m0-scripting.md) | The daemon validates every call's params against the method's schema, and leaves results and event data unchecked | assumed — autonomous |
 | medium | medium | [m0-scripting D29](decisions/m0-scripting.md) | Tech-spec mechanisms: one shared validator in protocol, validation in the dispatcher, declarative command specs, a JSON-mode pre-scan | assumed — autonomous |
+| medium | medium | [m2-source-control-core D3](decisions/m2-source-control-core.md) | The slice is all of source-control.md except diff notes, AI actions and hosted review | locked by docs/loop/queue.json (the titles); assumed — autonomous (the exact cut) |
+| medium | medium | [m2-source-control-core D23](decisions/m2-source-control-core.md) | Diffs open in a `quirky.git/diff` view in the main area, and closing it returns to the worktree's sessions | assumed — autonomous |
+| medium | medium | [m2-source-control-core D25](decisions/m2-source-control-core.md) | Diffs render with `@codemirror/merge`, editable only for unstaged changes, saved with a disk precondition | locked by docs/architecture.md (CodeMirror); assumed — autonomous (the save method) |
+| medium | medium | [m2-source-control-core D27](decisions/m2-source-control-core.md) | The conflict review and conflict file views live in this plugin, without accept buttons | assumed — autonomous |
 | medium | medium | [m0-core D10](decisions/m0-core.md) | Repo and worktree selectors resolve in the daemon, with the caller's cwd and identity | assumed — autonomous |
 | medium | medium | [m0-core D20](decisions/m0-core.md) | Irreversible methods confirm through an ask unless the call passes `yes` | locked by docs/roadmap.md (ask unless `--yes`); assumed — autonomous (the protocol) |
 | medium | medium | [m0-core D22](decisions/m0-core.md) | Plugin slots report their own content as JSON | assumed — autonomous |
@@ -96,6 +101,8 @@ files, not this one.
 | medium | high | [m0-scripting D9](decisions/m0-scripting.md) | One command table drives parsing, validation, help, suggestions and the catalog | locked by research/orca-features/cli.md |
 | medium | high | [m0-scripting D15](decisions/m0-scripting.md) | Under `--json`, errors are a JSON document on stdout, and the exit codes stay 0, 1 and 2 | assumed — autonomous |
 | medium | high | [m0-scripting D17](decisions/m0-scripting.md) | `quirky api --json` returns one versioned catalog of methods, events, UI commands and CLI commands | assumed — autonomous |
+| medium | high | [m2-source-control-core D8](decisions/m2-source-control-core.md) | The status record grows additively, read from porcelain v2 | assumed — autonomous |
+| medium | high | [m2-source-control-core D20](decisions/m2-source-control-core.md) | The compare base is the worktree's base, else the project's, else the detected default, and Change Base Ref writes where the base came from | locked by research/orca-features/source-control.md |
 | medium | high | [m0-core D8](decisions/m0-core.md) | v1's CLI words stay, with `wt` and `term` as group aliases | assumed — autonomous |
 | medium | high | [m0-core D12](decisions/m0-core.md) | Notifications are a kernel service, and each plugin decides when to notify | locked by docs/architecture.md |
 | medium | high | [m0-core D13](decisions/m0-core.md) | v1's settings become plugin settings | supersedes m0-ui-api D18 |
@@ -121,6 +128,10 @@ files, not this one.
 | medium | high | [m0-registry D6](decisions/m0-registry.md) | A plugin's own contributions use short names, overrides use full IDs | assumed — autonomous |
 | medium | high | [m0-registry D9](decisions/m0-registry.md) | Disable works by plugin ID or contribution ID, before any code loads, and persists | locked by docs/roadmap.md (disable by ID); assumed — autonomous (cascade and persistence) |
 | medium | high | [m0-registry D11](decisions/m0-registry.md) | Plugins activate lazily on first use by default, or at startup when the manifest says so | locked by docs/roadmap.md (lazy); assumed — autonomous (trigger set) |
+| medium | high | [m3-terminal-dock D1](decisions/m3-terminal-dock.md) | Build the dock as an opt-in built-in plugin with its own composer | locked by docs/roadmap.md |
+| medium | high | [m3-terminal-dock D3](decisions/m3-terminal-dock.md) | Preserve macOS parity and do not reproduce the three observed Orca defects | locked by docs/roadmap.md |
+| medium | high | [m3-terminal-dock D7](decisions/m3-terminal-dock.md) | Missing pane and send APIs alone are not reasons to block | assumed — autonomous |
+| medium | high | [m3-terminal-dock D9](decisions/m3-terminal-dock.md) | Prefer daemon-authoritative state and a per-PTY send queue if scope is resolved | assumed — autonomous |
 | medium | high | [m2-ask-parity D5](decisions/m2-ask-parity.md) | The question schema is Orca's, plus Quirky's optional `title` | locked by research/orca-features/ask.md |
 | medium | high | [m2-ask-parity D9](decisions/m2-ask-parity.md) | The deadline lives in the daemon, is stored, and survives a restart | locked by research/orca-features/ask.md |
 | medium | high | [m2-ask-parity D12](decisions/m2-ask-parity.md) | Drafts are Orca's per-question partial, saved by the window 500 ms after typing stops | locked by research/orca-features/ask.md |
@@ -157,6 +168,23 @@ files, not this one.
 | easy | medium | [m0-scripting D32](decisions/m0-scripting.md) | Build in four waves after a type scaffold: protocol and CLI specs, then validation and generated commands, then discovery and the skill, then scenario tests | assumed — autonomous |
 | easy | medium | [m0-scripting D33](decisions/m0-scripting.md) | Skip wave 1's checkpoint review | assumed — autonomous |
 | easy | medium | [m0-scripting D35](decisions/m0-scripting.md) | Implementers' judgment calls kept: group suggestions only as a fallback, `skill show --json` wraps the text, `quirky help <words>` acts like `--help` | assumed — autonomous |
+| easy | medium | [m2-source-control-core D6](decisions/m2-source-control-core.md) | AI Fix, Resolve with AI and the Source Control AI settings belong to `m2-source-control-notes-ai` | assumed — autonomous |
+| easy | medium | [m2-source-control-core D9](decisions/m2-source-control-core.md) | "Resolved locally" is tracked by the daemon for conflict files opened through `quirky.git` | assumed — autonomous |
+| easy | medium | [m2-source-control-core D16](decisions/m2-source-control-core.md) | Rebase from base fetches the base's branch and rebases onto it | locked by research/orca-features/source-control.md |
+| easy | medium | [m2-source-control-core D26](decisions/m2-source-control-core.md) | The combined diff loads sections lazily and on demand past 10,000 changed lines | locked by research/orca-features/source-control.md |
+| easy | medium | [m2-source-control-core D30](decisions/m2-source-control-core.md) | The panel polls status every 3 seconds while shown and branch compare every 30 seconds, and nothing fetches on a timer | assumed — autonomous |
+| easy | medium | [m2-source-control-core D33](decisions/m2-source-control-core.md) | The Orca defects tested are the unreachable selection, the dead-end merge and the swallowed diff errors | assumed — autonomous |
+| easy | medium | [m2-source-control-core D35](decisions/m2-source-control-core.md) | Changes mode, Markdown diff preview, preview tabs, split groups and "Open in" are out | assumed — autonomous |
+| easy | medium | [m2-source-control-core D46](decisions/m2-source-control-core.md) | Build in three waves: git primitives and pure modules, then the daemon, panel and view, then integration | assumed — autonomous |
+| easy | medium | [m2-source-control-core D47](decisions/m2-source-control-core.md) | Skip W1's checkpoint review | assumed — autonomous |
+| easy | medium | [m2-source-control-core D48](decisions/m2-source-control-core.md) | W2 starts while W1's full suite is still running | assumed — autonomous |
+| easy | medium | [m2-source-control-core D49](decisions/m2-source-control-core.md) | The diff view's CSS starts in the view and moves to `styles.css` in W3 | assumed — autonomous |
+| easy | medium | [m2-source-control-core D52](decisions/m2-source-control-core.md) | Skip W2's checkpoint review; the final round covers it at deep depth right after W3 | assumed — autonomous |
+| easy | medium | [m2-source-control-core D55](decisions/m2-source-control-core.md) | The Source Control window tests run in a second `bun test` process | assumed — autonomous |
+| easy | medium | [m2-source-control-core D57](decisions/m2-source-control-core.md) | X4 (a git timeout kills only git, not helpers holding its pipes) stays as it is | assumed — autonomous |
+| easy | medium | [m2-source-control-core D60](decisions/m2-source-control-core.md) | Goals the tool could not fully drive are recorded, not failed | assumed — autonomous |
+| easy | medium | [m2-source-control-core D61](decisions/m2-source-control-core.md) | The file diff's changed-on-disk banner has no layout test | assumed — autonomous |
+| easy | medium | [m2-source-control-core D63](decisions/m2-source-control-core.md) | The second catch-up takes build/roadmap's test runner, which retires D55's three-process split | supersedes m2-source-control-core D55 |
 | easy | medium | [m0-core D14](decisions/m0-core.md) | v1 data carries over on upgrade | assumed — autonomous |
 | easy | medium | [m0-core D25](decisions/m0-core.md) | Ask cards move into a Questions panel that opens itself | assumed — autonomous |
 | easy | medium | [m0-core D39](decisions/m0-core.md) | Build in five waves: a scaffold, kernel modules, plugins beside v1, the switch-over with the UI port, then scenario tests | assumed — autonomous |
@@ -285,6 +313,45 @@ files, not this one.
 | easy | high | [m0-scripting D38](decisions/m0-scripting.md) | Final round 1: fix three findings, two of which share a cause | assumed — autonomous |
 | easy | high | [m0-scripting D39](decisions/m0-scripting.md) | The final review loop ends after the closure round passes on all three lenses | locked by docs/loop/LOOP.md |
 | easy | high | [m0-scripting D40](decisions/m0-scripting.md) | Every scenario has a named test through the CLI or the daemon API, and the item's one CLI defect belongs to m0-cli-core | locked by docs/loop/LOOP.md |
+| easy | high | [m2-source-control-core D1](decisions/m2-source-control-core.md) | Classify the item as a Visual, API, CLI and Integration design, and run research phases A and B | assumed — autonomous |
+| easy | high | [m2-source-control-core D2](decisions/m2-source-control-core.md) | Skip the visual companion and the adhd offer, use the standard gray-area set | locked by docs/loop/LOOP.md |
+| easy | high | [m2-source-control-core D4](decisions/m2-source-control-core.md) | Select every gray area that matters for source control | assumed — autonomous |
+| easy | high | [m2-source-control-core D7](decisions/m2-source-control-core.md) | Hosted review is out until M4 | locked by docs/roadmap.md |
+| easy | high | [m2-source-control-core D10](decisions/m2-source-control-core.md) | One remote operation runs at a time per worktree, and status says which | assumed — autonomous |
+| easy | high | [m2-source-control-core D11](decisions/m2-source-control-core.md) | Discard, force push and abort are destructive methods | locked by docs/roadmap.md |
+| easy | high | [m2-source-control-core D12](decisions/m2-source-control-core.md) | Push always sets the upstream, and Publish Branch is a push with no upstream | locked by research/orca-features/source-control.md |
+| easy | high | [m2-source-control-core D13](decisions/m2-source-control-core.md) | Force push leases on the upstream commit the decision was made on | assumed — autonomous |
+| easy | high | [m2-source-control-core D14](decisions/m2-source-control-core.md) | Pull, fast-forward and fetch follow Orca's arguments | locked by research/orca-features/source-control.md |
+| easy | high | [m2-source-control-core D15](decisions/m2-source-control-core.md) | Sync is one daemon method: fetch, then force push under the lease rule, else pull and push | locked by research/orca-features/source-control.md (the steps); assumed — autonomous (the placement) |
+| easy | high | [m2-source-control-core D17](decisions/m2-source-control-core.md) | Quirky adds Continue for a merge, rebase or cherry-pick once no conflicts are unresolved | assumed — autonomous |
+| easy | high | [m2-source-control-core D18](decisions/m2-source-control-core.md) | The daemon normalises remote errors and gives each a reason; the window frames them per action | locked by research/orca-features/source-control.md |
+| easy | high | [m2-source-control-core D19](decisions/m2-source-control-core.md) | Commit and push failures carry Orca's classification; the cards ship without AI buttons | locked by research/orca-features/source-control.md |
+| easy | high | [m2-source-control-core D21](decisions/m2-source-control-core.md) | Branch compare shows committed changes from the merge base, with Orca's statuses | locked by research/orca-features/source-control.md |
+| easy | high | [m2-source-control-core D22](decisions/m2-source-control-core.md) | History returns 50 commits by default and at most 200, from HEAD, with a has-more flag | locked by research/orca-features/source-control.md |
+| easy | high | [m2-source-control-core D24](decisions/m2-source-control-core.md) | Diff content follows Orca's sources and limits | locked by research/orca-features/source-control.md |
+| easy | high | [m2-source-control-core D28](decisions/m2-source-control-core.md) | Huge repositories cap the status at 1,000 entries, with Orca's banner and ignore offer | locked by research/orca-features/source-control.md |
+| easy | high | [m2-source-control-core D29](decisions/m2-source-control-core.md) | The panel keeps Orca's filter, tree view, selection, group order and row menu, without "Open in" | assumed — autonomous |
+| easy | high | [m2-source-control-core D31](decisions/m2-source-control-core.md) | The panel toggle shows the uncommitted count as its badge | assumed — autonomous |
+| easy | high | [m2-source-control-core D32](decisions/m2-source-control-core.md) | Commands, keybindings and settings follow Orca's, as `quirky.git` contributions | locked by research/orca-features/source-control.md |
+| easy | high | [m2-source-control-core D34](decisions/m2-source-control-core.md) | Platform-specific parts are logged and built for macOS only | deferred: platform |
+| easy | high | [m2-source-control-core D36](decisions/m2-source-control-core.md) | Fast-track the remaining defaults | locked by docs/loop/LOOP.md |
+| easy | high | [m2-source-control-core D37](decisions/m2-source-control-core.md) | A folder workspace keeps m1-worktrees' sentence instead of Orca's | locked by docs/quirk/specs/2026-10-26-m1-worktrees/logic.md |
+| easy | high | [m2-source-control-core D38](decisions/m2-source-control-core.md) | The CLI's JSON error document gains the error's `data` | assumed — autonomous (extends m0-scripting D15) |
+| easy | high | [m2-source-control-core D39](decisions/m2-source-control-core.md) | `setPanelBadge` takes an optional tooltip | locked by docs/roadmap.md ("Plugin API growth") |
+| easy | high | [m2-source-control-core D40](decisions/m2-source-control-core.md) | Write a tech spec | locked by docs/loop/LOOP.md |
+| easy | high | [m2-source-control-core D41](decisions/m2-source-control-core.md) | Actionable messages are notices in the panel, not toasts | assumed — autonomous |
+| easy | high | [m2-source-control-core D42](decisions/m2-source-control-core.md) | Spec review: fix all six standing findings and both gate-dropped gaps, keep Sync's leased force push | assumed — autonomous |
+| easy | high | [m2-source-control-core D43](decisions/m2-source-control-core.md) | The terminal e2e helper reads `ps` with a 64 MiB buffer | assumed — autonomous |
+| easy | high | [m2-source-control-core D44](decisions/m2-source-control-core.md) | Build with Claude subagents implementing and Codex reviewing | locked by docs/loop/LOOP.md |
+| easy | high | [m2-source-control-core D45](decisions/m2-source-control-core.md) | A type and runner scaffold lands before the first wave | assumed — autonomous |
+| easy | high | [m2-source-control-core D50](decisions/m2-source-control-core.md) | Two scenario details move to match git and Orca, found while building the daemon | assumed — autonomous |
+| easy | high | [m2-source-control-core D51](decisions/m2-source-control-core.md) | Daemon part 2's edit to `test/folder.test.ts` is accepted as a widening inside its component | assumed — autonomous |
+| easy | high | [m2-source-control-core D53](decisions/m2-source-control-core.md) | W3 found two daemon–window mismatches and a test-isolation bug; the orchestrator fixed one test race | assumed — autonomous |
+| easy | high | [m2-source-control-core D54](decisions/m2-source-control-core.md) | Catching up with build/roadmap (m1-agent-status) needed no change here | assumed — autonomous |
+| easy | high | [m2-source-control-core D56](decisions/m2-source-control-core.md) | Final Round 1: accept all nine standing findings, which collapse to seven defects, and fix them in one batch | assumed — autonomous |
+| easy | high | [m2-source-control-core D58](decisions/m2-source-control-core.md) | All seven Final Round 1 defects are closed by the fix batch, each with a test | assumed — autonomous |
+| easy | high | [m2-source-control-core D59](decisions/m2-source-control-core.md) | UI verification round 1: 18 goals pass, three app defects found and fixed on the branch | assumed — autonomous |
+| easy | high | [m2-source-control-core D62](decisions/m2-source-control-core.md) | The UI rerun passes SC-61, SC-45 and the conflict badge | assumed — autonomous |
 | easy | high | [m0-core D1](decisions/m0-core.md) | Classify the item as an API, CLI, Organization and Visual design, and run every research phase | assumed — autonomous |
 | easy | high | [m0-core D2](decisions/m0-core.md) | Skip the visual companion and the adhd offer, use the standard gray-area set | locked by docs/loop/LOOP.md |
 | easy | high | [m0-core D3](decisions/m0-core.md) | Keep m0-core as one item with one pair of specs, built in waves | locked by docs/loop/queue.json |
@@ -451,6 +518,11 @@ files, not this one.
 | easy | high | [m0-registry D32](decisions/m0-registry.md) | Wave 2 checkpoint findings: fix all four defects | assumed — autonomous |
 | easy | high | [m0-registry D33](decisions/m0-registry.md) | A long QUIRKY_HOME breaks the PTY host's socket; logged, not fixed here | deferred: platform |
 | easy | high | [m0-registry D34](decisions/m0-registry.md) | The final review loop closed after three rounds with no open finding | assumed — autonomous |
+| easy | high | [m3-terminal-dock D2](decisions/m3-terminal-dock.md) | Run unattended brainstorming and select every relevant gray area | locked by docs/loop/LOOP.md |
+| easy | high | [m3-terminal-dock D4](decisions/m3-terminal-dock.md) | Bind omp OpenAI implementers to Gemini review after Opus proved unavailable | assumed — autonomous |
+| easy | high | [m3-terminal-dock D5](decisions/m3-terminal-dock.md) | Linux and Windows execution remain deferred | deferred: platform |
+| easy | high | [m3-terminal-dock D6](decisions/m3-terminal-dock.md) | Claude session-only picker controls avoid the global-settings defect | locked by docs/roadmap.md |
+| easy | high | [m3-terminal-dock D8](decisions/m3-terminal-dock.md) | Do not silently narrow parity or resurrect explicitly dropped subsystems | assumed — autonomous |
 | easy | high | [m2-ask-parity D1](decisions/m2-ask-parity.md) | In scope: the roadmap's five ask-parity points plus what they need to be testable | locked by docs/roadmap.md |
 | easy | high | [m2-ask-parity D2](decisions/m2-ask-parity.md) | Out of scope: hand-off, liveness, the wait cap, the 3-minute notification, rich previews, attention markers | locked by docs/roadmap.md |
 | easy | high | [m2-ask-parity D4](decisions/m2-ask-parity.md) | Brainstorming runs headless with the standard gray areas, all selected | locked by docs/loop/LOOP.md |
