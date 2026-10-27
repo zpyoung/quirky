@@ -373,9 +373,9 @@ OneShotSpec = {args: string[] /* may contain {model} {thinking} {prompt} */, pro
 ```
 `background: 'claude'` marks the Claude isolation args and the strict-MCP retry.
 
-Pruning (D6): on activate, and in `notes` for a worktree that fails `env.resolve` with
-`not-found`, delete that worktree's rows. On activate, list known worktrees via
-`quirky.worktree/list` and delete rows of IDs not present.
+Pruning (D6, D43): in `notes` for a worktree that fails `env.resolve` with `not-found`, delete
+that worktree's rows. Never prune at activation from a worktree listing: a transient git failure
+omits repositories from it.
 
 ## DO-NOT-CHANGE fences
 

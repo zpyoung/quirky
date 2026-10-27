@@ -462,5 +462,16 @@
 - **Revisit if:** m3-terminal-dock's per-PTY send queue lands and note sends should use it
 - **Source:** assumed — autonomous
 
+## D43: Final Round 1: accept all seven findings, which collapse to six defects, and fix them in one batch
+- **Question:** adjudicating Final Round 1 (three Codex lenses, gpt-6.1-sol, independence full, depth deep, over f4ff5ea..ROUND_1_HEAD excluding docs; prepass ran typecheck and the full suite live, both green)
+- **Options:** accept; reject; downgrade
+- **Chose:** accept all, none refuted or contested: X1 (CRITICAL) activation pruning deleted notes when a transient git failure dropped a repository from `quirky.worktree/list`, so activation no longer prunes and NA-23 is amended; C1 = S1 (HIGH) the sparkle sent a custom-command recipe to settings when no built-in agent can generate; C3 (MEDIUM) two quick sparkle clicks started two runs and the busy refusal cleared the live run's controls; S2 (MEDIUM) the launch dialog enabled Start with an unavailable saved agent and no enabled agents; C2 (MEDIUM) the 200 000-byte diff budget counted UTF-16 units; X2 (MEDIUM) a cancelled run released its lane before its process group was gone. Fixers FA (window AI), FB (notes pruning, budget) and FC (one-shot runner) run in parallel with disjoint scopes
+- **Why:** each was reproduced by the refute stage and names a wrong result or lost data
+- **Evidence:** scratchpad fr1/gate-C.json, gate-S.json, gate-X.json and manifest-*.json
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** a fix reopens a passing scenario
+- **Source:** assumed — autonomous
+
 ## Progress
-All three waves merged (W3 at ec31808), caught up with build/roadmap (D42). Post-catch-up gate running. Next: Final Round 1 (C, S, X lenses, Codex, deep) over f4ff5ea..HEAD, one fix batch, gate, then step 6 (UI pass).
+Final Round 1 done (D43); fix batch FA/FB/FC running in scratch worktrees from FIX1_BASE. Next: audit, merge, gate, then step 6 (UI pass, native file), then land.

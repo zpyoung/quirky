@@ -7,6 +7,7 @@
 **Amendments:**
 - 2026-10-27, before build: Codex adversarial review ([D32](../../../loop/decisions/m2-source-control-notes-ai.md)). An unconfirmed delivery keeps the notes (NA-18); agent output is decoded and cleaned before it becomes a message, including OpenCode's JSON events (NA-27); any typing during a generation keeps the box, even if the text typed was deleted again (NA-30).
 - 2026-10-27, during build ([D39](../../../loop/decisions/m2-source-control-notes-ai.md)): the CLI flag for a range start is `--start-line` (NA-4); a value that starts with `--` is passed as `--args=--model gpt-5.4` (NA-39); under NA-32's repository recipe Codex also takes the global `--model haiku` in place of its default model; a disabled session's tooltip is the daemon's reason, such as "Codex is waiting for approval." (NA-17).
+- 2026-10-27, Final Round 1 ([D43](../../../loop/decisions/m2-source-control-notes-ai.md)): notes are pruned only when their own worktree no longer resolves, never at activation (NA-23).
 
 ## Conceptual model
 
@@ -272,7 +273,7 @@ Nothing calls a real model.
 23. **NA-23: a removed worktree's notes go with it** (API)
     - **Given** two notes on **feat**
     - **When** **feat** is deleted through `quirky worktree delete --yes`, and an API client lists notes for its ID
-    - **Then** the list call fails with the worktree's not-found error, and the notes are gone from the store the next time the plugin reads notes or activates
+    - **Then** the list call fails with the worktree's not-found error, and the notes are gone from the store the next time that worktree's notes are read (activation never prunes, because a transient listing failure would look like a removal)
 
 ### Generating commit messages
 
