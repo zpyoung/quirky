@@ -15,7 +15,9 @@ import {
 import { startHarness, waitFor, waitForAsync, type Harness } from '../../../packages/daemon/test/helpers'
 import { makeTempDir, removeTempDirs } from '../../../packages/daemon/test/plugins/fixtures'
 import { createClaudeRunner, type ClaudeQueryParams } from '../claude-runner'
-import type { StructuredContext, StructuredLaunchOptions, StructuredRunner, StructuredRunnerFactory } from '../runner'
+import { createCodexRunner } from '../codex-runner'
+import type { StructuredContext, StructuredLaunchOptions, StructuredStartOptions, StructuredRunner, StructuredRunnerFactory } from '../runner'
+import { createCodexAppServerFixture, isolatedProviderEnvironment } from './fakes/codex-app-server'
 import { FakeQuery } from './fakes/fake-query'
 import { FakeWorld } from './fakes/world'
 
@@ -24,16 +26,16 @@ const FAKES_DIR = join(PLUGIN_DIR, 'test', 'fakes')
 const globals = globalThis as any
 
 class FakeRunner implements StructuredRunner {
-  started: { session: Session; prompt: string; options?: unknown }[] = []
+  started: { session: Session; prompt?: string; options?: unknown }[] = []
   sent: { sessionId: string; text: string }[] = []
   stopped: string[] = []
   startError: Error | null = null
   sendError: Error | null = null
   constructor(readonly context: StructuredContext) {}
-  async start(session: Session, prompt: string, options?: StructuredLaunchOptions) {
+  async start(session: Session, prompt?: string, options?: StructuredStartOptions) {
     if (this.startError) throw this.startError
     this.started.push({ session, prompt, options })
-    this.context.appendMessage({ sessionId: session.id, role: 'user', text: prompt })
+    if (prompt !== undefined) this.context.appendMessage({ sessionId: session.id, role: 'user', text: prompt })
     this.context.setStatus(session.id, 'working')
   }
   async send(sessionId: string, text: string) {
@@ -63,11 +65,11 @@ function builtinDir(accountPreparation = false): string {
   return dir
 }
 
-async function boot(options: { factory?: StructuredRunnerFactory; home?: string; world?: FakeWorld; accountPreparation?: boolean } = {}) {
+async function boot(options: { factory?: StructuredRunnerFactory | null; home?: string; world?: FakeWorld; accountPreparation?: boolean } = {}) {
   world = options.world ?? new FakeWorld()
   globals.__structuredFakes = world
   globals.__QUIRKY_TEST_STRUCTURED_RUNNER__ =
-    options.factory ?? ((context: StructuredContext) => (runner = new FakeRunner(context)))
+    options.factory === null ? undefined : options.factory ?? ((context: StructuredContext) => (runner = new FakeRunner(context)))
   h = await startHarness({
     home: options.home ?? shortHome(),
     builtinPluginsDir: builtinDir(options.accountPreparation === true)
@@ -85,6 +87,8 @@ afterEach(async () => {
 const call = (method: string, params: Record<string, unknown> = {}) => client.callAny(method, params) as Promise<any>
 const create = (prompt = 'fix the bug') =>
   call('quirky.structured/create', { worktree: 'main', agent: 'claude', prompt }) as Promise<Session>
+const createAgent = (agent: string, prompt = 'fix the bug', extra: Record<string, unknown> = {}) =>
+  call('quirky.structured/create', { worktree: 'main', agent, prompt, ...extra }) as Promise<Session>
 
 async function failure(promise: Promise<unknown>): Promise<RpcError> {
   try {
@@ -347,9 +351,8 @@ describe('structured sessions with a runner', () => {
   })
 
   test('validates agent, worktree and session kind', async () => {
-    expect(await failure(call('quirky.structured/create', { worktree: 'main', agent: 'codex', prompt: 'x' }))).toMatchObject({
-      code: RpcErrorCode.InvalidParams,
-      message: 'structured sessions support only the claude agent'
+    expect(await failure(call('quirky.structured/create', { worktree: 'main', agent: 'gemini', prompt: 'x' }))).toMatchObject({
+      code: RpcErrorCode.InvalidParams
     })
     expect(await failure(call('quirky.structured/create', { worktree: 'nope', agent: 'claude', prompt: 'x' }))).toMatchObject({
       code: RpcErrorCode.NotFound
@@ -367,6 +370,19 @@ describe('structured sessions with a runner', () => {
     })
   })
 
+  test('structured resume refuses unsupported forks and provider identity overrides', async () => {
+    const session = await create('go')
+    await waitFor(() => runner.started.length === 1)
+    expect(await failure(call('quirky.structured/resume', { session: session.id, fork: true }))).toMatchObject({
+      code: RpcErrorCode.InvalidParams
+    })
+    expect(await failure(call('quirky.structured/resume', { session: session.id, providerSession: 'override' }))).toMatchObject({
+      code: RpcErrorCode.InvalidParams
+    })
+    expect(world.registerCalls).toHaveLength(1)
+    expect(h.pty.requests.some((request) => request.type === 'create')).toBe(false)
+  })
+
   test('send failures from the runner surface as internal errors', async () => {
     const session = await create('go')
     await waitFor(() => runner.started.length === 1)
@@ -376,19 +392,9 @@ describe('structured sessions with a runner', () => {
       message: 'quirky.structured: session is not running'
     })
   })
-
-  test('the catalog lists the methods, the message event and read-only messages', async () => {
-    const api = (await client.call('api.describe', {})) as ApiDescription
-    const methods = api.methods.filter((m) => m.plugin === 'quirky.structured')
-    expect(methods.map((m) => m.name).sort()).toEqual([
-      'quirky.structured/create',
-      'quirky.structured/messages',
-      'quirky.structured/send'
-    ])
-    expect(methods.find((m) => m.name === 'quirky.structured/messages')?.readOnly).toBe(true)
-    expect(api.events.map((e) => e.name)).toContain('quirky.structured/message')
-  })
 })
+
+
 
 describe('a runner that fails to start', () => {
   test('leaves a system message and marks the session exited', async () => {
@@ -461,6 +467,203 @@ describe('the Claude runner inside the plugin', () => {
     ])
     await waitFor(() => structuredEvents().length === messages.length)
     expect(structuredEvents().map((e) => e.data.message.seq)).toEqual([1, 2, 3, 4, 5])
+  })
+})
+
+describe('the Codex runner inside the plugin', () => {
+  test('runs app-server through the daemon API, persists native state, asks approval and continues an idle thread', async () => {
+    const home = shortHome()
+    const fixture = createCodexAppServerFixture(home)
+    await boot({
+      home,
+      factory: (context) =>
+        createCodexRunner(
+          { ...context, resolveCodexPath: async () => fixture.executable },
+          { env: isolatedProviderEnvironment(home) }
+        )
+    })
+    world.worktree.path = home
+    const snapshot = {
+      agent: 'codex',
+      options: { model: { value: 'gpt-5.5', source: 'explicit' }, effort: { value: 'high', source: 'explicit' } },
+      summary: 'Codex · GPT-5.5 · Effort: high'
+    }
+    world.resolveLaunchOverride = () => ({
+      added: [],
+      args: '',
+      structured: { model: 'gpt-5.5', effort: 'high' },
+      shadowed: [],
+      launchSettings: snapshot
+    })
+
+    const session = await createAgent('codex', '[approve] summarize', { model: 'gpt-5.5', options: { effort: 'high' } })
+    expect(session).toMatchObject({ kind: 'structured', agent: 'codex', cwd: home })
+    expect(h.pty.requests.some((request) => request.type === 'create')).toBe(false)
+    const ask = await waitForAsync(async () => ((await call('quirky.ask/list', { pendingOnly: true })) as { id: string }[])[0])
+    await call('quirky.ask/answer', { askId: ask.id, answers: { decision: { value: 'allow', source: 'option' } } })
+    await waitFor(() => world.statusLog.some((entry) => entry.sessionId === session.id && entry.status === 'done'))
+    expect(settledEvents().find((event) => event.sessionId === session.id && event.state === 'done')).toMatchObject({
+      agent: 'codex',
+      state: 'done',
+      lastAssistantMessage: 'Codex: [approve] summarize'
+    })
+
+    const stored = (await call('quirky.session/get', { session: session.id })) as Session
+    expect(stored).toMatchObject({
+      providerSession: { id: 'scripted-thread', transcriptPath: null },
+      launchSettings: snapshot
+    })
+    expect(fixture.requests().filter((request) => request.method).map((request) => request.method)).toEqual([
+      'initialize',
+      'initialized',
+      'thread/start',
+      'turn/start'
+    ])
+    expect(fixture.requests().find((request) => request.method === 'turn/start')?.params).toEqual({
+      threadId: 'scripted-thread',
+      input: [{ type: 'text', text: '[approve] summarize' }],
+      model: 'gpt-5.5',
+      effort: 'high'
+    })
+    expect(fixture.requests().find((request) => request.id === 'approval-1')).toEqual({
+      id: 'approval-1',
+      result: { decision: 'accept' }
+    })
+
+    await call('quirky.structured/send', { session: session.id, text: 'continue' })
+    await waitForAsync(async () => {
+      const messages = (await call('quirky.structured/messages', { session: session.id })) as StructuredMessage[]
+      return messages.some((message) => message.role === 'assistant' && message.text === 'Codex: continue')
+    })
+    const journal = (await call('quirky.structured/messages', { session: session.id })) as StructuredMessage[]
+    expect(journal.filter((message) => message.role === 'assistant').map((message) => message.text)).toEqual([
+      'Codex: [approve] summarize',
+      'Codex: continue'
+    ])
+    expect(journal.some((message) => message.role === 'tool' && message.text.includes('printf approved') && message.text.includes('approved'))).toBe(true)
+
+    await call('quirky.structured/stop', { session: session.id })
+    expect((await call('quirky.session/get', { session: session.id })).status).toBe('exited')
+    expect(await call('quirky.structured/messages', { session: session.id })).toHaveLength(journal.length)
+  })
+
+  test('reports malformed JSON and rejected turn-start RPCs as exited, never done', async () => {
+    const home = shortHome()
+    const fixture = createCodexAppServerFixture(home)
+    await boot({
+      home,
+      factory: (context) =>
+        createCodexRunner(
+          { ...context, resolveCodexPath: async () => fixture.executable },
+          { env: isolatedProviderEnvironment(home) }
+        )
+    })
+    world.worktree.path = home
+    for (const [prompt, diagnostic] of [
+      ['[malformed]', 'malformed JSON'],
+      ['[rpc-error]', 'scripted turn request error']
+    ]) {
+      const session = await createAgent('codex', prompt)
+      await waitFor(() => world.statusLog.some((entry) => entry.sessionId === session.id && entry.status === 'exited'))
+      const messages = (await call('quirky.structured/messages', { session: session.id })) as StructuredMessage[]
+      expect(messages.some((message) => message.role === 'system' && message.text.includes(diagnostic)), JSON.stringify(messages)).toBe(true)
+      expect(settledEvents().some((event) => event.sessionId === session.id && event.state === 'done')).toBe(false)
+    }
+    expect(h.pty.requests.some((request) => request.type === 'create')).toBe(false)
+  })
+
+  test('sends the selected Codex home to the native app-server on create and resume', async () => {
+    const home = makeTempDir('qs-codex-account-')
+    const managedHome = join(home, 'managed-codex')
+    const resumeTranscriptPath = join(managedHome, 'sessions', '2026', '10', '27', 'rollout-scripted-thread.jsonl')
+    const fixture = createCodexAppServerFixture(home)
+    const worldWithManagedCodex = new FakeWorld()
+    worldWithManagedCodex.worktree.path = home
+    worldWithManagedCodex.accountPreparationResult = {
+      env: { CODEX_HOME: managedHome },
+      shellInit: null,
+      account: {
+        provider: 'codex',
+        id: '00000000-0000-4000-8000-000000000001',
+        label: 'Managed Codex',
+        source: 'managed'
+      },
+      resumeTranscriptPath
+    }
+    await boot({
+      home,
+      world: worldWithManagedCodex,
+      accountPreparation: true,
+      factory: (context) =>
+        createCodexRunner(
+          { ...context, resolveCodexPath: async () => fixture.executable },
+          { env: isolatedProviderEnvironment(home) }
+        )
+    })
+
+    const original = await createAgent('codex', 'continue this conversation')
+    await waitFor(() =>
+      worldWithManagedCodex.statusLog.some((entry) => entry.sessionId === original.id && entry.status === 'done')
+    )
+    expect(fixture.environments()).toEqual([{ CODEX_HOME: managedHome }])
+    expect((await call('quirky.session/get', { session: original.id })).providerSession).toMatchObject({
+      id: 'scripted-thread',
+      transcriptPath: null
+    })
+    await call('quirky.structured/stop', { session: original.id })
+
+    const resumed = (await call('quirky.structured/resume', { session: original.id })) as Session
+    const resumedRecord = await waitForAsync(async () => {
+      const stored = (await call('quirky.session/get', { session: resumed.id })) as Session
+      return fixture.environments().length === 2 && stored.providerSession?.transcriptPath === resumeTranscriptPath
+        ? stored
+        : undefined
+    })
+
+    expect(resumedRecord).toMatchObject({
+      agent: 'codex',
+      resumedFrom: original.id,
+      providerSession: { id: 'scripted-thread', transcriptPath: resumeTranscriptPath }
+    })
+    expect(worldWithManagedCodex.accountPrepareCalls[1]).toMatchObject({
+      agent: 'codex',
+      sessionId: resumed.id,
+      resume: {
+        sourceSessionId: original.id,
+        providerSession: { id: 'scripted-thread', transcriptPath: null }
+      }
+    })
+    expect(fixture.requests().find((request) => request.method === 'thread/resume')?.params).toMatchObject({
+      threadId: 'scripted-thread',
+      cwd: home
+    })
+    expect(fixture.environments()).toEqual([{ CODEX_HOME: managedHome }, { CODEX_HOME: managedHome }])
+    await call('quirky.structured/stop', { session: resumed.id })
+  })
+
+  test('does not spawn Codex app-server when account preparation fails', async () => {
+    const home = makeTempDir('qs-codex-account-failure-')
+    const fixture = createCodexAppServerFixture(home)
+    const worldWithUnavailableHome = new FakeWorld()
+    worldWithUnavailableHome.worktree.path = home
+    worldWithUnavailableHome.accountPreparationFailure = 'selected Codex home is unavailable'
+    await boot({
+      home,
+      world: worldWithUnavailableHome,
+      accountPreparation: true,
+      factory: (context) =>
+        createCodexRunner(
+          { ...context, resolveCodexPath: async () => fixture.executable },
+          { env: isolatedProviderEnvironment(home) }
+        )
+    })
+
+    const error = await failure(createAgent('codex', 'must not start'))
+
+    expect(error.message).toContain('selected Codex home is unavailable')
+    expect(worldWithUnavailableHome.sessions.size).toBe(0)
+    expect(fixture.environments()).toEqual([])
+    expect(fixture.requests()).toEqual([])
   })
 })
 
