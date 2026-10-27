@@ -1,5 +1,6 @@
 import { existsSync, readFileSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
+import { isDeepStrictEqual } from 'node:util'
 import { hookCommand } from '../hook-command.ts'
 import { InstallError, type InstallEnv, type Installer } from '../types.ts'
 import { claudeDefinition } from './claude-json.ts'
@@ -57,11 +58,36 @@ function isEmptyFlowSequence(lines: readonly string[]): boolean {
   return body.length === 1 && withoutComment(body[0]!) === '[]'
 }
 
+const unparseableDsh = (path: string, home: string): InstallError => new InstallError(`Could not parse ${tildePath(path, home)}`)
+
+/** The patch file's rows; throws InstallError unless the text is valid YAML holding a sequence (or nothing). */
+function dshRows(lines: readonly string[], path: string, home: string): unknown[] {
+  let document: unknown
+  try {
+    document = Bun.YAML.parse(lines.join('\n'))
+  } catch {
+    throw unparseableDsh(path, home)
+  }
+  if (document === null) return []
+  if (!Array.isArray(document)) throw unparseableDsh(path, home)
+  return document
+}
+
+const isQuirkyRow = (row: unknown): boolean =>
+  typeof row === 'object' && row !== null && Array.isArray((row as { insert?: unknown }).insert) && (row as { insert: unknown[] }).insert.some((entry) => (entry as { id?: unknown } | null)?.id === DSH_ROW_ID)
+
+/** Refuses an edit whose result parses to anything but the original rows plus Quirky's own entry, e.g. an appended entry that lands in a second YAML document. */
+function assertDshEdit(before: readonly string[], after: readonly string[], path: string, home: string): void {
+  const kept = (lines: readonly string[]): unknown[] => dshRows(lines, path, home).filter((row) => !isQuirkyRow(row))
+  if (!isDeepStrictEqual(kept(before), kept(after))) throw unparseableDsh(path, home)
+}
+
 /** dsh's patch file is a YAML sequence: appending an entry to a flow sequence, or to a mapping, would break it. */
 function assertDshShape(lines: readonly string[], path: string, home: string): void {
   const fail = (): never => {
-    throw new InstallError(`Could not parse ${tildePath(path, home)}`)
+    throw unparseableDsh(path, home)
   }
+  dshRows(lines, path, home)
   const body = lines.filter(isBodyLine)
   if (body.length === 0 || isEmptyFlowSequence(lines)) return
   if (body[0]!.trimStart().startsWith('[')) fail()
@@ -93,9 +119,6 @@ export const dshInstaller: Installer = {
     const hooksPath = dshHooksPath(target)
     const { text, parts } = readDsh(patchPath, target.home)
     const original = snapshot(parts)
-    const hooksText = dshHooksText()
-    const hooksChanged = !existsSync(hooksPath) || readFileSync(hooksPath, 'utf8') !== hooksText
-    if (hooksChanged) writeFileAtomic(hooksPath, hooksText)
     const region = findRegion(parts.lines, DSH_START, DSH_END)
     if (region) {
       const wasEmpty = parts.lines.slice(region.start, region.end).includes(DSH_EMPTY_NOTE)
@@ -112,6 +135,10 @@ export const dshInstaller: Installer = {
       parts.lines.push(...dshBlock(hooksPath, wasEmpty))
       parts.finalNewline = true
     }
+    assertDshEdit(original.lines, parts.lines, patchPath, target.home)
+    const hooksText = dshHooksText()
+    const hooksChanged = !existsSync(hooksPath) || readFileSync(hooksPath, 'utf8') !== hooksText
+    if (hooksChanged) writeFileAtomic(hooksPath, hooksText)
     const patchChanged = commitParts(patchPath, text, original, parts)
     return { changed: [...(patchChanged ? [patchPath] : []), ...(hooksChanged ? [hooksPath] : [])] }
   },
@@ -127,6 +154,7 @@ export const dshInstaller: Installer = {
       const wasEmpty = parts.lines.slice(region.start, region.end).includes(DSH_EMPTY_NOTE)
       parts.lines.splice(region.start, region.end - region.start + 1)
       if (wasEmpty) parts.lines.push('[]')
+      assertDshEdit(original.lines, parts.lines, patchPath, target.home)
       patchChanged = commitParts(patchPath, text, original, parts)
     }
     const hooksChanged = existsSync(hooksPath)
@@ -211,7 +239,7 @@ export const hermesInstaller: Installer = {
     if (text !== null) {
       const parts = splitText(text)
       const original = snapshot(parts)
-      parts.lines = restoreConfig(parts.lines)
+      parts.lines = restoreConfig(parts.lines, HERMES_PLUGIN_NAME)
       if (commitParts(configPath, text, original, parts)) changed.push(configPath)
     }
     return { changed: [...removeOwned(hermesPluginFiles(target), [hermesPluginDir(target)]), ...changed] }

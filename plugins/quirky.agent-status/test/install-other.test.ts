@@ -455,6 +455,26 @@ describe('dsh', () => {
       expect(existsSync(hooksFile(home))).toBe(false)
     }
   })
+
+  test('YAML that does not parse is reported and left alone on install and remove', () => {
+    const home = makeHome()
+    for (const bad of ['- insert: [\n', '- "unterminated\n- insert:\n', '- a: |\n  text\n- insert:\n    - id: z\n']) {
+      const patch = put(home, '.dsh/cordis.patch.yml', bad)
+      expectError(dshInstaller, target(home), 'Could not parse ~/.dsh/cordis.patch.yml')
+      expect(() => dshInstaller.remove(target(home))).toThrow('Could not parse ~/.dsh/cordis.patch.yml')
+      expect(read(patch)).toBe(bad)
+      expect(existsSync(hooksFile(home))).toBe(false)
+    }
+  })
+
+  test('an edit that would change what the file means is refused before anything is written', () => {
+    const home = makeHome()
+    const original = '- insert:\n    - id: mine\n...\n'
+    const patch = put(home, '.dsh/cordis.patch.yml', original)
+    expect(() => dshInstaller.install(target(home))).toThrow('Could not parse ~/.dsh/cordis.patch.yml')
+    expect(read(patch)).toBe(original)
+    expect(existsSync(hooksFile(home))).toBe(false)
+  })
 })
 
 describe('hermes', () => {
@@ -550,6 +570,30 @@ describe('hermes', () => {
     writeFileSync(config, read(config).replace('    - quirky-status', '    - mine\n    - quirky-status'))
     hermesInstaller.remove(target(home))
     expect(Bun.YAML.parse(read(config))).toEqual({ plugins: { enabled: ['mine'] } })
+  })
+
+  test('removal keeps plugins the user added to an enabled flow list after install', () => {
+    const home = makeHome()
+    const config = put(home, '.hermes/config.yaml', 'plugins:\n  enabled: [mine]\n  disabled: [noisy]\n')
+    const env = target(home)
+    hermesInstaller.install(env)
+    writeFileSync(config, read(config).replace('[mine, quirky-status]', '[mine, quirky-status, later]'))
+    hermesInstaller.remove(env)
+    expect(Bun.YAML.parse(read(config))).toEqual({ plugins: { enabled: ['mine', 'later'], disabled: ['noisy'] } })
+    expect(read(config)).not.toContain('quirky')
+  })
+
+  test('removal keeps edits to a disabled flow list and puts back only the name Quirky took out', () => {
+    const home = makeHome()
+    const config = put(home, '.hermes/config.yaml', 'plugins:\n  enabled: [mine]\n  disabled: [a, quirky-status, b]\n')
+    const env = target(home)
+    hermesInstaller.install(env)
+    writeFileSync(config, read(config).replace('disabled: [a, b]', 'disabled: [a, b, later]'))
+    hermesInstaller.remove(env)
+    const plugins = (Bun.YAML.parse(read(config)) as any).plugins
+    expect(plugins.enabled).toEqual(['mine'])
+    expect([...plugins.disabled].sort()).toEqual(['a', 'b', 'later', 'quirky-status'])
+    expect(read(config)).not.toContain('quirky-original')
   })
 
   test('reads HERMES_HOME', () => {

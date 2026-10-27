@@ -246,11 +246,34 @@ function editLines(input: readonly string[], name: string): string[] {
   return lines
 }
 
-/** Undoes `enablePlugin`: restores rewritten lines and drops added ones, keeping a parent line the user has since put children under. */
-export function restoreConfig(input: readonly string[]): string[] {
+function flowTokens(line: string): string[] | null {
+  const value = valueAfterColon(line)
+  return value.startsWith('[') && value.endsWith(']') ? splitFlow(value.slice(1, -1).trim()) : null
+}
+
+/**
+ * The line a rewritten flow list becomes on remove. When the list still reads as Quirky left it,
+ * the saved original comes back byte for byte; when the user has edited it since, their entries
+ * stay and only `name` is taken out of `enabled`, or put back into `disabled`.
+ */
+function restoreFlowLine(line: string, original: string, name: string): string {
+  const rewritten = flowTokens(line.slice(0, line.indexOf(ORIGINAL_MARK)))
+  const saved = flowTokens(original)
+  if (!rewritten || !saved) return original
+  const wasDisabled = saved.some((token) => itemName(token) === name)
+  const expected = wasDisabled ? saved.filter((token) => itemName(token) !== name) : [...saved, name]
+  if (rewritten.length === expected.length && rewritten.every((token, position) => token === expected[position])) return original
+  const present = rewritten.some((token) => itemName(token) === name)
+  const kept = wasDisabled ? (present ? rewritten : [...rewritten, saved.find((token) => itemName(token) === name)!]) : rewritten.filter((token) => itemName(token) !== name)
+  return `${keyPart(line)} ${flow(kept)}`
+}
+
+/** Undoes `enablePlugin` for `name`: restores rewritten lines and drops added ones, keeping a parent line the user has since put children under. */
+export function restoreConfig(input: readonly string[], name: string): string[] {
   const lines = input.map((line) => {
     const at = line.indexOf(ORIGINAL_MARK)
-    return at === -1 ? line : line.slice(at + ORIGINAL_MARK.length)
+    if (at === -1) return line
+    return restoreFlowLine(line, line.slice(at + ORIGINAL_MARK.length), name)
   })
   for (let index = lines.length - 1; index >= 0; index--) {
     if (!lines[index]!.endsWith(ADDED)) continue
