@@ -1,5 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { GitBusyOp, GitChange, GitCommit, GitStatus, GitStatusEntry, UiPluginContext } from '@quirky/protocol'
+import { CommitSparkle } from '../ai/CommitSparkle'
+import type { FixButtonProps } from '../ai/FixSplitButton'
+import { LaunchDialog } from '../ai/LaunchDialog'
+import type { FixAction } from '../ai/types'
+import { useAiFix } from '../ai/useAiFix'
 import { NotesShelf } from '../notes/NotesShelf'
 import { noteViewInput } from '../notes/open-note'
 import { noteCounts, useNotes } from '../notes/useNotes'
@@ -144,10 +149,13 @@ export function WorktreePanel({ context, worktree, report, notify, drafts, offer
   const [notesReveal, setNotesReveal] = useState(0)
   const [message, setMessageState] = useState(() => drafts.get(worktree))
   const [committing, setCommitting] = useState(false)
+  const edits = useRef(0)
+  const aiFix = useAiFix(context, worktree)
   const [remoteError, setRemoteError] = useState<string | null>(null)
   const [commitBlocked, setCommitBlocked] = useState<Blocked | null>(null)
   const [pushBlocked, setPushBlocked] = useState<Blocked | null>(null)
   const [dialog, setDialog] = useState<DialogState | null>(null)
+  const [launch, setLaunch] = useState<FixAction | null>(null)
   const [menu, setMenu] = useState<{ x: number; y: number; item: RowItem } | null>(null)
   const [submodules, setSubmodules] = useState<Record<string, SubmoduleState>>({})
 
@@ -171,6 +179,7 @@ export function WorktreePanel({ context, worktree, report, notify, drafts, offer
   )
 
   const setMessage = (text: string) => {
+    edits.current += 1
     setMessageState(text)
     drafts.set(worktree, text)
   }
@@ -270,6 +279,10 @@ export function WorktreePanel({ context, worktree, report, notify, drafts, offer
   const menuRows = menuItems(ladder)
   const unresolved = entries.filter((e) => e.conflict?.state === 'unresolved').length
   const operation = status?.operation ?? 'none'
+  const aiEnabled = settings.aiEnabled
+  const stagedCount = entries.filter((e) => e.area === 'staged').length
+  const fixFor = (action: FixAction): FixButtonProps | undefined =>
+    aiEnabled ? { action, busy: aiFix.busy, onFix: () => void aiFix.start(action), onCustomize: () => setLaunch(action) } : undefined
 
   const open = (input: Omit<DiffViewInput, 'worktree'>) => context.openView(DIFF_VIEW_ID, { worktree, ...input })
 
@@ -737,6 +750,7 @@ export function WorktreePanel({ context, worktree, report, notify, drafts, offer
             onReview={() => open({ mode: 'conflicts' })}
             onContinue={() => void remote('continue')}
             onAbort={() => void abort()}
+            fix={fixFor('resolveConflicts')}
           />
         )}
         {status?.capped && (
@@ -758,6 +772,19 @@ export function WorktreePanel({ context, worktree, report, notify, drafts, offer
             remoteError={remoteError}
             onPrimary={onPrimary}
             onMenu={(id) => void runMenu(id)}
+            sparkle={
+              aiEnabled ? (
+                <CommitSparkle
+                  context={context}
+                  worktree={worktree}
+                  staged={stagedCount}
+                  message={message}
+                  committing={committing}
+                  edits={edits}
+                  onResult={setMessage}
+                />
+              ) : undefined
+            }
           >
             {commitBlocked && (
               <BlockedCard
@@ -765,6 +792,7 @@ export function WorktreePanel({ context, worktree, report, notify, drafts, offer
                 pill={commitBlocked.pill}
                 summary={commitBlocked.summary}
                 onDetails={hasMoreDetail(commitBlocked.summary, commitBlocked.output) ? () => setDialog({ kind: 'details', title: 'Commit Failed', output: commitBlocked.output }) : null}
+                fix={fixFor('fixCommitFailure')}
               />
             )}
             {pushBlocked && (
@@ -773,6 +801,7 @@ export function WorktreePanel({ context, worktree, report, notify, drafts, offer
                 pill={pushBlocked.pill}
                 summary={pushBlocked.summary}
                 onDetails={hasMoreDetail(pushBlocked.summary, pushBlocked.output) ? () => setDialog({ kind: 'details', title: 'Push Failed', output: pushBlocked.output }) : null}
+                fix={fixFor('fixPushFailure')}
               />
             )}
           </CommitArea>
@@ -878,11 +907,27 @@ export function WorktreePanel({ context, worktree, report, notify, drafts, offer
         <Dialog title={dialog.title} onClose={() => setDialog(null)} wide>
           <pre className="script-preview">{dialog.output}</pre>
           <div className="dialog-actions">
+            {aiEnabled && (
+              <button
+                type="button"
+                className="primary"
+                disabled={aiFix.busy}
+                onClick={() => {
+                  setDialog(null)
+                  void aiFix.start(dialog.title === 'Commit Failed' ? 'fixCommitFailure' : 'fixPushFailure')
+                }}
+              >
+                Fix with AI
+              </button>
+            )}
             <button type="button" onClick={() => setDialog(null)}>
               Close
             </button>
           </div>
         </Dialog>
+      )}
+      {launch !== null && aiEnabled && (
+        <LaunchDialog context={context} worktree={worktree} action={launch} onClose={() => setLaunch(null)} start={(params) => aiFix.start(launch, params)} />
       )}
       {dialog?.kind === 'base' && (
         <ChangeBaseDialog context={context} worktree={worktree} current={base} onClose={() => setDialog(null)} onChanged={() => void refreshAll()} />

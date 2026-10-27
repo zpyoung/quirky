@@ -2639,6 +2639,10 @@
       {
         "id": "diff",
         "title": "Diff"
+      },
+      {
+        "id": "ai-settings",
+        "title": "Source Control AI defaults"
       }
     ],
     "command": [
@@ -2886,6 +2890,10 @@
       {
         "id": "send-review-notes",
         "title": "Send Review Notes to Agent"
+      },
+      {
+        "id": "ai-settings",
+        "title": "Source Control AI Settings"
       }
     ],
     "keybinding": [

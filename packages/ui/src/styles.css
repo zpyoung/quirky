@@ -2684,3 +2684,170 @@ select {
   font-size: 11px;
   color: var(--muted);
 }
+
+.commit-box {
+  position: relative;
+}
+
+.scm-ai-message {
+  padding-right: 30px;
+}
+
+.scm-ai-spark {
+  position: absolute;
+  top: 12px;
+  right: 14px;
+  display: inline-flex;
+}
+
+.scm-ai-sparkle,
+.scm-ai-stop {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border-radius: 4px;
+}
+
+.scm-ai-sparkle:not(:disabled) {
+  color: var(--accent);
+}
+
+.scm-ai-stop {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  background: var(--bg-raised);
+}
+
+.scm-ai-spark:hover .scm-ai-stop,
+.scm-ai-stop:focus-visible {
+  opacity: 1;
+}
+
+.scm-ai-stop-square {
+  width: 9px;
+  height: 9px;
+  border-radius: 1px;
+  background: currentColor;
+}
+
+.scm-ai-fix {
+  flex-shrink: 0;
+}
+
+.scm-ai-fix-primary {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
+.scm-ai-fix-chevron {
+  padding: 3px 7px;
+  border-left-width: 0;
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+}
+
+.scm-ai-icon {
+  flex-shrink: 0;
+}
+
+.scm-ai-template {
+  font-family: ui-monospace, Menlo, monospace;
+  font-size: 12px;
+}
+
+.scm-ai-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.scm-ai-field-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  color: var(--muted);
+}
+
+.scm-ai-status {
+  padding: 4px 0;
+}
+
+.scm-ai-save {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+.scm-ai-check {
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  color: var(--text);
+}
+
+.scm-ai-view {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px 18px;
+}
+
+.scm-ai-view label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  color: var(--muted);
+}
+
+.scm-ai-view .scm-ai-check {
+  color: var(--text);
+}
+
+.scm-ai-view .muted {
+  margin: 0;
+}
+
+.scm-ai-view-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.scm-ai-view-head h2,
+.scm-ai-action h3 {
+  margin: 0;
+}
+
+.scm-ai-view-head h2 {
+  font-size: 15px;
+}
+
+.scm-ai-action {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-width: 640px;
+  padding: 12px 0 4px;
+  border-top: 1px solid var(--border);
+}
+
+.scm-ai-action h3 {
+  font-size: 13px;
+}
+
+.scm-ai-hint {
+  font-size: 11px;
+}
