@@ -148,12 +148,13 @@ textarea {
   align-items: center;
   gap: 8px;
   padding: 0 8px;
-  overflow-x: auto;
+  overflow: visible;
   background: var(--bg-raised);
 }
 
 .plugin-status-bar .plugin-status-bar-slot {
   display: flex;
+  flex: 1 1 auto;
   flex-direction: row;
   align-items: center;
   min-width: 0;
@@ -161,6 +162,7 @@ textarea {
 
 .plugin-status-bar-slot .plugin-slot-body {
   display: flex;
+  flex: 1 1 auto;
   align-items: center;
   min-width: 0;
 }
