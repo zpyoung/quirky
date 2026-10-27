@@ -244,8 +244,9 @@
         "m1-worktrees",
         "m1-agent-status"
       ],
-      "status": "todo",
-      "early": true
+      "status": "in-progress",
+      "early": true,
+      "lane": 1
     },
     {
       "id": "m6-orchestration-workers",
