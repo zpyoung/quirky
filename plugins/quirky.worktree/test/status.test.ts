@@ -63,7 +63,9 @@ describe('windowDisplay', () => {
     ['blocked past 30 minutes', { state: 'blocked', display: 'blocked', label: 'Blocked', evidenceAt: NOW - 40 * MIN }, false, 'idle', 'Idle'],
     ['done never decays', { state: 'done', display: 'done', label: 'Done', evidenceAt: 0 }, true, 'done', 'Done'],
     ['failed never decays', { state: 'done', display: 'failed', label: 'Failed', evidenceAt: 0 }, false, 'failed', 'Failed'],
-    ['unconfirmed fresh keeps its label', { display: 'unconfirmed', label: "Couldn't confirm" }, true, 'unconfirmed', "Couldn't confirm"]
+    ['unconfirmed fresh keeps its label', { display: 'unconfirmed', label: "Couldn't confirm" }, true, 'unconfirmed', "Couldn't confirm"],
+    ['restored-unconfirmed past 30 minutes, running, stays unconfirmed', { display: 'unconfirmed', label: "Couldn't confirm", restoredUnconfirmed: true, evidenceAt: NOW - 40 * MIN }, true, 'unconfirmed', "Couldn't confirm"],
+    ['restored-unconfirmed past 30 minutes, not running, stays unconfirmed', { display: 'unconfirmed', label: "Couldn't confirm", restoredUnconfirmed: true, evidenceAt: NOW - 40 * MIN }, false, 'unconfirmed', "Couldn't confirm"]
   ]
   for (const [name, over, running, display, label] of table) {
     test(name, () => expect(windowDisplay(row(over), NOW, running)).toEqual({ display, label } as never))
@@ -137,6 +139,11 @@ describe('worktreeGlyph', () => {
     const stale = withSummary('a', 'working', { evidenceAt: NOW - 31 * 60_000 })
     expect(shown([stale, session('b', 'w1', 'running')])).toBe('unverifiable')
     expect(shown([stale, withSummary('c', 'done')])).toBe('unverifiable')
+  })
+
+  test('a restored-unconfirmed summary keeps its unconfirmed glyph however long it has been quiet', () => {
+    const restored = withSummary('a', 'unconfirmed', { restoredUnconfirmed: true, evidenceAt: NOW - 31 * 60_000 })
+    expect(shown([restored, session('b', 'w1', 'running')])).toBe('unconfirmed')
   })
 
   test('sessions with no summary rank by coarse status, and a summary wins a tie with its own progress', () => {
