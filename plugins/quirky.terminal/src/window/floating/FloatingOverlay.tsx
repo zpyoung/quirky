@@ -89,14 +89,15 @@ function PanelBody({ context, options, onReport }: { context: UiPluginContext; o
  * The floating workspace: a draggable button that toggles a panel (title bar, edge resize,
  * maximize, minimize) over the window. Geometry changes are local while the mouse is down and sent
  * once through `setFloating` on release. It tells the window when focus is inside the panel
- * (`floatingFocus`), so the app keys act on its workspace, and reports `{shown, state, layout,
- * focusedPane, panes, visibleSessions}`. Draws nothing while the Enable Floating Workspace setting is off.
+ * (`floatingFocus`), so the app keys act on its workspace, and reports `{shown, state, focused, focusSequence,
+ * layout, focusedPane, panes, visibleSessions}`. Draws nothing while the Enable Floating Workspace setting is off.
  */
 export function FloatingOverlay({ context, report, workspaceOptions }: Props) {
   const [state, setState] = useState<FloatingState | null>(null)
   const [local, setLocal] = useState<Local | null>(null)
   const [menu, setMenu] = useState<Point | null>(null)
   const [body, setBody] = useState<ViewReport | null>(null)
+  const lastFocusSequence = useRef(0)
   const view = useViewport()
   const panel = useRef<HTMLDivElement>(null)
   const suppressClick = useRef(false)
@@ -149,11 +150,14 @@ export function FloatingOverlay({ context, report, workspaceOptions }: Props) {
   const showPanel = state !== null && state.enabled && state.open
 
   useEffect(() => {
+    if (typeof body?.focusSequence === 'number') lastFocusSequence.current = Math.max(lastFocusSequence.current, body.focusSequence)
     report?.({
       shown: showPanel,
       state,
       layout: showPanel ? (body?.layout ?? null) : null,
       focusedPane: showPanel ? (body?.focusedPane ?? null) : null,
+      focused: showPanel && Boolean(body?.focused),
+      focusSequence: lastFocusSequence.current,
       panes: showPanel ? (body?.panes ?? []) : [],
       visibleSessions: showPanel ? (body?.visibleSessions ?? []) : []
     })
