@@ -93,6 +93,7 @@ export class Rig {
   writeLog: Write[] = []
   private terminalModel: { screen: TerminalRow[]; scrollback: TerminalRow[] } | null = null
   private writeWatchers: { when: (text: string, session: string) => boolean; action: () => void; every: boolean }[] = []
+  private readWatchers: (() => void)[] = []
 
   private constructor(
     public h: Harness,
@@ -134,7 +135,9 @@ export class Rig {
     requests.push = (...items) => {
       const length = push(...items)
       for (const item of items) {
-        if (item.type === 'read' && this.terminalModel) this.h.pty.setReadResult(this.readFor(this.terminalModel, item.lines, item.unwrap === true))
+        if (item.type !== 'read') continue
+        if (this.terminalModel) this.h.pty.setReadResult(this.readFor(this.terminalModel, item.lines, item.unwrap === true))
+        for (const action of this.readWatchers.splice(0)) action()
       }
       return length
     }
@@ -172,6 +175,14 @@ export class Rig {
   onWrite(when: (text: string, session: string) => boolean, action: () => void, options: { every?: boolean } = {}): void {
     this.writeWatchers.push({ when, action, every: options.every === true })
   }
+
+  /** Runs `action` synchronously on the next screen read the PTY host receives, before it answers. */
+  onRead(action: () => void): void {
+    this.readWatchers.push(action)
+  }
+
+  /** Makes the fake `quirky.agents` hold each `deliver` call for `ms` after it has written, as a slow delivery would. */
+  holdDelivery = (ms: number) => this.client.callAny('quirky.agents/setDeliverDelay', { ms })
 
   /** Sets how the fake `quirky.agents` says `agent` submits a prompt; null makes the agent unknown to it. */
   plan = (agent: string, plan: SubmitPlan | null) => this.client.callAny('quirky.agents/setPlan', { agent, plan })

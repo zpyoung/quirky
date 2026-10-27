@@ -111,10 +111,10 @@ export class AgentStatusService {
       log: (message) => context.log(message)
     })
     this.sampler = new ScreenSampler(context.pty, (sessionId) => this.titles.get(sessionId), now, timing.scale)
-    this.screen = { sources: this.sources, matcher: this.matcher, sampler: this.sampler, timeScale: timing.scale }
+    this.screen = { sources: this.sources, matcher: this.matcher, sampler: this.sampler, timeScale: timing.scale, now }
     this.sender = new Sender({
       context,
-      inspect: (sessionId) => this.inspect(sessionId),
+      inspect: (sessionId, deadline) => this.inspect(sessionId, undefined, deadline),
       row: (sessionId) => this.rows.get(sessionId) ?? null,
       onCommit: (sessionId, listener) => this.onCommit(sessionId, listener),
       nextCommit: (sessionId, timeoutMs) => this.nextCommit(sessionId, timeoutMs),
@@ -125,7 +125,7 @@ export class AgentStatusService {
     this.waits = new Waits({
       context,
       matcher: this.matcher,
-      inspect: (sessionId) => this.inspect(sessionId),
+      inspect: (sessionId, deadline) => this.inspect(sessionId, undefined, deadline),
       session: (ref) => this.requireSession(ref),
       onWake: (sessionId, listener) => this.onCommit(sessionId, listener),
       now,
@@ -265,14 +265,24 @@ export class AgentStatusService {
   /**
    * Looks a session up by ID or name and reads its row and screen rules into a script state.
    * `at` (default now) is the time the row's freshness is judged at; the screen is always read live.
+   * The row is taken after the screen has been read, so a hook that committed meanwhile counts.
+   * A `deadline` (epoch ms) keeps the read from waiting for screen quiet past it.
    * Rejects `not-found` for an unknown session and `invalid-params` for one without a terminal.
    */
-  async inspect(ref: string, at?: number): Promise<Inspection> {
+  async inspect(ref: string, at?: number, deadline?: number): Promise<Inspection> {
     const session = await this.requireSession(ref)
+    const read = (agent: string) =>
+      session.status === 'exited' ? this.unreadScreen(agent) : readScreen(this.screen, session.id, agent, deadline)
+    let agent = this.rows.get(session.id)?.agent ?? session.agent
+    let reading = await read(agent)
+    let row = this.rows.get(session.id) ?? null
+    const newest = row?.agent ?? session.agent
+    if (newest !== agent) {
+      agent = newest
+      reading = await read(agent)
+      row = this.rows.get(session.id) ?? null
+    }
     const now = at ?? this.now()
-    const row = this.rows.get(session.id) ?? null
-    const agent = row?.agent ?? session.agent
-    const reading = session.status === 'exited' ? await this.unreadScreen(agent) : await readScreen(this.screen, session.id, agent)
     return { session, row, reading, result: scriptState({ session, row, verdict: reading.verdict, now }), now }
   }
 

@@ -53,7 +53,7 @@ export function explanationLines(explained: Explanation, ctx: CliContext): strin
     const because = row.because
     lines.push(
       because
-        ? `because: ${because.rule} (${because.source}) ${ago(row.ageMs)} ago`
+        ? `because: ${because.rule} (${because.source}) ${ago(row.becauseAgeMs ?? row.ageMs)} ago`
         : 'because: no record (stored before explain existed)'
     )
     const facts = [`${row.state}`, `shown as ${row.display}`, `source ${row.source}`, row.fresh ? 'fresh' : 'not fresh', `last evidence ${ago(row.ageMs)} ago`]

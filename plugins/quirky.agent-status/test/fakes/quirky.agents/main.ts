@@ -19,6 +19,7 @@ export function activate(context: PluginContext): void {
   let agents: FakeAgent[] = JSON.parse(process.env.QUIRKY_TEST_FAKE_AGENTS ?? '[]')
   const plans = new Map<string, Plan>(['claude', 'codex', 'cursor'].map((agent) => [agent, DEFAULT_PLAN]))
   const delivered: DeliverCall[] = []
+  let deliverDelayMs = 0
   context.provide('method:quirky.agents/setCommand', (params: Record<string, unknown>) => {
     command = String(params.command)
     return true
@@ -30,6 +31,10 @@ export function activate(context: PluginContext): void {
   context.provide('method:quirky.agents/setPlan', (params: Record<string, unknown>) => {
     if (params.plan === null) plans.delete(String(params.agent))
     else plans.set(String(params.agent), { ...DEFAULT_PLAN, ...(params.plan as Partial<Plan>) })
+    return true
+  })
+  context.provide('method:quirky.agents/setDeliverDelay', (params: Record<string, unknown>) => {
+    deliverDelayMs = Number(params.ms)
     return true
   })
   context.provide('method:quirky.agents/get', (params: Record<string, unknown>) => {
@@ -55,6 +60,7 @@ export function activate(context: PluginContext): void {
     if (!alive) return { delivery: 'not-delivered' }
     const plan = plans.get(call.agent) ?? DEFAULT_PLAN
     context.pty.write(call.sessionId, PASTE(call.text) + (call.submit && plan.enterWithPaste ? '\r' : ''))
+    if (deliverDelayMs > 0) await Bun.sleep(deliverDelayMs)
     return { delivery: 'pasted' }
   })
   context.provide('method:quirky.agents/delivered', () => delivered)
