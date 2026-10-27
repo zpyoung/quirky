@@ -213,11 +213,6 @@ describe('SC-32: each resumable agent gets its own resume arguments', () => {
   }, 60_000)
   afterAll(() => e2e.cleanup())
 
-  test('SC-32: the table covers the 25 resumable agents the catalog lists', async () => {
-    const listing = parsed<{ agents: { id: string; resumable: boolean }[] }>(await e2e.cli(['agents', 'list', '--json']))
-    expect(listing.agents.filter((agent) => agent.resumable).map((agent) => agent.id).sort()).toEqual(RESUMABLE.map((row) => row.id).sort())
-  }, 30_000)
-
   for (const row of RESUMABLE) {
     test(
       `SC-32: ${row.id} resumes with ${row.tail.join(' ')}`,

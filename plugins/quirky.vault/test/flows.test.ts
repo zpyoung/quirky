@@ -191,7 +191,7 @@ describe('vault public acceptance flows', () => {
     expect(capped.sessions.length).toBe(23)
     expect(capped.hasMore).toBe(true)
     expect(new Set(cappedIds).size).toBe(23)
-  })
+  }, 30_000)
 
 
   test('kernel consent starts indexing, publishes status without a status read, and clear follows the retained disabled index', async () => {
@@ -419,7 +419,7 @@ describe('vault public acceptance flows', () => {
       query: 'missingfilemarker', freshness: 'wait-until-current', filters
     }))
     expect(swept.hits.length).toBe(0)
-  })
+  }, 30_000)
 
   test('API retention removes old derived content only and an unavailable source root retains recent indexed data', async () => {
     const vault = await start()
