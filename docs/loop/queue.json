@@ -350,8 +350,7 @@
       "deps": [
         "m1-agent-status"
       ],
-      "status": "in-progress",
-      "lane": 1
+      "status": "done"
     },
     {
       "id": "m2-editor",
