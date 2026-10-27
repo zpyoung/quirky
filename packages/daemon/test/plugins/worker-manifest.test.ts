@@ -10,12 +10,12 @@ function parse(manifest: unknown, source: PluginSource = 'installed') {
 
 describe('declared plugin workers', () => {
   test.each([
-    [],
-    { 'bad name': 'src/worker.ts' },
-    { scanner: '/tmp/worker.ts' },
-    { scanner: '../worker.ts' },
-    { scanner: 'src/\ud800.ts' }
-  ])('rejects malformed or escaping worker declarations: %j', (workers) => {
+    { workers: [] },
+    { workers: { 'bad name': 'src/worker.ts' } },
+    { workers: { scanner: '/tmp/worker.ts' } },
+    { workers: { scanner: '../worker.ts' } },
+    { workers: { scanner: 'src/\ud800.ts' } }
+  ])('rejects malformed or escaping worker declarations: %j', ({ workers }) => {
     expect(parse({ ...base, workers }).ok).toBe(false)
   })
 })

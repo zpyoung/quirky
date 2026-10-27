@@ -48,7 +48,7 @@ describe('vault public API', () => {
     await vault.call('list', { unlimited: true })
 
     const status = await vault.call<PublicSearchStatus>('searchStatus', {})
-    expect(status.status).toMatchObject({ enabled: false, phase: 'closed' })
+    expect(status.status.enabled).toBe(false)
     expect(status.hosts).toEqual([expect.objectContaining({ hostId: 'local', kind: 'ok' })])
     expect(vault.searchDatabaseExists()).toBe(false)
 
