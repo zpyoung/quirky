@@ -865,6 +865,12 @@ export function accountSort(a: AccountSummary, b: AccountSummary): number {
   return b.updatedAt - a.updatedAt || a.label.localeCompare(b.label)
 }
 
+export function displayIdentity(account: Pick<SystemAccount, 'email' | 'authKind' | 'hasAuth'>): string {
+  if (!account.hasAuth) return 'Not signed in'
+  return `${account.authKind === 'api-key' ? 'API-key authentication' : account.authKind === 'oauth' ? 'OAuth sign-in' : 'Authentication detected'}${account.email ? ` · ${account.email}` : ''}`
+}
+
+
 export function credentialLabel(kind: string): string {
   const labels: Record<string, string> = { 'api-key': 'API key', cookie: 'Cookie', 'group-id': 'Group ID', 'base-url': 'Base URL', model: 'Model' }
   return labels[kind] ?? kind

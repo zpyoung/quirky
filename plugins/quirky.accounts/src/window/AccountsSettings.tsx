@@ -1,6 +1,6 @@
 import { useEffect, useState, useSyncExternalStore, type FormEvent } from 'react'
 import type { UiPluginContext } from '@quirky/protocol'
-import { AccountsUiStore, accountSort, ageLabel, credentialLabel, snapshotStatus, windowEntries, type AccountState, type AccountSummary, type CredentialStatus, type ManagedProvider, type PendingLogin } from './model'
+import { AccountsUiStore, accountSort, ageLabel, credentialLabel, displayIdentity, formatReset, snapshotStatus, windowEntries, type AccountState, type AccountSummary, type CredentialStatus, type ManagedProvider, type PendingLogin } from './model'
 import { ACCOUNTS_CSS } from './styles'
 import { meterColor, SnapshotLine, UsagePreferencesControls } from './Usage'
 import { useStableReport, type UiReport } from './report'
@@ -16,11 +16,6 @@ const CREDENTIAL_FIELDS: Record<string, { provider: string; label: string; help:
   ] }],
   'opencode-go': [{ provider: 'opencode-go', label: 'OpenCode Go', help: 'Configure the credential used for the OpenCode Go usage meter.', kinds: [{ kind: 'api-key', input: 'password' }, { kind: 'cookie', input: 'password' }] }],
   zcode: [{ provider: 'zcode', label: 'ZCode', help: 'Configure the credential used for the ZCode usage meter.', kinds: [{ kind: 'api-key', input: 'password' }, { kind: 'base-url', input: 'url' }] }]
-}
-
-function displayIdentity(account: { email: string | null; authKind: string; hasAuth: boolean }): string {
-  if (!account.hasAuth) return 'Not signed in'
-  return `${account.authKind === 'api-key' ? 'API-key authentication' : account.authKind === 'oauth' ? 'OAuth sign-in' : 'Authentication detected'}${account.email ? ` · ${account.email}` : ''}`
 }
 
 function statusBadge(account: AccountSummary, activeId: string | null): { text: string; className: string }[] {

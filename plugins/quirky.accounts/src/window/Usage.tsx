@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'reac
 import { ACCOUNTS_CSS } from './styles'
 import { useStableReport, type UiReport } from './report'
 import {
-  ageLabel, accountSort, AccountsUiStore, canShowProviderVisibility, compactWindow, displayPercent, formatReset, isConfigured, isCurrentSnapshot, maxUsed, providerSource,
+  ageLabel, accountSort, AccountsUiStore, canShowProviderVisibility, compactWindow, displayIdentity, displayPercent, formatReset, isConfigured, isCurrentSnapshot, maxUsed, providerSource,
   PROVIDER_BADGES, PROVIDER_LABELS, snapshotStatus, windowEntries,
   type AccountState, type CredentialStatus, type ManagedProvider, type Preferences, type ProviderId, type ProviderSnapshot, type ResetExpectedScope, type StaleSession, type UsageState, type WindowData
 } from './model'
