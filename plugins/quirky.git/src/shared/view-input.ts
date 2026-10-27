@@ -1,0 +1,21 @@
+import type { GitDiffSource } from '@quirky/protocol'
+
+export const DIFF_VIEW_ID = 'view:quirky.git/diff'
+export const PANEL_ID = 'panel:quirky.git/source-control'
+export const SESSIONS_VIEW_ID = 'view:quirky.session/worktree'
+
+/**
+ * What the `diff` view is opened with. `file` shows one file's diff from `source`; `combined` lists
+ * a section's files (`area`, or `commit` for one commit); `conflicts` is the conflict review and
+ * `conflict-file` one conflicted file. `worktree` keeps the panel on the same worktree.
+ */
+export type DiffViewInput = {
+  worktree: string
+  mode: 'file' | 'combined' | 'conflicts' | 'conflict-file'
+  source?: GitDiffSource
+  path?: string
+  oldPath?: string
+  area?: 'staged' | 'unstaged' | 'untracked' | 'branch' | 'all'
+  commit?: string
+  title?: string
+}
