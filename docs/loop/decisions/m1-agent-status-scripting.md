@@ -339,5 +339,25 @@
 - **Confidence:** high
 - **Source:** locked by docs/loop/LOOP.md
 
+## D34: A done row never goes stale for scripts
+- **Question:** the script state of a done row older than 30 minutes (build, wave 2, raised by the T7 implementer)
+- **Options:** apply the 30 minute limit to every row (a long-finished agent reads unknown); exempt done rows, as the dot does
+- **Chose:** a done row is always fresh, so it reads idle however old it is; restored unconfirmed rows are only ever non-done (hydrate keeps done rows as they were)
+- **Why:** with the limit, `wait --until idle` on an agent that finished an hour ago would never return; m1-agent-status D16 never decays a done row
+- **Evidence:** docs/loop/decisions/m1-agent-status.md D16; plugins/quirky.agent-status/src/model.ts:146 (displayOf decays only live rows)
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** supersedes m1-agent-status-scripting D4 (freshness of done rows)
+
+## D35: Wave 2 splits: T7 lands first, then the send and wait chain runs beside the checkpoint fixes
+- **Question:** how to run the wave-1 checkpoint fixes without waiting for the whole wave 2 chain
+- **Options:** fix after wave 2; merge the accepted T4 and T7 and run T8 and T9 beside four scoped fixers
+- **Chose:** the second; the fixers own the PTY host's read, `src/rules/matcher.ts` and `sources.ts`, quirky.session's create, and `src/script-state.ts`, none of which T8 or T9 touch
+- **Why:** scopes are disjoint, so nothing can collide at merge, and the checkpoint review of wave 2 then sees the fixed code
+- **Evidence:** run journal (scopes)
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** assumed — autonomous
+
 ## Progress
 Step 4 (specs) done: logic.md and tech.md written, reviewed by Codex (D27) and amended. Next: step 5, build with subagent-driven development.

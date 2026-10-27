@@ -13,6 +13,8 @@
   the first Enter, so a turn that starts and ends inside the submit delay still counts (D31). New
   scenarios SC-38 to SC-41; SC-4 (c), SC-7 and SC-31 corrected; send prints the state it reached;
   output waits say what happens when the session exits.
+- 2026-10-27, build (D34): a done row never goes stale, so an agent that finished long ago still
+  reads idle.
 
 ## Conceptual model
 
@@ -95,8 +97,9 @@ Each session's script state is decided in this order. The first line that applie
 | The row is fresh and its last evidence is a title, an OSC 7501 report or an inference | as for a hook row | that evidence |
 | Otherwise | unknown | what is missing |
 
-A row is fresh while its evidence is under 30 minutes old and it isn't restored unconfirmed. A
-done row is idle whatever its outcome (done, failed or interrupted). A blocked row or rule names a
+A row is fresh while its evidence is under 30 minutes old and it isn't restored unconfirmed; a
+done row is always fresh, because a finished turn never decays (as on the dot). A done row is idle
+whatever its outcome (done, failed or interrupted). A blocked row or rule names a
 kind: approval, or question.
 
 ### Explain

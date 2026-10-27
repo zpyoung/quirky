@@ -180,7 +180,7 @@ Verdict = { rule: string, state: 'working' | 'blocked' | 'idle', kind?: 'approva
 
 PSEUDOCODE (justified, ≤3 lines): the precedence table in the logic spec, as a function of
 `(session, row, verdict, now)`; written here because the "fresh hook" test is subtle:
-`freshHook = row && !row.restoredUnconfirmed && now - row.evidenceAt <= STALE_AFTER_MS && (row.source === 'hook' || row.source === 'replay')`.
+`freshHook = row && (row.state === 'done' || (!row.restoredUnconfirmed && now - row.evidenceAt <= STALE_AFTER_MS)) && (row.source === 'hook' || row.source === 'replay')` ([D34](../../../loop/decisions/m1-agent-status-scripting.md); the same freshness test applies to title, OSC 7501 and inference rows).
 
 CONTRACT:
 ```
