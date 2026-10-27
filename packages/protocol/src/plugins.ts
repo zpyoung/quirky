@@ -172,6 +172,8 @@ export type PluginLaunch = {
     worktreeId: string
     agent: string
     envPatch?: Record<string, string | null>
+    /** Absolute path to the trusted plugin shell init file for an interactive shell session. */
+    shellInit?: string
   }): Record<string, string>
   shellArgv(): string[]
   /** True when the configured shell gets Quirky's ready-marker wrapper (zsh or bash). */
@@ -200,6 +202,8 @@ export type ClientStream = {
 export type CallerConnection = {
   id: number
   transport: 'websocket' | 'socket'
+  /** Registers transport-neutral cleanup for disconnect, invoking immediately if already closed. */
+  onClose(callback: () => void): () => void
   /** Throws InvalidParams on a socket connection. */
   openStream(): ClientStream
 }

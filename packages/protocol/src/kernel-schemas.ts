@@ -164,6 +164,7 @@ const uiMenuItem = object(
 const uiModel = object(
   {
     sidebarSections: listOf({ type: 'object' }),
+    statusBars: listOf({ type: 'object' }),
     panels: listOf({ type: 'object' }),
     views: listOf({ type: 'object' }),
     overlays: listOf({ type: 'object' }),
@@ -175,7 +176,7 @@ const uiModel = object(
     theme: object({ chosen: string(), active: string() }, ['chosen', 'active']),
     modules: { type: 'object', additionalProperties: true }
   },
-  ['sidebarSections', 'panels', 'views', 'overlays', 'commands', 'keybindings', 'settings', 'menuItems', 'themes', 'theme', 'modules']
+  ['sidebarSections', 'statusBars', 'panels', 'views', 'overlays', 'commands', 'keybindings', 'settings', 'menuItems', 'themes', 'theme', 'modules']
 )
 const apiDescription = object(
   {

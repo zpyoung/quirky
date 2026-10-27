@@ -1,0 +1,521 @@
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
+import { ACCOUNTS_CSS } from './styles'
+import { useStableReport, type UiReport } from './report'
+import {
+  ageLabel, accountSort, AccountsUiStore, canShowProviderVisibility, compactWindow, displayIdentity, displayPercent, formatReset, isConfigured, isCurrentSnapshot, maxUsed, providerSource,
+  PROVIDER_BADGES, PROVIDER_LABELS, snapshotStatus, windowEntries,
+  type AccountState, type CredentialStatus, type ManagedProvider, type Preferences, type ProviderId, type ProviderSnapshot, type ResetExpectedScope, type StaleSession, type UsageState, type WindowData
+} from './model'
+
+const useStore = (store: AccountsUiStore) => useSyncExternalStore(store.subscribe, store.getSnapshot)
+const MANAGE_LABEL = 'Manage Accounts…'
+
+export function meterColor(used: number): string {
+  if (used >= 80) return 'var(--danger,#e5534b)'
+  if (used >= 60) return 'var(--amber,#f0b429)'
+  return 'var(--accent,#4f8ff7)'
+}
+
+function Letter({ provider }: { provider: ProviderId }) {
+  return <span className={`provider-letter provider-${provider}`} aria-hidden="true">{PROVIDER_BADGES[provider]}</span>
+}
+
+function Meter({ window, direction, label }: { window: WindowData; direction: Preferences['direction']; label: string }) {
+  const used = Math.round(window.usedPercent)
+  const value = displayPercent(window.usedPercent, direction)
+  return <div className="usage-window" aria-label={`${label}: ${value}% ${direction}`}>
+    <div className="usage-window-heading"><span>{label}</span><span style={{ color: meterColor(used) }}>{value}% {direction === 'used' ? 'used' : 'remaining'}</span></div>
+    <div className="meter" role="meter" aria-label={`${label} usage`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={value}>
+      <span style={{ width: `${value}%`, backgroundColor: meterColor(used) }} />
+    </div>
+    <small>Resets {formatReset(window)}</small>
+  </div>
+}
+
+export function SnapshotLine({ snapshot }: { snapshot: ProviderSnapshot }) {
+  const state = snapshotStatus(snapshot)
+  const tone = state.kind === 'danger' ? 'status-danger' : state.kind === 'warning' ? 'status-error' : state.kind === 'ready' ? 'status-ready' : 'status-loading'
+  const source = providerSource(snapshot)
+  return <div className="info-line">
+    <span className={tone} aria-live="polite">{state.label}{snapshot.status === 'error' && (snapshot.session || snapshot.weekly || snapshot.monthly || snapshot.fableWeekly || snapshot.buckets?.length) ? ' — showing last good usage' : ''}</span>
+    <small title={source ? `Source: ${source}. ${ageLabel(snapshot.updatedAt)}.` : `${ageLabel(snapshot.updatedAt)}.`}>{ageLabel(snapshot.updatedAt)}</small>
+  </div>
+}
+
+function StatusChip({ snapshot, preferences }: { snapshot: ProviderSnapshot; preferences: Preferences }) {
+  const state = snapshotStatus(snapshot)
+  const headline = compactWindow(snapshot)
+  const windows = windowEntries(snapshot)
+  const tooltip = [PROVIDER_LABELS[snapshot.provider], state.label, ageLabel(snapshot.updatedAt), providerSource(snapshot)]
+    .filter(Boolean).join(' · ')
+  if (snapshot.status === 'unavailable') return <span className={`usage-chip status-${state.kind}`} data-provider={snapshot.provider} title={tooltip} aria-label={`${PROVIDER_LABELS[snapshot.provider]}: ${state.label}`}>
+    <Letter provider={snapshot.provider} />{preferences.density === 'normal' && <span>--</span>}
+  </span>
+  if (snapshot.status === 'idle' || snapshot.status === 'fetching' && !headline) return <span className="usage-chip status-loading loading-indicator" data-provider={snapshot.provider} title={tooltip} aria-label={`${PROVIDER_LABELS[snapshot.provider]}: ${state.label}`}>
+    <Letter provider={snapshot.provider} />{preferences.density === 'normal' && <span>···</span>}
+  </span>
+  if (!headline) return <span className={`usage-chip ${snapshot.status === 'error' ? 'status-error' : 'status-loading'}`} data-provider={snapshot.provider} title={tooltip} aria-label={`${PROVIDER_LABELS[snapshot.provider]}: ${state.label}`}>
+    <Letter provider={snapshot.provider} />{preferences.density === 'normal' && <span>{snapshot.status === 'error' ? '! ' : ''}{state.label}</span>}
+  </span>
+  return <span className="usage-chip" data-provider={snapshot.provider} title={tooltip} aria-label={`${PROVIDER_LABELS[snapshot.provider]} ${displayPercent(headline.window.usedPercent, preferences.direction)}% ${preferences.direction}`}>
+    <Letter provider={snapshot.provider} />
+    {preferences.density === 'normal' && (preferences.mode === 'compact'
+      ? <span style={{ color: meterColor(headline.window.usedPercent) }}>{displayPercent(headline.window.usedPercent, preferences.direction)}% {formatReset(headline.window)}</span>
+      : <span className="usage-detailed-chip">{windows.map(({ name, window }) => <span key={name} style={{ color: meterColor(window.usedPercent) }}>{name} {displayPercent(window.usedPercent, preferences.direction)}% <i className="meter" aria-hidden="true"><i style={{ width: `${displayPercent(window.usedPercent, preferences.direction)}%`, backgroundColor: meterColor(window.usedPercent), display: 'block', height: '100%' }} /></i></span>)}</span>)}
+    {snapshot.status === 'error' && <span className="status-error" aria-label={state.label}>!</span>}
+    {snapshot.status === 'fetching' && <span className="loading-indicator" aria-label="Refreshing">···</span>}
+  </span>
+}
+
+function UsageControls({ preferences, setPreferences }: { preferences: Preferences; setPreferences(patch: Partial<Preferences>): Promise<void> }) {
+  return <div className="usage-controls">
+    <div className="segmented" role="group" aria-label="Usage footer detail">
+      <button type="button" aria-pressed={preferences.mode === 'detailed'} onClick={() => void setPreferences({ mode: 'detailed' })}>Detailed</button>
+      <button type="button" aria-pressed={preferences.mode === 'compact'} onClick={() => void setPreferences({ mode: 'compact' })}>Compact</button>
+    </div>
+    <div className="segmented" role="group" aria-label="Usage percentage display">
+      <button type="button" aria-pressed={preferences.direction === 'used'} onClick={() => void setPreferences({ direction: 'used' })}>Used</button>
+      <button type="button" aria-pressed={preferences.direction === 'remaining'} onClick={() => void setPreferences({ direction: 'remaining' })}>Remaining</button>
+    </div>
+  </div>
+}
+
+export function UsagePreferencesControls({ store, preferences }: { store: AccountsUiStore; preferences: Preferences }) {
+  const visible = new Set(preferences.visibleProviders)
+  const agentDetection = useStore(store).agentDetection
+  const visibilityProviders = PROVIDER_LABELS_LIST.filter(([provider]) => canShowProviderVisibility(provider, agentDetection))
+  return <div className="account-stack">
+    <section className="section-card">
+      <h2>Usage display</h2>
+      <p className="settings-description">Choose how provider usage appears in the status bar and Usage popover.</p>
+      <UsageControls preferences={preferences} setPreferences={(patch) => store.setPreferences(patch)} />
+      <div className="checkbox-row"><input id="accounts-hide-status" type="checkbox" checked={preferences.hidden} onChange={(event) => void store.setPreferences({ hidden: event.currentTarget.checked })} /><label htmlFor="accounts-hide-status">Hide usage from the status bar</label></div>
+      <div className="checkbox-row"><input id="accounts-icon-density" type="checkbox" checked={preferences.density === 'icons'} onChange={(event) => void store.setPreferences({ density: event.currentTarget.checked ? 'icons' : 'normal' })} /><label htmlFor="accounts-icon-density">Show provider badges only</label></div>
+    </section>
+    <section className="section-card">
+      <h2>Status bar providers</h2>
+      <p className="settings-description">Choose which configured provider meters are visible.</p>
+      {agentDetection.status !== 'ready' && <small role="status">{agentDetection.status === 'loading' ? 'Checking installed agent CLIs…' : 'Agent detection is unavailable; CLI-specific toggles are hidden. Refresh usage to retry.'}</small>}
+      {visibilityProviders.map(([provider, label]) => <label className="checkbox-row" key={provider}>
+        <input type="checkbox" aria-label={`${label} Usage`} checked={visible.has(provider)} onChange={(event) => {
+          const next = new Set(visible)
+          if (event.currentTarget.checked) next.add(provider)
+          else next.delete(provider)
+          void store.setPreferences({ visibleProviders: [...next] })
+        }} />{label} Usage
+      </label>)}
+    </section>
+  </div>
+}
+
+const PROVIDER_LABELS_LIST = Object.entries(PROVIDER_LABELS) as [ProviderId, string][]
+
+function EmptyUsage({ store, statusBar = false }: { store: AccountsUiStore; statusBar?: boolean }) {
+  return <div className={`usage-cta${statusBar ? ' usage-status-cta' : ''}`}>
+    <h2>Configure usage tracking</h2>
+    <p>Connect your AI provider accounts to see their usage in real time and easily switch between accounts.</p>
+    <div className="details-actions">
+      <button type="button" onClick={() => void store.openSettingsSection('claude')}>Manage Accounts…</button>
+      <button type="button" aria-label="Hide from status bar" onClick={() => {
+        void store.setPreferences({ hidden: true })
+        void store.setUiState({ open: false })
+      }}>Hide from status bar</button>
+    </div>
+  </div>
+}
+
+function ProviderRoster({ store, usage, accounts, preferences, credentials }: { store: AccountsUiStore; usage: UsageState | null; accounts: AccountState | null; preferences: Preferences; credentials: CredentialStatus[] }) {
+  const configured = (usage?.providers ?? []).filter((snapshot) => isCurrentSnapshot(snapshot, accounts) && isConfigured(snapshot, accounts, credentials))
+    .sort((a, b) => (maxUsed(b) ?? -1) - (maxUsed(a) ?? -1) || PROVIDER_LABELS[a.provider].localeCompare(PROVIDER_LABELS[b.provider]))
+  if (!configured.length) {
+    const accountConfigured = Boolean(accounts && (
+      accounts.accounts.some((account) => !account.needsSignIn) || accounts.systemDefault.claude.hasAuth || accounts.systemDefault.codex.hasAuth
+    ))
+    const credentialConfigured = credentials.some((credential) => credential.configured)
+    return accountConfigured || credentialConfigured
+      ? <p className="empty-note" role="status">Usage for the selected account is loading. Refresh if it does not appear.</p>
+      : <EmptyUsage store={store} />
+  }
+  const staleCodex = accounts?.staleSessions.filter((session) => session.provider === 'codex').length ?? 0
+  return <div className="provider-list" aria-label="Provider usage">
+    {configured.map((snapshot) => {
+      const status = snapshotStatus(snapshot)
+      const best = compactWindow(snapshot)
+      const stale = snapshot.provider === 'codex' ? staleCodex : 0
+      const rowLabel = snapshot.provider === 'claude' ? 'Open Claude details and account switcher' : snapshot.provider === 'codex' ? 'Open Codex details and account switcher' : 'Open usage details'
+      return <button type="button" className="provider-row" key={snapshot.provider} aria-label={rowLabel} onClick={() => {
+        void store.setUiState({ provider: snapshot.provider, ...(snapshot.provider === 'claude' || snapshot.provider === 'codex' ? { expanded: null } : {}) })
+      }}>
+        <span className="provider-row-main">
+          <span className="provider-row-label"><Letter provider={snapshot.provider} /><strong>{PROVIDER_LABELS[snapshot.provider]}</strong>{snapshot.status === 'error' && <span className="status-error" aria-label={status.label}>!</span>}</span>
+          <small className={`status-${status.kind}`}>{best ? `${displayPercent(best.window.usedPercent, preferences.direction)}% ${preferences.direction} · resets ${formatReset(best.window)}` : status.label}{stale ? ` · ${stale} session${stale === 1 ? '' : 's'} on old account` : ''}</small>
+        </span>
+        <span className="provider-summary" aria-hidden="true">{best ? `${displayPercent(best.window.usedPercent, preferences.direction)}%` : snapshot.status === 'unavailable' ? '--' : '›'}</span>
+      </button>
+    })}
+  </div>
+}
+
+function InactiveUsage({ snapshot, direction, active = false }: { snapshot: ProviderSnapshot | undefined; direction: Preferences['direction']; active?: boolean }) {
+  if (!snapshot) return <small className="muted">{active ? 'Current account usage has not been read yet.' : 'Usage will load when this account is expanded.'}</small>
+  const entries = windowEntries(snapshot)
+  if (!entries.length) return <small className={`status-${snapshotStatus(snapshot).kind}`}>{snapshotStatus(snapshot).label}</small>
+  return <div className="usage-window-list">{entries.map(({ name, window }) => <Meter key={name} window={window} direction={direction} label={name} />)}</div>
+}
+
+function AccountSwitcher({ store, provider, state, usage }: { store: AccountsUiStore; provider: ManagedProvider; state: AccountState | null; usage: UsageState | null }) {
+  const snapshot = useStore(store)
+  const accounts = (state?.accounts ?? []).filter((account) => account.provider === provider).sort(accountSort)
+  const selectedId = state?.active[provider] ?? null
+  const selected = accounts.find((account) => account.id === selectedId)
+  const system = state?.systemDefault[provider]
+  const expanded = snapshot.ui.expanded === provider
+  const systemActive = state?.active[provider] === null
+  const ProviderName = provider === 'claude' ? 'Claude' : 'Codex'
+  return <section className="provider-details" aria-label={`${ProviderName} account switcher`}>
+    <div className="row-heading"><strong>{ProviderName} Account</strong><button type="button" aria-label={expanded ? 'Collapse account choices' : 'Expand account choices'} aria-expanded={expanded} onClick={() => {
+      void store.setUiState({ expanded: expanded ? null : provider })
+      if (!expanded) void store.inactiveUsage(provider)
+    }}>{expanded ? 'Hide accounts' : selected?.label ?? (system?.email ? `System default: ${system.email}` : 'System default')}⌄</button></div>
+    {expanded && <div className="account-list" role="group" aria-label={`${ProviderName} account choices`}>
+      <div className="account-row">
+        <div className="account-row-main"><strong>{system?.email ? `System default: ${system.email}` : 'System default'}</strong><small>{displayIdentity(system ?? { email: null, authKind: 'none', hasAuth: false })}</small>{provider === 'claude' && <small>Use the system default Claude login.</small>}{provider === 'codex' && !system?.hasAuth && <small>No Codex sign-in was found for this device.</small>}{systemActive && <InactiveUsage snapshot={usage?.providers.find((item) => item.provider === provider && item.accountId === null)} direction={state?.preferences.direction ?? 'used'} active />}</div>
+        <div className="account-actions">{systemActive && <span className="badge active">Active</span>}{provider === 'codex' && system && !system.hasAuth && <span className="badge warning">Needs sign-in</span>}<button type="button" aria-label={`Select ${ProviderName} System default`} disabled={!state || systemActive} onClick={() => void store.selectAccount(provider, null)}>{!state ? 'Loading' : systemActive ? 'Active' : 'Select'}</button></div>
+      </div>
+      {accounts.map((account) => {
+        const active = account.id === selectedId
+        const accountUsage = active
+          ? usage?.providers.find((item) => item.provider === provider && item.accountId === account.id)
+          : usage?.inactive[account.id]
+        return <div className="account-row" key={account.id}>
+          <div className="account-row-main"><strong>{account.label}</strong><small>{[account.email, account.organization, account.lastAuthenticatedAt ? `Signed in ${new Date(account.lastAuthenticatedAt).toLocaleDateString()}` : null].filter(Boolean).join(' · ') || 'Managed account'}</small>{account.needsSignIn && <small className="status-error">Sign in again to use this account.</small>}<InactiveUsage snapshot={accountUsage} direction={state?.preferences.direction ?? 'used'} active={active} /></div>
+          <div className="account-actions">{active && <span className="badge active">Active</span>}{account.needsSignIn && <span className="badge warning">Needs sign-in</span>}<button type="button" aria-label={`Select ${ProviderName} account ${account.label}`} disabled={!state || account.needsSignIn || active} onClick={() => void store.selectAccount(provider, account.id)}>{active ? 'Active' : account.needsSignIn ? 'Needs sign-in' : 'Select'}</button></div>
+        </div>
+      })}
+      {!accounts.length && <p className="empty-note">No managed {ProviderName} accounts. Add one in Account settings.</p>}
+    </div>}
+  </section>
+}
+
+function StaleSessionActions({ store, session }: { store: AccountsUiStore; session: StaleSession }) {
+  return <div className="account-stack">
+    {session.provider === 'claude' && session.busy && session.queued && <small className="status-loading">Waiting for this Claude session to finish before restarting on {session.selectedLabel}.</small>}
+    {session.kept ? <small className="muted">Kept on {session.accountLabel}.</small> : <div className="details-actions">
+      <button type="button" onClick={() => void store.keep([session.sessionId], session.selectionRevision)}>{session.provider === 'codex' ? 'Keep old account' : 'Keep as is'}</button>
+      <button type="button" onClick={() => void store.restart([session.sessionId], session.selectionRevision)}>{session.provider === 'codex' ? 'Restart' : 'Restart session'}</button>
+    </div>}
+  </div>
+}
+
+function ResetCredit({ store, snapshot, accounts }: { store: AccountsUiStore; snapshot: ProviderSnapshot | undefined; accounts: AccountState | null }) {
+  const offer = snapshot?.rateLimitResetCredits
+  const expectedScope = offer?.expectedScope
+  const [pendingOffer, setPendingOffer] = useState<{ expectedScope: ResetExpectedScope; accountLabel: string } | null>(null)
+  const [dontAsk, setDontAsk] = useState(false)
+  const [retryFailed, setRetryFailed] = useState(false)
+  if (!offer && !pendingOffer) return null
+  const currentAccount = expectedScope?.accountId ? accounts?.accounts.find((account) => account.provider === 'codex' && account.id === expectedScope.accountId) : null
+  const accountLabel = currentAccount?.label ?? pendingOffer?.accountLabel ?? accounts?.systemDefault.codex.label ?? 'System default'
+  const submit = async (scope: ResetExpectedScope, label: string) => {
+    const success = await store.consumeResetCredit(store.resetRequestId(scope), scope)
+    if (success) {
+      setPendingOffer(null)
+      setRetryFailed(false)
+    } else {
+      setRetryFailed(true)
+      setPendingOffer((current) => current ?? { expectedScope: scope, accountLabel: label })
+    }
+  }
+  const requestReset = () => {
+    if (!expectedScope) return
+    if (accounts?.preferences.skipCodexResetConfirm) {
+      void submit(expectedScope, accountLabel)
+      return
+    }
+    setDontAsk(false)
+    setPendingOffer({ expectedScope, accountLabel })
+    setRetryFailed(false)
+  }
+  const availableCount = offer?.availableCount ?? 0
+  return <section className="section-card" aria-label="Codex reset credits">
+    {offer && <>
+      <div className="row-heading"><strong>{availableCount > 0 ? `${availableCount} rate-limit reset${availableCount === 1 ? '' : 's'} available` : 'No rate-limit resets available'}</strong>{offer.nextExpiresAt ? <small>Next expiry {new Date(offer.nextExpiresAt).toLocaleString()}</small> : null}</div>
+      {offer.totalEarnedCount !== undefined && <small>Total earned: {offer.totalEarnedCount}</small>}
+      {availableCount > 0 && <>
+        <p className="settings-description">Use a Codex reset credit for the active account's eligible usage windows.</p>
+        <button type="button" aria-label="Reset Codex limits" disabled={!expectedScope} title={!expectedScope ? 'A verified offer scope is unavailable.' : undefined} onClick={requestReset}>Reset now</button>
+        {!expectedScope && <small className="status-error" role="status">Reset is unavailable because the displayed offer could not be bound to an account revision.</small>}
+      </>}
+    </>}
+    {pendingOffer && <div className="reset-confirm" role="dialog" aria-label="Reset Codex limits confirmation" aria-modal="false">
+      <h3>Reset Codex limits?</h3>
+      <p>This uses one Codex reset credit for the account and offer displayed when you requested it.</p>
+      <small>Offer shown for {pendingOffer.accountLabel}. The confirmation remains bound to that account and offer.</small>
+      <label className="checkbox-row"><input type="checkbox" checked={dontAsk || accounts?.preferences.skipCodexResetConfirm === true} onChange={(event) => setDontAsk(event.currentTarget.checked)} />Don't ask again</label>
+      {retryFailed && <p className="status-error" role="alert">The reset did not complete. Retry keeps the same request ID and displayed account scope.</p>}
+      <div className="dialog-actions"><button type="button" onClick={() => { setPendingOffer(null); setRetryFailed(false); setDontAsk(false) }}>Cancel</button><button type="button" onClick={async () => {
+        if (dontAsk) await store.setPreferences({ skipCodexResetConfirm: true })
+        await submit(pendingOffer.expectedScope, pendingOffer.accountLabel)
+      }}>{retryFailed ? 'Retry reset' : 'Reset now'}</button></div>
+    </div>}
+  </section>
+}
+
+function ProviderDetails({ store, provider, usage, accounts }: { store: AccountsUiStore; provider: ProviderId; usage: UsageState | null; accounts: AccountState | null }) {
+  const snapshot = useStore(store)
+  const preferences = accounts?.preferences
+  const candidate = usage?.providers.find((item) => item.provider === provider)
+  const providerSnapshot = candidate && isCurrentSnapshot(candidate, accounts) ? candidate : undefined
+  const label = PROVIDER_LABELS[provider]
+  const windows = providerSnapshot ? windowEntries(providerSnapshot) : []
+  const managed = provider === 'claude' || provider === 'codex'
+  const showClaudeSessions = accounts?.preferences.claudeSwitchPolicy === 'ask'
+  const stale = accounts?.staleSessions.filter((session) => session.provider === provider && (provider === 'codex' || showClaudeSessions || session.queued || session.error)) ?? []
+  const status = providerSnapshot ? snapshotStatus(providerSnapshot) : null
+  return <div className="provider-details" aria-label={`${label} usage details`}>
+    <div className="section-heading"><button type="button" aria-label="Back to usage" onClick={() => void store.setUiState({ provider: null })}>‹ Usage</button><h2>{label}</h2><button type="button" aria-label="Refresh rate limits" title="Refresh usage data" disabled={snapshot.refreshing} onClick={() => void store.refresh(provider)}>↻</button></div>
+    {providerSnapshot ? <>
+      <SnapshotLine snapshot={providerSnapshot} />
+      {windows.length ? <div className="usage-window-list">{windows.map(({ name, window }) => <Meter key={name} window={window} direction={preferences?.direction ?? 'used'} label={name} />)}</div> : <p className={`empty-note status-${status?.kind ?? 'muted'}`}>{status?.label ?? 'Usage has not been read yet.'}</p>}
+      {providerSnapshot.extraUsage && <ExtraUsageDetails snapshot={providerSnapshot} />}
+      {providerSnapshot.planType && <div className="info-line"><span>Plan</span><span>{providerSnapshot.planType}</span></div>}
+    </> : <p className="empty-note">Usage has not been read yet.</p>}
+    {managed && <AccountSwitcher store={store} provider={provider} state={accounts} usage={usage} />}
+    {provider === 'codex' && <ResetCredit store={store} snapshot={providerSnapshot} accounts={accounts} />}
+    {stale.length > 0 && <section className="section-card" aria-label={`${label} sessions on a previous account`}>
+      <div className="section-heading"><h3>{stale.length} {label} session{stale.length === 1 ? '' : 's'} still on the old account</h3></div>
+      <div className="stale-list">{stale.map((session) => <div className="stale-row" key={session.sessionId}><span>{session.accountLabel} → {session.selectedLabel}{session.busy ? ' · Busy' : ''}</span><StaleSessionActions store={store} session={session} />{session.error && <small className="status-error" role="alert">Restart failed. Retry when the session is available.</small>}</div>)}</div>
+    </section>}
+    {managed && <button type="button" onClick={() => void store.openSettingsSection(provider)}>{MANAGE_LABEL}</button>}
+    {status?.signedOut && managed && <button type="button" onClick={() => void store.openSettingsSection(provider)}>Sign in</button>}
+  </div>
+}
+
+function formatCurrency(value: number | null, code: string): string {
+  if (value === null) return 'Unavailable'
+  try {
+    return new Intl.NumberFormat(undefined, { style: 'currency', currency: code }).format(value)
+  } catch {
+    return `${value} ${code}`
+  }
+}
+
+function ExtraUsageDetails({ snapshot }: { snapshot: ProviderSnapshot }) {
+  const extra = snapshot.extraUsage
+  if (!extra) return null
+  const balance = extra.unit === 'currency' ? formatCurrency(extra.balance, extra.currencyCode) : extra.unlimited ? 'Unlimited' : `${extra.balance} credits`
+  return <section className="section-card" aria-label="Additional provider balance">
+    <div className="info-line"><strong>{extra.unit === 'currency' ? 'Additional usage balance' : 'Additional credits'}</strong><strong>{balance}</strong></div>
+    {extra.unit === 'currency' && <>
+      <div className="info-line"><span>Spent</span><span>{formatCurrency(extra.spent, extra.currencyCode)}</span></div>
+      <div className="info-line"><span>Spend limit</span><span>{extra.spendLimit === null ? 'Not reported' : formatCurrency(extra.spendLimit, extra.currencyCode)}</span></div>
+      {extra.spentPercent !== null && <div className="info-line"><span>Limit used</span><span>{Math.round(extra.spentPercent)}%</span></div>}
+    </>}
+    {extra.enabled ? <small className="muted">Balance and overage metadata reported by the provider.</small> : <small className="muted">Additional usage is not enabled.</small>}
+  </section>
+}
+
+function UsagePopover({ store, accounts, usage, credentials }: { store: AccountsUiStore; accounts: AccountState | null; usage: UsageState | null; credentials: CredentialStatus[] }) {
+  const current = useStore(store)
+  const preferences = accounts?.preferences
+  if (!current.ui.open) return null
+  return <div className="usage-popover" role="dialog" aria-label="Usage" onKeyDown={(event) => {
+    if (event.key === 'Escape') void store.setUiState({ open: false })
+  }}>
+    <div className="usage-popover-header"><h2>Usage <small>all agents</small></h2><div className="details-actions"><button type="button" aria-label="Refresh rate limits" title="Refresh usage data" disabled={current.refreshing} onClick={() => void store.refresh()}>↻</button><button type="button" aria-label="Close Usage" onClick={() => void store.setUiState({ open: false })}>×</button></div></div>
+    {preferences && <UsageControls preferences={preferences} setPreferences={(patch) => store.setPreferences(patch)} />}
+    {current.ui.provider && isProvider(current.ui.provider)
+      ? <ProviderDetails store={store} provider={current.ui.provider} usage={usage} accounts={accounts} />
+      : <ProviderRoster store={store} usage={usage} accounts={accounts} preferences={preferences ?? { ...DEFAULT_USAGE_PREFERENCES }} credentials={credentials} />}
+    <div className="usage-footer"><span className="muted">Usage updates from provider quota snapshots.</span><button type="button" onClick={() => void store.openSettingsSection(current.ui.provider && isManaged(current.ui.provider) ? current.ui.provider : 'claude')}>{MANAGE_LABEL}</button></div>
+  </div>
+}
+
+const DEFAULT_USAGE_PREFERENCES: Preferences = { mode: 'compact', direction: 'used', hidden: false, visibleProviders: [], density: 'normal', claudeSwitchPolicy: 'ask', skipCodexResetConfirm: false }
+const isProvider = (value: string): value is ProviderId => (Object.hasOwn(PROVIDER_LABELS, value))
+const isManaged = (value: string): value is ManagedProvider => value === 'claude' || value === 'codex'
+
+export function StatusBarUsage({ store, report }: { store: AccountsUiStore; report?: UiReport }) {
+  const snapshot = useStore(store)
+  const [contextMenu, setContextMenu] = useState(false)
+  const [visibleCount, setVisibleCount] = useState<number | null>(null)
+  const rootRef = useRef<HTMLDivElement>(null)
+  const measureRef = useRef<HTMLDivElement>(null)
+  const triggerRef = useRef<HTMLButtonElement>(null)
+  const refreshRef = useRef<HTMLButtonElement>(null)
+  const moreRef = useRef<HTMLSpanElement>(null)
+  const preferences = snapshot.accounts?.preferences
+  const visibilityProviders = PROVIDER_LABELS_LIST.filter(([provider]) => canShowProviderVisibility(provider, snapshot.agentDetection))
+  const configuredProviders = useMemo(() => (snapshot.usage?.providers ?? []).filter((provider) => isCurrentSnapshot(provider, snapshot.accounts) && isConfigured(provider, snapshot.accounts, snapshot.credentials)), [snapshot.usage, snapshot.accounts, snapshot.credentials])
+  const chips = useMemo(() => configuredProviders.filter((provider) => preferences?.visibleProviders.includes(provider.provider)), [configuredProviders, preferences])
+  const showEmptyCta = snapshot.accounts !== null && snapshot.usage !== null && configuredProviders.length === 0
+
+  useEffect(() => {
+    const root = rootRef.current
+    const measureContainer = measureRef.current
+    if (!root || !measureContainer) return
+    const children = [...measureContainer.children].filter((child) => child instanceof HTMLElement) as HTMLElement[]
+    const measure = () => {
+      const width = root.clientWidth
+      if (width <= 0 || !preferences || preferences.hidden) { setVisibleCount(null); return }
+      if (!children.length) { setVisibleCount(0); return }
+      const triggerWidth = triggerRef.current?.getBoundingClientRect().width ?? 0
+      const refreshWidth = refreshRef.current?.getBoundingClientRect().width ?? 0
+      const available = Math.max(0, width - triggerWidth - refreshWidth - 14)
+      const widths = children.map((child) => child.getBoundingClientRect().width)
+      if (widths.every((item) => item === 0)) { setVisibleCount(null); return }
+      const plusWidth = moreRef.current?.getBoundingClientRect().width || 38
+      const used = widths.reduce((sum, item) => sum + item, 0)
+      if (used <= available) { setVisibleCount(null); return }
+      let count = 0
+      for (let candidate = widths.length - 1; candidate >= 0; candidate -= 1) {
+        const candidateWidth = widths.slice(0, candidate).reduce((sum, item) => sum + item, 0) + plusWidth
+        if (candidateWidth <= available) { count = candidate; break }
+      }
+      setVisibleCount(count)
+    }
+    measure()
+    if (typeof ResizeObserver === 'undefined') return
+    const observer = new ResizeObserver(measure)
+    observer.observe(root)
+    observer.observe(measureContainer)
+    for (const child of children) observer.observe(child)
+    return () => observer.disconnect()
+  }, [chips, preferences?.hidden, preferences?.density, preferences?.mode, visibleCount])
+
+  const hidden = preferences?.hidden ?? false
+  const visibleChips = visibleCount === null ? chips : chips.slice(0, visibleCount)
+  const collapsed = visibleCount === null ? [] : chips.slice(visibleCount)
+  const tooltip = collapsed.length ? `Also: ${collapsed.map((item) => {
+    const best = compactWindow(item)
+    return `${PROVIDER_LABELS[item.provider]}${best ? ` ${displayPercent(best.window.usedPercent, preferences?.direction ?? 'used')}%` : ''}`
+  }).join(', ')}` : ''
+  const reportState = {
+    view: 'accounts-usage',
+    presentation: { hidden, mode: preferences?.mode ?? 'compact', direction: preferences?.direction ?? 'used', density: preferences?.density ?? 'normal' },
+    availableProviders: configuredProviders.map((provider) => provider.provider),
+    agentDetection: { status: snapshot.agentDetection.status, installedProviders: snapshot.agentDetection.installedProviders },
+    visibleProviders: hidden ? [] : visibleChips.map((provider) => provider.provider),
+    visibleProviderStatus: hidden ? [] : visibleChips.map((provider) => ({ provider: provider.provider, label: PROVIDER_LABELS[provider.provider], status: snapshotStatus(provider).label, usedPercent: maxUsed(provider) })),
+    collapsedProviders: hidden ? [] : collapsed.map((provider) => provider.provider),
+    emptyCtaVisible: !hidden && showEmptyCta && !snapshot.ui.open,
+    ui: { popoverOpen: snapshot.ui.open, provider: snapshot.ui.provider && isProvider(snapshot.ui.provider) ? snapshot.ui.provider : null, expanded: snapshot.ui.expanded }
+  }
+  useStableReport(report, reportState)
+  const updateVisibility = (provider: ProviderId, checked: boolean) => {
+    if (!preferences) return
+    const next = new Set(preferences.visibleProviders)
+    if (checked) next.add(provider)
+    else next.delete(provider)
+    void store.setPreferences({ visibleProviders: [...next] })
+  }
+  return <div ref={rootRef} className="accounts-ui usage-status-bar" style={hidden ? { display: 'none', flex: '0 0 0', maxWidth: '0' } : undefined} onContextMenu={(event) => {
+    event.preventDefault()
+    setContextMenu((open) => !open)
+  }}>
+    <style>{ACCOUNTS_CSS}</style>
+    {!hidden && <>
+      <button ref={triggerRef} type="button" className="usage-trigger" aria-label="Open Usage" aria-expanded={snapshot.ui.open} onClick={() => void store.setUiState({ open: !snapshot.ui.open })}>Usage <small>{preferences?.direction === 'remaining' ? 'Remaining' : 'Used'}</small></button>
+      {showEmptyCta
+        ? !snapshot.ui.open && <EmptyUsage store={store} statusBar />
+        : <div className="usage-chips" aria-label="Provider usage status bar">
+            {visibleChips.map((provider) => <StatusChip key={provider.provider} snapshot={provider} preferences={preferences ?? DEFAULT_USAGE_PREFERENCES} />)}
+            {collapsed.length > 0 && <button type="button" className="usage-chip" aria-label={`${collapsed.length} more providers`} title={tooltip} onClick={() => void store.setUiState({ open: true })}>+{collapsed.length}</button>}
+          </div>}
+      <button ref={refreshRef} type="button" className="usage-refresh" aria-label="Refresh rate limits" title="Refresh usage data" disabled={snapshot.refreshing} onClick={() => void store.refresh()}>↻</button>
+    </>}
+    {contextMenu && <div className="context-menu" role="menu" aria-label="Usage visibility" onClick={(event) => event.stopPropagation()}>
+      {snapshot.agentDetection.status !== 'ready' && <small role="status">{snapshot.agentDetection.status === 'loading' ? 'Checking installed agent CLIs…' : 'Agent detection is unavailable; CLI-specific toggles are hidden. Refresh usage to retry.'}</small>}
+      {visibilityProviders.map(([provider, label]) => <label key={provider} role="menuitemcheckbox" aria-checked={preferences?.visibleProviders.includes(provider) ?? false}>
+        <input type="checkbox" aria-label={`${label} Usage`} checked={preferences?.visibleProviders.includes(provider) ?? false} onChange={(event) => updateVisibility(provider, event.currentTarget.checked)} />{label} Usage
+      </label>)}
+      <button type="button" onClick={() => setContextMenu(false)}>Close menu</button>
+    </div>}
+    <UsagePopover store={store} accounts={snapshot.accounts} usage={snapshot.usage} credentials={snapshot.credentials} />
+    <div ref={measureRef} className="usage-measure" aria-hidden="true">{chips.map((provider) => <StatusChip key={provider.provider} snapshot={provider} preferences={preferences ?? DEFAULT_USAGE_PREFERENCES} />)}</div>
+    <span ref={moreRef} className="usage-chip" aria-hidden="true" style={{ position: 'absolute', visibility: 'hidden', pointerEvents: 'none' }}>+9</span>
+  </div>
+}
+
+export function SessionAccessory({ store, input, report }: { store: AccountsUiStore; input: unknown; report?: UiReport }) {
+  const snapshot = useStore(store)
+  const sessionId = input && typeof input === 'object' && 'sessionId' in input && typeof input.sessionId === 'string' ? input.sessionId : null
+  const paneId = input && typeof input === 'object' && 'paneId' in input && typeof input.paneId === 'string' ? input.paneId : null
+  const session = sessionId ? snapshot.accounts?.staleSessions.find((item) => item.sessionId === sessionId) : null
+  const visible = Boolean(session && (session.provider === 'codex' || session.queued || session.error))
+  useStableReport(report, {
+    view: 'session-accessory',
+    visible,
+    provider: session?.provider ?? null,
+    accountLabel: session?.accountLabel ?? null,
+    selectedLabel: session?.selectedLabel ?? null,
+    busy: session?.busy ?? false,
+    queued: session?.queued ?? false,
+    kept: session?.kept ?? false,
+    hasError: Boolean(session?.error)
+  })
+  if (!session || (session.provider === 'claude' && !session.queued && !session.error)) return null
+  const providerName = session.provider === 'codex' ? 'Codex' : 'Claude'
+  return <div className="accounts-ui provider-details" data-pane={paneId ?? undefined} aria-label={`${providerName} account switched`}>
+    <style>{ACCOUNTS_CSS}</style>
+    <strong>{providerName} account switched</strong>
+    <span>{session.provider === 'codex' ? `Codex is still signed in as ${session.accountLabel}. Restart this session to use ${session.selectedLabel}. It stays on the previous account until you do.` : `Claude is still running as ${session.accountLabel}. Restarting continues this conversation on ${session.selectedLabel}.`}</span>
+    {session.error && <small className="status-error" role="alert">Restart failed. The session remains on its previous account; retry when available.</small>}
+  </div>
+}
+
+export function AccountSwitchDialog({ store, report }: { store: AccountsUiStore; report?: UiReport }) {
+  const snapshot = useStore(store)
+  const [dontAskAgain, setDontAskAgain] = useState(false)
+  const state = snapshot.accounts
+  const askSessions = state?.preferences.claudeSwitchPolicy === 'ask'
+    ? state.staleSessions.filter((session) => session.provider === 'claude' && !session.kept)
+    : []
+  const queued = state?.staleSessions.filter((session) => session.provider === 'claude' && session.queued && !session.kept) ?? []
+  const visible = [...askSessions, ...queued.filter((session) => !askSessions.some((candidate) => candidate.sessionId === session.sessionId))]
+  useStableReport(report, {
+    view: 'switch-dialog',
+    visible: visible.length > 0,
+    sessions: visible.map((session) => ({
+      accountLabel: session.accountLabel,
+      selectedLabel: session.selectedLabel,
+      busy: session.busy,
+      queued: session.queued,
+      kept: session.kept,
+      hasError: Boolean(session.error),
+      selectionRevision: session.selectionRevision
+    }))
+  })
+  if (!visible.length) return null
+  const revisions = new Set(visible.map((session) => session.selectionRevision))
+  return <div className="accounts-ui switch-overlay">
+    <style>{ACCOUNTS_CSS}</style>
+    <section className="switch-dialog" role="dialog" aria-modal="true" aria-label={`Switched to ${visible[0]?.selectedLabel ?? 'another account'}`}>
+      <h2>Switched to {visible[0]?.selectedLabel ?? 'another account'}</h2>
+      <p>{visible.length} Claude session{visible.length === 1 ? '' : 's'} {visible.length === 1 ? 'is' : 'are'} still running on {visible[0]?.accountLabel}. Restarting continues each conversation on {visible[0]?.selectedLabel}. Busy sessions wait for idle before restarting.</p>
+      <div className="stale-list">{visible.map((session) => <div className="stale-row" key={session.sessionId}>
+        <strong>{session.accountLabel} → {session.selectedLabel}</strong>
+        {session.queued ? <small className="status-loading">Restart queued; waiting for Claude to become idle.</small> : null}
+        {session.busy && <small>Busy now. Restart will wait until this turn finishes.</small>}
+        {session.error && <small className="status-error" role="alert">Restart failed. This session remains on its old account.</small>}
+        <StaleSessionActions store={store} session={session} />
+      </div>)}</div>
+      <label className="checkbox-row"><input type="checkbox" checked={dontAskAgain} onChange={(event) => setDontAskAgain(event.currentTarget.checked)} />Don't ask again (restart automatically)<small>You can turn this off in Settings → AI Provider Accounts.</small></label>
+      <div className="dialog-actions">
+        <button type="button" onClick={async () => {
+          if (dontAskAgain) await store.setPreferences({ claudeSwitchPolicy: 'always' })
+          const groups = new Map<number, string[]>()
+          for (const session of visible) groups.set(session.selectionRevision, [...(groups.get(session.selectionRevision) ?? []), session.sessionId])
+          for (const [selectionRevision, sessions] of groups) await store.keep(sessions, selectionRevision)
+        }}>Keep as is</button>
+        <button type="button" onClick={async () => {
+          if (dontAskAgain) await store.setPreferences({ claudeSwitchPolicy: 'always' })
+          const groups = new Map<number, string[]>()
+          for (const session of visible) groups.set(session.selectionRevision, [...(groups.get(session.selectionRevision) ?? []), session.sessionId])
+          for (const [selectionRevision, sessions] of groups) await store.restart(sessions, selectionRevision)
+        }}>{visible.length === 1 ? 'Restart session' : `Restart ${visible.length} sessions`}</button>
+      </div>
+      {revisions.size > 1 && <small className="muted">Sessions from different account selections are protected by their own selection revisions.</small>}
+    </section>
+  </div>
+}

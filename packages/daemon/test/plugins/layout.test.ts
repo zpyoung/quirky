@@ -518,7 +518,7 @@ describe('command routing timeout', () => {
       store: { getUiState: () => null, setUiState: () => {} },
       ui: {
         contributions: () =>
-          ({ sidebarSections: [], panels: [], views: [], commands: [{ id: BOOM }] }) as unknown as UiModel
+          ({ sidebarSections: [], statusBars: [], panels: [], views: [], commands: [{ id: BOOM }] }) as unknown as UiModel
       },
       clients: () => [conn],
       broadcast: () => {},

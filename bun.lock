@@ -86,6 +86,20 @@
         "@types/react-dom": "^19.3.0",
       },
     },
+    "plugins/quirky.accounts": {
+      "name": "@quirky/plugin-accounts",
+      "version": "0.1.0",
+      "dependencies": {
+        "@quirky/protocol": "workspace:*",
+        "react": "19.2.0",
+        "react-dom": "19.2.0",
+      },
+      "devDependencies": {
+        "@happy-dom/global-registrator": "20.14.6",
+        "@types/react": "^19.3.0",
+        "@types/react-dom": "^19.3.0",
+      },
+    },
     "plugins/quirky.agent-status": {
       "name": "@quirky/plugin-agent-status",
       "version": "0.1.0",
@@ -160,6 +174,13 @@
         "@quirky/git": "workspace:*",
         "@types/react": "^19.3.0",
         "@types/react-dom": "^19.3.0",
+      },
+    },
+    "plugins/quirky.hosting": {
+      "name": "@quirky/plugin-hosting",
+      "version": "0.1.0",
+      "dependencies": {
+        "@quirky/protocol": "workspace:*",
       },
     },
     "plugins/quirky.notifications": {
@@ -334,6 +355,8 @@
 
     "@quirky/git": ["@quirky/git@workspace:packages/git"],
 
+    "@quirky/plugin-accounts": ["@quirky/plugin-accounts@workspace:plugins/quirky.accounts"],
+
     "@quirky/plugin-agent-status": ["@quirky/plugin-agent-status@workspace:plugins/quirky.agent-status"],
 
     "@quirky/plugin-agents": ["@quirky/plugin-agents@workspace:plugins/quirky.agents"],
@@ -343,6 +366,7 @@
     "@quirky/plugin-git": ["@quirky/plugin-git@workspace:plugins/quirky.git"],
 
     "@quirky/plugin-handoff": ["@quirky/plugin-handoff@workspace:plugins/quirky.handoff"],
+    "@quirky/plugin-hosting": ["@quirky/plugin-hosting@workspace:plugins/quirky.hosting"],
 
     "@quirky/plugin-notifications": ["@quirky/plugin-notifications@workspace:plugins/quirky.notifications"],
 

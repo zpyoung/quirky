@@ -42,6 +42,8 @@ button.qt-badge:hover { background: var(--bg-active); color: var(--text); }
 .qt-divider-right { cursor: col-resize; }
 .qt-divider-down { cursor: row-resize; }
 .qt-pane-header { position: absolute; top: 4px; right: 8px; z-index: 12; display: flex; align-items: center; gap: 2px; padding: 2px 4px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg-raised); font-size: 12px; }
+.qt-pane-accessories { position: absolute; top: 4px; left: 8px; z-index: 11; display: flex; align-items: center; gap: 4px; max-width: calc(100% - 16px); }
+.qt-pane-accessory { display: flex; align-items: center; min-width: 0; }
 .qt-pane-title { max-width: 200px; padding: 0 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .qt-grip { cursor: grab; }
 .qt-exit { position: absolute; inset: 0; z-index: 14; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; padding: 16px; background: rgba(0, 0, 0, 0.6); text-align: center; }

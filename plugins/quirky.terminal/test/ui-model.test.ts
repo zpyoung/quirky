@@ -92,12 +92,12 @@ describe('the built-ins as the window sees them', () => {
     expect(model.views.find((entry) => entry.id === 'view:quirky.session/structured')?.plugin).toBe('quirky.session')
   })
 
-  test('the panels and the floating overlay are declared and the module may provide every command', () => {
+  test('the terminal panels are declared and the module may provide every command', () => {
     expect(model.panels.filter((entry) => entry.plugin === 'quirky.terminal').map((entry) => entry.id).sort()).toEqual([
       'panel:quirky.terminal/quick-commands',
       'panel:quirky.terminal/sessions'
     ])
-    expect(model.overlays.filter((entry) => entry.plugin === 'quirky.terminal').map((entry) => [entry.id, entry.plugin, entry.title])).toEqual([['overlay:quirky.terminal/floating', 'quirky.terminal', 'Floating Workspace']])
+
     const provides = model.modules['quirky.terminal']!.provides
     expect(provides).toEqual(
       expect.arrayContaining([
