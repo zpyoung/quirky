@@ -368,15 +368,39 @@ describe('quirky.git combined diff', () => {
     expect(seen).toEqual([1, 2, 1, 2, 1, 2])
   })
 
-  test('a refresh that finds a changed file reloads its loaded section', async () => {
+  test('a refresh revalidates each loaded section once, and the counts follow the status', async () => {
     const { element } = await open()
     fake.handlers['quirky.git/status'] = () =>
       status(entries().map((e) => (e.path === 'f1.ts' ? row('f1.ts', { added: 5, removed: 5 }) : e)))
     const before = fake.callsTo('quirky.git/diff').length
     await act(async () => fake.emit({ type: 'quirky.git/changed', data: { worktreeId: 'w1' } }))
     await settle()
-    expect(fake.callsTo('quirky.git/diff').slice(before).map((c) => c.params.path)).toEqual(['f1.ts'])
+    expect(fake.callsTo('quirky.git/diff').slice(before).map((c) => c.params.path)).toEqual(small.slice(0, 6))
     expect(sectionOf(element, 'f1.ts').querySelector('.qgv-counts')?.textContent).toBe('+5 -5')
+  })
+
+  test('a loaded section whose file is rewritten with the same counts shows the new content', async () => {
+    const { element } = await open()
+    const rewritten = diffOf('f1.ts').modified.replace('one', 'uno')
+    fake.handlers['quirky.git/diff'] = (params) =>
+      params.path === 'f1.ts' ? textDiff({ ...diffOf('f1.ts'), modified: rewritten, modifiedHash: 'hash-2' }) : diffOf(params.path as string)
+    await act(async () => fake.emit({ type: 'quirky.git/changed', data: { worktreeId: 'w1' } }))
+    await settle()
+    expect(s.modifiedEditor(element, 0).state.sliceDoc()).toBe(rewritten)
+    expect(s.modifiedEditor(element, 1).state.sliceDoc()).toBe(diffOf('f2.ts').modified)
+  })
+
+  test('a section with edits whose file is rewritten under it is flagged stale and keeps the edits', async () => {
+    const { element, report } = await open()
+    edit(element, 'mine\n', 0)
+    await settle()
+    fake.handlers['quirky.git/diff'] = (params) =>
+      params.path === 'f1.ts' ? textDiff({ ...diffOf('f1.ts'), modified: 'agent\n', modifiedHash: 'hash-2' }) : diffOf(params.path as string)
+    await act(async () => fake.emit({ type: 'quirky.git/changed', data: { worktreeId: 'w1' } }))
+    await settle()
+    expect(sectionOf(element, 'f1.ts').querySelector('.qgv-stale')).not.toBeNull()
+    expect(report().stale).toBe(true)
+    expect(s.modifiedEditor(element, 0).state.sliceDoc()).toBe('mine\n')
   })
 })
 

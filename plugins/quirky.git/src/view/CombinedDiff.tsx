@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { GitCompare, GitDiff, GitStatus } from '@quirky/protocol'
+import { reuseGitDiff } from '../diffRefresh'
 import { DIFF_VIEW_ID } from '../shared/view-input'
 import {
   changeSections,
@@ -90,6 +91,22 @@ export function CombinedDiff({ context, input, settings, setSetting, report, bin
     patchSection(key, { status: 'loaded', diff, error: undefined, revision: (sectionsRef.current[key]?.revision ?? 0) + 1 })
   }
 
+  /**
+   * Refetches a loaded section and compares its content with what is shown, because the status
+   * counts cannot tell a rewrite that keeps them. Clean sections take the new diff; sections
+   * with edits are flagged stale and keep their draft.
+   */
+  const revalidateSection = async (key: string): Promise<void> => {
+    const entry = dataRef.current?.entries.find((e) => e.key === key)
+    const shown = sectionsRef.current[key]
+    if (!entry || shown?.status !== 'loaded' || !shown.diff) return
+    const fresh = reuseGitDiff(shown.diff, await diffFor(entry))
+    const now = sectionsRef.current[key]
+    if (fresh === shown.diff || now?.status !== 'loaded' || now.diff !== shown.diff) return
+    if (paneStatesRef.current[key]?.dirty) handles.current.get(key)?.markStale()
+    else patchSection(key, { diff: fresh, revision: now.revision + 1 })
+  }
+
   const fetchData = async (full: boolean): Promise<Data> => {
     if (input.commit !== undefined) {
       const result = (await context.call('quirky.git/commitFiles', { worktree, commit: input.commit })) as {
@@ -120,28 +137,26 @@ export function CombinedDiff({ context, input, settings, setSetting, report, bin
     try {
       const next = await fetchData(full)
       const nextSignature = `${next.entries.map(entrySignature).join('\n')}#${next.excluded}#${next.compare?.status}#${next.compare?.base}`
-      if (nextSignature === signature.current) return
-      const previous = new Map((dataRef.current?.entries ?? []).map((e) => [e.key, entrySignature(e)]))
-      signature.current = nextSignature
-      dataRef.current = next
-      setData(next)
-      setError(null)
+      if (nextSignature !== signature.current) {
+        signature.current = nextSignature
+        dataRef.current = next
+        setData(next)
+        setError(null)
 
-      const kept: Record<string, SectionState> = {}
-      for (const entry of next.entries) kept[entry.key] = sectionsRef.current[entry.key] ?? { status: 'idle', revision: 0 }
-      commitSections(kept)
-      for (const key of [...handles.current.keys()]) if (!kept[key]) handles.current.delete(key)
+        const kept: Record<string, SectionState> = {}
+        for (const entry of next.entries) kept[entry.key] = sectionsRef.current[entry.key] ?? { status: 'idle', revision: 0 }
+        commitSections(kept)
+        for (const key of [...handles.current.keys()]) if (!kept[key]) handles.current.delete(key)
 
-      for (const entry of next.entries) {
-        const before = previous.get(entry.key)
-        if (before === undefined || before === entrySignature(entry)) continue
-        if (kept[entry.key].status !== 'loaded') continue
-        if (paneStatesRef.current[entry.key]?.dirty) handles.current.get(entry.key)?.markStale()
-        else void reloadSection(entry.key).catch(() => undefined)
+        next.entries.slice(0, EAGER_SECTIONS).forEach((entry) => {
+          if (kept[entry.key].status === 'idle' && loadMode(entry) === 'auto') void loader.current?.request(entry.key)
+        })
       }
-      next.entries.slice(0, EAGER_SECTIONS).forEach((entry) => {
-        if (kept[entry.key].status === 'idle' && loadMode(entry) === 'auto') void loader.current?.request(entry.key)
-      })
+      // a commit's files never change under it
+      if (input.commit === undefined) {
+        const loaded = next.entries.filter((e) => sectionsRef.current[e.key]?.status === 'loaded')
+        await Promise.all(loaded.map((e) => revalidateSection(e.key).catch(() => undefined)))
+      }
     } catch (e) {
       if (dataRef.current === null) setError(messageOf(e))
     } finally {

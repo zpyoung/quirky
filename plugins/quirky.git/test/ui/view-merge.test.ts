@@ -143,6 +143,21 @@ describe('createMerge options', () => {
     blank.destroy()
   })
 
+  test('SC-60: with whitespace off, only leading and trailing whitespace differences are ignored', () => {
+    const count = (from: string, to: string) => {
+      const merge = createMerge(parent, { ...base, original: from, modified: to, showWhitespace: false })
+      const changes = merge.changeCount()
+      merge.destroy()
+      return changes
+    }
+    expect(count('const x = "a b";\n', 'const x = "ab";\n')).toBe(1)
+    expect(count('const x = `hello world`;\n', 'const x = `hello  world`;\n')).toBe(1)
+    expect(count('a b\n', 'a\tb\n')).toBe(1)
+    expect(count('value\n', 'value   \n')).toBe(0)
+    expect(count('  value\n', 'value\n')).toBe(0)
+    expect(count('a b\n', ' a b  \n')).toBe(0)
+  })
+
   test('SC-60: collapse unchanged folds long unchanged runs into a band', () => {
     const folded = createMerge(parent, { ...base, collapseUnchanged: true })
     expect(parent.querySelector('.cm-collapsedLines')).not.toBeNull()
