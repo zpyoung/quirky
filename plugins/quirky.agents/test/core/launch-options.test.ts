@@ -249,6 +249,10 @@ describe('parseLaunchOptions rejections', () => {
       'launchOptions.unlistedOptions'
     )
     expect(problem(withOptions({ options: [effort], unlisted: 'refuse', unlistedOptions: [{ id: 'effort' }] }))).toStartWith('launchOptions.unlistedOptions')
+    expect(problem(withOptions({ unlisted: 'refuse', unlistedOptions: [] }))).toStartWith('launchOptions.unlistedOptions')
+    expect(
+      problem(withOptions({ models: [{ id: 'a', label: 'A', options: [] }], unlistedOptions: [] }))
+    ).toStartWith('launchOptions.unlistedOptions')
     expect(problem(withOptions({ options: [effort], unlistedOptions: [{ id: 'nope' }] }))).toStartWith('launchOptions.unlistedOptions[0].id')
     expect(problem(withOptions({ unlisted: 'maybe' }))).toStartWith('launchOptions.unlisted')
   })

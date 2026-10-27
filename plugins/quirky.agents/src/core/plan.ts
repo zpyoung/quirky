@@ -1,3 +1,4 @@
+import { terminatorIndex } from './arg-occurrence'
 import { resolveLaunch } from './resolve'
 import { joinCommand, quote, tokenize } from './shell'
 import type {
@@ -296,9 +297,9 @@ export function buildLaunchPlan(input: LaunchPlanInput): LaunchPlan {
     planEnv = env
   ): LaunchPlan => ({ agent: entry.id, command, env: planEnv, record, promptDelivery, paste, launchSettings: resolution.launchSettings })
 
-  const terminator = userArgs.indexOf('--')
+  const terminator = terminatorIndex(userArgs, entry.launchOptions?.valueFlags ?? [])
   const head =
-    terminator === -1
+    terminator === userArgs.length
       ? [...base, ...userArgs, ...hookArgs]
       : [...base, ...userArgs.slice(0, terminator), ...hookArgs, ...userArgs.slice(terminator)]
   const plain = joinCommand(head)

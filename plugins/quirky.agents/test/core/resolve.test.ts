@@ -395,6 +395,13 @@ describe('resolveLaunch: command override', () => {
     expect(resolve({ commandTokens: override, configuredArgs: YOLO }).args).toEqual(YOLO)
   })
 
+  test('SC-16: a wrapper command with its own -- is still scanned for conflicting flags', () => {
+    expect(refusal({ commandTokens: ['env', '--', 'claude', '--model', 'sonnet'], selection: pick('opus') })).toBe(message)
+    expect(
+      refusal({ commandTokens: ['env', 'FOO=1', 'claude', '--effort', 'low'], selection: pick('opus', { effort: 'high' }) })
+    ).toBe(message)
+  })
+
   test('the executable itself is not scanned', () => {
     expect(resolve({ commandTokens: ['--model'], selection: pick('opus') }).added).toEqual(['--model', 'opus'])
   })

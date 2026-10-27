@@ -27,6 +27,7 @@ function pickedModel(value: unknown): string | null {
   if (typeof value !== 'string') throw invalid('model must be a string')
   const model = value.trim()
   if (!model) throw invalid('model must not be empty')
+  if (model.startsWith('-')) throw invalid('the model can\'t start with "-"')
   if (model.length > MAX_MODEL_LENGTH) throw invalid(`model must be ${MAX_MODEL_LENGTH} characters or fewer`)
   return model
 }
