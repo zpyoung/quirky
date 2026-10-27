@@ -1,0 +1,54 @@
+{
+  "id": "acme.launch-bad",
+  "name": "Acme launch bad",
+  "version": "1.0.0",
+  "description": "Declares an agent whose launchOptions effort choices are not a list, for e2e tests.",
+  "contributes": {
+    "agent": [
+      {
+        "id": "bad",
+        "label": "Bad",
+        "detect": "bad-agent",
+        "prompt": "argv",
+        "launchOptions": {
+          "model": {
+            "flag": [
+              "--model",
+              "{value}"
+            ],
+            "conflicts": [
+              {
+                "flags": [
+                  "--model"
+                ]
+              }
+            ]
+          },
+          "options": [
+            {
+              "id": "effort",
+              "label": "Effort",
+              "type": "select",
+              "choices": "low",
+              "flag": [
+                "--effort",
+                "{value}"
+              ]
+            }
+          ],
+          "models": [
+            {
+              "id": "m",
+              "label": "M",
+              "options": [
+                {
+                  "id": "effort"
+                }
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  }
+}
