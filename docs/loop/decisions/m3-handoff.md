@@ -1,0 +1,510 @@
+# m3-handoff decisions
+
+## D1: Classify the item as Visual, API, CLI and Integration work, and run research phases A and B
+- **Question:** brainstorming's domain detection and research swarm (brainstorming, checklist 2 and 7)
+- **Options:** one domain with a small swarm; every domain the item touches, with phases A and B; phases A, B and C
+- **Chose:** Visual (the dialog, toasts, badges, settings page), API and CLI (the handoff methods and command group) and Integration (launching a second agent and pasting into its terminal). Phase A ran two web agents (patterns, pitfalls) and four code-mapping agents (launch and delivery, agent status and storage, worktree and git, UI plugin surfaces). Phase B ran one agent per approach in D5. Phase C was skipped.
+- **Why:** the feature crosses six existing plugins and the shell. Phase C is for a novel approach; the chosen one reuses the pattern earlier items proved (a plugin that owns its policy in the daemon and drives other plugins through their public methods, m1-notifications D5).
+- **Evidence:** research results recorded in the logic spec's Industry Insights
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** assumed — autonomous
+
+## D2: Skip the visual companion and the adhd offer; use the standard gray-area set
+- **Question:** brainstorming's companion and adhd offers
+- **Options:** offer them; skip them
+- **Chose:** skip both
+- **Why:** LOOP.md "Answering a skill's questions" says to skip both in a headless run
+- **Evidence:** docs/loop/LOOP.md
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** locked by docs/loop/LOOP.md
+
+## D3: Select every gray area that matters
+- **Question:** which gray areas to resolve (brainstorming, gray areas step 1)
+- **Options:** the three or four most relevant; every one that changes what a person, script or agent sees
+- **Chose:** scope and entry points; the destination (worktree, new worktree, agent, relationship); brief content and composition; transcript reachability; a busy source; editing the preview; the secret scan; the cost readout; start, delivery and resend; lineage and badges; templates and preferences; drafts; the scripting surface; error and empty states. Each is settled by the decisions below.
+- **Why:** LOOP.md asks for every area that matters when no human is present
+- **Evidence:** docs/loop/LOOP.md "Answering a skill's questions"
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** locked by docs/loop/LOOP.md
+
+## D4: In scope is every flow of handoff.md that works on one Mac with a terminal session; native chat, SSH and runtime hosts, the AI Vault row entry and the dashboard are out
+- **Question:** which of handoff.md's flows and entry points this item owns
+- **Options:** every flow and entry point in the doc; every flow minus the entry points whose host feature is dropped or not built yet
+- **Chose:** the second. In: the terminal pane menu entry, the whole dialog (destination, content, notes, preview editing, busy source, secret scan, cost readout, start, delivery outcomes and resend), drafts, lineage with badges on session tabs and a working jump, the Settings "Session handoff" template page, and handing off a session that has no live terminal (an ended session or an archived transcript) through the API. Out, as non-goals: the native chat entry (native chat is dropped, BRIEF.md "Dropped"), SSH and runtime-environment hosts and the "different execution host" warning (dropped, BRIEF.md; same exclusion as m2-source-control-core and m1-worktrees), the AI Vault row entry and the Vault lineage line (m3-vault builds Vault rows and calls this item's methods, D7), the dashboard agent rows (Quirky has no dashboard), the es/fr/ja/ko/zh catalogs (Quirky ships English only, as every earlier item).
+- **Why:** roadmap "Parity" covers every flow of a kept feature; session handoff is on BRIEF.md's kept list. The excluded entry points live inside features that are dropped (native chat, SSH) or that a later queue item builds (the Vault). Unlike m3-terminal-dock's block, no handoff flow needs a dropped capability: every flow is reachable from the terminal pane entry and the API.
+- **Evidence:** handoff.md "Where to find it"; BRIEF.md "Features to keep"; docs/roadmap.md "What the order rests on"; docs/loop/BLOCKERS.md "m3-terminal-dock: blocked"
+- **Reversibility:** easy
+- **Confidence:** medium
+- **Revisit if:** a reviewer reads the Vault row entry as a handoff flow that must ship before m3-vault
+- **Source:** assumed — autonomous
+
+## D5: A new built-in plugin, `quirky.handoff`, owns composition, launch and lineage in the daemon; the window is a thin view
+- **Question:** where the logic lives (brainstorming, approaches)
+- **Options:** A, a new plugin whose daemon side composes the brief, probes the transcript, launches, delivers and stores lineage, with a window dialog that calls those methods; B, Orca's shape, composition and launch in the window with only lineage in the daemon; C, add handoff methods to `quirky.session`
+- **Chose:** A
+- **Why:** roadmap "Everything is scriptable" needs an agent to hand off with no window open, which B can't do without writing the logic twice. C breaks "features are plugins" (a distro can't turn handoff off without losing sessions). Phase B research: shipping daemon-plus-thin-UI apps report the CLI as a second consumer of the same API rather than a second implementation, and renderer-owned state is the usual source of multi-window inconsistencies.
+- **Evidence:** docs/roadmap.md "Features are plugins", "Everything is scriptable"; logic spec Industry Insights
+- **Reversibility:** hard
+- **Confidence:** high
+- **Source:** assumed — autonomous
+
+## D6: A source is a session; a live source is the agent running in a terminal session
+- **Question:** what Orca's "pane key" maps to
+- **Options:** the terminal layout's pane id; the session id
+- **Chose:** the session id. Quirky's panes hold exactly one session, agent status and provider session ids are keyed by session, and a session outlives its pane (an ended session keeps its history). Lineage, drafts and the retained brief are keyed by session id.
+- **Why:** plugins/quirky.terminal/src/layout/types.ts:28-41 (a pane leaf names one session); plugins/quirky.agent-status/src/store.ts:5-8 (rows keyed by session)
+- **Evidence:** as above
+- **Reversibility:** medium
+- **Confidence:** high
+- **Source:** assumed — autonomous
+
+## D7: A source can also be an archived session given by agent, provider session id and transcript path
+- **Question:** how a session with no Quirky terminal (Orca's Vault rows) is handed off before the Vault exists
+- **Options:** only live or ended Quirky sessions; also an archived source passed as `{agent, providerSessionId, transcriptPath, title, worktree}`
+- **Chose:** both. An archived source is accepted by every method that takes a source; it has no live pane, so "Wait for idle" and recapture are unavailable and the dialog says "This source has no live pane. Idle waiting and live scrollback recapture are unavailable." It is eligible only with a transcript path or a non-empty prompt or last message, mirroring Orca's Vault rule. m3-vault adds the row entry and the lineage line on top of these methods.
+- **Why:** handoff.md "Transcript probe" and "Edge cases" describe the no-live-pane flow; building it now makes those flows testable and leaves m3-vault only UI work
+- **Evidence:** handoff.md "Edge cases and failure behaviour" (Vault eligibility, OpenCode)
+- **Reversibility:** easy
+- **Confidence:** medium
+- **Source:** assumed — autonomous
+
+## D8: The pane menu shows "Hand Off to Another Agent" only on panes whose session runs a catalog agent, right below Quick Commands
+- **Question:** entry visibility and placement
+- **Options:** every pane; agent panes only
+- **Chose:** agent panes only (session agent is not `shell`), placed directly below "Quick Commands ▸" and above the separator, with Orca's label. A plain shell pane doesn't show it.
+- **Why:** handoff.md "Where to find it" and "Verified in the app" 1; m1-term-ui D18 fixes the rest of the menu's order
+- **Evidence:** handoff.md lines 13, 242; docs/loop/decisions/m1-term-ui.md D18
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** locked by handoff.md
+
+## D9: The pane menu gains a public contribution point other plugins use
+- **Question:** how `quirky.handoff` adds a row to `quirky.terminal`'s private pane menu
+- **Options:** hard-code the row in quirky.terminal; a public menu contribution kind declared in the manifest, with a placement and a condition, that quirky.terminal reads
+- **Chose:** a public contribution. A plugin declares a menu item for the menu `quirky.terminal/pane` with a title, the command it runs, and a condition on the pane (here: the pane runs an agent). The terminal lists contributed items in its menu and its report, and runs the command with the pane's session.
+- **Why:** roadmap "Each feature ships as a built-in plugin, using only the public plugin API. If it needs something the API lacks, the API grows"; hard-coding would make quirky.terminal depend on handoff
+- **Evidence:** plugins/quirky.terminal/src/window/workspace/controller.ts:850-885 (rows are hard-coded today); packages/protocol/src/ui.ts:4 (no menu kind)
+- **Reversibility:** medium
+- **Confidence:** high
+- **Source:** locked by docs/roadmap.md
+
+## D10: No context, no dialog
+- **Question:** what happens when the source has nothing to continue from
+- **Options:** open the dialog anyway; refuse with Orca's toast
+- **Chose:** when a live source has no transcript path and its terminal history is empty after stripping escapes, the entry shows the toast "No session context is available to continue in a new session." and opens nothing; the API returns error reason `no-context`.
+- **Why:** handoff.md "Hand a session off" 1
+- **Evidence:** handoff.md line 27
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** locked by handoff.md
+
+## D11: Orca's labels and messages are kept word for word, with "Orca" read as "Quirky" in the brief
+- **Question:** the dialog's, toasts' and brief's wording
+- **Options:** new wording; Orca's wording
+- **Chose:** Orca's wording from handoff.md for every label, hint, warning and toast. In the brief text, the product name is Quirky ("Continue work from the prior Quirky session.", "Latest Quirky status hints", "## Locked Quirky handoff notice").
+- **Why:** parity; the brief names the product the reader is running
+- **Evidence:** handoff.md throughout
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** locked by handoff.md
+
+## D12: The worktree list is the source repo's worktrees plus folder workspaces that contain it, defaulting to the source's worktree
+- **Question:** destination candidates
+- **Options:** every worktree; Orca's repo-scoped list
+- **Chose:** Orca's: every worktree of the source's repo, plus folder workspaces whose path equals or contains the source repo's path, each row showing name and path, searchable with "Search worktrees…" and "No matching worktrees.". The default is the source's worktree. A source in a folder workspace lists that folder only.
+- **Why:** handoff.md "Destination group"
+- **Evidence:** handoff.md line 37; plugins/quirky.worktree/quirky-plugin.json list (`repo` selector, `kind`)
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** locked by handoff.md
+
+## D13: "Create a new worktree" creates it at Start through `quirky.worktree/create`, only for git sources
+- **Question:** inline worktree creation
+- **Options:** create on toggle; create at Start
+- **Chose:** at Start, with the name (placeholder `handoff-follow-up`) and optional base branch (placeholder "Current branch"; blank means the source worktree's current branch). The toggle is shown only when the source repo is a git repo. Start is disabled while the name is blank. Creation runs the same path as any create (setup follows the repo's setting). A creation failure shows its message in the strip and keeps every field; a later failure leaves the new worktree selected.
+- **Why:** handoff.md "Destination group" and "Edge cases"
+- **Evidence:** handoff.md lines 38, 218; plugins/quirky.worktree/src/daemon/create.ts:216-230
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** locked by handoff.md
+
+## D14: The base branch blank means the source worktree's current branch, not the repo's default
+- **Question:** what an empty "Base branch (optional)" means, since `worktree.create` defaults to the project's base
+- **Options:** pass nothing (project base); pass the source worktree's branch
+- **Chose:** pass the source worktree's branch (or its HEAD commit when detached)
+- **Why:** the placeholder says "Current branch"; a follow-up session usually continues the source's work
+- **Evidence:** handoff.md line 38
+- **Reversibility:** easy
+- **Confidence:** medium
+- **Revisit if:** Orca's code passes `undefined` and users expect the default branch
+- **Source:** assumed — autonomous
+
+## D15: The agent list is the installed, enabled catalog agents; default order is draft, last used, source, default agent, first
+- **Question:** agent choices and the default
+- **Options:** every catalog agent; installed and enabled ones
+- **Chose:** installed and enabled agents from `quirky.agents/list`, with "Detecting Agents on the target host…" while the list loads, "Could not detect Agents on the target host." on failure and "No enabled Agents were detected on the target host." when empty. The default is a restored draft's agent, then the last agent used for a successful handoff, then the source's agent, then the `default-agent` setting, then the first listed. Switching the target keeps the choice when the agent is still listed.
+- **Why:** handoff.md "Destination group" agent order; Quirky has one host, so detection is one list
+- **Evidence:** handoff.md lines 39, 42; plugins/quirky.agents/quirky-plugin.json `default-agent`
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** locked by handoff.md
+
+## D16: Relationship is Continues, Reviews or Branches from, recorded and shown, acting on nothing
+- **Question:** relationship
+- **Options:** as Orca
+- **Chose:** as Orca; default Continues
+- **Why:** handoff.md line 40
+- **Evidence:** handoff.md
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** locked by handoff.md
+
+## D17: Session context is Focused by default; Full only when the transcript is usable; never remembered
+- **Question:** context mode
+- **Options:** as Orca
+- **Chose:** "Focused handoff (Recommended)" with the hint "Carries status hints and reads older transcript details only when needed.", or "Full session transcript". Full is disabled unless the probe says usable, with Orca's two reasons. Each open starts Focused.
+- **Why:** handoff.md "Content group"
+- **Evidence:** handoff.md line 46
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** locked by handoff.md
+
+## D18: Include toggles are repo state (on), diff bodies (off, needs repo state, capped at 12,000), open editor tabs (on); remembered after a successful start
+- **Question:** include toggles
+- **Options:** as Orca
+- **Chose:** as Orca, labels "Git status and changed file paths", "Diff bodies" with "Opt-in and capped at 12,000 characters.", "Open editor tabs"
+- **Why:** handoff.md "Content group" and "Settings and defaults"
+- **Evidence:** handoff.md lines 47, 79-86
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** locked by handoff.md
+
+## D19: Open editor tabs come from the editor plugin when it is running; without it the block is left out
+- **Question:** where "Open editor tabs" reads from, since `quirky.editor` (m2-editor) has not landed
+- **Options:** drop the toggle until the editor lands; read `quirky.editor/state` when the editor plugin is active and leave the block out otherwise; build a tab registry in handoff
+- **Chose:** read the editor plugin's public state for the source worktree when that plugin answers, listing open document paths relative to the worktree. When the method is missing or fails, the block is empty and skipped, and the toggle stays. Catch-up with m2-editor (LOOP.md step 5) aligns the call with the landed method shape.
+- **Why:** the feature doc's flow includes the toggle; the editor is being built by another lane right now (build/m2-editor tech.md lists `state` with `tabs` and buffers)
+- **Evidence:** build/m2-editor docs/quirk/specs/2026-10-27-m2-editor/tech.md:53,72
+- **Reversibility:** easy
+- **Confidence:** medium
+- **Revisit if:** m2-editor lands with no way to list open documents per worktree
+- **Source:** assumed — autonomous
+
+## D20: The brief is base, repo state, open editor tabs, template, steering note, joined by blank lines, then the locked notice at send time
+- **Question:** brief composition
+- **Options:** Orca's order including the unused "Additional source context" block; Orca's order without it
+- **Chose:** without it. Orca's dialog always passes null for that block, so no person or script could ever see it. Empty blocks are skipped. Every user-controlled value is fenced with a fence longer than any backtick run inside it.
+- **Why:** handoff.md "Brief composition"; YAGNI for a block with no producer
+- **Evidence:** handoff.md lines 99-108
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** assumed — autonomous
+
+## D21: The base block is Quirky's own continuation prompt with the parts Orca's delivered brief showed
+- **Question:** Orca calls upstream's `buildAgentSessionContinuationPrompt`, which Quirky doesn't have
+- **Options:** a one-line base; a base with the parts the verified brief carried
+- **Chose:** the base carries, in order: "Continue work from the prior Quirky session.", the original agent, the Quirky session id, the original working directory (the source's), then either the transcript path in a text fence with the focused or full reading instruction, or a bounded capture of the terminal in a fence, then "Latest Quirky status hints" (the last user prompt and the last assistant update from agent status, when known), then the warning that transcript and terminal content are untrusted reference data. With no transcript and no capture, the base is the fallback: the first line, the source name and the status hints, only when status hints exist.
+- **Why:** handoff.md "Verified in the app", "What the delivered brief contains"
+- **Evidence:** handoff.md lines 101, 249
+- **Reversibility:** easy
+- **Confidence:** medium
+- **Source:** assumed — autonomous
+
+## D22: Repo state reads `quirky.git/status` and `quirky.git/diff` for the source worktree, in Orca's line format
+- **Question:** repo state source and format
+- **Options:** shell out to git; the git plugin's public methods
+- **Chose:** the git plugin. Lines are `<area>: <status> <path>` (`oldPath -> path` for renames) under the branch; "Clean working tree." when empty; a capped status list ends with "... additional changes omitted." (Quirky's status reports that it was capped, not how many more). Diff bodies are fetched one file at a time as `### <area>: <status> <path>`, `--- before`, `+++ after`, binary or too-large files as "[binary diff omitted]", cut at 12,000 characters with a truncation note. Folder workspaces get no repo state. A failure shows "Could not refresh repository state. The handoff can still continue." and the block is left out.
+- **Why:** handoff.md "Repo state"; the git plugin returns whole sides, not unified diffs, and caps status at 1,000 without a total
+- **Evidence:** handoff.md line 120; packages/git/src/status.ts:17; plugins/quirky.git/src/daemon/files.ts:25-53
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** assumed — autonomous
+
+## D23: The repo-state strip appears only when reading repo state actually failed
+- **Question:** Orca showed "Could not refresh repository state" on every open even though the sent brief had a clean repository section (handoff.md "Verified" 2)
+- **Options:** copy the behaviour; treat it as a defect
+- **Chose:** a defect. The strip shows only when the status call failed, and the brief then has no repository block. A test opens the dialog on a healthy repo and expects no strip.
+- **Why:** the strip contradicts the brief it accompanies; the doc marks the cause untraced
+- **Evidence:** handoff.md line 243
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** assumed — autonomous
+
+## D24: The cost readout uses Orca's estimator
+- **Question:** token estimate
+- **Options:** Orca's 6.5/4.5/3.5 chars per token by prose, code and diff; research's ~4.5/4.0
+- **Chose:** Orca's, "{characters} characters · about {tokens} tokens", over the editable text without the locked notice
+- **Why:** parity; the readout is labelled "about". Research shows prose nearer 4.5 chars per token, so Orca under-counts prose.
+- **Evidence:** handoff.md line 116; logic spec Industry Insights
+- **Reversibility:** easy
+- **Confidence:** medium
+- **Revisit if:** the readout misleads people choosing between focused and full
+- **Source:** locked by handoff.md
+
+## D25: The transcript probe checks local files only: reported path, session id, earlier paths, then a Claude project scan
+- **Question:** transcript reachability without SSH or runtime hosts
+- **Options:** trust the reported path; Orca's candidate chain on the local disk
+- **Chose:** Orca's chain on the local disk. Candidates, best first: the path agent status reported; the agent's transcript found by provider session id under its session root; up to 5 earlier paths this session reported (kept for up to 256 sessions, because Claude reports a new id before it writes the file); for Claude only, the newest `.jsonl` in the workspace's project folder not claimed by another session, withheld as ambiguous when the two newest were written within 5 minutes. Each candidate must be a `.jsonl` inside the agent's session root (Claude `~/.claude/projects`, Codex `~/.codex/sessions`, honouring `CLAUDE_CONFIG_DIR` and `CODEX_HOME`); outside it is unverifiable. Verdicts: usable, unverifiable (refused, or a stat error other than not-found, or any thrown error), unreachable (a path was reported but nothing exists), none (nothing reported and nothing found).
+- **Why:** handoff.md "Transcript probe"; Quirky has one host, so Orca's runtime and host-change short-circuits never apply. The Vault's accept rule doesn't exist yet, so the root plus extension rule stands in for it.
+- **Evidence:** handoff.md lines 143-160; plugins/quirky.agent-status/src/capture.ts:77-85
+- **Reversibility:** medium
+- **Confidence:** medium
+- **Revisit if:** m3-vault defines a stricter accept rule; the probe should then use it
+- **Source:** assumed — autonomous
+
+## D26: Session roots are home-relative paths; Windows roots are not handled
+- **Question:** transcript roots across platforms
+- **Options:** macOS and Linux paths only; add Windows profile paths
+- **Chose:** home-relative paths, which serve macOS and Linux
+- **Why:** LOOP.md platform rule
+- **Evidence:** docs/loop/LOOP.md "Platforms"
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** deferred: platform
+
+## D27: A bounded capture is the source terminal's last 800 history lines, escapes stripped, last 36,000 characters
+- **Question:** what travels when the transcript can't
+- **Options:** as Orca
+- **Chose:** as Orca, prefixed "[Earlier terminal output omitted: N characters]" when cut. It is used when the transcript is not usable and the source has terminal history (an ended session still has history).
+- **Why:** handoff.md "Transcript vs capture"
+- **Evidence:** handoff.md line 112; plugins/quirky.terminal/src/terminal.ts:184 (`history`)
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** locked by handoff.md
+
+## D28: The busy strip appears while the source's agent status is working; "Wait for idle" recaptures on idle and never starts by itself
+- **Question:** busy source
+- **Options:** as Orca
+- **Chose:** as Orca: "The source Agent is working. Capture now or wait for newer context." with "Wait for idle" and "Capture anyway"; waiting reads "Waiting for the source session to go idle. You can still start now."; on idle the dialog recaptures and recomposes (or adds a stale reason when detached). No busy strip for a source with no agent status row or no live terminal.
+- **Why:** handoff.md "Source is busy"
+- **Evidence:** handoff.md lines 62-69
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** locked by handoff.md
+
+## D29: Editing the preview detaches it; regenerate reattaches; changes while detached only mark it stale
+- **Question:** preview editing
+- **Options:** as Orca
+- **Chose:** as Orca, with the notice and stale text from handoff.md; the locked notice sits below the editor, read-only, labelled "Locked safety note · always appended last".
+- **Why:** handoff.md "Edit the brief"
+- **Evidence:** handoff.md lines 55-60
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** locked by handoff.md
+
+## D30: The preview editor is CodeMirror 6, plain text, line numbers, word wrap
+- **Question:** Orca uses Monaco
+- **Options:** Monaco; CodeMirror 6; a textarea
+- **Chose:** CodeMirror 6, with secret hits as red marks whose hover text is "Potential secret: <excerpt>"
+- **Why:** architecture.md "Editor: CodeMirror 6 instead of Monaco"; a textarea can't mark ranges
+- **Evidence:** docs/architecture.md Decisions
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** locked by docs/architecture.md
+
+## D31: The secret scan runs on every preview, never blocks, and the host warning never shows
+- **Question:** Orca scans only when the target is on a different execution host, which can't happen in Quirky
+- **Options:** never scan (the flow can't be reached); scan when the target agent differs from the source agent; scan every preview
+- **Chose:** scan every preview with Orca's six rules, the banner "{count} potential secrets found. Review the inline preview markers before starting.", the inline markers and the line under the editor. Hits never block Start. "The brief will be sent to a different execution host." never shows.
+- **Why:** leaving the scan unreachable drops a doc flow; a brief always leaves for an agent provider, so the risk the scan names exists on one host too. Hits never block, so the cost of false positives (research: regex scanners run near 46% precision) is a banner.
+- **Evidence:** handoff.md "Secret scan"; logic spec Industry Insights
+- **Reversibility:** easy
+- **Confidence:** medium
+- **Revisit if:** the banner fires often enough on ordinary briefs to be ignored
+- **Source:** assumed — autonomous
+
+## D32: Start is disabled under Orca's conditions
+- **Question:** when Start is disabled
+- **Options:** as Orca
+- **Chose:** while a start is running, agents are loading, no agent is selected, no target resolves, the brief has no context, the probe is loading, repo state is included and loading, or "Create a new worktree" is on with a blank name. The button reads "Starting…" while it runs.
+- **Why:** handoff.md line 33
+- **Evidence:** handoff.md
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** locked by handoff.md
+
+## D33: An attached preview is recomposed at Start and refused if the source changed
+- **Question:** what body Start sends
+- **Options:** as Orca
+- **Chose:** attached: the daemon recomposes from a fresh capture; if the text differs from what the caller showed, nothing launches and the error "The source session changed. The preview was refreshed — review it, then start again." returns with the fresh text. Detached: the edited text is sent verbatim.
+- **Why:** handoff.md "Starting and delivery" 2
+- **Evidence:** handoff.md line 167
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** locked by handoff.md
+
+## D34: The new session opens as a tab in the source's tab group when the target is the source's worktree, else in the target's active group
+- **Question:** where the new tab lands
+- **Options:** always the target's active group; the source's group
+- **Chose:** the source's group when source and target share a worktree; otherwise the active group of the target worktree's workspace, since a tab group belongs to one workspace in Quirky. The new tab doesn't take focus from the source.
+- **Why:** handoff.md "Starting and delivery" 6 (source's tab group); plugins/quirky.terminal/src/layout/types.ts (groups live in a workspace keyed by worktree)
+- **Evidence:** as above
+- **Reversibility:** easy
+- **Confidence:** medium
+- **Source:** assumed — autonomous
+
+## D35: The brief is pasted after the agent's input is ready through `quirky.agents/deliver`, not passed on the command line
+- **Question:** delivery mechanism
+- **Options:** pass the brief as the launch prompt (argv for most agents); launch with no prompt, then the ready-gated bracketed paste plus Enter
+- **Chose:** the paste. The agent starts with no prompt, then `deliver` waits for the agent's ready signal, pastes and submits.
+- **Why:** parity with Orca's `submit-after-ready`; the delivery result gives the evidence the outcome needs (D36), and a resend uses the same path. Research found the 64-byte paste trap and late-paste duplicates in naive paste code; `deliver` already sends Enter as a separate write after a settle delay.
+- **Evidence:** handoff.md line 171; plugins/quirky.agents/src/delivery.ts:45; docs/loop/decisions/m1-providers.md D21, D40
+- **Reversibility:** medium
+- **Confidence:** high
+- **Source:** locked by handoff.md
+
+## D36: The delivery outcome is delivered, not delivered or unobservable, with Orca's toasts and one automatic retry
+- **Question:** delivery outcome and resend
+- **Options:** as Orca
+- **Chose:** delivered when `deliver` reports a paste after the ready signal, or the child's agent status turns working after launch; not delivered only on positive idle evidence (`deliver` reports not delivered and the child's agent status row is settled or absent while its hooks are installed); otherwise unobservable. Not delivered resends once automatically. Toasts: "The handoff brief was sent."; "The initial delivery failed, then Quirky resent the brief."; persistent "Brief delivery and the automatic retry failed." with "Resend brief"; persistent "Brief delivery could not be confirmed." with "Resend is manual because the target Agent does not expose delivery evidence." and "Resend brief", which asks "The brief may already have arrived. Sending again can create a duplicate turn." with "Send again" and "Cancel". Dismissing the toast discards the retained brief; a closed child drops it.
+- **Why:** handoff.md "Starting and delivery" and the verified unobservable toast
+- **Evidence:** handoff.md lines 177-186, 248
+- **Reversibility:** easy
+- **Confidence:** medium
+- **Source:** locked by handoff.md
+
+## D37: Toasts gain a kind, persistence and action buttons in the shell
+- **Question:** the shell's toasts are info or error, auto-dismiss after 6 s, and have no actions
+- **Options:** draw handoff's own toast stack; grow the shell toast
+- **Chose:** grow the shell toast: kinds success and warning, a persistent flag, and action buttons that run a command with arguments; reachable from window plugins and daemon notify events, and listed in `ui.state` so a script can see and press them.
+- **Why:** roadmap "API grows in the same milestone"; one toast stack for every plugin
+- **Evidence:** packages/ui/src/lib/state.ts:10-17; packages/ui/src/plugins/host.ts:793
+- **Reversibility:** medium
+- **Confidence:** high
+- **Source:** locked by docs/roadmap.md
+
+## D38: Lineage is one record per handoff in the plugin's store, capped at 500
+- **Question:** lineage storage
+- **Options:** fields on the session record; one record per handoff with both ends
+- **Chose:** one record `{id, createdAt, relationship, parent, child}` where each end is `{session, agent, providerSessionId, transcriptPath, worktreeId, title}` and the child also has its tab id. Oldest records drop past 500; bad rows are skipped on read. The child's provider session id is filled in once its agent status reports one, and never overwritten.
+- **Why:** handoff.md "Lineage storage"; phase B research: per-link records hold a typed relationship and survive either end's deletion, where a parent field covers one relationship only
+- **Evidence:** handoff.md lines 188-206
+- **Reversibility:** medium
+- **Confidence:** high
+- **Source:** locked by handoff.md
+
+## D39: A lineage write failure never fails the handoff
+- **Question:** a store error after the tab opened
+- **Options:** as Orca
+- **Chose:** swallowed; the start result still succeeds
+- **Why:** handoff.md "Edge cases"
+- **Evidence:** handoff.md line 219
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** locked by handoff.md
+
+## D40: Badges show on session tabs through a generic session badge, and the jump focuses the other end
+- **Question:** where lineage shows, since Quirky has no agent rows on worktree cards and no dashboard
+- **Options:** handoff draws into other plugins' views; a generic badge on the session record that the tab strips render
+- **Chose:** a generic badge: a plugin sets a labelled badge with a tooltip and a command on a session, and the terminal tab strip and the session tabs draw it. Handoff sets "Handed off · <relationship>" on the source and "From handoff · <relationship>" on the child, each running `quirky.handoff/jump`. The jump focuses the other end's pane; with no live pane it says "No live pane is available.", and when the other end's worktree is gone it says "worktree removed".
+- **Why:** handoff.md "Where lineage shows up"; the notifications precedent writes data that the owning plugin draws (m1-notifications D35)
+- **Evidence:** plugins/quirky.notifications/src/service.ts:345-366; handoff.md line 208
+- **Reversibility:** medium
+- **Confidence:** medium
+- **Source:** assumed — autonomous
+
+## D41: The badge's jump must work
+- **Question:** Orca's click on the source badge's arrow did nothing (handoff.md "Verified" 9)
+- **Options:** copy; treat as a defect
+- **Chose:** a defect; a test runs the jump from each end and expects the other end focused
+- **Why:** the button exists to move there
+- **Evidence:** handoff.md line 250
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** assumed — autonomous
+
+## D42: Three built-in templates with Quirky-written bodies; Orca's catalog limits and normalization
+- **Question:** template contents and rules
+- **Options:** as Orca, with bodies written here because the doc gives only names
+- **Chose:** "Continue implementation", "Review what was done", "Debug the failure" (ids `continue-implementation`, `review-completed-work`, `debug-failure`) with short bodies that use `{{gitStatus}}` and `{{changedPaths}}`. Names cut to 80, bodies to 8,000, at most 24, empty dropped, duplicate ids dropped, missing ids numbered. An absent catalog means built-ins; an empty one means none; reset clears back to absent. The first edit of an untouched catalog seeds it from the built-ins. A duplicate name only warns.
+- **Why:** handoff.md "Template management", "Template storage and normalization"
+- **Evidence:** handoff.md lines 51, 73, 212
+- **Reversibility:** easy
+- **Confidence:** medium
+- **Source:** locked by handoff.md
+
+## D43: "New Template" in the dialog saves the steering note
+- **Question:** the dialog's template creation
+- **Options:** as Orca
+- **Chose:** as Orca: name up to 80, note non-empty and at most 8,000, fewer than 24 templates; with no template selected, the new one becomes selected and the note clears
+- **Why:** handoff.md "Notes group"
+- **Evidence:** handoff.md line 53
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** locked by handoff.md
+
+## D44: The Session handoff page is a view opened by a command and listed in Settings
+- **Question:** where template management lives
+- **Options:** scalar settings; a view like Notifications'
+- **Chose:** a view titled "Session handoff" with the subtitle "Create reusable instructions for continuing work in a new Agent session.", the list, "{count} of {limit} templates", "Add template", per-row edit and remove, and "Reset to defaults" (disabled until customised). Delete and reset confirm with "Delete “{name}”?" and "Reset handoff templates?". The editor has "Name", "Instructions" with a "0 / 8,000" counter and the variables hint.
+- **Why:** handoff.md "Template management"; m1-notifications built its settings page the same way
+- **Evidence:** plugins/quirky.notifications/src/ui.tsx:8-23
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** locked by handoff.md
+
+## D45: Last agent, include toggles and last template live in the plugin store, written after a successful start
+- **Question:** where preferences live
+- **Options:** declared settings; the plugin store
+- **Chose:** the plugin store; they are remembered choices, not settings a person edits. Written best-effort after a successful start; a last template that no longer exists reads as none.
+- **Why:** handoff.md "Settings and defaults"; the Settings dialog would otherwise list internal state
+- **Evidence:** handoff.md lines 79-86
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** assumed — autonomous
+
+## D46: Drafts live in the daemon's memory, keyed by source, and Cancel and Escape both keep one
+- **Question:** draft preservation
+- **Options:** window memory (lost on reload, as Orca); daemon memory; the store
+- **Chose:** daemon memory: closing without starting keeps the note, toggles, template, agent, target, relationship and, if detached, the edited text and stale reasons. Reopening restores them; a restored target is used only if it still resolves. A successful start clears the draft. Drafts vanish when the daemon restarts.
+- **Why:** handoff.md "Edge cases" draft preservation; the daemon outlives a window reload, which keeps more than Orca does at no cost
+- **Evidence:** handoff.md line 216
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** assumed — autonomous
+
+## D47: Escape keeps the draft
+- **Question:** Orca's Escape lost the note in one try (handoff.md "Verified" 11)
+- **Options:** copy; treat as a defect
+- **Chose:** a defect; a test closes with Escape and expects the note back
+- **Why:** the doc says Escape and Cancel keep a draft
+- **Evidence:** handoff.md lines 31, 252
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** assumed — autonomous
+
+## D48: The scripting surface is the `quirky.handoff` methods and the `quirky handoff` command group
+- **Question:** what scripts and agents can do
+- **Options:** start only; every step the dialog takes
+- **Chose:** methods to prepare (the dialog's open state and no-context check), preview (compose with warnings, cost and secrets), probe the transcript, start, resend, discard a retained brief, list lineage, jump, and list and change templates. The CLI group `handoff` has `preview`, `start`, `resend`, `lineage`, `jump` and `templates` (list, add, edit, rm, reset). The dialog and settings page are also driven by UI commands with reports, so `quirky ui state` shows what the window shows.
+- **Why:** roadmap "Everything is scriptable"
+- **Evidence:** docs/roadmap.md
+- **Reversibility:** medium
+- **Confidence:** high
+- **Source:** locked by docs/roadmap.md
+
+## D49: The source keeps running and is never written to
+- **Question:** what happens to the source
+- **Options:** as Orca
+- **Chose:** the source session is only read (history, status, transcript). Nothing is typed into it.
+- **Why:** handoff.md dialog description "The source stays running."
+- **Evidence:** handoff.md line 9
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** locked by handoff.md
+
+## D50: No native-only scenarios
+- **Question:** which scenarios only the real window can show
+- **Options:** list some; none
+- **Chose:** none. The dialog, toasts, badges and settings page are webview content.
+- **Why:** LOOP.md step 6 names window frame, menu bar, tray, banners, OS dialogs and focus; handoff uses none
+- **Evidence:** docs/loop/LOOP.md step 6
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** assumed — autonomous
+
+## Progress
+Brainstorming and decisions D1–D50 done. Next: write logic.md and tech.md under docs/quirk/specs/2026-10-27-m3-handoff/, run the Codex adversarial review of both, fix, commit, then build.
