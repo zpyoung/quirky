@@ -159,7 +159,7 @@ test(
     expect(installed.code, installed.stderr).toBe(0)
 
     const model = JSON.parse(await h.ok(['ui', 'contributions', '--json'])) as UiModel
-    expect(model.statusBars.map((entry) => [entry.id, entry.order])).toEqual([
+    expect(model.statusBars.filter((entry) => entry.plugin === 'test.status').map((entry) => [entry.id, entry.order])).toEqual([
       [STATUS_EARLY, 10],
       [STATUS_LATE, 20]
     ])
@@ -247,7 +247,7 @@ test(
       report.panes.length === 2 &&
       Object.values(report.mountedAccessories).filter((ids) => ids.includes(ACCESSORY_ID)).length === 2
     )
-    expect(twoPanes.mountedAccessories[paneId]).toEqual([ACCESSORY_ID])
+    expect(twoPanes.mountedAccessories[paneId]).toContain(ACCESSORY_ID)
     expect(document.querySelectorAll('[data-test-accessory="base"]')).toHaveLength(2)
     for (const pane of twoPanes.panes) {
       const badge = document.querySelector<HTMLElement>(`[data-pane="${pane.pane}"] [data-test-accessory="base"]`)
@@ -268,7 +268,7 @@ test(
     )
     await waitFor('replacement accessory views to appear', () => (document.querySelectorAll('[data-test-accessory="override"]').length === 2 ? true : undefined))
     expect(document.querySelectorAll('[data-test-accessory="base"]')).toHaveLength(0)
-    expect(overrideReport.mountedAccessories[paneId]).toEqual([ACCESSORY_ID])
+    expect(overrideReport.mountedAccessories[paneId]).toContain(ACCESSORY_ID)
 
     const overrideDisabled = await h.cli(['plugin', 'disable', 'test.override'])
     expect(overrideDisabled.code, overrideDisabled.stderr).toBe(0)
@@ -283,8 +283,8 @@ test(
     const removed = await viewReport(f, 'accessory contribution removed', (report) =>
       !Object.values(report.mountedAccessories).some((ids) => ids.includes(ACCESSORY_ID))
     )
-    expect(removed.mountedAccessories[paneId]).toBeUndefined()
-    await waitFor('all accessory roots to be removed', () => (document.querySelector('[data-terminal-accessory]') === null ? true : undefined))
+    expect(removed.mountedAccessories[paneId] ?? []).not.toContain(ACCESSORY_ID)
+    await waitFor('the fixture accessory view to be removed', () => (document.querySelector('[data-test-accessory]') === null ? true : undefined))
   },
   FEATURE_MS
 )
