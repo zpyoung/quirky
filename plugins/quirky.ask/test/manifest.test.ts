@@ -46,6 +46,14 @@ describe('SC-17/SC-18: quirky.ask as a built-in plugin', () => {
     ])
   })
 
+  test('the deadlines job is scheduled every minute and runs against the lazy plugin', async () => {
+    const h = await startAsk()
+    const client = await h.connect('cli')
+    const jobs = (await client.call('job.list', {})) as { id: string; plugin: string; intervalMs: number }[]
+    expect(jobs.find((job) => job.id === 'job:quirky.ask/deadlines')).toMatchObject({ plugin: 'quirky.ask', intervalMs: 60000 })
+    expect(await client.call('job.run', { id: 'job:quirky.ask/deadlines' })).toMatchObject({ status: 'ok' })
+  })
+
   test('the Questions panel is an effective panel in ui.state', async () => {
     const h = await startAsk()
     const client = await h.connect('cli')

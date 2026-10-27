@@ -1,5 +1,7 @@
 import type { Ask, PluginCaller, PluginContext, UiState } from '@quirky/protocol'
 import { AskService } from './asks'
+import { askQueueMigration } from './store-migrations'
+import { ClaudeVersionGate, commandProbe, suppressionHook } from './suppression'
 import { v1AsksMigration } from './v1-import'
 
 const QUESTIONS_PANEL = 'panel:quirky.ask/questions'
@@ -22,7 +24,6 @@ async function openQuestionsPanel(context: PluginContext): Promise<void> {
 }
 
 function announce(context: PluginContext, ask: Ask): void {
-  context.emit('created', { ask })
   context.notify({
     title: ask.spec.title ?? 'Question',
     body: ask.spec.questions[0].question,
@@ -33,9 +34,9 @@ function announce(context: PluginContext, ask: Ask): void {
 
 let service: AskService | undefined
 
-/** Provides the ask methods; the CLI commands and the panel's window module live elsewhere. */
+/** Provides the ask methods, the deadline job and the Claude launch hook; the CLI commands and the panel's window module live elsewhere. */
 export function activate(context: PluginContext): void {
-  const store = context.openStore([v1AsksMigration(context.home)])
+  const store = context.openStore([v1AsksMigration(context.home), askQueueMigration])
   const asks = new AskService(
     store,
     {
@@ -44,8 +45,17 @@ export function activate(context: PluginContext): void {
       conflict: (message) => context.error('conflict', message)
     },
     {
-      created: (ask) => announce(context, ask),
-      resolved: (askId, envelope) => void context.emit('resolved', { askId, envelope })
+      created: (ask, seq) => {
+        context.emit('created', { ask, seq })
+        if (!ask.queued) announce(context, ask)
+      },
+      surfaced: (ask, seq) => {
+        context.emit('surfaced', { ask, seq })
+        announce(context, ask)
+        void openQuestionsPanel(context)
+      },
+      updated: (askId, partial, seq) => void context.emit('updated', { askId, partial, seq }),
+      resolved: (askId, envelope, seq) => void context.emit('resolved', { askId, envelope, seq })
     }
   )
 
@@ -56,9 +66,13 @@ export function activate(context: PluginContext): void {
     const ask = asks.create(
       params.spec,
       str(params, 'session') ?? client?.sessionId ?? null,
-      str(params, 'worktree') ?? client?.worktreeId ?? null
+      str(params, 'worktree') ?? client?.worktreeId ?? null,
+      {
+        ...(typeof params.timeoutMs === 'number' ? { timeoutMs: params.timeoutMs } : {}),
+        checkCredentialText: caller.role !== 'plugin'
+      }
     )
-    await openQuestionsPanel(context)
+    if (!ask.queued) await openQuestionsPanel(context)
     return { askId: ask.id }
   })
   context.provide('method:quirky.ask/wait', (params: Record<string, unknown>) =>
@@ -69,6 +83,14 @@ export function activate(context: PluginContext): void {
   )
   context.provide('method:quirky.ask/cancel', (params: Record<string, unknown>) => asks.cancel(str(params, 'askId')!))
   context.provide('method:quirky.ask/list', (params: Record<string, unknown>) => asks.list(params.pendingOnly === true))
+  context.provide('method:quirky.ask/updatePartial', (params: Record<string, unknown>) =>
+    asks.updatePartial(str(params, 'askId')!, params.partial)
+  )
+  context.provide('method:quirky.ask/expire', (params: Record<string, unknown>) => asks.expire(str(params, 'askId')!))
+  context.provide('job:quirky.ask/deadlines', () => asks.sweep())
+  context.provide('launch-hook:quirky.ask/claude-ask', suppressionHook(context, new ClaudeVersionGate(commandProbe(context), Date.now)))
+
+  asks.start()
 }
 
 /** Rejects pending waits and clears their timers so nothing touches the store once the host closes it. */

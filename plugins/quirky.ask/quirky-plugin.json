@@ -556,6 +556,14 @@
           "quirky.ask/cancel"
         ]
       }
+    ],
+    "job": [
+      {
+        "id": "deadlines",
+        "description": "Times out asks whose deadline passed while the daemon was down.",
+        "interval": "60s",
+        "initialDelay": "1s"
+      }
     ]
   }
 }

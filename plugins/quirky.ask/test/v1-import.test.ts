@@ -1,10 +1,11 @@
 import { Database } from 'bun:sqlite'
 import { afterEach, describe, expect, test } from 'bun:test'
 import { join } from 'node:path'
-import type { AskEnvelope, PluginStore } from '@quirky/protocol'
+import type { AskEnvelope } from '@quirky/protocol'
 import { makeTempHome } from '../../../packages/daemon/test/helpers'
 import { v1AsksMigration } from '../v1-import'
-import { cleanupAll, connectAs, spec, startAsk, stopKeepingHome } from './support'
+import { askQueueMigration } from '../store-migrations'
+import { cleanupAll, connectAs, memoryStore, spec, startAsk, stopKeepingHome } from './support'
 
 afterEach(cleanupAll)
 
@@ -32,23 +33,6 @@ function writeV1Home(home: string): void {
   db.close()
 }
 
-/** A `PluginStore` over an in-memory database, enough to run a migration function. */
-function memoryStore(): PluginStore & { db: Database } {
-  const db = new Database(':memory:')
-  return {
-    db,
-    version: 0,
-    run: (sql, ...params) => {
-      const result = db.query(sql).run(...(params as never[]))
-      return { changes: Number(result.changes), lastInsertRowid: Number(result.lastInsertRowid) }
-    },
-    get: (sql, ...params) => (db.query(sql).get(...(params as never[])) as never) ?? null,
-    all: (sql, ...params) => db.query(sql).all(...(params as never[])) as never,
-    exec: (sql) => db.exec(sql),
-    transaction: (work) => db.transaction(work)()
-  }
-}
-
 describe('v1 asks import', () => {
   test('SC-26: pending and resolved asks are listed, the pending one is answerable, and a second start copies nothing', async () => {
     const home = makeTempHome('qa-')
@@ -59,12 +43,14 @@ describe('v1 asks import', () => {
     expect(listed.map((ask) => ask.id)).toEqual(['ask_done', 'ask_pending'])
     expect(listed[0]).toMatchObject({
       sessionId: null,
+      seq: 1,
+      queued: false,
       envelope: { status: 'partial', answers: { env: { value: 'dev', source: 'option' } }, skipped: ['why'] }
     })
-    expect(listed[1]).toMatchObject({ sessionId: 'sess_1', worktreeId: 'wt_1', envelope: { status: 'pending' } })
+    expect(listed[1]).toMatchObject({ sessionId: 'sess_1', worktreeId: 'wt_1', seq: 2, queued: false, envelope: { status: 'pending' } })
     expect(((await client.callAny('quirky.ask/list', { pendingOnly: true })) as unknown[]).length).toBe(1)
 
-    const answered = await client.callAny('quirky.ask/answer', { askId: 'ask_pending', answers: { env: { value: 'prod', source: 'option' } } })
+    const answered = await client.callAny('quirky.ask/answer', { askId: 'ask_pending', answers: { env: { value: 'prod', source: 'option' }, why: { value: 'ship it', source: 'input' } } })
     expect(answered).toMatchObject({ status: 'answered' })
 
     await stopKeepingHome(h)
@@ -108,5 +94,63 @@ describe('the import migration', () => {
       { id: 'ask_done', status: 'partial' },
       { id: 'ask_pending', status: 'pending' }
     ])
+  })
+})
+
+describe('migration 2', () => {
+  test('numbers existing rows 1..n in creation order and starts the counter at n', () => {
+    const home = makeTempHome('qa-')
+    writeV1Home(home)
+    const store = memoryStore()
+    v1AsksMigration(home)(store)
+    askQueueMigration(store)
+    expect(store.all('SELECT id, seq, created_seq, partial, expires_at, summary FROM asks ORDER BY seq')).toEqual([
+      { id: 'ask_done', seq: 1, created_seq: 1, partial: '{}', expires_at: null, summary: '' },
+      { id: 'ask_pending', seq: 2, created_seq: 2, partial: '{}', expires_at: null, summary: '' }
+    ])
+    expect(store.all('SELECT id, value FROM ask_seq')).toEqual([{ id: 1, value: 2 }])
+  })
+
+  test('ties on created_at are ordered by id', () => {
+    const store = memoryStore()
+    v1AsksMigration(makeTempHome('qa-'))(store)
+    for (const id of ['ask_b', 'ask_a']) {
+      store.run('INSERT INTO asks VALUES (?, ?, NULL, NULL, 100, ?, ?, ?)', id, JSON.stringify(spec), 'pending', '{}', '[]')
+    }
+    askQueueMigration(store)
+    expect(store.all('SELECT id, seq FROM asks ORDER BY seq')).toEqual([
+      { id: 'ask_a', seq: 1 },
+      { id: 'ask_b', seq: 2 }
+    ])
+  })
+
+  test('an empty store gets a counter at 0', () => {
+    const store = memoryStore()
+    v1AsksMigration(makeTempHome('qa-'))(store)
+    askQueueMigration(store)
+    expect(store.all('SELECT id, value FROM ask_seq')).toEqual([{ id: 1, value: 0 }])
+  })
+
+  test('pending v1 asks of one session join its queue in creation order, and promotion takes the next counter value', async () => {
+    const home = makeTempHome('qa-')
+    const db = new Database(join(home, 'quirky.db'), { create: true })
+    db.exec(V1_ASKS)
+    const insert = db.query('INSERT INTO asks VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+    insert.run('ask_old', JSON.stringify(spec), null, null, 50, 'declined', '{}', '[]')
+    insert.run('ask_b', JSON.stringify(spec), 'sess_1', null, 200, 'pending', '{}', '[]')
+    insert.run('ask_a', JSON.stringify(spec), 'sess_1', null, 100, 'pending', '{}', '[]')
+    db.close()
+
+    const h = await startAsk(home)
+    const client = await connectAs(h)
+    const queue = async () =>
+      ((await client.callAny('quirky.ask/list', { pendingOnly: true })) as { id: string; seq: number; queued: boolean }[]).map((ask) => [ask.id, ask.seq, ask.queued])
+    expect(await queue()).toEqual([
+      ['ask_a', 2, false],
+      ['ask_b', 3, true]
+    ])
+
+    await client.callAny('quirky.ask/answer', { askId: 'ask_a', answers: {}, skipped: ['env', 'why'] })
+    expect(await queue()).toEqual([['ask_b', 5, false]])
   })
 })
