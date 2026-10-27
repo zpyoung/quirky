@@ -254,6 +254,14 @@
       "status": "done"
     },
     {
+      "id": "fix-ask-regex-budget-20261027",
+      "milestone": "M2",
+      "title": "Fix required remote suite: plugins/quirky.ask/test/core/spec.test.ts accepts unanchored a*a*a*b with a 200-character nonmatching default but validation takes 103-118 ms and violates its 100 ms budget even in isolated runs; investigate bounded regex validation without suppressing the assertion or changing matching semantics",
+      "docs": [],
+      "deps": [],
+      "status": "todo"
+    },
+    {
       "id": "fix-sc31-first-shell-race",
       "milestone": "M1",
       "title": "Fix the SC-31 race in plugins/quirky.worktree/test/window-create.test.ts: after a create that skips setup, the window sometimes opens a first shell for the new worktree before the test checks it has no sessions (6 of 10 runs on the Linux test host). Decide whether the window or the test is wrong, fix it, and remove its line from scripts/test-on-macos.txt",
@@ -523,14 +531,6 @@
         "m1-term-daemon",
         "m1-agent-status"
       ],
-      "status": "todo"
-    },
-    {
-      "id": "fix-ask-regex-budget-20261027",
-      "milestone": "M2",
-      "title": "Fix required remote suite: plugins/quirky.ask/test/core/spec.test.ts accepts unanchored a*a*a*b with a 200-character nonmatching default but validation takes 103-118 ms and violates its 100 ms budget even in isolated runs; investigate bounded regex validation without suppressing the assertion or changing matching semantics",
-      "docs": [],
-      "deps": [],
       "status": "todo"
     },
     {
