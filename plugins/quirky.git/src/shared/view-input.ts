@@ -21,6 +21,8 @@ export type DiffViewInput = {
   area?: 'staged' | 'unstaged' | 'untracked' | 'branch' | 'all'
   commit?: string
   title?: string
+  /** The note whose card a `file` view scrolls into view once its diff has loaded. */
+  noteId?: string
   /** The review a `conflicts` view resumes, or the one a `conflict-file` view returns to on close. */
   review?: ReviewSnapshot
 }
