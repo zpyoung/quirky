@@ -429,5 +429,15 @@
 - **Confidence:** high
 - **Source:** supersedes m1-agent-status-scripting D30 (who writes the paste)
 
+## D43: The final fix batch closed every Final Round 1 finding; nothing goes to BLOCKERS.md
+- **Question:** LOOP.md step 5: which Final Round 1 findings stay open after the one fix batch
+- **Options:** run closure rounds; confirm closure by tests and the gate
+- **Chose:** each accepted finding has a test that fails without its fix (the implementer reverted the send, inspect and timeout-version fixes to check; the matcher-deadline and `rules show` tests assert the new behavior directly), and the gate after the batch passed: `bun run test` 0 failures and no flaky files, `bun test scripts`, `bun run typecheck`. No finding is left open, so BLOCKERS.md gets no entry. Known residual, recorded in D32: a daemon killed with SIGKILL mid-match can leave the matcher child spinning until its regex ends.
+- **Why:** LOOP.md replaces Final Rounds 2-5 with this check
+- **Evidence:** scratchpad gate-f1.log (head 2d20a80)
+- **Reversibility:** easy
+- **Confidence:** medium
+- **Source:** locked by docs/loop/LOOP.md
+
 ## Progress
-Step 5 (build), final fix batch. Final Round 1 done (D41); fixers H1 (agent-status) and H2 (pty-host test) running. Next: merge, gate, append any unclosed finding to BLOCKERS.md, land.
+Step 7 (land). Build, Final Round 1, its fix batch and the final gate are done (head 2d20a80 plus this note). No UI or native scenarios (D25). If this iteration stopped before landing: run `bun install`, the gate (`bun run test && bun test scripts && bun run typecheck`), commit, `git switch --detach`, check `pgrep -fl "queue.ts land"` is empty, then `bun scripts/build-loop/queue.ts land m1-agent-status-scripting`.
