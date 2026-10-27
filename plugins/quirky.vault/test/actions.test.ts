@@ -1,22 +1,52 @@
 import { afterEach, describe, expect, test } from 'bun:test'
-import { existsSync, readFileSync } from 'node:fs'
-import { join } from 'node:path'
+import { existsSync, readFileSync, writeFileSync } from 'node:fs'
+import { basename, dirname, join } from 'node:path'
+import { RpcErrorCode } from '@quirky/protocol'
 import type { HostedSession, PublicListResult } from '../src/types'
 import { VaultRig } from './support/harness'
+import { TrashVolume } from './support/trash-volume'
 
 let rig: VaultRig | undefined
+let trashVolume: TrashVolume | undefined
+
+type DeleteResult = { deleted: boolean; trashed: number; alreadyMissing: boolean }
 
 afterEach(async () => {
-  await rig?.cleanup()
-  rig = undefined
+  try {
+    await rig?.cleanup()
+  } finally {
+    rig = undefined
+    try {
+      trashVolume?.cleanup()
+    } finally {
+      trashVolume = undefined
+    }
+  }
 })
 
 const start = async () => (rig = await VaultRig.start())
+const startWithVolumeTmpdir = async (volume: TrashVolume) => {
+  const previousTmpdir = process.env.TMPDIR
+  process.env.TMPDIR = volume.tmpDir
+  try {
+    return await start()
+  } finally {
+    if (previousTmpdir === undefined) delete process.env.TMPDIR
+    else process.env.TMPDIR = previousTmpdir
+  }
+}
 
 const claudeSession = async (vault: VaultRig): Promise<HostedSession> => {
   const list = await vault.call<PublicListResult>('list', { agents: ['claude'], unlimited: true })
   const session = list.sessions[0]
   if (!session) throw new Error('Claude fixture was not discovered')
+  return session
+}
+
+const agentSession = async (vault: VaultRig, agent: string): Promise<HostedSession> => {
+  const list = await vault.call<PublicListResult>('list', { agents: [agent], unlimited: true })
+  const session = list.sessions[0]
+  if (!session) throw new Error(`${agent} fixture was not discovered`)
   return session
 }
 
@@ -61,29 +91,81 @@ describe('vault session actions', () => {
     expect(await vault.call<{ available: boolean; reason: string }>('jump', { id: session.id, target: 'pane' })).toMatchObject({ available: false, reason: expect.any(String) })
   })
 
-  test('unsupported source deletion refuses without changing the original file', async () => {
+  test('unsupported source deletion reports a conflict without changing original bytes or source home', async () => {
     const vault = await start()
-    const list = await vault.call<PublicListResult>('list', { agents: ['codex'], unlimited: true })
-    const session = list.sessions[0]
-    if (!session?.source.filePath) throw new Error('Codex source fixture was not discovered')
+    const session = await agentSession(vault, 'codex')
     const filePath = session.source.filePath
+    if (!filePath) throw new Error('Codex source fixture path was redacted')
+    const originalBytes = readFileSync(filePath)
 
-    await expect(vault.call('deleteSession', { id: session.id, yes: true })).rejects.toThrow(/unsupported|cannot delete/i)
-    expect(existsSync(filePath)).toBe(true)
-  })
-
-  test('supported local deletion moves only the selected temporary transcript to macOS Trash', async () => {
-    if (process.platform !== 'darwin') return
-    const vault = await start()
-    const session = await claudeSession(vault)
-    const sourcePath = session.source.filePath
-    if (!sourcePath) throw new Error('Claude source fixture path was redacted')
-    expect(existsSync(sourcePath)).toBe(true)
-
-    const result = await vault.call<{ deleted: boolean; hostId: string }>('deleteSession', { id: session.id, yes: true })
-
-    expect(result).toMatchObject({ deleted: true, hostId: 'local' })
-    expect(existsSync(sourcePath)).toBe(false)
+    await expect(vault.call('deleteSession', { id: session.id, yes: true })).rejects.toMatchObject({
+      code: RpcErrorCode.Conflict
+    })
+    expect(readFileSync(filePath)).toEqual(originalBytes)
     expect(existsSync(vault.sourceHome)).toBe(true)
   })
+
+  test.skipIf(process.platform !== 'darwin')(
+    'local file and directory deletion use only the selected sources and disposable APFS Trash',
+    async () => {
+      const volume = trashVolume = TrashVolume.create()
+      const vault = await startWithVolumeTmpdir(volume)
+
+      const claude = await claudeSession(vault)
+      const claudePath = claude.source.filePath
+      if (!claudePath) throw new Error('Claude source fixture path was redacted')
+      const claudeBytes = readFileSync(claudePath)
+      const codex = await agentSession(vault, 'codex')
+      const unrelatedSourcePath = codex.source.filePath
+      if (!unrelatedSourcePath) throw new Error('Codex source fixture path was redacted')
+      const unrelatedSourceBytes = readFileSync(unrelatedSourcePath)
+
+      const grok = await agentSession(vault, 'grok')
+      const grokPath = grok.source.filePath
+      if (!grokPath) throw new Error('Grok source fixture path was redacted')
+      const grokDirectory = dirname(grokPath)
+      const grokSummaryBytes = readFileSync(grokPath)
+      const grokHistoryPath = join(grokDirectory, 'chat_history.jsonl')
+      const grokHistoryBytes = readFileSync(grokHistoryPath)
+      const siblingPath = join(dirname(grokDirectory), 'unrelated-sibling.txt')
+      const siblingBytes = Buffer.from('unrelated sibling source data\n')
+      writeFileSync(siblingPath, siblingBytes)
+
+      volume.assertSafeDeletionTarget(claudePath, vault.sourceHome, vault.home)
+      volume.assertSafeDeletionTarget(grokDirectory, vault.sourceHome, vault.home)
+      expect(existsSync(claudePath)).toBe(true)
+      expect(existsSync(grokDirectory)).toBe(true)
+
+      const initialTrashEntries = volume.listTrashEntries()
+      const claudeResult = await vault.call<DeleteResult>('deleteSession', { id: claude.id, yes: true })
+
+      expect(claudeResult).toMatchObject({ deleted: true, trashed: 1, alreadyMissing: false })
+      expect(existsSync(claudePath)).toBe(false)
+      expect(readFileSync(volume.trashPathFor(basename(claudePath)))).toEqual(claudeBytes)
+      expect(volume.listTrashEntries().length).toBeGreaterThan(initialTrashEntries.length)
+      expect(readFileSync(unrelatedSourcePath)).toEqual(unrelatedSourceBytes)
+      expect(existsSync(vault.sourceHome)).toBe(true)
+
+      const trashAfterClaude = volume.listTrashEntries()
+      const repeatedClaudeResult = await vault.call<DeleteResult>('deleteSession', { id: claude.id, yes: true })
+      expect(repeatedClaudeResult).toMatchObject({ deleted: true, trashed: 0, alreadyMissing: true })
+      expect(volume.listTrashEntries().sort()).toEqual(trashAfterClaude.sort())
+
+      const grokResult = await vault.call<DeleteResult>('deleteSession', { id: grok.id, yes: true })
+      const trashedGrokDirectory = volume.trashPathFor(basename(grokDirectory))
+      expect(grokResult).toMatchObject({ deleted: true, trashed: 1, alreadyMissing: false })
+      expect(existsSync(grokDirectory)).toBe(false)
+      expect(existsSync(trashedGrokDirectory)).toBe(true)
+      expect(readFileSync(join(trashedGrokDirectory, basename(grokPath)))).toEqual(grokSummaryBytes)
+      expect(readFileSync(join(trashedGrokDirectory, basename(grokHistoryPath)))).toEqual(grokHistoryBytes)
+      expect(readFileSync(siblingPath)).toEqual(siblingBytes)
+      expect(readFileSync(unrelatedSourcePath)).toEqual(unrelatedSourceBytes)
+      expect(existsSync(vault.sourceHome)).toBe(true)
+
+      const trashAfterGrok = volume.listTrashEntries()
+      const repeatedGrokResult = await vault.call<DeleteResult>('deleteSession', { id: grok.id, yes: true })
+      expect(repeatedGrokResult).toMatchObject({ deleted: true, trashed: 0, alreadyMissing: true })
+      expect(volume.listTrashEntries().sort()).toEqual(trashAfterGrok.sort())
+    }
+  )
 })

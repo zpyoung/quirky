@@ -6,6 +6,7 @@ import { HISTORY_AGENTS } from '../agents'
 import { join } from 'node:path'
 import { ensureQuerySchema, extendContentHash, indexedMessageRows, readGeneration, searchIndex } from './engine'
 import type { SearchContentHash, SearchSourceRecord } from './engine'
+import { sqliteSourcePath } from '../scanner/parsers/sqlite'
 
 /*
  * MIT License
@@ -27,7 +28,7 @@ import type { SearchContentHash, SearchSourceRecord } from './engine'
  * SOFTWARE.
  */
 
-const SCHEMA_VERSION = 1
+const SCHEMA_VERSION = 2
 const RECONCILE_INTERVAL_MS = 20_000
 const PASS_BUDGET_MS = RECONCILE_INTERVAL_MS / 4
 const FULL_SWEEP_EVERY_CYCLES = 15
@@ -230,11 +231,6 @@ export function createSearch(options: SearchOptions): VaultSearch {
     const started = performance.now()
     const controller = new AbortController()
     activeController = controller
-    let deadlineReached = false
-    const deadline = setTimeout(() => {
-      deadlineReached = true
-      controller.abort()
-    }, PASS_BUDGET_MS)
     lastReconcileAt = Date.now()
     publish()
     let completedFull = false
@@ -283,9 +279,7 @@ export function createSearch(options: SearchOptions): VaultSearch {
         owed = true
       }
     } finally {
-      clearTimeout(deadline)
       if (activeController === controller) activeController = null
-      if (deadlineReached) owed = true
       publish()
     }
   }
@@ -338,24 +332,14 @@ export function createSearch(options: SearchOptions): VaultSearch {
 
   const sourcePresence = (record: SearchSourceRecord): 'present' | 'missing' | 'unverifiable' => {
     if (rootStates.get(record.source_root)?.presence === 'unverifiable') return 'unverifiable'
-    const path = record.file_path
+    if (record.file_path !== record.candidate_path && !knownCandidatePaths.has(record.candidate_path)) return 'missing'
     try {
-      const stat = lstatSync(path)
-      return stat.isSymbolicLink() ? 'unverifiable' : 'present'
+      const stat = lstatSync(record.file_path)
+      return stat.isSymbolicLink() || !stat.isFile() ? 'unverifiable' : 'present'
     } catch (error) {
       const code = (error as NodeJS.ErrnoException).code
-      if (code !== 'ENOENT') return 'unverifiable'
-      const separator = path.lastIndexOf('#')
-      if (separator > 0 && knownCandidatePaths.has(path)) {
-        try {
-          const baseStat = lstatSync(path.slice(0, separator))
-          return baseStat.isSymbolicLink() || !baseStat.isFile() ? 'unverifiable' : 'present'
-        } catch (baseError) {
-          const baseCode = (baseError as NodeJS.ErrnoException).code
-          if (baseCode !== 'ENOENT') return 'unverifiable'
-        }
-      }
-      return 'missing'
+      if (code === 'ENOENT') return 'missing'
+      return 'unverifiable'
     }
   }
 
@@ -529,7 +513,7 @@ function markFileSeen(db: Database, path: string, scanId: number): void {
 
 function markFileDue(db: Database, candidate: SourceCandidate, scanId: number): void {
   const current = findFile(db, candidate.filePath)
-  const info = safeFileIdentity(candidate.filePath)
+  const info = safeFileIdentity(sqliteSourcePath(candidate))
   if (!current) {
     db.prepare(`INSERT INTO files(path, root, agent, dev, ino, state, pending_signature, pending_mtime_ms, pending_size_bytes, last_seen_scan)
       VALUES (?, ?, ?, ?, ?, 'due', ?, ?, ?, ?)`)
@@ -544,7 +528,7 @@ function markFileDue(db: Database, candidate: SourceCandidate, scanId: number): 
       changedMtime ? 0 : current.fail_count, changedMtime ? null : current.failed_mtime_ms, candidate.filePath)
 }
 function identityUnchanged(row: FileRow, candidate: SourceCandidate): boolean {
-  const identity = safeFileIdentity(candidate.filePath)
+  const identity = safeFileIdentity(sqliteSourcePath(candidate))
   return (identity.dev === null || row.dev === null || identity.dev === row.dev) &&
     (identity.ino === null || row.ino === null || identity.ino === row.ino) &&
     candidate.size >= row.size_bytes
@@ -643,7 +627,7 @@ function publishStage(
   hash: SearchContentHash,
   callbackMessages: number
 ): void {
-  const info = safeFileIdentity(candidate.filePath)
+  const info = safeFileIdentity(sqliteSourcePath(candidate))
   db.transaction(() => {
     const oldFile = db.prepare('SELECT session_row_id FROM files WHERE path = ?').get(candidate.filePath) as { session_row_id: number | null } | null
     const oldIdentity = db.prepare('SELECT id FROM sessions WHERE vault_id = ?').get(session.id) as { id: number } | null

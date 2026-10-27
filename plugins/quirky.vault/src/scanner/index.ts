@@ -16,7 +16,7 @@ import type {
 } from '../types'
 import { parseGraph } from './parsers/graph'
 import { parsePrimary } from './parsers/primary'
-import { parseSqlite } from './parsers/sqlite'
+import { parseSqlite, sqliteSourcePath } from './parsers/sqlite'
 import { parseDocumentAgent } from './parsers/document-agents'
 import { throwIfAborted, type ParserContext } from './parsers/shared'
 import { agentSourceRoots, discoverSources, isDeleteSupported, isPathWithin, stableSourceId } from './discovery'
@@ -186,8 +186,7 @@ function parseByAgent(context: ParserContext): Promise<VaultSession | null> {
 }
 
 async function validateCurrentFile(candidate: SourceCandidate): Promise<boolean> {
-  const marker = candidate.filePath.lastIndexOf('#')
-  const sourcePath = marker >= 0 ? candidate.filePath.slice(0, marker) : candidate.filePath
+  const sourcePath = sqliteSourcePath(candidate)
   try {
     const [info, rootInfo, sourceReal, rootReal] = await Promise.all([
       lstat(sourcePath),
@@ -269,9 +268,6 @@ async function validateDeleteTarget(path: string, root: string, kind: 'file' | '
   return path
 }
 
-function deleteError(message: 'invalid-path' | 'unsupported-agent' | 'synthetic-path' | 'path-outside-known-roots'): Error {
-  return new Error(message)
-}
 
 export function createScanner(options: ScannerOptions): VaultScanner {
   const normalized: ScanOptions = {
@@ -312,6 +308,7 @@ export function createScanner(options: ScannerOptions): VaultScanner {
       const cached = await cache.get(id, candidate.signature)
       if (cached) {
         if (expectedGeneration !== generation && invalidated.has(id)) return null
+        cached.filePath = sqliteSourcePath(candidate)
         return cached
       }
     }
@@ -326,7 +323,7 @@ export function createScanner(options: ScannerOptions): VaultScanner {
     throwIfAborted(signal)
     if (!parsed) return null
     parsed.id = id
-    parsed.filePath = candidate.filePath
+    parsed.filePath = sqliteSourcePath(candidate)
     parsed.codexHome = candidate.codexHome
     parsed.presence = 'present'
     if (!subagent && (candidate.agent === 'claude' || candidate.agent === 'omp')) {
@@ -431,13 +428,12 @@ export function createScanner(options: ScannerOptions): VaultScanner {
     },
     async deleteTargets(id) {
       const candidate = knownCandidates.get(id)
-      if (!candidate) throw deleteError('invalid-path')
-      if (!isDeleteSupported(candidate.agent)) throw deleteError('unsupported-agent')
-      if (candidate.filePath.includes('#')) throw deleteError('synthetic-path')
+      if (!candidate) throw new Error('invalid-path')
+      if (!isDeleteSupported(candidate.agent)) throw new Error('unsupported-agent')
       const path = resolve(candidate.filePath)
       const roots = agentSourceRoots(normalized, candidate.agent).map((root) => resolve(root))
       const root = roots.find((value) => isPathWithin(value, path))
-      if (!root) throw deleteError('path-outside-known-roots')
+      if (!root) throw new Error('path-outside-known-roots')
       const targets: { path: string; root: string; kind: 'file' | 'directory' }[] = []
       if (DELETABLE_WHOLE_DIRECTORY.has(candidate.agent)) {
         targets.push({ path: dirname(path), root, kind: 'directory' })
