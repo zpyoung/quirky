@@ -87,6 +87,19 @@ describe('adopting sessions', () => {
     expect(workspaceTabs(result.workspace).map((tab) => tab.defaultTitle)).toEqual(['Terminal 1', 'Claude', 'Claude 2', 'Terminal 2'])
   })
 
+  test('a shell session created with its own title keeps it, and the session plugin\'s own Shell titles take the number', () => {
+    const result = reconcile(emptyWorkspace('wt', new CounterIds(0)), {
+      sessions: [
+        session('s1', { createdAt: 1, title: 'Setup' }),
+        session('s2', { createdAt: 2, title: 'Shell' }),
+        session('s3', { createdAt: 3, title: 'Shell 2' }),
+        session('s4', { createdAt: 4, title: 'Shell 10' }),
+        session('s5', { createdAt: 5, title: 'Shellfish' })
+      ]
+    })
+    expect(workspaceTabs(result.workspace).map((tab) => tab.defaultTitle)).toEqual(['Setup', 'Terminal 1', 'Terminal 2', 'Terminal 3', 'Shellfish'])
+  })
+
   test('sessions of another worktree, and ones another workspace\'s pane holds, are left alone', () => {
     const result = reconcile(emptyWorkspace('wt', new CounterIds(0)), {
       sessions: [session('other', { worktreeId: 'elsewhere' }), session('held'), session('free', { createdAt: 2 })],

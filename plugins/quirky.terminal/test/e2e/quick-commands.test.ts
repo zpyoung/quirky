@@ -149,7 +149,21 @@ test(
   SCENARIO_MS
 )
 
-test.todo('SC-54: `quirky terminal quick-command list --worktree <selector>` is a usage error; the manifest declares only --all', async () => {})
+test(
+  'SC-54: quick-command list --worktree main lists the project commands of its repo, and a worktree of another repo only the global ones',
+  async () => {
+    const h = await startE2e()
+    await h.json<Commands>(['terminal', 'quick-command', 'add', '--label', 'Hello', '--command', 'echo hello'])
+    await h.json<Commands>(['terminal', 'quick-command', 'add', '--label', 'Test', '--command', 'echo test', '--scope', 'repo'])
+    const ids = (listed: Commands) => listed.commands.map((command) => command.id)
+
+    expect(ids(await h.json<Commands>(['terminal', 'quick-command', 'list', '--worktree', 'main']))).toEqual(['hello', 'test'])
+    const other = await addRepo(h, 'docs')
+    expect(ids(await h.json<Commands>(['terminal', 'quick-command', 'list', '--worktree', `path:${other}`]))).toEqual(['hello'])
+    expect(ids(await h.json<Commands>(['terminal', 'quick-command', 'list', '--worktree', `path:${h.repo}`]))).toEqual(['hello', 'test'])
+  },
+  SCENARIO_MS
+)
 
 test(
   'SC-54: a repo command is offered only to that repo, and the strip remembers the last one',

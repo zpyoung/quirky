@@ -390,6 +390,12 @@ describe('quick commands and the floating workspace', () => {
     expect(JSON.parse((await run('quick-command-list', [], {}, { answers, json: true })).lines[0]!)).toEqual({ commands: QUICK })
   })
 
+  test('quick-command list --worktree scopes the list to that workspace', async () => {
+    const answers = { quickCommands: { commands: QUICK } }
+    const scoped = await run('quick-command-list', [], { worktree: 'name:docs' }, { answers })
+    expect(scoped.calls).toEqual([{ method: 'quickCommands', params: { workspace: 'name:docs' } }])
+  })
+
   test('quick-command add maps its flags, with --no-enter as appendEnter false', async () => {
     const answers = { addQuickCommand: { commands: QUICK } }
     const added = await run('quick-command-add', [], { label: 'Test', command: 'bun test' }, { answers })
