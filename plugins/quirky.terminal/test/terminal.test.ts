@@ -283,7 +283,8 @@ describe('the CLI catalog', () => {
     const api = (await call(client, 'api.describe', {})) as ApiDescription
     expect(api.cli.groups.find((g) => g.plugin === 'quirky.terminal')).toEqual({ plugin: 'quirky.terminal', words: 'terminal', aliases: ['term'] })
     const own = api.cli.commands.filter((c) => c.plugin === 'quirky.terminal')
-    expect(own.map((c) => c.words).sort()).toEqual([
+    // the layout, tab, pane, group, quick-command and floating words are pinned in cli-layout.test.ts
+    expect(own.map((c) => c.words)).toEqual(expect.arrayContaining([
       'terminal history',
       'terminal kill',
       'terminal kill-all',
@@ -291,8 +292,9 @@ describe('the CLI catalog', () => {
       'terminal restart-host',
       'terminal send',
       'terminal sessions',
-      'terminal snapshot'
-    ])
+      'terminal snapshot',
+      'terminal layout'
+    ]))
     expect(own.find((c) => c.words === 'terminal read')!.aliasWords).toEqual(['term read'])
     const names = api.methods.map((m) => m.name)
     for (const name of ['attach', 'detach', 'write', 'resize', 'send', 'read']) expect(names).toContain(`quirky.terminal/${name}`)
