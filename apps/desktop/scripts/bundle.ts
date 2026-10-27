@@ -1,6 +1,6 @@
 /**
  * Prepares `apps/desktop/resources/` for the Electrobun copy step: one bundled file per helper
- * process, the built UI and the bundled built-in plugins. Missing inputs are skipped with a
+ * process, the built UI, the tray images and the bundled built-in plugins. Missing inputs are skipped with a
  * warning; pass `--strict` to fail instead. A plugin whose UI module is not built always fails.
  */
 import { cpSync, existsSync, mkdirSync, rmSync } from 'node:fs'
@@ -46,6 +46,15 @@ if (existsSync(join(uiDist, 'index.html'))) {
   console.log('copied packages/ui/dist -> resources/ui')
 } else {
   skip(join(uiDist, 'index.html'))
+}
+
+const assetsDir = join(import.meta.dir, '..', 'assets')
+rmSync(join(resources, 'assets'), { recursive: true, force: true })
+if (existsSync(assetsDir)) {
+  cpSync(assetsDir, join(resources, 'assets'), { recursive: true })
+  console.log('copied apps/desktop/assets -> resources/assets')
+} else {
+  skip(assetsDir)
 }
 
 const pluginsDir = join(root, 'plugins')
