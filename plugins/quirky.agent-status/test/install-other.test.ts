@@ -515,6 +515,51 @@ describe('hermes', () => {
     }
   })
 
+  test('quoted names in a flow list keep their exact text and meaning', () => {
+    const home = makeHome()
+    const original = `plugins:\n  enabled: ["a,b", "true", 'null', "x # y"] # mine\n  disabled: ["c,d", quirky-status, "7"]\n`
+    const config = put(home, '.hermes/config.yaml', original)
+    const env = target(home)
+    hermesInstaller.install(env)
+    const parsed = Bun.YAML.parse(read(config)) as any
+    expect(parsed.plugins.enabled).toEqual(['a,b', 'true', 'null', 'x # y', 'quirky-status'])
+    expect(parsed.plugins.disabled).toEqual(['c,d', '7'])
+    expect(read(config)).toContain(`["a,b", "true", 'null', "x # y", quirky-status]`)
+    expect(read(config)).toContain(`["c,d", "7"]`)
+    expect(hermesInstaller.status(env)).toBe('installed')
+    hermesInstaller.remove(env)
+    expect(read(config)).toBe(original)
+  })
+
+  test('a quoted plugins key is edited in place, not shadowed by a second mapping', () => {
+    const home = makeHome()
+    for (const original of [
+      '"plugins":\n  enabled: [other]\n',
+      "'plugins':\n  enabled:\n    - other\n",
+      'plugins:\n  "enabled":\n    - other\n  \'disabled\': [quirky-status, x]\n'
+    ]) {
+      const config = put(home, '.hermes/config.yaml', original)
+      hermesInstaller.install(target(home))
+      const text = read(config)
+      expect(text.match(/plugins/g)).toHaveLength(1)
+      const parsed = Bun.YAML.parse(text) as any
+      expect(parsed.plugins.enabled).toEqual(['other', 'quirky-status'])
+      expect(hermesInstaller.status(target(home))).toBe('installed')
+      hermesInstaller.remove(target(home))
+      expect(read(config)).toBe(original)
+    }
+  })
+
+  test('malformed YAML is reported and left untouched, never edited', () => {
+    const home = makeHome()
+    for (const bad of ['model: [broken\n', 'model: "unterminated\nother: 1\n', 'a: b: c\n', 'model: x\n  stray: 1\n', 'a: 1\n---\nb: 2\n']) {
+      const config = put(home, '.hermes/config.yaml', bad)
+      expectError(hermesInstaller, target(home), 'Could not parse ~/.hermes/config.yaml')
+      expect(read(config)).toBe(bad)
+      expect(existsSync(pluginDir(home))).toBe(false)
+    }
+  })
+
   test('a plugin directory the user wrote is never overwritten', () => {
     const home = makeHome()
     const mine = put(home, '.hermes/plugins/quirky-status/__init__.py', '# mine\n')

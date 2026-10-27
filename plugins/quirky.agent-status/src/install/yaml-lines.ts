@@ -1,8 +1,12 @@
+import { isDeepStrictEqual } from 'node:util'
+
 /**
  * Line edits to Hermes's `config.yaml` that add a plugin to `plugins.enabled` and take it out of
- * `plugins.disabled`. There is no YAML parser; the layouts it understands are a block or a
- * one-line flow list under a block `plugins:` mapping. Every line Quirky adds ends in `ADDED`,
- * and every line it rewrites keeps the original after `ORIGINAL`, so removal restores the file.
+ * `plugins.disabled`. The layouts it edits are a block or a one-line flow list under a block
+ * `plugins:` mapping; entries it doesn't own keep their exact text. Every line Quirky adds ends
+ * in `ADDED`, and every line it rewrites keeps the original after `ORIGINAL`, so removal restores
+ * the file. The input is parsed before editing and the result after, so a file that isn't valid
+ * YAML, or a layout the line editor would misread, raises YamlShapeError and is never written.
  */
 
 export class YamlShapeError extends Error {}
@@ -12,6 +16,8 @@ const ORIGINAL_MARK = '# quirky-original: '
 const KEY_PATTERN = /^(?:[A-Za-z0-9_][A-Za-z0-9_.-]*|"[^"]*"|'[^']*')\s*:(?:\s|$)/
 const KEY_NULL_VALUES = new Set(['~', 'null', 'Null', 'NULL'])
 const DEFAULT_INDENT = 2
+
+const keyPattern = (name: string): RegExp => new RegExp(`^(?:${name}|"${name}"|'${name}')\\s*:(\\s|$)`)
 
 const indentOf = (line: string): number => line.length - line.trimStart().length
 
@@ -29,9 +35,77 @@ function stripComment(text: string): string {
   return text.trim()
 }
 
-function unquote(text: string): string {
-  const match = /^(['"])(.*)\1$/.exec(text.trim())
-  return match ? match[2]! : text.trim()
+/** The string a list item denotes; empty for anything that isn't a string scalar, so it never matches a plugin name. */
+function itemName(text: string): string {
+  try {
+    const value: unknown = Bun.YAML.parse(text)
+    return typeof value === 'string' ? value : ''
+  } catch {
+    return ''
+  }
+}
+
+/** Splits the inside of a one-line flow list on its top-level commas, leaving every token's text as written. */
+function splitFlow(inner: string): string[] {
+  const tokens: string[] = []
+  let quote = ''
+  let depth = 0
+  let start = 0
+  for (let index = 0; index < inner.length; index++) {
+    const char = inner[index]!
+    if (quote) {
+      if (quote === '"' && char === '\\') index++
+      else if (char === quote) quote = ''
+    } else if (char === '"' || char === "'") quote = char
+    else if (char === '[' || char === '{') depth++
+    else if (char === ']' || char === '}') depth--
+    else if (char === ',' && depth === 0) {
+      tokens.push(inner.slice(start, index).trim())
+      start = index + 1
+    }
+  }
+  const last = inner.slice(start).trim()
+  if (last !== '' || tokens.length > 0) tokens.push(last)
+  return tokens
+}
+
+type Mapping = Record<string, unknown>
+
+const isMapping = (value: unknown): value is Mapping => typeof value === 'object' && value !== null && !Array.isArray(value)
+
+/** Parses the document, requiring a single mapping (or nothing); anything else is not a config Quirky can edit. */
+function parseDocument(lines: readonly string[]): Mapping | null {
+  let document: unknown
+  try {
+    document = Bun.YAML.parse(lines.join('\n'))
+  } catch {
+    throw new YamlShapeError('not valid YAML')
+  }
+  if (document === null) return null
+  if (!isMapping(document)) throw new YamlShapeError('top level is not a mapping')
+  return document
+}
+
+/** The document `before` means once `name` is enabled and no longer disabled; the edit must produce exactly this. */
+function withEnabled(before: Mapping | null, name: string): Mapping {
+  const root: Mapping = before ? structuredClone(before) : {}
+  const plugins: Mapping = isMapping(root.plugins) ? root.plugins : {}
+  const enabled = Array.isArray(plugins.enabled) ? plugins.enabled : []
+  if (!enabled.includes(name)) enabled.push(name)
+  plugins.enabled = enabled
+  if (Array.isArray(plugins.disabled)) plugins.disabled = plugins.disabled.filter((item) => item !== name)
+  root.plugins = plugins
+  return root
+}
+
+/** Drops an empty or null `disabled`: dropping the last block item leaves the key null where the model has `[]`. */
+function comparable(document: Mapping): Mapping {
+  const copy = structuredClone(document)
+  if (isMapping(copy.plugins)) {
+    const disabled = copy.plugins.disabled
+    if (disabled === null || (Array.isArray(disabled) && disabled.length === 0)) delete copy.plugins.disabled
+  }
+  return copy
 }
 
 /** Throws YamlShapeError for a file whose top level isn't a mapping Quirky can read line by line. */
@@ -48,7 +122,7 @@ function assertLayout(lines: readonly string[]): void {
 const valueAfterColon = (line: string): string => stripComment(line.slice(line.indexOf(':') + 1))
 
 function topLevelPlugins(lines: readonly string[]): number {
-  const found = lines.flatMap((line, index) => (/^plugins\s*:(\s|$)/.test(line) ? [index] : []))
+  const found = lines.flatMap((line, index) => (keyPattern('plugins').test(line) ? [index] : []))
   if (found.length > 1) throw new YamlShapeError('plugins defined twice')
   return found[0] ?? -1
 }
@@ -65,14 +139,15 @@ function entryEnd(lines: readonly string[], key: number): number {
   return lines.length
 }
 
-type NamedList = { names: string[]; items: { index: number; name: string }[]; lastLine: number; style: 'block' | 'flow' | 'null' }
+type NamedList = { names: string[]; tokens: string[]; items: { index: number; name: string }[]; lastLine: number; style: 'block' | 'flow' | 'null' }
 
 function readList(lines: readonly string[], key: number): NamedList {
   const value = valueAfterColon(lines[key]!)
   if (value.startsWith('[') && value.endsWith(']')) {
     const inner = value.slice(1, -1).trim()
-    const names = inner === '' ? [] : inner.split(',').map(unquote)
-    return { names, items: [], lastLine: key, style: 'flow' }
+    const tokens = splitFlow(inner)
+    if (tokens.some((token) => token === '' || /^[[{&*!|>]/.test(token))) throw new YamlShapeError(lines[key]!)
+    return { names: tokens.map(itemName), tokens, items: [], lastLine: key, style: 'flow' }
   }
   if (value === '' || KEY_NULL_VALUES.has(value)) {
     const items: NamedList['items'] = []
@@ -83,10 +158,10 @@ function readList(lines: readonly string[], key: number): NamedList {
       const item = /^\s*-\s+(.+)$/.exec(line)
       const name = item ? stripComment(item[1]!) : ''
       if (!item || name === '' || /^[[{&*!|>]/.test(name) || /:(\s|$)/.test(name)) throw new YamlShapeError(line)
-      items.push({ index, name: unquote(name) })
+      items.push({ index, name: itemName(name) })
       lastLine = index
     }
-    return { names: items.map((item) => item.name), items, lastLine, style: value === '' ? 'block' : 'null' }
+    return { names: items.map((item) => item.name), tokens: [], items, lastLine, style: value === '' ? 'block' : 'null' }
   }
   throw new YamlShapeError(lines[key]!)
 }
@@ -100,18 +175,32 @@ function locate(lines: readonly string[], plugins: number): PluginsMap {
   const body = lines.slice(plugins + 1, end).filter((line) => !isSkippable(line))
   const indent = body.length > 0 ? Math.min(...body.map(indentOf)) : DEFAULT_INDENT
   const find = (name: string): number => {
-    const found = lines.flatMap((line, index) => (index > plugins && index < end && indentOf(line) === indent && new RegExp(`^${name}\\s*:(\\s|$)`).test(line.trim()) ? [index] : []))
+    const found = lines.flatMap((line, index) => (index > plugins && index < end && indentOf(line) === indent && keyPattern(name).test(line.trim()) ? [index] : []))
     if (found.length > 1) throw new YamlShapeError(`${name} defined twice`)
     return found[0] ?? -1
   }
   return { header: plugins, end, indent, enabled: find('enabled'), disabled: find('disabled') }
 }
 
-const flow = (names: string[]): string => `[${names.join(', ')}]`
+const flow = (tokens: readonly string[]): string => `[${tokens.join(', ')}]`
 
-/** Returns the lines with `name` in `plugins.enabled` and out of `plugins.disabled`. */
+/** The line up to and including its colon, so a rewritten list keeps the key as the user spelled it. */
+const keyPart = (line: string): string => line.slice(0, line.indexOf(':') + 1)
+
+/**
+ * Returns the lines with `name` in `plugins.enabled` and out of `plugins.disabled`.
+ * Throws YamlShapeError when the input isn't valid YAML or the edit would change anything else.
+ */
 export function enablePlugin(input: readonly string[], name: string): string[] {
   assertLayout(input)
+  const before = parseDocument(input)
+  const lines = editLines(input, name)
+  const after = parseDocument(lines)
+  if (!after || !isDeepStrictEqual(comparable(after), comparable(withEnabled(before, name)))) throw new YamlShapeError('edit would change other content')
+  return lines
+}
+
+function editLines(input: readonly string[], name: string): string[] {
   const lines = [...input]
   const plugins = topLevelPlugins(lines)
   const created = (indent: number): string[] => [`${' '.repeat(indent)}enabled:${ADDED}`, `${' '.repeat(indent + DEFAULT_INDENT)}- ${name}${ADDED}`]
@@ -130,7 +219,8 @@ export function enablePlugin(input: readonly string[], name: string): string[] {
     const list = readList(lines, map.disabled)
     if (list.names.includes(name)) {
       if (list.style === 'flow') {
-        lines[map.disabled] = `${pad}disabled: ${flow(list.names.filter((item) => item !== name))} ${ORIGINAL_MARK}${lines[map.disabled]}`
+        const kept = list.tokens.filter((_, position) => list.names[position] !== name)
+        lines[map.disabled] = `${keyPart(lines[map.disabled]!)} ${flow(kept)} ${ORIGINAL_MARK}${lines[map.disabled]}`
       } else {
         for (const item of list.items) if (item.name === name) lines[item.index] = `${ORIGINAL_MARK}${lines[item.index]}`
       }
@@ -148,7 +238,7 @@ export function enablePlugin(input: readonly string[], name: string): string[] {
         const itemIndent = list.items.length > 0 ? indentOf(lines[list.lastLine]!) : map.indent + DEFAULT_INDENT
         insert = [`${' '.repeat(itemIndent)}- ${name}${ADDED}`]
       } else {
-        lines[map.enabled] = `${pad}enabled: ${flow([...list.names, name])} ${ORIGINAL_MARK}${lines[map.enabled]}`
+        lines[map.enabled] = `${keyPart(lines[map.enabled]!)} ${flow([...list.tokens, name])} ${ORIGINAL_MARK}${lines[map.enabled]}`
       }
     }
   }
@@ -180,6 +270,7 @@ export function restoreConfig(input: readonly string[]): string[] {
 /** Whether the plugin is enabled, and whether a disabled list still names it. */
 export function readEnablement(input: readonly string[], name: string): { enabled: boolean; disabled: boolean } {
   assertLayout(input)
+  parseDocument(input)
   const plugins = topLevelPlugins(input)
   if (plugins === -1) return { enabled: false, disabled: false }
   const value = valueAfterColon(input[plugins]!)
