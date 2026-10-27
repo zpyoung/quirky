@@ -1,12 +1,12 @@
 /**
  * Just enough TOML to edit lines inside a region Quirky owns: which lines start a table or a key,
  * which are continuations of a multi-line value, and how to read and write a one-line string.
- * It is not a parser; a file it can't classify is reported as unreadable and left alone.
+ * It is not a parser and trusts its input to be valid TOML; callers validate with a real parser first.
  */
 
 export type TomlKind = 'blank' | 'comment' | 'header' | 'key' | 'continuation'
 
-export type TomlScan = { kinds: TomlKind[]; valid: boolean }
+export type TomlScan = { kinds: TomlKind[] }
 
 type ValueState = { multi: '"""' | "'''" | null; depth: number }
 
@@ -132,11 +132,10 @@ export function parseHeader(line: string): HeaderLine | null {
   return parsed ? { segments: parsed.segments, array: match[1] === '[[' } : null
 }
 
-/** Classifies every line; `valid` is false when a line is neither a header, a key nor a continuation. */
+/** Classifies every line of valid TOML as a blank, comment, header, key or continuation of a multi-line value. */
 export function scanToml(lines: readonly string[]): TomlScan {
   const kinds: TomlKind[] = []
   const state: ValueState = { multi: null, depth: 0 }
-  let valid = true
   for (const line of lines) {
     if (state.multi || state.depth > 0) {
       scanValue(line, state)
@@ -146,16 +145,12 @@ export function scanToml(lines: readonly string[]): TomlScan {
     const trimmed = line.trim()
     if (trimmed === '') kinds.push('blank')
     else if (trimmed.startsWith('#')) kinds.push('comment')
-    else if (trimmed.startsWith('[')) {
-      kinds.push('header')
-      if (!parseHeader(line)) valid = false
-    } else {
+    else if (trimmed.startsWith('[')) kinds.push('header')
+    else {
       kinds.push('key')
       const key = parseKeyLine(line)
       if (key) scanValue(key.value, state)
-      else valid = false
     }
   }
-  if (state.multi || state.depth > 0) valid = false
-  return { kinds, valid }
+  return { kinds }
 }
