@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, test } from 'bun:test'
+import type { PublicListResult } from './src/types'
 import { VaultRig } from './support/harness'
 
 let rig: VaultRig | undefined
@@ -36,7 +37,7 @@ describe('vault worker lifecycle', () => {
 
     await vault.client.callAny('plugin.enable', { id: 'quirky.vault' })
     expect(await pluginState(vault)).toBe('inactive')
-    const result = await vault.call<any>('list', { agents: ['claude'], unlimited: true })
+    const result = await vault.call<PublicListResult>('list', { agents: ['claude'], unlimited: true })
     expect(result.sessions).toHaveLength(1)
     expect(await pluginState(vault)).toBe('active')
   })

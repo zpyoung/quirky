@@ -11,6 +11,7 @@ import {
   layoutOf,
   leavesOf,
   stopAll,
+  tabsOf,
   terminal,
   waitFor,
   type Features,

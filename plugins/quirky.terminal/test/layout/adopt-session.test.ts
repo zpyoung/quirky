@@ -3,7 +3,7 @@ import { QuirkyClient, RpcErrorCode } from '@quirky/protocol'
 import { waitForAsync, type Harness } from '../../../../packages/daemon/test/helpers'
 import { groupsInOrder, paneLeaves } from '../../src/layout/tree'
 import type { Group, Workspace } from '../../src/layout/types'
-import { createSession, startPluginHarness, TERMINAL_PLUGINS } from '../support'
+import { call, createSession, startPluginHarness, TERMINAL_PLUGINS } from '../support'
 
 let h: Harness
 let client: QuirkyClient
@@ -13,7 +13,7 @@ afterEach(async () => {
   await h.cleanup()
 })
 
-const api = <T = unknown>(method: string, params: Record<string, unknown> = {}) => client.callAny(`quirky.terminal/${method}`, params) as Promise<T>
+const api = <T>(method: string, params: Record<string, unknown> = {}) => call<T>(client, `quirky.terminal/${method}`, params)
 const groups = (workspace: Workspace): Group[] => groupsInOrder(workspace.root)
 const allPanes = (workspace: Workspace) => groups(workspace).flatMap((group) => group.tabs.flatMap((tab) => paneLeaves(tab.root)))
 
@@ -31,7 +31,7 @@ test('groupInfo reports the owner and adoptSession moves an auto-adopted tab exa
   workspace = (await api<{ workspace: Workspace }>('moveTab', { tab: secondTab.id, split: 'right', of: firstGroup.id })).workspace
   const [left, right] = groups(workspace)
   if (!left || !right) throw new Error('the fixture should contain two tab groups')
-  expect(await api('groupInfo', { group: right.id })).toEqual({ workspace: 'wt_main' })
+  expect(await api<{ workspace: string }>('groupInfo', { group: right.id })).toEqual({ workspace: 'wt_main' })
 
   const session = await createSession(client, { worktree: 'id:wt_main', agent: 'shell' })
   await waitForAsync(async () => {
@@ -41,8 +41,8 @@ test('groupInfo reports the owner and adoptSession moves an auto-adopted tab exa
   const before = (await api<{ workspace: Workspace }>('workspace', { workspace: 'wt_main' })).workspace
   expect(allPanes(before).filter((pane) => pane.session === session.id)).toHaveLength(1)
 
-  await api('adoptSession', { session: session.id, group: right.id })
-  await api('adoptSession', { session: session.id, group: right.id })
+  await api<{ workspace: Workspace }>('adoptSession', { session: session.id, group: right.id })
+  await api<{ workspace: Workspace }>('adoptSession', { session: session.id, group: right.id })
   const after = (await api<{ workspace: Workspace }>('workspace', { workspace: 'wt_main' })).workspace
   expect(allPanes(after).filter((pane) => pane.session === session.id)).toHaveLength(1)
   expect(groups(after).find((group) => group.id === right.id)?.tabs.some((tab) => paneLeaves(tab.root).some((pane) => pane.session === session.id))).toBe(true)
@@ -54,12 +54,12 @@ test('adoptSession rejects a group owned by another worktree before changing eit
   const group = groups(main)[0]!
   const other = await createSession(client, { worktree: 'id:wt_other', agent: 'shell' })
 
-  await expect(api('adoptSession', { session: other.id, group: group.id })).rejects.toMatchObject({ code: RpcErrorCode.Conflict })
+  await expect(api<{ workspace: Workspace }>('adoptSession', { session: other.id, group: group.id })).rejects.toMatchObject({ code: RpcErrorCode.Conflict })
   const mainAfter = (await api<{ workspace: Workspace }>('workspace', { workspace: 'wt_main' })).workspace
   expect(allPanes(mainAfter).some((pane) => pane.session === other.id)).toBe(false)
 })
 
 test('groupInfo rejects an unknown group without guessing a workspace', async () => {
   await start()
-  await expect(api('groupInfo', { group: 'grp-not-present' })).rejects.toMatchObject({ code: RpcErrorCode.NotFound })
+  await expect(api<{ workspace: string }>('groupInfo', { group: 'grp-not-present' })).rejects.toMatchObject({ code: RpcErrorCode.NotFound })
 })

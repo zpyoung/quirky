@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, test } from 'bun:test'
-import { commands } from '../cli'
-import { testCliContext } from '../../quirky.session/test/support'
+import { runCli } from '../../../packages/cli/test/fixtures/fake-daemon'
+import type { HostOutcome, PublicListResult, SearchResponse, SearchStatus } from '../src/types'
 import { VaultRig } from './support/harness'
 
 let rig: VaultRig | undefined
@@ -11,45 +11,72 @@ afterEach(async () => {
 })
 
 const start = async () => (rig = await VaultRig.start())
-const invoke = (name: string, client: VaultRig['client'], args: { positionals: string[]; flags: Record<string, unknown> }, json = false) => {
-  const { ctx, lines } = testCliContext(client, { json })
-  return { result: commands[name]!(args, ctx), lines }
-}
+const run = (vault: VaultRig, args: string[]) => runCli(args, { home: vault.home })
 
 describe('vault CLI', () => {
-  test('list uses the declared API and emits the public JSON envelope', async () => {
+  test('list dispatches through quirky and emits the public JSON session records', async () => {
     const vault = await start()
-    const { result, lines } = invoke('list', vault.client, { positionals: [], flags: { unlimited: true } }, true)
-    await result
-    const payload = JSON.parse(lines[0]!)
+    const result = await run(vault, ['vault', 'list', '--unlimited', '--json'])
+
+    expect(result.code).toBe(0)
+    expect(result.stderr).toBe('')
+    const payload = JSON.parse(result.stdout) as PublicListResult
     expect(payload.sessions).toHaveLength(25)
     expect(payload.hosts).toEqual([expect.objectContaining({ hostId: 'local', kind: 'ok' })])
-  })
-
-  test('search index-status rejects query flags before calling the daemon', async () => {
-    const vault = await start()
-    const { result } = invoke('search', vault.client, { positionals: [], flags: { 'index-status': true, agent: ['claude'] } })
-    await expect(result).rejects.toMatchObject({ kind: 'usage' })
-    expect(vault.searchDatabaseExists()).toBe(false)
-  })
-
-  test('search validates offset timestamps and the 64-path bound locally', async () => {
-    const vault = await start()
-    const invalidSince = invoke('search', vault.client, { positionals: ['needle'], flags: { since: '2026-10-27T10:00:00' } })
-    await expect(invalidSince.result).rejects.toMatchObject({ kind: 'usage' })
-
-    const tooManyPaths = invoke('search', vault.client, {
-      positionals: ['needle'],
-      flags: { path: Array.from({ length: 65 }, (_, index) => `/tmp/path-${index}`) }
+    const expectedClaude = vault.expected.claude!
+    expect(payload.sessions.find((session) => session.agent === 'claude')).toMatchObject({
+      sessionId: expectedClaude.sessionId,
+      title: expectedClaude.title,
+      cwd: expectedClaude.cwd,
+      source: { presence: 'present' }
     })
-    await expect(tooManyPaths.result).rejects.toMatchObject({ kind: 'usage' })
+  })
+
+  test('search index status is returned by the daemon as typed JSON', async () => {
+    const vault = await start()
+    const result = await run(vault, ['vault', 'search', '--index-status', '--json'])
+
+    expect(result.code).toBe(0)
+    expect(result.stderr).toBe('')
+    const payload = JSON.parse(result.stdout) as { status: SearchStatus; hosts: HostOutcome[] }
+    expect(payload.status).toMatchObject({ enabled: false, filesIndexed: 0 })
+    expect(payload.hosts).toEqual([expect.objectContaining({ hostId: 'local', kind: 'ok' })])
     expect(vault.searchDatabaseExists()).toBe(false)
   })
 
-  test('search forwards filters and can return typed unavailable JSON', async () => {
+  test('rejects query/status conflicts and invalid filters before creating search data', async () => {
     const vault = await start()
-    const { result, lines } = invoke('search', vault.client, { positionals: ['needle'], flags: {} }, true)
-    await result
-    expect(JSON.parse(lines[0]!)).toEqual({ kind: 'unavailable', reason: 'disabled' })
+    const statusWithQueryFlag = await run(vault, ['vault', 'search', '--index-status', '--agent', 'claude'])
+    const invalidSince = await run(vault, ['vault', 'search', 'vault-fixture-claude-marker', '--since', '2026-10-27T10:00:00'])
+    const tooManyPaths = await run(vault, [
+      'vault',
+      'search',
+      'vault-fixture-claude-marker',
+      ...Array.from({ length: 65 }, (_, index) => ['--path', `/tmp/path-${index}`]).flat()
+    ])
+
+    for (const result of [statusWithQueryFlag, invalidSince, tooManyPaths]) {
+      expect(result.code).toBe(2)
+      expect(result.stdout).toBe('')
+      expect(result.stderr).not.toBe('')
+      expect(result.stderr).not.toContain('vault-fixture-claude-marker')
+    }
+    expect(vault.searchDatabaseExists()).toBe(false)
+  })
+
+  test('disabled search reports its public status without exposing transcript text', async () => {
+    const vault = await start()
+    const result = await run(vault, ['vault', 'search', 'vault-fixture-claude-marker', '--json'])
+
+    expect(result.code).toBe(0)
+    expect(result.stderr).toBe('')
+    const payload = JSON.parse(result.stdout) as SearchResponse
+    expect(payload).toMatchObject({
+      kind: 'unavailable',
+      reason: 'disabled',
+      hosts: [expect.objectContaining({ hostId: 'local', kind: 'ok' })]
+    })
+    expect(result.stdout).not.toContain('vault-fixture-claude-marker')
+    expect(vault.searchDatabaseExists()).toBe(false)
   })
 })
