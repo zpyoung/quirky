@@ -303,5 +303,38 @@
 - **Revisit if:** catch-up, full-suite or final-review findings change the tree.
 - **Source:** locked by docs/loop/LOOP.md
 
+## D28: Apply incoming test ownership and broad-protocol verification rules
+- **Question:** do the roadmap catch-up decisions conflict with hosting or change verification ownership?
+- **Options:** keep the prior local smoke/full-suite plan; apply incoming guardian ownership and current LOOP rules.
+- **Chose:** read all incoming decision logs, use owned-run for standalone smoke, and run the full remote suite because CallerConnection is part of the broadly imported protocol.
+- **Why:** the six logs contain no conflicting hosting requirement. ProcessScope guardians cover hard worker death; ordinary harness teardown remains. Current LOOP explicitly permits a full-suite run for protocol changes.
+- **Evidence:** merge724d3a470637157d0008ccc1add7095fde27e09d, pinned integration parent ae15c50d321ab621893899c01c6f84dfa57e279a; incoming fix-ask-regex-budget-20261027 D1-D7, fix-sc31-first-shell-race D1-D10, fix-test-process-leaks D1-D12, m2-sidebar-extras D1-D24, m2-source-control-notes-ai D1-D47, sa-browser-agent D1-D17. Post-catch-up owned CLI smoke and typecheck passed.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** another catch-up changes the public plugin or process-lifetime contracts.
+- **Source:** locked by docs/loop/LOOP.md; locked by docs/loop/decisions/fix-test-process-leaks.md
+
+## D29: Honor actual provider wire shapes and supported branch routes
+- **Question:** should safety guards reject valid absent metadata, and do owner-qualified CLI head operations work?
+- **Options:** keep fixture-only shapes; follow the documented provider protocol and distinguish absence from failure.
+- **Chose:** successful REST omitted/null stack means ordinary PR; validate actual non-null stack summaries without a fabricated id. Valid nullable/empty review decision maps NONE, unavailable/missing stays UNKNOWN, and only positive required approvals block NONE. Use REST owner-qualified head filtering/recovery, bare-head same-repo CLI creation, and explicit REST fork creation including organization-owned heads.
+- **Why:** current fixtures returned unrequested fields and invented stack identity. These masks made ordinary PR merging fail closed and let unsupported branch commands appear functional. Templates, draft, resolved base/head, single mutation and uncertain-completion recovery remain unchanged.
+- **Evidence:** original Orca src/main/github/client/lookup/pr-number-lookup.ts:19-48 and pull-request-lookup-data.ts:53-76,110-142; https://cli.github.com/manual/gh_pr_list; https://cli.github.com/manual/gh_pr_create; GitHub GraphQL PullRequest.reviewDecision is nullable in https://docs.github.com/en/graphql/reference/pulls. Amended logic/tech precede implementation.
+- **Reversibility:** medium
+- **Confidence:** high
+- **Revisit if:** GitHub changes its supported stack or branch-filter protocol.
+- **Source:** locked by hosting-api.md
+
+## D30: Require consent for destructive project-comment deletion only
+- **Question:** should projectItemMutation bypass the irreversible-action rule or prompt for every reversible edit?
+- **Options:** leave deletion unguarded; guard every action; use the existing conditional confirmation describer.
+- **Chose:** mark the method destructive with a readonly projectItemMutationConfirmation describer returning null for reversible actions and a validated question for deleteComment. The existing kernel enforces yes or answered confirmation for the deletion, including plugin callers.
+- **Why:** deleting user content is irreversible; editing project fields should not acquire a new prompt. Kernel confirmation already supports null to skip a non-destructive action without skipping its handler.
+- **Evidence:** packages/daemon/src/plugins/confirm.ts:67-75,140-145; docs/roadmap.md irreversible-action rule; amended logic guard and tech public-method contract. Add stateful refusal/readback and explicit-consent deletion regressions before implementation.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** the kernel changes its conditional-describer contract.
+- **Source:** locked by docs/roadmap.md
+
 ## Progress
-Step5 acceptance gate passed: all115 targeted tests, typecheck, decorated-gh authentication probe and real CLI guarded-merge/readback smoke. Documentation is updated. Next: commit the verified repair batch, merge build/roadmap and read incoming decisions, run required remote/full gates, complete the one final cross-family review and accepted-finding fix batch, then land.
+Step5 catch-up completed. The original115 targeted tests, typecheck and isolated CLI smoke passed; the post-catch-up smoke also passed under owned-run. Before final gates, fix newly confirmed provider-wire and conditional-consent defects with failing-before/passing-after API regressions. Verify GraphQL queries against the authoritative schema rather than trusting synthetic fixtures. Then run required full gates, the one final cross-family review and accepted-finding fix batch, and land.

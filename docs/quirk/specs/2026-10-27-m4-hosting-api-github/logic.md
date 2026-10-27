@@ -34,7 +34,7 @@ All GitHub portions of flows 1–7 in hosting-api.md are in scope, including acc
 ### API and CLI
 - Plugin ID quirky.hosting; methods quirky.hosting/<name>; CLI group hosting with schema-derived kebab-case commands/flags, JSON support and existing exit codes.
 - Existing result/error conventions remain: context errors plus safe classified `data.reason`. Lookup outcomes distinguish found, no-review and unavailable. Missing CLI, auth, permission, unavailable repo, network/server, rate limit and validation errors remain distinct; secrets and raw stderr never escape.
-- Every confirmed upstream mutation step invalidates affected caches and emits changed, even when a later step makes the aggregate operation fail. A partial-change event marks `partial: true` and names the completed steps; no successful completion is invented. Merge declares destructive and requires yes or the kernel's answered confirmation. A plugin caller, including sitter, receives the same confirmation rule.
+- Every confirmed upstream mutation step invalidates affected caches and emits changed, even when a later step makes the aggregate operation fail. A partial-change event marks `partial: true` and names the completed steps; no successful completion is invented. Merge and deletion of a project-item comment require the kernel's answered confirmation or yes. Other project edits remain non-destructive. Plugin callers receive the same rule.
 
 ### Transport, rate limits and refresh
 - All GitHub traffic uses one bounded runner: four active processes maximum, bounded output, noninteractive env, default 30 s timeout, 60 s creation, descendant termination on deadline. Retry only idempotent transient reads, never replay create/merge/comments or GraphQL mutations.
@@ -44,8 +44,8 @@ All GitHub portions of flows 1–7 in hosting-api.md are in scope, including acc
 
 ### Creation, merge and partial data
 - Recheck creation preflight at mutation time: detached, existing review, unsupported provider, default branch, dirty, no upstream, behind, auth, ahead, missing remote base. A failed lookup blocks creation.
-- Create uses templates/body file, explicit base/head/title and optional draft. A timeout/duplicate/ambiguous response probes exactly once for an existing matching PR; zero/multiple matches are unknown completion, never success.
-- Merge reads fresh head/protections/stack metadata, refuses unknown safety metadata, reviews required/changes requested/conflicts and inappropriate direct merges on queue-required branches. Caller supplies expected head; changed head fails without mutation. Never admin bypass or branch deletion. Auto-merge/queue and stacks remain explicit states/actions.
+- Create uses the selected template or supplied body, resolved base/head, title and optional draft. A timeout/duplicate/ambiguous response probes exactly once for an existing matching PR; zero/multiple matches are unknown completion, never success.
+- Merge reads fresh head/protections/stack metadata, refuses unavailable or malformed safety data, required reviews, changes requested, conflicts and inappropriate direct merges on queue-required branches. Valid provider absence is not an error: an ordinary REST PR can omit stack, and a nullable review decision with no required approvals permits merging. Caller supplies expected head; a changed head fails without mutation. Never admin bypass or branch deletion. Auto-merge/queue and stacks remain explicit actions.
 - Legacy statuses without runnable IDs produce an actionable rerun error. Missing file patches are not empty files. Partial detail has explicit unavailable/truncated flags. Input/output bounds follow the feature doc.
 
 ## Behavior and acceptance scenarios
@@ -107,4 +107,4 @@ GHES: GitHub Enterprise Server. Head SHA: the exact reviewed commit whose merge 
 
 Status: Required joint Codex review completed; F1 HIGH and F2 MEDIUM accepted and resolved in the specifications before implementation. Tech spec required by LOOP.md and subsystem/file-count gate.
 
-**Amendments:** 2026-10-27 — specify per-authenticated-connection refresh ownership/generations/disconnect cleanup (F1), and invalidation plus partial-change notification for confirmed upstream steps even when aggregate mutations fail (F2). Clarify Projects v2 cross-repository parity: configured-remote restriction applies to pasted work-item lookups, not repositories obtained from authenticated project items; verified against original project-row actions and by-slug handlers.
+**Amendments:** 2026-10-27 — specify per-connection refresh ownership and partial-mutation invalidation after joint review. Clarify Projects cross-repository parity from original by-slug handlers. Correct provider-wire distinctions: valid omitted stack and nullable no-review decisions are not unavailable metadata; use supported branch-filter/create routes, including organization forks. Apply the existing irreversible-action consent rule to project-comment deletion without prompting for reversible project edits.
