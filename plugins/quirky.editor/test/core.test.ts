@@ -121,6 +121,8 @@ describe('editor core through the daemon API', () => {
     const b = await open(t, 'b.ts', { preview: true })
     const again = await open(t, 'b.ts', { preview: true })
     const currentState = await state(t, { worktree: t.worktreeId })
+    expect(b.openedTabId).toBe(a.openedTabId)
+    expect(again.openedTabId).toBe(b.openedTabId)
     expect(a.id).not.toBe(b.id)
     expect(again.id).toBe(b.id)
     expect(currentState.tabs.filter((tab) => tab.mode === 'preview')).toHaveLength(1)
@@ -198,7 +200,7 @@ describe('editor core through the daemon API', () => {
     expect(saved.content).toBe(content)
     expect(readFileSync(join(t.root, 'bom.ts'))).toEqual(Buffer.from(content, 'utf8'))
   })
-  test('keeps Markdown anchors and full search-match lengths in tab presentation state', async () => {
+  test('keeps Markdown anchors, frontmatter visibility and search-match lengths in presentation state', async () => {
     const t = await boot()
     await write(t, 'guide.md', '# Install\nbody\n')
     const opened = await open(t, 'guide.md', { focus: false })
@@ -214,6 +216,11 @@ describe('editor core through the daemon API', () => {
       bufferId: opened.id, tabId: opened.openedTabId, action: 'update', patch: { markdownAnchor: null }
     })
     expect(cleared.view).toMatchObject({ byTabId: { [opened.openedTabId]: { markdownAnchor: null } } })
+    const frontmatter = await t.call<{ visible: boolean }>('quirky.editor/markdown', {
+      bufferId: opened.id, action: 'frontmatter', visible: true
+    })
+    expect(frontmatter.visible).toBe(true)
+    expect((await state(t)).buffers.find((item) => item.id === opened.id)?.view).toMatchObject({ markdownFrontmatterVisible: true })
     await expect(t.call('quirky.editor/view', {
       bufferId: opened.id, tabId: opened.openedTabId, action: 'update', patch: { markdownAnchor: '../outside' }
     })).rejects.toThrow()
@@ -621,7 +628,10 @@ describe('editor core through the daemon API', () => {
     }
     visitTabs(terminalWorkspace.workspace.root)
     const editorTabs = terminalTabs.filter((tab) => tab.input?.bufferId === left.id)
-    expect(editorTabs.filter((tab) => tab.input?.mode === 'rich').map((tab) => tab.key)).toEqual([left.id, left.id])
+    const richKeys = editorTabs.filter((tab) => tab.input?.mode === 'rich').map((tab) => tab.key)
+    expect(richKeys).toHaveLength(2)
+    expect(new Set(richKeys).size).toBe(2)
+    expect(richKeys).toContain(left.id)
     expect(editorTabs.find((tab) => tab.input?.mode === 'preview')?.key).toBe(`preview:${left.id}`)
   })
 

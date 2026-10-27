@@ -45,7 +45,8 @@ function pushField(row: string[], field: string): void {
 
 function appendRow(rows: string[][], row: string[], field: string): void {
   pushField(row, field)
-  rows.push(row)
+  rows.push(row.slice())
+  row.length = 0
 }
 
 function recordByteLength(text: string, start: number, end: number): number {

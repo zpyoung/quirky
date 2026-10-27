@@ -182,7 +182,7 @@ describe('notebook API behavior', () => {
     expect(readFileSync(join(world.root, 'notes.ipynb'), 'utf8')).toBe(`${JSON.stringify(saved, null, 1)}\n`)
   })
 
-  test('SC-16: deleting the last cell leaves a valid empty code cell and clearing outputs is cell-scoped', async () => {
+  test('SC-16: deleting the last cell leaves a valid empty code cell', async () => {
     const source = JSON.stringify({
       cells: [{ cell_type: 'code', execution_count: 2, metadata: { tag: 1 }, outputs: [{ output_type: 'stream', name: 'stdout', text: 'x' }], source: ['x'] }],
       metadata: { root: 'keep' }, nbformat: 4, nbformat_minor: 5
@@ -190,6 +190,7 @@ describe('notebook API behavior', () => {
     const world = await start({ 'single.ipynb': source })
     const { bufferId } = await world.open('single.ipynb')
 
+    await notebook(world, bufferId, 'delete', { index: 0 })
     const parsed = record(await notebook(world, bufferId, 'parse'))
     const parsedCells = notebookCells(parsed)
     expect(parsedCells).toHaveLength(1)

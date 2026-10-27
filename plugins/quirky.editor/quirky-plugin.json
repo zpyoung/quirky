@@ -564,7 +564,7 @@
             "outputOffset": { "type": "integer", "minimum": 0 }, "outputLimit": { "type": "integer", "minimum": 1, "maximum": 8, "description": "For parse, output page size; service requires at least 1 and caps at 8." },
             "path": { "type": "string" }, "python": { "type": "string" }, "runWorkspaceInterpreters": { "type": "boolean" },
             "yes": { "type": "boolean", "description": "Explicit CLI approval consumed by the dispatcher before this handler." },
-            "mode": { "type": "string", "enum": ["inPlace", "advance", "all"] },
+            "mode": { "type": "string", "enum": ["in-place", "advance"] },
             "granted": { "type": "boolean" },
             "browse": { "type": "boolean", "description": "Open the native Python chooser; cancellation leaves the current interpreter unchanged." }
           },
@@ -611,13 +611,14 @@
         "readOnly": true,
         "params": {
           "type": "object",
+          "description": "The dispatcher forwards the original notebook params; this side-effect-free planner uses action, bufferId, path, and python and ignores the remaining fields.",
           "properties": {
             "bufferId": { "type": "string", "description": "Required for install/venv confirmation; ignored for other actions." },
             "action": { "type": "string", "enum": ["parse", "edit", "insert", "move", "delete", "type", "clear", "save", "environments", "describe", "select", "trust", "install", "venv", "start", "run", "runAll", "interrupt", "restart", "shutdown", "state"], "description": "install/venv require bufferId and return confirmation text; all other actions return null without resolving a buffer." },
             "path": { "type": "string" }, "python": { "type": "string" }
           },
           "required": ["action"],
-          "additionalProperties": false
+          "additionalProperties": true
         },
         "result": { "description": "Confirmation text for install and venv; null for every other notebook action." }
       },

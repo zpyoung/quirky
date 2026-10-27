@@ -428,24 +428,25 @@ async function markdownAction(host: EditorServices, rawParams: Record<string, un
     if (action === 'insert' && !INSERT_FORMATS.has(format)) {
       throw errorOf(host, 'invalid-params', `insert does not support the ${format} format.`)
     }
-    const selected = params.selection
-      ? validateSelection(host, params.selection, body.length)
-      : { from: body.length, to: body.length }
-    if (action === 'format' && !params.selection) throw errorOf(host, 'invalid-params', 'selection is required for Markdown formatting.')
     if (buffer.mode !== 'rich') throw errorOf(host, 'invalid-params', 'Rich Markdown changes require rich editor mode.')
+    const canonical = supportedCanonical(source, buffer.relativePath, params.openAnyway === true)
+    if (canonical.canonical === null) throw errorOf(host, 'invalid-params', canonical.reason ?? 'Open source mode to edit this Markdown safely.')
+    const operationSource = canonical.canonical
+    const selected = params.selection
+      ? validateSelection(host, params.selection, operationSource.length)
+      : { from: operationSource.length, to: operationSource.length }
+    if (action === 'format' && !params.selection) throw errorOf(host, 'invalid-params', 'selection is required for Markdown formatting.')
     if (action === 'format' && format === 'copyCode') {
-      return { text: extractSelectedCode(body, params.selection), contentRevision: buffer.contentRevision }
+      return { text: extractSelectedCode(operationSource, params.selection), contentRevision: buffer.contentRevision }
     }
     if (format === 'link' || format === 'image' || format === 'documentLink') {
       await validateFormatTarget(host, buffer, format, params.target)
     }
-    const canonical = supportedCanonical(source, buffer.relativePath, params.openAnyway === true)
-    if (canonical.canonical === null) throw errorOf(host, 'invalid-params', canonical.reason ?? 'Open source mode to edit this Markdown safely.')
     let desired: string
     try {
       desired = action === 'format'
-        ? formatMarkdownSelection(body, format, selected, { target: params.target, language: params.language, text: params.text })
-        : insertMarkdown(body, { format, text: params.text, target: params.target, language: params.language, selection: selected })
+        ? formatMarkdownSelection(operationSource, format, selected, { target: params.target, language: params.language, text: params.text })
+        : insertMarkdown(operationSource, { format, text: params.text, target: params.target, language: params.language, selection: selected })
     } catch (error) {
       throw errorOf(host, 'invalid-params', error instanceof Error ? error.message : String(error))
     }
@@ -455,9 +456,12 @@ async function markdownAction(host: EditorServices, rawParams: Record<string, un
   if (action === 'links') {
     if (params.operation !== 'remove' && typeof params.target !== 'string') throw errorOf(host, 'invalid-params', 'target is required for Markdown link actions.')
     if (params.operation === 'remove' || params.operation === 'edit') {
-      const selection = validateSelection(host, params.selection, body.length)
       if (buffer.mode !== 'rich') throw errorOf(host, 'invalid-params', 'Link edits require rich editor mode.')
-      const selected = body.slice(selection.from, selection.to)
+      const canonical = supportedCanonical(source, buffer.relativePath, params.openAnyway === true)
+      if (canonical.canonical === null) throw errorOf(host, 'invalid-params', canonical.reason ?? 'Open source mode to edit this Markdown safely.')
+      const operationSource = canonical.canonical
+      const selection = validateSelection(host, params.selection, operationSource.length)
+      const selected = operationSource.slice(selection.from, selection.to)
       let replacement = selected
       if (params.operation === 'remove') replacement = selected.replace(/!?(\[[^\]]*\])\((?:<[^>]+>|[^)]+)\)/g, '$1').replace(/\[\[([^\]|]+)(?:\|([^\]]+))?\]\]/g, '$2')
       else {
@@ -465,7 +469,7 @@ async function markdownAction(host: EditorServices, rawParams: Record<string, un
         await validateFormatTarget(host, buffer, 'link', params.target)
         replacement = selected.replace(/!?(\[[^\]]*\])\((?:<[^>]+>|[^)]+)\)/g, (_match, label: string) => `${label}(<${params.target!.replace(/[<>]/g, '')}>)`)
       }
-      return commitRichText(host, buffer, requireRevision(host, params), body.slice(0, selection.from) + replacement + body.slice(selection.to), params.openAnyway === true)
+      return commitRichText(host, buffer, requireRevision(host, params), operationSource.slice(0, selection.from) + replacement + operationSource.slice(selection.to), params.openAnyway === true)
     }
     if (typeof params.target !== 'string') throw errorOf(host, 'invalid-params', 'target is required for Markdown link resolution.')
     return resolveMarkdownLink(host, buffer, params.target)

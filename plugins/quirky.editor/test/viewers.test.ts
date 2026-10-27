@@ -329,8 +329,18 @@ describe('viewer API behavior', () => {
     expect(diagram).toMatchObject({ kind: 'mermaid', sourceAvailable: true })
     await world.call('view', { bufferId: mermaid.bufferId, action: 'update', patch: { mode: 'source' } })
     const sourceView = record(await world.call('state', { bufferId: mermaid.bufferId }), 'editor state')
-    expect(records(sourceView.buffers, 'editor buffers')[0]!.mode).toBe('source')
-    expect(records(sourceView.buffers, 'editor buffers')[0]!.content).toContain('graph TD')
+    const mermaidState = records(sourceView.buffers, 'editor buffers').find((buffer) => buffer.id === mermaid.bufferId)
+    if (!mermaidState) throw new Error('Mermaid editor buffer is missing from state')
+    expect(mermaidState.mode).toBe('source')
+    const sourceRead = record(await world.call('read', {
+      bufferId: mermaid.bufferId,
+      action: 'text',
+      kind: 'content',
+      offset: 0,
+      length: 64 * 1024,
+      contentRevision: mermaidState.contentRevision
+    }), 'Mermaid source read')
+    expect(requiredString(sourceRead, 'text')).toContain('graph TD')
 
     const binary = await world.open('binary.dat')
     const binaryResult = record(await viewer(world, binary.bufferId, 'metadata'))

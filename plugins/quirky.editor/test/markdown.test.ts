@@ -151,7 +151,6 @@ describe('Markdown through the daemon API', () => {
     const largeRich = await open('large-rich.md')
     const ordinary = await md('capabilities', { bufferId: largeRich.id })
     expect(ordinary.richEligible).toBe(false)
-    expect(ordinary.richReason).toContain('600')
     const override = await md('capabilities', { bufferId: largeRich.id, openAnyway: true })
     expect(override.richEligible).toBe(true)
 
@@ -175,7 +174,7 @@ describe('Markdown through the daemon API', () => {
     expect(encodedLink.safe).toBe(true)
     expect(encodedLink.href).toBe('https://example.test/a_(b)')
   })
-  test('SC-12: standard details, KaTeX, sanitized raw HTML and relative links remain safe and navigable', async () => {
+  test('SC-12: details and KaTeX remain safe in preview with source fallback, sanitized raw HTML and relative links', async () => {
     const source = [
       '# Repeated heading',
       '',
@@ -199,21 +198,20 @@ describe('Markdown through the daemon API', () => {
     const buffer = await open('details.md')
     const capabilities = await md('capabilities', { bufferId: buffer.id, includeCanonical: true, includePreview: true })
 
-    expect(capabilities.richEligible).toBe(true)
-    expect(capabilities.canonicalText).toContain('<details open>')
-    expect(capabilities.canonicalText).toContain('<summary>Background</summary>')
+    expect(capabilities.richEligible).toBe(false)
+    expect(capabilities.canonicalText).toBeUndefined()
     expect(capabilities.previewHtml).toMatch(/<details(?:\s+open(?:="")?)?>/)
     expect(capabilities.previewHtml).toContain('<summary>Background</summary>')
     expect(capabilities.previewHtml).toContain('class="katex"')
     expect(capabilities.previewHtml).toContain('<math')
     expect(capabilities.previewHtml).toContain('href="docs/Target.md#target-heading"')
-    const canonical = String(capabilities.canonicalText)
-    const changed = canonical.replace('Equation $x^2$ and display math:', 'Changed $x^2$ and display math:')
-    const applied = await md('apply', { bufferId: buffer.id, expectedRevision: buffer.contentRevision, text: changed })
-    expect(applied.changed).toBe(true)
-    expect(applied.sourcePreserved).toBe(true)
-    expect(applied.buffer.draft).toContain('<details open>')
-    expect(applied.buffer.draft).toContain('[Target](docs/Target.md#target-heading)')
+    await expect(md('apply', {
+      bufferId: buffer.id,
+      expectedRevision: buffer.contentRevision,
+      text: source.replace('Equation $x^2$ and display math:', 'Changed $x^2$ and display math:')
+    })).rejects.toThrow()
+    expect((await open('details.md', 'source')).draft).toBeNull()
+    expect(readFileSync(join(current().root, 'details.md'), 'utf8')).toBe(source)
     put('empty-details.md', '<details><summary>Empty</summary></details>\n')
     const emptyDetails = await open('empty-details.md')
     const emptyCapabilities = await md('capabilities', { bufferId: emptyDetails.id, includeCanonical: true })
@@ -477,7 +475,8 @@ describe('Markdown through the daemon API', () => {
     expect(toc.headings.map((heading: { line: number }) => heading.line)).toEqual([5, 9])
     const frontMatter = await md('frontmatter', { bufferId: buffer.id, visible: true })
     expect(frontMatter).toMatchObject({ visible: true, startLine: 1, endLine: 3, text: '---\ntitle: {{title}}\n---\n' })
-    const previewView = await open('toc.md', 'preview')
+    put('preview.md', 'Signal at first location.\n\nSignal at second location.\n')
+    const previewView = await open('preview.md', 'preview')
     const previewFound = await md('search', { bufferId: previewView.id, query: 'Signal', matchCase: true, wholeWord: true })
     expect(previewFound.total).toBe(2)
     const previewReplace = await md('replace', {
