@@ -1,6 +1,6 @@
 # Build loop
 
-Three unattended Orca loops, called lanes, build [the roadmap](../roadmap.md) in parallel, one work
+Six unattended Orca loops, called lanes, build [the roadmap](../roadmap.md) in parallel, one work
 item per iteration each. Their work lands on the `build/roadmap` branch. They never touch `main` and
 never push. [LOOP.md](LOOP.md) is what each iteration follows, and [NATIVE.md](NATIVE.md) is what
 the nightly native run follows.
@@ -31,7 +31,26 @@ tests leaves `build/roadmap` unchanged.
 | `~/orca/workspaces/quirky/build-roadmap` | lane 1 (the loop "quirky build") |
 | `~/orca/workspaces/quirky/build-lane-2` | lane 2 |
 | `~/orca/workspaces/quirky/build-lane-3` | lane 3 |
+| `~/orca/workspaces/quirky/build-lane-4` to `build-lane-6` | lanes 4 to 6, on omp |
 | `~/orca/workspaces/quirky/native-qa` | the nightly native run, 23:30 America/Chicago |
+
+## Where the tests run
+
+`bun run test` runs the suite on a Linux host instead of this Mac, so the lanes' test runs don't
+compete for its CPU. `<git common dir>/build-loop/remote-tests.json` names the host and how many
+test files run there at once; it's local to this machine and never committed. Without that file,
+or with `QUIRKY_TEST_LOCAL=1`, everything runs here. If the host can't be reached, the run falls
+back to this Mac.
+
+- **The host** is the OVH box, as the unprivileged user `quirkyci`. Every run copies the working
+  tree to a fresh folder there and deletes it afterwards. Only files git doesn't ignore are copied,
+  so `research/` never leaves this machine.
+- **The host's setup** is bun 1.4.0 and zsh, a git identity, and stub `claude` and `codex`
+  commands in `~/.local/bin` (also on the zsh login PATH through `~/.zprofile`). Some tests look
+  for those commands on the PATH. The stubs never reach a real account.
+- **macOS-only tests** are listed in `scripts/test-on-macos.txt` and run on this Mac alongside.
+- **Flaky files:** a failing test file is rerun once on its own. One that then passes is logged to
+  `<git common dir>/build-loop/flakes.log`; fix the ones that keep showing up.
 
 ## Running it
 
@@ -39,7 +58,7 @@ Run `queue.ts` from any lane worktree.
 
 - **Progress:**
   - `bun scripts/build-loop/queue.ts status` shows the counts, and which lane holds what.
-  - `orca loop list` shows the three loops. Each loop's tab shows its rail.
+  - `orca loop list` shows the six loops. Each loop's tab shows its rail.
 - **Unblock an item:**
   1. Fix or decide what its BLOCKERS.md entry asks.
   2. Run `bun scripts/build-loop/queue.ts set <id> todo`.

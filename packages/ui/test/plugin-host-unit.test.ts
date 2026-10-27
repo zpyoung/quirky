@@ -1937,6 +1937,24 @@ test("D21: setPanelBadge shows a count on the plugin's own panel, and null or de
   expect(state(t).badges).toEqual({})
 })
 
+test('D21: setPanelBadge keeps an optional tooltip beside the count, and a later call without one drops it', async () => {
+  const { t, context } = await booted()
+  context().setPanelBadge(SIDE, 3, '3 files changed')
+  expect(state(t).badges).toEqual({ [SIDE]: 3 })
+  expect(state(t).badgeTitles).toEqual({ [SIDE]: '3 files changed' })
+  context().setPanelBadge(SIDE, 3, '3 staged')
+  expect(state(t).badgeTitles).toEqual({ [SIDE]: '3 staged' })
+  context().setPanelBadge(SIDE, 3)
+  expect(state(t).badgeTitles).toEqual({})
+  context().setPanelBadge(SIDE, 2, 'two')
+  context().setPanelBadge(SIDE, null)
+  expect(state(t).badgeTitles).toEqual({})
+  context().setPanelBadge(SIDE, 2, 'two')
+  t.setModel(makeModel())
+  await t.host.refresh()
+  expect(state(t).badgeTitles).toEqual({})
+})
+
 test("D22: a mounted slot's report goes to the daemon, and unmounting clears it", async () => {
   const t = setup(makeModel({ panels: [panel(NOTES, 'side')] }))
   const reports: ((state: unknown) => void)[] = []

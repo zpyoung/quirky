@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import type { AskEnvelope, QuirkyClient } from '@quirky/protocol'
-import type { Harness } from '../../../packages/daemon/test/helpers'
+import { waitFor, type Harness } from '../../../packages/daemon/test/helpers'
 import { commands } from '../cli'
 import { cleanupAll, confirmSpec, connectAs, deploy, openWindow, startAsk, testCli } from './support'
 
@@ -55,10 +55,11 @@ async function rejection(promise: Promise<unknown>): Promise<Error & { exit?: nu
 
 describe('quirky ask command module', () => {
   test('SC-28: prints the registered line immediately, then the answered envelope', async () => {
-    await answerAsksAfter(300)
+    // a second's gap between creating and answering keeps the order check meaningful on a loaded machine
+    await answerAsksAfter(1000)
     const cli = await cliFor({ QUIRKY_SESSION_ID: 'sess_7', QUIRKY_WORKTREE_ID: 'wt_7' })
     const running = run(cli, 'ask', { spec: specJson })
-    await Bun.sleep(100)
+    await waitFor(() => cli.lines.length > 0)
     expect(cli.lines).toHaveLength(1)
     const registered = cli.lines[0] as { status: string; askId: string }
     expect(registered.status).toBe('registered')

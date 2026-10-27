@@ -89,6 +89,14 @@ describe('land', () => {
     expect(queue().find((entry) => entry.id === 'a')?.status).toBe('in-progress')
   })
 
+  test('skips verification when the branch changes only docs/', async () => {
+    await claim(repo, 1)
+    branch('a', 'docs/notes.md', 'notes\n')
+    await land(repo, 'a', [['false']])
+    expect(readFileSync(join(repo.integration, 'docs/notes.md'), 'utf8')).toBe('notes\n')
+    expect(queue().find((entry) => entry.id === 'a')?.status).toBe('done')
+  })
+
   test('refuses a branch that conflicts with build/roadmap', async () => {
     await claim(repo, 1)
     await claim(repo, 2)

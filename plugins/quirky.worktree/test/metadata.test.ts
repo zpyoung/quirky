@@ -141,6 +141,33 @@ describe('the changed event carries unread only for a set that asked for it', ()
   })
 })
 
+describe('set stores the worktree base ref', () => {
+  test('a string is trimmed and stored, an empty or blank string or null clears it, and other types are refused', async () => {
+    const { client, repoDir } = await start()
+    addWorktrees(repoDir, 'fix-login')
+    const set = (baseRef: unknown) => call(client, 'quirky.worktree/set', { worktree: 'fix-login', baseRef }) as Promise<Worktree>
+
+    expect((await set('  origin/develop ')).baseRef).toBe('origin/develop')
+    expect((await listWorktrees(client)).find((w) => w.name === 'fix-login')?.baseRef).toBe('origin/develop')
+    expect((await set('')).baseRef).toBeNull()
+    expect((await set('main')).baseRef).toBe('main')
+    expect((await set('   ')).baseRef).toBeNull()
+    expect((await set('main')).baseRef).toBe('main')
+    expect((await set(null)).baseRef).toBeNull()
+
+    for (const bad of [7, true, ['main'], {}]) {
+      expect(await failure(set(bad))).toMatchObject({ code: RpcErrorCode.InvalidParams, message: 'baseRef must be a string or null' })
+    }
+  })
+
+  test('a set without baseRef leaves it alone', async () => {
+    const { client, repoDir } = await start()
+    addWorktrees(repoDir, 'fix-login')
+    await call(client, 'quirky.worktree/set', { worktree: 'fix-login', baseRef: 'main' })
+    expect(((await call(client, 'quirky.worktree/set', { worktree: 'fix-login', pinned: true })) as Worktree).baseRef).toBe('main')
+  })
+})
+
 describe('SC-41: parents are set and cleared, and cycles are refused', () => {
   test('a, b under a, c under b: cycles are refused, no-parent clears, show lists the children (CLI)', async () => {
     const { client, repoDir } = await start()

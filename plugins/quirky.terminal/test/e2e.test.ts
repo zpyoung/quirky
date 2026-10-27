@@ -98,6 +98,25 @@ scenario('SC-2: input sent before the prompt waits for it and runs once, in orde
   expect((await h.hostRow(session.id))?.shellState).toBe('ready')
 })
 
+scenario('SC-2: input held for a slow prompt is drawn once, because the shell is ready only once its line editor is', async () => {
+  // a prompt that takes a second to expand widens the gap between precmd and the line editor taking the terminal
+  const h = await start({ zshrc: "setopt prompt_subst\nPROMPT='$(sleep 1)%# '\n" })
+  const session = await h.newSession()
+
+  await h.cli(['terminal', 'send', session.id, 'echo one', '--enter'])
+  const rows = await h.waitForLine(session.id, 'one')
+  expect(rows.filter((line) => line.endsWith('echo one'))).toHaveLength(1)
+})
+
+scenario('SC-2: in bash too, input held for a slow prompt is drawn once', async () => {
+  const h = await start({ shell: '/bin/bash', bashrc: "PS1='$(sleep 1)$ '\n" })
+  const session = await h.newSession()
+
+  await h.cli(['terminal', 'send', session.id, 'echo one', '--enter'])
+  const rows = await h.waitForLine(session.id, 'one')
+  expect(rows.filter((line) => line.endsWith('echo one'))).toHaveLength(1)
+})
+
 /** The bytes of every history log file the PTY host wrote for a session. */
 function sessionLogText(home: string, id: string): string {
   const dir = join(home, 'sessions', id)

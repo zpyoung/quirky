@@ -27,13 +27,69 @@ describe('quirky.git manifest', () => {
     expect(git).toMatchObject({ source: 'builtin', dependencies: ['quirky.worktree'], activation: 'lazy' })
     const contributions = (await g.call('plugin.contributions', { pluginId: 'quirky.git' })) as { id: string }[]
     expect(contributions.map((c) => c.id).sort()).toEqual([
+      'command:quirky.git/collapse-all',
+      'command:quirky.git/load-diff',
+      'command:quirky.git/next-change',
+      'command:quirky.git/next-conflict',
+      'command:quirky.git/open-branch-changes',
+      'command:quirky.git/open-changes',
+      'command:quirky.git/open-commit',
+      'command:quirky.git/open-diff',
+      'command:quirky.git/overwrite',
+      'command:quirky.git/previous-change',
+      'command:quirky.git/previous-conflict',
+      'command:quirky.git/refresh-compare',
+      'command:quirky.git/reload-from-disk',
+      'command:quirky.git/revert-change',
+      'command:quirky.git/review-conflicts',
+      'command:quirky.git/save',
+      'command:quirky.git/select',
+      'command:quirky.git/set-filter',
+      'command:quirky.git/show',
+      'command:quirky.git/toggle-history',
       'event:quirky.git/changed',
+      'keybinding:quirky.git/next-change',
+      'keybinding:quirky.git/previous-change',
+      'keybinding:quirky.git/show',
+      'method:quirky.git/abort',
+      'method:quirky.git/branches',
       'method:quirky.git/commit',
+      'method:quirky.git/commitFiles',
+      'method:quirky.git/compare',
+      'method:quirky.git/conflictFile',
+      'method:quirky.git/continue',
+      'method:quirky.git/describeAbort',
+      'method:quirky.git/describeDiscard',
+      'method:quirky.git/describeForcePush',
       'method:quirky.git/diff',
+      'method:quirky.git/discard',
+      'method:quirky.git/fastForward',
+      'method:quirky.git/fetch',
+      'method:quirky.git/forcePush',
+      'method:quirky.git/history',
+      'method:quirky.git/hugeFolders',
+      'method:quirky.git/ignoreFolder',
+      'method:quirky.git/pull',
+      'method:quirky.git/push',
+      'method:quirky.git/rebaseFromBase',
+      'method:quirky.git/reveal',
+      'method:quirky.git/save',
+      'method:quirky.git/setBase',
       'method:quirky.git/stage',
       'method:quirky.git/status',
+      'method:quirky.git/submoduleStatus',
+      'method:quirky.git/sync',
       'method:quirky.git/unstage',
-      'panel:quirky.git/source-control'
+      'panel:quirky.git/source-control',
+      'setting:quirky.git/combinedDiffFileTree',
+      'setting:quirky.git/compareBase',
+      'setting:quirky.git/diffCollapseUnchanged',
+      'setting:quirky.git/diffDefaultView',
+      'setting:quirky.git/diffShowWhitespace',
+      'setting:quirky.git/diffWordWrap',
+      'setting:quirky.git/groupOrder',
+      'setting:quirky.git/viewMode',
+      'view:quirky.git/diff'
     ])
   })
 })
@@ -58,23 +114,26 @@ describe('quirky.git methods', () => {
       { worktreeId: g.main.id }
     ])
     expect(g.git.calls.map((c) => [c.fn, c.args[0]])).toEqual([
-      ['status', g.main.path],
-      ['diff', g.main.path],
-      ['stage', g.main.path],
-      ['unstage', g.main.path],
+      ['statusV2', g.main.path],
+      ['diffSource', g.main.path],
+      ['statusV2', g.main.path],
+      ['stagePaths', g.main.path],
+      ['statusV2', g.main.path],
+      ['unstagePaths', g.main.path],
       ['commit', g.main.path]
     ])
   })
 
   test('read-only methods emit nothing and a failed write does not announce a change', async () => {
     const { call, events } = g
-    g.git.stage = async () => {
+    g.git.stagePaths = async () => {
       throw new GitError('git add failed', 'fatal: pathspec missing did not match', 128)
     }
     await call('quirky.git/status', { worktree: g.main.id })
     await call('quirky.git/diff', { worktree: g.main.id, path: 'a.txt' })
     const error = await errorOf(call('quirky.git/stage', { worktree: g.main.id, paths: ['missing'] }))
-    expect(error.code).toBe(RpcErrorCode.Internal)
+    expect(error.code).toBe(RpcErrorCode.Conflict)
+    expect(error.data).toEqual({ reason: 'failed' })
     expect(error.message).toContain('fatal: pathspec missing did not match')
     await Bun.sleep(50)
     expect(events.filter((e) => e.type === 'quirky.git/changed')).toEqual([])
@@ -85,9 +144,9 @@ describe('quirky.git methods', () => {
       throw new GitError('git commit failed', '  nothing to commit, working tree clean\n', 1)
     }
     const error = await errorOf(g.call('quirky.git/commit', { worktree: g.main.id, message: 'x' }))
-    expect(error.code).toBe(RpcErrorCode.Internal)
-    expect(error.message).toContain('nothing to commit, working tree clean')
-    expect(error.message).not.toContain('git commit failed')
+    expect(error.code).toBe(RpcErrorCode.Conflict)
+    expect(error.data).toMatchObject({ reason: 'failed', summary: 'nothing to commit, working tree clean' })
+    expect(error.message).toBe('nothing to commit, working tree clean')
   })
 
   test('rejects a bare string where paths must be a list', async () => {

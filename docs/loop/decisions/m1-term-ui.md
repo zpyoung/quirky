@@ -581,5 +581,15 @@
 - **Confidence:** medium
 - **Source:** assumed — autonomous
 
+## D58: The first land failed on dependencies the integration tree never installed
+- **Question:** `queue.ts land` failed with 150 failures: `Cannot find module '@xterm/xterm'` (and `@xterm/addon-clipboard`) in the integration tree, plus the cascade from those (daemons that never answered, a second Happy DOM registration). This item adds seven `@xterm/*` packages to `plugins/quirky.terminal/package.json`, and land runs the suite without `bun install`.
+- **Options:** run `bun install` in the integration tree; copy the missing store entries and links in
+- **Chose:** copy, as iteration 9 did: the four missing `node_modules/.bun/@xterm+*` entries, `js-base64@3.9.5` (the clipboard addon's dependency), and `plugins/quirky.terminal/node_modules/@xterm`. A copy only adds; `bun install` against build/roadmap's lockfile could prune what other lanes' trees need. Then merged build/roadmap (docs only) and landed again.
+- **Why:** the code passed the same suite in this worktree (gate f2); the failures come from the integration tree's environment. `scripts/build-loop/` is protected, so making land install is for a person (see notes, iteration 9).
+- **Evidence:** scratchpad land.log; gate-f2.log
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** assumed — autonomous
+
 ## Progress
-All fixes are committed and gate f2 is green apart from D57's flake. Next: land.
+Gate f2 is green (D57); the first land failed on the integration tree's missing dependencies (D58). Next: land again.

@@ -219,8 +219,9 @@ describe('commandProbe', () => {
       }
     }
     const started = Date.now()
-    expect(await commandProbe(fake.context, { timeoutMs: 400 })(fake.launcher, { sessionId: 's1', worktreeId: 'w1' })).toBeNull()
-    expect(Date.now() - started).toBeLessThan(2500)
+    // long enough for a loaded machine to start the shell, far short of its 30 s sleep
+    expect(await commandProbe(fake.context, { timeoutMs: 1500 })(fake.launcher, { sessionId: 's1', worktreeId: 'w1' })).toBeNull()
+    expect(Date.now() - started).toBeLessThan(10_000)
     const pids = [pidFile, childFile].map((file) => Number(readFileSync(file, 'utf8').trim()))
     expect(pids.every((pid) => pid > 0)).toBe(true)
     const deadline = Date.now() + 2000

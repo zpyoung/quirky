@@ -167,6 +167,13 @@ function errorReason(error: unknown): string | undefined {
   return typeof reason === 'string' ? reason : undefined
 }
 
+/** The `data` object an RPC error carries, verbatim, when it is a non-null object. */
+function errorData(error: unknown): object | undefined {
+  if (!(error instanceof RpcError)) return undefined
+  const data: unknown = error.data
+  return typeof data === 'object' && data !== null ? data : undefined
+}
+
 /** Prints `error` the way the mode asks for and returns the exit code. */
 function report(error: unknown, out: Printer, writer: Writer): number {
   const message = error instanceof Error ? error.message : String(error)
@@ -178,8 +185,15 @@ function report(error: unknown, out: Printer, writer: Writer): number {
   const suggestions = error instanceof UsageError ? error.suggestions : []
   if (out.json) {
     const reason = errorReason(error)
+    const data = errorData(error)
     out.jsonLine({
-      error: { code: errorCode(error), message, ...(reason !== undefined ? { reason } : {}), ...(suggestions.length ? { suggestions } : {}) }
+      error: {
+        code: errorCode(error),
+        message,
+        ...(reason !== undefined ? { reason } : {}),
+        ...(data !== undefined ? { data } : {}),
+        ...(suggestions.length ? { suggestions } : {})
+      }
     })
     return code
   }

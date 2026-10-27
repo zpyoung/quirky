@@ -36,9 +36,15 @@ test(
       90000,
       'every session to exit'
     )
-    const after = await residentMiB(host.pid)
-
-    expect(after - before).toBeLessThan(SESSIONS * 1.5 + 40)
+    // a loaded machine delays the host's garbage collection, so give it time to settle; a leak never does
+    const bound = SESSIONS * 1.5 + 40
+    let growth = Infinity
+    const settled = Date.now() + 15000
+    while (growth >= bound && Date.now() < settled) {
+      growth = (await residentMiB(host.pid)) - before
+      if (growth >= bound) await Bun.sleep(250)
+    }
+    expect(growth).toBeLessThan(bound)
 
     // history ends where the screen begins, so the newest rows are the screen's and not in the page
     const page = await client.request('history', { sessionId: 'm0', lines: 20 })

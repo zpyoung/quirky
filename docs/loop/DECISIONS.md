@@ -37,6 +37,7 @@ files, not this one.
 | hard | high | [m0-ui-api D29](decisions/m0-ui-api.md) | Choose declared slots with lazily imported modules that mount into host elements | assumed — autonomous |
 | hard | high | [m0-registry D12](decisions/m0-registry.md) | Every contribution is declared in the manifest, and code can only provide declared ones | assumed — autonomous |
 | hard | high | [m0-registry D23](decisions/m0-registry.md) | Choose declarative contributions with lazily loaded code | assumed — autonomous |
+| hard | high | [m1-term-ui D7](decisions/m1-term-ui.md) | Layout lives in the daemon; the window renders it and changes it only through methods | locked by docs/roadmap.md |
 | hard | high | [m1-providers D9](decisions/m1-providers.md) | Agent IDs, labels and table values are Orca's | locked by docs/architecture.md |
 | medium | medium | [m0-scripting D6](decisions/m0-scripting.md) | The daemon validates every call's params against the method's schema, and leaves results and event data unchecked | assumed — autonomous |
 | medium | medium | [m0-scripting D29](decisions/m0-scripting.md) | Tech-spec mechanisms: one shared validator in protocol, validation in the dispatcher, declarative command specs, a JSON-mode pre-scan | assumed — autonomous |
@@ -75,6 +76,12 @@ files, not this one.
 | medium | medium | [m1-launch-settings D4](decisions/m1-launch-settings.md) | This item builds the catalog, its resolution into argv and structured options, the launch snapshot, the extra-arguments allowlist, and their use by session and structured launches | assumed — autonomous |
 | medium | medium | [m1-launch-settings D11](decisions/m1-launch-settings.md) | Precedence: per-launch extra arguments beat picks, and picks beat the agent's configured arguments; a beaten flag is removed, never repeated | assumed — autonomous |
 | medium | medium | [m1-launch-settings D21](decisions/m1-launch-settings.md) | API: `quirky.agents/options` lists an agent's catalog and `quirky.agents/resolveLaunch` previews a resolution | assumed — autonomous |
+| medium | medium | [m1-term-ui D6](decisions/m1-term-ui.md) | `quirky.terminal` owns the feature, and replaces the session view by overriding its ID | assumed — autonomous |
+| medium | medium | [m1-term-ui D12](decisions/m1-term-ui.md) | Closing a pane or tab ends its sessions; a running command or agent asks first | locked by term-ui.md |
+| medium | medium | [m1-term-ui D33](decisions/m1-term-ui.md) | The CLI: one `quirky terminal` group with tab, pane, group, quick-command and floating subcommands | assumed — autonomous |
+| medium | medium | [m1-term-ui D34](decisions/m1-term-ui.md) | Layout responses carry a revision; a stale revision is refused | assumed — autonomous |
+| medium | medium | [m1-term-ui D38](decisions/m1-term-ui.md) | The overlay slot and keybinding `when` clauses are the plugin API growth this item needs | supersedes m0-ui-api D14 |
+| medium | medium | [m1-term-ui D39](decisions/m1-term-ui.md) | Approach: extend `quirky.terminal` with a daemon layout service and a new window module, keep `quirky.session`'s view as the fallback | assumed — autonomous |
 | medium | medium | [m1-providers D8](decisions/m1-providers.md) | Two effective `agent` contributions with the same name: the built-in wins, then the lower plugin ID | assumed — autonomous |
 | medium | medium | [m1-providers D11](decisions/m1-providers.md) | Agents are still started by exec under the login shell, not typed into an interactive shell | assumed — autonomous |
 | medium | medium | [m1-providers D21](decisions/m1-providers.md) | Paste-after-ready follows Orca's renderer path: a per-agent ready signal, a deadline, then a blind paste reported as unconfirmed | assumed — autonomous |
@@ -123,6 +130,14 @@ files, not this one.
 | medium | high | [m1-launch-settings D12](decisions/m1-launch-settings.md) | The snapshot comes from the same resolution as the command, so it can't misreport provenance | assumed — autonomous |
 | medium | high | [m1-launch-settings D16](decisions/m1-launch-settings.md) | A session stores its snapshot, and resume and fork replay the resolved arguments | assumed — autonomous |
 | medium | high | [m1-launch-settings D23](decisions/m1-launch-settings.md) | Windows shell quoting for picks and extras is not built | deferred: platform |
+| medium | high | [m1-term-ui D8](decisions/m1-term-ui.md) | Tab groups and pane trees are binary trees with ratios, like Orca | locked by term-ui.md |
+| medium | high | [m1-term-ui D9](decisions/m1-term-ui.md) | Every tab, group and pane has a stable short ID; a pane is bound to one session | assumed — autonomous |
+| medium | high | [m1-term-ui D10](decisions/m1-term-ui.md) | Every session gets a pane; sessions created elsewhere open in a new tab | assumed — autonomous |
+| medium | high | [m1-term-ui D23](decisions/m1-term-ui.md) | Quick commands live in the terminal plugin's store, with Orca's limits, and are managed in a panel | locked by term-ui.md |
+| medium | high | [m1-term-ui D25](decisions/m1-term-ui.md) | The floating workspace is a full-window overlay with its own tab groups, state kept in the daemon | locked by term-ui.md |
+| medium | high | [m1-term-ui D26](decisions/m1-term-ui.md) | Keybindings: Orca's macOS defaults for terminal panes and tabs, with a shortcut policy | locked by term-ui.md |
+| medium | high | [m1-term-ui D35](decisions/m1-term-ui.md) | Layout persists in the plugin store, survives window and daemon restarts, and repairs itself | locked by term-ui.md |
+| medium | high | [m1-term-ui D36](decisions/m1-term-ui.md) | The view's report is the workspace plus what only the window knows | assumed — autonomous |
 | medium | high | [m1-providers D10](decisions/m1-providers.md) | `Session.agent` becomes any agent ID string, and the protocol version stays 2 | assumed — autonomous |
 | medium | high | [m1-providers D14](decisions/m1-providers.md) | Per-agent configuration lives in `quirky.agents`' store; the default agent and workspace trust are plain settings | assumed — autonomous |
 | medium | high | [m1-providers D20](decisions/m1-providers.md) | The prompt reaches the agent the way its entry says, using Orca's builders | locked by research/orca-features/providers.md |
@@ -216,6 +231,17 @@ files, not this one.
 | easy | medium | [m1-launch-settings D22](decisions/m1-launch-settings.md) | CLI: `--model`, `--effort`, repeatable `--option key=value` and `--extra-args=` on launch commands, plus `quirky agents options` and `quirky agents resolve` | assumed — autonomous |
 | easy | medium | [m1-launch-settings D25](decisions/m1-launch-settings.md) | A malformed `launchOptions` block makes the agent entry invalid, as any other malformed field does | supersedes m1-providers D7 (extends it to the new field) |
 | easy | medium | [m1-launch-settings D26](decisions/m1-launch-settings.md) | Skip Phase C deep research | assumed — autonomous |
+| easy | medium | [m1-term-ui D3](decisions/m1-term-ui.md) | Keep m1-term-ui as one item, built in waves, resumed across iterations if needed | assumed — autonomous |
+| easy | medium | [m1-term-ui D17](decisions/m1-term-ui.md) | Tab groups: drop zones, Move Tab to Split, 0.15–0.85 dividers, and closing a group keeps its tabs | assumed — autonomous |
+| easy | medium | [m1-term-ui D19](decisions/m1-term-ui.md) | Tab colours are Orca's ten, shown as a dot; pinned tabs sort first | assumed — autonomous |
+| easy | medium | [m1-term-ui D21](decisions/m1-term-ui.md) | Links: URLs, file paths, OSC 8 and PR links, with Orca's click rules; files open with the default app until the editor lands | locked by term-ui.md |
+| easy | medium | [m1-term-ui D28](decisions/m1-term-ui.md) | Terminal colours come from Quirky's themes; inline images, ligatures and Ghostty import are left out | assumed — autonomous |
+| easy | medium | [m1-term-ui D31](decisions/m1-term-ui.md) | User remapping of shortcuts is left to a later item | assumed — autonomous |
+| easy | medium | [m1-term-ui D46](decisions/m1-term-ui.md) | PTY protocol 3 retires a running protocol 2 host | assumed — autonomous |
+| easy | medium | [m1-term-ui D48](decisions/m1-term-ui.md) | A `quirky.ask` CLI timing test fails only under full-suite load | assumed — autonomous |
+| easy | medium | [m1-term-ui D49](decisions/m1-term-ui.md) | Wave 3 runs while the waves 1–2 checkpoint review runs | assumed — autonomous |
+| easy | medium | [m1-term-ui D50](decisions/m1-term-ui.md) | Checkpoint 2: accept nine findings, dismiss one; the spec lens was adjudicated from its first stage | assumed — autonomous |
+| easy | medium | [m1-term-ui D57](decisions/m1-term-ui.md) | Gate f2 is green apart from one load flake in quirky.ask | assumed — autonomous |
 | easy | medium | [m1-providers D16](decisions/m1-providers.md) | Agent Permissions default to Yolo, as in Orca | locked by research/orca-features/providers.md |
 | easy | medium | [m1-providers D18](decisions/m1-providers.md) | Detection walks the login shell's PATH plus well-known install directories, with no subprocess per command | locked by research/orca-features/providers.md |
 | easy | medium | [m1-providers D23](decisions/m1-providers.md) | A draft prompt (left in the input, not submitted) uses a native flag where the agent has one, else paste without Enter | assumed — autonomous |
@@ -466,6 +492,38 @@ files, not this one.
 | easy | high | [m1-launch-settings D33](decisions/m1-launch-settings.md) | Checkpoint reviews: five findings accepted and fixed | assumed — autonomous |
 | easy | high | [m1-launch-settings D34](decisions/m1-launch-settings.md) | Final Round 1: correctness and spec lenses passed; one security finding fixed | locked by docs/loop/LOOP.md |
 | easy | high | [m1-launch-settings D35](decisions/m1-launch-settings.md) | No UI scenarios and no native-only scenarios, so the web pass and the native hand-off are skipped | locked by docs/loop/LOOP.md |
+| easy | high | [m1-term-ui D1](decisions/m1-term-ui.md) | Classify the item as Visual, API, CLI and Data design, and run every research phase | assumed — autonomous |
+| easy | high | [m1-term-ui D2](decisions/m1-term-ui.md) | Skip the visual companion and the adhd offer, use the standard gray-area set | locked by docs/loop/LOOP.md |
+| easy | high | [m1-term-ui D4](decisions/m1-term-ui.md) | Select every gray area that matters | locked by docs/loop/LOOP.md |
+| easy | high | [m1-term-ui D5](decisions/m1-term-ui.md) | In scope are every term-ui flow on macOS; out of scope are the flows whose features Quirky doesn't have yet | locked by docs/loop/LOOP.md |
+| easy | high | [m1-term-ui D11](decisions/m1-term-ui.md) | Tab titles: a custom title, else the live title, else `Terminal N` | locked by term-ui.md |
+| easy | high | [m1-term-ui D13](decisions/m1-term-ui.md) | Reopen closed tab starts a fresh shell with the old tab's directory, title, colour and agent kind | locked by term-ui.md |
+| easy | high | [m1-term-ui D14](decisions/m1-term-ui.md) | Exit 0 closes the pane, a non-zero exit keeps it with an overlay | locked by term-ui.md |
+| easy | high | [m1-term-ui D15](decisions/m1-term-ui.md) | Splits start in the source pane's directory as a shell | locked by term-ui.md |
+| easy | high | [m1-term-ui D16](decisions/m1-term-ui.md) | Pane sizes, focus, expand and titles follow Orca's rules | locked by term-ui.md |
+| easy | high | [m1-term-ui D18](decisions/m1-term-ui.md) | The tab menu and pane menu follow Orca's order minus the agent rows | locked by term-ui.md |
+| easy | high | [m1-term-ui D20](decisions/m1-term-ui.md) | Search is the xterm search addon with Orca's box, counts, keys and colours | locked by term-ui.md |
+| easy | high | [m1-term-ui D22](decisions/m1-term-ui.md) | Paste is chunked like Orca's, and dropped files type shell-escaped paths | locked by term-ui.md |
+| easy | high | [m1-term-ui D24](decisions/m1-term-ui.md) | Running a quick command follows Orca's two paths | locked by term-ui.md |
+| easy | high | [m1-term-ui D27](decisions/m1-term-ui.md) | Terminal settings: the ones that change the pane on macOS, with Orca's defaults except scrollback | locked by docs/architecture.md |
+| easy | high | [m1-term-ui D29](decisions/m1-term-ui.md) | Zoom is per pane and not saved | locked by term-ui.md |
+| easy | high | [m1-term-ui D30](decisions/m1-term-ui.md) | Clear and Reset reach the PTY host | locked by term-ui.md |
+| easy | high | [m1-term-ui D32](decisions/m1-term-ui.md) | The `+` menu keeps v1's rows under Orca's labels, with a search box over rows and open tabs | locked by term-ui.md |
+| easy | high | [m1-term-ui D37](decisions/m1-term-ui.md) | Only visible panes are mounted, and only they get WebGL | locked by docs/architecture.md |
+| easy | high | [m1-term-ui D40](decisions/m1-term-ui.md) | Design sections self-reviewed and accepted without a pause | locked by docs/loop/LOOP.md |
+| easy | high | [m1-term-ui D41](decisions/m1-term-ui.md) | The Orca defects this item tests against | locked by docs/loop/LOOP.md |
+| easy | high | [m1-term-ui D42](decisions/m1-term-ui.md) | Platform work deferred | deferred: platform |
+| easy | high | [m1-term-ui D43](decisions/m1-term-ui.md) | Spec review: accept 17 of 18 findings and fix them in the specs | assumed — autonomous |
+| easy | high | [m1-term-ui D44](decisions/m1-term-ui.md) | Build pairing `claude-task + codex`, five waves, one checkpoint over waves 1–2 | locked by docs/loop/LOOP.md |
+| easy | high | [m1-term-ui D45](decisions/m1-term-ui.md) | The e2e helper reads the whole process table | assumed — autonomous |
+| easy | high | [m1-term-ui D47](decisions/m1-term-ui.md) | Wave 1's kernel UI task got six test fakes added to its scope | assumed — autonomous |
+| easy | high | [m1-term-ui D51](decisions/m1-term-ui.md) | Daemon test harnesses in `quirky.terminal` share one built-in plugins directory per process | assumed — autonomous |
+| easy | high | [m1-term-ui D52](decisions/m1-term-ui.md) | Catching up twice: m1-worktrees, then m1-agent-status, whose tab glyph moves into the workspace tab strip | assumed — autonomous |
+| easy | high | [m1-term-ui D53](decisions/m1-term-ui.md) | Final Round 1: accept nine findings, dismiss five | assumed — autonomous |
+| easy | high | [m1-term-ui D54](decisions/m1-term-ui.md) | The window's import map serves `react-dom` | assumed — autonomous |
+| easy | high | [m1-term-ui D55](decisions/m1-term-ui.md) | Like-a-user pass: 25 scenarios pass, SC-21 and SC-24 partial because of the tool | assumed — autonomous |
+| easy | high | [m1-term-ui D56](decisions/m1-term-ui.md) | Fixes from the UI pass | assumed — autonomous |
+| easy | high | [m1-term-ui D58](decisions/m1-term-ui.md) | The first land failed on dependencies the integration tree never installed | assumed — autonomous |
 | easy | high | [m1-providers D1](decisions/m1-providers.md) | Classify the item as Data, API, CLI, Visual and Integration work, and run every research phase | assumed — autonomous |
 | easy | high | [m1-providers D2](decisions/m1-providers.md) | Skip the visual companion and the adhd offer, use the standard gray-area set | locked by docs/loop/LOOP.md |
 | easy | high | [m1-providers D3](decisions/m1-providers.md) | Select every gray area that matters for m1-providers | assumed — autonomous |
