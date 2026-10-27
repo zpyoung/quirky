@@ -381,6 +381,26 @@ describe('SC-53: a parent is deleted only with its descendants (CLI)', () => {
     expect(existsSync(a.path)).toBe(true)
   })
 
+  test('a primary checkout assigned a parent refuses the whole run up front', async () => {
+    const w = await start()
+    const a = await create(w, 'a')
+    const b = await create(w, 'b', { parent: a.id })
+    const [primary] = await listWorktrees(w.t.client, { repo: w.repo.id })
+    await call(w.t.client, 'quirky.worktree/set', { worktree: primary!.id, parent: a.id })
+    const session = await shell(w, primary!)
+
+    const refused = await removeFailure(w, a.id, { withDescendants: true, force: true })
+    expect(refused.data).toMatchObject({ reason: 'primary' })
+    expect(refused.message).toContain(primary!.name)
+    expect(existsSync(w.repoDir)).toBe(true)
+    expect(existsSync(a.path)).toBe(true)
+    expect(existsSync(b.path)).toBe(true)
+    const after = await listWorktrees(w.t.client, { repo: w.repo.id })
+    expect(after.find((worktree) => worktree.id === primary!.id)?.parentId).toBe(a.id)
+    const sessions = (await call(w.t.client, 'quirky.session/list', {})) as { id: string }[]
+    expect(sessions.map((open) => open.id)).toContain(session.id)
+  })
+
   test('describeRemove names the target, its descendants and what force discards', async () => {
     const w = await start()
     const { a } = await chain(w)
@@ -428,6 +448,34 @@ describe('SC-54: orphaned worktrees are cleaned or refused (CLI)', () => {
     await cliRm(w, forgot.id, { force: true })
     expect(existsSync(forgot.path)).toBe(false)
     expect(storedRows(w.t.h.home, 'id = ?', forgot.id)).toHaveLength(0)
+  })
+
+  test('a folder recreated at the old path by something else is refused even by force', async () => {
+    const w = await start()
+    const forgot = await create(w, 'forgot')
+    forget(forgot)
+    rmSync(forgot.path, { recursive: true, force: true })
+    await Bun.sleep(25)
+    mkdirSync(forgot.path, { recursive: true })
+    writeFileSync(join(forgot.path, 'theirs.txt'), 'x')
+
+    const refused = await removeFailure(w, forgot.id, { force: true })
+    expect(refused.data).toMatchObject({ reason: 'unregistered' })
+    expect(readFileSync(join(forgot.path, 'theirs.txt'), 'utf8')).toBe('x')
+    expect(storedRows(w.t.h.home, 'id = ?', forgot.id)).toHaveLength(1)
+  })
+
+  test('a row with no recorded birth time is not force-deleted', async () => {
+    const w = await start()
+    const forgot = await create(w, 'forgot')
+    forget(forgot)
+    const db = new (await import('bun:sqlite')).Database(join(w.t.h.home, 'plugin-data', 'quirky.worktree', 'store.db'))
+    db.run('UPDATE worktrees SET birthtime = NULL WHERE id = ?', [forgot.id])
+    db.close()
+
+    const refused = await removeFailure(w, forgot.id, { force: true })
+    expect(refused.data).toMatchObject({ reason: 'unregistered' })
+    expect(existsSync(forgot.path)).toBe(true)
   })
 
   test('a folder Quirky never made is refused and left alone', async () => {

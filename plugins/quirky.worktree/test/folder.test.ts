@@ -178,4 +178,32 @@ describe('SC-11: a group can hold a folder workspace on its parent folder (CLI)'
     expect(storedRows(t.h.home, 'group_id = ?', apps.id)).toHaveLength(1)
     expect((await listWorktrees(client, { group: 'apps' })).map((w) => w.id)).toEqual([created.id])
   })
+
+  test('a create from inside a workspace of the group nests under that workspace', async () => {
+    const { client, t, apps } = await startApps()
+    const first = ((await call(client, 'quirky.worktree/create', { group: 'apps', name: 'apps-root' })) as WorktreeCreateResult).worktree
+    const inside = await t.connectAs({ worktreeId: first.id })
+
+    const nested = ((await call(inside, 'quirky.worktree/create', { group: 'apps', name: 'nested' })) as WorktreeCreateResult).worktree
+    expect(nested).toMatchObject({ groupId: apps.id, parentId: first.id })
+    const implied = ((await call(inside, 'quirky.worktree/create', { name: 'implied' })) as WorktreeCreateResult).worktree
+    expect(implied).toMatchObject({ groupId: apps.id, parentId: first.id })
+    const detached = ((await call(inside, 'quirky.worktree/create', { group: 'apps', name: 'detached', noParent: true })) as WorktreeCreateResult).worktree
+    expect(detached.parentId).toBeNull()
+  })
+
+  test('a folder workspace is named by its folder name after its display name changes; a shared folder is ambiguous', async () => {
+    const { client, apps, appsDir } = await startApps()
+    const first = ((await call(client, 'quirky.worktree/create', { group: 'apps', name: 'apps-root' })) as WorktreeCreateResult).worktree
+    await call(client, 'quirky.worktree/set', { worktree: first.id, displayName: 'Root of apps' })
+    const folderName = appsDir.split('/').at(-1)!
+    const resolve = async (selector: string) => ((await call(client, 'quirky.worktree/resolve', { selector })) as Worktree).id
+    for (const selector of [folderName, `name:${folderName}`]) expect(await resolve(selector)).toBe(first.id)
+
+    const second = ((await call(client, 'quirky.worktree/create', { group: 'apps', name: 'second', noParent: true })) as WorktreeCreateResult).worktree
+    expect(second.groupId).toBe(apps.id)
+    const ambiguous = await failure(call(client, 'quirky.worktree/resolve', { selector: folderName }))
+    expect(ambiguous.code).toBe(RpcErrorCode.Conflict)
+    expect([...(ambiguous.data as { matches: string[] }).matches].sort()).toEqual([`id:${first.id}`, `id:${second.id}`].sort())
+  })
 })

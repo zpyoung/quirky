@@ -69,7 +69,7 @@ export const runnerCommand = (runner: string): string => `/bin/bash ${shellQuote
 
 /**
  * Runs an existing runner in the daemon with the hook environment, no stdin and its own process
- * group. After `timeoutMs` the group gets SIGTERM and, `killGraceMs` later, SIGKILL; output past
+ * group. After `timeoutMs` the group gets SIGTERM and, `killGraceMs` later, SIGKILL (even if the script itself already exited); output past
  * `maxOutputBytes` is discarded. Resolves when the script has exited.
  */
 export async function runHookInDaemon(runner: string, target: HookTarget, options: HookRunOptions = {}): Promise<HookRunResult> {
@@ -125,7 +125,7 @@ export async function runHookInDaemon(runner: string, target: HookTarget, option
 
   await proc.exited
   clearTimeout(timer)
-  clearTimeout(hardKill)
+  // after a timeout the group SIGKILL must still land: the parent may exit on TERM while a child ignores it
   let settled: ReturnType<typeof setTimeout> | undefined
   await Promise.race([Promise.all(drains), new Promise((resolve) => (settled = setTimeout(resolve, DRAIN_GRACE_MS)))])
   clearTimeout(settled)
