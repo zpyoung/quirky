@@ -347,6 +347,37 @@ describe('SC-46: an agent that disappeared is refused', () => {
   })
 })
 
+describe('D15: start without an agent uses the same default order as prepare', () => {
+  test('an unavailable source agent and an unusable default fall back to the first listed agent', async () => {
+    const s = await opened()
+    await rig.call('quirky.agents/setEnabled', { agent: 'claude', enabled: false })
+    const prepared = await prepare(s.id)
+    const first = prepared.agents.list[0].id as string
+    expect(prepared.controls.agent).toBe(first)
+
+    const result = await start({ source: { session: s.id }, controls: {}, wait: true })
+    expect((await sessionOf(result.child.session)).agent).toBe(first)
+  })
+})
+
+describe('H1: the worktree is created before the body is resolved', () => {
+  test('a source change while the worktree is created fails an attached preview as source-changed', async () => {
+    const s = await opened()
+    const controls = { agent: 'gemini', target: { create: { name: 'slow' } } }
+    const shown = await preview({ source: { session: s.id }, controls })
+    const create = rig.git.addNewBranchWorktree.bind(rig.git)
+    rig.git.addNewBranchWorktree = async (...args: Parameters<typeof create>) => {
+      rig.setHistory(['output that arrived while the worktree was created'])
+      return create(...args)
+    }
+
+    const error = await rig.failure('quirky.handoff/start', { source: { session: s.id }, controls, shown: shown.brief })
+
+    expect(error.data).toMatchObject({ reason: 'source-changed', worktreeCreated: { name: 'slow' } })
+    expect((error.data as { preview: Preview }).preview.brief).toContain('arrived while the worktree was created')
+  })
+})
+
 describe('SC-47: a launch failure keeps the handoff', () => {
   test('the error says the handoff is unchanged and nothing was recorded', async () => {
     const s = await opened()

@@ -14,6 +14,13 @@ type StatusRow = { state?: unknown; turnStartedAt?: unknown; lastHookAt?: unknow
 
 type Retained = { agent: string; text: string; lineageId: string | null }
 
+/** A live view of one child's agent status, kept from before the paste so no change is missed. */
+type Observation = {
+  /** Resolves once a turn began, the child closed, or the watch window ended. */
+  settled: () => Promise<{ delivered: boolean; row: StatusRow | null }>
+  stop: () => void
+}
+
 type Toast = Pick<PluginNotification, 'kind' | 'title' | 'detail' | 'persistent'>
 
 const TOASTS: Record<Outcome, Toast> = {
@@ -106,11 +113,15 @@ export class DeliveryTracker {
     const brief = this.retained.get(child)
     if (brief === undefined) return Promise.resolve('unobservable')
     return this.share(child, async () => {
-      const launchedAt = Date.now()
-      const paste = await this.paste(child, brief)
+      const observation = this.observe(child, Date.now())
       let outcome: Outcome
-      if (paste === 'pasted' || (await this.watch(child, launchedAt)).delivered) outcome = 'delivered'
-      else outcome = paste === 'not-delivered' ? 'retry-failed' : 'unobservable'
+      try {
+        const paste = await this.paste(child, brief)
+        if (paste === 'pasted' || (await observation.settled()).delivered) outcome = 'delivered'
+        else outcome = paste === 'not-delivered' ? 'retry-failed' : 'unobservable'
+      } finally {
+        observation.stop()
+      }
       this.settle(child, brief.lineageId, outcome)
       return outcome
     })
@@ -125,11 +136,19 @@ export class DeliveryTracker {
   }
 
   private async firstAttempt(child: string, brief: Retained, launchedAt: number): Promise<Outcome> {
-    const first = await this.paste(child, brief)
-    if (first === 'pasted') return 'delivered'
-    const watched = await this.watch(child, launchedAt)
+    const observation = this.observe(child, launchedAt)
+    let watched: { delivered: boolean; row: StatusRow | null }
+    let first: Paste
+    try {
+      first = await this.paste(child, brief)
+      if (first === 'pasted') return 'delivered'
+      watched = await observation.settled()
+    } finally {
+      observation.stop()
+    }
     if (watched.delivered) return 'delivered'
-    if (first === 'not-delivered' && settledWithHooks(watched.row)) {
+    // a brief discarded while the first delivery ran must not be sent by the retry
+    if (this.retained.has(child) && first === 'not-delivered' && settledWithHooks(watched.row)) {
       return (await this.paste(child, brief)) === 'pasted' ? 'resent' : 'retry-failed'
     }
     return 'unobservable'
@@ -154,27 +173,58 @@ export class DeliveryTracker {
     }
   }
 
-  /** Watches the child's status row until it shows a turn after `since`, the child closes, or the window ends. */
-  private async watch(child: string, since: number): Promise<{ delivered: boolean; row: StatusRow | null }> {
-    let row = await this.readRow(child)
-    if (turnedWorking(row, since)) return { delivered: true, row }
-    return new Promise((resolve) => {
-      const finish = (delivered: boolean) => {
-        clearTimeout(timer)
-        this.watchers.delete(watcher)
-        resolve({ delivered, row })
-      }
-      const watcher = (event: QuirkyEvent) => {
-        const data = 'data' in event ? (event.data as { sessionId?: unknown; row?: StatusRow | null } | undefined) : undefined
-        if (data?.sessionId !== child) return
-        if (event.type === 'quirky.session/removed') return finish(false)
-        if (event.type !== 'quirky.agent-status/changed') return
-        row = data.row ?? null
-        if (turnedWorking(row, since)) finish(true)
-      }
-      const timer = setTimeout(() => finish(false), watchMs())
-      this.watchers.add(watcher)
+  /**
+   * Starts following the child's status row at once and keeps every change since: once a turn has
+   * been seen working after `since` it counts, even if it has finished by the time the paste returns. The first read never
+   * overrides a newer change that arrived while it ran.
+   */
+  private observe(child: string, since: number): Observation {
+    let row: StatusRow | null = null
+    let started = false
+    let closed = false
+    let heard = false
+    let wake: (() => void) | null = null
+    const note = (next: StatusRow | null) => {
+      row = next
+      if (turnedWorking(next, since)) started = true
+    }
+    const watcher = (event: QuirkyEvent) => {
+      const data = 'data' in event ? (event.data as { sessionId?: unknown; row?: StatusRow | null } | undefined) : undefined
+      if (data?.sessionId !== child) return
+      if (event.type === 'quirky.session/removed') closed = true
+      else if (event.type === 'quirky.agent-status/changed') {
+        heard = true
+        note(data.row ?? null)
+      } else return
+      wake?.()
+    }
+    this.watchers.add(watcher)
+    const read = this.readRow(child).then((initial) => {
+      if (heard) {
+        if (turnedWorking(initial, since)) started = true
+      } else note(initial)
+      wake?.()
     })
+    return {
+      settled: async () => {
+        await read
+        if (!started && !closed) {
+          await new Promise<void>((resolve) => {
+            const timer = setTimeout(resolve, watchMs())
+            wake = () => {
+              if (!started && !closed) return
+              clearTimeout(timer)
+              resolve()
+            }
+          })
+        }
+        wake = null
+        return { delivered: started, row }
+      },
+      stop: () => {
+        this.watchers.delete(watcher)
+      }
+    }
   }
 
   private notify(notification: PluginNotification): void {

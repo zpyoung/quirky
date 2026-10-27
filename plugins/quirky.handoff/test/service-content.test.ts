@@ -364,6 +364,22 @@ describe('SC-42: Start is disabled until the dialog can start (content side)', (
     expect(result.warnings.map((warning) => warning.code)).toContain('no-context')
   })
 
+  test('a detached preview takes contextAvailable and the no-context warning from the edited body', async () => {
+    rig = await HandoffRig.start()
+    const s = await rig.session('w')
+    await rig.reportTranscript(s.id, 'gone', join(rig.userHome, '.claude/projects/w/gone.jsonl'))
+    rig.setHistory([])
+    const bare = { include: { repoState: false, diffBodies: false, openEditorTabs: false } }
+    const written = await preview({ source: { session: s.id }, controls: bare, body: 'My own brief.' })
+    expect(written.contextAvailable).toBe(true)
+    expect(written.warnings.map((warning) => warning.code)).not.toContain('no-context')
+
+    const { id } = await readable()
+    const blank = await preview({ source: { session: id }, controls: {}, body: '  \n ' })
+    expect(blank.contextAvailable).toBe(false)
+    expect(blank.warnings.map((warning) => warning.code)).toContain('no-context')
+  })
+
   test('a note or repository state gives the brief something to send', async () => {
     rig = await HandoffRig.start()
     const s = await rig.session('w')

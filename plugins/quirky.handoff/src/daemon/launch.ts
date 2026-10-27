@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto'
 import type { PluginContext, PluginErrorKind, PluginStore, Session, Worktree } from '@quirky/protocol'
 import type { DeliveryTracker } from './delivery'
 import type { LineageStore } from './lineage'
-import { listAgents, type Call, type Composition } from './source'
+import { listAgents, type Call, type Composition, type Destination } from './source'
 import { readPrefs, writePrefs } from './store'
 import type { Controls, LineageRecord, Outcome, Relationship, SourceRef } from './types'
 
@@ -37,6 +37,8 @@ type LauncherDeps = {
   store: PluginStore
   lineage: LineageStore
   delivery: DeliveryTracker
+  /** Where the source can go, with the target already checked; read before anything is created. */
+  destination: (ref: SourceRef, controls: Controls) => Promise<Destination>
   compose: (ref: SourceRef, controls: Controls, options: { recapture: boolean; body?: string }) => Promise<Composition>
   clearDraft: (key: string) => void
   /** Notes a child whose provider session id lineage should fill in once it is reported. */
@@ -60,8 +62,8 @@ export class Launcher {
   constructor(private readonly deps: LauncherDeps) {}
 
   /**
-   * Starts a handoff in this order: compose; create the worktree when asked; resolve the body
-   * (an attached preview must equal a fresh composition) and append the locked notice; check the
+   * Starts a handoff in this order: create the worktree when asked; resolve the body (a fresh
+   * capture and composition; an attached preview must equal it) and append the locked notice; check the
    * agent; open the child's tab without focusing it; retain the brief; write lineage; badge both
    * ends; clear the draft; remember the choices; deliver. Nothing after the tab opens can fail the
    * start. A failure after a worktree was created names it in `data.worktreeCreated`.
@@ -69,12 +71,13 @@ export class Launcher {
   async start(request: StartRequest): Promise<StartResult> {
     const { deps } = this
     const { ref, controls } = request
-    const composed = await deps.compose(ref, controls, {
-      recapture: request.body === undefined,
-      ...(request.body === undefined ? {} : { body: request.body })
-    })
-    const created = await this.createWorktree(composed, controls)
+    const destination = await deps.destination(ref, controls)
+    const created = await this.createWorktree(destination, controls)
     try {
+      const composed = await deps.compose(ref, controls, {
+        recapture: request.body === undefined,
+        ...(request.body === undefined ? {} : { body: request.body })
+      })
       return await this.launch(request, composed, created)
     } catch (error) {
       throw created === null ? error : this.withCreated(error, created)
@@ -87,14 +90,10 @@ export class Launcher {
     return Object.assign(error, { data: { ...data, worktreeCreated: { id: worktree.id, name: worktree.name, path: worktree.path } } })
   }
 
-  private async createWorktree(composed: Composition, controls: Controls): Promise<Worktree | null> {
+  private async createWorktree(destination: Destination, controls: Controls): Promise<Worktree | null> {
     const { target } = controls
-    const home = composed.destination.home
-    if (target === undefined) {
-      if (home === null) throw this.deps.fail('invalid-params', 'Choose a worktree for the new session', { reason: 'invalid-target' })
-      return null
-    }
-    if (!('create' in target)) return null
+    const home = destination.home
+    if (target === undefined || !('create' in target)) return null
     const base = target.create.base?.trim() || home?.branch || home?.head
     try {
       const result = (await this.deps.call('quirky.worktree/create', {
@@ -113,7 +112,11 @@ export class Launcher {
   private place(composed: Composition, controls: Controls, created: Worktree | null): Place {
     if (created !== null) return { id: created.id, path: created.path }
     const { target } = controls
-    const id = target !== undefined && 'worktree' in target ? target.worktree : composed.destination.home!.id
+    const home = composed.destination.home
+    if (target === undefined && home === null) {
+      throw this.deps.fail('invalid-params', 'Choose a worktree for the new session', { reason: 'invalid-target' })
+    }
+    const id = target !== undefined && 'worktree' in target ? target.worktree : home!.id
     const found = composed.destination.candidates.find((candidate) => candidate.id === id)
     if (!found) throw this.deps.fail('invalid-params', `${id} is not a worktree this handoff can go to`, { reason: 'invalid-target' })
     return { id: found.id, path: found.path }
@@ -123,7 +126,7 @@ export class Launcher {
     const agents = await listAgents(this.deps.call)
     const listed = (id: string | null | undefined): id is string => !!id && agents.list.some((agent) => agent.id === id)
     const remembered = readPrefs(this.deps.store)?.lastAgent
-    const agent = controls.agent ?? [remembered, composed.info.agent, agents.defaultAgent].find(listed)
+    const agent = controls.agent ?? [remembered, composed.info.agent, agents.defaultAgent].find(listed) ?? agents.list[0]?.id
     if (!listed(agent)) throw this.deps.fail('conflict', AGENT_UNAVAILABLE, { reason: 'agent-unavailable' })
     return agent
   }

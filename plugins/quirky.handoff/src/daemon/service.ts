@@ -92,6 +92,11 @@ export class HandoffService {
       store,
       lineage: this.lineageStore,
       delivery: this.delivery,
+      destination: async (ref, controls) => {
+        const { destination } = await this.gatherDestination(ref)
+        this.checkTarget(controls.target, destination)
+        return destination
+      },
       compose: (ref, controls, options) => this.compose(ref, controls, options),
       clearDraft: (key) => this.drafts.delete(key),
       track: (child) => this.awaitingProvider.add(child),
@@ -264,6 +269,12 @@ export class HandoffService {
     return capture
   }
 
+  /** The source and where it can go, without probing or capturing. */
+  private async gatherDestination(ref: SourceRef) {
+    const info = await resolveSource(this.call, ref)
+    return { info, destination: await destinationOf(this.call, info) }
+  }
+
   /** Reads the source, probes its transcript, takes a capture when the transcript is not usable, and refuses a source with no context. */
   private async gather(ref: SourceRef, refreshCapture: boolean) {
     const info = await resolveSource(this.call, ref)
@@ -393,9 +404,11 @@ export class HandoffService {
     }
     if (!info.live) warnings.push({ code: 'no-live-pane', message: NO_LIVE_PANE })
     if (repoState === 'failed') warnings.push({ code: 'repo-state-failed', message: REPO_STATE_FAILED })
-    warnings.push(...composed.warnings)
-
+    const detached = options.body !== undefined
     const brief = options.body ?? composed.brief
+    const contextAvailable = detached ? brief.trim() !== '' : !composed.warnings.some((warning) => warning.code === 'no-context')
+    warnings.push(...composed.warnings.filter((warning) => !(detached && warning.code === 'no-context')))
+    if (detached && !contextAvailable) warnings.push({ code: 'no-context', message: NO_CONTEXT_MESSAGE })
     const secrets = scanSecrets(brief)
     if (secrets.length > 0) {
       warnings.push({
@@ -414,7 +427,7 @@ export class HandoffService {
       repoState,
       busy: info.busy,
       live: info.live,
-      contextAvailable: !composed.warnings.some((warning) => warning.code === 'no-context')
+      contextAvailable
     }
     return { preview, info, destination }
   }

@@ -29,9 +29,9 @@ const handoff = (source: string, agent: string, extra: Record<string, unknown> =
 /** Shows a ready composer on a session. */
 const ready = (id: string) => rig.h.pty.emit(id, PASTE_ON + CURSOR_ON)
 
-/** Makes each agent that starts settle its status row, as an agent with hooks installed does. */
+/** Makes each agent that starts settle its status row without starting a turn, as an agent with hooks installed does. */
 function settleOnSpawn() {
-  stoppers.push(rig.onSpawn((id) => void rig.eventually(() => rig.turn(id, 'earlier work', 'done'))))
+  stoppers.push(rig.onSpawn((id) => void rig.eventually(() => rig.stop(id, 'earlier work'))))
 }
 
 const toastsFor = (child: string): Notify[] => rig.notifications().filter((event) => event.key === `handoff:${child}`)
@@ -207,6 +207,43 @@ describe('SC-51: a retained brief goes away with its toast or its session', () =
 })
 
 describe('H2: delivery outcome rules', () => {
+  test('a turn that starts and finishes while the paste is in flight still counts as delivered', async () => {
+    const s = await opened()
+    stoppers.push(
+      rig.onSpawn((id) => {
+        setTimeout(
+          () =>
+            void rig.eventually(async () => {
+              await rig.startTurn(id, 'the handed off brief')
+              await rig.stop(id, 'done already')
+            }),
+          200
+        )
+      })
+    )
+    const result = await handoff(s.id, 'blind-bot')
+    expect(result.delivery).toBe('delivered')
+    expect(pastes(result.child.session)).toHaveLength(1)
+    expect((await rig.failure('quirky.handoff/resend', { session: result.child.session })).data).toEqual({ reason: 'no-brief' })
+  })
+
+  test('a brief discarded during the first delivery is not sent by the automatic retry', async () => {
+    const s = await opened()
+    settleOnSpawn()
+    const started = await start({ source: { session: s.id }, controls: { agent: 'strict-bot' }, wait: false })
+    const child = started.child.session
+    await rig.waitFor(() => rig.logs.some((line) => line.includes(`session ${child} (strict-bot) not-delivered`)), 4000)
+    expect(await rig.call('quirky.handoff/discard', { session: child })).toEqual({ discarded: true })
+    ready(child)
+    await rig.waitFor(() => rig.pluginEvents('delivery').some((event) => event.child === child), 4000)
+    await rig.settle(150)
+    expect(rig.pluginEvents('delivery').filter((event) => event.child === child)).toEqual([
+      { child, lineageId: started.lineageId, outcome: 'unobservable' }
+    ])
+    expect(pastes(child)).toHaveLength(0)
+    expect(toastsFor(child)).toHaveLength(0)
+  })
+
   test('a paste that landed unconfirmed is not retried even when the row is settled', async () => {
     const s = await opened()
     settleOnSpawn()
@@ -219,7 +256,7 @@ describe('H2: delivery outcome rules', () => {
     const s = await opened()
     stoppers.push(
       rig.onSpawn((id) => {
-        void rig.eventually(() => rig.turn(id, 'earlier work', 'done'))
+        void rig.eventually(() => rig.stop(id, 'earlier work'))
         setTimeout(() => void rig.eventually(() => rig.startTurn(id, 'brief')), 450)
       })
     )
