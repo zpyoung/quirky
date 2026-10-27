@@ -64,7 +64,6 @@ test(
     expect(pane.result).toMatchObject({ restored: true, live: true })
     expect(pane.replayText).toContain('50')
     await pane.detach()
-    h.noteProcesses()
     const after = await layoutOf(h)
     expect(settled(after)).toEqual(settled(saved))
     expect(leavesOf(findTab(after, build.tab.id).root).find((leaf) => leaf.id === third.pane.id)!.title).toBe('logs')

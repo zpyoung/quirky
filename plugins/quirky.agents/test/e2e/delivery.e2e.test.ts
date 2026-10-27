@@ -1,4 +1,3 @@
-import { spawn } from 'node:child_process'
 import { existsSync, readFileSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { afterEach, expect, test } from 'bun:test'
@@ -13,9 +12,10 @@ const DAEMON_MAIN = resolve(import.meta.dir, '../../../../packages/daemon/src/ma
 const STDIN_DELIVERY_PLUGIN = join(import.meta.dir, 'fixtures-delivery/acme.stdin-delivery')
 
 let e2e: E2E | undefined
-const teardown: Array<() => Promise<void>> = []
+let restartedClient: QuirkyClient | undefined
 afterEach(async () => {
-  for (const undo of teardown.splice(0).reverse()) await undo().catch(() => {})
+  restartedClient?.close()
+  restartedClient = undefined
   await e2e?.cleanup()
   e2e = undefined
 })
@@ -266,7 +266,7 @@ test(
     await waitFor(async () => !(await isDaemonAlive(old)), 10_000, 'the old daemon to die')
 
     const root = dirname(e2e.home)
-    const restarted = spawn(process.execPath, [DAEMON_MAIN], {
+    const restarted = e2e.processScope.spawn([process.execPath, DAEMON_MAIN], {
       env: {
         QUIRKY_HOME: e2e.home,
         HOME: e2e.userHome,
@@ -274,35 +274,22 @@ test(
         PATH: `${e2e.fakebin}:/usr/bin:/bin`,
         QUIRKY_AGENT_SEARCH_DIRS: '',
         QUIRKY_PORT: '0',
-        QUIRKY_TEST_AGENT_TIME_SCALE: '1'
+        QUIRKY_TEST_AGENT_TIME_SCALE: '1',
+        ...e2e.processScope.env
       },
-      stdio: 'ignore'
-    })
-    let client: QuirkyClient | undefined
-    teardown.push(async () => {
-      let hostPid = 0
-      try {
-        hostPid = ((await client?.call('status.get', {})) as { ptyHost: { pid: number } }).ptyHost.pid
-      } catch {}
-      client?.close()
-      restarted.kill('SIGTERM')
-      await Bun.sleep(500)
-      restarted.kill('SIGKILL')
-      if (hostPid && hostPid !== e2e!.ptyHostPid()) {
-        try {
-          process.kill(hostPid, 'SIGTERM')
-        } catch {}
-      }
+      stdout: 'ignore',
+      stderr: 'ignore'
     })
 
     const runtime = await waitFor(async () => {
+      if (restarted.exitCode !== null) throw new Error(`the restarted daemon exited ${restarted.exitCode}`)
       const info = readRuntime(e2e!.home)
       return info && info.pid !== old.pid && (await isDaemonAlive(info)) ? info : undefined
     }, 20_000, 'the restarted daemon')
-    client = await QuirkyClient.connect(rpcUrl(runtime), { role: 'cli', name: 'agents-e2e-restart' })
+    restartedClient = await QuirkyClient.connect(rpcUrl(runtime), { role: 'cli', name: 'agents-e2e-restart' })
 
     const after = (await waitFor(async () => {
-      const sessions = (await client!.callAny('quirky.session/list', {})) as SessionRecord[]
+      const sessions = (await restartedClient!.callAny('quirky.session/list', {})) as SessionRecord[]
       return sessions.find((record) => record.id === session.id)
     }, 10_000, 'the session after restart'))
     expect(after.promptDelivery).toBe('not-delivered')

@@ -10,6 +10,7 @@ import {
 import { join } from 'node:path'
 import { QUIRKY_HOOK_SCRIPT } from '../src/launch'
 import { makeTempHome } from './helpers'
+import { createProcessScope, type ProcessScope } from '../../../scripts/test-support/process-scope'
 
 type Captured = { path: string; search: string; headers: Headers; body: string }
 
@@ -18,11 +19,13 @@ let home: string
 let scriptPath: string
 let stub: ReturnType<typeof Bun.serve>
 let hits: Captured[]
+let scope: ProcessScope
 const children: { kill(): void }[] = []
 
 beforeEach(() => {
   root = makeTempHome('qd-hook-')
   home = join(root, 'q')
+  scope = createProcessScope(home)
   mkdirSync(join(home, 'bin'), { recursive: true })
   scriptPath = join(home, 'bin', 'quirky-hook')
   writeFileSync(scriptPath, QUIRKY_HOOK_SCRIPT, { mode: 0o755 })
@@ -43,10 +46,23 @@ beforeEach(() => {
   })
 })
 afterEach(async () => {
-  for (const child of children.splice(0)) child.kill()
-  await stub.stop(true)
-  rmSync(root, { recursive: true, force: true })
+  let failed = false
+  let firstError: unknown
+  const attempt = async (action: () => void | Promise<void>) => {
+    try {
+      await action()
+    } catch (error) {
+      if (!failed) firstError = error
+      failed = true
+    }
+  }
+  for (const child of children.splice(0)) await attempt(() => child.kill())
+  await attempt(() => stub.stop(true))
+  await attempt(() => scope.cleanup())
+  await attempt(() => rmSync(root, { recursive: true, force: true }))
+  if (failed) throw firstError
 })
+
 
 const hookUrl = (port: number) => `http://127.0.0.1:${port}/hook`
 
@@ -82,7 +98,7 @@ async function run(source: string, options: RunOptions = {}) {
   const env = baseEnv(options.env)
   for (const name of options.unset ?? []) delete env[name]
   const started = Date.now()
-  const proc = Bun.spawn(['/bin/sh', scriptPath, source, ...(options.args ?? [])], {
+  const proc = scope.spawn(['/bin/sh', scriptPath, source, ...(options.args ?? [])], {
     env,
     stdin: new Blob([options.stdin ?? '']),
     stdout: 'pipe',
@@ -184,7 +200,7 @@ describe('staying quiet', () => {
   test('no session id exits without reading stdin that stays open', async () => {
     const env = baseEnv()
     delete env.QUIRKY_SESSION_ID
-    const proc = Bun.spawn(['/bin/sh', scriptPath, 'claude'], {
+    const proc = scope.spawn(['/bin/sh', scriptPath, 'claude'], {
       env,
       stdin: 'pipe',
       stdout: 'pipe'
@@ -196,7 +212,7 @@ describe('staying quiet', () => {
   })
 
   test('antigravity with CLAUDE_JOB_DIR returns at once while stdin stays open', async () => {
-    const proc = Bun.spawn(['/bin/sh', scriptPath, 'antigravity'], {
+    const proc = scope.spawn(['/bin/sh', scriptPath, 'antigravity'], {
       env: baseEnv({ CLAUDE_JOB_DIR: '/x', QUIRKY_HOOK_EVENT: 'Stop' }),
       stdin: 'pipe',
       stdout: 'pipe'
@@ -403,7 +419,7 @@ describe('daemon down', () => {
 describe('agents that keep stdin open', () => {
   test.each(['grok', 'antigravity'])('%s posts within 2 s of the JSON', async (source) => {
     const payload = '{"hook_event_name":"SessionStart","text":"héllo"}'
-    const proc = Bun.spawn(['/bin/sh', scriptPath, source], {
+    const proc = scope.spawn(['/bin/sh', scriptPath, source], {
       env: baseEnv({ QUIRKY_HOOK_EVENT: 'SessionStart' }),
       stdin: 'pipe',
       stdout: 'pipe',
@@ -422,7 +438,7 @@ describe('agents that keep stdin open', () => {
   })
 
   test('trailing bytes after the first JSON value are not posted', async () => {
-    const proc = Bun.spawn(['/bin/sh', scriptPath, 'grok'], {
+    const proc = scope.spawn(['/bin/sh', scriptPath, 'grok'], {
       env: baseEnv(),
       stdin: 'pipe',
       stdout: 'pipe'
