@@ -27,7 +27,8 @@ const session: Session = {
     summary: 'Claude · Haiku'
   },
   resumedFrom: 's_old',
-  agentStatus: null
+  agentStatus: null,
+  unread: null
 }
 
 const summary: AgentStatusSummary = {
@@ -123,7 +124,8 @@ describe('session store migration 2', () => {
       promptDelivery: null,
       launchSettings: null,
       resumedFrom: null,
-      agentStatus: null
+      agentStatus: null,
+      unread: null
     })
     expect(records.update('s_old', { status: 'exited', exitCode: 0 })).toMatchObject({ status: 'exited', launch: null })
     expect(records.repoIdOf('s_old')).toBe('repo')
@@ -213,5 +215,25 @@ describe('SessionRecords.update', () => {
     records.update('s_cols', { status: 'running', providerSession: undefined, launch: undefined })
 
     expect(records.get('s_cols')).toMatchObject({ status: 'running', providerSession: { id: 'p1', transcriptPath: null } })
+  })
+})
+
+describe('session store migration 6', () => {
+  test('a row written before it reads with no unread reason', () => {
+    const store = memoryStore(5)
+    store.run(
+      "INSERT INTO sessions (id, kind, agent, worktree_id, cwd, title, status, created_at, last_activity_at, exit_code, repo_id) VALUES ('s_old', 'terminal', 'claude', 'wt', '/work', 'Claude', 'running', 1, 1, NULL, 'repo')"
+    )
+    migrateStore(store, 5)
+    expect(new SessionRecords(store).get('s_old')?.unread ?? null).toBeNull()
+  })
+
+  test('the reason round-trips through update, other updates leave it, and null clears it', () => {
+    const records = new SessionRecords(memoryStore())
+    records.insert(session, 'repo')
+    expect(records.get('s_new')?.unread ?? null).toBeNull()
+    expect(records.update('s_new', { unread: 'bell' })?.unread).toBe('bell')
+    expect(records.update('s_new', { status: 'working' })?.unread).toBe('bell')
+    expect(records.update('s_new', { unread: null })?.unread ?? null).toBeNull()
   })
 })

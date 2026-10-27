@@ -4,7 +4,7 @@ import { ClaudeVersionGate, claudeEventsFor, claudeSettings, commandProbe } from
 import { HooksService } from './src/hooks'
 import { AgentStatusService } from './src/service'
 import { drainSpool } from './src/spool'
-import { importNotificationsSetting, migrations, RowStore } from './src/store'
+import { migrations, RowStore } from './src/store'
 
 const DEFAULT_CLAUDE_COMMAND = 'claude'
 
@@ -37,7 +37,7 @@ let service: AgentStatusService | undefined
 
 /** Wires the agent-status service: hook events in, rows and session summaries out. */
 export async function activate(context: PluginContext): Promise<void> {
-  const store = context.openStore(migrations(context.home))
+  const store = context.openStore(migrations)
   const active = new AgentStatusService(context, new RowStore(store))
   service = active
   const installer = new HooksService(context)
@@ -64,7 +64,6 @@ export async function activate(context: PluginContext): Promise<void> {
   context.subscribe((event) => installer.onEvent(event))
   context.pty.onFact((sessionId, fact) => active.onFact(sessionId, fact))
   context.pty.onInput((sessionId, data) => active.onInput(sessionId, data))
-  await importNotificationsSetting(context, store)
   installer.begin()
 }
 

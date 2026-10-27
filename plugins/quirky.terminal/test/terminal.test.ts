@@ -502,6 +502,7 @@ describe('SC-40: the catalog', () => {
       'quirky.terminal/cwd',
       'quirky.terminal/floating',
       'quirky.terminal/layout',
+      'quirky.terminal/notification',
       'quirky.terminal/quickCommands',
       'quirky.terminal/title'
     ])

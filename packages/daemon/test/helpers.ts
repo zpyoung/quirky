@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { lstatSync, mkdirSync, mkdtempSync, readdirSync, readlinkSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { QuirkyClient, type ClientRole, type QuirkyEvent } from '@quirky/protocol'
@@ -28,20 +28,74 @@ export function makeTempHome(prefix = 'qd-'): string {
   return mkdtempSync(join(tmpdir(), prefix))
 }
 
+const sharedBuiltinDirs = new Map<string, string>()
+
+/**
+ * The same built-ins as `dir`, from one directory per distinct set of links for the whole test
+ * process. Under `bun test` every import of a plugin from a new path keeps about four file
+ * descriptors open until the process exits, so a fresh built-in directory per daemon start runs the
+ * single-process suite out of descriptors. A directory that holds anything but symlinks, or nothing,
+ * is returned as is.
+ */
+export function sharedBuiltinDir(dir: string): string {
+  let names: string[]
+  try {
+    names = readdirSync(dir).sort()
+  } catch {
+    return dir
+  }
+  if (names.length === 0 || names.some((name) => !lstatSync(join(dir, name)).isSymbolicLink())) return dir
+  const links = names.map((name) => [name, resolve(dir, readlinkSync(join(dir, name)))] as const)
+  const key = links.map(([name, target]) => `${name}>${target}`).join('\n')
+  let shared = sharedBuiltinDirs.get(key)
+  if (shared === undefined) {
+    const root = join(tmpdir(), `qbi-${process.pid}-${sharedBuiltinDirs.size}`)
+    if (sharedBuiltinDirs.size === 0) process.once('exit', () => { for (const d of sharedBuiltinDirs.values()) rmSync(join(d, '..'), { recursive: true, force: true }) })
+    shared = join(root, 'builtin')
+    mkdirSync(shared, { recursive: true })
+    for (const [name, target] of links) symlinkSync(target, join(shared, name))
+    sharedBuiltinDirs.set(key, shared)
+  }
+  return shared
+}
+
 export async function startHarness(options: Partial<DaemonOptions> = {}): Promise<Harness> {
+  const ownsHome = options.home === undefined
   const home = options.home ?? makeTempHome()
   const pty = startFakePtyHost(home)
   const notifications: { title: string; body: string }[] = []
-  const daemon = await startDaemon({
-    home,
-    port: 0,
-    shell: '/bin/zsh',
-    notifier: (title, body) => notifications.push({ title, body }),
-    cliEntry: '/opt/quirky/cli/main.ts',
-    uiDir: join(home, 'no-ui'),
-    builtinPluginsDir: null,
-    ...options
-  })
+  let daemon: DaemonHandle
+  try {
+    daemon = await startDaemon({
+      home,
+      port: 0,
+      shell: '/bin/zsh',
+      notifier: ({ title, body }) => notifications.push({ title, body }),
+      cliEntry: '/opt/quirky/cli/main.ts',
+      uiDir: join(home, 'no-ui'),
+      builtinPluginsDir: null,
+      ...options,
+      ...(options.builtinPluginsDir ? { builtinPluginsDir: sharedBuiltinDir(options.builtinPluginsDir) } : {})
+    })
+  } catch (error) {
+    const cleanupErrors: unknown[] = []
+    try {
+      pty.stop()
+    } catch (cleanupError) {
+      cleanupErrors.push(cleanupError)
+    }
+    if (ownsHome) {
+      try {
+        rmSync(home, { recursive: true, force: true })
+      } catch (cleanupError) {
+        cleanupErrors.push(cleanupError)
+      }
+    }
+    if (cleanupErrors.length > 0) {
+      throw new AggregateError([error, ...cleanupErrors], 'startHarness failed and rollback was incomplete', { cause: error })
+    }
+    throw error
+  }
   const clients: QuirkyClient[] = []
   const harness: Harness = {
     home,
@@ -63,10 +117,21 @@ export async function startHarness(options: Partial<DaemonOptions> = {}): Promis
       return { client, events }
     },
     async cleanup() {
-      for (const client of clients) client.close()
-      await daemon.stop()
-      pty.stop()
-      rmSync(home, { recursive: true, force: true })
+      let failed = false
+      let firstError: unknown
+      const attempt = async (action: () => void | Promise<void>) => {
+        try {
+          await action()
+        } catch (error) {
+          if (!failed) firstError = error
+          failed = true
+        }
+      }
+      for (const client of clients) await attempt(() => client.close())
+      await attempt(() => daemon.stop())
+      await attempt(() => pty.stop())
+      await attempt(() => rmSync(home, { recursive: true, force: true }))
+      if (failed) throw firstError
     }
   }
   return harness

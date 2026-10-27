@@ -31,8 +31,6 @@ async function until(check: () => boolean | Promise<boolean>, timeoutMs: number,
 type V1Row = { id: string; agent: string; title: string; createdAt: number }
 
 let e2e: E2E
-let restarted: ReturnType<typeof Bun.spawn> | undefined
-let restartedHostPid = 0
 let probe: QuirkyClient | undefined
 
 beforeEach(async () => {
@@ -42,18 +40,6 @@ beforeEach(async () => {
 afterEach(async () => {
   probe?.close()
   probe = undefined
-  if (restarted && restarted.exitCode === null) {
-    restarted.kill('SIGTERM')
-    await Promise.race([restarted.exited, Bun.sleep(5000)])
-    if (restarted.exitCode === null) restarted.kill('SIGKILL')
-  }
-  restarted = undefined
-  if (restartedHostPid && isAlive(restartedHostPid)) {
-    try {
-      process.kill(restartedHostPid, 'SIGKILL')
-    } catch {}
-  }
-  restartedHostPid = 0
   await e2e.cleanup()
 })
 
@@ -91,7 +77,7 @@ async function reopenAsV1Home(rows: V1Row[], worktreeId: string): Promise<void> 
   for (const suffix of ['', '-wal', '-shm']) rmSync(`${store}${suffix}`, { force: true })
 
   const root = dirname(e2e.home)
-  restarted = Bun.spawn([process.execPath, DAEMON_MAIN], {
+  const restarted = e2e.processScope.spawn([process.execPath, DAEMON_MAIN], {
     env: {
       QUIRKY_HOME: e2e.home,
       HOME: e2e.userHome,
@@ -99,13 +85,15 @@ async function reopenAsV1Home(rows: V1Row[], worktreeId: string): Promise<void> 
       PATH: `${e2e.fakebin}:/usr/bin:/bin`,
       QUIRKY_AGENT_SEARCH_DIRS: '',
       QUIRKY_PORT: '0',
-      QUIRKY_TEST_AGENT_TIME_SCALE: '1'
+      QUIRKY_TEST_AGENT_TIME_SCALE: '1',
+      ...e2e.processScope.env
     },
     stdout: Bun.file(join(root, 'daemon-2.log')),
     stderr: Bun.file(join(root, 'daemon-2.log'))
   })
   await until(
     async () => {
+      if (restarted.exitCode !== null) throw new Error(`the second daemon exited ${restarted.exitCode}`)
       const info = readRuntime(e2e.home)
       return info !== null && info.pid !== runtime.pid && (await isDaemonAlive(info))
     },
@@ -113,7 +101,6 @@ async function reopenAsV1Home(rows: V1Row[], worktreeId: string): Promise<void> 
     'the second daemon to start'
   )
   probe = await QuirkyClient.connect(rpcUrl(readRuntime(e2e.home)!), { role: 'cli', name: 'compat-e2e' })
-  restartedHostPid = ((await probe.call('status.get', {})) as { ptyHost: { pid: number } }).ptyHost.pid
 }
 
 const cliJson = async <T>(args: string[]): Promise<T> => {

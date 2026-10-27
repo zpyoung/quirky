@@ -1,6 +1,6 @@
-import { expect, test } from 'bun:test'
-import type { GitDiff, GitFileStatus } from '@quirky/protocol'
-import { keepSelection, reuseDiff } from '../src/diffRefresh'
+import { describe, expect, test } from 'bun:test'
+import type { GitDiff, GitDiffPair, GitFileStatus } from '@quirky/protocol'
+import { keepSelection, reuseDiff, reuseGitDiff } from '../src/diffRefresh'
 
 const file = (path: string, index: string, worktree: string): GitFileStatus => ({
   path,
@@ -9,7 +9,7 @@ const file = (path: string, index: string, worktree: string): GitFileStatus => (
   untracked: false
 })
 
-const diff = (original: string, modified: string, overrides: Partial<GitDiff> = {}): GitDiff => ({
+const diff = (original: string, modified: string, overrides: Partial<GitDiffPair> = {}): GitDiffPair => ({
   path: 'a.ts',
   staged: false,
   original,
@@ -62,4 +62,46 @@ test('takes the new diff when binary flips or there was no previous diff', () =>
   const next = diff('x', 'y', { binary: true })
   expect(reuseDiff(diff('x', 'y'), next)).toBe(next)
   expect(reuseDiff(null, next)).toBe(next)
+})
+
+describe('reuseGitDiff', () => {
+  const full = (overrides: Partial<GitDiff> = {}): GitDiff => ({
+    path: 'a.ts',
+    staged: false,
+    original: 'one\n',
+    modified: 'two\n',
+    binary: false,
+    source: 'unstaged',
+    kind: 'text',
+    modifiedHash: 'h1',
+    ...overrides
+  })
+
+  test('keeps the previous diff when nothing changed, so the editor is not rebuilt', () => {
+    const prev = full()
+    expect(reuseGitDiff(prev, full())).toBe(prev)
+  })
+
+  test('returns the new diff when the working file hash moved', () => {
+    const next = full({ modifiedHash: 'h2' })
+    expect(reuseGitDiff(full(), next)).toBe(next)
+  })
+
+  test('returns the new diff when a side, the kind or the too-large marker changed', () => {
+    const marker = { originalLines: 1, modifiedLines: 130_000, characters: 9, reason: 'lines' as const }
+    for (const changed of [
+      full({ original: 'x' }),
+      full({ modified: 'x' }),
+      full({ kind: 'binary' }),
+      full({ modifiedDeleted: true }),
+      full({ tooLarge: marker })
+    ]) {
+      expect(reuseGitDiff(full(), changed)).toBe(changed)
+    }
+  })
+
+  test('takes the first diff when there is no previous one', () => {
+    const next = full()
+    expect(reuseGitDiff(null, next)).toBe(next)
+  })
 })

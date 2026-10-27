@@ -44,6 +44,20 @@ output of the shell appears in the terminal.
 
 ## Testing against a separate QUIRKY_HOME
 
+For disposable **web UI passes**, launch the daemon through the owned-command wrapper:
+
+```sh
+bun scripts/owned-run.ts -- bun packages/daemon/src/main.ts
+```
+
+It prints a fresh `QUIRKY_HOME` on stderr. Keep the wrapper running during the pass and use that
+home for CLI commands. Stop the wrapper when finished: its guardian stops the daemon, detached
+PTY host and session process trees, then removes the temporary home. The guardian also runs if
+the wrapper is killed with SIGKILL. Never point a disposable pass at your normal profile.
+
+For a native app run that should keep its sessions after the shell quits, use a separate home
+and stop the persistent services explicitly:
+
 The shell and everything it starts read `QUIRKY_HOME`. Use a short path (the PTY host socket
 lives under it and macOS limits socket paths to about 100 characters):
 

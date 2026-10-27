@@ -180,6 +180,11 @@ export function tabsReport(ws: Workspace, sessions: Readonly<Record<string, Sess
   return rows
 }
 
+/** The sessions on screen: every pane a window mounts, in visual order. */
+export function visibleSessionsOf(ws: Workspace): string[] {
+  return mountedPanes(ws).map(({ leaf }) => leaf.session)
+}
+
 export type PaneStateReport = {
   pane: string
   session: string

@@ -162,7 +162,18 @@ export type UiLayout = {
 }
 
 /** A connected window (a client with role `ui`). */
-export type UiWindowInfo = { connId: number; name?: string; focused: boolean }
+export type UiWindowInfo = {
+  connId: number
+  name?: string
+  focused: boolean
+  /** Epoch milliseconds of the window's last reported input; null before any. */
+  inputAt: number | null
+  /** Whether that input is within the away threshold. */
+  present: boolean
+}
+
+/** How long without input before a window stops counting as present; milliseconds. */
+export const DESKTOP_AWAY_MS = 180_000
 
 /** One slot in the UI model, with the latest report from its mounted window. */
 export type UiSlotState = {
@@ -216,8 +227,8 @@ export type UiPluginContext = {
   /** Shows a confirm dialog; resolves true when the person confirms. */
   confirm(options: { title: string; body?: string; confirmLabel?: string }): Promise<boolean>
   toast(title: string, body: string): void
-  /** Shows a count on the panel's toggle; null clears it. */
-  setPanelBadge(panelId: string, count: number | null): void
+  /** Shows a count on the panel's toggle, with `title` as its tooltip (default "<count> waiting"); null clears it. */
+  setPanelBadge(panelId: string, count: number | null, title?: string): void
   /**
    * Sets a window-global context key that keybinding `when` conditions read; `undefined` clears
    * it. The window clears every key this plugin set when the plugin is deactivated.

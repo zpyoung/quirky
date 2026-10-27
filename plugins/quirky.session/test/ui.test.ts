@@ -109,7 +109,8 @@ describe('the worktree view', () => {
         { session: 's1', title: 'Shell 1', agent: 'shell', status: 'running' },
         { session: 's2', title: 'Claude 1', agent: 'claude', status: 'working' }
       ],
-      active: 's2'
+      active: 's2',
+      visibleSessions: ['s2']
     })
   })
 
@@ -178,6 +179,25 @@ describe('the worktree view', () => {
     expect(fake.opened).toEqual([{ id: VIEW, input: { worktree: WORKTREE.id, session: 's2' } }])
   })
 
+  test('an unread session shows an amber bell in place of its status dot, labelled by reason', async () => {
+    const labels = { agent: 'Unread agent completion', bell: 'Unread bell', notification: 'Unread notification' } as const
+    start([
+      session({ id: 's1', title: 'Shell 1', createdAt: 1, unread: 'bell' }),
+      session({ id: 's2', title: 'Claude 1', agent: 'claude', createdAt: 2, unread: 'agent' }),
+      session({ id: 's3', title: 'Claude 2', agent: 'claude', createdAt: 3, unread: 'notification' }),
+      session({ id: 's4', title: 'Shell 2', createdAt: 4 })
+    ])
+    const view = await open({ worktree: WORKTREE.id, session: 's4' })
+    const bells = view.tabs().map((tab) => tab.querySelector('.glyph-unread'))
+    expect(bells.map((bell) => bell?.getAttribute('aria-label') ?? null)).toEqual([labels.bell, labels.agent, labels.notification, null])
+    for (const bell of bells.slice(0, 3)) expect(bell!.getAttribute('role')).toBe('img')
+    expect(view.tabs()[0]!.querySelector('.dot, .glyph:not(.glyph-unread)')).toBeNull()
+    expect(view.tabs()[3]!.querySelector('.dot')).not.toBeNull()
+
+    await fake.emit({ type: 'quirky.session/changed', data: { session: session({ id: 's1', title: 'Shell 1', createdAt: 1, unread: null }) } })
+    expect(view.tabs()[0]!.querySelector('.glyph-unread')).toBeNull()
+  })
+
   test('marks the active tab selected', async () => {
     start()
     const view = await open({ worktree: WORKTREE.id, session: 's2' })
@@ -188,14 +208,14 @@ describe('the worktree view', () => {
     start([], { 'quirky.worktree/resolve': () => Promise.reject(new RpcError(RpcErrorCode.NotFound, 'no such worktree')) })
     const view = await open({ worktree: 'nowhere' })
     expect(view.element.textContent).toContain('Worktree not found')
-    expect(view.lastReport()).toEqual({ worktree: 'nowhere', tabs: [], active: null })
+    expect(view.lastReport()).toEqual({ worktree: 'nowhere', tabs: [], active: null, visibleSessions: [] })
   })
 
   test('an input without a worktree asks for one and reports nothing open', async () => {
     start()
     const view = await open({})
     expect(view.element.textContent).toContain('Pick a worktree')
-    expect(view.lastReport()).toEqual({ worktree: null, tabs: [], active: null })
+    expect(view.lastReport()).toEqual({ worktree: null, tabs: [], active: null, visibleSessions: [] })
   })
 
   test('an empty worktree offers a new shell', async () => {

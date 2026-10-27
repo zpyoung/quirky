@@ -13,6 +13,8 @@ export type ClientConn = {
   worktreeId?: string
   /** Epoch milliseconds of the last `ui.window.focused` with `focused: true`. */
   focusedAt?: number
+  /** Epoch milliseconds of the last `ui.window.activity`. */
+  inputAt?: number
   /** terminal streamId -> sessionId */
   streams: Map<number, string>
   nextStreamId: number

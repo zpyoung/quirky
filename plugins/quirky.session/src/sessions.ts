@@ -52,6 +52,7 @@ function exitFields(details: SessionExit) {
 
 const MAX_PROVIDER_SESSION_ID = 512
 const CONTROL_CHARACTERS = /[\u0000-\u001f\u007f-\u009f]/
+const UNREAD_REASONS = ['agent', 'bell', 'notification']
 
 /** The rule an agent CLI's session ID breaks, or null when it is fine to store and pass back. */
 export function providerSessionIdProblem(id: string): string | null {
@@ -343,6 +344,17 @@ export class SessionService {
     return updated
   }
 
+  /** Sets or clears a session's unread reason; `changed` goes out only when the stored value differs. */
+  setUnread = (params: Record<string, unknown>): Session => {
+    const before = this.require(params.session as string)
+    const unread = params.unread
+    if (unread !== null && !UNREAD_REASONS.includes(unread as never)) {
+      throw this.context.error('invalid-params', 'unread must be agent, bell, notification or null')
+    }
+    if ((before.unread ?? null) === unread) return before
+    return this.publish(this.records.update(before.id, { unread: unread as Session['unread'] }) as Session)
+  }
+
   /**
    * Marks a live session exited; null for one that is unknown or already exited. An exit that
    * arrives while the session's restore is spawning is held and applied when the spawn returns.
@@ -496,7 +508,8 @@ export class SessionService {
       providerSession: null,
       promptDelivery: null,
       resumedFrom: null,
-      agentStatus: null
+      agentStatus: null,
+      unread: null
     }
   }
 

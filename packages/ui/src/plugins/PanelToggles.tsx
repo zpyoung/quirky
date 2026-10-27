@@ -3,7 +3,7 @@ import { usePluginHost, usePluginState } from '../context'
 /** One header button per plugin panel; the open panel's button is pressed, and a panel's count shows beside its title. */
 export function PanelToggles() {
   const host = usePluginHost()
-  const { model, layout, badges } = usePluginState()
+  const { model, layout, badges, badgeTitles } = usePluginState()
   return (
     <>
       {(model?.panels ?? []).map((panel) => {
@@ -17,7 +17,7 @@ export function PanelToggles() {
           >
             {panel.title}
             {count !== undefined && count > 0 && (
-              <span className="badge" title={`${count} waiting`}>
+              <span className="badge" title={badgeTitles[panel.id] ?? `${count} waiting`}>
                 {count}
               </span>
             )}

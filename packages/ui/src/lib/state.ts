@@ -52,7 +52,7 @@ export function reduce(state: AppState, action: Action): AppState {
         epoch: action.status === 'connected' ? state.epoch + 1 : state.epoch
       }
     case 'event':
-      return action.event.type === 'notify'
+      return action.event.type === 'notify' && action.event.toast !== false
         ? withToast(state, {
             kind: 'info',
             title: action.event.title,

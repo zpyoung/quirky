@@ -82,7 +82,6 @@ test(
     expect(await h.json<FloatingState>(['terminal', 'floating', 'show'])).toMatchObject({ open: true, maximized: false })
     await until(f, panel)
     await h.json(['terminal', 'tab', 'new', '--workspace', 'floating'])
-    h.noteProcesses()
     await floatingReport(f, 'a second floating terminal', (report) => report.layout !== null && tabsOf(report.layout).length === 2)
     expect([...document.querySelectorAll('[data-floating-panel] .qt-tab-title')].map((title) => title.textContent)).toEqual(['Terminal 1', 'Terminal 2'])
   },
@@ -155,7 +154,6 @@ test(
     await h.json(['terminal', 'floating', 'show'])
     await h.json(['terminal', 'floating', 'maximize'])
     const opened = await h.json<{ workspace: { root: unknown } }>(['terminal', 'tab', 'new', '--workspace', 'floating'])
-    h.noteProcesses()
     expect(opened.workspace.root).toBeDefined()
     const floating = await floatingReport(f, 'a floating terminal', (report) => report.panes.length === 1)
     const session = floating.panes[0]!.session

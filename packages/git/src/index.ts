@@ -5,7 +5,7 @@
 import { existsSync, statSync } from 'node:fs'
 import { mkdir, stat } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
-import type { GitDiff, GitFileStatus, GitStatus } from '@quirky/protocol'
+import type { GitDiffPair, GitFileStatus, GitStatusSummary } from '@quirky/protocol'
 import { git, runGit } from './run'
 
 export class GitError extends Error {
@@ -134,10 +134,10 @@ export async function removeWorktree(repoPath: string, path: string, force: bool
   await git(repoPath, ['worktree', 'remove', ...(force ? ['--force'] : []), path])
 }
 
-export async function status(cwd: string): Promise<GitStatus> {
+export async function status(cwd: string): Promise<GitStatusSummary> {
   const out = await git(cwd, ['status', '--porcelain=v1', '-z', '--branch', '--untracked-files=all'])
   const entries = out.split('\0')
-  const result: GitStatus = { branch: null, upstream: null, ahead: 0, behind: 0, files: [] }
+  const result: GitStatusSummary = { branch: null, upstream: null, ahead: 0, behind: 0, files: [] }
 
   let i = 0
   const header = entries[0]
@@ -165,7 +165,7 @@ export async function status(cwd: string): Promise<GitStatus> {
   return result
 }
 
-function parseBranchHeader(header: string, out: GitStatus): void {
+function parseBranchHeader(header: string, out: GitStatusSummary): void {
   if (header.startsWith('No commits yet on ')) {
     out.branch = header.slice('No commits yet on '.length)
     return
@@ -220,7 +220,7 @@ async function readWorkingFile(cwd: string, path: string): Promise<Side> {
 }
 
 /** See `GitDiff` for which sides `staged` selects. Files over 2 MB or with NUL bytes are binary. */
-export async function diff(cwd: string, path: string, staged: boolean): Promise<GitDiff> {
+export async function diff(cwd: string, path: string, staged: boolean): Promise<GitDiffPair> {
   const [original, modified] = staged
     ? await Promise.all([readBlob(cwd, `HEAD:${path}`), readBlob(cwd, `:${path}`)])
     : await Promise.all([readBlob(cwd, `:${path}`), readWorkingFile(cwd, path)])
@@ -253,3 +253,14 @@ export async function commit(cwd: string, message: string): Promise<string> {
 }
 
 export * from './ops'
+export * from './status'
+export * from './upstream'
+export * from './remote'
+export * from './remote-error'
+export * from './failure'
+export * from './discard'
+export * from './compare'
+export * from './history'
+export * from './diffs'
+export * from './conflicts'
+export * from './huge'

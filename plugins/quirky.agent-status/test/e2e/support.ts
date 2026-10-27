@@ -37,31 +37,40 @@ export async function startStatusE2E(options: StartOptions = {}): Promise<Status
     QUIRKY_TEST_AGENT_TIME_SCALE: String(options.timeScale ?? 1),
     ...options.extraEnv
   }
-  let restarted: ReturnType<typeof Bun.spawn> | undefined
-  let cleaning: Promise<void> | undefined
 
-  const waitForDaemon = async (notPid: number) => {
-    const deadline = Date.now() + 20_000
-    for (;;) {
-      const info = readRuntime(base.home)
-      if (info && info.pid !== notPid && (await isDaemonAlive(info))) return
-      if (Date.now() > deadline) throw new Error('timed out waiting for the restarted quirkyd')
-      await Bun.sleep(25)
-    }
-  }
 
   const harness: StatusE2E = {
     ...base,
     async restartDaemon() {
-      const old = readRuntime(base.home)!
-      process.kill(old.pid, 'SIGTERM')
-      const deadline = Date.now() + 10_000
-      while (await isDaemonAlive(old)) {
-        if (Date.now() > deadline) throw new Error('the old quirkyd did not stop')
-        await Bun.sleep(25)
+      try {
+        const old = readRuntime(base.home)!
+        process.kill(old.pid, 'SIGTERM')
+        const deadline = Date.now() + 10_000
+        while (await isDaemonAlive(old)) {
+          if (Date.now() > deadline) throw new Error('the old quirkyd did not stop')
+          await Bun.sleep(25)
+        }
+        const proc = base.processScope.spawn([process.execPath, DAEMON_MAIN], {
+          env: { ...env, ...base.processScope.env },
+          stdout: 'ignore',
+          stderr: 'ignore'
+        })
+        const restartDeadline = Date.now() + 20_000
+        for (;;) {
+          if (proc.exitCode !== null) throw new Error(`the restarted quirkyd exited ${proc.exitCode}`)
+          const info = readRuntime(base.home)
+          if (info && info.pid !== old.pid && (await isDaemonAlive(info))) break
+          if (Date.now() > restartDeadline) throw new Error('timed out waiting for the restarted quirkyd')
+          await Bun.sleep(25)
+        }
+      } catch (error) {
+        try {
+          await base.cleanup()
+        } catch (cleanupError) {
+          throw new AggregateError([error, cleanupError], 'status E2E daemon restart and cleanup failed')
+        }
+        throw error
       }
-      restarted = Bun.spawn([process.execPath, DAEMON_MAIN], { env, stdout: 'ignore', stderr: 'ignore' })
-      await waitForDaemon(old.pid)
     },
     put(relative, content) {
       const path = join(base.userHome, relative)
@@ -75,7 +84,7 @@ export async function startStatusE2E(options: StartOptions = {}): Promise<Status
     },
     async shim(source, sessionId, payload, shimOptions = {}) {
       const identity = JSON.parse(readFileSync(join(base.home, 'daemon-identity.json'), 'utf8')) as { hookToken: string }
-      const proc = Bun.spawn([join(base.home, 'bin', 'quirky-hook'), source], {
+      const proc = base.processScope.spawn([join(base.home, 'bin', 'quirky-hook'), source], {
         env: {
           PATH: '/usr/bin:/bin',
           HOME: base.userHome,
@@ -83,7 +92,8 @@ export async function startStatusE2E(options: StartOptions = {}): Promise<Status
           QUIRKY_SESSION_ID: sessionId,
           QUIRKY_HOOK_TOKEN: identity.hookToken,
           ...(shimOptions.pid === undefined ? {} : { QUIRKY_HOOK_AGENT_PID: String(shimOptions.pid) }),
-          ...(shimOptions.event === undefined ? {} : { QUIRKY_HOOK_EVENT: shimOptions.event })
+          ...(shimOptions.event === undefined ? {} : { QUIRKY_HOOK_EVENT: shimOptions.event }),
+          ...base.processScope.env
         },
         stdin: new TextEncoder().encode(typeof payload === 'string' ? payload : JSON.stringify(payload)),
         stdout: 'pipe',
@@ -91,17 +101,6 @@ export async function startStatusE2E(options: StartOptions = {}): Promise<Status
       })
       const [stdout, code] = await Promise.all([new Response(proc.stdout as ReadableStream).text(), proc.exited])
       return { code, stdout }
-    },
-    cleanup() {
-      cleaning ??= (async () => {
-        if (restarted && restarted.exitCode === null) {
-          restarted.kill('SIGTERM')
-          await Promise.race([restarted.exited, Bun.sleep(5000)])
-          if (restarted.exitCode === null) restarted.kill('SIGKILL')
-        }
-        await base.cleanup()
-      })()
-      return cleaning
     }
   }
   return harness

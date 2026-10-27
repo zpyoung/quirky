@@ -5,21 +5,36 @@ import { ensureDaemon, quirkyHome, rpcUrl, type RuntimeInfo } from '@quirky/prot
 import { BrowserWindow, Tray, Utils, app } from 'electrobun/main'
 import { maintainConnection } from './connection'
 import { setDockBadge } from './dock'
-import { badgeLabel, createBadgeUpdater, loadBadgeInputs, notificationFor, shouldRefreshBadge } from './events'
+import {
+  TRAY_MENU,
+  attentionIn,
+  badgeLabel,
+  createBadgeUpdater,
+  loadBadge,
+  loadShowMenuBarIcon,
+  notificationFor,
+  shouldRefreshBadge,
+  showMenuBarIconIn,
+  soundIn,
+  trayState,
+  type TrayInput,
+  type TrayState
+} from './events'
 import { daemonUrl, errorPageHtml } from './page'
-import { resolveRuntimeEnv } from './paths'
+import { resolveRuntimeEnv, trayDotPath } from './paths'
+import { playSound } from './sound'
 
 const WINDOW_TITLE = 'Quirky'
+const SETTINGS_VIEW_ID = 'view:quirky.notifications/settings'
 
-Object.assign(
-  process.env,
-  resolveRuntimeEnv({
-    packaged: app.isPackaged,
-    moduleDir: import.meta.dir,
-    env: process.env,
-    exists: existsSync
-  })
-)
+const pathOptions = {
+  packaged: app.isPackaged,
+  moduleDir: import.meta.dir,
+  env: process.env,
+  exists: existsSync
+}
+
+Object.assign(process.env, resolveRuntimeEnv(pathOptions))
 
 const logPath = join(quirkyHome(), 'logs', 'daemon.log')
 let stopping = false
@@ -63,6 +78,7 @@ function createWindow(content: { html: string | null; url: string | null }): Bro
     stopping = true
     window = null
   })
+  created.on('focus', () => applyTray({ type: 'focus' }))
   return created
 }
 
@@ -73,30 +89,75 @@ function showWindow(): void {
   }
 }
 
-const tray = new Tray({ title: 'Q' })
-tray.setMenu([
-  { type: 'normal', label: 'Show Quirky', action: 'show' },
-  { type: 'divider' },
-  { type: 'normal', label: 'Quit Quirky', action: 'quit' }
-])
-tray.on('tray-clicked', (event) => {
+function onTrayClicked(event: unknown): void {
   const action = (event as { data?: { action?: string } }).data?.action
   if (action === 'show') showWindow()
+  if (action === 'settings') {
+    showWindow()
+    void client?.callAny('ui.view.open', { id: SETTINGS_VIEW_ID }).catch((error) => {
+      console.warn('opening notification settings failed:', error)
+    })
+  }
   if (action === 'quit') {
     stopping = true
     app.quit()
   }
-})
+}
+
+const trayDotImage = trayDotPath(pathOptions)
+let trayModel: TrayState = { visible: true, dot: false }
+let tray: Tray | null = null
+let trayShowsDot = false
+
+function createTray(dot: boolean): Tray {
+  const created = dot
+    ? new Tray({ title: 'Q', image: trayDotImage, template: false, width: 16, height: 16 })
+    : new Tray({ title: 'Q' })
+  created.setMenu(TRAY_MENU)
+  created.on('tray-clicked', onTrayClicked)
+  return created
+}
+
+function renderTray(): void {
+  if (!tray || trayShowsDot !== trayModel.dot) {
+    tray?.remove()
+    tray = createTray(trayModel.dot)
+    trayShowsDot = trayModel.dot
+  }
+  tray.setVisible(trayModel.visible)
+}
+
+function applyTray(input: TrayInput): void {
+  trayModel = trayState(trayModel, input)
+  renderTray()
+}
+
+function windowIsVisible(): boolean {
+  return window !== null && window.isVisible() && !window.isMinimized()
+}
+
+renderTray()
+
+app.on('before-quit', () => setDockBadge(''))
 
 let client: QuirkyClient | null = null
 const badge = createBadgeUpdater({
   load: async () => {
     const connected = client
     if (!connected) throw new Error('not connected')
-    return loadBadgeInputs((method, params) => connected.callAny(method, params))
+    return loadBadge((method, params) => connected.callAny(method, params))
   },
   apply: (count) => setDockBadge(badgeLabel(count))
 })
+
+async function refreshShowMenuBarIcon(connected: QuirkyClient): Promise<void> {
+  try {
+    const value = await loadShowMenuBarIcon((method, params) => connected.callAny(method, params))
+    applyTray({ type: 'showMenuBarIcon', value })
+  } catch (error) {
+    console.warn('reading Show Menu Bar Icon failed:', error)
+  }
+}
 
 let latest: RuntimeInfo | null = null
 
@@ -122,9 +183,19 @@ void maintainConnection({
     client = connected
     connected.onEvent((event) => {
       const notification = notificationFor(event)
-      if (notification) Utils.showNotification(notification)
+      if (notification) {
+        Utils.showNotification({ title: notification.title, body: notification.body, silent: notification.silent })
+        if (notification.soundFile) playSound(notification.soundFile, notification.volume)
+      }
+      const sound = soundIn(event)
+      if (sound) playSound(sound.file, sound.volume)
+      if (attentionIn(event)) applyTray({ type: 'attention', windowVisible: windowIsVisible() })
+      const showMenuBarIcon = showMenuBarIconIn(event)
+      if (showMenuBarIcon !== null) applyTray({ type: 'showMenuBarIcon', value: showMenuBarIcon })
+      if (event.type === 'plugin.changed') void refreshShowMenuBarIcon(connected)
       if (shouldRefreshBadge(event)) void badge.refresh()
     })
+    void refreshShowMenuBarIcon(connected)
     void badge.refresh()
   },
   onDisconnected: () => {

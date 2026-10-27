@@ -66,6 +66,8 @@ export type PluginContext = {
   openStore(migrations: StoreMigration[]): PluginStore
   /** The current value of a setting: a short name in this plugin's own namespace, or a full setting ID. */
   getSetting(name: string): unknown
+  /** The raw stored value of any setting ID, declared or not, or undefined when none is stored. */
+  storedSettingValue(id: string): unknown
   /** Builds an Error that the RPC layer reports with the code for `kind`. */
   error(kind: PluginErrorKind, message: string): Error
   /** The Quirky home directory. */
@@ -139,6 +141,10 @@ export type PluginNotification = {
   open?: { view: string; input?: unknown }
   /** Whether the desktop shell shows a native notification; defaults to true. */
   desktop?: boolean
+  /** A sound to play; `file: null` is the system sound, `volume` is 0-100. Absent means silent. */
+  sound?: { file: string | null; volume: number }
+  /** Whether the webview shows a toast; defaults to true. */
+  toast?: boolean
 }
 
 /** The kernel half of launching a session. */
