@@ -199,12 +199,25 @@ describe('subscribe', () => {
   test('a wrapped tail replays from a line boundary and still joins the live stream exactly', async () => {
     const host = startHost({ tailBytes: 128 })
     const first = await host.connect()
-    await first.request('create', createParams('w', ['/bin/cat']))
+    await first.request(
+      'create',
+      {
+        ...createParams('w', sh("stty -echo && printf '\\033]777;quirky-shell-ready\\007' && exec /bin/cat")),
+        shellReady: true
+      }
+    )
     const whole = collect(first, 'w')
     await first.request('subscribe', { sessionId: 'w' })
+    await waitFor(
+      () => host.server.manager.list().find((session) => session.sessionId === 'w')?.shellState === 'ready',
+      5000,
+      'cat ready'
+    )
     const lines = Array.from({ length: 40 }, (_, i) => `line-${i}\n`).join('')
+    const expectedBulk = lines.replace(/\n/g, '\r\n')
     first.sendInput('w', new TextEncoder().encode(lines))
-    await waitFor(() => occurrences(whole.text(), 'line-39') >= 2, 5000, 'bulk output')
+    await waitFor(() => whole.text().endsWith(expectedBulk), 5000, 'bulk output')
+    expect(whole.text()).toBe(expectedBulk)
 
     const { sub, live } = await subscribeRaw(host, 'w')
     const replay = base64ToBytes(sub.replay)
@@ -216,8 +229,10 @@ describe('subscribe', () => {
     expect(full[start - 1]).toBe('\n')
     expect(text(replay)).toBe(full.slice(start))
 
+    const expectedTail = 'tail-end\r\n'
     first.sendInput('w', new TextEncoder().encode('tail-end\n'))
-    await waitFor(() => occurrences(whole.text(), 'tail-end') >= 2, 5000, 'more output')
+    await waitFor(() => whole.text().endsWith(expectedTail), 5000, 'more output')
+    expect(whole.text()).toBe(full + expectedTail)
     await waitFor(() => sub.offset + live.all().length === whole.all().length, 5000, 'live catches up')
     expect(text(concat([replay, live.all()]))).toBe(whole.text().slice(start))
   })

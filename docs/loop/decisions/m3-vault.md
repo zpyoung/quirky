@@ -550,5 +550,27 @@
 - **Revisit if:** The rebuilt merged surface differs or an optional startup credential owner becomes a hard Vault dependency.
 - **Source:** locked by LOOP.md test-state isolation and core UI verification
 
+## D51: Follow the landed inline hook-settings contract without a forwarding pin
+- **Question:** Should the external-resume test keep requiring a generated hook-settings filepath?
+- **Options:** Restore the old representation; re-pin the new JSON text; remove the obsolete call-payload assertion and retain actual launch effects.
+- **Chose:** Delete the forwarded prepareResume payload/path assertion and its unused fakeAgents import. Keep the returned provider identity and actual PTY cwd/argv/configured-model/user-env checks.
+- **Why:** Session Info's landed hook runner recursively merges jsonArgs and serializes inline --settings JSON. prepareResume still takes hookArgs/hookEnv; external resume already propagates them correctly. The old path was not a consumer contract.
+- **Evidence:** m3-session-info D1-D48 and fix-flaky-quirky-git-files-scenarios D1-D7 read completely; public external resume passes6 cases21 assertions after removal. Incoming Session Info's typed UI fake was migrated to the three required command-drag methods; typecheck exits0. No production hook or Vault launch logic changed.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** Real CLI arguments, user environment or provider identity differ from the requested resume.
+- **Source:** locked by the landed launch-hook contract and behavior-based test policy
+
+## D52: Separate replay-boundary proof from terminal echo and startup timing
+- **Question:** What does the persistent wrapped-tail test's duplicate line-39 wait actually prove?
+- **Options:** Raise the timeout/retry; weaken replay assertions; control echo/readiness and keep exact stream invariants.
+- **Chose:** Start the fixture with stty -echo, emit the existing shell-ready marker, wait for ready, then assert exact single-copy bulk and tail output. Retain bounded128-byte replay, line-start alignment, offset agreement and exact replay-plus-live joining.
+- **Why:** The failure occurs before subscribeRaw, while the fixture implicitly requires both terminal echo and cat output. That cannot establish a replay defect. Explicit process state isolates the boundary under test without a production change, budget increase or retry.
+- **Evidence:** Land's isolated case timed out before replay. The corrected full PTY file passes32 cases71 assertions on its isolated remote run; the three-file PTY/external-resume/Session-Info run returns ok with only host.test.ts reported flaky after guardian startup failures under load. Typecheck passes and the current14-plugin package builds.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** Controlled output is lost/duplicated or replay/live offsets disagree.
+- **Source:** assumed — autonomous, preserving the blocking consumer stream invariant
+
 ## Progress
-Core implementation and blocking integration fixes pass:266 remote affected files plus2macOS-only files, typecheck with frozen install, packaged build and all4 final core web goals. Required active-account behavior has6 passing public API cases. The single final review/fix batch and both parity completion items remain recorded. No protected-loop edit, type shim, manual whole suite or local multi-package run was used for this merge. Final done status and whole-suite verification remain owned by queue.ts land.
+Core and blocking integration changes are verified:266 remote affected files plus2macOS files, final4-goal core web smoke, active-account public regressions, current typecheck/build and focused replay/hook/UI gates. Obsolete forwarding/identity pins were removed, not repinned; stream assertions remain exact. Both completion items and open nonblocking findings are recorded. Whole-suite verification and final done status remain owned by queue.ts land.

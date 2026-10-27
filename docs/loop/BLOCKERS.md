@@ -186,3 +186,7 @@ Registration update: `bun scripts/build-loop/queue.ts add /tmp/quirky-session-in
 - **Bootstrap proof:** an owned isolated checkout with Accounts node_modules deliberately removed passed the new `bun run typecheck` in 30.62 seconds, restoring dependency resolution. Product behavior is unchanged; prior consumer tests and fresh real-PTY content smoke remain applicable. The next authoritative landing must verify the final merge result.
 
 - **Protected script load sensitivity:** the next local scripts run had 59 pass/3 five-second timeouts in the Git-based lanes fixture. The unchanged affected file then passed alone: 23 tests/60 assertions; the self-contained current-tree typecheck also passed. No timeout cap/assertion or protected infrastructure file was changed. Preserve this as runner reliability evidence, not a hidden green full-scripts claim.
+
+## m3-vault: remaining worktree gate timing
+
+- **LOW — background fetch/setup-gate test race** (`plugins/quirky.worktree/test/create.test.ts:367`, `:395`). A land run saw the background-refresh wait time out and a ref-lock conflict when the setup-gate test moved its remote base. The focused remote file first reproduced the ref-lock conflict, then its required isolated retry passed all40 cases140 assertions and returned ok with the file marked flaky. No worktree implementation, assertions, timeouts or retry policy were changed in the vault item.

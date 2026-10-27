@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import { QuirkyClient, RpcErrorCode, type RpcError, type Session } from '@quirky/protocol'
 import type { Harness } from '../../../packages/daemon/test/helpers'
 import { makeTempDir, removeTempDirs } from '../../../packages/daemon/test/plugins/fixtures'
-import { fakeAgents, resetFakeAgents } from './fakes/quirky.agents/main'
+import { resetFakeAgents } from './fakes/quirky.agents/main'
 import { call, SESSION_PLUGINS, startPluginHarness } from './support'
 import { cleanupAll as cleanupAccounts, startAccounts, waitForAsync } from '../../quirky.accounts/test/support/index'
 
@@ -97,11 +97,6 @@ describe('quirky.session/resumeExternal', () => {
     expect(request.argv[3]).toContain('--model configured-model')
     expect(request.argv[3]).toContain('--resume source-session-17')
     expect(request.env).toMatchObject({ VAULT_PROVIDER_TOKEN: 'literal-secret' })
-    const plan = fakeAgents().calls.find((entry) => entry.method === 'prepareResume')?.params
-    expect(plan).toMatchObject({
-      agent: 'claude', cwd: sourceCwd, providerSession, fork: false, record,
-      hookArgs: ['--settings', `${h.home}/hooks/claude-settings.json`]
-    })
   })
 
   test('an unmanaged source cwd without an explicit destination uses floating ownership', async () => {
