@@ -9,6 +9,9 @@
   itself was already read (SC-7); a change in what the window reports as visible triggers the same
   re-check as a focus change (Data flow 7); the test notification makes no toast of its own, so the
   settings view's acknowledgment is the only one (SC-50); OSC 99 chunk state is bounded.
+- 2026-10-27, Final Round 1: SC-33 no longer expects an ESC byte inside a notification's text. An
+  ESC ends or aborts an OSC sequence before the payload is complete, so such a sequence makes no
+  notification; the cleaning applies to the controls that can reach a payload.
 
 ## Conceptual model
 
@@ -332,10 +335,11 @@ are relative to the first event.
       `o=unfocused` one marks S and is considered for a banner
 
 33. **SC-33: notification text is cleaned** (API)
-    - **When** S prints OSC 777 notify whose title holds an ESC byte, a C1 control and a tab, and
-      whose body is 400 characters
+    - **When** S prints OSC 777 notify whose title holds a C0 control, a C1 control, DEL and a tab,
+      and whose body is 400 characters; and, separately, an OSC 777 notify interrupted by a stray ESC
     - **Then** the title has no control characters and its whitespace is single spaces; the body is
-      cut to 256 characters ending in "…"
+      cut to 256 characters ending in "…"; the interrupted sequence makes no notification (an ESC
+      ends or aborts an OSC, so it can never be part of the payload)
 
 34. **SC-34: Quirky's own shell-ready marker is unchanged** (API)
     - **When** a shell starts in a session

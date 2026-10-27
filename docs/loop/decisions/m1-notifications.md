@@ -559,5 +559,15 @@
 - **Revisit if:** the leak returns as tests grow; then a person should split the suite into processes
 - **Source:** supersedes m1-term-ui D51
 
+## D56: Final Round 1: accept five of six findings; SC-33's ESC case is amended instead
+- **Question:** Final Round 1 (C, S, X at deep over the item's non-test source diff against build/roadmap at 66a6f5a; pre-pass typecheck plus the notifications, desktop, terminal window and OSC tests, all green; reviewer codex gpt-6.1-sol, independence full)
+- **Options:** fix each; reject with a reason
+- **Chose:** six MEDIUM findings, none contested, one suppressed. Accepted: floating sessions never auto-cleared outside a worktree view (C1); slow banner preparation shortened the cooldown (C2); a completion during the bell hold could miss superseding it (C3); a timed-out own write later read as Mark Read (X1); a stalled filesystem in the custom-sound check blocked the queue (X2). One fixer owns all five (same two files). Rejected S1 (an OSC 777 title with an ESC byte makes no notification): the scanner treats ESC as the start of ST or as aborting the sequence, as every terminal does, so an ESC can't be in a payload; the spec's SC-33 asked for the impossible, and is amended (logic.md amendments) rather than the parser.
+- **Why:** each accepted finding was reproduced; S1's expected behaviour contradicts how OSC sequences end (ECMA-48 string terminator)
+- **Evidence:** fr1/{C,S,X}-gate.json in the session scratchpad; packages/pty-host/src/scanner.ts OSC state
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** assumed — autonomous
+
 ## Progress
 W1–W3 and both checkpoint fix batches merged; caught up with build/roadmap (m1-term-ui) at 9fcea51. In flight: the term-ui obligations task (bell in the terminal strip, `visibleSessions` from the terminal view and floating overlay) and the descriptor task (shared harness directories, window-presence fake). Next: merge both, full gate green, Final Round 1 (C, S, X deep over d325202..HEAD without docs), its fix batch, gate, the like-a-user web pass (SC-6, SC-46 to SC-50), docs/loop/native/m1-notifications.json, land. Briefs and run journal: session scratchpad sdd/; review drivers cp1/run_cp.py.
