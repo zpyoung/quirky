@@ -229,7 +229,8 @@
         "m1-launch-settings",
         "m1-agent-status"
       ],
-      "status": "blocked"
+      "status": "in-progress",
+      "lane": 12
     },
     {
       "id": "m6-orchestration-core",
