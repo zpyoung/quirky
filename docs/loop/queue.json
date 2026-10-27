@@ -545,6 +545,18 @@
       "status": "todo"
     },
     {
+      "id": "m4-editor-drop-open-in-place",
+      "milestone": "M4",
+      "title": "Finder drops into the editor open a file in place when it is inside the worktree and import it otherwise, as Orca does (editor SC-9). m2-editor imports every drop, by user ruling, because Electrobun 2.0.4 gives the page no source path for a dropped file (see docs/loop/decisions/m2-editor.md). Get the dropped paths through a supported Electrobun API or a newer Electrobun release and route them through the shell's typed RPC as a public event. Block with a BLOCKERS.md entry if that needs a native patch or fork, which the user hasn't approved",
+      "docs": [
+        "editor.md"
+      ],
+      "deps": [
+        "m2-editor"
+      ],
+      "status": "todo"
+    },
+    {
       "id": "m7-parity-sweep",
       "milestone": "M7",
       "title": "Parity sweep: every remaining flow in the 28 feature docs",
