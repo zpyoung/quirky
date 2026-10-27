@@ -115,6 +115,32 @@ function crashImage(home: string): string {
   return copy
 }
 
+/** A stored session on disk whose log is `output`, with a stale meta cwd. */
+function storedSession(sessionId: string, output: string, metaCwd = '/qm-stale'): string {
+  const home = tempHome()
+  const dir = dirOf(home, sessionId)
+  mkdirSync(dir, { recursive: true })
+  const log = HistoryLog.create(dir, { cols: 80, rows: 24 })
+  log.appendOutput(enc(output))
+  log.close()
+  writeMeta(dir, {
+    version: 1,
+    sessionId,
+    argv: ['/bin/cat'],
+    startCwd: metaCwd,
+    cwd: metaCwd,
+    cols: 80,
+    rows: 24,
+    createdAt: Date.now(),
+    endedAt: null,
+    exitCode: null,
+    exitSignal: null,
+    exitCause: null,
+    restorable: false
+  })
+  return home
+}
+
 function tempDir(): string {
   const dir = realpathSync(mkdtempSync(join(tmpdir(), 'qm-')))
   onCleanup(() => rmSync(dir, { recursive: true, force: true }))
@@ -829,5 +855,66 @@ describe('shutdown and stored sessions', () => {
     )
     await Bun.sleep(100)
     expect(existsSync(dirOf(home, 'f'))).toBe(false)
+  })
+})
+
+describe('removed sinks and shutdown races', () => {
+  test('a sink removed while its screen subscribe settles is never registered', async () => {
+    const { manager } = newManager()
+    await manager.create(params('r', sh('echo hi; sleep 30')))
+    await readUntil(manager, 'r', 0, (lines) => lines.includes('hi'))
+
+    const gone = () => {}
+    const unsubscribed = manager.subscribe('r', gone)
+    manager.unsubscribe('r', gone)
+    await expect(unsubscribed).rejects.toThrow('subscription cancelled')
+    expect(manager.subscriberCount('r')).toBe(0)
+
+    const dropped = manager.subscribe('r', gone)
+    manager.dropSink(gone)
+    await expect(dropped).rejects.toThrow('subscription cancelled')
+    expect(manager.subscriberCount('r')).toBe(0)
+
+    const kept = () => {}
+    const other = manager.subscribe('r', kept)
+    manager.dropSink(gone)
+    await other
+    expect(manager.subscriberCount('r')).toBe(1)
+  })
+
+  test('forgetting a session cancels a subscribe that is still settling', async () => {
+    const { manager } = newManager()
+    await manager.create(params('r', sh('echo hi; sleep 30')))
+    await readUntil(manager, 'r', 0, (lines) => lines.includes('hi'))
+    const pending = manager.subscribe('r', () => {})
+    manager.forget('r')
+    await expect(pending).rejects.toThrow()
+  })
+
+  test('a stored session reports the cwd the rebuild recovered, not the stale meta cwd', async () => {
+    const root = tempDir()
+    const home = storedSession('c', `\x1b]7;file://h${root}\x07done\r\n`)
+    const { manager } = newManager({}, home)
+    expect((await manager.snapshot('c')).cwd).toBe(root)
+  })
+
+  test('a stored session read reports the alternate screen from the rebuilt screen', async () => {
+    const home = storedSession('a', '\x1b[?1049hfullscreen\r\n')
+    const { manager } = newManager({}, home)
+    const result = await manager.read('a', 5)
+    expect(result.alt).toBe(true)
+    expect(result.lines).toContain('fullscreen')
+  })
+
+  test('a restore still replaying from disk when shutdown begins does not spawn and stays restorable', async () => {
+    const home = storedSession('w', 'old-1\r\n')
+    const { manager } = newManager({}, home)
+    const restoring = manager.create(params('w', ['/bin/cat'], { restore: true }))
+    const stopped = manager.shutdown()
+    await expect(restoring).rejects.toThrow('Terminal host is shutting down')
+    await stopped
+    expect(manager.isAlive('w')).toBe(false)
+    expect(manager.list()).toMatchObject([{ sessionId: 'w', state: 'restorable' }])
+    await expect(manager.create(params('n', ['/bin/cat']))).rejects.toThrow('Terminal host is shutting down')
   })
 })
