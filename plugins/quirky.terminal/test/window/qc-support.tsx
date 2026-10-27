@@ -10,6 +10,7 @@ type Modules = {
   dialog: typeof import('../../src/window/quick-commands/QuickCommandDialog')
   strip: typeof import('../../src/window/quick-commands/QuickCommandsStripButton')
   items: typeof import('../../src/window/quick-commands/pane-items')
+  shared: typeof import('../../src/window/quick-commands/shared')
 }
 
 let modules: Modules
@@ -25,7 +26,8 @@ export async function loadQuickCommands(): Promise<void> {
     panel: await import('../../src/window/quick-commands/QuickCommandsPanel'),
     dialog: await import('../../src/window/quick-commands/QuickCommandDialog'),
     strip: await import('../../src/window/quick-commands/QuickCommandsStripButton'),
-    items: await import('../../src/window/quick-commands/pane-items')
+    items: await import('../../src/window/quick-commands/pane-items'),
+    shared: await import('../../src/window/quick-commands/shared')
   }
 }
 

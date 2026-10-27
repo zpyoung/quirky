@@ -21,31 +21,32 @@ export function summaryOf(command: QuickCommand): string {
 export function useQuickCommands(context: UiPluginContext, workspace: string | 'all' | null): { commands: QuickCommand[]; loaded: boolean; refresh(): Promise<void> } {
   const [commands, setCommands] = useState<QuickCommand[]>([])
   const [loaded, setLoaded] = useState(false)
-  const mounted = useRef(true)
+  const latest = useRef(0)
 
   const refresh = useCallback(async () => {
     if (workspace === null) return
+    const generation = ++latest.current
     try {
       const params = workspace === 'all' ? { all: true } : { workspace }
       const result = (await context.call('quirky.terminal/quickCommands', params)) as { commands: QuickCommand[] }
-      if (mounted.current) {
+      if (generation === latest.current) {
         setCommands(result.commands)
         setLoaded(true)
       }
     } catch (error) {
-      if (mounted.current) setLoaded(true)
+      if (generation !== latest.current) return
+      setLoaded(true)
       context.toast('Could not load quick commands', messageOf(error))
     }
   }, [context, workspace])
 
   useEffect(() => {
-    mounted.current = true
     void refresh()
     const unsubscribe = context.subscribe((event) => {
       if (event.type === QUICK_COMMANDS_EVENT) void refresh()
     })
     return () => {
-      mounted.current = false
+      latest.current++
       unsubscribe()
     }
   }, [context, refresh])
