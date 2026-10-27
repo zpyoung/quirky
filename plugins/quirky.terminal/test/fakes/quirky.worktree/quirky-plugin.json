@@ -1,0 +1,24 @@
+{
+  "id": "quirky.worktree",
+  "name": "Worktree (test fake)",
+  "version": "0.0.0",
+  "main": "main.ts",
+  "activation": "startup",
+  "contributes": {
+    "method": [
+      {
+        "id": "resolve",
+        "readOnly": true,
+        "params": {
+          "type": "object",
+          "properties": {
+            "selector": { "type": "string" },
+            "cwd": { "type": "string" },
+            "worktreeId": { "type": "string" }
+          },
+          "required": ["selector"]
+        }
+      }
+    ]
+  }
+}

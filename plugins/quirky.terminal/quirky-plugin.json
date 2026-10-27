@@ -560,6 +560,1352 @@
             "pid"
           ]
         }
+      },
+      {
+        "id": "workspace",
+        "description": "A workspace's layout. With `ensure`, a workspace without tabs gets its first one (adopting sessions that no pane holds).",
+        "params": {
+          "type": "object",
+          "properties": {
+            "workspace": {
+              "type": "string",
+              "description": "A worktree selector or `floating`; default the caller's worktree."
+            },
+            "ensure": {
+              "type": "boolean",
+              "description": "Create the first tab when there is none."
+            }
+          }
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "workspace": {
+              "type": "object",
+              "description": "The whole workspace after the change, with its new revision."
+            }
+          },
+          "required": [
+            "workspace"
+          ]
+        }
+      },
+      {
+        "id": "newTab",
+        "description": "Starts a session and opens it as a tab at the end of a group.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "workspace": {
+              "type": "string",
+              "description": "A worktree selector or `floating`; default the caller's worktree."
+            },
+            "group": {
+              "type": "string",
+              "description": "The group; default the active group."
+            },
+            "cwd": {
+              "type": "string",
+              "description": "An existing absolute directory to start in."
+            },
+            "agent": {
+              "type": "string",
+              "description": "The agent to start; default `shell`."
+            },
+            "prompt": {
+              "type": "string",
+              "description": "The first prompt of an agent."
+            },
+            "title": {
+              "type": "string",
+              "description": "The default title; at most 200 characters."
+            },
+            "quickCommand": {
+              "type": "string",
+              "description": "The quick command this tab runs, remembered on the group."
+            },
+            "revision": {
+              "type": "integer",
+              "description": "Fails with a conflict naming the current revision when the workspace is at another one."
+            }
+          }
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "workspace": {
+              "type": "object",
+              "description": "The whole workspace after the change, with its new revision."
+            }
+          },
+          "required": [
+            "workspace"
+          ]
+        }
+      },
+      {
+        "id": "closeTab",
+        "description": "Closes a tab and ends its sessions; the tab can be reopened.",
+        "destructive": true,
+        "confirm": "Close tab {tab}?",
+        "describe": "describeClose",
+        "params": {
+          "type": "object",
+          "properties": {
+            "tab": {
+              "type": "string",
+              "description": "The tab ID."
+            },
+            "revision": {
+              "type": "integer",
+              "description": "Fails with a conflict naming the current revision when the workspace is at another one."
+            }
+          },
+          "required": [
+            "tab"
+          ]
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "workspace": {
+              "type": "object",
+              "description": "The whole workspace after the change, with its new revision."
+            }
+          },
+          "required": [
+            "workspace"
+          ]
+        }
+      },
+      {
+        "id": "closeTabs",
+        "description": "Closes the unpinned tabs on one side of a tab, or all others, and ends their sessions.",
+        "destructive": true,
+        "confirm": "Close the {which} tabs of {tab}?",
+        "describe": "describeClose",
+        "params": {
+          "type": "object",
+          "properties": {
+            "tab": {
+              "type": "string",
+              "description": "The tab ID."
+            },
+            "which": {
+              "type": "string",
+              "description": "Which tabs to close.",
+              "enum": [
+                "others",
+                "right",
+                "left"
+              ]
+            },
+            "revision": {
+              "type": "integer",
+              "description": "Fails with a conflict naming the current revision when the workspace is at another one."
+            }
+          },
+          "required": [
+            "tab",
+            "which"
+          ]
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "workspace": {
+              "type": "object",
+              "description": "The whole workspace after the change, with its new revision."
+            }
+          },
+          "required": [
+            "workspace"
+          ]
+        }
+      },
+      {
+        "id": "describeClose",
+        "description": "The question asked before closing: null when no target session has a running command or is a live agent.",
+        "readOnly": true,
+        "params": {
+          "type": "object",
+          "properties": {
+            "tab": {
+              "type": "string",
+              "description": "The tab ID."
+            },
+            "pane": {
+              "type": "string",
+              "description": "The pane ID."
+            },
+            "session": {
+              "type": "string",
+              "description": "The session shown by the pane, instead of `pane`."
+            },
+            "which": {
+              "type": "string",
+              "description": "With `tab`, the side whose tabs close.",
+              "enum": [
+                "others",
+                "right",
+                "left"
+              ]
+            },
+            "revision": {
+              "type": "integer",
+              "description": "Fails with a conflict naming the current revision when the workspace is at another one."
+            }
+          }
+        },
+        "result": {
+          "description": "The question as text, or null when nothing needs confirming."
+        }
+      },
+      {
+        "id": "renameTab",
+        "description": "Sets a tab's custom title; the empty string clears it.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "tab": {
+              "type": "string",
+              "description": "The tab ID."
+            },
+            "title": {
+              "type": "string",
+              "description": "At most 200 characters."
+            },
+            "revision": {
+              "type": "integer",
+              "description": "Fails with a conflict naming the current revision when the workspace is at another one."
+            }
+          },
+          "required": [
+            "tab",
+            "title"
+          ]
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "workspace": {
+              "type": "object",
+              "description": "The whole workspace after the change, with its new revision."
+            }
+          },
+          "required": [
+            "workspace"
+          ]
+        }
+      },
+      {
+        "id": "setTabColor",
+        "description": "Sets a tab's colour.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "tab": {
+              "type": "string",
+              "description": "The tab ID."
+            },
+            "color": {
+              "type": "string",
+              "description": "A colour name.",
+              "enum": [
+                "none",
+                "blue",
+                "purple",
+                "pink",
+                "red",
+                "orange",
+                "yellow",
+                "green",
+                "teal",
+                "gray"
+              ]
+            },
+            "revision": {
+              "type": "integer",
+              "description": "Fails with a conflict naming the current revision when the workspace is at another one."
+            }
+          },
+          "required": [
+            "tab",
+            "color"
+          ]
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "workspace": {
+              "type": "object",
+              "description": "The whole workspace after the change, with its new revision."
+            }
+          },
+          "required": [
+            "workspace"
+          ]
+        }
+      },
+      {
+        "id": "pinTab",
+        "description": "Pins or unpins a tab; pinned tabs sort before unpinned ones.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "tab": {
+              "type": "string",
+              "description": "The tab ID."
+            },
+            "pinned": {
+              "type": "boolean"
+            },
+            "revision": {
+              "type": "integer",
+              "description": "Fails with a conflict naming the current revision when the workspace is at another one."
+            }
+          },
+          "required": [
+            "tab",
+            "pinned"
+          ]
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "workspace": {
+              "type": "object",
+              "description": "The whole workspace after the change, with its new revision."
+            }
+          },
+          "required": [
+            "workspace"
+          ]
+        }
+      },
+      {
+        "id": "moveTab",
+        "description": "Moves a tab to a position in a group, or into a new group beside one.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "tab": {
+              "type": "string",
+              "description": "The tab ID."
+            },
+            "group": {
+              "type": "string",
+              "description": "The target group, with `index`."
+            },
+            "index": {
+              "type": "integer",
+              "description": "0-based position in the group; default the end.",
+              "minimum": 0
+            },
+            "split": {
+              "type": "string",
+              "description": "Open a new group on this side instead.",
+              "enum": [
+                "right",
+                "left",
+                "down",
+                "up"
+              ]
+            },
+            "of": {
+              "type": "string",
+              "description": "The group the new group opens beside; default the tab's group."
+            },
+            "revision": {
+              "type": "integer",
+              "description": "Fails with a conflict naming the current revision when the workspace is at another one."
+            }
+          },
+          "required": [
+            "tab"
+          ]
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "workspace": {
+              "type": "object",
+              "description": "The whole workspace after the change, with its new revision."
+            }
+          },
+          "required": [
+            "workspace"
+          ]
+        }
+      },
+      {
+        "id": "activateTab",
+        "description": "Activates a tab by ID, by 1-based index in a group, or the next or previous one.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "tab": {
+              "type": "string",
+              "description": "The tab ID."
+            },
+            "workspace": {
+              "type": "string",
+              "description": "A worktree selector or `floating`; default the caller's worktree."
+            },
+            "group": {
+              "type": "string",
+              "description": "With `index`, the group; default the active group."
+            },
+            "index": {
+              "type": "integer",
+              "description": "1-based position in the group.",
+              "minimum": 1
+            },
+            "offset": {
+              "type": "integer",
+              "description": "1 for the next tab, -1 for the previous one; wraps.",
+              "enum": [
+                1,
+                -1
+              ]
+            },
+            "order": {
+              "type": "string",
+              "description": "Whether `offset` follows strip position or recent use.",
+              "enum": [
+                "position",
+                "recent"
+              ]
+            },
+            "revision": {
+              "type": "integer",
+              "description": "Fails with a conflict naming the current revision when the workspace is at another one."
+            }
+          }
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "workspace": {
+              "type": "object",
+              "description": "The whole workspace after the change, with its new revision."
+            }
+          },
+          "required": [
+            "workspace"
+          ]
+        }
+      },
+      {
+        "id": "reopenTab",
+        "description": "Reopens the newest closed tab as a fresh session with its title, colour, directory and agent.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "workspace": {
+              "type": "string",
+              "description": "A worktree selector or `floating`; default the caller's worktree."
+            },
+            "revision": {
+              "type": "integer",
+              "description": "Fails with a conflict naming the current revision when the workspace is at another one."
+            }
+          }
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "workspace": {
+              "type": "object",
+              "description": "The whole workspace after the change, with its new revision."
+            }
+          },
+          "required": [
+            "workspace"
+          ]
+        }
+      },
+      {
+        "id": "splitPane",
+        "description": "Splits a pane; the new shell starts in the source pane's directory.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "pane": {
+              "type": "string",
+              "description": "The pane ID; or pass `session` to name the pane showing it."
+            },
+            "session": {
+              "type": "string",
+              "description": "The session shown by the pane, instead of `pane`."
+            },
+            "direction": {
+              "type": "string",
+              "description": "Where the new pane goes.",
+              "enum": [
+                "right",
+                "down"
+              ]
+            },
+            "revision": {
+              "type": "integer",
+              "description": "Fails with a conflict naming the current revision when the workspace is at another one."
+            }
+          },
+          "required": [
+            "direction"
+          ]
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "workspace": {
+              "type": "object",
+              "description": "The whole workspace after the change, with its new revision."
+            }
+          },
+          "required": [
+            "workspace"
+          ]
+        }
+      },
+      {
+        "id": "closePane",
+        "description": "Closes a pane and ends its session; a tab's only pane closes the tab.",
+        "destructive": true,
+        "confirm": "Close pane {pane}?",
+        "describe": "describeClose",
+        "params": {
+          "type": "object",
+          "properties": {
+            "pane": {
+              "type": "string",
+              "description": "The pane ID; or pass `session` to name the pane showing it."
+            },
+            "session": {
+              "type": "string",
+              "description": "The session shown by the pane, instead of `pane`."
+            },
+            "revision": {
+              "type": "integer",
+              "description": "Fails with a conflict naming the current revision when the workspace is at another one."
+            }
+          }
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "workspace": {
+              "type": "object",
+              "description": "The whole workspace after the change, with its new revision."
+            }
+          },
+          "required": [
+            "workspace"
+          ]
+        }
+      },
+      {
+        "id": "restartPane",
+        "description": "Replaces the ended session of a pane with a fresh shell in the same directory.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "pane": {
+              "type": "string",
+              "description": "The pane ID; or pass `session` to name the pane showing it."
+            },
+            "session": {
+              "type": "string",
+              "description": "The session shown by the pane, instead of `pane`."
+            },
+            "revision": {
+              "type": "integer",
+              "description": "Fails with a conflict naming the current revision when the workspace is at another one."
+            }
+          }
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "workspace": {
+              "type": "object",
+              "description": "The whole workspace after the change, with its new revision."
+            }
+          },
+          "required": [
+            "workspace"
+          ]
+        }
+      },
+      {
+        "id": "focusPane",
+        "description": "Focuses a pane (and activates its tab and group), or moves focus to the next or previous pane of a tab.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "pane": {
+              "type": "string",
+              "description": "The pane ID; or pass `session` to name the pane showing it."
+            },
+            "session": {
+              "type": "string",
+              "description": "The session shown by the pane, instead of `pane`."
+            },
+            "tab": {
+              "type": "string",
+              "description": "With `offset`, the tab; default the active tab."
+            },
+            "workspace": {
+              "type": "string",
+              "description": "A worktree selector or `floating`; default the caller's worktree."
+            },
+            "offset": {
+              "type": "integer",
+              "description": "1 for the next pane, -1 for the previous one; wraps.",
+              "enum": [
+                1,
+                -1
+              ]
+            },
+            "revision": {
+              "type": "integer",
+              "description": "Fails with a conflict naming the current revision when the workspace is at another one."
+            }
+          }
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "workspace": {
+              "type": "object",
+              "description": "The whole workspace after the change, with its new revision."
+            }
+          },
+          "required": [
+            "workspace"
+          ]
+        }
+      },
+      {
+        "id": "setPaneTitle",
+        "description": "Sets a pane's title; the empty string clears it.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "pane": {
+              "type": "string",
+              "description": "The pane ID; or pass `session` to name the pane showing it."
+            },
+            "session": {
+              "type": "string",
+              "description": "The session shown by the pane, instead of `pane`."
+            },
+            "title": {
+              "type": "string",
+              "description": "At most 200 characters."
+            },
+            "revision": {
+              "type": "integer",
+              "description": "Fails with a conflict naming the current revision when the workspace is at another one."
+            }
+          },
+          "required": [
+            "title"
+          ]
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "workspace": {
+              "type": "object",
+              "description": "The whole workspace after the change, with its new revision."
+            }
+          },
+          "required": [
+            "workspace"
+          ]
+        }
+      },
+      {
+        "id": "expandPane",
+        "description": "Expands a pane to fill its tab, or collapses the expanded pane.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "pane": {
+              "type": "string",
+              "description": "The pane ID; or pass `session` to name the pane showing it."
+            },
+            "session": {
+              "type": "string",
+              "description": "The session shown by the pane, instead of `pane`."
+            },
+            "expanded": {
+              "type": "boolean"
+            },
+            "revision": {
+              "type": "integer",
+              "description": "Fails with a conflict naming the current revision when the workspace is at another one."
+            }
+          },
+          "required": [
+            "expanded"
+          ]
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "workspace": {
+              "type": "object",
+              "description": "The whole workspace after the change, with its new revision."
+            }
+          },
+          "required": [
+            "workspace"
+          ]
+        }
+      },
+      {
+        "id": "equalize",
+        "description": "Gives the panes of a tab equal shares.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "tab": {
+              "type": "string",
+              "description": "The tab ID."
+            },
+            "revision": {
+              "type": "integer",
+              "description": "Fails with a conflict naming the current revision when the workspace is at another one."
+            }
+          },
+          "required": [
+            "tab"
+          ]
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "workspace": {
+              "type": "object",
+              "description": "The whole workspace after the change, with its new revision."
+            }
+          },
+          "required": [
+            "workspace"
+          ]
+        }
+      },
+      {
+        "id": "resizeSplit",
+        "description": "Sets one divider: by split ID and first-side ratio, or by the share a pane or group gets of its pair.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "split": {
+              "type": "string",
+              "description": "The split ID, with `ratio`."
+            },
+            "ratio": {
+              "type": "number",
+              "description": "The first side's share."
+            },
+            "pane": {
+              "type": "string",
+              "description": "The pane ID; or pass `session` to name the pane showing it."
+            },
+            "session": {
+              "type": "string",
+              "description": "The session shown by the pane, instead of `pane`."
+            },
+            "group": {
+              "type": "string",
+              "description": "The group ID, with `share`."
+            },
+            "share": {
+              "type": "number",
+              "description": "The share the pane or group gets of its pair."
+            },
+            "revision": {
+              "type": "integer",
+              "description": "Fails with a conflict naming the current revision when the workspace is at another one."
+            }
+          }
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "workspace": {
+              "type": "object",
+              "description": "The whole workspace after the change, with its new revision."
+            }
+          },
+          "required": [
+            "workspace"
+          ]
+        }
+      },
+      {
+        "id": "movePane",
+        "description": "Moves a pane to an edge of another pane, or into another tab of the same workspace.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "pane": {
+              "type": "string",
+              "description": "The pane ID; or pass `session` to name the pane showing it."
+            },
+            "session": {
+              "type": "string",
+              "description": "The session shown by the pane, instead of `pane`."
+            },
+            "toPane": {
+              "type": "string",
+              "description": "The pane to move beside, with `edge`."
+            },
+            "edge": {
+              "type": "string",
+              "description": "Which edge of `toPane`.",
+              "enum": [
+                "left",
+                "right",
+                "top",
+                "bottom"
+              ]
+            },
+            "toTab": {
+              "type": "string",
+              "description": "The tab to move into."
+            },
+            "revision": {
+              "type": "integer",
+              "description": "Fails with a conflict naming the current revision when the workspace is at another one."
+            }
+          }
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "workspace": {
+              "type": "object",
+              "description": "The whole workspace after the change, with its new revision."
+            }
+          },
+          "required": [
+            "workspace"
+          ]
+        }
+      },
+      {
+        "id": "closeGroup",
+        "description": "Closes a group, moving its tabs to the end of the first group of the sibling side.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "group": {
+              "type": "string",
+              "description": "The group ID."
+            },
+            "revision": {
+              "type": "integer",
+              "description": "Fails with a conflict naming the current revision when the workspace is at another one."
+            }
+          },
+          "required": [
+            "group"
+          ]
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "workspace": {
+              "type": "object",
+              "description": "The whole workspace after the change, with its new revision."
+            }
+          },
+          "required": [
+            "workspace"
+          ]
+        }
+      },
+      {
+        "id": "clearPane",
+        "description": "Clears a pane's screen and scrollback, in the PTY host too.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "pane": {
+              "type": "string",
+              "description": "The pane ID; or pass `session` to name the pane showing it."
+            },
+            "session": {
+              "type": "string",
+              "description": "The session shown by the pane, instead of `pane`."
+            }
+          }
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "ok": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "ok"
+          ]
+        }
+      },
+      {
+        "id": "resetPane",
+        "description": "Turns off mouse tracking, bracketed paste and application cursor in a pane and the PTY host.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "pane": {
+              "type": "string",
+              "description": "The pane ID; or pass `session` to name the pane showing it."
+            },
+            "session": {
+              "type": "string",
+              "description": "The session shown by the pane, instead of `pane`."
+            }
+          }
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "ok": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "ok"
+          ]
+        }
+      },
+      {
+        "id": "paneOf",
+        "description": "The workspace, tab and pane that show a session.",
+        "readOnly": true,
+        "params": {
+          "type": "object",
+          "properties": {
+            "session": {
+              "type": "string",
+              "description": "The session ID."
+            }
+          },
+          "required": [
+            "session"
+          ]
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "workspace": {
+              "type": "string"
+            },
+            "tab": {
+              "type": "string"
+            },
+            "pane": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "workspace",
+            "tab",
+            "pane"
+          ]
+        }
+      },
+      {
+        "id": "floating",
+        "description": "The floating workspace's state.",
+        "readOnly": true,
+        "params": {
+          "type": "object",
+          "properties": {}
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            },
+            "open": {
+              "type": "boolean"
+            },
+            "maximized": {
+              "type": "boolean"
+            },
+            "bounds": {
+              "description": "{x, y, width, height} in window CSS px, or null for the default placement."
+            },
+            "button": {
+              "description": "{x, y}, or null for the default place."
+            }
+          },
+          "required": [
+            "enabled",
+            "open",
+            "maximized",
+            "bounds",
+            "button"
+          ]
+        }
+      },
+      {
+        "id": "setFloating",
+        "description": "Changes the floating workspace's open, maximized, bounds or button state; returns the new state.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "open": {
+              "type": "boolean"
+            },
+            "maximized": {
+              "type": "boolean"
+            },
+            "bounds": {
+              "description": "{x, y, width, height} with width >= 420 and height >= 280, or null for the default placement."
+            },
+            "button": {
+              "description": "{x, y} or null."
+            }
+          }
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            },
+            "open": {
+              "type": "boolean"
+            },
+            "maximized": {
+              "type": "boolean"
+            },
+            "bounds": {},
+            "button": {}
+          },
+          "required": [
+            "enabled",
+            "open",
+            "maximized",
+            "bounds",
+            "button"
+          ]
+        }
+      },
+      {
+        "id": "openExternal",
+        "description": "Opens an http, https or mailto link, or an absolute path, with the system handler; with `reveal`, shows the path in Finder.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "target": {
+              "type": "string",
+              "description": "The URL or absolute path."
+            },
+            "reveal": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "target"
+          ]
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "ok": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "ok"
+          ]
+        }
+      },
+      {
+        "id": "pathsExist",
+        "description": "Whether each absolute path exists.",
+        "readOnly": true,
+        "params": {
+          "type": "object",
+          "properties": {
+            "paths": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "At most 50 paths; relative paths report false."
+            }
+          },
+          "required": [
+            "paths"
+          ]
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "exists": {
+              "type": "array",
+              "items": {
+                "type": "boolean"
+              }
+            }
+          },
+          "required": [
+            "exists"
+          ]
+        }
+      },
+      {
+        "id": "quickCommands",
+        "description": "The quick commands a workspace's repo sees (its own plus global ones), or every command with `all`.",
+        "readOnly": true,
+        "params": {
+          "type": "object",
+          "properties": {
+            "workspace": {
+              "type": "string",
+              "description": "A worktree selector or `floating`; default the caller's worktree."
+            },
+            "all": {
+              "type": "boolean"
+            }
+          }
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "commands": {
+              "type": "array",
+              "items": {
+                "type": "object"
+              },
+              "description": "Every saved quick command."
+            }
+          },
+          "required": [
+            "commands"
+          ]
+        }
+      },
+      {
+        "id": "addQuickCommand",
+        "description": "Saves a quick command.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "label": {
+              "type": "string",
+              "description": "At most 80 characters."
+            },
+            "kind": {
+              "type": "string",
+              "description": "`terminal` (default) or `agent`.",
+              "enum": [
+                "terminal",
+                "agent"
+              ]
+            },
+            "agent": {
+              "type": "string",
+              "description": "The agent of an agent command; one whose prompt is not typed in after it starts."
+            },
+            "command": {
+              "type": "string",
+              "description": "At most 4000 characters; lines are joined with `; ` when it runs."
+            },
+            "appendEnter": {
+              "type": "boolean",
+              "description": "Press Enter after typing the command into a pane; terminal commands only; default true."
+            },
+            "scope": {
+              "type": "string",
+              "description": "`global` (default) or `repo`.",
+              "enum": [
+                "global",
+                "repo"
+              ]
+            },
+            "repo": {
+              "type": "string",
+              "description": "The repo of a repo command; default the caller's worktree's repo."
+            }
+          },
+          "required": [
+            "command"
+          ]
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "commands": {
+              "type": "array",
+              "items": {
+                "type": "object"
+              },
+              "description": "Every saved quick command."
+            }
+          },
+          "required": [
+            "commands"
+          ]
+        }
+      },
+      {
+        "id": "updateQuickCommand",
+        "description": "Changes the given fields of a quick command.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "description": "The quick command ID."
+            },
+            "label": {
+              "type": "string",
+              "description": "At most 80 characters."
+            },
+            "kind": {
+              "type": "string",
+              "description": "`terminal` (default) or `agent`.",
+              "enum": [
+                "terminal",
+                "agent"
+              ]
+            },
+            "agent": {
+              "type": "string",
+              "description": "The agent of an agent command; one whose prompt is not typed in after it starts."
+            },
+            "command": {
+              "type": "string",
+              "description": "At most 4000 characters; lines are joined with `; ` when it runs."
+            },
+            "appendEnter": {
+              "type": "boolean",
+              "description": "Press Enter after typing the command into a pane; terminal commands only; default true."
+            },
+            "scope": {
+              "type": "string",
+              "description": "`global` (default) or `repo`.",
+              "enum": [
+                "global",
+                "repo"
+              ]
+            },
+            "repo": {
+              "type": "string",
+              "description": "The repo of a repo command; default the caller's worktree's repo."
+            }
+          },
+          "required": [
+            "id"
+          ]
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "commands": {
+              "type": "array",
+              "items": {
+                "type": "object"
+              },
+              "description": "Every saved quick command."
+            }
+          },
+          "required": [
+            "commands"
+          ]
+        }
+      },
+      {
+        "id": "removeQuickCommand",
+        "description": "Deletes a quick command.",
+        "destructive": true,
+        "confirm": "Remove quick command {id}?",
+        "params": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "description": "The quick command ID."
+            }
+          },
+          "required": [
+            "id"
+          ]
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "commands": {
+              "type": "array",
+              "items": {
+                "type": "object"
+              },
+              "description": "Every saved quick command."
+            }
+          },
+          "required": [
+            "commands"
+          ]
+        }
+      },
+      {
+        "id": "runQuickCommand",
+        "description": "Runs a quick command in a pane, or in a new tab (an agent command in a new agent tab).",
+        "params": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "description": "The quick command ID."
+            },
+            "pane": {
+              "type": "string",
+              "description": "Type the command into this pane instead of opening a tab."
+            },
+            "workspace": {
+              "type": "string",
+              "description": "A worktree selector or `floating`; default the caller's worktree."
+            },
+            "group": {
+              "type": "string",
+              "description": "The group the new tab goes in."
+            }
+          },
+          "required": [
+            "id"
+          ]
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "ok": {
+              "type": "boolean"
+            },
+            "session": {
+              "type": "string"
+            },
+            "workspace": {
+              "type": "object"
+            }
+          },
+          "required": [
+            "ok",
+            "session"
+          ]
+        }
       }
     ],
     "event": [
@@ -634,6 +1980,47 @@
             "cwd"
           ]
         }
+      },
+      {
+        "id": "layout",
+        "description": "A workspace's layout changed.",
+        "data": {
+          "type": "object",
+          "properties": {
+            "workspace": {
+              "type": "string"
+            },
+            "revision": {
+              "type": "integer"
+            }
+          },
+          "required": [
+            "workspace",
+            "revision"
+          ]
+        }
+      },
+      {
+        "id": "quickCommands",
+        "description": "The saved quick commands changed.",
+        "data": {
+          "type": "object"
+        }
+      },
+      {
+        "id": "floating",
+        "description": "The floating workspace's state changed.",
+        "data": {
+          "type": "object",
+          "properties": {
+            "state": {
+              "type": "object"
+            }
+          },
+          "required": [
+            "state"
+          ]
+        }
       }
     ],
     "setting": [
@@ -645,6 +2032,267 @@
         "default": 2000,
         "minimum": 500,
         "maximum": 10000
+      },
+      {
+        "id": "font-family",
+        "type": "string",
+        "title": "Font family",
+        "default": "SF Mono"
+      },
+      {
+        "id": "font-size",
+        "type": "number",
+        "title": "Font size",
+        "default": 14,
+        "minimum": 10,
+        "maximum": 24
+      },
+      {
+        "id": "font-weight",
+        "type": "number",
+        "title": "Font weight",
+        "default": 500,
+        "minimum": 100,
+        "maximum": 900
+      },
+      {
+        "id": "font-weight-bold",
+        "type": "number",
+        "title": "Bold font weight",
+        "default": 700,
+        "minimum": 100,
+        "maximum": 900
+      },
+      {
+        "id": "line-height",
+        "type": "number",
+        "title": "Line height",
+        "default": 1,
+        "minimum": 1,
+        "maximum": 3
+      },
+      {
+        "id": "cursor-style",
+        "type": "enum",
+        "title": "Cursor shape",
+        "default": "block",
+        "values": [
+          "block",
+          "bar",
+          "underline"
+        ]
+      },
+      {
+        "id": "cursor-blink",
+        "type": "boolean",
+        "title": "Blinking cursor",
+        "default": true
+      },
+      {
+        "id": "word-separators",
+        "type": "string",
+        "title": "Word separators",
+        "description": "Characters that end a word when double-clicking.",
+        "default": " ()[]{}',\"`"
+      },
+      {
+        "id": "option-as-alt",
+        "type": "enum",
+        "title": "Option as Alt",
+        "description": "Which Option keys act as Alt.",
+        "default": "auto",
+        "values": [
+          "auto",
+          "both",
+          "left",
+          "right",
+          "off"
+        ]
+      },
+      {
+        "id": "jis-yen-backslash",
+        "type": "boolean",
+        "title": "JIS Yen to backslash",
+        "default": false
+      },
+      {
+        "id": "copy-on-select",
+        "type": "boolean",
+        "title": "Copy on select",
+        "default": false
+      },
+      {
+        "id": "trim-gutter-on-copy",
+        "type": "boolean",
+        "title": "Trim gutter on copy",
+        "description": "Drop the indentation shared by every copied line.",
+        "default": true
+      },
+      {
+        "id": "allow-osc52",
+        "type": "boolean",
+        "title": "Allow TUI clipboard writes",
+        "description": "Let programs set the clipboard with OSC 52.",
+        "default": true
+      },
+      {
+        "id": "right-click-paste",
+        "type": "boolean",
+        "title": "Right-click to paste",
+        "default": false
+      },
+      {
+        "id": "focus-follows-mouse",
+        "type": "boolean",
+        "title": "Focus follows mouse",
+        "default": false
+      },
+      {
+        "id": "scroll-sensitivity",
+        "type": "number",
+        "title": "Scroll speed",
+        "default": 1.15,
+        "minimum": 0.5,
+        "maximum": 3
+      },
+      {
+        "id": "fast-scroll-sensitivity",
+        "type": "number",
+        "title": "Fast scroll speed",
+        "default": 5,
+        "minimum": 1,
+        "maximum": 10
+      },
+      {
+        "id": "gpu-acceleration",
+        "type": "enum",
+        "title": "GPU acceleration",
+        "default": "auto",
+        "values": [
+          "auto",
+          "on",
+          "off"
+        ]
+      },
+      {
+        "id": "minimum-contrast",
+        "type": "number",
+        "title": "Minimum contrast",
+        "default": 1,
+        "minimum": 1,
+        "maximum": 21
+      },
+      {
+        "id": "inactive-pane-opacity",
+        "type": "number",
+        "title": "Inactive pane opacity",
+        "default": 0.9,
+        "minimum": 0,
+        "maximum": 1
+      },
+      {
+        "id": "divider-thickness",
+        "type": "number",
+        "title": "Divider thickness",
+        "description": "Thickness of pane dividers in pixels.",
+        "default": 3,
+        "minimum": 1,
+        "maximum": 32
+      },
+      {
+        "id": "padding-x",
+        "type": "number",
+        "title": "Horizontal padding",
+        "default": 4,
+        "minimum": 0,
+        "maximum": 512
+      },
+      {
+        "id": "padding-y",
+        "type": "number",
+        "title": "Vertical padding",
+        "default": 4,
+        "minimum": 0,
+        "maximum": 512
+      },
+      {
+        "id": "background-opacity",
+        "type": "number",
+        "title": "Background opacity",
+        "default": 1,
+        "minimum": 0,
+        "maximum": 1
+      },
+      {
+        "id": "link-click",
+        "type": "enum",
+        "title": "Terminal URL clicks",
+        "description": "What clicking a link does.",
+        "default": "actions",
+        "values": [
+          "actions",
+          "open",
+          "terminal"
+        ]
+      },
+      {
+        "id": "link-middle-click",
+        "type": "enum",
+        "title": "Terminal URL middle click",
+        "description": "What middle-clicking a link does.",
+        "default": "open",
+        "values": [
+          "actions",
+          "open",
+          "terminal"
+        ]
+      },
+      {
+        "id": "confirm-close-running",
+        "type": "boolean",
+        "title": "Confirm before closing running terminals",
+        "default": true
+      },
+      {
+        "id": "confirm-close-pinned",
+        "type": "boolean",
+        "title": "Confirm before closing pinned tabs",
+        "default": true
+      },
+      {
+        "id": "ctrl-tab-order",
+        "type": "enum",
+        "title": "Ctrl+Tab order",
+        "description": "Whether Ctrl+Tab lists tabs by recent use or by position.",
+        "default": "mru",
+        "values": [
+          "mru",
+          "sequential"
+        ]
+      },
+      {
+        "id": "shortcut-policy",
+        "type": "enum",
+        "title": "Shortcuts in terminal",
+        "description": "Whether app shortcuts or the terminal get a key first while a terminal has focus.",
+        "default": "app-first",
+        "values": [
+          "app-first",
+          "terminal-first"
+        ]
+      },
+      {
+        "id": "floating-enabled",
+        "type": "boolean",
+        "title": "Enable floating workspace",
+        "default": true
+      },
+      {
+        "id": "floating-cwd",
+        "type": "string",
+        "title": "Terminal directory",
+        "description": "Where shells in the floating workspace start.",
+        "default": "~"
       }
     ],
     "cli-command": [
