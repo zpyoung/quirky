@@ -607,5 +607,25 @@
 - **Confidence:** high
 - **Source:** assumed — autonomous
 
+## D61: Final Round 1: four MEDIUM findings, all fixed in one batch
+- **Question:** LOOP.md step 5's single final review round and fix batch
+- **Options:** fix each accepted finding; append unclosed ones to BLOCKERS.md
+- **Chose:** three lenses (C, S, X), depth deep, codex gpt-6.1-sol, over the item's non-test source diff against build/roadmap e7155ed (`--diff-file`, 60 files), criteria = logic.md and tech.md verbatim, pre-pass `bun run typecheck` and `bun test scripts`. Each lens NEEDS_FIXES, one MEDIUM finding apiece except X with two; none contested. Accepted and fixed, each with a regression test: (C2) editing the selected template left an attached preview unchanged and a detached one unmarked; (S2) a blank detached preview left Start enabled until the debounced analysis, and the daemon accepted a blank body; (X1) a failed draft save on Cancel or Escape closed the dialog and lost the edited text; (X3) a thrown `deliver` counted as positive non-delivery and could trigger a duplicate automatic resend. Nothing goes to BLOCKERS.md.
+- **Why:** LOOP.md step 5
+- **Evidence:** session scratchpad fr1/*-gate.json
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** locked by docs/loop/LOOP.md
+
+## D62: The terminal's ui-model test checks only its own overlays
+- **Question:** after the catch-up, `plugins/quirky.terminal/test/ui-model.test.ts` asserted that the whole built-in model has exactly one overlay, which the handoff dialog overlay breaks
+- **Options:** narrow the assertion to the terminal's overlays, as the panels line above it already does; drop the handoff overlay
+- **Chose:** narrow it (wave-gate test fix, SDD step 7)
+- **Why:** the test is about the terminal plugin's declarations
+- **Evidence:** plugins/quirky.terminal/test/ui-model.test.ts:100
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** assumed — autonomous
+
 ## Progress
-All three waves merged with both checkpoints fixed (D56, D58). Next: catch-up merge with build/roadmap (LOOP.md step 5) and its tests, Final Round 1 (three lenses, deep) with one fix batch, UI pass with quirk:using-apps-like-a-user (SC-1, 3, 21, 24, 33, 36, 40, 50, 53, 54, 58, 59), then land.
+Built, checkpoints and Final Round 1 fixed (D56, D58, D61), caught up with build/roadmap e7155ed (D60). Next: confirm the post-fix gate (`bun run test`, `bun test scripts`, `bun run typecheck`, `bun run build`), then the step 6 UI pass: `bun run build`, start quirkyd on a temp QUIRKY_HOME/HOME (use scripts/owned-run.ts per fix-test-process-leaks D5), run quirk:using-apps-like-a-user `--surface web --owner yours --unattended` against the daemon UI URL with goals SC-1, 3, 21, 24, 33, 36, 40, 50, 53, 54, 58, 59 (fake agent TUIs on PATH in the temp home; agent-status hooks through the shim), record results as a decision, write docs/loop/native/m3-handoff.json only if needed (D50 says none), then land with `queue.ts land m3-handoff` (copy plugins/quirky.handoff/node_modules links into the integration tree first if land fails on module resolution, as m1-notifications D62).
