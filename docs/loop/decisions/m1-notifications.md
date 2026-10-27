@@ -609,5 +609,15 @@
 - **Confidence:** high
 - **Source:** supersedes m1-term-ui D51
 
+## D61: The final gate passes; nothing goes to BLOCKERS.md
+- **Question:** LOOP.md step 6's three commands on the merged branch, and the open-findings rule of step 5
+- **Options:** n/a
+- **Chose:** at beadf87, `bun run test` through the remote runner: 405 of 406 files passed and the remaining one, `packages/pty-host/test/manager.test.ts`, passed when rerun alone, so the runner logged it as a load flake (`suite-result ok: true`, as m1-agent-status D49 saw before); `bun test scripts` 41 pass; `bun run typecheck` clean. Every Final Round 1 finding was fixed or answered by a spec amendment (D56), so no open review finding is appended to BLOCKERS.md.
+- **Why:** LOOP.md step 6 and step 5
+- **Evidence:** sdd/gate-final.log in the session scratchpad
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** locked by docs/loop/LOOP.md
+
 ## Progress
-All waves, both checkpoint fix batches, Final Round 1 and its fix batch merged; UI pass passed (D57); native file written (D58); merged build/roadmap again (0c1e6b0, D59). Next: final gate through `bun run test`, `bun test scripts`, `bun run typecheck`; any open finding goes to BLOCKERS.md; then `git switch --detach` and `bun scripts/build-loop/queue.ts land m1-notifications`.
+Done and verified (D61). Landing with `bun scripts/build-loop/queue.ts land m1-notifications`.
