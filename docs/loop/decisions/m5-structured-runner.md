@@ -217,5 +217,30 @@ Implementation wave: T1 structured/session/catalog, T2 checks plugin, T3 ask own
 - **Confidence:** high
 - **Source:** supersedes m5-structured-runner D18 (review baseline only)
 
+## D22: Complete all three final review lenses without treating transport failure as a pass
+- **Question:** Final Round1 security refute could not start because an empty-claims fallback expanded the prompt beyond Darwin's argument limit
+- **Options:** infer a pass from empty promote; rerun discovery; recover the unchanged empty-claims refute stage
+- **Chose:** retain C/S results and all failed transport evidence. Stage empty artifact excerpts for the genuinely empty X claims, dispatch a fresh Gemini refute, then run merge/gate/manifest on the original chain. No second promote or source change during recovery.
+- **Why:** both failed X attempts were exec Argument list too long, not reviewer judgments. Actual recovered refute returned valid []; deep X PASS has zero findings/advisories/limitations/exclusions. All final reviewers were google/gemini-3.1-pro-preview at high, full cross-family independence from OpenAI implementation.
+- **Evidence:** final-round1-green/lenses/X/refute.attempt-{1,2}.stderr; refute-recovered.*; gate-recovered.json and manifest-recovered.json; C/S gate and manifest files
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** assumed — autonomous
+
+## D23: Accept the real close hang despite the evidence gate's line-range suppression, then close it with one fix batch
+- **Question:** C1 was upheld by promote/refute but mechanically dropped because its quote named lines133–135 instead of the actual130–132
+- **Options:** trust a line-mismatch suppression as substantive refutation; validate the claim and repair if real
+- **Chose:** accept C1 HIGH. The source awaited child close indefinitely after group termination while an escaped child held inherited pipes. Added owned-stdio destruction and a bounded500ms final wait. Process group remains the ownership boundary; do not globally hunt or kill independent detached services. S1 was refuted because createAsk already clears tracking in finally. No other accepted finding remains.
+- **Why:** a guardian-owned process reproduction hung until its watchdog killed the pipe holder (1505ms,exit1). The same reproduction after fix returned in253ms without watchdog intervention. A permanent escaped-stdio regression and all10 prior Codex tests pass; typecheck passes. No second final discovery round, as LOOP requires.
+- **Evidence:** final-adjudication.json; C/merged.json standing HIGH and C/gate.json line mismatch; close-smoke runtime red/green; commit edda245; Codex tests11pass/43assertions; isolated fix HEAD/scope barrier passed
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** assumed — autonomous
+
+## Verification before the accepted final fix
+- Required gate on fc4ae09: typecheck clean; scripts48pass/217assertions;425remote files and2macOS-only files pass, no flaky reruns. Duration1118555ms. Exact logs: /tmp/m5-runner-KYwwFv/final-round1-green/check.{stdout,stderr,json}.
+- Actual runtime: real daemon/CLI + scripted native Codex create, approval, stop/resume and immediate send; native ID/model/effort preserved; shared check succeeded. Installed Codex initialize/thread/start succeeded in isolated HOME with no model turn.
+- C1 fix verification: native runner tests11pass and typecheck clean; owned runtime reproduction changed from watchdog-required hang to bounded close. Final required suite and packaged build still need rerunning on the fixed source.
+
 ## Progress
-Implemented components and actual CLI/native protocol smokes pass. Kernel-confirmation regression and fixture types repaired; typecheck and targeted checks pass. Latest integration e7155edf caught up and all new decisions read. Next: full prepass (typecheck, scripts, remote suite), then three Gemini final lenses, one accepted fix batch, required checks/build and queue land. No final model review yet; no UI/native scenarios or running smoke services.
+Final Round1 completed across all three Gemini lenses; accepted C1 is implemented and confirmed closed by regression/runtime evidence. S1 refuted; X has no findings, no remaining accepted review findings. One fix batch merged. Next: commit this evidence/docs, run typecheck/scripts/build/full remote suite on final source, then queue land. No UI/native scenarios or running smoke services.

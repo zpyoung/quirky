@@ -34,6 +34,10 @@ record and journal remain unchanged. A connected conversation has one owner; com
 missing native identity, a missing directory, forks and launch overrides are refused. Use the new
 ID with `quirky structured send --session <id> --text <prompt>`.
 
+Codex stop bounds its final pipe cleanup even when an independently detached child retains an
+output descriptor. Its process group is the execution ownership boundary; it does not adopt
+independently detached services.
+
 ## Shared checks
 
 `quirky.checks` executes local shell commands independently of agent sessions:
