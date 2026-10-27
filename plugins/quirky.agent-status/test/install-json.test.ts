@@ -277,6 +277,30 @@ describe('format specifics', () => {
     expect(museInstaller.status(t)).toBe('not-installed')
   })
 
+  test('muse remove keeps allowlist names the user already had and restores their file exactly', () => {
+    const home = makeHome()
+    const xdg = join(makeHome(), 'xdg')
+    const t = target(home, { XDG_CONFIG_HOME: xdg })
+    const original = `${JSON.stringify({ schema_version: 1, managed_hooks_env_vars: ['MINE', 'QUIRKY_HOME'], theme: 'x' }, null, 2)}\n`
+    const settings = put(xdg, 'muse/settings.json', original)
+
+    museInstaller.install(t)
+    expect(read(settings).managed_hooks_env_vars).toEqual([
+      'MINE',
+      'QUIRKY_HOME',
+      'QUIRKY_SESSION_ID',
+      'QUIRKY_HOOK_URL',
+      'QUIRKY_HOOK_TOKEN'
+    ])
+    const installed = readFileSync(settings, 'utf8')
+    expect(museInstaller.install(t).changed).toEqual([])
+    expect(readFileSync(settings, 'utf8')).toBe(installed)
+
+    museInstaller.remove(t)
+    expect(readFileSync(settings, 'utf8')).toBe(original)
+    expect(existsSync(join(home, '.quirky/agent-hooks/muse-env-added.json'))).toBe(false)
+  })
+
   test('muse leaves a managed_hooks_path the user pointed elsewhere', () => {
     const home = makeHome()
     const text = JSON.stringify({ schema_version: 1, managed_hooks_path: '/etc/mine.json' })
