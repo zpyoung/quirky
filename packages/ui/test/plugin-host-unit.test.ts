@@ -58,20 +58,21 @@ const urlOf = (plugin: string) => `/plugins/${plugin}/ui.js`
 function makeModel(parts: Partial<UiModel> = {}): UiModel {
   const model: UiModel = {
     sidebarSections: [],
+    statusBars: [],
     panels: [],
-    settingsSections: [],
     views: [],
     overlays: [],
     commands: [],
     keybindings: [],
     settings: [],
+    menuItems: [],
     themes: [DEFAULT_THEME],
     theme: { chosen: 'default', active: 'default' },
     modules: {},
     ...parts
   }
   if (parts.modules) return model
-  const entries = [...model.sidebarSections, ...model.panels, ...model.settingsSections, ...model.views, ...model.overlays, ...model.commands]
+  const entries = [...model.sidebarSections, ...model.statusBars, ...model.panels, ...model.views, ...model.overlays, ...model.commands]
   for (const entry of entries) {
     const module = (model.modules[entry.plugin] ??= { url: urlOf(entry.plugin), provides: [] })
     module.provides.push(entry.id)
@@ -256,6 +257,7 @@ function recording(ids: string[], implementation: (id: string) => unknown = () =
 const NOTES = 'acme.notes'
 const LIST = 'sidebar-section:acme.notes/list'
 const PAGE = 'view:acme.notes/page'
+const STATUS = 'status-bar:acme.notes/usage'
 const OPEN = 'command:acme.notes/open'
 const key = (code: string, mods: Partial<Record<'metaKey' | 'ctrlKey' | 'altKey' | 'shiftKey', boolean>> = {}) => ({
   key: code.replace('Key', ''),
@@ -298,6 +300,22 @@ test('SC-7: mounting a section reuses the module the window already loaded and m
   expect((el as Fake).text).toBe('3 notes')
   expect(state(t).plugins[NOTES]).toEqual({ state: 'active' })
   expect(cleanups).toBe(0)
+})
+
+test('SC-7: mounting a status bar loads its owning module and reports its slot mounted', async () => {
+  const t = setup(makeModel({ statusBars: [slot('status-bar', NOTES, 'usage')] }))
+  const { module, record } = recording([STATUS])
+  t.useModule(NOTES, module)
+  await t.host.refresh()
+
+  const unmount = t.host.mount(STATUS, element())
+  await settled(t, STATUS)
+
+  expect(state(t).slots[STATUS]).toEqual({ status: 'mounted' })
+  expect(record.activations).toBe(1)
+  expect(t.imports).toEqual([urlOf(NOTES)])
+  unmount()
+  expect(state(t).slots[STATUS]).toBeUndefined()
 })
 
 test('SC-7: concurrent mounts and commands share one import and one activation', async () => {
@@ -509,68 +527,6 @@ test('SC-11: a plugin calls the daemon through its context and receives events o
   expect(received).toEqual([])
   await tick()
   expect(received).toEqual([{ type: 'acme.notes/changed', data: null }])
-})
-
-test('window command drag capabilities snapshot arguments, keep one active token, restrict cancellation to the owner, and revoke with the owner', async () => {
-  const ownerPlugin = 'acme.vault'
-  const receiverPlugin = 'acme.terminal'
-  const ownerSlot = 'panel:acme.vault/history'
-  const receiverSlot = 'panel:acme.terminal/workspace'
-  const t = setup(makeModel({ panels: [panel(ownerPlugin, 'history'), panel(receiverPlugin, 'workspace')] }))
-  let owner!: UiPluginContext
-  let receiver!: UiPluginContext
-  t.useModule(ownerPlugin, {
-    activate(context) {
-      owner = context
-      context.provide(ownerSlot, () => {})
-    }
-  })
-  t.useModule(receiverPlugin, {
-    activate(context) {
-      receiver = context
-      context.provide(receiverSlot, () => {})
-    }
-  })
-
-  try {
-    await t.host.refresh()
-    t.host.mount(ownerSlot, element())
-    t.host.mount(receiverSlot, element())
-    await settled(t, ownerSlot)
-    await settled(t, receiverSlot)
-
-    const args = { session: { id: 'original' } }
-    const token = owner.createCommandDrag('command:acme.vault/resume', args)
-    args.session.id = 'mutated'
-    receiver.cancelCommandDrag(token)
-    expect(receiver.consumeCommandDrag(token)).toEqual({
-      command: 'command:acme.vault/resume',
-      args: { session: { id: 'original' } }
-    })
-    expect(receiver.consumeCommandDrag(token)).toBeNull()
-
-    const displaced = owner.createCommandDrag('command:acme.vault/resume', { id: 'displaced' })
-    const replacement = receiver.createCommandDrag('command:acme.terminal/open-menu', { kind: 'tab' })
-    expect(receiver.consumeCommandDrag(displaced)).toBeNull()
-    expect(owner.consumeCommandDrag(replacement)).toEqual({
-      command: 'command:acme.terminal/open-menu',
-      args: { kind: 'tab' }
-    })
-
-    const cancelled = owner.createCommandDrag('command:acme.vault/resume', { id: 'cancelled' })
-    owner.cancelCommandDrag(cancelled)
-    expect(receiver.consumeCommandDrag(cancelled)).toBeNull()
-
-    const revoked = owner.createCommandDrag('command:acme.vault/resume', { id: 'revoked' })
-    t.setModel(makeModel({ panels: [panel(receiverPlugin, 'workspace')] }))
-    await t.host.refresh()
-    expect(receiver.consumeCommandDrag(revoked)).toBeNull()
-    const disposed = receiver.createCommandDrag('command:acme.terminal/open-menu', { kind: 'tab' })
-    t.host.stop()
-    expect(receiver.consumeCommandDrag(disposed)).toBeNull()
-  } finally {
-    t.host.stop()
-  }
 })
 
 test('SC-11: a listener that throws or rejects is logged with its plugin ID and does not stop the others', async () => {

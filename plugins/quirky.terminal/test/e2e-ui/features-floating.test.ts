@@ -51,6 +51,7 @@ test(
   async () => {
     const f = await startFeatures()
     const { h } = f
+    await until(f, button)
     expect(panel()).toBeNull()
     await until(f, button)
 

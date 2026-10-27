@@ -87,11 +87,6 @@ export function fakeContext(layout: UiLayout = layoutFor(null)): Fake {
       },
       getSetting: (name) => fake.settings[name],
       executeCommand: async () => {},
-      createCommandDrag() {
-        throw new Error('command dragging is unavailable in this fake')
-      },
-      consumeCommandDrag: () => null,
-      cancelCommandDrag() {},
       openView: (id, input) => void fake.opened.push({ id, input }),
       closeView() {},
       togglePanel: (id, open) => void fake.panelToggles.push({ id, open }),

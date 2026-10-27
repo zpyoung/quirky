@@ -152,6 +152,14 @@ describe('quirky.agents manifest', () => {
     }
   })
 
+  test('25 agents resume, with the argv after the command as providers.md lists it', () => {
+    const parsed = entries()
+    for (const [id, , , , , , , resume] of TABLE) {
+      expect({ id, resume: parsed.find((entry) => entry.id === id)!.resume?.join(' ') ?? '' }).toEqual({ id, resume })
+    }
+    expect(parsed.filter((entry) => entry.resume)).toHaveLength(25)
+  })
+
   test('only claude, codex, grok and pi can fork', () => {
     const forks = Object.fromEntries(entries().filter((entry) => entry.fork).map((entry) => [entry.id, entry.fork!.join(' ')]))
     expect(forks).toEqual({

@@ -12,6 +12,7 @@ import {
   type ThemeInfo,
   type UiCommandEntry,
   type UiKeybinding,
+  type UiMenuItemEntry,
   type UiModel,
   type UiSettingEntry,
   type UiSlotEntry,
@@ -240,6 +241,25 @@ function buildThemes(effective: ContributionInfo[]): ThemeInfo[] {
   return [DEFAULT_THEME, ...declared]
 }
 
+function buildMenuItems(effective: ContributionInfo[]): UiMenuItemEntry[] {
+  const items = effective.map((declaration): UiMenuItemEntry => {
+    const { data } = declaration
+    const written = stringField(data, 'command') ?? ''
+    const when = data.when as UiMenuItemEntry['when']
+    const after = data.after as UiMenuItemEntry['after']
+    return {
+      id: declaration.id,
+      plugin: declaration.plugin,
+      menu: data.menu as UiMenuItemEntry['menu'],
+      title: stringField(data, 'title') ?? declaration.name,
+      command: parseContributionId(written) ? written : `command:${declaration.plugin}/${written}`,
+      ...(when !== undefined ? { when } : {}),
+      ...(after !== undefined ? { after } : {}),
+    }
+  })
+  return items.sort((a, b) => compare(a.id, b.id))
+}
+
 /**
  * Turns every contribution declaration and the plugin list into the UI model the window renders,
  * plus the derived warnings keyed by the plugin that owns the offending entry. Pure: it reads
@@ -271,7 +291,7 @@ export function buildUiModel(input: {
   for (const pluginId of [...codeBackedOwners].sort(compare)) {
     const ui = byId.get(pluginId)?.ui
     if (ui === undefined) {
-      addWarning(warnings, pluginId, 'declares commands, views, panels, overlays, settings sections or sidebar sections but has no ui module')
+      addWarning(warnings, pluginId, 'declares code-backed contributions but has no ui module')
       continue
     }
     const url = moduleUrl(pluginId, ui)
@@ -286,9 +306,6 @@ export function buildUiModel(input: {
       kind,
       plugin: declaration.plugin,
       title: stringField(declaration.data, 'title') ?? declaration.name,
-      ...(kind === 'settings-section' && stringField(declaration.data, 'description') !== undefined
-        ? { description: stringField(declaration.data, 'description') }
-        : {}),
       order: typeof declaration.data.order === 'number' ? declaration.data.order : DEFAULT_ORDER,
       module: moduleOf(declaration.plugin),
     }))
@@ -319,18 +336,21 @@ export function buildUiModel(input: {
     bindings: input.distroId ? distroBindings(input.distroKeybindings ?? [], input.distroId) : []
   })
 
+  const menuItems = buildMenuItems(ofKind('menu-item'))
+
   const themes = buildThemes(ofKind('theme'))
   const active = themes.some((theme) => theme.id === chosenTheme) ? chosenTheme : DEFAULT_THEME.id
 
   const model: UiModel = {
     sidebarSections: slot('sidebar-section').sort(byOrder),
+    statusBars: slot('status-bar').sort(byOrder),
     panels: slot('panel').sort(byOrder),
-    settingsSections: slot('settings-section').sort(byOrder),
     views: slot('view').sort((a, b) => compare(a.id, b.id)),
     overlays: slot('overlay').sort(byOrder),
     commands,
     keybindings,
     settings,
+    menuItems,
     themes,
     theme: { chosen: chosenTheme, active },
     modules,

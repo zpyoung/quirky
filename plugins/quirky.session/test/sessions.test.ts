@@ -13,6 +13,7 @@ import {
   writeModulePlugin
 } from '../../../packages/daemon/test/plugins/fixtures'
 import { fakeAgents, resetFakeAgents } from './fakes/quirky.agents/main'
+import { CLAUDE_SETTINGS } from './fakes/quirky.agent-status/main'
 import { call, code, createSession, restartDaemon, SESSION_PLUGINS, startPluginHarness, storedSessions } from './support'
 
 let h: Harness
@@ -92,7 +93,7 @@ describe('quirky.session/create', () => {
       '/bin/zsh',
       '-l',
       '-c',
-      `${exportPath()}exec claude '--settings' '${h.home}/hooks/claude-settings.json' 'do the thing'`
+      `${exportPath()}exec claude '--settings' '${JSON.stringify(CLAUDE_SETTINGS)}' 'do the thing'`
     ])
     const codex = await createSession(client, { worktree: 'id:wt_main', agent: 'codex' })
     expect(spawned(codex.id).argv[3]).toBe(
@@ -159,7 +160,7 @@ describe('quirky.session/create', () => {
       cwd: '/fake/alpha',
       prompt: 'hi',
       submitPrompt: true,
-      hookArgs: ['--settings', `${h.home}/hooks/claude-settings.json`],
+      hookArgs: ['--settings', JSON.stringify(CLAUDE_SETTINGS)],
       hookEnv: {}
     })
   })
@@ -223,7 +224,7 @@ describe('quirky.session/create', () => {
       '/bin/zsh',
       '-l',
       '-c',
-      `${exportPath()}exec claude '--settings' '${h.home}/hooks/claude-settings.json' 'hi'`
+      `${exportPath()}exec claude '--settings' '${JSON.stringify(CLAUDE_SETTINGS)}' 'hi'`
     ])
     expect(request.env).toMatchObject({
       FOO: '1',

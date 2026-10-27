@@ -1,6 +1,6 @@
-import { chmodSync, mkdirSync, writeFileSync } from 'node:fs'
+import { chmodSync, existsSync, mkdirSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
-import { basename, join } from 'node:path'
+import { basename, isAbsolute, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 export function defaultCliEntry(): string {
@@ -63,6 +63,8 @@ export function buildSessionEnv(options: {
   base?: Record<string, string | undefined>
   /** Applied over the base environment and `TERM`; a string sets, `null` deletes. Kernel variables and `PATH` still win, and reserved names are the caller's to filter. */
   envPatch?: Record<string, string | null>
+  /** Absolute path of a trusted plugin init file, sourced after user rc files for an interactive shell. */
+  shellInit?: string
 }): Record<string, string> {
   const env: Record<string, string> = {}
   for (const [key, value] of Object.entries(options.base ?? process.env)) {
@@ -81,6 +83,11 @@ export function buildSessionEnv(options: {
           QUIRKY_ORIG_ZDOTDIR: env.ZDOTDIR || env.HOME || homedir()
         }
       : {}
+  const shellInit = options.agent === 'shell' ? options.shellInit : undefined
+  if (shellInit !== undefined) {
+    if (!isAbsolute(shellInit)) throw new Error('plugin shell init path must be absolute')
+    if (!existsSync(shellInit)) throw new Error('plugin shell init file is unavailable')
+  }
   return {
     ...baseEnv,
     QUIRKY_HOME: options.home,
@@ -88,6 +95,7 @@ export function buildSessionEnv(options: {
     QUIRKY_WORKTREE_ID: options.worktreeId,
     QUIRKY_HOOK_URL: options.hookUrl,
     QUIRKY_HOOK_TOKEN: options.hookToken,
+    ...(shellInit !== undefined ? { QUIRKY_SHELL_INIT: shellInit } : {}),
     ...zsh,
     PATH: `${join(options.home, 'bin')}:${path}`
   }
@@ -249,6 +257,11 @@ export function quirkyShimScript(cliEntry: string): string {
 const ZSH_PRELUDE = `: \${_quirky_wrapper_dir:=$ZDOTDIR}
 : \${_quirky_user_dir:=\${QUIRKY_ORIG_ZDOTDIR:-$HOME}}`
 
+const PLUGIN_SHELL_INIT = `if [ -z "\${__quirky_plugin_shell_init_sourced-}" ] && [ -n "\${QUIRKY_SHELL_INIT-}" ] && [ -r "$QUIRKY_SHELL_INIT" ]; then
+  __quirky_plugin_shell_init_sourced=1
+  . "$QUIRKY_SHELL_INIT"
+fi`
+
 function zshSourceUser(file: string): string {
   return `if [[ -r $_quirky_user_dir/${file} ]]; then
   ZDOTDIR=$_quirky_user_dir
@@ -370,6 +383,7 @@ if [[ -n \${HISTFILE-} && $HISTFILE == $_quirky_wrapper_dir/* ]]; then
 fi
 ${zshSourceUser('.zshrc')}
 ${prependBin}
+${PLUGIN_SHELL_INIT}
 ${ZSH_INTEGRATION}
 `,
     '.zlogin': `${header}${ZSH_PRELUDE}
@@ -404,6 +418,7 @@ __quirky_rest="\${__quirky_rest%:}"
 if [ -n "$__quirky_rest" ]; then PATH="$__quirky_bin:$__quirky_rest"; else PATH="$__quirky_bin"; fi
 export PATH
 unset __quirky_bin __quirky_rest
+${PLUGIN_SHELL_INIT}
 ${BASH_INTEGRATION}
 `
 }

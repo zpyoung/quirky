@@ -490,5 +490,16 @@
 - **Revisit if:** any additional unrequested review artifact or live experiment is found.
 - **Source:** locked by operator instruction in this conversation
 
+## D45: Resolve public workspace types without depending on new installation links
+- **Question:** how to clear the normal lander's missing @quirky/protocol declarations for the newly added hosting workspace?
+- **Options:** modify shared integration dependencies directly; make repository type resolution explicitly follow the public package exports.
+- **Chose:** add root TypeScript paths for @quirky/protocol and @quirky/protocol/node to the exact public entries declared by packages/protocol/package.json. Hosting's workspace dependency remains declared; no private import or runtime fallback was introduced.
+- **Why:** normal queue land passed all447 test files and62 scripts tests, then integration typecheck could not find the new workspace's public protocol link. Feature-worktree typecheck had passed with installed workspace links. The compiler should resolve this repository's public workspace source independently of when a new link is installed.
+- **Evidence:** normal CLI landing output; hosting package.json already declares workspace:*; protocol package.json exports src/index.ts and src/node/index.ts. A read-only TypeScript resolver check denying all node_modules/@quirky/protocol paths resolved both aliases to those public entries.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** protocol's public exports move.
+- **Source:** assumed — autonomous; blocking landing-environment repair
+
 ## Progress
-Core ready for normal queue CLI landing. Scoped gate: scripts55 passed, typecheck passed,1580 tests/99 files passed. Single final review and accepted C1/S1 fix batch complete; final typecheck, both targeted regressions, full hosting135/135 and real CLI merge/readback passed. Follow-up m4-hosting-api-github-parity remains in the restored queue; nonblocking inherited advisories are recorded. All unsafe review scratch files/scaffolds were deleted and named-process checks were empty. All agents and verification jobs are settled. Commit final closure, detach and run queue.ts land m4-hosting-api-github; no more harness experiments, review rounds or whole-suite preflight.
+First normal landing passed447 whole-suite files and62 scripts tests but failed integration typecheck on missing new-workspace protocol links; no shared integration file was edited. Public workspace compiler resolution is corrected; final typecheck and the resolver check with protocol links denied both passed. Retry normal queue.ts land. Core review fixes,135 hosting tests, targeted regressions and CLI smoke are verified; follow-up remains queued. No harness experiments or additional feature work.

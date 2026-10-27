@@ -1,10 +1,10 @@
 # Quirky
 
 Quirky is a memory-efficient rewrite of [Orca](https://github.com/zpyoung/orca) for running coding
-agents in git worktrees. v1 runs on macOS: you add repos, create worktrees, run shells and agents
+agents in git worktrees. Quirky runs on macOS: you add repos, create worktrees, run shells and agents
 in terminals that survive closing the app, see which agents are working, waiting or done, review
 and commit diffs, answer `quirky ask` questions, and run background Claude sessions with no
-terminal. Its daemon and PTY host together use about 43 MB with eight busy terminals
+terminal. The measured v1 daemon and PTY host together used about 43 MB with eight busy terminals
 (`research/memory-probe/quirky-v1-daemon.md`).
 
 ## Try it
@@ -22,32 +22,6 @@ logs and cleanup.
 
 Inside any Quirky terminal, the `quirky` command is on PATH: try `quirky status` or `quirky help`.
 
-## Agent Session History
-
-Open **Agent Session History** to browse agent-owned transcripts and resume a session in a
-terminal. Workspace/Project filters follow the current context; select **All** to browse other
-directories. Resume uses the agent's configured command and the transcript's original directory.
-
-Transcript search is **off until explicitly enabled**. Before consent, the search box filters
-titles only. Enabling stores a local searchable copy of unredacted conversations and up to 3,072
-characters per tool result; authenticated clients can search that copy. Disable retains it.
-**Clear search data** disables search and removes only the derived index, not original transcripts.
-
-The same core flows are scriptable:
-
-```sh
-quirky vault list --unlimited --json
-quirky vault search --index-status --json
-quirky vault enable
-quirky vault search 'remembered words' --fresh --json
-quirky vault resume '<id from list>'
-quirky vault clear --yes
-```
-
-Advanced parity and verification obligations are tracked in
-[the vault's open findings](docs/loop/BLOCKERS.md#m3-vault-open-review-findings) and the dependent
-`m3-vault-parity-completion` queue item.
-
 ## How it's built
 
 - **`packages/pty-host`:** `quirky-pty` owns every terminal and its history.
@@ -58,8 +32,9 @@ Advanced parity and verification obligations are tracked in
 - **`apps/desktop`:** the Electrobun window.
 - **`prototypes/`:** stack experiments, such as the native Swift shell.
 
-`bun run test` runs the whole suite through the configured test host. Use
-`bun scripts/suite.ts <dirs>` for affected packages and `bun test <file>` for a single file.
+`bun run test` runs the package, app and plugin suite on the configured remote test host, plus
+macOS-only checks locally. Use `bun test <file>` for a targeted file, `bun test scripts` for the
+runner tests, and `bun run typecheck` for TypeScript.
 
 ## Docs
 

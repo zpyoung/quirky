@@ -5,7 +5,7 @@ import type { DropZone } from '../../layout/tree'
 import { GROUP_RATIO_MAX, GROUP_RATIO_MIN, TAB_COLOR_HEX } from '../../layout/types'
 import type { Group, GroupNode, Tab } from '../../layout/types'
 import { CollapseIcon, CloseIcon, PinIcon } from './icons'
-import { hasCommandDrop, type ControllerState, type WorkspaceController } from './controller'
+import type { ControllerState, WorkspaceController } from './controller'
 import { activeTabOf, byPaneId, groupRects, px } from './model'
 import type { GroupDividerRect } from './model'
 import { InlineField, PaneLayer } from './PaneLayer'
@@ -81,6 +81,26 @@ function TabItem({ controller, state, group, tab, index, others, now }: Common &
         <InlineField label="Tab title" initial={displayTitle(tab)} className="qt-rename" onCommit={(value) => void controller.commitRename(value)} onCancel={() => controller.cancelRename()} />
       ) : (
         <span className="qt-tab-title">{title}</span>
+      )}
+      {Object.entries(session?.badges ?? {}).map(([key, badge]) =>
+        badge.command ? (
+          <button
+            key={key}
+            type="button"
+            className="qt-badge"
+            title={badge.tooltip}
+            onClick={(event) => {
+              event.stopPropagation()
+              void controller.context.executeCommand(badge.command!, badge.args)
+            }}
+          >
+            {badge.label}
+          </button>
+        ) : (
+          <span key={key} className="qt-badge" title={badge.tooltip}>
+            {badge.label}
+          </span>
+        )
       )}
       {tab.expandedPane !== null ? (
         <button
@@ -182,26 +202,12 @@ function GroupView({ controller, state, group }: Common & { group: Group }) {
       <div
         className={`qt-strip${stripEnd ? ' qt-drop-end' : ''}`}
         onDragOver={(event) => {
-          if (!drag) {
-            const transfer = event.dataTransfer
-            if (hasCommandDrop(transfer)) {
-              event.preventDefault()
-              transfer.dropEffect = 'copy'
-            }
-            return
-          }
+          if (!drag) return
           event.preventDefault()
           controller.overTabDrag({ kind: 'strip', group: group.id, index: others.length })
         }}
         onDrop={(event) => {
-          if (!drag) {
-            const transfer = event.dataTransfer
-            if (!hasCommandDrop(transfer)) return
-            event.preventDefault()
-            event.stopPropagation()
-            void controller.dropCommand(transfer, group.id)
-            return
-          }
+          if (!drag) return
           event.preventDefault()
           void controller.dropTab({ kind: 'strip', group: group.id, index: others.length })
         }}
@@ -224,26 +230,12 @@ function GroupView({ controller, state, group }: Common & { group: Group }) {
         className="qt-body"
         data-group-body={group.id}
         onDragOver={(event) => {
-          if (!drag) {
-            const transfer = event.dataTransfer
-            if (hasCommandDrop(transfer)) {
-              event.preventDefault()
-              transfer.dropEffect = 'copy'
-            }
-            return
-          }
+          if (!drag) return
           event.preventDefault()
           controller.overTabDrag({ kind: 'zone', group: group.id, zone: zoneAt(event) })
         }}
         onDrop={(event) => {
-          if (!drag) {
-            const transfer = event.dataTransfer
-            if (!hasCommandDrop(transfer)) return
-            event.preventDefault()
-            event.stopPropagation()
-            void controller.dropCommand(transfer, group.id)
-            return
-          }
+          if (!drag) return
           event.preventDefault()
           void controller.dropTab({ kind: 'zone', group: group.id, zone: zoneAt(event) })
         }}
