@@ -4,7 +4,1687 @@
   "version": "0.1.0",
   "description": "Continues an agent's work in a fresh session: composes a brief from the old one, lets the person edit it, and starts the new session with it.",
   "main": "main.ts",
+  "cli": "cli.ts",
   "activation": "startup",
-  "dependencies": [],
-  "contributes": {}
+  "dependencies": [
+    "quirky.session",
+    "quirky.worktree",
+    "quirky.repo",
+    "quirky.git",
+    "quirky.agents",
+    "quirky.agent-status",
+    "quirky.terminal"
+  ],
+  "contributes": {
+    "method": [
+      {
+        "id": "prepare",
+        "description": "Everything the dialog needs to open on a source: where it can go, the available agents, the controls seeded from the source's draft and the remembered choices, and the templates. Refuses a source with no session context (reason no-context).",
+        "params": {
+          "type": "object",
+          "properties": {
+            "source": {
+              "type": "object",
+              "properties": {
+                "session": {
+                  "type": "string",
+                  "description": "A live session id."
+                },
+                "archived": {
+                  "type": "object",
+                  "properties": {
+                    "agent": {
+                      "type": "string",
+                      "description": "The agent that ran the session."
+                    },
+                    "providerSessionId": {
+                      "type": "string",
+                      "description": "The agent CLI's own session id."
+                    },
+                    "transcriptPath": {
+                      "type": "string",
+                      "description": "The saved transcript file."
+                    },
+                    "title": {
+                      "type": "string",
+                      "description": "A name for the source."
+                    },
+                    "worktree": {
+                      "type": "string",
+                      "description": "A worktree selector the session ran in."
+                    },
+                    "cwd": {
+                      "type": "string",
+                      "description": "The folder the session ran in."
+                    },
+                    "prompt": {
+                      "type": "string",
+                      "description": "The last user prompt."
+                    },
+                    "lastMessage": {
+                      "type": "string",
+                      "description": "The agent's last message."
+                    }
+                  },
+                  "required": [
+                    "agent"
+                  ],
+                  "description": "An archived session described by its agent, provider session id and transcript path."
+                }
+              },
+              "description": "The session to continue from: a live session id, or an archived one; pass exactly one."
+            }
+          },
+          "required": [
+            "source"
+          ]
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "source": {
+              "type": "object",
+              "properties": {
+                "key": {
+                  "type": "string",
+                  "description": "The key drafts are kept under."
+                },
+                "session": {
+                  "description": "The live session id, or null for an archived source."
+                },
+                "agent": {
+                  "type": "string"
+                },
+                "title": {
+                  "description": "The source's title, or null."
+                },
+                "cwd": {
+                  "description": "The folder the source ran in, or null."
+                },
+                "worktreeId": {
+                  "description": "The source's worktree, or null."
+                },
+                "providerSessionId": {
+                  "description": "The agent CLI's session id, or null."
+                },
+                "transcriptPath": {
+                  "description": "The transcript path the source reported, or null."
+                },
+                "prompt": {
+                  "description": "The last user prompt, or null."
+                },
+                "lastMessage": {
+                  "description": "The last assistant message, or null."
+                },
+                "live": {
+                  "type": "boolean",
+                  "description": "The source still has a running terminal."
+                },
+                "busy": {
+                  "type": "boolean",
+                  "description": "The source's agent is working."
+                }
+              },
+              "required": [
+                "key",
+                "session",
+                "agent",
+                "title",
+                "cwd",
+                "worktreeId",
+                "providerSessionId",
+                "transcriptPath",
+                "prompt",
+                "lastMessage",
+                "live",
+                "busy"
+              ]
+            },
+            "candidates": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "name": {
+                    "type": "string"
+                  },
+                  "path": {
+                    "type": "string"
+                  },
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "git",
+                      "folder"
+                    ]
+                  },
+                  "branch": {
+                    "description": "The branch, or null."
+                  }
+                },
+                "required": [
+                  "id",
+                  "name",
+                  "path",
+                  "kind",
+                  "branch"
+                ]
+              }
+            },
+            "canCreateWorktree": {
+              "type": "boolean",
+              "description": "The source is in a git repository, so a worktree can be created."
+            },
+            "agents": {
+              "type": "object",
+              "properties": {
+                "state": {
+                  "type": "string",
+                  "enum": [
+                    "ready",
+                    "failed"
+                  ]
+                },
+                "list": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string"
+                      },
+                      "label": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "label"
+                    ]
+                  }
+                }
+              },
+              "required": [
+                "state",
+                "list"
+              ]
+            },
+            "controls": {
+              "type": "object",
+              "properties": {
+                "target": {
+                  "type": "object",
+                  "properties": {
+                    "worktree": {
+                      "type": "string",
+                      "description": "An existing worktree id from the candidates."
+                    },
+                    "create": {
+                      "type": "object",
+                      "properties": {
+                        "name": {
+                          "type": "string",
+                          "description": "Name for the new worktree."
+                        },
+                        "base": {
+                          "type": "string",
+                          "description": "Ref to cut it from; blank means the source worktree's branch."
+                        }
+                      },
+                      "required": [
+                        "name"
+                      ]
+                    }
+                  },
+                  "description": "Where the new session starts: an existing worktree, or a worktree created at Start. Defaults to the source's worktree."
+                },
+                "agent": {
+                  "type": "string",
+                  "description": "The agent to start."
+                },
+                "relationship": {
+                  "type": "string",
+                  "description": "How the new session relates to the source; recorded, acting on nothing.",
+                  "enum": [
+                    "continues",
+                    "reviews",
+                    "branches-from"
+                  ]
+                },
+                "context": {
+                  "type": "string",
+                  "description": "Focused carries status hints; full asks for the whole transcript and needs a usable one.",
+                  "enum": [
+                    "focused",
+                    "full"
+                  ]
+                },
+                "include": {
+                  "type": "object",
+                  "properties": {
+                    "repoState": {
+                      "type": "boolean",
+                      "description": "Git status and changed file paths."
+                    },
+                    "diffBodies": {
+                      "type": "boolean",
+                      "description": "Diff bodies, capped at 12,000 characters; needs repoState."
+                    },
+                    "openEditorTabs": {
+                      "type": "boolean",
+                      "description": "Documents the editor has open."
+                    }
+                  }
+                },
+                "templateId": {
+                  "description": "The template id, or null for none."
+                },
+                "note": {
+                  "type": "string",
+                  "description": "The steering note."
+                }
+              },
+              "description": "The dialog's controls; every field defaults."
+            },
+            "draft": {
+              "description": "A draft: {controls, preview} where preview is null while attached or {text, stale} once edited. Null when none is kept."
+            },
+            "templates": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "name": {
+                    "type": "string"
+                  },
+                  "body": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "id",
+                  "name",
+                  "body"
+                ]
+              }
+            }
+          },
+          "required": [
+            "source",
+            "candidates",
+            "canCreateWorktree",
+            "agents",
+            "controls",
+            "draft",
+            "templates"
+          ]
+        },
+        "readOnly": true
+      },
+      {
+        "id": "preview",
+        "description": "Composes the brief for a source and controls with its warnings, secret hits and cost. With body, analyzes that edited text instead of composing. Refuses a source with no context (reason no-context) and a target that does not resolve (reason invalid-target).",
+        "params": {
+          "type": "object",
+          "properties": {
+            "source": {
+              "type": "object",
+              "properties": {
+                "session": {
+                  "type": "string",
+                  "description": "A live session id."
+                },
+                "archived": {
+                  "type": "object",
+                  "properties": {
+                    "agent": {
+                      "type": "string",
+                      "description": "The agent that ran the session."
+                    },
+                    "providerSessionId": {
+                      "type": "string",
+                      "description": "The agent CLI's own session id."
+                    },
+                    "transcriptPath": {
+                      "type": "string",
+                      "description": "The saved transcript file."
+                    },
+                    "title": {
+                      "type": "string",
+                      "description": "A name for the source."
+                    },
+                    "worktree": {
+                      "type": "string",
+                      "description": "A worktree selector the session ran in."
+                    },
+                    "cwd": {
+                      "type": "string",
+                      "description": "The folder the session ran in."
+                    },
+                    "prompt": {
+                      "type": "string",
+                      "description": "The last user prompt."
+                    },
+                    "lastMessage": {
+                      "type": "string",
+                      "description": "The agent's last message."
+                    }
+                  },
+                  "required": [
+                    "agent"
+                  ],
+                  "description": "An archived session described by its agent, provider session id and transcript path."
+                }
+              },
+              "description": "The session to continue from: a live session id, or an archived one; pass exactly one."
+            },
+            "controls": {
+              "type": "object",
+              "properties": {
+                "target": {
+                  "type": "object",
+                  "properties": {
+                    "worktree": {
+                      "type": "string",
+                      "description": "An existing worktree id from the candidates."
+                    },
+                    "create": {
+                      "type": "object",
+                      "properties": {
+                        "name": {
+                          "type": "string",
+                          "description": "Name for the new worktree."
+                        },
+                        "base": {
+                          "type": "string",
+                          "description": "Ref to cut it from; blank means the source worktree's branch."
+                        }
+                      },
+                      "required": [
+                        "name"
+                      ]
+                    }
+                  },
+                  "description": "Where the new session starts: an existing worktree, or a worktree created at Start. Defaults to the source's worktree."
+                },
+                "agent": {
+                  "type": "string",
+                  "description": "The agent to start."
+                },
+                "relationship": {
+                  "type": "string",
+                  "description": "How the new session relates to the source; recorded, acting on nothing.",
+                  "enum": [
+                    "continues",
+                    "reviews",
+                    "branches-from"
+                  ]
+                },
+                "context": {
+                  "type": "string",
+                  "description": "Focused carries status hints; full asks for the whole transcript and needs a usable one.",
+                  "enum": [
+                    "focused",
+                    "full"
+                  ]
+                },
+                "include": {
+                  "type": "object",
+                  "properties": {
+                    "repoState": {
+                      "type": "boolean",
+                      "description": "Git status and changed file paths."
+                    },
+                    "diffBodies": {
+                      "type": "boolean",
+                      "description": "Diff bodies, capped at 12,000 characters; needs repoState."
+                    },
+                    "openEditorTabs": {
+                      "type": "boolean",
+                      "description": "Documents the editor has open."
+                    }
+                  }
+                },
+                "templateId": {
+                  "description": "The template id, or null for none."
+                },
+                "note": {
+                  "type": "string",
+                  "description": "The steering note."
+                }
+              },
+              "description": "The dialog's controls; every field defaults."
+            },
+            "recapture": {
+              "type": "boolean",
+              "description": "Take a new terminal capture instead of reusing the one from opening."
+            },
+            "body": {
+              "type": "string",
+              "description": "Edited text to analyze instead of composing."
+            }
+          },
+          "required": [
+            "source"
+          ]
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "brief": {
+              "type": "string",
+              "description": "The editable text; the caller's body when one was given."
+            },
+            "notice": {
+              "type": "string",
+              "description": "The locked notice appended at send time."
+            },
+            "characters": {
+              "type": "integer"
+            },
+            "tokens": {
+              "type": "integer"
+            },
+            "warnings": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "code": {
+                    "type": "string"
+                  },
+                  "message": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "code",
+                  "message"
+                ]
+              }
+            },
+            "secrets": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "rule": {
+                    "type": "string"
+                  },
+                  "start": {
+                    "type": "integer"
+                  },
+                  "end": {
+                    "type": "integer"
+                  },
+                  "excerpt": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "rule",
+                  "start",
+                  "end",
+                  "excerpt"
+                ]
+              }
+            },
+            "probe": {
+              "type": "object",
+              "properties": {
+                "verdict": {
+                  "type": "string",
+                  "description": "Whether the transcript can be read here.",
+                  "enum": [
+                    "usable",
+                    "unverifiable",
+                    "unreachable",
+                    "none"
+                  ]
+                },
+                "path": {
+                  "description": "The transcript path, or null."
+                },
+                "reason": {
+                  "description": "Why the verdict is not usable, or null."
+                },
+                "candidate": {
+                  "description": "Which lookup found the path (reported, session-id, history or project-scan), or null."
+                }
+              },
+              "required": [
+                "verdict",
+                "path",
+                "reason",
+                "candidate"
+              ]
+            },
+            "repoState": {
+              "type": "string",
+              "enum": [
+                "ok",
+                "failed",
+                "off",
+                "none"
+              ]
+            },
+            "busy": {
+              "type": "boolean"
+            },
+            "live": {
+              "type": "boolean"
+            },
+            "contextAvailable": {
+              "type": "boolean",
+              "description": "The brief carries something beyond the opening line."
+            }
+          },
+          "required": [
+            "brief",
+            "notice",
+            "characters",
+            "tokens",
+            "warnings",
+            "secrets",
+            "probe",
+            "repoState",
+            "busy",
+            "live",
+            "contextAvailable"
+          ]
+        },
+        "readOnly": true
+      },
+      {
+        "id": "probe",
+        "description": "Whether the source's transcript can be read on this machine, and where.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "source": {
+              "type": "object",
+              "properties": {
+                "session": {
+                  "type": "string",
+                  "description": "A live session id."
+                },
+                "archived": {
+                  "type": "object",
+                  "properties": {
+                    "agent": {
+                      "type": "string",
+                      "description": "The agent that ran the session."
+                    },
+                    "providerSessionId": {
+                      "type": "string",
+                      "description": "The agent CLI's own session id."
+                    },
+                    "transcriptPath": {
+                      "type": "string",
+                      "description": "The saved transcript file."
+                    },
+                    "title": {
+                      "type": "string",
+                      "description": "A name for the source."
+                    },
+                    "worktree": {
+                      "type": "string",
+                      "description": "A worktree selector the session ran in."
+                    },
+                    "cwd": {
+                      "type": "string",
+                      "description": "The folder the session ran in."
+                    },
+                    "prompt": {
+                      "type": "string",
+                      "description": "The last user prompt."
+                    },
+                    "lastMessage": {
+                      "type": "string",
+                      "description": "The agent's last message."
+                    }
+                  },
+                  "required": [
+                    "agent"
+                  ],
+                  "description": "An archived session described by its agent, provider session id and transcript path."
+                }
+              },
+              "description": "The session to continue from: a live session id, or an archived one; pass exactly one."
+            },
+            "target": {
+              "description": "Ignored: Quirky has one host."
+            }
+          },
+          "required": [
+            "source"
+          ]
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "verdict": {
+              "type": "string",
+              "description": "Whether the transcript can be read here.",
+              "enum": [
+                "usable",
+                "unverifiable",
+                "unreachable",
+                "none"
+              ]
+            },
+            "path": {
+              "description": "The transcript path, or null."
+            },
+            "reason": {
+              "description": "Why the verdict is not usable, or null."
+            },
+            "candidate": {
+              "description": "Which lookup found the path (reported, session-id, history or project-scan), or null."
+            }
+          },
+          "required": [
+            "verdict",
+            "path",
+            "reason",
+            "candidate"
+          ]
+        },
+        "readOnly": true
+      },
+      {
+        "id": "start",
+        "description": "Starts the new session and delivers the brief.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "source": {
+              "type": "object",
+              "properties": {
+                "session": {
+                  "type": "string",
+                  "description": "A live session id."
+                },
+                "archived": {
+                  "type": "object",
+                  "properties": {
+                    "agent": {
+                      "type": "string",
+                      "description": "The agent that ran the session."
+                    },
+                    "providerSessionId": {
+                      "type": "string",
+                      "description": "The agent CLI's own session id."
+                    },
+                    "transcriptPath": {
+                      "type": "string",
+                      "description": "The saved transcript file."
+                    },
+                    "title": {
+                      "type": "string",
+                      "description": "A name for the source."
+                    },
+                    "worktree": {
+                      "type": "string",
+                      "description": "A worktree selector the session ran in."
+                    },
+                    "cwd": {
+                      "type": "string",
+                      "description": "The folder the session ran in."
+                    },
+                    "prompt": {
+                      "type": "string",
+                      "description": "The last user prompt."
+                    },
+                    "lastMessage": {
+                      "type": "string",
+                      "description": "The agent's last message."
+                    }
+                  },
+                  "required": [
+                    "agent"
+                  ],
+                  "description": "An archived session described by its agent, provider session id and transcript path."
+                }
+              },
+              "description": "The session to continue from: a live session id, or an archived one; pass exactly one."
+            },
+            "controls": {
+              "type": "object",
+              "properties": {
+                "target": {
+                  "type": "object",
+                  "properties": {
+                    "worktree": {
+                      "type": "string",
+                      "description": "An existing worktree id from the candidates."
+                    },
+                    "create": {
+                      "type": "object",
+                      "properties": {
+                        "name": {
+                          "type": "string",
+                          "description": "Name for the new worktree."
+                        },
+                        "base": {
+                          "type": "string",
+                          "description": "Ref to cut it from; blank means the source worktree's branch."
+                        }
+                      },
+                      "required": [
+                        "name"
+                      ]
+                    }
+                  },
+                  "description": "Where the new session starts: an existing worktree, or a worktree created at Start. Defaults to the source's worktree."
+                },
+                "agent": {
+                  "type": "string",
+                  "description": "The agent to start."
+                },
+                "relationship": {
+                  "type": "string",
+                  "description": "How the new session relates to the source; recorded, acting on nothing.",
+                  "enum": [
+                    "continues",
+                    "reviews",
+                    "branches-from"
+                  ]
+                },
+                "context": {
+                  "type": "string",
+                  "description": "Focused carries status hints; full asks for the whole transcript and needs a usable one.",
+                  "enum": [
+                    "focused",
+                    "full"
+                  ]
+                },
+                "include": {
+                  "type": "object",
+                  "properties": {
+                    "repoState": {
+                      "type": "boolean",
+                      "description": "Git status and changed file paths."
+                    },
+                    "diffBodies": {
+                      "type": "boolean",
+                      "description": "Diff bodies, capped at 12,000 characters; needs repoState."
+                    },
+                    "openEditorTabs": {
+                      "type": "boolean",
+                      "description": "Documents the editor has open."
+                    }
+                  }
+                },
+                "templateId": {
+                  "description": "The template id, or null for none."
+                },
+                "note": {
+                  "type": "string",
+                  "description": "The steering note."
+                }
+              },
+              "description": "The dialog's controls; every field defaults."
+            },
+            "body": {
+              "type": "string",
+              "description": "Edited text to send as is."
+            },
+            "shown": {
+              "type": "string",
+              "description": "The attached preview text the caller showed."
+            },
+            "wait": {
+              "type": "boolean",
+              "description": "Resolve after the delivery outcome."
+            }
+          },
+          "required": [
+            "source",
+            "controls"
+          ]
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "child": {
+              "type": "object",
+              "properties": {
+                "session": {
+                  "type": "string"
+                },
+                "tab": {
+                  "type": "string"
+                },
+                "worktreeId": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "session",
+                "tab",
+                "worktreeId"
+              ]
+            },
+            "lineageId": {
+              "description": "The lineage record id, or null when it could not be written."
+            },
+            "worktreeCreated": {
+              "description": "The id of the worktree created for this start, or null."
+            },
+            "delivery": {
+              "description": "The outcome, or \"pending\" when the call did not wait."
+            }
+          },
+          "required": [
+            "child",
+            "lineageId",
+            "worktreeCreated",
+            "delivery"
+          ]
+        }
+      },
+      {
+        "id": "resend",
+        "description": "Sends the retained brief to a child again.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "session": {
+              "type": "string",
+              "description": "The child session."
+            }
+          },
+          "required": [
+            "session"
+          ]
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "delivery": {
+              "type": "string",
+              "enum": [
+                "delivered",
+                "resent",
+                "retry-failed",
+                "unobservable"
+              ]
+            }
+          },
+          "required": [
+            "delivery"
+          ]
+        }
+      },
+      {
+        "id": "discard",
+        "description": "Drops the brief retained for a child.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "session": {
+              "type": "string",
+              "description": "The child session."
+            }
+          },
+          "required": [
+            "session"
+          ]
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "discarded": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "discarded"
+          ]
+        }
+      },
+      {
+        "id": "lineage",
+        "description": "The handoff records, newest first; with session only those naming it on either side.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "session": {
+              "type": "string"
+            }
+          }
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "records": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "createdAt": {
+                    "type": "number"
+                  },
+                  "relationship": {
+                    "type": "string",
+                    "enum": [
+                      "continues",
+                      "reviews",
+                      "branches-from"
+                    ]
+                  },
+                  "parent": {
+                    "type": "object",
+                    "properties": {
+                      "session": {
+                        "description": "The session id, or null."
+                      },
+                      "agent": {
+                        "description": "The agent, or null."
+                      },
+                      "providerSessionId": {
+                        "description": "or null"
+                      },
+                      "transcriptPath": {
+                        "description": "or null"
+                      },
+                      "worktreeId": {
+                        "description": "or null"
+                      },
+                      "title": {
+                        "description": "or null"
+                      }
+                    }
+                  },
+                  "child": {
+                    "type": "object",
+                    "properties": {
+                      "session": {
+                        "description": "The session id, or null."
+                      },
+                      "agent": {
+                        "description": "The agent, or null."
+                      },
+                      "providerSessionId": {
+                        "description": "or null"
+                      },
+                      "transcriptPath": {
+                        "description": "or null"
+                      },
+                      "worktreeId": {
+                        "description": "or null"
+                      },
+                      "title": {
+                        "description": "or null"
+                      },
+                      "tab": {
+                        "description": "The child's tab id, or null."
+                      }
+                    }
+                  }
+                },
+                "required": [
+                  "id",
+                  "createdAt",
+                  "relationship",
+                  "parent",
+                  "child"
+                ]
+              }
+            }
+          },
+          "required": [
+            "records"
+          ]
+        },
+        "readOnly": true
+      },
+      {
+        "id": "jump",
+        "description": "Focuses the other end of a handoff.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "session": {
+              "type": "string"
+            },
+            "lineage": {
+              "type": "string",
+              "description": "The record to follow; default the newest naming the session."
+            }
+          },
+          "required": [
+            "session"
+          ]
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "focused": {
+              "type": "object",
+              "properties": {
+                "session": {
+                  "type": "string"
+                },
+                "pane": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "session",
+                "pane"
+              ]
+            },
+            "lineageId": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "focused",
+            "lineageId"
+          ]
+        }
+      },
+      {
+        "id": "templates",
+        "description": "The handoff templates in effect and whether the catalog was changed from the built-ins.",
+        "params": {
+          "type": "object",
+          "properties": {}
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "templates": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "name": {
+                    "type": "string"
+                  },
+                  "body": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "id",
+                  "name",
+                  "body"
+                ]
+              }
+            },
+            "custom": {
+              "type": "boolean"
+            },
+            "limit": {
+              "type": "integer"
+            }
+          },
+          "required": [
+            "templates",
+            "custom",
+            "limit"
+          ]
+        },
+        "readOnly": true
+      },
+      {
+        "id": "templateMutate",
+        "description": "Adds, updates, removes or resets handoff templates. Names are cut to 80 characters and bodies to 8,000; at most 24 templates. Fails with reason limit when full and invalid when the template is empty or unknown.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "op": {
+              "type": "string",
+              "enum": [
+                "add",
+                "update",
+                "remove",
+                "reset"
+              ]
+            },
+            "template": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "body": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "name",
+                "body"
+              ]
+            },
+            "id": {
+              "type": "string",
+              "description": "The template to remove."
+            }
+          },
+          "required": [
+            "op"
+          ]
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "templates": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "name": {
+                    "type": "string"
+                  },
+                  "body": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "id",
+                  "name",
+                  "body"
+                ]
+              }
+            },
+            "custom": {
+              "type": "boolean",
+              "description": "False while the built-ins apply."
+            },
+            "warnings": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "duplicate-name"
+                ]
+              }
+            }
+          },
+          "required": [
+            "templates",
+            "custom",
+            "warnings"
+          ]
+        }
+      },
+      {
+        "id": "draft",
+        "description": "Keeps the dialog state for a source, or clears it with null.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "source": {
+              "type": "object",
+              "properties": {
+                "session": {
+                  "type": "string",
+                  "description": "A live session id."
+                },
+                "archived": {
+                  "type": "object",
+                  "properties": {
+                    "agent": {
+                      "type": "string",
+                      "description": "The agent that ran the session."
+                    },
+                    "providerSessionId": {
+                      "type": "string",
+                      "description": "The agent CLI's own session id."
+                    },
+                    "transcriptPath": {
+                      "type": "string",
+                      "description": "The saved transcript file."
+                    },
+                    "title": {
+                      "type": "string",
+                      "description": "A name for the source."
+                    },
+                    "worktree": {
+                      "type": "string",
+                      "description": "A worktree selector the session ran in."
+                    },
+                    "cwd": {
+                      "type": "string",
+                      "description": "The folder the session ran in."
+                    },
+                    "prompt": {
+                      "type": "string",
+                      "description": "The last user prompt."
+                    },
+                    "lastMessage": {
+                      "type": "string",
+                      "description": "The agent's last message."
+                    }
+                  },
+                  "required": [
+                    "agent"
+                  ],
+                  "description": "An archived session described by its agent, provider session id and transcript path."
+                }
+              },
+              "description": "The session to continue from: a live session id, or an archived one; pass exactly one."
+            },
+            "draft": {
+              "description": "A draft: {controls, preview} where preview is null while attached or {text, stale} once edited."
+            }
+          },
+          "required": [
+            "source",
+            "draft"
+          ]
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "ok": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "ok"
+          ]
+        }
+      }
+    ],
+    "event": [
+      {
+        "id": "delivery",
+        "description": "A handoff brief reached its final delivery outcome.",
+        "data": {
+          "type": "object",
+          "properties": {
+            "child": {
+              "type": "string"
+            },
+            "lineageId": {
+              "description": "or null"
+            },
+            "outcome": {
+              "type": "string",
+              "enum": [
+                "delivered",
+                "resent",
+                "retry-failed",
+                "unobservable"
+              ]
+            }
+          },
+          "required": [
+            "child",
+            "lineageId",
+            "outcome"
+          ]
+        }
+      },
+      {
+        "id": "changed",
+        "description": "The lineage records or the templates changed.",
+        "data": {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "enum": [
+                "lineage",
+                "templates"
+              ]
+            }
+          },
+          "required": [
+            "kind"
+          ]
+        }
+      }
+    ],
+    "cli-command": [
+      {
+        "id": "preview",
+        "words": "preview",
+        "summary": "show the brief a handoff would send, with warnings, secret hits and cost",
+        "positionals": [
+          {
+            "name": "session",
+            "description": "the source session; omit it with --source-agent for an archived source",
+            "required": false
+          }
+        ],
+        "flags": {
+          "worktree": {
+            "type": "string",
+            "description": "start in this existing worktree (default: the source's)"
+          },
+          "new-worktree": {
+            "type": "string",
+            "description": "create a worktree with this name at start"
+          },
+          "base": {
+            "type": "string",
+            "description": "ref to cut --new-worktree from (default: the source's branch)"
+          },
+          "agent": {
+            "type": "string",
+            "description": "the agent to start"
+          },
+          "relationship": {
+            "type": "string",
+            "description": "how the new session relates to the source",
+            "enum": [
+              "continues",
+              "reviews",
+              "branches-from"
+            ]
+          },
+          "context": {
+            "type": "string",
+            "description": "carry status hints or the whole transcript",
+            "enum": [
+              "focused",
+              "full"
+            ]
+          },
+          "no-repo-state": {
+            "type": "boolean",
+            "description": "leave out git status and changed file paths"
+          },
+          "diff-bodies": {
+            "type": "boolean",
+            "description": "include diff bodies, capped at 12,000 characters"
+          },
+          "no-editor-tabs": {
+            "type": "boolean",
+            "description": "leave out the open editor tabs"
+          },
+          "template": {
+            "type": "string",
+            "description": "the template id"
+          },
+          "note": {
+            "type": "string",
+            "description": "the steering note"
+          },
+          "source-agent": {
+            "type": "string",
+            "description": "describe an archived source: the agent that ran it"
+          },
+          "provider-session": {
+            "type": "string",
+            "description": "archived source: the agent CLI's session id"
+          },
+          "transcript": {
+            "type": "string",
+            "description": "archived source: the transcript file"
+          },
+          "last-message": {
+            "type": "string",
+            "description": "archived source: the agent's last message"
+          },
+          "title": {
+            "type": "string",
+            "description": "archived source: a name for it"
+          },
+          "cwd": {
+            "type": "string",
+            "description": "archived source: the folder it ran in"
+          }
+        },
+        "methods": [
+          "quirky.handoff/preview",
+          "quirky.worktree/resolve"
+        ]
+      },
+      {
+        "id": "start",
+        "words": "start",
+        "summary": "start the new session and deliver the brief",
+        "positionals": [
+          {
+            "name": "session",
+            "description": "the source session; omit it with --source-agent for an archived source",
+            "required": false
+          }
+        ],
+        "flags": {
+          "worktree": {
+            "type": "string",
+            "description": "start in this existing worktree (default: the source's)"
+          },
+          "new-worktree": {
+            "type": "string",
+            "description": "create a worktree with this name at start"
+          },
+          "base": {
+            "type": "string",
+            "description": "ref to cut --new-worktree from (default: the source's branch)"
+          },
+          "agent": {
+            "type": "string",
+            "description": "the agent to start"
+          },
+          "relationship": {
+            "type": "string",
+            "description": "how the new session relates to the source",
+            "enum": [
+              "continues",
+              "reviews",
+              "branches-from"
+            ]
+          },
+          "context": {
+            "type": "string",
+            "description": "carry status hints or the whole transcript",
+            "enum": [
+              "focused",
+              "full"
+            ]
+          },
+          "no-repo-state": {
+            "type": "boolean",
+            "description": "leave out git status and changed file paths"
+          },
+          "diff-bodies": {
+            "type": "boolean",
+            "description": "include diff bodies, capped at 12,000 characters"
+          },
+          "no-editor-tabs": {
+            "type": "boolean",
+            "description": "leave out the open editor tabs"
+          },
+          "template": {
+            "type": "string",
+            "description": "the template id"
+          },
+          "note": {
+            "type": "string",
+            "description": "the steering note"
+          },
+          "source-agent": {
+            "type": "string",
+            "description": "describe an archived source: the agent that ran it"
+          },
+          "provider-session": {
+            "type": "string",
+            "description": "archived source: the agent CLI's session id"
+          },
+          "transcript": {
+            "type": "string",
+            "description": "archived source: the transcript file"
+          },
+          "last-message": {
+            "type": "string",
+            "description": "archived source: the agent's last message"
+          },
+          "title": {
+            "type": "string",
+            "description": "archived source: a name for it"
+          },
+          "cwd": {
+            "type": "string",
+            "description": "archived source: the folder it ran in"
+          },
+          "brief": {
+            "type": "string",
+            "description": "send this text as the brief instead of composing one; @file reads it from a file"
+          },
+          "wait": {
+            "type": "boolean",
+            "description": "wait for the delivery outcome and print it"
+          }
+        },
+        "methods": [
+          "quirky.handoff/start",
+          "quirky.worktree/resolve"
+        ]
+      },
+      {
+        "id": "resend",
+        "words": "resend",
+        "summary": "send the brief kept for a child session again",
+        "positionals": [
+          {
+            "name": "session",
+            "description": "the child session",
+            "required": true
+          }
+        ],
+        "methods": [
+          "quirky.handoff/resend"
+        ]
+      },
+      {
+        "id": "lineage",
+        "words": "lineage",
+        "summary": "list the handoff records, newest first",
+        "flags": {
+          "session": {
+            "type": "string",
+            "description": "only records naming this session on either side"
+          }
+        },
+        "methods": [
+          "quirky.handoff/lineage"
+        ]
+      },
+      {
+        "id": "jump",
+        "words": "jump",
+        "summary": "focus the other end of a handoff",
+        "positionals": [
+          {
+            "name": "session",
+            "description": "a session in the handoff",
+            "required": true
+          }
+        ],
+        "flags": {
+          "lineage": {
+            "type": "string",
+            "description": "the record to follow (default: the newest naming the session)"
+          }
+        },
+        "methods": [
+          "quirky.handoff/jump"
+        ]
+      },
+      {
+        "id": "templates-list",
+        "words": "templates list",
+        "summary": "list the handoff templates",
+        "methods": [
+          "quirky.handoff/templates"
+        ]
+      },
+      {
+        "id": "templates-add",
+        "words": "templates add",
+        "summary": "add a handoff template",
+        "flags": {
+          "name": {
+            "type": "string",
+            "description": "the template name (at most 80 characters)",
+            "required": true
+          },
+          "body": {
+            "type": "string",
+            "description": "the instructions (at most 8,000 characters)",
+            "required": true
+          }
+        },
+        "methods": [
+          "quirky.handoff/templateMutate"
+        ]
+      },
+      {
+        "id": "templates-edit",
+        "words": "templates edit",
+        "summary": "change a handoff template",
+        "positionals": [
+          {
+            "name": "id",
+            "description": "the template id",
+            "required": true
+          }
+        ],
+        "flags": {
+          "name": {
+            "type": "string",
+            "description": "the new name"
+          },
+          "body": {
+            "type": "string",
+            "description": "the new instructions"
+          }
+        },
+        "methods": [
+          "quirky.handoff/templates",
+          "quirky.handoff/templateMutate"
+        ]
+      },
+      {
+        "id": "templates-rm",
+        "words": "templates rm",
+        "summary": "remove a handoff template",
+        "positionals": [
+          {
+            "name": "id",
+            "description": "the template id",
+            "required": true
+          }
+        ],
+        "methods": [
+          "quirky.handoff/templateMutate"
+        ]
+      },
+      {
+        "id": "templates-reset",
+        "words": "templates reset",
+        "summary": "go back to the built-in handoff templates",
+        "methods": [
+          "quirky.handoff/templateMutate"
+        ]
+      }
+    ]
+  }
 }
