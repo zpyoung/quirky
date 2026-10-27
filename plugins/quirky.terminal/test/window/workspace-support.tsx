@@ -25,7 +25,7 @@ export async function loadWorkspace(): Promise<WorkspaceModule> {
   const original = Element.prototype.getBoundingClientRect
   Element.prototype.getBoundingClientRect = function (this: Element) {
     const own = rects.get(this)
-    const measured = own ?? (/\bqt-(panes|split|body)\b/.test(this.getAttribute('class') ?? '') ? { left: 0, top: 0, ...AREA } : null)
+    const measured = own ?? (/\bqt-(panes|groups|body)\b/.test(this.getAttribute('class') ?? '') ? { left: 0, top: 0, ...AREA } : null)
     if (!measured) return original.call(this)
     return { ...measured, x: measured.left, y: measured.top, right: measured.left + measured.width, bottom: measured.top + measured.height, toJSON: () => ({}) } as DOMRect
   }

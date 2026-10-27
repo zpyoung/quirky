@@ -129,12 +129,28 @@ describe('rendering from the daemon workspace', () => {
     expect(view.q('[data-pane="pane-1"]')).toBeNull()
   })
 
-  test('group dividers carry the ratio as flex shares', async () => {
+  test('groups share the width the divider leaves by the split ratio', async () => {
     const ws = conceptualWorkspace()
     ;(ws.root as any).ratio = 0.3
     const view = await mount(fakeDaemon(ws))
-    const sides = view.qa('[data-split="split-1"] > .qt-split-side')
-    expect(sides.map((el) => el.style.flex)).toEqual(['0.3 1 0%', '0.7 1 0%'])
+    const slots = ['grp-1', 'grp-2'].map((id) => view.q(`[data-group="${id}"]`)!.parentElement!.style)
+    expect(slots.map((style) => [style.left, style.width])).toEqual([
+      ['0px', '299px'],
+      ['302px', '698px']
+    ])
+    expect(view.q<HTMLElement>('[data-group-divider="split-1"]')!.style.left).toBe('299px')
+  })
+
+  test('splitting the group tree keeps the terminals of the group that stays mounted', async () => {
+    const ws = makeWorkspace(group('grp-1', [tab('tab-1', pane('pane-1', 's-1')), tab('tab-2', pane('pane-2', 's-2'))]))
+    const view = await mount(fakeDaemon(ws))
+    const original = view.q('[data-pane="pane-1"]')
+    expect(terminals).toHaveLength(1)
+    await act(async () => view.controller().moveTabToSplit('tab-2', 'right', 'grp-1'))
+    await settle()
+    expect(view.qa('[data-group]')).toHaveLength(2)
+    expect(view.q('[data-pane="pane-1"]')).toBe(original)
+    expect(terminals).toHaveLength(2)
   })
 
   test('a missing worktree input shows the muted pick text and reports an empty view', async () => {

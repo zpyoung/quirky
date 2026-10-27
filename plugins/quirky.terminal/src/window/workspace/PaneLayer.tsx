@@ -298,6 +298,7 @@ export function PaneLayer({ controller, state, group, tab }: Props) {
         const top = px(rect.y)
         const session = sessions[leaf.session]
         const focused = focusedGroup && tab.activePane === leaf.id
+        const structured = session?.kind === 'structured'
         return (
           <div
             key={leaf.id}
@@ -306,12 +307,16 @@ export function PaneLayer({ controller, state, group, tab }: Props) {
             data-session={leaf.session}
             data-active={focused ? 'true' : 'false'}
             style={{ left, top, width: px(rect.x + rect.width) - left, height: px(rect.y + rect.height) - top }}
+            onMouseDownCapture={structured ? () => void controller.focusPane(leaf.id) : undefined}
+            onFocus={structured ? () => void controller.focusPane(leaf.id) : undefined}
             onContextMenu={(event) => {
               event.preventDefault()
               controller.openMenu('pane', leaf.id, { x: event.clientX, y: event.clientY })
             }}
           >
-            {session?.kind === 'structured' ? (
+            {!session ? (
+              <p className="qt-muted qt-pad">Loading session...</p>
+            ) : session.kind === 'structured' ? (
               <StructuredHost controller={controller} session={leaf.session} />
             ) : (
               <TerminalPaneView
@@ -319,10 +324,10 @@ export function PaneLayer({ controller, state, group, tab }: Props) {
                 ref={(handle) => controller.registerHandle(leaf.id, handle)}
                 context={controller.context}
                 sessionId={leaf.session}
-                cwd={cwds[leaf.session] ?? session?.cwd ?? ''}
+                cwd={cwds[leaf.session] ?? session.cwd ?? ''}
                 settings={settings}
                 active={focused}
-                interactive={leaf.exit === null && session?.status !== 'exited'}
+                interactive={leaf.exit === null && session.status !== 'exited'}
                 dragging={state.dragging}
                 onFocus={() => void controller.focusPane(leaf.id)}
                 onState={(report) => controller.setPaneState(leaf.id, report)}

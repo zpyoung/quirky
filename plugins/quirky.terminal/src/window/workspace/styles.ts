@@ -2,11 +2,9 @@ const CSS = `
 .qt-workspace { position: relative; flex: 1; min-width: 0; min-height: 0; display: flex; background: var(--bg); color: var(--text); }
 .qt-muted { color: var(--muted); }
 .qt-pad { padding: 12px; }
-.qt-split { flex: 1; display: flex; min-width: 0; min-height: 0; }
-.qt-split-right { flex-direction: row; }
-.qt-split-down { flex-direction: column; }
-.qt-split-side { display: flex; min-width: 0; min-height: 0; overflow: hidden; }
-.qt-group-divider { flex: none; background: var(--border); z-index: 6; }
+.qt-groups { position: relative; flex: 1; min-width: 0; min-height: 0; overflow: hidden; }
+.qt-group-slot { position: absolute; display: flex; min-width: 0; min-height: 0; overflow: hidden; }
+.qt-group-divider { position: absolute; background: var(--border); z-index: 6; }
 .qt-group-divider:hover { background: var(--accent); }
 .qt-group-divider-right { cursor: col-resize; }
 .qt-group-divider-down { cursor: row-resize; }
