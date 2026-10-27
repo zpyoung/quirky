@@ -118,6 +118,19 @@ All of these apply to every milestone:
   - Title and OSC fallback.
   - Status that programs report with cmux's OSC 7501 sequence, so tools that already report to
     cmux show their status in Quirky.
+- [Agent status for scripts](../research/orca-features/agent-status.md), after agent status lands.
+  These follow herdr, a terminal workspace for agents:
+  - An explain command that names the source and rule behind a session's current state, so
+    "why does this say idle?" has an answer.
+  - Screen detection rules stored as data, one file per agent. A plugin can ship rules and a user
+    can override them locally without a new release. Quirky never downloads rules from a server.
+  - Sending a prompt to an agent never types into one waiting for approval, because idle isn't
+    permission to type. The send fails with a distinct error when the agent is waiting for
+    approval, and with another when it hasn't started working within a few seconds, instead of
+    hanging.
+  - Waits for scripts: until a session reaches a given state, and until its output matches a
+    pattern. Sessions can be given unique names to address them by.
+  - Loops, automations and orchestration send prompts through this path, so it lands before M5.
 - [Notifications](../research/orca-features/notifications.md):
   - Unread markers, cooldown, banner text, sounds, tray dot.
   - Notifications from the OSC 9, OSC 99 and OSC 777 sequences that terminal programs already
@@ -280,4 +293,6 @@ decision the loop makes is logged for review.
 - **Ideas from cmux:** a few items follow conventions from cmux, a GPL-3.0 macOS terminal for
   agents. Those items match cmux's documented behavior and never copy its code, which would bring
   the GPL with it.
+- **Ideas from herdr:** agent status for scripts follows herdr's documented behavior. herdr is
+  Apache-2.0 but written in Rust, so nothing is ported from it.
 - **Review stop:** the loop stops for review after M0.
