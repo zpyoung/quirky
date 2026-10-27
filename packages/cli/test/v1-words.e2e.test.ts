@@ -65,7 +65,7 @@ describe('SC-20: v1 command lines run through the plugins', () => {
     expect(created).toMatch(
       new RegExp(`^id: wt_[0-9a-f]+\\nname: feature-x\\nbranch: feature-x\\npath: ${join(worktreesRoot, 'api', 'feature-x')}\\n`)
     )
-    expect(git.calls.find((call) => call.fn === 'addWorktree')?.args[3]).toBe('refs/heads/main')
+    expect(git.calls.find((call) => call.fn === 'addWorktree')?.args[3]).toBe('c'.repeat(40))
 
     const worktrees = (await ok(['wt', 'list', '--repo', 'api'])).split('\n')
     expect(worktrees[0]).toMatch(/^ID\s+NAME\s+BRANCH\s+STATUS\s+PATH$/)
