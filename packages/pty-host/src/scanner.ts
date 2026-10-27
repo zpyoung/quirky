@@ -342,10 +342,19 @@ function capField(text: string): string {
   return last >= 0xd800 && last <= 0xdbff ? cut.slice(0, -1) : cut
 }
 
+/**
+ * Decodes an OSC 99 base64 payload as UTF-8, or null when it is not valid base64. Padding is
+ * optional, but when present it must be canonical: `=` only as the last one or two characters and
+ * only as many as the length needs to reach a multiple of four.
+ */
 function decodeBase64Utf8(text: string): string | null {
-  const unpadded = text.replace(/={0,2}$/, '')
-  if (!/^[A-Za-z0-9+/]*$/.test(unpadded) || unpadded.length % 4 === 1) return null
-  return Buffer.from(unpadded, 'base64').toString('utf8')
+  const match = /^([A-Za-z0-9+/]*)(={0,2})$/.exec(text)
+  if (match === null) return null
+  const [, data = '', padding = ''] = match
+  const remainder = data.length % 4
+  if (remainder === 1) return null
+  if (padding !== '' && padding.length !== (4 - remainder) % 4) return null
+  return Buffer.from(data, 'base64').toString('utf8')
 }
 
 /**

@@ -134,6 +134,17 @@ describe('OSC 99 (SC-31, SC-32)', () => {
     expect(notes(input)).toEqual([note('Build', 'ok')])
   })
 
+  test('base64 padding must be canonical or absent', () => {
+    for (const bad of ['aA=', 'YQ=', 'aGVsbG8==', 'YWJj==', 'YWJj=', 'YQ===', 'a', 'YWJjZ', '=YQ=', 'YQ=A']) {
+      expect(notes(osc99('e=1', bad))).toEqual([])
+    }
+    expect(notes(osc99('e=1', 'YQ=='))).toEqual([note('a', '')])
+    expect(notes(osc99('e=1', 'aGVsbG8='))).toEqual([note('hello', '')])
+    expect(notes(osc99('e=1', 'YWJj'))).toEqual([note('abc', '')])
+    expect(notes(osc99('e=1', 'YQ'))).toEqual([note('a', '')])
+    expect(notes(osc99('e=1', 'aGVsbG8'))).toEqual([note('hello', '')])
+  })
+
   test('other payload types are ignored whole', () => {
     expect(notes(osc99('p=icon', 'x'))).toEqual([])
     expect(notes(osc99('i=3:d=0:p=icon', 'x') + osc99('i=3', 'T'))).toEqual([note('T', '')])
