@@ -487,5 +487,16 @@
 - **Revisit if:** a later item touches packages/daemon/test/lock.test.ts
 - **Source:** assumed — autonomous
 
+## D49: The first land failed in the integration tree; the new package links were copied in by hand, as m1-providers D51 did
+- **Question:** the first `queue.ts land` failed with 85 failures after a 29-minute test run, mostly "timed out waiting for quirkyd to start". The integration tree's `plugins/quirky.terminal/node_modules` lacked the links for `react`, `react-dom`, `@types/react`, `@types/react-dom` and `@happy-dom/global-registrator`, which this item added. `land` doesn't run `bun install`. While those tests ran, lane 1 merged build/roadmap into m2-ask-parity, which picked up this item's unverified land merge (2f8ece4). m2-ask-parity then landed, so this item's code reached build/roadmap with the queue still showing it in progress.
+- **Options:** block until a person runs `bun install` in the integration tree; copy the links in, as m1-providers D51 did
+- **Chose:** copy them. The five symlinks were copied from this worktree into the integration tree's `plugins/quirky.terminal/node_modules`; all their targets already existed in its `node_modules/.bun` store. They're git-ignored, so its tree stays clean. `quirky.terminal`'s UI test then passed there. The branch merged build/roadmap again (a fast-forward, since roadmap already held it), and the full gate passed: 3634 tests, scripts 30, typecheck clean. Then land again.
+- **Why:** the same reason as m1-providers D51. The loop script that would install after merging is protected.
+- **Evidence:** first land output (task output in the session); `ls <integration>/plugins/quirky.terminal/node_modules`; `git log --graph build/roadmap` shows 2f8ece4 inside m2-ask-parity's history
+- **Reversibility:** easy
+- **Confidence:** medium
+- **Revisit if:** two lanes land at once again; `land` should hold a lock across merge and verify, and that change is a person's, since scripts/build-loop is protected
+- **Source:** assumed — autonomous
+
 ## Progress
 Done. W1-W4 built, with checkpoint fix batches after W1-W3 (D36-D39), the SC-23 kill fix (D40), two catch-ups with build/roadmap (D41, D42), and Final Round 1 with its fix batch (D43, D44). The UI pass found and fixed the restore cursor defect, and every UI goal passed (D45, D46). There are no native scenarios (D47), and the e2e harness was hardened against leaks (D48). Verify: `bun run test` 3327 pass, `bun test scripts` 30 pass, `bun run typecheck` clean. SC-1 to SC-42 each have a named test, including the Orca defects SC-34 and SC-37. The feature ships as built-in plugins (`quirky.terminal`, `quirky.session`) on the public plugin API (SC-41). Nothing is left open in BLOCKERS.md.
