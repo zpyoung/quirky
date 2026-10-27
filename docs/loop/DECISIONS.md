@@ -17,6 +17,7 @@ files, not this one.
 | hard | medium | [m1-worktrees D8](decisions/m1-worktrees.md) | The worktree record grows additively, and `name` becomes the display name or the folder name | assumed — autonomous |
 | hard | medium | [m0-daemon-api D4](decisions/m0-daemon-api.md) | Plugin method wire names are `<pluginId>/<name>` | assumed — autonomous |
 | hard | medium | [m0-daemon-api D9](decisions/m0-daemon-api.md) | Each plugin gets one SQLite file and a data directory of its own | assumed — autonomous |
+| hard | medium | [m5-ledger D5](decisions/m5-ledger.md) | Keep stable ledger codebase identity separate from generated repo IDs | assumed — autonomous |
 | hard | medium | [m0-ui-api D6](decisions/m0-ui-api.md) | A slot gives the plugin one container element to mount into, and nothing else of the page | assumed — autonomous |
 | hard | medium | [m0-registry D4](decisions/m0-registry.md) | Contribution IDs are `<kind>:<pluginId>/<name>` | assumed — autonomous |
 | hard | medium | [m1-launch-settings D5](decisions/m1-launch-settings.md) | Approach: each agent's model and option catalog is a `launchOptions` data block on its `agent` contribution, resolved by code in `quirky.agents` | assumed — autonomous |
@@ -39,6 +40,9 @@ files, not this one.
 | hard | high | [m1-notifications D40](decisions/m1-notifications.md) | Approach: a daemon policy plugin that listens to producers, with markers on their records and the shell rendering | assumed — autonomous |
 | hard | high | [m0-daemon-api D7](decisions/m0-daemon-api.md) | The four kinds are `method`, `event`, `job` and `launch-hook` | assumed — autonomous |
 | hard | high | [m0-daemon-api D13](decisions/m0-daemon-api.md) | Choose declared contributions with provided implementations | supersedes nothing; extends m0-registry D23 |
+| hard | high | [m5-ledger D2](decisions/m5-ledger.md) | Use the same authenticated scripting surface for every ledger action | locked by docs/architecture.md |
+| hard | high | [m5-ledger D7](decisions/m5-ledger.md) | Preserve validation, history and no-op semantics exactly | locked by external research/orca-features/ledger.md |
+| hard | high | [m5-ledger D8](decisions/m5-ledger.md) | Keep imports replay-safe and evidence advisory | locked by external research/orca-features/ledger.md |
 | hard | high | [m0-ui-api D4](decisions/m0-ui-api.md) | The seven UI kinds are `view`, `panel`, `sidebar-section`, `command`, `keybinding`, `setting` and `theme` | assumed — autonomous |
 | hard | high | [m0-ui-api D29](decisions/m0-ui-api.md) | Choose declared slots with lazily imported modules that mount into host elements | assumed — autonomous |
 | hard | high | [m0-registry D12](decisions/m0-registry.md) | Every contribution is declared in the manifest, and code can only provide declared ones | assumed — autonomous |
@@ -168,6 +172,13 @@ files, not this one.
 | medium | high | [m5-structured-runner D7](decisions/m5-structured-runner.md) | Checks are a built-in plugin with run and cancel methods | assumed — autonomous |
 | medium | high | [m5-structured-runner D12](decisions/m5-structured-runner.md) | One connected runner owns each native conversation | assumed — autonomous |
 | medium | high | [m5-structured-runner D13](decisions/m5-structured-runner.md) | Ask owns cancellation when its creating plugin is disabled or the daemon stops | assumed — autonomous |
+| medium | high | [m5-ledger D1](decisions/m5-ledger.md) | Implement the complete Project ledger feature | locked by docs/roadmap.md |
+| medium | high | [m5-ledger D4](decisions/m5-ledger.md) | Normalize ledger storage in the public plugin SQLite store | locked by docs/loop/decisions/m0-daemon-api.md |
+| medium | high | [m5-ledger D6](decisions/m5-ledger.md) | Preserve target distinctions and reject ambiguous selector combinations | locked by external research/orca-features/ledger.md |
+| medium | high | [m5-ledger D9](decisions/m5-ledger.md) | Reconcile owner recovery before reads, not only mutations | assumed — autonomous |
+| medium | high | [m5-ledger D10](decisions/m5-ledger.md) | Preserve documented UI surfaces with scriptable controls and pinned detail actions | locked by external research/orca-features/ledger.md |
+| medium | high | [m5-ledger D12](decisions/m5-ledger.md) | Correct genuine spec-review gaps and reject planned-path prepass false positives | assumed — autonomous |
+| medium | high | [m5-ledger D16](decisions/m5-ledger.md) | Correct import paths, value flags and Quirky JSON rather than copy Orca's transport envelope | assumed — autonomous |
 | medium | high | [m0-ui-api D5](decisions/m0-ui-api.md) | Plugin UI code is one ES module named by a manifest `ui` field, loaded in the window only when needed | assumed — autonomous |
 | medium | high | [m0-ui-api D8](decisions/m0-ui-api.md) | The daemon resolves UI contributions into one model the window and agents read | assumed — autonomous |
 | medium | high | [m0-ui-api D12](decisions/m0-ui-api.md) | Keybindings are `mod+shift+k` chords that must include a modifier, or a function key | deferred: platform |
@@ -683,6 +694,15 @@ files, not this one.
 | easy | high | [m5-structured-runner D25](decisions/m5-structured-runner.md) | Resolve public workspace types directly rather than requiring generated plugin links | assumed — autonomous |
 | easy | high | [m5-structured-runner D26](decisions/m5-structured-runner.md) | Preserve the final catch-up's regex semantics and browser feasibility block | locked by docs/loop/decisions/fix-ask-regex-budget-20261027.md |
 | easy | high | [m5-structured-runner D27](decisions/m5-structured-runner.md) | Preserve the implemented item and block on the protected queue-order gate | locked by docs/loop/LOOP.md |
+| easy | high | [m5-ledger D3](decisions/m5-ledger.md) | Use omp implementers with the reachable Gemini reviewer fallback | assumed — autonomous |
+| easy | high | [m5-ledger D11](decisions/m5-ledger.md) | Build and verify macOS behavior without claiming other platforms | deferred: platform |
+| easy | high | [m5-ledger D13](decisions/m5-ledger.md) | Use two independent implementation components with one integration owner | assumed — autonomous |
+| easy | high | [m5-ledger D14](decisions/m5-ledger.md) | Enforce the actual public schema subset and canonical filesystem paths | assumed — autonomous |
+| easy | high | [m5-ledger D15](decisions/m5-ledger.md) | Test consumer invariants rather than SQLite bytes or asynchronous loading frames | assumed — autonomous |
+| easy | high | [m5-ledger D17](decisions/m5-ledger.md) | Do not rewrite protected queue infrastructure to clear the scripts gate | locked by docs/loop/LOOP.md |
+| easy | high | [m5-ledger D18](decisions/m5-ledger.md) | Treat an unchanged fast refresh as a visual-probe limitation, not a proved dead request | assumed — autonomous |
+| easy | high | [m5-ledger D19](decisions/m5-ledger.md) | Preserve separate visual outcomes and the constrained-viewport footer proof | assumed — autonomous |
+| easy | high | [m5-ledger D20](decisions/m5-ledger.md) | Fix asynchronous test readiness, retain the red infrastructure gate, and stop superseded verification | assumed — autonomous |
 | easy | high | [m0-ui-api D1](decisions/m0-ui-api.md) | Classify the item as an API and Visual design, and run both research phases | assumed — autonomous |
 | easy | high | [m0-ui-api D2](decisions/m0-ui-api.md) | Skip the visual companion and the adhd offer, use the standard gray-area set | locked by docs/loop/LOOP.md |
 | easy | high | [m0-ui-api D3](decisions/m0-ui-api.md) | Select every gray area that matters for the UI plugin API | assumed — autonomous |
