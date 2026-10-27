@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import type { UiPluginContext } from '@quirky/protocol'
 import { Dialog } from '../panel/Dialog'
-import { generators, initialAgent, type AgentList } from './agents'
+import { generators, hasCustomCommand, initialAgent, type AgentList } from './agents'
 import { CUSTOM_AGENT, DEFAULT_TEMPLATE } from './types'
 
 type Props = {
@@ -10,15 +10,6 @@ type Props = {
   onClose(): void
   /** Runs one generation with these values; nothing is saved. */
   onGenerate(choice: { agent: string; template: string }): void
-}
-
-/** Whether the custom command setting holds a command, so "Custom command" can be offered. */
-function hasCustomCommand(context: UiPluginContext): boolean {
-  try {
-    return String(context.getSetting('ai-custom-command') ?? '').trim() !== ''
-  } catch {
-    return false
-  }
 }
 
 /**

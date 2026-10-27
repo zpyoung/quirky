@@ -67,7 +67,7 @@ function LaunchForm({ action, preview, agents, onClose, start }: FormProps) {
       <div className="form">
         <label>
           Agent
-          {agents.list !== null && (usable.length > 0 || agent !== '') ? (
+          {agents.list !== null && usable.length > 0 ? (
             <select aria-label="Agent" value={agent} onChange={(event) => setPicked(event.target.value)}>
               {!known && agent !== '' && <option value={agent}>{agent}</option>}
               {usable.map((entry) => (
@@ -121,7 +121,7 @@ function LaunchForm({ action, preview, agents, onClose, start }: FormProps) {
         <button type="button" onClick={onClose}>
           Cancel
         </button>
-        <button type="button" className="primary" disabled={agent === '' || starting} onClick={() => void go()}>
+        <button type="button" className="primary" disabled={agent === '' || usable.length === 0 || starting} onClick={() => void go()}>
           {saving ? 'Save & start agent' : 'Start agent'}
         </button>
       </div>
