@@ -3,6 +3,8 @@ import { existsSync, mkdirSync, readdirSync, realpathSync, writeFileSync } from 
 import { join } from 'node:path'
 import { RpcErrorCode, type Repo, type Session, type Worktree, type WorktreeCreateResult } from '@quirky/protocol'
 import { waitFor } from '../../../packages/daemon/test/helpers'
+import { gitApi } from '@quirky/git'
+import { useTestGit } from '@quirky/git/testing'
 import { call, commitFiles, failure, git, isolateGitConfig } from '../../quirky.repo/test/git-fixtures'
 import { testCliContext } from '../../quirky.repo/test/harness'
 import { commands } from '../cli'
@@ -363,6 +365,32 @@ describe('SC-20: a remote base that cannot be fetched falls back to the local br
     expect(made.baseFallback).toBeUndefined()
     expect(made.worktree.baseRef).toBe('origin/main')
     await waitFor(() => (git(dir, 'rev-parse', 'origin/main') !== stale ? true : undefined), 5000)
+  })
+})
+
+describe('the commit the setup gate read is the commit the workspace is made from', () => {
+  test('a remote base that moves after the hooks were read does not change the commit checked out', async () => {
+    const { dir, origin } = await startApi()
+    const pusher = makeProject(join(scratch(), 'pusher'), { origin })
+    const gated = git(dir, 'rev-parse', 'origin/main')
+    commitFiles(pusher, { 'b.txt': 'two\n' })
+    git(pusher, 'push', '-q', 'origin', 'main')
+
+    const real = gitApi()
+    useTestGit({
+      ...real,
+      addNewBranchWorktree: async (...args: Parameters<typeof real.addNewBranchWorktree>) => {
+        git(dir, 'fetch', '-q', 'origin')
+        return real.addNewBranchWorktree(...args)
+      }
+    })
+    try {
+      const made = await create({ repo: 'api', name: 'pinned', base: 'origin/main' })
+      expect(git(dir, 'rev-parse', 'origin/main')).not.toBe(gated)
+      expect(git(made.worktree.path, 'rev-parse', 'HEAD')).toBe(gated)
+    } finally {
+      useTestGit(null)
+    }
   })
 })
 

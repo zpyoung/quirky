@@ -301,6 +301,19 @@ describe('worktree add', () => {
     await createTrackingBranch(repo, 'feat', 'origin/feat')
     expect(await upstreamOf(repo, 'feat')).toBe('origin/feat')
   })
+
+  test('createTrackingBranch starts at the given commit and still tracks the remote ref', async () => {
+    const { repo } = repoWithOrigin()
+    const first = git(repo, 'rev-parse', 'HEAD')
+    git(repo, 'push', '-q', 'origin', 'main:feat')
+    git(repo, 'fetch', '-q', 'origin')
+    commitFile(repo, 'later.txt', 'x')
+    git(repo, 'push', '-q', 'origin', 'main:feat')
+    git(repo, 'fetch', '-q', 'origin')
+    await createTrackingBranch(repo, 'feat', 'origin/feat', first)
+    expect(git(repo, 'rev-parse', 'feat')).toBe(first)
+    expect(await upstreamOf(repo, 'feat')).toBe('origin/feat')
+  })
 })
 
 describe('config', () => {

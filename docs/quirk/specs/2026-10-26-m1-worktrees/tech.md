@@ -284,7 +284,7 @@ Steps run in this order; any refusal before step 6 leaves git and the disk untou
 3. `hasCommits` false → `no-commits`.
 4. Resolve the base ([Base resolution](#base-resolution)) unless `branch` is given (its tip is the
    start point).
-5. Hooks gate: `quirky.repo/hooks { repo, ref: <base or branch full ref> }`. If there is an
+5. Resolve the base or branch to a commit id once; the hooks gate and step 7 both use that commit, so a background fetch cannot split them. Hooks gate: `quirky.repo/hooks { repo, ref: <commit> }`. If there is an
    effective setup script: decision = `setup` unless inherit, else the policy
    (`run-by-default` → run, `skip-by-default` → skip, `ask` → `setup-decision-required`). If the
    decision is run and the setup has an untrusted shared part and not `trustSetup` →
@@ -294,9 +294,9 @@ Steps run in this order; any refusal before step 6 leaves git and the disk untou
    `worktreeLocation` (relative → against `repo.path`) else `worktreesRoot`, and `repoDir` is
    `worktreeDirName` (`main.ts:117-120`); `ensureInside(root, folder)` or `invalid-name`. Walk
    suffixes to 100 ([Naming](#naming)).
-7. `git worktree add`: new branch `git worktree add --no-track -b <branch> <path> <fullBase>`;
+7. `git worktree add`: new branch `git worktree add --no-track -b <branch> <path> <commit>`;
    existing branch `git worktree add <path> <branch>` (a remote-only `origin/<b>` first creates
-   local `<b>` with `git branch --track <b> origin/<b>`); refusal when checked out elsewhere →
+   local `<b>` at `<commit>` with `origin/<b>` as its upstream); refusal when checked out elsewhere →
    `branch-checked-out`.
 8. Best-effort git config: `branch.<branch>.base = <fullBase>`; `push.autoSetupRemote true` unless
    `git config --get push.autoSetupRemote` returns anything; upstream when the branch name equals the

@@ -299,7 +299,9 @@ async function createGit(env: CreateEnv, repo: Repo, params: CreateParams, creat
     }
   }
 
-  const hooksRef = existing?.fullRef ?? base!.fullRef
+  const startRef = existing?.fullRef ?? base!.fullRef
+  const hooksRef = await git.resolveCommit(repo.path, startRef)
+  if (hooksRef === null) throw env.fail('invalid-params', `Base ref "${existing?.branch ?? base!.shortRef}" was not found.`)
   const hooks = (await env.call('quirky.repo/hooks', { repo: repo.id, ref: hooksRef })) as EffectiveHooks
   const decision = decideSetup(env, repo, settings, hooks, params, hooksRef)
 
@@ -336,7 +338,7 @@ async function createGit(env: CreateEnv, repo: Repo, params: CreateParams, creat
       if (existing === null) {
         if (!(await git.checkRefFormatBranch(branch))) throw reasoned(env, 'invalid-params', 'invalid-name', 'Invalid worktree name')
         if (await git.localBranchExists(repo.path, branch)) {
-          const atBase = (await git.branchHead(repo.path, branch)) === (await git.resolveCommit(repo.path, base!.fullRef))
+          const atBase = (await git.branchHead(repo.path, branch)) === hooksRef
           if (!atBase || (await checkedOut(branch))) throw reasoned(env, 'conflict', 'branch-exists', `Branch ${branch} already exists`, { branch })
           mode = 'existing'
         }
@@ -388,7 +390,7 @@ async function createGit(env: CreateEnv, repo: Repo, params: CreateParams, creat
       const holder = await checkedOut(branch)
       if (holder) throw branchCheckedOut(env, branch, holder.path)
     }
-    await addWorktree(env, repo, { mode, branch, folder, base, existing })
+    await addWorktree(env, repo, { mode, branch, folder, start: hooksRef, existing })
 
     await configureBranch(env, repo, branch, mode === 'tracking' || existing !== null ? null : base!)
 
@@ -431,21 +433,20 @@ const branchCheckedOut = (env: CreateEnv, branch: string, path: string | null) =
 async function addWorktree(
   env: CreateEnv,
   repo: Repo,
-  plan: { mode: 'new' | 'existing' | 'tracking'; branch: string; folder: string; base: ResolvedBase | null; existing: BranchSource | null }
+  plan: { mode: 'new' | 'existing' | 'tracking'; branch: string; folder: string; start: string; existing: BranchSource | null }
 ): Promise<void> {
   const git = gitApi()
   try {
     if (plan.mode === 'new') {
-      await git.addNewBranchWorktree(repo.path, plan.folder, plan.branch, plan.base!.fullRef)
+      await git.addNewBranchWorktree(repo.path, plan.folder, plan.branch, plan.start)
       return
     }
     if (plan.mode === 'tracking') {
-      const tip = await git.resolveCommit(repo.path, plan.existing!.fullRef)
-      await git.createTrackingBranch(repo.path, plan.branch, plan.existing!.fullRef)
+      await git.createTrackingBranch(repo.path, plan.branch, plan.existing!.fullRef, plan.start)
       try {
         await git.addExistingBranchWorktree(repo.path, plan.folder, plan.branch)
       } catch (error) {
-        if (tip) await git.deleteRefIfAt(repo.path, plan.branch, tip)
+        await git.deleteRefIfAt(repo.path, plan.branch, plan.start)
         throw error
       }
       return
