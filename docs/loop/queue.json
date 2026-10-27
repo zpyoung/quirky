@@ -578,6 +578,16 @@
       "status": "todo"
     },
     {
+      "id": "fix-test-cost",
+      "milestone": "M1",
+      "title": "Make the test suite cheaper to run. Today every test file starts a real daemon, a pty-host and a login zsh (`zsh -l`), and on the 8-vCPU test host that keeps the load near 21 while four files run. Measure per-file wall time and CPU with `bun run test`, then cut the cost without losing coverage: start non-login shells (`zsh -f`, `bash --noprofile --norc`) in tests that don't exercise shell integration or the login environment, share one daemon and pty-host per test file (beforeAll) where tests don't depend on a fresh one, and drop fixed sleeps in favour of waiting on the event. Keep every scenario test that checks shell integration on a real login shell. Report the before and after suite times in the decision log",
+      "docs": [
+        "term-daemon.md"
+      ],
+      "deps": [],
+      "status": "todo"
+    },
+    {
       "id": "m7-parity-sweep",
       "milestone": "M7",
       "title": "Parity sweep: every remaining flow in the 28 feature docs",
