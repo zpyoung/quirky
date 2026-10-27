@@ -154,5 +154,82 @@
 - **Revisit if:** post-change gate reports a deterministic failure
 - **Source:** assumed — autonomous
 
+## D15: Preserve Gemini consent and complete Codex config-warning parity
+- **Question:** Which documented local flows were missing from the initial implementation contract?
+- **Options:** leave implicit/untested; explicitly cover Gemini CLI OAuth consent and Codex last-synced configuration warnings
+- **Chose:** Gemini OAuth default-off setting and Accounts consent control; required configWarnings projection and safe managed Codex resync/retention (AC18); always force private Codex file credentials even without a default config
+- **Why:** accounts.md explicitly gates Gemini OAuth and displays Codex configuration warnings. Source review found automatic Gemini refresh and a missing-config Codex path that omitted file-store enforcement. These are existing parity/security requirements, not optional scope expansion.
+- **Evidence:** accounts.md:83,270; usage/local-adapters.ts initial unconditional refresh branch; profiles.ts setupCodex initial conditional write; logic.md AC18 and amended tech shared contracts
+- **Reversibility:** medium (profile/credential lifecycle)
+- **Confidence:** high
+- **Revisit if:** provider credential or configuration semantics change
+- **Source:** locked by research/orca-features/accounts.md
+
+## D16: Complete daemon-driven coverage rather than count service tests as flow proof
+- **Question:** Does provider-unit and mounted-UI coverage satisfy the loop's acceptance bar?
+- **Options:** count direct UsageService tests; add real daemon API/CLI acceptance for missing flows
+- **Chose:** a disjoint acceptance-api/acceptance-fixtures test slice maps every AC to actual daemon/API coverage; real daemon/PTY smoke fixture is prepared outside the repo
+- **Why:** LOOP.md requires each flow's test to drive the CLI or daemon API, while tests alone cannot prove the changed runtime/UI surface.
+- **Evidence:** docs/loop/LOOP.md:115-137; AccountsApiAcceptance task contract; AccountSmokeHarness scratch-only contract; original usage.test.ts service-only seam
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** a test cannot exercise a required flow through the public surface
+- **Source:** locked by docs/loop/LOOP.md
+
+## D17: Integrate accepted prerequisites before dependent lifecycle acceptance
+- **Question:** How should independently implemented fixed-contract components be exercised together?
+- **Options:** fake missing sibling modules in tests; merge audited/accepted integration and usage prerequisites into lifecycle tree
+- **Chose:** after all original workers returned and authoritative scopes/HEADs passed, commit accepted integration 32bc433 and usage 0e23da3; parent merges them into lifecycle tree (045a86a) before API acceptance
+- **Why:** lifecycle runtime imports the real usage engine and required launch seams. Stubbing those modules would not prove the consumer behavior. All worker edits remain within their original disjoint source scopes; temporary dependency installation is parent-owned.
+- **Evidence:** /tmp/quirky-m3-accounts-lane10.BBUvf8/audit-barrier.json; component-checks.json; actual targeted shell20/session44/usage17 passing checks; lifecycle API7 passing after cancellation fix
+- **Reversibility:** easy (feature branch only)
+- **Confidence:** high
+- **Revisit if:** any source worker changes another component's committed files
+- **Source:** assumed — autonomous
+
+## D18: Bridge dispatcher authorization once and reserve reset scope before validation
+- **Question:** Why did confirmed reset and live telemetry fail the real daemon/API tests?
+- **Options:** duplicate confirmation or accept guessed nested hook payloads; consume actual direct events and trust the public dispatcher's completed confirmation
+- **Chose:** exact authenticated hook.received agent=session-info-claude protocol; recorded prepare identity gates ingestion. Public reset handler passes explicit authorization to its private adapter, which durably reserves request ID→scope before checking current account/offer.
+- **Why:** the dispatcher removes yes/confirmation before handler invocation. Rechecking yes returned confirmationRequired instead of rejecting a stale offer. Reserving after validation left a stale confirmed request's ID reusable for another account.
+- **Evidence:** actual daemon acceptance initially3pass3fail, then6pass191expects after fix; packages/daemon/src/server.ts direct event; AccountsAuthSeamFix; usage regression17pass110expects
+- **Reversibility:** medium (authorization/ledger ordering)
+- **Confidence:** high
+- **Revisit if:** dispatcher confirmation or authenticated hook wire format changes
+- **Source:** assumed — autonomous
+
+## D19: Distinct known Codex users may share a workspace
+- **Question:** Is equal provider/workspace ID alone sufficient to reject a saved Codex login?
+- **Options:** reject all equal workspace IDs; distinguish known user emails while retaining matching workspace identity for duplicates
+- **Chose:** different known emails are not duplicates; identical available user/workspace identity remains rejected
+- **Why:** the real restart flow with two distinct fixture users sharing a workspace was rejected as a duplicate, leaving no second account to select. Native tokens carry user email and workspace identity separately.
+- **Evidence:** profiles.ts readCodexIdentity/isSameIdentity; failing Codex restart fixture followed by2pass14expects; lifecycle duplicate coverage9pass62expects retained
+- **Reversibility:** easy (identity comparison only)
+- **Confidence:** high
+- **Revisit if:** a documented provider principal ID replaces email as the stable distinguishing identity
+- **Source:** assumed — autonomous
+
+## D20: Use native PTY behavior and strict fixture isolation as runtime evidence
+- **Question:** How should shell-routing acceptance avoid tool/fixture artifacts?
+- **Options:** external script wrapper and lexical-path pins; real Bun PTY, canonical home equivalence, actual input delimiters and bounded cleanup
+- **Chose:** native Bun PTY, canonical ownership paths, genuine newline input and SIGKILL cleanup for the owned interactive test shell; scrub provider-home/auth and shell rc override variables; fake Keychain and HTTP boundaries only
+- **Why:** an executed-readiness diagnostic proved interactive Bash remains running after SIGTERM. An earlier sentinel matched input echo and was corrected before drawing that conclusion. Tests must not source the user's rc or inherit provider credentials from environment overrides.
+- **Evidence:** /tmp/quirky-m3-accounts-lane10.BBUvf8/pty-signal-proof.ts; actual profiles6pass43expects, including pointer reread in an already-open shell; support/index.ts isolation lists
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** native PTY cleanup or platform process semantics change
+- **Source:** assumed — autonomous
+
+## D21: Non-macOS account adapters remain explicit platform work
+- **Question:** Which platform-specific places require another platform pass?
+- **Options:** claim portability from portable TypeScript; test and record only macOS
+- **Chose:** defer Windows credential-store/path and Cursor IDE locations, Windows process-tree cancellation, PowerShell shell routing, Windows junction ownership/removal, and Linux Keychain substitutes/native OAuth browser integration
+- **Why:** this loop is macOS-only; provider protocols and storage-independent mapping prefer portable APIs, but those OS surfaces were not exercised.
+- **Evidence:** docs/loop/LOOP.md Platforms; profiles.ts Keychain access; login.ts process groups; routing.ts bash/zsh; usage/web-adapters.ts Cursor native paths
+- **Reversibility:** medium (platform adapters)
+- **Confidence:** high
+- **Revisit if:** Linux/Windows become an authorized build target
+- **Source:** deferred: platform
+
 ## Progress
-Step 5 ready. Both specs reviewed with actual Codex promote/refute and confirmed findings corrected (D12). Baseline remote suite green with one load flake (D14). Next commit specs/log; fork four component worktrees and dispatch D13 through OpenAI task agents, keep main tree untouched during wave; audit scopes/HEADs, run narrow acceptance then merge/required whole gate. Required final catch-up, read incoming decisions, one Gemini final round/fix batch, built smoke/web/native handoff and queue land remain. No implementation changes yet. Scratch /tmp/quirky-m3-accounts-lane10.BBUvf8; review /tmp/m3-accounts-spec-review.vqOBOP.
+Step 5 component integration. Accepted source commits: public integration32bc433, usage0e23da3, lifecycle/seam fixesef1dcbd (includes parent prerequisite merges), UI24267ab. Authoritative scopes/HEADs passed, with only parent-approved spec/log changes in the main tree. Targeted evidence: shell20/session44, lifecycle API9, profiles6, restarts2, daemon acceptance6, usage17 and UI6 all pass. UI covers reports/visibility gating and empty CTA; no built browser/runtime proof yet. Next commit amended specs/log, merge accepted components into main feature branch, install workspace dependencies, typecheck/build/remote whole gate. Then catch up roadmap decisions, one Gemini final round/fix batch, actual smoke/web/native handoff/docs and queue land. Scratch /tmp/quirky-m3-accounts-lane10.BBUvf8.

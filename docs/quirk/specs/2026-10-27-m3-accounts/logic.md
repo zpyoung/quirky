@@ -4,7 +4,7 @@
 
 Status: Design accepted by unattended defaults under LOOP.md; tech spec required (plugin/UI/launch subsystem boundary). Combined Codex promote/refute review completed; confirmed contract findings corrected before implementation.
 
-**Amendments:** 2026-10-27 — clarified custom-home precedence, queued-restart supersession, credential configuration, shared session-info statusline ownership and reset-credit authorization scope after spec review. No feature-flow scope removed.
+**Amendments:** 2026-10-27 — clarified custom-home precedence, queued-restart supersession, credential configuration, shared session-info statusline ownership and reset-credit authorization scope after spec review. Implementation coverage review made the documented Gemini OAuth opt-in and retained Codex settings/config warnings explicit (AC18). No feature-flow scope removed.
 
 ## Conceptual model
 
@@ -114,6 +114,11 @@ Before: built-in enabled. API catalog exposes schema-declared accounts methods/C
 ### AC17: Configure provider meter credentials
 
 Before: MiniMax/OpenCode Go/ZCode have no usable credential. Set the supported masked credential through UI or CLI stdin/file, then refresh: configured/readable state and authoritative quota appear, never the credential value. Clear the credential: later refresh stops using it and falls back only to a documented native source. Events, logs, preferences, usage snapshots and API responses remain secret-free. Invalid provider/credential-kind/base-URL combinations reject without saving.
+
+### AC18: Retain Codex settings when synchronization fails
+
+Before: a managed Codex profile last synchronized valid default settings. Change the source config and prepare/select the account: valid settings mirror into the private home with file-based credentials enforced, even when the original default config never existed. If the source becomes missing, empty, unreadable, invalid, or cannot be copied, retain the last good private settings and show an actionable Codex warning in Accounts. Never silently inject a non-OpenAI model provider into an OAuth managed account. Default config/auth stays unchanged; warnings expose neither credentials nor full private paths.
+
 ## Orca defects and corrections
 
 - Incorrect local-runtime copy (“your current this device Claude login”) is corrected and covered by AC9.
