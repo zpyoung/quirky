@@ -549,6 +549,37 @@ describe('the queue', () => {
     expect(surfaced).toEqual([c.id])
   })
 
+  test('SC-18: a deadline that passes during promotion times the ask out instead of surfacing it', () => {
+    const clock = fakeClock()
+    const surfaced: [string, number][] = []
+    const resolved: string[] = []
+    let readsBeforeJump = Infinity
+    clock.now = () => {
+      if (readsBeforeJump-- <= 0) clock.time += 200
+      return clock.time
+    }
+    const service = new AskService(
+      migratedStore(),
+      errors,
+      {
+        ...noHooks,
+        surfaced: (ask, seq) => surfaced.push([ask.id, seq]),
+        resolved: (id, envelope) => {
+          resolved.push(`${id}:${envelope.status}`)
+          if (readsBeforeJump === Infinity) readsBeforeJump = 1
+        }
+      },
+      clock
+    )
+    const a = service.create(spec, 's1', null, { checkCredentialText: true })
+    const b = service.create(spec, 's1', null, { timeoutMs: 100, checkCredentialText: true })
+    const c = service.create(spec, 's1', null, { checkCredentialText: true })
+    service.answer(a.id, { env: { value: 'dev', source: 'option' } }, ['why'])
+    expect(resolved).toEqual([`${a.id}:partial`, `${b.id}:timed_out`])
+    expect(surfaced.map(([id]) => id)).toEqual([c.id])
+    expect(surfaced[0][1]).toBe(service.get(c.id).seq)
+  })
+
   test('a deadline that passes while the ask is being created resolves it only after created', () => {
     const clock = fakeClock()
     const readings = [clock.time, clock.time + 5]
