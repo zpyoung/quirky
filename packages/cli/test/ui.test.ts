@@ -15,6 +15,7 @@ describe('ui contributions', () => {
   test('prints one headed table per non-empty section', async () => {
     daemon.addUiSlot('sidebar-section', 'acme.notes', 'list', { title: 'Notes', order: 20, module: '/plugins/acme.notes/ui.js' })
     daemon.addUiSlot('sidebar-section', 'acme.notes', 'tags', { title: 'Tags' })
+    daemon.addUiSlot('status-bar', 'acme.notes', 'usage', { title: 'Usage', order: 7 })
     daemon.addUiSlot('panel', 'acme.notes', 'inspector', { title: 'Inspector', order: 5 })
     daemon.addUiSlot('view', 'acme.notes', 'editor', { title: 'Editor' })
     daemon.addUiCommand('acme.notes', 'new', { title: 'New note', module: '/plugins/acme.notes/ui.js' })
@@ -32,6 +33,7 @@ describe('ui contributions', () => {
     const sections = result.stdout.trimEnd().split('\n\n')
     expect(sections.map((section) => section.split('\n')[0])).toEqual([
       'SIDEBAR',
+      'STATUS BARS',
       'PANELS',
       'VIEWS',
       'COMMANDS',
@@ -39,13 +41,14 @@ describe('ui contributions', () => {
       'SETTINGS',
       'THEMES'
     ])
-    const [sidebar, panels, views, commands, keybindings, settings, themes] = sections.map((s) => s.split('\n').slice(1))
+    const [sidebar, statusBars, panels, views, commands, keybindings, settings, themes] = sections.map((s) => s.split('\n').slice(1))
 
     expect(sidebar.map(cells)).toEqual([
       ['ID', 'PLUGIN', 'TITLE', 'ORDER', 'MODULE'],
       ['sidebar-section:acme.notes/list', 'acme.notes', 'Notes', '20', '/plugins/acme.notes/ui.js'],
       ['sidebar-section:acme.notes/tags', 'acme.notes', 'Tags', '100', '-']
     ])
+    expect(statusBars.map(cells)[1]).toEqual(['status-bar:acme.notes/usage', 'acme.notes', 'Usage', '7', '-'])
     expect(panels.map(cells)[1]).toEqual(['panel:acme.notes/inspector', 'acme.notes', 'Inspector', '5', '-'])
     expect(views.map(cells)[1]).toEqual(['view:acme.notes/editor', 'acme.notes', 'Editor', '100', '-'])
     expect(commands.map(cells)).toEqual([
@@ -72,10 +75,11 @@ describe('ui contributions', () => {
   })
 
   test('omits empty sections', async () => {
+    daemon.addUiSlot('status-bar', 'acme.notes', 'usage')
     daemon.addUiSlot('panel', 'acme.notes', 'inspector')
     const result = await run(['ui', 'contributions'])
-    const headers = result.stdout.split('\n').filter((line) => /^[A-Z]+$/.test(line))
-    expect(headers).toEqual(['PANELS', 'THEMES'])
+    const headers = result.stdout.trimEnd().split('\n\n').map((section) => section.split('\n')[0])
+    expect(headers).toEqual(['STATUS BARS', 'PANELS', 'THEMES'])
   })
 
   test('says so when every section is empty', async () => {

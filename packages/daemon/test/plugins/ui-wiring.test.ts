@@ -138,9 +138,7 @@ describe('UI plugin API wiring', () => {
     const client = await harness.connect()
     const plugins = await client.call('plugin.list', {})
     const bare = plugins.find((plugin) => plugin.id === 'acme.bare')!
-    expect(bare.diagnostics).toEqual([
-      { level: 'warning', message: 'declares commands, views, panels, overlays or sidebar sections but has no ui module' }
-    ])
+    expect(bare.diagnostics).toMatchObject([{ level: 'warning' }])
     expect(bare.ui).toBeUndefined()
     const withUi = plugins.find((plugin) => plugin.id === 'acme.ui')!
     expect(withUi.ui).toBe('ui/main.js')

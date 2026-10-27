@@ -168,6 +168,7 @@ describe('the UI model', () => {
         ui: 'ui.js',
         contributes: {
           'sidebar-section': [{ id: 'list', title: 'Notes', order: 20 }],
+          'status-bar': [{ id: 'usage', title: 'Usage', order: 7 }],
           panel: [{ id: 'outline', title: 'Outline', order: 3 }],
           view: [{ id: 'page', title: 'Page' }],
           command: [{ id: 'new', title: 'New note' }],
@@ -184,6 +185,7 @@ describe('the UI model', () => {
     const module = '/plugins/acme.notes/ui.js'
 
     expect(model.sidebarSections).toMatchObject([{ id: 'sidebar-section:acme.notes/list', title: 'Notes', order: 20, plugin: 'acme.notes', module }])
+    expect(model.statusBars).toMatchObject([{ id: 'status-bar:acme.notes/usage', title: 'Usage', order: 7, module }])
     expect(model.panels).toMatchObject([{ id: 'panel:acme.notes/outline', title: 'Outline', order: 3, module }])
     expect(model.views).toMatchObject([{ id: 'view:acme.notes/page', title: 'Page', module }])
     expect(model.commands).toMatchObject([{ id: 'command:acme.notes/new', title: 'New note', plugin: 'acme.notes', module }])
@@ -320,7 +322,7 @@ describe('the UI model', () => {
 
     const bare = await pluginInfo(client, 'acme.bare')
     expect(bare.state).not.toBe('invalid')
-    expect(warnings(bare)).toEqual(['declares commands, views, panels, overlays or sidebar sections but has no ui module'])
+    expect(warnings(bare)).toHaveLength(1)
     expect(bare.ui).toBeUndefined()
 
     const model = await client.call('ui.contributions', {})

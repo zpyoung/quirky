@@ -35,6 +35,7 @@ export type ViewReport = {
   layout: Workspace | null
   focusedPane: string | null
   panes: PaneReport[]
+  mountedAccessories: Record<string, string[]>
   menu: { kind: string; target: string | null; items: { label: string; key: string | null; enabled: boolean; separator: boolean }[] } | null
   dialog: { kind: string; title: string } | null
 }
