@@ -21,10 +21,15 @@ describe('notificationFor', () => {
     expect(notificationFor(event)).toEqual({
       title: 'Claude',
       body: 'needs input',
-      silent: false,
+      silent: true,
       soundFile: null,
       volume: 100
     })
+  })
+
+  test('SC-40: a notify event without a sound is silent and plays nothing', () => {
+    const event: QuirkyEvent = { type: 'notify', title: 'Claude', body: 'done', desktop: true }
+    expect(notificationFor(event)).toMatchObject({ silent: true, soundFile: null })
   })
 
   test('falls back to the app name for a blank title', () => {
