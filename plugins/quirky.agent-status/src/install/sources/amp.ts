@@ -2,10 +2,13 @@ import { OWNED_MARKER, POST_IMPORTS, postSource } from './post.ts'
 
 export const AMP_PLUGIN_FILE = 'quirky-agent-status.ts'
 
+/** Amp's own plugin package; the generated file imports it, Quirky never does. */
+const AMP_PLUGIN_PACKAGE = '@ampcode/plugin'
+
 /** The Amp plugin: reports Amp's session, agent and tool events to the daemon. */
 export function ampPluginSource(): string {
   return `// ${OWNED_MARKER}
-${POST_IMPORTS}import type { PluginAPI } from '@ampcode/plugin'
+${POST_IMPORTS}import type { PluginAPI } from ${JSON.stringify(AMP_PLUGIN_PACKAGE)}
 
 ${postSource("'amp'")}
 const queue = quirkyQueue()
