@@ -1,4 +1,5 @@
 import type { UiPluginContext } from '@quirky/protocol'
+import { AI_SETTINGS_VIEW_ID } from '../ai/types'
 import { addReviewNote } from '../notes/composers'
 import { activePanel } from '../panel/registry'
 import { worktreeOf } from '../scm'
@@ -65,6 +66,7 @@ export function commandHandlers(context: UiPluginContext): Record<string, (args?
       postSendRequest({ nonce: Date.now(), issuedAt: Date.now() })
     },
     'add-review-note': () => void addReviewNote(),
+    'ai-settings': () => context.openView(AI_SETTINGS_VIEW_ID, { worktree: worktreeFor(context, {}) }),
     'next-change': () => activeView().nextChange(),
     'previous-change': () => activeView().previousChange(),
     'next-conflict': () => activeView().nextConflict(),

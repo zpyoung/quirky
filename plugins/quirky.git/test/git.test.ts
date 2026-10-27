@@ -28,6 +28,7 @@ describe('quirky.git manifest', () => {
     const contributions = (await g.call('plugin.contributions', { pluginId: 'quirky.git' })) as { id: string }[]
     expect(contributions.map((c) => c.id).sort()).toEqual([
       'command:quirky.git/add-review-note',
+      'command:quirky.git/ai-settings',
       'command:quirky.git/collapse-all',
       'command:quirky.git/load-diff',
       'command:quirky.git/next-change',
@@ -111,6 +112,7 @@ describe('quirky.git manifest', () => {
       'setting:quirky.git/diffWordWrap',
       'setting:quirky.git/groupOrder',
       'setting:quirky.git/viewMode',
+      'view:quirky.git/ai-settings',
       'view:quirky.git/diff'
     ])
   })

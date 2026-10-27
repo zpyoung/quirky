@@ -62,7 +62,10 @@ describe('SC-66: the API lists every method with its schema (CLI)', () => {
     s = await startScenario(scratch)
     const contributions = (await s.client.callAny('plugin.contributions', { pluginId: 'quirky.git' })) as ContributionInfo[]
     const ofKind = (kind: string) => contributions.filter((c) => c.kind === kind)
-    expect(ofKind('view').map((c) => [c.name, c.data.title])).toEqual([['diff', 'Diff']])
+    expect(ofKind('view').map((c) => [c.name, c.data.title]).sort()).toEqual([
+      ['ai-settings', 'Source Control AI defaults'],
+      ['diff', 'Diff']
+    ])
     expect(ofKind('keybinding').map((c) => [c.name, c.data.key, c.data.command]).sort()).toEqual([
       ['add-review-note', 'mod+shift+a', 'add-review-note'],
       ['next-change', 'f7', 'next-change'],
@@ -70,7 +73,7 @@ describe('SC-66: the API lists every method with its schema (CLI)', () => {
       ['show', 'mod+shift+g', 'show']
     ])
     expect(ofKind('command').map((c) => c.name).sort()).toEqual([
-      'add-review-note', 'collapse-all', 'load-diff', 'next-change', 'next-conflict', 'open-branch-changes', 'open-changes', 'open-commit', 'open-diff',
+      'add-review-note', 'ai-settings', 'collapse-all', 'load-diff', 'next-change', 'next-conflict', 'open-branch-changes', 'open-changes', 'open-commit', 'open-diff',
       'overwrite', 'previous-change', 'previous-conflict', 'refresh-compare', 'reload-from-disk', 'revert-change', 'review-conflicts',
       'save', 'select', 'send-review-notes', 'set-filter', 'show', 'toggle-history'
     ])
@@ -91,6 +94,7 @@ describe('SC-66: the API lists every method with its schema (CLI)', () => {
       title: 'Source Control Group Order',
       values: ['changes-first', 'staged-first', 'untracked-first']
     })
+    expect(ofKind('command').find((c) => c.name === 'ai-settings')!.data).toMatchObject({ title: 'Source Control AI Settings' })
     expect(ofKind('command').find((c) => c.name === 'open-diff')!.data.args).toMatchObject({
       properties: { path: { type: 'string' }, source: { type: 'string' } },
       required: ['path']
