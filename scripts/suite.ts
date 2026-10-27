@@ -196,19 +196,22 @@ function slotted(slots: number, priority: boolean, log: string): Run {
     process.on('exit', () => rmSync(marker, { force: true }))
   }
   const BUSY = 75
+  // a process scope starts a guardian process, so probe a slot with a bare flock before paying for one
+  const free = (lock: string) => Bun.spawnSync(['flock', '-n', '-E', String(BUSY), lock, 'true']).exitCode === 0
   return async (cwd, args) => {
     for (;;) {
       const usable = usableSlots(slots, priority, !priority && landRunning(dir))
       const start = Math.floor(Math.random() * usable)
       for (let i = 0; i < usable; i++) {
         const lock = join(dir, `${(start + i) % usable}.lock`)
+        if (!free(lock)) continue
         const began = Date.now()
         const result = await exec(['flock', '-n', '-E', String(BUSY), lock, 'bun', 'test', ...args], cwd, false, undefined, createProcessScope())
         if (result.code === BUSY) continue
         appendFileSync(log, `${args.at(-1)?.replace(/^\.\//, '')} ${Date.now() - began}\n`)
         return result
       }
-      await Bun.sleep(500)
+      await Bun.sleep(1000)
     }
   }
 }
