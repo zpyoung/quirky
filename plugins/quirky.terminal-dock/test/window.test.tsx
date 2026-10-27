@@ -471,6 +471,18 @@ describe('terminal dock composer behavior', () => {
     expect(fake.state.question?.dismissed).toBe(true)
   })
 
+  test('keeps a reported model selected when it is absent from the advertised choices', async () => {
+    const options = baseState().options
+    const fake = fakeContext({ state: baseState({
+      options: { ...options, model: 'fable', choices: { ...options.choices, model: ['opus', 'sonnet'] } }
+    }) })
+    const view = await openComposer(fake)
+    const model = view.byLabel('Model') as HTMLSelectElement
+
+    expect(model.value).toBe('fable')
+    expect(model.options[model.selectedIndex]?.textContent).toBe('fable (current)')
+  })
+
   test('uses session option actions and reports real or unknown context without global writes', async () => {
     const fake = fakeContext()
     const view = await openComposer(fake)

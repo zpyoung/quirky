@@ -3020,7 +3020,10 @@ select {
 }
 
 .qtd-gutter {
+  position: relative;
+  z-index: 1;
   box-sizing: border-box;
+  overflow: visible;
   border-top: 1px solid var(--border);
   background: var(--bg);
   color: var(--text);
@@ -3064,24 +3067,40 @@ select {
   height: 100%;
   box-sizing: border-box;
   flex-direction: column;
-  overflow: hidden;
+  overflow: visible;
   background: var(--bg);
   color: var(--text);
   font: inherit;
 }
 
-.qtd-notice,
-.qtd-warning,
-.qtd-error,
-.qtd-passthrough-notice,
-.qtd-disabled-reason {
-  flex: 0 0 auto;
-  margin: 0;
-  padding: 5px 10px;
+.qtd-status-row {
+  box-sizing: border-box;
+  display: flex;
+  min-width: 0;
+  height: 27px;
+  flex: 0 0 27px;
+  align-items: center;
+  overflow-x: auto;
+  overflow-y: hidden;
   border-bottom: 1px solid var(--border);
+  scrollbar-width: thin;
+}
+
+.qtd-status-row > .qtd-notice,
+.qtd-status-row > .qtd-warning,
+.qtd-status-row > .qtd-error,
+.qtd-status-row > .qtd-passthrough-notice {
+  min-width: 0;
+  max-width: min(680px, 90vw);
+  flex: 0 1 auto;
+  overflow: hidden;
+  margin: 0;
+  padding: 4px 8px;
   color: var(--muted);
   font-size: 12px;
-  line-height: 1.35;
+  line-height: 18px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .qtd-warning {
@@ -3092,20 +3111,41 @@ select {
   color: var(--danger);
 }
 
-.qtd-passthrough-notice {
+.qtd-status-row > .qtd-passthrough-notice {
+  flex: 0 0 auto;
   background: var(--bg-raised);
   color: var(--text);
   font-weight: 600;
 }
 
-.qtd-question-card {
+.qtd-host > .qtd-error {
+  flex: 0 0 auto;
+  margin: 0;
+  padding: 5px 10px;
+  border-bottom: 1px solid var(--border);
+  font-size: 12px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.qtd-overlay-stack {
   position: absolute;
   z-index: 5;
-  top: 8px;
   right: 8px;
+  bottom: calc(100% + 6px);
   left: 8px;
-  max-height: calc(100% - 16px);
-  overflow: auto;
+  display: flex;
+  max-height: var(--qtd-overlay-max-height, 50vh);
+  flex-direction: column;
+  gap: 6px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.qtd-question-card {
+  position: static;
+  flex: 0 0 auto;
+  overflow: visible;
   border: 1px solid var(--border);
   border-radius: 6px;
   background: var(--bg-raised);
@@ -3164,14 +3204,15 @@ select {
 }
 
 .qtd-picker {
-  z-index: 2;
   display: flex;
   max-height: 160px;
   flex: 0 0 auto;
   flex-direction: column;
   overflow: auto;
-  border-top: 1px solid var(--border);
+  border: 1px solid var(--border);
+  border-radius: 6px;
   background: var(--bg-raised);
+  box-shadow: 0 8px 24px rgb(0 0 0 / 35%);
 }
 
 .qtd-picker__state {
@@ -3192,6 +3233,19 @@ select {
   background: transparent;
   color: var(--text);
   text-align: left;
+}
+
+.qtd-picker__item span,
+.qtd-picker__item small {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.qtd-picker__item small {
+  flex: 0 1 auto;
+  color: var(--muted);
 }
 
 .qtd-picker__item--active {
@@ -3276,62 +3330,124 @@ select {
 }
 
 .qtd-attachments {
+  box-sizing: border-box;
   display: flex;
-  min-height: 0;
-  flex: 0 0 auto;
-  flex-wrap: wrap;
+  min-width: 0;
+  height: 30px;
+  flex: 0 0 30px;
+  flex-wrap: nowrap;
   align-items: center;
   gap: 6px;
-  padding: 5px 8px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 3px 8px;
   border-top: 1px solid var(--border);
+}
+
+.qtd-attachments:empty {
+  display: none;
 }
 
 .qtd-attachments__chip {
   display: inline-flex;
-  max-width: 100%;
+  max-width: min(80vw, 320px);
+  flex: 0 0 auto;
   align-items: center;
   gap: 6px;
+  overflow: hidden;
   padding: 3px 7px;
   border: 1px solid var(--border);
   border-radius: 12px;
   background: var(--bg-raised);
   font-size: 11px;
+  white-space: nowrap;
+}
+
+.qtd-attachments__chip > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .qtd-attachments__remove {
+  flex: 0 0 auto;
   padding: 0 2px;
   border: 0;
   background: transparent;
   color: var(--muted);
 }
 
-.qtd-toolbar,
 .qtd-actions {
   display: flex;
-  min-height: 32px;
-  flex: 0 0 auto;
+  width: 100%;
+  height: 36px;
+  min-width: 0;
+  min-height: 0;
+  flex: 0 0 36px;
   align-items: center;
-  gap: 7px;
-  padding: 5px 8px;
+  justify-content: space-between;
+  gap: 8px;
+  overflow: hidden;
+  box-sizing: border-box;
+  padding: 4px 8px;
   border-top: 1px solid var(--border);
+}
+
+.qtd-action-controls {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex: 1 1 auto;
+  align-items: center;
+  gap: 8px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  white-space: nowrap;
 }
 
 .qtd-control-group {
   display: inline-flex;
+  flex: 0 0 auto;
   align-items: center;
-  gap: 4px;
+  gap: 6px;
+  white-space: nowrap;
 }
 
 .qtd-control-option {
-  max-width: 160px;
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+  font-size: 11px;
+}
+
+.qtd-control-option select {
+  max-width: 136px;
+  min-width: 42px;
+  height: 25px;
+  padding: 0 4px;
+  font-size: 11px;
 }
 
 .qtd-context {
   display: inline-flex;
+  flex: 0 0 auto;
   align-items: center;
   gap: 6px;
   color: var(--muted);
   font-size: 11px;
+  white-space: nowrap;
+}
+
+.qtd-action-status {
+  max-width: 160px;
+  flex: 0 0 auto;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .qtd-context__ring {
@@ -3343,23 +3459,16 @@ select {
   background: conic-gradient(var(--accent) var(--qtd-context-used, 0%), var(--border) 0);
 }
 
-.qtd-actions {
-  min-height: 38px;
-  justify-content: flex-end;
-}
-
-.qtd-actions-spacer {
-  flex: 1 1 auto;
-}
-
-.qtd-draft-status,
-.qtd-send-phase {
-  color: var(--muted);
-  font-size: 11px;
+.qtd-action-buttons {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 6px;
 }
 
 .qtd-send {
   min-width: 68px;
+  flex: 0 0 auto;
 }
 
 .qtd-file-input {
@@ -3376,12 +3485,8 @@ select {
   flex: 0 0 auto;
 }
 
-.qtd-disabled-reason {
-  color: var(--muted);
-}
-
 .qtd-passthrough .qtd-editor-region,
-.qtd-passthrough .qtd-toolbar,
+.qtd-passthrough .qtd-action-controls,
 .qtd-passthrough .qtd-attachments,
 .qtd-passthrough .qtd-actions {
   opacity: 0.42;

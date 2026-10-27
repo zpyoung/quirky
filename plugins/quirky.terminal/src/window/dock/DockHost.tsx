@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type MouseEvent as ReactMouseEvent } from 'react'
 import type { QuirkyEvent, UiPluginContext } from '@quirky/protocol'
 import { TerminalPaneView, type TerminalPaneHandle, type TerminalPaneProps } from '../pane/TerminalPaneView'
 import type { WorkspaceController } from '../workspace/controller'
@@ -126,6 +126,7 @@ export function DockHost(props: Props) {
   const requested = Boolean(dock?.enabled && dock.supported && dock.docked)
   const shownRows = resize?.previewRows ?? rows
   const shownHeight = dockHeight(shownRows)
+  const overlayMaxHeight = Math.max(0, availableHeight - shownHeight - 6)
   useEffect(() => {
     const next = requested ? shouldMountDock(geometryMounted, availableHeight, dockHeight(shownRows), resize !== null) : false
     if (next !== geometryMounted) setGeometryMounted(next)
@@ -360,7 +361,7 @@ export function DockHost(props: Props) {
         <div
           className="qtd-gutter"
           data-dock-height={shownHeight}
-          style={{ flex: `0 0 ${shownHeight}px`, height: shownHeight, minHeight: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}
+          style={{ flex: `0 0 ${shownHeight}px`, height: shownHeight, minHeight: 0, display: 'flex', flexDirection: 'column', overflow: 'visible' }}
         >
           <div
             className="qtd-resize-handle"
@@ -375,7 +376,7 @@ export function DockHost(props: Props) {
             ref={composerHost}
             className="qtd-composer-host"
 
-            style={{ flex: '1 1 auto', minHeight: 0, minWidth: 0, overflow: 'hidden', position: 'relative' }}
+            style={{ '--qtd-overlay-max-height': `${overlayMaxHeight}px`, flex: '1 1 auto', minHeight: 0, minWidth: 0, overflow: 'visible', position: 'relative' } as CSSProperties}
           />
         </div>
       ) : null}
