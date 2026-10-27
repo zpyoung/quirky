@@ -1,4 +1,4 @@
-import type { GitFileStatus, GitStatus, UiLayout } from '@quirky/protocol'
+import type { GitFileStatus, GitStatusSummary, UiLayout } from '@quirky/protocol'
 
 export function splitFiles(files: GitFileStatus[]): { staged: GitFileStatus[]; unstaged: GitFileStatus[] } {
   const staged: GitFileStatus[] = []
@@ -31,7 +31,7 @@ export function worktreeOf(layout: UiLayout): string | null {
 /** What the source-control slot reports to `ui.state`. */
 export type ScmReport = { worktree: string | null; branch: string | null; staged: number; unstaged: number }
 
-export function scmReport(worktree: string | null, status: GitStatus | null): ScmReport {
+export function scmReport(worktree: string | null, status: GitStatusSummary | null): ScmReport {
   const { staged, unstaged } = splitFiles(status?.files ?? [])
   return { worktree, branch: status?.branch ?? null, staged: staged.length, unstaged: unstaged.length }
 }

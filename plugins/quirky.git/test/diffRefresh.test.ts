@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test'
-import type { GitDiff, GitFileStatus } from '@quirky/protocol'
+import type { GitDiffPair, GitFileStatus } from '@quirky/protocol'
 import { keepSelection, reuseDiff } from '../src/diffRefresh'
 
 const file = (path: string, index: string, worktree: string): GitFileStatus => ({
@@ -9,7 +9,7 @@ const file = (path: string, index: string, worktree: string): GitFileStatus => (
   untracked: false
 })
 
-const diff = (original: string, modified: string, overrides: Partial<GitDiff> = {}): GitDiff => ({
+const diff = (original: string, modified: string, overrides: Partial<GitDiffPair> = {}): GitDiffPair => ({
   path: 'a.ts',
   staged: false,
   original,

@@ -1,6 +1,6 @@
 import { afterAll, beforeEach, describe, expect, test } from 'bun:test'
 import { GlobalRegistrator } from '@happy-dom/global-registrator'
-import type { GitDiff, GitStatus, QuirkyEvent, UiLayout, UiPluginContext } from '@quirky/protocol'
+import type { GitDiffPair as GitDiff, GitStatusSummary as GitStatus, QuirkyEvent, UiLayout, UiPluginContext } from '@quirky/protocol'
 
 GlobalRegistrator.register()
 ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true

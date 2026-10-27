@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import type { GitDiff, GitStatus, UiPluginContext } from '@quirky/protocol'
+import type { GitDiffPair, GitStatusSummary, UiPluginContext } from '@quirky/protocol'
 import { keepSelection, reuseDiff, type DiffSelection } from './diffRefresh'
 import { scmReport, splitFiles, worktreeOf, type ScmReport } from './scm'
 import { CommitBox } from './CommitBox'
@@ -44,15 +44,15 @@ export function SourceControl({ context, report }: Props) {
 
 /** Changes of one worktree: polls `quirky.git/status` while mounted and shows a diff for the chosen file. */
 function WorktreeChanges({ context, worktree, report }: Props & { worktree: string }) {
-  const [status, setStatus] = useState<GitStatus | null>(null)
+  const [status, setStatus] = useState<GitStatusSummary | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [unavailable, setUnavailable] = useState<string | null>(null)
   const [selection, setSelection] = useState<DiffSelection | null>(null)
-  const [diff, setDiff] = useState<GitDiff | null>(null)
+  const [diff, setDiff] = useState<GitDiffPair | null>(null)
 
   const refresh = useCallback(async () => {
     try {
-      setStatus((await context.call('quirky.git/status', { worktree })) as GitStatus)
+      setStatus((await context.call('quirky.git/status', { worktree })) as GitStatusSummary)
       setError(null)
       setUnavailable(null)
     } catch (e) {
@@ -95,7 +95,7 @@ function WorktreeChanges({ context, worktree, report }: Props & { worktree: stri
     context
       .call('quirky.git/diff', { worktree, path: selectionPath, staged: selectionStaged })
       .then((result) => {
-        if (!cancelled) setDiff((prev) => reuseDiff(prev, result as GitDiff))
+        if (!cancelled) setDiff((prev) => reuseDiff(prev, result as GitDiffPair))
       })
       .catch((e: unknown) => {
         if (!cancelled) setError(message(e))

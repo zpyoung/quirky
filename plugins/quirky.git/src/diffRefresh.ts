@@ -1,4 +1,4 @@
-import type { GitDiff, GitFileStatus } from '@quirky/protocol'
+import type { GitDiffPair, GitFileStatus } from '@quirky/protocol'
 
 export type DiffSelection = { path: string; staged: boolean }
 
@@ -17,7 +17,7 @@ export function keepSelection(
  * The previous diff when a refetch returned the same content, so the merge view is not rebuilt
  * (which would reset its scroll position) on every status poll.
  */
-export function reuseDiff(prev: GitDiff | null, next: GitDiff): GitDiff {
+export function reuseDiff(prev: GitDiffPair | null, next: GitDiffPair): GitDiffPair {
   if (
     prev &&
     prev.path === next.path &&

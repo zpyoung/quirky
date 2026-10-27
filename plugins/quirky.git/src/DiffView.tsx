@@ -7,7 +7,7 @@ import { javascript } from '@codemirror/lang-javascript'
 import { json } from '@codemirror/lang-json'
 import { markdown } from '@codemirror/lang-markdown'
 import { python } from '@codemirror/lang-python'
-import type { GitDiff } from '@quirky/protocol'
+import type { GitDiffPair } from '@quirky/protocol'
 import { withoutTrailingNewline } from './diffText'
 import { languageForPath, type LanguageId } from './language'
 
@@ -33,7 +33,7 @@ function languageExtension(id: LanguageId): Extension[] {
 }
 
 /** Read-only side-by-side diff: the left side is `original`, the right side is `modified`. */
-export function DiffView({ diff }: { diff: GitDiff }) {
+export function DiffView({ diff }: { diff: GitDiffPair }) {
   const host = useRef<HTMLDivElement>(null)
 
   useEffect(() => {

@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync } from 'node:fs'
 import { basename } from 'node:path'
-import type { GitDiff, GitStatus } from '@quirky/protocol'
+import type { GitDiffPair, GitStatusSummary } from '@quirky/protocol'
 import * as realGit from './index'
 import type { GitApi } from './api'
 
@@ -57,7 +57,7 @@ export function createFakeGit(): FakeGit {
         )
       }
     },
-    async status(cwd): Promise<GitStatus> {
+    async status(cwd): Promise<GitStatusSummary> {
       record('status', cwd)
       return {
         branch: basename(cwd),
@@ -67,7 +67,7 @@ export function createFakeGit(): FakeGit {
         files: [{ path: 'a.txt', index: ' ', worktree: 'M', untracked: false }]
       }
     },
-    async diff(cwd, path, staged): Promise<GitDiff> {
+    async diff(cwd, path, staged): Promise<GitDiffPair> {
       record('diff', cwd, path, staged)
       return { path, staged, original: 'old', modified: 'new', binary: false }
     },
