@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
-import { mkdirSync, mkdtempSync, rmSync, unlinkSync, utimesSync, writeFileSync } from 'node:fs'
+import { chmodSync, mkdirSync, mkdtempSync, rmSync, unlinkSync, utimesSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { ContributionInfo } from '@quirky/protocol'
@@ -200,6 +200,38 @@ describe('invalid sources', () => {
     const rules = sources()
     expect((await rules.effective('codex'))?.origin.kind).toBe('built-in')
     expect((await rules.listing('codex'))?.ignored).toHaveLength(1)
+  })
+
+  test('a source path under something that is not a directory is ignored with its error code', async () => {
+    put(join(builtinDir, 'codex.json'), body('codex', rule('builtin', 'a')))
+    const rules = new RuleSources({ userDir: '/dev/null', builtinDir, contributions: async () => [], log: (message) => logs.push(message) })
+    expect((await rules.effective('codex'))?.origin.kind).toBe('built-in')
+    const listing = await rules.listing('codex')
+    expect(listing?.ignored).toHaveLength(1)
+    expect(listing?.ignored[0]!.reason).toContain('ENOTDIR')
+    expect(await rules.list()).toHaveLength(1)
+    await rules.effective('codex')
+    expect(logs.filter((line) => line.includes('ENOTDIR'))).toHaveLength(1)
+  })
+
+  test('effective and list resolve to nothing when every source path is unusable', async () => {
+    const rules = new RuleSources({ userDir: '/dev/null', builtinDir: '/dev/null', contributions: async () => [], log: (message) => logs.push(message) })
+    expect(await rules.effective('fake')).toBeNull()
+    expect(await rules.list()).toEqual([])
+  })
+
+  test.skipIf(process.getuid?.() === 0)('an unreadable file is ignored with its error code and the next source applies', async () => {
+    put(join(builtinDir, 'codex.json'), body('codex', rule('builtin', 'a')))
+    const user = join(userDir, 'codex.json')
+    put(user, body('codex', rule('user', 'b')))
+    chmodSync(user, 0o000)
+    const rules = sources()
+    expect((await rules.effective('codex'))?.origin.kind).toBe('built-in')
+    const listing = await rules.listing('codex')
+    expect(listing?.ignored[0]!.origin).toEqual({ kind: 'user', path: user })
+    expect(listing?.ignored[0]!.reason).toContain('EACCES')
+    chmodSync(user, 0o644)
+    expect((await rules.effective('codex'))?.origin.kind).toBe('user')
   })
 
   test('an invalid built-in file is ignored too', async () => {
