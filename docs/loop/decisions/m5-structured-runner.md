@@ -146,5 +146,45 @@
 
 Implementation wave: T1 structured/session/catalog, T2 checks plugin, T3 ask ownership cleanup. Components have disjoint write scopes and no semantic build dependency, so all fork the committed specs and run concurrently. Width 3, cap 4 does not bind; no successor wave and therefore no checkpoint review. Final review remains three Gemini lenses after catch-up and green gates.
 
+## D15: Gate component reports with observed behavior and repair root causes
+- **Question:** implementation reports were unverified; first structured gate exposed omitted state and fixture defects
+- **Options:** trust reports; weaken tests; repair observed defects and keep consumer acceptance
+- **Chose:** initialize active/starting state, fix optional-prompt typing and fixture model/env types, correct newline framing in the scripted server log, preserve bidirectional RPC ID namespaces, and assert error codes rather than incidental wording. Use real temporary cwd for subprocess API tests. Preserve the first startup protocol failure rather than overwrite it with a later generic not-running error.
+- **Why:** the parent observed runtime/type failures and actual malformed-frame diagnostics; none establishes acceptance without repaired passing commands. An ask worker's relative-path contamination was removed precisely and main audited clean before retry. Checks workspace setup prospectively added bun.lock scope; no competing lock writer existed.
+- **Evidence:** structured component gate artifacts 72,74,77,79,81,83,85,92,94; checks 16 pass; ask 46 pass; authoritative scope/HEAD barrier before component commits ef16bc5,a1e87e6,6afe921
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** assumed — autonomous
+
+## D16: Installed Codex schemas define wire enums, not documentation shorthand
+- **Question:** does the runner's camel-case approval/sandbox spelling match the installed protocol?
+- **Options:** trust prose examples and permissive fake server; generate the installed CLI schema in an isolated home
+- **Chose:** approvalPolicy on-request and sandbox workspace-write. The scripted app-server rejects invalid enum spellings so request acceptance tests detect the real failure.
+- **Why:** actual generated ThreadStartParams schema lists these spellings. The stronger fixture failed before the source fix with -32602; after the fix provider/API acceptance passed. No model invocation or credentials were used.
+- **Evidence:** env HOME=/tmp/m5-runner-KYwwFv/native-home CODEX_HOME=... codex app-server generate-json-schema --out /tmp/m5-runner-KYwwFv/native-schema; v2/ThreadStartParams.json definitions AskForApproval/SandboxMode; red artifact88, green94
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** assumed — autonomous
+
+## D17: A send waits for native startup, including immediately after resume
+- **Question:** integrated CLI smoke resumed successfully but immediate send failed while app-server was still initializing
+- **Options:** force every consumer to poll; await the already-owned startTasks promise in send
+- **Chose:** await startup before provider send, retain failure if startup itself failed, and never start a new conversation as fallback.
+- **Why:** asynchronous registration is existing API behavior, but initialization latency must not make valid immediate continuation unreliable. The actual CLI flow and permanent restart-resume test failed before the barrier and passed after it. Keep the Claude SDK lazy so Codex-only sessions do not load that provider.
+- **Evidence:** integrated-smoke.ts initial failure; resume.test.ts immediate-send red artifact101 and passing rerun; real daemon/CLI smoke prints INTEGRATED_CLI_SMOKE_PASS with matching native ID/options and new Quirky ID
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** assumed — autonomous
+
+## D18: Preserve caught-up process ownership and unrelated scope decisions
+- **Question:** integration merge brought three decision logs and test-process ownership changes
+- **Options:** alter them for this feature; preserve their contracts and verify compatibility
+- **Chose:** retain fix-sc31-first-shell-race, fix-test-process-leaks and m2-sidebar-extras decisions unchanged. No source conflict. New tests use temporary homes and existing harness ownership. Final campaign baseline is pinned integration commit 1f65c0de467e78bbcf73dc2ae82873ce4f666c94 so review covers this item rather than re-reviewing unrelated landed work.
+- **Why:** the catch-up changes are test ownership or separate product scope, not new structured/check semantics. Review baseline is fixed before discovery; subsequent verdicts will not move it.
+- **Evidence:** git merge build/roadmap result; all three imported decision logs read; integrated CLI smoke after merge
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** locked by docs/loop/decisions/fix-test-process-leaks.md
+
 ## Progress
-Research complete for starting code and feature scope. Author logic/tech specs, perform Codex adversarial review, commit specs, then implement one wave of two disjoint components: structured lifecycle (including session delegation) and checks plugin. No UI/native scenarios.
+Three components implemented, scope-audited, targeted acceptance verified and merged. Integration caught up at 1f65c0d; all imported decisions read. Real daemon/CLI smoke proved create, approval, stop/resume/immediate continuation with saved model/effort, and shared checks. User docs/spec pointers updated. Next: commit integration repairs/docs, run required full prepass and three Gemini final lenses, adjudicate one fix batch, rerun required checks/build, then queue land. No UI/native scenarios.

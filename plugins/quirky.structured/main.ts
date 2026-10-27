@@ -494,6 +494,8 @@ export function activate(context: PluginContext): void {
   const send: MethodHandler = async (params) => {
     const session = await requireStructured(params.session as string)
     if (!isStructuredAgent(session.agent)) throw context.error('conflict', `structured sessions cannot send to provider ${session.agent}`)
+    await startTasks.get(session.id)
+    ensureActive()
     const runner = runnerBySession.get(session.id) ?? runnerFor(session.agent)
     await runner.send(session.id, params.text as string)
     return { ok: true }

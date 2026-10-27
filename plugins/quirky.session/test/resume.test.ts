@@ -506,6 +506,7 @@ describe('structured provider resume', () => {
       expect(codexSuccess).toBeDefined()
       expect(codexConflict?.error).toMatchObject({ code: RpcErrorCode.Conflict })
       const resumedCodex = codexSuccess!.session
+      await call(client, 'quirky.structured/send', { session: resumedCodex.id, text: 'later Codex turn' })
       const [resumedClaudeRecord, resumedCodexRecord] = await waitForAsync(async () => {
         const [claudeRecord, codexRecord] = await Promise.all([
           call<Session>(client, 'quirky.session/get', { session: resumedClaude.id }),
@@ -548,7 +549,6 @@ describe('structured provider resume', () => {
 
       const resumeCall = fixture.requests().filter((request) => request.method === 'thread/resume').at(-1)
       expect(resumeCall?.params).toMatchObject({ threadId: oldCodex.providerSession!.id, cwd: folder, model: 'gpt-5.5' })
-      await call(client, 'quirky.structured/send', { session: resumedCodex.id, text: 'later Codex turn' })
       await waitForAsync(async () => {
         const messages = await call<StructuredMessage[]>(client, 'quirky.structured/messages', { session: resumedCodex.id })
         return messages.some((message) => message.role === 'assistant' && message.text === 'Codex: later Codex turn')

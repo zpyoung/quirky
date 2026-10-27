@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto'
-import { query as sdkQuery, type CanUseTool, type Options, type SDKUserMessage } from '@anthropic-ai/claude-agent-sdk'
+import type { CanUseTool, Options, SDKUserMessage } from '@anthropic-ai/claude-agent-sdk'
 import type { AskEnvelope, Session } from '@quirky/protocol'
 import type { StructuredContext, StructuredRunner, StructuredStartOptions } from './runner'
 
@@ -141,7 +141,8 @@ class ClaudeRunner implements StructuredRunner {
     const startup = { stopped: false }
     this.starting.set(session.id, startup)
     try {
-      const query = this.deps.query ?? sdkQuery
+      // Load this provider only when the runtime provider registry selects Claude, not for Codex sessions.
+      const query = this.deps.query ?? (await import('@anthropic-ai/claude-agent-sdk')).query
       if (startup.stopped) return
       const pathToClaudeCodeExecutable = await this.context.resolveClaudePath()
       if (startup.stopped) return

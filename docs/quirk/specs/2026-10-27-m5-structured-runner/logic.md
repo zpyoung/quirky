@@ -4,6 +4,7 @@
 Status: Autonomous design accepted under LOOP.md; Codex promote/refute reviewed, confirmed findings addressed. Tech spec: requested (cross-subsystem and required by loop).
 
 **Amendments:** 2026-10-27 — initial design, decisions D1–D10 in [item log](../../../loop/decisions/m5-structured-runner.md). Codex review clarified single-owner resume and ask ownership cleanup on plugin shutdown (D12–D13).
+2026-10-27 — daemon/CLI smoke clarified that send waits for asynchronous native startup, including immediately after resume (D17).
 
 ## Purpose
 Provide the native conversation and bounded command-execution seams that unattended automation, loop and objective plugins consume, without hidden PTYs or duplicated check-process implementations.
@@ -39,6 +40,7 @@ Before: a worktree and no structured session. Call structured/create with agent 
 
 ### AC2: Continue an idle or active conversation
 Before: an idle Codex thread whose first turn completed. Send "Continue". After: a new turn starts on the same thread and the user message appears once. During an active turn, send "Focus on tests"; turn/steer uses the current expectedTurnId. A refused send must not be recorded as accepted or leave the session falsely working. Stop during startup or active work prevents later activity and leaves no subprocess.
+If send arrives during native startup, it waits for startup before submitting the input; it does not fail merely because the resumed transport is still initializing.
 
 ### AC3: Answer approvals from the API
 Before: Codex asks to execute a command or apply a file change. After: session waiting and an ask attached to that session; API allow responds with the correct native accept decision, deny/cancel responds with decline. Multiple pending asks cannot resume working until all resolve. Unsupported server requests get explicit protocol errors instead of hanging. Removing a session or disabling the plugin cancels pending asks and terminates the runner.
