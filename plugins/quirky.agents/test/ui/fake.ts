@@ -48,6 +48,7 @@ export function fakeContext(handlers: Record<string, Handler> = {}) {
       layout.view = null
     },
     togglePanel() {},
+    setPalette() {},
     getLayout: () => layout,
     onLayout: () => () => {},
     onStream: () => () => {},

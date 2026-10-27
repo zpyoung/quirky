@@ -574,5 +574,16 @@ Implementation wave: T1 structured/session/catalog, T2 checks plugin, T3 ask own
 - **Revisit if:** queue.ts land reports a conflict or failing merge-result check
 - **Source:** assumed — autonomous
 
+## D53: Use the operator's immediate landing gate ownership
+- **Question:** whether to repeat long semantic/full-suite verification after another integration conflict
+- **Options:** repeat local scouting and semantic suites while integration moves again; resolve the conflict, typecheck/scripts and let land run the full suite
+- **Chose:** follow the operator's explicit 4am sprint instruction: stop scouting, run only bun run typecheck and bun test scripts, commit/detach and land immediately. For any further land conflict, resolve it, typecheck and retry land immediately.
+- **Why:** m5 gates the orchestration chain and repeated long reverification permitted the integration tip to move. The next conflict was only bun.lock: preserve both checks and browser workspace/package-link entries. Frozen install passed after that additive resolution (one package installed,54ms). Scouting was stopped and returned; no further semantic re-verification is required before the supported land command, which owns the full merge-result suite.
+- **Evidence:** operator's latest interjection; bg_56 conflict; lock conflict blocks6/7 retained both entries; bg_57 frozen-install exit0; Scout stopped; bg_58 is the exact typecheck/scripts gate.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** typecheck or the supported landing gate names a concrete failure
+- **Source:** assumed — autonomous (operator-directed verification ownership)
+
 ## Progress
-Ready to retry step7: second catch-up complete, all restored files/specs kept and staged, incoming handoff/Session Info contracts preserved, real catalog/native launch+resume and account preparation covered, final211affected files/no flakes plus typecheck/scripts/native smoke pass. Old failed snapshots remain recorded; no claim they passed. All owned agents/jobs returned and external scaffolding removed. Next: commit the resolved latest merge and decision record, detach, queue.ts land m5-structured-runner without an outer deadline, and wait for its fresh full merge-result verdict.
+Operator fast-path gate passed: bun run typecheck (including frozen install190/195,no changes) and bun test scripts (63pass,0fail,478assertions;115.68seconds), bg_58/artifact://119. Latest lock-only conflict is resolved additively; scouting stopped and no additional semantic suite was run. Commit this resolved merge and decision record, detach, and land immediately without an outer deadline. On a further conflict resolve/typecheck/retry; queue.ts land owns fresh full-suite verification.

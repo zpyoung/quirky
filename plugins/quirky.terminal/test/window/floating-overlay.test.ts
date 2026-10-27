@@ -499,7 +499,14 @@ describe('SC-67: the overlay report and its events', () => {
 
   test('reports shown false with no layout while minimized', async () => {
     const view = await mountOverlay()
-    expect(view.last()).toEqual({ shown: false, state: expect.objectContaining({ open: false }), layout: null, focusedPane: null, panes: [], visibleSessions: [] })
+    const report = view.last()
+    expect(report.shown).toBe(false)
+    expect(report.state).toMatchObject({ open: false })
+    expect(report.layout).toBeNull()
+    expect(report.focusedPane).toBeNull()
+    expect(report.panes).toEqual([])
+    expect(report.visibleSessions).toEqual([])
+    expect(report.focused).toBe(false)
   })
 
   test('a floating event shows or hides the panel and refreshes the report', async () => {

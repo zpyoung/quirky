@@ -2,13 +2,14 @@ import { chmodSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:
 import { randomBytes } from 'node:crypto'
 import { join } from 'node:path'
 import {
+  base64ToBytes,
   encodePtyData,
   encodePtyJson,
   PTY_PROTOCOL_VERSION,
   PtyFrameDecoder,
   type PtyEvent,
   type PtyRequest,
-  type PtyResults
+  type PtyResults,
 } from '@quirky/protocol'
 import { socketPath as resolveSocketPath } from '@quirky/protocol/node'
 import { SessionManager, type DataSink, type SessionManagerOptions } from './session'
@@ -137,7 +138,25 @@ export function startPtyServer(options: PtyServerOptions): PtyServer {
     }
     const { id } = request
     const reply = (result: unknown) => send(conn, { id, ok: true, result })
-    const fail = (error: unknown) => send(conn, { id, ok: false, error: error instanceof Error ? error.message : String(error) })
+    const fail = (error: unknown) => {
+      const message = error instanceof Error ? error.message : String(error)
+      if (request.type !== 'writeAccepted') {
+        send(conn, { id, ok: false, error: message })
+        return
+      }
+      if (error instanceof Error && 'code' in error && 'acceptedBytes' in error) {
+        const code = error.code
+        const acceptedBytes = error.acceptedBytes
+        if (
+          (code === 'PTY_WRITE_REJECTED' || code === 'PTY_WRITE_UNCERTAIN') &&
+          (acceptedBytes === null || (typeof acceptedBytes === 'number' && Number.isSafeInteger(acceptedBytes) && acceptedBytes >= 0))
+        ) {
+          send(conn, { id, ok: false, error: message, code, acceptedBytes })
+          return
+        }
+      }
+      send(conn, { id, ok: false, error: message, code: 'PTY_WRITE_REJECTED', acceptedBytes: 0 })
+    }
 
     if (!conn.authenticated) {
       const rejection = authenticate(request)
@@ -175,6 +194,8 @@ export function startPtyServer(options: PtyServerOptions): PtyServer {
         return { version: PTY_PROTOCOL_VERSION, pid: process.pid }
       case 'create':
         return manager.create(request)
+      case 'writeAccepted':
+        return manager.writeAccepted(request.sessionId, base64ToBytes(request.bytes)).then(() => ({}))
       case 'resize':
         manager.resize(request.sessionId, request.cols, request.rows)
         return {}
