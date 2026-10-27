@@ -84,6 +84,7 @@ export function createRuntimeRunner(context: PluginContext, invalidateUnknownWri
   const circuits = new Map<string, Circuit>()
   const budgets = new Map<string, RateLimitSnapshot>()
   const rateLimitCache = new Map<string, { snapshot: RateLimitSnapshot; expiresAt: number }>()
+  const rateLimitFailures = new Map<string, { error: Error; expiresAt: number }>()
   const rateLimitInflight = new Map<string, Promise<RateLimitSnapshot>>()
   const authCache = new Map<string, AuthCache>()
   const authInflight = new Map<string, Promise<AuthAccount[]>>()
@@ -140,7 +141,7 @@ export function createRuntimeRunner(context: PluginContext, invalidateUnknownWri
     }
   }
 
-  async function run(scope: Scope, args: string[], options: RunOptions = {}): Promise<string> {
+  async function run(scope: Scope, args: string[], options: RunOptions = {}, onSuccess?: (output: string) => void): Promise<string> {
     validateArguments(args, invalidError)
     const target = await trustedTarget(scope, options)
     const pinnedArgs = pinArguments(args, target)
@@ -177,6 +178,7 @@ export function createRuntimeRunner(context: PluginContext, invalidateUnknownWri
           signal: options.signal
         }, activeChildren)
         if (result.exitCode === 0 && !result.timedOut && !result.outputLimit && !result.aborted) {
+          onSuccess?.(result.stdout)
           circuits.delete(circuitKey)
           return result.stdout
         }
@@ -345,10 +347,20 @@ export function createRuntimeRunner(context: PluginContext, invalidateUnknownWri
 
   async function rateLimit(scope: Scope, force = false): Promise<RateLimitSnapshot> {
     const key = authenticationScopeKey(scope)
+    const now = Date.now()
     const cached = rateLimitCache.get(key)
-    if (!force && cached && cached.expiresAt > Date.now()) return cached.snapshot
+    if (!force && cached && cached.expiresAt > now) return cached.snapshot
     const pending = rateLimitInflight.get(key)
     if (!force && pending) return pending
+    const failed = rateLimitFailures.get(key)
+    if (!force && failed) {
+      if (failed.expiresAt > now) {
+        const previous = budgets.get(key)
+        if (previous) return previous
+        throw failed.error
+      }
+      rateLimitFailures.delete(key)
+    }
     const loading = run(scope, ['api', 'rate_limit'], { idempotent: true })
       .then((output) => {
         let snapshot: Omit<RateLimitSnapshot, 'fetchedAt'>
@@ -358,11 +370,32 @@ export function createRuntimeRunner(context: PluginContext, invalidateUnknownWri
           throw pluginError('invalid_response', 'GitHub returned an invalid rate-limit response.')
         }
         const value = { ...snapshot, fetchedAt: Date.now() }
+        rateLimitFailures.delete(key)
         rateLimitCache.set(key, { snapshot: value, expiresAt: Date.now() + RATE_LIMIT_TTL_MS })
         budgets.set(key, value)
         pruneMap(rateLimitCache, 128)
         pruneMap(budgets, 128)
         return value
+      })
+      .catch((error: unknown) => {
+        const record = isRecord(error) ? error : undefined
+        const data = record && isRecord(record.data) ? record.data : undefined
+        const rawReason = data?.reason
+        const reason = typeof rawReason === 'string' && /^[a-z][a-z0-9_]{0,63}$/.test(rawReason)
+          ? rawReason
+          : 'upstream_error'
+        const failure = Object.assign(context.error('conflict', 'GitHub rate-limit information is unavailable.'), {
+          data: { reason }
+        })
+        if (rateLimitInflight.get(key) === loading) {
+          rateLimitFailures.set(key, { error: failure, expiresAt: Date.now() + RATE_LIMIT_TTL_MS })
+          pruneMap(rateLimitFailures, 128)
+        }
+        if (!force) {
+          const previous = budgets.get(key)
+          if (previous) return previous
+        }
+        throw failure
       })
       .finally(() => {
         if (rateLimitInflight.get(key) === loading) rateLimitInflight.delete(key)
@@ -449,12 +482,27 @@ export function createRuntimeRunner(context: PluginContext, invalidateUnknownWri
     if (Buffer.byteLength(query, 'utf8') > 8192) throw invalidError('query_too_large', 'The GraphQL query exceeds the supported size limit.')
     const input = JSON.stringify({ query, variables })
     if (Buffer.byteLength(input, 'utf8') > MAX_INPUT_BYTES) throw invalidError('input_too_large', 'The GraphQL request body exceeds the supported size limit.')
-    const output = await run(scope, ['api', 'graphql', '-X', 'POST', '--input', '-'], {
+    let response: unknown
+    await run(scope, ['api', 'graphql', '-X', 'POST', '--input', '-'], {
       ...options,
       idempotent: options.idempotent ?? !isGraphqlMutation(query),
       input
+    }, (output) => {
+      response = parseJson(output)
+      const data = isRecord(response) && isRecord(response.data) ? response.data : undefined
+      const rateLimit = data && isRecord(data.rateLimit) ? data.rateLimit : undefined
+      const cost = rateLimit?.cost
+      if (typeof cost !== 'number' || !Number.isSafeInteger(cost) || cost <= 1) return
+      const key = authenticationScopeKey(scope, options.ambient === true)
+      const snapshot = budgets.get(key)
+      if (!snapshot) return
+      // The one-point reservation is already charged. Settle before releasing admission.
+      budgets.set(key, {
+        ...snapshot,
+        graphql: { ...snapshot.graphql, remaining: Math.max(0, snapshot.graphql.remaining - (cost - 1)) }
+      })
     })
-    return parseJson(output)
+    return response
   }
 
   async function dispose(): Promise<void> {
@@ -471,6 +519,7 @@ export function createRuntimeRunner(context: PluginContext, invalidateUnknownWri
     budgets.clear()
     rateLimitCache.clear()
     rateLimitInflight.clear()
+    rateLimitFailures.clear()
     authCache.clear()
     authInflight.clear()
     tokenCache.clear()
@@ -740,6 +789,7 @@ function timeoutFor(options: RunOptions): number {
 function classifyBucket(args: string[]): BucketName {
   if (args[0] === 'search' || (args[0] === 'api' && args.some((arg) => arg.startsWith('search/')))) return 'search'
   if (args[0] === 'api' && args.includes('graphql')) return 'graphql'
+  if (args[0] === 'pr' && ['view', 'list', 'checks'].includes(args[1] ?? '')) return 'graphql'
   return 'core'
 }
 

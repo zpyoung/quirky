@@ -98,12 +98,62 @@ const belongsTo = (item, identity) => {
   const name = item.baseRepository?.name ?? item.repository?.name ?? item.base?.repo?.name
   return (owner === undefined || owner === identity.owner) && (name === undefined || name === identity.repo)
 }
+const projectPr = (item) => {
+  const fields = option('--json')
+  if (typeof fields !== 'string') return item
+  const projected = {}
+  for (const field of fields.split(',')) {
+    if (Object.hasOwn(item, field)) projected[field] = item[field]
+  }
+  return projected
+}
 const savePr = (item) => {
   const index = prs.findIndex((entry) => entry.number === item.number)
   if (index < 0) prs.push(item)
   else prs[index] = item
   state.prs = prs
   saveState(state)
+}
+const restPull = (item) => {
+  const baseOwner = item.baseRepositoryOwner?.login ?? item.baseRepository?.owner?.login ?? repo.owner
+  const baseRepo = item.baseRepository?.name ?? repo.repo
+  const headOwner = item.headRepositoryOwner?.login ?? item.headRepository?.owner?.login ?? repo.owner
+  const headRepo = item.headRepository?.name ?? repo.repo
+  const merged = item.state === 'MERGED'
+  const response = {
+    number: item.number,
+    id: item.number,
+    url: 'https://api.github.com/repos/' + baseOwner + '/' + baseRepo + '/pulls/' + item.number,
+    html_url: 'https://github.com/' + baseOwner + '/' + baseRepo + '/pull/' + item.number,
+    title: item.title,
+    body: item.body,
+    state: merged || item.state === 'CLOSED' ? 'closed' : 'open',
+    draft: item.isDraft === true,
+    merged_at: merged ? new Date(0).toISOString() : null,
+    mergeable: item.mergeable === 'MERGEABLE' ? true : item.mergeable === 'CONFLICTING' ? false : null,
+    mergeable_state: typeof item.mergeStateStatus === 'string' ? item.mergeStateStatus.toLowerCase() : null,
+    base: { ref: item.baseRefName, sha: item.baseRefOid, repo: { name: baseRepo, owner: { login: baseOwner } } },
+    head: { ref: item.headRefName, sha: item.headRefOid, repo: { name: headRepo, owner: { login: headOwner }, default_branch: 'main' }, user: { login: headOwner } }
+  }
+  const restStacks = state.restStacks && typeof state.restStacks === 'object' ? state.restStacks : {}
+  if (Object.hasOwn(restStacks, String(item.number))) {
+    response.stack = restStacks[String(item.number)]
+  } else {
+    const registeredStacks = Object.values(state.stacks ?? {}).flat()
+    const registered = registeredStacks.find((value) =>
+      value && typeof value === 'object' && Array.isArray(value.pullRequests) && value.pullRequests.includes(item.number))
+    if (registered) {
+      const members = registered.pullRequests
+      const root = byNumber(members[0])
+      response.stack = {
+        number: registered.number,
+        position: members.indexOf(item.number) + 1,
+        size: members.length,
+        base: { ref: root?.baseRefName ?? item.baseRefName ?? 'main', sha: root?.baseRefOid ?? item.baseRefOid }
+      }
+    }
+  }
+  return response
 }
 const command = args[0]
 if (command === 'auth' && args[1] === 'status') {
@@ -147,6 +197,12 @@ if (command === 'auth' && args[1] === 'status') {
       if (state.mergeMetadataAvailable === false) {
         out({ data: { repository: null } })
       } else {
+        const rules = Array.isArray(state.rules) ? state.rules.map((rule) => {
+          if (rule === null || typeof rule !== 'object' || Array.isArray(rule)) return rule
+          const projected = { type: rule.type }
+          if (query.includes('parameters') && Object.hasOwn(rule, 'parameters')) projected.parameters = rule.parameters
+          return projected
+        }) : []
         out({ data: { repository: {
           id: 'REPO_' + owner + '_' + name,
           viewerDefaultMergeMethod: 'SQUASH',
@@ -156,7 +212,7 @@ if (command === 'auth' && args[1] === 'status') {
           autoMergeAllowed: true,
           defaultBranchRef: { name: state.defaultBranch ?? 'main' },
           mergeQueue: state.mergeQueueRequired ? { id: 'QUEUE_test' } : null,
-          ref: { rules: { nodes: Array.isArray(state.rules) ? state.rules : [] } }
+          ref: { rules: { nodes: rules } }
         } } })
       }
     } else {
@@ -171,11 +227,22 @@ if (command === 'auth' && args[1] === 'status') {
     if (endpoint.includes('/commits/') && endpoint.includes('/pulls?')) {
       out([])
     } else if (endpoint.includes('/pulls?')) {
+      if (state.listFailure) fail(state.listFailure === true ? 'HTTP 503: temporarily unavailable' : String(state.listFailure))
       const query = new URLSearchParams(endpoint.split('?')[1] ?? '')
       const head = query.get('head') ?? ''
-      const branch = head.split(':').at(-1) ?? ''
+      const separator = head.indexOf(':')
+      const headOwner = separator < 0 ? '' : head.slice(0, separator)
+      const branch = separator < 0 ? head : head.slice(separator + 1)
       const base = query.get('base') ?? ''
-      out(prs.filter((item) => item.headRefName === branch && (!base || item.baseRefName === base) && belongsTo(item, apiOwnerRepo)))
+      const stateFilter = query.get('state') ?? 'open'
+      const matches = prs.filter((item) => {
+        const actualHeadOwner = item.headRepositoryOwner?.login ?? item.headRepository?.owner?.login ?? ''
+        const itemState = item.state === 'MERGED' || item.state === 'CLOSED' ? 'closed' : 'open'
+        return item.headRefName === branch && (!headOwner || actualHeadOwner.toLowerCase() === headOwner.toLowerCase()) &&
+          (!base || item.baseRefName === base) && belongsTo(item, apiOwnerRepo) &&
+          (stateFilter === 'all' || stateFilter === itemState)
+      })
+      out(matches.map(restPull))
     } else if (/\/pulls\/\d+\/merge-async(?:\/|$)/.test(endpoint)) {
       const mergeNumber = Number(endpoint.match(/\/pulls\/(\d+)\/merge-async/)?.[1])
       const item = byNumber(mergeNumber)
@@ -185,7 +252,8 @@ if (command === 'auth' && args[1] === 'status') {
         if (inputFields.sha !== item.headRefOid) fail('HTTP 422: head sha does not match')
         const mergeAction = inputFields.merge_action
         if (mergeAction !== 'direct_merge' && mergeAction !== 'merge_queue') fail('Invalid merge action')
-        if (!['squash', 'merge', 'rebase'].includes(inputFields.merge_method)) fail('Invalid merge method')
+        if (mergeAction === 'direct_merge' && !['squash', 'merge', 'rebase'].includes(inputFields.merge_method)) fail('Invalid merge method')
+        if (mergeAction === 'merge_queue' && Object.hasOwn(inputFields, 'merge_method')) fail('merge_method is only valid for direct_merge')
         const outcome = state.mergeAsyncStart ?? 'merged'
         const operationId = outcome === 'enqueued' ? 'op-queue' : 'op-stack'
         const operations = state.mergeOperations && typeof state.mergeOperations === 'object' ? state.mergeOperations : {}
@@ -197,7 +265,7 @@ if (command === 'auth' && args[1] === 'status') {
           state.mergeQueueEntries = [...(state.mergeQueueEntries ?? []), mergeNumber]
         }
         savePr(item)
-        out({ status: outcome, id: operationId })
+        out({ status: outcome, details: { uuid: operationId } })
       } else {
         const operationId = endpoint.split('/').at(-1)
         const operation = state.mergeOperations?.[operationId]
@@ -212,17 +280,63 @@ if (command === 'auth' && args[1] === 'status') {
           state.mergeQueueEntries = [...(state.mergeQueueEntries ?? []), mergeNumber]
           saveState(state)
         }
-        out({ status: outcome, id: operationId })
+        out({ status: outcome, details: { uuid: operationId } })
       }
     } else if (/\/pulls\/\d+$/.test(endpoint)) {
       const item = byNumber(apiNumber)
       if (!item || !belongsTo(item, apiOwnerRepo)) fail('HTTP 404: Not Found')
+      if (method === 'GET' && state.restPullFailure === true) fail('HTTP 503: pull request metadata unavailable')
       if (method === 'PATCH') {
         for (const [key, value] of Object.entries(inputFields)) item[key] = value
         if (option('--title') !== undefined) item.title = option('--title')
         savePr(item)
       }
-      out(item)
+      out(restPull(item))
+    } else if (/\/pulls$/.test(endpoint) && method === 'POST') {
+      let created
+      if (state.createWrites !== false) {
+        const requestedHeadRepo = typeof inputFields.head_repo === 'string' ? inputFields.head_repo : apiOwnerRepo.repo
+        const headRepoParts = requestedHeadRepo.split('/')
+        const headRepo = headRepoParts.at(-1)
+        const headRepositoryOwner = headRepoParts.length > 1 ? headRepoParts.at(-2) : undefined
+        const requestedHead = typeof inputFields.head === 'string' ? inputFields.head : ''
+        const separator = requestedHead.indexOf(':')
+        const headOwner = separator < 0 ? apiOwnerRepo.owner : requestedHead.slice(0, separator)
+        const headName = separator < 0 ? requestedHead : requestedHead.slice(separator + 1)
+        const expectedHeadRepositoryOwner = headRepositoryOwner ?? (typeof inputFields.head_repo === 'string' ? headOwner : apiOwnerRepo.owner)
+        if (!headName || !headRepo || headOwner.toLowerCase() !== expectedHeadRepositoryOwner.toLowerCase()) fail('REST head and head_repo ownership do not match')
+        const nextNumber = Math.max(0, ...prs.map((item) => item.number)) + 1
+        created = {
+          number: nextNumber,
+          id: 'PR_test_' + nextNumber,
+          title: typeof inputFields.title === 'string' ? inputFields.title : 'Untitled',
+          body: typeof inputFields.body === 'string' ? inputFields.body : '',
+          state: 'OPEN',
+          isDraft: inputFields.draft === true,
+          url: 'https://github.com/' + apiOwnerRepo.owner + '/' + apiOwnerRepo.repo + '/pull/' + nextNumber,
+          baseRefName: String(inputFields.base ?? 'main'),
+          baseRefOid: 'b'.repeat(40),
+          headRefName: headName,
+          headRefOid: 'c'.repeat(40),
+          headRepositoryOwner: { login: headOwner },
+          headRepository: { name: headRepo, owner: { login: headOwner } },
+          baseRepositoryOwner: { login: apiOwnerRepo.owner },
+          baseRepository: { name: apiOwnerRepo.repo, owner: { login: apiOwnerRepo.owner } },
+          mergeable: 'UNKNOWN',
+          mergeStateStatus: 'UNKNOWN',
+          reviewDecision: 'REVIEW_REQUIRED',
+          statusCheckRollup: [],
+          autoMergeRequest: null
+        }
+        prs.push(created)
+        state.prs = prs
+        saveState(state)
+      }
+      if (state.createFailure) fail(String(state.createFailure))
+      if (state.createResponse === 'malformed') out('creation response could not be parsed')
+      else if (state.createResponse === 'empty') out('')
+      else if (created) out(restPull(created))
+      else out({})
     } else if (endpoint.includes('/stacks?')) {
       const query = new URLSearchParams(endpoint.split('?')[1] ?? '')
       const pullRequest = query.get('pull_request') ?? ''
@@ -230,27 +344,27 @@ if (command === 'auth' && args[1] === 'status') {
       out(stacks[pullRequest] ?? [])
     } else if (endpoint.endsWith('/stacks') && method === 'POST') {
       if (state.stackRegistrationFails) fail('HTTP 404: stacked pull requests are not available')
-      const stackId = 'stack-1'
       const pullRequests = Array.isArray(inputFields.pull_requests) ? inputFields.pull_requests : []
-      const stack = { id: stackId, pullRequests }
+      const stackNumber = Number(pullRequests[0] ?? 0)
+      if (!Number.isSafeInteger(stackNumber) || stackNumber <= 0) fail('Invalid stack number')
+      const stack = { number: stackNumber, pullRequests }
       state.stacks = state.stacks ?? {}
-      state.stacks[String(pullRequests[0] ?? '')] = [stack]
-      const child = byNumber(pullRequests.at(-1))
-      if (child) child.stack = stack
+      state.stacks[String(stackNumber)] = [stack]
       saveState(state)
-      out(stack)
-    } else if (/\/stacks\/[^/]+\/add$/.test(endpoint) && method === 'POST') {
+      out({ number: stackNumber })
+    } else if (/\/stacks\/\d+\/add$/.test(endpoint) && method === 'POST') {
       if (state.stackRegistrationFails) fail('HTTP 404: stacked pull requests are not available')
-      const stackId = endpoint.split('/').at(-2)
+      const stackNumber = Number(endpoint.match(/\/stacks\/(\d+)\/add$/)?.[1])
       const pullRequests = Array.isArray(inputFields.pull_requests) ? inputFields.pull_requests : []
       const stackCollections = Object.values(state.stacks ?? {}).flat()
-      const stack = stackCollections.find((item) => item.id === stackId) ?? { id: stackId, pullRequests: [] }
+      const existing = stackCollections.find((item) => item.number === stackNumber)
+      const stack = existing ?? { number: stackNumber, pullRequests: [] }
       stack.pullRequests = [...(stack.pullRequests ?? []), ...pullRequests]
-      state.stackAdds = [...(state.stackAdds ?? []), { stackId, pullRequests }]
-      const child = byNumber(pullRequests.at(-1))
-      if (child) child.stack = stack
+      state.stacks = state.stacks ?? {}
+      if (!existing) state.stacks[String(stackNumber)] = [stack]
+      state.stackAdds = [...(state.stackAdds ?? []), { stackNumber, pullRequests }]
       saveState(state)
-      out({ id: stackId, added: true })
+      out({ number: stackNumber })
     } else {
       out({})
     }
@@ -258,12 +372,13 @@ if (command === 'auth' && args[1] === 'status') {
 } else if (command === 'repo' && args[1] === 'view') {
   out({ nameWithOwner: repo.owner + '/' + repo.repo, isFork: false, parent: null, defaultBranchRef: { name: state.defaultBranch ?? 'main' } })
 } else if (command === 'pr' && args[1] === 'list') {
-  if (state.listFailure) fail(state.listFailure === true ? 'HTTP 503: temporarily unavailable' : String(state.listFailure))
   const head = option('--head', '')
-  const branch = head.split(':').at(-1) ?? ''
+  if (head.includes(':')) fail('gh pr list --head does not support owner:branch')
+  if (state.listFailure) fail(state.listFailure === true ? 'HTTP 503: temporarily unavailable' : String(state.listFailure))
   const base = option('--base', '')
   const stateFilter = option('--state', 'open')
-  out(prs.filter((item) => item.headRefName === branch && (!base || item.baseRefName === base) && belongsTo(item, repo) && (stateFilter === 'all' || item.state === 'OPEN' || item.state === 'DRAFT')))
+  out(prs.filter((item) => item.headRefName === head && (!base || item.baseRefName === base) && belongsTo(item, repo) &&
+    (stateFilter === 'all' || item.state === 'OPEN' || item.state === 'DRAFT')).map(projectPr))
 } else if (command === 'pr' && args[1] === 'view') {
   if (state.invalidPrView === true) {
     out({})
@@ -272,7 +387,7 @@ if (command === 'auth' && args[1] === 'status') {
     const item = number ? byNumber(number) : undefined
     if (!item || !belongsTo(item, repo)) fail('HTTP 404: Not Found')
     if (state.pauseNextView === true) {
-      const snapshot = JSON.stringify(item)
+      const snapshot = JSON.stringify(projectPr(item))
       const watcher = watch(process.env.QUIRKY_TEST_FIXTURE_DIR ?? '', { persistent: false })
       state.pauseNextView = false
       state.lookupStarted = true
@@ -282,29 +397,31 @@ if (command === 'auth' && args[1] === 'status') {
       }
       out(snapshot)
     } else {
-      out(item)
+      out(projectPr(item))
     }
   }
 } else if (command === 'pr' && args[1] === 'create') {
   if (state.createWrites !== false) {
     const title = option('--title', 'Untitled')
     const base = option('--base', 'main')
-    const headParts = option('--head', 'test-owner:feature').split(':')
+    const requestedHead = option('--head', 'feature')
+    const headParts = requestedHead.split(':')
     const headOwner = headParts.length > 1 ? headParts[0] : repo.owner
     const head = headParts.at(-1)
+    if (headParts.length > 1 && Array.isArray(state.organizationOwners) && state.organizationOwners.includes(headOwner)) {
+      fail('gh pr create --head does not support organization:branch')
+    }
     const bodyPath = option('--body-file')
     const body = bodyPath && existsSync(bodyPath) ? readFileSync(bodyPath, 'utf8') : ''
     const nextNumber = Math.max(0, ...prs.map((item) => item.number)) + 1
     const created = {
-      ...{
-        number: nextNumber, id: 'PR_test_' + nextNumber, title, body, state: 'OPEN', isDraft: args.includes('--draft'),
-        url: 'https://github.com/' + repo.owner + '/' + repo.repo + '/pull/' + nextNumber,
-        baseRefName: base, baseRefOid: 'b'.repeat(40), headRefName: head, headRefOid: 'c'.repeat(40),
-        headRepositoryOwner: { login: headOwner }, headRepository: { name: repo.repo, owner: { login: headOwner } },
-        baseRepositoryOwner: { login: repo.owner }, baseRepository: { name: repo.repo, owner: { login: repo.owner } },
-        mergeable: 'UNKNOWN', mergeStateStatus: 'UNKNOWN', reviewDecision: 'REVIEW_REQUIRED',
-        statusCheckRollup: [], autoMergeRequest: null, stack: null
-      }
+      number: nextNumber, id: 'PR_test_' + nextNumber, title, body, state: 'OPEN', isDraft: args.includes('--draft'),
+      url: 'https://github.com/' + repo.owner + '/' + repo.repo + '/pull/' + nextNumber,
+      baseRefName: base, baseRefOid: 'b'.repeat(40), headRefName: head, headRefOid: 'c'.repeat(40),
+      headRepositoryOwner: { login: headOwner }, headRepository: { name: repo.repo, owner: { login: headOwner } },
+      baseRepositoryOwner: { login: repo.owner }, baseRepository: { name: repo.repo, owner: { login: repo.owner } },
+      mergeable: 'UNKNOWN', mergeStateStatus: 'UNKNOWN', reviewDecision: 'REVIEW_REQUIRED',
+      statusCheckRollup: [], autoMergeRequest: null
     }
     prs.push(created)
     if (state.createTwoMatches === true) {
@@ -361,13 +478,13 @@ if (command === 'auth' && args[1] === 'status') {
 `
 
 
-async function rejection(promise: Promise<unknown>): Promise<{ message: string; data?: unknown }> {
+async function rejection(promise: Promise<unknown>): Promise<{ code?: unknown; message: string; data?: unknown }> {
   try {
     await promise
   } catch (error) {
     if (!(error instanceof Error)) throw new Error('expected an Error rejection')
     const record = isRecord(error) ? error : undefined
-    return { message: error.message, ...(record?.data !== undefined ? { data: record.data } : {}) }
+    return { message: error.message, ...(record?.code !== undefined ? { code: record.code } : {}), ...(record?.data !== undefined ? { data: record.data } : {}) }
   }
   throw new Error('expected the call to reject')
 }
@@ -418,6 +535,15 @@ function advanceTrackingBranch(testHost: HostingTest): void {
 
 function invocationsFor(testHost: HostingTest, predicate: (args: string[]) => boolean): Array<{ args: string[]; input: string; env: Record<string, string> }> {
   return testHost.invocations().filter((entry) => predicate(entry.args))
+}
+function restPullListCalls(testHost: HostingTest): Array<{ args: string[]; input: string; env: Record<string, string> }> {
+  return invocationsFor(testHost, (args) => args[0] === 'api' && args.some((argument) => argument.includes('/pulls?')))
+}
+
+function pullListQuery(invocation: { args: string[] }): URLSearchParams {
+  const endpoint = invocation.args.find((argument) => argument.includes('/pulls?'))
+  if (!endpoint) throw new Error('expected a REST pulls list request')
+  return new URLSearchParams(endpoint.slice(endpoint.indexOf('?') + 1))
 }
 function requestBody(invocation: { input: string }): Record<string, unknown> {
   const value: unknown = JSON.parse(invocation.input)
@@ -521,6 +647,28 @@ describe('quirky.hosting PR reads', () => {
     const result = recordOf(await testHost.call('forBranch', { worktree: testHost.worktree, branch: 'feature' }))
     expect(result).toMatchObject({ kind: 'found', review: { number: 7, headRefName: 'release' } })
   }, 20_000)
+  test('GH09 finds an organization-owned branch review through the REST head filter', async () => {
+    const organizationPr = pr({
+      number: 31,
+      url: 'https://github.com/acme/service/pull/31',
+      headRepositoryOwner: { login: 'acme' },
+      headRepository: { name: 'service', owner: { login: 'acme' } },
+      baseRepositoryOwner: { login: 'acme' },
+      baseRepository: { name: 'service', owner: { login: 'acme' } }
+    })
+    const testHost = await host(fixtureState({ prs: [organizationPr] }), {
+      remote: 'https://github.com/acme/service.git'
+    })
+
+    const result = recordOf(await testHost.call('forBranch', { worktree: testHost.worktree, branch: 'feature' }))
+    expect(result).toMatchObject({ kind: 'found', review: { number: 31, headRefName: 'feature' } })
+    const pullLists = restPullListCalls(testHost)
+    const pullList = pullLists[0]
+    if (!pullList) throw new Error('expected a REST pulls list request')
+    const headFilter = pullListQuery(pullList).get('head')
+    expect(pullLists).toHaveLength(1)
+    expect(headFilter).toBe('acme:feature')
+  }, 20_000)
 
   test('GH10 distinguishes empty absence, hides stale merged/default-branch matches, and preserves explicit links', async () => {
     const merged = pr({ state: 'MERGED', headRefOid: 'd'.repeat(40) })
@@ -539,14 +687,13 @@ describe('quirky.hosting PR reads', () => {
 })
 
 async function assertStackedRegistration(appendExisting: boolean): Promise<void> {
-  const existingStackValue = { id: 'stack-1', pullRequests: [20] }
+  const existingStackValue = { number: 20, pullRequests: [20] }
   const parent = pr({
     number: 20,
     title: 'Parent',
     headRefName: 'parent',
     headRefOid: 'f'.repeat(40),
     url: 'https://github.com/test-owner/test-repo/pull/20',
-    stack: appendExisting ? existingStackValue : null
   })
   const testHost = await host(fixtureState({
     prs: [parent],
@@ -563,12 +710,18 @@ async function assertStackedRegistration(appendExisting: boolean): Promise<void>
   }))
   expect(result).toMatchObject({ number: 21, stacked: true })
   if (appendExisting) {
-    expect(testHost.readState()).toMatchObject({ stackAdds: [{ stackId: 'stack-1', pullRequests: [21] }] })
+    expect(testHost.readState()).toMatchObject({ stackAdds: [{ stackNumber: 20, pullRequests: [21] }] })
   } else {
-    expect(testHost.readState()).toMatchObject({ stacks: { '20': [{ id: 'stack-1', pullRequests: [20, 21] }] } })
+    expect(testHost.readState()).toMatchObject({ stacks: { '20': [{ number: 20, pullRequests: [20, 21] }] } })
   }
-  expect(await testHost.call('review', { worktree: testHost.worktree, number: 21 })).toMatchObject({
-    kind: 'found', review: { number: 21, state: 'open', stack: { id: 'stack-1', pullRequests: [20, 21] } }
+  const readback = recordOf(await testHost.call('review', { worktree: testHost.worktree, number: 21 }))
+  expect(readback).toMatchObject({
+    kind: 'found',
+    review: {
+      number: 21,
+      state: 'open',
+      stack: { number: 20, position: 2, size: 2, base: { ref: 'main', sha: 'b'.repeat(40) } }
+    }
   })
 }
 
@@ -654,7 +807,7 @@ describe('quirky.hosting PR creation', () => {
     const error = await rejection(testHost.call('create', { worktree: testHost.worktree, title: 'Must stay blocked' }))
     expect(reasonOf(error)).toBe('existing_review')
     expect(invocationsFor(testHost, (args) => args[0] === 'pr' && args[1] === 'create')).toHaveLength(0)
-    expect(invocationsFor(testHost, (args) => args[0] === 'pr' && args[1] === 'list')).toHaveLength(2)
+    expect(restPullListCalls(testHost)).toHaveLength(2)
   }, 20_000)
   test('GH13 blocks the default branch and unsupported providers before create', async () => {
     const defaultHost = await host(fixtureState(), { branch: 'main' })
@@ -695,6 +848,127 @@ describe('quirky.hosting PR creation', () => {
     expect(testHost.readState()).toMatchObject({ prs: [{ title: 'Feature title', body: 'Template body\n', isDraft: true }] })
     expect(await testHost.call('review', { worktree: testHost.worktree, number: 1 })).toMatchObject({
       kind: 'found', review: { title: 'Feature title', body: 'Template body\n', state: 'draft' }
+    })
+  }, 20_000)
+  test('GH14 creates an organization-owned same-repository PR with a bare head, body template, draft, and readback', async () => {
+    const testHost = await host(fixtureState({ organizationOwners: ['engineering'] }), {
+      remote: 'https://github.com/engineering/widget.git'
+    })
+    mkdirSync(join(testHost.repoPath, '.github'), { recursive: true })
+    writeFileSync(join(testHost.repoPath, '.github', 'pull_request_template.md'), 'Engineering template\n')
+    git(testHost, ['add', '.github/pull_request_template.md'])
+    git(testHost, ['-c', 'user.name=Hosting Test', '-c', 'user.email=hosting@example.invalid', 'commit', '-m', 'add organization PR template'])
+    git(testHost, ['update-ref', 'refs/remotes/origin/feature', 'HEAD'])
+
+    const result = recordOf(await testHost.call('create', {
+      worktree: testHost.worktree, title: 'Organization feature', useTemplate: true, draft: true
+    }))
+    expect(result).toMatchObject({ number: 1, url: 'https://github.com/engineering/widget/pull/1' })
+    const createCalls = invocationsFor(testHost, (args) => args[0] === 'pr' && args[1] === 'create')
+    const createCall = createCalls[0]
+    if (!createCall) throw new Error('expected gh pr create invocation')
+    const args = createCall.args
+    const headIndex = args.indexOf('--head')
+    const bodyFileIndex = args.indexOf('--body-file')
+    const cliHead = args[headIndex + 1]
+    const baseIndex = args.indexOf('--base')
+    const cliBase = args[baseIndex + 1]
+    const hasDraftFlag = args.includes('--draft')
+    const hasBodyFileFlag = bodyFileIndex >= 0
+    const bodyFile = args[bodyFileIndex + 1]
+    const state = testHost.readState()
+    if (!isRecord(state) || !Array.isArray(state.prs) || !isRecord(state.prs[0])) throw new Error('expected created pull request')
+    const createdPr = state.prs[0]
+    const createdCount = state.prs.length
+    const createdBody = createdPr.body
+    const createdDraft = createdPr.isDraft
+    const headOwner = recordOf(createdPr.headRepositoryOwner).login
+    const baseOwner = recordOf(createdPr.baseRepositoryOwner).login
+    const headRepository = recordOf(createdPr.headRepository)
+    const baseRepository = recordOf(createdPr.baseRepository)
+    const headRepositoryOwner = recordOf(headRepository.owner).login
+    const baseRepositoryOwner = recordOf(baseRepository.owner).login
+    expect(createCalls).toHaveLength(1)
+    expect(headIndex).toBeGreaterThanOrEqual(0)
+    expect(cliHead).toBe('feature')
+    expect(cliBase).toBe('main')
+    expect(hasDraftFlag).toBe(true)
+    expect(hasBodyFileFlag).toBe(true)
+    expect(bodyFile).toBeTruthy()
+    expect(existsSync(bodyFile!)).toBe(false)
+    expect(invocationsFor(testHost, (callArgs) => callArgs[0] === 'api' && callArgs.some((argument) => argument === 'repos/engineering/widget/pulls'))).toHaveLength(0)
+    expect(createdCount).toBe(1)
+    expect(createdBody).toBe('Engineering template\n')
+    expect(createdDraft).toBe(true)
+    expect(headOwner).toBe('engineering')
+    expect(headRepository.name).toBe('widget')
+    expect(headRepositoryOwner).toBe('engineering')
+    expect(baseRepository.name).toBe('widget')
+    expect(baseRepositoryOwner).toBe('engineering')
+    expect(baseOwner).toBe('engineering')
+    expect(await testHost.call('review', { worktree: testHost.worktree, number: 1 })).toMatchObject({
+      kind: 'found',
+      review: {
+        number: 1, title: 'Organization feature', body: 'Engineering template\n', state: 'draft',
+        headRefName: 'feature', baseRefName: 'main',
+        headRepositoryOwner: { login: 'engineering' }, headRepository: { name: 'widget', owner: { login: 'engineering' } }
+      }
+    })
+  }, 20_000)
+
+  test('GH14 creates an organization-owned fork once through REST with head_repo, supplied body, draft, and readback', async () => {
+    const testHost = await host(fixtureState({ organizationOwners: ['acme'] }), {
+      remote: 'https://github.com/acme/feature-fork.git',
+      upstream: 'https://github.com/acme/base-project.git'
+    })
+    mkdirSync(join(testHost.repoPath, '.github'), { recursive: true })
+    writeFileSync(join(testHost.repoPath, '.github', 'pull_request_template.md'), 'Fork template\n')
+    git(testHost, ['add', '.github/pull_request_template.md'])
+    git(testHost, ['-c', 'user.name=Hosting Test', '-c', 'user.email=hosting@example.invalid', 'commit', '-m', 'add fork PR template'])
+    git(testHost, ['update-ref', 'refs/remotes/origin/feature', 'HEAD'])
+
+    const result = recordOf(await testHost.call('create', {
+      worktree: testHost.worktree, title: 'Organization fork', body: 'Supplied fork body', useTemplate: true, draft: true
+    }))
+    expect(result).toMatchObject({ number: 1, url: 'https://github.com/acme/base-project/pull/1' })
+    const createCalls = invocationsFor(testHost, (args) => args[0] === 'api' && args.some((argument) => argument === 'repos/acme/base-project/pulls'))
+    const createCall = createCalls[0]
+    if (!createCall) throw new Error('expected REST pull request creation')
+    const request = requestBody(createCall)
+    const methodIndex = createCall.args.indexOf('-X')
+    const methodValue = createCall.args[methodIndex + 1]
+    const hasMethodFlag = methodIndex >= 0
+    const cliCreateCalls = invocationsFor(testHost, (args) => args[0] === 'pr' && args[1] === 'create')
+    const state = testHost.readState()
+    if (!isRecord(state) || !Array.isArray(state.prs) || !isRecord(state.prs[0])) throw new Error('expected created pull request')
+    const createdPr = state.prs[0]
+    const createdCount = state.prs.length
+    const headOwner = recordOf(createdPr.headRepositoryOwner).login
+    const headRepository = recordOf(createdPr.headRepository)
+    const baseOwner = recordOf(createdPr.baseRepositoryOwner).login
+    const baseRepository = recordOf(createdPr.baseRepository)
+    expect(createCalls).toHaveLength(1)
+    expect(hasMethodFlag).toBe(true)
+    expect(methodValue).toBe('POST')
+    expect(request).toMatchObject({
+      title: 'Organization fork', head: 'acme:feature', head_repo: 'feature-fork',
+      base: 'main', body: 'Supplied fork body', draft: true
+    })
+    expect(cliCreateCalls).toHaveLength(0)
+    expect(createdCount).toBe(1)
+    expect(headOwner).toBe('acme')
+    expect(headRepository.name).toBe('feature-fork')
+    expect(recordOf(headRepository.owner).login).toBe('acme')
+    expect(baseOwner).toBe('acme')
+    expect(baseRepository.name).toBe('base-project')
+    expect(recordOf(baseRepository.owner).login).toBe('acme')
+    expect(await testHost.call('review', { worktree: testHost.worktree, number: 1 })).toMatchObject({
+      kind: 'found',
+      review: {
+        number: 1, title: 'Organization fork', body: 'Supplied fork body', state: 'draft',
+        headRefName: 'feature', baseRefName: 'main',
+        headRepositoryOwner: { login: 'acme' }, headRepository: { name: 'feature-fork', owner: { login: 'acme' } }
+      }
     })
   }, 20_000)
 
@@ -748,7 +1022,16 @@ describe('quirky.hosting PR creation', () => {
     const calls = testHost.invocations()
     const createIndex = calls.findIndex((entry) => entry.args[0] === 'pr' && entry.args[1] === 'create')
     expect(createIndex).toBeGreaterThanOrEqual(0)
-    expect(calls.slice(createIndex + 1).filter((entry) => entry.args[0] === 'pr' && entry.args[1] === 'list')).toHaveLength(1)
+    const recoveryCalls = calls.slice(createIndex + 1).filter((entry) =>
+      entry.args[0] === 'api' && entry.args.some((argument) => argument.includes('/pulls?')))
+    const recoveryCall = recoveryCalls[0]
+    if (!recoveryCall) throw new Error('expected one REST recovery probe')
+    const recoveryQuery = pullListQuery(recoveryCall)
+    const headFilter = recoveryQuery.get('head')
+    const baseFilter = recoveryQuery.get('base')
+    expect(recoveryCalls).toHaveLength(1)
+    expect(headFilter).toBe('test-owner:feature')
+    expect(baseFilter).toBe('main')
   }, 20_000)
 
   test('GH15 rejects ambiguous create output when multiple matching reviews are found', async () => {
@@ -759,7 +1042,16 @@ describe('quirky.hosting PR creation', () => {
     expect(reasonOf(error)).toBe('unknown_completion')
     const calls = testHost.invocations()
     const createIndex = calls.findIndex((entry) => entry.args[0] === 'pr' && entry.args[1] === 'create')
-    expect(calls.slice(createIndex + 1).filter((entry) => entry.args[0] === 'pr' && entry.args[1] === 'list')).toHaveLength(1)
+    const recoveryCalls = calls.slice(createIndex + 1).filter((entry) =>
+      entry.args[0] === 'api' && entry.args.some((argument) => argument.includes('/pulls?')))
+    const recoveryCall = recoveryCalls[0]
+    if (!recoveryCall) throw new Error('expected one REST recovery probe')
+    const recoveryQuery = pullListQuery(recoveryCall)
+    const headFilter = recoveryQuery.get('head')
+    const baseFilter = recoveryQuery.get('base')
+    expect(recoveryCalls).toHaveLength(1)
+    expect(headFilter).toBe('test-owner:feature')
+    expect(baseFilter).toBe('main')
   }, 20_000)
   test('GH15 preserves a typed body-too-long rejection without probing for a PR', async () => {
     const testHost = await host(fixtureState({
@@ -767,12 +1059,12 @@ describe('quirky.hosting PR creation', () => {
       createFailure: 'GitHub rejected the request because its body is too long.'
     }))
     pushFeature(testHost)
-    const listsBefore = invocationsFor(testHost, (args) => args[0] === 'pr' && args[1] === 'list').length
+    const listsBefore = restPullListCalls(testHost).length
     const error = await rejection(testHost.call('create', { worktree: testHost.worktree, base: 'main', title: 'Large body' }))
     expect(reasonOf(error)).toBe('body_too_long')
     expect(error.message).toBe('GitHub rejected the request because its body is too long.')
     expect(invocationsFor(testHost, (args) => args[0] === 'pr' && args[1] === 'create')).toHaveLength(1)
-    expect(invocationsFor(testHost, (args) => args[0] === 'pr' && args[1] === 'list')).toHaveLength(listsBefore + 1)
+    expect(restPullListCalls(testHost)).toHaveLength(listsBefore + 1)
     expect(testHost.readState()).toMatchObject({ prs: [] })
   }, 20_000)
 
@@ -787,9 +1079,9 @@ describe('quirky.hosting PR creation', () => {
     expect(reasonOf(error)).toBe('unknown_completion')
     expect(error.message).not.toContain('timed out')
     expect(invocationsFor(testHost, (args) => args[0] === 'pr' && args[1] === 'create')).toHaveLength(1)
-    const listsBeforeRefresh = invocationsFor(testHost, (args) => args[0] === 'pr' && args[1] === 'list').length
+    const listsBeforeRefresh = restPullListCalls(testHost).length
     expect(await testHost.call('forBranch', { worktree: testHost.worktree, branch: 'feature' })).toMatchObject({ kind: 'no-review' })
-    expect(invocationsFor(testHost, (args) => args[0] === 'pr' && args[1] === 'list')).toHaveLength(listsBeforeRefresh + 1)
+    expect(restPullListCalls(testHost)).toHaveLength(listsBeforeRefresh + 1)
     expect(testHost.readState()).toMatchObject({ prs: [] })
     expect(events.some((event) => isRecord(event) && event.type === 'quirky.hosting/changed' && isRecord(event.data) && event.data.confirmed === true)).toBe(false)
   }, 20_000)
@@ -800,7 +1092,7 @@ describe('quirky.hosting PR creation', () => {
     testHost.client.onEvent((event) => events.push(event))
     await testHost.client.callAny('events.subscribe', {})
     expect(await testHost.call('forBranch', { worktree: testHost.worktree, branch: 'feature' })).toMatchObject({ kind: 'found', review: { state: 'open' } })
-    const listsBeforeTimeout = invocationsFor(testHost, (args) => args[0] === 'pr' && args[1] === 'list').length
+    const listsBeforeTimeout = restPullListCalls(testHost).length
   
     const error = await rejection(testHost.call('merge', {
       worktree: testHost.worktree, number: 7, expectedHead: 'a'.repeat(40), method: 'squash', action: 'direct', yes: true
@@ -811,7 +1103,7 @@ describe('quirky.hosting PR creation', () => {
     expect(testHost.readState()).toMatchObject({ prs: [{ state: 'OPEN' }] })
     expect(events.some((event) => isRecord(event) && event.type === 'quirky.hosting/changed' && isRecord(event.data) && event.data.confirmed === true)).toBe(false)
     expect(await testHost.call('forBranch', { worktree: testHost.worktree, branch: 'feature' })).toMatchObject({ kind: 'found', review: { state: 'open' } })
-    expect(invocationsFor(testHost, (args) => args[0] === 'pr' && args[1] === 'list')).toHaveLength(listsBeforeTimeout + 1)
+    expect(restPullListCalls(testHost)).toHaveLength(listsBeforeTimeout + 1)
   }, 20_000)
 
 
@@ -912,13 +1204,86 @@ describe('quirky.hosting PR mutations', () => {
     expect(reasonOf(metadataFailure)).toBe('unknown_safety_metadata')
     expect(invocationsFor(testHost, (args) => args[0] === 'pr' && args[1] === 'merge' || args.some((arg) => arg.includes('/merge-async')))).toHaveLength(0)
   }, 20_000)
+  test('GH23 merges ordinary PRs when the successful REST response omits stack or sets it null', async () => {
+    const restStackResponses: Record<string, unknown>[] = [{}, { '7': null }]
+    for (const restStacks of restStackResponses) {
+      const testHost = await host(fixtureState({ prs: [pr()], restStacks }))
+      const result = recordOf(await testHost.call('merge', {
+        worktree: testHost.worktree, number: 7, expectedHead: 'a'.repeat(40), method: 'squash', action: 'direct', yes: true
+      }))
+      expect(result).toMatchObject({ state: 'merged', number: 7, head: 'a'.repeat(40) })
+      expect(invocationsFor(testHost, (args) => args[0] === 'pr' && args[1] === 'merge')).toHaveLength(1)
+      expect(invocationsFor(testHost, (args) => args.some((arg) => arg.includes('/merge-async')))).toHaveLength(0)
+      expect(testHost.readState()).toMatchObject({ prs: [{ state: 'MERGED' }] })
+    }
+  }, 20_000)
+
+  test('GH23 refuses merging when the REST stack metadata probe fails', async () => {
+    const testHost = await host(fixtureState({ prs: [pr()], restPullFailure: true }))
+    const error = await rejection(testHost.call('merge', {
+      worktree: testHost.worktree, number: 7, expectedHead: 'a'.repeat(40), method: 'squash', action: 'direct', yes: true
+    }))
+    expect(reasonOf(error)).toBe('unknown_safety_metadata')
+    expect(invocationsFor(testHost, (args) => args[0] === 'pr' && args[1] === 'merge' || args.some((arg) => arg.includes('/merge-async')))).toHaveLength(0)
+  }, 20_000)
+
+  test('GH23 refuses a malformed non-null REST stack summary', async () => {
+    const testHost = await host(fixtureState({
+      prs: [pr()],
+      restStacks: { '7': { number: 7, position: 2, size: 1, base: { ref: 'main', sha: 'b'.repeat(40) } } }
+    }))
+    const error = await rejection(testHost.call('merge', {
+      worktree: testHost.worktree, number: 7, expectedHead: 'a'.repeat(40), method: 'squash', action: 'direct', yes: true
+    }))
+    expect(reasonOf(error)).toBe('unknown_safety_metadata')
+    expect(invocationsFor(testHost, (args) => args[0] === 'pr' && args[1] === 'merge' || args.some((arg) => arg.includes('/merge-async')))).toHaveLength(0)
+  }, 20_000)
+
+  test('GH23 maps null and empty review decisions to NONE when a rule requires zero approvals', async () => {
+    for (const reviewDecision of [null, '']) {
+      const testHost = await host(fixtureState({
+        prs: [pr({ reviewDecision })],
+        rules: [{ type: 'PULL_REQUEST', parameters: { required_approving_review_count: 0 } }]
+      }))
+      const lookup = recordOf(await testHost.call('review', { worktree: testHost.worktree, number: 7 }))
+      expect(recordOf(lookup.review).reviewDecision).toBe('NONE')
+      const result = recordOf(await testHost.call('merge', {
+        worktree: testHost.worktree, number: 7, expectedHead: 'a'.repeat(40), method: 'squash', action: 'direct', yes: true
+      }))
+      expect(result).toMatchObject({ state: 'merged', number: 7 })
+    }
+  }, 20_000)
+
+  test('GH23 still requires approval when a PULL_REQUEST rule requires a positive approval count', async () => {
+    const testHost = await host(fixtureState({
+      prs: [pr({ reviewDecision: null })],
+      rules: [{ type: 'PULL_REQUEST', parameters: { required_approving_review_count: 1 } }]
+    }))
+    const error = await rejection(testHost.call('merge', {
+      worktree: testHost.worktree, number: 7, expectedHead: 'a'.repeat(40), method: 'squash', action: 'direct', yes: true
+    }))
+    expect(reasonOf(error)).toBe('review_required')
+    expect(invocationsFor(testHost, (args) => args[0] === 'pr' && args[1] === 'merge' || args.some((arg) => arg.includes('/merge-async')))).toHaveLength(0)
+  }, 20_000)
+
+  test('GH23 denies a missing reviewDecision instead of treating it as NONE', async () => {
+    const missingDecision = pr()
+    delete missingDecision.reviewDecision
+    const testHost = await host(fixtureState({ prs: [missingDecision] }))
+    const error = await rejection(testHost.call('merge', {
+      worktree: testHost.worktree, number: 7, expectedHead: 'a'.repeat(40), method: 'squash', action: 'direct', yes: true
+    }))
+    expect(reasonOf(error)).toBe('unknown_safety_metadata')
+    expect(invocationsFor(testHost, (args) => args[0] === 'pr' && args[1] === 'merge' || args.some((arg) => arg.includes('/merge-async')))).toHaveLength(0)
+  }, 20_000)
+
 
   test('GH22 a client cannot merge without destructive confirmation and GH24 queue/stack stay explicitly enqueued', async () => {
     const guarded = await host(fixtureState({ prs: [pr()] }))
     const notConfirmed = await rejection(guarded.call('merge', {
       worktree: guarded.worktree, number: 7, expectedHead: 'a'.repeat(40), method: 'squash', action: 'direct'
     }))
-    expect(notConfirmed.message.toLowerCase()).toContain('confirm')
+    expect(notConfirmed.code).toBe(-32009)
     expect(invocationsFor(guarded, (args) => args[0] === 'pr' && args[1] === 'merge')).toHaveLength(0)
   
     const queued = await host(fixtureState({ prs: [pr()], mergeQueueRequired: true, mergeAsyncStart: 'enqueued' }))
@@ -934,18 +1299,25 @@ describe('quirky.hosting PR mutations', () => {
     expect(queued.readState()).toMatchObject({ mergeQueueEntries: [7], prs: [{ state: 'OPEN' }] })
   }, 20_000)
 
-  test('GH24 stacks use the async merge route and preserve a truthful merged result', async () => {
-    const stacked = pr({ stack: { id: 'stack-1', pullRequests: [7, 8] } })
-    const testHost = await host(fixtureState({ prs: [stacked], mergeAsyncStart: 'merged' }))
+  test('GH24 recognizes an actual REST stack summary and merges by PR number through the async endpoint', async () => {
+    const stack = { number: 7, position: 2, size: 2, base: { ref: 'main', sha: 'b'.repeat(40) } }
+    const testHost = await host(fixtureState({
+      prs: [pr()], restStacks: { '7': stack }, mergeAsyncStart: 'merged'
+    }))
     const result = recordOf(await testHost.call('merge', {
       worktree: testHost.worktree, number: 7, expectedHead: 'a'.repeat(40), method: 'rebase', action: 'direct', yes: true
     }))
     expect(result).toMatchObject({ state: 'merged', number: 7, head: 'a'.repeat(40) })
     const asyncCall = invocationsFor(testHost, (args) => args.some((arg) => arg.includes('/merge-async')))
+    const asyncInvocation = asyncCall[0]
+    if (!asyncInvocation) throw new Error('expected asynchronous merge request')
+    const asyncEndpoint = asyncInvocation.args.find((arg) => arg.includes('/merge-async'))
+    const mergeRequest = requestBody(asyncInvocation)
     expect(asyncCall).toHaveLength(1)
-    expect(requestBody(asyncCall[0]!).merge_action).toBe('direct_merge')
-    expect(requestBody(asyncCall[0]!).merge_method).toBe('rebase')
-    expect(requestBody(asyncCall[0]!).sha).toBe('a'.repeat(40))
+    expect(asyncEndpoint).toBe('repos/test-owner/test-repo/pulls/7/merge-async')
+    expect(mergeRequest.merge_action).toBe('direct_merge')
+    expect(mergeRequest.merge_method).toBe('rebase')
+    expect(mergeRequest.sha).toBe('a'.repeat(40))
     expect(invocationsFor(testHost, (args) => args[0] === 'pr' && args[1] === 'merge')).toHaveLength(0)
     expect(testHost.readState()).toMatchObject({ prs: [{ state: 'MERGED' }] })
     expect(await testHost.call('review', { worktree: testHost.worktree, number: 7 })).toMatchObject({
@@ -960,6 +1332,20 @@ describe('quirky.hosting PR mutations', () => {
     }))
     expect(result).toMatchObject({ state: 'enqueued', number: 7, head: 'a'.repeat(40), operationId: 'op-stack' })
     expect(invocationsFor(testHost, (args) => args.some((arg) => arg.includes('/merge-async/op-stack')))).toHaveLength(1)
+    expect(testHost.readState()).toMatchObject({ prs: [{ state: 'OPEN' }] })
+  }, 20_000)
+
+  test('GH24 stops on a terminal async poll response without inventing a pending result or resubmitting', async () => {
+    const stack = { number: 7, position: 2, size: 2, base: { ref: 'main', sha: 'b'.repeat(40) } }
+    const testHost = await host(fixtureState({
+      prs: [pr()], restStacks: { '7': stack }, mergeAsyncStart: 'pending', mergeAsyncPoll: 'failed'
+    }))
+    const error = await rejection(testHost.call('merge', {
+      worktree: testHost.worktree, number: 7, expectedHead: 'a'.repeat(40), method: 'squash', action: 'direct', yes: true
+    }))
+    expect(recordOf(error.data).reason).toBe('unknown_completion')
+    expect(invocationsFor(testHost, (args) => args.some((arg) => arg.endsWith('/merge-async')) && args.includes('PUT'))).toHaveLength(1)
+    expect(invocationsFor(testHost, (args) => args.some((arg) => arg.endsWith('/merge-async/op-stack')))).toHaveLength(1)
     expect(testHost.readState()).toMatchObject({ prs: [{ state: 'OPEN' }] })
   }, 20_000)
 
@@ -980,7 +1366,9 @@ describe('quirky.hosting PR mutations', () => {
     })
     expect(invocationsFor(testHost, (args) => args[0] === 'pr' && args[1] === 'merge' && args.includes('--disable-auto'))).toHaveLength(1)
   
-    const stackedHost = await host(fixtureState({ prs: [pr({ stack: { id: 'stack-1' } })] }))
+    const stackedHost = await host(fixtureState({
+      prs: [pr()], restStacks: { '7': { number: 7, position: 1, size: 1, base: { ref: 'main', sha: 'b'.repeat(40) } } }
+    }))
     const error = await rejection(stackedHost.call('autoMerge', {
       worktree: stackedHost.worktree, number: 7, action: 'enable', expectedHead: 'a'.repeat(40), method: 'squash'
     }))

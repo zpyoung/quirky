@@ -165,8 +165,8 @@ function graphRollup(contexts: unknown[], suites: unknown[] = [], headSha = 'a'.
               commit: {
                 statusCheckRollup: {
                   contexts: { nodes: contexts },
-                  checkSuites: { nodes: suites },
                 },
+                checkSuites: { nodes: suites },
               },
             }],
           },
@@ -643,7 +643,7 @@ describe('hosting detail API', () => {
   test('validates reaction and thread IDs and reads add/remove and resolve/unresolve transitions', async () => {
     const ownedTarget = { data: {
       repository: { pullRequest: { id: 'PR_NODE' } },
-      node: { __typename: 'IssueComment', pullRequest: { id: 'PR_NODE' } },
+      node: { __typename: 'IssueComment', issueCommentPullRequest: { id: 'PR_NODE' } },
     } };
     const commentsState = (reactionGroups: unknown[], isResolved: boolean) => ({
       data: { repository: { pullRequest: {
@@ -689,7 +689,7 @@ describe('hosting detail API', () => {
           ownedTarget,
           { data: {
             repository: { pullRequest: { id: 'PR_NODE' } },
-            node: { __typename: 'IssueComment', pullRequest: { id: 'OTHER_PR' } },
+            node: { __typename: 'IssueComment', issueCommentPullRequest: { id: 'OTHER_PR' } },
           } },
         ] },
         HostingReactionMutation: { __sequence: [
@@ -704,7 +704,7 @@ describe('hosting detail API', () => {
       },
       transitions: {
         'GRAPHQL HostingReactionMutation': [
-          { graphqlResponses: { HostingComments: commentsState([{ content: 'THUMBS_UP', users: { totalCount: 1, viewerHasReacted: true } }], false) } },
+          { graphqlResponses: { HostingComments: commentsState([{ content: 'THUMBS_UP', viewerHasReacted: true, users: { totalCount: 1 } }], false) } },
           { graphqlResponses: { HostingComments: noReaction } },
         ],
         'GRAPHQL HostingThreadMutation': [

@@ -5,10 +5,6 @@ const LOOKUP_FIELDS = [
   'id', 'number', 'title', 'body', 'state', 'url', 'isDraft', 'updatedAt', 'mergeable', 'reviewDecision', 'mergeStateStatus',
   'autoMergeRequest', 'baseRefName', 'headRefName', 'baseRefOid', 'headRefOid', 'headRepositoryOwner', 'headRepository', 'statusCheckRollup'
 ].join(',')
-const BRANCH_FIELDS = [
-  'number', 'title', 'body', 'state', 'url', 'isDraft', 'baseRefName', 'headRefName', 'baseRefOid', 'headRefOid',
-  'headRepositoryOwner', 'headRepository'
-].join(',')
 const FOUND_TTL = 120_000
 const ACTIVE_TTL = 60_000
 const ABSENT_TTL = 15 * 60_000
@@ -76,6 +72,22 @@ export type PRMergeMetadata = {
 }
 
 export type PRRead = { scope: Scope; repository: IdentityValue; raw: Record<string, unknown>; review: Review; metadata: PRMergeMetadata; stackKnown: boolean }
+export type PRStackSummary = {
+  number: number
+  position: number
+  size: number
+  base: { ref: string; sha: string }
+}
+
+export function isPRStackSummary(value: unknown): value is PRStackSummary {
+  if (!isRecord(value) || !isRecord(value.base)) return false
+  const number = parsePositiveInteger(value.number)
+  const position = parsePositiveInteger(value.position)
+  const size = parsePositiveInteger(value.size)
+  return number !== undefined && position !== undefined && size !== undefined &&
+    position <= size && parseBranch(value.base.ref) !== undefined && parseOid(value.base.sha) !== undefined
+}
+
 
 type CachedLookup = { expiresAt: number; value: Lookup }
 export type PRLookup = {
@@ -177,7 +189,10 @@ function reviewFromRaw(raw: Record<string, unknown>, repository: IdentityValue, 
   const review: Review = {
     provider: 'github', number, url, title, body, state, headRefName, baseRefName, headRefOid, baseRefOid,
     mergeable: mergeability(raw), checksStatus: checksStatus(raw),
-    reviewDecision: typeof raw.reviewDecision === 'string' ? raw.reviewDecision : 'UNKNOWN',
+    reviewDecision: Object.hasOwn(raw, 'reviewDecision') && (
+      raw.reviewDecision === null ||
+      (typeof raw.reviewDecision === 'string' && raw.reviewDecision.trim().length === 0)
+    ) ? 'NONE' : typeof raw.reviewDecision === 'string' ? raw.reviewDecision : 'UNKNOWN',
     mergeStateStatus: typeof raw.mergeStateStatus === 'string' ? raw.mergeStateStatus : 'UNKNOWN',
     autoMergeRequest: raw.autoMergeRequest ?? null,
     stack,
@@ -250,7 +265,7 @@ function metadataFromResponse(value: unknown): PRMergeMetadata {
 }
 
 function graphqlMetadataQuery(): string {
-  return 'query HostingPRMergeMetadata($owner:String!,$name:String!,$branch:String!,$qualifiedBranch:String!){repository(owner:$owner,name:$name){viewerDefaultMergeMethod mergeCommitAllowed rebaseMergeAllowed squashMergeAllowed autoMergeAllowed defaultBranchRef{name} mergeQueue(branch:$branch){id} ref(qualifiedName:$qualifiedBranch){rules(first:50){nodes{type}}}}}'
+  return 'query HostingPRMergeMetadata($owner:String!,$name:String!,$branch:String!,$qualifiedBranch:String!){repository(owner:$owner,name:$name){viewerDefaultMergeMethod mergeCommitAllowed rebaseMergeAllowed squashMergeAllowed autoMergeAllowed defaultBranchRef{name} mergeQueue(branch:$branch){id} ref(qualifiedName:$qualifiedBranch){rules(first:50){nodes{type parameters{... on PullRequestParameters{requiredApprovingReviewCount}}}}}}}'
 }
 
 async function readMetadata(env: HostingEnv, scope: Scope, repository: IdentityValue, branch: string, fresh = false): Promise<PRMergeMetadata> {
@@ -278,7 +293,7 @@ function normalizeRestPull(raw: Record<string, unknown>): Record<string, unknown
   const baseRefName = base ? parseBranch(base.ref) : undefined
   const headRefOid = head ? parseOid(head.sha) : undefined
   const baseRefOid = base ? parseOid(base.sha) : undefined
-  const url = nonEmptyString(raw.url) ?? nonEmptyString(raw.html_url)
+  const url = nonEmptyString(raw.html_url) ?? nonEmptyString(raw.url)
   if (!head || !base || !headRefName || !baseRefName || !headRefOid || !baseRefOid || !url) return undefined
   const state = typeof raw.state === 'string' ? raw.state.toUpperCase() : ''
   const mergeStateStatus = typeof raw.mergeStateStatus === 'string'
@@ -287,7 +302,7 @@ function normalizeRestPull(raw: Record<string, unknown>): Record<string, unknown
   return {
     ...raw,
     url,
-    state: raw.merged === true ? 'MERGED' : state,
+    state: raw.merged === true || typeof raw.merged_at === 'string' ? 'MERGED' : state,
     isDraft: raw.draft === true,
     headRefName,
     headRefOid,
@@ -298,6 +313,27 @@ function normalizeRestPull(raw: Record<string, unknown>): Record<string, unknown
     ...(mergeStateStatus !== undefined ? { mergeStateStatus } : {})
   }
 }
+
+function isValidRestPullDetail(value: unknown, repository: IdentityValue, number: number): value is Record<string, unknown> {
+  if (!isRecord(value) || parsePositiveInteger(value.number) !== number) return false
+  const head = isRecord(value.head) ? value.head : undefined
+  const base = isRecord(value.base) ? value.base : undefined
+  const url = nonEmptyString(value.html_url)
+  const state = typeof value.state === 'string' ? value.state.toUpperCase() : ''
+  if (!head || !base || typeof value.title !== 'string' || !['OPEN', 'CLOSED'].includes(state) || !url ||
+    !parseBranch(head.ref) || !parseBranch(base.ref) || !parseOid(head.sha) || !parseOid(base.sha)) return false
+  let parsedUrl: URL
+  try {
+    parsedUrl = new URL(url)
+  } catch {
+    return false
+  }
+  const expectedPath = `/${repository.owner}/${repository.repo}/pull/${number}`
+  return (parsedUrl.protocol === 'https:' || parsedUrl.protocol === 'http:') &&
+    parsedUrl.host.toLowerCase() === repository.host.toLowerCase() &&
+    parsedUrl.pathname.toLowerCase() === expectedPath.toLowerCase()
+}
+
 
 async function rawByNumber(env: HostingEnv, scope: Scope, repository: IdentityValue, number: number): Promise<Record<string, unknown> | null> {
   let viewError: unknown
@@ -327,13 +363,18 @@ async function enrichRead(env: HostingEnv, scope: Scope, repository: IdentityVal
   const number = parsePositiveInteger(raw.number)
   const headRefName = parseBranch(raw.headRefName)
   if (!number || !headRefName) throw env.invalid('upstream_unavailable', 'GitHub returned incomplete pull request details.')
-  let stack: unknown = raw.stack
-  let stackKnown = Object.hasOwn(raw, 'stack')
+  let stack: unknown
+  let stackKnown = false
   try {
     const detail = await env.rest(scope, `repos/${repository.owner}/${repository.repo}/pulls/${number}`, 'GET', undefined, { idempotent: true })
-    if (isRecord(detail) && Object.hasOwn(detail, 'stack')) {
-      stack = detail.stack
-      stackKnown = true
+    if (isValidRestPullDetail(detail, repository, number)) {
+      if (!Object.hasOwn(detail, 'stack') || detail.stack === null) {
+        stack = null
+        stackKnown = true
+      } else {
+        stack = detail.stack
+        stackKnown = isPRStackSummary(detail.stack)
+      }
     }
   } catch {
     // A normal review lookup remains available when optional stack metadata cannot be read.
@@ -343,27 +384,42 @@ async function enrichRead(env: HostingEnv, scope: Scope, repository: IdentityVal
   if (!review) throw env.invalid('upstream_unavailable', 'GitHub returned incomplete pull request details.')
   return { scope, repository, raw, review, metadata, stackKnown }
 }
+async function warmRateLimit(env: HostingEnv, scope: Scope, repository: IdentityValue): Promise<void> {
+  if (repository.host.toLowerCase() !== 'github.com') return
+  await env.rateLimit({ ...scope, repository }).catch(() => undefined)
+}
 
 async function readCandidate(env: HostingEnv, scope: Scope, repository: IdentityValue, number: number, fresh = false): Promise<PRRead | null> {
   const selectedScope: Scope = { ...scope, repository }
+  await warmRateLimit(env, selectedScope, repository)
   const raw = await rawByNumber(env, selectedScope, repository, number)
   return raw ? enrichRead(env, selectedScope, repository, raw, fresh) : null
 }
 
+function restHeadMatchesOrigin(scope: Scope, raw: Record<string, unknown>, branch: string): boolean {
+  const head = isRecord(raw.head) ? raw.head : undefined
+  const repository = head && isRecord(head.repo) ? head.repo : undefined
+  if (!head || !repository) return false
+  const owner = nestedLogin(repository.owner)
+  const name = nonEmptyString(repository.name)
+  return parseBranch(head.ref) === branch &&
+    owner?.toLowerCase() === scope.origin.owner.toLowerCase() &&
+    name?.toLowerCase() === scope.origin.repo.toLowerCase()
+}
+
 async function branchCandidates(env: HostingEnv, scope: Scope, repository: IdentityValue, branch: string): Promise<PRRead[]> {
   const selectedScope: Scope = { ...scope, repository }
-  const command = ['pr', 'list', '--repo', repoArg(repository), '--head', `${scope.origin.owner}:${branch}`, '--state', 'all', '--limit', '100', '--json', BRANCH_FIELDS]
-  const value = await env.json(selectedScope, command, { idempotent: true })
+  await warmRateLimit(env, selectedScope, repository)
+  const head = encodeURIComponent(`${scope.origin.owner}:${branch}`)
+  const value = await env.rest(selectedScope,
+    `repos/${repository.owner}/${repository.repo}/pulls?head=${head}&state=all&per_page=100`,
+    'GET', undefined, { idempotent: true })
   if (!Array.isArray(value)) throw env.invalid('upstream_unavailable', 'GitHub returned an invalid pull request list.')
   const results: PRRead[] = []
   for (const raw of value) {
-    if (!isRecord(raw)) continue
-    const foundBranch = parseBranch(raw.headRefName)
+    if (!isRecord(raw) || !restHeadMatchesOrigin(scope, raw, branch)) continue
     const number = parsePositiveInteger(raw.number)
-    const headOwner = nestedLogin(raw.headRepositoryOwner)
-    const headName = nestedStringValue(raw.headRepository, 'name')
-    if (foundBranch !== branch || !number || !headOwner || !headName ||
-      headOwner.toLowerCase() !== scope.origin.owner.toLowerCase() || headName.toLowerCase() !== scope.origin.repo.toLowerCase()) continue
+    if (!number) continue
     const hydrated = await readCandidate(env, scope, repository, number)
     if (hydrated) results.push(hydrated)
   }

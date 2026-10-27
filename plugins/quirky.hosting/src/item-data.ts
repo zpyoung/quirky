@@ -188,14 +188,32 @@ function namesFromConnection(value: unknown): string[] {
   })
 }
 
-function stateFromRaw(raw: Record<string, unknown>, isPullRequest: boolean, isDraft: boolean): WorkItemState {
+function stateValueFromRaw(raw: Record<string, unknown>): unknown {
+  if (raw.__typename === 'Issue' && raw.issueState !== undefined) return raw.issueState
+  if (raw.__typename === 'PullRequest' && raw.pullRequestState !== undefined) return raw.pullRequestState
+  return raw.state
+}
+
+function stateFromRaw(raw: Record<string, unknown>, isPullRequest: boolean, isDraft: boolean, stateValue: unknown = raw.state): WorkItemState {
   if (isDraft) return 'draft'
-  const state = typeof raw.state === 'string' ? raw.state.toLowerCase() : ''
+  const state = typeof stateValue === 'string' ? stateValue.toLowerCase() : ''
   if (state === 'merged' || raw.merged === true || (typeof raw.mergedAt === 'string' && raw.mergedAt.length > 0)) return 'merged'
   if (state === 'open' || state === 'opened') return 'open'
   if (state === 'closed') return 'closed'
   if (isPullRequest && state === 'draft') return 'draft'
   return 'unknown'
+}
+
+export function canonicalWorkItemState(value: unknown, isPullRequest?: boolean, isDraft?: boolean): WorkItemState {
+  const raw = record(value)
+  if (!raw) return 'unknown'
+  const pullRequest = isPullRequest ?? (isRecord(raw.pull_request) || raw.__typename === 'PullRequest')
+  const draft = isDraft ?? (
+    raw.isDraft === true ||
+    raw.is_draft === true ||
+    (pullRequest && String(stateValueFromRaw(raw) ?? '').toLowerCase() === 'draft')
+  )
+  return stateFromRaw(raw, pullRequest, draft, stateValueFromRaw(raw))
 }
 
 export function mapWorkItem(value: unknown, fallback: { identity: Identity; kind?: WorkItemKind }): WorkItemRecord | null {
@@ -206,8 +224,9 @@ export function mapWorkItem(value: unknown, fallback: { identity: Identity; kind
   const pullRequest = isRecord(raw.pull_request) || raw.__typename === 'PullRequest' || fallback.kind === 'pullRequest'
   const kind: WorkItemKind = pullRequest ? 'pullRequest' : 'issue'
   const title = textOrEmpty(raw.title)
-  const isDraft = raw.isDraft === true || raw.is_draft === true || (kind === 'pullRequest' && String(raw.state ?? '').toLowerCase() === 'draft')
-  const url = nonEmptyString(raw.url) ?? `https://${fallback.identity.host}/${fallback.identity.owner}/${fallback.identity.repo}/${kind === 'issue' ? 'issues' : 'pull'}/${number}`
+  const stateValue = stateValueFromRaw(raw)
+  const isDraft = raw.isDraft === true || raw.is_draft === true || (kind === 'pullRequest' && String(stateValue ?? '').toLowerCase() === 'draft')
+  const url = nonEmptyString(raw.html_url) ?? nonEmptyString(raw.url) ?? `https://${fallback.identity.host}/${fallback.identity.owner}/${fallback.identity.repo}/${kind === 'issue' ? 'issues' : 'pull'}/${number}`
   const authorObject = record(raw.author) ?? record(raw.user) ?? record(raw.creator)
   const author = nonEmptyString(authorObject?.login) ?? nonEmptyString(raw.author)
   const result: WorkItemRecord = {
@@ -215,7 +234,7 @@ export function mapWorkItem(value: unknown, fallback: { identity: Identity; kind
     number,
     title,
     body: textOrEmpty(raw.body),
-    state: stateFromRaw(raw, kind === 'pullRequest', isDraft),
+    state: stateFromRaw(raw, kind === 'pullRequest', isDraft, stateValue),
     url,
     createdAt: string(raw.createdAt) ?? string(raw.created_at),
     updatedAt: string(raw.updatedAt) ?? string(raw.updated_at),

@@ -48,18 +48,18 @@ const COMMENTS_QUERY = `query HostingComments($owner: String!, $name: String!, $
   repository(owner: $owner, name: $name) {
     pullRequest(number: $number) {
       comments(first: 100) {
-        nodes { id databaseId body createdAt url author { login } reactionGroups { content users { totalCount viewerHasReacted } } }
+        nodes { id databaseId body createdAt url author { login } reactionGroups { content users { totalCount } viewerHasReacted } }
         pageInfo { hasNextPage }
       }
       reviews(first: 100) {
-        nodes { id databaseId body submittedAt url state author { login } reactionGroups { content users { totalCount viewerHasReacted } } }
+        nodes { id databaseId body submittedAt url state author { login } reactionGroups { content users { totalCount } viewerHasReacted } }
         pageInfo { hasNextPage }
       }
       reviewThreads(first: 100) {
         nodes {
           id isResolved path line originalLine startLine originalStartLine
           comments(first: 100) {
-            nodes { id databaseId body createdAt url path line originalLine startLine originalStartLine author { login } reactionGroups { content users { totalCount viewerHasReacted } } }
+            nodes { id databaseId body createdAt url path line originalLine startLine originalStartLine author { login } reactionGroups { content users { totalCount } viewerHasReacted } }
             pageInfo { hasNextPage }
           }
         }
@@ -83,6 +83,9 @@ export function commentMethods(env: HostingEnv): Record<string, Handler> {
 }
 
 async function loadComments(env: HostingEnv, context: DetailContext): Promise<unknown> {
+  if (context.identity.host.toLowerCase() === 'github.com') {
+    await env.rateLimit({ ...context.scope, repository: context.identity }).catch(() => undefined);
+  }
   const sources = await Promise.allSettled([
     env.rest(envScope(context), `${context.base}/issues/${context.number}/comments?per_page=100`, 'GET', undefined, { idempotent: true }),
     env.rest(envScope(context), `${context.base}/pulls/${context.number}/reviews?per_page=100`, 'GET', undefined, { idempotent: true }),
@@ -305,7 +308,7 @@ function mapReactionGroups(value: unknown): CommentReaction[] {
     return [{
       content: nonemptyString(group.content) ?? 'UNKNOWN',
       count,
-      viewerHasReacted: users?.viewerHasReacted === true,
+      viewerHasReacted: group.viewerHasReacted === true,
     }];
   });
 }
@@ -551,7 +554,7 @@ export const REACTION_TARGET_QUERY = `query HostingReactionTarget($owner: String
   node(id: $subjectId) {
     __typename
     ... on PullRequest { id }
-    ... on IssueComment { pullRequest { id } }
+    ... on IssueComment { issueCommentPullRequest: pullRequest { id } }
     ... on PullRequestReviewComment { pullRequest { id } }
     ... on PullRequestReview { pullRequest { id } }
   }
@@ -583,7 +586,10 @@ function graphqlPull(value: unknown): DetailRecord | null {
 function reactionParentId(node: DetailRecord): string | null {
   const typename = node.__typename;
   if (typename === 'PullRequest') return nonemptyString(node.id);
-  if (typename === 'IssueComment' || typename === 'PullRequestReviewComment' || typename === 'PullRequestReview') {
+  if (typename === 'IssueComment') {
+    return nonemptyString(asRecord(node.issueCommentPullRequest)?.id);
+  }
+  if (typename === 'PullRequestReviewComment' || typename === 'PullRequestReview') {
     return nonemptyString(asRecord(node.pullRequest)?.id);
   }
   return null;

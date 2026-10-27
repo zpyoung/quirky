@@ -22,6 +22,16 @@ It requests confirmation unless `--yes` authorizes the action. With asks disable
 the call fails closed; a changed head is refused even with `--yes`. People and
 plugin callers use the same `quirky.hosting/merge` implementation.
 
+A present, empty provider review decision is `NONE`; unavailable review metadata
+is `UNKNOWN`. Ordinary PRs without required approvals can merge with `NONE`, but
+unknown safety data still blocks merging.
+
+Project-item edits and comment updates do not prompt. Deleting a project-item
+comment uses the same kernel confirmation rule as merge; authorize it with
+`--yes` or an answered confirmation. `project-item-mutation-confirmation` previews
+that deletion without changing data. Issue-type actions currently require an
+organization-owned project; support for user-owned projects is tracked separately.
+
 `gh` owns credentials. Normal requests use its ambient login or a repository's
 configured keyring-account binding; a failed binding never falls back to another
 account. Projects v2 uses the ambient login, not that binding. Enterprise hosts

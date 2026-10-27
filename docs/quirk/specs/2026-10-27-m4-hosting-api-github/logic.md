@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Expose the complete GitHub slice of hosting-api.md through a replaceable built-in plugin and the generated `quirky hosting` CLI. The window, agents and future sitter consume the same daemon methods; merging has exactly one authorization and execution path.
+Expose the core GitHub hosting flows through a replaceable built-in plugin and the generated `quirky hosting` CLI. The window, agents and future sitter consume the same daemon methods; merging has exactly one authorization and execution path. Operator-approved remaining parity work is named below and tracked by a dependent queue item.
 
 ## Conceptual model
 
@@ -23,6 +23,8 @@ Use one SHA-guarded merge method for humans and automation. Refresh state and me
 ## Scope and non-goals
 
 All GitHub portions of flows 1–7 in hosting-api.md are in scope, including account binding, rate limits, refresh pacing, stacked creation/merge, review detail/actions, issues/work items and Projects v2. Flow 8 is Bitbucket-only and excluded. Other providers, UI pages/settings cards, worktree creation from hosted items, SSH execution-host infrastructure, Windows/WSL routing, and Orca-specific star prompts are excluded. Local SSH clone remotes and aliases remain in scope. The API must not introduce connection-backed repository support that the registered-worktree API does not have.
+
+**Operator scope amendment:** land the tested core under the operator's deadline. User-owned Projects issue-type discovery/changes and distinct-query search batching/cursor reuse remain in dependent item `m4-hosting-api-github-parity`. User-owned-project type actions return an explicit unsupported error rather than claiming an empty successful implementation. Functional work-item search/pagination remains included; the deferred work is its source's cross-query batching and cursor-reuse behavior.
 
 ## Decisions Locked
 

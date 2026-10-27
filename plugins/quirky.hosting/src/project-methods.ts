@@ -26,12 +26,12 @@ const VIEWER_PROJECT_PAGE_QUERY = `query ViewerProjectPage($cursor: String) {
   viewer { projectsV2(first: 20, after: $cursor) { nodes { id number title url closed shortDescription public } pageInfo { endCursor hasNextPage } totalCount } }
 }`
 const VIEW_QUERY_WITH_VERTICAL = `query ProjectViews($owner: String!, $number: Int!, $cursor: String) {
-  organization(login: $owner) { projectV2(number: $number) { views(first: 20, after: $cursor) { nodes { id number name layout filter fields(first: 50) { nodes { id name dataType options { id name } } } groupByFields(first: 10) { nodes { id name } } verticalGroupByFields(first: 10) { nodes { id name } } sortByFields(first: 10) { nodes { id name } } } pageInfo { endCursor hasNextPage } } } }
-  user(login: $owner) { projectV2(number: $number) { views(first: 20, after: $cursor) { nodes { id number name layout filter fields(first: 50) { nodes { id name dataType options { id name } } } groupByFields(first: 10) { nodes { id name } } verticalGroupByFields(first: 10) { nodes { id name } } sortByFields(first: 10) { nodes { id name } } } pageInfo { endCursor hasNextPage } } } }
+  organization(login: $owner) { projectV2(number: $number) { views(first: 20, after: $cursor) { nodes { id number name layout filter fields(first: 50) { nodes { __typename ... on ProjectV2FieldCommon { id name dataType } ... on ProjectV2SingleSelectField { options { id name } } ... on ProjectV2MultiSelectField { multiSelectOptions { id name } } } } groupByFields(first: 10) { nodes { __typename ... on ProjectV2FieldCommon { id name dataType } ... on ProjectV2SingleSelectField { options { id name } } ... on ProjectV2MultiSelectField { multiSelectOptions { id name } } } } verticalGroupByFields(first: 10) { nodes { __typename ... on ProjectV2FieldCommon { id name dataType } ... on ProjectV2SingleSelectField { options { id name } } ... on ProjectV2MultiSelectField { multiSelectOptions { id name } } } } sortByFields(first: 10) { nodes { direction field { __typename ... on ProjectV2FieldCommon { id name dataType } ... on ProjectV2SingleSelectField { options { id name } } ... on ProjectV2MultiSelectField { multiSelectOptions { id name } } } } } } pageInfo { endCursor hasNextPage } } } }
+  user(login: $owner) { projectV2(number: $number) { views(first: 20, after: $cursor) { nodes { id number name layout filter fields(first: 50) { nodes { __typename ... on ProjectV2FieldCommon { id name dataType } ... on ProjectV2SingleSelectField { options { id name } } ... on ProjectV2MultiSelectField { multiSelectOptions { id name } } } } groupByFields(first: 10) { nodes { __typename ... on ProjectV2FieldCommon { id name dataType } ... on ProjectV2SingleSelectField { options { id name } } ... on ProjectV2MultiSelectField { multiSelectOptions { id name } } } } verticalGroupByFields(first: 10) { nodes { __typename ... on ProjectV2FieldCommon { id name dataType } ... on ProjectV2SingleSelectField { options { id name } } ... on ProjectV2MultiSelectField { multiSelectOptions { id name } } } } sortByFields(first: 10) { nodes { direction field { __typename ... on ProjectV2FieldCommon { id name dataType } ... on ProjectV2SingleSelectField { options { id name } } ... on ProjectV2MultiSelectField { multiSelectOptions { id name } } } } } } pageInfo { endCursor hasNextPage } } } }
 }`
 const VIEW_QUERY_WITHOUT_VERTICAL = `query ProjectViews($owner: String!, $number: Int!, $cursor: String) {
-  organization(login: $owner) { projectV2(number: $number) { views(first: 20, after: $cursor) { nodes { id number name layout filter fields(first: 50) { nodes { id name dataType options { id name } } } groupByFields(first: 10) { nodes { id name } } sortByFields(first: 10) { nodes { id name } } } pageInfo { endCursor hasNextPage } } } }
-  user(login: $owner) { projectV2(number: $number) { views(first: 20, after: $cursor) { nodes { id number name layout filter fields(first: 50) { nodes { id name dataType options { id name } } } groupByFields(first: 10) { nodes { id name } } sortByFields(first: 10) { nodes { id name } } } pageInfo { endCursor hasNextPage } } } }
+  organization(login: $owner) { projectV2(number: $number) { views(first: 20, after: $cursor) { nodes { id number name layout filter fields(first: 50) { nodes { __typename ... on ProjectV2FieldCommon { id name dataType } ... on ProjectV2SingleSelectField { options { id name } } ... on ProjectV2MultiSelectField { multiSelectOptions { id name } } } } groupByFields(first: 10) { nodes { __typename ... on ProjectV2FieldCommon { id name dataType } ... on ProjectV2SingleSelectField { options { id name } } ... on ProjectV2MultiSelectField { multiSelectOptions { id name } } } } sortByFields(first: 10) { nodes { direction field { __typename ... on ProjectV2FieldCommon { id name dataType } ... on ProjectV2SingleSelectField { options { id name } } ... on ProjectV2MultiSelectField { multiSelectOptions { id name } } } } } } pageInfo { endCursor hasNextPage } } } }
+  user(login: $owner) { projectV2(number: $number) { views(first: 20, after: $cursor) { nodes { id number name layout filter fields(first: 50) { nodes { __typename ... on ProjectV2FieldCommon { id name dataType } ... on ProjectV2SingleSelectField { options { id name } } ... on ProjectV2MultiSelectField { multiSelectOptions { id name } } } } groupByFields(first: 10) { nodes { __typename ... on ProjectV2FieldCommon { id name dataType } ... on ProjectV2SingleSelectField { options { id name } } ... on ProjectV2MultiSelectField { multiSelectOptions { id name } } } } sortByFields(first: 10) { nodes { direction field { __typename ... on ProjectV2FieldCommon { id name dataType } ... on ProjectV2SingleSelectField { options { id name } } ... on ProjectV2MultiSelectField { multiSelectOptions { id name } } } } } } pageInfo { endCursor hasNextPage } } } }
 }`
 
 type ProjectCaller = Parameters<Handler>[1]
@@ -206,6 +206,35 @@ async function resolveProject(env: HostingEnv, params: Record<string, unknown>, 
   })
 }
 
+function normalizeProjectFieldOptions(value: unknown): Record<string, unknown>[] {
+  return array(value).flatMap((option) => {
+    const entry = record(option)
+    const optionId = nonEmptyString(entry?.id)
+    return !entry || optionId === null || typeof entry.name !== 'string' ? [] : [{ id: optionId, name: entry.name }]
+  })
+}
+
+function normalizeProjectField(value: unknown): Record<string, unknown> | null {
+  const field = record(value)
+  const id = nonEmptyString(field?.id)
+  if (!field || id === null) return null
+  const normalized: Record<string, unknown> = {
+    id,
+    name: nonEmptyString(field.name) ?? '',
+    dataType: nonEmptyString(field.dataType)
+  }
+  if (Array.isArray(field.multiSelectOptions)) normalized.multiSelectOptions = normalizeProjectFieldOptions(field.multiSelectOptions)
+  else normalized.options = normalizeProjectFieldOptions(field.options)
+  return normalized
+}
+
+function normalizeProjectFields(value: unknown): Record<string, unknown>[] {
+  return array(record(value)?.nodes).flatMap((item) => {
+    const field = normalizeProjectField(item)
+    return field === null ? [] : [field]
+  })
+}
+
 function normalizeView(value: unknown): Record<string, unknown> | null {
   const raw = record(value)
   const id = nonEmptyString(raw?.id)
@@ -218,27 +247,14 @@ function normalizeView(value: unknown): Record<string, unknown> | null {
     name,
     layout: typeof raw.layout === 'string' ? raw.layout.toUpperCase() : 'UNKNOWN',
     filter: typeof raw.filter === 'string' ? raw.filter : '',
-    fields: array(record(raw.fields)?.nodes).flatMap((item) => {
-      const field = record(item)
-      const fieldId = nonEmptyString(field?.id)
-      if (!field || fieldId === null) return []
-      return [{ id: fieldId, name: nonEmptyString(field.name) ?? '', dataType: nonEmptyString(field.dataType), options: array(record(field.options)?.nodes).flatMap((option) => {
-        const choice = record(option)
-        const choiceId = nonEmptyString(choice?.id)
-        return !choice || choiceId === null ? [] : [{ id: choiceId, name: nonEmptyString(choice.name) ?? '' }]
-      }) }]
-    }),
-    groupByFields: array(record(raw.groupByFields)?.nodes).flatMap((field) => {
-      const entry = record(field)
-      return !entry || nonEmptyString(entry.id) === null ? [] : [{ id: nonEmptyString(entry.id), name: nonEmptyString(entry.name) ?? '' }]
-    }),
-    verticalGroupByFields: array(record(raw.verticalGroupByFields)?.nodes).flatMap((field) => {
-      const entry = record(field)
-      return !entry || nonEmptyString(entry.id) === null ? [] : [{ id: nonEmptyString(entry.id), name: nonEmptyString(entry.name) ?? '' }]
-    }),
-    sortByFields: array(record(raw.sortByFields)?.nodes).flatMap((field) => {
-      const entry = record(field)
-      return !entry || nonEmptyString(entry.id) === null ? [] : [{ id: nonEmptyString(entry.id), name: nonEmptyString(entry.name) ?? '' }]
+    fields: normalizeProjectFields(raw.fields),
+    groupByFields: normalizeProjectFields(raw.groupByFields),
+    verticalGroupByFields: normalizeProjectFields(raw.verticalGroupByFields),
+    sortByFields: array(record(raw.sortByFields)?.nodes).flatMap((item) => {
+      const sortBy = record(item)
+      const direction = nonEmptyString(sortBy?.direction)
+      const field = normalizeProjectField(sortBy?.field)
+      return !sortBy || direction === null || field === null ? [] : [{ direction, field }]
     })
   }
 }

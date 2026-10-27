@@ -53,17 +53,18 @@ function rawString(read: PRRead, key: string): string | undefined {
   return typeof value === 'string' ? value : undefined
 }
 
-function isStacked(read: PRRead): boolean {
-  return read.review.stack !== null && read.review.stack !== undefined && read.review.stack !== false &&
-    !(Array.isArray(read.review.stack) && read.review.stack.length === 0)
-}
 
-function stackId(read: PRRead): string | undefined {
-  return isRecord(read.review.stack) ? nonEmptyString(read.review.stack.id) : undefined
-}
+
 
 function mergeRulesRequireReview(read: PRRead): boolean {
-  return read.metadata.rules.some((rule) => isRecord(rule) && (rule.type === 'PULL_REQUEST' || rule.type === 'REQUIRED_REVIEWERS'))
+  return read.metadata.rules.some((rule) => {
+    if (!isRecord(rule)) return false
+    if (rule.type === 'REQUIRED_REVIEWERS') return true
+    if (rule.type !== 'PULL_REQUEST') return false
+    const parameters = isRecord(rule.parameters) ? rule.parameters : undefined
+    const approvalCount = parameters?.requiredApprovingReviewCount ?? parameters?.required_approving_review_count
+    return typeof approvalCount !== 'number' || !Number.isSafeInteger(approvalCount) || approvalCount !== 0
+  })
 }
 
 function mergeRulesRequireChecks(read: PRRead): boolean {
@@ -99,7 +100,7 @@ function checkSafety(env: HostingEnv, read: PRRead, method: MergeMethod, action:
   if (read.review.reviewDecision === 'CHANGES_REQUESTED') {
     invalid(env, 'changes_requested', 'A reviewer requested changes. Resolve the review before merging.')
   }
-  if (!['APPROVED', 'REVIEW_REQUIRED', 'CHANGES_REQUESTED'].includes(read.review.reviewDecision)) {
+  if (!['APPROVED', 'REVIEW_REQUIRED', 'CHANGES_REQUESTED', 'NONE'].includes(read.review.reviewDecision)) {
     invalid(env, 'unknown_safety_metadata', 'Could not verify the current review decision. Refresh and try again.')
   }
   if (mergeRulesRequireReview(read) && read.review.reviewDecision !== 'APPROVED') {
@@ -130,7 +131,8 @@ function parseAsync(value: unknown): AsyncOutcome | undefined {
   if (!isRecord(value) || typeof value.status !== 'string') return undefined
   const status = value.status.toLowerCase()
   if (status !== 'merged' && status !== 'enqueued' && status !== 'pending') return undefined
-  const operationId = typeof value.id === 'string' && value.id.trim().length > 0 ? value.id : undefined
+  const details = isRecord(value.details) ? value.details : undefined
+  const operationId = typeof details?.uuid === 'string' && details.uuid.trim().length > 0 ? details.uuid : undefined
   return { state: status, ...(operationId ? { operationId } : {}) }
 }
 
@@ -154,19 +156,18 @@ async function asyncMerge(
   action: MergeAction
 ): Promise<{ state: AsyncOutcome['state']; number: number; head: string; operationId?: string }> {
   const number = read.review.number
-  const operation = read.review.stack ? stackId(read) : undefined
-  if (read.review.stack && !operation) invalid(env, 'unknown_safety_metadata', 'Could not verify the GitHub stack identity.')
   if (read.repository.host.toLowerCase() !== 'github.com') {
     invalid(env, 'stacked_merge_unsupported', 'GitHub asynchronous stack and queue merging is not supported on this host.')
   }
   const path = `repos/${read.repository.owner}/${read.repository.repo}/pulls/${number}/merge-async`
   let result: AsyncOutcome | undefined
   try {
-    const response = await env.rest(read.scope, path, 'PUT', {
+    const fields: Record<string, unknown> = {
       merge_action: action === 'queue' ? 'merge_queue' : 'direct_merge',
-      merge_method: method,
       sha: expectedHead
-    }, { idempotent: false, timeoutMs: 60_000 })
+    }
+    if (action === 'direct') fields.merge_method = method
+    const response = await env.rest(read.scope, path, 'PUT', fields, { idempotent: false, timeoutMs: 60_000 })
     result = parseAsync(response)
   } catch (error) {
     if (isHeadMismatch(error)) invalid(env, 'head_changed', 'The pull request head changed. Refresh and review the new commit before trying again.')
@@ -192,14 +193,20 @@ async function asyncMerge(
   const deadline = Date.now() + 180_000
   for (let attempt = 0; attempt < 180 && Date.now() < deadline; attempt += 1) {
     await Bun.sleep(1_000)
+    let polled: AsyncOutcome | undefined
     try {
-      const polled = parseAsync(await env.rest(read.scope, `${path}/${encodeURIComponent(result.operationId)}`, 'GET', undefined, { idempotent: true, timeoutMs: 10_000 }))
-      if (polled?.state === 'merged' || polled?.state === 'enqueued') {
-        lookup.invalidate(read.scope, { type: 'pr', number, state: polled.state, operationId: result.operationId, head: expectedHead })
-        return { state: polled.state, number, head: expectedHead, operationId: result.operationId }
-      }
+      polled = parseAsync(await env.rest(read.scope, `${path}/${encodeURIComponent(result.operationId)}`, 'GET', undefined, { idempotent: true, timeoutMs: 10_000 }))
     } catch {
       // The accepted operation remains pending when a status read is temporarily unavailable.
+      continue
+    }
+    if (!polled) {
+      recordUnknownCompletion(lookup, read.scope, number)
+      throw unknownCompletion(env)
+    }
+    if (polled.state === 'merged' || polled.state === 'enqueued') {
+      lookup.invalidate(read.scope, { type: 'pr', number, state: polled.state, operationId: result.operationId, head: expectedHead })
+      return { state: polled.state, number, head: expectedHead, operationId: result.operationId }
     }
   }
   return { state: 'pending', number, head: expectedHead, operationId: result.operationId }
@@ -214,7 +221,7 @@ export function createPRMutationMethods(env: HostingEnv, lookup: PRLookup): Reco
     const read = await freshRead(env, lookup, { ...params, number }, caller)
     verifyHead(env, read, expectedHead)
     checkSafety(env, read, method, action)
-    if (isStacked(read) || action === 'queue') return asyncMerge(env, lookup, read, expectedHead, method, action)
+    if ((read.review.stack !== null && read.review.stack !== undefined) || action === 'queue') return asyncMerge(env, lookup, read, expectedHead, method, action)
 
     try {
       await env.run(read.scope, [
@@ -242,7 +249,7 @@ export function createPRMutationMethods(env: HostingEnv, lookup: PRLookup): Reco
       invalid(env, 'unknown_safety_metadata', 'Could not verify stack and merge metadata. Refresh and try again.')
     }
     if (action === 'enable') {
-      if (isStacked(read)) invalid(env, 'stacked_auto_merge_unsupported', 'GitHub does not support auto-merge for stacked pull requests.')
+      if (read.review.stack !== null && read.review.stack !== undefined) invalid(env, 'stacked_auto_merge_unsupported', 'GitHub does not support auto-merge for stacked pull requests.')
       const method = methodParam(env, params.method)
       if (!read.metadata.mergeMethods.allowed.includes(method)) invalid(env, 'merge_method_unavailable', `The ${method} merge method is not enabled for this repository.`)
       const id = rawString(read, 'id')

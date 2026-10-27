@@ -2,6 +2,7 @@ import type { Handler, HostingEnv, Identity, Scope } from './env'
 import {
   array,
   boundedText,
+  canonicalWorkItemState,
   positiveCount,
   nonEmptyString,
   positiveInteger,
@@ -17,10 +18,126 @@ import { loadProjectViews } from './project-methods'
 import { projectGraphql, resolveProjectHost, type ProjectOwnerType } from './project-ref'
 
 const PROJECT_ITEMS_QUERY_WITH_PARENT = `query ProjectItems($owner: String!, $number: Int!, $after: String, $query: String) {
-  organization(login: $owner) { projectV2(number: $number) { id number title items(first: 100, after: $after, query: $query, orderBy: { field: POSITION, direction: ASC }) { totalCount pageInfo { endCursor hasNextPage } nodes { id type content { __typename ... on Issue { number title body state url parent { number title url } } ... on PullRequest { number title body state url isDraft headRefName baseRefName } ... on DraftIssue { title body } } fieldValues(first: 50) { nodes { __typename ... on ProjectV2ItemFieldTextValue { text field { id name } } ... on ProjectV2ItemFieldNumberValue { number field { id name } } ... on ProjectV2ItemFieldDateValue { date field { id name } } ... on ProjectV2ItemFieldSingleSelectValue { name optionId field { id name } } ... on ProjectV2ItemFieldIterationValue { title startDate duration field { id name } } } } } } } }
-  user(login: $owner) { projectV2(number: $number) { id number title items(first: 100, after: $after, query: $query, orderBy: { field: POSITION, direction: ASC }) { totalCount pageInfo { endCursor hasNextPage } nodes { id type content { __typename ... on Issue { number title body state url parent { number title url } } ... on PullRequest { number title body state url isDraft headRefName baseRefName } ... on DraftIssue { title body } } fieldValues(first: 50) { nodes { __typename ... on ProjectV2ItemFieldTextValue { text field { id name } } ... on ProjectV2ItemFieldNumberValue { number field { id name } } ... on ProjectV2ItemFieldDateValue { date field { id name } } ... on ProjectV2ItemFieldSingleSelectValue { name optionId field { id name } } ... on ProjectV2ItemFieldIterationValue { title startDate duration field { id name } } } } } } } }
+  organization(login: $owner) {
+    projectV2(number: $number) {
+      id number title
+      items(first: 100, after: $after, query: $query, orderBy: { field: POSITION, direction: ASC }) {
+        totalCount pageInfo { endCursor hasNextPage }
+        nodes {
+          id type
+          content {
+            __typename
+            ... on Issue {
+              number title body issueState: state stateReason
+              repository { nameWithOwner }
+              assignees(first: 5) { nodes { login name avatarUrl } }
+              labels(first: 10) { nodes { name color } }
+              issueType { id name color description }
+              url parent { number title url }
+            }
+            ... on PullRequest {
+              number title body pullRequestState: state
+              repository { nameWithOwner }
+              assignees(first: 5) { nodes { login name avatarUrl } }
+              labels(first: 10) { nodes { name color } }
+              url isDraft headRefName baseRefName
+            }
+            ... on DraftIssue { title body }
+          }
+          fieldValues(first: 50) {
+            nodes {
+              __typename
+              ... on ProjectV2ItemFieldTextValue { text field { __typename ... on ProjectV2FieldCommon { id name } } }
+              ... on ProjectV2ItemFieldNumberValue { number field { __typename ... on ProjectV2FieldCommon { id name } } }
+              ... on ProjectV2ItemFieldDateValue { date field { __typename ... on ProjectV2FieldCommon { id name } } }
+              ... on ProjectV2ItemFieldSingleSelectValue { name optionId field { __typename ... on ProjectV2FieldCommon { id name } } }
+              ... on ProjectV2ItemFieldMultiSelectValue { options { id name } field { __typename ... on ProjectV2FieldCommon { id name } } }
+              ... on ProjectV2ItemFieldLabelValue { labels(first: 10) { nodes { name color } } field { __typename ... on ProjectV2FieldCommon { id name } } }
+              ... on ProjectV2ItemFieldUserValue { users(first: 5) { nodes { login name avatarUrl } } field { __typename ... on ProjectV2FieldCommon { id name } } }
+            }
+          }
+        }
+      }
+    }
+  }
+  user(login: $owner) {
+    projectV2(number: $number) {
+      id number title
+      items(first: 100, after: $after, query: $query, orderBy: { field: POSITION, direction: ASC }) {
+        totalCount pageInfo { endCursor hasNextPage }
+        nodes {
+          id type
+          content {
+            __typename
+            ... on Issue {
+              number title body issueState: state stateReason
+              repository { nameWithOwner }
+              assignees(first: 5) { nodes { login name avatarUrl } }
+              labels(first: 10) { nodes { name color } }
+              issueType { id name color description }
+              url parent { number title url }
+            }
+            ... on PullRequest {
+              number title body pullRequestState: state
+              repository { nameWithOwner }
+              assignees(first: 5) { nodes { login name avatarUrl } }
+              labels(first: 10) { nodes { name color } }
+              url isDraft headRefName baseRefName
+            }
+            ... on DraftIssue { title body }
+          }
+          fieldValues(first: 50) {
+            nodes {
+              __typename
+              ... on ProjectV2ItemFieldTextValue { text field { __typename ... on ProjectV2FieldCommon { id name } } }
+              ... on ProjectV2ItemFieldNumberValue { number field { __typename ... on ProjectV2FieldCommon { id name } } }
+              ... on ProjectV2ItemFieldDateValue { date field { __typename ... on ProjectV2FieldCommon { id name } } }
+              ... on ProjectV2ItemFieldSingleSelectValue { name optionId field { __typename ... on ProjectV2FieldCommon { id name } } }
+              ... on ProjectV2ItemFieldMultiSelectValue { options { id name } field { __typename ... on ProjectV2FieldCommon { id name } } }
+              ... on ProjectV2ItemFieldLabelValue { labels(first: 10) { nodes { name color } } field { __typename ... on ProjectV2FieldCommon { id name } } }
+              ... on ProjectV2ItemFieldUserValue { users(first: 5) { nodes { login name avatarUrl } } field { __typename ... on ProjectV2FieldCommon { id name } } }
+            }
+          }
+        }
+      }
+    }
+  }
 }`
 const PROJECT_ITEMS_QUERY_WITHOUT_PARENT = PROJECT_ITEMS_QUERY_WITH_PARENT.replaceAll(' parent { number title url }', '')
+
+function normalizeProjectLabels(value: unknown): Record<string, unknown>[] {
+  const connection = record(value)
+  return array(connection?.nodes).flatMap((value) => {
+    const label = record(value)
+    if (!label || typeof label.name !== 'string') return []
+    return [{ name: label.name, color: typeof label.color === 'string' ? label.color : '' }]
+  })
+}
+
+function normalizeProjectUsers(value: unknown): Record<string, unknown>[] {
+  const connection = record(value)
+  return array(connection?.nodes).flatMap((value) => {
+    const user = record(value)
+    if (!user || typeof user.login !== 'string') return []
+    return [{
+      login: user.login,
+      name: typeof user.name === 'string' ? user.name : null,
+      avatarUrl: typeof user.avatarUrl === 'string' ? user.avatarUrl : null
+    }]
+  })
+}
+
+function normalizeIssueType(value: unknown): Record<string, unknown> | null {
+  const issueType = record(value)
+  if (!issueType || typeof issueType.id !== 'string' || typeof issueType.name !== 'string') return null
+  return {
+    id: issueType.id,
+    name: issueType.name,
+    color: typeof issueType.color === 'string' ? issueType.color : null,
+    description: typeof issueType.description === 'string' ? issueType.description : null
+  }
+}
+
 type ProjectCaller = Parameters<Handler>[1]
 const parentUnsupportedHosts = new Set<string>()
 type ProjectItemConnection = { nodes: unknown[]; pageInfo: Record<string, unknown>; totalCount: number | null }
@@ -48,7 +165,16 @@ function normalizeFieldValue(value: unknown): Record<string, unknown> | null {
       break
     }
   }
+  if (Array.isArray(raw.options)) {
+    contentValue = raw.options.flatMap((option) => {
+      const entry = record(option)
+      const optionId = nonEmptyString(entry?.id)
+      return !entry || optionId === null || typeof entry.name !== 'string' ? [] : [{ id: optionId, name: entry.name }]
+    })
+  }
   if (raw.optionId !== undefined) contentValue = raw.optionId
+  if (raw.__typename === 'ProjectV2ItemFieldLabelValue') contentValue = normalizeProjectLabels(raw.labels)
+  if (raw.__typename === 'ProjectV2ItemFieldUserValue') contentValue = normalizeProjectUsers(raw.users)
   return {
     fieldId,
     fieldName: nonEmptyString(field?.name) ?? '',
@@ -67,13 +193,19 @@ function normalizeContent(value: unknown): Record<string, unknown> | null {
   else if (typename === 'DraftIssue') kind = 'draft'
   const number = positiveInteger(raw.number)
   const parent = record(raw.parent)
+  const repository = record(raw.repository)
   const result: Record<string, unknown> = {
     kind,
     number,
     title: typeof raw.title === 'string' ? raw.title : '',
     body: typeof raw.body === 'string' ? raw.body : '',
-    state: typeof raw.state === 'string' ? raw.state.toLowerCase() : 'unknown',
+    state: canonicalWorkItemState(raw, kind === 'pullRequest', raw.isDraft === true),
     url: nonEmptyString(raw.url),
+    repository: typeof repository?.nameWithOwner === 'string' ? repository.nameWithOwner : null,
+    assignees: normalizeProjectUsers(raw.assignees),
+    labels: normalizeProjectLabels(raw.labels),
+    stateReason: kind === 'issue' && typeof raw.stateReason === 'string' ? raw.stateReason : null,
+    issueType: kind === 'issue' ? normalizeIssueType(raw.issueType) : null,
     isDraft: raw.isDraft === true,
     headRefName: nonEmptyString(raw.headRefName),
     baseRefName: nonEmptyString(raw.baseRefName)

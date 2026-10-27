@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { Handler, HostingEnv, Scope } from './env'
 import { isRecord, nonEmptyString, parseBranch, parseIdentity, parsePositiveInteger, sameIdentity, providerReason, type IdentityValue } from './pr-data'
-import type { PRLookup } from './pr-review'
+import { isPRStackSummary, type PRLookup, type PRStackSummary } from './pr-review'
 
 type Blocker = { reason: string; nextAction: string; message: string }
 type Eligibility = {
@@ -273,7 +273,7 @@ function parseCreatedReview(value: unknown, repository: IdentityValue): CreateRe
   let url: string | undefined
   if (isRecord(value)) {
     number = parsePositiveInteger(value.number)
-    url = nonEmptyString(value.url)
+    url = nonEmptyString(value.html_url) ?? nonEmptyString(value.url)
   }
   if ((!number || !url) && typeof value === 'string') {
     const match = value.match(/https?:\/\/[^\s]+\/pull\/(\d+)/iu)
@@ -295,30 +295,48 @@ function parseCreatedReview(value: unknown, repository: IdentityValue): CreateRe
   return { number, url: `${parsed.origin}${expectedPath}` }
 }
 
-function createListMatches(value: unknown, head: string, base: string, repository: IdentityValue, headOwner: string): CreateResult[] {
+function createListMatches(
+  value: unknown,
+  head: string,
+  base: string,
+  repository: IdentityValue,
+  headOwner: string,
+  headRepo: string
+): CreateResult[] {
   if (!Array.isArray(value) || value.length !== 1) return []
   const item = value[0]
   if (!isRecord(item)) return []
   const number = parsePositiveInteger(item.number)
-  const url = nonEmptyString(item.url)
-  const branch = parseBranch(item.headRefName)
-  const target = parseBranch(item.baseRefName)
-  const owner = isRecord(item.headRepositoryOwner) ? nonEmptyString(item.headRepositoryOwner.login) : undefined
-  const headRepository = isRecord(item.headRepository) ? nonEmptyString(item.headRepository.name) : undefined
+  const url = nonEmptyString(item.html_url) ?? nonEmptyString(item.url)
+  const headData = isRecord(item.head) ? item.head : undefined
+  const baseData = isRecord(item.base) ? item.base : undefined
+  const headRepository = headData && isRecord(headData.repo) ? headData.repo : undefined
+  const owner = headRepository && isRecord(headRepository.owner) ? nonEmptyString(headRepository.owner.login) : undefined
+  const headRepositoryName = headRepository ? nonEmptyString(headRepository.name) : undefined
+  const branch = headData ? parseBranch(headData.ref) : undefined
+  const target = baseData ? parseBranch(baseData.ref) : undefined
   if (!number || !url || branch !== head || target !== base || !owner || owner.toLowerCase() !== headOwner.toLowerCase() ||
-    !headRepository || headRepository.toLowerCase() !== repository.repo.toLowerCase()) return []
-  const parsed = parseCreatedReview({ number, url }, repository)
+    !headRepositoryName || headRepositoryName.toLowerCase() !== headRepo.toLowerCase()) return []
+  const parsed = parseCreatedReview({ number, html_url: url }, repository)
   return parsed ? [parsed] : []
 }
 
-async function probeCreate(env: HostingEnv, scope: Scope, repository: IdentityValue, headOwner: string, head: string, base: string): Promise<CreateResult[]> {
+async function probeCreate(
+  env: HostingEnv,
+  scope: Scope,
+  repository: IdentityValue,
+  headOwner: string,
+  headRepo: string,
+  head: string,
+  base: string
+): Promise<CreateResult[]> {
   const selectedScope: Scope = { ...scope, repository }
-  const value = await env.json(selectedScope, [
-    'pr', 'list', '--repo', repoArg(repository), '--head', `${headOwner}:${head}`, '--base', base,
-    '--state', 'open', '--limit', '2', '--json', 'number,url,headRefName,baseRefName,headRepositoryOwner,headRepository'
-  ], { idempotent: true })
-  return createListMatches(value, head, base, repository, headOwner)
+  const value = await env.rest(selectedScope,
+    `repos/${repository.owner}/${repository.repo}/pulls?head=${encodeURIComponent(`${headOwner}:${head}`)}&base=${encodeURIComponent(base)}&state=open&per_page=2`,
+    'GET', undefined, { idempotent: true })
+  return createListMatches(value, head, base, repository, headOwner, headRepo)
 }
+
 
 function createErrorReason(error: unknown): string {
   return providerReason(error) ?? 'upstream_error'
@@ -385,27 +403,39 @@ export function createPRCreationMethods(env: HostingEnv, lookup: PRLookup): Reco
     if (base.toLowerCase() === head.toLowerCase()) throw env.invalid('validation_error', 'The pull request head and base branches must differ.')
     const suppliedBody = readParamString(env, params, 'body')
     const body = await bodyForCreate(scope, suppliedBody, params.useTemplate === true)
-    const temporaryDirectory = await mkdtemp(join(tmpdir(), 'quirky-pr-body-'))
-    const bodyFile = join(temporaryDirectory, 'body.md')
-    let output: string | undefined
+    const sameRepository = sameIdentity(repository, scope.origin)
+    const temporaryDirectory = sameRepository ? await mkdtemp(join(tmpdir(), 'quirky-pr-body-')) : undefined
+    const bodyFile = temporaryDirectory ? join(temporaryDirectory, 'body.md') : undefined
+    let output: unknown
     let mutationError: unknown
     try {
-      await writeFile(bodyFile, body, 'utf8')
+      if (bodyFile) await writeFile(bodyFile, body, 'utf8')
       if (!(await authenticated(env, mutationScope))) {
         throw env.invalid('authentication_required', 'GitHub authentication is unavailable. Check your gh login.')
       }
-      const args = [
-        'pr', 'create', '--repo', repoArg(repository), '--base', base, '--head', `${scope.origin.owner}:${head}`,
-        '--title', title, '--body-file', bodyFile
-      ]
-      if (params.draft === true) args.push('--draft')
       try {
-        output = await env.run(mutationScope, args, { idempotent: false, timeoutMs: 60_000 })
+        if (sameRepository) {
+          const args = [
+            'pr', 'create', '--repo', repoArg(repository), '--base', base, '--head', head,
+            '--title', title, '--body-file', bodyFile!
+          ]
+          if (params.draft === true) args.push('--draft')
+          output = await env.run(mutationScope, args, { idempotent: false, timeoutMs: 60_000 })
+        } else {
+          output = await env.rest(mutationScope, `repos/${repository.owner}/${repository.repo}/pulls`, 'POST', {
+            title,
+            body,
+            head: `${scope.origin.owner}:${head}`,
+            head_repo: scope.origin.repo,
+            base,
+            ...(params.draft === true ? { draft: true } : {})
+          }, { idempotent: false, timeoutMs: 60_000 })
+        }
       } catch (error) {
         mutationError = error
       }
     } finally {
-      await rm(temporaryDirectory, { recursive: true, force: true })
+      if (temporaryDirectory) await rm(temporaryDirectory, { recursive: true, force: true })
     }
 
     const confirmed = parseCreatedReview(output, repository)
@@ -431,7 +461,7 @@ export function createPRCreationMethods(env: HostingEnv, lookup: PRLookup): Reco
 
     let matches: CreateResult[] = []
     try {
-      matches = await probeCreate(env, scope, repository, scope.origin.owner, head, base)
+      matches = await probeCreate(env, scope, repository, scope.origin.owner, scope.origin.repo, head, base)
     } catch {
       lookup.invalidate(mutationScope, { type: 'pr', unknownCompletion: true, confirmed: false })
       throw unknownCompletion(env)
@@ -461,20 +491,16 @@ export function createPRCreationMethods(env: HostingEnv, lookup: PRLookup): Reco
     }
     if (!parent.stackKnown) throw env.invalid('unknown_safety_metadata', 'Could not verify GitHub pull request stack metadata.')
 
-    let stackId: string | undefined
-    const parentStack = parent.review.stack
-    if (parentStack !== null && parentStack !== undefined && parentStack !== false) {
-      if (!isRecord(parentStack)) throw env.invalid('unknown_safety_metadata', 'Could not verify GitHub pull request stack metadata.')
-      stackId = nonEmptyString(parentStack.id)
-      const entries = Array.isArray(parentStack.pullRequests) ? parentStack.pullRequests :
-        Array.isArray(parentStack.pull_requests) ? parentStack.pull_requests : undefined
-      if (!stackId || !entries || entries.length === 0) {
-        throw env.invalid('unknown_safety_metadata', 'Could not verify GitHub pull request stack metadata.')
+    let parentStack: PRStackSummary | undefined
+    const rawParentStack = parent.review.stack
+    if (rawParentStack !== null && rawParentStack !== undefined) {
+      if (!isPRStackSummary(rawParentStack)) throw env.invalid('unknown_safety_metadata', 'Could not verify GitHub pull request stack metadata.')
+      parentStack = rawParentStack
+      if (parentStack.position !== parentStack.size) {
+        throw env.invalid('stack_parent_not_top', 'The selected parent pull request is not the top of its stack.')
       }
-      const last = entries[entries.length - 1]
-      const topNumber = isRecord(last) ? parsePositiveInteger(last.number) : parsePositiveInteger(last)
-      if (topNumber !== parentNumber) throw env.invalid('stack_parent_not_top', 'The selected parent pull request is not the top of its stack.')
     }
+
 
     const localBranch = branchOf(scope)
     if (!localBranch) throw env.invalid('detached_head', 'Check out a branch before creating a stacked pull request.')
@@ -493,19 +519,21 @@ export function createPRCreationMethods(env: HostingEnv, lookup: PRLookup): Reco
     let result: CreateResult
     let createdNow = false
     if (current.kind === 'found') {
-      if (current.review.state !== 'open' && current.review.state !== 'draft') {
+      const existingRead = await lookup.readFresh({ ...params, number: current.review.number, prRepo: parent.repository }, caller)
+      if (!existingRead) throw env.invalid('not_found', 'The existing pull request was not found.')
+      if (!existingRead.stackKnown) throw env.invalid('unknown_safety_metadata', 'Could not verify GitHub pull request stack metadata.')
+      const existing = existingRead.review
+      if (existing.state !== 'open' && existing.state !== 'draft') {
         throw env.invalid('validation_error', 'An existing stacked pull request must be open.')
       }
-      if (current.review.baseRefName.toLowerCase() !== base.toLowerCase()) {
+      if (existing.baseRefName.toLowerCase() !== base.toLowerCase()) {
         throw env.invalid('stack_base_mismatch', 'The existing pull request does not target the selected parent branch.')
       }
-      result = { number: current.review.number, url: current.review.url, existing: true }
-      const childStack = current.review.stack
-      if (childStack !== null && childStack !== undefined && childStack !== false) {
-        if (!isRecord(childStack)) throw env.invalid('unknown_safety_metadata', 'Could not verify GitHub pull request stack metadata.')
-        const childStackId = nonEmptyString(childStack.id)
-        if (!childStackId) throw env.invalid('unknown_safety_metadata', 'Could not verify GitHub pull request stack metadata.')
-        if (stackId && childStackId === stackId) return { ...result, stacked: true }
+      result = { number: existing.number, url: existing.url, existing: true }
+      const childStack = existing.stack
+      if (childStack !== null && childStack !== undefined) {
+        if (!isPRStackSummary(childStack)) throw env.invalid('unknown_safety_metadata', 'Could not verify GitHub pull request stack metadata.')
+        if (parentStack && childStack.number === parentStack.number) return { ...result, stacked: true }
         throw env.invalid('stack_conflict', 'The existing pull request already belongs to a different stack.')
       }
     } else {
@@ -519,17 +547,18 @@ export function createPRCreationMethods(env: HostingEnv, lookup: PRLookup): Reco
       createdNow = result.existing !== true
     }
 
+
     const repository = parent.repository
     const selectedScope: Scope = { ...scope, repository }
     try {
       let registration: unknown
-      if (stackId) {
+      if (parentStack) {
         registration = await env.rest(selectedScope,
-          `repos/${repository.owner}/${repository.repo}/stacks/${encodeURIComponent(stackId)}/add`,
+          `repos/${repository.owner}/${repository.repo}/stacks/${parentStack.number}/add`,
           'POST',
           { pull_requests: [result.number] },
           { idempotent: false, timeoutMs: 60_000 })
-        if (!isRecord(registration) || (registration.added !== true && registration.id !== stackId)) {
+        if (!isRecord(registration) || parsePositiveInteger(registration.number) !== parentStack.number) {
           throw env.invalid('upstream_unavailable', 'GitHub did not confirm stack registration.')
         }
       } else {
@@ -538,7 +567,7 @@ export function createPRCreationMethods(env: HostingEnv, lookup: PRLookup): Reco
           'POST',
           { pull_requests: [parentNumber, result.number] },
           { idempotent: false, timeoutMs: 60_000 })
-        if (!isRecord(registration) || !nonEmptyString(registration.id)) {
+        if (!isRecord(registration) || !parsePositiveInteger(registration.number)) {
           throw env.invalid('upstream_unavailable', 'GitHub did not confirm stack registration.')
         }
       }

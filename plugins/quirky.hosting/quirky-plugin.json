@@ -246,7 +246,7 @@
         "description": "Read bounded issue or pull-request participants, timeline, and linked review details.",
         "readOnly": true,
         "params": {"type": "object", "properties": {"worktree": {"type": "string"}, "number": {"type": "integer", "minimum": 1}, "kind": {"type": "string", "enum": ["issue", "pullRequest"]}, "reference": {"type": "string", "description": "GitHub work-item URL validated by the handler and limited to 2048 UTF-8 bytes."}}},
-        "result": {"description": "Nullable bounded detail result; null means the requested work item was not found. A present result contains the normalized item and any available files, comments, participants, timeline, checks, and partial-read metadata.", "properties": {"item": {"type": "object", "description": "Normalized work-item record.", "properties": {"kind": {"type": "string", "enum": ["issue", "pullRequest"]}, "number": {"type": "integer"}, "title": {"type": "string"}, "body": {"type": "string"}, "state": {"type": "string", "enum": ["open", "closed", "merged", "draft", "unknown"]}, "url": {"type": "string"}, "createdAt": {"description": "Timestamp string or null."}, "updatedAt": {"description": "Timestamp string or null."}, "author": {"description": "Author login or null."}, "labels": {"type": "array", "items": {"type": "string"}}, "assignees": {"type": "array", "items": {"type": "string"}}, "isDraft": {"type": "boolean"}, "headRefName": {"type": "string"}, "baseRefName": {"type": "string"}, "headRefOid": {"type": "string"}, "baseRefOid": {"type": "string"}, "additions": {"type": "integer"}, "deletions": {"type": "integer"}, "changedFiles": {"type": "integer"}, "issueType": {"type": "object", "properties": {"id": {"type": "string"}, "name": {"type": "string"}}, "required": ["id", "name"]}, "stateReason": {"type": "string", "enum": ["completed", "not_planned", "unknown"]}, "duplicateOf": {"type": "integer"}, "mergeStateStatus": {"type": "string"}, "reviewDecision": {"type": "string"}, "partial": {"type": "boolean"}}, "required": ["kind", "number", "title", "body", "state", "url", "createdAt", "updatedAt", "author", "labels", "assignees", "isDraft"]}, "files": {"type": "array", "items": {"type": "object", "description": "Normalized changed-file details; see files.result for path, coordinates, and status fields."}}, "comments": {"type": "array", "items": {"type": "object", "description": "Normalized comment details; see comments.result for identity and nullable coordinate fields."}}, "participants": {"type": "array", "items": {"type": "object", "properties": {"login": {"type": "string"}, "name": {"type": "string"}, "url": {"type": "string"}}}}, "timeline": {"type": "array", "items": {"type": "object"}}, "checks": {"type": "array", "items": {"type": "object"}}, "partialFailures": {"type": "array", "items": {"type": "string"}}, "filesUnavailable": {"type": "boolean"}, "truncated": {"type": "boolean"}}, "required": ["item", "participants", "timeline", "partialFailures", "truncated"]}
+        "result": {"description": "Nullable bounded detail result; null means the requested work item was not found. A present result contains the normalized item and any available files, comments, participants, timeline, checks, and partial-read metadata.", "properties": {"item": {"type": "object", "description": "Normalized work-item record.", "properties": {"kind": {"type": "string", "enum": ["issue", "pullRequest"]}, "number": {"type": "integer"}, "title": {"type": "string"}, "body": {"type": "string"}, "state": {"type": "string", "enum": ["open", "closed", "merged", "draft", "unknown"]}, "url": {"type": "string"}, "createdAt": {"description": "Timestamp string or null."}, "updatedAt": {"description": "Timestamp string or null."}, "author": {"description": "Author login or null."}, "labels": {"type": "array", "items": {"type": "string"}}, "assignees": {"type": "array", "items": {"type": "string"}}, "isDraft": {"type": "boolean"}, "headRefName": {"type": "string"}, "baseRefName": {"type": "string"}, "headRefOid": {"type": "string"}, "baseRefOid": {"type": "string"}, "additions": {"type": "integer"}, "deletions": {"type": "integer"}, "changedFiles": {"type": "integer"}, "issueType": {"type": "object", "properties": {"id": {"type": "string"}, "name": {"type": "string"}}, "required": ["id", "name"]}, "stateReason": {"type": "string", "enum": ["completed", "not_planned", "unknown"]}, "duplicateOf": {"type": "integer"}, "mergeStateStatus": {"type": "string"}, "reviewDecision": {"type": "string"}, "partial": {"type": "boolean"}}, "required": ["kind", "number", "title", "body", "state", "url", "createdAt", "updatedAt", "author", "labels", "assignees", "isDraft"]}, "files": {"type": "array", "items": {"type": "object", "description": "Normalized changed-file details; see files.result for path, coordinates, and status fields."}}, "comments": {"type": "array", "items": {"type": "object", "description": "Normalized comment details; see comments.result for identity and nullable coordinate fields."}}, "participants": {"type": "array", "items": {"type": "object", "properties": {"login": {"type": "string"}, "name": {"description": "Name string or null."}, "url": {"description": "Profile URL string or null."}}}}, "timeline": {"type": "array", "items": {"type": "object"}}, "checks": {"type": "array", "items": {"type": "object"}}, "partialFailures": {"type": "array", "items": {"type": "string"}}, "filesUnavailable": {"type": "boolean"}, "truncated": {"type": "boolean"}}, "required": ["item", "participants", "timeline", "partialFailures", "truncated"]}
       },
       {
         "id": "createIssue",
@@ -311,14 +311,74 @@
       {
         "id": "projectField",
         "description": "Set or clear a supported GitHub Projects v2 field value.",
-        "params": {"type": "object", "properties": {"worktree": {"type": "string"}, "projectId": {"type": "string"}, "itemId": {"type": "string"}, "fieldId": {"type": "string"}, "value": {}, "clear": {"type": "boolean"}, "host": {"type": "string"}}, "required": ["projectId", "itemId", "fieldId"]},
+        "params": {"type": "object", "properties": {"worktree": {"type": "string"}, "projectId": {"type": "string"}, "itemId": {"type": "string"}, "fieldId": {"type": "string"}, "value": {"description": "Exactly one text, number, date, singleSelectOptionId, iterationId, or multiSelectOptionIds value; multiSelectOptionIds accepts up to 100 non-empty IDs, including an empty array. userIds is not supported."}, "clear": {"type": "boolean"}, "host": {"type": "string"}}, "required": ["projectId", "itemId", "fieldId"]},
         "result": {"type": "object", "properties": {"projectId": {"type": "string"}, "itemId": {"type": "string"}, "fieldId": {"type": "string"}, "host": {"type": "string"}, "updated": {"type": "boolean"}, "cleared": {"type": "boolean"}, "value": {}}}
       },
       {
         "id": "projectItemMutation",
         "description": "Edit an issue or pull request, comment, or issue type from a GitHub Project.",
-        "params": {"type": "object", "properties": {"worktree": {"type": "string"}, "action": {"type": "string", "enum": ["editIssue", "editReview", "addComment", "updateComment", "deleteComment", "updateIssueType"]}, "projectId": {"type": "string"}, "itemId": {"type": "string"}, "number": {"type": "integer", "minimum": 1}, "kind": {"type": "string", "enum": ["issue", "pullRequest"]}, "body": {"type": "string", "description": "Required for addComment and updateComment, optional for editIssue and editReview, and disallowed for other actions; limited to 65536 UTF-8 bytes by the handler."}, "commentId": {"type": "integer", "minimum": 1}, "title": {"type": "string"}, "state": {"type": "string", "enum": ["open", "closed"]}, "stateReason": {"type": "string", "enum": ["completed", "not_planned"]}, "labels": {"type": "array", "items": {"type": "string"}}, "assignees": {"type": "array", "items": {"type": "string"}}, "issueTypeId": {"type": "string"}, "issueTypeName": {"type": "string"}, "host": {"type": "string"}}, "required": ["action"]},
+        "destructive": true,
+        "confirm": "Delete this GitHub project item comment?",
+        "describe": "projectItemMutationConfirmation",
+        "params": {
+          "type": "object",
+          "properties": {
+            "worktree": {"type": "string"},
+            "action": {"type": "string", "enum": ["editIssue", "editReview", "addComment", "updateComment", "deleteComment", "updateIssueType"]},
+            "projectId": {"type": "string"},
+            "itemId": {"type": "string"},
+            "number": {"type": "integer", "minimum": 1},
+            "kind": {"type": "string", "enum": ["issue", "pullRequest"]},
+            "body": {"type": "string", "description": "Required for addComment and updateComment, optional for editIssue and editReview, and disallowed for other actions; limited to 65536 UTF-8 bytes by the handler."},
+            "commentId": {"type": "integer", "minimum": 1},
+            "title": {"type": "string"},
+            "state": {"type": "string", "enum": ["open", "closed"]},
+            "stateReason": {"type": "string", "enum": ["completed", "not_planned"]},
+            "labels": {"type": "array", "description": "Replace an issue's labels with up to 100 non-empty strings limited to 256 UTF-8 bytes; an empty array clears them. Only valid for editIssue and cannot be combined with addLabels or removeLabels.", "items": {"type": "string"}},
+            "assignees": {"type": "array", "description": "Replace an issue's assignees with up to 100 non-empty strings limited to 256 UTF-8 bytes; an empty array clears them. Only valid for editIssue and cannot be combined with addAssignees or removeAssignees.", "items": {"type": "string"}},
+            "addLabels": {"type": "array", "description": "Add up to 100 non-empty labels, each limited to 256 UTF-8 bytes. Only valid for editIssue and cannot be combined with labels.", "items": {"type": "string"}},
+            "removeLabels": {"type": "array", "description": "Remove up to 100 non-empty labels, each limited to 256 UTF-8 bytes. Only valid for editIssue and cannot be combined with labels.", "items": {"type": "string"}},
+            "addAssignees": {"type": "array", "description": "Add up to 100 non-empty assignee logins, each limited to 256 UTF-8 bytes. Only valid for editIssue and cannot be combined with assignees.", "items": {"type": "string"}},
+            "removeAssignees": {"type": "array", "description": "Remove up to 100 non-empty assignee logins, each limited to 256 UTF-8 bytes. Only valid for editIssue and cannot be combined with assignees.", "items": {"type": "string"}},
+            "issueTypeId": {"type": "string"},
+            "issueTypeName": {"type": "string"},
+            "host": {"type": "string"}
+          },
+          "required": ["projectId", "itemId", "action"]
+        },
         "result": {"type": "object", "properties": {"action": {"type": "string", "enum": ["editIssue", "editReview", "addComment", "updateComment", "deleteComment", "updateIssueType"]}, "number": {"type": "integer"}, "kind": {"type": "string", "enum": ["issue", "pullRequest"]}, "url": {"type": "string"}, "changed": {"type": "boolean"}, "commentId": {"type": "integer", "description": "Numeric comment ID returned by addComment/updateComment/deleteComment; pass it to commentId for updateComment or deleteComment."}, "body": {"type": "string", "description": "Comment body returned for addComment."}, "issueTypes": {"type": "array", "items": {"type": "object", "properties": {"id": {"type": "string"}, "name": {"type": "string"}, "description": {"description": "Description string or null."}, "enabled": {"type": "boolean"}}, "required": ["id", "name", "description", "enabled"]}}, "issueType": {"description": "Updated issue type object or null when GitHub returns no issue type.", "properties": {"id": {"type": "string"}, "name": {"type": "string"}}}}, "required": ["action", "number", "kind", "url", "changed"]}
+      },
+      {
+        "id": "projectItemMutationConfirmation",
+        "description": "Describe a validated GitHub project item comment deletion before confirmation.",
+        "readOnly": true,
+        "params": {
+          "type": "object",
+          "properties": {
+            "worktree": {"type": "string"},
+            "action": {"type": "string", "enum": ["editIssue", "editReview", "addComment", "updateComment", "deleteComment", "updateIssueType"]},
+            "projectId": {"type": "string"},
+            "itemId": {"type": "string"},
+            "number": {"type": "integer", "minimum": 1},
+            "kind": {"type": "string", "enum": ["issue", "pullRequest"]},
+            "body": {"type": "string", "description": "Required for addComment and updateComment, optional for editIssue and editReview, and disallowed for other actions; limited to 65536 UTF-8 bytes by the handler."},
+            "commentId": {"type": "integer", "minimum": 1},
+            "title": {"type": "string"},
+            "state": {"type": "string", "enum": ["open", "closed"]},
+            "stateReason": {"type": "string", "enum": ["completed", "not_planned"]},
+            "labels": {"type": "array", "description": "Replace an issue's labels with up to 100 non-empty strings limited to 256 UTF-8 bytes; an empty array clears them. Only valid for editIssue and cannot be combined with addLabels or removeLabels.", "items": {"type": "string"}},
+            "assignees": {"type": "array", "description": "Replace an issue's assignees with up to 100 non-empty strings limited to 256 UTF-8 bytes; an empty array clears them. Only valid for editIssue and cannot be combined with addAssignees or removeAssignees.", "items": {"type": "string"}},
+            "addLabels": {"type": "array", "description": "Add up to 100 non-empty labels, each limited to 256 UTF-8 bytes. Only valid for editIssue and cannot be combined with labels.", "items": {"type": "string"}},
+            "removeLabels": {"type": "array", "description": "Remove up to 100 non-empty labels, each limited to 256 UTF-8 bytes. Only valid for editIssue and cannot be combined with labels.", "items": {"type": "string"}},
+            "addAssignees": {"type": "array", "description": "Add up to 100 non-empty assignee logins, each limited to 256 UTF-8 bytes. Only valid for editIssue and cannot be combined with assignees.", "items": {"type": "string"}},
+            "removeAssignees": {"type": "array", "description": "Remove up to 100 non-empty assignee logins, each limited to 256 UTF-8 bytes. Only valid for editIssue and cannot be combined with assignees.", "items": {"type": "string"}},
+            "issueTypeId": {"type": "string"},
+            "issueTypeName": {"type": "string"},
+            "host": {"type": "string"}
+          },
+          "required": ["projectId", "itemId", "action"]
+        },
+        "result": {"description": "Nullable string: a question identifying the validated deleteComment target, or null for reversible actions."}
       },
       {
         "id": "refresh",
@@ -404,6 +464,7 @@
       {"id": "project-table", "method": "projectTable", "summary": "read a bounded project view table"},
       {"id": "project-field", "method": "projectField", "summary": "set or clear a project field"},
       {"id": "project-item-mutation", "method": "projectItemMutation", "summary": "edit a project issue, pull request, comment, or issue type"},
+      {"id": "project-item-mutation-confirmation", "method": "projectItemMutationConfirmation", "summary": "describe a GitHub project item comment deletion requiring confirmation"},
       {"id": "refresh", "method": "refresh", "summary": "refresh a pull request directly"},
       {"id": "enqueue-refresh", "method": "enqueueRefresh", "summary": "enqueue a pull request refresh"},
       {"id": "visible-refresh-candidates", "method": "visibleRefreshCandidates", "summary": "report visible pull request refresh candidates"},

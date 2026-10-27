@@ -362,6 +362,81 @@ describe('GH01-GH08: GitHub runtime boundary', () => {
     expect(await host.call('viewer')).toMatchObject({ login: 'fixture-user' })
     expect(host.invocations().length).toBeGreaterThan(countAtPause)
   })
+  test('GH08 charges reported GraphQL cost before another request can cross the safe floor', async () => {
+    const host = await boot()
+    const reset = Math.floor(Date.now() / 1000) + 600
+    host.writeState({
+      rateLimit: { resources: {
+        core: { limit: 5000, remaining: 4999, reset },
+        search: { limit: 30, remaining: 29, reset },
+        graphql: { limit: 5000, remaining: 99, reset }
+      } },
+      responses: {
+        graphql: { stdout: { data: {
+          search: { issueCount: 0, nodes: [], pageInfo: { hasNextPage: false } },
+          rateLimit: { cost: 51 }
+        } } },
+        pr: { stdout: [] },
+        api: { stdout: { total_count: 0, items: [] } }
+      }
+    })
+    await host.call('rateLimit')
+    expect(await host.call('listWorkItems', { query: 'first-cost-probe' })).toMatchObject({ partial: false, items: [] })
+    const graphqlBefore = host.invocations().filter(({ args }) => args.includes('graphql')).length
+    await host.call('listWorkItems', { query: 'second-cost-probe' })
+    expect(host.invocations().filter(({ args }) => args.includes('graphql'))).toHaveLength(graphqlBefore)
+    expect(await host.call('viewer')).toMatchObject({ login: 'fixture-user' })
+  }, 20_000)
+
+  test('GH08 cold PR lookups warm the quota snapshot before spending an exhausted bucket', async () => {
+    const host = await boot()
+    const reset = Math.floor(Date.now() / 1000) + 600
+    host.writeState({ rateLimit: { resources: {
+      core: { limit: 5000, remaining: 1, reset },
+      search: { limit: 30, remaining: 1, reset },
+      graphql: { limit: 5000, remaining: 1, reset }
+    } } })
+    expect(await host.call('review', { number: 11 })).toMatchObject({ kind: 'unavailable', reason: 'rate_limited' })
+    expect(host.invocations().filter(({ args }) => args[0] !== 'auth' && !args.includes('rate_limit'))).toEqual([])
+  }, 20_000)
+
+  test('GH08 CLI PR reads cannot spend an exhausted GraphQL bucket while REST remains usable', async () => {
+    const host = await boot()
+    const reset = Math.floor(Date.now() / 1000) + 600
+    host.writeState({
+      rateLimit: { resources: {
+        core: { limit: 5000, remaining: 4999, reset },
+        search: { limit: 30, remaining: 29, reset },
+        graphql: { limit: 5000, remaining: 1, reset }
+      } },
+      responses: { pr: { stdout: [] }, api: { stdout: { total_count: 0, items: [] } } }
+    })
+    await host.call('rateLimit')
+    const result = await host.call('listWorkItems', { query: 'quota-probe' })
+    expect(result).toMatchObject({ partial: true, errors: { prs: { reason: 'rate_limited' } } })
+    expect(host.invocations().filter(({ args }) => args[0] === 'pr')).toEqual([])
+    expect(await host.call('viewer')).toMatchObject({ login: 'fixture-user' })
+  }, 20_000)
+
+  test('GH08 cold work-item counts honor the search floor even when GraphQL has quota', async () => {
+    const host = await boot()
+    const reset = Math.floor(Date.now() / 1000) + 600
+    host.writeState({ rateLimit: { resources: {
+      core: { limit: 5000, remaining: 4999, reset },
+      search: { limit: 30, remaining: 1, reset },
+      graphql: { limit: 5000, remaining: 4999, reset }
+    } } })
+    expect(await host.call('countWorkItems')).toMatchObject({
+      count: 0,
+      partial: true,
+      partialFailures: expect.arrayContaining([
+        expect.objectContaining({ source: 'issues', reason: 'rate_limited' }),
+        expect.objectContaining({ source: 'prs', reason: 'rate_limited' })
+      ])
+    })
+    expect(host.invocations().filter(({ args }) => args[0] !== 'auth' && !args.includes('rate_limit'))).toEqual([])
+  }, 20_000)
+
   test('GH08 honors Retry-After and isolates circuit gates between repository account bindings', async () => {
     const host = await boot()
     host.writeState({
@@ -386,4 +461,48 @@ describe('GH01-GH08: GitHub runtime boundary', () => {
     await host.call('configure', { account: { host: 'github.com', user: 'bob' } })
     expect(await host.call('viewer')).toMatchObject({ login: 'bob' })
   })
+
+  test('GH08 caches failed rate-limit probes per account and force recovers', async () => {
+    const host = await boot()
+    host.writeState({
+      authStatus: 'Logged in to github.com account alice (keyring)\nActive account: true\nToken scopes: repo\nLogged in to github.com account bob (keyring)\nActive account: false\nToken scopes: repo\n',
+      responses: {
+        rate_limit: {
+          attempts: [
+            { exitCode: 1, stderr: 'HTTP 401: bad credentials token=private-probe-secret' },
+            { stdout: { resources: { core: { limit: 5000, remaining: 4999, reset: Math.floor(Date.now() / 1000) + 600 }, search: { limit: 30, remaining: 29, reset: Math.floor(Date.now() / 1000) + 600 }, graphql: { limit: 5000, remaining: 4999, reset: Math.floor(Date.now() / 1000) + 600 } } } },
+            { stdout: { resources: { core: { limit: 5000, remaining: 4999, reset: Math.floor(Date.now() / 1000) + 600 }, search: { limit: 30, remaining: 29, reset: Math.floor(Date.now() / 1000) + 600 }, graphql: { limit: 5000, remaining: 4999, reset: Math.floor(Date.now() / 1000) + 600 } } } }
+          ]
+        }
+      }
+    })
+    await host.call('configure', { account: { host: 'github.com', user: 'alice' } })
+    const failure = await host.call('rateLimit').then(() => null, (error: unknown) => error)
+    expect(failure).toMatchObject({ data: { reason: 'not_authenticated' } })
+    const failureMessage = failure instanceof Error ? failure.message : String(failure)
+    expect(failureMessage).not.toContain('private-probe-secret')
+    const rateLimitCalls = () => host.invocations().filter(({ args }) => args.includes('rate_limit'))
+    await expect(host.call('rateLimit')).rejects.toMatchObject({ data: { reason: 'not_authenticated' } })
+    expect(rateLimitCalls()).toHaveLength(1)
+
+    await host.call('configure', { account: { host: 'github.com', user: 'bob' } })
+    expect(await host.call('rateLimit')).toMatchObject({ core: { remaining: 4999 } })
+    expect(rateLimitCalls()).toHaveLength(2)
+
+    await host.call('configure', { account: { host: 'github.com', user: 'alice' } })
+    await expect(host.call('rateLimit')).rejects.toMatchObject({ data: { reason: 'not_authenticated' } })
+    expect(rateLimitCalls()).toHaveLength(2)
+    expect(await host.call('rateLimit', { force: true })).toMatchObject({ core: { remaining: 4999 } })
+    expect(rateLimitCalls()).toHaveLength(3)
+  }, 20_000)
+
+  test('GH08 PR lookup fails open when its rate-limit probe fails', async () => {
+    const host = await boot()
+    host.writeState({ responses: { rate_limit: { exitCode: 1, stderr: 'HTTP 401: bad credentials token=private-probe-secret' } } })
+    const result = await host.call('review', { number: 11 })
+    expect(result).toMatchObject({ kind: 'unavailable', reason: 'upstream_unavailable' })
+    expect(host.invocations().filter(({ args }) => args.includes('rate_limit'))).toHaveLength(1)
+    expect(host.invocations().filter(({ args }) => args[0] === 'pr' && args[1] === 'view')).toHaveLength(1)
+  }, 20_000)
+
 })

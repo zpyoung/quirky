@@ -29,13 +29,13 @@ const SEARCH_QUERY = `query WorkItemSearch($search: String!, $first: Int!, $afte
     nodes {
       __typename
       ... on Issue {
-        number title body state url createdAt updatedAt
+        number title body issueState: state url createdAt updatedAt
         author { login }
         labels(first: 20) { nodes { name } }
         assignees(first: 20) { nodes { login } }
       }
       ... on PullRequest {
-        number title body state url createdAt updatedAt isDraft
+        number title body pullRequestState: state url createdAt updatedAt isDraft
         headRefName baseRefName headRefOid baseRefOid reviewDecision mergeStateStatus
         author { login }
         labels(first: 20) { nodes { name } }
@@ -352,11 +352,23 @@ export async function listWorkItems(env: HostingEnv, params: Record<string, unkn
   return result
 }
 
+async function assertSearchBudget(env: HostingEnv, scope: Scope, identity: Identity): Promise<void> {
+  if (identity.host.toLowerCase() !== 'github.com') return
+  const snapshot = await env.rateLimit(scope).catch(() => null)
+  if (snapshot === null) return
+  const search = snapshot.search
+  if (search.limit > 0 && search.resetAt > Date.now() && search.remaining < 2) {
+    throw env.invalid('rate_limited', 'GitHub search rate limit is below the safe request floor.')
+  }
+}
+
 async function countForRepository(env: HostingEnv, scope: Scope, identity: Identity, query: string, kind: WorkItemKind): Promise<number> {
   const search = buildSearchQuery(query, identity, kind)
-  if (identity.host === 'github.com') {
+  const requestScope = scopeForRepository(scope, identity)
+  await assertSearchBudget(env, requestScope, identity)
+  if (identity.host.toLowerCase() === 'github.com') {
     try {
-      const raw = await env.graphql(scopeForRepository(scope, identity), SEARCH_QUERY, { search, first: 1, after: null }, { idempotent: true })
+      const raw = await env.graphql(requestScope, SEARCH_QUERY, { search, first: 1, after: null }, { idempotent: true })
       const count = countFromGraphql(raw)
       if (count !== null) return count
     } catch {
@@ -364,7 +376,7 @@ async function countForRepository(env: HostingEnv, scope: Scope, identity: Ident
     }
   }
   const path = `search/issues?q=${encodeURIComponent(search)}&per_page=1`
-  const raw = await env.rest(scopeForRepository(scope, identity), path, 'GET', undefined, { idempotent: true })
+  const raw = await env.rest(requestScope, path, 'GET', undefined, { idempotent: true })
   const root = record(raw)
   const count = positiveCount(root?.total_count) ?? positiveCount(root?.totalCount)
   if (count === null) throw env.invalid('unknown', 'GitHub returned an invalid work-item count.')

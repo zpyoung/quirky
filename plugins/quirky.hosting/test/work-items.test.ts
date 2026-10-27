@@ -142,6 +142,9 @@ function routeIssueParts(path) {
 function routeIssueChild(path) {
   return /^repos\/([^/]+)\/([^/]+)\/issues\/([0-9]+)\/(comments|timeline)(?:\?.*)?$/.exec(path)
 }
+function routeIssueCollectionMutation(path) {
+  return /^repos\/([^/]+)\/([^/]+)\/issues\/([0-9]+)\/(labels|assignees)(?:\/([^/?]+))?$/.exec(path)
+}
 function routeIssueCollection(path) {
   return /^repos\/([^/]+)\/([^/]+)\/issues(?:\?.*)?$/.exec(path)
 }
@@ -205,6 +208,48 @@ function dynamicRest() {
       return { handled: true, value: created }
     }
   }
+  const collectionMutation = routeIssueCollectionMutation(endpoint)
+  if (collectionMutation && issueStore) {
+    const key = issueKey(collectionMutation[1], collectionMutation[2], collectionMutation[3])
+    const issue = issueStore[key]
+    const collectionName = collectionMutation[4]
+    if (isObject(issue) && collectionName === 'labels' && method === 'POST') {
+      const requested = Array.isArray(requestBody?.labels) ? requestBody.labels : []
+      const names = asNames(issue.labels, 'name')
+      for (const name of requested) {
+        if (typeof name === 'string' && !names.includes(name)) names.push(name)
+      }
+      issue.labels = names.map((name) => {
+        const existing = Array.isArray(issueStore[key].labels)
+          ? issueStore[key].labels.find((label) => isObject(label) && label.name === name)
+          : null
+        return isObject(existing) ? existing : { name, color: 'd73a4a' }
+      })
+      return { handled: true, value: issue.labels }
+    }
+    if (isObject(issue) && collectionName === 'labels' && method === 'DELETE' && collectionMutation[5] !== undefined) {
+      const labelName = decodeURIComponent(collectionMutation[5])
+      const current = Array.isArray(issue.labels) ? issue.labels : []
+      if (!current.some((label) => (isObject(label) ? label.name : label) === labelName)) fail('HTTP 404: label not found')
+      issue.labels = current.filter((label) => (isObject(label) ? label.name : label) !== labelName)
+      return { handled: true, value: null }
+    }
+    if (isObject(issue) && collectionName === 'assignees' && (method === 'POST' || method === 'DELETE')) {
+      const requested = Array.isArray(requestBody?.assignees) ? requestBody.assignees : []
+      const names = asNames(issue.assignees, 'login')
+      const next = method === 'POST'
+        ? [...names, ...requested.filter((login) => typeof login === 'string' && !names.includes(login))]
+        : names.filter((login) => !requested.includes(login))
+      issue.assignees = next.map((login) => {
+        const existing = Array.isArray(issueStore[key].assignees)
+          ? issueStore[key].assignees.find((assignee) => isObject(assignee) && assignee.login === login)
+          : null
+        return isObject(existing) ? existing : { login, name: login, avatar_url: 'https://avatars.example/' + login }
+      })
+      return { handled: true, value: issue }
+    }
+  }
+
 
   const globalComment = routeGlobalComment(endpoint)
   if (globalComment && commentStore) {
@@ -231,7 +276,25 @@ function dynamicRest() {
     if (hasOwn(issueStore, key)) {
       if (method === 'GET') return { handled: true, value: issueStore[key] }
       if (method === 'PATCH') {
-        issueStore[key] = { ...issueStore[key], ...(isObject(requestBody) ? requestBody : {}), updated_at: '2026-10-02T00:00:00Z' }
+        const requested = isObject(requestBody) ? requestBody : {}
+        const patch = { ...requested }
+        if (Array.isArray(requested.labels)) {
+          patch.labels = requested.labels.map((name) => {
+            const existing = Array.isArray(issueStore[key].labels)
+              ? issueStore[key].labels.find((label) => isObject(label) && label.name === name)
+              : null
+            return isObject(existing) ? existing : { name, color: 'd73a4a' }
+          })
+        }
+        if (Array.isArray(requested.assignees)) {
+          patch.assignees = requested.assignees.map((login) => {
+            const existing = Array.isArray(issueStore[key].assignees)
+              ? issueStore[key].assignees.find((assignee) => isObject(assignee) && assignee.login === login)
+              : null
+            return isObject(existing) ? existing : { login, name: login, avatar_url: 'https://avatars.example/' + login }
+          })
+        }
+        issueStore[key] = { ...issueStore[key], ...patch, updated_at: '2026-10-02T00:00:00Z' }
         return { handled: true, value: issueStore[key] }
       }
     }
@@ -317,30 +380,95 @@ function projectItem(projectId, itemId) {
   if (!projectItemStore) return null
   return projectItemStore[projectId + '/' + itemId] ?? projectItemStore[itemId] ?? null
 }
+function projectFieldConfiguration(projectId, fieldId) {
+  for (const project of Object.values(resources.projectViews ?? {})) {
+    if (!isObject(project) || (project.projectId ?? 'PVT_4') !== projectId) continue
+    for (const view of Array.isArray(project.views) ? project.views : []) {
+      const fields = isObject(view) && isObject(view.fields) && Array.isArray(view.fields.nodes)
+        ? view.fields.nodes
+        : (isObject(view) && Array.isArray(view.fields) ? view.fields : [])
+      const configuration = fields.find((field) => isObject(field) && field.id === fieldId)
+      if (configuration) return configuration
+    }
+  }
+  return null
+}
+function itemResource(item) {
+  const url = typeof item.url === 'string' ? item.url : ''
+  const match = /^https:\/\/[^/]+\/([^/]+)\/([^/]+)\/(issues|pull)\/([0-9]+)\/?$/.exec(url)
+  if (!match) return { owner: null, repo: null, resource: null }
+  const key = issueKey(match[1], match[2], match[4])
+  const store = match[3] === 'issues' ? issueStore : pullStore
+  return { owner: match[1], repo: match[2], resource: isObject(store) && isObject(store[key]) ? store[key] : null }
+}
 function itemGraphNode(item) {
-  const issueType = item.kind === 'pullRequest' ? 'PullRequest' : 'Issue'
+  const kind = item.kind === 'pullRequest' ? 'PullRequest' : 'Issue'
+  const source = itemResource(item)
+  const resource = source.resource ?? {}
+  const labels = (Array.isArray(resource.labels) ? resource.labels : []).flatMap((label) => {
+    const entry = isObject(label) ? label : { name: label }
+    return typeof entry.name === 'string' ? [{ name: entry.name, color: typeof entry.color === 'string' ? entry.color : '' }] : []
+  })
+  const assignees = (Array.isArray(resource.assignees) ? resource.assignees : []).flatMap((assignee) => {
+    const entry = isObject(assignee) ? assignee : { login: assignee }
+    return typeof entry.login === 'string' ? [{
+      login: entry.login,
+      name: typeof entry.name === 'string' ? entry.name : null,
+      avatarUrl: typeof entry.avatarUrl === 'string' ? entry.avatarUrl : typeof entry.avatar_url === 'string' ? entry.avatar_url : null
+    }] : []
+  })
+  const fieldValues = Object.entries(projectFieldStore ?? {})
+    .filter(([key]) => key.startsWith(item.projectId + '/' + item.id + '/'))
+    .map(([key, value]) => {
+      const fieldId = key.split('/').at(-1)
+      const fieldValue = isObject(value) && isObject(value.value) ? value.value : {}
+      const configuration = projectFieldConfiguration(item.projectId, fieldId)
+      const field = {
+        __typename: isObject(configuration) && typeof configuration.__typename === 'string' ? configuration.__typename : 'ProjectV2Field',
+        id: fieldId,
+        name: isObject(configuration) && typeof configuration.name === 'string' ? configuration.name : fieldId
+      }
+      if (Array.isArray(fieldValue.multiSelectOptionIds)) {
+        const configuredOptions = isObject(configuration) && Array.isArray(configuration.multiSelectOptions) ? configuration.multiSelectOptions : []
+        return {
+          __typename: 'ProjectV2ItemFieldMultiSelectValue',
+          field,
+          options: fieldValue.multiSelectOptionIds.flatMap((optionId) => {
+            const option = configuredOptions.find((entry) => isObject(entry) && entry.id === optionId)
+            return !isObject(option) || typeof option.name !== 'string' ? [] : [{ id: option.id, name: option.name }]
+          })
+        }
+      }
+      return { __typename: 'ProjectV2ItemFieldTextValue', field, ...fieldValue }
+    })
+  const builtInFieldValues = source.resource === null ? [] : [
+    { __typename: 'ProjectV2ItemFieldLabelValue', field: { __typename: 'ProjectV2Field', id: 'FIELD_LABELS', name: 'Labels' }, labels: { nodes: labels } },
+    { __typename: 'ProjectV2ItemFieldUserValue', field: { __typename: 'ProjectV2Field', id: 'FIELD_ASSIGNEES', name: 'Assignees' }, users: { nodes: assignees } }
+  ]
+  const state = String(resource.state ?? item.state ?? 'OPEN').toUpperCase()
+  const stateReason = typeof resource.state_reason === 'string'
+    ? resource.state_reason.toUpperCase()
+    : typeof resource.stateReason === 'string'
+      ? resource.stateReason.toUpperCase()
+      : null
   return {
     id: item.id,
-    type: issueType === 'PullRequest' ? 'PULL_REQUEST' : 'ISSUE',
+    type: kind === 'PullRequest' ? 'PULL_REQUEST' : 'ISSUE',
     content: {
-      __typename: issueType,
+      __typename: kind,
       number: item.number,
-      title: item.title ?? '',
-      body: item.body ?? '',
-      state: item.state ?? 'OPEN',
-      url: item.url,
-      isDraft: item.isDraft === true,
+      title: resource.title ?? item.title ?? '',
+      body: resource.body ?? item.body ?? '',
+      ...(kind === 'PullRequest'
+        ? { pullRequestState: state, isDraft: resource.isDraft === true || item.isDraft === true, stateReason: null }
+        : { issueState: state, stateReason, issueType: resource.issueType ?? null }),
+      url: resource.html_url ?? item.url,
+      repository: { nameWithOwner: source.owner !== null && source.repo !== null ? source.owner + '/' + source.repo : null },
+      labels: { nodes: labels },
+      assignees: { nodes: assignees },
       ...(item.parent === undefined ? {} : { parent: item.parent })
     },
-    fieldValues: {
-      nodes: Object.entries(projectFieldStore ?? {})
-        .filter(([key]) => key.startsWith(item.projectId + '/' + item.id + '/'))
-        .map(([key, value]) => {
-          const fieldId = key.split('/').at(-1)
-          const fieldValue = isObject(value) && isObject(value.value) ? value.value : {}
-          return { __typename: 'ProjectV2ItemFieldTextValue', field: { id: fieldId, name: fieldId }, ...fieldValue }
-        })
-    }
+    fieldValues: { nodes: [...fieldValues, ...builtInFieldValues] }
   }
 }
 
@@ -509,6 +637,17 @@ async function expectReason(promise: Promise<unknown>, reason: string): Promise<
   expect(object(details.data).reason).toBe(reason)
 }
 
+async function expectConfirmationRequired(promise: Promise<unknown>): Promise<void> {
+  let error: unknown
+  try {
+    await promise
+  } catch (caught: unknown) {
+    error = caught
+  }
+  expect(error).toBeDefined()
+  expect(object(error).code).toBe(-32009)
+}
+
 test('GH27: a removed upstream resolves to origin and marks the issue source fallback', async () => {
   const h = await hosting({
     graphql: [
@@ -521,10 +660,10 @@ test('GH27: a removed upstream resolves to origin and marks the issue source fal
               issueCount: 8,
               pageInfo: { endCursor: 'issue-cursor-1', hasNextPage: false },
               nodes: [
-                { __typename: 'Issue', number: 12, title: 'issue two', state: 'OPEN', url: 'https://github.com/test-owner/test-repo/issues/12', updatedAt: '2026-10-01T00:00:00Z' },
-                { __typename: 'Issue', number: 13, title: 'issue three', state: 'OPEN', url: 'https://github.com/test-owner/test-repo/issues/13', updatedAt: '2026-09-30T00:00:00Z' },
-                { __typename: 'Issue', number: 14, title: 'issue four', state: 'OPEN', url: 'https://github.com/test-owner/test-repo/issues/14', updatedAt: '2026-09-28T00:00:00Z' },
-                { __typename: 'Issue', number: 15, title: 'issue five', state: 'OPEN', url: 'https://github.com/test-owner/test-repo/issues/15', updatedAt: '2026-09-27T00:00:00Z' }
+                { __typename: 'Issue', number: 12, title: 'issue two', issueState: 'OPEN', url: 'https://github.com/test-owner/test-repo/issues/12', updatedAt: '2026-10-01T00:00:00Z' },
+                { __typename: 'Issue', number: 13, title: 'issue three', issueState: 'OPEN', url: 'https://github.com/test-owner/test-repo/issues/13', updatedAt: '2026-09-30T00:00:00Z' },
+                { __typename: 'Issue', number: 14, title: 'issue four', issueState: 'OPEN', url: 'https://github.com/test-owner/test-repo/issues/14', updatedAt: '2026-09-28T00:00:00Z' },
+                { __typename: 'Issue', number: 15, title: 'issue five', issueState: 'OPEN', url: 'https://github.com/test-owner/test-repo/issues/15', updatedAt: '2026-09-27T00:00:00Z' }
               ]
             },
             rateLimit: { cost: 1 }
@@ -550,6 +689,7 @@ test('GH27: a removed upstream resolves to origin and marks the issue source fal
   const result = object(await h.call('listWorkItems', { query: 'is:open', page: 2, limit: 2 }))
 
   expect(list(result.items).map((item) => [object(item).kind, object(item).number])).toEqual([['issue', 13], ['pullRequest', 42]])
+  expect(list(result.items).map((item) => object(item).state)).toEqual(['open', 'draft'])
   expect(result.page).toBe(2)
   expect(result.limit).toBe(2)
   expect(result.totalCount).toBe(12)
@@ -659,7 +799,7 @@ test('GH27: malformed REST search JSON remains unavailable rather than becoming 
 test('GH27: origin preference affects issues while pull requests still prefer upstream', async () => {
   const h = await hosting({
     graphql: [
-      { when: 'search(type: ISSUE', whenArgs: 'test-owner/test-repo is:issue', body: { data: { search: { issueCount: 1, pageInfo: { hasNextPage: false }, nodes: [{ __typename: 'Issue', number: 20, title: 'origin issue', state: 'OPEN', updatedAt: '2026-10-01T00:00:00Z' }] }, rateLimit: { cost: 1 } } } },
+      { when: 'search(type: ISSUE', whenArgs: 'test-owner/test-repo is:issue', body: { data: { search: { issueCount: 1, pageInfo: { hasNextPage: false }, nodes: [{ __typename: 'Issue', number: 20, title: 'origin issue', issueState: 'OPEN', updatedAt: '2026-10-01T00:00:00Z' }] }, rateLimit: { cost: 1 } } } },
       { when: 'search(type: ISSUE', whenArgs: 'upstream-owner/upstream-repo is:pr', body: { data: { search: { issueCount: 1, pageInfo: { hasNextPage: false }, nodes: [] }, rateLimit: { cost: 1 } } } }
     ],
     responses: [{
@@ -697,7 +837,7 @@ test('GH27: a failed source remains partial while the successful source is retur
           search: {
             issueCount: 1,
             pageInfo: { hasNextPage: false },
-            nodes: [{ __typename: 'Issue', number: 5, title: 'available', state: 'OPEN' }]
+            nodes: [{ __typename: 'Issue', number: 5, title: 'available', issueState: 'OPEN' }]
           },
           rateLimit: { cost: 1 }
         }
@@ -726,9 +866,9 @@ test('GH28: an issue endpoint response marked as a PR is hydrated as a PR, not a
 }, 20_000)
 
 test('GH29: configured work-item references resolve and foreign pasted references fail closed', async () => {
-  const h = await hosting({ responses: [{ when: 'repos/test-owner/test-repo/issues/9', body: { number: 9, title: 'configured', state: 'open' } }] })
+  const h = await hosting({ responses: [{ when: 'repos/test-owner/test-repo/issues/9', body: { number: 9, title: 'configured', state: 'open', url: 'https://api.github.com/repos/test-owner/test-repo/issues/9', html_url: 'https://github.com/test-owner/test-repo/issues/9' } }] })
 
-  expect(object(await h.call('workItem', { reference: 'https://github.com/test-owner/test-repo/issues/9' })).number).toBe(9)
+  expect(object(await h.call('workItem', { reference: 'https://github.com/test-owner/test-repo/issues/9' })).url).toBe('https://github.com/test-owner/test-repo/issues/9')
   const before = h.invocations().length
   await expectReason(h.call('workItem', { reference: 'https://evil.example/other/repo/issues/9' }), 'validation_error')
   expect(h.invocations()).toHaveLength(before)
@@ -981,7 +1121,15 @@ test('GH30: project views retry optional schema fields and preserve supported la
               projectV2: {
                 views: {
                   nodes: [
-                    { id: 'view-table', number: 1, name: 'Table', layout: 'TABLE' },
+                    {
+                      id: 'view-table',
+                      number: 1,
+                      name: 'Table',
+                      layout: 'TABLE',
+                      fields: { nodes: [{ __typename: 'ProjectV2SingleSelectField', id: 'field-status', name: 'Status', dataType: 'SINGLE_SELECT', options: [{ id: 'opt-ready', name: 'Ready' }] }] },
+                      groupByFields: { nodes: [{ __typename: 'ProjectV2SingleSelectField', id: 'field-status', name: 'Status', dataType: 'SINGLE_SELECT', options: [{ id: 'opt-ready', name: 'Ready' }] }] },
+                      sortByFields: { nodes: [{ direction: 'DESC', field: { __typename: 'ProjectV2SingleSelectField', id: 'field-status', name: 'Status', dataType: 'SINGLE_SELECT', options: [{ id: 'opt-ready', name: 'Ready' }] } }] }
+                    },
                     { id: 'view-roadmap', number: 2, name: 'Roadmap', layout: 'ROADMAP' }
                   ],
                   pageInfo: { hasNextPage: false }
@@ -996,6 +1144,17 @@ test('GH30: project views retry optional schema fields and preserve supported la
 
   const result = object(await h.call('projectViews', { owner: 'test-owner', ownerType: 'organization', projectNumber: 4 }))
   expect(list(result.views).map((view) => object(view).layout)).toEqual(['TABLE', 'ROADMAP'])
+  const tableView = object(list(result.views)[0])
+  expect(object(list(tableView.fields)[0]).options).toEqual([{ id: 'opt-ready', name: 'Ready' }])
+  expect(object(list(tableView.sortByFields)[0]).direction).toBe('DESC')
+  expect(object(object(list(tableView.sortByFields)[0]).field).id).toBe('field-status')
+  const viewQueries = list(object(h.readState()).calls).map(object).filter((call) =>
+    typeof call.query === 'string' && call.query.includes('ProjectViews')
+  )
+  expect(viewQueries).toHaveLength(2)
+  expect(viewQueries[0].query).toContain('verticalGroupByFields')
+  expect(viewQueries[1].query).not.toContain('verticalGroupByFields')
+  expect(viewQueries[1].query).toContain('multiSelectOptions { id name }')
   expect(result.parentFieldDropped).toBe(false)
 }, 20_000)
 
@@ -1038,7 +1197,7 @@ test('GH30: project table follows item cursors and returns typed rows', async ()
                   nodes: [{
                     id: 'item-1',
                     fieldValues: { nodes: [] },
-                    content: { __typename: 'Issue', number: 31, title: 'Row one', state: 'OPEN' }
+                    content: { __typename: 'Issue', number: 31, title: 'Row one', issueState: 'OPEN' }
                   }],
                   pageInfo: { endCursor: 'item-cursor', hasNextPage: true },
                   totalCount: 2
@@ -1061,7 +1220,7 @@ test('GH30: project table follows item cursors and returns typed rows', async ()
                   nodes: [{
                     id: 'item-2',
                     fieldValues: { nodes: [] },
-                    content: { __typename: 'PullRequest', number: 32, title: 'Row two', state: 'OPEN' }
+                    content: { __typename: 'PullRequest', number: 32, title: 'Row two', pullRequestState: 'MERGED', isDraft: false }
                   }],
                   pageInfo: { endCursor: null, hasNextPage: false },
                   totalCount: 2
@@ -1079,6 +1238,8 @@ test('GH30: project table follows item cursors and returns typed rows', async ()
   expect(rows).toHaveLength(2)
   expect(object(rows[0].content).kind).toBe('issue')
   expect(object(rows[1].content).kind).toBe('pullRequest')
+  expect(object(rows[0].content).state).toBe('open')
+  expect(object(rows[1].content).state).toBe('merged')
   expect(table.layout).toBe('TABLE')
   expect(table.truncated).toBe(false)
 }, 20_000)
@@ -1162,7 +1323,7 @@ test('GH30: project table retries once without the optional issue parent field',
                   nodes: [{
                     id: 'item-1',
                     fieldValues: { nodes: [] },
-                    content: { __typename: 'Issue', number: 31, title: 'Row one' }
+                    content: { __typename: 'Issue', number: 31, title: 'Row one', issueState: 'OPEN' }
                   }],
                   pageInfo: { hasNextPage: false },
                   totalCount: 1
@@ -1177,6 +1338,7 @@ test('GH30: project table retries once without the optional issue parent field',
 
   const table = object(await h.call('projectTable', { owner: 'test-owner', ownerType: 'organization', projectNumber: 4 }))
   expect(list(table.items)).toHaveLength(1)
+  expect(object(object(list(table.items)[0]).content).state).toBe('open')
   expect(table.parentFieldDropped).toBe(true)
 }, 20_000)
 test('GH30: board and roadmap views render and unknown layouts fail explicitly', async () => {
@@ -1190,8 +1352,24 @@ test('GH30: board and roadmap views render and unknown layouts fail explicitly',
               projectV2: {
                 views: {
                   nodes: [
-                    { id: 'v-board', number: 1, name: 'Board', layout: 'BOARD', groupByFields: { nodes: [{ id: 'status', name: 'Status' }] }, fields: { nodes: [] } },
-                    { id: 'v-roadmap', number: 2, name: 'Roadmap', layout: 'ROADMAP', verticalGroupByFields: { nodes: [{ id: 'team', name: 'Team' }] }, fields: { nodes: [{ id: 'date-field', name: 'Start', dataType: 'DATE' }] } },
+                    {
+                      id: 'v-board',
+                      number: 1,
+                      name: 'Board',
+                      layout: 'BOARD',
+                      groupByFields: { nodes: [{ __typename: 'ProjectV2SingleSelectField', id: 'status', name: 'Status', dataType: 'SINGLE_SELECT', options: [{ id: 'ready', name: 'Ready' }] }] },
+                      sortByFields: { nodes: [{ direction: 'ASC', field: { __typename: 'ProjectV2SingleSelectField', id: 'status', name: 'Status', dataType: 'SINGLE_SELECT', options: [{ id: 'ready', name: 'Ready' }] } }] },
+                      fields: { nodes: [{ __typename: 'ProjectV2SingleSelectField', id: 'status', name: 'Status', dataType: 'SINGLE_SELECT', options: [{ id: 'ready', name: 'Ready' }] }] }
+                    },
+                    {
+                      id: 'v-roadmap',
+                      number: 2,
+                      name: 'Roadmap',
+                      layout: 'ROADMAP',
+                      verticalGroupByFields: { nodes: [{ __typename: 'ProjectV2MultiSelectField', id: 'team', name: 'Team', dataType: 'MULTI_SELECT', multiSelectOptions: [{ id: 'team-a', name: 'Team A' }] }] },
+                      sortByFields: { nodes: [{ direction: 'DESC', field: { __typename: 'ProjectV2Field', id: 'date-field', name: 'Start', dataType: 'DATE' } }] },
+                      fields: { nodes: [{ __typename: 'ProjectV2Field', id: 'date-field', name: 'Start', dataType: 'DATE' }] }
+                    },
                     { id: 'v-unknown', number: 3, name: 'Custom', layout: 'CUSTOM', fields: { nodes: [] } }
                   ],
                   pageInfo: { hasNextPage: false }
@@ -1227,6 +1405,12 @@ test('GH30: board and roadmap views render and unknown layouts fail explicitly',
   expect(Array.isArray(board.boardColumns)).toBe(true)
   expect(roadmap.layout).toBe('ROADMAP')
   expect(list(object(roadmap.roadmap).dateFields)).toHaveLength(1)
+  expect(object(list(board.fields)[0]).dataType).toBe('SINGLE_SELECT')
+  expect(object(list(object(board.view).sortByFields)[0]).direction).toBe('ASC')
+  expect(object(object(list(object(board.view).sortByFields)[0]).field).name).toBe('Status')
+  expect(object(object(list(object(board.view).sortByFields)[0]).field).options).toEqual([{ id: 'ready', name: 'Ready' }])
+  expect(object(list(object(roadmap.roadmap).groupByFields)[0]).dataType).toBe('MULTI_SELECT')
+  expect(object(list(object(roadmap.roadmap).groupByFields)[0]).multiSelectOptions).toEqual([{ id: 'team-a', name: 'Team A' }])
   await expectReason(h.call('projectTable', { owner: 'test-owner', ownerType: 'organization', projectNumber: 4, viewName: 'Custom' }), 'unsupported_layout')
 }, 20_000)
 
@@ -1250,7 +1434,19 @@ test('GH31: project fields set and clear are visible in a subsequent project tab
       projectViews: {
         'organization/test-owner/4': {
           projectId: 'PVT_4',
-          views: [{ id: 'VIEW_1', number: 1, name: 'Table', layout: 'TABLE', fields: [] }]
+          views: [{
+            id: 'VIEW_1',
+            number: 1,
+            name: 'Table',
+            layout: 'TABLE',
+            fields: { nodes: [{
+              __typename: 'ProjectV2MultiSelectField',
+              id: 'PVTF_3',
+              name: 'Tags',
+              dataType: 'MULTI_SELECT',
+              multiSelectOptions: [{ id: 'OPT_1', name: 'Doing' }, { id: 'OPT_2', name: 'Blocked' }]
+            }] }
+          }]
         }
       },
       projectFields: {}
@@ -1264,12 +1460,51 @@ test('GH31: project fields set and clear are visible in a subsequent project tab
   expect(storedValue).toBeDefined()
   expect(object(storedValue).value).toBe('Doing')
 
+  await h.call('projectField', {
+    projectId: 'PVT_4',
+    itemId: 'PVTI_7',
+    fieldId: 'PVTF_3',
+    value: { multiSelectOptionIds: ['OPT_1', 'OPT_2'] }
+  })
+  const afterMultiSet = object(await h.call('projectTable', { owner: 'test-owner', ownerType: 'organization', projectNumber: 4 }))
+  const multiValues = list(object(list(afterMultiSet.items)[0]).fieldValues).map(object)
+  const storedMultiValue = multiValues.find((value) => value.fieldId === 'PVTF_3')
+  expect(storedMultiValue).toBeDefined()
+  expect(object(storedMultiValue).type).toBe('ProjectV2ItemFieldMultiSelectValue')
+  expect(object(storedMultiValue).value).toEqual([{ id: 'OPT_1', name: 'Doing' }, { id: 'OPT_2', name: 'Blocked' }])
+  expect(object(list(afterMultiSet.fields)[0]).multiSelectOptions).toEqual([{ id: 'OPT_1', name: 'Doing' }, { id: 'OPT_2', name: 'Blocked' }])
+
+  const apiRequestsBeforeInvalidValue = list(object(h.readState()).calls).map(object).filter((call) =>
+    (typeof call.query === 'string' && call.query.length > 0) ||
+    (typeof call.endpoint === 'string' && call.endpoint.length > 0)
+  ).length
+  await expectReason(h.call('projectField', {
+    projectId: 'PVT_4',
+    itemId: 'PVTI_7',
+    fieldId: 'PVTF_3',
+    value: { userIds: ['user-1'] }
+  }), 'validation_error')
+  expect(list(object(h.readState()).calls).map(object).filter((call) =>
+    (typeof call.query === 'string' && call.query.length > 0) ||
+    (typeof call.endpoint === 'string' && call.endpoint.length > 0)
+  )).toHaveLength(apiRequestsBeforeInvalidValue)
+  const afterRejectedValue = object(await h.call('projectTable', { owner: 'test-owner', ownerType: 'organization', projectNumber: 4 }))
+  const preservedValues = list(object(list(afterRejectedValue.items)[0]).fieldValues).map(object)
+  expect(object(preservedValues.find((value) => value.fieldId === 'PVTF_3')).value).toEqual([
+    { id: 'OPT_1', name: 'Doing' },
+    { id: 'OPT_2', name: 'Blocked' }
+  ])
+
   await h.call('projectField', { projectId: 'PVT_4', itemId: 'PVTI_7', fieldId: 'PVTF_2', clear: true })
+  const afterTextClear = object(await h.call('projectTable', { owner: 'test-owner', ownerType: 'organization', projectNumber: 4 }))
+  const remainingValues = list(object(list(afterTextClear.items)[0]).fieldValues).map(object)
+  expect(remainingValues.map((value) => value.fieldId)).toEqual(['PVTF_3'])
+  await h.call('projectField', { projectId: 'PVT_4', itemId: 'PVTI_7', fieldId: 'PVTF_3', clear: true })
   const afterClear = object(await h.call('projectTable', { owner: 'test-owner', ownerType: 'organization', projectNumber: 4 }))
   expect(list(object(list(afterClear.items)[0]).fieldValues)).toEqual([])
 }, 20_000)
 
-test('GH31: project item actions persist issue, review, comment, and issue-type edits', async () => {
+test('GH31: project item actions allow reversible edits and require consent to delete a comment', async () => {
   const issueKey = 'test-owner/test-repo/31'
   const comments = [{
     id: 88,
@@ -1319,11 +1554,13 @@ test('GH31: project item actions persist issue, review, comment, and issue-type 
   const issue = { projectId: 'PVT_4', itemId: 'PVTI_ISSUE', number: 31, kind: 'issue' }
   const review = { projectId: 'PVT_4', itemId: 'PVTI_PR', number: 32, kind: 'pullRequest' }
 
-  await h.call('projectItemMutation', { ...issue, action: 'editIssue', title: 'triaged issue', body: 'edited issue body', state: 'closed', stateReason: 'completed' })
+  await h.call('projectItemMutation', { ...issue, action: 'editIssue', title: 'triaged issue', body: 'edited issue body', state: 'closed', stateReason: 'completed', labels: ['triaged'], assignees: ['fixer'] })
   await h.call('projectItemMutation', { ...review, action: 'editReview', title: 'updated review', body: 'edited review body', state: 'open' })
   const updatedIssue = object(await h.call('workItem', { number: 31, kind: 'issue' }))
   const updatedReview = object(await h.call('workItem', { number: 32, kind: 'pullRequest' }))
   expect([updatedIssue.title, updatedIssue.body, updatedIssue.state]).toEqual(['triaged issue', 'edited issue body', 'closed'])
+  expect(updatedIssue.labels).toEqual(['triaged'])
+  expect(updatedIssue.assignees).toEqual(['fixer'])
   expect([updatedReview.title, updatedReview.body, updatedReview.state]).toEqual(['updated review', 'edited review body', 'open'])
 
   await h.call('projectItemMutation', { ...issue, action: 'addComment', body: 'new comment' })
@@ -1332,7 +1569,13 @@ test('GH31: project item actions persist issue, review, comment, and issue-type 
   await h.call('projectItemMutation', { ...issue, action: 'updateComment', commentId: 88, body: 'updated comment' })
   const afterUpdate = object(await h.call('workItemDetails', { number: 31, kind: 'issue' }))
   expect(list(afterUpdate.comments).map((comment) => object(comment).body)).toContain('updated comment')
-  await h.call('projectItemMutation', { ...issue, action: 'deleteComment', commentId: 88 })
+  await expectConfirmationRequired(h.call('projectItemMutation', { ...issue, action: 'deleteComment', commentId: 88 }))
+  const afterDeniedDelete = object(await h.call('workItemDetails', { number: 31, kind: 'issue' }))
+  const deniedComments = list(afterDeniedDelete.comments).map((comment) => object(comment).body)
+  expect(deniedComments).toContain('updated comment')
+  expect(deniedComments).toContain('new comment')
+
+  await h.call('projectItemMutation', { ...issue, action: 'deleteComment', commentId: 88, yes: true })
   const afterDelete = object(await h.call('workItemDetails', { number: 31, kind: 'issue' }))
   expect(list(afterDelete.comments).map((comment) => object(comment).body)).toEqual(['new comment'])
 
@@ -1342,6 +1585,170 @@ test('GH31: project item actions persist issue, review, comment, and issue-type 
   const typedDetails = object(await h.call('workItemDetails', { number: 31, kind: 'issue' }))
   expect(object(object(typedDetails.item).issueType).name).toBe('Bug')
 }, 20_000)
+
+test('GH33: project issue collections support replacement, increments, and empty clears', async () => {
+  const issueKey = 'test-owner/test-repo/31'
+  const url = 'https://github.com/test-owner/test-repo/issues/31'
+  const h = await hosting({
+    resources: {
+      issues: {
+        [issueKey]: {
+          number: 31,
+          title: 'original issue',
+          body: 'original body',
+          state: 'open',
+          url,
+          labels: [{ name: 'legacy', color: 'cccccc' }],
+          assignees: [{ login: 'former', name: 'Former Assignee', avatar_url: 'https://avatars.example/former' }]
+        }
+      },
+      projectItems: {
+        'PVT_4/PVTI_ISSUE': {
+          id: 'PVTI_ISSUE',
+          projectId: 'PVT_4',
+          projectNumber: 4,
+          owner: 'test-owner',
+          ownerType: 'Organization',
+          kind: 'issue',
+          number: 31,
+          title: 'original issue',
+          url
+        }
+      }
+    }
+  })
+  const issue = { projectId: 'PVT_4', itemId: 'PVTI_ISSUE', number: 31, kind: 'issue' }
+
+  await h.call('projectItemMutation', { ...issue, action: 'editIssue', labels: ['triaged'], assignees: ['fixer'] })
+  const replaced = object(await h.call('workItem', { number: 31, kind: 'issue' }))
+  expect(replaced.labels).toEqual(['triaged'])
+  expect(replaced.assignees).toEqual(['fixer'])
+
+  await h.call('projectItemMutation', {
+    ...issue,
+    action: 'editIssue',
+    addLabels: ['bug'],
+    removeLabels: ['triaged'],
+    addAssignees: ['maintainer'],
+    removeAssignees: ['fixer']
+  })
+  const incremented = object(await h.call('workItem', { number: 31, kind: 'issue' }))
+  expect(incremented.labels).toEqual(['bug'])
+  expect(incremented.assignees).toEqual(['maintainer'])
+
+  await h.call('projectItemMutation', { ...issue, action: 'editIssue', labels: [], assignees: [] })
+  const cleared = object(await h.call('workItem', { number: 31, kind: 'issue' }))
+  expect(cleared.labels).toEqual([])
+  expect(cleared.assignees).toEqual([])
+
+  const allCalls = list(object(h.readState()).calls).map(object)
+  const replacementPatches = allCalls.filter((call) =>
+    call.method === 'PATCH' && call.endpoint === 'repos/test-owner/test-repo/issues/31'
+  )
+  expect(replacementPatches).toHaveLength(2)
+  expect(object(replacementPatches[0].input)).toEqual({ labels: ['triaged'], assignees: ['fixer'] })
+  expect(object(replacementPatches[1].input)).toEqual({ labels: [], assignees: [] })
+  const collectionCalls = allCalls.filter((call) =>
+    typeof call.endpoint === 'string' && /\/issues\/31\/(labels|assignees)(\/|$)/.test(call.endpoint)
+  )
+  expect(collectionCalls.some((call) => call.method === 'POST' && String(call.endpoint).endsWith('/labels'))).toBe(true)
+  expect(collectionCalls.some((call) => call.method === 'DELETE' && String(call.endpoint).endsWith('/labels/triaged'))).toBe(true)
+  expect(collectionCalls.some((call) => call.method === 'POST' && String(call.endpoint).endsWith('/assignees'))).toBe(true)
+  expect(collectionCalls.some((call) => call.method === 'DELETE' && String(call.endpoint).endsWith('/assignees'))).toBe(true)
+}, 20_000)
+
+test('GH33: project issue collection validation rejects forbidden and malformed inputs before provider access', async () => {
+  const h = await hosting({
+    resources: {
+      projectItems: {
+        'PVT_4/PVTI_ISSUE': {
+          id: 'PVTI_ISSUE',
+          projectId: 'PVT_4',
+          projectNumber: 4,
+          owner: 'test-owner',
+          ownerType: 'Organization',
+          kind: 'issue',
+          number: 31,
+          url: 'https://github.com/test-owner/test-repo/issues/31'
+        }
+      }
+    }
+  })
+  const issue = { projectId: 'PVT_4', itemId: 'PVTI_ISSUE', action: 'editIssue' }
+  const providerCalls = () => h.invocations().filter(({ args }) => args[0] === 'api')
+  const beforeInvalid = providerCalls().length
+
+  await expectReason(h.call('projectItemMutation', { ...issue, labels: ['triaged'], addLabels: ['bug'] }), 'validation_error')
+  await expectReason(h.call('projectItemMutation', { ...issue, action: 'editReview', addAssignees: [] }), 'validation_error')
+  await expectReason(h.call('projectItemMutation', { ...issue, assignees: ['fixer'], removeAssignees: ['former'] }), 'validation_error')
+  await expectReason(h.call('projectItemMutation', { ...issue, labels: [''] }), 'validation_error')
+  await expectReason(h.call('projectItemMutation', { ...issue, assignees: [''] }), 'validation_error')
+  expect(providerCalls()).toHaveLength(beforeInvalid)
+  const beforePreview = providerCalls().length
+  expect(await h.call('projectItemMutationConfirmation', { ...issue, labels: [], assignees: [] })).toBeNull()
+  expect(providerCalls()).toHaveLength(beforePreview)
+}, 20_000)
+
+test('GH33: project issue mutations publish earlier writes when a later provider step fails', async () => {
+  const issueKey = 'test-owner/test-repo/31'
+  const h = await hosting({
+    resources: {
+      issues: {
+        [issueKey]: {
+          number: 31,
+          title: 'original issue',
+          body: 'original body',
+          state: 'open',
+          url: 'https://github.com/test-owner/test-repo/issues/31',
+          labels: [],
+          assignees: [{ login: 'former' }]
+        }
+      },
+      projectItems: {
+        'PVT_4/PVTI_ISSUE': {
+          id: 'PVTI_ISSUE',
+          projectId: 'PVT_4',
+          projectNumber: 4,
+          owner: 'test-owner',
+          ownerType: 'Organization',
+          kind: 'issue',
+          number: 31,
+          title: 'original issue',
+          url: 'https://github.com/test-owner/test-repo/issues/31'
+        }
+      }
+    },
+    responses: [{
+      when: 'repos/test-owner/test-repo/issues/31/assignees',
+      method: 'POST',
+      error: 'HTTP 500: server error'
+    }]
+  })
+  const issue = { projectId: 'PVT_4', itemId: 'PVTI_ISSUE', number: 31, kind: 'issue' }
+  const before = object(await h.call('workItem', { number: 31, kind: 'issue' }))
+  expect(before.title).toBe('original issue')
+
+  let failure: unknown
+  try {
+    await h.call('projectItemMutation', {
+      ...issue,
+      action: 'editIssue',
+      title: 'partially updated',
+      addLabels: ['triaged'],
+      addAssignees: ['fixer']
+    })
+  } catch (error: unknown) {
+    failure = error
+  }
+  const errorData = object(object(failure).data)
+  const updated = object(await h.call('workItem', { number: 31, kind: 'issue' }))
+  expect(errorData.partial).toBe(true)
+  expect(errorData.completedSteps).toEqual(['content', 'labels-added'])
+  expect(updated.title).toBe('partially updated')
+  expect(updated.labels).toEqual(['triaged'])
+  expect(updated.assignees).toEqual(['former'])
+}, 20_000)
+
 
 test('GH31: project item mutations target unconfigured repositories on the trusted host', async () => {
   const issueKey = 'remote-owner/remote-repo/41'
@@ -1360,14 +1767,26 @@ test('GH31: project item mutations target unconfigured repositories on the trust
         [issueKey]: {
           number: 41,
           nodeId: 'REMOTE_ISSUE_41',
-          owner: 'test-owner',
+          owner: 'remote-owner',
           title: 'original issue',
           body: 'original issue body',
           state: 'open',
           url,
-          labels: [],
-          assignees: [],
+          labels: [{ name: 'legacy', color: 'cccccc' }],
+          assignees: [{ login: 'former', name: 'Former Assignee', avatar_url: 'https://avatars.example/former' }],
           user: { login: 'reporter' }
+        }
+      },
+      pulls: {
+        'remote-owner/remote-repo/42': {
+          number: 42,
+          title: 'remote pull request',
+          body: 'pull request body',
+          state: 'open',
+          url: 'https://github.com/remote-owner/remote-repo/pull/42',
+          isDraft: false,
+          labels: [{ name: 'review', color: '0e8a16' }],
+          assignees: [{ login: 'reviewer', name: 'Review Person', avatar_url: 'https://avatars.example/reviewer' }]
         }
       },
       comments: { [issueKey]: comments },
@@ -1382,14 +1801,31 @@ test('GH31: project item mutations target unconfigured repositories on the trust
           number: 41,
           title: 'original issue',
           url
+        },
+        'PVT_4/PVTI_REMOTE_PR': {
+          id: 'PVTI_REMOTE_PR',
+          projectId: 'PVT_4',
+          projectNumber: 4,
+          owner: 'test-owner',
+          ownerType: 'Organization',
+          kind: 'pullRequest',
+          number: 42,
+          title: 'remote pull request',
+          url: 'https://github.com/remote-owner/remote-repo/pull/42'
         }
       },
-      issueTypes: { 'test-owner': [{ id: 'IT_REMOTE', name: 'Enhancement', isEnabled: true }] }
+      projectViews: {
+        'organization/test-owner/4': {
+          projectId: 'PVT_4',
+          views: [{ id: 'VIEW_REMOTE', number: 1, name: 'Table', layout: 'TABLE', fields: { nodes: [] } }]
+        }
+      },
+      issueTypes: { 'remote-owner': [{ id: 'IT_REMOTE', name: 'Enhancement', color: 'ORANGE', description: 'Improvement', isEnabled: true }] }
     }
   })
   const issue = { projectId: 'PVT_4', itemId: 'PVTI_REMOTE_ISSUE', number: 41, kind: 'issue' }
 
-  await h.call('projectItemMutation', { ...issue, action: 'editIssue', title: 'triaged remote issue', body: 'updated body', state: 'closed' })
+  await h.call('projectItemMutation', { ...issue, action: 'editIssue', title: 'triaged remote issue', body: 'updated body', state: 'closed', stateReason: 'completed', labels: ['triaged'], assignees: ['fixer'] })
   await h.call('projectItemMutation', { ...issue, action: 'addComment', body: 'new remote comment' })
   await h.call('projectItemMutation', { ...issue, action: 'updateComment', commentId: 91, body: 'updated remote comment' })
   await h.call('projectItemMutation', { ...issue, action: 'updateIssueType', issueTypeName: 'Enhancement' })
@@ -1399,6 +1835,41 @@ test('GH31: project item mutations target unconfigured repositories on the trust
   const storedIssue = object(updatedIssue[issueKey])
   expect([storedIssue.title, storedIssue.body, storedIssue.state]).toEqual(['triaged remote issue', 'updated body', 'closed'])
   expect(object(storedIssue.issueType).name).toBe('Enhancement')
+
+  const table = object(await h.call('projectTable', { owner: 'test-owner', ownerType: 'organization', projectNumber: 4 }))
+  const rows = list(table.items).map(object)
+  const issueRow = rows.find((row) => object(row.content).number === 41)
+  const pullRow = rows.find((row) => object(row.content).number === 42)
+  expect(issueRow).toBeDefined()
+  expect(pullRow).toBeDefined()
+  const issueContent = object(issueRow?.content)
+  const pullContent = object(pullRow?.content)
+  expect(issueContent.repository).toBe('remote-owner/remote-repo')
+  expect(issueContent.labels).toEqual([{ name: 'triaged', color: 'd73a4a' }])
+  expect(issueContent.assignees).toEqual([{ login: 'fixer', name: 'fixer', avatarUrl: 'https://avatars.example/fixer' }])
+  expect(issueContent.stateReason).toBe('COMPLETED')
+  expect(issueContent.issueType).toEqual({ id: 'IT_REMOTE', name: 'Enhancement', color: 'ORANGE', description: 'Improvement' })
+  expect(pullContent.repository).toBe('remote-owner/remote-repo')
+  expect(pullContent.labels).toEqual([{ name: 'review', color: '0e8a16' }])
+  expect(pullContent.assignees).toEqual([{ login: 'reviewer', name: 'Review Person', avatarUrl: 'https://avatars.example/reviewer' }])
+  expect(pullContent.stateReason).toBeNull()
+  expect(pullContent.issueType).toBeNull()
+  const issueFieldValues = list(issueRow?.fieldValues).map(object)
+  const issueLabelValue = issueFieldValues.find((value) => value.fieldId === 'FIELD_LABELS')
+  const issueUserValue = issueFieldValues.find((value) => value.fieldId === 'FIELD_ASSIGNEES')
+  expect(issueLabelValue).toBeDefined()
+  expect(issueUserValue).toBeDefined()
+  expect(object(issueLabelValue).value).toEqual([{ name: 'triaged', color: 'd73a4a' }])
+  expect(object(issueUserValue).value).toEqual([{ login: 'fixer', name: 'fixer', avatarUrl: 'https://avatars.example/fixer' }])
+  const pullFieldValues = list(pullRow?.fieldValues).map(object)
+  const pullLabelValue = pullFieldValues.find((value) => value.fieldId === 'FIELD_LABELS')
+  const pullUserValue = pullFieldValues.find((value) => value.fieldId === 'FIELD_ASSIGNEES')
+  expect(pullLabelValue).toBeDefined()
+  expect(pullUserValue).toBeDefined()
+  expect(object(pullLabelValue).value).toEqual([{ name: 'review', color: '0e8a16' }])
+  expect(object(pullUserValue).value).toEqual([
+    { login: 'reviewer', name: 'Review Person', avatarUrl: 'https://avatars.example/reviewer' }
+  ])
   const storedComments = object(object(resources).comments)
   expect(list(storedComments[issueKey]).map((comment) => object(comment).body)).toEqual(['updated remote comment', 'new remote comment'])
   const restCalls = list(object(h.readState()).calls).map(object).filter((call) =>
@@ -1629,4 +2100,16 @@ test('GH30: a malformed Projects item connection is not treated as an empty tabl
   })
 
   await expectReason(h.call('projectTable', { owner: 'test-owner', ownerType: 'organization', projectNumber: 4 }), 'schema_drift')
+}, 20_000)
+
+test('GH31: user-owned project issue-type actions report their unsupported boundary', async () => {
+  const h = await hosting({ resources: { projectItems: {
+    'PVT_USER/PVTI_USER': {
+      id: 'PVTI_USER', projectId: 'PVT_USER', owner: 'test-owner', ownerType: 'User',
+      kind: 'issue', number: 31, url: 'https://github.com/test-owner/test-repo/issues/31'
+    }
+  } } })
+  await expectReason(h.call('projectItemMutation', {
+    projectId: 'PVT_USER', itemId: 'PVTI_USER', action: 'updateIssueType', issueTypeName: 'Bug'
+  }), 'unsupported_operation')
 }, 20_000)

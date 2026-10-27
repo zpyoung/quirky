@@ -1,6 +1,6 @@
 # GitHub hosting implementation contracts
 
-Status: Joint Codex spec review completed. The original115 targeted tests and isolated real CLI smoke passed; additional provider-wire and conditional-consent regressions are being verified. Full integration gates and the final cross-family review remain. Logic: [logic.md](logic.md).
+Status: Joint Codex spec review completed. Core provider/consent CLI smokes and targeted blocker checks passed; scoped pre-land checks, final cross-family review and landing remain. The operator-approved parity follow-up is defined in the [logic scope](logic.md#scope-and-non-goals).
 
 ## Architecture
 

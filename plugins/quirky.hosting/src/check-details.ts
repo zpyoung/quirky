@@ -51,20 +51,24 @@ const CHECKS_QUERY = `query HostingChecksRollup($owner: String!, $name: String!,
     pullRequest(number: $number) {
       headRefOid
       commits(last: 1) {
-        nodes { commit { statusCheckRollup {
-          contexts(first: 100) {
-            nodes {
-              __typename
-              ... on CheckRun { databaseId name status conclusion detailsUrl }
-              ... on StatusContext { context state targetUrl }
+        nodes {
+          commit {
+            statusCheckRollup {
+              contexts(first: 100) {
+                nodes {
+                  __typename
+                  ... on CheckRun { databaseId name status conclusion detailsUrl }
+                  ... on StatusContext { context state targetUrl }
+                }
+                pageInfo { hasNextPage }
+              }
             }
-            pageInfo { hasNextPage }
+            checkSuites(first: 100) {
+              nodes { databaseId conclusion app { name } checkRuns(first: 100) { totalCount } }
+              pageInfo { hasNextPage }
+            }
           }
-          checkSuites(first: 100) {
-            nodes { databaseId conclusion app { name } checkRuns(first: 100) { totalCount } }
-            pageInfo { hasNextPage }
-          }
-        } } }
+        }
       }
     }
   }
@@ -111,6 +115,9 @@ export function checkMethods(env: HostingEnv): Record<string, Handler> {
 }
 
 async function loadChecks(env: HostingEnv, context: DetailContext): Promise<ChecksResult> {
+  if (context.identity.host.toLowerCase() === 'github.com') {
+    await env.rateLimit({ ...context.scope, repository: context.identity }).catch(() => undefined);
+  }
   const partialFailures: string[] = [];
   try {
     const response = await env.graphql(envScope(context), CHECKS_QUERY, {
@@ -235,7 +242,7 @@ function parseGraphChecks(value: unknown, number: number): ChecksResult | null {
     }
   }
   deduplicateStatuses(checks);
-  const suiteConnection = asRecord(rollup?.checkSuites);
+  const suiteConnection = asRecord(commit?.checkSuites);
   appendApprovalSuites(checks, asArray(suiteConnection?.nodes).flatMap((item) => {
     const suite = asRecord(item);
     return suite === null ? [] : [suite];
