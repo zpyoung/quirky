@@ -149,8 +149,7 @@
       "deps": [
         "m1-term-daemon"
       ],
-      "status": "in-progress",
-      "lane": 1
+      "status": "done"
     },
     {
       "id": "m1-agent-status-scripting",
