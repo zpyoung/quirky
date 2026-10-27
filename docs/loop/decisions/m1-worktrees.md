@@ -770,5 +770,35 @@
 - **Revisit if:** a scenario's result depends on the renamed fixtures
 - **Source:** assumed — autonomous
 
+## D71: SC-27 is run with base `origin/main` on both sides, because a create with no base never falls back
+- **Question:** SC-27 expects the same fallback notice from the window and the CLI, but its steps give no base; with `origin/main` missing, D14's detection (Orca's: `origin/HEAD`, then `origin/main`, `origin/master`, `main`, `master`) picks local `main`, so there is nothing to fall back from
+- **Options:** change detection to prefer a missing remote base; read the scenario as creating from `origin/main`, as its test does
+- **Chose:** read it as creating from `origin/main`: the window run typed `origin/main` as Base and the CLI ran `wt create api2 same --base origin/main`; both fell back to local `main` with the same notice and otherwise matched
+- **Why:** D14 is Orca parity and the scenario is about the two callers agreeing, which holds either way; with no base both also agree (base `main`, no notice), as the first UI run showed
+- **Evidence:** packages/git/src/ops.ts `detectDefaultBase`; scratchpad uiv/report-B.md (sc27, no base), uiv/report-D.md (sc27, cloned fixture, no base), uiv/report-E.md (sc27 with `origin/main`, pass)
+- **Reversibility:** easy
+- **Confidence:** medium
+- **Revisit if:** the spec owner meant a dangling `origin/HEAD` to count as a remote default
+- **Source:** assumed — autonomous
+
+## D72: The UI scenarios pass as a user, with SC-59's tooltip checked by its test because the tool can't hover
+- **Question:** LOOP.md step 6 UI verification results, and the one partial
+- **Options:** fix the app; record the partial as a tool limit
+- **Chose:** record it: SC-59's disabled Delete was seen in the menu, but its tooltip is a `title` attribute the web tool can't show without a hover action; `ui.test.ts` asserts the exact text
+- **Why:** LOOP.md asks for a decision when a partial comes from the tool rather than the app
+- **Evidence:** summaries below; reports in scratchpad uiv/report-{A,B,C,D,E}.md, screenshots under `.quirk/using-apps-like-a-user/runs/` (local only)
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** the tool gains hover
+- **Source:** assumed — autonomous
+
+UI run summary (web surface, owner yours, unattended, each batch on its own daemon and temp home):
+- Batch A (run 20261027T050346-072b), all pass: SC-3 (Open as Folder; the workspace opens on "No sessions" and its New shell starts a shell in the folder), SC-8, SC-9, SC-10 (groups are made from a project's New Group from Project; there is no empty-group control), SC-13, SC-44, SC-60.
+- Batch B (run 20261027T050347-3c8e): SC-26, SC-28, SC-31, SC-33, SC-33 changed script, SC-62 and its API half pass; SC-25 partial (the checkout finished before the tool could act) and SC-27 fail (no base given, see D71). Both reran.
+- Batch C (run 20261027T050349-f788): SC-42, SC-43, SC-53, SC-57, SC-58 pass; SC-59 partial (D72). It also found the kept-branch notice pushed below the fold of a long sidebar, now fixed (sticky notices).
+- Batch D (run 20261027T052442-3b7e): SC-25 pass with a 15 s checkout (pending row, then opened; for slow2 the window stayed on main and "Created slow2" showed).
+- Batch E (run 20261027T052958-6989), all pass: SC-27 with `origin/main` (same fallback notice from window and CLI, identical worktrees apart from created-by and project), SC-13 after the panel fix (the sentence shows as a muted notice, not an error), SC-58 notice visible without scrolling.
+- Native-only scenarios: none (the macOS Open panel is out of scope, D54), so there is no docs/loop/native/m1-worktrees.json.
+
 ## Progress
-Step 5 done: Final Round 1 fixed (D69) and the suite is green after it. Step 6 running: UI batches A-C (D70). Next: record the UI report summaries, fix any failing scenario, then land with `git switch --detach` and `bun scripts/build-loop/queue.ts land m1-worktrees`.
+Steps 5 and 6 done (D69-D72). Next: land with `git switch --detach` and `bun scripts/build-loop/queue.ts land m1-worktrees`.
