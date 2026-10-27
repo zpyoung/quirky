@@ -6,6 +6,7 @@
 
 **Amendments:**
 - 2026-10-27, before build: Codex adversarial review ([D32](../../../loop/decisions/m2-source-control-notes-ai.md)). An unconfirmed delivery keeps the notes (NA-18); agent output is decoded and cleaned before it becomes a message, including OpenCode's JSON events (NA-27); any typing during a generation keeps the box, even if the text typed was deleted again (NA-30).
+- 2026-10-27, during build ([D39](../../../loop/decisions/m2-source-control-notes-ai.md)): the CLI flag for a range start is `--start-line` (NA-4); a value that starts with `--` is passed as `--args=--model gpt-5.4` (NA-39); under NA-32's repository recipe Codex also takes the global `--model haiku` in place of its default model; a disabled session's tooltip is the daemon's reason, such as "Codex is waiting for approval." (NA-17).
 
 ## Conceptual model
 
@@ -139,7 +140,7 @@ Nothing calls a real model.
 
 4. **NA-4: notes are added, listed and kept across a restart through the CLI** (CLI)
    - **Given** **feat** with no notes
-   - **When** the agent runs `quirky git addNote --path math.ts --line 30 --body "  Handle the empty list  " --json`, then `quirky git addNote --path util.ts --startLine 2 --line 4 --body "Rename x" --json`, then `quirky git addNote --path math.ts --line 5 --body "Typo" --json`, restarts the daemon, and runs `quirky git notes --json`
+   - **When** the agent runs `quirky git addNote --path math.ts --line 30 --body "  Handle the empty list  " --json`, then `quirky git addNote --path util.ts --start-line 2 --line 4 --body "Rename x" --json`, then `quirky git addNote --path math.ts --line 5 --body "Typo" --json`, restarts the daemon, and runs `quirky git notes --json`
    - **Then** each add returns the note with an ID, the trimmed body, its lines and `createdAt`; the list after the restart holds all three sorted by path, then line: `math.ts` 5, `math.ts` 30, `util.ts` 2-4
    - **Data before:** **feat notes**: none
    - **Walkthrough:**
@@ -241,7 +242,7 @@ Nothing calls a real model.
 17. **NA-17: the send menu offers scopes, then targets** (UI)
     - **Given** notes on `math.ts` (2) and `util.ts` (1); in **feat**, Claude session **s1** `working` titled "fix tests", Codex session **s2** waiting for approval, a shell session, and Claude and Codex installed and enabled
     - **When** the person opens the send menu from the `math.ts` diff pill, from the shelf, and from a note card
-    - **Then** the pill's menu reads "Send notes" with "This file 2" first and "All unsent notes 3" second, each opening "Send notes to": **s1** with its state dot and "Working · 2m ago · fix tests" (enabled), **s2** disabled with the tooltip "Waiting for approval", no shell; then "New agent" with Claude and Codex. The shelf's menu has only "All unsent notes"; the card's menu has only "This note". The trigger's tooltip is "Send notes to an agent". Sending shows "Sending notes...", then "Notes sent."
+    - **Then** the pill's menu reads "Send notes" with "This file 2" first and "All unsent notes 3" second, each opening "Send notes to": **s1** with its state dot and "Working · 2m ago · fix tests" (enabled), **s2** disabled with the tooltip "Codex is waiting for approval.", no shell; then "New agent" with Claude and Codex. The shelf's menu has only "All unsent notes"; the card's menu has only "This note". The trigger's tooltip is "Send notes to an agent". Sending shows "Sending notes...", then "Notes sent."
 
 18. **NA-18: notes start a new agent tab** (UI, CLI)
     - **Given** the note on `math.ts` line 30 and no sessions
@@ -325,7 +326,7 @@ Nothing calls a real model.
 32. **NA-32: the recipe shapes the run** (CLI)
     - **Given** a global commit message recipe with template `{basePrompt}` + line break + `Use Conventional Commits on {branch}. {unknown}` and CLI arguments `--model haiku`, then a repository recipe for **api** with agent Codex
     - **When** the agent runs `quirky git generateCommitMessage` before and after the repository recipe is saved
-    - **Then** before: Claude runs with `--model haiku` in place of `--model sonnet` (never both), and the prompt ends with "Use Conventional Commits on zoe/feat. {unknown}" (unknown variables stay as written); after: Codex runs (`exec --ephemeral --skip-git-repo-check -s read-only --model gpt-5.6-terra -c model_reasoning_effort=low`) with the global template and arguments, because the repository recipe sets only the agent. The sparkle now runs directly, without the dialog
+    - **Then** before: Claude runs with `--model haiku` in place of `--model sonnet` (never both), and the prompt ends with "Use Conventional Commits on zoe/feat. {unknown}" (unknown variables stay as written); after: Codex runs (`exec --ephemeral --skip-git-repo-check -s read-only` and `-c model_reasoning_effort=low`) with the global template and arguments, because the repository recipe sets only the agent, so the global `--model haiku` replaces Codex's default `--model gpt-5.6-terra` (one `--model`). The sparkle now runs directly, without the dialog
 
 ### AI Fix and Resolve with AI
 
@@ -361,7 +362,7 @@ Nothing calls a real model.
 
 39. **NA-39: recipes are read and saved through the CLI** (CLI)
     - **Given** no recipes
-    - **When** the agent runs `quirky git aiRecipe --action commitMessage --json`, then `quirky git setAiRecipe --action commitMessage --scope global --agent codex`, then the same `setAiRecipe` again, then `quirky git setAiRecipe --action commitMessage --scope repo --args "--model gpt-5.4"`, then `aiRecipe` again
+    - **When** the agent runs `quirky git aiRecipe --action commitMessage --json`, then `quirky git setAiRecipe --action commitMessage --scope global --agent codex`, then the same `setAiRecipe` again, then `quirky git setAiRecipe --action commitMessage --scope repo --args=--model gpt-5.4`, then `aiRecipe` again
     - **Then** the first read shows the effective recipe `{agent: null, args: "", template: "{basePrompt}"}` with each field's source `default`; the second `setAiRecipe` reports `saved: false` (identical); the last read shows agent `codex` from `global`, args from `repo`, template from `default`. An unknown action fails with `invalid-params`
 
 40. **NA-40: the Source Control AI defaults view** (UI)

@@ -407,5 +407,38 @@
 - **Revisit if:** a review finds one of them contradicts the logic spec
 - **Source:** assumed — autonomous
 
+## D38: W2 implementation choices accepted as built
+- **Question:** choices T5, T6a and T6b made where the contract was open
+- **Options:** accept; send back
+- **Chose:** accept: the `add-review-note` keybinding has no `when`, like `next-change`; `setAiRecipe` takes string fields and an empty agent or template clears it (the CLI can't send null), `reset` deletes the row; `action` is validated by the daemon so it can answer reason `unknown-action`; `ai.test.ts` runs on its own world because the generation timeout knob must reach the daemon; `ai-fix.ts` repeats the small newest-session walk from `targets.ts`; `PopupMenu` entries gain `submenu`, `icon`, `detail`, `badge` and `heading`; failed sends toast "Failed to send notes", failed edits "Failed to save comment", failed deletes "Failed to delete note" with the daemon message as body; the combined pill's Clear confirms through `context.confirm`; `SendMenu` gained an `ariaLabel` prop in T6b (inside its chain's scope)
+- **Why:** each follows an existing Quirky pattern or fills a text the doc doesn't give
+- **Evidence:** W2 implementer reports; scratchpad journal.md
+- **Reversibility:** easy
+- **Confidence:** medium
+- **Revisit if:** a review finds one contradicts the logic spec
+- **Source:** assumed — autonomous
+
+## D39: Four scenario details move to match the CLI and the daemon, found while building
+- **Question:** places where the logic spec's examples disagreed with what the generated CLI or the recipe rule produce
+- **Options:** change the code to fit the text; amend the text
+- **Chose:** amend logic.md (2026-10-27 during build): `--start-line` (the CLI kebab-cases flags), `--args=--model gpt-5.4` (the CLI refuses a bare value starting with `--`), NA-32's Codex run takes the global `--model haiku` in place of its default (the effective recipe rule the same scenario states), and the disabled-session tooltip is the daemon's reason text
+- **Why:** the scenario text was wrong in each case; the rules it rests on were right
+- **Evidence:** packages/cli/src/generated.ts; plugins/quirky.git/test/scenarios/ai.test.ts; T5 report
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** never
+- **Source:** assumed — autonomous
+
+## D40: The orchestrator updated the SC-66 catalog test as the wave-gate fixer
+- **Question:** W1's gate failed only in `test/scenarios/catalog.test.ts`, which lists `quirky.git`'s methods, commands, keybindings and settings and was outside every task's scope; a pty-host process-group test failed once and passed on the run's retry
+- **Options:** dispatch a scoped fixer; fix it in the main tree after W2 so one edit covers both waves
+- **Chose:** updated it once after W2 merged (new methods, `clearNotes` destructive, the two commands, the keybinding, the two settings), and gave W3's task the file for `ai-settings`. The pty-host test touches nothing this item changed and passed on its retry, so it is a load flake
+- **Why:** the test pins the pre-wave contract the waves intentionally grew
+- **Evidence:** scratchpad gate/w1.suite; plugins/quirky.git/test/scenarios/catalog.test.ts
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** the pty-host test fails again on a later gate
+- **Source:** assumed — autonomous
+
 ## Progress
-Building. W1 (T1-T4) merged at fe961bf; its gate is running. W2 (T5, T6a then T6b) next per D34.
+Building. W1 and W2 merged; catalog test updated; W2 gate running; W3 (T7, AI window) dispatched from WAVE_BASE_3. Next: merge W3, gate, Final Round 1 (three Codex lenses, deep), one fix batch, then step 6.
