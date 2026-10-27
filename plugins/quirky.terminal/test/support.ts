@@ -15,10 +15,10 @@ export type PluginSet = {
   fakes: string[]
 }
 
-/** The real terminal plugin over a fake session plugin, so the tests exercise no other real plugin. */
+/** The real terminal plugin over fakes of the plugins it calls, so the tests exercise no other real plugin. */
 export const TERMINAL_PLUGINS: PluginSet = {
   real: ['quirky.terminal'],
-  fakes: ['quirky.session']
+  fakes: ['quirky.session', 'quirky.worktree', 'quirky.agents']
 }
 
 /** A built-in plugins directory that links the named plugins, so the daemon sees them as built-ins. */
