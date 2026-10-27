@@ -342,7 +342,8 @@
         "m1-launch-settings",
         "m1-agent-status"
       ],
-      "status": "blocked"
+      "status": "in-progress",
+      "lane": 12
     },
     {
       "id": "m3-vault",
@@ -695,21 +696,6 @@
       "status": "todo"
     },
     {
-      "id": "m6-objective-landing",
-      "milestone": "M6",
-      "title": "Objective review, landing and owner interventions (heimdall-objective.md 'Review by tier', 'Landing and evidence', 'Stop and park rules', 'Pacing', 'Owner interventions for objectives', and the hosted-review hand-off that enrolls a derived sitter): Express, Standard and Full review, reviewer and integrator verdicts, landing ladder record-landing, commit, push and open hosted review, stop predicates, pacing, owner deviations",
-      "docs": [
-        "heimdall-objective.md",
-        "hosted-review-sitter.md"
-      ],
-      "deps": [
-        "m6-objective-execute",
-        "m6-heimdall-owner",
-        "m6-sitter-github"
-      ],
-      "status": "todo"
-    },
-    {
       "id": "m6-sitter-github",
       "milestone": "M6",
       "title": "Scope: all of the parts below together; a \"Not ...\" note in one part excludes only what no other part here covers. Part 1: PR sitter policy and kind (hosted-review-sitter.md 'Enrollment and authorization', 'Decision policy', 'Gating', 'Stop predicates and parking', 'Outcome resolution after a crash or timeout', 'Discrepancies shown to the user', 'Owner agent', pacing in 'The watch loop'): hosted-review kind in Heimdall, authorization from the forge, snapshot types and provider interface, pure decision policy with action identity, fix-checks and conflict paths, preflight gate, pacing, stop predicates, outcome rules, owner interventions. Provider reads and executors are separate slices Part 2: PR sitter GitHub provider (hosted-review-sitter.md 'Reading the review' GitHub part and local conflict simulation, 'Executing each action' for rerun-check, update-branch, merge and enqueue on GitHub): GraphQL snapshot with required checks, merge queue, failure signatures and readiness, executors and outcome resolution for rerun, update-branch, merge and enqueue",
@@ -721,6 +707,21 @@
         "m6-heimdall-control",
         "m6-heimdall-owner",
         "m4-hosting-api-github"
+      ],
+      "status": "todo"
+    },
+    {
+      "id": "m6-objective-landing",
+      "milestone": "M6",
+      "title": "Objective review, landing and owner interventions (heimdall-objective.md 'Review by tier', 'Landing and evidence', 'Stop and park rules', 'Pacing', 'Owner interventions for objectives', and the hosted-review hand-off that enrolls a derived sitter): Express, Standard and Full review, reviewer and integrator verdicts, landing ladder record-landing, commit, push and open hosted review, stop predicates, pacing, owner deviations",
+      "docs": [
+        "heimdall-objective.md",
+        "hosted-review-sitter.md"
+      ],
+      "deps": [
+        "m6-objective-execute",
+        "m6-heimdall-owner",
+        "m6-sitter-github"
       ],
       "status": "todo"
     },
