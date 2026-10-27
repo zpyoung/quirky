@@ -128,7 +128,7 @@ Target resolution: `workspace?` (a worktree selector or `floating`; default the 
 | `resizeSplit` | `{split, ratio, revision?} \| {pane, share, revision?} \| {group, share, revision?}` | `ratio` is the first child's share; `pane`/`group` forms resolve the target's parent split and set the target's share; pane splits accept any value strictly between 0 and 1 (the window enforces the 50 px minimum when drawing and dragging), group splits 0.15–0.85, else invalid-params "a group divider stays between 0.15 and 0.85" |
 | `movePane` | `{pane, toPane, edge: 'left'\|'right'\|'top'\|'bottom'} \| {pane, toTab}` | invalid-params for the last pane of a tab or a pane onto itself |
 | `closeGroup` | `{group}` | appends its tabs, in order, to the first group of its sibling subtree (depth-first, `first` child first), makes the closed group's active tab active there, and replaces the parent split with the sibling (D17); invalid-params for the only group |
-| `clearPane` / `resetPane` | `{pane}` | call `pty.clear` / `pty.resetModes` |
+| `clearPane` / `resetPane` | `{pane, revision?}` | call `pty.clear` / `pty.resetModes`; the layout and revision don't change and no `layout` event is emitted; returns the unchanged `{workspace}` |
 | `paneOf` | `{session}` | readOnly; `{workspace, tab, pane}` |
 | `floating` | `{}` | readOnly; `FloatingState` |
 | `setFloating` | `{open?, maximized?, bounds?, button?}` | returns `FloatingState`; emits `floating` |
