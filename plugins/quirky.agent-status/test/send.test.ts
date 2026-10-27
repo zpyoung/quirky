@@ -401,6 +401,48 @@ describe('a row that was working only between two looks', () => {
   })
 })
 
+describe('an approval that lands while the screen is being read', () => {
+  test('is seen by the look that follows, so nothing is written', async () => {
+    scaled('0.1')
+    const idleAfterQuiet = {
+      agent: 'claude',
+      rules: [{ id: 'composer', state: 'idle', region: 'screen', all: [{ contains: '> ' }], quietMs: 1000 }]
+    }
+    rig = await Rig.start({ builtinRules: { claude: idleAfterQuiet } })
+    await rig.hook('claude', claude('UserPromptSubmit', { prompt: 'earlier' }))
+    await rig.hook('claude', claude('Stop', { last_assistant_message: 'ok' }))
+    rig.show(['> '])
+    // the reading waits out the missing quiet; the permission request commits during that wait
+    rig.onRead(() => void rig.post('claude', claude('PermissionRequest', bash('rm -rf build', { tool_use_id: 't1' }))))
+
+    const refused = rig.send('s1', 'carry on')
+
+    await expect(refused).rejects.toMatchObject(conflict('agent-blocked'))
+    await expect(refused).rejects.toThrow('waiting for approval of Bash: rm -rf build')
+    expect(rig.writes()).toEqual([])
+    expect(await rig.delivered()).toEqual([])
+  })
+})
+
+describe('a turn that runs while the Enter-carrying delivery is still returning', () => {
+  test('is a start, so send reports idle instead of a stall', async () => {
+    scaled('1')
+    await idleClaude()
+    await rig.plan('claude', { enterWithPaste: true })
+    await rig.holdDelivery(300)
+    // no UserPromptSubmit, so the row never records a turn start and only the commits themselves show it
+    afterEnter([
+      [0, 'PreToolUse', bash('ls', { tool_use_id: 't1' })],
+      [0, 'Stop', { last_assistant_message: 'done' }]
+    ])
+
+    const sent = await rig.send('s1', 'list files', 1000)
+
+    expect(sent.state).toBe('idle')
+    expect(await rig.delivered()).toMatchObject([{ submit: true }])
+  })
+})
+
 describe('how the prompt is typed for each kind of agent', () => {
   test('an agent that takes Enter with the paste gets both in one deliver call', async () => {
     scaled('0.1')

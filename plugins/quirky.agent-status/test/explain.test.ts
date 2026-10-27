@@ -99,6 +99,49 @@ describe('SC-1: explain names the hook event behind a blocked Claude session', (
   })
 })
 
+describe('because: names the age of the deciding event', () => {
+  test('a tool ping refreshes the latest evidence but not the age of the reason', async () => {
+    rig = await Rig.start({ builtinRules: { claude: quiet('claude') } })
+    await rig.hook('claude', claude('UserPromptSubmit', { prompt: 'go' }))
+    await Bun.sleep(30)
+    await rig.hook('claude', claude('PreToolUse', bash('ls', { tool_use_id: 't1' })))
+    const row = (await rig.row())!
+    rig.show(['> '])
+
+    const explained = await rig.explain('s1', row.evidenceAt + 6000)
+
+    const because = explained.row!.because!
+    expect(because.event).toBe('UserPromptSubmit')
+    expect(because.at).toBeLessThan(row.evidenceAt)
+    expect(explained.row!.ageMs).toBe(6000)
+    expect(explained.row!.becauseAgeMs).toBe(row.evidenceAt + 6000 - because.at)
+  })
+
+  test('the text prints that age on the because line and the evidence age on the row line', async () => {
+    rig = await Rig.start({ builtinRules: { claude: quiet('claude') } })
+    await rig.hook('claude', claude('PermissionRequest', bash('npm test', { tool_use_id: 't1' })))
+    const evidenceAt = (await rig.row())!.evidenceAt
+    rig.show(['idle'])
+    const explained = await rig.explain('s1', evidenceAt + 6000)
+    const older = { ...explained, row: { ...explained.row!, becauseAgeMs: 5 * 60_000 } }
+
+    const lines = explanationLines(older, ctx)
+
+    expect(lines[1]).toBe('because: claude PermissionRequest → waiting (hook) 5m ago')
+    expect(lines[2]).toContain('last evidence 6s ago')
+  })
+
+  test('a row with no reason has no age for it', async () => {
+    rig = await Rig.start({ builtinRules: { claude: quiet('claude') } })
+    await rig.hook('claude', claude('UserPromptSubmit', { prompt: 'go' }))
+    rig.show(['> '])
+    const explained = await rig.explain()
+    const lines = explanationLines({ ...explained, row: { ...explained.row!, because: null, becauseAgeMs: null } }, ctx)
+
+    expect(lines[1]).toBe('because: no record (stored before explain existed)')
+  })
+})
+
 describe('SC-2: explain shows the fold that keeps a finished lead working', () => {
   test('the lead is done, one agent child is running, the state is working', async () => {
     rig = await Rig.start()

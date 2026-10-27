@@ -30,7 +30,8 @@ export type OutputWaitOptions = { pattern: string; ignoreCase: boolean; lines: n
 export type WaitHost = {
   context: Pick<PluginContext, 'error' | 'pty'>
   matcher: Pick<Matcher, 'matchLines'>
-  inspect(sessionId: string): Promise<Inspection>
+  /** Reads the session; a `deadline` (epoch ms) keeps the screen read from waiting past it. */
+  inspect(sessionId: string, deadline?: number): Promise<Inspection>
   /** Looks a session up by ID or name; rejects `not-found`. */
   session(ref: string): Promise<Session>
   /** Calls `listener` when the session's row commits or the session exits; the returned function stops it. */
@@ -85,7 +86,7 @@ export class Waits {
     const sleeper = napper(this.host, id)
     try {
       for (;;) {
-        const found = await this.host.inspect(id)
+        const found = await this.host.inspect(id, deadline)
         const { state, kind, decidedBy } = found.result
         const rule = decidedBy === 'rule' ? found.reading.verdict?.rule : undefined
         const outcome = { state, ...(kind !== undefined ? { kind } : {}), decidedBy, ...(rule !== undefined ? { rule } : {}), at: this.host.now() }

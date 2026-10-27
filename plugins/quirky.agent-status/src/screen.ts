@@ -73,7 +73,7 @@ export type ScreenReading = {
   sample: Sample | null
 }
 
-export type ScreenDeps = { sources: RuleSources; matcher: Matcher; sampler: ScreenSampler; timeScale: number }
+export type ScreenDeps = { sources: RuleSources; matcher: Matcher; sampler: ScreenSampler; timeScale: number; now: () => number }
 
 const QUIET_MARGIN_MS = 10
 
@@ -81,9 +81,11 @@ const QUIET_MARGIN_MS = 10
  * Reads `agent`'s rules against the session's screen. Without a rule file the screen is not
  * read. When a rule matches except for quiet, waits out the missing quiet time once and looks
  * again, so a caller never answers "no verdict" for a screen that is merely too new to judge.
+ * With a `deadline` (epoch ms) it never sleeps past it: when the quiet can't be established by
+ * then, the reading carries `pendingQuiet` and nothing from that rule.
  */
-export async function readScreen(deps: ScreenDeps, sessionId: string, agent: string | null): Promise<ScreenReading> {
-  const { sources, matcher, sampler, timeScale } = deps
+export async function readScreen(deps: ScreenDeps, sessionId: string, agent: string | null, deadline?: number): Promise<ScreenReading> {
+  const { sources, matcher, sampler, timeScale, now } = deps
   const ignoredOf = async () => (agent === null ? [] : ((await sources.listing(agent))?.ignored ?? []))
   if (agent === null || agent === 'shell' || (await sources.effective(agent)) === null) {
     return { origin: null, verdict: null, ignored: await ignoredOf(), sample: null }
@@ -98,8 +100,9 @@ export async function readScreen(deps: ScreenDeps, sessionId: string, agent: str
   if (judged.pendingQuiet !== undefined && judged.verdict?.state !== 'blocked' && judged.source) {
     const needed = judged.source.set.rules.find((rule) => rule.id === judged.pendingQuiet)?.quietMs ?? 0
     const missing = needed - (sample.quietForMs ?? 0)
-    if (missing > 0) {
-      await Bun.sleep(Math.ceil(missing * timeScale) + QUIET_MARGIN_MS)
+    const sleepMs = Math.ceil(missing * timeScale) + QUIET_MARGIN_MS
+    if (missing > 0 && (deadline === undefined || now() + sleepMs <= deadline)) {
+      await Bun.sleep(sleepMs)
       try {
         sample = await sampler.sample(sessionId)
         judged = await evaluateForAgent(sources, matcher, agent, sample)

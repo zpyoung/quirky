@@ -20,8 +20,11 @@ export type Explanation = {
     detail: string
     source: EvidenceSource
     fresh: boolean
+    /** Age of the latest evidence, which a tool ping can refresh without changing the reason. */
     ageMs: number
     because: Because | null
+    /** Age of the event that decided the row's state; null with no `because`. */
+    becauseAgeMs: number | null
     lead: { state: AgentState; since: number }
     children: { agent: number; shell: number; cron: number }
   }
@@ -111,6 +114,7 @@ export function explanationOf(input: ExplainInput): Explanation {
             fresh: isFresh(row, now),
             ageMs: now - row.evidenceAt,
             because: row.because ?? null,
+            becauseAgeMs: row.because ? now - row.because.at : null,
             lead: { state: row.lead.state, since: row.lead.stateStartedAt },
             children: { agent: live('agent'), shell: live('shell'), cron: live('cron') }
           }

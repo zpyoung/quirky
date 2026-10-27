@@ -28,7 +28,8 @@ export type SendResult = {
 /** What a send needs from the service that owns the rows. */
 export type SendHost = {
   context: Pick<PluginContext, 'call' | 'pty' | 'error'>
-  inspect(sessionId: string): Promise<Inspection>
+  /** Reads the session; a `deadline` (epoch ms) keeps the screen read from waiting past it. */
+  inspect(sessionId: string, deadline?: number): Promise<Inspection>
   row(sessionId: string): AgentRow | null
   /** Calls `listener` after each row commit of the session; the returned function stops it. */
   onCommit(sessionId: string, listener: () => void): () => void
@@ -42,6 +43,9 @@ export type SendHost = {
 }
 
 type StartedAs = 'working' | 'blocked'
+
+/** A commit observer: `seen()` is how the first commit since the Enter showed the agent took the prompt. */
+type Watch = { seen(): StartedAs | null; stop(): void }
 
 /** The bytes a terminal's own paste would send: line breaks as CR, ESC defused so the text cannot close the frame. */
 export function bracketedPaste(text: string): string {
@@ -87,18 +91,25 @@ export class Sender {
     const pasteEnter = plan.enterWithPaste && !deliverEnter
     const withEnter = deliverEnter || pasteEnter
     let enterAt = this.host.now()
-    await this.paste(sessionId, agent, text, known, deliverEnter, pasteEnter)
+    // a delivery that carries the Enter can see the whole turn go by before it returns, so the watch starts before it
+    let watch = withEnter ? this.watch(sessionId, enterAt) : null
+    try {
+      await this.paste(sessionId, agent, text, known, deliverEnter, pasteEnter)
 
-    if (!withEnter) {
-      await Bun.sleep(plan.delayMs)
-      const second = await this.look(sessionId)
-      if (second.result.state === 'exited') throw this.fail('session-exited', `session ${sessionId} exited before the text was submitted`)
-      if (second.result.state === 'blocked') throw this.fail('agent-blocked', blockedMessage(second, true))
-      enterAt = this.host.now()
-      this.write(sessionId, '\r')
+      if (!withEnter) {
+        await Bun.sleep(plan.delayMs)
+        const second = await this.look(sessionId)
+        if (second.result.state === 'exited') throw this.fail('session-exited', `session ${sessionId} exited before the text was submitted`)
+        if (second.result.state === 'blocked') throw this.fail('agent-blocked', blockedMessage(second, true))
+        enterAt = this.host.now()
+        watch = this.watch(sessionId, enterAt)
+        this.write(sessionId, '\r')
+      }
+      if (wasWorking) return await this.settle(sessionId, enterAt, 'working')
+      return await this.confirm(sessionId, watch!, enterAt, startTimeoutMs, plan.retryMs)
+    } finally {
+      watch?.stop()
     }
-    if (wasWorking) return this.settle(sessionId, enterAt, 'working')
-    return this.confirm(sessionId, enterAt, startTimeoutMs, plan.retryMs)
   }
 
   private fail(reason: string, message: string): Error {
@@ -143,6 +154,15 @@ export class Sender {
     if (outcome.delivery === 'not-delivered') throw this.fail('session-exited', `session ${sessionId} ended before the text could be typed`)
   }
 
+  /** Reads every row commit of the session from now on, since one can come and go between two looks. */
+  private watch(sessionId: string, enterAt: number): Watch {
+    let seen: StartedAs | null = null
+    const stop = this.host.onCommit(sessionId, () => {
+      seen ??= this.startedByRow(sessionId, enterAt)
+    })
+    return { seen: () => seen, stop }
+  }
+
   /** How a committed row shows the agent took the prompt written at `enterAt`, if it does. */
   private startedByRow(sessionId: string, enterAt: number): StartedAs | null {
     const row = this.host.row(sessionId)
@@ -163,40 +183,31 @@ export class Sender {
    * session still is not blocked. Settles one poll after the start, so a turn that ends within
    * it is reported as the idle it reached.
    */
-  private async confirm(sessionId: string, enterAt: number, startTimeoutMs: number, retryMs: number | null): Promise<SendResult> {
+  private async confirm(sessionId: string, watch: Watch, enterAt: number, startTimeoutMs: number, retryMs: number | null): Promise<SendResult> {
     const poll = OBSERVER_POLL_MS * this.host.scale
     const deadline = enterAt + startTimeoutMs
     const retryAt = retryMs !== null && enterAt + retryMs < deadline ? enterAt + retryMs : null
     let retried = false
-    // a commit can come and go between two looks, so each one is read as it lands
-    let seen: StartedAs | null = null
-    const stop = this.host.onCommit(sessionId, () => {
-      seen ??= this.startedByRow(sessionId, enterAt)
-    })
-    try {
-      for (;;) {
-        const found = await this.host.inspect(sessionId)
-        if (found.result.state === 'exited') throw this.fail('session-exited', `session ${sessionId} exited after the text was typed`)
-        const started =
-          seen ?? this.startedByRow(sessionId, enterAt) ?? this.startedByScreen(found) ?? (found.result.state === 'blocked' ? 'blocked' : null)
-        if (started) {
-          await Bun.sleep(poll)
-          return await this.settle(sessionId, enterAt, started)
-        }
-        const now = this.host.now()
-        if (retryAt !== null && !retried && now >= retryAt) {
-          retried = true
-          this.write(sessionId, '\r')
-          continue
-        }
-        if (now >= deadline) {
-          throw this.fail('prompt-stalled', `the text was typed and submitted, but the agent did not start within ${startTimeoutMs} ms; it may still pick it up`)
-        }
-        const next = retryAt !== null && !retried ? Math.min(retryAt, deadline) : deadline
-        await this.host.nextCommit(sessionId, Math.max(1, Math.min(poll, next - now)))
+    for (;;) {
+      const found = await this.host.inspect(sessionId, deadline)
+      if (found.result.state === 'exited') throw this.fail('session-exited', `session ${sessionId} exited after the text was typed`)
+      const started =
+        watch.seen() ?? this.startedByRow(sessionId, enterAt) ?? this.startedByScreen(found) ?? (found.result.state === 'blocked' ? 'blocked' : null)
+      if (started) {
+        await Bun.sleep(poll)
+        return await this.settle(sessionId, enterAt, started)
       }
-    } finally {
-      stop()
+      const now = this.host.now()
+      if (retryAt !== null && !retried && now >= retryAt) {
+        retried = true
+        this.write(sessionId, '\r')
+        continue
+      }
+      if (now >= deadline) {
+        throw this.fail('prompt-stalled', `the text was typed and submitted, but the agent did not start within ${startTimeoutMs} ms; it may still pick it up`)
+      }
+      const next = retryAt !== null && !retried ? Math.min(retryAt, deadline) : deadline
+      await this.host.nextCommit(sessionId, Math.max(1, Math.min(poll, next - now)))
     }
   }
 

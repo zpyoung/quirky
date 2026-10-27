@@ -256,6 +256,22 @@ describe('SC-29: a hookless agent follows its screen rules', () => {
   })
 })
 
+describe('a rule that needs quiet does not stretch a wait past its timeout', () => {
+  test('a 300 ms wait on a rule needing 1000 ms of quiet comes back pending in about 300 ms', async () => {
+    scaled('1')
+    rig = await Rig.start({ sessions: [{ agent: 'cline' }], builtinRules: { cline: clineRules } })
+    rig.show(['', 'type a message'])
+    rig.output('a')
+
+    const started = Date.now()
+    const reached = await rig.wait('s1', { until: ['idle'], timeoutMs: 300 })
+
+    expect(Date.now() - started).toBeLessThan(700)
+    expect(reached.status).toBe('pending')
+    expect(reached.state).toBe('unknown')
+  })
+})
+
 describe('freshness without a commit', () => {
   test('a row that goes stale while waited on ends a wait for unknown', async () => {
     scaled('0.1')
