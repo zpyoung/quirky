@@ -132,7 +132,8 @@ type ToastOptions = { kind?: 'info'|'success'|'warning'|'error'; key?: string; p
 UiToastState = { key: string|null; kind; title; body; detail: string|null; persistent: boolean;
   actions: { label: string; command: string; args?: unknown }[] }
 ```
-- Invariants: an existing toast with the same `key` is replaced in place; a non-persistent toast
+- Invariants: an existing toast with the same `key` is replaced in place, without running the
+  replaced toast's `onDismiss`; a non-persistent toast
   still auto-dismisses at 6 s; `onDismiss` runs exactly once per toast, on the button, the timer or
   `ui.toast.dismiss`, never after an action already dismissed it.
 - Errors: an action whose command fails shows the shell's error toast and keeps the original.
@@ -151,7 +152,10 @@ SCHEMA (manifest `contributes['menu-item']` entry):
 
 CONTRACT: `quirky.session/setBadge { session: string; key: string; badge: SessionBadge | null } -> { session: Session }`
 where `SessionBadge = { label: string; tooltip?: string; command?: string; args?: unknown }`.
-- The stored key is `<caller plugin id>/<key>`, so plugins can't overwrite each other. `null`
+- The stored key is `<caller plugin id>/<key>`, so plugins can't overwrite each other. Handoff
+  uses one key per lineage record (`lineage:<id>`) on each end, so a session in several handoffs
+  carries several badges; each badge's command is `command:quirky.handoff/jump` with
+  `{session, lineage}`. `null`
   removes. Unknown session: not-found error. Emits `quirky.session/changed`.
 
 ### T1: newTab
@@ -177,18 +181,24 @@ SCHEMA:
 | Method | Params | Result | Errors (reason) |
 |---|---|---|---|
 | `prepare` | `{source}` | `{ source: SourceInfo, candidates: Candidate[], canCreateWorktree, agents: {state:'ready'|'failed', list:{id,label}[]}, controls: Controls (seeded: draft, prefs, source), draft: Draft|null, templates: Template[] }` | `no-context`, not-found |
-| `preview` | `{source, controls, recapture?: boolean}` | `Preview` | `no-context`, `invalid-target` |
+| `preview` | `{source, controls, recapture?: boolean, body?: string}` | `Preview` | `no-context`, `invalid-target` |
 | `probe` | `{source, target?}` | `{verdict:'usable'|'unverifiable'|'unreachable'|'none', path:string|null, reason:string|null, candidate:'reported'|'session-id'|'history'|'project-scan'|null}` | |
 | `start` | `{source, controls, body?: string, shown?: string, wait?: boolean}` | `{ child: {session, tab, worktreeId}, lineageId: string|null, worktreeCreated: string|null, delivery: Outcome|'pending' }` | `no-context`, `source-changed` (data `{preview}`), `agent-unavailable`, `launch-failed`, `worktree-create-failed` (data `{message}`), `invalid-target` |
 | `resend` | `{session}` | `{delivery: Outcome}` | `no-brief` |
 | `discard` | `{session}` | `{discarded: boolean}` | |
 | `lineage` | `{session?}` | `{records: LineageRecord[]}` | |
-| `jump` | `{session}` | `{focused: {session, pane}}` | `no-live-pane`, `worktree-removed`, `no-lineage` |
+| `jump` | `{session, lineage?: string}` | `{focused: {session, pane}, lineageId}` | `no-live-pane`, `worktree-removed`, `no-lineage` |
 | `templates` | `{}` | `{templates: Template[], custom: boolean, limit: 24}` | |
 | `templateMutate` | `{op:'add'|'update'|'remove'|'reset', template?: {id?, name, body}, id?: string}` | `{templates, custom, warnings: ('duplicate-name')[]}` | `limit`, `invalid` |
 | `draft` | `{source, draft: Draft|null}` | `{ok:true}` | |
 
-- `body` set means detached: sent verbatim. `shown` set (attached): recompose with a fresh capture;
+- `preview` with `body` (a detached preview) skips composition and analyzes `body`: `brief` is
+  `body`, and `characters`, `tokens` and `secrets` describe it; warnings still come from the
+  controls and probe. The window calls it on every edit (debounced) so markers and cost follow.
+- A failure after `create` succeeded (agent check, launch) carries `data.worktreeCreated: {id, name, path}`
+  on its error; the window sets the target to that worktree and turns create mode off.
+- `jump` without `lineage` uses the newest record naming `session` on either side.
+- `start` `body` set means detached: sent verbatim. `shown` set (attached): recompose with a fresh capture;
   if the composed text differs from `shown`, fail `source-changed` with the fresh `Preview`. Neither
   set: compose and send (CLI default).
 - `Preview = { brief, notice, characters, tokens, warnings: {code, message}[], secrets: {rule, start, end, excerpt}[], probe, repoState: 'ok'|'failed'|'off'|'none', busy: boolean, live: boolean, contextAvailable: boolean }`.
@@ -214,7 +224,9 @@ SCHEMA:
 - Anything else → `unobservable`.
 - Emit `quirky.handoff/delivery {child, lineageId, outcome}` and a notify event carrying the K1 toast
   (key `handoff:<child>`; `retry-failed` and `unobservable` persistent with the "Resend brief" action
-  `command:quirky.handoff/resend-confirm {session}` and `onDismiss` → `command:quirky.handoff/discard`).
+  `command:quirky.handoff/resend-confirm {session}` with `keepOpen: true`, and `onDismiss` →
+  `command:quirky.handoff/discard`). A successful resend emits the "The handoff brief was sent."
+  toast with the same key, which replaces the persistent one without running its `onDismiss`.
 - `resend`: one in-flight promise per child; success deletes the retained brief and returns
   `delivered`. The retained brief is dropped on `discard` and on `quirky.session/removed`.
 
@@ -270,7 +282,7 @@ remaining C0 controls other than `\n` and `\t`.
   commands `template-add`, `template-edit`, `template-remove`, `templates-reset`.
 - The dialog recomposes with `preview` 150 ms after the last control change, dropping answers older
   than the latest request. Busy state follows `quirky.agent-status/changed` for the source.
-- `resend-confirm` uses `context.confirm({title: 'The brief may already have arrived. Sending again can create a duplicate turn.', confirmLabel: 'Send again'})` then `quirky.handoff/resend`.
+- `resend-confirm` on "Cancel" does nothing (the toast stays); otherwise it uses `context.confirm({title: 'The brief may already have arrived. Sending again can create a duplicate turn.', confirmLabel: 'Send again'})` then `quirky.handoff/resend`.
 
 ### H3: CLI group `handoff`
 

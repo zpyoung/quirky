@@ -506,5 +506,25 @@
 - **Confidence:** high
 - **Source:** assumed — autonomous
 
+## D51: Spec review: fix all four Codex findings
+- **Question:** what to do with the adversarial review of both specs (LOOP.md step 4)
+- **Options:** fix each confirmed finding; record why not
+- **Chose:** one `quirk:adversarial-review` run over `fa7e487..057438f` restricted to the spec directory with `--diff-file`, profile spec-design, depth deep, reviewer codex gpt-6.1-sol (independence full), criteria = roadmap "What the order rests on" and "When a milestone is done", LOOP.md steps 4 and 6, BRIEF.md's dropped list and handoff.md verbatim. Gate NEEDS_FIXES with 1 HIGH and 3 MEDIUM, 1 suppressed, none contested. Fixed: (SR1) a detached preview had no daemon call to analyze edited text, so `preview` takes `body` and returns secrets and cost for it; (SR2) a start failing after the worktree was created had no contract, so the error carries `worktreeCreated` and the dialog selects it with create mode off; (SR3) cancelling the resend confirmation could dismiss the persistent toast, so the action keeps it open and a successful resend replaces it by key; (SR4) badges and jumps were undefined for a session in several handoffs, so badges are keyed per lineage record and `jump` takes an optional lineage. The pre-pass could not run on a range (spec-design checks single files); a single-file pre-pass over logic.md reported only planned paths, example commands and secret-rule fragments, plus headings the writing-specs rubric doesn't require, rejected as m1-notifications D46 did.
+- **Why:** LOOP.md: fix every confirmed finding or record why not
+- **Evidence:** review bundle in the session scratchpad (sr1/SR-gate.json, sr1/SR-manifest.json); logic.md amendments
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** locked by docs/loop/LOOP.md
+
+## D52: Build pairing is claude-task implementers with a codex reviewer
+- **Question:** subagent-driven-development preflight backend pairing
+- **Options:** claude-task + codex; claude-task + gemini; pi-codex + opus
+- **Chose:** claude-task + codex (Sonnet implementers through Agent, reviews through pi-watch codex gpt-6.1-sol); codex and gemini both passed `pi-watch --check`. FULL_SUITE_CMD is `bun run test && bun test scripts && bun run typecheck`; the tree was clean on build/m3-handoff.
+- **Why:** LOOP.md step 5 names this pair for a Claude Code lane
+- **Evidence:** docs/loop/LOOP.md step 5
+- **Reversibility:** easy
+- **Confidence:** high
+- **Source:** locked by docs/loop/LOOP.md
+
 ## Progress
-Brainstorming and decisions D1–D50 done. Next: write logic.md and tech.md under docs/quirk/specs/2026-10-27-m3-handoff/, run the Codex adversarial review of both, fix, commit, then build.
+Specs written and reviewed (D51), pairing recorded (D52). Next: SDD wave 1 (K toasts, M menu-item kind, B session badges, T newTab, C pure core, P probe), then wave 2 (H service, manifest, CLI), checkpoint, wave 3 (W window, E e2e), catch up with build/roadmap, Final Round 1, UI pass, land.

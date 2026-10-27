@@ -4,7 +4,11 @@
 
 **Status:** Approved (headless build loop; decisions in [m3-handoff.md](../../../loop/decisions/m3-handoff.md)). Tech spec: requested.
 
-**Amendments:** none yet.
+**Amendments:**
+- 2026-10-27, Codex spec review: a detached preview's secret markers and cost follow the edited
+  text (SC-40); a start that fails after creating its worktree leaves that worktree selected and
+  create mode off (SC-9); cancelling the resend confirmation keeps the toast (SC-50); a session in
+  several handoffs shows one badge per handoff, each jumping to its own other end (SC-53, SC-54).
 
 ## Conceptual model
 
@@ -186,7 +190,9 @@ source's worktree in repo R.
    - **Given** a worktree named `taken` already exists in R
    - **When** a handoff starts with a new worktree named `taken`, note "keep me"
    - **Then** Start fails with the creation error in the strip; ✗ no session is launched; the note,
-     toggles and agent are unchanged
+     toggles and agent are unchanged; and when creation succeeds but a later step fails (the agent
+     was disabled meanwhile), the new worktree stays, is selected as the target, and "Create a new
+     worktree" is off, so a retry doesn't create it twice
 
 10. **SC-10: the agent defaults follow the draft, last used, source, default agent order** (API)
     - **Given** installed and enabled agents claude, codex, gemini; S runs claude; the default agent
@@ -421,7 +427,9 @@ source's worktree in repo R.
     - **Given** SC-39's note
     - **When** the dialog shows the preview
     - **Then** both ranges are marked red; hovering one shows "Potential secret: AKIA…"; the line under
-      the editor reads "2 potential secret markers are highlighted in the preview."
+      the editor reads "2 potential secret markers are highlighted in the preview."; after the person
+      deletes one secret from the edited (detached) text, one marker remains and the readout counts
+      the edited text
 
 41. **SC-41: the cost readout weighs prose, code and diffs** (API)
     - **Given** an editable text whose prose (fence marker lines included) is 650 characters, whose
@@ -504,7 +512,8 @@ source's worktree in repo R.
     - **Then** the persistent toast reads "Brief delivery could not be confirmed." with "Resend is
       manual because the target Agent does not expose delivery evidence."; "Resend brief" opens "The
       brief may already have arrived. Sending again can create a duplicate turn." with "Send again"
-      and "Cancel"; "Send again" delivers the brief to C
+      and "Cancel"; "Cancel" leaves the persistent toast in place; "Send again" delivers the brief to C
+      and the toast is replaced by "The handoff brief was sent."
 
 51. **SC-51: a retained brief goes away with its toast or its session** (API)
     - **Given** an unconfirmed handoff to C
@@ -524,13 +533,16 @@ source's worktree in repo R.
 53. **SC-53: both tabs show their badge** (UI)
     - **Given** the handoff of SC-52
     - **When** the person looks at the tab strip
-    - **Then** S's tab shows "Handed off · reviews" and C's tab shows "From handoff · reviews"
+    - **Then** S's tab shows "Handed off · reviews" and C's tab shows "From handoff · reviews"; if S is
+      then handed off again to C2 (continues), S's tab shows both "Handed off · reviews" and "Handed
+      off · continues", one badge per handoff
 
 54. **SC-54: the badge jumps to the other end** (UI)
     - **Given** the handoff of SC-52, with W2's tab showing
     - **When** the person clicks S's badge, then C's badge
-    - **Then** the first click focuses C's pane; the second focuses S's pane; `quirky handoff jump`
-      does the same from the CLI (D41)
+    - **Then** the first click focuses C's pane; the second focuses S's pane; each badge of a source
+      with two handoffs focuses its own child; `quirky handoff jump S` focuses the newest handoff's
+      other end and `--lineage <id>` picks one (D41)
 
 55. **SC-55: a jump with nothing to jump to says why** (API)
     - **Given** the handoff of SC-52
