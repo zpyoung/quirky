@@ -296,9 +296,33 @@ export class LedgerEngine {
         if (candidates.length !== 1) continue
         const candidate = candidates[0]!
         const owner = { tier: 'project', id: repo.id }
-        const before = { owner: null, formerOwner: asFormerOwner(candidate), name: candidate.name }
-        const after = { owner, formerOwner: asFormerOwner(candidate), name: repo.displayName || repo.name }
-        this.updateMetadata(candidate, 'reattached', before, after, unknownActor(), { owner_id: repo.id, name: repo.displayName || repo.name, owner_path: repo.path, repo_id: repo.id }, now)
+        const former = asFormerOwner(candidate)
+        const priorEquivalences = parseJson<string[][]>(candidate.source_equivalences, 'source equivalences')
+        const sourceId = former?.tier === 'project' ? former.id : candidate.repo_id
+        const equivalences = sourceId && sourceId !== repo.id
+          ? this.addEquivalence(priorEquivalences, sourceId, repo.id)
+          : priorEquivalences
+        if (this.hasCanonicalAnchorCollision(candidate.ledger_id, equivalences)) continue
+        const before = {
+          owner: null,
+          formerOwner: former,
+          identityKey: candidate.identity_key,
+          sourceEquivalences: priorEquivalences
+        }
+        const after = {
+          owner,
+          formerOwner: former,
+          identityKey: identity,
+          sourceEquivalences: equivalences
+        }
+        this.updateMetadata(candidate, 'reattached', before, after, unknownActor(), {
+          owner_id: repo.id,
+          name: repo.displayName || repo.name,
+          owner_path: repo.path,
+          repo_id: repo.id,
+          identity_key: identity,
+          source_equivalences: stringify(equivalences)
+        }, now)
         any = true
       }
       return any

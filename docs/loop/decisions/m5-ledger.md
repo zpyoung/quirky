@@ -264,5 +264,27 @@
 - **Revisit if:** new syntactic import forms are introduced
 - **Source:** assumed — autonomous
 
+## D25: Preserve imported source identity through automatic owner recovery
+- **Question:** whether unchanged legacy sources remain one observation after removing and re-adding their project
+- **Options:** accept duplicate entries under regenerated repo IDs; carry the existing project-equivalence semantics through automatic recovery
+- **Chose:** reuse source equivalence and canonical-anchor collision guards in the same transaction as automatic project reattachment, with an API/CLI regression for both live imports and tombstones
+- **Why:** a real isolated API smoke retained the same ledger UUID but created bug-2 beside bug-1 when the unchanged BUGS.md was imported after re-add. Automatic recovery updated the owner repo ID without recording source equivalence; canonical import matching uses that equivalence. The published idempotency/retention contract applies across this ordinary owner lifecycle, not only explicit attachment.
+- **Evidence:** env NODE_ENV=test bun /tmp/quirky-ledger-recovery-import-smoke.ts exited1 with SOURCE_IDENTITY_REPLAY_FAIL, same ledger 91b6c03d-2bbc-4b2a-a6c5-833634fcc58d and entry ids bug-1/bug-2; plugins/quirky.ledger/src/daemon/engine.ts performReconciliation/canonicalAnchorMatches
+- **Reversibility:** medium
+- **Confidence:** high
+- **Revisit if:** source equivalence would collapse distinct canonical anchors
+- **Source:** locked by external research/orca-features/ledger.md
+
+## D26: Diagnose the shell guardian failure without inventing a shell fix
+- **Question:** whether the remaining remote shell-path failure demonstrates a ledger or shell-wrapper regression
+- **Options:** suppress the test or extend its deadlines; add temporary boundary tracing and require a normal final gate
+- **Chose:** inspect test/guardian lifecycle, run narrowed zsh integration and the complete shell-path file with temporary bootstrap/snapshot tracing, then remove the tracing scaffold. Both instrumented runs passed remotely with ok:true/flaky:[]; no shell, guardian, timeout or protected-code change is justified by that evidence.
+- **Why:** the earlier complete file failed during hooks, followed by empty-stderr guardian-start errors. The read-only scout could not establish a product root cause. Instrumented success is additional evidence, not proof of the cause or a substitute for the next uninstrumented affected gate.
+- **Evidence:** /tmp/quirky-m5-ledger-final-c18bf29/newhost-check.{stdout,stderr}.log; LedgerShellGateScout; narrowed remote diagnostic exit0 in 11.02s; full-file diagnostic exit0 in 16.64s
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** the normal gate still fails, in which case preserve diagnostics and continue root investigation
+- **Source:** assumed — autonomous
+
 ## Progress
-Operator queue repair and integration catch-up are complete. Meaningful new-host affected coverage ran 209 files (207 passed, two repeated failures) and two local macOS-only files passed. Those owned failures are corrected under D24; targeted fence/UI/type checks pass. Prior UI smoke evidence remains D18–D19 because no product UI behavior changed. Next: commit the gate fixes, mint a fresh resolved artifact for the new feature HEAD with the same pinned integration baseline, rerun the complete affected gate on the new host, then fan the mandatory deep Gemini C/S/X final review and apply one accepted-finding fix batch. Rerun checks/build and land this item only through queue.ts. Discovery has not begun and no current complete gate or final-review clearance is claimed.
+The D25 recovery fix passes its original failing-before API smoke: same ledger retained and only bug-1 after replay. Import/CLI regression suite now passes 12 tests, ledger API 25, and typecheck exits0. Temporary shell guardian tracing passed both narrowed and complete remote shell-path runs without a shell/guardian code change; scaffold removed, normal gate remains required. Next: commit recovery/evidence, catch up integration and read new decisions, freeze a new review artifact, run the uninstrumented affected gate on the new host, then the required one Gemini C/S/X discovery round and one accepted-finding fix batch. No final review or complete gate clearance yet.

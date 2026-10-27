@@ -13,7 +13,16 @@ type JsonEntry = {
   content: Record<string, unknown>
   history?: { revision: number; actor?: Record<string, unknown> }[]
 }
-type JsonSummary = { ledgerId: string; tier: string; revision: number; entryCount: number; nextSequence: number; owner?: unknown }
+type JsonSummary = {
+  ledgerId: string
+  tier: string
+  revision: number
+  entryCount: number
+  nextSequence: number
+  owner?: unknown
+  sourceEquivalences?: string[][]
+  metadataHistory?: { action?: string; changedFields?: string[] }[]
+}
 type JsonError = { code: string; message?: string; data?: Record<string, unknown> }
 type JsonPayload = {
   schemaVersion?: number
@@ -390,6 +399,92 @@ describe('Project ledger CLI: legacy import formats and replay safety', () => {
     expect(sourcePathMatches(deleted[0]!, 'BUGS.md')).toBe(true)
     expect((jsonOutput(await successfulCli(harness, ['list', '--json'], { cwd: root })).entries)).toEqual([])
     expect(readFileSync(join(root, 'BUGS.md'))).toEqual(newerBytes)
+  })
+
+  test('automatic same-codebase recovery preserves import identity and deletion tombstones', async () => {
+    const harness = await start()
+    const original = harness.project
+    const source = `## BUG-12: Active after recovery
+File: src/main.ts:7
+Description: Keep this imported observation.
+Severity: high
+
+## BUG-13: Deleted before recovery
+File: src/main.ts:8
+Description: Keep this source identity tombstoned.
+Severity: medium
+`
+    writeSource(original.path, 'BUGS.md', source)
+
+    const imported = jsonOutput(await successfulCli(harness, ['import', '--json'], { cwd: original.path }))
+    expect(imported.importResult).toMatchObject({
+      created: ['bug-1', 'bug-2'],
+      updated: [],
+      alreadyPresent: [],
+      skipped: []
+    })
+    const originalLedger = imported.ledger!
+    const originalActive = jsonOutput(await successfulCli(harness, ['show', 'bug-1', '--json'], { cwd: original.path })).entry!
+    expect(originalActive).toMatchObject({
+      id: 'bug-1',
+      sequence: 1,
+      revision: 1,
+      history: [{ revision: 1, actor: { kind: 'import' } }]
+    })
+    await successfulCli(harness, [
+      'delete-entries', '--workspace', original.workspace.id,
+      '--selections', JSON.stringify([{ id: 'bug-2', revision: 1 }]), '--yes', '--json'
+    ], { cwd: original.path })
+
+    await harness.client.callAny('quirky.repo/remove', { repo: original.repo.id })
+    const replacement = await harness.addProject('alpha-readded', {
+      files: { 'src/main.ts': 'export const answer = 42\n', 'BUGS.md': source },
+      origin: 'https://github.com/acme/alpha.git'
+    })
+    expect(replacement.repo.id).not.toBe(original.repo.id)
+
+    const recoveredRun = await ledgerCli(harness, ['import', '--json'], { cwd: replacement.path })
+    expect(recoveredRun.code).toBe(1)
+    const recovered = jsonOutput(recoveredRun)
+    expect(recovered.importResult?.created).toEqual([])
+    expect([...(recovered.importResult?.updated ?? []), ...(recovered.importResult?.alreadyPresent ?? [])]).toEqual(['bug-1'])
+    expect(recovered.importResult?.skipped).toEqual([expect.objectContaining({ reason: 'deleted' })])
+    expect(recovered.ledger).toMatchObject({
+      ledgerId: originalLedger.ledgerId,
+      entryCount: 1,
+      nextSequence: 3
+    })
+    expect(recovered.ledger?.sourceEquivalences).toEqual(
+      expect.arrayContaining([expect.arrayContaining([original.repo.id, replacement.repo.id])])
+    )
+    expect(recovered.ledger?.metadataHistory).toEqual(expect.arrayContaining([
+      expect.objectContaining({ action: 'detached' }),
+      expect.objectContaining({
+        action: 'reattached',
+        changedFields: expect.arrayContaining(['owner', 'sourceEquivalences'])
+      })
+    ]))
+
+    const entries = jsonOutput(await successfulCli(harness, ['list', '--json'], { cwd: replacement.path }))
+    expect(entries.entries?.map(({ id, sequence }) => ({ id, sequence }))).toEqual([{ id: 'bug-1', sequence: 1 }])
+    const recoveredActive = jsonOutput(await successfulCli(harness, ['show', 'bug-1', '--json'], { cwd: replacement.path })).entry!
+    expect(recoveredActive.history).toEqual(expect.arrayContaining(originalActive.history ?? []))
+
+    const repeatedRun = await ledgerCli(harness, ['import', '--json'], { cwd: replacement.path })
+    expect(repeatedRun.code).toBe(1)
+    const repeated = jsonOutput(repeatedRun)
+    expect(repeated.importResult).toMatchObject({
+      created: [],
+      updated: [],
+      alreadyPresent: ['bug-1'],
+      skipped: [expect.objectContaining({ reason: 'deleted' })]
+    })
+    expect(repeated.ledger).toMatchObject({
+      ledgerId: originalLedger.ledgerId,
+      entryCount: 1,
+      nextSequence: 3
+    })
+    expect(jsonOutput(await successfulCli(harness, ['list', '--json'], { cwd: replacement.path })).entries?.map((entry) => entry.id)).toEqual(['bug-1'])
   })
 
   test('equivalent project attachment reuses a unique imported source anchor without creating a duplicate', async () => {
