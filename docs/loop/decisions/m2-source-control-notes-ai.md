@@ -496,4 +496,4 @@
 - **Source:** assumed — autonomous
 
 ## Progress
-Built, reviewed (Final Round 1, D43) and fixed (D44); gate green. Next: step 6 UI pass (scratchpad uiv/setup.sh worlds N1, N2, A1, A2 with fake agents), then land.
+Built, reviewed (D43), fixed (D44), gate green, app built. UI pass running: worlds N1, N2, A1, A2 from the scratchpad uiv/setup.sh with fake agents. If this stops: rebuild the worlds and rerun the pass, record it as D46, tear the worlds down, then land.
