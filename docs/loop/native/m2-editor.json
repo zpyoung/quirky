@@ -5,32 +5,50 @@
     {
       "id": "SC-9-native",
       "title": "On a disposable worktree, every Finder file drop into the editor/explorer imports a collision-safe copy, including a source already inside the worktree; explorer row drag into a terminal inserts shell-escaped paths; Copy Path/Relative Path use the system clipboard and Reveal in Finder selects the file without stealing unrelated state.",
-      "status": "pending", "lastRun": null, "report": null, "summary": null
+      "status": "fail",
+      "lastRun": "2026-10-28",
+      "report": "/Users/zpyoung/orca/workspaces/quirky/native-qa/.quirk/using-apps-like-a-user/runs/20261028T061952-27c6/report.md",
+      "summary": "Explorer Copy Path copies the worktree root joined to the absolute path, and Copy Relative Path copies the absolute path; Finder drops weren't exercised."
     },
     {
       "id": "SC-8-trash-native",
       "title": "Delete a file created by this run from Explorer: it moves to macOS Trash, undo restores its exact text, redo removes it again; deleting a dirty file with failed guarded save is refused and preserves disk/draft.",
-      "status": "pending", "lastRun": null, "report": null, "summary": null
+      "status": "blocked",
+      "lastRun": "2026-10-28",
+      "report": "/Users/zpyoung/orca/workspaces/quirky/native-qa/.quirk/using-apps-like-a-user/runs/20261028T053803-05a3/report.md",
+      "summary": "Seen working: delete to Trash, exact-text undo and redo were all OBSERVED, and deleting a dirty file with a failing guarded save was refused with disk and draft kept, but that last step was never certified (UNSETTLED, then DRIFT)."
     },
     {
       "id": "SC-14-pdf-native",
       "title": "Export Markdown from rich and preview modes through the native save dialog: initial name is document.pdf, folder selection works, replacement asks before overwriting, Cancel writes nothing, Save produces a valid rendered PDF and reports the destination.",
-      "status": "pending", "lastRun": null, "report": null, "summary": null
+      "status": "blocked",
+      "lastRun": "2026-10-28",
+      "report": "/Users/zpyoung/orca/workspaces/quirky/native-qa/.quirk/using-apps-like-a-user/runs/20261028T054707-0ce8/report.md",
+      "summary": "Export PDF opens the macOS save panel (suggested README.pdf, not document.pdf), but the harness can't see or drive the panel, so folder choice, replace, Cancel and Save weren't reached."
     },
     {
       "id": "SC-17-python-native",
       "title": "Browse for a local Python interpreter using the native chooser; cancelling leaves the notebook unchanged, choosing validates it and first execution still requires Run Notebook Code trust; no package installation happens without its separate confirmation.",
-      "status": "pending", "lastRun": null, "report": null, "summary": null
+      "status": "pending",
+      "lastRun": null,
+      "report": null,
+      "summary": null
     },
     {
       "id": "SC-20-default-app-native",
       "title": "Open a disposable audio/video/image/PDF file in the macOS default application from its viewer; unsupported codec error is visible and opening does not execute notebook content or leak the daemon token.",
-      "status": "pending", "lastRun": null, "report": null, "summary": null
+      "status": "blocked",
+      "lastRun": "2026-10-28",
+      "report": "/Users/zpyoung/orca/workspaces/quirky/native-qa/.quirk/using-apps-like-a-user/runs/20261028T063026-9edf/report.md",
+      "summary": "Seen working: Open in Default App launched Music with the fixture WAV, but the effect lands outside the window; the codec-error and token checks weren't exercised."
     },
     {
       "id": "SC-21-shortcuts-native",
       "title": "With terminal then editor focus, macOS Cmd+P, Cmd+S, Cmd+W, Cmd+Shift+T, Cmd+L and Cmd+Shift+E/F/G reach exactly one declared action; Source Control does not also open editor Find; native menu/focus routing agrees with daemon UI state.",
-      "status": "pending", "lastRun": null, "report": null, "summary": null
+      "status": "blocked",
+      "lastRun": "2026-10-28",
+      "report": "/Users/zpyoung/orca/workspaces/quirky/native-qa/.quirk/using-apps-like-a-user/runs/20261028T054707-0ce8/report.md",
+      "summary": "Partly run: Cmd+Shift+G opened Source Control once without editor Find and Cmd+P opened Go to File; Cmd+Shift+F opened an Explorer Names panel, not contents search; Cmd+S/W/Shift+T/L and terminal focus weren't reached."
     }
   ]
 }
