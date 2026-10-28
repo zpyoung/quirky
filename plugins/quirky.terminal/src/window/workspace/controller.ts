@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import { RpcErrorCode, type QuirkyEvent, type Session, type UiPluginContext } from '@quirky/protocol'
+import { RpcErrorCode, type QuirkyEvent, type Session, type UiMenuItemEntry, type UiPluginContext } from '@quirky/protocol'
 import { displayTitle } from '../../layout/titles'
 import { findGroup, groupsInOrder, paneLeaves, setGroupRatio, setPaneRatio } from '../../layout/tree'
 import type { DropZone } from '../../layout/tree'
@@ -82,6 +82,7 @@ export type ControllerState = {
 }
 type DockHostState = { mounted: boolean; focused: boolean; composerFocused: boolean }
 
+export type MenuContributionItem = MenuItem & Pick<UiMenuItemEntry, 'after'>
 /** The slots and switches a host of the workspace can set. */
 export type WorkspaceOptions = {
   /** `floating` mounts the floating workspace: no tab is created for it, and closing its last tab minimizes the panel. */
@@ -92,8 +93,8 @@ export type WorkspaceOptions = {
   paneMenuExtras?: (pane: PaneLeaf) => MenuItem[]
   /** Rows other plugins contribute to the pane menu, shown right after the Quick Commands row. */
   paneMenuContributions?: (pane: PaneLeaf, session: Session | undefined) => MenuItem[]
-  /** Rows other plugins contribute to the + menu for its selected group and workspace. */
-  plusMenuContributions?: (group: Group, workspace: string) => MenuItem[]
+  /** After-placed tab rows are searchable; unplaced rows are static, before Agent settings. */
+  tabMenuContributions?: (group: Group, workspace: string) => MenuContributionItem[]
   /** The public menu contribution list changes, keeping an open + menu current. */
   subscribeMenuContributions?: (listener: () => void) => () => void
   /** Menus beyond `tab`, `pane`, `plus` and `actions`, opened by `openMenu(kind, target)`. */
@@ -1164,11 +1165,7 @@ export class WorkspaceController {
     const group = groupId && this.ws ? findGroup(this.ws.root, groupId) : null
     const target = group?.id
     const needle = query.trim().toLowerCase()
-    const contributed = group
-      ? (this.options.plusMenuContributions?.(group, this.workspaceId) ?? []).filter(
-          (item) => needle === '' || item.label.toLowerCase().includes(needle)
-        )
-      : []
+    const contributed = group ? (this.options.tabMenuContributions?.(group, this.workspaceId) ?? []) : []
     const entries = filterEntries(this.state.agents, query)
     const rows: MenuItem[] = entries.map((entry) => ({
       label: entry.label,
@@ -1176,7 +1173,12 @@ export class WorkspaceController {
       onSelect: () => this.chooseEntry(entry, target)
     }))
     const footer = entries.findIndex((entry) => entry.kind === 'manage')
-    rows.splice(footer < 0 ? rows.length : footer, 0, ...contributed)
+    const visibleContributions = contributed.filter(
+      (item) =>
+        (needle === '' || item.after === 'quick-commands') &&
+        (needle === '' || item.label.toLowerCase().includes(needle))
+    )
+    rows.splice(footer < 0 ? rows.length : footer, 0, ...visibleContributions)
     if (needle !== '' && this.ws) {
       for (const candidate of groupsInOrder(this.ws.root)) {
         for (const tab of candidate.tabs) {

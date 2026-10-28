@@ -190,6 +190,7 @@ function fieldConfig(project, fieldId) {
 }
 function itemGraphNode(item) {
   const kind = item.kind === 'pullRequest' ? 'PullRequest' : item.kind === 'draft' ? 'DraftIssue' : 'Issue'
+  const issue = issues[(item.repository ?? '') + '/' + item.number]
   const content = {
     __typename: kind,
     ...(kind === 'DraftIssue' ? {} : { number: Number(item.number), [kind === 'PullRequest' ? 'pullRequestState' : 'issueState']: String(item.state ?? 'open').toUpperCase(), isDraft: item.isDraft === true }),
@@ -197,7 +198,7 @@ function itemGraphNode(item) {
     repository: { nameWithOwner: item.repository ?? null },
     labels: { nodes: (item.labels ?? []).map((entry) => typeof entry === 'string' ? { name: entry, color: '' } : entry) },
     assignees: { nodes: (item.assignees ?? []).map((entry) => typeof entry === 'string' ? { login: entry, name: null, avatarUrl: null } : entry) },
-    ...(kind === 'Issue' ? { stateReason: item.stateReason ?? null, issueType: item.issueType ?? null, ...(item.parent ? { parent: item.parent } : {}) } : {}),
+    ...(kind === 'Issue' ? { stateReason: issue?.stateReason ?? item.stateReason ?? null, issueType: issue?.issueType ?? item.issueType ?? null, ...(item.parent ? { parent: item.parent } : {}) } : {}),
     ...(kind === 'PullRequest' ? { headRefName: item.headRefName ?? null, baseRefName: item.baseRefName ?? null } : {})
   }
   const parent = projectViews[projectKey(item.ownerType === 'User' ? 'user' : 'organization', item.owner, item.projectNumber)]
@@ -259,7 +260,8 @@ if (query.includes('query ProjectOwner')) {
 if (query.includes('query ProjectViews')) {
   const owner = variable('owner')
   const number = Number(variable('number'))
-  const kind = ownerKindFromQuery(query)
+  const requestedKind = ownerKindFromQuery(query)
+  const kind = !getProject(requestedKind, owner, number) && query.includes('user(login:') ? 'user' : requestedKind
   const project = getProject(kind, owner, number)
   if (!project) fail('HTTP 404: Project not found')
   const views = (project.views ?? []).map((view) => ({
@@ -274,7 +276,8 @@ if (query.includes('query ProjectViews')) {
 if (query.includes('query ProjectItems')) {
   const owner = variable('owner')
   const number = Number(variable('number'))
-  const kind = ownerKindFromQuery(query)
+  const requestedKind = ownerKindFromQuery(query)
+  const kind = !getProject(requestedKind, owner, number) && query.includes('user(login:') ? 'user' : requestedKind
   const project = getProject(kind, owner, number)
   if (!project) fail('HTTP 404: Project not found')
   const items = matchingItems(owner, number).map(itemGraphNode)
@@ -332,13 +335,14 @@ if (query.includes('query ProjectItemContext')) {
   emit({ data: { project: { id: projectId, owner: { __typename: item.ownerType ?? 'Organization', login: item.owner ?? 'test-owner' } }, item: { id: itemId, project: { id: projectId }, type: item.kind === 'pullRequest' ? 'PULL_REQUEST' : item.kind === 'draft' ? 'DRAFT_ISSUE' : 'ISSUE', content: { __typename: item.kind === 'pullRequest' ? 'PullRequest' : item.kind === 'draft' ? 'DraftIssue' : 'Issue', number: item.number, url: item.url } } } })
 }
 if (query.includes('query OrganizationIssueTypes')) {
-  const owner = variable('owner')
+  const owner = variable('repoOwner')
   const repoOwner = variable('repoOwner')
   const repo = variable('repo')
   const number = Number(variable('number'))
   const issue = issues[repoOwner + '/' + repo + '/' + number]
   if (!issue) fail('HTTP 404: Issue not found')
-  emit({ data: { repository: { issue: { id: issue.nodeId ?? 'ISSUE_NODE_' + number } }, organization: { issueTypes: { nodes: issueTypes[owner] ?? [], pageInfo: { hasNextPage: false } } } } })
+  const repositoryOwner = issue.repositoryOwnerType === 'User' ? { __typename: 'User' } : { __typename: 'Organization', issueTypes: { nodes: issueTypes[owner] ?? [], pageInfo: { hasNextPage: false } } }
+  emit({ data: { repository: { issue: { id: issue.nodeId ?? 'ISSUE_NODE_' + number }, owner: repositoryOwner } } })
 }
 if (query.includes('mutation SetProjectField') || query.includes('mutation ClearProjectField')) {
   const input = variables.input ?? variables

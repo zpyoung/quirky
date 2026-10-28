@@ -75,7 +75,7 @@ export class Rig {
     readonly git: FakeGit
   ) {}
 
-  static async start(options: { awayMs?: number; cooldownMs?: number; home?: string; keepEnv?: boolean } = {}): Promise<Rig> {
+  static async start(options: { awayMs?: number; cooldownMs?: number; home?: string; keepEnv?: boolean; builtinPluginsDir?: string } = {}): Promise<Rig> {
     const git = createFakeGit()
     useTestGit(git)
     fakeRegistrations(git)
@@ -93,7 +93,7 @@ export class Rig {
 
     const h = await startHarness({
       home: options.home ?? makeTempHome('qn-'),
-      builtinPluginsDir: builtinsDir(),
+      builtinPluginsDir: options.builtinPluginsDir ?? builtinsDir(),
       ...(options.awayMs === undefined ? {} : { desktopAwayMs: options.awayMs })
     })
     const { client, events } = await h.connectWithEvents('cli')

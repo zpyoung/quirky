@@ -2160,7 +2160,7 @@
       },
       {
         "id": "generateCommitMessage",
-        "description": "Asks an AI agent for a commit message for the staged changes. The recipe's agent, template and arguments apply unless given here; the commit box is not touched. One run per worktree.",
+        "description": "Asks an AI agent for a commit message for the staged changes. The recipe's agent, template, arguments and launch options apply unless given here; the commit box is not touched. One run per worktree.",
         "params": {
           "type": "object",
           "properties": {
@@ -2179,6 +2179,9 @@
             "args": {
               "type": "string",
               "description": "Extra agent arguments for this run."
+            },
+            "launchOptions": {
+              "description": "Provider-specific catalog picks {model?, optionValues?}; null explicitly uses no picks for this run."
             },
             "requestId": {
               "type": "string",
@@ -2241,7 +2244,7 @@
       },
       {
         "id": "aiFix",
-        "description": "Opens a new agent tab in the worktree with a prompt that asks the agent to fix the failed commit or push, or to resolve the conflicts. Agent, arguments and template override the action's recipe for this launch; save stores them as that scope's recipe.",
+        "description": "Opens a new agent tab in the worktree with a prompt that asks the agent to fix the failed commit or push, or to resolve the conflicts. Agent, arguments, template and launch options override the action's recipe; save stores the choices used for this launch.",
         "params": {
           "type": "object",
           "properties": {
@@ -2264,6 +2267,9 @@
             "args": {
               "type": "string",
               "description": "Extra agent arguments, checked against the agent's allowlist."
+            },
+            "launchOptions": {
+              "description": "Provider-specific catalog picks {model?, optionValues?}; null clears picks for this launch."
             },
             "save": {
               "type": "string",
@@ -2349,51 +2355,42 @@
                   "type": "string",
                   "description": "The command template; {basePrompt} unless saved."
                 },
+                "launchOptions": {
+                  "type": "object",
+                  "properties": {
+                    "model": { "type": "string" },
+                    "optionValues": { "type": "object", "additionalProperties": true }
+                  },
+                  "description": "Effective provider-specific catalog picks; empty when none are selected."
+                },
                 "sources": {
                   "type": "object",
                   "properties": {
                     "agent": {
                       "type": "string",
-                      "enum": [
-                        "repo",
-                        "global",
-                        "default"
-                      ],
+                      "enum": ["repo", "global", "default"],
                       "description": "Where the agent comes from."
                     },
                     "args": {
                       "type": "string",
-                      "enum": [
-                        "repo",
-                        "global",
-                        "default"
-                      ],
+                      "enum": ["repo", "global", "default"],
                       "description": "Where the arguments come from."
                     },
                     "template": {
                       "type": "string",
-                      "enum": [
-                        "repo",
-                        "global",
-                        "default"
-                      ],
+                      "enum": ["repo", "global", "default"],
                       "description": "Where the template comes from."
+                    },
+                    "launchOptions": {
+                      "type": "string",
+                      "enum": ["repo", "global", "default"],
+                      "description": "Where the launch options come from."
                     }
                   },
-                  "required": [
-                    "agent",
-                    "args",
-                    "template"
-                  ]
+                  "required": ["agent", "args", "template", "launchOptions"]
                 }
               },
-              "required": [
-                "action",
-                "agent",
-                "args",
-                "template",
-                "sources"
-              ]
+              "required": ["action", "agent", "args", "template", "launchOptions", "sources"]
             }
           },
           "required": [
@@ -2439,56 +2436,47 @@
               "type": "string",
               "description": "The command template; {basePrompt} unless saved."
             },
+            "launchOptions": {
+              "type": "object",
+              "properties": {
+                "model": { "type": "string" },
+                "optionValues": { "type": "object", "additionalProperties": true }
+              },
+              "description": "Effective provider-specific catalog picks; empty when none are selected."
+            },
             "sources": {
               "type": "object",
               "properties": {
                 "agent": {
                   "type": "string",
-                  "enum": [
-                    "repo",
-                    "global",
-                    "default"
-                  ],
+                  "enum": ["repo", "global", "default"],
                   "description": "Where the agent comes from."
                 },
                 "args": {
                   "type": "string",
-                  "enum": [
-                    "repo",
-                    "global",
-                    "default"
-                  ],
+                  "enum": ["repo", "global", "default"],
                   "description": "Where the arguments come from."
                 },
                 "template": {
                   "type": "string",
-                  "enum": [
-                    "repo",
-                    "global",
-                    "default"
-                  ],
+                  "enum": ["repo", "global", "default"],
                   "description": "Where the template comes from."
+                },
+                "launchOptions": {
+                  "type": "string",
+                  "enum": ["repo", "global", "default"],
+                  "description": "Where the launch options come from."
                 }
               },
-              "required": [
-                "agent",
-                "args",
-                "template"
-              ]
+              "required": ["agent", "args", "template", "launchOptions"]
             }
           },
-          "required": [
-            "action",
-            "agent",
-            "args",
-            "template",
-            "sources"
-          ]
+          "required": ["action", "agent", "args", "template", "launchOptions", "sources"]
         }
       },
       {
         "id": "setAiRecipe",
-        "description": "Saves fields of an AI action's recipe for this repository or for all repositories, or deletes the saved recipe with reset. Fields not given are left as they are; an empty agent or template clears it.",
+        "description": "Saves fields of an AI action's recipe for this repository or for all repositories, or deletes the saved recipe with reset. Fields not given are left as they are; an empty agent or template clears it, and launchOptions null clears picks to inheritance while {} suppresses inherited picks.",
         "params": {
           "type": "object",
           "properties": {
@@ -2519,6 +2507,9 @@
             "template": {
               "type": "string",
               "description": "Command template; {basePrompt} stands for the built-in prompt."
+            },
+            "launchOptions": {
+              "description": "Provider-specific catalog picks {model?, optionValues?}; null clears this scope to inherit, while {} suppresses inherited picks."
             },
             "reset": {
               "type": "boolean",
@@ -2554,51 +2545,42 @@
                   "type": "string",
                   "description": "The command template; {basePrompt} unless saved."
                 },
+                "launchOptions": {
+                  "type": "object",
+                  "properties": {
+                    "model": { "type": "string" },
+                    "optionValues": { "type": "object", "additionalProperties": true }
+                  },
+                  "description": "Effective provider-specific catalog picks; empty when none are selected."
+                },
                 "sources": {
                   "type": "object",
                   "properties": {
                     "agent": {
                       "type": "string",
-                      "enum": [
-                        "repo",
-                        "global",
-                        "default"
-                      ],
+                      "enum": ["repo", "global", "default"],
                       "description": "Where the agent comes from."
                     },
                     "args": {
                       "type": "string",
-                      "enum": [
-                        "repo",
-                        "global",
-                        "default"
-                      ],
+                      "enum": ["repo", "global", "default"],
                       "description": "Where the arguments come from."
                     },
                     "template": {
                       "type": "string",
-                      "enum": [
-                        "repo",
-                        "global",
-                        "default"
-                      ],
+                      "enum": ["repo", "global", "default"],
                       "description": "Where the template comes from."
+                    },
+                    "launchOptions": {
+                      "type": "string",
+                      "enum": ["repo", "global", "default"],
+                      "description": "Where the launch options come from."
                     }
                   },
-                  "required": [
-                    "agent",
-                    "args",
-                    "template"
-                  ]
+                  "required": ["agent", "args", "template", "launchOptions"]
                 }
               },
-              "required": [
-                "action",
-                "agent",
-                "args",
-                "template",
-                "sources"
-              ]
+              "required": ["action", "agent", "args", "template", "launchOptions", "sources"]
             }
           },
           "required": [

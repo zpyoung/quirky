@@ -89,6 +89,7 @@ function checkMenuItem(label: string, entry: Entry, errors: string[]): void {
 
   const when = entry.when
   if (when !== undefined) {
+    if (entry.menu !== TERMINAL_PANE_MENU) errors.push(`${label}: when is only supported for ${TERMINAL_PANE_MENU}`)
     if (!isRecord(when)) errors.push(`${label}: when must be an object`)
     else {
       for (const field of Object.keys(when)) if (field !== 'agent') errors.push(`${label}: unknown condition \`${field}\` in when`)

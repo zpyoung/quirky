@@ -126,6 +126,41 @@ export function createReviewsEnv(context: PluginContext): ActiveReviewsEnv {
   return env
 }
 
+function reviewLinkWorktree(env: ReviewsEnv, value: unknown): string {
+  if (typeof value !== 'string' || value.trim() === '' || value.length > 4096) {
+    throw env.invalid('invalid_worktree', 'Select a registered review workspace.')
+  }
+  return value
+}
+
+async function resolveReviewLinkWorktree(env: ReviewsEnv, explicit: unknown): Promise<string> {
+  if (explicit !== undefined) return reviewLinkWorktree(env, explicit)
+
+  const currentUi = await env.call('ui.state')
+  if (!record(currentUi) || !record(currentUi.layout)) {
+    throw env.invalid('missing_worktree', 'Open a Review or Checks workspace before opening its link.')
+  }
+
+  const state = env.read()
+  const layout = currentUi.layout
+  let detailWorktree: string | null = null
+  let checksWorktree: string | null = null
+  if (record(layout.view) && layout.view.id === REVIEW_VIEW) {
+    detailWorktree = reviewLinkWorktree(env, state.detail.target?.worktree)
+  }
+  if (layout.panel === CHECKS_PANEL) {
+    checksWorktree = reviewLinkWorktree(env, state.checks.worktree)
+  }
+
+  if (detailWorktree === null && checksWorktree === null) {
+    throw env.invalid('missing_worktree', 'Open a Review or Checks workspace before opening its link.')
+  }
+  if (detailWorktree !== null && checksWorktree !== null && detailWorktree !== checksWorktree) {
+    throw env.invalid('ambiguous_worktree', 'Review and Checks are open for different workspaces; choose the link source workspace.')
+  }
+  return detailWorktree ?? checksWorktree!
+}
+
 export const parentMethods = (env: ReviewsEnv) => ({
   state: () => env.read(),
   close: async () => { await env.closeView(); return env.read() },
@@ -135,7 +170,8 @@ export const parentMethods = (env: ReviewsEnv) => ({
     let parsed: URL
     try { parsed = new URL(params.url) } catch { throw env.invalid('invalid_url', 'An HTTP(S) review URL is required.') }
     if (!['http:', 'https:'].includes(parsed.protocol) || parsed.username || parsed.password) throw env.invalid('invalid_url', 'An HTTP(S) review URL without credentials is required.')
-    return env.windowCommand('command:quirky.reviews/open-link', { url: parsed.href, invert: params.invert === true })
+    const worktree = await resolveReviewLinkWorktree(env, params.worktree)
+    return env.windowCommand('command:quirky.reviews/open-link', { url: parsed.href, worktree, invert: params.invert === true })
   },
   copyText: async (params: JsonRecord) => {
     if (typeof params.text !== 'string' || params.text.length > 1_048_576) throw env.invalid('invalid_text', 'Clipboard text is missing or too large.')
