@@ -24,6 +24,7 @@ export function SettingsScreen(props: {
   hosts: MobileHost[]
   onBack(): void
   onDiagnostics(hostId: string): void
+  onOpenNotifications(hostId: string): void
 }) {
   const [preferences, setPreferences] = useState<MobilePreferences | null>(null)
   const [notificationPermission, setNotificationPermission] = useState('Not checked')
@@ -173,6 +174,19 @@ export function SettingsScreen(props: {
           <Notice tone="warning">Remote push delivery is not available. Enabling device permission would not connect this phone to a Quirky push service.</Notice>
           <Text style={uiStyles.body}>Phone permission: {notificationPermission}</Text>
           <Text style={uiStyles.muted}>Saved notification preference: {preferences.notificationChoice}</Text>
+          <Text style={uiStyles.muted}>Desktop notification subscriptions are viewed in a paired desktop’s notification panel. They are not background push delivery.</Text>
+          {props.hosts.length === 0 ? (
+            <Text style={uiStyles.muted}>Pair a desktop to open its notifications here.</Text>
+          ) : props.hosts.map((host) => {
+            const name = host.personalName ?? host.machineName ?? host.name
+            return (
+              <View key={host.id} style={uiStyles.card}>
+                <Text style={uiStyles.body}>{name}</Text>
+                <Text style={uiStyles.muted}>Open this desktop’s notifications panel. Remote push and background subscriptions are unavailable.</Text>
+                <ActionButton title="Open notifications" secondary accessibilityLabel={`Open notifications for ${name}`} onPress={() => props.onOpenNotifications(host.id)} />
+              </View>
+            )
+          })}
           <View style={uiStyles.row}>
             <ActionButton title="Check device permission" secondary onPress={() => void checkNotificationPermission()} />
             {(notificationPermission === 'denied' || notificationPermission === 'undetermined') && <ActionButton title="Open device Settings" secondary onPress={() => void openNotificationSettings()} />}

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Alert, ScrollView, Text, TextInput, View } from 'react-native'
-import type { MobileConnectionState, MobileHost, MobileLogEntry } from '../contracts'
+import type { MobileConnectionState, MobileHost, MobileLogEntry, MobileRoute } from '../contracts'
 import type { MobileRuntimeInstance } from './runtime'
 import { describeDirectPath } from './network'
 import { ActionButton, FieldLabel, Notice, ScreenHeader, Section, uiStyles } from './ui'
@@ -28,7 +28,7 @@ export function HomeScreen(props: {
   onPair(): void
   onSettings(): void
   onHost(hostId: string): void
-  onOpenWorkspaces(hostId: string, route?: { kind: 'workspaces' } | { kind: 'session'; worktreeId: string }): void
+  onOpenRoute(hostId: string, route: MobileRoute): void
 }) {
   return (
     <View style={uiStyles.page}>
@@ -54,10 +54,15 @@ export function HomeScreen(props: {
                     <Text style={[uiStyles.body, state.phase === 'connected' ? styles.connected : styles.status]}>{connectionVerdict(state)}</Text>
                     <Text style={uiStyles.muted}>{describeDirectPath(host.endpoint)} · {host.endpoint}</Text>
                     <View style={uiStyles.row}>
-                      <ActionButton title="Open workspaces" onPress={() => props.onOpenWorkspaces(host.id, { kind: 'workspaces' })} />
+                      <ActionButton title="Open workspaces" onPress={() => props.onOpenRoute(host.id, { kind: 'workspaces' })} />
                       <ActionButton title="Host actions" secondary onPress={() => props.onHost(host.id)} accessibilityLabel={`Actions for ${hostDisplayName(host)}`} />
                     </View>
-                    {host.lastWorktree && <ActionButton title="Resume last workspace" secondary onPress={() => props.onOpenWorkspaces(host.id, { kind: 'session', worktreeId: host.lastWorktree! })} />}
+                    <View style={uiStyles.row}>
+                      <ActionButton title="Tasks" secondary onPress={() => props.onOpenRoute(host.id, { kind: 'tasks' })} />
+                      <ActionButton title="Accounts" secondary onPress={() => props.onOpenRoute(host.id, { kind: 'accounts' })} />
+                      <ActionButton title="Notifications" secondary onPress={() => props.onOpenRoute(host.id, { kind: 'notifications' })} />
+                    </View>
+                    {host.lastWorktree && <ActionButton title="Resume last workspace" secondary onPress={() => props.onOpenRoute(host.id, { kind: 'session', worktreeId: host.lastWorktree! })} />}
                   </View>
                 )
               })}
@@ -77,7 +82,7 @@ export function HostActionsScreen(props: {
   onBack(): void
   onEdit(): void
   onDiagnostics(): void
-  onOpenWorkspaces(): void
+  onOpenRoute(route: MobileRoute): void
   onRemoved(): void
   onCleanupPending(): void
   onPair(): void
@@ -122,7 +127,14 @@ export function HostActionsScreen(props: {
               ? <ActionButton title="Pair this desktop again" onPress={props.onPair} />
               : <ActionButton title="Reconnect" onPress={() => void reconnect()} />}
           <ActionButton title="Network diagnostics" secondary onPress={props.onDiagnostics} />
-          <ActionButton title="Open workspaces" secondary onPress={props.onOpenWorkspaces} />
+          <ActionButton title="Open workspaces" secondary onPress={() => props.onOpenRoute({ kind: 'workspaces' })} />
+        </Section>
+        <Section title="Desktop panels">
+          <View style={uiStyles.row}>
+            <ActionButton title="Tasks" secondary onPress={() => props.onOpenRoute({ kind: 'tasks' })} />
+            <ActionButton title="Accounts" secondary onPress={() => props.onOpenRoute({ kind: 'accounts' })} />
+            <ActionButton title="Notifications" secondary onPress={() => props.onOpenRoute({ kind: 'notifications' })} />
+          </View>
         </Section>
         <Section title="Host details">
           <ActionButton title="Edit name or address" secondary onPress={props.onEdit} />
