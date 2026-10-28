@@ -1895,7 +1895,8 @@
       "title": "Fix the native-only failures in m2-editor from the 2026-10-28 run: SC-9-native",
       "docs": [],
       "deps": [],
-      "status": "todo"
+      "status": "in-progress",
+      "lane": 10
     },
     {
       "id": "fix-native-m3-accounts-1028",
