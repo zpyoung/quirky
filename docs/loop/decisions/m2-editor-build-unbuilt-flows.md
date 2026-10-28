@@ -102,13 +102,24 @@
 ## D10: Preserve compact accessible controls and platform boundaries
 - **Question:** Layout, loading/error patterns, native interactions and platform scope?
 - **Options:** redesign shell; extend current controls and errors without changing native contracts
-- **Chose:** current density/loading/errors, input-safe keyboard handlers, visible clipboard and kernel errors, no false success. macOS only; Linux/Windows keyboard/clipboard/process behavior requires later platform work. Existing pending native clipboard scenarios remain the handoff; no new native window surface is built.
+- **Chose:** current density/loading/errors, input-safe keyboard handlers, visible clipboard and kernel errors, no false success. macOS only; Linux/Windows keyboard/clipboard/process behavior requires later platform work. Existing native editor scenarios remain unchanged; the new CSV row/column/range OS clipboard path gets its own pending C1-native-clipboard handoff.
 - **Why:** missing interactions do not require shell redesign or unsupported native APIs.
-- **Evidence:** editor.md sections7–8; docs/architecture.md UI; docs/loop/native/m2-editor.json
+- **Evidence:** editor.md sections7–8; docs/architecture.md UI; docs/loop/native/m2-editor.json; docs/loop/native/m2-editor-build-unbuilt-flows.json
 - **Reversibility:** easy
 - **Confidence:** high
 - **Revisit if:** a platform/native implementation item changes those contracts
 - **Source:** deferred: platform
+
+## D11: Isolate all smoke dependencies and retain exact component ownership
+- **Question:** Where can runtime evidence and worker edits safely live?
+- **Options:** real homes/global Python; isolated scratch and owned venv; allow workers to edit parent
+- **Chose:** scratch /tmp/quirky-lane6-editor-flows-1lss1N with fresh HOME/QUIRKY_HOME, hooks disabled and owned Python3.12 venv. uv installed ipykernel7.4 plus30 dependencies only there (cache also scratch). Three worktrees start at3ca50907. Explorer scope additionally owns window/editorState.ts type adaptation; parent retains manifest/types. Worker-reported mistaken relative-path viewer test edit in parent is being reverted only for that exact worker-authored block before absolute-path reapplication.
+- **Why:** notebook lifecycle needs a real disposable interpreter; unrelated real agent homes and parent edits must remain untouched. Parent audits component paths and initial-HEAD invariants after every worker returns.
+- **Evidence:** actual uv venv/pip output (31 packages installed); MapEditorFlows source map; BuildViewerFlows cross-worktree notification
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** scope audit finds unresolved contamination or any non-owned process/state
+- **Source:** assumed — autonomous
 
 ## Progress
 Scope resolved and logic spec self-reviewed against retained feature flows. Shared types/schemas and spec are ready for the pre-implementer contract commit. Next: create three isolated /tmp worktrees from that commit, dispatch at most three implementers with disjoint scopes, integrate, narrow runtime smoke and typecheck, catch up build/roadmap once/read incoming decisions, commit/detach/canonical land. No acceptance, review or UI/native pass claimed.
