@@ -507,6 +507,9 @@ export class OrchestrationMessages implements MessageArrivalPort {
   }
 
   async check(input: CheckParams, caller: PluginCaller): Promise<CheckResult> {
+    if (input.limit !== undefined && input.mode !== 'peek' && input.mode !== 'all') {
+      fail(this.context, 'invalid_argument', 'limit is only valid with --peek or --all')
+    }
     if (input.types !== undefined) this.validateMessageTypes(input.types)
     if (input.mode === 'peek' || input.mode === 'all') {
       if (input.wait) fail(this.context, 'invalid_argument', `${input.mode} cannot be combined with --wait`)
