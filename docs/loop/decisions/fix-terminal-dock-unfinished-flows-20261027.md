@@ -176,5 +176,38 @@
 - **Revisit if:** the reloaded actual browser fails the same boundary or another pane no longer fits.
 - **Source:** assumed — autonomous, blocking post-review UI finding; this delta is not claimed covered by D14's fixed review snapshot
 
+## D17: Wait for child consumption instead of treating accepted input as a file-write receipt
+- **Question:** why did the final affected run miss the idle Escape byte only under load?
+- **Options:** label the new test flaky; increase deadlines; wait for the real TUI consumer before asserting its file log.
+- **Chose:** keep the exact one-Escape-byte assertion, but use the existing waitForTuiInput condition to wait until the child log grows. No production timing, acceptance, interrupt behavior or timeout is changed.
+- **Why:** writeAccepted proves acceptance at the child PTY boundary, not that the raw-mode cat consumer has already appended its input log. The immediate read could legitimately be empty.
+- **Evidence:** post-geometry affected run accepted 95 remote files plus two macOS files after send.test.ts passed its unchanged isolated retry (4/0/29 assertions); initial run missed only that immediate file-read assertion. The test-only synchronization fix is followed by a fresh focused SC09/18 check and canonical full-suite landing.
+- **Reversibility:** easy
+- **Confidence:** high for the observed asynchronous boundary.
+- **Revisit if:** the child does not consume the Escape byte or receives more than one.
+- **Source:** assumed — autonomous, test-consumer synchronization; not a production retry or deadline relaxation
+
+## D18: Land under the operator's typecheck-only end-phase policy
+- **Question:** whether to continue verification after the operator moved all testing/debugging to the end phase.
+- **Options:** continue suites, dogfood and failure fixes; stop immediately, commit current work, typecheck and land.
+- **Chose:** stop suites, dogfood, reviews and test-failure work. Commit the current implementation/tests/docs, clean owned runtime resources, run typecheck and land through the current canonical controller. Add no follow-up because every named flow is implemented; remaining gaps are verification/debugging work for the end phase.
+- **Why:** the explicit operator instruction and new authoritative LOOP section override the earlier execution/verification sequencing. Original acceptance criteria and historical failures remain recorded, not relabelled as passing.
+- **Evidence:** operator interjection; `git show build/roadmap:docs/loop/LOOP.md`, Build first, test at the end; queue land now checks only typecheck until m7-test-triage.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** typecheck or the canonical land reports an integration error.
+- **Source:** operator decision, supersedes D1/D4/D13/D16/D17 pending verification sequencing
+
+## D19: Preserve end-phase UI evidence and unresolved verification precisely
+- **Question:** what should end-phase verification retain from the stopped campaign?
+- **Options:** imply complete visible acceptance; discard partial evidence; retain exact formal results and supplemental observations.
+- **Chose:** retain formal run 20261028T102010-951f as three pass, three partial and one blocked. The owned-browser worker reported 140/180/380px row bounds, 20px steps, repaired 239/260/280 hysteresis, real uploaded bytes with renderer-bound paste/drop and selected-chip removal, re-enable focus with trusted Shift+Enter, and a new terminal with AutoOpen off. Native OS selection/clipboard/drag are not claimed. Manual Show's visible completion and the final feature-disable check remain unverified; no more dogfood/debugging was run after the operator instruction.
+- **Why:** the worker's last manual-Show screenshot showed no gutter, while the parent's already-issued read-only daemon query returned the exact new pane as supported, docked and mounted with five rows. This does not justify a fabricated visual pass or another unapproved investigation cycle.
+- **Evidence:** private ui-receipt.json, formal report.json/report.md and retained screenshots; new pane-6/session s_9edc5185b481. Teardown receipt settingsUnchanged:true; isolated scene exited0 and cleaned. Parent closed the exact kept-open Playwright session and attributed/terminated only owned Chrome PIDs12925/63680, then removed their profiles and throwaway scripts. Historical formal end cleanup_failed remains in its report.
+- **Reversibility:** easy
+- **Confidence:** high for recorded evidence/statuses; supplemental byte/geometry details retain worker attribution.
+- **Revisit if:** end-phase sweeps exercise manual visibility, final disable, native chooser or the automation-fill anomaly.
+- **Source:** operator-directed end-phase handoff, not an unbuilt-flow deferral
+
 ## Progress
-Regression authoring and minimal source fixes are in place. Genuine red: Stop/Escape queued recovery, SessionEnd stale latch and corrected next-question cache refresh. Host re-enable test passes after its selector correction; no extra focus implementation. Baseline actual browser proved canvas occlusion; terminal stack is now isolated but post-fix browser verification remains. Corrected initial compiler mistakes (missing existing freshEvidence field, fixture closure paths, overbroad fixture report field); latest status-event envelope fix uses public plugin event data. Focused lifecycle/card verification is running. Next: finish green gates, integration catch-up, built private web campaign/exact measurements/acquisition, cross-family final review and canonical queue land. Native chooser handoff is pending in this item's native JSON; prior blocked attempt remains untouched.
+Implementation is committed through 5531b4a9 with the current test-consumer synchronization and final evidence documentation to commit. Verification campaigns are stopped under D18. The last affected run accepted 95 remote files plus two macOS files after one isolated retry; its child-log timing assertion was then synchronized and passed a focused check before the operator cutover. Prior typecheck/build passed, and D14's exact review scope remains qualified. Owned browsers/private daemon are stopped and throwaway scripts removed; private settings sentinel stayed unchanged. No verification-only follow-up is added. Next: commit current work, catch up once under the current policy, make typecheck pass, detach and run the canonical typecheck-only queue land. Native chooser and D19's unverified visual checks belong to the end phase.

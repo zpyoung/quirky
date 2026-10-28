@@ -167,7 +167,8 @@ test(
 
     const beforeInterrupt = inputBytes(harness)
     await harness.call('quirky.terminal-dock/cancel', { pane, interrupt: true })
-    expect(inputBytes(harness).subarray(beforeInterrupt.length)).toEqual(Buffer.from([0x1b]))
+    const interrupted = await waitForTuiInput(harness, (input) => input.length > beforeInterrupt.length)
+    expect(interrupted.subarray(beforeInterrupt.length)).toEqual(Buffer.from([0x1b]))
   },
   90_000
 )
