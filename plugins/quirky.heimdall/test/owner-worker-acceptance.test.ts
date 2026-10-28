@@ -96,6 +96,9 @@ async function waitForAttempt(watcherId: string, capability: string): Promise<{ 
   return waitForAsync(async () => {
     const inspection = await inspect(watcherId)
     const attempt = attemptsForCapability(inspection, capability).at(-1)
+    if (attempt?.state === 'settled' && attempt.effect !== 'landed') {
+      throw new Error(`Owner ${capability} ${String(attempt.effect)}: ${String(attempt.reason)}`)
+    }
     return attempt?.effect === 'landed' ? { inspection, attempt } : null
   }, 20_000)
 }
@@ -174,7 +177,7 @@ test('owner worker messages, answers, and exact stop reach an attested native ch
     if (!harness) throw new Error('the owner worker harness is not connected')
     return harness.fixture.processScope
   })
-  harness = await startWorkerAcceptance({ heldPrefix: 'The native worker has started the assigned task and is awaiting coordinator guidance.' })
+  harness = await startWorkerAcceptance({ heldPrefix: 'The native worker has started the assigned task and is awaiting coordinator guidance.', uniqueThreads: true })
   await harness.fixture.call('quirky.agents/refresh', {})
   await harness.fixture.call('quirky.agents/setEnabled', { agent: 'codex', enabled: true })
   const agentCatalog = record(await harness.fixture.call('quirky.agents/list', {}), 'agent catalog')
@@ -211,7 +214,6 @@ test('owner worker messages, answers, and exact stop reach an attested native ch
   const target = await waitForOwnedWorker(watcherId)
   const targetIdentity = record(await harness.fixture.call('quirky.session/identity', { session: target.sessionId }), 'native worker identity')
   expect(targetIdentity).toMatchObject({ sessionId: target.sessionId, live: true })
-  expect(stringField(targetIdentity, 'processIncarnation', 'native worker identity')).not.toBe('')
 
   const sibling = record(await harness.fixture.call('quirky.structured/create', {
     worktree: coordinatorWorktreeId,
@@ -220,6 +222,15 @@ test('owner worker messages, answers, and exact stop reach an attested native ch
     prompt: '[hold] Remain alive while the owner stops its exact worker.'
   }), 'unowned structured session')
   const siblingId = stringField(sibling, 'id', 'unowned structured session')
+  const connectedSibling = await waitForAsync(async () => {
+    const session = await harness!.session(siblingId)
+    if (session.status === 'exited') {
+      const messages = await harness!.fixture.call('quirky.structured/messages', { session: siblingId })
+      throw new Error(`Unowned sibling failed before any stop: ${JSON.stringify(messages)}`)
+    }
+    return session.providerSession && session.status === 'working' ? session : null
+  })
+  expect(connectedSibling.providerSession?.id).not.toBe((await harness.session(target.sessionId)).providerSession?.id)
   const siblingPid = await waitForProviderProcess(siblingId)
   expect(processIsAlive(siblingPid)).toBe(true)
 

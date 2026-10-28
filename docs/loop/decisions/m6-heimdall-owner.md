@@ -319,5 +319,41 @@
 - **Revisit if:** the corrected published result schema still rejects an actual attested worker delivery
 - **Source:** assumed — autonomous
 
+## D30: Consume canonical message schemas and preserve the actual worker answer proof
+- **Question:** the completed ordinary check delivery was unusable by its validating CLI, while dependency corrections arrived independently
+- **Options:** bypass decoding; locally replace the receipt; merge the core-owned canonical result correction
+- **Chose:** merge isolated26768fd4, then the current controls checkpointab953c04. Read controls D11–D15 and preserve their canonical snapshots, exact confirmation, ready-dispatch, blocking-Ask and authority decisions; no conflict. Keep actual worker start as a positive running dispatch, never equate liveness or a failed start with active work.
+- **Why:** the public schema must describe genuine Run-sender metadata without weakening backend identity. Controls' real Ask lifecycle also confirms the intended non-consuming question projection.
+- **Evidence:** post-merge owner-worker case passes16assertions through native ready/attestation, serviceSend, actual worker check body, actual blocking Ask, owner answer-worker, replay refusal and the child's exact answered body/message ID. It then waits unsuccessfully for the final stop's landed attempt; core's live-supervised task guard failure is already reported and accepted as ground truth, not a pass.
+- **Reversibility:** easy
+- **Confidence:** high for exercised delivery/answer paths; exact stop awaits the core correction
+- **Revisit if:** a canonical address projection or accepted dispatch is rejected after dependency catch-up
+- **Source:** assumed — autonomous
+
+## D31: Give independent native fixture connections distinct provider identities
+- **Question:** the full stop flow closed its exact target, but the supposed unrelated Codex sibling was already dead
+- **Options:** weaken the real connected-owner fence; use a different provider and miss same-provider bulk-stop bugs; correct the fixture's reused conversation identity
+- **Chose:** require positive sibling native startup before any intervention and compare its provider identity with the target. Keep both children on Codex. Add opt-in uniqueThreads to the shared fixture, using a fresh UUID only for new thread/start; thread/resume keeps the requested ID. Defaults remain unchanged. Make heldPrefix optional in the canonical fixture options and forward the supported options through the existing harness.
+- **Why:** the fixture always returned scripted-thread for every new process. Production correctly rejected the second connected owner. A dead-on-arrival sibling cannot prove resource isolation, and disabling that fence would create the actual bug.
+- **Evidence:** before-stop regression artifact236 reports could not start: the codex conversation already has a connected owner;83e4c51b isolated two-file correction; unchanged-default Codex12pass49assertions6.38s. No production ownership code changed.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** a resumed fixture conversation changes its captured provider identity
+- **Source:** assumed — autonomous
+
+## D32: Accept the complete real owner-worker proof only after exact target exit and sibling preservation
+- **Question:** when the common worker interventions and final type boundary could be claimed verified
+- **Options:** stop at applied forwarding; accept failed-start liveness; require actual attested effects and physical cleanup
+- **Chose:** integrate582a427f as cab18805 and read core D27–D29. Preserve the canonical two-migration journal and atomic message/receipt deletion while resolving cosmetic conflicts. Verify message delivery, real blocking Ask/exact answer/replay refusal, exact stop, public exited state, target PID disappearance and a positively connected same-provider independent sibling remaining alive. Remove a redundant non-empty incarnation assertion; the exact authenticated effect and identity checks remain.
+- **Why:** logical acceptance and physical termination are separate facts. Both native connections must have genuinely started before isolation is meaningful. Core's narrow stop fence preserves public live-Task guards rather than weakening them.
+- **Evidence:** complete owner-worker case1pass20assertions22.70s; full bun run typecheck exit0 in51.66s after fixture option repair; latest standalone owner publication/scoped native cleanup smokes7.18s pass. Core D27 agrees with owner D23 canonical replay; no authority conflict.
+- **Reversibility:** easy
+- **Confidence:** high for exercised end-to-end flow; final dependency/catch-up gates remain required
+- **Revisit if:** a post-catch-up actual worker or project gate fails
+- **Source:** assumed — autonomous
+
 ## Progress
-Owner branch through1b9bb6f6 includes actualdf799424/e410 facade, verified4bb boundaries, isolated427 startup-pointer/restart correction and d34 shared heldPrefix fixture. Own owner API17tests113assertions, prior owner runtime/gate/worker58tests354assertions, native69tests269assertions, driver/worker9tests25assertions, pointer14tests58assertions and semantic restart1test16assertions passed;21owner files scoped-type clean. Required scripts66tests517assertions pass. Actual owner-worker fixture is uncommitted: it now reaches positive ready/attested native work and lands serviceSend, but ordinary worker CLI check rejects the completed Run-sender delivery. Direct validation proves sender.kind is undeclared by check.result; core owner has exact receipt/schema evidence. No validation bypass or replacement mutation. Temporary SQLite/native diagnostics must be removed after core correction; message-before-question order and exact pending-question matching are authored. All implementers/scouts returned; bg_40 awaits queue core readiness. Next: integrate actual ordinary schema/stop/report/type fixes, finish worker message/answer/exact-stop/sibling proof, remove diagnostics/publish fixtures, dependency-ready/catch-up once/incoming logs, affected remote suite/full typecheck, commit/detach/queue land. Aged-item policy skips unstarted review/dogfood, not required behavior.
+- Source: actual df799424/e410 facade, verified4bb owner boundaries, isolated427 startup-pointer/restart, d34 heldPrefix fixture,1b9 harness option, bd3 real worker acceptance and83e4 independent fixture identities. Core267 schemas,582 stop/control corrections and controlsab953 are merged; all temporary SQL/native probes removed.
+- Own checks: owner API17tests113assertions; earlier combined owner58tests354assertions; native69tests269assertions; driver/worker9tests25assertions; pointer14tests58assertions; semantic restart1test16assertions. Full project typecheck exits0; scripts66tests517assertions pass. Final post-dependency affected remote suite/catch-up remain.
+- Actual worker case passes1test20assertions22.70s through ready/attestation, real message delivery, blocking Ask/exact answer/replay refusal, exact stop, target public exited/PID gone and positively connected same-provider independent sibling alive. Defaults Codex12tests49assertions pass. Latest standalone owner API/CLI publication and native scoped cleanup smokes both pass7.18s.
+- All implementers/scouts returned. Queue core dependency remains pending; bg_54 awaits readiness. Next: consume atomic fixture publication/remaining core report correction, deps ready, merge build/roadmap once/read incoming decisions, affected remote suite/typecheck if changed, commit/detach/queue land. Aged-item policy skips unstarted review/dogfood, not required behavior.
