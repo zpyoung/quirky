@@ -55,5 +55,27 @@
 - **Revisit if:** activation failure reproduces without stalled requests, or platform QA identifies incompatible path behavior
 - **Source:** deferred: platform
 
+## D6: Preserve incoming owners and retain bounded smoke cleanup evidence
+- **Question:** Do the single roadmap catch-up and smoke shutdown require another production change?
+- **Options:** broaden this editor repair into owner provisioning, UI activation or Bun process lifetime; retain those owners and document the observed boundary
+- **Chose:** keep the scoped path correction. Read all six incoming decision logs, including omitted Progress lines: fix-flaky-pty-host-clear, fix-flaky-quirky-worktree-create, fix-native-m3-accounts-1028, fix-native-sa-browser-agent-1028, m7-terminal-owner-provisioning-and-selector-flows, and ui-screenshot-review. No conflicting editor clipboard/drag contract. Preserve canonical selector/CLI/runtime authority, native credentials and UI lint/theme/capture owners. The isolated smoke printed EDITOR_SMOKE_CLEANED after awaited harness/home/repo cleanup; its Bun host remained alive and was explicitly stopped. No natural-exit-zero claim.
+- **Why:** unrelated timing/provisioning/native evidence cannot justify a fallback or widened fix. The new regression still passes against the incoming real daemon dependencies, and merged typecheck passed.
+- **Evidence:** clean ort roadmap merge after source commit 2d137f18; caught-up regression 3 pass/0 fail/34 assertions in 8.65s; full caught-up typecheck exit 0 in 33.19s; owned smoke service cleanup acknowledgment followed by stopped/exited receipt; static plugin validation found zero blocking incompatibilities
+- **Reversibility:** easy
+- **Confidence:** high for exercised clipboard/path contracts; smoke host natural-exit cause unestablished
+- **Revisit if:** a concrete regression or process-owner diagnostic identifies another changed boundary
+- **Source:** locked by incoming decision logs for their separate owners; assumed — autonomous for scoped evidence
+
+## D7: Land the verified native-path repair without misreporting broader suites
+- **Question:** Should unrelated suite failures suppress this fix, weaken assertions, or trigger another debugging item?
+- **Options:** broaden the item into every failing package flow; claim tests pass; retain precise failure evidence for the existing end phase and use LOOP's typecheck landing gate
+- **Chose:** retain the exact inventory in BLOCKERS.md and land the complete scoped repair. No debug/testing successor, suppressed assertion, arbitrary timeout or claim of green package/scripts suites.
+- **Why:** the native clipboard failure is repaired and exercised through real daemon data and the rendered surface. Broad suite failures cover independent CSV/Markdown, terminal admission/metadata/defaults, platform-only cases and incoming UI-review fixtures. LOOP explicitly gates land on typecheck and retains debugging for the end phase. None of these failures demonstrates an incorrect copied Explorer path.
+- **Evidence:** affected-suite command exit 1/414.24s: remote 101 passing/19 failing files, local 2 passing/1 failing file; caught-up scripts exit 1/82.08s: 113 pass/13 fail/1,009 assertions. Complete named inventories and concrete boundaries in docs/loop/BLOCKERS.md under this item. Caught-up scoped regression and typecheck passed as D6 records.
+- **Reversibility:** easy
+- **Confidence:** high for observed results; no attribution of every failure's historical origin
+- **Revisit if:** a failing end-phase scenario is traced to this change's exact path export boundary
+- **Source:** locked by docs/loop/LOOP.md
+
 ## Progress
-Implementation and narrow regression complete. Parent observed true red clipboard values, then 3 pass/0 fail/34 assertions. Web UI build and first full typecheck passed. Isolated browser clipboard readback passed; see D4/D5 for synthetic drag and environment limits. Browser tab closed and smoke daemon sent shutdown. Affected editor/terminal suite is running; scripts tests passed 81/0 with 820 assertions. Static plugin validation pending. Next: await every owned job, record suite results, commit, catch up once with build/roadmap and read incoming decisions, rerun typecheck, then detach and land using canonical queue script. Only SC-9-native reset to pending; all other scenarios untouched.
+Source committed as 2d137f18; single clean roadmap catch-up merged and all six incoming decision logs read completely. Caught-up root/UIlint/mobile/prepared-desktop typecheck passed (33.19s); caught-up Explorer regression passed 3/0 with 34 assertions (8.65s). Static plugin validation returned zero blocking issues. Actual browser clipboard smoke passed with D4/D5 limits; browser tab closed, smoke runtime cleanup acknowledged and remaining Bun host explicitly reaped (D6). All owned agents and finite jobs returned. Broader suite/script failures are recorded in D7 and BLOCKERS.md, not claimed green. Only SC-9-native is pending with historical date/report retained. Ready to commit this receipt, detach and canonical queue land, await merge-result typecheck, remove the owned temporary smoke script, and end exactly this one-item iteration.
