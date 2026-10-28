@@ -2,9 +2,9 @@ import { afterEach, expect, test } from 'bun:test'
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { startHarness, builtinsDir, type Harness } from '../../../packages/daemon/test/helpers'
+import { startHarness, type Harness } from '../../../packages/daemon/test/helpers'
 import { MobileTestClient } from './support/client'
-import { Store } from '../../../packages/daemon/src/store'
+import { makeBuiltinDir } from '../../quirky.session/test/support'
 
 let harness: Harness | undefined
 let phone: MobileTestClient | undefined
@@ -35,9 +35,7 @@ test('phone launcher catalog exposes availability without configured commands or
   const patch = { HOME: user, QUIRKY_HOME: home, QUIRKY_MOBILE_PORT: '0', QUIRKY_MOBILE_HOST: '127.0.0.1', QUIRKY_AGENT_SEARCH_DIRS: search, CODEX_HOME: join(user, '.codex'), CLAUDE_CONFIG_DIR: join(user, '.claude') }
   environment = new Map(Object.keys(patch).map(key => [key, process.env[key]]))
   Object.assign(process.env, patch)
-  const store = new Store(join(home, 'quirky.db'))
-  try { store.setSettingValue('setting:quirky.agent-status/hooks', false) } finally { store.close() }
-  harness = await startHarness({ home, builtinPluginsDir: builtinsDir() })
+  harness = await startHarness({ home, builtinPluginsDir: makeBuiltinDir(home, { real: ['quirky.mobile', 'quirky.agents'], fakes: [] }) })
   const local = await harness.connect('cli')
   await local.callAny('quirky.agents/configure', { agent: 'claude', command: '/usr/bin/true', args: '--private-launch-token=not-for-phone', env: { MOBILE_PRIVATE_CREDENTIAL: 'server-only-catalog-secret' } })
   const privateConfig = await local.callAny('quirky.agents/get', { agent: 'claude' }) as { env: Record<string, string> }

@@ -30,7 +30,7 @@ const DEFAULT_PREFERENCES: MobilePreferences = {
   onboardingCompleted: false,
   notificationChoice: 'unset',
   terminalTextScale: 1,
-  autocomplete: true,
+  autocomplete: false,
   terminalLinkMode: 'phone',
   shortcuts: []
 }
@@ -472,17 +472,24 @@ export function createMobileRuntime(dependencies: MobileRuntimeDependencies): Mo
   })
 
   const savePairedHost = async (offer: MobilePairOffer, hostId: string, info: { machineName: string; platform: string }): Promise<StoredHost> => {
-    const rollback: { credential: MobileCredentialRead } = { credential: { kind: 'missing' } }
-    let previousHost: StoredHost | undefined
+    const rollback: {
+      value: {
+        host: StoredHost | undefined
+        credential: MobileCredentialRead
+      } | undefined
+    } = { value: undefined }
     let writeAttempted = false
     let evictedId: string | undefined
     let pairedHost: StoredHost
     try {
       const saved = await updateState(async (current) => {
-        previousHost = current.hosts.find((host) => host.id === hostId)
+        const previousHost = current.hosts.find((host) => host.id === hostId)
         if (previousHost?.cleanupPending) throw new MobileRpcError('connection', 'Retry secure credential cleanup before pairing this desktop again')
-        rollback.credential = previousHost ? await dependencies.secrets.read(hostId) : { kind: 'missing' }
-        if (rollback.credential.kind === 'unavailable') throw new MobileRpcError('connection', 'Secure storage is temporarily unavailable')
+        const previousCredential: MobileCredentialRead = previousHost
+          ? await dependencies.secrets.read(hostId)
+          : { kind: 'missing' }
+        if (previousCredential.kind === 'unavailable') throw new MobileRpcError('connection', 'Secure storage is temporarily unavailable')
+        rollback.value = { host: previousHost, credential: previousCredential }
         const activeHosts = current.hosts.filter((host) => !host.cleanupPending && host.id !== hostId)
         if (!previousHost && current.hosts.length >= MAX_HOSTS * 2 && activeHosts.length < MAX_HOSTS) {
           throw new MobileRpcError('connection', 'Retry secure credential cleanup before pairing more desktops')
@@ -510,8 +517,9 @@ export function createMobileRuntime(dependencies: MobileRuntimeDependencies): Mo
       evictedId = saved.evictedId
     } catch (error) {
       if (writeAttempted) {
+        const previous = rollback.value
         try {
-          if (previousHost && rollback.credential.kind === 'available') await dependencies.secrets.write(hostId, rollback.credential.token)
+          if (previous?.host && previous.credential.kind === 'available') await dependencies.secrets.write(hostId, previous.credential.token)
           else await dependencies.secrets.remove(hostId)
         } catch {
           orphanedCredentialIds.add(hostId)
@@ -519,7 +527,7 @@ export function createMobileRuntime(dependencies: MobileRuntimeDependencies): Mo
             next: {
               ...current,
               cleanupIds: [...new Set([...current.cleanupIds, hostId])],
-              hosts: previousHost ? current.hosts.map((host) => host.id === hostId ? { ...host, cleanupPending: true } : host) : current.hosts
+              hosts: previous?.host ? current.hosts.map((host) => host.id === hostId ? { ...host, cleanupPending: true } : host) : current.hosts
             },
             result: undefined
           })).then(() => orphanedCredentialIds.delete(hostId), () => {})

@@ -3,7 +3,7 @@ import { createRequire } from 'node:module'
 import { dirname, isAbsolute, join, parse, relative, resolve, sep, win32 } from 'node:path'
 import { validateValue, type Schema } from '@quirky/protocol'
 
-type Manifest = { id?: string; main?: string; cli?: string; ui?: string; staticAssets?: unknown; workers?: unknown; [key: string]: unknown }
+type Manifest = { id?: string; main?: string; cli?: string; ui?: string; workers?: unknown; [key: string]: unknown }
 const MANIFEST_SCHEMA: Schema = {
   type: 'object',
   properties: {
@@ -11,7 +11,6 @@ const MANIFEST_SCHEMA: Schema = {
     main: { type: 'string' },
     cli: { type: 'string' },
     ui: { type: 'string' },
-    staticAssets: { type: 'array', items: { type: 'string' } }
   },
   additionalProperties: true
 }
@@ -254,18 +253,6 @@ function copyUi(pluginId: string, pluginDir: string, outPluginDir: string, ui: s
   cpSync(sourceDirectory, outputDirectory, { recursive: true })
 }
 
-function staticAssetRoots(pluginId: string, manifest: Manifest): string[] {
-  if (manifest.staticAssets === undefined) return []
-  if (!Array.isArray(manifest.staticAssets) || manifest.staticAssets.some((path) => typeof path !== 'string')) {
-    throw new Error(`plugin ${pluginId}: staticAssets must be an array of root-relative directories`)
-  }
-  const roots = (manifest.staticAssets as string[]).map((path) => safeRelativePath(pluginId, 'static asset', path))
-  if (roots.some((path) => path.split(/[\\/]+/).some((part) => part === '.'))) throw new Error(`plugin ${pluginId}: static asset paths must not contain dot segments`)
-  for (let index = 0; index < roots.length; index++) {
-    if (roots.slice(index + 1).some((other) => pathConflicts(roots[index]!, other))) throw new Error(`plugin ${pluginId}: static asset roots collide`)
-  }
-  return roots
-}
 
 function assertNoStaticLinks(pluginId: string, path: string): void {
   const entry = lstatSync(path)
@@ -369,13 +356,14 @@ export async function bundlePlugins(srcDir: string, outDir: string): Promise<str
       }
       manifest.workers = bundledWorkers
     }
-    if (manifest.ui) copyUi(id, pluginDir, outPluginDir, manifest.ui)
+    const hasAssets = existsSync(join(pluginDir, 'assets'))
+    if (manifest.ui && (!hasAssets || !manifest.ui.replaceAll('\\', '/').startsWith('assets/'))) copyUi(id, pluginDir, outPluginDir, manifest.ui)
     copyNotebookBridge(pluginDir, outPluginDir)
     if (existsSync(join(pluginDir, SOUNDS))) cpSync(join(pluginDir, SOUNDS), join(outPluginDir, SOUNDS), { recursive: true })
-    const staticAssets = staticAssetRoots(id, manifest)
-    const bundledOutputs = [manifest.main, manifest.cli, ...workerOutputs, ...(manifest.ui ? [manifest.ui] : [])].filter((name): name is string => typeof name === 'string')
+    const staticAssets = hasAssets ? ['assets'] : []
+    const bundledOutputs = [manifest.main, manifest.cli, ...workerOutputs].filter((name): name is string => typeof name === 'string')
     copyStaticAssets(id, pluginDir, outPluginDir, staticAssets, bundledOutputs)
-    copyPrivateAssets(id, pluginDir, outPluginDir, manifest, [...bundledOutputs, ...staticAssets])
+    copyPrivateAssets(id, pluginDir, outPluginDir, manifest, [...bundledOutputs, ...(manifest.ui ? [manifest.ui] : []), ...staticAssets])
     copyLegalNotices(id, pluginDir, outPluginDir)
 
     writeFileSync(join(outPluginDir, MANIFEST), `${JSON.stringify(manifest, null, 2)}\n`)

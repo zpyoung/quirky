@@ -53,7 +53,9 @@ export function fakeContext(layout: UiLayout = layoutFor(null)): Fake {
     panelToggles: [],
     toasts: [],
     settings: {},
-    handlers: {},
+    handlers: {
+      'quirky.git/notes': () => ({ notes: [] })
+    },
     provided: new Map(),
     layout,
     emit(event) {

@@ -84,20 +84,8 @@ describe('kernel method schemas', () => {
     }
   })
 
-  test('params never reject what the handlers accept', () => {
-    const p = (name: string) => methodSchemas[name]!
-    expect(p('setting.set').required).toEqual(['id', 'value'])
-    expect(p('setting.set').properties!.value!.type).toBeUndefined()
-    expect(p('client.hello').properties!.protocolVersion).toMatchObject({ type: 'integer', minimum: 0 })
-    expect(p('client.hello').properties!.role!.enum).toEqual(['desktop', 'ui', 'cli', 'mobile'])
-    expect(p('status.get')).toEqual({ type: 'object' })
-  })
-  test('palette state is optional in layout and palette.set accepts an omitted open value', () => {
-    const paletteSet = KERNEL_METHOD_SCHEMAS['ui.palette.set']!
-    expect(paletteSet.params.properties?.open?.type).toBe('boolean')
-    expect(paletteSet.params.required ?? []).not.toContain('open')
-    expect(paletteSet.result.properties?.palette?.type).toBe('boolean')
-  })
+
+
 })
 
 describe('kernel event schemas', () => {

@@ -31,14 +31,18 @@ export async function eventually<T>(read: () => T | Promise<T>, accepts: (value:
 }
 
 /** The CLI is executed by the real launched coordinator/worker, not an impersonated hello. */
-export async function startWorkerAcceptance(): Promise<WorkerAcceptance> {
+export async function startWorkerAcceptance(options: { heldPrefix?: string; uniqueThreads?: boolean } = {}): Promise<WorkerAcceptance> {
   const fixture = await startAgentsE2E({ extraEnv: { WORKER_TEST_CLI: CLI }, timeScale: 0.1 })
   try {
     fixture.addFake('claude')
     const launcher = join(fixture.fakebin, 'claude')
-    writeFileSync(launcher, `#!${process.execPath}\nimport ${JSON.stringify(AGENT)}\n`)
+    writeFileSync(launcher, `#!${process.execPath}
+if (process.argv.includes('--version') || process.argv.includes('-v')) { console.log('Claude Code 2.1.80'); process.exit(0) }
+process.stdout.write('\\x1b[?2004h')
+await import(${JSON.stringify(AGENT)})
+`)
     chmodSync(launcher, 0o755)
-    const native = createCodexAppServerFixture(join(fixture.userHome, 'native-codex'))
+    const native = createCodexAppServerFixture(join(fixture.userHome, 'native-codex'), options)
     const codex = join(fixture.fakebin, 'codex')
     writeFileSync(codex, `#!${process.execPath}
 import { startWorkerControl } from ${JSON.stringify(join(import.meta.dir, 'acceptance-control.ts'))}
@@ -49,9 +53,9 @@ process.on('SIGHUP', () => { control.stop(); process.exit(0) })
 await import(${JSON.stringify(native.executable)})
 `)
     chmodSync(codex, 0o755)
-    // Installation happens after the daemon's initial detection; use the same
-    // public refresh a user runs after adding an agent, not a relaxed admission.
+    // Use the public refresh after installing the fake Codex binary.
     await fixture.call('quirky.agents/refresh', {})
+    await fixture.call('quirky.agents/setEnabled', { agent: 'codex', enabled: true })
     const coordinator = await fixture.call('quirky.session/create', { worktree: `path:${fixture.repo}`, agent: 'claude', title: 'Fixture coordinator' }) as Session
     await eventually(() => existsSync(join(fixture.home, 'worker-fixture', `${coordinator.id}.events.jsonl`)), Boolean, 'coordinator process to start')
     const cli = async (session: string, args: string[], timeout = 60_000): Promise<CliResult> => {
@@ -59,6 +63,7 @@ await import(${JSON.stringify(native.executable)})
       const dir = join(fixture.home, 'worker-fixture')
       appendFileSync(join(dir, `${session}.requests.jsonl`), JSON.stringify({ id, args: [...args, '--json'] }) + '\n')
       const reply = join(dir, `${id}.reply.json`)
+      // The provider bridge publishes this file with an atomic rename, so existence means complete JSON.
       const result = await eventually(
         () => existsSync(reply) ? JSON.parse(readFileSync(reply, 'utf8')) as CliResult : null,
         value => value !== null,

@@ -108,7 +108,7 @@ function checkJsonTree(value: unknown, depth = 0): void {
   }
   if (!isPlainRecord(value) || Object.keys(value).length > 256) throw new MobileRpcError('params', 'RPC parameters must be plain JSON objects')
   for (const [key, item] of Object.entries(value)) {
-    if (Object.hasOwn(FORBIDDEN_PARAM_KEYS, key)) throw new MobileRpcError('params', 'RPC parameters cannot supply caller or credential identity')
+    if (Object.hasOwn(FORBIDDEN_PARAM_KEYS, key) && depth === 0) throw new MobileRpcError('params', 'RPC parameters cannot supply caller or credential identity')
     if (key.length > 256) throw new MobileRpcError('params', 'RPC parameter name is too large')
     checkJsonTree(item, depth + 1)
   }

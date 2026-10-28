@@ -6,11 +6,13 @@
   "dependencies": {
     "@quirky/protocol": "workspace:*",
     "agent-browser": "0.27.0",
+    "pngjs": "7.0.0",
     "react": "19.2.0",
     "react-dom": "19.2.0"
   },
   "devDependencies": {
     "@quirky/git": "workspace:*",
+    "@types/pngjs": "6.0.5",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "@happy-dom/global-registrator": "20.14.6"
@@ -27,6 +29,11 @@
         "dependency": "agent-browser",
         "source": "LICENSE",
         "destination": "licenses/agent-browser-LICENSE"
+      },
+      {
+        "dependency": "pngjs",
+        "source": "LICENSE",
+        "destination": "licenses/pngjs-LICENSE"
       }
     ]
   }

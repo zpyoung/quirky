@@ -220,5 +220,16 @@
 - **Revisit if:** m7-test-triage is claimed.
 - **Source:** supersedes sb-mobile-app-panels D17; locked by docs/loop/LOOP.md
 
+## D21: Compose the single catch-up without regressing the panel ceiling or connection lease
+- **Question:** how should the incoming base fixes compose with the completed panel cutover at landing?
+- **Options:** discard either side; preserve the base corrections and the public panel extension together.
+- **Chose:** retain the ten-route union, public PANEL_METHOD_PARAMS, notification commands and strict authenticated-proof transition; compose the base's terminal claim validation, optional mobileState selector, individually bounded viewport dimensions, atomic credential rollback snapshot and nullable initial base-page reports. Panel reports do not wait for an unrelated session layout. The CLI exports one canonical commands table, and the disk generation store uses a typed object plus the base's local touch closure. Preserve incoming bounded wait guards and minimal catalog fixture isolation; remove the conflicting obsolete allowlist-copy test rather than restore its dead export.
+- **Why:** base D7 reserves the panel extension to this item, D9 requires public delivery contracts, D10 denies broad events, and D11 binds terminal control to the connection lease. Neither side requires dropping the other item's authority constraints.
+- **Evidence:** one git merge build/roadmap; incoming decision handoff covering all34 changed logs including sb-mobile-app D7/D9–D11/D13–D14/D21; bun install --ignore-scripts && bun run typecheck exit0 (23.20seconds, including install). No suite, dogfood, review round or test-failure work after the operator cutover.
+- **Reversibility:** medium
+- **Confidence:** high
+- **Revisit if:** the end phase identifies a consumer-visible integration defect.
+- **Source:** locked by docs/loop/LOOP.md; supersedes the pending catch-up step in D20
+
 ## Progress
-Built implementation and acceptance tests committed; every implementer worktree removed and every owned startup/check process finished. Dependencies ready:true. Root and Expo typecheck pass. The single implementation-only follow-up was added. Next: merge build/roadmap once, preserve incoming decisions, rerun only typecheck, commit/detach and canonical queue land. No further suite, UI campaign, review or failure debugging before the end phase. After land, remove the owned /tmp scratch and update loop notes with the controller's actual receipt.
+Built implementation and acceptance tests committed; every implementer worktree removed and every owned startup/check process finished. Dependencies ready:true. The single implementation-only follow-up was added. The one required roadmap catch-up is resolved; all incoming decisions were read. Root and Expo typecheck pass on the composed source. Commit this catch-up, detach and canonical queue land now; the controller's receipt is authoritative. No further suite, UI campaign, review or failure debugging before the end phase. After land, remove the owned /tmp scratch and record the actual receipt in loop notes.

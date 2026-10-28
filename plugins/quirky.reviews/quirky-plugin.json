@@ -4696,6 +4696,9 @@
             "url": {
               "type": "string"
             },
+            "worktree": {
+              "type": "string"
+            },
             "invert": {
               "type": "boolean"
             }

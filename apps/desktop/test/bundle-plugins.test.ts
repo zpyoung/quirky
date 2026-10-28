@@ -287,7 +287,6 @@ describe('bundlePlugins', () => {
   test('copies the generated mobile page bundle into the packaged quirky.mobile plugin', async () => {
     const mobile = writePlugin('quirky.mobile', {
       main: 'main.ts',
-      staticAssets: ['assets/mobile']
     }, {
       'main.ts': 'export const active = true\n',
       'assets/mobile/manifest.json': '{\"v\":1,\"shellVersion\":1}\n',
@@ -305,7 +304,7 @@ describe('bundlePlugins', () => {
 })
 
 test('desktop mobile packaging builds a fresh page bundle before copying plugin assets', async () => {
-  const mobile = writePlugin('quirky.mobile', { main: 'main.ts', staticAssets: ['assets/mobile'] }, {
+  const mobile = writePlugin('quirky.mobile', { main: 'main.ts' }, {
     'main.ts': 'export const active = true\n'
   })
   write(join(work, 'apps', 'mobile', 'web-entry', 'main.tsx'), 'document.body.dataset.bundle = \"fresh\"')

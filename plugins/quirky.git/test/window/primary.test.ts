@@ -11,7 +11,10 @@ afterEach(shutdown)
 
 /** Waits for the primary button to show `label`, then returns it and the panel's report of it. */
 async function ladder(w: World, label: string) {
-  await w.win.waitFor(() => text(primary()) === label)
+  await w.win.waitFor(() =>
+    text(primary()) === label &&
+    (label !== 'Publish Branch' || !primary().disabled)
+  )
   const reported = await w.win.waitFor(async () => {
     const r = (await w.report())?.primary
     return r?.label === label ? r : undefined

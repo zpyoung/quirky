@@ -5,10 +5,10 @@
     {
       "id": "SC-18",
       "title": "Reveal in Finder on a Source Control row opens a Finder window with that file selected",
-      "status": "pending",
-      "lastRun": null,
-      "report": null,
-      "summary": null
+      "status": "blocked",
+      "lastRun": "2026-10-28",
+      "report": "/Users/zpyoung/orca/workspaces/quirky/native-qa/.quirk/using-apps-like-a-user/runs/20261028T051749-7676/report.md",
+      "summary": "Seen working: Reveal in Finder selected exactly README.md, but the effect lands in Finder so the harness can't certify it."
     }
   ]
 }

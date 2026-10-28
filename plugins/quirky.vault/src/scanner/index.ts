@@ -94,6 +94,36 @@ class ParseCache {
       // The parse cache is disposable; source reads remain authoritative.
     }
   }
+  async subagentParent(childId: string): Promise<string | null> {
+    const db = await this.open()
+    if (!db) return null
+    try {
+      const row = db.query('SELECT parent_id FROM subagents WHERE child_id = ?').get(childId) as { parent_id?: unknown } | null
+      return typeof row?.parent_id === 'string' ? row.parent_id : null
+    } catch {
+      return null
+    }
+  }
+
+  async setSubagentParent(childId: string, parentId: string): Promise<void> {
+    const db = await this.open()
+    if (!db) return
+    try {
+      db.query('INSERT INTO subagents(child_id, parent_id) VALUES (?, ?) ON CONFLICT(child_id) DO UPDATE SET parent_id=excluded.parent_id').run(childId, parentId)
+    } catch {
+      // A failed metadata write leaves the child resolvable for this Worker lifetime.
+    }
+  }
+
+  async deleteSubagentParent(childId: string): Promise<void> {
+    const db = await this.open()
+    if (!db) return
+    try {
+      db.query('DELETE FROM subagents WHERE child_id = ?').run(childId)
+    } catch {
+      // Persisted child ownership is disposable metadata.
+    }
+  }
 
   invalidate(id: string): void {
     const entry = this.rows.get(id)
@@ -103,6 +133,11 @@ class ParseCache {
     }
     try {
       this.db?.query('DELETE FROM sessions WHERE id = ?').run(id)
+    } catch {
+      // A broken derived cache cannot prevent source validation or browsing.
+    }
+    try {
+      this.db?.query('DELETE FROM subagents WHERE child_id = ? OR parent_id = ?').run(id, id)
     } catch {
       // A broken derived cache cannot prevent source validation or browsing.
     }
@@ -140,7 +175,7 @@ class ParseCache {
       try {
         await mkdir(dirname(this.filePath), { recursive: true })
         const db = new Database(this.filePath, { create: true })
-        db.exec('PRAGMA journal_mode = WAL; PRAGMA synchronous = NORMAL; CREATE TABLE IF NOT EXISTS sessions(id TEXT PRIMARY KEY, signature TEXT NOT NULL, session_json TEXT NOT NULL, seen_at INTEGER NOT NULL); CREATE INDEX IF NOT EXISTS sessions_seen_at ON sessions(seen_at)')
+        db.exec('PRAGMA journal_mode = WAL; PRAGMA synchronous = NORMAL; CREATE TABLE IF NOT EXISTS sessions(id TEXT PRIMARY KEY, signature TEXT NOT NULL, session_json TEXT NOT NULL, seen_at INTEGER NOT NULL); CREATE INDEX IF NOT EXISTS sessions_seen_at ON sessions(seen_at); CREATE TABLE IF NOT EXISTS subagents(child_id TEXT PRIMARY KEY, parent_id TEXT NOT NULL); CREATE INDEX IF NOT EXISTS subagents_parent ON subagents(parent_id)')
         this.db = db
         return db
       } catch {
@@ -345,7 +380,7 @@ export function createScanner(options: ScannerOptions): VaultScanner {
     const discovery = await discover(signal)
     const current = discovery.candidates.find((candidate) => stableSourceId(candidate) === id)
     if (current) return current
-    const parentId = registeredSubagents.get(id)
+    const parentId = registeredSubagents.get(id) ?? await cache.subagentParent(id)
     if (!parentId) return null
     const parent = discovery.candidates.find((candidate) => stableSourceId(candidate) === parentId)
     if (!parent) return null
@@ -430,17 +465,32 @@ export function createScanner(options: ScannerOptions): VaultScanner {
     async subagents(id) {
       const parent = await currentCandidateById(id)
       if (!parent || (parent.agent !== 'claude' && parent.agent !== 'omp')) return []
+      const generationAtStart = generation
       const parentId = stableSourceId(parent)
       const paths = await observeSubagentFiles(parent)
       const sessions: VaultSession[] = []
       for (const filePath of paths) {
         const candidate = await candidateForSubagent(parent, filePath)
         if (!candidate) continue
-        const session = await parseCandidate(candidate, undefined, undefined, generation, true, false)
-        if (session) {
-          registeredSubagents.set(stableSourceId(candidate), parentId)
-          sessions.push(session)
+        const session = await parseCandidate(candidate, undefined, undefined, generationAtStart, true, false)
+        if (!session) continue
+        const childId = stableSourceId(candidate)
+        const current = await candidateForSubagent(parent, filePath)
+        if (
+          !current ||
+          stableSourceId(current) !== childId ||
+          current.signature !== candidate.signature ||
+          invalidated.has(parentId) ||
+          invalidated.has(childId)
+        ) continue
+        registeredSubagents.set(childId, parentId)
+        await cache.setSubagentParent(childId, parentId)
+        if (invalidated.has(parentId) || invalidated.has(childId)) {
+          registeredSubagents.delete(childId)
+          await cache.deleteSubagentParent(childId)
+          continue
         }
+        sessions.push(session)
       }
       return sessions
     },
@@ -472,6 +522,9 @@ export function createScanner(options: ScannerOptions): VaultScanner {
     invalidate(id) {
       generation++
       invalidated.add(id)
+      for (const [childId, parentId] of registeredSubagents) {
+        if (childId === id || parentId === id) registeredSubagents.delete(childId)
+      }
       cache.invalidate(id)
     },
     close() {

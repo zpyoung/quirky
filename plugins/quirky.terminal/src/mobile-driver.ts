@@ -219,7 +219,7 @@ export class MobileDriverService {
         .filter((mobile) => mobile.deviceId === attachedBy)
         .flatMap((mobile) => [...mobile.sessions.keys()])
     )
-    const terminals = this.states().filter((item) =>
+    const terminals = this.states(caller.role === 'mobile').filter((item) =>
       (session === undefined || item.session === session) &&
       (visibleSessions === null || visibleSessions.has(item.session))
     ).map((item) => ({ ...item, controlledByCaller: isCurrentPhoneDriver(item.driver, caller) }))
@@ -491,9 +491,9 @@ export class MobileDriverService {
     if (this.leases.get(sessionId) === lease) this.leases.delete(sessionId)
   }
 
-  private states(): MobileTerminalState[] {
+  private states(includeWatching = false): MobileTerminalState[] {
     return [...this.leases.entries()]
-      .filter(([, lease]) => lease.driver !== null || lease.phoneFit)
+      .filter(([, lease]) => lease.driver !== null || lease.phoneFit || (includeWatching && lease.phones.size > 0))
       .map(([session, lease]) => ({
         session,
         driver: lease.driver ? { ...lease.driver } : null,

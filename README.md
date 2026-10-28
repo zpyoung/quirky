@@ -22,6 +22,24 @@ logs and cleanup.
 
 Inside any Quirky terminal, the `quirky` command is on PATH: try `quirky status` or `quirky help`.
 
+## Phone companion
+
+`apps/mobile` contains the Expo companion for direct LAN or tailnet connections. It pairs with
+`quirky mobile pair --address <reachable-desktop-address>` by scanning the QR, opening the
+`quirky://pair` link, or pasting the code. Pairing pins the desktop key; bearer credentials stay
+in the phone's secure store. No relay or cloud account is used.
+
+Build the desktop normally to include its verified workspace/session page bundle. For an iOS
+development build, run `bun run --filter '@quirky/mobile' ios` with Xcode configured. The custom
+page-origin module requires a native development build, not Expo Go. To check the portable
+client and page code, use `bun run typecheck:mobile` and `bun run build:mobile-pages`.
+
+The companion opens workspaces, drives terminal sessions under an explicit input lease, and
+answers agent questions. Interactive native chat, dictation, reversible workspace Sleep, and
+filters requiring unavailable client provenance are not supported. Other mobile panels and
+signed distribution are tracked separately. Actual camera, secure-store, WebView and keyboard
+checks remain in [the native scenario handoff](docs/loop/native/sb-mobile-app.json).
+
 ## Agent Session History
 
 Open **Agent Session History** to browse agent-owned transcripts and resume a session in a
@@ -35,11 +53,17 @@ titles only. Enabling stores a local searchable copy of unredacted conversations
 characters per tool result; authenticated clients can search that copy. Disable retains it.
 **Clear search data** disables search and removes only the derived index, not original transcripts.
 
+Vault owns the **Search every agent session** tip. A successful local enable marks it seen;
+disable, clear and restart preserve that state. The tip never grants consent: when search is
+off, the full disclosure and explicit **Enable** control remain available. Read the canonical
+state with `quirky vault search-tip --json` or `quirky.vault/getSearchTip`.
+
 The same core flows are scriptable:
 
 ```sh
 quirky vault list --unlimited --json
 quirky vault search --index-status --json
+quirky vault search-tip --json
 quirky vault enable
 quirky vault search 'remembered words' --fresh --json
 quirky vault resume '<id from list>'
@@ -61,6 +85,20 @@ Advanced parity and verification obligations are tracked in
 
 `bun run test` runs the whole suite through the configured test host. Use
 `bun scripts/suite.ts <dirs>` for affected packages and `bun test <file>` for a single file.
+
+Verify shell integration with the explicit Bash 5.2/5.3 matrix. Supply two installed GNU Bash
+executables (temporary source builds are sufficient):
+
+```sh
+bun run test:bash -- /path/to/bash-5.2/bin/bash /path/to/bash-5.3/bin/bash
+```
+
+The command rejects missing or wrong versions instead of skipping coverage. Each version runs
+the real-PTY Bash cases with disposable homes. For a single runtime, set `QUIRKY_TEST_BASH` when
+running `packages/daemon/test/shell-path.test.ts`; ordinary tests still use `/bin/bash`.
+Empty, whitespace and comment input must not produce command completions, including when
+`functrace` inherits DEBUG into the prompt helpers. Real commands still report their status
+when history ignores duplicates, ignores leading spaces, or is disabled.
 
 ### Public plugin UI and grouping APIs
 
@@ -116,6 +154,25 @@ The root TypeScript configuration resolves both public `@quirky/protocol` entrie
 workspace source, so newly added plugins do not need generated per-plugin links for typechecking.
 Keep those mappings aligned with `packages/protocol/package.json` exports.
 
+## Editor documents and shared review notes
+
+New Markdown documents use collision-safe untitled placeholders. Save opens a relative-path
+Save As dialog; cancelling keeps the draft. The public `quirky.editor/saveAs` method accepts
+`bufferId`, `path` and `expectedRevision`, refuses existing destinations and preserves the
+buffer and tab identities. Closing an untouched blank placeholder removes only that owned file;
+template-created, edited and externally changed files are retained.
+
+Source Control's Notes shelf includes both diff notes and Markdown review notes, including notes
+whose editor tab has closed. `quirky git notes --worktree <id> --json` lists the same notes.
+Copy, scoped clear and send use the canonical owner stores; confirmed sends remove only unchanged
+snapshots, and concurrent edits survive. A shared delivery reservation prevents a Markdown note
+from being sent simultaneously from its editor rail and Source Control.
+
+Source Control resolves GitHub review state for the current branch and HEAD before offering
+review creation, then hands the guarded preparation result to the existing Reviews composer.
+The [parity sweep specification](docs/quirk/specs/2026-10-28-m7-sweep-editor-source-control/logic.md)
+records the implemented flows and the remaining editor/hosted-target completion work.
+
 ## Docs
 
 - [docs/v1.md](docs/v1.md): what v1 does and leaves out, and how the parts fit together.
@@ -123,6 +180,8 @@ Keep those mappings aligned with `packages/protocol/package.json` exports.
   decisions made so far.
 - [docs/roadmap.md](docs/roadmap.md): the build order for every kept Orca feature and the plugin
   kernel, with each milestone's exit test.
+- [plugins/README.md](plugins/README.md): built-in command groups, including the Heimdall
+  fleet, watcher controls and optional Claude owner API.
 - [docs/stack-proposal.md](docs/stack-proposal.md): how the stack choice was settled, including the
   native Swift option, with the measurements.
 - [research/orca-features/](research/orca-features/README.md): how each Orca feature Quirky keeps

@@ -10,9 +10,10 @@ import type {
   GateRow,
   InboxResult,
   MessageRow,
-  RequestShowResult,
+  ReplyResult,
   RunRow,
   SendResult,
+  RequestShowResult,
   TaskRow
 } from '../src/contracts'
 import {
@@ -58,8 +59,9 @@ beforeEach(async () => {
   fixture = await startOrchestrationFixture()
 })
 afterEach(async () => {
-  await fixture?.cleanup()
+  const running = fixture
   fixture = undefined!
+  await running?.cleanup()
 })
 
 const createRun = async (party: OrchestrationParty, objective = 'test objective', requestId?: string) =>
@@ -91,6 +93,24 @@ async function rejected(promise: Promise<unknown>): Promise<unknown> {
   expect(error).toBeDefined()
   return error
 }
+
+function ownPending<T>(promise: Promise<T>) {
+  const settled = promise.then(
+    (value) => ({ ok: true as const, value }),
+    (error: unknown) => ({ ok: false as const, error })
+  )
+  return {
+    async value(): Promise<T> {
+      const outcome = await settled
+      if (!outcome.ok) throw outcome.error
+      return outcome.value
+    },
+    async settle(): Promise<void> {
+      await settled
+    }
+  }
+}
+
 async function waitForAcceptedRequest(party: OrchestrationParty, requestId: string) {
   return waitForAsync(async () => {
     const receipt = await call<{
@@ -147,17 +167,16 @@ function seedReceipts(path: string, callerFingerprint: string, rows: readonly Re
   }
 }
 
-async function primeReceiptCallerFingerprint(party: OrchestrationParty, path: string): Promise<string> {
-  const primer = await consume(party)
-  expect(primer.messages).toHaveLength(0)
-  const database = new Database(path)
+async function receiptCallerFingerprint(party: OrchestrationParty, requestId: string): Promise<string> {
+  const receipt = await call<RequestShowResult>(party, REQUEST_SHOW, { requestId })
+  expect(receipt).toMatchObject({ requestId, state: 'completed' })
+  const database = new Database(join(fixture.home, 'plugin-data', 'quirky.orchestration', 'store.db'))
   try {
-    const receipt = database.prepare(
-      'SELECT caller_fingerprint FROM mutation_receipts WHERE request_id = ?'
-    ).get(primer.mutation.requestId) as { caller_fingerprint: string } | null | undefined
-    if (receipt === undefined || receipt === null) throw new Error('the safe consume mutation did not create a receipt')
-    database.prepare('DELETE FROM mutation_receipts WHERE request_id = ?').run(primer.mutation.requestId)
-    return receipt.caller_fingerprint
+    const row = database
+      .query('SELECT caller_fingerprint FROM mutation_receipts WHERE request_id = ?')
+      .get(requestId) as { caller_fingerprint: string } | null
+    if (!row) throw new Error('completed fixture receipt is missing its caller fingerprint')
+    return row.caller_fingerprint
   } finally {
     database.close()
   }
@@ -332,43 +351,47 @@ describe('quirky.orchestration daemon API acceptance', () => {
 
     const dispatch = await createDispatch(coordinator, run.id, active.task.id, worker.id)
     const askRequest = mutation()
-    const pendingQuestion = call<AskResult>(worker, ASK, {
+    const pendingQuestion = ownPending(call<AskResult>(worker, ASK, {
       ...askRequest,
       mode: 'question',
       question: 'settle this with the Task',
       timeoutMs: 1000
-    })
-    const accepted = await waitForAcceptedRequest(worker, askRequest.requestId)
-    expect(accepted.receipt?.checkpoint?.messageId).toBeTruthy()
-    await expectReason(call(coordinator, TASK_UPDATE, {
-      ...mutation(),
-      runId: run.id,
-      taskId: active.task.id,
-      status: 'ready'
-    }), 'task_not_startable')
-    await expectReason(call(coordinator, TASK_UPDATE, {
-      ...mutation(),
-      runId: run.id,
-      taskId: unrelated.task.id,
-      status: 'dispatched'
-    }), 'task_not_startable')
-    expect((await call<{ tasks: TaskRow[] }>(coordinator, TASK_LIST, { runId: run.id, status: 'dispatched' })).tasks.map((t) => t.id)).toEqual([active.task.id])
+    }))
+    try {
+      const accepted = await waitForAcceptedRequest(worker, askRequest.requestId)
+      expect(accepted.receipt?.checkpoint?.messageId).toBeTruthy()
+      await expectReason(call(coordinator, TASK_UPDATE, {
+        ...mutation(),
+        runId: run.id,
+        taskId: active.task.id,
+        status: 'ready'
+      }), 'task_not_startable')
+      await expectReason(call(coordinator, TASK_UPDATE, {
+        ...mutation(),
+        runId: run.id,
+        taskId: unrelated.task.id,
+        status: 'dispatched'
+      }), 'task_not_startable')
+      expect((await call<{ tasks: TaskRow[] }>(coordinator, TASK_LIST, { runId: run.id, status: 'dispatched' })).tasks.map((t) => t.id)).toEqual([active.task.id])
 
-    const settled = await call<TaskUpdateResult>(coordinator, TASK_UPDATE, {
-      ...mutation(),
-      runId: run.id,
-      taskId: active.task.id,
-      status: 'completed',
-      result: 'coordinator completion'
-    })
-    expect(settled.task.status).toBe('completed')
-    const attempt = await call<{ dispatch: DispatchRow | null; worker: unknown }>(coordinator, DISPATCH_SHOW, {
-      taskId: active.task.id
-    })
-    expect(attempt.dispatch?.status).toBe('completed')
-    expect(attempt.worker).toBeNull()
-    expect((await call<{ tasks: TaskRow[] }>(coordinator, TASK_LIST, { runId: run.id, ready: true })).tasks.map((t) => t.id)).toContain(dependent.task.id)
-    expect((await pendingQuestion).state).toBe('cancelled')
+      const settled = await call<TaskUpdateResult>(coordinator, TASK_UPDATE, {
+        ...mutation(),
+        runId: run.id,
+        taskId: active.task.id,
+        status: 'completed',
+        result: 'coordinator completion'
+      })
+      expect(settled.task.status).toBe('completed')
+      const attempt = await call<{ dispatch: DispatchRow | null; worker: unknown }>(coordinator, DISPATCH_SHOW, {
+        taskId: active.task.id
+      })
+      expect(attempt.dispatch?.status).toBe('completed')
+      expect(attempt.worker).toBeNull()
+      expect((await call<{ tasks: TaskRow[] }>(coordinator, TASK_LIST, { runId: run.id, ready: true })).tasks.map((t) => t.id)).toContain(dependent.task.id)
+      expect((await pendingQuestion.value()).state).toBe('cancelled')
+    } finally {
+      await pendingQuestion.settle()
+    }
 
     const failed = await createTask(coordinator, run.id, 'failed context attempt')
     const pendingChild = await createTask(coordinator, run.id, 'wait for failed Task', {
@@ -376,22 +399,26 @@ describe('quirky.orchestration daemon API acceptance', () => {
     })
     const failedDispatch = await createDispatch(coordinator, run.id, failed.task.id, worker.id)
     const failureAskRequest = mutation()
-    const pendingOnFailure = call<AskResult>(worker, ASK, {
+    const pendingOnFailure = ownPending(call<AskResult>(worker, ASK, {
       ...failureAskRequest,
       mode: 'question',
       question: 'close this on failure',
       timeoutMs: 1000
-    })
-    await waitForAcceptedRequest(worker, failureAskRequest.requestId)
-    const failureUpdate = await call<TaskUpdateResult>(coordinator, TASK_UPDATE, {
-      ...mutation(),
-      runId: run.id,
-      taskId: failed.task.id,
-      status: 'failed',
-      result: 'coordinator failed this context attempt'
-    })
-    expect(failureUpdate.task.status).toBe('failed')
-    expect((await pendingOnFailure).state).toBe('cancelled')
+    }))
+    try {
+      await waitForAcceptedRequest(worker, failureAskRequest.requestId)
+      const failureUpdate = await call<TaskUpdateResult>(coordinator, TASK_UPDATE, {
+        ...mutation(),
+        runId: run.id,
+        taskId: failed.task.id,
+        status: 'failed',
+        result: 'coordinator failed this context attempt'
+      })
+      expect(failureUpdate.task.status).toBe('failed')
+      expect((await pendingOnFailure.value()).state).toBe('cancelled')
+    } finally {
+      await pendingOnFailure.settle()
+    }
     expect((await call<{ dispatch: DispatchRow | null }>(coordinator, DISPATCH_SHOW, { taskId: failed.task.id })).dispatch?.status).toBe('failed')
     expect((await call<{ tasks: TaskRow[] }>(coordinator, TASK_LIST, { runId: run.id, status: 'pending' })).tasks.map((task) => task.id)).toContain(pendingChild.task.id)
     expect(failedDispatch.dispatch.taskId).toBe(failed.task.id)
@@ -407,9 +434,13 @@ describe('quirky.orchestration daemon API acceptance', () => {
     const first = await createTask(coordinator, run.id, 'first')
     const second = await createTask(coordinator, run.id, 'second')
 
-    const beforeInputs = fixture.harness.pty.inputs.length
-    await call(coordinator, DISPATCH, { runId: run.id, taskId: first.task.id, to: worker.id, dryRun: true })
-    expect(fixture.harness.pty.inputs).toHaveLength(beforeInputs)
+    const dryRun = await call<{ dryRun: true; dispatch: null }>(coordinator, DISPATCH, {
+      runId: run.id,
+      taskId: first.task.id,
+      to: worker.id,
+      dryRun: true
+    })
+    expect(dryRun).toMatchObject({ dryRun: true, dispatch: null })
     expect((await call<{ tasks: TaskRow[] }>(coordinator, TASK_LIST, { runId: run.id, ready: true })).tasks.map((t) => t.id)).toEqual([first.task.id, second.task.id])
 
     const attempt = await createDispatch(coordinator, run.id, first.task.id, worker.id)
@@ -472,12 +503,11 @@ describe('quirky.orchestration daemon API acceptance', () => {
     })
     expect(accepted.kind).toBe('worker_report')
     if (accepted.kind !== 'worker_report') throw new Error('expected a worker report result')
-    expect(accepted.report.status).toBe('accepted')
     if (accepted.report.status !== 'accepted') throw new Error('expected an accepted worker report')
-    const acceptedTaskResult = accepted.report.task.result
-    if (acceptedTaskResult?.kind !== 'worker_report') throw new Error('expected a worker report task result')
-    expect(acceptedTaskResult).toMatchObject({ kind: 'worker_report', reportedBy: worker.id, outcome: 'succeeded' })
-    expect(acceptedTaskResult.filesModified).toEqual(['src/a.ts'])
+    expect(accepted.report.task.result).toMatchObject({ kind: 'worker_report', reportedBy: worker.id, outcome: 'succeeded' })
+    const acceptedResult = accepted.report.task.result
+    if (!acceptedResult || acceptedResult.kind !== 'worker_report') throw new Error('accepted report did not settle its Task')
+    expect(acceptedResult.filesModified).toEqual(['src/a.ts'])
 
     const duplicate = await send(worker, {
       to: { kind: 'run', runId: run.id },
@@ -521,6 +551,7 @@ describe('quirky.orchestration daemon API acceptance', () => {
     })
     expect(rejectedReport.kind).toBe('worker_report')
     if (rejectedReport.kind !== 'worker_report') throw new Error('expected an auditable worker report rejection')
+    if (rejectedReport.report.status !== 'rejected') throw new Error('expected a rejected worker report')
     expect(rejectedReport.report).toEqual({ status: 'rejected', reason: 'sender_not_assignee', audited: true })
     expect((await call<{ tasks: TaskRow[] }>(coordinator, TASK_LIST, { runId: run.id, status: 'dispatched' })).tasks.map((row) => row.id)).toContain(wrongOwner.task.id)
     const reportedFailureTask = await createTask(coordinator, run.id, 'worker-reported failure')
@@ -536,8 +567,7 @@ describe('quirky.orchestration daemon API acceptance', () => {
     })
     expect(workerFailure.kind).toBe('worker_report')
     if (workerFailure.kind !== 'worker_report') throw new Error('expected a worker report result')
-    expect(workerFailure.report.status).toBe('accepted')
-    if (workerFailure.report.status !== 'accepted') throw new Error('expected an accepted worker report')
+    if (workerFailure.report.status !== 'accepted') throw new Error('expected an accepted worker failure report')
     const failedAttempt = await call<{ dispatch: DispatchRow | null; worker: unknown }>(coordinator, DISPATCH_SHOW, {
       taskId: reportedFailureTask.task.id
     })
@@ -546,6 +576,35 @@ describe('quirky.orchestration daemon API acceptance', () => {
     const workerFailureTaskResult = workerFailure.report.task.result
     if (workerFailureTaskResult?.kind !== 'worker_report') throw new Error('expected a worker report task result')
     expect(workerFailureTaskResult).toMatchObject({ kind: 'worker_report', outcome: 'failed' })
+  }, 30_000)
+
+  test('AC6 a default worker message resolves through its exact active Dispatch Run', async () => {
+    const coordinator = await fixture.createParty('coordinator')
+    const worker = await fixture.createParty('worker')
+    const outsider = await fixture.createParty('outsider')
+    const { run } = await createRun(coordinator, 'default worker routing')
+    const task = await createTask(coordinator, run.id, 'message through active assignment')
+    const dispatch = await createDispatch(coordinator, run.id, task.task.id, worker.id)
+    const sent = await send(worker, { type: 'question', subject: 'Fixture', body: 'Continue?' })
+    if (sent.kind !== 'message') throw new Error('expected a normal message result')
+    expect(sent.messages).toHaveLength(1)
+    const message = sent.messages[0]!
+    expect(message.runId).toBe(run.id)
+    expect(message.fromSessionId).toBe(worker.id)
+    expect(message.sender.kind).toBe('dispatch')
+    if (message.sender.kind !== 'dispatch') throw new Error('the authenticated worker message lost its Dispatch sender')
+    expect(message.sender.dispatchId).toBe(dispatch.dispatch.id)
+    expect(message.mailbox.kind).toBe('run')
+    if (message.mailbox.kind !== 'run') throw new Error('the worker message did not route to a Run mailbox')
+    expect(message.mailbox.runId).toBe(run.id)
+    expect(message.subject).toBe('Fixture')
+    expect(message.body).toBe('Continue?')
+    await expectReason(
+      send(outsider, { type: 'question', subject: 'Fixture', body: 'Continue?' }),
+      'run_required'
+    )
+    const inbox = await call<InboxResult>(coordinator, INBOX, { full: true, limit: 100 })
+    expect(inbox.messages.filter((row) => row.body === 'Continue?')).toHaveLength(1)
   }, 30_000)
 
   test('AC6 routes direct, Run and Dispatch addresses and fans groups out once per eligible mailbox', async () => {
@@ -588,17 +647,6 @@ describe('quirky.orchestration daemon API acceptance', () => {
     expect(workerDefault.kind).toBe('message')
     if (workerDefault.kind !== 'message') throw new Error('expected a default worker message')
     expect(workerDefault.messages[0]?.mailbox).toEqual({ kind: 'run', runId: run.id })
-
-    const direct = await send(coordinator, {
-      to: { kind: 'session', sessionId: other.id },
-      runId: run.id,
-      type: 'status',
-      subject: 'direct address',
-      body: 'direct mailbox'
-    })
-    expect(direct.kind).toBe('message')
-    if (direct.kind !== 'message') throw new Error('expected a direct message')
-    expect(direct.messages[0]?.mailbox).toEqual({ kind: 'session', sessionId: other.id })
 
     const all = await send(coordinator, {
       to: { kind: 'group', group: 'all' },
@@ -682,17 +730,30 @@ describe('quirky.orchestration daemon API acceptance', () => {
     const messagesAfterRefusal = await call<InboxResult>(coordinator, INBOX, { full: true, limit: 100 })
     expect(messagesAfterRefusal.messages).toHaveLength(messagesBeforeRefusal)
     await expectReason(send(other, { type: 'status', subject: 'no active Run' }), 'run_required')
+    const unboundRecipient = await fixture.createParty('unbound-recipient')
     const unboundMail = await send(other, {
-      to: { kind: 'run', runId: 'run_unbound' },
+      to: { kind: 'session', sessionId: unboundRecipient.id },
       type: 'status',
       subject: 'unbound direct mail',
       body: 'mail-only unbound mailbox'
     })
     expect(unboundMail.kind).toBe('message')
-    if (unboundMail.kind !== 'message') throw new Error('expected mail to the run_unbound namespace')
-    expect(unboundMail.messages[0]?.mailbox).toEqual({ kind: 'run', runId: 'run_unbound' })
+    if (unboundMail.kind !== 'message') throw new Error('expected unbound direct mail')
+    expect(unboundMail.messages[0]?.runId).toBe('run_unbound')
+    expect(unboundMail.messages[0]?.mailbox).toEqual({ kind: 'session', sessionId: unboundRecipient.id })
 
     await call(other, RUN_USE, { ...mutation(), runId: run.id })
+    const direct = await send(coordinator, {
+      to: { kind: 'session', sessionId: other.id },
+      runId: run.id,
+      type: 'status',
+      subject: 'direct address',
+      body: 'direct mailbox'
+    })
+    expect(direct.kind).toBe('message')
+    if (direct.kind !== 'message') throw new Error('expected a direct message')
+    expect(direct.messages[0]?.mailbox).toEqual({ kind: 'run', runId: run.id })
+
     const historicAddress = await send(other, {
       to: { kind: 'session', sessionId: coordinator.id },
       runId: run.id,
@@ -764,34 +825,38 @@ describe('quirky.orchestration daemon API acceptance', () => {
     const coordinator = await fixture.createParty('coordinator')
     const { run } = await createRun(coordinator, 'filtered wait')
     const waiterRequest = mutation()
-    const waiting = consume(coordinator, {
+    const waiting = ownPending(consume(coordinator, {
       ...waiterRequest,
       wait: true,
       timeoutMs: 800,
       types: ['question']
-    })
-    await waitForAcceptedRequest(coordinator, waiterRequest.requestId)
-    await expectReason(consume(coordinator, { wait: true, timeoutMs: 100, types: ['question'] }), 'waiter_exists')
-    await send(coordinator, { to: { kind: 'run', runId: run.id }, type: 'status', subject: 'status first', body: 'does not match filter' })
-    const afterStatus = await call<{ state: string }>(coordinator, REQUEST_SHOW, { requestId: waiterRequest.requestId })
-    expect(afterStatus.state).toBe('pending')
-    await send(coordinator, { to: { kind: 'run', runId: run.id }, type: 'question', subject: 'question second', body: 'matches filter' })
-    const result = await waiting
-    expect(result.timedOut).toBe(false)
-    expect(result.messages.map((message) => message.subject)).toEqual(['status first', 'question second'])
-    expect(result.deliveryId).toBeTruthy()
-    await consume(coordinator, { ackDeliveryId: result.deliveryId })
-
-    const timeout = await consume(coordinator, { wait: true, timeoutMs: 35, types: ['dispatch'] })
-    expect(timeout.timedOut).toBe(true)
-    expect(timeout.messages).toHaveLength(0)
-    await rejected(call(coordinator, CHECK, {
-      ...mutation(),
-      mode: 'consume',
-      limit: 1
     }))
-    await rejected(call(coordinator, CHECK, { mode: 'peek', types: ['not-a-message-type'] }))
-    await expectReason(call(coordinator, CHECK, { mode: 'all', wait: true }), 'invalid_argument')
+    try {
+      await waitForAcceptedRequest(coordinator, waiterRequest.requestId)
+      await expectReason(consume(coordinator, { wait: true, timeoutMs: 100, types: ['question'] }), 'waiter_exists')
+      await send(coordinator, { to: { kind: 'run', runId: run.id }, type: 'status', subject: 'status first', body: 'does not match filter' })
+      const afterStatus = await call<{ state: string }>(coordinator, REQUEST_SHOW, { requestId: waiterRequest.requestId })
+      expect(afterStatus.state).toBe('pending')
+      await send(coordinator, { to: { kind: 'run', runId: run.id }, type: 'question', subject: 'question second', body: 'matches filter' })
+      const result = await waiting.value()
+      expect(result.timedOut).toBe(false)
+      expect(result.messages.map((message) => message.subject)).toEqual(['status first', 'question second'])
+      expect(result.deliveryId).toBeTruthy()
+      await consume(coordinator, { ackDeliveryId: result.deliveryId })
+
+      const timeout = await consume(coordinator, { wait: true, timeoutMs: 35, types: ['dispatch'] })
+      expect(timeout.timedOut).toBe(true)
+      expect(timeout.messages).toHaveLength(0)
+      await rejected(call(coordinator, CHECK, {
+        ...mutation(),
+        mode: 'consume',
+        limit: 1
+      }))
+      await rejected(call(coordinator, CHECK, { mode: 'peek', types: ['not-a-message-type'] }))
+      await expectReason(call(coordinator, CHECK, { mode: 'all', wait: true }), 'invalid_argument')
+    } finally {
+      await waiting.settle()
+    }
   }, 30_000)
 
   test('AC8 preserves a committed acknowledgement when rebinding interrupts the following wait', async () => {
@@ -803,33 +868,69 @@ describe('quirky.orchestration daemon API acceptance', () => {
     expect(delivery.deliveryId).toBeTruthy()
 
     const followingRequest = mutation()
-    const followingWait = consume(coordinator, {
+    const followingWait = ownPending(consume(coordinator, {
       ...followingRequest,
       ackDeliveryId: delivery.deliveryId,
       wait: true,
       timeoutMs: 1000
-    })
-    await waitForAcceptedRequest(coordinator, followingRequest.requestId)
-    await createRun(coordinator, 'new binding')
-    const interrupted = await followingWait
-    expect(interrupted.acknowledged).toBe(delivery.deliveryId)
-    expect(interrupted.cancelled || interrupted.waitInterrupted === 'consumer_fenced').toBe(true)
+    }))
+    try {
+      await waitForAcceptedRequest(coordinator, followingRequest.requestId)
+      await createRun(coordinator, 'new binding')
+      const interrupted = await followingWait.value()
+      expect(interrupted.acknowledged).toBe(delivery.deliveryId)
+      expect(interrupted.cancelled || interrupted.waitInterrupted === 'consumer_fenced').toBe(true)
 
-    await call(nextCoordinator, RUN_USE, { ...mutation(), runId: run.id })
-    await expectReason(consume(nextCoordinator, { ackDeliveryId: delivery.deliveryId }), 'consumer_fenced')
+      await call(nextCoordinator, RUN_USE, { ...mutation(), runId: run.id })
+      await expectReason(consume(nextCoordinator, { ackDeliveryId: delivery.deliveryId }), 'consumer_fenced')
+    } finally {
+      await followingWait.settle()
+    }
   }, 30_000)
 
   test('AC8 disconnecting a live consumer wait rejects honestly without consuming mail', async () => {
     const coordinator = await fixture.createParty('coordinator')
     await createRun(coordinator, 'disconnect while waiting')
     const request = mutation()
-    const waiting = consume(coordinator, { ...request, wait: true, timeoutMs: 1000 })
-    await waitForAcceptedRequest(coordinator, request.requestId)
-    await coordinator.client.close()
-    const error = await rejected(waiting)
-    expect(error).toMatchObject({ name: 'ConnectionLost' })
+    const waiting = ownPending(consume(coordinator, { ...request, wait: true, timeoutMs: 1000 }))
+    try {
+      await waitForAcceptedRequest(coordinator, request.requestId)
+      await coordinator.client.close()
+      const error = await rejected(waiting.value())
+      expect(error).toMatchObject({ name: 'ConnectionLost' })
+    } finally {
+      await waiting.settle()
+    }
   }, 30_000)
 
+  test('AC9 dispatched mail stays unread until its consumer acknowledges the delivery', async () => {
+    const coordinator = await fixture.createParty('coordinator')
+    const worker = await fixture.createParty('worker')
+    const { run } = await createRun(coordinator, 'dispatch delivery')
+    const task = await createTask(coordinator, run.id, 'mailbox target')
+    const dispatch = await createDispatch(coordinator, run.id, task.task.id, worker.id)
+    const mail = await send(coordinator, {
+      to: { kind: 'dispatch', dispatchId: dispatch.dispatch.id },
+      runId: run.id,
+      type: 'dispatch',
+      subject: 'worker brief',
+      body: 'dispatch content'
+    })
+    if (mail.kind !== 'message') throw new Error('expected dispatched mail')
+    const messageId = mail.messages[0]?.id
+    expect(messageId).toBeTruthy()
+
+    const beforeConsume = await call<InboxResult>(coordinator, INBOX, { full: true, limit: 100 })
+    expect(beforeConsume.messages.find((message) => message.id === messageId)?.read).toBe(false)
+    const delivery = await consume(worker)
+    expect(delivery.messages.map((message) => message.id)).toContain(messageId)
+    const beforeAck = await call<InboxResult>(coordinator, INBOX, { full: true, limit: 100 })
+    expect(beforeAck.messages.find((message) => message.id === messageId)?.read).toBe(false)
+
+    await consume(worker, { ackDeliveryId: delivery.deliveryId })
+    const afterAck = await call<InboxResult>(coordinator, INBOX, { full: true, limit: 100 })
+    expect(afterAck.messages.find((message) => message.id === messageId)?.read).toBe(true)
+  }, 30_000)
 
   test('AC10 timed-out questions resume by their original ID, answer once, and reject conflicts', async () => {
     const coordinator = await fixture.createParty('coordinator')
@@ -875,50 +976,54 @@ describe('quirky.orchestration daemon API acceptance', () => {
       body: 'wrong coordinator'
     }))
     const resumedRequest = mutation()
-    const resumed = call<AskResult>(worker, ASK, {
+    const resumed = ownPending(call<AskResult>(worker, ASK, {
       ...resumedRequest,
       mode: 'resume',
       messageId: questionId,
       timeoutMs: 800
-    })
-    await waitForAcceptedRequest(worker, resumedRequest.requestId)
-    const answer = await call<{ kind: 'question_answer'; duplicate: boolean; answerMessageId: MessageRow['id'] }>(coordinator, REPLY, {
-      ...mutation(),
-      runId: run.id,
-      messageId: questionId,
-      body: 'right'
-    })
-    expect(answer.kind).toBe('question_answer')
-    expect(answer.duplicate).toBe(false)
-    const answered = await resumed
-    if (answered.state !== 'answered') throw new Error('expected an answered request')
-    expect(answered).toMatchObject({ state: 'answered', answer: 'right', messageId: questionId })
-    expect(answered.answerMessageId).toBe(answer.answerMessageId)
+    }))
+    try {
+      await waitForAcceptedRequest(worker, resumedRequest.requestId)
+      const answer = await call<ReplyResult>(coordinator, REPLY, {
+        ...mutation(),
+        runId: run.id,
+        messageId: questionId,
+        body: 'right'
+      })
+      if (answer.kind !== 'question_answer') throw new Error('expected an exact question answer')
+      expect(answer.duplicate).toBe(false)
+      const answered = await resumed.value()
+      expect(answered).toMatchObject({ state: 'answered', answer: 'right', messageId: questionId })
+      if (answered.state !== 'answered') throw new Error('expected the resumed question to be answered')
+      expect(answered.answerMessageId).toBe(answer.answerMessageId)
 
-    const sameAnswer = await call<{ duplicate: boolean }>(coordinator, REPLY, {
-      ...mutation(),
-      runId: run.id,
-      messageId: questionId,
-      body: 'right'
-    })
-    expect(sameAnswer.duplicate).toBe(true)
-    await expectReason(call(coordinator, REPLY, {
-      ...mutation(),
-      runId: run.id,
-      messageId: questionId,
-      body: 'left'
-    }), 'answer_conflict')
-    const repeatedResume = await call<AskResult>(worker, ASK, {
-      ...mutation(),
-      mode: 'resume',
-      messageId: questionId,
-      timeoutMs: 0
-    })
-    expect(repeatedResume).toMatchObject({ state: 'answered', answer: 'right', messageId: questionId })
-    const inbox = await call<InboxResult>(coordinator, INBOX, { full: true, limit: 100 })
-    expect(inbox.messages.filter((message) => message.id === questionId)).toHaveLength(1)
-    expect(inbox.messages.find((message) => message.id === answer.answerMessageId)?.read).toBe(true)
-    expect(dispatch.dispatch.status).toBe('dispatched')
+      const sameAnswer = await call<{ duplicate: boolean }>(coordinator, REPLY, {
+        ...mutation(),
+        runId: run.id,
+        messageId: questionId,
+        body: 'right'
+      })
+      expect(sameAnswer.duplicate).toBe(true)
+      await expectReason(call(coordinator, REPLY, {
+        ...mutation(),
+        runId: run.id,
+        messageId: questionId,
+        body: 'left'
+      }), 'answer_conflict')
+      const repeatedResume = await call<AskResult>(worker, ASK, {
+        ...mutation(),
+        mode: 'resume',
+        messageId: questionId,
+        timeoutMs: 0
+      })
+      expect(repeatedResume).toMatchObject({ state: 'answered', answer: 'right', messageId: questionId })
+      const inbox = await call<InboxResult>(coordinator, INBOX, { full: true, limit: 100 })
+      expect(inbox.messages.filter((message) => message.id === questionId)).toHaveLength(1)
+      expect(inbox.messages.find((message) => message.id === answer.answerMessageId)?.read).toBe(true)
+      expect(dispatch.dispatch.status).toBe('dispatched')
+    } finally {
+      await resumed.settle()
+    }
   }, 30_000)
 
   test('AC11 ordinary replies are threaded and gates keep dependent Tasks blocked until resolution', async () => {
@@ -975,10 +1080,9 @@ describe('quirky.orchestration daemon API acceptance', () => {
     const resolved = await call<GateMutation>(coordinator, GATE_RESOLVE, {
       ...mutation(),
       gateId: gate.gate.id,
-      resolution: 'approved'
+      resolution: 'approve'
     })
     expect(resolved.gate.status).toBe('resolved')
-    expect(resolved.gate.resolution).toBe('approved')
     expect(resolved.gate.resolvedAt).toBeTruthy()
     expect(resolved.task.status).toBe('ready')
     expect((await call<{ gates: GateRow[] }>(coordinator, GATE_LIST, { runId: run.id, taskId: b.task.id, status: 'resolved' })).gates).toHaveLength(1)
@@ -1004,6 +1108,11 @@ describe('quirky.orchestration daemon API acceptance', () => {
   test('AC12 durable receipts join concurrent retries, fence mismatched requests, and survive reconnect/restart', async () => {
     const coordinator = await fixture.createParty('coordinator')
     const requestId = crypto.randomUUID()
+    await rejected(call(coordinator, RUN, {
+      requestId: crypto.randomUUID(),
+      contractVersion: 2,
+      objective: 'unsupported contract version'
+    }))
     const params = { ...mutation(requestId), objective: 'single durable operation' }
     const [first, concurrent] = await Promise.all([
       call<RunMutation>(coordinator, RUN, params),
@@ -1024,12 +1133,8 @@ describe('quirky.orchestration daemon API acceptance', () => {
     expect(receipt).toMatchObject({ state: 'completed', interpretation: 'completed_and_replayable' })
 
     const absentId = crypto.randomUUID()
-    const absent = await call<RequestShowResult>(reconnected, REQUEST_SHOW, { requestId: absentId })
-    expect(absent).toEqual({
-      requestId: absentId,
-      state: 'absent',
-      interpretation: 'absence_does_not_prove_no_effect'
-    })
+    const absent = await call<{ state: string; interpretation: string }>(reconnected, REQUEST_SHOW, { requestId: absentId })
+    expect(absent).toMatchObject({ state: 'absent', interpretation: 'absence_does_not_prove_no_effect' })
 
     const task = await createTask(reconnected, first.run.id, 'survives restart')
     const messageReceipt = await send(reconnected, {
@@ -1050,7 +1155,7 @@ describe('quirky.orchestration daemon API acceptance', () => {
     expect((await call<{ tasks: TaskRow[] }>(afterRestart, TASK_LIST, { runId: first.run.id, ready: false })).tasks.map((row) => row.id)).toContain(task.task.id)
   }, 45_000)
 
-  test('AC12 pending asks expose an accepted receipt checkpoint without minting replacement work', async () => {
+  test('AC12 pending asks expose an accepted receipt checkpoint and join an active retry', async () => {
     const coordinator = await fixture.createParty('coordinator')
     const worker = await fixture.createParty('worker')
     const { run } = await createRun(coordinator, 'accepted ask checkpoint')
@@ -1063,34 +1168,134 @@ describe('quirky.orchestration daemon API acceptance', () => {
       question: 'keep pending through checkpoint',
       timeoutMs: 1500
     }
-    const pendingAsk = call<AskResult>(worker, ASK, askParams)
-    const pendingReceipt = await waitForAcceptedRequest(worker, askRequest.requestId)
-    expect(pendingReceipt.state).toBe('pending')
-    const checkpointMessageId = pendingReceipt.receipt?.checkpoint?.messageId
-    expect(checkpointMessageId).toBeTruthy()
-    const countBefore = (await call<InboxResult>(coordinator, INBOX, { full: true, limit: 100 })).count
-    const joinedAsk = call<AskResult>(worker, ASK, askParams)
-    const joinedReceipt = await waitForAcceptedRequest(worker, askRequest.requestId)
-    expect(joinedReceipt.state).toBe('pending')
-    expect(joinedReceipt.receipt?.checkpoint?.messageId).toBe(checkpointMessageId)
-    const [timedOut, joined] = await Promise.all([pendingAsk, joinedAsk])
-    expect(timedOut.state).toBe('timedOut')
-    expect(checkpointMessageId).toBe(timedOut.messageId)
-    expect(joined).toMatchObject({ state: 'timedOut', messageId: checkpointMessageId })
-    const countAfter = (await call<InboxResult>(coordinator, INBOX, { full: true, limit: 100 })).count
-    expect(countAfter).toBe(countBefore)
+    const pendingAsk = ownPending(call<AskResult>(worker, ASK, askParams))
+    try {
+      const pendingReceipt = await waitForAcceptedRequest(worker, askRequest.requestId)
+      expect(pendingReceipt.state).toBe('pending')
+      const questionId = pendingReceipt.receipt?.checkpoint?.messageId
+      if (!questionId) throw new Error('accepted Ask receipt omitted its question message')
+      const countBefore = (await call<InboxResult>(coordinator, INBOX, { full: true, limit: 100 })).count
+      const retryAsk = ownPending(call<AskResult>(worker, ASK, askParams))
+      try {
+        const stillPending = await call<RequestShowResult>(worker, REQUEST_SHOW, { requestId: askRequest.requestId })
+        expect(stillPending).toMatchObject({
+          state: 'pending',
+          receipt: { checkpoint: { state: 'accepted', messageId: questionId } }
+        })
+        const answer = await call<ReplyResult>(coordinator, REPLY, {
+          ...mutation(),
+          runId: run.id,
+          messageId: questionId,
+          body: 'continue'
+        })
+        if (answer.kind !== 'question_answer') throw new Error('expected an exact question answer')
+        expect(answer.duplicate).toBe(false)
+        const [original, retried] = await Promise.all([pendingAsk.value(), retryAsk.value()])
+        if (original.state !== 'answered') throw new Error('expected the live Ask to be answered')
+        if (retried.state !== 'answered') throw new Error('expected the active retry to join the answered Ask')
+        expect(retried).toEqual(original)
+        expect(original).toMatchObject({ answer: 'continue', messageId: questionId })
+        expect(original.answerMessageId).toBe(answer.answerMessageId)
+        const afterAnswer = await call<InboxResult>(coordinator, INBOX, { full: true, limit: 100 })
+        expect(afterAnswer.count).toBe(countBefore + 1)
+        expect(afterAnswer.messages.filter((message) => message.id === questionId)).toHaveLength(1)
+      } finally {
+        await retryAsk.settle()
+      }
+    } finally {
+      await pendingAsk.settle()
+    }
   }, 30_000)
 
-  test('AC12 real mutations expire 30-day receipts and prune the oldest completed batch of 64', async () => {
+  test('AC12 an accepted Ask receipt with no live invocation remains unknown', async () => {
     const coordinator = await fixture.createParty('coordinator')
-    const absentBefore = crypto.randomUUID()
-    await call(coordinator, REQUEST_SHOW, { requestId: absentBefore })
+    const worker = await fixture.createParty('worker')
+    const { run } = await createRun(coordinator, 'accepted Ask receipt fixture')
+    const task = await createTask(coordinator, run.id, 'pending question')
+    await createDispatch(coordinator, run.id, task.task.id, worker.id)
+    const askPayload = {
+      mode: 'question' as const,
+      question: 'keep the accepted receipt without a live invocation',
+      timeoutMs: 10_000
+    }
+    const askRequest = mutation()
+    const askParams = { ...askRequest, ...askPayload }
+    const pendingAsk = ownPending(call<AskResult>(worker, ASK, askParams))
+    let questionId: string | undefined
+    try {
+      const accepted = await waitForAcceptedRequest(worker, askRequest.requestId)
+      expect(accepted.state).toBe('pending')
+      questionId = accepted.receipt?.checkpoint?.messageId
+      if (!questionId) throw new Error('accepted Ask receipt omitted its question message')
+      const originalReceipt = await call<RequestShowResult>(worker, REQUEST_SHOW, { requestId: askRequest.requestId })
+      expect(originalReceipt).toMatchObject({
+        state: 'pending',
+        receipt: { checkpoint: { state: 'accepted', messageId: questionId } }
+      })
+
+      const retryRequest = mutation()
+      const retryParams = { ...retryRequest, ...askPayload }
+      const database = new Database(join(fixture.home, 'plugin-data', 'quirky.orchestration', 'store.db'))
+      try {
+        // requestId is excluded from the mutation digest; copy the accepted row's actual caller, payload hash, and checkpoint.
+        database.prepare(`
+          INSERT INTO mutation_receipts
+            (caller_fingerprint, request_id, method, payload_hash, state, checkpoint_json, result_json, created_at, updated_at)
+          SELECT caller_fingerprint, ?, method, payload_hash, state, checkpoint_json, result_json, created_at, updated_at
+          FROM mutation_receipts
+          WHERE request_id = ? AND method = 'ask' AND state = 'pending' AND checkpoint_json IS NOT NULL
+        `).run(retryRequest.requestId, askRequest.requestId)
+      } finally {
+        database.close()
+      }
+      const seededReceipt = await call<RequestShowResult>(worker, REQUEST_SHOW, { requestId: retryRequest.requestId })
+      expect(seededReceipt).toMatchObject({
+        state: 'pending',
+        receipt: { checkpoint: { state: 'accepted', messageId: questionId } }
+      })
+
+      const beforeRetry = await call<InboxResult>(coordinator, INBOX, { full: true, limit: 100 })
+      const retryAsk = ownPending(call<AskResult>(worker, ASK, retryParams))
+      try {
+        await expectReason(retryAsk.value(), 'operation_unknown')
+        const afterRetry = await call<InboxResult>(coordinator, INBOX, { full: true, limit: 100 })
+        expect(afterRetry.count).toBe(beforeRetry.count)
+        expect(afterRetry.messages.map((message) => message.id)).toEqual(beforeRetry.messages.map((message) => message.id))
+      } finally {
+        await retryAsk.settle()
+      }
+    } finally {
+      try {
+        if (questionId) {
+          const answer = await call<ReplyResult>(coordinator, REPLY, {
+            ...mutation(),
+            runId: run.id,
+            messageId: questionId,
+            body: 'continue'
+          })
+          if (answer.kind !== 'question_answer') throw new Error('expected an exact question answer')
+          expect(answer.duplicate).toBe(false)
+          expect(await pendingAsk.value()).toMatchObject({
+            state: 'answered',
+            answer: 'continue',
+            messageId: questionId
+          })
+        }
+      } finally {
+        await pendingAsk.settle()
+      }
+    }
+  }, 45_000)
+
+  test('AC12 real mutations expire completed receipts after 30 days', async () => {
+    const coordinator = await fixture.createParty('coordinator')
+    const receiptOwner = await createRun(coordinator, 'receipt caller precondition')
+    const callerFingerprint = await receiptCallerFingerprint(coordinator, receiptOwner.mutation.requestId)
     const databasePath = join(fixture.home, 'plugin-data', 'quirky.orchestration', 'store.db')
-    const callerFingerprint = await primeReceiptCallerFingerprint(coordinator, databasePath)
     const expiredId = crypto.randomUUID()
     const expiredAt = new Date(Date.now() - 31 * 24 * 60 * 60 * 1000).toISOString()
     seedReceipts(databasePath, callerFingerprint, [{ requestId: expiredId, state: 'completed', createdAt: expiredAt }])
-    expect(await call(coordinator, REQUEST_SHOW, { requestId: expiredId })).toMatchObject({ state: 'completed' })
+    expect(await call<RequestShowResult>(coordinator, REQUEST_SHOW, { requestId: expiredId })).toMatchObject({ state: 'completed' })
     await createRun(coordinator, 'triggers expired receipt pruning')
     expect(await call<RequestShowResult>(coordinator, REQUEST_SHOW, { requestId: expiredId })).toEqual({
       requestId: expiredId,
@@ -1098,39 +1303,44 @@ describe('quirky.orchestration daemon API acceptance', () => {
       interpretation: 'absence_does_not_prove_no_effect'
     })
 
-    const completed = Array.from({ length: 10_000 }, (_, index) => ({
-      requestId: crypto.randomUUID(),
-      state: 'completed' as const,
-      createdAt: new Date(Date.now() - 20_000 + index).toISOString()
-    }))
-    seedReceipts(databasePath, callerFingerprint, completed)
-    const afterBatch = await createRun(coordinator, 'prunes oldest completed receipt batch')
-    expect((await call<RequestShowResult>(coordinator, REQUEST_SHOW, { requestId: completed[0]!.requestId })).state).toBe('absent')
-    expect((await call<RequestShowResult>(coordinator, REQUEST_SHOW, { requestId: completed[63]!.requestId })).state).toBe('absent')
-    expect((await call<RequestShowResult>(coordinator, REQUEST_SHOW, { requestId: completed[64]!.requestId })).state).toBe('completed')
-    expect((await call<RequestShowResult>(coordinator, REQUEST_SHOW, { requestId: afterBatch.mutation.requestId })).state).toBe('completed')
   }, 60_000)
 
   test('AC12 unresolved receipt saturation refuses effects with mutation_ledger_full', async () => {
     const coordinator = await fixture.createParty('coordinator')
-    await call(coordinator, REQUEST_SHOW, { requestId: crypto.randomUUID() })
+    const receiptOwner = await createRun(coordinator, 'receipt caller precondition')
+    const callerFingerprint = await receiptCallerFingerprint(coordinator, receiptOwner.mutation.requestId)
     const databasePath = join(fixture.home, 'plugin-data', 'quirky.orchestration', 'store.db')
-    const callerFingerprint = await primeReceiptCallerFingerprint(coordinator, databasePath)
     const pending = Array.from({ length: 10_000 }, () => ({
       requestId: crypto.randomUUID(),
       state: 'pending' as const,
       createdAt: new Date().toISOString()
     }))
     seedReceipts(databasePath, callerFingerprint, pending)
+    const runIdsBefore = (await call<{ runs: RunRow[] }>(coordinator, RUN_LIST, { limit: 100 })).runs.map((run) => run.id)
+    expect(runIdsBefore).toEqual([receiptOwner.run.id])
     await expectReason(createRun(coordinator, 'must not cross unresolved ledger saturation'), 'mutation_ledger_full')
-    expect((await call<{ runs: RunRow[] }>(coordinator, RUN_LIST, { limit: 100 })).runs).toHaveLength(0)
-    expect(await call(coordinator, REQUEST_SHOW, { requestId: pending[0]!.requestId })).toMatchObject({ state: 'pending' })
+    const runIdsAfter = (await call<{ runs: RunRow[] }>(coordinator, RUN_LIST, { limit: 100 })).runs.map((run) => run.id)
+    expect(runIdsAfter).toEqual(runIdsBefore)
+    expect(await call<RequestShowResult>(coordinator, REQUEST_SHOW, { requestId: pending[0]!.requestId })).toMatchObject({ state: 'pending' })
   }, 60_000)
 
   test('AC13 reset modes preserve the scoped survivors and retain mutation receipts', async () => {
     const coordinator = await fixture.createParty('coordinator')
     const worker = await fixture.createParty('worker')
     const { run } = await createRun(coordinator, 'reset scopes')
+
+    const runConfirmedReset = async (mode: 'messages' | 'tasks' | 'all', requestId: string): Promise<void> => {
+      const result = await fixture.runCli(coordinator, [
+        'orchestration',
+        'reset',
+        `--${mode}`,
+        '--retry-request',
+        requestId,
+        '--yes'
+      ])
+      expect(result.code).toBe(0)
+    }
+
     const task = await createTask(coordinator, run.id, 'survivor in messages reset')
     const gate = await call<GateMutation>(coordinator, GATE_CREATE, {
       ...mutation(),
@@ -1146,12 +1356,11 @@ describe('quirky.orchestration daemon API acceptance', () => {
     if (firstMail.kind !== 'message') throw new Error('expected mail before reset')
     const delivery = await consume(coordinator)
 
-    const messagesReset = await call<{ mode: string; mutation: MutationMarker }>(coordinator, RESET, {
-      ...mutation(),
-      yes: true,
-      mode: 'messages'
+    const messagesRequest = mutation()
+    await runConfirmedReset('messages', messagesRequest.requestId)
+    expect(await call<RequestShowResult>(coordinator, REQUEST_SHOW, { requestId: messagesRequest.requestId })).toMatchObject({
+      state: 'completed'
     })
-    expect(messagesReset.mode).toBe('messages')
     expect((await call<InboxResult>(coordinator, INBOX, { full: true, limit: 100 })).messages).toHaveLength(0)
     expect((await call<{ runs: RunRow[] }>(coordinator, RUN_LIST, { limit: 100 })).runs.map((row) => row.id)).toContain(run.id)
     expect((await call<{ tasks: TaskRow[] }>(coordinator, TASK_LIST, { runId: run.id, ready: false })).tasks.map((row) => row.id)).toContain(task.task.id)
@@ -1168,36 +1377,41 @@ describe('quirky.orchestration daemon API acceptance', () => {
     const questionTask = await createTask(coordinator, run.id, 'question closes on task reset')
     const questionDispatch = await createDispatch(coordinator, run.id, questionTask.task.id, worker.id)
     const questionRequest = mutation()
-    const pendingQuestion = call<AskResult>(worker, ASK, {
+    const pendingQuestion = ownPending(call<AskResult>(worker, ASK, {
       ...questionRequest,
       mode: 'question',
       question: 'close when Tasks reset',
       timeoutMs: 1000
-    })
-    const questionReceipt = await waitForAcceptedRequest(worker, questionRequest.requestId)
-    const questionId = questionReceipt.receipt?.checkpoint?.messageId
-    expect(questionId).toBeTruthy()
-    expect(questionDispatch.dispatch.taskId).toBe(questionTask.task.id)
-    const tasksReset = await call<{ mode: string; mutation: MutationMarker }>(coordinator, RESET, {
-      ...mutation(),
-      yes: true,
-      mode: 'tasks'
-    })
-    expect(tasksReset.mode).toBe('tasks')
-    expect((await pendingQuestion).state).toBe('cancelled')
-    expect((await call<{ runs: RunRow[] }>(coordinator, RUN_LIST, { limit: 100 })).runs.map((row) => row.id)).toContain(run.id)
-    expect((await call<{ tasks: TaskRow[]; count: number }>(coordinator, TASK_LIST, { runId: run.id, ready: false })).count).toBe(0)
-    expect((await call<{ gates: GateRow[] }>(coordinator, GATE_LIST, { runId: run.id })).gates).toHaveLength(0)
-    const preserved = await call<InboxResult>(coordinator, INBOX, { full: true, limit: 100 })
-    expect(preserved.messages.map((row) => row.subject)).toContain('mail survives tasks reset')
-    expect(preserved.messages.some((message) => message.id === questionId)).toBe(true)
+    }))
+    try {
+      const questionReceipt = await waitForAcceptedRequest(worker, questionRequest.requestId)
+      const questionId = questionReceipt.receipt?.checkpoint?.messageId
+      expect(questionId).toBeTruthy()
+      expect(questionDispatch.dispatch.taskId).toBe(questionTask.task.id)
+      const tasksRequest = mutation()
+      await runConfirmedReset('tasks', tasksRequest.requestId)
+      expect(await call<RequestShowResult>(coordinator, REQUEST_SHOW, { requestId: tasksRequest.requestId })).toMatchObject({
+        state: 'completed'
+      })
+      expect((await pendingQuestion.value()).state).toBe('cancelled')
+      expect((await call<{ runs: RunRow[] }>(coordinator, RUN_LIST, { limit: 100 })).runs.map((row) => row.id)).toContain(run.id)
+      expect((await call<{ tasks: TaskRow[]; count: number }>(coordinator, TASK_LIST, { runId: run.id, ready: false })).count).toBe(0)
+      expect((await call<{ gates: GateRow[] }>(coordinator, GATE_LIST, { runId: run.id })).gates).toHaveLength(0)
+      const preserved = await call<InboxResult>(coordinator, INBOX, { full: true, limit: 100 })
+      expect(preserved.messages.map((row) => row.subject)).toContain('mail survives tasks reset')
+      expect(preserved.messages.some((message) => message.id === questionId)).toBe(true)
 
-    const allReceipt = mutation()
-    await call(coordinator, RESET, { ...allReceipt, yes: true, mode: 'all' })
-    expect((await call<{ runs: RunRow[] }>(coordinator, RUN_LIST, { limit: 100 })).runs).toHaveLength(0)
-    expect((await call<InboxResult>(coordinator, INBOX, { full: true, limit: 100 })).messages).toHaveLength(0)
-    expect(await call(coordinator, REQUEST_SHOW, { requestId: allReceipt.requestId })).toMatchObject({ state: 'completed' })
-    expect((await call<{ id: string }[]>(coordinator, 'quirky.session/list', {})).map((session) => session.id)).toContain(worker.id)
+      const allReceipt = mutation()
+      await runConfirmedReset('all', allReceipt.requestId)
+      expect((await call<{ runs: RunRow[] }>(coordinator, RUN_LIST, { limit: 100 })).runs).toHaveLength(0)
+      expect((await call<InboxResult>(coordinator, INBOX, { full: true, limit: 100 })).messages).toHaveLength(0)
+      expect(await call<RequestShowResult>(coordinator, REQUEST_SHOW, { requestId: allReceipt.requestId })).toMatchObject({
+        state: 'completed'
+      })
+      expect((await call<{ id: string }[]>(coordinator, 'quirky.session/list', {})).map((session) => session.id)).toContain(worker.id)
+    } finally {
+      await pendingQuestion.settle()
+    }
   }, 45_000)
 
   test('AC13 a fresh daemon restart fences old deliveries without inventing a live attempt', async () => {

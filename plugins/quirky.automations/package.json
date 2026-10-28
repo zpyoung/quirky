@@ -4,6 +4,13 @@
   "private": true,
   "type": "module",
   "dependencies": {
-    "@quirky/protocol": "workspace:*"
+    "@quirky/protocol": "workspace:*",
+    "react": "19.2.0",
+    "react-dom": "19.2.0"
+  },
+  "devDependencies": {
+    "@happy-dom/global-registrator": "20.14.6",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0"
   }
 }

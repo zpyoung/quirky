@@ -5,34 +5,34 @@
     {
       "id": "AC4-native-focus",
       "title": "Launch the real desktop app with isolated HOME and QUIRKY_HOME and synthetic provider fixtures. Minimize or unfocus it, then restore and focus after the five-minute freshness window: automatic Usage refresh follows real window visibility/focus, repeated immediate focus is debounced, and manual Refresh still works. Never use the user's provider homes or make model requests.",
-      "status": "pending",
-      "lastRun": null,
-      "report": null,
-      "summary": null
+      "status": "blocked",
+      "lastRun": "2026-10-28",
+      "report": "/Users/zpyoung/orca/workspaces/quirky/native-qa/.quirk/using-apps-like-a-user/runs/20261028T060850-9953/report.md",
+      "summary": "There's no provider usage source to refresh against, so focus-driven refresh and debounce can't be told apart in the window."
     },
     {
       "id": "AC6-AC7-native-link",
       "title": "With isolated HOME/QUIRKY_HOME and a fixture native Claude/Codex sign-in command, verify Copy sign-in link uses the macOS clipboard and Open invokes the system browser for exactly the displayed approved authorize URL. Cancel the owned fixture login and return focus to Quirky. Never authenticate a real account or grant access to the user's credentials.",
-      "status": "pending",
-      "lastRun": null,
-      "report": null,
-      "summary": null
+      "status": "fail",
+      "lastRun": "2026-10-28",
+      "report": "/Users/zpyoung/orca/workspaces/quirky/native-qa/.quirk/using-apps-like-a-user/runs/20261028T060850-9953/report.md",
+      "summary": "Codex Copy link copies the exact authorize URL and Cancel stops the owned login, but Open does nothing in the desktop window (plain target=_blank link; no system browser)."
     },
     {
       "id": "AC5-native-keychain-dialog",
       "title": "Under isolated provider homes, exercise macOS Keychain denial or lock behavior using only a newly created synthetic credential service owned by this run. Any real OS permission dialog must not expose a credential or cause cross-profile fallback; Usage reports Keychain unavailable and remains usable. Never read, alter or delete another service or approve access to a real user credential; record blocked if this cannot be exercised safely unattended. Delete only the run-owned synthetic service afterwards.",
-      "status": "pending",
-      "lastRun": null,
-      "report": null,
-      "summary": null
+      "status": "blocked",
+      "lastRun": "2026-10-28",
+      "report": "/Users/zpyoung/orca/workspaces/quirky/native-qa/.quirk/using-apps-like-a-user/runs/20261028T060850-9953/report.md",
+      "summary": "Not exercised: it needs a synthetic Keychain service and possibly an OS permission dialog, which can't be handled safely unattended."
     },
     {
       "id": "AC11-AC12-native-pane-focus",
       "title": "With isolated synthetic Claude/Codex conversations in the real desktop window, switch accounts and use the existing restart choices. The new resumed tab receives real keyboard focus, typing reaches the intended fixture terminal, and closing the Usage/settings popover returns focus without stealing another application's focus. Confirm retained conversation contents, not only the account label, and stop all run-owned processes.",
-      "status": "pending",
-      "lastRun": null,
-      "report": null,
-      "summary": null
+      "status": "blocked",
+      "lastRun": "2026-10-28",
+      "report": "/Users/zpyoung/orca/workspaces/quirky/native-qa/.quirk/using-apps-like-a-user/runs/20261028T060850-9953/report.md",
+      "summary": "The stale-account banner and the Usage drill-in Keep/Restart appear, but Restart of the fixture Codex session fails, so resumed-tab focus can't be checked."
     }
   ]
 }

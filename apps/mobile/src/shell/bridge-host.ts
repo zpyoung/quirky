@@ -48,9 +48,10 @@ function safeError(error: unknown): string {
 }
 
 function safeResponse(value: unknown): unknown {
-  const json = JSON.stringify(value)
+  const result = value === undefined ? null : value
+  const json = JSON.stringify(result)
   if (json === undefined || utf8ByteLength(json) > MOBILE_BRIDGE_MAX_BYTES - 2048) throw new Error('Quirky response exceeds the page bridge limit')
-  return value
+  return result
 }
 
 function exactEnvelope(value: unknown, keys: readonly string[]): value is JsonRecord {

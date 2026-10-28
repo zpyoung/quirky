@@ -1,14 +1,19 @@
 import type { CliArgs, CliContext, CliModule } from '@quirky/protocol'
 import type { BrowserMethod } from './src/runtime/catalog'
 
-const COMMAND_METHODS: Readonly<Record<string, BrowserMethod>> = {
+type CliBrowserMethod = BrowserMethod | 'preferencesState' | 'profileSet' | 'profileClear' | 'profileDelete' | 'openLink'
+
+const COMMAND_METHODS: Readonly<Record<string, CliBrowserMethod>> = {
+  preferencesState: 'preferencesState', profileSet: 'profileSet', profileClear: 'profileClear', profileDelete: 'profileDelete', openLink: 'openLink',
   profileList: 'profileList', profileCreate: 'profileCreate', tabList: 'tabList', tabShow: 'tabShow', tabCurrent: 'tabCurrent',
   tabCreate: 'tabCreate', tabSwitch: 'tabSwitch', tabClose: 'tabClose', goto: 'goto', eval: 'eval', snapshot: 'snapshot',
   fill: 'fill', click: 'click', screenshot: 'screenshot', exec: 'exec',
   paneOpen: 'paneOpen', paneState: 'paneState', paneNavigate: 'paneNavigate', paneControl: 'paneControl',
   paneReport: 'paneReport', paneClose: 'paneClose', paneSuggestions: 'paneSuggestions', paneWatch: 'paneWatch',
   paneWatchStop: 'paneWatchStop', paneFrameAck: 'paneFrameAck', paneInput: 'paneInput', paneRespond: 'paneRespond',
-  paneDownload: 'paneDownload'
+  paneDownload: 'paneDownload',
+  designArm: 'designArm', designRead: 'designRead', designHover: 'designHover', designCancel: 'designCancel',
+  designCapture: 'designCapture', designFormat: 'designFormat', designTargets: 'designTargets', designSend: 'designSend'
 }
 
 const PAGE_TARGET_COMMANDS: Readonly<Record<string, true>> = {
@@ -31,7 +36,17 @@ async function runGeneric(id: string, args: CliArgs, context: CliContext): Promi
   const params: Record<string, unknown> = {}
   for (const [flag, value] of Object.entries(args.flags)) {
     const key = flag === 'label' ? 'name' : camelCase(flag)
-    params[key] = value
+    const jsonFlag = (id === 'designFormat' && (key === 'payload' || key === 'annotations')) ||
+      (id === 'designSend' && key === 'annotations') || (id === 'designCapture' && key === 'rect')
+    if (jsonFlag && typeof value === 'string') {
+      try {
+        params[key] = JSON.parse(value)
+      } catch {
+        throw context.usage(`--${flag} must contain valid JSON`)
+      }
+    } else {
+      params[key] = value
+    }
   }
   if (Object.hasOwn(PAGE_TARGET_COMMANDS, id)) params.cwd = context.cwd
   const result = await context.call(`quirky.browser/${method}`, params)

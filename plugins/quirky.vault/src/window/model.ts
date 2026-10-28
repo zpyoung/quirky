@@ -9,6 +9,7 @@ import type {
   SearchRequest,
   SearchResponse,
   SearchStatus,
+  SearchTipState,
   ViewState
 } from '../types'
 
@@ -35,6 +36,7 @@ export type VaultSnapshot = {
   list: VaultListState
   search: VaultSearchState
   searchStatus: SearchStatus | null
+  searchTip: SearchTipState | null
   scanProgress: { phase: 'discovering' | 'reading' | 'complete'; scannedFiles: number; parsedFiles: number; current?: string } | null
   hostOutcomes: HostOutcome[]
   repoRows: { id: string; name: string; path: string }[]
@@ -50,15 +52,20 @@ export type VaultViewReport = {
   focusedSearch: boolean
   group: ViewState['group']
   disabledAgents: string[]
+  browseSort: ViewState['browseSort']
+  searchSort: ViewState['searchSort']
   hideEmptySessions: boolean
   sessionLimit: ViewState['sessionLimit']
+  adjustmentCount: number
   visibleIds: string[]
+  listedCount: number
   total: number
   loading: boolean
   searchEnabled: boolean
   hostIssues: number
   sourceIssues: number
   status: string | null
+  searchError: string | null
 }
 
 export type VaultRow = {
@@ -111,6 +118,7 @@ const emptySnapshot = (): VaultSnapshot => ({
   list: { result: null, loading: false, error: null },
   search: { response: null, loading: false, error: null },
   searchStatus: null,
+  searchTip: null,
   scanProgress: null,
   hostOutcomes: [],
   repoRows: [],
@@ -133,6 +141,18 @@ function searchStatusFrom(value: unknown): SearchStatus | null {
   if (!Array.isArray(envelope.hosts) || typeof status.enabled !== 'boolean' || !['closed', 'idle', 'indexing', 'current', 'degraded'].includes(String(status.phase))) return null
   return status as unknown as SearchStatus
 }
+function localSearchStatusFrom(value: unknown): SearchStatus | null {
+  const status = asRecord(value)
+  if (typeof status.enabled !== 'boolean' || !['closed', 'idle', 'indexing', 'current', 'degraded'].includes(String(status.phase))) return null
+  return status as unknown as SearchStatus
+}
+
+function searchTipFrom(value: unknown): SearchTipState | null {
+  const candidate = asRecord(value)
+  return candidate.id === 'agent-session-search' && typeof candidate.seen === 'boolean'
+    ? { id: 'agent-session-search', seen: candidate.seen }
+    : null
+}
 
 
 function outcomeRows(value: unknown): HostOutcome[] {
@@ -153,6 +173,12 @@ function worktreeFrom(layout: UiLayout): string | null {
   return typeof worktree === 'string' && worktree.trim() !== '' ? worktree : null
 }
 
+function repoFrom(layout: UiLayout): string | null {
+  const input = asRecord(layout.view?.input)
+  const repo = input.repo
+  return typeof repo === 'string' && repo.trim() !== '' ? repo : null
+}
+
 
 export class VaultWindowModel {
   private snapshot = emptySnapshot()
@@ -164,6 +190,7 @@ export class VaultWindowModel {
   private listGeneration = 0
   private listToken: string | null = null
   private searchGeneration = 0
+  private searchTipGeneration = 0
   private readonly instance = Math.random().toString(36).slice(2)
   private scanStartedAt: number | null = null
 
@@ -203,6 +230,15 @@ export class VaultWindowModel {
             this.update({ searchStatus: status })
             const hosts = outcomeRows(data)
             if (hosts.length) this.update({ hostOutcomes: mergeHostOutcomes(this.snapshot.hostOutcomes, hosts) })
+          } else if (this.snapshot.view.host === 'local') {
+            const localStatus = localSearchStatusFrom(data)
+            if (localStatus) this.update({ searchStatus: localStatus })
+          }
+        } else if (event.type === 'quirky.vault/searchTipChanged') {
+          const searchTip = searchTipFrom((event as { data?: unknown }).data)
+          if (searchTip) {
+            this.searchTipGeneration += 1
+            this.update({ searchTip })
           }
         }
       }),
@@ -224,6 +260,7 @@ export class VaultWindowModel {
   }
 
   async retryView(): Promise<void> {
+    void this.refreshSearchTip()
     this.update({ list: { result: null, loading: true, error: null } })
     try {
       const view = viewOf(await this.context.call('quirky.vault/getView', {}))
@@ -279,7 +316,24 @@ export class VaultWindowModel {
     const generation = ++this.scopeGeneration
     const worktreeSelector = worktreeFrom(layout)
     if (worktreeSelector === null) {
-      this.update({ scope: { ...this.snapshot.scope, loading: false } })
+      const repoSelector = repoFrom(layout)
+      if (repoSelector === null) {
+        this.update({ scope: { worktree: null, repo: null, worktreeName: null, repoName: null, loading: false } })
+        return
+      }
+      this.update({ scope: { worktree: null, repo: null, worktreeName: null, repoName: null, loading: true } })
+      if (!this.snapshot.repoRows.some((repo) => repo.id === repoSelector)) await this.loadRepositories()
+      if (generation !== this.scopeGeneration || this.stopped) return
+      const repo = this.snapshot.repoRows.find((entry) => entry.id === repoSelector)
+      this.update({
+        scope: {
+          worktree: null,
+          repo: repo?.id ?? null,
+          worktreeName: null,
+          repoName: repo?.name ?? null,
+          loading: false
+        }
+      })
       return
     }
     this.update({ scope: { ...this.snapshot.scope, loading: true } })
@@ -326,6 +380,18 @@ export class VaultWindowModel {
     }
   }
 
+  private async refreshSearchTip(): Promise<void> {
+    const generation = ++this.searchTipGeneration
+    try {
+      const searchTip = searchTipFrom(await this.context.call('quirky.vault/getSearchTip', {}))
+      if (this.stopped || generation !== this.searchTipGeneration) return
+      if (this.snapshot.searchTip?.seen && searchTip?.seen !== true) return
+      this.update({ searchTip })
+    } catch {
+      if (this.stopped || generation !== this.searchTipGeneration || this.snapshot.searchTip?.seen) return
+      this.update({ searchTip: null })
+    }
+  }
   async refreshSearchStatus(host = this.snapshot.view.host): Promise<SearchStatus | null> {
     try {
       const response = await this.context.call('quirky.vault/searchStatus', { host })
@@ -397,9 +463,10 @@ export class VaultWindowModel {
     this.scanStartedAt = Date.now()
     this.update({ list: { result: null, loading: true, error: null }, scanProgress: { phase: 'discovering', scannedFiles: 0, parsedFiles: 0 } })
     try {
+      const within = this.within()
       const result = await this.context.call('quirky.vault/list', {
         host: view.host,
-        ...(this.within() ?? {}),
+        ...(within && Object.keys(within).length ? { within } : {}),
         agents,
         ...(view.sessionLimit === null ? { unlimited: true } : { limit: view.sessionLimit }),
         force,
@@ -421,7 +488,7 @@ export class VaultWindowModel {
     }
   }
 
-  async runSearch(options: { cursor?: string; append?: boolean } = {}): Promise<void> {
+  async runSearch(options: { cursor?: string; append?: boolean; freshness?: SearchRequest['freshness'] } = {}): Promise<void> {
     const view = this.snapshot.view
     const agents = this.selectedAgents()
     if (!this.snapshot.searchStatus?.enabled || view.query.trim() === '' || agents.length === 0) {
@@ -440,15 +507,20 @@ export class VaultWindowModel {
       host: view.host,
       limit: 20,
       ...(options.cursor ? { cursor: options.cursor } : {}),
+      ...(options.freshness ? { freshness: options.freshness } : {}),
       filters: { agents, sort: view.searchSort },
       ...(within && Object.keys(within).length ? { within } : {})
     }
-    this.update({ search: { ...this.snapshot.search, loading: true, error: null } })
+    this.update({
+      search: options.cursor
+        ? { ...this.snapshot.search, loading: true, error: null }
+        : { response: null, loading: true, error: null }
+    })
     try {
       const response = await this.context.call('quirky.vault/search', request as unknown as Record<string, unknown>) as SearchResponse
       if (this.stopped || generation !== this.searchGeneration) return
       if (response.kind === 'stale-cursor' && options.cursor) {
-        await this.runSearch()
+        await this.runSearch({ freshness: options.freshness })
         return
       }
       if (options.append && response.kind === 'results' && this.snapshot.search.response?.kind === 'results') {

@@ -276,13 +276,60 @@ export class PaneService {
     this.store.getProfile(profileId)
     if (tab.profileId === profileId) return structuredClone(tab)
     if (tab.mode === 'watch') {
-      const watch = this.watches.get(paneId)
-      if (watch) await this.stopWatch(watch)
-      this.clearPromptsForPane(paneId)
-      tab.page = null
-      tab.error = null
-      tab.canGoBack = false
-      tab.canGoForward = false
+      const previous = {
+        profileId: tab.profileId,
+        page: tab.page,
+        mode: tab.mode,
+        url: tab.url
+      }
+      const assertUnchanged = () => {
+        if (this.tabs.get(paneId) !== tab || tab.profileId !== previous.profileId ||
+            tab.page !== previous.page || tab.mode !== previous.mode || tab.url !== previous.url) {
+          throw fault('browser_tab_changed', 'browser pane changed while its profile was being switched')
+        }
+      }
+      const previousView = {
+        profileId: tab.profileId,
+        partition: tab.partition,
+        page: tab.page,
+        url: tab.url,
+        title: tab.title,
+        loading: tab.loading,
+        error: tab.error,
+        canGoBack: tab.canGoBack,
+        canGoForward: tab.canGoForward
+      }
+      let page: BrowserPage | undefined
+      let committed = false
+      try {
+        page = await this.createPage(tab.worktreeId, profileId, safeUrl(previous.url))
+        assertUnchanged()
+        const watch = this.watches.get(paneId)
+        if (watch) await this.stopWatch(watch)
+        assertUnchanged()
+        this.clearPromptsForPane(paneId)
+        tab.profileId = profileId
+        tab.partition = this.partition(profileId)
+        tab.page = page.browserPageId
+        tab.url = safeHistoryAddress(page.url) || previous.url
+        tab.title = page.title
+        tab.loading = false
+        tab.error = page.loadError?.description ?? null
+        tab.canGoBack = false
+        tab.canGoForward = false
+        try {
+          this.saveTab(tab)
+        } catch (error) {
+          Object.assign(tab, previousView)
+          throw error
+        }
+        committed = true
+        this.emitChanged()
+        return structuredClone(tab)
+      } catch (error) {
+        if (page && !committed) await this.closeCreatedPage(page.browserPageId)
+        throw error
+      }
     }
     tab.profileId = profileId
     tab.partition = this.partition(profileId)
@@ -592,7 +639,7 @@ export class PaneService {
   }
 
   private async closeCreatedPage(pageId: string): Promise<void> {
-    try { await this.context.call('quirky.browser/tabClose', { page: pageId }) } catch { /* the helper may already have removed the newly created page */ }
+    await this.context.call('quirky.browser/tabClose', { page: pageId, yes: true })
   }
 
   private setActive(tab: PaneTab): void {
@@ -746,11 +793,13 @@ export class PaneService {
         const result = await this.runtime.paneControl(this.pageFor(tab), {
           action: 'find', text, forward: changed ? true : request.forward ?? true, findCurrent: changed ? 0 : tab.find.current
         })
-        tab.find = {
-          text,
-          current: result.total && result.found ? changed ? 1 : ((tab.find.current - 1 + (request.forward === false ? result.total - 1 : 1)) % result.total) + 1 : 0,
-          total: result.total ?? 0
+        const { current, total } = result
+        if (typeof current !== 'number' || typeof total !== 'number' ||
+          !Number.isSafeInteger(current) || !Number.isSafeInteger(total) ||
+          current < 0 || total < 0 || current > total || (total === 0 ? current !== 0 : current === 0)) {
+          throw fault('browser_error', 'find did not return a valid selected occurrence')
         }
+        tab.find = { text, current, total }
         tab.command = null
         tab.error = null
       } else {
@@ -828,9 +877,14 @@ export class PaneService {
     if (request.fromTab && (caller.role !== 'plugin' || caller.pluginId !== 'quirky.terminal')) {
       throw fault('invalid_argument', 'fromTab is reserved for the terminal hosted-tab close hook')
     }
+    if (!request.fromTab && request.tabId !== undefined) {
+      throw fault('invalid_argument', 'tabId is reserved for the terminal hosted-tab close hook')
+    }
     const tab = this.tabs.get(request.pane)
     if (!tab) return true
-    if (request.fromTab && request.tabId !== tab.tabId) throw fault('browser_tab_changed', 'pane close came from a stale hosted tab')
+    if (request.fromTab && request.tabId !== tab.tabId) {
+      throw fault('browser_tab_changed', 'pane close came from a stale hosted tab')
+    }
     if (!request.fromTab && tab.tabId) {
       await this.context.call('quirky.terminal/closeTab', { tab: tab.tabId })
       if (!this.tabs.has(tab.id)) return true
@@ -1258,6 +1312,7 @@ export class PaneService {
     const entry = owner.entry
     try {
       entry.path = this.publishDownload(owner.stagingPath, owner.profileId, entry.name)
+      entry.name = basename(entry.path)
       entry.state = 'completed'
       entry.error = undefined
     } catch (error) {

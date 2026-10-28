@@ -7,7 +7,7 @@ let harness: WorkerAcceptance | undefined
 afterEach(async () => { await harness?.cleanup(); harness = undefined })
 
 async function startRun() {
-  harness = await startWorkerAcceptance()
+  harness = await startWorkerAcceptance({ heldPrefix: 'Working on the assigned native fixture task.' })
   const result = await harness.callAs<MutationResult<{ run: RunRow }>>(harness.coordinator.id, 'run-create', ['--objective', 'Isolated real worker lifecycle acceptance'])
   return { h: harness, run: result.run }
 }
@@ -165,12 +165,12 @@ test('a certified unexpected worker exit records its cause and wakes the coordin
   const worker = await startWorker(h)
   const started = h.events(worker.session).find((event) => event.type === 'started')
   if (!started || typeof started.pid !== 'number') throw new Error('the isolated worker has no owned process receipt')
+  const expectedResource = worker.shown.terminalResource
+  if (!expectedResource) throw new Error('the accepted worker has no terminal resource')
   const before = await h.fixture.call('quirky.session/identity', { session: worker.session }) as { sessionId: string; processIncarnation: string; live: boolean }
   expect(before.sessionId).toBe(worker.session)
   expect(before.live).toBe(true)
-  const terminalResource = worker.shown.terminalResource
-  if (!terminalResource) throw new Error('the exact worker has no terminal custody record')
-  expect(before.processIncarnation).toBe(terminalResource.processIncarnation)
+  expect(before.processIncarnation).toBe(expectedResource.processIncarnation)
   process.kill(started.pid, 'SIGKILL')
   const failed = await eventually(
     () => h.fixture.call('quirky.orchestration/workerShow', { dispatchId: worker.receipt.dispatchId }) as Promise<WorkerShowResult>,

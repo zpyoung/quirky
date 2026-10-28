@@ -21,13 +21,23 @@ test(
 
     const one = harness.call('quirky.terminal-dock/send', { pane, id: 'dock-one', text: 'one' }) as Promise<SendResult>
     const two = harness.call('quirky.terminal-dock/send', { pane, id: 'dock-two', text: 'two\nlines' }) as Promise<SendResult>
-    const consumed = await waitForTuiInput(harness, (input) => input.indexOf(Buffer.from('one')) >= 0 && input.indexOf(Buffer.from('two')) >= 0)
+    const consumed = await waitForTuiInput(harness, (input) => {
+      const firstBody = input.indexOf(Buffer.from('one'))
+      const firstSubmit = input.indexOf(0x0d, firstBody + Buffer.byteLength('one'))
+      const secondBody = input.indexOf(Buffer.from('two\rlines'))
+      const secondSubmit = input.indexOf(0x0d, secondBody + Buffer.byteLength('two\rlines'))
+      return firstBody >= 0 && firstSubmit >= 0 && secondBody >= 0 && secondSubmit >= 0
+    })
     const firstBody = consumed.indexOf(Buffer.from('one'))
-    const secondBody = consumed.indexOf(Buffer.from('two'))
+    const firstBodyEnd = firstBody + Buffer.byteLength('one')
+    const firstSubmit = consumed.indexOf(0x0d, firstBodyEnd)
+    const secondBody = consumed.indexOf(Buffer.from('two\rlines'))
+    const secondBodyEnd = secondBody + Buffer.byteLength('two\rlines')
+    const secondSubmit = consumed.indexOf(0x0d, secondBodyEnd)
     expect(firstBody).toBeGreaterThanOrEqual(0)
-    expect(secondBody).toBeGreaterThan(firstBody)
-    expect(consumed.includes(Buffer.from('two\rlines'))).toBe(true)
-
+    expect(firstSubmit).toBeGreaterThanOrEqual(firstBodyEnd)
+    expect(secondBody).toBeGreaterThan(firstSubmit)
+    expect(secondSubmit).toBeGreaterThanOrEqual(secondBodyEnd)
     const [first, second] = await Promise.all([one, two])
     expect(first.id).toBe('dock-one')
     expect(second.id).toBe('dock-two')
@@ -44,19 +54,35 @@ test(
 )
 
 test(
-  'SC-21: cancelling one queued send never writes it, and cancelling the current send suppresses delayed Enter',
+  'SC-21: cancelling queued and current sends suppresses delayed Enter and recovers accepted text ahead of newer drafts',
   async () => {
     harness = await startDockE2E({ holdBeforeEnter: true })
     const session = await launchFakeClaude(harness)
     await enableDock(harness)
     const pane = await paneOf(harness, session.id)
+    const initial = await harness.call<DockState>('quirky.terminal-dock/get', { pane })
+    const staged = await harness.call<DockState>('quirky.terminal-dock/set', {
+      pane,
+      revision: initial.revision,
+      draft: 'first-body'
+    })
     const beforeEnterWait = waitForDockBeforeEnter(harness)
     beforeEnter = beforeEnterWait
 
-    const first = harness.call('quirky.terminal-dock/send', { pane, id: 'current', text: 'first-body' }) as Promise<SendResult>
+    const first = harness.call('quirky.terminal-dock/send', {
+      pane,
+      id: 'current',
+      revision: staged.revision
+    }) as Promise<SendResult>
     const queued = harness.call('quirky.terminal-dock/send', { pane, id: 'queued', text: 'never-write' }) as Promise<SendResult>
     await waitForTuiInput(harness, (input) => input.indexOf(Buffer.from('first-body')) >= 0)
     await beforeEnterWait.reached
+    const sending = await harness.call<DockState>('quirky.terminal-dock/get', { pane })
+    await harness.call('quirky.terminal-dock/set', {
+      pane,
+      revision: sending.revision,
+      draft: 'newer draft'
+    })
 
     await harness.call('quirky.terminal-dock/cancel', { pane, send: 'queued' })
     await harness.call('quirky.terminal-dock/cancel', { pane, send: 'current' })
@@ -66,6 +92,9 @@ test(
     expect(queuedResult.outcome).toBe('cancelled')
     expect(queuedResult.accepted).toBe(false)
 
+    const recovered = await harness.call<DockState>('quirky.terminal-dock/get', { pane })
+    expect(recovered.draft).toBe('first-body\n\nnever-write\n\nnewer draft')
+    expect(recovered.notice).toContain('Check the terminal before retrying')
     const consumed = await Bun.file(`${harness.home}/dock-pty-input.bin`).bytes()
     const bodyEnd = Buffer.from(consumed).indexOf(Buffer.from('first-body')) + Buffer.byteLength('first-body')
     expect(Buffer.from(consumed).indexOf(Buffer.from('never-write'))).toBe(-1)
@@ -73,13 +102,20 @@ test(
   },
   90_000
 )
+
 test(
-  'SC-08: disabling the feature suppresses a pending Enter and preserves the recoverable prompt',
+  'SC-08: disabling during delayed Enter preserves manual-close and auto-open preferences',
   async () => {
     harness = await startDockE2E()
+    await harness.call('setting.set', { id: 'setting:quirky.terminal-dock/autoOpen', value: false })
     const session = await launchFakeClaude(harness)
     await enableDock(harness)
     const pane = await paneOf(harness, session.id)
+    const initiallyClosed = await harness.call<DockState>('quirky.terminal-dock/get', { pane })
+    expect(initiallyClosed).toMatchObject({ supported: true, docked: false, userUndocked: false })
+    const manuallyOpened = await harness.call<DockState>('quirky.terminal-dock/set', { pane, docked: true })
+    await harness.call('quirky.terminal-dock/set', { pane, docked: false })
+    expect(manuallyOpened.userUndocked).toBe(false)
 
     const pending = harness.call('quirky.terminal-dock/send', {
       pane,
@@ -95,9 +131,44 @@ test(
     expect(stoppedInput.subarray(bodyEnd).includes(0x0d)).toBe(false)
 
     await harness.call('setting.set', { id: 'setting:quirky.terminal-dock/enabled', value: true })
-    const restored = (await harness.call('quirky.terminal-dock/get', { pane })) as DockState
-    expect(restored.draft).toBe('survive the kill switch')
+    const restored = await harness.call<DockState>('quirky.terminal-dock/get', { pane })
+    expect(restored).toMatchObject({
+      draft: 'survive the kill switch',
+      docked: false,
+      userUndocked: true
+    })
     expect(inputBytes(harness)).toEqual(stoppedInput)
+
+    const next = await launchFakeClaude(harness)
+    const nextPane = await paneOf(harness, next.id)
+    expect(await harness.call<DockState>('quirky.terminal-dock/get', { pane: nextPane }))
+      .toMatchObject({ supported: true, docked: false, userUndocked: false })
+  },
+  90_000
+)
+
+test(
+  'SC-09/18: literal Escape becomes visible text while an idle interrupt writes one raw Escape byte',
+  async () => {
+    harness = await startDockE2E()
+    const session = await launchFakeClaude(harness)
+    await enableDock(harness)
+    const pane = await paneOf(harness, session.id)
+    const submitted = harness.call('quirky.terminal-dock/send', {
+      pane,
+      id: 'visible-escape',
+      text: 'literal \u001b[31m text'
+    }) as Promise<SendResult>
+    const safeBody = Buffer.from('literal ␛[31m text')
+    const consumed = await waitForTuiInput(harness, (input) => input.includes(safeBody))
+    await submitted
+    expect(consumed.includes(Buffer.from([0x1b]))).toBe(false)
+    expect(consumed.indexOf(safeBody)).toBe(consumed.lastIndexOf(safeBody))
+
+    const beforeInterrupt = inputBytes(harness)
+    await harness.call('quirky.terminal-dock/cancel', { pane, interrupt: true })
+    const interrupted = await waitForTuiInput(harness, (input) => input.length > beforeInterrupt.length)
+    expect(interrupted.subarray(beforeInterrupt.length)).toEqual(Buffer.from([0x1b]))
   },
   90_000
 )

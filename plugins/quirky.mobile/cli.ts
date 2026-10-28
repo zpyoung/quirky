@@ -25,7 +25,7 @@ function bundleReadArgs(args: CliArgs, context: CliContext, withGzip: boolean): 
   }
 }
 
-const named: CliModule['commands'] = {
+export const commands: CliModule['commands'] = {
   async 'agent-catalog'(args, context) {
     noArgs(args, context)
     const value = await context.call('quirky.mobile/agentCatalog', {})
@@ -131,6 +131,7 @@ const named: CliModule['commands'] = {
     const value = await context.call('quirky.mobile/bundleManifest', {})
     context.out.result(value, () => JSON.stringify(value, null, 2))
   },
+
   async 'bundle-chunk'(args, context) {
     const value = await context.call('quirky.mobile/bundleChunk', bundleReadArgs(args, context, false))
     context.out.result(value, () => JSON.stringify(value, null, 2))
@@ -150,10 +151,4 @@ const named: CliModule['commands'] = {
     const value = await context.call('quirky.mobile/open', { settings: true })
     context.out.result(value, () => 'opened Mobile settings')
   }
-}
-
-/** CLI names and method aliases share the same implementation. */
-export const commands: CliModule['commands'] = {
-  ...named,
-  ...Object.fromEntries(Object.entries(named).map(([name, run]) => [`cli-command:quirky.mobile/${name.replace(/[A-Z]/g, (letter) => `-${letter.toLowerCase()}`)}`, run]))
 }

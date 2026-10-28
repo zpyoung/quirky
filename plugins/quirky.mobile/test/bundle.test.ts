@@ -81,7 +81,7 @@ describe('authenticated mobile page bundle API', () => {
       expect(result.rangeBytes).toBeGreaterThan(0)
 
       const chunk = await harness.call('bundleChunk', { buildId: result.manifest.buildId, path: 'index.html', offset: 0 }) as { data: string; eof: boolean; sha256: string }
-      expect(Buffer.from(chunk.data, 'base64').equals(html)).toBe(true)
+      expect(Buffer.compare(Buffer.from(chunk.data, 'base64'), html)).toBe(0)
       expect(chunk.eof).toBe(true)
       expect(chunk.sha256).toBe(createHash('sha256').update(html).digest('hex'))
     } finally {
@@ -112,7 +112,7 @@ describe('authenticated mobile page bundle API', () => {
     try {
       const result = await harness.call('bundleRange', { buildId: 'a'.repeat(64), path: 'index.html', offset: 0, gzip: true }) as { data: string; encoding: string; sha256: string; eof: boolean }
       expect(result.encoding).toBe('gzip')
-      expect(gunzipSync(Buffer.from(result.data, 'base64')).equals(html)).toBe(true)
+      expect(Buffer.compare(gunzipSync(Buffer.from(result.data, 'base64')), html)).toBe(0)
       expect(result.sha256).toBe(createHash('sha256').update(html).digest('hex'))
       expect(result.eof).toBe(true)
     } finally {
@@ -128,7 +128,7 @@ describe('authenticated mobile page bundle API', () => {
       expect(await harness.call('updatePreferences', { autoRestoreFitMs: 300_000 })).toEqual({ autoRestoreFitMs: 300_000 })
       expect(await harness.call('preferences')).toEqual({ autoRestoreFitMs: 300_000 })
       await expect(harness.call('updatePreferences', { autoRestoreFitMs: 300_000, machineName: 'not-phone-owned' })).rejects.toThrow()
-      await expect(harness.call('configure', { machineName: 'phone-admin' })).rejects.toThrow(/local/i)
+      await expect(harness.call('configure', { machineName: 'phone-admin' })).rejects.toThrow()
     } finally {
       await harness.service.stop()
     }

@@ -6,12 +6,13 @@ import {
   type ClipboardEvent as ReactClipboardEvent,
   type CompositionEvent as ReactCompositionEvent,
   type KeyboardEvent as ReactKeyboardEvent,
-  type PointerEvent as ReactPointerEvent,
-  type WheelEvent as ReactWheelEvent
+  type PointerEvent as ReactPointerEvent
 } from 'react'
 import type { NativeBrowserHandle, NativeBrowserRequest, NativeBrowserState, UiPluginContext } from '@quirky/protocol'
 import type { PaneCommand, PaneDownload, PaneFrame, PanePrompt, PaneState, PaneTab, PaneViewport } from '../pane-contract'
 import { acceptLatestFrame, isTextInputKey, nativePreviewNavigationUrl, nativePreviewReportUrl, paneForView, pointerToFramePoint } from './model'
+import { DesignWindow, type DesignAction } from '../design-window/DesignWindow'
+import { BrowserImportHint, BrowserProfileMenu } from '../preferences-window/BrowserProfileMenu'
 
 const WORKTREE_VIEW = 'view:quirky.session/worktree'
 const SEARCH_ENGINES = ['google', 'duckduckgo', 'bing', 'kagi'] as const
@@ -91,6 +92,16 @@ export function focusBrowserAddress(): void {
 
 export function focusBrowserFind(): void {
   focusFind?.()
+}
+const focusedDesignActions = new Map<string, (action: DesignAction) => Promise<boolean>>()
+
+export async function runFocusedBrowserDesign(action: DesignAction): Promise<{ started: boolean; reason?: string }> {
+  const pane = focusedPaneId
+  if (!pane) return { started: false, reason: 'No browser pane is focused.' }
+  const run = focusedDesignActions.get(pane)
+  if (!run) return { started: false, reason: 'The focused browser pane has no active design controls.' }
+  const started = await run(action)
+  return started ? { started: true } : { started: false, reason: 'The requested design operation could not start on the focused Native page.' }
 }
 
 function settingFrom(context: UiPluginContext, name: string): unknown {
@@ -177,6 +188,7 @@ export function BrowserPaneWindow({ context, input }: { context: UiPluginContext
   const frameRef = useRef<PaneFrame | null>(null)
   const nativeHandleRef = useRef<NativeHandle | null>(null)
   const lastNativeCommandRef = useRef<string | null>(null)
+  const designActionRef = useRef<((action: DesignAction) => Promise<boolean>) | null>(null)
 
   const [state, setState] = useState<PaneState | null>(null)
   const [pane, setPane] = useState<PaneTab | null>(null)
@@ -202,9 +214,20 @@ export function BrowserPaneWindow({ context, input }: { context: UiPluginContext
   const [message, setMessage] = useState<{ text: string; kind: 'info' | 'error' } | null>(null)
   const [settings, setSettings] = useState(() => readSettings(context))
   const [promptValues, setPromptValues] = useState<Record<string, { text: string; username: string; password: string }>>({})
+  const [designPageHost, setDesignPageHost] = useState<HTMLDivElement | null>(null)
+  const [browserFocused, setBrowserFocused] = useState(false)
 
   paneRef.current = pane
   frameRef.current = frame
+  const attachFrameHost = useCallback((host: HTMLDivElement | null) => {
+    frameHostRef.current = host
+    if (host) setDesignPageHost(host)
+  }, [])
+  const reportDesignMessage = useCallback((text: string, kind: 'info' | 'error') => {
+    const copied = text === 'Copied' || text === 'Screenshotted' || text === 'Annotations copied.' || text === 'Notes sent.' || text === 'Markup copied — paste it into your agent.'
+    context.toast(copied ? text : 'Browser design mode', copied ? '' : text, { kind: copied ? 'success' : kind })
+    setMessage({ text, kind })
+  }, [context])
 
   const updateState = useCallback((next: PaneState) => {
     setState(next)
@@ -306,6 +329,7 @@ export function BrowserPaneWindow({ context, input }: { context: UiPluginContext
         requestAnimationFrame(() => findRef.current?.focus())
       }
       context.setContext('browserFocus', true)
+      setBrowserFocused(true)
     }, 0)
     return () => {
       mountedRef.current = false
@@ -317,13 +341,30 @@ export function BrowserPaneWindow({ context, input }: { context: UiPluginContext
         focusedPaneId = null
         focusAddress = null
         focusFind = null
+        setBrowserFocused(false)
         context.setContext('browserFocus', false)
       }
     }
   }, [context, requestedPaneId])
+  useEffect(() => {
+    const id = pane?.id ?? requestedPaneId
+    if (!id) return
+    const run = async (action: DesignAction): Promise<boolean> => {
+      if (focusedPaneId !== id || paneRef.current?.mode !== 'native') return false
+      const handler = designActionRef.current
+      return handler ? await handler(action) : false
+    }
+    focusedDesignActions.set(id, run)
+    return () => {
+      if (focusedDesignActions.get(id) === run) focusedDesignActions.delete(id)
+    }
+  }, [pane?.id, requestedPaneId])
 
   useEffect(() => {
-    if (pane && rootRef.current?.contains(document.activeElement)) focusedPaneId = pane.id
+    if (pane && rootRef.current?.contains(document.activeElement)) {
+      focusedPaneId = pane.id
+      setBrowserFocused(true)
+    }
   }, [pane?.id])
 
 
@@ -576,7 +617,10 @@ export function BrowserPaneWindow({ context, input }: { context: UiPluginContext
     frameRef.current = null
     setFrame(null)
     setWatchError(null)
+    setEditingAddress(false)
+    setSuggestionsOpen(false)
     try {
+      if (address !== pane.url) await context.call('quirky.browser/paneNavigate', { pane: pane.id, input: address })
       const result = await context.call('quirky.browser/paneWatch', { pane: pane.id })
       const id = typeof result === 'object' && result !== null ? Reflect.get(result, 'watchId') : null
       if (typeof id !== 'string' || id === '') throw new Error('Watch did not return a lease ID')
@@ -598,7 +642,7 @@ export function BrowserPaneWindow({ context, input }: { context: UiPluginContext
       setWatchError(errorText(error))
       setWatchRevision((revision) => revision + 1)
     }
-  }, [context, pane, refresh])
+  }, [address, context, pane, refresh])
 
   const loadAgentPages = useCallback(async () => {
     if (!pane) return
@@ -628,13 +672,32 @@ export function BrowserPaneWindow({ context, input }: { context: UiPluginContext
       if (mountedRef.current) setWatchError(errorText(error))
     })
   }, [context, pane, watchError])
+  const sendInputRef = useRef(sendInput)
+  sendInputRef.current = sendInput
 
-  const pointForEvent = (clientX: number, clientY: number) => {
+  const pointForEvent = useCallback((clientX: number, clientY: number) => {
     const host = frameHostRef.current
-    if (!host || !frame) return null
+    const currentFrame = frameRef.current
+    if (!host || !currentFrame) return null
     const rect = host.getBoundingClientRect()
-    return pointerToFramePoint(clientX, clientY, rect, frame.width, frame.height)
-  }
+    return pointerToFramePoint(clientX, clientY, rect, currentFrame.width, currentFrame.height)
+  }, [])
+
+  useEffect(() => {
+    const host = frameHostRef.current
+    if (!host) return
+    const handleWheel = (event: WheelEvent) => {
+      if (paneRef.current?.mode !== 'watch') return
+      const point = pointForEvent(event.clientX, event.clientY)
+      if (!point) return
+      event.preventDefault()
+      const currentFrame = frameRef.current
+      const unit = event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? currentFrame?.height ?? 1 : 1
+      sendInputRef.current({ kind: 'wheel', ...point, deltaX: event.deltaX * unit, deltaY: event.deltaY * unit, modifiers: modifiers(event) })
+    }
+    host.addEventListener('wheel', handleWheel, { passive: false })
+    return () => host.removeEventListener('wheel', handleWheel)
+  }, [pointForEvent])
 
   const mouseEvent = (
     event: ReactPointerEvent<HTMLDivElement>,
@@ -682,15 +745,6 @@ export function BrowserPaneWindow({ context, input }: { context: UiPluginContext
     mouseEvent(event, 'mouseMoved', point)
   }
 
-  const onWheel = (event: ReactWheelEvent<HTMLDivElement>) => {
-    if (pane?.mode !== 'watch') return
-    const point = pointForEvent(event.clientX, event.clientY)
-    if (!point) return
-    event.preventDefault()
-    const unit = event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? frame?.height ?? 1 : 1
-    sendInput({ kind: 'wheel', ...point, deltaX: event.deltaX * unit, deltaY: event.deltaY * unit, modifiers: modifiers(event) })
-  }
-
   const onKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
     if (pane?.mode !== 'watch' || !frame || event.target !== event.currentTarget || event.nativeEvent.isComposing || event.key === 'Process' || event.key === 'Dead') return
     if (isTextInputKey(event.key) && !event.altKey && !event.ctrlKey && !event.metaKey) {
@@ -733,9 +787,10 @@ export function BrowserPaneWindow({ context, input }: { context: UiPluginContext
       frameRef.current?.sequence !== candidate.sequence ||
       frameRef.current?.pane !== candidate.pane
     ) return
+    loadedFrameRef.current = { watchId: candidate.watchId, sequence: candidate.sequence }
     const previousAck = lastAckRef.current
     if (previousAck?.watchId === candidate.watchId && previousAck.sequence === candidate.sequence) return
-    lastAckRef.current = { watchId: candidate.watchId, sequence: candidate.sequence }
+    lastAckRef.current = loadedFrameRef.current
     void context.call('quirky.browser/paneFrameAck', { pane: candidate.pane, watchId: candidate.watchId, sequence: candidate.sequence }).catch((error: unknown) => {
       if (mountedRef.current) setWatchError(errorText(error))
     })
@@ -805,6 +860,7 @@ export function BrowserPaneWindow({ context, input }: { context: UiPluginContext
           requestAnimationFrame(() => findRef.current?.focus())
         }
         context.setContext('browserFocus', true)
+        setBrowserFocused(true)
       }}
       onBlurCapture={(event) => {
         const next = event.relatedTarget
@@ -814,6 +870,7 @@ export function BrowserPaneWindow({ context, input }: { context: UiPluginContext
           focusAddress = null
           focusFind = null
           context.setContext('browserFocus', false)
+          setBrowserFocused(false)
         }
       }}
     >
@@ -877,9 +934,23 @@ export function BrowserPaneWindow({ context, input }: { context: UiPluginContext
         </div>
         <button type="button" aria-label="Find in page" title="Find in page (Mod+F)" onClick={() => { setFindOpen(true); requestAnimationFrame(() => findRef.current?.focus()) }}>Find</button>
         <span className="qbp-mode" data-mode={pane?.mode ?? 'native'}>{pane?.mode === 'watch' ? 'Watch' : 'Native'}</span>
+        <DesignWindow
+          context={context}
+          pane={pane ? { id: pane.id, mode: pane.mode, page: pane.page, url: pane.url, title: pane.title, loading: pane.loading, error: pane.error, worktreeId: pane.worktreeId } : null}
+          nativeHandle={nativeHandleRef.current}
+          pageHost={designPageHost}
+          nativePageHost={nativeHostRef.current}
+          frameSize={pane?.mode === 'watch' && frame ? { width: frame.width, height: frame.height } : null}
+          watchId={pane?.mode === 'watch' ? frame?.watchId ?? null : null}
+          watchReady={Boolean(pane?.mode === 'watch' && frame?.pane === pane.id && frame.watchId === watchIdRef.current && !watchError && !pane.error)}
+          focused={browserFocused && focusedPaneId === pane?.id}
+          onMessage={reportDesignMessage}
+          actionRef={designActionRef}
+        />
         <details className="qbp-details">
           <summary aria-label="Browser menu">Browser menu</summary>
           <div className="qbp-menu-popover" role="menu">
+            <BrowserProfileMenu context={context} pane={pane ?? undefined} inline onError={(text) => setMessage({ text, kind: 'error' })} />
             {pane?.mode === 'watch'
               ? <button type="button" role="menuitem" onClick={() => void control('hardReload')}>Hard Reload</button>
               : pane?.mode === 'native'
@@ -916,6 +987,7 @@ export function BrowserPaneWindow({ context, input }: { context: UiPluginContext
             <span className="qbp-muted">Search engine: {settings.searchEngine}</span>
           </div>
         </details>
+        <BrowserImportHint context={context} pane={pane ?? undefined} onError={(text) => setMessage({ text, kind: 'error' })} />
         <details className="qbp-details">
           <summary aria-label="Browser history">History</summary>
           <div className="qbp-menu-popover qbp-history" role="menu" aria-label="Recent browser history">
@@ -960,14 +1032,13 @@ export function BrowserPaneWindow({ context, input }: { context: UiPluginContext
       </div> : null}
 
       <div
-        ref={frameHostRef}
+        ref={attachFrameHost}
         className="qbp-page"
         aria-label={pane ? `${pane.mode === 'watch' ? 'Watched' : 'Native'} page: ${pane.title || pane.url}` : 'Browser page'}
         tabIndex={canUseWatch ? 0 : -1}
         onPointerDown={onPointerDown}
         onPointerUp={onPointerUp}
         onPointerMove={onPointerMove}
-        onWheel={onWheel}
         onKeyDown={onKeyDown}
         onKeyUp={onKeyUp}
         onCompositionEnd={onCompositionEnd}

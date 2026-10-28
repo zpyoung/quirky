@@ -2,7 +2,7 @@ import type { QuirkyEvent, UiPluginContext } from '@quirky/protocol'
 import type { SecretHit, Template, Warning } from '../core/types'
 import { TEMPLATE_BODY_MAX, TEMPLATE_LIMIT, TEMPLATE_NAME_MAX } from '../core/template'
 import type { ProbeResult } from '../daemon/probe'
-import type { Candidate, Controls, Draft, Include, Preview, Relationship, SourceInfo, SourceRef } from '../daemon/types'
+import type { ArchivedSource, Candidate, Controls, Draft, Include, Preview, Relationship, SourceInfo, SourceRef } from '../daemon/types'
 import { DEBOUNCE_MS, messageOf, NO_CONTEXT_MESSAGE, PLUGIN_ID, reasonOf, STALE_MESSAGE } from './copy'
 
 const METHOD = (name: string) => `${PLUGIN_ID}/${name}`
@@ -253,11 +253,19 @@ export class HandoffDialog {
     this.timer = null
   }
 
-  /** Opens the dialog on a session; with no session context it toasts and shows nothing. */
+  /** Opens the dialog on a live Quirky session; archived provider IDs use `openArchived` instead. */
   async open(session: string): Promise<CommandResult> {
+    return this.openSource({ session })
+  }
+
+  /** Opens the dialog on the handoff owner's archived SourceRef without inventing a live session ID. */
+  async openArchived(archived: ArchivedSource): Promise<CommandResult> {
+    return this.openSource({ archived })
+  }
+
+  private async openSource(ref: SourceRef): Promise<CommandResult> {
     if (this.snapshot.starting) return refused('starting')
     const attempt = ++this.opening
-    const ref: SourceRef = { session }
     let prepared: Prepared
     try {
       prepared = (await this.context.call(METHOD('prepare'), { source: ref })) as Prepared

@@ -424,6 +424,20 @@
         }
       },
       {
+        "id": "getSearchTip",
+        "description": "Reads the Vault-owned agent-session-search tip state without starting indexing.",
+        "readOnly": true,
+        "params": { "type": "object", "properties": {} },
+        "result": {
+          "type": "object",
+          "properties": {
+            "id": { "type": "string", "enum": ["agent-session-search"] },
+            "seen": { "type": "boolean" }
+          },
+          "required": ["id", "seen"]
+        }
+      },
+      {
         "id": "searchStatus",
         "description": "Search index status and per-host outcomes.",
         "readOnly": true,
@@ -934,6 +948,17 @@
     ],
     "event": [
       {
+        "id": "searchTipChanged",
+        "data": {
+          "type": "object",
+          "properties": {
+            "id": { "type": "string", "enum": ["agent-session-search"] },
+            "seen": { "type": "boolean" }
+          },
+          "required": ["id", "seen"]
+        }
+      },
+      {
         "id": "scanProgress",
         "data": {
           "type": "object",
@@ -1027,6 +1052,7 @@
         }
       },
       { "id": "search-status", "summary": "show transcript search status", "flags": { "host": { "type": "string", "description": "local, all, or an effective host ID." } } },
+      { "id": "search-tip", "summary": "show the Vault-owned session-search tip state" },
       { "id": "enable", "summary": "enable local transcript search", "flags": { "history-days": { "type": "integer", "description": "Retain this many days; omit for all history." } } },
       { "id": "clear", "summary": "turn off search and clear its disposable index" },
       { "id": "get", "summary": "inspect one agent session", "positionals": [{ "name": "id", "description": "Host-qualified vault session ID.", "required": true }] },

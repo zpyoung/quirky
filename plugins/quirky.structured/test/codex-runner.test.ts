@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
-import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { AskEnvelope, AskSpec, Session, SessionStatus, StructuredMessage } from '@quirky/protocol'
@@ -115,6 +115,26 @@ describe('Codex app-server runner', () => {
     await starting
     expect(setup.fixture.requests()).toEqual([])
   })
+  test('includes native stderr when startup exits before initialize', async () => {
+    const script = readFileSync(setup.fixture.executable, 'utf8')
+    const pidMarker = 'const environmentLogPath = '
+    const initializeMarker = "send({ id: message.id, result: { userAgent: 'codex-fixture', platformFamily: 'unix', platformOs: 'macos' } })"
+    expect(script).toContain(pidMarker)
+    expect(script).toContain(initializeMarker)
+    writeFileSync(
+      setup.fixture.executable,
+      script
+        .replace(pidMarker, "fs.writeFileSync(logPath + '.startup-pid', String(process.pid))\nconst environmentLogPath = ")
+        .replace(initializeMarker, "process.stderr.write('fixture initialization diagnostic', () => process.exit(1))")
+    )
+
+    await expect(setup.runner.start(setup.session)).rejects.toThrow(
+      'Codex app-server stdout closed; stderr: fixture initialization diagnostic'
+    )
+    const pid = Number(readFileSync(setup.fixture.logPath + '.startup-pid', 'utf8'))
+    expect(() => process.kill(pid, 0)).toThrow()
+  })
+
 
   test('initializes before starting a thread and turn, persisting its provider ID first', async () => {
     await setup.runner.start(setup.session, 'summarize', { model: 'gpt-5.5', effort: 'high' })
@@ -141,10 +161,20 @@ describe('Codex app-server runner', () => {
     expect(setup.statuses).toEqual(['working', 'done'])
   })
 
+  test('starts later turns with the same model and effort after completion', async () => {
+    await setup.runner.start(setup.session, 'first', { model: 'gpt-5.5', effort: 'xhigh' })
+    await until(() => setup.statuses.includes('done'))
+    await setup.runner.send(setup.session.id, 'second')
+    await until(() => setup.messages.some((message) => message.role === 'assistant' && message.text === 'Codex: second'))
+
+    const turns = setup.fixture.requests().filter((request) => request.method === 'turn/start')
+    expect(turns.map((request) => request.params)).toEqual([
+      { threadId: 'scripted-thread', input: [{ type: 'text', text: 'first' }], model: 'gpt-5.5', effort: 'xhigh' },
+      { threadId: 'scripted-thread', input: [{ type: 'text', text: 'second' }], model: 'gpt-5.5', effort: 'xhigh' }
+    ])
+  })
   test('starts a native thread without an initial turn until the caller is attached', async () => {
-    await setup.runner.start(setup.session, undefined, {
-      env: { QUIRKY_SESSION_ID: setup.session.id, QUIRKY_SESSION_TOKEN: 'test-token' }
-    })
+    await setup.runner.start(setup.session, undefined)
     expect(setup.fixture.requests().map((request) => request.method)).toEqual([
       'initialize',
       'initialized',
@@ -172,6 +202,46 @@ describe('Codex app-server runner', () => {
       { threadId: 'scripted-thread', input: [{ type: 'text', text: 'first' }], model: 'gpt-5.5', effort: 'xhigh' },
       { threadId: 'scripted-thread', input: [{ type: 'text', text: 'second' }], model: 'gpt-5.5', effort: 'xhigh' }
     ])
+  })
+  test('journals native cumulative token usage as per-turn deltas', async () => {
+    const marker = "  notify('turn/started', { threadId, turn })"
+    const usageNotification = `${marker}
+  const turnNumber = Number(turn.id.slice(5))
+  notify('thread/tokenUsage/updated', {
+    threadId,
+    tokenUsage: { total: {
+      inputTokens: turnNumber === 1 ? 100 : 117,
+      outputTokens: turnNumber === 1 ? 20 : 26,
+      cachedInputTokens: turnNumber === 1 ? 8 : 11,
+      reasoningOutputTokens: turnNumber === 1 ? 4 : 8
+    } }
+  })`
+    const server = readFileSync(setup.fixture.executable, 'utf8')
+    writeFileSync(setup.fixture.executable, server.replace(marker, usageNotification))
+
+    await setup.runner.start(setup.session, 'first usage turn')
+    await until(() => setup.messages.filter((message) => message.role === 'result').length === 1)
+    await setup.runner.send(setup.session.id, 'second usage turn')
+    await until(() => setup.messages.filter((message) => message.role === 'result').length === 2)
+
+    const evidence = setup.messages.filter((message) => {
+      const data = message.data
+      return typeof data === 'object' && data !== null && 'type' in data &&
+        data.type === 'thread/tokenUsage/updated'
+    })
+    expect(evidence).toHaveLength(2)
+    expect(evidence[0]).toMatchObject({
+      data: {
+        type: 'thread/tokenUsage/updated',
+        turnUsage: { inputTokens: 100, outputTokens: 20, cachedInputTokens: 8, reasoningOutputTokens: 4 }
+      }
+    })
+    expect(evidence[1]).toMatchObject({
+      data: {
+        type: 'thread/tokenUsage/updated',
+        turnUsage: { inputTokens: 17, outputTokens: 6, cachedInputTokens: 3, reasoningOutputTokens: 4 }
+      }
+    })
   })
   test('a refused send is not journaled or left working', async () => {
     await setup.runner.start(setup.session, 'first accepted turn')

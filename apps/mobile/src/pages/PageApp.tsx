@@ -56,8 +56,8 @@ export function PageApp({ bridge }: PageAppProps) {
   if (panelReturnRouteRef.current === null) panelReturnRouteRef.current = initialPanelReturnRoute(route)
   const [connection, setConnection] = useState<MobileConnectionState>(bridge.state)
   const [visible, setVisible] = useState(() => typeof document === 'undefined' || document.visibilityState !== 'hidden')
-  const [workspaceLayout, setWorkspaceLayout] = useState<Record<string, unknown>>({})
-  const [sessionLayout, setSessionLayout] = useState<Record<string, unknown>>({})
+  const [workspaceLayout, setWorkspaceLayout] = useState<Record<string, unknown> | null>(null)
+  const [sessionLayout, setSessionLayout] = useState<Record<string, unknown> | null>(null)
   const [lastWorktreeId, setLastWorktreeId] = useState(() =>
     boundedWorktreeId(routeWorktreeId(route)) ?? boundedWorktreeId(bridge.init.host.lastWorktree)
   )
@@ -107,6 +107,8 @@ export function PageApp({ bridge }: PageAppProps) {
   }), [bridge, navigate])
 
   useEffect(() => {
+    const layout = route.kind === 'workspaces' ? workspaceLayout : route.kind === 'session' ? sessionLayout : undefined
+    if (layout === null) return
     const state: Record<string, unknown> = { route: route.kind, connectionPhase: connection.phase, stale: !active }
     if (route.kind === 'workspaces') {
       Object.assign(state, workspaceLayout)

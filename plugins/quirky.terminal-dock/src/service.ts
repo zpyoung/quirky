@@ -50,7 +50,7 @@ type StatusProjection = {
   source?: string
   restoredUnconfirmed?: boolean
   evidenceAt?: number
-  lead?: { ended?: boolean }
+  lead?: { ended?: boolean; providerSession?: string | null }
   programStatus?: { app?: string } | null
   state?: string
 } | null
@@ -58,7 +58,8 @@ type TransportReport = { noTerminal: boolean; reason: string | null }
 type HostReport = { pane: string; mounted: boolean; focused: boolean; transport?: string; updatedAt: number }
 type ProviderCache = { session: string; agent: string; question: DockQuestion | null; options: DockOptions; readAt: number }
 type CachedTitle = { title: string; source: 'fact' | 'list'; updatedAt: number }
-type FreshEvidence = { source: 'hook' | 'program-app'; value: string; at: number }
+type FreshEvidence = { source: 'hook' | 'program-app'; value: string; at: number; providerSession?: string }
+type HookLeadIdentity = { agent: string; providerSession: string }
 type QuestionOverlay = { id: string; collapsed: boolean; dismissed: boolean }
 type HistoryBrowse = { index: number; savedDraft: string }
 type DriverLease = { owner: string; expiresAt: number; timer: ReturnType<typeof setTimeout> }
@@ -85,6 +86,38 @@ type AttachInput = { path?: string; name?: string; mime?: string; base64?: strin
 
 const isObject = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value)
 const statusEnded = (status: StatusProjection) => status?.lead?.ended === true
+const CLAUDE_HOOK_AGENTS: Record<string, true> = { claude: true, openclaude: true }
+const HOOK_EVENT_KEYS = ['hook_event_name', 'hookEventName', 'hook_type', 'hookType', 'event']
+const PROVIDER_ID_CONTROL_CHARACTERS = /[\u0000-\u001f\u007f]/
+
+function providerSessionId(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined
+  const id = value.trim()
+  if (id === '' || id.length > 512 || id.startsWith('-') || PROVIDER_ID_CONTROL_CHARACTERS.test(id)) return undefined
+  return id
+}
+
+function hookEventName(payload: Record<string, unknown>, fallbackEvent: unknown): string | undefined {
+  for (const key of HOOK_EVENT_KEYS) {
+    const value = payload[key]
+    if (typeof value === 'string' && value !== '') return value
+  }
+  return typeof fallbackEvent === 'string' ? fallbackEvent : undefined
+}
+
+function sessionEndIdentity(agent: string, payload: unknown, fallbackEvent: unknown): HookLeadIdentity | null {
+  if (!Object.hasOwn(CLAUDE_HOOK_AGENTS, agent) || !isObject(payload)) return null
+  if (hookEventName(payload, fallbackEvent) !== 'SessionEnd' || (typeof payload.agent_id === 'string' && payload.agent_id.length > 0)) {
+    return null
+  }
+  const providerSession = providerSessionId(payload.session_id)
+  return providerSession ? { agent, providerSession } : null
+}
+
+function sameLeadIdentity(a: HookLeadIdentity, b: HookLeadIdentity): boolean {
+  return a.agent === b.agent && a.providerSession === b.providerSession
+}
+
 
 function findPaneSession(value: unknown, pane: string): string | null {
   if (!isObject(value)) return null
@@ -166,8 +199,11 @@ export class DockService {
   private readonly manualCandidates = new Map<string, string>()
   private readonly confirmedExits = new Map<string, number>()
   private readonly freshEvidence = new Map<string, FreshEvidence>()
+  private readonly statusLeadIdentities = new Map<string, HookLeadIdentity | null>()
+  private readonly sessionEndCandidates = new Map<string, HookLeadIdentity>()
   private readonly queues = new Map<string, SessionQueue>()
   private readonly sendOperations = new Map<string, Operation>()
+  private readonly sendAdmissionTails = new Map<string, Promise<void>>()
   private mutationTail: Promise<void> = Promise.resolve()
   private recoveryPending = true
   private stopped = false
@@ -247,10 +283,11 @@ export class DockService {
     const detail = event as unknown as Record<string, unknown>
     if (event.type === 'hook.received') {
       if (typeof detail.sessionId === 'string' && typeof detail.agent === 'string') {
-        this.rememberFreshEvidence(detail.sessionId, detail.agent, 'hook')
+        this.observeHookReceived(detail.sessionId, detail.agent, detail)
       }
       return
     }
+    if (event.type === 'quirky.agent-status/changed' && isObject(detail.data)) this.observeAgentStatusChange(detail.data)
     if (event.type === 'setting.changed' && detail.id === 'setting:quirky.terminal-dock/enabled') {
       const enabledNow = this.enabled()
       if (enabledNow === this.wasEnabled) return
@@ -290,6 +327,75 @@ export class DockService {
       if (this.enabled()) await this.reconcileAll()
     }
   }
+  private observeHookReceived(sessionId: string, agent: string, detail: Record<string, unknown>): void {
+    const payload = isObject(detail.payload) ? detail.payload : null
+    const isClaudeHook = Object.hasOwn(CLAUDE_HOOK_AGENTS, agent)
+    const isClaudeChild = isClaudeHook && typeof payload?.agent_id === 'string' && payload.agent_id.length > 0
+    if (!isClaudeChild) {
+      this.rememberFreshEvidence(
+        sessionId,
+        agent,
+        'hook',
+        isClaudeHook ? providerSessionId(payload?.session_id) : undefined
+      )
+    }
+    if (isClaudeChild) return
+
+    if (hookEventName(payload ?? {}, detail.event) !== 'SessionEnd') this.sessionEndCandidates.delete(sessionId)
+    const candidate = sessionEndIdentity(agent, payload, detail.event)
+    if (!candidate) return
+    const current = this.statusLeadIdentities.get(sessionId)
+    if (current && !sameLeadIdentity(candidate, current)) return
+    this.sessionEndCandidates.set(sessionId, candidate)
+    while (this.sessionEndCandidates.size > MAX_RECOGNITION_SESSIONS) {
+      this.sessionEndCandidates.delete(this.sessionEndCandidates.keys().next().value as string)
+    }
+  }
+
+  private rememberStatusLeadIdentity(sessionId: string, row: Record<string, unknown>): void {
+    const lead = isObject(row.lead) ? row.lead : null
+    const providerSession = providerSessionId(lead?.providerSession)
+    if (row.sessionId !== sessionId || typeof row.agent !== 'string' || !providerSession) {
+      this.rememberNoStatusLead(sessionId)
+      this.sessionEndCandidates.delete(sessionId)
+      return
+    }
+    const identity = { agent: row.agent, providerSession }
+    this.statusLeadIdentities.delete(sessionId)
+    this.statusLeadIdentities.set(sessionId, identity)
+    const candidate = this.sessionEndCandidates.get(sessionId)
+    if (candidate && !sameLeadIdentity(candidate, identity)) this.sessionEndCandidates.delete(sessionId)
+    while (this.statusLeadIdentities.size > MAX_RECOGNITION_SESSIONS) {
+      this.statusLeadIdentities.delete(this.statusLeadIdentities.keys().next().value as string)
+    }
+  }
+
+  private rememberNoStatusLead(sessionId: string): void {
+    this.statusLeadIdentities.delete(sessionId)
+    this.statusLeadIdentities.set(sessionId, null)
+    while (this.statusLeadIdentities.size > MAX_RECOGNITION_SESSIONS) {
+      this.statusLeadIdentities.delete(this.statusLeadIdentities.keys().next().value as string)
+    }
+  }
+
+  private observeAgentStatusChange(detail: Record<string, unknown>): void {
+    const sessionId = detail.sessionId
+    if (typeof sessionId !== 'string') return
+    for (const cached of this.providers.values()) {
+      if (cached.session === sessionId) cached.readAt = 0
+    }
+    if (isObject(detail.row)) {
+      this.rememberStatusLeadIdentity(sessionId, detail.row)
+      return
+    }
+    if (detail.row !== null) return
+    const candidate = this.sessionEndCandidates.get(sessionId)
+    const current = this.statusLeadIdentities.get(sessionId)
+    if (candidate && current && sameLeadIdentity(candidate, current)) this.markConfirmedExit(sessionId)
+    this.sessionEndCandidates.delete(sessionId)
+    this.rememberNoStatusLead(sessionId)
+  }
+
   private onPtyFact(sessionId: string, fact: PtyFact): void {
     if (fact.kind === 'title') {
       this.rememberTitle(sessionId, fact.title, 'fact')
@@ -403,9 +509,19 @@ export class DockService {
       this.manualCandidates.delete(this.manualCandidates.keys().next().value as string)
     }
   }
-  private rememberFreshEvidence(sessionId: string, value: string, source: FreshEvidence['source']): void {
+  private rememberFreshEvidence(
+    sessionId: string,
+    value: string,
+    source: FreshEvidence['source'],
+    providerSession?: string
+  ): void {
     this.freshEvidence.delete(sessionId)
-    this.freshEvidence.set(sessionId, { source, value, at: Date.now() })
+    this.freshEvidence.set(sessionId, {
+      source,
+      value,
+      at: Date.now(),
+      ...(providerSession ? { providerSession } : {})
+    })
     while (this.freshEvidence.size > MAX_RECOGNITION_SESSIONS) {
       this.freshEvidence.delete(this.freshEvidence.keys().next().value as string)
     }
@@ -426,6 +542,8 @@ export class DockService {
     this.manualAgents.delete(sessionId)
     this.manualCandidates.delete(sessionId)
     this.statusStates.delete(sessionId)
+    this.rememberNoStatusLead(sessionId)
+    this.sessionEndCandidates.delete(sessionId)
   }
 
   private liveStatusAgent(status: StatusProjection): string | null {
@@ -469,9 +587,16 @@ export class DockService {
         : fresh?.source === 'program-app'
           ? agentForAlias(fresh.value, this.catalog)
           : null
+      // hook.received has no event timestamp, so compare normalized evidence to the exit fence.
+      const statusEvidenceIsFresh = fresh?.source === 'hook'
+        ? fresh.providerSession !== undefined &&
+          status?.lead?.providerSession === fresh.providerSession &&
+          typeof status?.evidenceAt === 'number' && status.evidenceAt > confirmedAt
+        : fresh?.source === 'program-app' &&
+          typeof status?.evidenceAt === 'number' && status.evidenceAt >= fresh.at
       if (
-        liveAgent && freshAgent === liveAgent && fresh && fresh.at > confirmedAt &&
-        typeof status?.evidenceAt === 'number' && status.evidenceAt >= fresh.at
+        liveAgent && freshAgent === liveAgent && fresh &&
+        fresh.at > confirmedAt && statusEvidenceIsFresh
       ) {
         this.clearConfirmedExit(session.id)
         this.rememberManualAgent(session, liveAgent)
@@ -617,7 +742,11 @@ export class DockService {
         PROVIDER_READ_DEADLINE_MS,
         'agent status lookup'
       )
-      return isObject(value) ? (value as StatusProjection) : null
+      if (isObject(value)) {
+        if (!this.statusLeadIdentities.has(session.id)) this.rememberStatusLeadIdentity(session.id, value)
+        return value as StatusProjection
+      }
+      return null
     } catch {
       return null
     }
@@ -780,6 +909,8 @@ export class DockService {
     for (const sessionId of this.manualCandidates.keys()) if (!activeSessions.has(sessionId)) this.manualCandidates.delete(sessionId)
     for (const sessionId of this.confirmedExits.keys()) if (!activeSessions.has(sessionId)) this.confirmedExits.delete(sessionId)
     for (const sessionId of this.freshEvidence.keys()) if (!activeSessions.has(sessionId)) this.freshEvidence.delete(sessionId)
+    for (const sessionId of this.statusLeadIdentities.keys()) if (!activeSessions.has(sessionId)) this.statusLeadIdentities.delete(sessionId)
+    for (const sessionId of this.sessionEndCandidates.keys()) if (!activeSessions.has(sessionId)) this.sessionEndCandidates.delete(sessionId)
     const knownPanes = new Set([
       ...this.providers.keys(),
       ...this.overlays.keys(),
@@ -1233,100 +1364,116 @@ export class DockService {
   }
 
   private async send(params: Record<string, unknown>): Promise<SendResult> {
-    const binding = await this.resolveBinding({ pane: params.pane })
-    const id = params.id === undefined ? randomUUID() : params.id
-    if (typeof id !== 'string' || id.length === 0 || id.length > 160) throw this.context.error('invalid-params', 'send id must be a nonempty string of at most 160 characters')
-    if (!this.enabled()) return { id, outcome: 'refused', accepted: false, reason: 'Terminal dock is disabled' }
-    await this.ensureRecovered()
-    const status = binding.status
-    await this.reconcileBinding(binding, status)
-    const refusal = await this.writeRefusal(binding, status)
-    if (refusal) return { id, outcome: 'refused', accepted: false, reason: refusal }
-    const provider = await this.refreshProvider(binding, true)
-    if (provider.question) return { id, outcome: 'refused', accepted: false, reason: 'An agent question or permission request is awaiting an answer' }
+    // Keep same-pane calls in arrival order while resolving each accepted session binding.
+    const paneAdmissionKey = typeof params.pane === 'string' ? `pane:${params.pane}` : null
+    const releasePaneAdmission = paneAdmissionKey
+      ? await this.reserveSendAdmission(paneAdmissionKey)
+      : () => {}
+    let resultPromise: Promise<unknown>
+    try {
+      const binding = await this.resolveBinding({ pane: params.pane })
+      const id = params.id === undefined ? randomUUID() : params.id
+      if (typeof id !== 'string' || id.length === 0 || id.length > 160) throw this.context.error('invalid-params', 'send id must be a nonempty string of at most 160 characters')
+      if (!this.enabled()) return { id, outcome: 'refused', accepted: false, reason: 'Terminal dock is disabled' }
+      // Session admission keeps asynchronous preflight from reordering queue reservations.
+      const releaseSessionAdmission = await this.reserveSendAdmission(`session:${binding.session.id}`)
+      try {
+        await this.ensureRecovered()
+        const status = binding.status
+        await this.reconcileBinding(binding, status)
+        const refusal = await this.writeRefusal(binding, status)
+        if (refusal) return { id, outcome: 'refused', accepted: false, reason: refusal }
+        const provider = await this.refreshProvider(binding, true)
+        if (provider.question) return { id, outcome: 'refused', accepted: false, reason: 'An agent question or permission request is awaiting an answer' }
 
-    const textSupplied = Object.hasOwn(params, 'text')
-    if (textSupplied && typeof params.text !== 'string') throw this.context.error('invalid-params', 'send text must be a string')
-    let snapshot: DockRecovery | undefined
-    let attachments: DockAttachment[] = []
-    const prepared = await this.mutate(() => {
-      if (!this.enabled() || this.stopped) throw this.context.error('invalid-params', 'Terminal dock is disabled')
-      const record = this.store.get(binding.pane) ?? defaultDockRecord(binding.pane, binding.session.id, binding.tab)
-      if (this.wasUsedId(id)) throw this.context.error('invalid-params', `duplicate send ID ${id}`)
-      if (!textSupplied && params.revision !== record.revision) {
-        const state = this.stateFrom(binding, record, { noTerminal: false, reason: null }, null)
-        throw this.conflict('dock revision conflict', state)
-      }
-      if (record.recovery.length >= 64) throw this.context.error('invalid-params', 'terminal dock send queue is full')
-      const text = textSupplied ? (params.text as string) : record.draft
-      const attachmentIds = textSupplied ? [] : [...record.draftAttachments]
-      if (text.length === 0 && attachmentIds.length === 0) {
-        return { refused: { id, outcome: 'refused', accepted: false, reason: 'Send requires text or an attachment' } satisfies SendResult }
-      }
-      const sequence = record.nextSequence++
-      snapshot = { id, sequence, text, attachments: attachmentIds, mayHaveWritten: false, createdAt: Date.now() }
-      const nextRecovery = [...record.recovery, snapshot]
-      const nextDraft = textSupplied ? record.draft : ''
-      const nextDraftAttachments = textSupplied ? record.draftAttachments : []
-      if (recoverableTextLength(nextDraft, nextRecovery) > MAX_RECOVERABLE_CHARS) {
-        throw this.context.error('invalid-params', 'recoverable-text-limit: enqueue would exceed the 200000-character combined recovery budget')
-      }
-      if (recoverableAttachmentCount(nextDraftAttachments, nextRecovery) > MAX_ATTACHMENTS) {
-        throw this.context.error('invalid-params', `queued send would exceed the ${MAX_ATTACHMENTS}-attachment recovery budget`)
-      }
-      for (const attachmentId of attachmentIds) {
-        const attachment = record.attachments.find((item) => item.id === attachmentId)
-        if (!attachment) throw this.context.error('invalid-params', `attachment ${attachmentId} is no longer available`)
-        attachments.push(attachment)
-      }
-      record.recovery = nextRecovery
-      record.recentSendIds = [...record.recentSendIds.filter((existing) => existing !== id), id].slice(-200)
-      if (!textSupplied) {
-        record.draft = ''
-        record.draftAttachments = []
-        this.historyBrowse.delete(binding.pane)
-      }
-      record.notice = null
-      record.revision++
-      record.updatedAt = Date.now()
-      this.store.put(record)
-      return { queued: true }
-    })
-    if ('refused' in prepared && prepared.refused !== undefined) return prepared.refused
-    if (!snapshot) throw this.context.error('conflict', 'send snapshot was not created')
-
-    const operation = this.createOperation(id, binding, 'send', async (operation) => {
-      const result = await executePrompt({
-        context: this.context,
-        session: binding.session,
-        text: snapshot!.text,
-        attachments,
-        bridge: this.bridge,
-        signal: operation.controller.signal,
-        ensure: () => this.ensureWritable(binding, operation.controller.signal),
-        phase: (phase) => {
-          operation.phase = phase
-          this.announce(binding.pane)
-        },
-        ...(this.testHooks.beforeSubmit ? { beforeSubmit: this.testHooks.beforeSubmit } : {}),
-        bodyMayHaveBeenWritten: async () => {
-          if (this.stopped || operation.controller.signal.aborted || !this.enabled() || operation.restored) {
-            throw new Error('Terminal dock send stopped before body dispatch')
+        const textSupplied = Object.hasOwn(params, 'text')
+        if (textSupplied && typeof params.text !== 'string') throw this.context.error('invalid-params', 'send text must be a string')
+        let snapshot: DockRecovery | undefined
+        let attachments: DockAttachment[] = []
+        const prepared = await this.mutate(() => {
+          const record = this.store.get(binding.pane) ?? defaultDockRecord(binding.pane, binding.session.id, binding.tab)
+          if (this.wasUsedId(id)) throw this.context.error('invalid-params', `duplicate send ID ${id}`)
+          if (!textSupplied && params.revision !== record.revision) {
+            const state = this.stateFrom(binding, record, { noTerminal: false, reason: null }, null)
+            throw this.conflict('dock revision conflict', state)
           }
-          await this.mutate(() => {
-            if (this.stopped || operation.controller.signal.aborted || !this.enabled() || operation.restored) return
-            const record = this.store.get(binding.pane)
-            const recovery = record?.recovery.find((item) => item.id === id)
-            if (!record || !recovery || recovery.mayHaveWritten) return
-            recovery.mayHaveWritten = true
-            record.updatedAt = Date.now()
-            this.store.put(record)
-          })
-        }
-      }, id)
-      return result
-    }, snapshot)
-    const result = await this.enqueue(operation)
+          if (record.recovery.length >= 64) throw this.context.error('invalid-params', 'terminal dock send queue is full')
+          const text = textSupplied ? (params.text as string) : record.draft
+          const attachmentIds = textSupplied ? [] : [...record.draftAttachments]
+          if (text.length === 0 && attachmentIds.length === 0) {
+            return { refused: { id, outcome: 'refused', accepted: false, reason: 'Send requires text or an attachment' } satisfies SendResult }
+          }
+          const sequence = record.nextSequence++
+          snapshot = { id, sequence, text, attachments: attachmentIds, mayHaveWritten: false, createdAt: Date.now() }
+          const nextRecovery = [...record.recovery, snapshot]
+          const nextDraft = textSupplied ? record.draft : ''
+          const nextDraftAttachments = textSupplied ? record.draftAttachments : []
+          if (recoverableTextLength(nextDraft, nextRecovery) > MAX_RECOVERABLE_CHARS) {
+            throw this.context.error('invalid-params', 'recoverable-text-limit: enqueue would exceed the 200000-character combined recovery budget')
+          }
+          if (recoverableAttachmentCount(nextDraftAttachments, nextRecovery) > MAX_ATTACHMENTS) {
+            throw this.context.error('invalid-params', `queued send would exceed the ${MAX_ATTACHMENTS}-attachment recovery budget`)
+          }
+          for (const attachmentId of attachmentIds) {
+            const attachment = record.attachments.find((item) => item.id === attachmentId)
+            if (!attachment) throw this.context.error('invalid-params', `attachment ${attachmentId} is no longer available`)
+            attachments.push(attachment)
+          }
+          record.recovery = nextRecovery
+          record.recentSendIds = [...record.recentSendIds.filter((existing) => existing !== id), id].slice(-200)
+          if (!textSupplied) {
+            record.draft = ''
+            record.draftAttachments = []
+            this.historyBrowse.delete(binding.pane)
+          }
+          record.notice = null
+          record.revision++
+          record.updatedAt = Date.now()
+          this.store.put(record)
+          return { queued: true }
+        })
+        if ('refused' in prepared && prepared.refused !== undefined) return prepared.refused
+        if (!snapshot) throw this.context.error('conflict', 'send snapshot was not created')
+
+        const operation = this.createOperation(id, binding, 'send', async (operation) => {
+          const result = await executePrompt({
+            context: this.context,
+            session: binding.session,
+            text: snapshot!.text,
+            attachments,
+            bridge: this.bridge,
+            signal: operation.controller.signal,
+            ensure: () => this.ensureWritable(binding, operation.controller.signal),
+            phase: (phase) => {
+              operation.phase = phase
+              this.announce(binding.pane)
+            },
+            ...(this.testHooks.beforeSubmit ? { beforeSubmit: this.testHooks.beforeSubmit } : {}),
+            bodyMayHaveBeenWritten: async () => {
+              if (this.stopped || operation.controller.signal.aborted || !this.enabled() || operation.restored) {
+                throw new Error('Terminal dock send stopped before body dispatch')
+              }
+              await this.mutate(() => {
+                if (this.stopped || operation.controller.signal.aborted || !this.enabled() || operation.restored) return
+                const record = this.store.get(binding.pane)
+                const recovery = record?.recovery.find((item) => item.id === id)
+                if (!record || !recovery || recovery.mayHaveWritten) return
+                recovery.mayHaveWritten = true
+                record.updatedAt = Date.now()
+                this.store.put(record)
+              })
+            }
+          }, id)
+          return result
+        }, snapshot)
+        resultPromise = this.enqueue(operation)
+      } finally {
+        releaseSessionAdmission()
+      }
+    } finally {
+      releasePaneAdmission()
+    }
+    const result = await resultPromise
     return result as SendResult
   }
 
@@ -1555,6 +1702,19 @@ export class DockService {
       this.queues.set(session, queue)
     }
     return queue
+  }
+  private async reserveSendAdmission(identity: string): Promise<() => void> {
+    const previous = this.sendAdmissionTails.get(identity)
+    const { promise: current, resolve: releaseCurrent } = Promise.withResolvers<void>()
+    this.sendAdmissionTails.set(identity, current)
+    if (previous) await previous
+    let released = false
+    return () => {
+      if (released) return
+      released = true
+      releaseCurrent(undefined)
+      if (this.sendAdmissionTails.get(identity) === current) this.sendAdmissionTails.delete(identity)
+    }
   }
 
   private async pump(session: string, queue: SessionQueue): Promise<void> {

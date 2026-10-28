@@ -1,5 +1,5 @@
 import type { CliArgs, CliContext, CliModule } from '@quirky/protocol'
-import type { LoopConfig, LoopConfigPatch, LoopPreset, LoopSnapshot, IterationDetail, QueueOperation } from './src/types'
+import type { LoopConfig, LoopConfigPatch, LoopPreset, LoopSnapshot, LoopSummary, IterationDetail, QueueOperation } from './src/types'
 
 type Flags = Record<string, unknown>
 type EditPatch = LoopConfigPatch & { name?: string }
@@ -196,6 +196,24 @@ function assertNoExtraPositionals(args: CliArgs, count: number, ctx: CliContext)
   if (args.positionals.length > count) throw ctx.usage('too many positional arguments')
 }
 
+function jsonObjectFlag(flags: Flags, name: string, ctx: CliContext): Record<string, unknown> | undefined {
+  const raw = stringFlag(flags, name, ctx)
+  if (raw === undefined) return undefined
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(raw)
+  } catch (error) {
+    throw ctx.usage(`--${name} must be valid JSON: ${error instanceof Error ? error.message : String(error)}`)
+  }
+  if (!object(parsed)) throw ctx.usage(`--${name} must be a JSON object`)
+  return parsed
+}
+
+async function invokeUiCommand(name: string, args: Record<string, unknown>, ctx: CliContext): Promise<void> {
+  const result = await ctx.call('ui.command.run', { id: `command:quirky.loops/${name}`, args })
+  ctx.out.result(result, () => JSON.stringify(result, null, 2) ?? 'null')
+}
+
 function statusText(loop: LoopSnapshot): string {
   return `${loop.state}${loop.pauseReason ? `: ${loop.pauseReason}` : ''}${loop.pauseDetail ? ` — ${loop.pauseDetail}` : ''}`
 }
@@ -232,6 +250,12 @@ function loopLine(loop: LoopSnapshot): string {
     ...scheduleSummary(loop)
   ].filter((part): part is string => part !== undefined).join('  ')
 }
+function summaryLine(summary: LoopSummary): string {
+  const count = `${summary.iterationsCompleted}${summary.maxIterations === null ? '' : `/${summary.maxIterations}`}`
+  const reason = summary.pauseReason === null ? '' : `: ${summary.pauseReason}`
+  return `${summary.id}  ${summary.worktreeId}  ${summary.state}${reason}  iterations ${count}`
+}
+
 
 function showText(loop: LoopSnapshot, ctx: CliContext): string {
   const rows: [string, string][] = [
@@ -308,6 +332,13 @@ const named: CliModule['commands'] = {
     const worktree = stringFlag(args.flags, 'worktree', ctx)
     const loops = await ctx.call('quirky.loops/list', worktree === undefined ? {} : { worktree }) as LoopSnapshot[]
     ctx.out.result(loops, () => loops.length === 0 ? 'No loops.' : loops.map(loopLine).join('\n'))
+  },
+  async summaries(args, ctx) {
+    assertNoExtraPositionals(args, 0, ctx)
+    const summaries = await ctx.call('quirky.loops/summaries', {}) as LoopSummary[]
+    ctx.out.result(summaries, () =>
+      summaries.length === 0 ? 'No loop summaries.' : summaries.map(summaryLine).join('\n')
+    )
   },
   async show(args, ctx) {
     assertNoExtraPositionals(args, 1, ctx)
@@ -529,6 +560,45 @@ const named: CliModule['commands'] = {
 
     const loop = await ctx.call('quirky.loops/queue', { loopId, op: operation }) as LoopSnapshot
     ctx.out.result(loop, () => `Updated queue for loop ${loop.id} (${loop.name}).`)
+  },
+  async 'ui-new'(args, ctx) {
+    assertNoExtraPositionals(args, 0, ctx)
+    const workspace = stringFlag(args.flags, 'workspace', ctx)
+    const group = stringFlag(args.flags, 'group', ctx)
+    await invokeUiCommand('new', {
+      ...(workspace === undefined ? {} : { workspace }),
+      ...(group === undefined ? {} : { group })
+    }, ctx)
+  },
+  async 'ui-setup-action'(args, ctx) {
+    assertNoExtraPositionals(args, 1, ctx)
+    const action = positional(args, 0, 'setup-action requires an action', ctx)
+    const params = jsonObjectFlag(args.flags, 'payload', ctx)
+    await invokeUiCommand('setup-action', { action, ...(params === undefined ? {} : { params }) }, ctx)
+  },
+  async 'ui-open'(args, ctx) {
+    assertNoExtraPositionals(args, 1, ctx)
+    const loopId = positional(args, 0, 'open requires a loop ID', ctx)
+    await invokeUiCommand('open', { loopId }, ctx)
+  },
+  async 'ui-action'(args, ctx) {
+    assertNoExtraPositionals(args, 2, ctx)
+    const loopId = positional(args, 0, 'action requires a loop ID', ctx)
+    const action = positional(args, 1, 'action requires an action name', ctx)
+    const params = jsonObjectFlag(args.flags, 'payload', ctx)
+    await invokeUiCommand('action', { loopId, action, ...(params === undefined ? {} : { params }) }, ctx)
+  },
+  async 'ui-close-tab'(args, ctx) {
+    assertNoExtraPositionals(args, 1, ctx)
+    const loopId = positional(args, 0, 'close-tab requires a loop ID', ctx)
+    const tabId = nonEmpty(stringFlag(args.flags, 'tab', ctx), 'tab', ctx)
+    if (tabId === undefined) throw ctx.usage('close-tab requires --tab')
+    await invokeUiCommand('close-tab', { loopId, tabId }, ctx)
+  },
+  async 'ui-close-choice'(args, ctx) {
+    assertNoExtraPositionals(args, 1, ctx)
+    const choice = positional(args, 0, 'close-choice requires a choice', ctx)
+    await invokeUiCommand('close-choice', { choice }, ctx)
   }
 }
 

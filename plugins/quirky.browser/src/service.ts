@@ -8,6 +8,12 @@ import { asPluginError, fault } from './runtime/errors'
 import { parseExec } from './runtime/exec'
 import type { BrowserDependencies } from './runtime/dependencies'
 import { BrowserStore, type BrowserPage } from './profiles/store'
+import { DESIGN_METHODS, type DesignMethod, type DesignRequests } from './design-contract'
+import { DesignService } from './design/service'
+import { ProfileLifecycle } from './preferences-lifecycle'
+import { registerPreferences } from './preferences/controller'
+import { identityModeFromSetting } from './preferences/identity'
+import type { PreferencesController } from './preferences/contract'
 import { PANE_METHODS, type PaneMethod, type PaneTab } from './pane-contract'
 import { PaneService } from './pane-service'
 
@@ -83,12 +89,16 @@ export class BrowserService {
   private readonly store: BrowserStore
   private readonly runtime: BrowserRuntime
   private readonly actions: BrowserActions
+  private readonly profileLifecycle: ProfileLifecycle
+  private preferences?: PreferencesController
   private readonly panes: PaneService
+  private readonly design: DesignService
   private active = true
   constructor(private readonly context: PluginContext, dependencies: BrowserDependencies) {
     this.store = new BrowserStore(context.dataDir)
-    this.runtime = new BrowserRuntime(this.store, dependencies, (pageId) => this.actions?.clearPageRefs(pageId))
+    this.runtime = new BrowserRuntime(this.store, dependencies, (pageId) => this.actions?.clearPageRefs(pageId), identityModeFromSetting(context.getSetting('identityMode')))
     this.actions = new BrowserActions(this.store, this.runtime)
+    this.profileLifecycle = new ProfileLifecycle(context, this.store, this.runtime, () => this.listPanes())
     this.panes = new PaneService(
       context,
       this.store,
@@ -97,15 +107,28 @@ export class BrowserService {
       () => this.listWorktrees(),
       dependencies.downloadDirectory
     )
+    this.design = new DesignService(context, this.runtime, () => this.panes.listPanes(), (pageId) => this.store.getPage(pageId))
   }
 
   activate(): void {
     for (const name of BROWSER_METHODS) {
       this.context.provide(`method:quirky.browser/${name}`, (params: Record<string, unknown>, caller: PluginCaller) => this.call(name, params, caller))
     }
+    this.profileLifecycle.activate()
+    this.preferences = registerPreferences(this.context, {
+      listProfiles: () => this.store.listProfiles(),
+      listPanes: () => this.listPanes(),
+      listPageProfiles: () => this.store.listPages().map((page) => page.profileId),
+      setPaneProfile: (pane, profile) => this.setPaneProfile(pane, profile),
+      clearProfile: (profile, remove) => this.profileLifecycle.clearProfile(profile, remove)
+    })
   }
-  setPaneProfile(paneId: string, profileId: string): Promise<PaneTab> {
-    return this.panes.setPaneProfile(paneId, profileId)
+  async setPaneProfile(paneId: string, profileId: string): Promise<PaneTab> {
+    return await this.profileLifecycle.withProfileAdmission(profileId, async () => {
+      const current = this.panes.listPanes().find((tab) => tab.id === paneId)
+      if (current && current.profileId !== profileId) await this.design.cancelPane(paneId)
+      return await this.panes.setPaneProfile(paneId, profileId)
+    })
   }
 
   listPanes(): PaneTab[] {
@@ -114,6 +137,9 @@ export class BrowserService {
 
   async deactivate(): Promise<void> {
     this.active = false
+    this.preferences?.deactivate()
+    this.profileLifecycle.deactivate()
+    await this.design.deactivate()
     await this.panes.deactivate()
     await this.runtime.stopAll()
   }
@@ -121,25 +147,54 @@ export class BrowserService {
   private async call(name: BrowserMethod, params: Record<string, unknown>, caller: PluginCaller): Promise<unknown> {
     try {
       if (!this.active) throw fault('browser_error', 'browser plugin is shutting down')
-      return await this.invoke(name, params, caller)
+      const result = await this.invoke(name, params, caller)
+      if (name === 'tabCreate' || name === 'tabClose' || name === 'profileCreate' || name === 'paneOpen' || name === 'paneClose') this.context.emit('preferencesChanged', {})
+      return result
     } catch (error) {
       throw asPluginError(this.context, error)
     }
   }
 
   private async invoke(name: BrowserMethod, params: Record<string, unknown>, caller: PluginCaller): Promise<unknown> {
-    if ((PANE_METHODS as readonly string[]).includes(name)) return await this.panes.call(name as PaneMethod, params, caller)
+    if (name === 'paneOpen') {
+      const pageId = optionalString(params, 'page')
+      const profileId = pageId === undefined ? optionalString(params, 'profile') ?? 'default' : this.store.getPage(pageId).profileId
+      return await this.profileLifecycle.withProfileAdmission(profileId, () => this.panes.call('paneOpen', params, caller))
+    }
+    if ((PANE_METHODS as readonly string[]).includes(name)) {
+      const result = await this.panes.call(name as PaneMethod, params, caller)
+      if (name === 'paneClose' || name === 'paneWatchStop' || name === 'paneNavigate') {
+        const pane = typeof params.pane === 'string' ? params.pane : ''
+        if (pane !== '') await this.design.cancelPane(pane)
+      }
+      return result
+    }
+    if ((DESIGN_METHODS as readonly string[]).includes(name)) return await this.designMethod(name as DesignMethod, params)
     switch (name) {
       case 'tabList': return this.tabList(params, caller)
       case 'tabShow': return this.tabShow(params)
       case 'tabCurrent': return this.tabCurrent(params, caller)
-      case 'tabCreate': return await this.createPage(params, caller)
+      case 'tabCreate': return await this.profileLifecycle.withProfileAdmission(optionalString(params, 'profile') ?? 'default', () => this.createPage(params, caller))
       case 'tabSwitch': return await this.tabSwitch(params, caller)
       case 'tabClose': return await this.tabClose(params, caller)
       case 'profileList': return { profiles: this.store.listProfiles() }
       case 'profileCreate': return { profile: this.store.createProfile(stringParam(params, 'name')) }
       case 'exec': return await this.exec(params, caller)
       default: return await this.pageAction(name, params, caller)
+    }
+  }
+
+  private async designMethod(method: DesignMethod, params: Record<string, unknown>): Promise<unknown> {
+    switch (method) {
+      case 'designArm': return await this.design.designArm(params as DesignRequests['designArm'])
+      case 'designRead': return await this.design.designRead(params as DesignRequests['designRead'])
+      case 'designHover': return await this.design.designHover(params as DesignRequests['designHover'])
+      case 'designCancel': return await this.design.designCancel(params as DesignRequests['designCancel'])
+      case 'designCapture': return await this.design.designCapture(params as DesignRequests['designCapture'])
+      case 'designFormat': return await this.design.designFormat(params as DesignRequests['designFormat'])
+      case 'designTargets': return await this.design.designTargets(params as DesignRequests['designTargets'])
+      case 'designSend': return await this.design.designSend(params as DesignRequests['designSend'])
+      default: throw fault('browser_error', `no design implementation exists for ${method}`)
     }
   }
 
@@ -176,6 +231,7 @@ export class BrowserService {
     const worktreeId = await this.resolveWorktreeTarget(optionalString(params, 'worktree'), optionalString(params, 'cwd'), caller, false)
     const profileId = optionalString(params, 'profile') ?? 'default'
     this.store.getProfile(profileId)
+    this.profileLifecycle.assertAvailable(profileId)
     const page = this.store.addPage({ worktreeId: worktreeId ?? null, profileId, url: 'about:blank', title: '' })
     try {
       await this.runtime.withPage(page, 'tabCreate', async (execution) => {
@@ -231,6 +287,7 @@ export class BrowserService {
         page = candidates[index] ?? (() => { throw fault('browser_tab_not_found', `tab index ${index} does not exist`) })()
       } else page = this.activePage(candidates)
     }
+    await this.design.cancelPage(page.browserPageId)
     await this.runtime.closePageOutOfBand(page.browserPageId)
     await this.runtime.withProfileLock(page.profileId, async () => {
       await this.runtime.closePageLocked(page.profileId, page.browserPageId)
@@ -242,7 +299,10 @@ export class BrowserService {
   private async pageAction(method: BrowserMethod, params: Record<string, unknown>, caller: PluginCaller): Promise<unknown> {
     if (method === 'goto') validateNavigationUrl(stringParam(params, 'url'))
     const page = await this.resolvePageTarget(params, caller, Object.hasOwn(READ_ONLY_METHODS, method))
-    if (method === 'goto') this.runtime.invalidatePage(page.browserPageId, true)
+    if (method === 'goto') {
+      await this.design.cancelPage(page.browserPageId)
+      this.runtime.invalidatePage(page.browserPageId, true)
+    }
     return await this.runtime.withPage(page, method, (execution) => this.actions.run(method, params, execution))
   }
 
@@ -251,7 +311,10 @@ export class BrowserService {
     const plan = parseExec(stringParam(params, 'command'))
     if (plan.method === 'goto') validateNavigationUrl(stringParam(plan.params, 'url'))
     const page = await this.resolvePageTarget(params, caller, false)
-    if (plan.method === 'goto') this.runtime.invalidatePage(page.browserPageId, true)
+    if (plan.method === 'goto') {
+      await this.design.cancelPage(page.browserPageId)
+      this.runtime.invalidatePage(page.browserPageId, true)
+    }
     const result = await this.runtime.withPage(page, 'exec', (execution) => this.actions.run(plan.method, plan.params, execution))
     return { command: plan.command, result }
   }

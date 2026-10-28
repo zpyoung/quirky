@@ -51,6 +51,55 @@ describe('SC-1: the overlay and its menu command', () => {
     expect(overlay.view.q('h2')!.textContent).toBe('Continue in New Session')
     expect(fake.callsTo('prepare')[0]!.params).toEqual({ source: { session: 's_1' } })
   })
+  test('an archived-source command opens the dialog with the archived provider identity and context', async () => {
+    const world = makeWorld()
+    const firstPrompt = `Full archived prompt ${'literal source context '.repeat(200)}`
+    const archived = {
+      agent: 'claude',
+      providerSessionId: 'provider-archive-42',
+      transcriptPath: '/owned/source/.claude/projects/work/archive.jsonl',
+      title: 'Archived migration',
+      worktree: 'wt_W',
+      cwd: '/work/W',
+      prompt: firstPrompt,
+      lastMessage: 'The latest assistant response'
+    }
+    world.source = {
+      ...world.source,
+      key: 'archived:claude:provider-archive-42',
+      session: null,
+      title: archived.title,
+      providerSessionId: archived.providerSessionId,
+      transcriptPath: archived.transcriptPath,
+      cwd: archived.cwd,
+      prompt: firstPrompt,
+      lastMessage: archived.lastMessage,
+      live: false,
+      busy: false
+    }
+    const fake = fakeContext(daemon(world))
+    const overlay = await mountOverlay(ui, fake)
+
+    expect(await fake.run('open-archived', { source: { archived } })).toEqual({ ok: true })
+    await settle()
+
+    expect(fake.callsTo('prepare')[0]!.params).toEqual({ source: { archived } })
+    expect(overlay.last().source).toMatchObject({
+      session: null,
+      agent: 'claude',
+      title: archived.title,
+      cwd: archived.cwd,
+      providerSessionId: archived.providerSessionId,
+      transcriptPath: archived.transcriptPath,
+      prompt: firstPrompt,
+      lastMessage: archived.lastMessage,
+      live: false,
+      busy: false
+    })
+    expect(overlay.view.text()).toContain('Archived migration')
+    expect(overlay.last().shown).toBe(true)
+  })
+
 
   test('SC-63: a closed overlay reports the whole W1 shape', async () => {
     const overlay = await mountOverlay(ui, fakeContext(daemon(makeWorld())))

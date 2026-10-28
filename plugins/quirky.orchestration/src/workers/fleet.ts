@@ -52,6 +52,7 @@ type AgentEvidence = {
 type FleetCandidate = {
   dispatch: DispatchRow
   task: TaskRow
+  coordinatorSessionId: string | null
   worker: WorkerRecord | null
   resource: TerminalResource | null
   attention: ReturnType<WorkerCore['attentionFor']>
@@ -332,6 +333,7 @@ function makeFleetRow(
   const terminalState = terminalStateFor(candidate, liveness)
   const categories = attentionCategories(candidate, evidence, liveness, outcome)
   const identity = exactObservation(worker, resource, observation) ? observation.identity : null
+  const currentAssignment = identity !== null && resource?.ownerDispatchId === dispatch.id
   const session = identity ? observation.session : null
   const providerId = identity?.providerId ?? session?.agent ?? null
   const modelValue = session?.launchSettings?.options.model?.value
@@ -363,6 +365,11 @@ function makeFleetRow(
     taskId: task.id,
     runId: dispatch.runId,
     workerState: worker?.state ?? null,
+    currentAssignment,
+    taskTitle: task.taskTitle,
+    displayName: task.displayName,
+    coordinatorSessionId: candidate.coordinatorSessionId,
+    parentSessionId: dispatch.creatorSessionId,
     dispatchStatus: dispatch.status,
     agentTerminalHandle: resource?.ownerDispatchId === dispatch.id ? resource.sessionId : worker?.sessionId ?? null,
     terminalState,
@@ -396,9 +403,11 @@ function snapshotCandidates(core: WorkerCore, repo: WorkerRepository, filter: Fl
     if (filter.runId !== null && row.runId !== filter.runId) continue
     const dispatch = cloneDispatch(row)
     const task = cloneTask(core.getTask(dispatch.taskId))
+    const run = core.getRun(dispatch.runId)
     candidates.push({
       dispatch,
       task,
+      coordinatorSessionId: run.coordinatorSessionId,
       worker: records.get(dispatch.id) ?? null,
       resource: cloneResource(repo.resource(dispatch.id)),
       attention: { ...core.attentionFor(dispatch.id) }
@@ -490,7 +499,15 @@ export function createWorkerFleet(core: WorkerCore, repo: WorkerRepository, runt
     const task = cloneTask(core.getTask(dispatch.taskId))
     const worker = cloneWorker(repo.get(dispatch.id))
     const resource = cloneResource(repo.resource(dispatch.id))
-    const candidate: FleetCandidate = { dispatch, task, worker, resource, attention: { ...core.attentionFor(dispatch.id) } }
+    const run = core.getRun(dispatch.runId)
+    const candidate: FleetCandidate = {
+      dispatch,
+      task,
+      coordinatorSessionId: run.coordinatorSessionId,
+      worker,
+      resource,
+      attention: { ...core.attentionFor(dispatch.id) }
+    }
     const initialObservation = await observeCandidate(runtime, candidate)
     const evidence = await readAgentEvidence(runtime, dispatch, worker, resource, initialObservation)
     const observation = observationAfterEvidence(initialObservation, evidence)

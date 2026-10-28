@@ -2,9 +2,10 @@ import { afterEach, describe, expect, test } from 'bun:test'
 import { mkdirSync, readdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { MobileTestClient } from './support/client'
-import { builtinsDir, makeTempHome, startHarness, waitFor, waitForAsync, type Harness } from '../../../packages/daemon/test/helpers'
+import { makeTempHome, startHarness, waitFor, waitForAsync, type Harness } from '../../../packages/daemon/test/helpers'
 import { runCli } from '../../../packages/cli/test/fixtures/fake-daemon'
 import { RpcErrorCode } from '@quirky/protocol'
+import { makeBuiltinDir } from '../../quirky.session/test/support'
 
 let harness: Harness | undefined
 let mobile: MobileTestClient | undefined
@@ -20,7 +21,14 @@ async function boot(home?: string): Promise<Harness> {
   }
   process.env.QUIRKY_MOBILE_PORT = '0'
   delete process.env.QUIRKY_MOBILE_HOST
-  return await startHarness({ builtinPluginsDir: builtinsDir(), ...(home ? { home } : {}) })
+  const isolatedHome = home ?? makeTempHome()
+  return await startHarness({
+    home: isolatedHome,
+    builtinPluginsDir: makeBuiltinDir(isolatedHome, {
+      real: ['quirky.mobile', 'quirky.agents', 'quirky.session', 'quirky.terminal', 'quirky.ask', 'quirky.agent-status', 'quirky.worktree', 'quirky.repo', 'quirky.structured'],
+      fakes: []
+    })
+  })
 }
 
 async function cleanupHarness(value: Harness): Promise<void> {
@@ -167,12 +175,13 @@ describe('mobile daemon integration', () => {
     const waitingPeer = mobile
     const pendingWaits = Array.from({ length: 16 }, () => waitingPeer.call('quirky.agent-status/wait', waitParams))
     await expect(mobile.call('quirky.agent-status/wait', waitParams)).rejects.toMatchObject({ code: -32002 })
+    await expect(mobile.call('status.get', {}, { params: undefined })).rejects.toMatchObject({ code: -32002 })
     expect(await Promise.all(pendingWaits)).toHaveLength(16)
     const attached = await mobile.call('quirky.terminal/attach', { session: session.id, cols: 70, rows: 20 }) as { streamId: number }
     await mobile.call('quirky.terminal/claim', { session: session.id, cols: 70, rows: 20 })
     const mobileTerminals = await mobile.call('quirky.terminal/mobileState', { session: session.id }) as { terminals: { session: string }[] }
     expect(mobileTerminals.terminals.map(({ session: terminal }) => terminal)).toContain(session.id)
-    const secondSocket = MobileTestClient.connect(offer.endpoint, offer.publicKeyB64, offer.deviceToken)
+    const secondSocket = MobileTestClient.connect(`ws://127.0.0.1:${currentState.listener.port}`, offer.publicKeyB64, offer.deviceToken)
     try {
       await secondSocket.authenticated
       await secondSocket.call('quirky.terminal/attach', { session: session.id, cols: 70, rows: 20 })
@@ -223,23 +232,6 @@ describe('mobile daemon integration', () => {
     await reconnect.close()
     mobile = undefined
   }, 60_000)
-  test('the concurrent request budget also covers omitted params', async () => {
-    harness = await boot()
-    const api = await harness.connect('cli')
-    const pairing = await api.callAny('quirky.mobile/pair', { address: '127.0.0.1' }) as { pairingUrl: string; endpoint: string }
-    const offer = JSON.parse(Buffer.from(new URL(pairing.pairingUrl).searchParams.get('code')!, 'base64url').toString()) as { publicKeyB64: string; deviceToken: string }
-    const connected = MobileTestClient.connect(pairing.endpoint, offer.publicKeyB64, offer.deviceToken)
-    mobile = connected
-    await connected.authenticated
-    const { askId } = await api.callAny('quirky.ask/create', { spec: { questions: [{ id: 'ready', type: 'text', question: 'Ready?' }] } }) as { askId: string }
-    const waiting = Promise.allSettled(Array.from({ length: 16 }, () => connected.call('quirky.ask/wait', { askId, timeoutMs: 1000 })))
-    try {
-      await expect(connected.call('status.get', {}, { params: undefined })).rejects.toMatchObject({ code: -32002 })
-      await expect(connected.call('daemon.stop')).rejects.toMatchObject({ code: -32001 })
-    } finally {
-      await waiting
-    }
-  })
 
   test('ordinary answer IDs do not masquerade as caller identity', async () => {
     harness = await boot()

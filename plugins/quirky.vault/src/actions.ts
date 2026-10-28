@@ -102,11 +102,23 @@ export class VaultActions {
     if (source.hostId !== 'local') throw this.context.error('conflict', 'only local agent transcripts can be moved to Trash')
 
     const session = await this.request<VaultSession | null>('get', { id: source.sourceId })
+    const targets = await this.request<DeleteTarget[]>('deleteTargets', { id: source.sourceId })
+    if (session?.presence === 'unverifiable') {
+      return { deleted: false, trashed: 0, alreadyMissing: false, reason: 'source availability could not be verified' }
+    }
     if (!session || session.presence === 'missing') {
+      for (const target of targets) {
+        if (!isAbsolute(target.path)) throw this.context.error('conflict', 'scanner returned a non-absolute Trash target')
+        try {
+          lstatSync(target.path)
+          return { deleted: false, trashed: 0, alreadyMissing: false, reason: 'source path is present but no longer resolves to the selected session' }
+        } catch (error) {
+          if (!isMissing(error)) return { deleted: false, trashed: 0, alreadyMissing: false, reason: messageOf(error) }
+        }
+      }
       await this.invalidate(source.sourceId)
       return { deleted: true, trashed: 0, alreadyMissing: true }
     }
-    const targets = await this.request<DeleteTarget[]>('deleteTargets', { id: source.sourceId })
     if (targets.length === 0) {
       await this.invalidate(source.sourceId)
       return { deleted: true, trashed: 0, alreadyMissing: true }
@@ -204,16 +216,47 @@ export class VaultActions {
 
   handoff = async (params: Record<string, unknown>): Promise<{ available: boolean; reason?: string; result?: unknown }> => {
     const source = await this.source(this.requiredId(params))
-    const contributions = (await this.context.call('plugin.contributions', { kind: 'handoff' })) as ContributionInfo[]
-    const owner = contributions.find((contribution) => typeof contribution.data.method === 'string')
-    const method = owner?.data.method
-    if (typeof method !== 'string') return { available: false, reason: 'no handoff owner is installed' }
+    let raw: unknown
     try {
-      const result = await this.context.call(method, {
+      raw = await this.context.call('plugin.contributions', { kind: 'handoff' })
+    } catch (error) {
+      return { available: false, reason: `handoff is unavailable: ${messageOf(error)}` }
+    }
+    const owner = Array.isArray(raw)
+      ? raw.find((value): value is ContributionInfo => {
+          if (typeof value !== 'object' || value === null || Array.isArray(value)) return false
+          const contribution = value as ContributionInfo
+          return contribution.status === 'effective' &&
+            contribution.data.supportsArchivedSource === true &&
+            typeof contribution.data.method === 'string'
+        })
+      : undefined
+    const method = owner?.data.method
+    if (typeof method !== 'string') return { available: false, reason: 'no archived-source handoff owner is installed' }
+
+    try {
+      let prompt = source.lastUserPrompt
+      let lastMessage: string | undefined
+      for (let index = source.previewMessages.length - 1; index >= 0; index--) {
+        const message = source.previewMessages[index]!
+        if (lastMessage === undefined && message.role === 'assistant') lastMessage = message.text
+        if ((prompt === undefined || prompt === '') && message.role === 'user') prompt = message.text
+        if (prompt !== undefined && lastMessage !== undefined) break
+      }
+      const archived = {
         agent: source.agent,
-        sessionId: source.sessionId,
-        sourceId: source.id
-      })
+        providerSessionId: source.sessionId,
+        transcriptPath: source.filePath,
+        title: source.title,
+        ...(source.cwd === null ? {} : { cwd: source.cwd }),
+        ...(prompt === undefined || prompt === '' ? {} : { prompt }),
+        ...(lastMessage === undefined ? {} : { lastMessage })
+      }
+      const result = await this.context.call(method, { source: { archived } })
+      const opened = typeof result === 'object' && result !== null && !Array.isArray(result)
+        ? (result as Record<string, unknown>).opened
+        : undefined
+      if (opened !== true) return { available: false, reason: 'handoff owner did not open its archived-source dialog' }
       return { available: true, result }
     } catch (error) {
       return { available: false, reason: `handoff is unavailable: ${messageOf(error)}` }

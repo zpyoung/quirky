@@ -5,7 +5,7 @@ import { registerDom } from './register-dom'
 registerDom()
 ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 const s = await import('./panel-support')
-const { act, byLabel, buttonText, click, entry, failure, fakeContext, layoutFor, mountPanel, q, qa, settle, statusOf } = s
+const { act, byLabel, buttonText, click, entry, failure, fakeContext, layoutFor, mountPanel, q, qa, settle, statusOf, waitForState } = s
 
 afterAll(() => GlobalRegistrator.unregister())
 beforeEach(() => {
@@ -51,6 +51,7 @@ describe('the primary button runs its action, then refreshes status and compare'
       const { fake, element, unmount } = await open((f) => {
         f.status = statusOf([], overrides)
       })
+      if (label === 'Publish Branch') await waitForState(element, () => !primary(element).disabled)
       const before = fake.calls.length
       await click(primary(element))
       expect(fake.calls.slice(before).map((c) => c.method)).toEqual([method, 'quirky.git/status', 'quirky.git/compare'])

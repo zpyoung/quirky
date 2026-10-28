@@ -24,12 +24,42 @@ type DeferredEvent =
   | { kind: 'request'; request: { id: CodexRpcId; method: string; params: unknown } }
 
 type PendingCompletion = { status: string; turn: Record<string, unknown> }
+type TokenCounts = Partial<Record<'inputTokens' | 'outputTokens' | 'cachedInputTokens' | 'reasoningOutputTokens', number>>
+
+function tokenCounts(value: unknown): TokenCounts | null {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return null
+  const source = value as Record<string, unknown>
+  const counts: TokenCounts = {}
+  for (const [key, camel, snake] of [
+    ['inputTokens', 'inputTokens', 'input_tokens'],
+    ['outputTokens', 'outputTokens', 'output_tokens'],
+    ['cachedInputTokens', 'cachedInputTokens', 'cached_input_tokens'],
+    ['reasoningOutputTokens', 'reasoningOutputTokens', 'reasoning_output_tokens']
+  ] as const) {
+    const count = source[camel] ?? source[snake]
+    if (typeof count === 'number' && Number.isSafeInteger(count) && count >= 0) counts[key] = count
+  }
+  return Object.keys(counts).length === 0 ? null : counts
+}
+
+function tokenUsageDelta(total: TokenCounts, baseline: TokenCounts | null): TokenCounts | null {
+  if (baseline === null) return null
+  const delta: TokenCounts = {}
+  for (const key of ['inputTokens', 'outputTokens', 'cachedInputTokens', 'reasoningOutputTokens'] as const) {
+    const current = total[key]
+    const before = baseline[key] ?? 0
+    if (current !== undefined && current >= before) delta[key] = current - before
+  }
+  return Object.keys(delta).length === 0 ? null : delta
+}
 
 type Running = {
   sessionId: string
   threadId: string
   connection: CodexConnection
   options: StructuredLaunchOptions
+  totalTokenUsage: TokenCounts | null
+  turnUsageBaseline: TokenCounts | null
   activeTurnId: string | null
   pendingApprovalCount: number
   pendingCompletion: PendingCompletion | null
@@ -138,7 +168,10 @@ class CodexRunner implements StructuredRunner {
       if (run) this.running.delete(session.id)
       await startup.connection?.close()
       if (startup.stopped) return
-      throw run?.startupFailure ?? (error instanceof Error ? error : new Error(String(error)))
+      const failure = run?.startupFailure ?? (error instanceof Error ? error : new Error(String(error)))
+      const stderrTail = startup.connection?.stderrTail
+      if (!stderrTail) throw failure
+      throw new Error(`${failure.message}; stderr: ${stderrTail}`, { cause: failure })
     } finally {
       if (this.starting.get(session.id) === startup) this.starting.delete(session.id)
     }
@@ -239,6 +272,8 @@ class CodexRunner implements StructuredRunner {
       threadId,
       connection,
       options,
+      totalTokenUsage: null,
+      turnUsageBaseline: threadId === '' ? { inputTokens: 0, outputTokens: 0, cachedInputTokens: 0, reasoningOutputTokens: 0 } : null,
       activeTurnId: null,
       pendingApprovalCount: 0,
       pendingCompletion: null,
@@ -290,6 +325,7 @@ class CodexRunner implements StructuredRunner {
             input: [{ type: 'text', text }],
             expectedTurnId
           }
+    if (run.totalTokenUsage !== null) run.turnUsageBaseline = { ...run.totalTokenUsage }
     run.inputPending = true
     try {
       const response = await run.connection.request(method, params)
@@ -381,6 +417,28 @@ class CodexRunner implements StructuredRunner {
     if (typeof params.threadId === 'string' && params.threadId !== run.threadId) return
 
     switch (method) {
+      case 'thread/tokenUsage/updated': {
+        const rawUsage = rawParams && typeof rawParams === 'object' && !Array.isArray(rawParams)
+          ? (rawParams as Record<string, unknown>).tokenUsage
+          : undefined
+        if (typeof rawUsage !== 'object' || rawUsage === null || Array.isArray(rawUsage)) return
+        const usage = rawUsage as Record<string, unknown>
+        const total = tokenCounts(usage.total)
+        const last = tokenCounts(usage.last)
+        if (total) run.totalTokenUsage = total
+        const turnUsage = last ?? (total ? tokenUsageDelta(total, run.turnUsageBaseline) : null)
+        this.context.appendMessage({
+          sessionId: run.sessionId,
+          role: 'system',
+          text: 'Codex token usage updated',
+          data: {
+            type: 'thread/tokenUsage/updated',
+            tokenUsage: rawUsage,
+            ...(turnUsage ? { turnUsage } : {})
+          }
+        })
+        return
+      }
       case 'account/rateLimits/updated':
         this.context.appendMessage({
           sessionId: run.sessionId,

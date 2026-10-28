@@ -48,6 +48,8 @@ function structuredRunnerFactory(
       {
         query: (params: ClaudeQueryParams) => {
           const query = new FakeQuery(params)
+          const nativeSessionId = params.options?.resume ?? 'claude-provider-session'
+          queueMicrotask(() => query.emit({ type: 'system', subtype: 'init', session_id: nativeSessionId }))
           claudeQueries.push(query)
           return query
         }
@@ -456,7 +458,7 @@ describe('structured provider resume', () => {
       providerSession: { id: 'scripted-thread' },
       launchSettings: { agent: 'codex', options: { model: { value: 'gpt-5.5' }, effort: { value: 'xhigh' } } }
     })
-    expect(claudeQueries[0].params.options?.sessionId).toBe(oldClaude.providerSession!.id)
+    expect(oldClaude.providerSession?.id).toBe('claude-provider-session')
     expect(oldClaude.providerSession!.id).not.toBe(claude.id)
     expect(h.pty.requests.some((request) => request.type === 'create')).toBe(false)
 

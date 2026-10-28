@@ -26,6 +26,11 @@
       "id": "N5",
       "title": "At narrow phone width with system keyboard shown, open and cancel workspace options, new workspace, new tab and confirmation sheets. Every control remains reachable, no content clips to the right or stays shifted after dismissal, and selected preferences survive restart.",
       "status": "pending", "lastRun": null, "report": null, "summary": null
+    },
+    {
+      "id": "N6",
+      "title": "In the actual iOS development build, finish onboarding once, verify connected/reconnecting/revoked and secure-store-unavailable host verdicts, edit the friendly name and reachable address without duplicating host identity, reconnect/disconnect, copy redacted diagnostics, and resume the remembered workspace. Persist terminal text scale/autocomplete/custom shortcuts/link target and daemon auto-restore delay; verify unsupported push/voice/distribution settings remain truthful.",
+      "status": "pending", "lastRun": null, "report": null, "summary": null
     }
   ]
 }

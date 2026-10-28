@@ -26,7 +26,7 @@ const ID_IN_TEXT = /"(?:tab|grp|pane|split)-(\d+)"/g
 
 const messageOf = (error: unknown) => (error instanceof Error ? error.message : String(error))
 const isNotFound = (error: unknown) => (error as { code?: number } | null)?.code === RpcErrorCode.NotFound
-const isTabbed = (session: Session) => session.kind === 'terminal' || session.kind === 'structured'
+const isTabbed = (session: Session) => session.background !== true && session.kind === 'terminal'
 
 /** What `createTab` takes beyond the workspace: where the tab goes and what its session runs. */
 export type NewTabSpec = {
@@ -244,7 +244,9 @@ export class LayoutService {
     const groupId = params.group as string
     const workspace = this.ownerOf('group', groupId)
     const session = await this.session(params.session as string)
-    if (!isTabbed(session)) throw this.context.error('conflict', `session ${session.id} cannot be placed in a terminal tab`)
+    if (session.kind !== 'terminal' && session.kind !== 'structured') {
+      throw this.context.error('conflict', `session ${session.id} cannot be placed in a terminal tab`)
+    }
     if (session.worktreeId !== workspace.id) {
       throw this.context.error('conflict', `session ${session.id} belongs to ${session.worktreeId}, not workspace ${workspace.id}`)
     }
@@ -316,10 +318,21 @@ export class LayoutService {
     }
   }
 
-  private async ensureViewsClosable(tabs: readonly Tab[]): Promise<void> {
+  private async ensureViewsClosable(tabs: readonly Tab[], closeReason: 'single' | 'bulk' | 'replacement'): Promise<void> {
     for (const tab of tabs) {
       if (!isViewTab(tab) || tab.closeMethod === undefined) continue
-      const result = await this.context.call(tab.closeMethod, { ...(tab.closeParams ?? {}), tabId: tab.id })
+      const params: Record<string, unknown> = { ...(tab.closeParams ?? {}), tabId: tab.id }
+      delete params.closeReason
+      delete params.closeViewId
+      delete params.closeViewKey
+      delete params.closeViewInput
+      if (tab.closeContext === true) {
+        params.closeReason = closeReason
+        params.closeViewId = tab.viewId
+        params.closeViewKey = tab.key
+        if (tab.input !== undefined) params.closeViewInput = tab.input
+      }
+      const result = await this.context.call(tab.closeMethod, params)
       if (result !== true) throw this.context.error('conflict', `view tab ${tab.id} refused to close`)
     }
   }
@@ -522,6 +535,10 @@ export class LayoutService {
     if (closeParamsValue !== undefined && (typeof closeParamsValue !== 'object' || closeParamsValue === null || Array.isArray(closeParamsValue))) {
       throw this.context.error('invalid-params', 'closeParams must be an object')
     }
+    const closeContext = params.closeContext
+    if (closeContext !== undefined && typeof closeContext !== 'boolean') {
+      throw this.context.error('invalid-params', 'closeContext must be a boolean')
+    }
     const closeCommand = params.closeCommand
     if (closeCommand !== undefined) {
       if (typeof closeCommand !== 'string' || !closeCommand.startsWith('command:')) {
@@ -569,6 +586,7 @@ export class LayoutService {
           ...(closeCommand === undefined ? {} : { closeCommand }),
           ...(closeMethod === undefined ? {} : { closeMethod }),
           ...(suppliedCloseParams === undefined ? {} : { closeParams: suppliedCloseParams }),
+          ...(closeContext === undefined ? {} : { closeContext }),
           ...(params.preview === undefined ? {} : { preview: params.preview as boolean })
         })))
         if (activate) next = this.unwrap(ops.activateTab(next, existing.id))
@@ -583,7 +601,7 @@ export class LayoutService {
       if (!isViewTab(location.tab) || location.tab.pinned || !location.tab.preview) {
         throw this.context.error('invalid-params', 'replace must target an existing unpinned preview view tab')
       }
-      await this.ensureViewsClosable([location.tab])
+      await this.ensureViewsClosable([location.tab], 'replacement')
       const replaced = this.unwrap(ops.updateViewTab(ws, replaceId, (tab) => ({
         kind: 'view',
         id: tab.id,
@@ -597,6 +615,7 @@ export class LayoutService {
         ...(closeCommand === undefined ? {} : { closeCommand: closeCommand as string }),
         ...(closeMethod === undefined ? {} : { closeMethod: closeMethod as string }),
         ...(suppliedCloseParams === undefined ? {} : { closeParams: suppliedCloseParams }),
+        ...(closeContext === undefined ? {} : { closeContext }),
         createdAt: tab.createdAt
       })))
       let next = replaced
@@ -622,6 +641,7 @@ export class LayoutService {
       ...(closeCommand === undefined ? {} : { closeCommand: closeCommand as string }),
       ...(closeMethod === undefined ? {} : { closeMethod: closeMethod as string }),
       ...(suppliedCloseParams === undefined ? {} : { closeParams: suppliedCloseParams }),
+      ...(closeContext === undefined ? {} : { closeContext }),
       createdAt: this.now()
     }
     const next = this.unwrap(ops.appendTab(ws, groupId, tab, activate))
@@ -824,7 +844,7 @@ export class LayoutService {
     const tabId = params.tab as string
     const ws = this.ownerOf('tab', tabId)
     this.checkRevision(ws, params.revision)
-    return this.removeTabs(ws, this.tabsFor(ws, tabId, params.which as string).map((tab) => tab.id))
+    return this.removeTabs(ws, this.tabsFor(ws, tabId, params.which as string).map((tab) => tab.id), 'bulk')
   }
 
   /** The unpinned tabs of a tab's group that lie on `which` side of it. */
@@ -837,9 +857,9 @@ export class LayoutService {
   }
 
   /** Ends only terminal sessions; hosted views are checked before any affected tab is removed. */
-  private async removeTabs(ws: Workspace, tabIds: readonly string[]): Promise<{ workspace: Workspace }> {
+  private async removeTabs(ws: Workspace, tabIds: readonly string[], closeReason: 'single' | 'bulk' = 'single'): Promise<{ workspace: Workspace }> {
     const tabs = tabIds.map((id) => ops.locateTab(ws, id)!.tab)
-    await this.ensureViewsClosable(tabs)
+    await this.ensureViewsClosable(tabs, closeReason)
     const terminalTabs = tabs.filter(isTerminalTab)
     const records = await Promise.all(terminalTabs.map((tab) => this.closedRecord(tab)))
     const recordById = new Map(terminalTabs.map((tab, index) => [tab.id, records[index]!]))
@@ -1034,7 +1054,7 @@ export class LayoutService {
     this.checkRevision(ws, params.revision)
     const group = findGroup(ws.root, groupId)
     if (!group) throw this.context.error('not-found', `no group ${groupId}`)
-    await this.ensureViewsClosable(group.tabs)
+    await this.ensureViewsClosable(group.tabs, 'bulk')
     return this.edit(ws, params, () => ops.closeGroupOp(ws, groupId))
   }
 

@@ -9,3 +9,7 @@ artifacts/
 *.db-*
 /research/
 plugins/*/dist/
+/plugins/quirky.mobile/assets/mobile/
+/apps/mobile/.expo/
+/apps/mobile/ios/
+/apps/mobile/android/

@@ -2,6 +2,37 @@
 
 This directory holds Quirky's built-in plugins, one per subdirectory, each with a `quirky-plugin.json` manifest. The daemon finds it through `QUIRKY_BUILTIN_PLUGINS_DIR`.
 
+## Terminal dock
+
+`quirky.terminal-dock` provides an opt-in composer below recognized terminal agents.
+Open **Terminal Dock Settings** from the command palette to enable it or change
+automatic opening. Plain-shell pane menus have no composer toggle. Use
+**Mod+Shift+K** to show or hide a supported pane's dock and **Mod+Shift+P** for
+terminal passthrough.
+
+```sh
+quirky dock list --json
+quirky dock get --pane <pane-id> --json
+quirky dock toggle --pane <pane-id>
+quirky dock cancel --pane <pane-id> --interrupt
+```
+
+Drafts and attachments belong to the pane. Stop or Escape preserves newer draft
+text; cancelling a queued send restores that prompt without submitting it.
+Question cards support collapse, answer and dismissal. Dismissal hides the card,
+not the agent's pending request, so ordinary Send stays disabled until it resolves.
+
+Model and effort controls use observable session-only actions. An unrecognized
+picker or a persistent-default confirmation is refused; the dock never falls back
+to saving global Claude settings. Agent exit hooks are correlated with the lead's
+provider-session identity, not a child or another conversation. Confirmed exit
+undocks without remembering a manual close; fresh agent evidence can reopen it.
+
+The gutter is fixed at `80 + 20 × rows` pixels, with 3–15 rows and a default of five.
+File acquisition uses real daemon-readable files; removing a chip never deletes a
+caller-owned source file.
+[Behavior and acceptance scenarios](../docs/quirk/specs/2026-10-27-m3-terminal-dock/logic.md).
+
 ## Session Info
 
 `quirky.session-info` contributes the **Session Info** right-column panel and the
@@ -66,10 +97,11 @@ The model and effort use the agent catalog. Omit both to leave the provider defa
 Raw extra arguments are refused for structured sessions.
 
 With `quirky.accounts` enabled, creation and resume prepare the selected Claude or Codex account
-before starting the native process. Explicit provider-home configuration takes precedence;
-preparation failure refuses the launch. Prepared environment values are not saved in the launch
-snapshot. Codex resume retains the native conversation ID and records its relocated transcript
-path when account preparation moves the conversation.
+before starting the native process. Explicit provider-home configuration and trusted launch-hook
+home overrides take precedence over managed selection; the account record describes the effective
+home. Preparation failure refuses the launch. Prepared environment values are not saved in the
+launch snapshot. Codex resume retains the native conversation ID and records its relocated
+transcript path when account preparation moves the conversation.
 
 The plugin exposes `create`, `messages`, `send`, `stop`, and `resume`. Creation returns a session
 record before startup finishes; `send` waits for native startup before submitting input. Messages
@@ -129,7 +161,7 @@ SQLite enforces read-only access, migrations do not run, and write/transaction m
 
 `quirky.orchestration` provides durable Runs, dependent Tasks, authoritative Dispatch attempts,
 mailboxes, resumable questions, decision gates and worker lifecycle operations. The manifest
-declares 29 API methods and 28 CLI verbs under `quirky orchestration`.
+declares session and worker APIs plus CLI verbs under `quirky orchestration`.
 Actor-sensitive commands run inside a live Quirky-managed terminal or structured session;
 the kernel verifies its launch credential and process or lease identity. `--from` and
 `--terminal` are equality assertions, not credentials.
@@ -153,25 +185,87 @@ Public session helpers provide exact-incarnation identity, guarded close and ide
 submission. Structured `create` accepts `deferStart: true` without a prompt, so authority can attach
 before the first turn. Automatic idle-mailbox nudging is deferred to
 `m6-orchestration-idle-pointer-shutdown`; explicit safe submission and durable mail remain available.
-Worker placement, custody and fleet use this same core. Headless service coordinators remain a
-separate orchestration slice; plugin metadata cannot impersonate a session.
+Worker placement, custody and fleet use this same core. Headless coordinators use the plugin-owned
+service APIs below; plugin metadata cannot impersonate a session.
 
-**Methods (29):** `runCreate`, `runUse`, `runCurrent`, `runList`, `runShow`, `taskCreate`,
+Settings → Orchestration installs the version-matched `/orchestration` skill, shows actual
+per-agent file coverage, and provides copyable supervised-work prompts. Installation is explicit;
+unsupported loaders and partial failures are reported per agent. The same setup is scriptable:
+
+```sh
+quirky orchestration skill-status --json
+quirky orchestration skill-install --json
+quirky orchestration policy-show --json
+quirky orchestration policy-set --nested-worker-max-depth 2 --json
+```
+
+Run policy changes from an unbound operator client. Session-attested, paired-device and plugin
+callers cannot change the cap, and generic settings do not expose it. The persisted integer
+defaults to 1 and governs future dispatch admission and worker preambles; lowering it does not
+stop admitted workers. This is a policy guard, not a sandbox against other holders of the user token.
+
+Terminal `task_…` links and nested sidebar rows resolve the latest exact assignment through
+`taskTerminal`; `task-terminal --task-id <id> --json` returns the same session/workspace target.
+Context-only Dispatches are navigable too. Reused, released, changed or structured-only sessions
+are refused rather than opening an unrelated terminal. Fleet rows separate task labels and
+lineage from `currentAssignment` confidence; uncertain workers remain visible without stale task
+titles. Physical input transfers existing worker custody to the user, so release retains that
+terminal instead of closing it. The setup affordance's open and dismiss actions are public UI commands.
+
+**Session, worker and setup methods:** `runCreate`, `runUse`, `runCurrent`, `runList`, `runShow`, `taskCreate`,
 `taskList`, `taskUpdate`, `dispatch`, `dispatchShow`, `send`, `check`, `reply`, `inbox`, `ask`,
 `gateCreate`, `gateResolve`, `gateList`, `requestShow`, `reset`, `workerStart`, `workerShow`,
 `workerRead`, `workerList`, `workerStop`, `workerAbandon`, `workerRelease`, `workerRetain`,
-`workerTerminalUserInput` (internal terminal-custody guard).
+`workerTerminalUserInput` (internal terminal-custody guard), `skillShow`, `skillStatus`,
+`skillInstall`, `policyShow`, `policySet`, `taskTerminal`.
 
-**CLI verbs (28):** `run-create`, `run-use`, `run-current`, `run-list`, `run-show`, `task-create`,
+**CLI verbs (34):** `run-create`, `run-use`, `run-current`, `run-list`, `run-show`, `task-create`,
 `task-list`, `task-update`, `dispatch`, `dispatch-show`, `send`, `check`, `reply`, `inbox`, `ask`,
 `gate-create`, `gate-resolve`, `gate-list`, `request-show`, `reset`, `worker-start`, `worker-show`,
-`worker-read`, `worker-list`, `worker-stop`, `worker-abandon`, `worker-release`, `worker-retain`.
+`worker-read`, `worker-list`, `worker-stop`, `worker-abandon`, `worker-release`, `worker-retain`,
+`skill-show`, `skill-status`, `skill-install`, `policy-show`, `policy-set`, `task-terminal`.
 Use `quirky api --json` for the current method and result schemas.
 
 See the [contracts](quirky.orchestration/src/contracts.ts),
 [runtime interfaces](quirky.orchestration/src/runtime-contracts.ts),
-[core behavior specification](../docs/quirk/specs/2026-10-27-m6-orchestration-core/logic.md) and
-[worker behavior specification](../docs/quirk/specs/2026-10-27-m6-orchestration-workers/logic.md).
+[core behavior specification](../docs/quirk/specs/2026-10-27-m6-orchestration-core/logic.md),
+[worker behavior specification](../docs/quirk/specs/2026-10-27-m6-orchestration-workers/logic.md) and
+[setup and UI specification](../docs/quirk/specs/2026-10-28-m6-orchestration-ui/logic.md).
+
+## Heimdall kernel and service-owned Runs
+
+`quirky.heimdall` runs bounded watchers supplied by registered kind plugins. A kind owns its
+authorization, observation, decision, execution and stop hooks; the kernel owns scheduling,
+capability gates, durable attempts, budgets and recovery. Register through `quirky.heimdall/registerKind`,
+then use `enroll`, `inspect` and `reconcile`. Hook and result types are defined in
+[`contracts.ts`](quirky.heimdall/src/contracts.ts).
+
+Enrollment is unique per canonical workspace. Re-enrollment preserves watcher identity;
+re-arming an operator-disarmed watcher starts a new budget generation. Work in flight counts
+toward active time without double-counting overlaps. Background workers require positive live
+identity and an active assignment to count. Missing contact, an idle prompt or a lost reply does
+not prove completion. Unknown effects retain their durable request identity.
+
+Headless plugins use the eight `quirky.orchestration` service methods through `PluginContext.call`:
+
+- `serviceRunCreate` creates a stable Run for the authenticated plugin and its key. It does not
+  invent a coordinator session.
+- `serviceRunShow` reads owned worker identities and blocking Ask threads without consuming mail
+  or changing consumer generations.
+- `serviceWorkerStart` starts an attested worker in an explicit workspace. `serviceSend` sends
+  guidance with the Run as sender; `serviceCheck` consumes and acknowledges owned Run deliveries.
+- `serviceReply` answers a pending blocking Ask. `serviceWorkerStop` requires the exact session
+  and process incarnation; `serviceWorkerRelease` uses settled-outcome, archive and custody guards.
+
+Another plugin cannot read or control that service-owned Run. Ordinary worker CLI commands keep
+their native launch authority; they do not receive the service principal. See
+[`services/contracts.ts`](quirky.orchestration/src/services/contracts.ts) for request and result types.
+
+Watcher state, attempt facts, a bounded diagnostic trace ring and terminal summaries live in the
+plugin's private store; unresolved attempt traces remain pinned. A newer unknown store version
+remains inspectable but cannot execute work. Removing a
+watcher removes its own history, not its workers. Automatic OS sleep/wake binding is not installed
+by this plugin.
 
 ## Shared checks
 
@@ -229,8 +323,10 @@ unknown safety data still blocks merging.
 Project-item edits and comment updates do not prompt. Deleting a project-item
 comment uses the same kernel confirmation rule as merge; authorize it with
 `--yes` or an answered confirmation. `project-item-mutation-confirmation` previews
-that deletion without changing data. Issue-type actions currently require an
-organization-owned project; support for user-owned projects is tracked separately.
+that deletion without changing data. Issue types belong to the Issue's repository,
+not the Project containing it: user-owned Projects can edit organization-repository
+types. Personal repositories expose no organization types; unavailable or disabled
+types are refused before mutation.
 
 `gh` owns credentials. Normal requests use its ambient login or a repository's
 configured keyring-account binding; a failed binding never falls back to another
@@ -243,6 +339,10 @@ connection-owned refreshes. Use `quirky api --json` for the live method, paramet
 result, and event contracts. Fixed-cap reads report truncation, partial results, or a limit error;
 only work-item search exposes client `--page` and `--limit`.
 
+Concurrent work-item search/count reads batch within the same authenticated repository
+scope. Valid cursor pages are reused for up to two minutes within bounded caches;
+forced refresh and mutations invalidate them. A failed GraphQL alias does not discard
+another alias's successful result. Tasks' direct numbered pages remain direct requests.
 Top-level PR conversation comments use `hosting review-conversation`, not issue
 or Project mutation routes:
 
@@ -318,9 +418,12 @@ The live API catalog contains all method schemas and generated command aliases.
 slot reports are bounded summaries pointing to that method, so large comments or
 diffs do not exceed the kernel's 64-KiB report limit.
 
-Other-provider review/create/settings and in-app link routing have explicit
-prerequisite-dependent queue items; current cards and routing never claim those
-unavailable capabilities succeeded. Clipboard/system-browser/focus behavior is
+Review links use Browser's Link Routing setting and Shift+Cmd/Ctrl modifier policy.
+Each PR/Checks action carries its originating worktree, including when the two surfaces
+show different worktrees. API callers can supply `--worktree`; an omitted target is
+inferred only from an unambiguous visible Review/Checks context. Routing failures do
+not silently launch the system browser. Other-provider review/create/settings remain
+explicitly deferred. Clipboard/system-browser/focus and native guest behavior are
 handed to the native scenario run, not inferred from headless web output.
 ## GitHub Tasks
 
@@ -499,3 +602,83 @@ earlier prompt. CLI/API callers can pin the same content with
 `--trust-issue-command --trust-issue-command-hash <hash-from-error>`, or
 `--trust-setup --trust-setup-hash <hash-from-error>` for setup.
 Trust flags without a hash authorize the current call's script.
+
+## Accounts and running sessions
+
+Account selection applies to future launches. Existing Claude and Codex processes keep their old
+account until restarted. The Codex pane's **Keep old account** and **Restart** controls use the same
+revision-checked actions as Usage. A restart preserves the native conversation and focuses its new
+terminal; removing an earlier Codex account does not invalidate the current transcript locator.
+
+Display preferences and “Don't ask again” choices do not advance account-selection authority.
+A later account selection still invalidates an earlier restart choice or unspent reset offer.
+Reset retries retain the displayed account/offer scope and request ID; missing credit, changed
+offers and unknown outcomes are shown separately from confirmed redemption.
+
+Full remaining UI acceptance and native-only clipboard, browser, Keychain and OS-focus checks are
+tracked in [the completion decisions](../docs/loop/decisions/m3-accounts-remaining-flows.md).
+
+## Heimdall fleet and controls
+
+`quirky.heimdall` provides the Heimdall sidebar entry, fleet view and watcher controls.
+Kinds register their enrollment and execution hooks through the public plugin API.
+Enrollment refuses an unknown kind; kind-specific commands such as `objective` require
+that kind's public detail provider.
+
+```sh
+quirky heimdall list --json
+quirky heimdall show <watcher-id>
+quirky heimdall pause <watcher-id> --json
+quirky heimdall budget <watcher-id> --hours 2 --turns none --json
+quirky heimdall debug <watcher-id> --out /tmp/heimdall-debug.json
+```
+
+Controls use the last observed owner fence and command revision. A changed revision is
+refused, so refresh the detail before submitting another command. Results distinguish
+`applied`, `refused` and `indeterminate`; an uncertain reply is not permission to repeat
+an external effect.
+
+Pause drains the current tick before committing. Resume cannot undo Disarm and refuses
+an exhausted budget or pending worker question. A budget limit of zero is valid; `none`
+means unlimited. Objective concurrency is limited to one in folder workspaces.
+
+Deleting a watcher removes its saved history and requires confirmation unless `--yes`
+authorizes it. Worker sessions keep running. `stop-worker` instead uses the exact recorded
+session and process incarnation; missing or unverifiable identity is refused.
+
+The API exposes `quirky.heimdall/fleet`, `detail`, `command` and `debugReport`.
+`fleetChanged` pushes newer snapshots; a failed refresh retains the last confirmed view.
+Fleet activity counts only live workers whose Dispatch assignment is still active. A live process
+retained after completion is not running work; `detail` and `debugReport` keep that worker visible
+and expose `assignmentActive` separately from process `state`.
+The schema-2 debug JSON includes bounded journal and trace history. Approval-request and
+terminal transitions go through `quirky.notifications`, including its enabled, focus and
+cooldown policy. Disabling that plugin silences delivery.
+
+### Optional Claude owner
+
+An enrollment can set `owner: { agent: "claude", model?, effort? }` and
+`ownerInterventionCapability: "off" | "gated" | "on"` (default `"off"`).
+Without an owner, deterministic watcher behavior is unchanged. A configured owner receives
+typed deviations, including full rejected-plan and operator-edit details, in one resumable
+native conversation. Repeated evidence keys do not start duplicate turns.
+
+```sh
+quirky heimdall owner-inspect --watcher-id <watcher-id> --json
+quirky heimdall owner-ready --watcher-id <watcher-id> --report-key <issued-key> --json
+```
+
+`ownerInspect` exposes the current issued report path and key. Write the intervention JSON
+only to that private path, then submit the key through `ownerReady`; the API never accepts
+an arbitrary report path. Reports are limited to 64 KiB and reject malformed, stale or
+symlinked input. Kind-specific proposals use the registered kind's public `ownerAction`
+hook. Every proposal still requires both the owner-intervention grant and the native
+action's capability, exact approvals and current evidence.
+
+An owner that stays silent for 15 minutes receives one reminder; another 15 minutes parks
+the watcher with `owner-escalation`. Only answering that exact escalation resumes its owner
+flow. Deleting a watcher or disabling Heimdall releases its owner connection without
+stopping worker or independent sessions. Unconfirmed cleanup retains uncertainty rather
+than starting a replacement conversation.
+
+Use `quirky heimdall --help` and `quirky api --json` for the live commands and schemas.

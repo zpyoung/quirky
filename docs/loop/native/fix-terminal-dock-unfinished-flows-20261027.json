@@ -1,0 +1,14 @@
+{
+  "item": "fix-terminal-dock-unfinished-flows-20261027",
+  "spec": "docs/quirk/specs/2026-10-27-m3-terminal-dock/logic.md",
+  "scenarios": [
+    {
+      "id": "SC-12-native-file-dialog",
+      "title": "Use a fresh temporary HOME and QUIRKY_HOME, a private supported-agent PTY and a run-created valid PNG. Enable Terminal dock, enter an unsent draft, click Attach and use the real macOS Open panel to choose that PNG. Verify its named chip and unchanged draft, then remove only that chip. The earlier m3-terminal-dock native run opened the panel but its driver returned delivery_failed; preserve that historical blocked report and record a new result only if this run actually selects the file. Never use normal user or agent state.",
+      "status": "pending",
+      "lastRun": null,
+      "report": null,
+      "summary": null
+    }
+  ]
+}

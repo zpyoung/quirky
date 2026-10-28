@@ -5,6 +5,7 @@
   "description": "Durable Claude and Codex background loops with until-done, queue, and interval presets.",
   "main": "main.ts",
   "cli": "cli.ts",
+  "ui": "dist/ui.js",
   "cliAliases": ["loop"],
   "activation": "startup",
   "dependencies": ["quirky.worktree", "quirky.structured", "quirky.checks", "quirky.ask", "quirky.session"],
@@ -112,6 +113,41 @@
           "properties": { "worktreeId": { "type": "string" }, "worktree": { "type": "string" } }
         },
         "result": { "type": "array", "items": { "type": "object", "description": "A complete LoopSnapshot.", "additionalProperties": true } }
+      },
+      {
+        "id": "summaries",
+        "description": "Returns compact summaries of unfinished loops.",
+        "readOnly": true,
+        "params": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {}
+        },
+        "result": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "id": { "type": "string" },
+              "worktreeId": { "type": "string" },
+              "state": { "type": "string", "enum": ["running", "needs-you", "paused"] },
+              "pauseReason": { "description": "PauseReason scalar or null." },
+              "iterationsCompleted": { "type": "integer" },
+              "maxIterations": { "description": "Integer cap or null when uncapped." },
+              "updatedAt": { "type": "number" }
+            },
+            "required": [
+              "id",
+              "worktreeId",
+              "state",
+              "pauseReason",
+              "iterationsCompleted",
+              "maxIterations",
+              "updatedAt"
+            ]
+          }
+        }
       },
       {
         "id": "get",
@@ -281,6 +317,45 @@
           "required": ["loopId", "op"]
         },
         "result": { "type": "object", "description": "The updated durable loop snapshot.", "additionalProperties": true }
+      },
+      {
+        "id": "viewCloseGuard",
+        "description": "Guards removal of an opted-in hosted loop tab; host-computed bulk/replacement closes detach without stopping the loop.",
+        "readOnly": true,
+        "params": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "loopId": { "type": "string" },
+            "tabId": { "type": "string" },
+            "closeReason": { "type": "string", "enum": ["single", "bulk", "replacement"] },
+            "closeViewId": { "type": "string" },
+            "closeViewKey": { "type": "string" },
+            "closeViewInput": { "type": "object", "additionalProperties": true }
+          },
+          "required": ["loopId", "tabId"]
+        },
+        "result": { "type": "boolean" }
+      },
+      {
+        "id": "closeView",
+        "description": "Explicitly cancels, detaches, or stops and then removes the matching hosted loop tab.",
+        "params": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "loopId": { "type": "string" },
+            "tabId": { "type": "string" },
+            "choice": { "type": "string", "enum": ["cancel", "keep-running", "stop"] }
+          },
+          "required": ["loopId", "tabId", "choice"]
+        },
+        "result": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": { "closed": { "type": "boolean" } },
+          "required": ["closed"]
+        }
       }
     ],
     "event": [
@@ -306,6 +381,124 @@
           },
           "required": ["loopId", "name", "event", "worktreeId"]
         }
+      }
+    ],
+    "view": [
+      { "id": "loop", "title": "Background Loop" }
+    ],
+    "overlay": [
+      { "id": "dialogs", "title": "Loop dialogs" }
+    ],
+    "command": [
+      {
+        "id": "new",
+        "title": "New Loop",
+        "description": "Open setup for a background loop in a workspace and group.",
+        "args": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": { "worktree": { "type": "string" }, "workspace": { "type": "string" }, "group": { "type": "string" } }
+        }
+      },
+      {
+        "id": "setup-action",
+        "title": "Change Loop Setup",
+        "description": "Dispatch a setup form action.",
+        "args": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "action": { "type": "string", "enum": ["update", "queue-add", "queue-edit", "queue-move", "queue-remove", "start", "cancel", "advanced"] },
+            "params": { "type": "object", "additionalProperties": true }
+          },
+          "required": ["action"]
+        }
+      },
+      {
+        "id": "open",
+        "title": "Open Loop",
+        "description": "Open and activate a loop's hosted view.",
+        "args": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": { "loopId": { "type": "string" } },
+          "required": ["loopId"]
+        }
+      },
+      {
+        "id": "action",
+        "title": "Control Loop View",
+        "description": "Dispatch a rail, queue, iteration, or detail action.",
+        "args": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "loopId": { "type": "string" },
+            "action": {
+              "type": "string",
+              "enum": [
+                "pause",
+                "resume",
+                "resume-update",
+                "stop-open",
+                "stop",
+                "stop-cancel",
+                "steer-open",
+                "steer-update",
+                "steer",
+                "steer-cancel",
+                "edit-open",
+                "edit-update",
+                "edit-save",
+                "edit-cancel",
+                "queue-draft",
+                "queue-add",
+                "queue-edit-open",
+                "queue-edit-update",
+                "queue-edit-cancel",
+                "queue-edit",
+                "queue-move",
+                "queue-remove",
+                "iteration",
+                "back"
+              ]
+            },
+            "params": { "type": "object", "additionalProperties": true }
+          },
+          "required": ["loopId", "action"]
+        }
+      },
+      {
+        "id": "close-tab",
+        "title": "Close Loop Tab",
+        "description": "Ask what to do before closing a running loop view.",
+        "args": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": { "loopId": { "type": "string" }, "tabId": { "type": "string" } },
+          "required": ["loopId", "tabId"]
+        }
+      },
+      {
+        "id": "close-choice",
+        "title": "Choose Loop Close Action",
+        "description": "Cancel, detach, or stop a loop while closing its hosted view.",
+        "args": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "choice": { "type": "string", "enum": ["cancel", "keep-running", "stop"] }
+          },
+          "required": ["choice"]
+        }
+      }
+    ],
+    "menu-item": [
+      {
+        "id": "new-loop",
+        "menu": "quirky.terminal/tab",
+        "title": "Loop…",
+        "command": "new"
       }
     ],
     "cli-command": [
@@ -348,6 +541,12 @@
         "summary": "list durable loops",
         "flags": { "worktree": { "type": "string", "description": "filter by worktree selector" } },
         "methods": ["quirky.loops/list"]
+      },
+      {
+        "id": "summaries",
+        "words": "summaries",
+        "summary": "list compact summaries of unfinished loops",
+        "methods": ["quirky.loops/summaries"]
       },
       {
         "id": "show",
@@ -451,6 +650,59 @@
           "position": { "type": "integer", "description": "zero-based insertion position for add (default: append)" }
         },
         "methods": ["quirky.loops/get", "quirky.loops/queue"]
+      },
+      {
+        "id": "ui-new",
+        "words": "ui new",
+        "summary": "open new loop setup in a workspace or group",
+        "flags": {
+          "workspace": { "type": "string", "description": "terminal workspace ID" },
+          "group": { "type": "string", "description": "target tab group ID" }
+        },
+        "methods": ["ui.command.run"]
+      },
+      {
+        "id": "ui-setup-action",
+        "words": "ui setup-action",
+        "summary": "dispatch a setup form action",
+        "positionals": [{ "name": "action", "required": true, "description": "setup action name" }],
+        "flags": { "payload": { "type": "string", "description": "JSON object of action parameters" } },
+        "methods": ["ui.command.run"]
+      },
+      {
+        "id": "ui-open",
+        "words": "ui open",
+        "summary": "open and activate a loop view",
+        "positionals": [{ "name": "loop", "required": true, "description": "loop ID" }],
+        "methods": ["ui.command.run"]
+      },
+      {
+        "id": "ui-action",
+        "words": "ui action",
+        "summary": "dispatch a loop view action",
+        "positionals": [
+          { "name": "loop", "required": true, "description": "loop ID" },
+          { "name": "action", "required": true, "description": "rail, queue, or iteration action name" }
+        ],
+        "flags": { "payload": { "type": "string", "description": "JSON object of action parameters" } },
+        "methods": ["ui.command.run"]
+      },
+      {
+        "id": "ui-close-tab",
+        "words": "ui close-tab",
+        "summary": "request a hosted loop tab close",
+        "positionals": [{ "name": "loop", "required": true, "description": "loop ID" }],
+        "flags": { "tab": { "type": "string", "required": true, "description": "hosted terminal tab ID" } },
+        "methods": ["ui.command.run"]
+      },
+      {
+        "id": "ui-close-choice",
+        "words": "ui close-choice",
+        "summary": "cancel, detach, or stop while closing a loop tab",
+        "positionals": [
+          { "name": "choice", "required": true, "description": "cancel, keep-running, or stop" }
+        ],
+        "methods": ["ui.command.run"]
       }
     ]
   }

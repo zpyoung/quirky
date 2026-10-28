@@ -368,7 +368,7 @@ export function DockHost(props: Props) {
 
       style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', minHeight: 0, minWidth: 0, overflow: 'hidden' }}
     >
-      <div className="qtd-terminal" style={{ position: 'relative', flex: '1 1 auto', minHeight: 0, minWidth: 0, overflow: 'hidden' }}>
+      <div className="qtd-terminal" style={{ position: 'relative', zIndex: 0, flex: '1 1 auto', minHeight: 0, minWidth: 0, overflow: 'hidden' }}>
         <TerminalPaneView
           key={terminalEpoch}
           {...terminalProps}

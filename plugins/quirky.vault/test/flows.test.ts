@@ -541,6 +541,12 @@ describe('vault public acceptance flows', () => {
       host: 'all', agents: ['claude'], unlimited: true
     })
     const matchingProviderIds = allSessions.sessions.filter((session) => session.agent === 'claude' && session.sessionId === 'claude-fixture-session')
+    const localOnly = await local.call<PublicListResult>('list', {
+      host: 'local', agents: ['claude'], unlimited: true
+    })
+    expect(localOnly.sessions.filter((session) => session.sessionId === 'claude-fixture-session').map((session) => session.hostId)).toEqual(['local'])
+    expect(localOnly.hosts.map((host) => host.hostId)).toEqual(['local'])
+
     expect(matchingProviderIds.length).toBe(2)
     const localSession = matchingProviderIds.find((session) => session.hostId === 'local')
     const remoteSession = matchingProviderIds.find((session) => session.hostId === remoteHostId)
@@ -588,8 +594,30 @@ describe('vault public acceptance flows', () => {
     } finally {
       renameSync(movedProjects, remoteProjects)
     }
+    await remote.call('setSearchEnabled', { enabled: false })
+    const enabledAll = await local.call<PublicStatus>('setSearchEnabled', { enabled: true, host: 'all' })
+    expect(enabledAll.hosts.map((host) => host.hostId)).toEqual(['local', remoteHostId])
+    expect(enabledAll.hosts.every((host) => host.kind === 'ok')).toBe(true)
+    expect((await local.call<PublicStatus>('searchStatus', { host: 'local' })).status.enabled).toBe(true)
+    expect((await local.call<PublicStatus>('searchStatus', { host: remoteHostId })).status.enabled).toBe(true)
+    const webClient = await local.h.connect('ui')
+    const webDisabled = await webClient.callAny('quirky.vault/setSearchEnabled', { enabled: false, host: 'local' }) as PublicStatus
+    expect(webDisabled.status.enabled).toBe(false)
+    const webEnabled = await webClient.callAny('quirky.vault/setSearchEnabled', { enabled: true, host: 'local' }) as PublicStatus
+    expect(webEnabled.status.enabled).toBe(true)
+    const disabledAgain = await webClient.callAny('quirky.vault/setSearchEnabled', { enabled: false, host: 'local' }) as PublicStatus
+    expect(disabledAgain.status.enabled).toBe(false)
+
+
 
     await remote.client.callAny('plugin.disable', { id: 'quirky.vault' })
+    const partialAll = await local.call<PublicListResult>('list', {
+      host: 'all', agents: ['claude'], unlimited: true
+    })
+    expect(partialAll.sessions.some((session) => session.hostId === 'local')).toBe(true)
+    const failedRemote = partialAll.hosts.find((host) => host.hostId === remoteHostId)
+    expect(failedRemote?.kind).toBe('error')
+    expect(failedRemote?.reason?.includes(remote.sourceHome)).toBe(false)
     const unavailableList = await local.call<PublicListResult>('list', {
       host: remoteHostId, agents: ['claude'], unlimited: true
     })
