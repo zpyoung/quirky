@@ -1,4 +1,4 @@
-import { createElement, useEffect, useState } from 'react'
+import { Badge, IconButton, StatusDot } from '@quirky/ui'
 import { createRoot } from 'react-dom/client'
 import type { MountFunction, QuirkyEvent, UiLayout, UiPluginContext } from '@quirky/protocol'
 import { isPlainRecord } from './daemon/state'
@@ -74,7 +74,7 @@ function unavailable(worktreeId: string | null, error: unknown): DirtyResult {
 function BranchIcon() {
   return createElement(
     'svg',
-    { width: 16, height: 16, viewBox: '0 0 16 16', fill: 'none', 'aria-hidden': 'true', focusable: 'false' },
+    { width: '1em', height: '1em', viewBox: '0 0 16 16', fill: 'none', 'aria-hidden': 'true', focusable: 'false' },
     createElement('path', {
       d: 'M5 3.5v8.9M5 7.8h4.2a2.3 2.3 0 0 0 2.3-2.3V3.5',
       stroke: 'currentColor',
@@ -92,34 +92,41 @@ function ActivityButton({ context, status }: { context: UiPluginContext; status:
   const label = status?.available === false && status.error
     ? `${title} — status unavailable: ${status.error}`
     : title
+  const statusKind = status === null || (status.available && status.worktreeId === null)
+    ? 'idle'
+    : !status.available
+      ? 'failing'
+      : status.dirty
+        ? 'needs-you'
+        : 'done'
+  const statusLabel = status === null
+    ? 'Source Control status loading'
+    : !status.available
+      ? 'Source Control status unavailable'
+      : status.worktreeId === null
+        ? 'No active worktree'
+        : status.dirty
+          ? 'Uncommitted changes are present'
+          : 'No uncommitted changes'
+  const count = status?.capped ? `${status.count}+` : String(status?.count ?? 0)
   return createElement(
-    'button',
+    IconButton,
     {
-      type: 'button',
-      className: 'sidebar-extras-activity-item',
       title,
-      'aria-label': label,
+      label,
       'data-available': status === null ? 'unknown' : String(status.available),
       'data-dirty': status?.available && status.dirty ? 'true' : 'false',
-      style: { position: 'relative' },
       onClick: () => context.togglePanel(PANEL_ID)
     },
-    createElement(BranchIcon),
-    status?.available && status.dirty
-      ? createElement('span', {
-          className: 'sidebar-extras-activity-dot',
-          'aria-hidden': 'true',
-          style: {
-            position: 'absolute',
-            top: 1,
-            right: 1,
-            width: 5,
-            height: 5,
-            borderRadius: '50%',
-            backgroundColor: 'var(--danger, #e5534b)'
-          }
-        })
-      : null
+    createElement(
+      'span',
+      { className: 'ui-cluster' },
+      createElement(BranchIcon),
+      createElement(StatusDot, { status: statusKind, label: statusLabel }),
+      status?.available && status.dirty
+        ? createElement(Badge, { tone: 'needs-you' }, count)
+        : null
+    )
   )
 }
 

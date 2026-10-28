@@ -123,10 +123,20 @@ test('the Settings window renders generic category and section metadata and save
   expect(dialog.textContent).toContain('Window & Sidebar')
   expect(dialog.textContent).toContain(dividerTitle)
   expect(dialog.textContent).toContain('Font size')
-  expect(Array.from(dialog.querySelectorAll('fieldset > legend')).map((legend) => legend.textContent?.trim())).toContain('acme.editor')
+  expect(dialog.querySelector('[role="group"][aria-label="acme.editor"]')).not.toBeNull()
 
   const checkbox = dialog.querySelector('input[type="checkbox"]') as HTMLInputElement
   expect(checkbox.checked).toBe(true)
+  await win.click('[role="dialog"] input[type="checkbox"]')
+  await win.waitFor(() => !(win.document.querySelector('[role="dialog"] input[type="checkbox"]') as HTMLInputElement | null)?.checked)
+  await win.click('[role="dialog"] button[type="button"]:not([aria-label])')
+  await win.waitFor(() => win.document.querySelector('[role="dialog"]') === null)
+  const unchanged = await agent.callAny('setting.get', { id: settingId })
+  expect(unchanged).toMatchObject({ value: true })
+  expect(unchanged).not.toHaveProperty('stored')
+
+  await win.click('button[aria-label="Settings"]')
+  await win.waitFor(() => (win.document.querySelector('[role="dialog"] input[type="checkbox"]') as HTMLInputElement | null)?.checked === true)
   await win.click('[role="dialog"] input[type="checkbox"]')
   await win.waitFor(() => !(win.document.querySelector('[role="dialog"] input[type="checkbox"]') as HTMLInputElement | null)?.checked)
   await win.click('[role="dialog"] button[type="submit"]')
@@ -146,4 +156,5 @@ test('the Settings window renders generic category and section metadata and save
   expect(reopened.textContent).toContain('Appearance')
   expect(reopened.textContent).toContain('Window & Sidebar')
   expect((reopened.querySelector('input[type="checkbox"]') as HTMLInputElement).checked).toBe(false)
+  expect(reopened.querySelector('[role="group"][aria-label="acme.editor"]')).not.toBeNull()
 })
