@@ -13,7 +13,9 @@ import {
   type Worktree,
   type WorktreeCreatedBy,
   type WorktreeCreateResult,
-  type GitHubWorktreeSource
+  type GitHubWorktreeSource,
+  type WorktreeAutomationProvenance,
+  type WorktreeAutomationProvenanceRequest
 } from '@quirky/protocol'
 import { contains, expandHome, resolveRealPath, worktreeIdForPath } from '../../paths'
 import type { CallerIdentity } from '../../selector'
@@ -66,6 +68,7 @@ export type CreateParams = {
   allowLocalBaseFallback?: boolean
   activate?: boolean
   createdBy?: WorktreeCreatedBy
+  automationProvenanceRequest?: WorktreeAutomationProvenanceRequest
 }
 
 /** A setup or agent start that is waiting for a Setup terminal to exit. */
@@ -98,6 +101,79 @@ const labelOf = (repo: Repo): string => repo.displayName ?? repo.name
 
 const reasoned = (env: CreateEnv, kind: 'invalid-params' | 'not-found' | 'conflict', reason: string, message: string, data: Record<string, unknown> = {}) =>
   env.fail(kind, message, { reason, ...data })
+
+const MAX_PROVENANCE_ID_LENGTH = 512
+const MAX_PROVENANCE_TOKEN_LENGTH = 128
+
+function parseAutomationProvenanceRequest(env: CreateEnv, value: unknown): WorktreeAutomationProvenanceRequest | undefined {
+  if (value === undefined) return undefined
+  const invalid = (): never => {
+    throw env.fail('invalid-params', 'automationProvenanceRequest must contain only automationId, runId, and dispatchToken.')
+  }
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return invalid()
+  let keys: PropertyKey[]
+  try {
+    const prototype = Object.getPrototypeOf(value)
+    if (prototype !== Object.prototype && prototype !== null) return invalid()
+    keys = Reflect.ownKeys(value)
+  } catch {
+    return invalid()
+  }
+  const allowed = ['automationId', 'runId', 'dispatchToken'] as const
+  if (keys.length !== allowed.length || keys.some((key) => typeof key !== 'string' || !allowed.includes(key as typeof allowed[number]))) return invalid()
+  const values = new Map<string, unknown>()
+  for (const key of allowed) {
+    let descriptor: PropertyDescriptor | undefined
+    try {
+      descriptor = Object.getOwnPropertyDescriptor(value, key)
+    } catch {
+      return invalid()
+    }
+    if (!descriptor || !Object.hasOwn(descriptor, 'value')) return invalid()
+    values.set(key, descriptor.value)
+  }
+  const automationId = values.get('automationId')
+  const runId = values.get('runId')
+  const dispatchToken = values.get('dispatchToken')
+  if (
+    typeof automationId !== 'string' || automationId.trim().length === 0 || automationId.length > MAX_PROVENANCE_ID_LENGTH ||
+    typeof runId !== 'string' || runId.trim().length === 0 || runId.length > MAX_PROVENANCE_ID_LENGTH ||
+    typeof dispatchToken !== 'string' || dispatchToken.trim().length === 0 ||
+    dispatchToken.length < 16 || dispatchToken.length > MAX_PROVENANCE_TOKEN_LENGTH
+  ) return invalid()
+  return { automationId, runId, dispatchToken }
+}
+
+async function claimAutomationProvenance(
+  env: CreateEnv,
+  repoId: string,
+  request: WorktreeAutomationProvenanceRequest
+): Promise<WorktreeAutomationProvenance> {
+  const value = await env.call('quirky.automations/claimWorkspaceProvenance', { ...request, repoId })
+  const candidate = objectRecord(value)
+  const expectedKeys = ['kind', 'automationId', 'automationName', 'runId', 'runTitle', 'projectId', 'hostId']
+  if (
+    !candidate || Object.keys(candidate).length !== expectedKeys.length ||
+    Object.keys(candidate).some((key) => !expectedKeys.includes(key)) ||
+    candidate.kind !== 'created-by-automation' ||
+    candidate.automationId !== request.automationId ||
+    typeof candidate.automationName !== 'string' || candidate.automationName.trim().length === 0 ||
+    candidate.runId !== request.runId ||
+    typeof candidate.runTitle !== 'string' || candidate.runTitle.trim().length === 0 ||
+    candidate.projectId !== repoId || candidate.hostId !== 'local'
+  ) {
+    throw env.fail('conflict', 'The automation workspace provenance claim returned invalid trusted data.')
+  }
+  return {
+    kind: 'created-by-automation',
+    automationId: candidate.automationId,
+    automationName: candidate.automationName,
+    runId: candidate.runId,
+    runTitle: candidate.runTitle,
+    projectId: candidate.projectId,
+    hostId: 'local'
+  }
+}
 
 const exists = (path: string): boolean => {
   try {
@@ -268,6 +344,10 @@ type Created = {
 
 /** Creates a workspace: a git worktree on a branch, or a folder workspace for a folder project or a group. */
 export async function createWorkspace(env: CreateEnv, params: CreateParams, identity: CallerIdentity): Promise<WorktreeCreateResult> {
+  if (Object.hasOwn(params, 'automationProvenance')) {
+    throw env.fail('invalid-params', 'automationProvenance is assigned only by a live automation dispatch.')
+  }
+  const provenanceRequest = parseAutomationProvenanceRequest(env, params.automationProvenanceRequest)
   if (params.agent === 'shell') throw env.fail('invalid-params', 'agent must be an agent ID, not shell')
   if (params.submitPrompt !== undefined && typeof params.submitPrompt !== 'boolean') {
     throw env.fail('invalid-params', 'submitPrompt must be a boolean')
@@ -276,6 +356,13 @@ export async function createWorkspace(env: CreateEnv, params: CreateParams, iden
   if (params.parent !== undefined && params.noParent === true) throw env.fail('invalid-params', 'parent and noParent cannot be used together')
   if (params.branch !== undefined && params.branchName !== undefined) throw env.fail('invalid-params', 'pass either a branch or a branch name, not both')
   const target = await resolveTarget(env, params, identity)
+  let automationProvenance: WorktreeAutomationProvenance | undefined
+  if (provenanceRequest) {
+    if (!('repo' in target) || target.repo.kind !== 'git') {
+      throw env.fail('invalid-params', 'automation provenance is unsupported for folder and group workspaces.')
+    }
+    automationProvenance = await claimAutomationProvenance(env, target.repo.id, provenanceRequest)
+  }
   if (params.github !== undefined && ('group' in target || target.repo.kind !== 'git')) {
     throw reasoned(env, 'invalid-params', 'github-target', 'GitHub work-item creation requires a Git project, not a folder or group.')
   }
@@ -284,7 +371,7 @@ export async function createWorkspace(env: CreateEnv, params: CreateParams, iden
   let created: Created
   if ('group' in target) created = await createFolder(env, target, params, createdBy, parentId)
   else if (target.repo.kind === 'folder') created = await createFolder(env, target, params, createdBy, parentId)
-  else created = await env.queue.run(target.repo.id, () => createGit(env, target.repo, params, createdBy, parentId))
+  else created = await env.queue.run(target.repo.id, () => createGit(env, target.repo, params, createdBy, parentId, automationProvenance))
 
   env.changed({ repoId: created.worktree.repoId, worktreeId: created.worktree.id })
   return finish(env, created, params)
@@ -339,7 +426,14 @@ export async function suggestName(env: CreateEnv, params: { repo: string }): Pro
 }
 
 /** Steps 3 to 10 of the pipeline for a git project; the caller holds the project's create queue slot. */
-async function createGit(env: CreateEnv, repo: Repo, params: CreateParams, createdBy: WorktreeCreatedBy, parentId: string | null): Promise<Created> {
+async function createGit(
+  env: CreateEnv,
+  repo: Repo,
+  params: CreateParams,
+  createdBy: WorktreeCreatedBy,
+  parentId: string | null,
+  automationProvenance?: WorktreeAutomationProvenance
+): Promise<Created> {
   const git = gitApi()
   const details = (await env.call('quirky.repo/show', { repo: repo.id })) as RepoDetails
   const settings = details.settings
@@ -532,7 +626,8 @@ async function createGit(env: CreateEnv, repo: Repo, params: CreateParams, creat
         parentId,
         linkedPR: source?.item.kind === 'pullRequest' ? source.item : null,
         linkedIssue: source?.item.kind === 'issue' ? source.item : null,
-        pushTarget: pullPlan?.pushTarget ?? null
+        pushTarget: pullPlan?.pushTarget ?? null,
+        automationProvenance
       })
       retire()
     })

@@ -5,7 +5,7 @@ import type { HeimdallWorktreeStatus } from './useTree'
 import { resolveMembershipTarget, type MembershipTarget } from './membership'
 import { changeGroup, copyText, SESSION_VIEW, setWorkspaceSleeping, setWorktree } from './actions'
 import { ContextMenu, groupMenu, projectMenu, STATUS_LABELS, workspaceMenu, type MenuItem } from './Menu'
-import { projectSeparatorBoundaries, repoLabel, type DialogState, type GroupNode, type ProjectNode, type TreeModel, type TreeRow } from './report'
+import { projectSeparatorBoundaries, repoLabel, type AutomationAvailabilitySnapshot, type DialogState, type GroupNode, type ProjectNode, type TreeModel, type TreeRow } from './report'
 import { StatusDot, UnreadBell } from './StatusDot'
 import { worktreeGlyph } from './status'
 import { OrchestrationRows, type OrchestrationWorkerRow } from './OrchestrationRows'
@@ -19,6 +19,9 @@ export type TreeProps = {
   groups: ProjectGroup[]
   sessions: Session[] | null
   selectedId: string | null
+  automationExpandedId: string | null
+  automationAvailability: AutomationAvailabilitySnapshot | null
+  onToggleAutomationDetails(worktreeId: string): void
   /** The clock agent glyphs are judged stale against. */
   now: number
   separatorEnabled: boolean
@@ -97,13 +100,36 @@ type CardProps = {
   selected: boolean
   repoName?: string
   options: StockWorktreeOptions
+  automationExpanded: boolean
+  automationAvailability: AutomationAvailabilitySnapshot | null
   onToggle(): void
+  onToggleAutomationDetails(): void
   onMenu(worktree: Worktree, x: number, y: number): void
   onDragStart(worktree: Worktree, event: DragEvent<HTMLLIElement>): void
   onDragEnd(): void
 }
 
-function WorktreeCard({ context, worktree, depth, childCount, collapsed, sessions, orchestrationWorkers, loop, now, selected, repoName, options, onToggle, onMenu, onDragStart, onDragEnd }: CardProps) {
+function WorktreeCard({
+  context,
+  worktree,
+  depth,
+  childCount,
+  collapsed,
+  sessions,
+  orchestrationWorkers,
+  loop,
+  now,
+  selected,
+  repoName,
+  options,
+  automationExpanded,
+  automationAvailability,
+  onToggle,
+  onToggleAutomationDetails,
+  onMenu,
+  onDragStart,
+  onDragEnd
+}: CardProps) {
   const sleeping = 'sleeping' in worktree && worktree.sleeping === true
   const open = async () => {
     if (sleeping && !await setWorkspaceSleeping(context, worktree.id, false)) return
@@ -113,6 +139,37 @@ function WorktreeCard({ context, worktree, depth, childCount, collapsed, session
   const linkedWork = worktree.linkedPR ?? worktree.linkedIssue
   const className = ['worktree', selected && 'selected', worktree.removing && 'removing', sleeping && 'sleeping', options.compact && 'compact'].filter(Boolean).join(' ')
   const heimdall = heimdallStatusOf(worktree)
+  const provenance = worktree.automationProvenance?.kind === 'created-by-automation'
+    ? worktree.automationProvenance
+    : null
+  const currentAutomationAvailability = automationAvailability
+  const availability = provenance !== null &&
+    currentAutomationAvailability?.worktreeId === worktree.id &&
+    currentAutomationAvailability.automationId === provenance.automationId &&
+    currentAutomationAvailability.runId === provenance.runId
+      ? currentAutomationAvailability
+      : null
+  const definitionStatus = availability?.definition ?? 'checking'
+  const runHistoryStatus = availability?.runHistory ?? 'checking'
+  const openAutomation = () => {
+    if (!provenance) return
+    void context.call('quirky.automations/uiNavigate', {
+      page: 'detail',
+      automationId: provenance.automationId
+    }).catch((error: unknown) => {
+      context.toast('Could not open automation', error instanceof Error ? error.message : String(error))
+    })
+  }
+  const openRun = () => {
+    if (!provenance) return
+    void context.call('quirky.automations/uiNavigate', {
+      page: 'run',
+      automationId: provenance.automationId,
+      runId: provenance.runId
+    }).catch((error: unknown) => {
+      context.toast('Could not open automation run', error instanceof Error ? error.message : String(error))
+    })
+  }
   return (
     <li
       className={className}
@@ -150,6 +207,42 @@ function WorktreeCard({ context, worktree, depth, childCount, collapsed, session
         >
           {linkedWork.kind === 'pullRequest' ? 'PR' : 'Issue'} #{linkedWork.number}
         </a>
+      )}
+      {provenance && (
+        <>
+          <span className="tag tag-automation-created">Created by automation</span>
+          <button
+            type="button"
+            className="tag tag-automation-details"
+            aria-label={`Automation details for ${worktree.id}`}
+            aria-expanded={automationExpanded}
+            onClick={onToggleAutomationDetails}
+          >
+            Automation details
+          </button>
+          {automationExpanded && (
+            <section className="automation-detail" role="group" aria-label="Automation details" style={{ flexBasis: '100%' }}>
+              <h3>Automation</h3>
+              <p><strong>Automation name:</strong> {provenance.automationName}</p>
+              <p><strong>Run:</strong> {provenance.runTitle}</p>
+              {(definitionStatus === 'checking' || runHistoryStatus === 'checking') && (
+                <p role="status">Checking automation availability...</p>
+              )}
+              {definitionStatus === 'available' && <p role="status">Automation available.</p>}
+              {runHistoryStatus === 'available' && <p role="status">Run history available.</p>}
+              {definitionStatus === 'missing' && <p role="status">Automation no longer available.</p>}
+              {runHistoryStatus === 'missing' && <p role="status">Run history no longer available.</p>}
+              {(definitionStatus === 'error' || runHistoryStatus === 'error') && (
+                <p role="status">Automation availability could not be checked.</p>
+              )}
+              {(definitionStatus === 'unavailable' || runHistoryStatus === 'unavailable') && (
+                <p role="status">Automations plugin unavailable.</p>
+              )}
+              <button type="button" onClick={openAutomation} disabled={definitionStatus !== 'available'}>Open automation</button>
+              <button type="button" onClick={openRun} disabled={runHistoryStatus !== 'available'}>Open run</button>
+            </section>
+          )}
+        </>
       )}
       {childCount > 0 && (
         <button className="children-chip" aria-expanded={!collapsed} onClick={onToggle}>
@@ -192,6 +285,9 @@ export function Tree({
   groups,
   sessions,
   selectedId,
+  automationExpandedId,
+  automationAvailability,
+  onToggleAutomationDetails,
   now,
   separatorEnabled,
   options = DEFAULT_STOCK_OPTIONS,
@@ -391,6 +487,9 @@ export function Tree({
             selected={worktree.id === selectedId}
             repoName={repoName}
             options={options}
+            automationExpanded={automationExpandedId === worktree.id}
+            automationAvailability={automationAvailability?.worktreeId === worktree.id ? automationAvailability : null}
+            onToggleAutomationDetails={() => onToggleAutomationDetails(worktree.id)}
             onToggle={() => toggleFold(worktree.id)}
             onMenu={openWorkspaceMenu}
             onDragStart={(item, event) => {
@@ -656,6 +755,9 @@ export function Tree({
                   selected={worktree.id === selectedId}
                   repoName={repoName}
                   options={options}
+                  automationExpanded={automationExpandedId === worktree.id}
+                  automationAvailability={automationAvailability?.worktreeId === worktree.id ? automationAvailability : null}
+                  onToggleAutomationDetails={() => onToggleAutomationDetails(worktree.id)}
                   onToggle={() => {}}
                   onMenu={openWorkspaceMenu}
                   onDragStart={(item, event) => {

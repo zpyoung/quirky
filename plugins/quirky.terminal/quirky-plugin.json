@@ -81,6 +81,44 @@
   "contributes": {
     "method": [
       {
+        "id": "artifacts",
+        "description": "Discover local terminal-output file artifacts, preview through an opaque caller-bound grant, refresh authorization or conditionally save complete text. Never accepts a file path.",
+        "connection": true,
+        "params": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "action": { "type": "string", "enum": ["list", "preview", "refresh", "save"] },
+            "worktree": { "type": "string", "description": "Exact worktree ID, 1–1024 characters." },
+            "session": { "type": "string", "description": "Exact source terminal session ID, 1–1024 characters." },
+            "artifactId": { "type": "string", "description": "Opaque producer-issued artifact ID, at most128 characters." },
+            "grant": { "type": "string", "description": "Opaque caller-bound grant, at most128 characters." },
+            "expectedRevision": { "type": "string", "description": "Exact64-character preview revision required for save." },
+            "content": { "type": "string", "description": "Complete UTF-8 save content, at most48KiB." }
+          },
+          "required": ["action", "worktree", "session"]
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "kind": { "type": "string", "enum": ["listed", "preview", "refreshed", "saved", "refused"] },
+            "artifacts": { "type": "array", "items": { "type": "object" }, "description": "At most50 producer-issued artifacts." },
+            "limited": { "type": "boolean" },
+            "artifact": { "type": "object" },
+            "format": { "type": "string", "enum": ["text", "markdown", "image", "binary"] },
+            "content": { "type": "string" },
+            "image": { "type": "object" },
+            "bytes": { "type": "integer", "minimum": 0 },
+            "truncated": { "type": "boolean" },
+            "writable": { "type": "boolean" },
+            "revision": { "type": "string" },
+            "reason": { "type": "string", "enum": ["grant-expired", "grant-invalid", "source-unavailable", "file-changed", "unsupported", "too-large", "read-only"] },
+            "guidance": { "type": "string" }
+          },
+          "required": ["kind"]
+        }
+      },
+      {
         "id": "attach",
         "description": "Starts streaming a terminal session to this client: base64 replay of recent output, then live binary frames tagged with `streamId`.",
         "connection": true,
@@ -2945,6 +2983,23 @@
         "methods": [
           "quirky.terminal/read"
         ]
+      },
+      {
+        "id": "artifacts",
+        "words": "artifacts",
+        "summary": "list, preview, refresh or conditionally save a file discovered in terminal output",
+        "positionals": [
+          { "name": "action", "description": "list, preview, refresh or save" },
+          { "name": "worktree", "description": "the source worktree ID" },
+          { "name": "session", "description": "the source terminal session ID" }
+        ],
+        "flags": {
+          "artifact-id": { "type": "string", "description": "opaque ID returned by list" },
+          "grant": { "type": "string", "description": "opaque caller-bound grant returned by list or refresh" },
+          "revision": { "type": "string", "description": "exact revision returned by preview" },
+          "content-file": { "type": "string", "description": "local UTF-8 file containing save content" }
+        },
+        "methods": ["quirky.terminal/artifacts"]
       },
       {
         "id": "send",

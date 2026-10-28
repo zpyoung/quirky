@@ -1,9 +1,12 @@
 import { randomUUID } from 'node:crypto'
 import { validateValue, type Schema } from '@quirky/protocol'
 import { BrowserFault, fault } from './errors'
-import { BrowserRuntime, type JsonValue, type PageExecution } from './driver'
+import { BrowserRuntime, type JsonValue, type NavigationResult, type PageExecution } from './driver'
 import type { BrowserStore } from '../profiles/store'
 import type { BrowserMethod } from './catalog'
+import { BrowserExtraActions } from './extras-actions'
+
+export { validateFindParams } from './extras-actions'
 
 type SnapshotRef = { ref: string; role: string; name: string }
 type RefEntry = { pageId: string; projectionId: string; generation: number; helperRef: string }
@@ -44,8 +47,11 @@ function stringParam(params: Record<string, unknown>, key: string, allowEmpty = 
 export class BrowserActions {
   private readonly refs = new Map<string, RefEntry>()
   private readonly projections = new Map<string, Projection>()
+  private readonly extras: BrowserExtraActions
 
-  constructor(private readonly store: BrowserStore, private readonly runtime: BrowserRuntime) {}
+  constructor(private readonly store: BrowserStore, private readonly runtime: BrowserRuntime) {
+    this.extras = new BrowserExtraActions(store, runtime, (execution, selector) => this.resolveElement(execution, selector))
+  }
 
   clearPageRefs(pageId: string): void {
     const projection = this.projections.get(pageId)
@@ -62,7 +68,7 @@ export class BrowserActions {
       case 'eval': return await this.evaluate(execution, params)
       case 'fill': return await this.elementAction(execution, method, params)
       case 'click': return await this.elementAction(execution, method, params)
-      default: throw fault('browser_error', `no page action implementation exists for ${method}`)
+      default: return await this.extras.run(method, params, execution)
     }
   }
 
@@ -116,8 +122,12 @@ export class BrowserActions {
   }
 
   private async goto(execution: PageExecution, url: string) {
-    this.absoluteUrl(url)
-    let result
+    const target = this.absoluteUrl(url)
+    const geolocation = this.runtime.pageSettings(execution.page.browserPageId).geolocation
+    if (geolocation && target.origin !== 'null') {
+      await execution.cdp.send('Browser.setPermission', { origin: target.origin, permission: { name: 'geolocation' }, setting: 'granted' })
+    }
+    let result: NavigationResult
     try {
       result = await this.runtime.navigate(execution, url, 30_000)
     } catch (error) {

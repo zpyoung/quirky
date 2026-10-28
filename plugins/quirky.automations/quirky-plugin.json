@@ -210,6 +210,35 @@
           "additionalProperties": false
         }
       },
+      {
+        "id": "claimWorkspaceProvenance",
+        "description": "Consumes a single-use capability issued by the live automation dispatcher for one new local workspace.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "automationId": { "type": "string" },
+            "runId": { "type": "string" },
+            "dispatchToken": { "type": "string" },
+            "repoId": { "type": "string" }
+          },
+          "required": ["automationId", "runId", "dispatchToken", "repoId"],
+          "additionalProperties": false
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "kind": { "type": "string", "enum": ["created-by-automation"] },
+            "automationId": { "type": "string" },
+            "automationName": { "type": "string" },
+            "runId": { "type": "string" },
+            "runTitle": { "type": "string" },
+            "projectId": { "type": "string" },
+            "hostId": { "type": "string", "enum": ["local"] }
+          },
+          "required": ["kind", "automationId", "automationName", "runId", "runTitle", "projectId", "hostId"],
+          "additionalProperties": false
+        }
+      },
 
       {
         "id": "runs",

@@ -102,6 +102,8 @@ export function NotebookSurface(props: SurfaceProps) {
   const [sourceError, setSourceError] = useState<string | null>(null)
   const [actionBusy, setActionBusy] = useState(false)
   const [kernelError, setKernelError] = useState<string | null>(null)
+  const runtimeRefreshSequence = useRef(0)
+  const runtimeSurfaceMounted = useRef(false)
   const [cellOffset, setCellOffset] = useState(0)
   const [outputLimits, setOutputLimits] = useState<Record<number, number>>({})
   const [findOpen, setFindOpen] = useState(false)
@@ -117,13 +119,29 @@ export function NotebookSurface(props: SurfaceProps) {
 
   useEffect(() => {
     let active = true
-    void onAction('quirky.editor/notebook', { bufferId, action: 'state' }).then((value) => {
-      if (active) setRuntime(notebookRuntime(value))
-    }).catch((error: unknown) => {
-      if (active) setKernelError(error instanceof Error ? error.message : String(error))
+    runtimeSurfaceMounted.current = true
+    const refreshPublishedRuntime = async () => {
+      const request = ++runtimeRefreshSequence.current
+      try {
+        const value = await onAction('quirky.editor/notebook', { bufferId, action: 'state' })
+        if (active && request === runtimeRefreshSequence.current) setRuntime(notebookRuntime(value))
+      } catch (error) {
+        if (active && request === runtimeRefreshSequence.current) {
+          setKernelError(error instanceof Error ? error.message : String(error))
+        }
+      }
+    }
+    const unsubscribe = props.context.subscribe((event) => {
+      if (event.type === 'quirky.editor/changed') void refreshPublishedRuntime()
     })
-    return () => { active = false }
-  }, [bufferId, buffer.contentRevision, onAction])
+    void refreshPublishedRuntime()
+    return () => {
+      active = false
+      runtimeSurfaceMounted.current = false
+      runtimeRefreshSequence.current++
+      unsubscribe()
+    }
+  }, [props.context, bufferId, buffer.contentRevision, onAction])
 
   useEffect(() => {
     setCellDrafts({})
@@ -134,8 +152,9 @@ export function NotebookSurface(props: SurfaceProps) {
   }, [bufferId, buffer.contentRevision])
 
   const refreshRuntime = async () => {
+    const request = ++runtimeRefreshSequence.current
     const result = await onAction('quirky.editor/notebook', { bufferId, action: 'state' })
-    setRuntime(notebookRuntime(result))
+    if (runtimeSurfaceMounted.current && request === runtimeRefreshSequence.current) setRuntime(notebookRuntime(result))
   }
 
   const action = async (name: string, fields: Record<string, unknown> = {}): Promise<unknown> =>
@@ -232,6 +251,18 @@ export function NotebookSurface(props: SurfaceProps) {
       setKernelError(error instanceof Error ? error.message : String(error))
       setActionBusy(false)
       setTrustRequest(null)
+    }
+  }
+  const restartKernel = async () => {
+    setActionBusy(true)
+    setKernelError(null)
+    try {
+      await action('restart')
+      await refreshRuntime()
+    } catch (error) {
+      setKernelError(error instanceof Error ? error.message : String(error))
+    } finally {
+      setActionBusy(false)
     }
   }
 
@@ -394,7 +425,7 @@ export function NotebookSurface(props: SurfaceProps) {
         <button type="button" onClick={() => requestRun({ index: null, all: true, mode: 'in-place' })} disabled={actionBusy || buffer.readOnly}>Run all</button>
         <button type="button" onClick={() => void mutateNotebook('clear', {})} disabled={actionBusy || buffer.readOnly}>Clear all outputs</button>
         {runtime.busy && <button type="button" onClick={() => void action('interrupt')} disabled={actionBusy}>Interrupt</button>}
-        {runtime.kernel?.status === 'ready' && <button type="button" onClick={() => void action('restart').then(refreshRuntime)} disabled={actionBusy}>Restart kernel</button>}
+        {(runtime.kernel?.status === 'ready' || runtime.kernel?.status === 'dead') && <button type="button" onClick={() => void restartKernel()} disabled={actionBusy}>Restart kernel</button>}
       </>}
     </header>
     {findOpen && <div className="notebook-toolbar" role="search" aria-label="Find in notebook">
@@ -528,7 +559,7 @@ export function NotebookSurface(props: SurfaceProps) {
     {runtime.interruptStalled && <p role="status">Not responding. Restart kernel.</p>}
     {sourceError && <p role="alert">{sourceError}</p>}
     {kernelError && <p role="alert">{kernelError}</p>}
-    {runtime.kernel?.status === 'dead' && <p role="alert">The kernel died. {runtime.kernel.stderr}</p>}
+    {runtime.kernel?.status === 'dead' && <p role="alert">The kernel died. {runtime.kernel.error || runtime.kernel.stderr || 'The kernel process exited unexpectedly.'}</p>}
     {runtime.kernel?.error && runtime.kernel.status !== 'dead' && <p role="alert">{runtime.kernel.error}</p>}
   </section>
 }

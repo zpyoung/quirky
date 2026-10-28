@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { MobileBundleAsset, MobileBundleManifest, MobileBundleManifestResult, MobileBundleReadResult } from '../src/contracts'
 import { buildMobilePages } from '../scripts/build-pages'
-import { downloadBundle, evictLeastRecentlyUsedHosts, validateBundleManifest } from '../src/shell/generation'
+import { downloadBundle, evictLeastRecentlyUsedHosts, PAGE_BUNDLE_ROUTES, validateBundleManifest } from '../src/shell/generation'
 import type { GenerationStore, StoredGeneration } from '../src/shell/generation'
 
 const bytes = new TextEncoder().encode('<html>phone</html>')
@@ -144,7 +144,7 @@ test('the production page builder emits a manifest matching every packaged web a
     const built = await buildMobilePages(repositoryRoot, outputDirectory)
     expect(validateBundleManifest(built)).toEqual(built)
     expect(built.buildId).toBe(buildIdFor(built.assets))
-    expect(built.routes.map((route) => route.kind)).toEqual(['workspaces', 'session'])
+    expect(built.routes.map((route) => route.kind)).toEqual(PAGE_BUNDLE_ROUTES.map((route) => route.kind))
     for (const asset of built.assets) {
       const content = new Uint8Array(await readFile(join(outputDirectory, asset.path)))
       expect(content.byteLength).toBe(asset.bytes)
