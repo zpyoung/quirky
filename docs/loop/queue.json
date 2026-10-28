@@ -1426,6 +1426,14 @@
       "docs": [],
       "deps": [],
       "status": "todo"
+    },
+    {
+      "id": "fix-native-m3-vault-1028",
+      "milestone": "M3",
+      "title": "Fix the native-only failures in m3-vault from the 2026-10-28 run: SC-18-native-clipboard",
+      "docs": [],
+      "deps": [],
+      "status": "todo"
     }
   ]
 }
