@@ -58,7 +58,7 @@ export class ScriptedStructuredRunner implements StructuredRunner {
 
     const existingProvider = options?.providerSession ?? session.providerSession ?? null
     const providerSessionId = existingProvider?.id ?? `acceptance-claude-thread:${session.id}`
-    await this.context.setProviderSession(session.id, { id: providerSessionId })
+    await this.context.setProviderSession(session.id, { id: providerSessionId, transcriptPath: existingProvider?.transcriptPath ?? null })
 
     const child = spawnScriptedClaude(this.scope, session.cwd, providerSessionId, options)
     const processState: ScriptedProcess = {
