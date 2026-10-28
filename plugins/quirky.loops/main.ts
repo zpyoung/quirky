@@ -333,10 +333,6 @@ export async function activate(context: PluginContext): Promise<void> {
       onlyKeys(params, ['loopId', 'patch'], 'edit', context)
       const id = loopId(params, context)
       const patch = validateConfigPatch(params.patch, context)
-      if (patch.promptSource !== undefined || patch.pacing !== undefined) {
-        const current = active.get(id)
-        validatePresetConfig(current.preset, { ...current.config, ...patch }, undefined, context)
-      }
       return active.edit(id, patch)
     },
     queue: (params) => {

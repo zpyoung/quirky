@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, test } from 'bun:test'
+import type { CliArgs, CliContext, CliModule } from '@quirky/protocol'
 import type { LoopSnapshot } from '../src/types'
 import { commands } from '../cli'
 import { loopConfig, startLoopRig, type LoopRig } from './rig'
@@ -49,8 +50,8 @@ describe('quirky loop preset CLI', () => {
     for (const flags of cases) await expectFailure(run('create', [], flags))
     expect(rig.starts).toHaveLength(0)
     expect(rig.sends).toHaveLength(0)
-    expect(await rig.call('quirky.loops/list', {})).toEqual([])
-  })
+    expect(await rig.call<LoopSnapshot[]>('quirky.loops/list', {})).toEqual([])
+  }, 30_000)
 
   test('queue CLI CRUD changes the actual next task and each resume approves one iteration', async () => {
     rig = await startLoopRig({ script: () => 'iteration settled' })
@@ -127,7 +128,7 @@ describe('quirky loop preset CLI', () => {
     expect(completed.iterationsCompleted).toBe(3)
     expect(rig.sends[2]?.text).toContain('task E')
     expect(rig.sends).toHaveLength(3)
-  })
+  }, 30_000)
 
   test('interval edits preserve omitted pacing fields and show its durable waiting deadline', async () => {
     rig = await startLoopRig({ script: () => 'iteration settled' })
@@ -167,6 +168,6 @@ describe('quirky loop preset CLI', () => {
     expect(loop.nextIterationAt).not.toBeNull()
     expect((await run('show', [loop.id])).join('\n')).toContain(new Date(loop.nextIterationAt!).toISOString())
     expect(rig.sends).toHaveLength(1)
-  })
+  }, 30_000)
 })
 

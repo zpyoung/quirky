@@ -18,6 +18,7 @@ Recommended: extend the existing plugin/types/store/decision function; reject a 
 - Queue: add may append or insert; edit/move/remove apply even to done items but never an in-flight item. Moving another item across an in-flight item may change its dense position without mutating its identity/body/claim. Empty queues are allowed after creation. Repeat resets done items to pending atomically when the next cycle is claimed; empty repeat queue still exhausts. Concurrent claim/mutation cannot send a removed or stale body.
 - Ask-before-next: first iteration needs no approval. Each completed iteration pauses before another available task, and explicit resume grants exactly one next iteration. Resume clears old evidence, not queue claims or pacing. Exhaustion wins over approval so no meaningless final approval is requested. No Orca/Quirky ask call is made by this build loop; the shipped loop's pause/resume is its approval surface.
 - Pacing: waits are interruptible by edit/pause/stop/resume; nextIterationAt and skippedTicks are durable snapshot fields and CLI-visible. Count skipped wall-clock ticks once per completed attempt, excluding the start tick. Changing pacing applies to the next decision, never overlaps an active turn. Time/caps safety from core remains higher priority.
+- EDIT pacing is independent of immutable preset: any existing loop may switch between on-idle and interval through the public API. Preset and prompt-source kind remain immutable. Strict creation combinations and CLI `--every`/`--anchor` preset restrictions do not change; UI clients edit the pacing section directly.
 - Architecture: native structured background sessions and public plugin API only; no PTY, tab creation, foreground/focus changes, private imports, kernel scheduler or new dependency.
 
 ## Acceptance scenarios
@@ -37,6 +38,7 @@ Every flow is driven through daemon API or actual CLI; pure/store tests add dete
 | P10 | Approval pause after turn; resume with next interval still in future; edit interval/anchor | One approval only, wait to new deadline, then one prompt; no re-pause loop or bypass of busy/user/safety holds. Exhausted queue requests no approval. Stop while waiting ends promptly. |
 | P11 | list/show and reload daemon with paused queue and pacing metadata | Durable item ids/order/states, nextIterationAt/skippedTicks and completed count restored; active loops restart paused, no autonomous catch-up. |
 | P12 | Safety evidence and new presets interact | Caps/protected paths/blocked markers beat queue advance/approval/pacing; independent completion beats exhausted-with-check pause; ask gate does not consume pending item. |
+| P13 | Until-done or interval loop is edited through the API to the opposite pacing kind, then resumed | Preset/source kind/body stay unchanged; interval mode holds until its deadline, switching to on-idle wakes the next actual turn. Interval preset can run on-idle after edit. Invalid creates and source-kind/preset mutations still reject; CLI flag restrictions remain. |
 
 ## Orca defects and non-regressions
 The feature doc records unexercised interval/repeat paths rather than a proved defect: P05/P08/P09 provide actual deterministic/API coverage instead of assuming parity. Its observed fresh-session focus jump must not recur: presets reuse background structured sessions and never call window/tab focus APIs (P01/P08). Unknown cost/verification/notification safety remain core behavior, not reimplemented.
@@ -60,3 +62,5 @@ Claim: durable exclusive ownership of a queue item by an iteration attempt famil
 
 ## Status & amendments
 Status: autonomously accepted after flow-by-flow self-review under authoritative LOOP night mode, one combined spec and no separate tech/spec-review. 2026-10-27: initial design. All gray-area decisions resolved without human questions. **Amendments, 2026-10-27:** clarify raw API session defaulting, orthogonal queue pacing, empty-after-mutation boundary and exact queue CLI grammar before source integration; these retain feature-doc config and CLI distinctions.
+
+**Amendment, 2026-10-28:** lane1's U08 integration identifies the documented Edit Pacing selector (fork-loops.md117). Add P13 and clarify EDIT-only pacing independence before changing validation; no UI implementation is added to this item.

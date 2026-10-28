@@ -99,7 +99,7 @@ describe('queue preset runtime API', () => {
     expect(rig.sends).toHaveLength(2)
     expect(rig.sends.map(({ text }) => text.slice(text.lastIndexOf('\n\n') + 2))).toEqual(['task A', 'task B'])
     expect(new Set(rig.sends.map(({ sessionId }) => sessionId)).size).toBe(1)
-  })
+  }, 30_000)
 
   test('P03: paused queue mutations retain identities and apply final positions before the next send', async () => {
     rig = await startLoopRig({ script: () => 'iteration settled' })
@@ -138,7 +138,7 @@ describe('queue preset runtime API', () => {
     const completed = await rig.waitForLoop(created.id, (snapshot) => snapshot.state === 'completed')
     expect(rig.sends.map(({ text }) => text.slice(text.lastIndexOf('\n\n') + 2))).toEqual(['A', 'C', 'E'])
     expect(completed.queueItems.map((item) => item.id)).toEqual([a!.id, c!.id, d!.id])
-  })
+  }, 30_000)
 
   test('P03: completed rows remain editable, movable, and removable', async () => {
     rig = await startLoopRig({ script: () => 'iteration settled' })
@@ -160,7 +160,7 @@ describe('queue preset runtime API', () => {
     await rig.call('quirky.loops/resume', { loopId: created.id })
     await rig.waitForLoop(created.id, (snapshot) => snapshot.state === 'completed')
     expect(rig.sends.map(({ text }) => text.slice(text.lastIndexOf('\n\n') + 2))).toEqual(['completed row', 'pending row'])
-  })
+  }, 30_000)
 
   test('P04: in-flight rows conflict while insertion may shift them without changing the claimed prompt', async () => {
     const hold = Promise.withResolvers<void>()
@@ -206,7 +206,7 @@ describe('queue preset runtime API', () => {
       'inserted first',
       'later B',
     ])
-  })
+  }, 30_000)
 
   test('P05: repeat and ask-before-next claim one item per explicit resume and reset only at the next cycle', async () => {
     rig = await startLoopRig({ script: () => 'iteration settled' })
@@ -241,7 +241,7 @@ describe('queue preset runtime API', () => {
       { body: 'A', state: 'done' },
       { body: 'B', state: 'pending' },
     ])
-  })
+  }, 60_000)
 
   test('P05: an empty repeat queue after removal exhausts without done signals', async () => {
     rig = await startLoopRig({ script: () => 'iteration settled' })
@@ -258,7 +258,7 @@ describe('queue preset runtime API', () => {
     expect(completed.iterationsCompleted).toBe(1)
     expect(completed.queueItems).toEqual([])
     expect(rig.sends.map(({ text }) => text.endsWith('only A'))).toEqual([true])
-  })
+  }, 30_000)
 
 
   test('P06: exhausted queues pause before asking and can accept work before resume', async () => {
@@ -289,7 +289,7 @@ describe('queue preset runtime API', () => {
     expect(rig.sends).toHaveLength(2)
     expect(rig.sends[1]?.text.endsWith('B')).toBe(true)
     expect(exhaustedAgain.queueItems.map((item) => item.state)).toEqual(['done', 'done'])
-  })
+  }, 30_000)
 
   test('P06: an exhausted queue without done signals completes without a spurious approval', async () => {
     rig = await startLoopRig({ script: () => 'iteration settled' })
@@ -305,7 +305,7 @@ describe('queue preset runtime API', () => {
     expect(completed.iterationsCompleted).toBe(1)
     expect(completed.queueItems[0]?.state).toBe('done')
     expect(rig.sends.map(({ text }) => text.endsWith('only item'))).toEqual([true])
-  })
+  }, 30_000)
 
   test('P06/P12: an independent passing check completes an exhausted queue', async () => {
     rig = await startLoopRig({
@@ -329,7 +329,7 @@ describe('queue preset runtime API', () => {
     expect(completed.queueItems[0]?.state).toBe('done')
     expect((await latestAttempt(rig, created.id))[0]?.check?.pass).toBe(true)
     expect(rig.sends).toHaveLength(1)
-  })
+  }, 30_000)
 
   test('P07: a crashed attempt retries the same claim and consumes it only after settlement', async () => {
     let turns = 0
@@ -352,7 +352,7 @@ describe('queue preset runtime API', () => {
     ])
     expect(completed.queueItems.map((item) => item.state)).toEqual(['done', 'done'])
     expect(completed.iterationsCompleted).toBe(2)
-  })
+  }, 30_000)
 
   test('P07/P11: restart retains an in-flight claim for explicit retry with the same body', async () => {
     const hold = Promise.withResolvers<void>()
@@ -394,7 +394,7 @@ describe('queue preset runtime API', () => {
       { attempt: 2, endReason: 'settled', queueItemId: item.id },
     ])
     expect(completed.queueItems[0]?.state).toBe('done')
-  })
+  }, 30_000)
 
   test('P07: stopping an in-flight attempt never consumes its queue item', async () => {
     const hold = Promise.withResolvers<void>()
@@ -415,7 +415,7 @@ describe('queue preset runtime API', () => {
     expect(stopped.queueItems.map((item) => item.state)).toEqual(['in-flight', 'pending'])
     expect(attempts.at(-1)?.endReason).toBe('stopped')
     expect(rig.sends).toHaveLength(1)
-  })
+  }, 30_000)
 })
 
 describe('interval preset runtime API', () => {
@@ -438,7 +438,7 @@ describe('interval preset runtime API', () => {
     const stopped = await rig.call<LoopSnapshot>('quirky.loops/stop', { loopId: created.id, mode: 'now' })
     expect(stopped.state).toBe('stopped')
     expect(rig.sends).toHaveLength(1)
-  })
+  }, 30_000)
 
   test('P09: wall-clock ticks are skipped once per ended attempt and persist across restart', async () => {
     rig = await startLoopRig({ script: async () => {
@@ -568,7 +568,7 @@ describe('interval preset runtime API', () => {
     // The driver polls once per second; wait through one poll to catch an unintended restart send.
     await Bun.sleep(1200)
     expect(rig.sends).toHaveLength(1)
-  })
+  }, 30_000)
 })
 
 describe('preset safety precedence', () => {
@@ -589,7 +589,7 @@ describe('preset safety precedence', () => {
     expect(paused.pauseReason).toBe('cap-iterations')
     expect(paused.queueItems.map((item) => item.state)).toEqual(['done', 'pending'])
     expect(rig.sends).toHaveLength(1)
-  })
+  }, 30_000)
 
   test('P12: protected-path evidence pauses before approval and does not consume the next item', async () => {
     rig = await startLoopRig({
@@ -609,7 +609,7 @@ describe('preset safety precedence', () => {
     expect(paused.pauseReason).toBe('protected-path')
     expect(paused.queueItems.map((item) => item.state)).toEqual(['done', 'pending'])
     expect(rig.sends).toHaveLength(1)
-  })
+  }, 30_000)
 
   test('P12: blocked markers pause before ask-before-next without claiming another row', async () => {
     rig = await startLoopRig({ script: () => 'LOOP_BLOCKED: waiting on a decision' })
@@ -624,5 +624,5 @@ describe('preset safety precedence', () => {
     expect(paused.pauseReason).toBe('agent-blocked')
     expect(paused.queueItems.map((item) => item.state)).toEqual(['done', 'pending'])
     expect(rig.sends).toHaveLength(1)
-  })
+  }, 30_000)
 })
