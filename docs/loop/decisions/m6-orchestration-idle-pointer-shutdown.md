@@ -99,5 +99,16 @@
 - **Revisit if:** end-phase acceptance/suites find a concrete failure
 - **Source:** assumed — autonomous
 
+## D10: Preserve incoming lifecycle decisions and final merged evidence
+- **Question:** Does the single roadmap catchup alter authority, shutdown or native constraints?
+- **Options:** bypass incoming locks; reconcile all seven incoming logs before landing.
+- **Chose:** Conflict-free merge; IncomingIdleDecisions read every entry/Progress in m4-hosting-ui-review-browser-routing D1–D6, m5-automations-dispatch-remote-and-args D1–D4, m5-loops-ui-visible-stop-close-review D1–D9, m6-heimdall-host-power D1–D7, sa-browser-pane-native-host-controls D1–D8, sa-browser-pane-workspace-preview D1–D7 and sb-mobile-app-panels D1–D21. No binding conflict.
+- **Why:** Keep hostPower capability valid through plugin deactivation and dispose its native source afterwards; pointer fencing neither reorders that lifecycle nor infers cancellation. Preserve existing public identity, coordinator selector precedence, remote/native prerequisite blocks and mobile scope. Leave historical D4 visible with D8's explicit supersession.
+- **Evidence:** final merged root/mobile `bun run typecheck` exit0 in24.65s; merged daemon/API/CLI smoke exit0 in2.39s, including all six SQLite-backed unresolved-dependency cases. Actual stop during text/Enter gap69ms; after700ms observation no delayed Enter, closed-orchestration-store access or deactivation timeout. The already-admitted session call still logs its honest revoked-context rejection rather than false cancellation.
+- **Reversibility:** easy
+- **Confidence:** high for the observed type/smoke gates; no suite/UI/native pass claimed
+- **Revisit if:** canonical merged typecheck or end-phase acceptance reports a concrete defect
+- **Source:** locked by docs/loop/LOOP.md
+
 ## Progress
-Implementation and narrow smoke proof complete; no permanent tests, suites, review or UI dogfood ran. All implementers returned; component worktree removed. Next: commit the exact returned source/tests/docs, catch up once with build/roadmap, read incoming decision logs, run final typecheck and land with the canonical absolute queue command. Preserve the original checkpoint and all AC9 safety behavior; D8 documents the strengthened executable-command migration.
+Ready for canonical landing. Exact source/test/docs committed in0a909d1b and efda407d, one conflict-free roadmap catchup complete, all seven incoming logs reconciled. Final merged typecheck and standalone daemon/API/CLI/lifetime smoke passed with69ms stop and no delayed Enter. Permanent tests remain written/unrun; no suites, review or UI dogfood ran. All agents/jobs completed, component tree removed. Commit this record, detach, run the absolute canonical queue.ts land m6-orchestration-idle-pointer-shutdown, record its actual result in ignored notes, remove owned scratch and end this one-item turn.

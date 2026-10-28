@@ -1,7 +1,7 @@
 # Automatic idle mailbox nudges with bounded shutdown
 
 ## Status & amendments
-Status: implemented with standalone daemon/API/CLI and unresolved-dependency smoke evidence; permanent regression cases written, not run under build-first rules. Integration typecheck and queue landing still required.
+Status: implemented; final merged root/mobile typecheck and standalone daemon/API/CLI/unresolved-dependency smokes passed. Permanent regression cases are written, not run under build-first rules. Ready for canonical queue landing; no suite/UI/native acceptance pass claimed.
 
 **Amendments:** 2026-10-28: restores the single flow deferred by m6-orchestration-core D41. Actual CLI execution exposed the checkpoint test's incorrect Dispatch `--run` wording: that flag selects the coordinator mailbox (orchestration.md:421), not the worker's Dispatch. Preserve all AC9 safety assertions and timeout, replace the incidental string pin with execution of the captured command and positive receipt of the exact mailed message. The original case remains reviewable at the unchanged checkpoint.
 
