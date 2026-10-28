@@ -1,10 +1,16 @@
 import { formatContributionId, type PluginContext } from '@quirky/protocol'
 import { createAutomationService, type AutomationService } from './service'
+import { createAutomationDispatcher } from './dispatch'
+import { createAutomationTargetResolver } from './target'
 
 let activeService: AutomationService | undefined
 
 export async function activate(context: PluginContext): Promise<void> {
-  const service = createAutomationService(context)
+  const targets = createAutomationTargetResolver(context)
+  const service = createAutomationService(context, Date.now, {
+    targets,
+    createDispatcher: (hooks) => createAutomationDispatcher(context, hooks)
+  })
   const methods = {
     list: service.list,
     show: service.show,
@@ -13,6 +19,8 @@ export async function activate(context: PluginContext): Promise<void> {
     remove: service.remove,
     run: service.run,
     runs: service.runs,
+    target: service.target,
+    dispatch: service.dispatch,
     schedule: service.schedule,
     tick: () => service.tick(),
     claim: service.claim,
