@@ -236,6 +236,58 @@ function dataTypeIsReadOnly(field: ProjectField): boolean {
   const name = field.name?.trim().toLowerCase() ?? ''
   return type === 'REPOSITORY' || type === 'PARENT_ISSUE' || name === 'repository' || name === 'parent' || name === 'parent issue' || name === 'title'
 }
+type ProjectFieldOverride = { projectKey: string; itemId: string; fieldId: string; clear: boolean; pending: boolean; value?: unknown }
+
+function projectFieldMutationKey(projectKey: string, itemId: string, fieldId: string): string {
+  return JSON.stringify([projectKey, itemId, fieldId])
+}
+
+function withProjectField(item: ProjectItem, fieldId: string, value: unknown, clear: boolean): ProjectItem {
+  const values = item.fieldValues ?? []
+  const fieldValues = clear
+    ? values.filter((entry) => entry.fieldId !== fieldId)
+    : values.some((entry) => entry.fieldId === fieldId)
+      ? values.map((entry) => entry.fieldId === fieldId ? { ...entry, value } : entry)
+      : [...values, { fieldId, value }]
+  return { ...item, fieldValues }
+}
+
+function sameProjectFieldValue(actual: unknown, expected: unknown): boolean {
+  if (expected === null || expected === undefined) return actual === null || actual === undefined
+  if (Array.isArray(expected)) {
+    return Array.isArray(actual) && actual.length === expected.length && expected.every((value, index) => sameProjectFieldValue(actual[index], value))
+  }
+  const expectedRecord = record(expected)
+  if (expectedRecord) {
+    const actualRecord = record(actual)
+    return actualRecord !== null && Object.entries(expectedRecord).every(([key, value]) => sameProjectFieldValue(actualRecord[key], value))
+  }
+  return Object.is(actual, expected)
+}
+
+function preserveProjectFieldOverrides(
+  table: ProjectRecord,
+  projectKey: string,
+  overrides: Map<string, ProjectFieldOverride>
+): ProjectRecord {
+  if (!Array.isArray(table.items)) return table
+  let changed = false
+  const items = asItems(table.items).map((item) => {
+    let next = item
+    for (const [key, override] of overrides) {
+      if (override.projectKey !== projectKey || override.itemId !== item.id) continue
+      const expected = override.clear ? null : override.value
+      if (sameProjectFieldValue(fieldValue(item, override.fieldId), expected)) {
+        if (!override.pending) overrides.delete(key)
+        continue
+      }
+      next = withProjectField(next, override.fieldId, override.value, override.clear)
+      changed = true
+    }
+    return next
+  })
+  return changed ? { ...table, items } : table
+}
 
 
 export function ProjectsSurface({ context, state, refresh }: TasksSurfaceProps) {
@@ -245,6 +297,10 @@ export function ProjectsSurface({ context, state, refresh }: TasksSurfaceProps) 
   const preferredView = project ? (project.viewId ?? state.projects.lastViewByProject[projectKey]) : undefined
   const [localViewId, setLocalViewId] = useState('')
   const activeViewId = localViewId || preferredView || ''
+  const currentProjectKey = useRef(projectKey)
+  currentProjectKey.current = projectKey
+  const currentViewId = useRef(activeViewId)
+  currentViewId.current = activeViewId
   const [views, setViews] = useState<ProjectView[]>([])
   const [table, setTable] = useState<Record<string, unknown> | null>(null)
   const [loadingViews, setLoadingViews] = useState(false)
@@ -264,6 +320,7 @@ export function ProjectsSurface({ context, state, refresh }: TasksSurfaceProps) 
   const [errorAnnouncement, setErrorAnnouncement] = useState('')
   const [queryDraft, setQueryDraft] = useState('')
   const [appliedQuery, setAppliedQuery] = useState('')
+  const [localQueryOverrides, setLocalQueryOverrides] = useState<Record<string, string>>({})
   const [queryBusy, setQueryBusy] = useState(false)
   const [columnsOpen, setColumnsOpen] = useState(false)
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set())
@@ -276,21 +333,25 @@ export function ProjectsSurface({ context, state, refresh }: TasksSurfaceProps) 
   const [previewDetails, setPreviewDetails] = useState<ProjectRecord | null>(null)
   const [previewLoading, setPreviewLoading] = useState(false)
   const [busyItem, setBusyItem] = useState('')
+  const [createdWorkspaceLinks, setCreatedWorkspaceLinks] = useState<Record<string, string>>({})
   const [issueTypesByItem, setIssueTypesByItem] = useState<Record<string, Array<{ id: string; name: string }>>>({})
   const [deviceColumns, setDeviceColumns] = useState<{ hidden: string[]; widths: Record<string, number> }>({ hidden: [], widths: {} })
   const [zoom, setZoom] = useState<RoadmapZoom>(() => readZoom())
   const projectGeneration = useRef(0)
   const viewGeneration = useRef(0)
   const tableGeneration = useRef(0)
+  const viewSelectionGeneration = useRef(0)
+  const queryGeneration = useRef(0)
   const writeEpoch = useRef(0)
   const mutationGeneration = useRef(new Map<string, number>())
+  const projectFieldOverrides = useRef(new Map<string, ProjectFieldOverride>())
   const warnedSubIssues = useRef(false)
   const roadmapScroller = useRef<HTMLDivElement>(null)
   const previewGeneration = useRef(0)
   const currentView = views.find((view) => view.id === activeViewId) ?? (record(table?.view) as ProjectView | null)
   const queryKey = project && currentView ? projectViewIdentity(project, currentView.id) : ''
-  const persistedQuery = queryKey ? state.projects.queryByView[queryKey] ?? (typeof currentView?.filter === 'string' ? currentView.filter : '') : ''
-  const queryOverrideForView = queryKey ? state.projects.queryByView[queryKey] : undefined
+  const persistedQuery = queryKey ? localQueryOverrides[queryKey] ?? state.projects.queryByView[queryKey] ?? (typeof currentView?.filter === 'string' ? currentView.filter : '') : ''
+  const queryOverrideForView = queryKey ? localQueryOverrides[queryKey] ?? state.projects.queryByView[queryKey] : undefined
   const tableItems = useMemo(() => asItems(table?.items), [table])
   const tableFields = useMemo(() => {
     const raw = Array.isArray(table?.fields) ? table.fields : currentView?.fields ?? []
@@ -308,6 +369,10 @@ export function ProjectsSurface({ context, state, refresh }: TasksSurfaceProps) 
   useEffect(() => {
     projectGeneration.current += 1
     viewGeneration.current += 1
+    viewSelectionGeneration.current += 1
+    queryGeneration.current += 1
+    currentViewId.current = ''
+    setQueryBusy(false)
     tableGeneration.current += 1
     setLocalViewId('')
     setViews([])
@@ -323,6 +388,7 @@ export function ProjectsSurface({ context, state, refresh }: TasksSurfaceProps) 
     setPreviewLoading(false)
     setChooseView(false)
     setSort(null)
+    setIssueTypesByItem({})
     if (project) void loadViewsForProject(project)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectKey])
@@ -366,10 +432,12 @@ export function ProjectsSurface({ context, state, refresh }: TasksSurfaceProps) 
       const requestedId = target.viewNumber ? nextViews.find((view) => Number(view.number) === target.viewNumber)?.id : undefined
       const initial = savedId && nextViews.some((view) => view.id === savedId) ? savedId : requestedId
       if (initial) {
+        currentViewId.current = initial
         setLocalViewId(initial)
         setChooseView(false)
-        await loadTableFor(target, initial, state.projects.queryByView[projectViewIdentity(target, initial)] ?? undefined, false)
+        await loadTableFor(target, initial, localQueryOverrides[projectViewIdentity(target, initial)] ?? state.projects.queryByView[projectViewIdentity(target, initial)] ?? undefined, false)
       } else {
+        currentViewId.current = ''
         setLocalViewId('')
         setChooseView(true)
       }
@@ -383,7 +451,16 @@ export function ProjectsSurface({ context, state, refresh }: TasksSurfaceProps) 
   async function loadTableFor(target: ProjectTarget, viewId: string, query: string | undefined, refreshNow: boolean): Promise<boolean> {
     const request = ++tableGeneration.current
     const projectRequest = projectGeneration.current
+    const selectionRequest = viewSelectionGeneration.current
+    const targetProjectKey = projectIdentity(target)
     const observedWriteEpoch = writeEpoch.current
+    const ownsSelection = () =>
+      request === tableGeneration.current &&
+      projectRequest === projectGeneration.current &&
+      selectionRequest === viewSelectionGeneration.current &&
+      targetProjectKey === currentProjectKey.current &&
+      viewId === currentViewId.current
+    const ownsRequest = () => ownsSelection() && observedWriteEpoch === writeEpoch.current
     setLoadingTable(true)
     setMainError(null)
     const params = {
@@ -395,11 +472,11 @@ export function ProjectsSurface({ context, state, refresh }: TasksSurfaceProps) 
     let loaded = false
     try {
       const raw = await context.call('quirky.tasks/projectView', params)
-      if (request !== tableGeneration.current || projectRequest !== projectGeneration.current || observedWriteEpoch !== writeEpoch.current) return false
+      if (!ownsRequest()) return false
       const response = object(raw)
       const resultValue = response.result ?? response.table ?? raw
       const result = object(resultValue)
-      const tableResult = object(result.result ?? resultValue)
+      const tableResult = preserveProjectFieldOverrides(object(result.result ?? resultValue), targetProjectKey, projectFieldOverrides.current)
       setTable(tableResult)
       const loadedView = record(tableResult.view)
       if (loadedView && typeof loadedView.id === 'string') setViews((previous) => previous.map((view) => view.id === loadedView.id ? { ...view, ...loadedView, id: loadedView.id as string } : view))
@@ -410,9 +487,9 @@ export function ProjectsSurface({ context, state, refresh }: TasksSurfaceProps) 
         context.toast('Sub-issue data is unavailable for your token.', 'GitHub did not return parent issue fields for this project view.')
       }
     } catch (error) {
-      if (request === tableGeneration.current && projectRequest === projectGeneration.current && observedWriteEpoch === writeEpoch.current) setMainError(error)
+      if (ownsRequest()) setMainError(error)
     } finally {
-      if (request === tableGeneration.current && projectRequest === projectGeneration.current) setLoadingTable(false)
+      if (ownsSelection()) setLoadingTable(false)
     }
     return loaded
   }
@@ -470,21 +547,34 @@ export function ProjectsSurface({ context, state, refresh }: TasksSurfaceProps) 
     if (!project) return
     const view = views.find((candidate) => candidate.id === viewId)
     if (!view || !supportedLayout(view.layout)) return
+    const targetProject = project
+    const targetProjectKey = projectIdentity(targetProject)
+    const request = ++viewSelectionGeneration.current
     const prior = activeViewId
+    const priorQuery = activeQuery
+    currentViewId.current = viewId
+    queryGeneration.current += 1
+    setQueryBusy(false)
     setLocalViewId(viewId)
     setSort(null)
     setChooseView(false)
-    const nextQuery = state.projects.queryByView[projectViewIdentity(project, viewId)] ?? (typeof view.filter === 'string' ? view.filter : '')
+    const nextQuery = localQueryOverrides[projectViewIdentity(targetProject, viewId)] ?? state.projects.queryByView[projectViewIdentity(targetProject, viewId)] ?? (typeof view.filter === 'string' ? view.filter : '')
     setAppliedQuery(nextQuery)
     setQueryDraft(nextQuery)
     try {
-      await context.call('quirky.tasks/projectView', { action: 'select', project, viewId })
+      await context.call('quirky.tasks/projectView', { action: 'select', project: targetProject, viewId })
     } catch (error) {
-      setLocalViewId(prior)
-      setMainError(error)
+      if (request === viewSelectionGeneration.current && currentProjectKey.current === targetProjectKey) {
+        currentViewId.current = prior
+        setLocalViewId(prior)
+        setAppliedQuery(priorQuery)
+        setQueryDraft(priorQuery)
+        setMainError(error)
+      }
       return
     }
-    await loadTableFor(project, viewId, state.projects.queryByView[projectViewIdentity(project, viewId)] ?? undefined, false)
+    if (request !== viewSelectionGeneration.current || currentProjectKey.current !== targetProjectKey) return
+    await loadTableFor(targetProject, viewId, localQueryOverrides[projectViewIdentity(targetProject, viewId)] ?? state.projects.queryByView[projectViewIdentity(targetProject, viewId)] ?? undefined, false)
   }
 
   async function applyQuery(value: string) {
@@ -493,18 +583,32 @@ export function ProjectsSurface({ context, state, refresh }: TasksSurfaceProps) 
       setQueryDraft(activeQuery)
       return
     }
+    const request = ++queryGeneration.current
+    const targetProject = project
+    const targetProjectKey = projectIdentity(targetProject)
+    const viewId = currentView.id
+    const preferenceKey = projectViewIdentity(targetProject, viewId)
+    const previousLocalOverride = localQueryOverrides[preferenceKey]
     setQueryBusy(true)
     const previous = activeQuery
+    setLocalQueryOverrides((prior) => ({ ...prior, [preferenceKey]: value }))
     setAppliedQuery(value)
     setQueryDraft(value)
     try {
-      const loaded = await loadTableFor(project, currentView.id, value, false)
+      const loaded = await loadTableFor(targetProject, viewId, value, false)
+      if (request !== queryGeneration.current || currentProjectKey.current !== targetProjectKey || currentViewId.current !== viewId) return
       if (!loaded) {
+        setLocalQueryOverrides((prior) => {
+          const next = { ...prior }
+          if (previousLocalOverride === undefined) delete next[preferenceKey]
+          else next[preferenceKey] = previousLocalOverride
+          return next
+        })
         setAppliedQuery(previous)
         setQueryDraft(previous)
       }
     } finally {
-      setQueryBusy(false)
+      if (request === queryGeneration.current) setQueryBusy(false)
     }
   }
 
@@ -546,87 +650,106 @@ export function ProjectsSurface({ context, state, refresh }: TasksSurfaceProps) 
     writeDeviceColumns(key, next)
   }
 
-  function commitOptimistic(itemId: string, fieldId: string, value: unknown, clear: boolean) {
-    const key = `${itemId}|${fieldId}`
+  function commitOptimistic(projectKey: string, itemId: string, fieldId: string, value: unknown, clear: boolean) {
+    const key = projectFieldMutationKey(projectKey, itemId, fieldId)
     const mine = (mutationGeneration.current.get(key) ?? 0) + 1
     mutationGeneration.current.set(key, mine)
     writeEpoch.current += 1
-    setTable((previous) => {
-      if (!previous) return previous
-      const items = asItems(previous.items).map((item) => {
-        if (item.id !== itemId) return item
-        const values = item.fieldValues ?? []
-        const nextValues = clear
-          ? values.filter((entry) => entry.fieldId !== fieldId)
-          : values.some((entry) => entry.fieldId === fieldId)
-            ? values.map((entry) => entry.fieldId === fieldId ? { ...entry, value } : entry)
-            : [...values, { fieldId, value }]
-        return { ...item, fieldValues: nextValues }
-      })
-      return { ...previous, items }
-    })
+    setTable((previous) => previous ? {
+      ...previous,
+      items: asItems(previous.items).map((item) => item.id === itemId ? withProjectField(item, fieldId, value, clear) : item)
+    } : previous)
     return { key, mine }
   }
 
   async function editProjectField(item: ProjectItem, field: ProjectField, value: unknown, clear = false) {
     if (!project || isRestricted(item) || isDraft(item) || dataTypeIsReadOnly(field)) return
-    const oldValues = item.fieldValues ?? []
-    const mutation = commitOptimistic(item.id, field.id, value, clear)
+    const targetProject = project
+    const targetProjectKey = projectIdentity(targetProject)
+    const projectRequest = projectGeneration.current
+    const viewId = currentView?.id ?? activeViewId
+    const query = queryOverrideForView
+    const key = projectFieldMutationKey(targetProjectKey, item.id, field.id)
+    const previousOverride = projectFieldOverrides.current.get(key)
+    const previousValue = fieldValue(item, field.id)
+    const mutation = commitOptimistic(targetProjectKey, item.id, field.id, value, clear)
+    projectFieldOverrides.current.set(key, { projectKey: targetProjectKey, itemId: item.id, fieldId: field.id, clear, pending: true, ...(clear ? {} : { value }) })
     try {
-      const args: Record<string, unknown> = { action: 'field', projectId: project.id, itemId: item.id, fieldId: field.id, host: project.host ?? hostFromUrl(project.url) ?? undefined, ...(clear ? { clear: true } : { value }) }
+      const args: Record<string, unknown> = { action: 'field', projectId: targetProject.id, itemId: item.id, fieldId: field.id, host: targetProject.host ?? hostFromUrl(targetProject.url) ?? undefined, ...(clear ? { clear: true } : { value }) }
       await context.call('quirky.tasks/projectEdit', args)
+      writeEpoch.current += 1
       if (mutationGeneration.current.get(mutation.key) === mutation.mine) {
-        setWriteError(null)
-        setErrorAnnouncement('')
-        await loadTableFor(project, currentView?.id ?? activeViewId, queryOverrideForView, false)
+        projectFieldOverrides.current.set(key, { projectKey: targetProjectKey, itemId: item.id, fieldId: field.id, clear, pending: false, ...(clear ? {} : { value }) })
+        if (projectGeneration.current === projectRequest && currentProjectKey.current === targetProjectKey) {
+          setWriteError(null)
+          setErrorAnnouncement('')
+          if (currentViewId.current === viewId) await loadTableFor(targetProject, viewId, query, false)
+        }
       }
     } catch (error) {
+      writeEpoch.current += 1
       if (mutationGeneration.current.get(mutation.key) === mutation.mine) {
-        writeEpoch.current += 1
-        setTable((previous) => previous ? {
-          ...previous,
-          items: asItems(previous.items).map((candidate) => candidate.id === item.id ? { ...candidate, fieldValues: oldValues } : candidate)
-        } : previous)
-        setWriteError(error)
-        setErrorAnnouncement('Project field update was rolled back locally; GitHub did not confirm the change.')
-        await loadTableFor(project, currentView?.id ?? activeViewId, queryOverrideForView, false)
+        const previousConfirmed = previousOverride?.pending === false ? previousOverride : undefined
+        if (previousConfirmed) projectFieldOverrides.current.set(key, previousConfirmed)
+        else projectFieldOverrides.current.delete(key)
+        if (projectGeneration.current === projectRequest && currentProjectKey.current === targetProjectKey) {
+          const rollback = previousConfirmed ?? { clear: previousValue === null, value: previousValue }
+          setTable((previous) => previous ? {
+            ...previous,
+            items: asItems(previous.items).map((candidate) => candidate.id === item.id ? withProjectField(candidate, field.id, rollback.value, rollback.clear) : candidate)
+          } : previous)
+          setWriteError(error)
+          setErrorAnnouncement('Project field update was rolled back locally; GitHub did not confirm the change.')
+          if (currentViewId.current === viewId) await loadTableFor(targetProject, viewId, query, false)
+        }
       }
     }
   }
 
   async function editIssueCollection(item: ProjectItem, field: ProjectField, raw: string) {
     if (!project || !isIssue(item) || isRestricted(item) || isDraft(item)) return
+    const targetProject = project
+    const targetProjectKey = projectIdentity(targetProject)
+    const projectRequest = projectGeneration.current
+    const viewId = currentView?.id ?? activeViewId
+    const query = queryOverrideForView
     const values = raw.split(',').map((part) => part.trim().replace(/^@/, '')).filter(Boolean)
     const targetProp = fieldDataType(field) === 'USERS' || /assignee/i.test(field.name ?? '') ? 'assignees' : 'labels'
     const old = Array.isArray(item.content?.[targetProp]) ? item.content?.[targetProp] : []
-    const key = `${item.id}|${targetProp}`
+    const key = projectFieldMutationKey(targetProjectKey, item.id, targetProp)
     const mine = (mutationGeneration.current.get(key) ?? 0) + 1
     mutationGeneration.current.set(key, mine)
     writeEpoch.current += 1
     setTable((previous) => previous ? { ...previous, items: asItems(previous.items).map((candidate) => candidate.id === item.id ? { ...candidate, content: { ...candidate.content, [targetProp]: values } } : candidate) } : previous)
     try {
-      await context.call('quirky.tasks/projectEdit', { action: 'issue', projectId: project.id, itemId: item.id, kind: 'issue', number: item.content?.number, host: project.host ?? hostFromUrl(project.url) ?? undefined, [targetProp]: values })
-      if (mutationGeneration.current.get(key) === mine) {
+      await context.call('quirky.tasks/projectEdit', { action: 'issue', projectId: targetProject.id, itemId: item.id, kind: 'issue', number: item.content?.number, host: targetProject.host ?? hostFromUrl(targetProject.url) ?? undefined, [targetProp]: values })
+      writeEpoch.current += 1
+      if (mutationGeneration.current.get(key) === mine && projectGeneration.current === projectRequest && currentProjectKey.current === targetProjectKey) {
         setWriteError(null)
         setErrorAnnouncement('')
-        await loadTableFor(project, currentView?.id ?? activeViewId, queryOverrideForView, false)
+        if (currentViewId.current === viewId) await loadTableFor(targetProject, viewId, query, false)
       }
     } catch (error) {
-      if (mutationGeneration.current.get(key) === mine) {
-        writeEpoch.current += 1
+      writeEpoch.current += 1
+      if (mutationGeneration.current.get(key) === mine && projectGeneration.current === projectRequest && currentProjectKey.current === targetProjectKey) {
         setTable((previous) => previous ? { ...previous, items: asItems(previous.items).map((candidate) => candidate.id === item.id ? { ...candidate, content: { ...candidate.content, [targetProp]: old } } : candidate) } : previous)
         setWriteError(error)
         const data = record(record(error)?.data)
         const completed = Array.isArray(data?.completedSteps) ? data.completedSteps.filter((step) => typeof step === 'string') : []
         setErrorAnnouncement(data?.partial === true ? `Partial write: GitHub completed ${completed.join(', ') || 'part of the change'} before failing.` : 'The issue field update failed; the previous value was restored.')
-        await loadTableFor(project, currentView?.id ?? activeViewId, queryOverrideForView, false)
+        if (currentViewId.current === viewId) await loadTableFor(targetProject, viewId, query, false)
       }
     }
   }
 
   async function updateIssueType(item: ProjectItem, issueType: { id: string; name: string }) {
     if (!project || !isIssue(item) || isRestricted(item) || isDraft(item)) return
-    const key = `${item.id}|issueType`
+    const targetProject = project
+    const targetProjectKey = projectIdentity(targetProject)
+    const projectRequest = projectGeneration.current
+    const viewId = currentView?.id ?? activeViewId
+    const query = queryOverrideForView
+    const key = projectFieldMutationKey(targetProjectKey, item.id, 'issueType')
     const mine = (mutationGeneration.current.get(key) ?? 0) + 1
     mutationGeneration.current.set(key, mine)
     const previous = item.content?.issueType ?? null
@@ -634,31 +757,36 @@ export function ProjectsSurface({ context, state, refresh }: TasksSurfaceProps) 
     setTable((prior) => prior ? { ...prior, items: asItems(prior.items).map((candidate) => candidate.id === item.id ? { ...candidate, content: { ...candidate.content, issueType } } : candidate) } : prior)
     try {
       await context.call('quirky.tasks/projectEdit', {
-        action: 'issueType', projectId: project.id, itemId: item.id, kind: 'issue',
-        number: item.content?.number, host: project.host ?? hostFromUrl(project.url) ?? undefined, issueTypeId: issueType.id
+        action: 'issueType', projectId: targetProject.id, itemId: item.id, kind: 'issue',
+        number: item.content?.number, host: targetProject.host ?? hostFromUrl(targetProject.url) ?? undefined, issueTypeId: issueType.id
       })
-      if (mutationGeneration.current.get(key) === mine) {
+      writeEpoch.current += 1
+      if (mutationGeneration.current.get(key) === mine && projectGeneration.current === projectRequest && currentProjectKey.current === targetProjectKey) {
         setWriteError(null)
         setErrorAnnouncement('')
-        await loadTableFor(project, currentView?.id ?? activeViewId, queryOverrideForView, false)
+        if (currentViewId.current === viewId) await loadTableFor(targetProject, viewId, query, false)
       }
     } catch (error) {
-      if (mutationGeneration.current.get(key) === mine) {
-        writeEpoch.current += 1
+      writeEpoch.current += 1
+      if (mutationGeneration.current.get(key) === mine && projectGeneration.current === projectRequest && currentProjectKey.current === targetProjectKey) {
         setTable((prior) => prior ? { ...prior, items: asItems(prior.items).map((candidate) => candidate.id === item.id ? { ...candidate, content: { ...candidate.content, issueType: previous } } : candidate) } : prior)
         setWriteError(error)
-        await loadTableFor(project, currentView?.id ?? activeViewId, queryOverrideForView, false)
+        await loadTableFor(targetProject, viewId, query, false)
       }
     }
   }
 
   async function loadIssueTypes(item: ProjectItem) {
     if (!project || issueTypesByItem[item.id]) return
+    const targetProject = project
+    const targetProjectKey = projectIdentity(targetProject)
+    const projectRequest = projectGeneration.current
     try {
       const response = object(await context.call('quirky.tasks/projectEdit', {
-        action: 'issueType', projectId: project.id, itemId: item.id, kind: 'issue',
-        number: item.content?.number, host: project.host ?? hostFromUrl(project.url) ?? undefined
+        action: 'issueType', projectId: targetProject.id, itemId: item.id, kind: 'issue',
+        number: item.content?.number, host: targetProject.host ?? hostFromUrl(targetProject.url) ?? undefined
       }))
+      if (currentProjectKey.current !== targetProjectKey || projectGeneration.current !== projectRequest) return
       const result = object(response.result)
       const options = Array.isArray(result.issueTypes) ? result.issueTypes.flatMap((value) => {
         const issueType = record(value)
@@ -668,7 +796,7 @@ export function ProjectsSurface({ context, state, refresh }: TasksSurfaceProps) 
       }) : []
       setIssueTypesByItem((previous) => ({ ...previous, [item.id]: options }))
     } catch (error) {
-      setMainError(error)
+      if (currentProjectKey.current === targetProjectKey && projectGeneration.current === projectRequest) setMainError(error)
     }
   }
 
@@ -709,14 +837,18 @@ export function ProjectsSurface({ context, state, refresh }: TasksSurfaceProps) 
   }
 
   async function openItem(item: ProjectItem) {
-    if (!project || isRestricted(item) || isDraft(item)) {
+    const targetProject = project
+    if (!targetProject || isRestricted(item) || isDraft(item)) {
       showProjectCardPreview(item, isRestricted(item) ? 'Restricted project content cannot be opened or edited.' : 'Draft project cards do not have an issue or pull-request detail page.')
       return
     }
-    const resolution = await matchLocalRepositories(context, state, parseRepoSlug(item, project))
+    const targetProjectKey = projectIdentity(targetProject)
+    const projectRequest = projectGeneration.current
+    const resolution = await matchLocalRepositories(context, state, parseRepoSlug(item, targetProject))
+    if (projectGeneration.current !== projectRequest || currentProjectKey.current !== targetProjectKey) return
     if (resolution.state === 'updating') {
       const fallback = resolution.contextWorktree
-      const target = fallback ? itemTarget(item, project, fallback.worktree) : null
+      const target = fallback ? itemTarget(item, targetProject, fallback.worktree) : null
       if (item.content?.kind === 'pullRequest' && target) {
         await loadProjectItemPreview(item, target, 'Repository matching is still updating; showing the exact Project item instead.')
       } else {
@@ -733,7 +865,7 @@ export function ProjectsSurface({ context, state, refresh }: TasksSurfaceProps) 
       showProjectCardPreview(item, 'No registered local worktree is available for the Project item detail route. The Project card preview is shown instead.')
       return
     }
-    const target = itemTarget(item, project, worktree)
+    const target = itemTarget(item, targetProject, worktree)
     if (!target) {
       showProjectCardPreview(item, 'This Project card has no valid issue or pull-request identity.')
       return
@@ -741,26 +873,32 @@ export function ProjectsSurface({ context, state, refresh }: TasksSurfaceProps) 
     try {
       if (target.kind === 'pullRequest') {
         if (resolution.matches.length === 1) {
-          await openReview(context, { worktree: target.worktree, number: target.number, tab: 'conversation' })
+          await openReview(context, { ...target, tab: 'conversation' })
           return
         }
         const reason = resolution.excludedMatches.length > 0 ? 'This pull request is outside the selected repositories. ' : ''
         await loadProjectItemPreview(item, target, `${reason}Project data is read by its exact Project item identity.`)
         return
       }
-      await context.call('quirky.tasks/navigate', { mode: 'projects', detail: target, project })
+      await context.call('quirky.tasks/navigate', { mode: 'projects', detail: target, project: targetProject })
     } catch (error) {
-      setActionHelp({ item, text: `Could not open project item: ${errorMessage(error)}`, externalUrl: projectItemUrl(item, project) })
+      if (projectGeneration.current === projectRequest && currentProjectKey.current === targetProjectKey) {
+        setActionHelp({ item, text: `Could not open project item: ${errorMessage(error)}`, externalUrl: projectItemUrl(item, targetProject) })
+      }
     }
   }
 
   async function startItem(item: ProjectItem, forceNew = false) {
-    const externalUrl = project ? projectItemUrl(item, project) : null
-    if (!project || isRestricted(item) || isDraft(item)) {
+    const targetProject = project
+    const externalUrl = targetProject ? projectItemUrl(item, targetProject) : null
+    if (!targetProject || isRestricted(item) || isDraft(item)) {
       setActionHelp({ item, text: isDraft(item) ? 'Draft project cards are not startable.' : 'Restricted project content cannot be opened or started.', externalUrl })
       return
     }
-    const resolution = await matchLocalRepositories(context, state, parseRepoSlug(item, project))
+    const targetProjectKey = projectIdentity(targetProject)
+    const projectRequest = projectGeneration.current
+    const resolution = await matchLocalRepositories(context, state, parseRepoSlug(item, targetProject))
+    if (projectGeneration.current !== projectRequest || currentProjectKey.current !== targetProjectKey) return
     if (resolution.state === 'updating') {
       setActionHelp({ item, text: 'Repository list is updating. Retry once local repositories finish loading.', externalUrl })
       return
@@ -777,15 +915,16 @@ export function ProjectsSurface({ context, state, refresh }: TasksSurfaceProps) 
       return
     }
     const matched = resolution.matches[0]!
-    const target = itemTarget(item, project, matched.worktree)
+    const target = itemTarget(item, targetProject, matched.worktree)
     if (!target) return
     const content = item.content ?? {}
     const name = typeof content.title === 'string' && content.title.trim() ? content.title.trim().slice(0, 80) : `${content.kind === 'pullRequest' ? 'PR' : 'Issue'} #${content.number}`
     const url = externalUrl ?? ''
     const prompt = `Work on this GitHub ${content.kind === 'pullRequest' ? 'pull request' : 'issue'}: ${name}\n\n${url}${typeof content.body === 'string' && content.body.trim() ? `\n\n${content.body}` : ''}`
-    const existingLink = linkedWorkspace(item, state, project)
+    const existingLink = linkedWorkspace(item, state, targetProject, createdWorkspaceLinks)
     const workspaceAction = existingLink && !forceNew ? 'resume' : 'start'
-    setBusyItem(item.id)
+    const busyKey = `${targetProjectKey}|${item.id}`
+    setBusyItem(busyKey)
     try {
       const response = object(await context.call('quirky.tasks/workspace', {
         target,
@@ -793,17 +932,67 @@ export function ProjectsSurface({ context, state, refresh }: TasksSurfaceProps) 
         ...(workspaceAction === 'start' ? { newWorkspace: true, name, prompt, setup: 'inherit' } : {})
       }))
       if (response.kind === 'composer') {
-        context.toast('Workspace setup required', 'The Project item context is prefilled in the workspace composer.')
-      } else if (response.kind === 'created' || response.kind === 'resumed' || response.kind === 'linked') {
         setActionHelp(null)
-        context.toast(response.kind === 'resumed' ? 'Workspace resumed' : 'Workspace started', name)
+        const reason = response.setupDecisionRequired === true
+          ? 'Choose whether to run the repository setup script in the workspace composer.'
+          : nonEmpty(response.error) ?? 'Choose an agent in the workspace composer.'
+        context.toast('Workspace setup required', `${reason} The Project item context is prefilled.`)
+      } else if (response.kind === 'created') {
+        const createdWorktree = record(response.worktree)
+        const workspaceName = nonEmpty(createdWorktree?.name) ?? name
+        if (externalUrl) setCreatedWorkspaceLinks((previous) => ({ ...previous, [externalUrl]: workspaceName }))
+        const warnings = Array.isArray(response.warnings) ? response.warnings.filter((warning): warning is string => typeof warning === 'string' && warning.length > 0) : []
+        const setup = record(response.setup)
+        if (setup?.timedOut === true) warnings.push('Repository setup timed out.')
+        else if (typeof setup?.exitCode === 'number' && setup.exitCode !== 0) warnings.push(`Repository setup exited with status ${setup.exitCode}.`)
+        const issueCommand = record(response.issueCommand)
+        if (issueCommand?.timedOut === true) warnings.push('The issue command timed out.')
+        else if (typeof issueCommand?.exitCode === 'number' && issueCommand.exitCode !== 0) warnings.push(`The issue command exited with status ${issueCommand.exitCode}.`)
+        const fallback = record(response.baseFallback)
+        if (nonEmpty(fallback?.message)) warnings.push(nonEmpty(fallback?.message)!)
+        const deliveryState = response.promptDelivery
+        let delivery = 'No agent prompt-delivery outcome was reported.'
+        if (response.agentPending === true || deliveryState === 'pending') {
+          delivery = 'The agent session is pending; item context delivery has not been confirmed.'
+        } else if (deliveryState === 'pasted') {
+          delivery = 'Item context was delivered to the agent by paste.'
+        } else if (deliveryState === 'command-line') {
+          delivery = 'Item context was delivered to the agent on the command line.'
+        } else if (deliveryState === 'unconfirmed') {
+          delivery = 'The agent started, but item context delivery could not be confirmed.'
+        } else if (deliveryState === 'not-delivered') {
+          delivery = 'The workspace exists, but item context was not delivered to the agent.'
+        } else if (typeof response.agentSessionId === 'string') {
+          delivery = 'The agent session exists, but prompt delivery status is unavailable.'
+        }
+        try {
+          await refresh()
+        } catch (error) {
+          warnings.push(`Workspace was created, but Tasks could not refresh its link: ${errorMessage(error)}`)
+        }
+        const warningList = [...new Set(warnings)]
+        const details = `Workspace ${workspaceName} was created and linked. ${delivery}${warningList.length > 0 ? ` ${warningList.join(' ')}` : ''}`
+        const deliveryConfirmed = response.agentPending !== true && (deliveryState === 'pasted' || deliveryState === 'command-line')
+        if (warningList.length > 0 || !deliveryConfirmed) setActionHelp({ item, text: details, externalUrl })
+        else setActionHelp(null)
+        context.toast(warningList.length > 0 || !deliveryConfirmed ? 'Workspace created with a warning' : 'Workspace started', `${workspaceName}. ${delivery}`)
+      } else if (response.kind === 'resumed' || response.kind === 'linked') {
+        const linkedName = nonEmpty(record(response.worktree)?.name) ?? name
+        if (externalUrl) setCreatedWorkspaceLinks((previous) => ({ ...previous, [externalUrl]: linkedName }))
+        setActionHelp(null)
+        try {
+          await refresh()
+          context.toast(response.kind === 'resumed' ? 'Workspace resumed' : 'Workspace linked', linkedName)
+        } catch (error) {
+          setActionHelp({ item, text: `Workspace ${linkedName} is available, but Tasks could not refresh its link: ${errorMessage(error)}`, externalUrl })
+        }
       } else {
         setActionHelp({ item, text: 'The workspace action returned an unrecognized result. No success was reported.', externalUrl })
       }
     } catch (error) {
       setActionHelp({ item, text: `Could not start work: ${errorMessage(error)}`, externalUrl })
     } finally {
-      setBusyItem('')
+      setBusyItem((current) => current === busyKey ? '' : current)
     }
   }
   async function addLocalRepository(item: ProjectItem) {
@@ -922,11 +1111,13 @@ export function ProjectsSurface({ context, state, refresh }: TasksSurfaceProps) 
 
   const selectedView = currentView
   const openItemActions = (item: ProjectItem) => {
-    const linked = linkedWorkspace(item, state, project) !== null
+    const linked = linkedWorkspace(item, state, project, createdWorkspaceLinks) !== null
+    const busyKey = `${projectKey}|${item.id}`
+    const busy = busyItem === busyKey
     return <div style={{ display: 'flex', gap: 4, justifyContent: 'flex-end' }}>
       <button type="button" style={button} onClick={(event) => { event.stopPropagation(); void invokeLink(projectItemUrl(item, project), linkCommand) }} aria-label={`Open ${item.content?.kind ?? 'project item'} on GitHub`}>GitHub</button>
-      <button type="button" style={button} disabled={busyItem === item.id || isRestricted(item) || isDraft(item)} onClick={(event) => { event.stopPropagation(); void startItem(item) }} aria-label={`${linked ? 'Resume' : 'Start work on'} ${String(item.content?.title ?? 'project item')}`}>{busyItem === item.id ? 'Starting…' : linked ? 'Resume' : 'Start work'}</button>
-      {linked && <button type="button" style={button} disabled={busyItem === item.id} onClick={(event) => { event.stopPropagation(); void startItem(item, true) }} aria-label={`Start new workspace for ${String(item.content?.title ?? 'project item')}`}>Start new</button>}
+      <button type="button" style={button} disabled={busy || isRestricted(item) || isDraft(item)} onClick={(event) => { event.stopPropagation(); void startItem(item) }} aria-label={`${linked ? 'Resume' : 'Start work on'} ${String(item.content?.title ?? 'project item')}`}>{busy ? 'Starting…' : linked ? 'Resume' : 'Start work'}</button>
+      {linked && <button type="button" style={button} disabled={busy} onClick={(event) => { event.stopPropagation(); void startItem(item, true) }} aria-label={`Start new workspace for ${String(item.content?.title ?? 'project item')}`}>Start new</button>}
     </div>
   }
 
@@ -1010,8 +1201,9 @@ function toggleSet(previous: Set<string>, key: string): Set<string> {
   return next
 }
 
-function linkedWorkspace(item: ProjectItem, state: TasksSurfaceProps['state'], project: ProjectTarget): string | null {
-  const url = nonEmpty(item.content?.url)
+function linkedWorkspace(item: ProjectItem, state: TasksSurfaceProps['state'], project: ProjectTarget, localLinks: Record<string, string> = {}): string | null {
+  const url = projectItemUrl(item, project)
+  if (url && localLinks[url]) return localLinks[url]!
   if (url && state.links[url]) return state.links[url]!.name
   const repository = nonEmpty(item.content?.repository)
   const parts = repository ? /^([^/]+)\/([^/]+)$/.exec(repository) : null
