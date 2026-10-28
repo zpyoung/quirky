@@ -55,5 +55,27 @@
 - **Revisit if:** the real reviewer dispatch fails.
 - **Source:** assumed — autonomous
 
+## D6: Keep real daemon primitives when mounting its mobile UI in Happy DOM
+- **Question:** Why did the Mac Watch scenario fail after runner placement was corrected?
+- **Options:** weaken Browser authentication or mock scrolling; repair the mixed DOM/daemon test fixture.
+- **Chose:** supply the actual CLI plugin dependency in the shared Browser harness; use the existing Browser test outer 90-second process lifecycle budget without changing the 15-second UI condition deadline; preserve native transport/HTTP/abort/timer globals around DOM registration; let Happy DOM decode/load the real JPEG once; populate its incomplete WheelEvent's standard client coordinates against an offset, half-size displayed image.
+- **Why:** successive diagnostics established separate fixture defects. Missing quirky.cli rejected worktree activation. The default 5-second outer budget interrupted owned Chrome startup. The identical plain-Bun Watch operation passed in 4.15 seconds while Happy DOM failed CDP attachment. Restoring WebSocket advanced to Bun.serve rejecting Happy DOM's Response class; restoring native primitives advanced to real Tall page/2616px content. Instrumentation then showed x/y NaN because Happy DOM WheelEvent extends UIEvent and discards MouseEvent coordinates, plus a stale duplicate ACK caused by manually firing a load Happy DOM already fires for data URLs. No evidence called for a production change.
+- **Evidence:** actual Watch failures captured at artifact38/54/60/62/64; plain runtime artifact56; plugins/quirky.browser/test/design-ui.test.tsx:9–15; node_modules Happy DOM WheelEvent.js:1–24 and HTMLImageElement.js:362–377; apps/mobile/test/session-tabs.test.tsx.
+- **Reversibility:** easy
+- **Confidence:** high for observed diagnostic boundaries; final acceptance receipt follows separately
+- **Revisit if:** real browser or device events reproduce the failure outside the simulator.
+- **Source:** assumed — autonomous
+
+## D7: Preserve exact source ownership when prerequisite work races
+- **Question:** Does the shared Browser fixture dependency correction duplicate the broader sweep?
+- **Options:** merge unrelated sweep work; diverge on dependency policy; retain the identical one-line prerequisite and share receipts.
+- **Chose:** lane7 published d34de2be immediately before receiving lane8's take-ownership message; lane8 e1a4f78b independently contains the same quirky.cli inclusion. Both lanes acknowledged the race and stopped competing harness edits. Publicized lane8 commits rather than copying foreign uncommitted source. Lane7 owns production PhoneLinks, Browser fixes and shell resource cleanup; lane8 owns these app fixtures and the existing Watch case.
+- **Why:** adding the real declared dependency repairs admission without a fake API, dependency bypass or duplicate product implementation. Array discovery order does not alter the plugin set.
+- **Evidence:** /tmp/quirky-lane7-mobile-repair-coordination.md; canonical m7-sweep-browser-mobile decisions; accepted terminal messages and both scoped commits.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** integration reports an actual differing fixture contract.
+- **Source:** assumed — autonomous
+
 ## Progress
 Claimed this iteration's sole item on build/fix-test-apps-mobile-1028. Read authoritative LOOP and recorded triage evidence; source mapping in progress. No source edits or checks run yet.
