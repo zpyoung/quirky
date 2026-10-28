@@ -1,5 +1,6 @@
 import type { PluginContext } from '@quirky/protocol'
 import { MobileService, registerMobileMethods } from './src/daemon/service'
+import { registerMobileAgentCatalog } from './src/daemon/agent-catalog'
 
 let service: MobileService | undefined
 
@@ -10,6 +11,7 @@ export async function activate(context: PluginContext): Promise<void> {
   })
   service = active
   registerMobileMethods(context, active)
+  registerMobileAgentCatalog(context)
   await active.start()
 }
 

@@ -6,7 +6,12 @@ import { validateValue, type Schema } from '@quirky/protocol'
 type Manifest = { id?: string; main?: string; cli?: string; ui?: string; workers?: unknown; [key: string]: unknown }
 const MANIFEST_SCHEMA: Schema = {
   type: 'object',
-  properties: { id: { type: 'string' }, main: { type: 'string' }, cli: { type: 'string' }, ui: { type: 'string' } },
+  properties: {
+    id: { type: 'string' },
+    main: { type: 'string' },
+    cli: { type: 'string' },
+    ui: { type: 'string' },
+  },
   additionalProperties: true
 }
 
@@ -248,6 +253,49 @@ function copyUi(pluginId: string, pluginDir: string, outPluginDir: string, ui: s
   cpSync(sourceDirectory, outputDirectory, { recursive: true })
 }
 
+
+function assertNoStaticLinks(pluginId: string, path: string): void {
+  const entry = lstatSync(path)
+  if (entry.isSymbolicLink()) throw new Error(`plugin ${pluginId}: static asset trees cannot contain symlinks`)
+  if (entry.isDirectory()) {
+    for (const child of readdirSync(path)) assertNoStaticLinks(pluginId, join(path, child))
+  } else if (!entry.isFile()) {
+    throw new Error(`plugin ${pluginId}: static assets must contain only regular files and directories`)
+  }
+}
+
+function copyStaticAssets(
+  pluginId: string,
+  pluginDir: string,
+  outPluginDir: string,
+  roots: readonly string[],
+  bundledOutputs: readonly string[]
+): void {
+  const pluginRoot = realpathSync(pluginDir)
+  const destinations = [MANIFEST, SOUNDS, ...bundledOutputs]
+  const copied: string[] = []
+  for (const root of roots) {
+    if (destinations.some((reserved) => pathConflicts(root, reserved)) || copied.some((prior) => pathConflicts(root, prior))) {
+      throw new Error(`plugin ${pluginId}: static asset root ${root} collides with a bundled output`)
+    }
+    const source = resolve(pluginDir, root)
+    const output = resolve(outPluginDir, root)
+    if (!within(resolve(pluginDir), source) || !within(resolve(outPluginDir), output)) throw new Error(`plugin ${pluginId}: static asset root escapes its plugin directory`)
+    try {
+      if (!lstatSync(source).isDirectory()) throw new Error('not a directory')
+      assertNoStaticLinks(pluginId, source)
+      const real = realpathSync(source)
+      if (!within(pluginRoot, real)) throw new Error('outside plugin root')
+      mkdirSync(dirname(output), { recursive: true })
+      cpSync(real, output, { recursive: true, dereference: false })
+    } catch (error) {
+      if (error instanceof Error && error.message.startsWith(`plugin ${pluginId}:`)) throw error
+      throw new Error(`plugin ${pluginId}: static asset directory ${root} is missing or unsafe`)
+    }
+    copied.push(root)
+  }
+}
+
 function copyNotebookBridge(pluginDir: string, outPluginDir: string): void {
   const relativePath = 'src/notebook/kernel-bridge.py'
   const from = join(pluginDir, relativePath)
@@ -272,7 +320,7 @@ function copyLegalNotices(pluginId: string, pluginDir: string, outPluginDir: str
 /**
  * Writes a self-contained copy of every plugin under `srcDir` into `outDir`, replacing whatever
  * was there. Each copy holds the rewritten manifest; `main` and `cli` bundled to `.js` with their
- * dependencies inlined; generated UI asset tree and any `sounds/` directory; the plugin-local
+ * dependencies inlined; generated UI asset tree and declared static asset trees; `sounds/`; the plugin-local
  * runtime bridge `src/notebook/kernel-bridge.py` when present; declared private package assets;
  * and legal notices. Other sources, `test/` and `node_modules/` stay behind.
  * A manifest that names a UI module which has not been built fails the whole bundle. Returns the
@@ -308,10 +356,14 @@ export async function bundlePlugins(srcDir: string, outDir: string): Promise<str
       }
       manifest.workers = bundledWorkers
     }
-    if (manifest.ui) copyUi(id, pluginDir, outPluginDir, manifest.ui)
+    const hasAssets = existsSync(join(pluginDir, 'assets'))
+    if (manifest.ui && (!hasAssets || !manifest.ui.replaceAll('\\', '/').startsWith('assets/'))) copyUi(id, pluginDir, outPluginDir, manifest.ui)
     copyNotebookBridge(pluginDir, outPluginDir)
     if (existsSync(join(pluginDir, SOUNDS))) cpSync(join(pluginDir, SOUNDS), join(outPluginDir, SOUNDS), { recursive: true })
-    copyPrivateAssets(id, pluginDir, outPluginDir, manifest, [manifest.main, manifest.cli, ...workerOutputs].filter((name): name is string => typeof name === 'string'))
+    const staticAssets = hasAssets ? ['assets'] : []
+    const bundledOutputs = [manifest.main, manifest.cli, ...workerOutputs].filter((name): name is string => typeof name === 'string')
+    copyStaticAssets(id, pluginDir, outPluginDir, staticAssets, bundledOutputs)
+    copyPrivateAssets(id, pluginDir, outPluginDir, manifest, [...bundledOutputs, ...(manifest.ui ? [manifest.ui] : []), ...staticAssets])
     copyLegalNotices(id, pluginDir, outPluginDir)
 
     writeFileSync(join(outPluginDir, MANIFEST), `${JSON.stringify(manifest, null, 2)}\n`)
