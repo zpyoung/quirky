@@ -1606,8 +1606,7 @@
         "ui-terminal-theme",
         "ui-screenshot-review"
       ],
-      "status": "in-progress",
-      "lane": 2
+      "status": "done"
     },
     {
       "id": "ui-restyle-browser",
@@ -1644,8 +1643,7 @@
         "ui-terminal-theme",
         "ui-screenshot-review"
       ],
-      "status": "in-progress",
-      "lane": 1
+      "status": "done"
     },
     {
       "id": "ui-restyle-orchestration",
@@ -1720,7 +1718,8 @@
         "ui-terminal-theme",
         "ui-screenshot-review"
       ],
-      "status": "todo"
+      "status": "in-progress",
+      "lane": 10
     },
     {
       "id": "ui-final-review",
@@ -1948,6 +1947,19 @@
       "status": "done"
     },
     {
+      "id": "m7-native-notification-and-signed-terminal-host",
+      "milestone": "M7",
+      "title": "Implement the remaining native notification permission/click/dismiss lifecycle only after supported public Electrobun SDK callbacks are available, and production signed terminal-host launchd/TCC/admission/upgrade packaging only after an authorized signing/packaging identity is supplied. These remain unbuilt source flows from m7-vm-and-owner-bound-host-workspaces; inherited missing public callbacks and zero authorized signing identities are prerequisites, not permission to fabricate callbacks, private SDK patches, ad-hoc production identity or delivery success. Keep Native Browser and remote automation/model retirement with their existing canonical owners; no VM/registered-host duplication.",
+      "docs": [
+        "notifications.md",
+        "term-daemon.md"
+      ],
+      "deps": [
+        "m7-vm-and-owner-bound-host-workspaces"
+      ],
+      "status": "todo"
+    },
+    {
       "id": "m7-sweep-sessions",
       "milestone": "M7",
       "docs": [
@@ -2031,7 +2043,8 @@
       "deps": [
         "m7-test-triage"
       ],
-      "status": "todo"
+      "status": "in-progress",
+      "lane": 2
     },
     {
       "id": "fix-test-git-1028",
@@ -2041,7 +2054,8 @@
       "deps": [
         "m7-test-triage"
       ],
-      "status": "todo"
+      "status": "in-progress",
+      "lane": 1
     },
     {
       "id": "fix-test-heimdall-1028",
@@ -2312,7 +2326,8 @@
         "fix-test-accounts-1028",
         "fix-test-packages-protocol-1028",
         "fix-test-scripts-ui-review-1028",
-        "fix-test-scripts-profile-timeout-1028"
+        "fix-test-scripts-profile-timeout-1028",
+        "m7-native-notification-and-signed-terminal-host"
       ],
       "status": "todo",
       "early": true

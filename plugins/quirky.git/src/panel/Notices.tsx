@@ -1,3 +1,4 @@
+import { Toast } from '@quirky/ui'
 import { useEffect, useState } from 'react'
 
 /** A button on a notice. After `expiresMs` it is withdrawn and only Dismiss remains. */
@@ -27,33 +28,17 @@ function NoticeCard({ notice, away, onDismiss }: { notice: Shown; away: boolean;
     )
     return () => timers.forEach(clearTimeout)
   }, [notice])
+  const action = notice.actions.find((candidate) => !expired.has(candidate.label))
+  const status = notice.title.startsWith('Failed') ? 'failing' : 'needs-you'
   return (
-    <div className="notice" role="status">
-      <p className="notice-text">
-        <strong>{away ? `${notice.title} in ${notice.worktree}` : notice.title}</strong>
-        {notice.body ? ` ${notice.body}` : ''}
-      </p>
-      <div className="notice-actions">
-        {!away &&
-          notice.actions
-            .filter((action) => !expired.has(action.label))
-            .map((action) => (
-              <button
-                key={action.label}
-                type="button"
-                onClick={() => {
-                  onDismiss()
-                  action.run()
-                }}
-              >
-                {action.label}
-              </button>
-            ))}
-        <button type="button" onClick={onDismiss}>
-          Dismiss
-        </button>
-      </div>
-    </div>
+    <Toast
+      title={away ? `${notice.title} in ${notice.worktree}` : notice.title}
+      description={notice.body}
+      status={status}
+      durationMs={0}
+      action={!away && action !== undefined ? { label: action.label, onAction: action.run } : undefined}
+      onDismiss={onDismiss}
+    />
   )
 }
 
@@ -61,7 +46,12 @@ function NoticeCard({ notice, away, onDismiss }: { notice: Shown; away: boolean;
 export function Notices({ notices, current, onDismiss }: { notices: Shown[]; current: string | null; onDismiss(id: string): void }) {
   if (notices.length === 0) return null
   return (
-    <div className="notices">
+    <div
+      className="ui-stack"
+      role="region"
+      aria-label="Source control notices"
+      style={{ position: 'absolute', insetBlockEnd: 0, insetInlineEnd: 0, maxWidth: '100%', maxHeight: '100%', overflowY: 'auto', zIndex: 1 }}
+    >
       {notices.map((notice) => (
         <NoticeCard key={notice.seq} notice={notice} away={notice.worktree !== current} onDismiss={() => onDismiss(notice.id)} />
       ))}

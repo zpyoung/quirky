@@ -2,11 +2,14 @@ import { useEffect, useRef, useState } from 'react'
 import { EditorState } from '@codemirror/state'
 import { EditorView, keymap, lineNumbers } from '@codemirror/view'
 import type { GitConflictKind, GitOperation } from '@quirky/protocol'
+import { Badge, EmptyState, IconButton, SectionHeader } from '@quirky/ui'
+import { editorTheme } from '@quirky/ui/editor-theme'
+
 import { conflictBlocks, conflictDecorations, type ConflictBlock } from './conflict-markers'
 import { messageOf, POLL_MS, reasonOf, useRefreshTriggers } from './data'
 import { StaleBar } from './DiffPane'
 import { ErrorNotice } from './Fallbacks'
-import { lineBreakExtension, shellTheme, syntaxExtensions } from './theme'
+import { lineBreakExtension, syntaxExtensions } from './theme'
 import type { ModeProps } from './types'
 
 type ConflictFileResult = {
@@ -167,7 +170,7 @@ export function ConflictFile({ context, input, settings, report, bind, close }: 
         doc: carried.current ?? base.current.text,
         extensions: [
           lineNumbers(),
-          shellTheme,
+          editorTheme,
           syntaxExtensions(path, host),
           lineBreakExtension(base.current.text),
           conflictDecorations(),
@@ -235,61 +238,47 @@ export function ConflictFile({ context, input, settings, report, bind, close }: 
   const result = file?.result
   const kindHint = result && (result.kind === 'deleted_by_us' || result.kind === 'deleted_by_them')
   return (
-    <div className="qgv-file">
-      <header className="qgv-bar">
-        <span className="qgv-title" title={path}>
-          <span className="qgv-path">{path}</span>
-          <span className="qgv-sub"> (conflict)</span>
-        </span>
-        <span className="qgv-spacer" />
-        {editable && (
-          <>
-            <span className="qgv-counter">{blocks.length === 0 ? '0 / 0' : `${current ?? 1} / ${blocks.length}`}</span>
-            <button
-              type="button"
-              aria-label="Previous conflict"
-              title="Previous conflict"
-              disabled={blocks.length === 0}
-              onClick={() => step(-1)}
-            >
-              ↑
-            </button>
-            <button
-              type="button"
-              aria-label="Next conflict"
-              title="Next conflict"
-              disabled={blocks.length === 0}
-              onClick={() => step(1)}
-            >
-              ↓
-            </button>
-          </>
-        )}
-        <button type="button" aria-label="Close" title="Close" onClick={close}>
-          ✕
-        </button>
-      </header>
+    <div className="ui-stack" style={{ flex: 1, minHeight: 0, minWidth: 0, overflow: 'hidden' }}>
+      <SectionHeader
+        title={`${path} (conflict)`}
+        actions={
+          <div className="ui-cluster">
+            {editable && (
+              <>
+                <Badge label={blocks.length === 0 ? '0 conflicts' : `Conflict ${current ?? 1} of ${blocks.length}`}>{blocks.length === 0 ? '0 / 0' : `${current ?? 1} / ${blocks.length}`}</Badge>
+                <IconButton label="Previous conflict" title="Previous conflict" disabled={blocks.length === 0} onClick={() => step(-1)}>
+                  ↑
+                </IconButton>
+                <IconButton label="Next conflict" title="Next conflict" disabled={blocks.length === 0} onClick={() => step(1)}>
+                  ↓
+                </IconButton>
+              </>
+            )}
+            <IconButton label="Close" title="Close" onClick={close}>×</IconButton>
+          </div>
+        }
+      />
       {result && (
-        <div className="qgv-banner">
-          <strong>
+        <div className="ui-stack" role="status" style={{ padding: 'var(--ui-space-8)' }}>
+          <Badge tone={result.state === 'unresolved' ? 'needs-you' : 'accent'}>
             {result.state === 'unresolved' ? 'Unresolved conflict' : 'Resolved locally conflict'} · {KIND_LABEL[result.kind]}
-          </strong>
+          </Badge>
           {result.state === 'resolved_locally' && (
-            <span className="qgv-muted">Session-local continuity state. Git is no longer reporting this file as unmerged.</span>
+            <span className="ui-text-muted">Session-local continuity state. Git is no longer reporting this file as unmerged.</span>
           )}
           {kindHint && <span>Decide whether to keep the file or accept deletion</span>}
         </div>
       )}
       {stale && <StaleBar variant="file" onReload={() => void reload()} onOverwrite={() => void save(true)} />}
-      <div className="qgv-body">
+      <div className="ui-stack" style={{ flex: 1, minHeight: 0, minWidth: 0, overflow: 'auto' }}>
         {error !== null && !file ? (
           <ErrorNotice message={error} subject="conflict file" />
         ) : !file ? (
-          <p className="qgv-muted qgv-pad">Loading diff...</p>
+          <p className="ui-text-muted" style={{ padding: 'var(--ui-space-8)' }}>Loading diff...</p>
         ) : result?.content === null ? (
-          <p className="qgv-muted qgv-pad">No working-tree file is available to edit for this conflict.</p>
+          <EmptyState message="No working-tree file is available to edit for this conflict." />
         ) : (
-          <div className="qgv-host" ref={hostRef} />
+          <div data-diff-editor ref={hostRef} style={{ flex: 1, minHeight: 0, minWidth: 0, overflow: 'auto' }} />
         )}
       </div>
     </div>

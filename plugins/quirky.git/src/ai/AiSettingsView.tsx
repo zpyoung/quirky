@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useId, useState } from 'react'
+import { Button, EmptyState, FormRow, SectionHeader, TextField } from '@quirky/ui'
 import { createRoot } from 'react-dom/client'
 import type { MountFunction, UiPluginContext } from '@quirky/protocol'
 import { isRecord } from '../daemon/validation'
@@ -123,6 +124,7 @@ function NameActionControls({ context, worktree, action, agent, args, template, 
   const [sessionError, setSessionError] = useState<string | null>(null)
   const [name, setName] = useState('')
   const [error, setError] = useState<string | null>(null)
+  const sessionId = useId()
   const [working, setWorking] = useState(false)
   useEffect(() => {
     let alive = true
@@ -162,28 +164,22 @@ function NameActionControls({ context, worktree, action, agent, args, template, 
   }
 
   return (
-    <div className="scm-ai-name-action">
-      <label>
-        {action === 'conversationName' ? 'Captured conversation' : 'Work prompt conversation (optional)'}
-        <select aria-label={action === 'conversationName' ? 'Captured conversation' : 'Work prompt conversation (optional)'} value={session} onChange={(event) => {
+    <div className="ui-stack">
+      <FormRow label={action === 'conversationName' ? 'Captured conversation' : 'Work prompt conversation (optional)'} htmlFor={sessionId}>
+        <select id={sessionId} className="ui-text-field__input" aria-label={action === 'conversationName' ? 'Captured conversation' : 'Work prompt conversation (optional)'} value={session} onChange={(event) => {
           setSession(event.target.value)
           setName('')
         }}>
           <option value="">{action === 'conversationName' ? 'Select a conversation' : 'Use Git changes only'}</option>
           {sessions.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}
         </select>
-      </label>
-      {sessionError && <p className="form-error" role="alert">{sessionError}</p>}
-      <button type="button" disabled={working || agent === '' || (action === 'conversationName' && session === '')} onClick={() => void generate()}>
+      </FormRow>
+      {sessionError && <p className="ui-error-text" role="alert">{sessionError}</p>}
+      <Button type="button" disabled={working || agent === '' || (action === 'conversationName' && session === '')} onClick={() => void generate()}>
         {working ? 'Generating name…' : action === 'branchName' ? 'Generate branch name' : 'Generate conversation name'}
-      </button>
-      {name !== '' && (
-        <label>
-          Suggested name
-          <input aria-label="Suggested name" readOnly value={name} />
-        </label>
-      )}
-      {error && <p className="form-error" role="alert">{error}</p>}
+      </Button>
+      {name !== '' && <TextField label="Suggested name" readOnly value={name} />}
+      {error && <p className="ui-error-text" role="alert">{error}</p>}
     </div>
   )
 }
@@ -213,14 +209,21 @@ function ActionSection({ context, worktree, action, title, recipe, agents, onRec
   const optionValue = agent === (recipe?.agent ?? '') ? recipe?.launchOptions ?? {} : {}
   const listed = choices.some((choice) => choice.id === agent) || agent === '' || (action === 'commitMessage' && agent === CUSTOM_AGENT)
   const overridden = recipe !== undefined && Object.values(recipe.sources).includes('repo')
+  const agentId = useId()
+  const templateId = useId()
 
   return (
-    <section className="scm-ai-action" data-action={action}>
+    <section className="ui-stack" data-action={action}>
       <h3>{title}</h3>
-      {overridden && <p className="muted scm-ai-hint">This repository has its own recipe, which takes precedence here.</p>}
-      <label>
-        Agent
-        <select aria-label={`${title} agent`} value={agent} onChange={(event) => changeAgent(event.target.value)}>
+      {overridden && <p className="ui-text-muted">This repository has its own recipe, which takes precedence here.</p>}
+      <FormRow label="Agent" htmlFor={agentId}>
+        <select
+          id={agentId}
+          className="ui-text-field__input"
+          aria-label={`${title} agent`}
+          value={agent}
+          onChange={(event) => changeAgent(event.target.value)}
+        >
           <option value="">Default agent</option>
           {!listed && <option value={agent}>{agent}</option>}
           {choices.map((choice) => (
@@ -230,11 +233,15 @@ function ActionSection({ context, worktree, action, title, recipe, agents, onRec
           ))}
           {action === 'commitMessage' && <option value={CUSTOM_AGENT}>Custom command</option>}
         </select>
-      </label>
-      <label>
-        CLI arguments
-        <input type="text" aria-label={`${title} CLI arguments`} spellCheck={false} value={args} onChange={(event) => changeArgs(event.target.value)} />
-      </label>
+      </FormRow>
+      <TextField
+        label="CLI arguments"
+        type="text"
+        aria-label={`${title} CLI arguments`}
+        spellCheck={false}
+        value={args}
+        onChange={(event) => changeArgs(event.target.value)}
+      />
       <LaunchOptionsEditor
         key={`${action}:${provider}`}
         host="local"
@@ -246,21 +253,23 @@ function ActionSection({ context, worktree, action, title, recipe, agents, onRec
         resetLabel="Use inherited launch choices"
         onChange={(launchOptions) => void persist({ launchOptions })}
       />
-      <div className="scm-ai-field">
-        <div className="scm-ai-field-head">
-          <label>Command template</label>
-          <button type="button" disabled={template === DEFAULT_TEMPLATE} onClick={() => changeTemplate(DEFAULT_TEMPLATE, '')}>
+      <div className="ui-stack">
+        <FormRow label="Command template" htmlFor={templateId}>
+          <textarea
+            id={templateId}
+            className="ui-text-field__input"
+            aria-label={`${title} command template`}
+            rows={4}
+            spellCheck={false}
+            value={template}
+            onChange={(event) => changeTemplate(event.target.value)}
+          />
+        </FormRow>
+        <div className="ui-cluster">
+          <Button type="button" disabled={template === DEFAULT_TEMPLATE} onClick={() => changeTemplate(DEFAULT_TEMPLATE, '')}>
             Reset
-          </button>
+          </Button>
         </div>
-        <textarea
-          className="scm-ai-template"
-          aria-label={`${title} command template`}
-          rows={4}
-          spellCheck={false}
-          value={template}
-          onChange={(event) => changeTemplate(event.target.value)}
-        />
       </div>
       {action === 'branchName' && (
         <NameActionControls context={context} worktree={worktree} action="branchName" agent={provider} args={args} template={template} launchOptions={optionValue} />
@@ -279,7 +288,7 @@ function inputWorktree(input: unknown): string | null {
 
 function AiSettingsView({ context, input }: { context: UiPluginContext; input: unknown }) {
   const worktree = inputWorktree(input) ?? worktreeOf(context.getLayout())
-  if (worktree === null) return <p className="muted pad">Open a worktree first.</p>
+  if (worktree === null) return <EmptyState message="Open a worktree first." />
   return <AiSettingsBody context={context} worktree={worktree} />
 }
 
@@ -299,17 +308,17 @@ function AiSettingsBody({ context, worktree }: { context: UiPluginContext; workt
     }
   }
   const [custom, changeCustom] = useDraft(settings.custom, (next) => write('ai-custom-command', next))
+  const switchId = useId()
 
   return (
-    <div className="scm-ai-view">
-      <header className="scm-ai-view-head">
-        <h2>Source Control AI defaults</h2>
-        <button type="button" onClick={() => context.openView(SESSIONS_VIEW_ID, { worktree })}>
-          Close
-        </button>
-      </header>
-      <label className="scm-ai-check scm-ai-switch">
+    <div className="ui-stack">
+      <SectionHeader
+        title="Source Control AI defaults"
+        actions={<Button type="button" onClick={() => context.openView(SESSIONS_VIEW_ID, { worktree })}>Close</Button>}
+      />
+      <FormRow label="Show Source Control AI actions" htmlFor={switchId}>
         <input
+          id={switchId}
           type="checkbox"
           role="switch"
           aria-label="Show Source Control AI actions"
@@ -319,14 +328,17 @@ function AiSettingsBody({ context, worktree }: { context: UiPluginContext; workt
             void write('ai-enabled', event.target.checked)
           }}
         />
-        <span>Show Source Control AI actions</span>
-      </label>
-      <p className="muted">Adds AI buttons that run the selected agent with the command template for that action.</p>
-      <label>
-        Custom command
-        <input type="text" aria-label="Custom command" spellCheck={false} value={custom} onChange={(event) => changeCustom(event.target.value)} />
-      </label>
-      <p className="muted">Command line Quirky runs when a recipe uses Custom command.</p>
+      </FormRow>
+      <p className="ui-text-muted">Adds AI buttons that run the selected agent with the command template for that action.</p>
+      <TextField
+        label="Custom command"
+        type="text"
+        aria-label="Custom command"
+        spellCheck={false}
+        value={custom}
+        onChange={(event) => changeCustom(event.target.value)}
+        help="Command line Quirky runs when a recipe uses Custom command."
+      />
       {ACTIONS.map(({ action, title }) => (
         <ActionSection key={action} context={context} worktree={worktree} action={action} title={title} recipe={recipes[action]} agents={agents.list} onRecipe={putRecipe} />
       ))}
