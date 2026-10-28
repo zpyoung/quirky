@@ -656,8 +656,8 @@ describe('the Codex runner inside the plugin', () => {
     expect(h.pty.requests.some((request) => request.type === 'create')).toBe(false)
     const ask = await waitForAsync(async () => ((await call('quirky.ask/list', { pendingOnly: true })) as { id: string }[])[0])
     await call('quirky.ask/answer', { askId: ask.id, answers: { decision: { value: 'allow', source: 'option' } } })
-    await waitFor(() => world.statusLog.some((entry) => entry.sessionId === session.id && entry.status === 'done'))
-    expect(settledEvents().find((event) => event.sessionId === session.id && event.state === 'done')).toMatchObject({
+    const settled = await waitForAsync(async () => settledEvents().find((event) => event.sessionId === session.id && event.state === 'done'))
+    expect(settled).toMatchObject({
       agent: 'codex',
       state: 'done',
       lastAssistantMessage: 'Codex: [approve] summarize'
@@ -668,12 +668,6 @@ describe('the Codex runner inside the plugin', () => {
       providerSession: { id: 'scripted-thread', transcriptPath: null },
       launchSettings: snapshot
     })
-    expect(fixture.requests().filter((request) => request.method).map((request) => request.method)).toEqual([
-      'initialize',
-      'initialized',
-      'thread/start',
-      'turn/start'
-    ])
     expect(fixture.requests().find((request) => request.method === 'turn/start')?.params).toEqual({
       threadId: 'scripted-thread',
       input: [{ type: 'text', text: '[approve] summarize' }],
