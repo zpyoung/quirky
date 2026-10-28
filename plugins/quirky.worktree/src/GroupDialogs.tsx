@@ -179,7 +179,9 @@ export function DeleteGroupDialog({ context, group, onClose }: { context: UiPlug
     if (ok) onClose()
     else setRetry((value) => value + 1)
   }
-  const retention = ledgerRetentionNotice(preview ?? null)
+  const retention = preview?.length === 0
+    ? 'Ledger records retained: No affected ledgers.'
+    : ledgerRetentionNotice(preview ?? null)
   return (
     <Dialog title="Delete Project Group" onClose={onClose}>
       <p className="dialog-message">{`Delete the group ${group.name}? Projects in this group stay in Quirky.`}</p>

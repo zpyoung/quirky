@@ -103,6 +103,7 @@ type UiHarness = {
   emit(type: string): Promise<void>
   deferNextSet(): { started: Promise<void>; release(): void }
   deferNextProjection(): { started: Promise<void>; release(): void }
+  deferNextLedgerPreview(): { started: Promise<void>; release(): void }
 }
 
 let act: (callback: () => unknown) => Promise<void>
@@ -324,6 +325,7 @@ function setup(
   }
   let nextSetGate: CallGate | null = null
   let nextProjectionGate: CallGate | null = null
+  let nextLedgerPreviewGate: CallGate | null = null
   const calls: Call[] = []
   const reports: unknown[] = []
   const provided = new Map<string, unknown>()
@@ -439,10 +441,17 @@ function setup(
           return [...world.repos]
         case 'quirky.repo/groupList':
           return [...world.groups]
-        case 'quirky.ledger/request':
+        case 'quirky.ledger/request': {
+          const gate = nextLedgerPreviewGate
+          if (gate) {
+            nextLedgerPreviewGate = null
+            gate.start()
+            await gate.wait
+          }
           if (world.ledgerPreviewFailure) throw world.ledgerPreviewFailure
           if (world.ledgerPreview === null) throw new RpcLike('method not found', RpcErrorCode.MethodNotFound)
           return { removalPreview: [...world.ledgerPreview] }
+        }
         case 'quirky.worktree/options':
           return { ...world.options, filterRepoIds: [...world.options.filterRepoIds], showProperties: [...world.options.showProperties] }
         case 'quirky.worktree/setOptions':
@@ -688,6 +697,11 @@ function setup(
     deferNextProjection() {
       const gate = callGate()
       nextProjectionGate = gate
+      return { started: gate.started, release: gate.release }
+    },
+    deferNextLedgerPreview() {
+      const gate = callGate()
+      nextLedgerPreviewGate = gate
       return { started: gate.started, release: gate.release }
     }
   }
@@ -949,6 +963,48 @@ test('group deletion retries ledger preview failures and sends subtree snapshots
     expectedLedgers: [{ ledgerId: 'ledger-team', revision: 7 }]
   })
   expect(h.world.groups.map((item) => item.id)).not.toContain('g-grandchild')
+})
+
+test('group deletion discloses an empty ledger preview only after verification', async () => {
+  const h = setup()
+  await h.mount()
+  const gate = h.deferNextLedgerPreview()
+  h.world.ledgerPreviewFailure = new Error('ledger backend unavailable')
+
+  const team = sectionForGroup('Team')!
+  await h.click(buttons(team).find((button) => button.textContent?.trim() === '⋯')!)
+  await h.click(menuItems().find((item) => /delete group/i.test(item.textContent ?? ''))!)
+
+  const dialog = document.querySelector<HTMLElement>('[role="dialog"]')!
+  const confirm = [...dialog.querySelectorAll<HTMLButtonElement>('button')].find((button) => button.textContent?.trim() === 'Delete Group')!
+  await gate.started
+  expect(dialog.textContent).toContain('Checking retained ledger records…')
+  expect(dialog.textContent).not.toContain('No affected ledgers')
+  expect(confirm.disabled).toBe(true)
+
+  gate.release()
+  await h.flush()
+  expect(dialog.querySelector('[role="alert"]')?.textContent).toContain('ledger backend unavailable')
+  expect(dialog.textContent).not.toContain('No affected ledgers')
+  expect(confirm.disabled).toBe(true)
+
+  h.world.ledgerPreviewFailure = null
+  h.world.ledgerPreview = []
+  await h.click([...dialog.querySelectorAll<HTMLButtonElement>('button')].find((button) => button.textContent?.trim() === 'Retry')!)
+  expect(dialog.textContent).toContain('Ledger records retained')
+  expect(dialog.textContent).toContain('No affected ledgers')
+  expect(dialog.querySelector('[role="alert"]')).toBeNull()
+  expect(confirm.disabled).toBe(false)
+
+  await h.click(confirm)
+  expect(h.calls.filter((call) => call.method === 'quirky.repo/groupDelete').at(-1)?.params).toEqual({
+    group: 'g-team',
+    expectedLedgers: []
+  })
+  expect(h.world.groups.map((item) => item.id)).not.toContain('g-team')
+  expect(h.world.groups.map((item) => item.id)).not.toContain('g-child')
+  expect(h.world.worktrees.find((item) => item.id === 'w-feature')?.projectGroupId).toBeNull()
+  expect(h.world.worktrees.find((item) => item.id === 'w-independent')?.projectGroupId).toBeNull()
 })
 test('SC-01: new group creation is guarded by the selected Git worktree identity', async () => {
   const h = setup()
