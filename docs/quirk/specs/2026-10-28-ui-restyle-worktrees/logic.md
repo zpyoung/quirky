@@ -70,6 +70,8 @@ One wave, three independent components, no semantic dependency or scope overlap.
 
 - Tree slice: `Tree.tsx`, `Menu.tsx`, `StatusDot.tsx`, `LoopGlyph.tsx`, `WorktreeBoard.tsx`, `OrchestrationRows.tsx` under `plugins/quirky.worktree/src/`.
 - Dialog slice: all existing `*Dialog.tsx`, `GroupDialogs.tsx`, and `Dialog.tsx` under that same directory. No files in the tree or panel slices.
+
+2026-10-28 shared Menu extension: the existing implementation lacks context positioning and submenus needed by shipped worktree actions. `MenuItem` adds optional `submenu`, `title`, `current` and optional `onAction` for submenu/disabled entries; `MenuProps` adds optional pointer `position: { x, y }` and `onClose`. Context mode opens immediately without a trigger, clamps to viewport, preserves keyboard/submenu/disabled semantics and calls `onClose` on dismissal. Ordinary trigger menus keep their contract. The parent owns this shared implementation; worktree ContextMenu becomes data mapping only.
 - Panel slice: `WorktreesSection.tsx`, `StockOptions.tsx`, `ActivityFilters.tsx`, `ExternalInbox.tsx`, `Notices.tsx`, `ledger.tsx`, `ui.tsx` under that directory.
 - Parent: `packages/ui/src/design-system/components.css`, any necessary shared presentation contracts/implementation, lint plugin registry, README/decision/spec documentation and regression coverage only where a consumer-visible edge changes.
 
