@@ -153,5 +153,65 @@ The initial ZCode external fixture supplied `usage` as consumed rather than tota
 - **Revisit if:** operator changes the execution policy
 - **Source:** locked by operator remote-only verification instruction
 
+## D14: Preserve the exact sole roadmap merge and all incoming decisions
+- **Question:** Did incoming repairs conflict with Accounts?
+- **Options:** assume compatibility; read the exact merged decision set and retain its boundaries
+- **Chose:** sole catch-up a516f0355463804d07d92afa52106166554464ec from eb25572073a718f4c6191dad4db0a91d3f9f8fc2, after3be83b46; all14 logs,132 decisions and trailing receipts read completely
+- **Why:** no binding conflict. Hash-object versus incoming git blobs matched all14 files, resolving the scout's initial identity caveat. Raw truncated footer lines were reread. Preserve native clipboard/OS handoffs, exact-window ToolShell ownership, SQL-filtered Ask list/one-use confirmation, harness history separation, remote tests and named repair owners.
+- **Evidence:** incoming.json and incoming-decision-hashes.json; ReadAccountsIncoming complete audit; clean137-file merge. New shell and incoming usage sizing merged without replacing this item's composite lookup.
+- **Reversibility:** medium
+- **Confidence:** high
+- **Revisit if:** canonical integration identifies an interaction
+- **Source:** locked by incoming decision logs
+
+## D15: Keep queued Claude progress nonmodal
+- **Question:** Why could the user not supersede a busy Always restart?
+- **Options:** bypass the occluded policy selector with an API; wait for idle; repair modal eligibility
+- **Chose:** Ask dialog includes only Ask-policy stale sessions that are not kept or queued. Existing pane/details progress continues nonmodally.
+- **Why:** unconditional queued-session union trapped Settings under Always; Ask Restart also kept the modal after acceptance. Actual old-source screenshots reproduce the trap. Existing pinned submission/error/C1 fences remain unchanged. No UI automation bypass was used.
+- **Evidence:** blocked223111-67d5 obs36/39; two new mounted regressions; remote UI/authority/remaining-flow three-file gate passes15.12s without flakes; fresh merged-shell224831-aed3 passes queued B→policy Ask→C fresh choice→Keep→idle, terminal still A with prior bytes at obs21.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** queued progress disappears from the existing nonmodal surfaces
+- **Source:** locked by accounts.md Claude switch policy and actual UI evidence
+
+## D16: Cut over the public reset reply to its advertised envelope
+- **Question:** How should the operator's A5 schema/result mismatch be repaired?
+- **Options:** weaken the schema to scalar; accept both shapes; return the advertised required object and migrate consumers
+- **Chose:** contract commit4f89795f requires `{outcome,state}`; service wraps the private authorized scalar under existing serialization, renderer requires a recognized outcome and parseable UsageState, public API/UI fixtures migrate without scalar tolerance
+- **Why:** manifest already advertised the envelope. Internal usage-engine scalar tests remain correct; CLI/main forward the entire public result unchanged. The returned state is the current cached snapshot, not an added force refresh; renderer retains its fenced reload policy rather than applying a possibly stale reply.
+- **Evidence:** five remote API/authority/UI/acceptance files pass18.75s, no flakes; final typecheck and full packaged build pass56.33s with the disclosed icon/release-baseURL warnings. Read-only plugin-validator confirms the exact manifest/handler/replay/error/consumer boundary, not runtime certification. Final reset UI230214-7fc7 consumes the strict envelope and all three goals pass.
+- **Reversibility:** medium (public wire reply)
+- **Confidence:** high
+- **Revisit if:** a public consumer still assumes scalar or treats cached state as a forced refresh
+- **Source:** locked by operator A5 contract ruling and advertised plugin schema
+
+## D17: Close reachable acceptance with exact mixed-surface evidence
+- **Question:** Which inherited observations are now exercised, and which limits must remain?
+- **Options:** relabel every partial report; preserve historical reports and add narrowly complete receipts
+- **Chose:** retain old partial/blocked reports unchanged; close their reachable gaps with the following evidence, keeping native-only handoffs explicit
+- **Why:** user-facing controls, public authority and native conversation data need different evidence. No test overrides or real provider credentials were used.
+- **Evidence:** scenario map below; all owned browsers ended and all fixture services stopped with exit0; the unreadable-source browser closed but its attempt to restore the pre-existing frontmost SecurityAgent failed, retained as a cleanup limit.
+- **Reversibility:** easy
+- **Confidence:** high for named exercised paths, not universal native/provider parity
+- **Revisit if:** native runner or a later public consumer contradicts a receipt
+- **Source:** assumed — autonomous
+
+| Acceptance | Exact evidence and boundary |
+| --- | --- |
+| AC1 presentation | 215954-66ee,220443-7ad2,220631-5ca5: Detailed/Remaining/hide→same-home restart, then Compact/Used/restore→second restart. No native-window persistence claim. |
+| AC2 details/inactive | All10 opened in220631-5ca5; valid ZCode weekly/monthly quota in223128-8f43. Postmerge224227-09df shows actual inactive Claude A/B and Codex A/B meters, with earlier full Claude C screenshot in222649-f7f6. Immediate Claude reopen kept7 external calls unchanged; Codex pairs were22:49:50.450/52.481. Exact60s boundary/sequencing also passes public API regression. |
+| AC3 login/reauth | 220000-eb53: pending link/Cancel, Claude save without selection, Codex save/select, Needs-sign-in refusal and failed/successful same-row reauth. Its two history goals remain partial in that original report; new daemon/API tests independently preserve nonempty native bytes, exact home and identity for both providers. Actual failed-Cancel transport/native-completion smoke also passed. |
+| AC4 Claude | 220355-cbe0 Ask Restart/Always busy→idle/Never passed; queued supersession now passes fresh post-fix224831-aed3. Ordinary/opt-out Keep prior receipts and authority/reload/C1 regressions remain preserved. |
+| AC5 Codex | 220355-cbe0 Keep retains A; Restart B displays prior bytes. Actual separate A→B→remove-A→C daemon/PTY accumulated-content receipt remains preserved. Guard-refused opacity0 keyboard input is not a typing pass; OS focus/keyboard follow-through stays in the existing native handoff. |
+| AC6 removal | 220000-eb53: both provider-specific warnings, Cancel preserves Active row, UI-created account confirmation removes it and selects System default. |
+| AC7 credentials/errors | 220631-5ca5 masked MiniMax/OpenCode Go keys/cookies and ZCode key Set→empty/configured→Clear; duplicate cookie goal's partial label is unchanged. 222649-f7f6 shows actual Claude503 last-good/error and recovery, plus Grok/Cursor read-only/source Settings. |
+| AC8 reset | Final230214-7fc7 all3 goals pass: stale account and offer show actionable no-reset warning and0POSTs; unknown response Retry returns alreadyRedeemed via envelope, then UI Refresh shows1 of2 credits remaining, exactly2POSTs503/200. Durable replay/no-extra-spend and opt-out authority pass API regressions. |
+| AC9 warnings | 220000-eb53 empty/missing source warning/recovery; fresh231418-0567 unreadable source warning/recovery passes. Byte retention is proven separately by API/profile tests, not inferred from a warning. |
+| AC10 identity | Terminal-only candidate/public structured refusal/sessionHome regression passes; original launch provenance, authority, reload and committed-action C1 tests retained. |
+| AC11 native | Existing synthetic-only clipboard/browser/Keychain/real focus scenarios remain pending. No real OAuth, Keychain permission or native keyboard pass claimed. |
+
+Latest broader caught-up `bun scripts/suite.ts plugins/quirky.accounts scripts` ran24 remote files:23pass/1fail, no flakes,34.85s. Only accounts-api Codex discovery still reports executable unavailable instead of authoritative models; its diagnostic/model-probe repair and the13 CLI stable-ID mismatches remain with the explicitly named lane3/existing repair owners. No duplicate fix, alias, queue item, or whole-suite-green claim. The five final envelope/authority/UI/API files and full typecheck/build are independently green. These known consumer ownership limits are not silently converted into Accounts API or CLI clearance.
+
 ## Progress
-Initial fixes, one bounded source review and one genuine-UI defect fix batch are complete, with fresh remote four-file gate green. Fresh bounded verifiers are finishing inactive/error/read-only, queued supersession and reset retry/actionable stale-scope observations; opacity-refused keyboard/native handoffs stay explicit. Next: commit the accepted fix batch, catch up current roadmap once (Ask/scripts repairs landed), read incoming decisions, run final remote Accounts/scripts and typecheck/build, finish/close the remaining browser/daemon surfaces, retain evidence and canonical land. No broad-suite or native pass claimed.
+Reachable completion acceptance and all source repairs are implemented and exercised; native handoffs, historical partial reports, reviewer deviations and existing lane-owned discovery/CLI limits remain explicit. All workers/checks/browsers/private daemons have returned or closed. Final five-file remote gate, typecheck and packaged build pass. Preserve private evidence, commit the final source/docs, detach and run canonical queue land; only its actual receipt establishes landing. Do not claim a full broad-suite/native pass or start a second item.

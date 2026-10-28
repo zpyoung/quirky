@@ -42,6 +42,16 @@ function makeClaudeSelection(revision: number, selectedId: string, selectedLabel
     staleSessions: state.staleSessions.map((session) => ({ ...session, selectedId }))
   }
 }
+function makeBusyClaudeSwitch(revision: number): AccountState {
+  const state = makeState('claude', revision, 'Account B')
+  const account = state.accounts[0]!
+  return {
+    ...state,
+    accounts: [account, { ...account, id: 'claude-b', label: 'Account B', email: 'b@example.test', active: false }],
+    staleSessions: state.staleSessions.map((session) => ({ ...session, busy: true, queued: false }))
+  }
+}
+
 
 type UsageFixture = { providers: ProviderSnapshot[]; inactive: Record<string, ProviderSnapshot>; updatedAt: number }
 type ResetScope = ResetCreditExpectedScope
@@ -66,6 +76,7 @@ let calls: { method: string; params?: Record<string, unknown> }[]
 let loginGate: Promise<unknown> | null
 let resolveLogin!: (value: unknown) => void
 let restartGate: Promise<unknown> | null
+let queueBusyRestart: boolean
 let restartStarted: Promise<void>
 let resolveRestartStarted!: () => void
 let rejectStaleReset: boolean
@@ -103,6 +114,7 @@ beforeEach(() => {
   calls = []
   loginGate = null
   restartGate = null
+  queueBusyRestart = false
   const restart = Promise.withResolvers<void>()
   restartStarted = restart.promise
   resolveRestartStarted = restart.resolve
@@ -169,6 +181,16 @@ function makeContext(): UiPluginContext {
         resolveRestartStarted()
         if (restartGate) return await restartGate
         if (params?.selectionRevision !== stateValue.revision) throw new Error('The selected account changed. Refresh the account state and choose again.')
+        if (queueBusyRestart) {
+          const sessions = params?.sessions as string[]
+          stateValue = {
+            ...stateValue,
+            staleSessions: stateValue.staleSessions.map((session) =>
+              sessions.includes(session.sessionId) && session.busy ? { ...session, queued: true } : session
+            )
+          }
+          return stateValue
+        }
         stateValue = { ...stateValue, staleSessions: [] }
         return stateValue
       }
@@ -252,7 +274,7 @@ function makeContext(): UiPluginContext {
         if (rejectStaleReset && JSON.stringify(params?.expectedScope) !== JSON.stringify(codex?.rateLimitResetCredits?.expectedScope)) {
           throw new Error('Codex reset offer changed; refresh usage and confirm again')
         }
-        return resetOutcome
+        return { outcome: resetOutcome, state: usageValue }
       }
       return undefined
     },
@@ -1059,4 +1081,72 @@ test('canceling the Codex reset offer leaves it available without consuming a cr
   expect(container.querySelector('[aria-label="Reset Codex limits confirmation"]')).toBeNull()
   expect(buttonByLabel('Reset Codex limits').disabled).toBe(false)
   expect(calls.filter((call) => call.method === 'quirky.accounts/consumeResetCredit')).toHaveLength(0)
+})
+test('Always-queued busy Claude restart skips the Ask dialog but keeps pane progress visible', async () => {
+  stateValue = makeBusyClaudeSwitch(95)
+  usageValue = usageFor(stateValue)
+  queueBusyRestart = true
+  await mount('view:quirky.accounts/settings')
+  const policy = container.querySelector<HTMLSelectElement>('[aria-label="Claude running-session switch policy"]')
+  if (!policy) throw new Error('Missing Claude running-session policy')
+  await act(async () => {
+    policy.value = 'always'
+    policy.dispatchEvent(new Event('change', { bubbles: true }))
+  })
+  await settle()
+  expect(policy.value).toBe('always')
+
+  await act(async () => { unregister?.(); accountsUi.deactivate() })
+  unregister = undefined
+  provided = new Map()
+  await mount('status-bar:quirky.accounts/usage')
+  await act(async () => { buttonByLabel('Open Usage').click() })
+  await settle()
+  await act(async () => { buttonByLabel('Open Claude details and account switcher').click() })
+  await settle()
+  await act(async () => { buttonByLabel('Expand account choices').click() })
+  await settle()
+  await act(async () => { buttonByLabel('Select Claude account Account B').click() })
+  await waitFor(
+    () => container.textContent?.includes('Waiting for this Claude session to finish before restarting on Account B.') ? true : null,
+    'Always policy to queue the busy Claude restart'
+  )
+
+  await act(async () => { unregister?.(); accountsUi.deactivate() })
+  unregister = undefined
+  provided = new Map()
+  await mount('overlay:quirky.accounts/switch-dialog')
+  expect(container.querySelector('[role="dialog"]')).toBeNull()
+
+  await act(async () => { unregister?.(); accountsUi.deactivate() })
+  unregister = undefined
+  provided = new Map()
+  await mount('view:quirky.accounts/session-accessory', { sessionId: 'session-1', paneId: 'pane-1' })
+  const accessory = container.querySelector<HTMLElement>('[aria-label="Claude account switched"]')
+  if (!accessory) throw new Error('Missing queued Claude pane accessory')
+  expect(accessory.querySelector('.status-loading')?.textContent).toContain('Waiting for this Claude session to finish before restarting on Account B.')
+})
+
+test('Ask restart closes its modal when a busy Claude session queues and leaves accessory progress', async () => {
+  stateValue = makeBusyClaudeSwitch(96)
+  usageValue = usageFor(stateValue)
+  queueBusyRestart = true
+  await mount('overlay:quirky.accounts/switch-dialog')
+  expect(container.querySelector('[role="dialog"]')).not.toBeNull()
+  expect(container.textContent).toContain('Busy now. Restart will wait until this turn finishes.')
+  const restart = container.querySelector<HTMLButtonElement>('.switch-dialog .dialog-actions button:last-child')
+  if (!restart) throw new Error('Missing dialog restart action')
+  await act(async () => { restart.click() })
+  await waitFor(
+    () => container.querySelector('[role="dialog"]') ? null : true,
+    'Ask dialog to close after the busy restart is queued'
+  )
+
+  await act(async () => { unregister?.(); accountsUi.deactivate() })
+  unregister = undefined
+  provided = new Map()
+  await mount('view:quirky.accounts/session-accessory', { sessionId: 'session-1', paneId: 'pane-1' })
+  const accessory = container.querySelector<HTMLElement>('[aria-label="Claude account switched"]')
+  if (!accessory) throw new Error('Missing queued Claude pane accessory')
+  expect(accessory.querySelector('.status-loading')?.textContent).toContain('Waiting for this Claude session to finish before restarting on Account B.')
 })

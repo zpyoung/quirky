@@ -578,10 +578,14 @@ export class AccountService {
 
   async consumeResetCredit(params: Record<string, unknown>): Promise<unknown> {
     const input = this.readResetCreditInput(params)
-    return this.serialize(() => this.trackUsage(this.requireUsage().consumeResetCreditAuthorized({
-      idempotencyKey: input.idempotencyKey,
-      expectedScope: input.expectedScope
-    })))
+    return this.serialize(async () => {
+      const usage = this.requireUsage()
+      const outcome = await this.trackUsage(usage.consumeResetCreditAuthorized({
+        idempotencyKey: input.idempotencyKey,
+        expectedScope: input.expectedScope
+      }))
+      return { outcome, state: usage.state() }
+    })
   }
 
   async usageTargets(): Promise<UsageTarget[]> {

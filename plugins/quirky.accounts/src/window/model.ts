@@ -846,12 +846,18 @@ export class AccountsUiStore {
       if (scopeChanged) void this.loadUsage()
       return scopeChanged ? 'scope-changed' : 'failed'
     }
-    if (result !== 'reset' && result !== 'alreadyRedeemed' && result !== 'nothingToReset' && result !== 'noCredit') {
+    const reply = isRecord(result) ? result : null
+    const outcome = reply?.outcome
+    const returnedState = reply ? parseUsageState(reply.state) : null
+    if (
+      !returnedState ||
+      outcome !== 'reset' && outcome !== 'alreadyRedeemed' && outcome !== 'nothingToReset' && outcome !== 'noCredit'
+    ) {
       this.context.toast('Could not reset Codex limits', 'The accounts service returned an unrecognized reset outcome.')
       return 'failed'
     }
     void this.loadUsage()
-    return result
+    return outcome
   }
 }
 

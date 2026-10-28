@@ -527,10 +527,9 @@ export function AccountSwitchDialog({ store, report }: { store: AccountsUiStore;
   const submissionLock = useRef(false)
   const state = snapshot.accounts
   const askSessions = state?.preferences.claudeSwitchPolicy === 'ask'
-    ? state.staleSessions.filter((session) => session.provider === 'claude' && !session.kept)
+    ? state.staleSessions.filter((session) => session.provider === 'claude' && !session.kept && !session.queued)
     : []
-  const queued = state?.staleSessions.filter((session) => session.provider === 'claude' && session.queued && !session.kept) ?? []
-  const currentVisible = [...askSessions, ...queued.filter((session) => !askSessions.some((candidate) => candidate.sessionId === session.sessionId))]
+  const currentVisible = askSessions
   const dialogKey = state ? `${state.active.claude ?? 'system'}:${state.revision}` : 'loading'
   const visible = [...currentVisible, ...(pinnedSessions?.key === dialogKey ? pinnedSessions.sessions.filter((session) => !currentVisible.some((candidate) => candidate.sessionId === session.sessionId)) : [])]
   const dontAskAgain = dontAskChoice.key === dialogKey && dontAskChoice.checked

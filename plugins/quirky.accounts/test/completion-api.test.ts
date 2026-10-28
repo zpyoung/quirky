@@ -364,6 +364,45 @@ describe('quirky.accounts completion API acceptance', () => {
   })
 
 
+
+  test('successful Codex reset completion and replay return the outcome with current usage state', async () => {
+    const h = await startAccounts()
+    const account = await addManagedAccount(h, 'codex', 'public-reset-result@fixture.test')
+    await call(h, 'quirky.accounts/setPreferences', { skipCodexResetConfirm: true })
+    const idempotencyKey = 'accounts-completion-public-reset-result'
+    const redemptionIds: string[] = []
+    const fixture = interceptProviderFetch((url, init) => {
+      if (url.hostname !== 'chatgpt.com') return null
+      if (url.pathname === '/backend-api/wham/usage') return codexUsageResponse()
+      if (url.pathname === '/backend-api/wham/rate-limit-reset-credits/consume') {
+        const body = JSON.parse(String(init?.body ?? '{}')) as { redeem_request_id?: string }
+        redemptionIds.push(body.redeem_request_id ?? '')
+        return Response.json({ code: 'reset' })
+      }
+      return null
+    })
+    try {
+      const offered = codexSnapshot(await call<UsageState>(h, 'quirky.accounts/refresh', { provider: 'codex', force: true }))
+      const expectedScope = offered.rateLimitResetCredits?.expectedScope
+      if (!expectedScope) throw new Error('Codex usage did not include a reset offer scope')
+      const request = { idempotencyKey, expectedScope }
+
+      const first = await call<{ outcome: string; state: UsageState }>(h, 'quirky.accounts/consumeResetCredit', request)
+      const replay = await call<{ outcome: string; state: UsageState }>(h, 'quirky.accounts/consumeResetCredit', request)
+      expect(first.outcome).toBe('reset')
+      expect(codexSnapshot(first.state)).toMatchObject({
+        accountId: account.id,
+        status: 'ok',
+        rateLimitResetCredits: expect.objectContaining({ expectedScope })
+      })
+      expect(replay).toEqual(first)
+      expect(redemptionIds).toEqual([idempotencyKey])
+    } finally {
+      await fixture.restore()
+    }
+  })
+
+
   test('an unknown Codex reset outcome retries and replays the same redemption identity', async () => {
     const h = await startAccounts()
     await addManagedAccount(h, 'codex', 'unknown-reset@fixture.test')
@@ -393,8 +432,15 @@ describe('quirky.accounts completion API acceptance', () => {
       expect(first).toMatchObject({ error: { message: expect.stringContaining('unknown reset outcome') } })
       expect(redemptionCount).toBe(1)
 
-      await expect(call(h, 'quirky.accounts/consumeResetCredit', request)).resolves.toBe('alreadyRedeemed')
-      await expect(call(h, 'quirky.accounts/consumeResetCredit', request)).resolves.toBe('alreadyRedeemed')
+      const retry = await call<{ outcome: string; state: UsageState }>(h, 'quirky.accounts/consumeResetCredit', request)
+      const replay = await call<{ outcome: string; state: UsageState }>(h, 'quirky.accounts/consumeResetCredit', request)
+      expect(retry.outcome).toBe('alreadyRedeemed')
+      expect(codexSnapshot(retry.state)).toMatchObject({
+        accountId: expectedScope.accountId,
+        status: 'ok',
+        rateLimitResetCredits: expect.objectContaining({ expectedScope })
+      })
+      expect(replay).toEqual(retry)
       expect(redemptionIds).toEqual([idempotencyKey, idempotencyKey])
       expect(redemptionCount).toBe(2)
     } finally {

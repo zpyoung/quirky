@@ -23,3 +23,17 @@ If cancelling sign-in fails, the pending login remains visible and status pollin
 Usage and pane restart controls apply only to terminal sessions. Background and structured runners keep their recorded account identity, but are not offered a terminal restart they cannot execute. Their original account home remains available through `quirky.accounts/sessionHome`; selecting a new account does not relabel a running process.
 
 Codex continuation carries the accumulated native rollout into the selected managed home before replacing the old terminal. Removing an earlier account after a successful continuation does not make a later account depend on that removed home's transcript path.
+
+## Inactive account usage
+
+Expanding Claude or Codex account choices loads usage for the inactive accounts without selecting them. `UsageState.inactive` uses `provider:accountId` keys, matching the identity in each snapshot; desktop and mobile consumers must not look up a bare account ID.
+
+## Reset-credit responses
+
+Public `quirky.accounts/consumeResetCredit` returns `{ outcome, state }` for both completion and durable replay. `outcome` is `reset`, `nothingToReset`, `noCredit`, or `alreadyRedeemed`; `state` is the current cached `UsageState`, not an implicit forced provider refresh. Scalar public replies are not supported.
+
+Changed account/offer authority returns a public Conflict before provider redemption. Unknown provider outcomes remain retryable with the same captured scope and request ID; a retry cannot migrate that ID to a different offer.
+
+## Queued Claude restarts
+
+Always queues busy restarts without an Ask modal. Under Ask, accepting Restart closes the choice dialog once the restart is queued; the pane accessory and usage details retain nonmodal progress until idle. If policy changes to Ask or Never before the next selection, the old queued intent is invalidated and cannot authorize a restart on the newly selected account.
