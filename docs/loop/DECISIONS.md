@@ -1717,6 +1717,10 @@ files, not this one.
 | easy | high | [m1-worktrees D69](decisions/m1-worktrees.md) | Final Round 1: accept all eight findings, which collapse to seven defects, and fix them in one batch | assumed — autonomous |
 | easy | high | [m1-worktrees D70](decisions/m1-worktrees.md) | The UI scenarios run as three web batches, each on its own daemon, temp HOME and fixture world | assumed — autonomous |
 | easy | high | [m1-worktrees D72](decisions/m1-worktrees.md) | The UI scenarios pass as a user, with SC-59's tooltip checked by its test because the tool can't hover | assumed — autonomous |
+| easy (test-only repair). | high | [fix-test-cli-1028 D1](decisions/fix-test-cli-1028.md) | Repair the current failure without adding obsolete API aliases | assumed — autonomous |
+| easy | high | [fix-test-cli-1028 D2](decisions/fix-test-cli-1028.md) | Prove retained credentials by encrypted use, not JSON encoding | assumed — autonomous |
+| easy | high | [fix-test-cli-1028 D3](decisions/fix-test-cli-1028.md) | Keep removal local and preserve explicit CLI consent | assumed — autonomous |
+| easy | high | [fix-test-cli-1028 D4](decisions/fix-test-cli-1028.md) | Land the bounded test repair after complete exercised checks | assumed — autonomous |
 | easy | high | [fix-test-process-leaks D2](decisions/fix-test-process-leaks.md) | Use OpenAI implementers and Gemini review | assumed — autonomous |
 | easy | high | [fix-test-process-leaks D3](decisions/fix-test-process-leaks.md) | Fix item skips brainstorming and specs | locked by docs/loop/LOOP.md |
 | easy | high | [fix-test-process-leaks D5](decisions/fix-test-process-leaks.md) | Add an owned CLI launch for unattended web passes | assumed — autonomous |
