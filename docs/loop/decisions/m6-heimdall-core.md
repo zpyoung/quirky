@@ -165,5 +165,27 @@
 - **Revisit if:** final merged dependency build fails after the actual helper is present
 - **Source:** assumed — autonomous
 
+## D16: Replace a failed persistence writer without discarding its regression source
+- **Question:** the store agent acknowledged production modules were absent after rejected oversized mutations
+- **Options:** continue reporting planned files; discard its tests; stop the writer and repartition concrete implementation
+- **Chose:** cancel/fence the original writer, preserve its test file, parent implements actual store.ts in its assigned worktree, and a fresh bounded registry/enrollment task owns only those two modules in a new isolated worktree. Correct mechanical test imports and real failure injection; delete forwarding-only assertions rather than pinning implementation details. No checks during in-flight edits.
+- **Why:** failed mutations executed nothing; source absence was confirmed by the writer and both integrating lanes. Repartitioning produces actual reachable code while preserving behavioral requirements and test provenance. All file-tool paths are absolute.
+- **Evidence:** agent cancellation result; physical-path/source acknowledgement; /tmp/quirky-lane11-source-checkpoint.md; actual store.ts written and preserved enrollment-store.test.ts
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** replacement scope cannot satisfy the same AC1-4 contract
+- **Source:** assumed — autonomous
+
+## D17: Make RPC description and worker-request replies explicit
+- **Question:** serializable kind hooks cannot return callbacks or synchronous RPC results
+- **Options:** pass dispatch callbacks over RPC; guess result keys; publish exact serializable replies
+- **Chose:** KindExecuteReply is ExecuteResult or `{worker:WorkerRequest}`, never both. Registry uses the internal dispatchWorker capability under the recorded attempt. Description hooks support async results; runner awaits description and rechecks its lifecycle fence before storing trace JSON. Nullable owner config and optional naturalKey/dispatch/message/trigger deviation fields preserve lane12's published types without importing or running owner modules.
+- **Why:** Promise-as-JSON loses the trace summary; callbacks cannot cross the shared RPC boundary. Exact wire fields let operator smoke drive real worker effects rather than fake forwarding.
+- **Evidence:** contracts.ts KindExecuteReply/WatcherKind; runner readSnapshot integration correction; /tmp/quirky-lane10-core-control-reply.md Exact result; lane12 published owner/contracts.ts
+- **Reversibility:** medium
+- **Confidence:** high
+- **Revisit if:** actual hook API proof shows a different source-grounded serialization need
+- **Source:** assumed — autonomous
+
 ## Progress
 Iteration4: spec/contracts committed6764039; three disjoint implementation worktrees running, no checks/commits until their wave barrier. Worker dependency query returned ready:false pending m6-orchestration-workers after510s; independent implementation continues. Lanes1+9 approved service authority extension reserved to lane11, parent authored type contracts; actual core/worker runtime still pending. Missing feature/API smoke completed with isolated actual quirkyd and cleanup. Next: accept/audit components after all return, integrate dependency implementation and additive service APIs, exercise AC1-11 including real worker adapter, affected suite/scripts/typecheck, deps-ready/catch-up/final independent review/queue landing. No runtime feature acceptance claim.
