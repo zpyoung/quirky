@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type ChangeEvent, type CSSProperties, type FormEvent } from 'react'
+import { Badge, Button, EmptyState, FormRow, InlineAgentCard, SectionHeader, StatusDot, TextField, type UiStatus } from '@quirky/ui'
 import type { QuirkyEvent, UiPluginContext } from '@quirky/protocol'
 import type { ActivityThread } from './activity-types'
 import type { DashboardBucket, DashboardQuery, DashboardSnapshot } from './dashboard-types'
@@ -27,19 +28,69 @@ const PAGE_STYLE: CSSProperties = {
   flex: '1 1 auto',
   minHeight: 0,
   minWidth: 0,
-  overflow: 'hidden',
-  color: 'var(--text, inherit)'
+  overflow: 'hidden'
 }
-const TOOLBAR_STYLE: CSSProperties = { display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, padding: 12 }
-const FILTERS_STYLE: CSSProperties = { display: 'flex', alignItems: 'flex-end', flexWrap: 'wrap', gap: '8px 12px', padding: '0 12px 12px' }
-const FIELD_STYLE: CSSProperties = { display: 'flex', flexDirection: 'column', flex: '1 1 200px', gap: 4, minWidth: 160 }
-const ACTIONS_STYLE: CSSProperties = { display: 'flex', flexWrap: 'wrap', gap: 8 }
-const BOARD_STYLE: CSSProperties = { display: 'grid', gridTemplateColumns: 'repeat(3, minmax(260px, 1fr))', gap: 12, flex: '1 1 auto', minHeight: 0, minWidth: 0, overflow: 'auto', padding: 12 }
-const COLUMN_STYLE: CSSProperties = { display: 'flex', flexDirection: 'column', gap: 8, minWidth: 0, minHeight: 0 }
-const CARD_STYLE: CSSProperties = { display: 'flex', flexDirection: 'column', gap: 6, padding: 10, border: '1px solid var(--border, #7774)', borderRadius: 8, background: 'var(--bg-raised, transparent)' }
-const CARD_BUTTON_STYLE: CSSProperties = { border: 0, padding: 0, background: 'transparent', color: 'inherit', font: 'inherit', fontWeight: 600, textAlign: 'left', cursor: 'pointer' }
-const CARD_CONTEXT_STYLE: CSSProperties = { margin: 0, color: 'var(--muted, #8a909e)' }
-const CARD_TEXT_STYLE: CSSProperties = { margin: 0, overflowWrap: 'anywhere' }
+const HEADER_STYLE: CSSProperties = { padding: 'var(--ui-space-12)' }
+const FILTERS_STYLE: CSSProperties = {
+  display: 'flex',
+  flexDirection: 'column',
+  flex: '0 0 auto',
+  gap: 'var(--ui-space-8)',
+  padding: '0 var(--ui-space-12) var(--ui-space-12)'
+}
+const ACTIONS_STYLE: CSSProperties = { display: 'flex', flexWrap: 'wrap', gap: 'var(--ui-space-8)' }
+const RESULTS_STYLE: CSSProperties = {
+  flex: '1 1 auto',
+  minHeight: 0,
+  minWidth: 0,
+  overflow: 'auto'
+}
+const BOARD_STYLE: CSSProperties = {
+  display: 'grid',
+  gap: 'var(--ui-space-12)',
+  flex: '1 1 auto',
+  minHeight: 0,
+  minWidth: 0,
+  overflow: 'auto',
+  padding: 'var(--ui-space-12)'
+}
+const COLUMN_STYLE: CSSProperties = { display: 'flex', flexDirection: 'column', gap: 'var(--ui-space-8)', minWidth: 0, minHeight: 0 }
+const CARD_LIST_STYLE: CSSProperties = {
+  display: 'flex',
+  flexDirection: 'column',
+  gap: 'var(--ui-space-8)',
+  listStyle: 'none',
+  margin: 0,
+  padding: 0
+}
+const MESSAGE_STYLE: CSSProperties = {
+  margin: 0,
+  padding: 'var(--ui-space-8) var(--ui-space-12)',
+  overflowWrap: 'anywhere'
+}
+
+function statusForDisplay(display: ActivityThread['display']): UiStatus {
+  switch (display) {
+    case 'working':
+    case 'monitoring':
+      return 'working'
+    case 'waiting':
+    case 'blocked':
+    case 'permission':
+      return 'needs-you'
+    case 'failed':
+      return 'failing'
+    case 'done':
+      return 'done'
+    case 'interrupted':
+    case 'idle':
+    case 'unconfirmed':
+    case 'unverifiable':
+      return 'idle'
+    default:
+      return 'idle'
+  }
+}
 
 export function dashboardViewInput(input: unknown): DashboardQuery {
   const value = typeof input === 'object' && input !== null && !Array.isArray(input) ? (input as Record<string, unknown>) : {}
@@ -60,25 +111,30 @@ const activityChanged = (event: QuirkyEvent) => event.type === `${PLUGIN_ID}/cha
 
 function DashboardCardView({ context, thread, bucket }: { context: UiPluginContext; thread: ActivityThread; bucket: DashboardBucket }) {
   return (
-    <article className="dashboard-card" data-dashboard-bucket={bucket} data-session-id={thread.sessionId} style={CARD_STYLE}>
-      <button
-        type="button"
-        aria-label={`Open dashboard thread ${thread.sessionId}`}
-        style={CARD_BUTTON_STYLE}
-        onClick={() => {
-          void context.executeCommand(OPEN_THREAD_COMMAND, { sessionId: thread.sessionId, worktreeId: thread.worktreeId, turn: thread.turn }).catch((cause) => {
-            context.toast('Could not open Dashboard thread', cause instanceof Error ? cause.message : String(cause))
-          })
+    <div data-dashboard-bucket={bucket} data-session-id={thread.sessionId}>
+      <InlineAgentCard
+        title={thread.sessionName}
+        status={statusForDisplay(thread.display)}
+        action={{
+          label: 'Open',
+          onAction: () => {
+            void context.executeCommand(OPEN_THREAD_COMMAND, { sessionId: thread.sessionId, worktreeId: thread.worktreeId, turn: thread.turn }).catch((cause) => {
+              context.toast('Could not open Dashboard thread', cause instanceof Error ? cause.message : String(cause))
+            })
+          }
         }}
-      >
-        <span>{thread.sessionName}</span> · <span>{thread.label}</span>
-      </button>
-      <p className="dashboard-card-context" style={CARD_CONTEXT_STYLE}>
-        {thread.worktreeName} · {thread.agent} · {thread.live ? 'Available' : 'Session unavailable'}
-      </p>
-      {thread.prompt ? <p className="dashboard-card-prompt" style={CARD_TEXT_STYLE}>{thread.prompt}</p> : null}
-      {thread.detail ? <p className="dashboard-card-detail" style={CARD_TEXT_STYLE}>{thread.detail}</p> : null}
-    </article>
+        description={
+          <div className="ui-stack">
+            <div className="ui-cluster">
+              <span>{thread.label}</span>
+              <span>{thread.worktreeName} · {thread.agent} · {thread.live ? 'Available' : 'Session unavailable'}</span>
+            </div>
+            {thread.prompt ? <span>{thread.prompt}</span> : null}
+            {thread.detail ? <span>{thread.detail}</span> : null}
+          </div>
+        }
+      />
+    </div>
   )
 }
 
@@ -134,19 +190,18 @@ export function DashboardNavigation({ context }: { context: UiPluginContext }) {
   const layoutView = context.getLayout().view
   const input = layoutView?.id === VIEW_ID ? dashboardViewInput(layoutView.input) : {}
   return (
-    <section className="dashboard-navigation-section">
-      <button
-        className="dashboard-navigation"
-        type="button"
-        aria-label={total > 0 ? `Agent Dashboard, ${attention} need you and ${working} working` : 'Agent Dashboard'}
-        onClick={() => void context.executeCommand(TOGGLE_COMMAND, input).catch((error) => {
-          context.toast('Could not toggle Agent Dashboard', error instanceof Error ? error.message : String(error))
-        })}
-      >
-        <span>Agent Dashboard</span>
-        {total > 0 ? <span className={attention > 0 ? 'dashboard-count needs-you' : 'dashboard-count working'}>{total}</span> : null}
-      </button>
-    </section>
+    <Button
+      className="ui-cluster"
+      style={{ width: '100%', justifyContent: 'flex-start' }}
+      aria-label={total > 0 ? `Agent Dashboard, ${attention} need you and ${working} working` : 'Agent Dashboard'}
+      onClick={() => void context.executeCommand(TOGGLE_COMMAND, input).catch((error) => {
+        context.toast('Could not toggle Agent Dashboard', error instanceof Error ? error.message : String(error))
+      })}
+    >
+      <StatusDot status={attention > 0 ? 'needs-you' : working > 0 ? 'working' : 'idle'} />
+      <span>Agent Dashboard</span>
+      {total > 0 ? <Badge tone={attention > 0 ? 'needs-you' : 'working'}>{total}</Badge> : null}
+    </Button>
   )
 }
 
@@ -227,79 +282,115 @@ export function DashboardView({ context, input }: { context: UiPluginContext; in
   const hasFilters = Boolean(view.text || view.project || view.workspaceStatus || view.reviewStatus)
 
   return (
-    <main className="dashboard-view" style={PAGE_STYLE}>
-      <header className="dashboard-toolbar" style={TOOLBAR_STYLE}>
-        <h1 style={{ margin: 0, fontSize: 20 }}>Agent Dashboard</h1>
-        <div className="dashboard-actions" style={ACTIONS_STYLE}>
-          <button type="button" onClick={() => {
-            void context.executeCommand(`command:${PLUGIN_ID}/openDashboardWindow`, view).catch((cause: unknown) => {
-              context.toast('Could not pop out the Dashboard', cause instanceof Error ? cause.message : String(cause))
-            })
-          }}>Pop out</button>
-          {snapshot ? (
-            <span className="dashboard-total" aria-label="Dashboard total">
-              {snapshot.total} total{snapshot.hiddenIdle > 0 ? ` · ${snapshot.hiddenIdle} idle hidden` : ''}
-            </span>
-          ) : null}
-          {snapshot && snapshot.hiddenIdle > 0 ? (
-            <button type="button" aria-label={`Show idle threads (${snapshot.hiddenIdle})`} onClick={() => updateView({ showIdle: true })}>
-              Show idle ({snapshot.hiddenIdle})
-            </button>
-          ) : view.showIdle === true ? (
-            <button type="button" aria-label="Hide idle threads" onClick={() => updateView({ showIdle: false })}>Hide idle</button>
-          ) : null}
-        </div>
-      </header>
-      <form className="dashboard-filters" style={FILTERS_STYLE} onSubmit={applyFilters}>
-        <label style={FIELD_STYLE}>
-          Search
-          <input aria-label="Search dashboard" type="search" value={draftText} onChange={(event: ChangeEvent<HTMLInputElement>) => setDraftText(event.currentTarget.value)} />
-        </label>
-        <label style={FIELD_STYLE}>
-          Project
-          <input aria-label="Project" type="search" value={draftProject} onChange={(event: ChangeEvent<HTMLInputElement>) => setDraftProject(event.currentTarget.value)} />
-        </label>
-        <label style={FIELD_STYLE}>
-          Workspace status
-          <select aria-label="Workspace status" value={draftWorkspaceStatus} onChange={(event: ChangeEvent<HTMLSelectElement>) => setDraftWorkspaceStatus(event.currentTarget.value)}>
+    <main style={PAGE_STYLE}>
+      <div style={HEADER_STYLE}>
+        <SectionHeader
+          title="Agent Dashboard"
+          actions={
+            <div style={ACTIONS_STYLE}>
+              <Button onClick={() => {
+                void context.executeCommand(`command:${PLUGIN_ID}/openDashboardWindow`, view).catch((cause: unknown) => {
+                  context.toast('Could not pop out the Dashboard', cause instanceof Error ? cause.message : String(cause))
+                })
+              }}>Pop out</Button>
+              {snapshot ? (
+                <Badge label="Dashboard total">
+                  {snapshot.total} total{snapshot.hiddenIdle > 0 ? ` · ${snapshot.hiddenIdle} idle hidden` : ''}
+                </Badge>
+              ) : null}
+              {snapshot && snapshot.hiddenIdle > 0 ? (
+                <Button aria-label={`Show idle threads (${snapshot.hiddenIdle})`} onClick={() => updateView({ showIdle: true })}>
+                  Show idle ({snapshot.hiddenIdle})
+                </Button>
+              ) : view.showIdle === true ? (
+                <Button aria-label="Hide idle threads" onClick={() => updateView({ showIdle: false })}>Hide idle</Button>
+              ) : null}
+            </div>
+          }
+        />
+      </div>
+      <form style={FILTERS_STYLE} onSubmit={applyFilters}>
+        <TextField
+          id="dashboard-search"
+          label="Search"
+          aria-label="Search dashboard"
+          type="search"
+          value={draftText}
+          onChange={(event: ChangeEvent<HTMLInputElement>) => setDraftText(event.currentTarget.value)}
+        />
+        <TextField
+          id="dashboard-project"
+          label="Project"
+          aria-label="Project"
+          type="search"
+          value={draftProject}
+          onChange={(event: ChangeEvent<HTMLInputElement>) => setDraftProject(event.currentTarget.value)}
+        />
+        <FormRow label="Workspace status" htmlFor="dashboard-workspace-status">
+          <select
+            aria-label="Workspace status"
+            className="ui-text-field__input"
+            style={{ appearance: 'auto' }}
+            value={draftWorkspaceStatus}
+            onChange={(event: ChangeEvent<HTMLSelectElement>) => setDraftWorkspaceStatus(event.currentTarget.value)}
+          >
             <option value="">Any</option>
             {WORKSPACE_STATUSES.map((entry) => <option value={entry.value} key={entry.value}>{entry.label}</option>)}
           </select>
-        </label>
-        <label style={FIELD_STYLE}>
-          GitHub review status
-          <select aria-label="GitHub review status" value={draftReviewStatus} onChange={(event: ChangeEvent<HTMLSelectElement>) => setDraftReviewStatus(event.currentTarget.value)}>
+        </FormRow>
+        <FormRow label="GitHub review status" htmlFor="dashboard-review-status">
+          <select
+            aria-label="GitHub review status"
+            className="ui-text-field__input"
+            style={{ appearance: 'auto' }}
+            value={draftReviewStatus}
+            onChange={(event: ChangeEvent<HTMLSelectElement>) => setDraftReviewStatus(event.currentTarget.value)}
+          >
             <option value="">Any</option>
             {REVIEW_STATUSES.map((entry) => <option value={entry.value} key={entry.value}>{entry.label}</option>)}
           </select>
-        </label>
-        <div className="dashboard-filter-actions" style={ACTIONS_STYLE}>
-          <button type="submit" aria-label="Apply dashboard filters">Apply</button>
-          <button type="button" aria-label="Clear dashboard filters" onClick={clearFilters}>Clear all filters</button>
+        </FormRow>
+        <div style={ACTIONS_STYLE}>
+          <Button type="submit" aria-label="Apply dashboard filters" variant="primary">Apply</Button>
+          <Button aria-label="Clear dashboard filters" onClick={clearFilters}>Clear all filters</Button>
         </div>
       </form>
-      {error ? <p className="dashboard-error" role="alert">{error}</p> : null}
-      {snapshot?.unavailable.map((message) => <p className="dashboard-unavailable" role="alert" key={message}>Unavailable: {message}</p>)}
-      {loading && snapshot === null ? <p role="status">Loading Agent Dashboard…</p> : null}
-      {!loading && !error && snapshot?.total === 0 ? (
-        <p className="dashboard-empty" role="status">{hasFilters ? 'No Activity threads match these filters.' : 'No Activity threads yet.'}</p>
-      ) : null}
-      {snapshot ? (
-        <div className="dashboard-board" style={{ ...BOARD_STYLE, ...(view.showIdle === true ? { gridTemplateColumns: 'repeat(4, minmax(260px, 1fr))' } : {}) }}>
-          {columns.map(({ bucket, label }) => (
-            <section className="dashboard-column" data-dashboard-column={bucket} key={bucket} style={COLUMN_STYLE}>
-              <h2 style={{ margin: 0, fontSize: 16 }}>{label}</h2>
-              <ul style={{ display: 'flex', flexDirection: 'column', gap: 8, listStyle: 'none', margin: 0, padding: 0 }}>
-                {snapshot.cards.filter((card) => card.bucket === bucket).map((card) => (
-                  <li key={card.thread.sessionId}>
-                    <DashboardCardView context={context} thread={card.thread} bucket={card.bucket} />
-                  </li>
-                ))}
-              </ul>
-            </section>
-          ))}
-        </div>
-      ) : null}
+      <div style={RESULTS_STYLE}>
+        {error ? <div className="ui-error-text" role="alert" style={MESSAGE_STYLE}>{error}</div> : null}
+        {snapshot?.unavailable.map((message) => (
+          <div className="ui-error-text" role="alert" style={MESSAGE_STYLE} key={message}>Unavailable: {message}</div>
+        ))}
+        {loading && snapshot === null ? <p className="ui-text-muted" role="status" style={MESSAGE_STYLE}>Loading Agent Dashboard…</p> : null}
+        {!loading && !error && snapshot?.total === 0 ? (
+          <div role="status">
+            <EmptyState message={hasFilters ? 'No Activity threads match these filters.' : 'No Activity threads yet.'} />
+          </div>
+        ) : null}
+        {snapshot ? (
+          <div
+            style={{
+              ...BOARD_STYLE,
+              gridTemplateColumns: view.showIdle === true
+                ? 'repeat(4, minmax(var(--ui-space-24), 1fr))'
+                : 'repeat(3, minmax(var(--ui-space-24), 1fr))'
+            }}
+          >
+            {columns.map(({ bucket, label }) => (
+              <section data-dashboard-column={bucket} key={bucket} style={COLUMN_STYLE}>
+                <SectionHeader title={label} />
+                <ul style={CARD_LIST_STYLE}>
+                  {snapshot.cards.filter((card) => card.bucket === bucket).map((card) => (
+                    <li key={card.thread.sessionId}>
+                      <DashboardCardView context={context} thread={card.thread} bucket={card.bucket} />
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            ))}
+          </div>
+        ) : null}
+      </div>
     </main>
   )
 }
+
