@@ -30,9 +30,12 @@ beforeEach(() => {
   mkdirSync(outputDir)
   const testHome = join(scratch, 'home')
   mkdirSync(testHome)
+  const quirkyHome = join(scratch, 'quirky-home')
+  mkdirSync(quirkyHome)
   childPidFile = join(scratch, 'review-child.pid')
   reviewStartedFile = join(scratch, 'review-started')
   setEnv('HOME', testHome)
+  setEnv('QUIRKY_HOME', quirkyHome)
   setEnv('XDG_CONFIG_HOME', join(testHome, '.config'))
   setEnv('UI_REVIEW_FAKE_MODE', 'pass')
   setEnv('UI_REVIEW_FAKE_CHILD_PID', childPidFile)
@@ -43,9 +46,11 @@ beforeEach(() => {
 })
 
 afterEach(() => {
-  const oldPid = existsSync(childPidFile) ? Number(readFileSync(childPidFile, 'utf8')) : undefined
-  if (oldPid && Number.isSafeInteger(oldPid)) {
-    try { process.kill(oldPid, 'SIGKILL') } catch {}
+  const oldPids = existsSync(childPidFile) ? readFileSync(childPidFile, 'utf8').trim().split('\n').map(Number) : []
+  for (const oldPid of oldPids) {
+    if (oldPid > 0 && Number.isSafeInteger(oldPid)) {
+      try { process.kill(oldPid, 'SIGKILL') } catch {}
+    }
   }
   rmSync(scratch, { recursive: true, force: true })
   for (const [name, value] of previousEnv) {
@@ -81,8 +86,7 @@ function capturePng(theme: 'dark' | 'light'): Buffer {
 }
 
 function manifest(): CaptureManifest {
-  const targetsDir = join(scratch, 'captures')
-  mkdirSync(targetsDir)
+  const targetsDir = mkdtempSync(join(scratch, 'captures-'))
   const captures = (['dark', 'light'] as const).map((theme) => {
     const path = join(targetsDir, `${theme}.png`)
     writeFileSync(path, capturePng(theme))
@@ -134,7 +138,7 @@ const provider = mode === 'unknown-family' ? 'mystery' : mode === 'github-copilo
 const model = mode === 'github-copilot' ? 'claude-3.7-sonnet' : mode === 'reviewer-same-family' ? 'gpt-4.1' : 'gemini-3.1-pro-preview';
 if (mode === 'timeout') {
   const child = spawn(process.execPath, ['-e', 'setInterval(() => {}, 60000)'], { stdio: 'ignore' });
-  fs.writeFileSync(process.env.UI_REVIEW_FAKE_CHILD_PID, String(child.pid));
+  fs.appendFileSync(process.env.UI_REVIEW_FAKE_CHILD_PID, String(child.pid) + String.fromCharCode(10));
   setInterval(() => {}, 60000);
 }
 if (mode === 'process-fail') { process.stderr.write('dispatch failed' + String.fromCharCode(10)); process.exit(9); }
@@ -145,7 +149,7 @@ if (mode === 'tamper-image') {
   const metadata = JSON.parse(prompt.slice(prompt.indexOf(marker) + marker.length));
   fs.appendFileSync(metadata.imagePath, 'tampered');
 }
-let score = mode === 'bad-score' ? 101 : mode === 'low-dark' && prompt.includes('\"theme\":\"dark\"') ? 84 : 100;
+let score = mode === 'bad-score' ? 101 : mode === 'boundary' ? 85 : mode === 'low-dark' && prompt.includes('\"theme\":\"dark\"') ? 84 : 100;
 const assessment = {
   targetVisible: mode !== 'target-hidden',
   imagesRead: mode !== 'images-not-read',
@@ -355,13 +359,17 @@ test('reviewer process failures are reported without passing captures', async ()
   expect(report.failures.join(' ')).toMatch(/reviewer|process|dispatch/i)
 })
 
-test('timed-out reviewer and its owned child are terminated', async () => {
+test('timed-out reviewers and all their owned children are terminated', async () => {
   setEnv('UI_REVIEW_FAKE_MODE', 'timeout')
   const report = await reviewManifest(manifest(), options({ timeoutMs: 2_000 }))
 
   expect(report.status).toBe('error')
   expect(report.failures.join(' ')).toMatch(/timed out|timeout/i)
-  const childPid = Number(readFileSync(childPidFile, 'utf8'))
-  const processState = Bun.spawnSync(['ps', '-o', 'stat=', '-p', String(childPid)])
-  expect(processState.exitCode === 1 || processState.stdout.toString().trim().startsWith('Z')).toBe(true)
+  const childPids = readFileSync(childPidFile, 'utf8').trim().split('\n').map(Number)
+  expect(childPids).toHaveLength(2)
+  for (const childPid of childPids) {
+    const processState = Bun.spawnSync(['ps', '-o', 'stat=', '-p', String(childPid)])
+    expect(processState.exitCode === 1 || processState.stdout.toString().trim().startsWith('Z')).toBe(true)
+  }
+  rmSync(childPidFile)
 })
