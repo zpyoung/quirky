@@ -5,6 +5,8 @@ Status: Approved autonomous recommended defaults under authoritative LOOP.md. Co
 
 **Amendments:** 2026-10-28 — initial specification. Prior requirements and evidence are preserved, not reclassified as a full pass.
 
+**Amendments:** 2026-10-28 — operator A5 contract finding: public `consumeResetCredit` must return its advertised `{ outcome, state }` envelope for fresh completion and durable replay. Both fields are required; `outcome` is `reset | nothingToReset | noCredit | alreadyRedeemed`, and `state` is the current `UsageState` snapshot. The internal usage engine may keep its scalar outcome contract. Migrate the public handler, desktop consumer and all public-boundary fixtures/assertions together; do not accept legacy scalar public replies or add aliases. This does not change reset authority, ledger identity, provider-attempt errors or refresh policy.
+
 ## Conceptual model and data flow
 Complete the existing built-in Accounts plugin, not an alternate implementation. Selection changes future launches; a live process retains its true account until native conversation-preserving restart. Public daemon API and CLI remain the authority. The renderer projects account, usage, login and configuration-warning snapshots and uses captured selection/offer authority for actions. Tests replace external provider/credential boundaries only; real homes, credentials, browser sessions and Keychain services are forbidden.
 
