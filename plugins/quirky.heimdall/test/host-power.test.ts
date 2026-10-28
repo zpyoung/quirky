@@ -34,7 +34,7 @@ const descriptor: KindRegistration = {
   hooks: HOOKS
 }
 const contributions = Object.values(HOOKS).map((id) => ({
-  kind: 'method', status: 'effective', plugin: OWNER_PLUGIN, id
+  kind: 'method', status: 'effective', plugin: OWNER_PLUGIN, id: `method:${id}`
 }))
 const roots: string[] = []
 const databaseClosers: Array<() => void> = []
