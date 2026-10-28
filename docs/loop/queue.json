@@ -1492,7 +1492,8 @@
       "deps": [
         "m7-terminal-runtime-native-and-worktree-parity"
       ],
-      "status": "todo"
+      "status": "in-progress",
+      "lane": 9
     },
     {
       "id": "m7-test-triage",
