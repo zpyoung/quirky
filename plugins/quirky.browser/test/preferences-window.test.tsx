@@ -210,6 +210,22 @@ test('profile menu marks the pane profile and switches only after the profile AP
   expect(container.querySelector<HTMLInputElement>('input[aria-label="Use Review profile"]')?.checked).toBe(true)
   expect(errors).toEqual([])
 })
+
+test('imported Default metadata keeps clear-only maintenance and remains visible in the profile menu', async () => {
+  const importedDefault: BrowserProfile = {
+    ...DEFAULT_PROFILE,
+    scope: 'imported',
+    source: { browserFamily: 'chrome', profileName: 'Default', importedAt: 1 }
+  }
+  state = { ...state, profiles: [{ profile: importedDefault, active: true }] }
+  const context = makeContext()
+  await mount(<><BrowserSettings {...props(context)} /><BrowserProfileMenu {...props(context, pane())} /></>)
+
+  expect([...container.querySelectorAll('button')].some((button) => button.textContent?.trim() === 'Clear cookies & site data')).toBe(true)
+  expect([...container.querySelectorAll('button')].some((button) => button.textContent?.trim() === 'Remove')).toBe(false)
+  await clickButton('Profile: Default')
+  expect(container.textContent).toContain('Imported from Chrome (Default)')
+})
 test('profile switching prevents overlapping requests while the selected profile is pending', async () => {
   state = { ...state, profiles: [{ profile: DEFAULT_PROFILE, active: true }, { profile: REVIEW_PROFILE, active: false }] }
   const switchGate = Promise.withResolvers<void>()

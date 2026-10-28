@@ -32,6 +32,20 @@ Page operations accept an explicit `--page` or use the existing worktree/current
 
 CLI values are literal data. In particular, a string beginning with `@file:` is passed unchanged; the CLI does not read files or stdin implicitly.
 
+Bulk input is explicit: `fill --value-file <path>`, `eval --expression-file <path>`, or an operation's `--text-file <path>` reads only that named field. Corresponding `--value-stdin`, `--expression-stdin` and `--text-stdin` read stdin only when requested. Inline/file/stdin choices are mutually exclusive; a literal `@file:` value never opts into reading.
+
+Advanced automation adds history, semantic locators, keyboard/mouse and form operations, uploads/downloads, full-page screenshots/PDF, console/network/HAR, interception and page emulation. `exec` remains a closed typed command parser: it cannot launch or retarget the helper, close its session, change transport, or bypass ordinary page scoping.
+
+```sh
+quirky browser full-screenshot --page <page-id> --format png --json
+quirky browser pdf --page <page-id> --json
+quirky browser find --page <page-id> --locator nth --value 'input' --index -1 --action fill --text 'last input'
+quirky browser tab profile show --page <page-id> --json
+quirky browser tab profile set-page --page <page-id> --profile <profile-id> --json
+```
+
+`tab profile set-page` changes a managed agent page; existing `tab profile set --pane` changes a hosted Browser pane. Clone requires an empty isolated destination and copies actual cookies, not native-webview storage. Chrome identity uses the existing next-runtime-start setting; it does not change an already running profile's identity.
+
 ## Browser panes
 The operator-authorized delivery for sa-browser-pane is pane lifecycle and navigation through the daemon API and CLI. Retained Watch, advanced controls and page-event source is not a claim that its remaining UI scenarios passed. Existing sa-browser-pane-native-host-controls owns screencast, base-pane UI and cross-lane pane/profile integration acceptance; native-events owns page events; workspace-preview owns grant preview. Lane8 retains its own profiles/settings feature and focused follow-ups. Exact handoffs are in docs/loop/decisions/sa-browser-pane.md and docs/loop/BLOCKERS.md.
 
@@ -87,13 +101,13 @@ The public UI command `quirky.browser/design` accepts `grab`, `annotate`, `draw`
 
 ## API and command surface
 
-The automation methods are `profileList`, `profileCreate`, `tabList`, `tabShow`, `tabCurrent`, `tabCreate`, `tabSwitch`, `tabClose`, `goto`, `eval`, `snapshot`, `fill`, `click`, `screenshot`, and `exec`. Browser preferences add `preferencesState`, `profileSet` and `openLink`; profile selection targets a hosted Browser **pane**, not an unscoped automation page.
+The schema-declared automation catalog includes managed profiles/pages, advanced page interactions, captures, observability, cookies/storage, import jobs and page controls. `quirky api --json` is the authoritative method/argument listing. Browser preferences retain `preferencesState`, `profileSet` and `openLink`; `profileSet` targets a hosted Browser **pane**, while `tabProfileSet` targets a managed agent page.
 
 Pane methods are `paneOpen`, `paneState`, `paneNavigate`, `paneControl`, `paneReport`, `paneClose`, `paneSuggestions`, `paneWatch`, `paneWatchStop`, `paneFrameAck`, `paneInput`, `paneRespond`, and `paneDownload`; they use the same Browser CLI group.
 
 Design methods are `designArm`, `designRead`, `designHover`, `designCancel`, `designCapture`, `designFormat`, `designTargets`, and `designSend`.
 
-Page commands support navigation, serializable JavaScript evaluation, accessibility snapshots, input fill, selector or current snapshot-reference click, and viewport PNG/JPEG screenshots. Snapshot references are page- and generation-bound; navigation, actual helper-tab switches, closure, and browser epoch loss invalidate them. `exec` is shell-free and accepts only `goto`, `eval`, `snapshot`, `fill`, `click`, and viewport `screenshot`; the documented `open` and `navigate` aliases normalize to `goto`. It cannot access arbitrary helper commands.
+Snapshot references are page- and generation-bound; navigation, actual helper-tab switches, closure, and browser epoch loss invalidate them. Redundant same-tab selection preserves fresh references. Every page mutation remains scoped, and a profile-wide FIFO covers helper selection plus the complete action. `exec` accepts only implemented typed page commands; documented `open` and `navigate` aliases normalize to scoped `goto`, never helper launch.
 
 ## Profiles and Browser settings
 
@@ -113,10 +127,18 @@ Chrome identity is `clean` by default; it removes embedding/headless user-agent 
 
 ### Explicit capability limits
 
-- **Cookie imports:** current core has no import engine. Menus disclose this and the Google-login exclusion, never fabricated installed-browser rows or import success. Source detection/import/file summaries are queued in `sa-browser-profile-import-ui` after `sa-browser-agent-extras`. Hide Hint persists and can be reversed in Settings.
+- **Cookie import UI:** the engine is available through API/CLI; menus/file selection/source badges/toasts remain with the existing dependent `sa-browser-profile-import-ui`. Current menus do not fabricate those flows. Imports affect managed Chrome/Watch credentials, not the separate Native WKWebView engine. Hide Hint persists and can be reversed in Settings.
 - **Native clear/removal:** `profileClear`/`profileDelete` and their `tab profile clear|delete` CLI commands require confirmation and refuse active profiles. Current SDK has no deletion completion acknowledgement; native capability rejects before invocation, preserving Chrome data/profile metadata. Successful native clear/removal is **not shipped**. `sa-browser-native-profile-clear-completion` owns the missing barrier; the one-use desktop claim command cannot bypass ordinary destructive confirmation.
 - **Native identity and localhost labels:** no supported native UA override or faithful worktree-host routing capability is available. Settings state the limits rather than store working-looking no-ops. Exact follow-ups: `sa-browser-native-identity`, `sa-browser-localhost-label-routing`.
 - **Native test state:** `QUIRKY_HOME` alone does not prove WKWebView storage-root isolation. Native nightly scenarios must use newly created UUID profiles only; never clear/use shared Default without independent native-root proof. Web checks cannot prove native storage isolation or deletion.
 
 
-Cookie import and other deferred browser capabilities belong to the dependent `sa-browser-agent-extras` follow-up. The full pre-cutover implementation is retained on `build/sa-browser-agent-full-snapshot`.
+## Cookie import and credential safety
+
+`detectBrowsers` inspects installed source cookie files only when explicitly requested. Import supports detected macOS Chromium-family profiles, Firefox SQLite, Safari binarycookies, explicit daemon-local JSON files, and explicit API JSON cookie arrays. Sources are read-only; destination data stays inside the selected managed profile. Chromium source decryption uses the selected browser's Safe Storage key only on explicit import. Tests inject synthetic roots/keys and never read the user's browser or Keychain.
+
+`importCookies` performs a confirmed one-shot import. `importStart` returns a tracked job ID; `importGet` and `importList` expose its state and actual summary. Import methods require ordinary destructive confirmation or `--yes`. Summaries include imported/skipped counts and domain/decryption/partition warnings, never credential values.
+
+Replacement is restricted to safely imported registrable domain families, including private public-suffix rules. Unrelated cookies remain untouched. Google logins are excluded; sign in to Google directly in Quirky. Unreadable partition/decryption families are preserved instead of being wiped by partial imports. Failed writes restore the previous exact cookie identities; an unprovable rollback fails explicitly as `browser_unsafe_replace`. There is no plaintext restart-staging fallback or success claim for rejected live writes.
+
+Cookie and storage CRUD share the same scoped API/CLI. Dialog accept/dismiss uses the current exact page session outside the ordinary command FIFO, allowing a pending prompt-producing evaluation to complete without answering another page. Clipboard operations use Chrome's private modern-headless clipboard, not the desktop clipboard.
