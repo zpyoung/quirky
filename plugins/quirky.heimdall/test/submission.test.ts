@@ -96,6 +96,7 @@ function fixture(submissionReply: () => unknown | Promise<unknown> = () => ({ ki
     service,
     hooksCalled: () => hookCalls,
     actionPreflightCalls: () => actionPreflightCalls,
+    unavailable() { rejectHook = true },
     async ready(registration: KindRegistration = descriptor, seedAttempt = true) {
       await service.start()
       await service.registerKind(registration, { role: 'plugin', pluginId: 'demo.kind' })

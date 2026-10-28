@@ -197,4 +197,22 @@ describe('Heimdall control CLI', () => {
   })
 
 
+  test('qualified peer selectors reject missing or mismatched owners before mutation', async () => {
+    const target = { watcherId: row.watcherId, connectionId: 'peer-a', pairingRevision: 2 }
+    for (const present of [false, true]) {
+      let mutations = 0
+      const { ctx } = contextFor((method) => {
+        if (method === 'quirky.heimdall/fleet') return {
+          ...fleet,
+          rows: present ? [{ ...watcher, target, workspaceName: 'project', branch: 'main', phase: null, lastSuccessfulTickAtMs: null, runningWorkers: 0, maxConcurrency: null, pendingQuestion: false }] : []
+        }
+        if (method === 'quirky.heimdall/detail') return { ...watcher, target: { ...target, connectionId: 'peer-b' } }
+        if (method === 'quirky.heimdall/command') { mutations++; throw new Error('Wrong peer must not be mutated') }
+        throw new Error(`unexpected method ${method}`)
+      })
+      await expect(invoke('pause', ['peer-a::watcher-1'], {}, ctx)).rejects.toThrow()
+      expect(mutations).toBe(0)
+    }
+  })
+
 })

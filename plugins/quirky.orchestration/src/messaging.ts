@@ -970,7 +970,9 @@ export class OrchestrationMessages implements MessageArrivalPort {
     const timer = setTimeout(() => reject(new Error('submission preflight timed out')), 5_000)
     timer.unref()
     try {
-      const value = await Promise.race([this.context.call(registration.method, submission), promise])
+      // This private callback receives the JSON object constructed by the authenticated send path.
+      const params = submission as unknown as Record<string, unknown>
+      const value = await Promise.race([this.context.call(registration.method, params), promise])
       if (typeof value !== 'object' || value === null || Array.isArray(value)) {
         return {
           kind: 'rejected',

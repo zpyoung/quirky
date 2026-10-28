@@ -224,7 +224,7 @@ const fleetSnapshotSchema = object({
   attentionCount: integer()
 }, ['generatedAtMs', 'rows', 'actionHistory', 'buckets', 'activeCount', 'attentionCount'])
 
-const watcherDetailSchema = object({
+const watcherDetailSchema: Schema = { properties: {
   ...inspectionProperties,
   target: targetSchema,
   ownerFence: ownerFenceSchema,
@@ -236,12 +236,12 @@ const watcherDetailSchema = object({
   workers: array(workerSchema),
   openEscalations: array(escalationSchema),
   pendingControls: array(text())
-}, [
+}, required: [
   'readOnly', 'enrollment', 'status', 'journal', 'traces', 'summary', 'budget', 'target', 'ownerFence',
   'ownerContact', 'observedAtMs', 'name', 'workers', 'openEscalations', 'pendingControls'
-])
+], additionalProperties: false, description: 'Watcher detail, or null when the watcher does not exist.' }
 
-const debugReportSchema = object({
+const debugReportSchema: Schema = { properties: {
   schemaVersion: { type: 'integer', enum: [2] },
   generatedAtMs: integer(),
   enrollment: enrollmentSchema,
@@ -255,10 +255,10 @@ const debugReportSchema = object({
   workers: array(workerSchema),
   runner: any('Live runner status, or null when no runner is present.'),
   pointers: object({ database: text(), workspace: text(), leaseHolder: any('Verified lease holder, or null when unavailable.') }, ['database', 'workspace', 'leaseHolder'])
-}, [
+}, required: [
   'schemaVersion', 'generatedAtMs', 'enrollment', 'status', 'budget', 'openInterval', 'ledger', 'traces',
   'pendingControls', 'malformed', 'workers', 'runner', 'pointers'
-])
+], additionalProperties: false, description: 'Diagnostic report, or null when the watcher does not exist.' }
 
 const watcherCommandSchema = object({
   kind: { type: 'string', enum: ['pause', 'resume', 'disarm', 'delete', 'approve', 'adjust-budget', 'set-concurrency', 'answer-question', 'answer-escalation', 'stop-worker'] },
@@ -305,8 +305,8 @@ const command = (id: string, summary: string, methods: string[], positionals: Cl
   positionals,
   flags
 })
-const watcherId = positional('watcherId', 'The exact local watcher ID.')
-const commandMethods = ['quirky.heimdall/detail', 'quirky.heimdall/command']
+const watcherId = positional('watcherId', 'The watcher ID, or <peer-id>::<watcher-id> from the fleet.')
+const commandMethods = ['quirky.heimdall/fleet', 'quirky.heimdall/detail', 'quirky.heimdall/command']
 const ownerFlags = {
   owner: flag('string', 'Owner agent.', { enum: ['claude'] }),
   'owner-model': flag('string', 'Owner model.'),
@@ -411,8 +411,8 @@ export const controlContributions = {
       kind: flag('string', 'Filter by watcher kind.', { enum: ['objective', 'hosted-review'] }),
       worktree: flag('string', 'Filter by worktree ID, workspace name or path.')
     }),
-    command('show', 'show a watcher and its live detail', ['quirky.heimdall/detail'], [watcherId]),
-    command('objective', 'show the objective kind detail', ['quirky.heimdall/detail', 'quirky.heimdall/objectiveDetail'], [watcherId]),
+    command('show', 'show a local or paired watcher and its live detail', ['quirky.heimdall/fleet', 'quirky.heimdall/detail'], [watcherId]),
+    command('objective', 'show the objective kind detail', ['quirky.heimdall/fleet', 'quirky.heimdall/detail', 'quirky.heimdall/objectiveDetail'], [watcherId]),
     command('create', 'enroll a registered watcher kind', ['quirky.heimdall/enroll'], [positional('kind', 'A registered Heimdall kind.')], {
       worktree: flag('string', 'Worktree selector; defaults to active.'),
       spec: flag('string', 'JSON or @file with the supported create-spec root keys.'),
@@ -450,7 +450,7 @@ export const controlContributions = {
     }),
     command('stop-worker', 'stop a worker by its exact recorded process identity', commandMethods, [watcherId, positional('dispatchId', 'The exact recorded dispatch ID.')]),
     command('set-concurrency', 'set an objective watcher concurrency cap', commandMethods, [watcherId, positional('maxConcurrency', 'An integer from 1 to 1,024.')]),
-    command('debug', 'print a bounded schema-two debug report', ['quirky.heimdall/debugReport'], [watcherId], {
+    command('debug', 'print a bounded schema-two debug report', ['quirky.heimdall/fleet', 'quirky.heimdall/debugReport'], [watcherId], {
       out: flag('string', 'Write the same JSON report to a path on this CLI machine.')
     })
   ],

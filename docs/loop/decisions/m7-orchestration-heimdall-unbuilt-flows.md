@@ -77,5 +77,71 @@
 - **Revisit if:** end-phase triage starts or platform checks become authorized.
 - **Source:** deferred: platform
 
+## D8: Derive provider questions and early-report authority from actual contracts
+- **Question:** The first judgment source used an inferred provider payload, and report admission depended solely on a ready receipt already present in the watcher journal.
+- **Options:** ship inferred `{model,kind,state}`; invent generic judgment policy; use verified provider questions from an optional kind hook. Trust only journal mapping; inspect the active owned service Run.
+- **Chose:** Verified `{model,state,questions}` protocol from the cited original client, optional owner-namespaced `judgmentQuestions`, no outbound call without non-empty valid questions. Recheck actual owner-scoped serviceRunShow active worker inventory before/after submission hook; journal is supplemental.
+- **Why:** Original provider validation requires questions; generic Heimdall must not invent Objective policy. A worker can authenticate and report before worker-start returns ready, so journal timing is not proof of missing Dispatch authority.
+- **Evidence:** HostKernelAuthority source investigation of `/Users/zpyoung/PycharmProjects/orca/src/main/fork-heimdall/judgment/client.ts`; returned service.ts initial ownsActiveDispatch; orchestration.md Races and fencing early worker reports.
+- **Reversibility:** medium
+- **Confidence:** high for documented wire/identity contracts; runtime evidence pending.
+- **Revisit if:** actual provider or daemon response violates the consumed schema.
+- **Source:** assumed — autonomous
+
+## D9: Integrate attributed source and actual schema/type diagnostics
+- **Question:** How should returned component changes and discovered contract mismatches be accepted?
+- **Options:** trust reports; overwrite unexpected changes; audit exact scopes and preserve actual outcomes.
+- **Chose:** Kernel e72549b8 and fleet 76568327 accepted after original-wave scope/HEAD audit; both worktrees removed. Worker explicitly attributed its accidental parent runner-test edit, and parent restored only its two missing original lines before merge. Synchronize canonical method/event schemas with AST edits, including null for missing detail/debug results.
+- **Why:** The first kernel merge refused the unexpected test change rather than overwriting it. Structural plugin validation found four object-only schemas whose implementation returns null. Initial integrated typecheck reported five concrete errors; parent restored budgetUsage import, captured kind identity for closure narrowing, supplied the unavailable-hook fixture control and retained Bun fetch.preconnect on the test seam.
+- **Evidence:** Actual merge refusal and worker attribution; git scope outputs and component commits; HeimdallDeclarationCheck structural report; typecheck exit2 in21.37s. Real filesystem epoch smoke returned epoch1 then2 with stale renewal/release false and current release true.
+- **Reversibility:** easy
+- **Confidence:** high for these exact observations; no suite or full daemon proof claimed yet.
+- **Revisit if:** final typecheck or changed-path smoke contradicts them.
+- **Source:** assumed — autonomous
+
+## D10: Give paired watchers explicit CLI selectors and incarnation fences
+- **Question:** Existing CLI commands always constructed a local target, even though the fleet now contains remote owners.
+- **Options:** silently choose a same-ID local watcher; add global remote flags; qualify the existing watcher positional.
+- **Chose:** `<peer-id>::<watcher-id>` resolves exactly one current fleet target; list text emits it, detail verifies returned peer/revision, and controls carry the observed owner incarnation. Plain watcher IDs remain local. Declare fleet lookup in each affected CLI method ceiling.
+- **Why:** A remote row must be scriptable without guessing a local session or losing pairing authority. Missing/ambiguous/mismatched ownership refuses before mutation.
+- **Evidence:** control-cli.ts targetFor/detailFor/commandParams; control-api.ts command declarations; new rejection-boundary regression source. Tests have not run.
+- **Reversibility:** medium
+- **Confidence:** high for intended contract; actual CLI/daemon smoke pending.
+- **Revisit if:** an existing peer ID can contain the reserved `::` separator.
+- **Source:** assumed — autonomous
+
+## D11: Defer only the genuinely unbuilt remote worker flows at build-first cutover
+- **Question:** The initial federation implementer returned only transport/submission source and a fresh retry had not completed an end-to-end remote worker flow before the prescribed item cutover.
+- **Options:** advertise stub worker federation; block useful completed host/fleet work without an external blocker; remove disconnected work and register one product implementation item.
+- **Chose:** Land completed peer transport, Heimdall host epochs/removal/judgment/report admission and paired watcher controls. Remove unconnected remote-start APIs, guard stubs, tables and capabilities. One follow-up `m7-orchestration-worker-federation` owns remote placement/attachment, durable mail/ask/report home settlement, worker lifecycle/output/fleet/navigation. No test/review/debug follow-up; no invented external prerequisite.
+- **Why:** LOOP requires a build-first, bounded item cutover and allows a single remaining-flow item. The completed flows operate without worker federation; transport is not proof that workers can execute remotely. Original scenarios1–3 remain explicit requirements in the amended spec.
+- **Evidence:** original RemoteFederation incomplete return with no external blocker; fresh FederationImplement component; current LOOP Build first, test at the end; external orchestration.md Federation.
+- **Reversibility:** medium
+- **Confidence:** high that these worker flows are not yet built; no passing worker federation claim.
+- **Revisit if:** the named follow-up implements real peer-owned workers and home-authoritative relay settlement.
+- **Source:** deferred: remote worker federation
+
+## D12: Keep observed runtime proof narrower than feature acceptance
+- **Question:** What did the actual changed-path smoke prove, and what failed before it?
+- **Options:** infer full parity from types; retain only observed filesystem, daemon/CLI and shipped-view evidence.
+- **Chose:** Record real filesystem epoch1→2 contention/expiry/stale-holder proof; two actual isolated quirkyd/PTY processes, reciprocal pinned pairing/status, secret-free inventory, remote watcher fleet/detail/debug, qualified CLI show and owner-applied budget, remote delete description; actual shipped React view shows peer provenance and applies Pause on the owner. Final owner read returned paused:true/revision2 and both daemon fixtures cleaned with exit0.
+- **Why:** This exercises real transport/owner routing without claiming real remote workers, paid provider calls, a complete UI campaign or native window behavior. The smoke caught a missing successful-start `started=true` assignment introduced by the kernel integration; restoring it allowed real kind registration. Initial browser failure was the throwaway adapter's missing onConnection implementation; the final adapter uses actual EventSource state and the final surface reported zero errors.
+- **Evidence:** lease-smoke.ts output; heimdall-peer-smoke6f API/CLI output and FINAL_OWNER_STATE; actual browser screenshot/observations at /var/folders/x5/07kj5yld16l9wd5p_v01h20c0000gp/T/omp-sshots-15b808986dc873dc.webp. Earlier failed fixtures and readiness outputs remain historical failures, not passing claims.
+- **Reversibility:** easy
+- **Confidence:** high for those exact paths only; provider credentials, removal-worker acceptance and full suites remain unexecuted under build-first.
+- **Revisit if:** end-phase execution contradicts the observed boundary behavior.
+- **Source:** assumed — autonomous
+
+## D13: Preserve landed worker contracts while removing only new disconnected federation work
+- **Question:** The cutover retry removed existing includeRemote uncertainty reporting, archived-output reasons and a fleet expiry scheduling call along with its own incomplete federation code.
+- **Options:** ship that unrelated worker contract removal; preserve the exact pre-item worker sources and schemas.
+- **Chose:** Restore the five affected worker source/test files to the committed pre-item contents and restore workerRead/workerList/worker-list declarations. Keep the existing honest capability_unsupported result; remove only this item's unconnected --on implementation/tables/capabilities. Integrate peer/submission source as f569e2f9.
+- **Why:** Existing consumer contracts and expiry behavior are not obsolete merely because worker federation remains deferred. No previously landed behavior is silently weakened. Final type diagnostics also exposed a removed core type import and two incomplete typed worker projections; parent corrected those exact errors and removed unsupported minLength schema keywords while keeping real token byte validation.
+- **Evidence:** returned-component scope/diff audit; existing worker snapshots and original manifest declarations; typecheck exit2 in20.81s; core/fixture edits and live plugin activation in the two-daemon smoke.
+- **Reversibility:** easy
+- **Confidence:** high for preserved source and observed live activation.
+- **Revisit if:** the worker-federation implementation replaces these contracts end to end.
+- **Source:** assumed — autonomous
+
 ## Progress
-Combined specification self-reviewed against all claimed flows. Public peer/report JSON contracts prepared before implementation. Next: commit spec/contracts and dispatch three disjoint implementers. Inherited .serena/ untouched. No suite/review/dogfood claimed.
+All three component source slices are integrated; owned component worktrees removed. D11 explicitly defers only unbuilt remote worker flows into one prepared implementation follow-up (not yet added). Filesystem epoch and real two-daemon API/CLI/shipped-view smoke passed as narrowly recorded in D12; both owned fixtures and browser tabs are stopped. No suites, paid-provider call, full UI campaign or final code review were run. Next: commit parent integration, one roadmap catch-up/read incoming decisions, final typecheck, add the single follow-up, detach and canonical queue land. Inherited .serena/ untouched. The prescribed two-hour target was exceeded; no on-time completion claim.

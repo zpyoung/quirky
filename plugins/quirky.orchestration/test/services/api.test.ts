@@ -120,6 +120,7 @@ function parseRunDetail(value: unknown): ServiceRunDetail {
     return {
       assignmentActive: worker.assignmentActive,
       taskId: stringField(worker, 'taskId'),
+      dispatchId: stringField(worker, 'dispatchId'),
       sessionId: nullableStringField(worker, 'sessionId'),
       processIncarnation: nullableStringField(worker, 'processIncarnation'),
       state,

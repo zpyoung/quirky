@@ -1622,7 +1622,7 @@ describe('Heimdall runner gate and budget behavior', () => {
       subjectId: 'dispatch-shadow',
       question: { type: 'noul', instructions: 'Is the worker stalled?' }
     }
-    globalThis.fetch = async (url, init) => {
+    globalThis.fetch = Object.assign(async (url: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
       fetchCalls++
       expect(String(url)).toBe('https://api.typesafe.ai/v1/systemone')
       expect(JSON.parse(String(init?.body))).toMatchObject({ model: 'jev-latest', questions: { 'q-stall': question.question } })
@@ -1631,7 +1631,7 @@ describe('Heimdall runner gate and budget behavior', () => {
         answers: { 'q-stall': { type: 'noul', noul: 0.25 } },
         usage: { input_tokens: 10, output_tokens: 2 }
       }))
-    }
+    }, { preconnect: originalFetch.preconnect })
     const watcherKind = kind({
       decide: () => ({ action }),
       judgmentQuestions: async () => [question],

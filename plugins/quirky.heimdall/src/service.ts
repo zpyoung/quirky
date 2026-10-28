@@ -12,6 +12,7 @@ import type {
   Runner,
   RunnerOptions
 } from './contracts'
+import { budgetUsage } from './budget'
 import { createEnrollmentService } from './enrollment'
 import { createKindRegistry } from './registry'
 import { createKernelStore } from './store'
@@ -202,6 +203,7 @@ export function createKernelService(context: PluginContext, now: () => number = 
       if (stopped) return
       startRunner(enrollment)
     }
+    started = true
   }
 
   const enrollmentService = createEnrollmentService(options, (enrollment) => {
@@ -309,8 +311,9 @@ export function createKernelService(context: PluginContext, now: () => number = 
       return rejectedSubmission('stale-dispatch', 'The report no longer belongs to an active Dispatch.')
     }
 
-    const descriptor = registry.descriptors().find((registration) => registration.id === current.kind) ??
-      store.registrations().find((registration) => registration.id === current.kind)
+    const kindId = current.kind
+    const descriptor = registry.descriptors().find((registration) => registration.id === kindId) ??
+      store.registrations().find((registration) => registration.id === kindId)
     const method = descriptor?.hooks.submission
     if (method === undefined) return { kind: 'accepted' }
     if (!descriptor || typeof descriptor.pluginId !== 'string') {

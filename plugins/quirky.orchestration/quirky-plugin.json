@@ -3682,7 +3682,7 @@
       {
         "id": "peerListen",
         "description": "Start the dedicated peer endpoint. token is private; non-loopback listeners require HTTPS certificate and 0600 private-key files.",
-        "params": {"type": "object", "properties": {"host": {"type": "string"}, "port": {"type": "integer", "minimum": 0, "maximum": 65535}, "token": {"type": "string", "minLength": 32}, "certificateFile": {"type": "string"}, "privateKeyFile": {"type": "string"}}, "required": ["host", "port", "token"], "additionalProperties": false},
+        "params": {"type": "object", "properties": {"host": {"type": "string"}, "port": {"type": "integer", "minimum": 0, "maximum": 65535}, "token": {"type": "string", "description": "Private credential of at least 32 UTF-8 bytes, checked by the handler."}, "certificateFile": {"type": "string"}, "privateKeyFile": {"type": "string"}}, "required": ["host", "port", "token"], "additionalProperties": false},
         "result": {"type": "object", "properties": {"endpoint": {"type": "string"}, "fingerprint": {"type": "string"}, "incarnation": {"type": "string"}, "capabilities": {"type": "array", "items": {"type": "string"}}, "host": {"type": "string"}, "port": {"type": "integer"}}, "required": ["endpoint", "fingerprint", "incarnation", "capabilities", "host", "port"]}
       },
       {
@@ -3694,7 +3694,7 @@
       {
         "id": "peerPair",
         "description": "Pair one peer using a private shared credential and an out-of-band pinned SHA-256 fingerprint.",
-        "params": {"type": "object", "properties": {"peerId": {"type": "string"}, "label": {"type": "string"}, "endpoint": {"type": "string"}, "token": {"type": "string", "minLength": 32}, "fingerprint": {"type": "string"}}, "required": ["peerId", "label", "endpoint", "token", "fingerprint"], "additionalProperties": false},
+        "params": {"type": "object", "properties": {"peerId": {"type": "string"}, "label": {"type": "string"}, "endpoint": {"type": "string"}, "token": {"type": "string", "description": "Private credential of at least 32 UTF-8 bytes, checked by the handler."}, "fingerprint": {"type": "string"}}, "required": ["peerId", "label", "endpoint", "token", "fingerprint"], "additionalProperties": false},
         "result": {"type": "object", "properties": {"peer": {"type": "object", "properties": {"id": {"type": "string"}, "label": {"type": "string"}, "endpoint": {"type": "string"}, "fingerprint": {"type": "string"}, "pairingRevision": {"type": "integer"}}, "required": ["id", "label", "endpoint", "fingerprint", "pairingRevision"]}}, "required": ["peer"]}
       },
       {

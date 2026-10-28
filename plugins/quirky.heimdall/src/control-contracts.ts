@@ -20,7 +20,7 @@ export type WatcherCommand =
   | { kind: 'answer-question'; messageId: string; body: string }
   | { kind: 'answer-escalation'; escalationId: string; body: string }
   | { kind: 'stop-worker'; identity: WorkerIdentity }
-export interface CommandRequest { target: WatcherTarget; expectedOwner: OwnerFence; command: WatcherCommand }
+export interface CommandRequest { target: WatcherTarget; expectedOwner: OwnerFence; command: WatcherCommand; expectedIncarnation?: string }
 export interface FleetRow {
   target: WatcherTarget; ownerFence: OwnerFence; enrollment: Enrollment; status: RunnerStatus
   name: string; workspaceName: string; branch: string | null; phase: string | null

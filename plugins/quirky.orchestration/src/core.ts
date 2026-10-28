@@ -6,6 +6,7 @@ import type {
   DispatchId,
   DispatchRow,
   DispatchStatus,
+  DispatchTransitionInput,
   JsonValue,
   MailboxAddress,
   MessageId,
