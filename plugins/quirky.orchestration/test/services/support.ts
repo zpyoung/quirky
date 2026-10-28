@@ -11,14 +11,8 @@ import { writePlugin } from '../../../../packages/daemon/test/plugins/fixtures'
 const PLUGINS_DIR = resolve(import.meta.dir, '../../../..', 'plugins')
 const ORCHESTRATION_DB = (home: string) => join(home, 'plugin-data', 'quirky.orchestration', 'store.db')
 const CLIENT_IDS = ['acme.orchestration-a', 'acme.orchestration-b'] as const
-const READY_AGENT: FakeBehavior = {
-  raw: true,
-  steps: [
-    { afterMs: 50, write: '\u001b[?2004h' },
-    { afterMs: 10, write: '> \r\n' },
-    { afterMs: 250, write: '\u001b]7501;state=working\u001b\\' }
-  ]
-}
+const CLI_MAIN = resolve(import.meta.dir, '../../../../packages/cli/src/main.ts')
+const AGENT_FIXTURE = resolve(import.meta.dir, '../workers/acceptance-agent.ts')
 
 export type ServiceClientId = 'a' | 'b'
 export type ServiceE2E = E2E & {
@@ -95,6 +89,32 @@ function createFixturePluginsDir(): string {
   for (const id of CLIENT_IDS) createFixturePlugin(root, id)
   return root
 }
+function inputDrivenAgentSource(cliMain: string, args?: readonly string[]): string {
+  const base = `#!${process.execPath}
+import { appendFileSync, existsSync, readFileSync } from 'node:fs'
+import { join } from 'node:path'
+if (process.argv.includes('--version')) { console.log('1.0.0 (isolated orchestration fixture)'); process.exit(0) }
+process.env.WORKER_TEST_CLI = ${JSON.stringify(cliMain)}
+process.stdout.write('\\x1b[?2004h')
+// This side-effect fixture must initialize after its per-child CLI env and terminal mode; static imports are hoisted.
+await import(${JSON.stringify(AGENT_FIXTURE)})
+`
+  if (!args) return base
+  const command = args.includes('--json') ? [...args] : [...args, '--json']
+  return base + `
+const root = join(process.env.QUIRKY_HOME, 'worker-fixture')
+const session = process.env.QUIRKY_SESSION_ID
+const events = join(root, session + '.events.jsonl')
+const timer = setInterval(() => {
+  if (!existsSync(events)) return
+  const started = readFileSync(events, 'utf8').split('\\n').filter(Boolean).some((line) => JSON.parse(line).type === 'turn_started')
+  if (!started) return
+  clearInterval(timer)
+  appendFileSync(join(root, session + '.requests.jsonl'), JSON.stringify({ id: crypto.randomUUID(), args: ${JSON.stringify(command)} }) + '\\n')
+}, 20)
+`
+}
+
 
 export async function startServicesE2E(options: { fakes?: Record<string, FakeBehavior | true> } = {}): Promise<ServiceE2E> {
   const fixtureDir = createFixturePluginsDir()
@@ -102,9 +122,21 @@ export async function startServicesE2E(options: { fakes?: Record<string, FakeBeh
   let eventClient: QuirkyClient | undefined
   try {
     harness = await startAgentsE2E({
-      fakes: { claude: READY_AGENT, ...options.fakes },
-      extraEnv: { QUIRKY_BUILTIN_PLUGINS_DIR: fixtureDir }
+      fakes: { claude: true, ...options.fakes },
+      extraEnv: { QUIRKY_BUILTIN_PLUGINS_DIR: fixtureDir, WORKER_TEST_CLI: CLI_MAIN }
     })
+    if (options.fakes?.claude === undefined) {
+      const path = join(harness.fakebin, 'claude')
+      writeFileSync(path, inputDrivenAgentSource(CLI_MAIN))
+      chmodSync(path, 0o755)
+    }
+    const plugins = await harness.client.call('plugin.list', {})
+    const invalid = plugins.filter((plugin) =>
+      (plugin.id === 'quirky.orchestration' || CLIENT_IDS.some((id) => id === plugin.id)) &&
+      (plugin.state === 'invalid' || plugin.state === 'failed' || plugin.state === 'disabled'))
+    if (invalid.length > 0) {
+      throw new Error(`service fixture dependency is not executable: ${JSON.stringify(invalid.map(({ id, state, diagnostics }) => ({ id, state, diagnostics })))}`)
+    }
     const runtime = readRuntime(harness.home)
     if (!runtime) throw new Error('the service test daemon did not publish its runtime information')
     eventClient = await QuirkyClient.connect(rpcUrl(runtime), { role: 'ui', name: 'orchestration-service-events' })
@@ -162,17 +194,7 @@ export function openOrchestrationDb(harness: ServiceE2E): Database {
 }
 
 export function installAgentCli(harness: ServiceE2E, cliMain: string, args: readonly string[]): void {
-  const quote = (value: string) => `'${value.replace(/'/gu, `'\\''`)}'`
-  const command = [process.execPath, cliMain, ...args].map(quote).join(' ')
-  const source = [
-    '#!/bin/sh',
-    'if [ "$1" = "--version" ]; then printf "1.0.0 (fixture)\\n"; exit 0; fi',
-    `printf '\\033[?2004h> \\r\\n'`,
-    'IFS= read -r _preamble',
-    `printf '\\033]7501;state=working\\033\\\\'`,
-    `exec ${command}`,
-    ''
-  ].join('\n')
+  const source = inputDrivenAgentSource(cliMain, args)
   const path = join(harness.fakebin, 'claude')
   writeFileSync(path, source)
   chmodSync(path, 0o755)

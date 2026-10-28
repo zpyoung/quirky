@@ -287,7 +287,7 @@ async function resolveServicePlan(
   validateModelPicks(params, agentOptions)
   const preferred: WorkerMode = params.mode ?? 'terminal'
   const mode: WorkerMode = selectedSession ? 'terminal' : preferred
-  if (mode === 'structured' && (!agentOptions.structured || agentId !== 'claude')) {
+  if (mode === 'structured' && (!agentOptions.structured || (agentId !== 'claude' && agentId !== 'codex'))) {
     throw failure('agent_unconfigured', `Agent ${agentId} does not support a structured background session.`)
   }
   const decision: WorkerModeDecision = {
@@ -393,7 +393,7 @@ async function resolvePlan(context: PluginContext, params: WorkerStartParams, ca
 
   const preferred: WorkerMode = params.mode ?? 'terminal'
   const mode: WorkerMode = selectedSession ? 'terminal' : preferred
-  if (mode === 'structured' && (!agentOptions.structured || agentId !== 'claude')) {
+  if (mode === 'structured' && (!agentOptions.structured || (agentId !== 'claude' && agentId !== 'codex'))) {
     throw failure('agent_unconfigured', `Agent ${agentId} does not support a structured background session.`)
   }
   const decision: WorkerModeDecision = {

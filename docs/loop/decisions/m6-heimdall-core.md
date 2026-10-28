@@ -209,5 +209,82 @@
 - **Revisit if:** full kernel/API gates show a changed budget or pin lifecycle
 - **Source:** assumed — autonomous
 
+## D20: Apply the aged-item night-mode exit policy
+- **Question:** whether to begin a new final-review campaign after source/dependency integration
+- **Options:** start a new review/dogfood round; follow the authoritative already-aged item rule
+- **Chose:** finish all reachable API/worker behavior, affected checks, scripts, typecheck and actual smoke, then land without starting an unstarted review campaign. Existing reported blockers still require fixes. Readiness probes/scratch directories were not review rounds.
+- **Why:** first spec commit6764039 is2026-10-27T18:51:54-05:00; observed clock2026-10-28T02:17:27Z makes the item at least145minutes old. Night mode explicitly says already-aged items land as soon as own checks pass and skip review/dogfood not yet started. No reachable acceptance invariant is removed.
+- **Evidence:** observed git commit timestamp/date output; current LOOP Night mode; no pi-watch review prompt was dispatched
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** the operator changes the night-mode instruction
+- **Source:** locked by docs/loop/LOOP.md
+
+## D21: Defer automatic native host-power binding behind a real trusted publisher
+- **Question:** scheduling source requires actual OS sleep/wake, but the existing public daemon API supplies no native power source
+- **Options:** pretend asynchronous subscription is native binding; infer sleep from timer delay; add an unverified native IOKit/ack subsystem now; separate the native producer flow
+- **Chose:** ship/test explicit runner suspend/resume and conservative known-contact accounting, and track automatic macOS power binding in dependent item m6-heimdall-host-power, now confirmed todo in the authoritative queue. The follow-up must provide an in-process trusted daemon producer plus pre-sleep fencing/ack callback, bind all runners, clean up native subscriptions and verify on an idle macOS/native host. No helper processes or elapsed-delay inference.
+- **Why:** repository evidence finds no sleep/wake producer. Generic plugin subscriptions deliver asynchronously after the emitter, so merely subscribing cannot fence work before a native sleep acknowledgement. Native provider/ack semantics are a separate missing kernel capability; night mode forbids starting this new native flow after the item is aged. Remaining supervision works without claiming automatic host-power integration.
+- **Evidence:** HostLifecycleSeam source report; daemon.ts:132-150, desktop index.ts:141-142,166-207, plugin events.ts:61-70; runner suspend/resume tests; /tmp/quirky-heimdall-l11-host-power-item.json
+- **Reversibility:** medium
+- **Confidence:** high
+- **Revisit if:** a trusted native host publisher/public acknowledgement seam becomes available
+- **Source:** deferred: automatic host sleep/wake binding
+
+## D22: Wire the concrete service facade through the actual shared worker components
+- **Question:** service source ports alone do not make the eight endpoints executable
+- **Options:** stub a service backend; duplicate state; compose real core/message/worker instances
+- **Chose:** actual service coordinator and handlers share OrchestrationCore receipts/store, OrchestrationMessages, and registered WorkerComponents. Main applies core, worker and service migrations in order and provides all eight methods. Owner views enumerate supervised Dispatches without consuming mail and separate assignmentActive from liveness. Ordinary session useRun cannot bind service-owned Runs.
+- **Why:** a headless plugin principal is coordinator authority, never process attestation. Shared lifecycle/archive/close checks and after-commit events must remain real rather than be replaced by a fixture.
+- **Evidence:** src/services/coordinator.ts, main.ts, core.ts and messaging.ts; real service admission test1pass19assertions; broader worker/API verification remains pending
+- **Reversibility:** medium
+- **Confidence:** high for source composition; runtime acceptance remains gated
+- **Revisit if:** actual worker/answer/stop/release smoke exposes a missing or duplicated authority path
+- **Source:** assumed — autonomous
+
+## D23: Use the supported manifest subset and actual core nesting policy
+- **Question:** real daemon and worker-start diagnostics exposed metadata and undeclared-setting dependencies
+- **Options:** loosen global validators; swallow errors/default an undeclared setting; correct metadata and share the existing policy
+- **Chose:** remove unsupported minLength from the service key schema while retaining semantic non-empty validation. Keep reset confirmation and remove duplicate primary alias. Worker preamble uses the same MAX_NESTED_DEPTH=1 as core admission, not an undeclared nestedWorkerMaxDepth setting; the later settings slice owns protected configuration.
+- **Why:** actual plugin.list rejected orchestration for minLength; after that repair service admission passed. A real launched worker then failed at authority_attached because the missing setting threw. Adding a phantom configurable knob would disagree with the current enforced cap; a silent catch would hide the defect.
+- **Evidence:** service discovery diagnostic and owned cleanup; core.serviceRunCreate key validation; worker-readiness result failed/authority_attached/no-setting; core cap and workers/start.ts shared import
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** the settings slice provides a real protected, uniform dynamic-depth policy
+- **Source:** assumed — autonomous
+
+## D24: Make provider fixtures input-driven and retain real caller authentication
+- **Question:** real worker startup never observed composer readiness, while default five-second test bounds hid the configured twenty-second operation result
+- **Options:** relax production readiness; timer-based fake working state; actual provider UI/input barriers with correctly bounded tests
+- **Chose:** reuse the launched acceptance-agent transport, advertise the bracketed paste it handles, and enqueue real CLI work only after its observed turn_started event. Worker tests use the existing sixty-second E2E convention; production readiness limits are unchanged. Correct CLI numeric text20000 rather than a JavaScript underscore literal. Remove asymmetric matcher mutations of reused identities; keep primitive authentication/outcome invariants.
+- **Why:** the old timer emitted working without a delivered prompt; actual readiness diagnostic returned failed after20117ms and no input. The new fixture reached the next genuine authority stage rather than spoof readiness or caller evidence. Whole-daemon1532ms shutdown includes other plugins; replace the incidental exact1500ms assertion with blocked-hook fencing and durable unknown-outcome restart proof, not a larger timing pin.
+- **Evidence:** real readiness diagnostic before/after fixture change; Bun default-five-second timeout output; user-confirmed asymmetric matcher mutation; actual kernel API6pass35assertions after the stronger lifecycle test
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** actual guarded worker flow still fails with the corrected transport
+- **Source:** assumed — autonomous
+
+## D25: Preserve actual native provider identity and forward journal versions
+- **Question:** dependency merge resolution diverged from verified native-provider semantics
+- **Options:** persist a fabricated fresh/idle native ID; journal receipt/launch reorder; keep provider-confirmed IDs and stable migrations
+- **Chose:** Claude stores fresh native IDs only after SDK init, keeps known real resume identity/transcript and current-run guards, and treats failed results honestly. Preserve journal v1 and send receipts v2; add launch options as v3 so existing v2 stores migrate correctly. Preserve real Codex connection/path helpers exactly.
+- **Why:** Quirky session/lease identity is not the provider conversation ID. Reordering a completed migration can skip required tables in existing homes.
+- **Evidence:** scoped NativeDependencyCoherence comparison with7f789885; claude-runner.ts/journal.ts/native tests; codex-connection blob b354974c894cb2eeb9032200919b2c3b13a7d3b4 unchanged
+- **Reversibility:** medium
+- **Confidence:** high for source reconciliation; owned native gates remain required
+- **Revisit if:** actual native child/session history checks fail
+- **Source:** assumed — autonomous
+
+## D26: Publish executable service source without overstating unresolved worker checks
+- **Question:** downstream control/owner lanes need real endpoint providers to exercise their actual callers
+- **Options:** publish interfaces only; hide current failures; publish the concrete checkpoint with exact evidence
+- **Chose:** publish all eight real facade providers/main/manifest and the isolated c8639c31 admission repair. Source-backed ordinary/core native dependency reconciliations remain included; no owner/control item is imported. Both service and session worker placement now admit the actually supported native Claude and Codex agents, retaining the public structured capability check.
+- **Why:** real service tests now reach owner/mailbox/worker logic. The latest run has4pass/2fail, exposing a live-supervised-worker transition error in stop and a failed early-report release setup; those remain blocking fixes, not a passing feature claim. The corrected real provider smoke reached ready/input_accepted/observed with a genuine live assignment in2092ms.
+- **Evidence:** actual service4pass2fail output; real readiness smoke and owned cleanup; kernel units63pass273assertions; kernel daemon API6pass35assertions; user native Codex admission report and runtime.ts two supported-agent guards
+- **Reversibility:** easy
+- **Confidence:** high for executable source and stated evidence
+- **Revisit if:** remaining actual worker flows or required final gates fail
+- **Source:** assumed — autonomous
+
 ## Progress
 Iteration4: original source wave/replacement barrier audited; actual store/registry/enrollment/runner/plugin/adapter plus additive service handler/migration/test checkpoints are merged on the item branch. Integrated kernel/storage/adapter/migration unit regressions pass51/51 with172assertions; three concrete regressions have red-green proof. Runtime checkpoint794266f1 is published, final import/test safety correction follows. No owned implementer remains running. Full daemon API/worker proof and actual eight-service core facade/hubs still require the prerequisite's committed executable source; lane1 has supplied read-only component paths, not a runtime API claim. Continue real service integration, affected gates/typecheck, deps-ready/catch-up and queue-controlled landing. Lane10 controls then lane12 owner integrate their own serial hubs; their modules remain untouched.

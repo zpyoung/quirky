@@ -8,10 +8,12 @@ import type {
   Json,
   JournalEntry,
   KernelStore,
+  KernelWorkerObservation,
   OrchestrationPort,
   WorkerMessage,
   WorkerRequest
 } from './contracts'
+import { isCoordinatorSeatLostError, workerObservationsFromRun } from './worker-evidence'
 
 const CONTRACT_VERSION = 1 as const
 const MAILBOX_EVENT = 'quirky.orchestration/message-arrived'
@@ -39,6 +41,14 @@ type CompletedCheck = JournalEntry & {
 /** UUIDv8 uses the first 128 SHA-256 bits; version and RFC variant bits are set after hashing. */
 export function orchestrationRequestIdForAttemptFingerprint(fingerprint: string): string {
   return uuidV8(sha256(`heimdall-dispatch-v1\0${fingerprint}`))
+}
+function indeterminateWorkerResult(requestId: string, detail: string, error?: unknown): DispatchResult {
+  return {
+    kind: 'indeterminate',
+    requestId,
+    detail,
+    ...(error !== undefined && isCoordinatorSeatLostError(error) ? { reason: 'coordinator-seat-lost' } : {})
+  }
 }
 
 export function createOrchestrationAdapter(
@@ -133,10 +143,7 @@ export function createOrchestrationAdapter(
         contractVersion: CONTRACT_VERSION
       })
     } catch (error) {
-      return {
-        kind: 'indeterminate', requestId,
-        detail: `worker start reply is unknown: ${errorMessage(error)}`
-      }
+      return indeterminateWorkerResult(requestId, `worker start reply is unknown: ${errorMessage(error)}`, error)
     }
     if (disposed) return { kind: 'indeterminate', requestId, detail: 'worker start completed after the shutdown fence' }
     if (!hasMutationReceipt(value, requestId) || !isRecord(value)) {
@@ -163,7 +170,6 @@ export function createOrchestrationAdapter(
     }
     return { kind: 'dispatched', dispatchId: value.dispatchId }
   }
-
   async function completeCheck(enrollment: Enrollment, runId: string, prepared: PreparedCheck): Promise<CompletedCheck> {
     if (disposed) throw new Error('orchestration adapter is disposed')
     const params: Record<string, unknown> = {
@@ -311,17 +317,6 @@ export function createOrchestrationAdapter(
     }
   }
 
-  async function runIdFor(enrollment: Enrollment): Promise<string> {
-    if (disposed) throw new Error('orchestration adapter is disposed')
-    const runId = enrollment.orchestrationRunId
-    if (runId === null) throw new Error('the enrollment has no orchestration run')
-    const value = await context.call('quirky.orchestration/serviceRunShow', { runId })
-    if (disposed) throw new Error('run verification completed after the shutdown fence')
-    if (!isRecord(value) || !isRecord(value.run) || value.run.id !== runId) {
-      throw new Error('the orchestration run could not be verified')
-    }
-    return runId
-  }
 
   return {
     async dispatch(enrollment, attempt, request) {
@@ -340,10 +335,7 @@ export function createOrchestrationAdapter(
         const runId = await ensureRun(enrollment)
         return await startWorker(requestId, runId, request)
       } catch (error) {
-        return {
-          kind: 'indeterminate', requestId,
-          detail: `orchestration run creation or dispatch is uncertain: ${errorMessage(error)}`
-        }
+        return indeterminateWorkerResult(requestId, `orchestration run creation or dispatch is uncertain: ${errorMessage(error)}`, error)
       }
     },
     async recover(enrollment, attempt) {
@@ -355,12 +347,18 @@ export function createOrchestrationAdapter(
       }
       try {
         const runId = await ensureRun(enrollment)
-        if (enrollment.orchestrationRunId !== null) await runIdFor(enrollment)
         if (disposed) return { kind: 'indeterminate', requestId, detail: 'worker recovery completed after the shutdown fence' }
         return await startWorker(requestId, runId, request)
       } catch (error) {
-        return { kind: 'indeterminate', requestId, detail: `worker recovery is uncertain: ${errorMessage(error)}` }
+        return indeterminateWorkerResult(requestId, `worker recovery is uncertain: ${errorMessage(error)}`, error)
       }
+    },
+    async observeWorkers(enrollment): Promise<KernelWorkerObservation[]> {
+      if (store.readOnly || disposed || enrollment.orchestrationRunId === null) return []
+      const runId = enrollment.orchestrationRunId
+      const value = await context.call('quirky.orchestration/serviceRunShow', { runId })
+      if (disposed) throw new Error('worker observation completed after orchestration shutdown')
+      return workerObservationsFromRun(value, runId)
     },
     async mailbox(enrollment) {
       if (store.readOnly || disposed || enrollment.orchestrationRunId === null) return []

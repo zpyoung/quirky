@@ -1,6 +1,8 @@
 import { describe, expect, test } from 'bun:test'
 import type { PluginContext, QuirkyEvent } from '@quirky/protocol'
-import type { Attempt, Enrollment, JournalAppend, JournalEntry, KernelStore, WorkerRequest } from '../src/contracts'
+import { budgetUsage } from '../src/budget'
+import { createRunner } from '../src/runner'
+import type { Attempt, Enrollment, JournalAppend, JournalEntry, KernelStore, KindRegistry, WatcherKind, WorkerRequest } from '../src/contracts'
 import { createOrchestrationAdapter, orchestrationRequestIdForAttemptFingerprint } from '../src/orchestration'
 
 describe('Heimdall orchestration adapter', () => {
@@ -155,10 +157,120 @@ describe('Heimdall orchestration adapter', () => {
     const result = await adapter.recover(enrollment, preparedAttempt())
 
     expect(result).toMatchObject({ kind: 'dispatched', dispatchId: 'ctx_fixture' })
-    expect(calls.map((call) => call.method)).toEqual([
-      'quirky.orchestration/serviceRunShow', 'quirky.orchestration/serviceWorkerStart'
-    ])
-    expect(calls[1]?.params.requestId).toBe(orchestrationRequestIdForAttemptFingerprint('fp-1'))
+    expect(calls.map((call) => call.method)).toEqual(['quirky.orchestration/serviceWorkerStart'])
+    expect(calls[0]?.params.requestId).toBe(orchestrationRequestIdForAttemptFingerprint('fp-1'))
+  })
+
+  test('owner-run worker evidence drives billable contact and malformed rows cannot appear live', async () => {
+    let nowMs = 1_000
+    let workerState: 'live' | 'exited' = 'live'
+    let omitWorkers = false
+    const enrollment = makeEnrollment({ orchestrationRunId: 'run_fixture' })
+    const store = makeStore(enrollment)
+    const attempt = preparedAttempt()
+    if (!attempt.requestId || !attempt.workerRequest) throw new Error('prepared fixture has no worker replay data')
+    store.append(enrollment.watcherId, {
+      kind: 'attempt',
+      class: 'fact',
+      origin: 'owner',
+      resolved: false,
+      eventId: 'seed-running-worker',
+      attemptId: attempt.attemptId,
+      fingerprint: attempt.fingerprint,
+      action: attempt.action,
+      state: 'running',
+      requestId: attempt.requestId,
+      workerRequest: attempt.workerRequest
+    })
+    const context = makeContext(async (method, params = {}) => {
+      if (method === 'quirky.orchestration/serviceWorkerStart') return readyReceipt(params.runId, params.requestId)
+      if (method === 'quirky.orchestration/serviceCheck') return checkResult(params.requestId)
+      if (method === 'quirky.orchestration/serviceRunShow') {
+        return {
+          run: { id: params.runId },
+          questions: [],
+          ...(omitWorkers ? {} : {
+            workers: [{
+              dispatchId: 'ctx_fixture',
+              sessionId: 'session-fixture',
+              processIncarnation: 'process-fixture',
+              state: workerState,
+              assignmentActive: true,
+              lastContactAtMs: nowMs
+            }]
+          })
+        }
+      }
+      throw new Error(`unexpected method ${method}`)
+    })
+    const adapter = createOrchestrationAdapter(context, store, () => {})
+    const kind: WatcherKind = {
+      id: 'fixture',
+      displayName: 'Fixture',
+      enrollmentPayloadSchema: {} as never,
+      authorizeEnrollment: async () => { throw new Error('unused') },
+      read: async () => ({
+        freshness: 'live',
+        contentIdentity: 'fixture-world',
+        observedAtMs: nowMs,
+        world: {}
+      }),
+      decide: () => ({ action: null, reason: 'waiting' }),
+      execute: async () => ({ effect: 'landed' })
+    }
+    const registry: KindRegistry = {
+      get: (id) => id === kind.id ? kind : undefined,
+      register: () => {},
+      registerDescriptor: () => {},
+      descriptors: () => []
+    }
+    const runner = createRunner({
+      context,
+      store,
+      registry,
+      orchestration: adapter,
+      enrollment,
+      now: () => nowMs
+    })
+    try {
+      await runner.pulse()
+      expect(store.journal(enrollment.watcherId).some((entry) =>
+        entry.kind === 'interval-open' && entry.cause === 'worker-dispatched' && entry.class === 'fact'
+      )).toBe(true)
+
+      nowMs = 1_500
+      await runner.pulse()
+      expect(budgetUsage(store.journal(enrollment.watcherId), nowMs).activeMs).toBe(500)
+
+      nowMs = 2_000
+      workerState = 'exited'
+      await runner.pulse()
+      expect(budgetUsage(store.journal(enrollment.watcherId), nowMs).activeMs).toBe(500)
+      expect(store.journal(enrollment.watcherId).filter((entry) => entry.kind === 'interval-close')).toHaveLength(1)
+      expect(store.journal(enrollment.watcherId).filter((entry) => entry.kind === 'attempt').at(-1))
+        .toMatchObject({ state: 'running', dispatchId: 'ctx_fixture' })
+      expect(runner.status()).toMatchObject({ state: 'held', reason: 'worker-contact-unverifiable' })
+
+      nowMs = 3_000
+      omitWorkers = true
+      await runner.pulse()
+      expect(runner.status()).toMatchObject({
+        state: 'held',
+        reason: 'tick-error',
+        detail: expect.stringContaining('worker')
+      })
+      expect(store.journal(enrollment.watcherId).some((entry) =>
+        entry.kind === 'interval-open' && entry.cause === 'worker-dispatched' &&
+        !store.journal(enrollment.watcherId).some((closed) =>
+          closed.kind === 'interval-close' && closed.intervalId === entry.intervalId
+        )
+      )).toBe(false)
+      expect(store.journal(enrollment.watcherId).filter((entry) => entry.kind === 'attempt').at(-1))
+        .toMatchObject({ state: 'running', dispatchId: 'ctx_fixture' })
+    } finally {
+      await runner.shutdown(0)
+      adapter.dispose()
+    }
   })
 
   test('drains committed mailbox evidence, acknowledges the exact delivery, and wakes only its run', async () => {

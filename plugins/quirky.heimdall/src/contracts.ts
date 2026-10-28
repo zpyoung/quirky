@@ -27,7 +27,7 @@ export interface WorkerRequest { spec: string; worktree: string; agent?: string;
 export type DispatchResult =
   | { kind: 'dispatched'; dispatchId: string; terminalHandle?: string }
   | { kind: 'refused'; reason: string; detail?: string }
-  | { kind: 'indeterminate'; requestId: string; detail?: string }
+  | { kind: 'indeterminate'; requestId: string; detail?: string; reason?: 'coordinator-seat-lost' }
 export type ExecuteResult = { effect: 'landed' | 'not-landed' | 'indeterminate'; reason?: string; expectedAfter?: Json; failureClass?: string }
 /** Serializable hook reply. The worker branch asks the kernel to dispatch under its recorded attempt. */
 export type KindExecuteReply = ExecuteResult | { worker: WorkerRequest }
@@ -131,9 +131,18 @@ export interface EnrollmentService {
   enroll(input: EnrollmentInput): Promise<EnrollmentResult>
 }
 export interface WorkerMessage { id: string; type: 'worker_done' | 'question' | 'escalation' | string; dispatchId?: string; body: string; resolved?: boolean; outcome?: 'succeeded' | 'failed'; raw?: Json }
+export interface KernelWorkerObservation {
+  dispatchId: string
+  sessionId: string | null
+  processIncarnation: string | null
+  state: 'live' | 'exited' | 'unverifiable'
+  assignmentActive: boolean
+  lastContactAtMs: number | null
+}
 export interface OrchestrationPort {
   dispatch(enrollment: Enrollment, attempt: Attempt, request: WorkerRequest): Promise<DispatchResult>
   recover(enrollment: Enrollment, attempt: Attempt): Promise<DispatchResult | null>
+  observeWorkers(enrollment: Enrollment): Promise<KernelWorkerObservation[]>
   mailbox(enrollment: Enrollment): Promise<WorkerMessage[]>
   acknowledge(enrollment: Enrollment, messages: WorkerMessage[]): Promise<void>
   release(enrollment: Enrollment, dispatchId: string): Promise<void>

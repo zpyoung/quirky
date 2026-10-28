@@ -102,9 +102,8 @@ describe('start', () => {
     const query = await begin()
     expect(query.params.options?.cwd).toBe('/work/tree')
     expect(query.params.options?.pathToClaudeCodeExecutable).toBe('/usr/local/bin/claude')
-    expect(query.params.options?.permissionMode ?? 'default').toBe('default')
+    expect(query.params.options?.permissionMode).toBe('default')
     expect(typeof query.params.options?.canUseTool).toBe('function')
-    expect(typeof query.params.options?.sessionId).toBe('string')
     await until(() => query.written.length === 1)
     expect(query.written[0]).toMatchObject({ type: 'user', message: { role: 'user', content: 'hello' } })
   })
@@ -120,55 +119,61 @@ describe('start', () => {
     expect(queries[1].params.options).not.toHaveProperty('effort')
   })
 
-  test('persists the native init ID and resumes that conversation', async () => {
+  test('persists its native ID after SDK init and resumes with the known ID', async () => {
     await runner.start(session, 'first prompt')
-    const initialQuery = queries[0]
-    await until(() => initialQuery?.written.length === 1)
-    const nativeSessionId = initialQuery.written[0]?.session_id
-    if (typeof nativeSessionId !== 'string' || nativeSessionId.length === 0) {
-      throw new Error('Claude user turn did not carry a session ID')
-    }
     expect(providerSessions).toEqual([])
-    initialQuery.emit({ type: 'system', subtype: 'init', session_id: nativeSessionId })
+
+    const freshInit = { type: 'system', subtype: 'init', session_id: 'fresh-native-id' }
+    const nativeSessionId = freshInit.session_id
+    queries[0].emit(freshInit)
     await until(() => providerSessions.length === 1)
     expect(providerSessions).toEqual([{ sessionId: 's_1', id: nativeSessionId, transcriptPath: null }])
 
     const resumedSession = {
       ...session,
       id: 's_2',
-      providerSession: { id: nativeSessionId, transcriptPath: null }
+      providerSession: { id: nativeSessionId, transcriptPath: '/tmp/native.jsonl' }
     }
+    const resumedInit = { type: 'system', subtype: 'init', session_id: nativeSessionId }
     await runner.start(resumedSession, undefined, {
       model: 'sonnet',
-      providerSession: { id: nativeSessionId, transcriptPath: null }
+      providerSession: { id: nativeSessionId, transcriptPath: '/tmp/native.jsonl' }
     })
     expect(queries[1].params.options?.resume).toBe(nativeSessionId)
     expect(queries[1].params.options).not.toHaveProperty('sessionId')
     expect(queries[1].params.options?.model).toBe('sonnet')
-    expect(providerSessions.at(-1)).toEqual({
-      sessionId: 's_2',
-      id: nativeSessionId,
-      transcriptPath: null
-    })
+    queries[1].emit(resumedInit)
+    await until(() => messages.some((message) => message.data === resumedInit))
+    expect(providerSessions).toEqual([
+      { sessionId: 's_1', id: nativeSessionId, transcriptPath: null },
+      { sessionId: 's_2', id: nativeSessionId, transcriptPath: '/tmp/native.jsonl' }
+    ])
     await runner.send('s_2', 'continue later')
     await until(() => queries[1].written.length === 1)
-    expect(queries[1].written[0]).toMatchObject({
-      session_id: nativeSessionId,
-      message: { content: 'continue later' }
-    })
+    expect(queries[1].written[0]?.session_id).toBe(nativeSessionId)
+    expect(queries[1].written[0]?.message).toEqual({ role: 'user', content: 'continue later' })
   })
 
   test('opens a native session without submitting an initial model turn', async () => {
-    await runner.start(session, undefined, { env: { QUIRKY_SESSION_ID: session.id, QUIRKY_SESSION_TOKEN: 'test-token' } })
+    await runner.start(session, undefined)
+    expect(providerSessions).toEqual([])
     expect(messages).toEqual([])
     expect(statuses).toEqual(['running'])
 
-    await runner.send(session.id, 'first turn after opening')
+    const nativeInit = { type: 'system', subtype: 'init', session_id: 'idle-native-id' }
+    queries[0].emit(nativeInit)
+    await until(() => providerSessions.length === 1)
+    expect(providerSessions).toEqual([{ sessionId: session.id, id: 'idle-native-id', transcriptPath: null }])
+
+    await runner.send(session.id, 'first turn after native init')
     await until(() => queries[0]?.written.length === 1)
-    expect(queries[0]?.written[0]).toMatchObject({
-      message: { content: 'first turn after opening' }
+    expect(queries[0]?.written[0]?.session_id).toBe('idle-native-id')
+    expect(queries[0]?.written[0]?.message).toEqual({
+      role: 'user',
+      content: 'first turn after native init'
     })
   })
+
 
   test('passes the prepared account environment to Claude Code', async () => {
     await runner.start(session, 'hello', { env: { CLAUDE_CONFIG_DIR: '/managed/claude' } })
