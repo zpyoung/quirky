@@ -1305,6 +1305,18 @@
         "sa-browser-profiles-settings"
       ],
       "status": "todo"
+    },
+    {
+      "id": "sa-browser-native-profile-clear-completion",
+      "milestone": "Side A",
+      "title": "Browser profiles: complete Default/native cookies-site-data clear and isolated profile removal ONLY after public native Session deletion completion acknowledgement/barrier exists; current Session.clearStorageData void proves invocation only, so preserve Chrome/metadata and reject before native invocation. Also prove isolated native storage-root configuration before Default nightly clearing; QUIRKY_HOME alone does not relocate websiteDataStore.",
+      "docs": [
+        "browser.md"
+      ],
+      "deps": [
+        "sa-browser-profiles-settings"
+      ],
+      "status": "todo"
     }
   ]
 }
