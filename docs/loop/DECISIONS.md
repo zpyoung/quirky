@@ -187,6 +187,9 @@ files, not this one.
 | medium | high | [m2-source-control-notes-ai D6](decisions/m2-source-control-notes-ai.md) | Notes live in a `quirky.git` plugin store keyed by worktree ID and survive a restart | assumed — autonomous |
 | medium | high | [m2-source-control-notes-ai D14](decisions/m2-source-control-notes-ai.md) | Notes are scriptable: `quirky git` gains note commands, which Orca lacks | assumed — autonomous |
 | medium | high | [m2-source-control-notes-ai D19](decisions/m2-source-control-notes-ai.md) | Recipes are stored by `quirky.git` per action, globally and per repository, and the repository one wins | assumed — autonomous |
+| medium | high | [m4-sidebar-review-filters D1](decisions/m4-sidebar-review-filters.md) | Deliver only the M4 review-filter slice | locked by docs/roadmap.md |
+| medium | high | [m4-sidebar-review-filters D3](decisions/m4-sidebar-review-filters.md) | Keep one daemon visibility result and add cache-only hosting read | assumed — autonomous |
+| medium | high | [m4-sidebar-review-filters D4](decisions/m4-sidebar-review-filters.md) | Match conservative visibility and preserve activity-only hidden count | locked by sidebar-extras.md |
 | medium | high | [m2-source-control-core D8](decisions/m2-source-control-core.md) | The status record grows additively, read from porcelain v2 | assumed — autonomous |
 | medium | high | [m2-source-control-core D20](decisions/m2-source-control-core.md) | The compare base is the worktree's base, else the project's, else the detected default, and Change Base Ref writes where the base came from | locked by research/orca-features/source-control.md |
 | medium | high | [m3-handoff D6](decisions/m3-handoff.md) | A source is a session; a live source is the agent running in a terminal session | assumed — autonomous |
@@ -378,6 +381,7 @@ files, not this one.
 | easy | medium | [m2-source-control-notes-ai D37](decisions/m2-source-control-notes-ai.md) | W1 implementation choices accepted as built | assumed — autonomous |
 | easy | medium | [m2-source-control-notes-ai D38](decisions/m2-source-control-notes-ai.md) | W2 implementation choices accepted as built | assumed — autonomous |
 | easy | medium | [m2-source-control-notes-ai D46](decisions/m2-source-control-notes-ai.md) | The UI pass: every scenario's visible behavior passes; four app defects were found and fixed, and the partials are the tool's limits | assumed — autonomous |
+| easy | medium | [m4-sidebar-review-filters D11](decisions/m4-sidebar-review-filters.md) | Close the single final review round without unverified clearance claims | assumed — autonomous |
 | easy | medium | [m2-source-control-core D6](decisions/m2-source-control-core.md) | AI Fix, Resolve with AI and the Source Control AI settings belong to `m2-source-control-notes-ai` | assumed — autonomous |
 | easy | medium | [m2-source-control-core D9](decisions/m2-source-control-core.md) | "Resolved locally" is tracked by the daemon for conflict files opened through `quirky.git` | assumed — autonomous |
 | easy | medium | [m2-source-control-core D16](decisions/m2-source-control-core.md) | Rebase from base fetches the base's branch and rebases onto it | locked by research/orca-features/source-control.md |
@@ -708,6 +712,14 @@ files, not this one.
 | easy | high | [m2-source-control-notes-ai D44](decisions/m2-source-control-notes-ai.md) | The fix batch closes all six Final Round 1 defects, each with a test; nothing goes to BLOCKERS.md | assumed — autonomous |
 | easy | high | [m2-source-control-notes-ai D45](decisions/m2-source-control-notes-ai.md) | No native-only scenarios | assumed — autonomous |
 | easy | high | [m2-source-control-notes-ai D47](decisions/m2-source-control-notes-ai.md) | The post-UI-fix gate's four failures are load flakes in files this item doesn't touch | assumed — autonomous |
+| easy | high | [m4-sidebar-review-filters D2](decisions/m4-sidebar-review-filters.md) | Apply unattended night-mode defaults and one combined spec | locked by docs/loop/LOOP.md |
+| easy | high | [m4-sidebar-review-filters D5](decisions/m4-sidebar-review-filters.md) | Use OpenAI task implementers with verified Gemini fallback | locked by docs/loop/LOOP.md |
+| easy | high | [m4-sidebar-review-filters D6](decisions/m4-sidebar-review-filters.md) | Preserve client-local storage and macOS-only verification | deferred: platform |
+| easy | high | [m4-sidebar-review-filters D7](decisions/m4-sidebar-review-filters.md) | Repair schema-subset and fixture defects without narrowing acceptance | assumed — autonomous |
+| easy | high | [m4-sidebar-review-filters D8](decisions/m4-sidebar-review-filters.md) | Expire cached review visibility through hosting-owned one-shot events | assumed — autonomous |
+| easy | high | [m4-sidebar-review-filters D9](decisions/m4-sidebar-review-filters.md) | Preserve incoming editor contracts and existing refresh behavior | assumed — autonomous |
+| easy | high | [m4-sidebar-review-filters D10](decisions/m4-sidebar-review-filters.md) | Verify the real daemon and a bounded guarded web campaign | assumed — autonomous |
+| easy | high | [m4-sidebar-review-filters D12](decisions/m4-sidebar-review-filters.md) | Preserve truthful verification scope and retain consumer-visible regression assertions | assumed — autonomous |
 | easy | high | [m2-source-control-core D1](decisions/m2-source-control-core.md) | Classify the item as a Visual, API, CLI and Integration design, and run research phases A and B | assumed — autonomous |
 | easy | high | [m2-source-control-core D2](decisions/m2-source-control-core.md) | Skip the visual companion and the adhd offer, use the standard gray-area set | locked by docs/loop/LOOP.md |
 | easy | high | [m2-source-control-core D4](decisions/m2-source-control-core.md) | Select every gray area that matters for source control | assumed — autonomous |
