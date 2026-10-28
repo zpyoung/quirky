@@ -19,6 +19,7 @@ import {
   type WorktreeAutomationProvenance,
   type WorktreeAutomationProvenanceRequest
 } from '@quirky/protocol'
+import type { VmEnvironment, VmEnvironmentRecipe, VmRemoteWorkspace } from '../vm-types'
 import { contains, expandHome, resolveRealPath, worktreeIdForPath } from '../../paths'
 import type { CallerIdentity } from '../../selector'
 import { BaseError, resolveBase, type ResolvedBase } from './base'
@@ -76,8 +77,10 @@ export type CreateParams = {
   options?: Record<string, string | boolean>
   sparsePaths?: string[]
   keepMain?: boolean
-  /** Selected VM recipe from quirky.yaml; Orca's VM lifecycle owner is not a local shell command. */
+  /** Selected repository VM recipe; this routes to the Lima lifecycle owner, never a local shell command. */
   environmentRecipe?: string
+  /** Exact complete lifecycle recipe hash approved for this one VM create. */
+  trustEnvironmentRecipeHash?: string
   /** One-based defaultTabs template indexes, e.g. ["1", "2"]; omitted selects every configured tab. */
   defaultTabs?: string[]
   /** Overrides the default submit behavior for an initial agent prompt. */
@@ -92,7 +95,7 @@ export type RemoteCreateParams = CreateParams & { runtime: string }
 type CreateWorkspaceOptions = { requireGitRepository?: boolean }
 type DefaultTabTemplate = { title?: string; color?: string; command?: string }
 type DefaultTabsTrust = { text: string; hash: string; trusted: boolean; changed: boolean } | null
-type EnvironmentRecipe = { id: string; name: string; create: string; checkoutMode?: 'orca-worktree' | 'provisioned-root' }
+type EnvironmentRecipe = VmEnvironmentRecipe
 type CreateHooks = EffectiveHooks & {
   defaultTabs?: DefaultTabTemplate[]
   defaultTabsTrust?: DefaultTabsTrust
@@ -147,9 +150,11 @@ type CreateReceipt = {
   preparedCheckout: boolean
   defaultTabs?: Array<{ title: string; tab: string; session: string }>
   agentLaunch?: { sessionId: string; launchSettings: LaunchSettings | null }
+  vm?: VmEnvironment
+  remoteWorkspace?: VmRemoteWorkspace
 }
 
-type CreateResult = WorktreeCreateResult & { creationReceipt: CreateReceipt }
+type CreateResult = WorktreeCreateResult & { creationReceipt: CreateReceipt; vm?: VmEnvironment; remoteWorkspace?: VmRemoteWorkspace }
 
 const MAIN_NOT_REQUESTED: MainUpdateReceipt = { status: 'not-requested' }
 const MAX_SPARSE_PATHS = 100
@@ -189,6 +194,10 @@ function normalizeCreateChoices(env: CreateEnv, params: CreateParams): CreatePar
   if (params.environmentRecipe !== undefined &&
     (typeof params.environmentRecipe !== 'string' || !/^[a-z0-9][a-z0-9._-]{0,63}$/.test(params.environmentRecipe))) {
     throw env.fail('invalid-params', 'environmentRecipe must be a valid configured recipe ID')
+  }
+  if (params.trustEnvironmentRecipeHash !== undefined &&
+    (params.environmentRecipe === undefined || typeof params.trustEnvironmentRecipeHash !== 'string' || !/^[0-9a-f]{64}$/.test(params.trustEnvironmentRecipeHash))) {
+    throw env.fail('invalid-params', 'trustEnvironmentRecipeHash requires environmentRecipe and a lowercase SHA-256 recipe hash')
   }
   if (params.host !== undefined && (typeof params.host !== 'string' || params.host.trim() === '' || params.host !== params.host.trim())) {
     throw env.fail('invalid-params', 'host must be an exact authenticated peer ID')
@@ -280,10 +289,119 @@ function preflightEnvironmentRecipe(
   throw reasoned(
     env,
     'conflict',
-    'environment-recipe-owner-unavailable',
-    `Environment recipe "${recipe.name}" is a ${checkoutMode} VM lifecycle recipe. Its authoritative runtime/attachment owner is not available through the worktree or terminal public APIs; refusing to substitute a local shell command.${ref ? ` Selected ref: ${ref}.` : ''}`,
-    { repo: repo.id, recipe: recipe.id, checkoutMode }
+    'environment-recipe-local-fallback',
+    `Environment recipe "${recipe.name}" is a ${checkoutMode} VM lifecycle recipe. It must be routed to the public vmCreate owner; refusing local Git, path, or terminal fallback.${ref ? ` Selected ref: ${ref}.` : ''}`,
   )
+}
+const GUEST_CREATE_PARAM_KEYS = [
+  'branch', 'branchName', 'base', 'github', 'issueCommand', 'trustIssueCommand', 'trustIssueCommandHash',
+  'displayName', 'comment', 'parent', 'noParent', 'setup', 'trustSetup', 'trustSetupHash', 'agent',
+  'prompt', 'model', 'options', 'sparsePaths', 'keepMain', 'defaultTabs', 'submitPrompt', 'allowLocalBaseFallback'
+] as const
+
+function canonicalGuestCreateParams(params: CreateParams): Record<string, unknown> {
+  const forwarded: Record<string, unknown> = {}
+  for (const key of GUEST_CREATE_PARAM_KEYS) {
+    const value = params[key]
+    if (value !== undefined) forwarded[key] = value
+  }
+  return forwarded
+}
+
+async function createVmRecipeWorkspace(
+  env: CreateEnv,
+  repo: Repo,
+  params: CreateParams,
+  selectedWindow: SelectedWindow | null
+): Promise<CreateResult> {
+  const details = await env.call('quirky.repo/show', { repo: repo.id }) as RepoDetails & { hooks: CreateHooks }
+  const recipe = details.hooks.environmentRecipes?.find((candidate) => candidate.id === params.environmentRecipe)
+  if (!recipe) {
+    const detail = details.hooks.environmentRecipeDiagnostics?.map((diagnostic) => diagnostic.message).join(' ') ?? ''
+    throw env.fail('invalid-params', `environmentRecipe "${params.environmentRecipe}" is not valid for this project.${detail ? ` ${detail}` : ''}`)
+  }
+  const checkoutMode = recipe.checkoutMode ?? 'orca-worktree'
+  if (params.automationProvenanceRequest !== undefined) {
+    throw env.fail('invalid-params', 'VM recipe creation cannot assign automation provenance to a guest worktree.')
+  }
+
+  const canonicalParams = canonicalGuestCreateParams(params)
+  let setup: WorktreeCreateResult['setup'] = { ran: 'none' }
+  let guestParams = canonicalParams
+  if (checkoutMode === 'provisioned-root') {
+    const unsupported = Object.keys(canonicalParams).filter((key) => key !== 'setup' && key !== 'defaultTabs')
+    if (params.name !== undefined || unsupported.length > 0) {
+      throw env.fail('invalid-params', `provisioned-root attaches an existing guest workspace and cannot honor these create choices: ${[...(params.name === undefined ? [] : ['name']), ...unsupported].join(', ')}`)
+    }
+    if (params.setup !== undefined && params.setup !== 'skip' && params.setup !== 'inherit') {
+      throw env.fail('invalid-params', 'provisioned-root cannot run a new setup script; use setup:skip or an orca-worktree recipe.')
+    }
+    if (params.defaultTabs !== undefined && params.defaultTabs.length > 0) {
+      throw env.fail('invalid-params', 'provisioned-root cannot create default terminal tabs on an existing guest workspace.')
+    }
+    if (params.defaultTabs === undefined && (details.hooks.defaultTabs?.length ?? 0) > 0) {
+      throw env.fail('invalid-params', 'provisioned-root cannot create the project default terminal tabs; select defaultTabs:[] or use an orca-worktree recipe.')
+    }
+    if (details.hooks.setup) {
+      if (params.setup === 'skip' || (params.setup !== 'run' && details.settings.setupPolicy === 'skip-by-default')) {
+        setup = { ran: 'skipped' }
+      } else if (details.settings.setupPolicy === 'ask' && params.setup !== 'run') {
+        throw env.fail('conflict', 'Setup decision required before attaching this provisioned-root workspace; pass setup:skip or choose an orca-worktree recipe.')
+      } else {
+        throw env.fail('invalid-params', 'provisioned-root cannot run the configured setup hook; choose setup:skip or an orca-worktree recipe.')
+      }
+    } else if (params.setup === 'run') {
+      throw env.fail('invalid-params', 'No setup hook can run for this provisioned-root workspace.')
+    }
+    guestParams = {}
+  }
+
+  const vm = await env.call('quirky.worktree/vmCreate', {
+    repo: repo.id,
+    recipe: recipe.id,
+    ...(params.trustEnvironmentRecipeHash === undefined ? {} : { trustHash: params.trustEnvironmentRecipeHash }),
+    ...(params.name === undefined ? {} : { name: params.name }),
+    ...(Object.keys(guestParams).length === 0 ? {} : { createParams: guestParams })
+  }) as VmEnvironment
+  const mirror = vm?.remoteWorkspace
+  if (!vm || typeof vm !== 'object' || !mirror || !mirror.connected || mirror.hostId === '' ||
+    typeof mirror.id !== 'string' || typeof mirror.worktree?.id !== 'string' || typeof mirror.worktree.instanceId !== 'string') {
+    throw env.fail('conflict', 'vmCreate did not return a connected, exact remote workspace mirror; inspect vmShow before retrying.')
+  }
+
+  const warnings = [...(vm.guestCreateResult?.warnings ?? [])]
+  if (setup.ran === 'skipped' && vm.guestCreateResult === null) warnings.push('Setup hooks were skipped while attaching the existing provisioned-root workspace.')
+  if (params.activate === true || params.window !== undefined) {
+    try {
+      await env.call('quirky.worktree/remoteNavigate', {
+        workspace: mirror.id,
+        ...(selectedWindow === null ? {} : { window: selectedWindow.connId })
+      })
+    } catch (error) {
+      warnings.push(`VM workspace was created, but remote navigation failed: ${messageOf(error)}`)
+    }
+  }
+
+  const guestResult = vm.guestCreateResult
+  const guestSetup = guestResult?.setup ?? setup
+  const remoteReceipt = (guestResult as (WorktreeCreateResult & { creationReceipt?: CreateReceipt }) | null)?.creationReceipt
+  return {
+    worktree: mirror.worktree,
+    warnings,
+    setup: guestSetup,
+    ...(guestResult?.baseFallback === undefined ? {} : { baseFallback: guestResult.baseFallback }),
+    ...(guestResult?.issueCommand === undefined ? {} : { issueCommand: guestResult.issueCommand }),
+    vm,
+    remoteWorkspace: mirror,
+    creationReceipt: {
+      sparsePaths: remoteReceipt?.sparsePaths ?? [],
+      sharedDirectories: remoteReceipt?.sharedDirectories ?? [],
+      main: remoteReceipt?.main ?? MAIN_NOT_REQUESTED,
+      preparedCheckout: remoteReceipt?.preparedCheckout ?? false,
+      vm,
+      remoteWorkspace: mirror
+    }
+  }
 }
 
 function decideDefaultTabs(
@@ -735,7 +853,7 @@ export async function createWorkspace(
   options: CreateWorkspaceOptions = {}
 ): Promise<CreateResult> {
   params = normalizeCreateChoices(env, params)
-  await preflightAgentSelection(env, params)
+  if (params.environmentRecipe === undefined) await preflightAgentSelection(env, params)
   if (Object.hasOwn(params, 'automationProvenance')) {
     throw env.fail('invalid-params', 'automationProvenance is assigned only by a live automation dispatch.')
   }
@@ -758,9 +876,18 @@ export async function createWorkspace(
     )
   }
   const selectedWindow = params.activate === true ? await preflightCreateWindow(env, params.window) : null
+  const remoteSelectedWindow = params.environmentRecipe !== undefined && params.activate !== true && params.window !== undefined
+    ? await preflightCreateWindow(env, params.window)
+    : selectedWindow
   const target = await resolveTarget(env, params, identity)
   if (options.requireGitRepository === true && (!('repo' in target) || target.repo.kind !== 'git')) {
     throw env.fail('invalid-params', 'Remote owner worktree creation requires a Git repository.')
+  }
+  if (params.environmentRecipe !== undefined) {
+    if (!('repo' in target) || target.repo.kind !== 'git') {
+      throw env.fail('invalid-params', 'environmentRecipe requires a Git project.')
+    }
+    return await createVmRecipeWorkspace(env, target.repo, params, remoteSelectedWindow)
   }
   let automationProvenance: WorktreeAutomationProvenance | undefined
   if (provenanceRequest) {
