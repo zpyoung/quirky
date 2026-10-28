@@ -19,6 +19,7 @@ function makeContext(handlers: Record<string, Handler> = {}) {
   const context: UiPluginContext = {
     pluginId: 'quirky.session-info',
     nativeBrowser: createNativeBrowserCapability(),
+    readClipboardText: async () => '',
     log() {},
     provide(id, implementation) { provided.set(id, implementation as (...args: unknown[]) => unknown) },
     async call(method, params = {}) {

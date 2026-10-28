@@ -61,6 +61,8 @@ export type DesktopShellReply = {
 /** The narrow bridge provided only to the trusted desktop UI webview. */
 export type DesktopShellBridge = {
   readonly capabilities: NativeDesktopCapabilities
+  /** Reads text from the native pasteboard without WKWebView's async clipboard permission gate. */
+  readClipboardText(): Promise<string>
   pickFolder(request: FolderPickerRequest): Promise<FolderPickerResult>
   openWindow(request: DesktopWindowRequest, ownerShell: DesktopWindowOwner): Promise<DesktopWindowResult>
   closeWindow(windowId: string): Promise<DesktopWindowCloseResult>
