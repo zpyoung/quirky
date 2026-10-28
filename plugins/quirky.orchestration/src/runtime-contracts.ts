@@ -24,6 +24,8 @@ export interface SessionPointerParams {
   expectedIncarnation: string
   operationId: string
   text: string
+  /** Driving Task preambles submit normally; mailbox hints keep Cursor text-only behavior. */
+  purpose?: 'mailbox_pointer' | 'worker_start'
 }
 
 /** Unknown sends remain unknown, not automatically replayed after restart. */

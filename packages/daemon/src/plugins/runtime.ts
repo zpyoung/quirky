@@ -12,6 +12,7 @@ import { buildSessionEnv, commandArgv, shellArgv, shellKind } from '../launch'
 import { createHandlers } from '../methods'
 import type { Core } from '../service'
 import type { Store } from '../store'
+import type { RuntimeSessionAuthority } from '../session-authority'
 import { fillConfirm } from './confirm'
 import { DistroService, renderDistroInspection } from './distros'
 import { Dispatcher } from './dispatch'
@@ -41,6 +42,7 @@ export type PluginRuntimeOptions = {
   safeMode?: boolean
   /** Stops the daemon process; `daemon.stop` calls it after replying. */
   stopDaemon: () => void
+  sessionAuthority: RuntimeSessionAuthority
 }
 
 type LaunchInput = Omit<LaunchHookInput, 'env' | 'args' | 'jsonArgs'>
@@ -103,12 +105,14 @@ export function createPluginRuntime(options: PluginRuntimeOptions): PluginRuntim
     layout,
     distros,
     install: installDeps,
+    sessionAuthority: options.sessionAuthority,
     stopDaemon: options.stopDaemon
   })
   const confirmText = (method: 'plugin.install' | 'distro.install', params: Record<string, unknown>) =>
     fillConfirm(KERNEL_METHOD_SCHEMAS[method].destructive.confirm, params)
   const dispatcher = new Dispatcher(handlers, plugins, log, {
     store,
+    resolveSessionAuthority: (conn) => options.sessionAuthority.resolveForConnection(conn),
     kernelDescribers: {
       'plugin.install': async (params) =>
         `${confirmText('plugin.install', params)}\n\n${renderInspection(inspectPlugin(installDeps, String(params.path)))}`,
@@ -119,6 +123,25 @@ export function createPluginRuntime(options: PluginRuntimeOptions): PluginRuntim
   const openedStores = new Map<string, OpenedStore>()
   const ptyApis = new Map<string, { revoke(): void }>()
 
+  const buildEnv = (input: {
+    sessionId: string
+    worktreeId: string
+    agent: string
+    envPatch?: Record<string, string | null>
+    shellInit?: string
+  }) =>
+    buildSessionEnv({
+      home,
+      sessionId: input.sessionId,
+      worktreeId: input.worktreeId,
+      hookUrl: core.hookUrl,
+      hookToken: core.hookToken,
+      shell: options.shell,
+      agent: input.agent,
+      ...(input.shellInit === undefined ? {} : { shellInit: input.shellInit }),
+      envPatch: input.envPatch ?? {}
+    })
+
   const extension: ContextExtension = {
     create({ id }, isRevoked) {
       const guard = () => {
@@ -127,7 +150,7 @@ export function createPluginRuntime(options: PluginRuntimeOptions): PluginRuntim
       const dataDir = pluginDataDir(home, id)
       mkdirSync(dataDir, { recursive: true, mode: 0o700 })
       let opened: OpenedStore | undefined
-      const ptyApi = createPtyApi(core.pty, id, log)
+      const ptyApi = createPtyApi(core.pty, id, log, options.sessionAuthority)
       ptyApis.set(id, ptyApi)
 
       return {
@@ -147,17 +170,23 @@ export function createPluginRuntime(options: PluginRuntimeOptions): PluginRuntim
             for (const [name, value] of Object.entries(input.envPatch ?? {})) {
               if (!isReservedLaunchEnv(name)) envPatch[name] = value
             }
-            return buildSessionEnv({
-              home,
-              sessionId: input.sessionId,
-              worktreeId: input.worktreeId,
-              hookUrl: core.hookUrl,
-              hookToken: core.hookToken,
-              shell: options.shell,
-              agent: input.agent,
-              ...(input.shellInit === undefined ? {} : { shellInit: input.shellInit }),
-              envPatch
-            })
+            return {
+              ...buildEnv({ ...input, envPatch }),
+              QUIRKY_SESSION_TOKEN: options.sessionAuthority.issueTerminalToken(input.sessionId)
+            }
+          },
+          openStructuredLease(input) {
+            guard()
+            const env = buildEnv(input)
+            const lease = options.sessionAuthority.openStructuredLease(id, input.sessionId)
+            return {
+              env: { ...env, QUIRKY_SESSION_TOKEN: lease.token },
+              release: lease.release
+            }
+          },
+          sessionIdentity(sessionId) {
+            guard()
+            return options.sessionAuthority.sessionIdentity(sessionId)
           },
           shellArgv() {
             guard()
@@ -224,6 +253,7 @@ export function createPluginRuntime(options: PluginRuntimeOptions): PluginRuntim
     },
     revoke(pluginId) {
       events.removeAll(pluginId)
+      options.sessionAuthority.releasePlugin(pluginId)
       scheduler.revokePlugin(pluginId)
       ptyApis.get(pluginId)?.revoke()
       ptyApis.delete(pluginId)

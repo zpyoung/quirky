@@ -51,7 +51,8 @@ function genericParams(entry: ApiCliCommandEntry, args: ParsedArgs, schema: Sche
 /** The CLI services a plugin's CLI module gets for one command run. */
 export function cliContextFor(ctx: Context): CliContext {
   return {
-    call: (method, params = {}) => ctx.rpc.callAny(method, params),
+    requestBase: ctx.requestBase,
+    call: (method, params = {}, options) => ctx.rpc.callAny(method, params, options),
     out: {
       json: ctx.out.json,
       result: (value, text) => ctx.out.result(value, text),
