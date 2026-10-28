@@ -948,6 +948,17 @@
     ],
     "event": [
       {
+        "id": "searchTipChanged",
+        "data": {
+          "type": "object",
+          "properties": {
+            "id": { "type": "string", "enum": ["agent-session-search"] },
+            "seen": { "type": "boolean" }
+          },
+          "required": ["id", "seen"]
+        }
+      },
+      {
         "id": "scanProgress",
         "data": {
           "type": "object",

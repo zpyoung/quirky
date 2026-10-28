@@ -1,5 +1,5 @@
 import type { CliContext, CliModule } from '@quirky/protocol'
-import type { HostedSession, HostOutcome, PublicListResult, SearchResponse, SearchStatus, ViewState } from './src/types'
+import type { HostedSession, HostOutcome, PublicListResult, SearchResponse, SearchStatus, SearchTipState, ViewState } from './src/types'
 
 type PublicSearchStatus = { status: SearchStatus; hosts: HostOutcome[] }
 
@@ -132,6 +132,13 @@ const named: CliModule['commands'] = {
     context.out.result(result, () => context.format.record([
       ['enabled', String((result as { status: { enabled: boolean } }).status.enabled)],
       ['phase', (result as { status: { phase: string } }).status.phase]
+    ]))
+  },
+  async 'search-tip'(_args, context) {
+    const result = await context.call('quirky.vault/getSearchTip', {}) as SearchTipState
+    context.out.result(result, () => context.format.record([
+      ['id', result.id],
+      ['seen', String(result.seen)]
     ]))
   },
 
