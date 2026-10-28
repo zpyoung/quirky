@@ -1,4 +1,7 @@
 import { afterAll, afterEach, expect, test } from 'bun:test'
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { join } from 'node:path'
+import { Buffer } from 'node:buffer'
 import { GlobalRegistrator } from '@happy-dom/global-registrator'
 import { registerDom } from '../ui/register-dom'
 import { isolateGitConfig } from '../../../quirky.repo/test/git-fixtures'
@@ -43,10 +46,32 @@ function diffTabs(workspace: RecordValue): Array<{ tab: RecordValue; group: Reco
   )
 }
 
+
 function clickRow(path: string, detail = 1, init: MouseEventInit = {}): void {
   const target = rowOf(path)
   if (!target) throw new Error(`missing Source Control row ${path}`)
   target.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, detail, ...init }))
+}
+
+function imageSource(html: string): string {
+  const match = /<img\b[^>]*\bsrc="([^"]+)"/i.exec(html)
+  if (!match) throw new Error('Markdown preview did not contain an image resource.')
+  return match[1]!
+}
+
+function imageUrl(world: World, source: string): string {
+  return new URL(source, `http://127.0.0.1:${world.harness.runtime.port}`).toString()
+}
+
+async function expectImageResource(world: World, source: string, bytes: Uint8Array): Promise<void> {
+  const response = await fetch(imageUrl(world, source))
+  expect(response.status).toBe(200)
+  expect([...new Uint8Array(await response.arrayBuffer())]).toEqual([...bytes])
+}
+
+async function expectImageResourceUnavailable(world: World, source: string): Promise<void> {
+  const response = await fetch(imageUrl(world, source))
+  expect([404, 410]).toContain(response.status)
 }
 
 test('Source Control preview replaces only a clean hosted tab, promotes on double click or pin, and splits with Option-click', async () => {
@@ -138,24 +163,104 @@ test('dirty hosted diffs refuse close and are never replaced by another preview'
   ))
 })
 
-test('Markdown preview renders only the modified side, states image limits, and switches source in the same tab', async () => {
+test('Markdown diff previews the modified side with an authorized image and releases only its hosted lease', async () => {
   const world = await boot(scratch, { published: false })
-  world.write('README.md', '# Draft heading\\n\\nModified body.\\n')
-  await world.win.waitFor(() => rowOf('README.md'))
-  await world.run('open-diff', { path: 'README.md', source: 'unstaged', display: 'preview', preview: true })
-  await world.win.waitFor(() => q('.qgv-markdown-preview'))
+  const imageBytes = new Uint8Array(Buffer.from(
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+cS6sAAAAASUVORK5CYII=',
+    'base64'
+  ))
+  const markdownPath = 'docs/Guide.md'
+  const imagePath = 'docs/images/chart.png'
+  const committedText = '# Committed heading\n\nHEAD body.\n\n![Chart](images/chart.png)\n'
+  const modifiedText = '# Draft heading\n\nModified body.\n\n![Chart](images/chart.png)\n'
+  world.write(markdownPath, committedText)
+  mkdirSync(join(world.dir, 'docs', 'images'), { recursive: true })
+  writeFileSync(join(world.dir, imagePath), imageBytes)
+  world.git('add', 'docs')
+  world.git('commit', '-q', '-m', 'Add Markdown guide and chart')
+  world.write(markdownPath, modifiedText)
+
+  const editorStateBefore = record(await world.agent.callAny('quirky.editor/state', { worktree: world.feat.id }))
+  const buffersBefore = editorStateBefore.buffers
+  if (!Array.isArray(buffersBefore)) throw new Error('Editor state did not include its buffers.')
+  const bufferCountBefore = buffersBefore.length
+  const tabsBefore = groups((await terminalWorkspace(world)).root).reduce(
+    (count, group) => count + (Array.isArray(group.tabs) ? group.tabs.length : 0), 0
+  )
+  await world.run('open-diff', { path: markdownPath, source: 'unstaged', display: 'preview', preview: true })
+  await world.win.waitFor(() => q('.qgv-markdown-preview img'))
   const preview = q('.qgv-markdown-preview')!
   expect(text(preview)).toContain('Draft heading')
   expect(text(preview)).toContain('Modified body.')
-  expect(text(preview)).not.toContain('one')
-  expect(text(q('.qgv-markdown-preview-notice'))).toContain('Local images are omitted')
+  expect(text(preview)).not.toContain('Committed heading')
+  expect(text(preview)).not.toContain('HEAD body.')
+  expect(q('.qgv-markdown-preview-notice')).not.toBeNull()
 
-  const before = await world.win.waitFor(async () => diffTabs(await terminalWorkspace(world))[0] ?? null)
-  const sourceButton = q('button[aria-label="Show Source"]')!
-  sourceButton.click()
+  const hostedPreviewSrc = q('.qgv-markdown-preview img')?.getAttribute('src')
+  expect(hostedPreviewSrc).toBeTruthy()
+  await expectImageResource(world, hostedPreviewSrc!, imageBytes)
+  expect(readFileSync(join(world.dir, markdownPath), 'utf8')).toBe(modifiedText)
+  const editorStateAfter = record(await world.agent.callAny('quirky.editor/state', { worktree: world.feat.id }))
+  const buffersAfter = editorStateAfter.buffers
+  if (!Array.isArray(buffersAfter)) throw new Error('Editor state did not include its buffers.')
+  expect(buffersAfter.length).toBe(bufferCountBefore)
+  const tabsAfter = groups((await terminalWorkspace(world)).root).reduce(
+    (count, group) => count + (Array.isArray(group.tabs) ? group.tabs.length : 0), 0
+  )
+  expect(tabsAfter).toBe(tabsBefore + 1)
+
+  const siblingLeaseId = crypto.randomUUID()
+  const sibling = record(await world.agent.callAny('quirky.editor/markdownPreview', {
+    action: 'render',
+    leaseId: siblingLeaseId,
+    worktree: `id:${world.feat.id}`,
+    path: markdownPath,
+    text: modifiedText
+  }))
+  expect(sibling).toMatchObject({ leaseId: siblingLeaseId, worktreeId: world.feat.id, path: markdownPath })
+  const siblingSrc = imageSource(typeof sibling.html === 'string' ? sibling.html : '')
+  await expectImageResource(world, siblingSrc, imageBytes)
+
+  const sourceBuffer = record(await world.agent.callAny('quirky.editor/open', {
+    worktree: `id:${world.feat.id}`,
+    path: markdownPath,
+    mode: 'preview',
+    focus: false
+  }))
+  const sourcePreview = record(await world.agent.callAny('quirky.editor/markdown', {
+    action: 'capabilities',
+    bufferId: sourceBuffer.id,
+    includePreview: true
+  }))
+  const sourceImageUrls = record(sourcePreview.imageUrls)
+  const sourceSrc = Object.values(sourceImageUrls).find((value): value is string => typeof value === 'string')
+  expect(sourceSrc).toBeTruthy()
+  await expectImageResource(world, sourceSrc!, imageBytes)
+
+  const hostedBefore = await world.win.waitFor(async () => {
+    const current = diffTabs(await terminalWorkspace(world)).find(({ tab }) => record(tab.input).path === markdownPath)
+    return current ?? null
+  })
+  const hostedTabId = hostedBefore.tab.id
+  q('button[aria-label="Show Source"]')?.click()
   await world.win.waitFor(async () => {
-    const current = diffTabs(await terminalWorkspace(world)).find(({ tab }) => tab.id === before.tab.id)
+    const current = diffTabs(await terminalWorkspace(world)).find(({ tab }) => tab.id === hostedTabId)
     return current !== undefined && record(current.tab.input).display === 'source'
   })
   expect(diffTabs(await terminalWorkspace(world))).toHaveLength(1)
+  expect(diffTabs(await terminalWorkspace(world))[0]?.tab.id).toBe(hostedTabId)
+  await world.win.waitFor(async () => {
+    const response = await fetch(imageUrl(world, hostedPreviewSrc!))
+    return response.status === 404 || response.status === 410
+  })
+  await expectImageResourceUnavailable(world, hostedPreviewSrc!)
+  await expectImageResource(world, siblingSrc, imageBytes)
+  await expectImageResource(world, sourceSrc!, imageBytes)
+
+  expect(await world.agent.callAny('quirky.editor/markdownPreview', {
+    action: 'release',
+    leaseId: siblingLeaseId
+  })).toMatchObject({ leaseId: siblingLeaseId, released: true })
+  await expectImageResourceUnavailable(world, siblingSrc)
+  await expectImageResource(world, sourceSrc!, imageBytes)
 })

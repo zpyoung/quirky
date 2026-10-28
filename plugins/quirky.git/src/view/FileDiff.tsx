@@ -122,30 +122,50 @@ export function FileDiff({ context, input, settings, setSetting, report, bind, c
       setPreviewError(null)
       return
     }
-    let alive = true
+    const leaseId = crypto.randomUUID()
+    let active = true
+    const worktreeId = input.worktree
     const text = paneRef.current?.modifiedText() ?? loaded.diff.modified
+    const release = () => {
+      try {
+        void context.call('quirky.editor/markdownPreview', { action: 'release', leaseId }).catch(() => {})
+      } catch {}
+    }
     setPreviewHtml(null)
     setPreviewError(null)
-    void context.call('quirky.editor/markdown', { action: 'renderPreview', text }).then((value: unknown) => {
-      if (!alive) return
+    void context.call('quirky.editor/markdownPreview', {
+      action: 'render',
+      leaseId,
+      worktree: `id:${worktreeId}`,
+      path,
+      text
+    }).then((value: unknown) => {
+      if (!active) {
+        release()
+        return
+      }
       if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+        release()
         setPreviewError('The Markdown preview renderer returned invalid content.')
         return
       }
       const response = value as Record<string, unknown>
-      const html = response.html
-      if (typeof html !== 'string') {
+      if (response.leaseId !== leaseId || response.worktreeId !== worktreeId || response.path !== path ||
+        typeof response.html !== 'string') {
+        release()
         setPreviewError('The Markdown preview renderer returned invalid content.')
         return
       }
-      setPreviewHtml(html)
-    }).catch((error: unknown) => {
-      if (alive) setPreviewError(messageOf(error))
+      setPreviewHtml(response.html)
+    }).catch((reason: unknown) => {
+      release()
+      if (active) setPreviewError(messageOf(reason))
     })
     return () => {
-      alive = false
+      active = false
+      release()
     }
-  }, [context, showMarkdownPreview, loaded?.revision, stateKey])
+  }, [context, input.worktree, path, showMarkdownPreview, loaded?.revision, stateKey])
 
   useEffect(() => {
     if (!menuOpen) return
@@ -274,7 +294,7 @@ export function FileDiff({ context, input, settings, setSetting, report, bind, c
         {showMarkdownPreview && (
           <div className="qgv-markdown-preview-panel">
             <p className="qgv-markdown-preview-notice">
-              Showing only the modified Markdown side. Local images are omitted because this detached preview has no source-file context. Switch to Source to compare both sides.
+              Showing only the modified Markdown side. Switch to Source to compare both sides.
             </p>
             {loaded === null ? (
               error !== null ? <ErrorNotice message={error} /> : <p className="qgv-muted qgv-pad">Loading modified Markdown...</p>
