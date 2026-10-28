@@ -1623,6 +1623,18 @@
         "m7-sweep-orchestration"
       ],
       "status": "todo"
+    },
+    {
+      "id": "sb-mobile-app-panels-unbuilt-flows",
+      "milestone": "Side B",
+      "title": "Implement remaining unbuilt mobile flows: native APNs/FCM token registration, leases, OS permission/sound and background tap delivery once an operator-controlled push service and entitlements exist; GitLab/Linear/Jira Tasks list/detail/mutations and linked workspace creation after provider-owned APIs land; terminal-artifact preview and conditional save with a real terminal path producer, opaque grants, grant refresh and source-aware routes.",
+      "docs": [
+        "mobile.md"
+      ],
+      "deps": [
+        "sb-mobile-app-panels"
+      ],
+      "status": "todo"
     }
   ]
 }
