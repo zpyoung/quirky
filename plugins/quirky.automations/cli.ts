@@ -1,6 +1,7 @@
 import type { CliArgs, CliContext, CliModule } from '@quirky/protocol'
 import type { AutomationDefinition, AutomationRun, AutomationRunsPage, ScheduleBuildInput } from './types'
 import { buildAutomationRrule, describeAutomationSchedule, isValidAutomationSchedule } from './schedule'
+import { uiCommands } from './src/ui-cli'
 
 const createFlags = [
   'name', 'prompt', 'provider', 'project', 'repo', 'workspace', 'workspaceMode', 'baseBranch', 'setupDecision',
@@ -510,6 +511,7 @@ function command(handler: (args: CliArgs, ctx: CliContext) => Promise<void>) {
 }
 
 export const commands: CliModule['commands'] = {
+  ...uiCommands,
   list: command(list),
   show: command(show),
   create: command(create),

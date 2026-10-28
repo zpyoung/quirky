@@ -4,10 +4,16 @@
   "version": "0.1.0",
   "description": "Durable scheduled and manual structured agent runs.",
   "main": "main.ts",
+  "ui": "dist/ui.js",
   "cli": "cli.ts",
   "activation": "startup",
   "contributes": {
     "method": [
+      { "id": "uiState", "description": "Read daemon-owned automation navigation and retained editor draft.", "readOnly": true, "params": { "type": "object", "properties": {}, "additionalProperties": false }, "result": { "type": "object", "properties": { "revision": { "type": "integer" }, "navigation": { "type": "object", "additionalProperties": true }, "editor": {} }, "required": ["revision", "navigation", "editor"], "additionalProperties": false } },
+      { "id": "uiNavigate", "description": "Set automation page, selection, filters and sort atomically.", "params": { "type": "object", "properties": { "page": { "type": "string", "enum": ["list", "detail", "runs", "run"] }, "automationId": {}, "runId": {}, "tab": { "type": "string", "enum": ["overview", "runs"] }, "query": { "type": "string" }, "host": { "type": "string" }, "status": { "type": "string", "enum": ["all", "enabled", "paused"] }, "lastRun": { "type": "string", "enum": ["all", "failed", "succeeded", "never"] }, "agent": { "type": "string" }, "sort": { "type": "string", "enum": ["name", "lastRun"] }, "direction": { "type": "string", "enum": ["asc", "desc"] }, "runQuery": { "type": "string" }, "runStatus": { "type": "string", "enum": ["all", "successful", "failed", "progress", "skipped"] } }, "additionalProperties": false }, "result": { "type": "object", "additionalProperties": true } },
+      { "id": "open", "description": "Open Automations, retaining state and the prior view.", "params": { "type": "object", "additionalProperties": true }, "result": { "type": "object", "additionalProperties": true } },
+      { "id": "close", "description": "Restore the view shown before Automations.", "params": { "type": "object", "properties": {}, "additionalProperties": false }, "result": { "type": "object", "properties": { "closed": { "type": "boolean" } }, "required": ["closed"] } },
+      { "id": "settings", "description": "Open Automation settings even when its sidebar shortcut is hidden.", "params": { "type": "object", "properties": {}, "additionalProperties": false }, "result": { "type": "object", "properties": { "opened": { "type": "boolean" } }, "required": ["opened"] } },
       {
         "id": "list",
         "description": "Lists automation definitions in name order.",
@@ -276,9 +282,28 @@
       }
     ],
     "event": [
-      { "id": "changed", "description": "An automation definition or run changed after its durable write completed." }
+      { "id": "changed", "description": "An automation definition or run changed after its durable write completed." },
+      { "id": "uiChanged", "description": "Automation navigation or retained editor draft changed." }
+    ],
+    "view": [
+      { "id": "automations", "title": "Automations" },
+      { "id": "settings", "title": "Automations", "settings": true }
+    ],
+    "sidebar-section": [{ "id": "automations", "title": "Automations", "order": 35 }],
+    "setting": [
+      { "id": "show-automations-button", "title": "Show Automations Button", "description": "Show the Automations shortcut in the sidebar.", "type": "boolean", "default": true, "menu": "view" },
+      { "id": "ask-before-delete", "title": "Ask Before Deleting Automations", "description": "Confirm deleting automations and their run history.", "type": "boolean", "default": true }
+    ],
+    "command": [
+      { "id": "open", "title": "Open Automations" },
+      { "id": "settings", "title": "Automation settings" }
     ],
     "cli-command": [
+      { "id": "uiState", "words": "ui-state", "summary": "read automation view and draft state", "methods": ["quirky.automations/uiState"] },
+      { "id": "uiNavigate", "words": "navigate", "summary": "set automation navigation with a JSON patch", "flags": { "patch": { "type": "string", "description": "JSON navigation patch", "required": true } }, "methods": ["quirky.automations/uiNavigate"] },
+      { "id": "open", "words": "open", "summary": "open the automation page", "flags": { "patch": { "type": "string", "description": "JSON navigation patch" } }, "methods": ["quirky.automations/open"] },
+      { "id": "close", "words": "close", "summary": "restore the preceding view", "methods": ["quirky.automations/close"] },
+      { "id": "settings", "words": "settings", "summary": "open automation settings", "methods": ["quirky.automations/settings"] },
       { "id": "list", "words": "list", "summary": "list scheduled automations", "methods": ["quirky.automations/list"] },
       { "id": "show", "words": "show", "summary": "show an automation", "positionals": [{ "name": "id", "description": "automation ID", "required": false }], "flags": { "id": { "type": "string", "description": "automation ID as an alternative to the positional ID" } }, "methods": ["quirky.automations/show"] },
       {

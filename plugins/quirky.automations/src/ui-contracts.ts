@@ -56,6 +56,7 @@ export type AutomationSurfaceProps = {
   state: AutomationUiState
   refresh(): Promise<void>
   notify(message: string, kind?: 'success' | 'error' | 'info'): void
+  report?(state: unknown): void
 }
 export type AutomationEditorData = {
   hosts: { id: string; label: string; available: boolean; reason?: string }[]
