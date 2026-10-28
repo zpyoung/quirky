@@ -125,7 +125,7 @@ describe('kernel command declarations', () => {
     const methods = (name: string) => COMMANDS.find((command) => command.name === name)?.methods
     expect(methods('plugin install')).toEqual(['plugin.inspect', 'plugin.install'])
     expect(methods('daemon restart')).toEqual(['daemon.stop'])
-    expect(methods('open')).toEqual([])
+    expect(methods('open')).toEqual(['status.get'])
     expect(methods('help')).toEqual([])
   })
 

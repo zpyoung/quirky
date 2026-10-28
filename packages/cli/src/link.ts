@@ -69,13 +69,23 @@ export function createDaemonLink(connect: () => Promise<QuirkyClient>, options: 
   const counts = new Map<string, number>()
   const destructive = new Set<string>()
   let current: Promise<QuirkyClient> | null = null
+  let closed = false
 
-  const get = () =>
-    (current ??= connect().catch((error) => {
-      throw new DaemonUnavailableError(error instanceof Error ? error.message : String(error))
+  const get = () => {
+    if (closed) return Promise.reject(new Error('daemon link is closed'))
+    return (current ??= connect().catch((error) => {
+      const message = error instanceof Error ? error.message : String(error)
+      if (
+        error instanceof RpcError ||
+        /\b(?:EACCES|EPERM)\b|permission denied|unauthori[sz]ed|authentication failed/i.test(message)
+      ) {
+        throw error
+      }
+      throw new DaemonUnavailableError(message)
     }))
-
+  }
   const reconnect = async () => {
+    if (closed) throw new Error('daemon link is closed')
     const previous = current
     current = null
     if (previous) (await previous.catch(() => null))?.close()
@@ -163,6 +173,7 @@ export function createDaemonLink(connect: () => Promise<QuirkyClient>, options: 
     callAny: (method, params, callOptions) => invoke(method, params, callOptions),
     reconnect,
     close() {
+      closed = true
       void current?.then((client) => client.close()).catch(() => {})
     }
   }
