@@ -1,8 +1,9 @@
+import { mkdirSync, writeFileSync } from 'node:fs'
 import { Database } from 'bun:sqlite'
 import { join } from 'node:path'
 import { afterEach, describe, expect, setDefaultTimeout, test } from 'bun:test'
 import { RpcErrorCode } from '../../../packages/protocol/src'
-import { waitFor } from '../../../packages/daemon/test/helpers'
+import { waitFor, waitForAsync } from '../../../packages/daemon/test/helpers'
 import {
   boot,
   call,
@@ -248,7 +249,7 @@ describe('sidebar-extras API', () => {
   })
 
 
-  test('normalizes corrupt persisted preferences to conservative defaults', async () => {
+  test('normalizes corrupt preferences across restart and accepts a later valid mutation', async () => {
     env = await boot()
     await extras(env.client, 'state')
     const store = new Database(join(env.harness.home, 'plugin-data', 'quirky.sidebar-extras', 'store.db'))
@@ -263,13 +264,19 @@ describe('sidebar-extras API', () => {
         hideCompletedReviewWorkspaces: 'true',
         hidePassingCheckWorkspaces: null
       }))
+      insert.run('invalid-custom-days', JSON.stringify({
+        workspaceActivityWindow: 'custom',
+        workspaceActivityCustomDays: 0
+      }))
       insert.run('invalid-json', '{not-json')
     } finally {
       store.close()
     }
 
+    env = await restart(env)
     const legacy = await extras<ExtrasState>(env.client, 'state', { client: 'legacy' })
     const corrupt = await extras<ExtrasState>(env.client, 'state', { client: 'corrupt' })
+    const invalidCustomDays = await extras<ExtrasState>(env.client, 'state', { client: 'invalid-custom-days' })
     const malformed = await extras<ExtrasState>(env.client, 'state', { client: 'invalid-json' })
     expect(legacy.preferences).toMatchObject({
       workspaceActivityWindow: 'week',
@@ -285,8 +292,75 @@ describe('sidebar-extras API', () => {
       hideCompletedReviewWorkspaces: false,
       hidePassingCheckWorkspaces: false
     })
+    expect(invalidCustomDays.preferences).toMatchObject({
+      workspaceActivityWindow: 'custom',
+      workspaceActivityCustomDays: 30
+    })
     expect(malformed.preferences).toEqual(corrupt.preferences)
+
+    const recovered = await extras<ExtrasState>(env.client, 'set', {
+      client: 'invalid-json',
+      workspaceActivityWindow: 'custom',
+      workspaceActivityCustomDays: 4
+    })
+    expect(recovered.preferences).toMatchObject({
+      workspaceActivityWindow: 'custom',
+      workspaceActivityCustomDays: 4
+    })
+    env = await restart(env)
+    expect((await extras<ExtrasState>(env.client, 'state', { client: 'invalid-json' })).preferences).toMatchObject({
+      workspaceActivityWindow: 'custom',
+      workspaceActivityCustomDays: 4
+    })
   })
+
+  test('overrides and disables the real Source Control activity item without disabling worktrees', async () => {
+    env = await boot()
+    const project = await createGitProject(env.client)
+    const activityItemId = 'activity-item:quirky.sidebar-extras/source-control'
+    const overrideId = 'acme.sidebar-extras-activity-override'
+    const activityItem = async () =>
+      (await call<{ activityItems: { id: string; plugin: string; title: string }[] }>(
+        env!.client,
+        'ui.contributions'
+      )).activityItems.find((item) => item.id === activityItemId)
+
+    expect(await activityItem()).toMatchObject({
+      id: activityItemId,
+      plugin: 'quirky.sidebar-extras',
+      title: 'Source Control'
+    })
+
+    const source = join(env.harness.home, 'activity-item-override-source')
+    mkdirSync(source, { recursive: true })
+    writeFileSync(join(source, 'quirky-plugin.json'), JSON.stringify({
+      id: overrideId,
+      name: 'Sidebar extras activity override',
+      version: '1.0.0',
+      ui: 'ui.js',
+      overrides: [{ id: activityItemId, title: 'Team Source Control' }]
+    }))
+    writeFileSync(join(source, 'ui.js'), 'export function activate() {}\n')
+    await call(env.client, 'plugin.install', { path: source, yes: true })
+    const overridden = await waitForAsync(async () => {
+      const item = await activityItem()
+      return item?.plugin === overrideId ? item : undefined
+    }, 5_000)
+    expect(overridden).toMatchObject({ id: activityItemId, plugin: overrideId, title: 'Team Source Control' })
+
+    await call(env.client, 'plugin.disable', { id: overrideId })
+    const restored = await waitForAsync(async () => {
+      const item = await activityItem()
+      return item?.plugin === 'quirky.sidebar-extras' ? item : undefined
+    }, 5_000)
+    expect(restored).toMatchObject({ id: activityItemId, plugin: 'quirky.sidebar-extras', title: 'Source Control' })
+
+    await call(env.client, 'plugin.disable', { id: 'quirky.sidebar-extras' })
+    expect(await waitForAsync(async () => (await activityItem()) === undefined ? true : undefined, 5_000)).toBe(true)
+    const worktrees = await call<{ id: string }[]>(env.client, 'quirky.worktree/list')
+    expect(worktrees.map((worktree) => worktree.id)).toContain(project.main.id)
+  })
+
   test('does not transfer visits when a canonical worktree is replaced at the same path', async () => {
     env = await boot()
     const currentEnv = env
