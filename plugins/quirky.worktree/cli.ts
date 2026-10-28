@@ -64,6 +64,10 @@ type WorktreeCreateReceipt = WorktreeCreateResult & {
     agentLaunch?: { sessionId: string; launchSettings: { summary: string } | null }
   }
 }
+type RemoteWorktreeCreateReceipt = {
+  runtime: { id: string; name: string; endpoint: string; grantId: string }
+  result: WorktreeCreateReceipt
+}
 
 function launchOptions(args: CliArgs, ctx: CliContext): { model?: string; options?: Record<string, string | boolean> } {
   const model = stringFlag(args, 'model')
@@ -347,6 +351,25 @@ const named: CliModule['commands'] = {
     if (args.flags['no-fallback'] === true) params.allowLocalBaseFallback = false
     if (args.flags['keep-main'] === true) params.keepMain = true
     if (args.flags.activate === true) params.activate = true
+    const runtime = stringFlag(args, 'runtime')
+    if (runtime !== undefined) {
+      if (stringFlag(args, 'host') !== undefined) throw ctx.usage('--runtime and --host cannot be used together')
+      if (typeof params.repo !== 'string' || params.repo.trim() === '' || params.group !== undefined) {
+        throw ctx.usage('--runtime requires an explicit remote Git project selector with --repo, not --group')
+      }
+      if (params.activate === true || args.flags.window !== undefined) {
+        throw ctx.usage('remote worktrees cannot be activated in a local UI window')
+      }
+      const remoteParams = { ...params }
+      delete remoteParams.createdBy
+      const remote = (await ctx.call('quirky.worktree/createRemote', { runtime, ...remoteParams })) as RemoteWorktreeCreateReceipt
+      ctx.out.result(remote, () => [
+        `created ${remote.result.worktree.name} on owner runtime ${remote.runtime.name} (${remote.runtime.id})`,
+        `remote worktree: ${remote.result.worktree.id}`,
+        `remote path: ${remote.result.worktree.path}`
+      ].join('\n'))
+      return
+    }
 
     const result = (await ctx.call('quirky.worktree/create', params)) as WorktreeCreateReceipt
     ctx.out.result(result, () => [worktreeRecord(ctx, result.worktree), ...createNotes(result, stringFlag(args, 'agent'))].join('\n'))

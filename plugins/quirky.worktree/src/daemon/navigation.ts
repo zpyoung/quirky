@@ -2,6 +2,7 @@ import type { PluginStore, Worktree } from '@quirky/protocol'
 import type { CallerIdentity } from '../../selector'
 import type { StockWorktreeOptions, WorktreeControl } from '../control-types'
 import { openWindowView, selectWindow, type SelectedWindow, type WindowEnv } from './window'
+import { resolveWorkspaceViewOwner } from './view-owner'
 
 const HISTORY_KEY = 'worktree-navigation-history'
 const WINDOW_HISTORY_KEY = 'worktree-navigation-history-by-window'
@@ -87,11 +88,12 @@ function writeHistory(store: PluginStore, selected: SelectedWindow, history: Nav
   }
 }
 
-function activeWorktree(value: unknown): string | null {
-  const layout = recordOf(value)
-  const view = recordOf(layout?.view)
-  const input = recordOf(view?.input)
-  return typeof input?.worktree === 'string' ? input.worktree : null
+function activeWorktree(view: unknown, worktrees: WorktreeControl[], fail: NavigationEnv['fail']): string | null {
+  const resolution = resolveWorkspaceViewOwner(view, worktrees)
+  if (resolution.kind === 'unknown') {
+    throw fail('conflict', 'The selected workspace view has no unique canonical worktree owner.')
+  }
+  return resolution.kind === 'owned' ? resolution.owner.worktreeId : null
 }
 
 function navigationOrder(worktrees: WorktreeControl[], options: StockWorktreeOptions): WorktreeControl[] {
@@ -149,9 +151,9 @@ export async function navigate(
   if (typeof params.worktree !== 'string' || params.worktree.trim() === '') throw env.fail('invalid-params', 'worktree must be a selector')
   const target = targetOf(params.target, env.fail)
   const selected = await selectWindow(env, params.window)
-  const { worktree } = await env.find(params.worktree, identity)
+  const { worktree, all } = await env.find(params.worktree, identity)
+  activeWorktree(selected.view, all, env.fail)
   await openView(env, selected, worktree, target)
-  pushHistory(env.store, selected, worktree.id)
   return { worktreeId: worktree.id, target }
 }
 
@@ -173,8 +175,8 @@ export async function navigationHistoryMove(
   window?: unknown
 ): Promise<{ worktreeId: string; target: 'terminal' }> {
   const selected = await selectWindow(env, window)
-  const current = activeWorktree(selected.layout)
   const listed = await env.list()
+  const current = activeWorktree(selected.view, listed, env.fail)
   const available = new Set(listed.map((worktree) => worktree.id))
   const history = readHistory(env.store, selected)
   let worktrees = history.worktrees.filter((id) => available.has(id))
@@ -202,8 +204,9 @@ export async function navigationStep(
   window?: unknown
 ): Promise<{ worktreeId: string; target: 'terminal' }> {
   const selected = await selectWindow(env, window)
-  const current = activeWorktree(selected.layout)
-  const worktrees = navigationOrder(await env.list(), env.options())
+  const listed = await env.list()
+  const current = activeWorktree(selected.view, listed, env.fail)
+  const worktrees = navigationOrder(listed, env.options())
   const index = worktrees.findIndex((worktree) => worktree.id === current)
   if (index < 0) throw env.fail('not-found', 'The current view is not a listed worktree.')
   const next = index + (direction === 'previous' ? -1 : 1)
@@ -223,7 +226,9 @@ export async function navigationIndex(
     throw env.fail('invalid-params', 'index must be an integer from 1 through 9')
   }
   const selected = await selectWindow(env, window)
-  const worktrees = navigationOrder(await env.list(), env.options())
+  const listed = await env.list()
+  activeWorktree(selected.view, listed, env.fail)
+  const worktrees = navigationOrder(listed, env.options())
   const target = worktrees[value - 1]
   if (!target) throw env.fail('not-found', `Workspace index ${value} is not available.`)
   await openView(env, selected, target, 'terminal')

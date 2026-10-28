@@ -13,7 +13,7 @@ import {
 import { expandHome, resolveRealPath, worktreeIdForPath } from './paths'
 import { SelectorSyntaxError, matchWorktrees, type CallerIdentity } from './selector'
 import { BranchCleaner } from './src/daemon/branches'
-import { createWorkspace, prefetchWorktreeCreateBase, suggestName, type CreateEnv, type CreateParams, type PendingStart } from './src/daemon/create'
+import { createRemoteWorkspace, createWorkspace, prefetchWorktreeCreateBase, suggestName, type CreateEnv, type CreateParams, type PendingStart, type RemoteCreateParams } from './src/daemon/create'
 import { groupRepoId, listEverything, listGroup, listProject, type ListEnv } from './src/daemon/list'
 import { KeyedQueue } from './src/daemon/queue'
 import { deleteBranch, describeRemove, removeWorktree, type DeleteBranchParams, type InFlightRemove, type RemoveEnv, type RemoveParams } from './src/daemon/remove'
@@ -482,11 +482,24 @@ export async function activate(context: PluginContext): Promise<void> {
     },
     availableHosts: () => availableHosts((method, params) => context.call(method, params), fail),
     async create(params, caller) {
+      if (Object.hasOwn(params, 'runtime')) throw fail('invalid-params', 'Use quirky.worktree/createRemote for owner-runtime worktree creation.')
+      const requireGitRepository = params.requireGitRepository === true
+      const createParams = { ...params }
+      delete createParams.requireGitRepository
       try {
-        return await createWorkspace(createEnv, params as CreateParams, identityOf(caller), originCreatorOf(caller))
+        return await createWorkspace(
+          createEnv,
+          createParams as CreateParams,
+          identityOf(caller),
+          originCreatorOf(caller),
+          { requireGitRepository }
+        )
       } finally {
         armPreparedExpiry()
       }
+    },
+    createRemote(params) {
+      return createRemoteWorkspace(createEnv, params as RemoteCreateParams)
     },
     async prefetchCreate(params) {
       try {
