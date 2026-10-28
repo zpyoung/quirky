@@ -1149,8 +1149,7 @@
       "deps": [
         "sa-browser-pane"
       ],
-      "status": "in-progress",
-      "lane": 10
+      "status": "blocked"
     },
     {
       "id": "sa-browser-profile-import-ui",

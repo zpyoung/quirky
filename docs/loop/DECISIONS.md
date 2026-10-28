@@ -82,6 +82,8 @@ files, not this one.
 | hard | high | [m0-registry D12](decisions/m0-registry.md) | Every contribution is declared in the manifest, and code can only provide declared ones | assumed — autonomous |
 | hard | high | [m0-registry D23](decisions/m0-registry.md) | Choose declarative contributions with lazily loaded code | assumed — autonomous |
 | hard (engine/data boundary) | high | [sa-browser-design-mode D2](decisions/sa-browser-design-mode.md) | Preserve Native and exact-page Watch engine identity | locked by docs/architecture.md |
+| hard (engine and acceptance boundary) | high | [sa-browser-pane-native-events D1](decisions/sa-browser-pane-native-events.md) | Keep this item scoped to the deferred Native page-event flows | locked by docs/architecture.md and docs/loop/decisions/sa-browser-pane.md |
+| hard (security boundary) | high | [sa-browser-pane-native-events D3](decisions/sa-browser-pane-native-events.md) | Keep certificate approval loopback-only and external launches explicitly approved | locked by browser.md and docs/loop/decisions/sa-browser-pane.md D5 |
 | hard | high | [m5-automations-dispatch D1](decisions/m5-automations-dispatch.md) | Use daemon structured execution, never a hidden terminal | locked by docs/architecture.md |
 | hard | high | [m1-term-ui D7](decisions/m1-term-ui.md) | Layout lives in the daemon; the window renders it and changes it only through methods | locked by docs/roadmap.md |
 | hard | high | [m1-providers D9](decisions/m1-providers.md) | Agent IDs, labels and table values are Orca's | locked by docs/architecture.md |
@@ -574,6 +576,9 @@ files, not this one.
 | medium | high | [m6-orchestration-ui D5](decisions/m6-orchestration-ui.md) | Preserve uncertainty, identity and terminal ownership | locked by research/orca-features/orchestration.md |
 | medium | high | [m6-orchestration-ui D8](decisions/m6-orchestration-ui.md) | Resolve navigation in one public daemon operation, including context-only Dispatches | locked by research/orca-features/orchestration.md |
 | medium | high | [m6-orchestration-ui D15](decisions/m6-orchestration-ui.md) | Compose canonical service migrations and routing before retrying the land | assumed — autonomous |
+| medium (visible interaction contract) | high | [sa-browser-pane-native-events D2](decisions/sa-browser-pane-native-events.md) | Resolve interaction and error-state gray areas without weakening source semantics | locked by browser.md and docs/loop/decisions/sa-browser-pane.md D5 |
+| medium (native ownership contracts) | high | [sa-browser-pane-native-events D4](decisions/sa-browser-pane-native-events.md) | Preserve download ownership and OAuth opener/body fidelity | locked by browser.md and docs/loop/decisions/sa-browser-pane.md D5 |
+| medium (platform-specific host support) | high | [sa-browser-pane-native-events D8](decisions/sa-browser-pane-native-events.md) | Defer other-platform native capability validation | deferred: platform |
 | medium | high | [fix-flaky-daemon-pty-client D2](decisions/fix-flaky-daemon-pty-client.md) | Retain the locked older-retire/newer-refuse upgrade policy | locked by docs/loop/decisions/m1-term-daemon.md |
 | medium | high | [fix-flaky-daemon-pty-client D6](decisions/fix-flaky-daemon-pty-client.md) | Catch up once and retain incoming Hosting policy unchanged | locked by docs/loop/LOOP.md |
 | medium | high | [m5-automations-dispatch D2](decisions/m5-automations-dispatch.md) | Preserve raw-argument refusal and defer that incompatible flow | deferred: raw extra agent arguments |
@@ -1985,6 +1990,9 @@ files, not this one.
 | easy | high | [m6-orchestration-ui D11](decisions/m6-orchestration-ui.md) | Preserve sidebar workspace layout and isolate actual UI proof | assumed — autonomous |
 | easy | high | [m6-orchestration-ui D12](decisions/m6-orchestration-ui.md) | Keep catch-up and review provenance explicit | assumed — autonomous |
 | easy | high | [m6-orchestration-ui D14](decisions/m6-orchestration-ui.md) | Keep guarded dogfood limits separate from actual isolated-browser proof | assumed — autonomous |
+| easy (repeat capability assessment after a supported sdk update) | high for the inspected public surface | [sa-browser-pane-native-events D5](decisions/sa-browser-pane-native-events.md) | The selected public SDK still lacks the required response contracts | assumed — autonomous |
+| easy (resume preserved blocked branch after prerequisite changes) | high | [sa-browser-pane-native-events D6](decisions/sa-browser-pane-native-events.md) | Block the core item rather than ship another deferral or forbidden replacement | locked by docs/loop/LOOP.md and docs/loop/decisions/sa-browser-pane.md D5 |
+| easy (resume normal implementation after prerequisite is supported) | high | [sa-browser-pane-native-events D7](decisions/sa-browser-pane-native-events.md) | Use the unattended build-first workflow, with no implementation or completion claims | locked by docs/loop/LOOP.md |
 | easy | high | [fix-flaky-daemon-pty-client D1](decisions/fix-flaky-daemon-pty-client.md) | Diagnose retirement before changing the shutdown-count assertion | assumed — autonomous |
 | easy | high | [fix-flaky-daemon-pty-client D3](decisions/fix-flaky-daemon-pty-client.md) | Use Gemini for the final cross-family review because Claude reviewers are unavailable | assumed — autonomous |
 | easy | high | [fix-flaky-daemon-pty-client D4](decisions/fix-flaky-daemon-pty-client.md) | Deduplicate retirement by authenticated incarnation within each establishment attempt | assumed — autonomous |
