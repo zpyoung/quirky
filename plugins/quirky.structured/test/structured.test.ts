@@ -86,11 +86,14 @@ afterEach(async () => {
 const call = (method: string, params: Record<string, unknown> = {}) => client.callAny(method, params) as Promise<any>
 const create = (prompt = 'fix the bug') =>
   call('quirky.structured/create', { worktree: 'main', agent: 'claude', prompt }) as Promise<Session>
-const createAgent = (agent: string, prompt = 'fix the bug', extra: Record<string, unknown> = {}) =>
-  call('quirky.structured/create', { worktree: 'main', agent, prompt, ...extra }) as Promise<Session>
+type StructuredAgent = 'claude' | 'codex'
+type StructuredCreateOverrides = {
+  model?: string
+  options?: Record<string, string | boolean>
+}
+const createAgent = (agent: StructuredAgent, prompt = 'fix the bug', overrides: StructuredCreateOverrides = {}) =>
+  call('quirky.structured/create', { worktree: 'main', agent, prompt, ...overrides }) as Promise<Session>
 
-const createAgent = (agent: string, prompt = 'fix the bug', extra: Record<string, unknown> = {}) =>
-  call('quirky.structured/create', { worktree: 'main', agent, prompt, ...extra }) as Promise<Session>
 
 async function failure(promise: Promise<unknown>): Promise<RpcError> {
   try {

@@ -16,6 +16,10 @@ export interface ServiceCoordinatorEvidence {
 }
 export type CoordinatorEvidence = RuntimeCallerEvidence | ServiceCoordinatorEvidence
 
+export function isServiceCoordinatorEvidence(evidence: CoordinatorEvidence): evidence is ServiceCoordinatorEvidence {
+  return 'kind' in evidence && evidence.kind === 'service'
+}
+
 export type WorkerMode = 'terminal' | 'structured'
 export type TurnStart = 'observed' | 'permission' | 'unsupported' | 'unobserved'
 export type TerminalState = 'active' | 'reclaimable' | 'retained' | 'release_pending' | 'release_unknown' | 'released'
@@ -153,7 +157,6 @@ export interface WorkerRepository {
   putArchive(archive: WorkerArchive): void
   deleteArchive(dispatchId: DispatchId): void
   addObservation(dispatchId: DispatchId, facet: string, payload: JsonValue): void
-  reconcile(runtimeEpoch: string): void
 }
 export interface WorkerPlacement {
   worktreeId: string; session: Session; identity: SessionIdentity; created: boolean

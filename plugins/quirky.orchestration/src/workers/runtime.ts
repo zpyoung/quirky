@@ -768,6 +768,7 @@ export function createWorkerRuntime(context: PluginContext): WorkerRuntime {
             }
             session = sessionRecord as unknown as Session
           }
+        }
 
         if (!worktreeId) throw failure('invalid_runtime_response', 'The worker session has no resolved workspace.')
         let identity: SessionIdentity

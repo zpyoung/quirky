@@ -40,6 +40,7 @@ export type LifecycleFixture = {
 type FixtureOptions = {
   state?: WorkerRecord['state']
   runtimeEpoch?: string
+  workerRuntimeEpoch?: string
   processIncarnation?: string | null
   dispatchStatus?: DispatchRow['status']
   taskStatus?: TaskRow['status']
@@ -154,7 +155,7 @@ export function createLifecycleFixture(options: FixtureOptions = {}): LifecycleF
     lastError: null,
     createdAt: now,
     updatedAt: now,
-    runtimeEpoch: epoch,
+    runtimeEpoch: options.workerRuntimeEpoch ?? epoch,
     processIncarnation: incarnation,
     processRuntimeEpoch: processEpoch,
     mode: 'terminal',
@@ -191,6 +192,21 @@ export function createLifecycleFixture(options: FixtureOptions = {}): LifecycleF
   const closeQuestionCalls: DispatchId[] = []
   let registeredPort: Parameters<WorkerCore['registerWorkerPort']>[0] | null = null
   let registrationCount = 0
+  const transitionDispatch = (input: DispatchTransitionInput): DispatchRow => {
+    const current = dispatches.get(input.dispatchId)
+    if (!current || current.status !== input.expectedState) throw new Error('dispatch state compare-and-set failed')
+    const failureClass = 'failureClass' in input ? input.failureClass : null
+    const next: DispatchRow = {
+      ...current,
+      status: input.nextState,
+      failureCount: failureClass === 'infrastructure' ? current.failureCount + 1 : current.failureCount,
+      lastFailure: 'failureReason' in input ? input.failureReason ?? current.lastFailure : current.lastFailure,
+      completedAt: input.nextState === 'dispatched' ? null : input.at
+    }
+    dispatches.set(input.dispatchId, next)
+    registeredPort?.settleDispatch(store, input.dispatchId, next.status, input.at)
+    return next
+  }
   const identityFor = (record: WorkerRecord): SessionIdentity | null =>
     record.processIncarnation === null || record.sessionId === null || record.processRuntimeEpoch === null ? null : ({
       sessionId: record.sessionId,
@@ -261,21 +277,7 @@ export function createLifecycleFixture(options: FixtureOptions = {}): LifecycleF
       tasks.set(input.taskId, next)
       return next
     },
-    transitionDispatch(input: DispatchTransitionInput) {
-      const current = dispatches.get(input.dispatchId)
-      if (!current || current.status !== input.expectedState) throw new Error('dispatch state compare-and-set failed')
-      const failureClass = 'failureClass' in input ? input.failureClass : null
-      const next: DispatchRow = {
-        ...current,
-        status: input.nextState,
-        failureCount: failureClass === 'infrastructure' ? current.failureCount + 1 : current.failureCount,
-        lastFailure: 'failureReason' in input ? input.failureReason ?? current.lastFailure : current.lastFailure,
-        completedAt: input.nextState === 'pending' || input.nextState === 'dispatched' ? null : input.at
-      }
-      dispatches.set(input.dispatchId, next)
-      registeredPort?.settleDispatch(store, input.dispatchId, next.status, input.at)
-      return next
-    },
+    transitionDispatch,
     transitionWorker(input: WorkerTransitionInput) {
       if (!registeredPort) throw new Error('worker lifecycle port is not registered')
       const workerRow = registeredPort.transitionWorker(store, input)
@@ -338,8 +340,13 @@ export function createLifecycleFixture(options: FixtureOptions = {}): LifecycleF
         ...(input.outcome === 'failed' ? { failureClass: 'worker_report' as const } : {}),
         at: now
       } as DispatchTransitionInput
-      this.transitionDispatch(transition)
-      const updatedTask = { ...currentTask, status: input.outcome === 'succeeded' ? 'completed' : 'failed', result: reportResult, completedAt: now }
+      transitionDispatch(transition)
+      const updatedTask: TaskRow = {
+        ...currentTask,
+        status: input.outcome === 'succeeded' ? 'completed' : 'failed',
+        result: reportResult,
+        completedAt: now
+      }
       tasks.set(input.taskId, updatedTask)
       return { status: 'accepted', task: updatedTask, dispatch: dispatches.get(input.dispatchId)!, worker: accepted }
     },

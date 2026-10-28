@@ -144,6 +144,10 @@ describe('launch hook JSON arguments', () => {
       shell: '/bin/sh',
       binDir: '/bin',
       env: () => ({}),
+      openStructuredLease: () => {
+        throw new Error('structured lease API is not used by this test')
+      },
+      sessionIdentity: () => null,
       shellArgv: () => ['/bin/sh'],
       shellReady: () => false,
       commandArgv: () => [],

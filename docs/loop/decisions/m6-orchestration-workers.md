@@ -275,5 +275,16 @@
 - **Revisit if:** physical input or custody ordering changes
 - **Source:** assumed — autonomous
 
+## D26: Reconcile interrupted worker state through the shared core transition
+- **Question:** a real daemon crash recovered the Worker as start_unknown but left its Task dispatched
+- **Options:** weaken the API assertion; update Task separately; run epoch reconciliation through the same core-authorized lifecycle transaction
+- **Chose:** lifecycle initialization registers its real worker port before reconciling interrupted attempts. The shared core transition projects unknown Task state atomically with Worker state and metadata; the obsolete repository-only transition path is removed rather than retained as a second convention.
+- **Why:** uncertainty must block the Task without falsely settling its pending Dispatch, fencing a valid exact report, creating a second process or resubmitting input.
+- **Evidence:** actual private daemon SIGKILL/restart API regression artifact://215 at acceptance-restart.test.ts154: Worker start_unknown/Dispatch pending, Task received dispatched instead of blocked. Source store.reconcile bypassed Core.transitionWorker. Fix and post-change regression pending.
+- **Reversibility:** medium
+- **Confidence:** high
+- **Revisit if:** runtime reconciliation gains another equally atomic shared lifecycle entry point
+- **Source:** locked by worker AC6/19 and core lifecycle authority
+
 ## Progress
 Iteration3: worker components committed651605c9/733aa6c7/87e0e424 after scope/HEAD audits; preserved unattributed .serena metadata. Source checkpoints d575d2eb,841f3e08,8796bfbc,ebbfcd33 compose input guards, real core/runtime,29methods/28verbs, CLI and same-store worker migrations. Full manifest parser passes. Assembled worker units59pass/352assertions; merged session/record gate126pass with missing native module, restored exact dependency codex-connection/path, then native runner12pass/49assertions. Actual API gate progresses past authenticated real terminal launch and worker_done, but latest8-scenario gate is3pass/5fail: accepted report leaves Worker ready; stop hits generic live-worker Task guard; release consequently refuses; native path has stale Claude-only restriction; unexpected exit lacks exact observation settlement. Scoped fixers own core.ts and runtime/authority/session proof files, parent owns the acceptance fixture. Public catalog installation refresh and undeclared depth setting root causes were corrected, not bypassed. No full API/UI pass, final suites/typecheck or landing claim. D17 skips unstarted formal review/dogfood; actual mandatory smoke remains. Next: finish integration fixes, prove all reachable real flows, final affected checks, dependency readiness and queue-controlled landing in the same turn.

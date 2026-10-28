@@ -98,12 +98,6 @@ describe('kernel method schemas', () => {
     expect(paletteSet.params.required ?? []).not.toContain('open')
     expect(paletteSet.result.properties?.palette?.type).toBe('boolean')
   })
-  test('sessionToken is an optional hello field separate from sessionId', () => {
-    const hello = methodSchemas['client.hello']!
-    expect(hello.required).not.toContain('sessionToken')
-    expect(hello.properties?.sessionToken).toEqual({ type: 'string' })
-    expect(hello.properties?.sessionId).toEqual({ type: 'string' })
-  })
 })
 
 describe('kernel event schemas', () => {

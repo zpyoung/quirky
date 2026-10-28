@@ -1,5 +1,6 @@
 import type { AcceptedWorkerCheckpoint, DispatchId, DispatchRow, DispatchStatus, DispatchTransitionInput, JsonValue, ResetMode, RuntimeCallerEvidence, TaskRow, UtcTimestamp, WorkerRow, WorkerState, WorkerTransitionInput } from '../contracts'
 import type { PluginStore } from '@quirky/protocol'
+import { isServiceCoordinatorEvidence } from '../worker-contracts'
 import type {
   CoordinatorEvidence, TerminalResource, WorkerArchive, WorkerControlParams, WorkerControlResult, WorkerCore,
   WorkerLifecycle, WorkerObservation, WorkerOutput, WorkerRecord, WorkerRepository, WorkerRuntime,
@@ -713,7 +714,7 @@ export function createWorkerLifecycle(
       updateState(params.dispatchId, worker.state, 'abandoned')
       updateStage(params.dispatchId, 'abandoned', {
         stage: 'abandoned',
-        lastError: `${worker.lastError ? `${worker.lastError}\\n` : ''}Abandoned by ${caller.kind === 'service' ? caller.pluginId : caller.callerSessionId}.`
+        lastError: `${worker.lastError ? `${worker.lastError}\\n` : ''}Abandoned by ${isServiceCoordinatorEvidence(caller) ? caller.pluginId : caller.callerSessionId}.`
       })
       setControlDispatchFence(dispatch, 'abandoned')
       const resource = repo.resource(params.dispatchId)
@@ -942,7 +943,7 @@ export function createWorkerLifecycle(
         return { takenOver: true }
       }
       if (resource.ownershipState !== 'owned' || resource.releaseState === 'releasing' ||
-        resource.releaseState === 'released' || resource.ownershipState === 'released') return { takenOver: false }
+        resource.releaseState === 'released') return { takenOver: false }
       repo.putResource({
         ...resource,
         ownershipState: 'user_owned',
@@ -1083,11 +1084,31 @@ export function createWorkerLifecycle(
     }
   }
 
-  repo.store.transaction(() => repo.reconcile(runtime.epoch))
   core.registerWorkerPort(lifecycle)
-  lifecycleByCore.set(core, lifecycle)
 
   core.store.transaction(() => {
+    for (const worker of repo.list()) {
+      if (worker.runtimeEpoch === runtime.epoch) continue
+      if (worker.state === 'starting') {
+        updateState(worker.dispatchId, 'starting', 'start_unknown')
+        updateStage(worker.dispatchId, 'start_unknown', {
+          stage: 'start_unknown',
+          lastError: 'The runtime restarted before worker-start reached a terminal receipt.'
+        })
+      } else if (worker.state === 'stopping') {
+        updateState(worker.dispatchId, 'stopping', 'stop_unknown')
+        updateStage(worker.dispatchId, 'stop_unknown', {
+          stage: 'stop_unknown',
+          lastError: 'The runtime restarted while worker-stop was awaiting an exact close confirmation.'
+        })
+      } else if (worker.state === 'stop_unknown' && worker.stage === 'stopping') {
+        updateStage(worker.dispatchId, 'stop_unknown', {
+          stage: 'stop_unknown',
+          lastError: 'The runtime restarted while retrying a worker-stop with an unproven outcome.'
+        })
+      }
+    }
+
     for (const dispatch of core.listDispatches()) {
       const worker = repo.get(dispatch.id)
       if (!worker || !ACTIVE_WORKER_STATES.has(worker.state) || !finalDispatchStatus(dispatch.status)) continue
@@ -1100,6 +1121,7 @@ export function createWorkerLifecycle(
       if (resource && resource.ownerDispatchId === dispatch.id) markResourceRetained(resource, 'assignment_settled')
     }
   })
+  lifecycleByCore.set(core, lifecycle)
 
   unregisterExit = runtime.context.pty.onExit((sessionId, exitCode, event) => {
     if (disposed) return

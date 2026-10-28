@@ -283,6 +283,10 @@ class ClaudeRunner implements StructuredRunner {
       for await (const msg of run.query) {
         if (run.stopped) break
         this.journal(sessionId, msg)
+        if (msg?.type === 'result' && msg.is_error === true) {
+          await this.stop(sessionId)
+          break
+        }
       }
     } catch (error) {
       failure = error instanceof Error ? error : new Error(String(error))
@@ -329,7 +333,7 @@ class ClaudeRunner implements StructuredRunner {
         return
       case 'result':
         append('result', resultText(msg), msg)
-        this.context.setStatus(sessionId, 'done')
+        if (msg.is_error !== true) this.context.setStatus(sessionId, 'done')
         return
       default:
         append('system', String(msg?.type ?? 'event'), msg)
