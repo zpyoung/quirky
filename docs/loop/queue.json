@@ -1454,6 +1454,18 @@
         "m5-automations-dispatch-remote-and-args"
       ],
       "status": "todo"
+    },
+    {
+      "id": "m5-loops-ui-visible-stop-close-review",
+      "milestone": "M5",
+      "title": "Complete existing loop UI visible Stop (Cancel/After iteration/Now), Close (Cancel/Keep running/Stop), tool-limited setup verdict, and one bounded cross-family review; use unique native fixture conversation ids and retain all shipped tests/guards",
+      "docs": [
+        "fork-loops.md"
+      ],
+      "deps": [
+        "m5-loops-ui"
+      ],
+      "status": "todo"
     }
   ]
 }
