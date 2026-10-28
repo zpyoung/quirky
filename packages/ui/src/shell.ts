@@ -118,6 +118,7 @@ export function createShell(options: ShellOptions): AppContextValue {
       store.dispatch({ type: 'toast', toast: { ...toastOptions, kind, title, body } }),
     dismissToast: (key) => dismissToastByKey({ store, plugins }, key),
     log: options.log,
+    readClipboardText: desktopBridge ? () => desktopBridge.readClipboardText() : undefined,
     windowFocus: options.windowFocus,
     windowActivity: options.windowActivity,
     windowRoute: options.windowRoute
