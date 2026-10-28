@@ -119,6 +119,21 @@ function journalValue(raw: string): JournalEntry {
   // All public identity fields have been checked; kind-owned fields remain opaque JSON.
   return value as unknown as JournalEntry
 }
+function attemptRetention(entries: JournalEntry[]): { known: boolean; pending: Set<string> } {
+  const latest = new Map<string, JournalEntry>()
+  const resolved = new Set<string>()
+  for (const entry of entries) {
+    if (entry.kind === 'attempt' && text(entry.attemptId)) latest.set(entry.attemptId, entry)
+    if (entry.kind === 'attempt-resolved' && text(entry.attemptId) &&
+      (entry.effect === 'landed' || entry.effect === 'not-landed')) resolved.add(entry.attemptId)
+  }
+  const pending = new Set<string>()
+  for (const [id, entry] of latest) {
+    if (!resolved.has(id) && (entry.state !== 'settled' || entry.effect === 'indeterminate')) pending.add(id)
+  }
+  return { known: latest.size > 0, pending }
+}
+
 function futureHandle(path: string): ReadOnlyStore | null {
   if (!existsSync(path)) return null
   const db = new Database(path, { readonly: true })
@@ -246,6 +261,10 @@ export function createKernelStore(context: PluginContext): KernelStore {
     retain(id) {
       live(true)
       db.transaction(() => {
+        const attempts = attemptRetention(journal(id))
+        if (attempts.known && attempts.pending.size === 0) {
+          db.run("UPDATE tick_traces SET pinned=0,trace_json=json_set(trace_json,'$.pinned',json('false')) WHERE watcher_id=? AND pinned=1", id)
+        }
         db.run(`DELETE FROM journal WHERE watcher_id=? AND class='observation' AND resolved=1 AND seq NOT IN
           (SELECT seq FROM journal WHERE watcher_id=? AND class='observation' AND resolved=1 ORDER BY seq DESC LIMIT ?)`, id,id,RING)
         db.run(`DELETE FROM tick_traces WHERE watcher_id=? AND pinned=0 AND seq NOT IN
@@ -262,16 +281,7 @@ export function createKernelStore(context: PluginContext): KernelStore {
           kind:'terminal',class:'fact',origin:'owner',resolved:true,atMs:summary.atMs,state:summary.state,reason:summary.reason
         })
         db.run('INSERT INTO terminal_summaries(watcher_id,summary_json) VALUES(?,?) ON CONFLICT(watcher_id) DO UPDATE SET summary_json=excluded.summary_json',enrollment.watcherId,encode(summary))
-        const latest = new Map<string, JournalEntry>()
-        const resolved = new Set<string>()
-        for (const entry of entries) {
-          if (entry.kind === 'attempt' && text(entry.attemptId)) latest.set(entry.attemptId,entry)
-          if (entry.kind === 'attempt-resolved' && text(entry.attemptId)) resolved.add(entry.attemptId)
-        }
-        const pending = new Set<string>()
-        for (const [attemptId, entry] of latest) {
-          if (!resolved.has(attemptId) && (entry.state !== 'settled' || entry.effect === 'indeterminate')) pending.add(attemptId)
-        }
+        const { pending } = attemptRetention(entries)
         for (const entry of entries) {
           const keep = entry.kind === 'terminal' || (entry.class === 'observation' && !entry.resolved) ||
             (entry.kind === 'attempt' && text(entry.attemptId) && pending.has(entry.attemptId))

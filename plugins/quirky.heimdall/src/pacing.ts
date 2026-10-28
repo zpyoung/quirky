@@ -29,6 +29,7 @@ export function pacingDelay(input: {
 }): number | null {
   const { tier, nowMs, lastLiveReadAtMs, consecutiveErrors, consecutiveGateHolds } = input
   const baseDelay = tierDelayMs(tier)
+  if (baseDelay === null) return null
   const errorDelay = backoffMs(consecutiveErrors)
   const holdDelay = backoffMs(consecutiveGateHolds)
   let delay = Math.max(baseDelay ?? 0, errorDelay, holdDelay)

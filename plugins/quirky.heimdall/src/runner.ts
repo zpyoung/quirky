@@ -280,7 +280,7 @@ export function createRunner(options: RunnerOptions): Runner & { withControl<T>(
     const generation = budgetGeneration(journal, watcherId)
     const saved = appendEntry({
       kind: 'interval-open',
-      class: 'observation',
+      class: 'fact',
       origin: 'owner',
       resolved: true,
       eventId: `interval-open:${intervalId}`,
@@ -300,7 +300,7 @@ export function createRunner(options: RunnerOptions): Runner & { withControl<T>(
     if (!opened) return
     appendEntry({
       kind: 'interval-close',
-      class: 'observation',
+      class: 'fact',
       origin: 'owner',
       resolved: true,
       eventId: `interval-close:${intervalId}`,
@@ -333,7 +333,7 @@ export function createRunner(options: RunnerOptions): Runner & { withControl<T>(
       if (currentTime <= interval.checkpointAtMs) continue
       appendEntry({
         kind: 'interval-checkpoint',
-        class: 'observation',
+        class: 'fact',
         origin: 'owner',
         resolved: true,
         eventId: `interval-checkpoint:${interval.intervalId}:${currentTime}`,
