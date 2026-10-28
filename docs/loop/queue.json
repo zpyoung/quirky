@@ -458,8 +458,7 @@
       "deps": [
         "m1-providers"
       ],
-      "status": "in-progress",
-      "lane": 8
+      "status": "done"
     },
     {
       "id": "m4-hosting-api-gitlab",

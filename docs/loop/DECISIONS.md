@@ -43,6 +43,9 @@ files, not this one.
 | hard | high | [m0-core D31](decisions/m0-core.md) | Port v1 for real, growing the public plugin API, rather than facades or raw RPC primitives | locked by docs/roadmap.md (built-ins use only the public API); assumed — autonomous (the approach) |
 | hard | high | [m1-worktrees D5](decisions/m1-worktrees.md) | Extend `quirky.repo` and `quirky.worktree` in place, with one create path and one remove path | assumed — autonomous |
 | hard | high | [m1-worktrees D7](decisions/m1-worktrees.md) | Worktree IDs stay v1's path hash; extra folder workspaces get random IDs | assumed — autonomous |
+| hard (sensitive data already read cannot be unread). | high | [m3-vault D5](decisions/m3-vault.md) | Consent controls index creation; disabling preserves it and clear disables before deletion | locked by docs/roadmap.md |
+| hard | high | [m3-vault D10](decisions/m3-vault.md) | Exclude only explicitly dropped surfaces, not their surviving vault flows | locked by BRIEF.md |
+| hard | high | [m3-vault D11](decisions/m3-vault.md) | Keep current same-token authorization; do not invent desktop-only enablement | locked by docs/roadmap.md |
 | hard | high | [m1-agent-status D2](decisions/m1-agent-status.md) | The status row is keyed by Quirky session, and the session ID from the hook's environment is the pane identity | assumed — autonomous |
 | hard | high | [m1-agent-status D4](decisions/m1-agent-status.md) | Orca's four states, its derived display states and its labels are kept as they are | locked by docs/roadmap.md |
 | hard | high | [m1-notifications D40](decisions/m1-notifications.md) | Approach: a daemon policy plugin that listens to producers, with markers on their records and the shell rendering | assumed — autonomous |
@@ -84,6 +87,7 @@ files, not this one.
 | medium | medium | [m1-worktrees D32](decisions/m1-worktrees.md) | Metadata is edited with `quirky.worktree/set` and `wt set`, using Orca's flag names | assumed — autonomous |
 | medium | medium | [m1-worktrees D46](decisions/m1-worktrees.md) | Project groups live in `quirky.repo`, with `repo group` commands | assumed — autonomous |
 | medium | medium | [m1-worktrees D47](decisions/m1-worktrees.md) | A scanned group can hold folder workspaces on its parent folder | locked by research/orca-features/worktrees.md; assumed — autonomous (the synthetic repo ID) |
+| medium | medium | [m3-vault D12](decisions/m3-vault.md) | Use public generic extension points for missing surfaces | assumed — autonomous |
 | medium | medium | [m1-agent-status D3](decisions/m1-agent-status.md) | `quirky.agent-status` owns the status row; `quirky.session` keeps a coarse status plus a summary for the UI | assumed — autonomous |
 | medium | medium | [m1-agent-status D6](decisions/m1-agent-status.md) | Hooks are installed into each agent's own config, automatically while the switch is on, except Claude | locked by research/orca-features/agent-status.md |
 | medium | medium | [m1-agent-status D11](decisions/m1-agent-status.md) | A different provider session in a live row is a nested agent and is ignored, which fixes Orca's helper-overwrite defect | assumed — autonomous |
@@ -209,6 +213,24 @@ files, not this one.
 | medium | high | [fix-test-process-leaks D4](decisions/fix-test-process-leaks.md) | Own disposable runs with an external process-scope guardian | assumed — autonomous |
 | medium | high | [fix-test-process-leaks D7](decisions/fix-test-process-leaks.md) | The test guardian requires POSIX process inspection | deferred: platform |
 | medium | high | [fix-test-process-leaks D10](decisions/fix-test-process-leaks.md) | Guardian control state must outlive the resource home | assumed — autonomous |
+| medium | high | [m3-vault D4](decisions/m3-vault.md) | Browsing preserves Orca defaults and remains available without indexing | locked by docs/roadmap.md |
+| medium | high | [m3-vault D6](decisions/m3-vault.md) | Search preserves scoped evidence and invalidates cursors across writes | locked by docs/roadmap.md |
+| medium | high | [m3-vault D7](decisions/m3-vault.md) | Resume uses provider configuration and verified sources, never raw shell concatenation | locked by docs/architecture.md |
+| medium | high | [m3-vault D8](decisions/m3-vault.md) | Build on macOS and record other platform work rather than fabricate verification | deferred: platform |
+| medium | high | [m3-vault D9](decisions/m3-vault.md) | Choose a lazy Bun Worker; reject inline scans and forked helpers | locked by docs/architecture.md |
+| medium | high | [m3-vault D13](decisions/m3-vault.md) | Preserve MIT provenance and rewrite only runtime-coupled port boundaries | assumed — autonomous |
+| medium | high | [m3-vault D14](decisions/m3-vault.md) | Accept the two confirmed spec findings and calibrate mechanical observations | assumed — autonomous |
+| medium | high | [m3-vault D15](decisions/m3-vault.md) | Preserve external cwd without registering a project; destination owns the resumed tab | assumed — autonomous |
+| medium | high | [m3-vault D19](decisions/m3-vault.md) | Lock generic Worker/settings and evidence interfaces before integrating consumers | assumed — autonomous |
+| medium | high | [m3-vault D20](decisions/m3-vault.md) | Use one canonical public result envelope and remove renderer guessing | assumed — autonomous |
+| medium | high | [m3-vault D21](decisions/m3-vault.md) | Prepare external resume records from public effective configuration without trust side effects | locked by docs/loop/decisions/m1-providers.md |
+| medium | high | [m3-vault D24](decisions/m3-vault.md) | Keep the locked flat schema dialect and document nullable response fields honestly | locked by docs/loop/decisions/m0-scripting.md |
+| medium | high | [m3-vault D25](decisions/m3-vault.md) | Add four history resume capabilities in the existing provider owner | supersedes m1-providers D9 |
+| medium | high | [m3-vault D26](decisions/m3-vault.md) | Recover Gemini roots only from genuine project metadata | assumed — autonomous |
+| medium | high | [m3-vault D29](decisions/m3-vault.md) | Keep logical SQLite identity separate from its physical public source path | assumed — autonomous |
+| medium | high | [m3-vault D32](decisions/m3-vault.md) | Bound new indexing starts without starving an in-flight one-shot read | assumed — autonomous |
+| medium | high | [m3-vault D35](decisions/m3-vault.md) | A command drag carries a window-local single-use capability | assumed — autonomous |
+| medium | high | [m3-vault D38](decisions/m3-vault.md) | Serialize new calls behind idle retirement rather than replay or strand them | assumed — autonomous |
 | medium | high | [m1-agent-status D14](decisions/m1-agent-status.md) | The fold keeps a finished lead `working` while children or background work live | locked by research/orca-features/agent-status.md |
 | medium | high | [m1-notifications D5](decisions/m1-notifications.md) | A new built-in plugin, `quirky.notifications`, owns the policy; other plugins only report events | supersedes m0-core D12 |
 | medium | high | [m1-notifications D6](decisions/m1-notifications.md) | Producers emit settled and notification events; boundaries and replays still emit nothing | assumed — autonomous |
@@ -408,6 +430,9 @@ files, not this one.
 | easy | medium | [m1-worktrees D65](decisions/m1-worktrees.md) | W4 starts while W3's checkpoint review runs, and owns only the manifest's UI keys | assumed — autonomous |
 | easy | medium | [m1-worktrees D71](decisions/m1-worktrees.md) | SC-27 is run with base `origin/main` on both sides, because a create with no base never falls back | assumed — autonomous |
 | easy | medium | [fix-test-process-leaks D9](decisions/fix-test-process-leaks.md) | Final cross-family review returned no actionable findings | assumed — autonomous |
+| easy | medium | [m3-vault D30](decisions/m3-vault.md) | Test genuine macOS Trash only on an owned disposable volume | locked by docs/loop/LOOP.md |
+| easy | medium | [m3-vault D41](decisions/m3-vault.md) | Record the one final review round without overstating security assurance | locked by docs/loop/LOOP.md and the operator note |
+| easy | medium | [m3-vault D46](decisions/m3-vault.md) | Retry with the workspace present in the verifier's base | assumed — autonomous, preserving protected loop and public module boundaries |
 | easy | medium | [m1-agent-status D1](decisions/m1-agent-status.md) | This item covers the dot, the hooks, provider capture and the fallbacks; the Activity view and the Agent Dashboard are out | assumed — autonomous |
 | easy | medium | [m1-agent-status D7](decisions/m1-agent-status.md) | Codex hooks go into `~/.codex/hooks.json` and the user approves them once in Codex | assumed — autonomous |
 | easy | medium | [m1-agent-status D13](decisions/m1-agent-status.md) | Cold-restore resume stays out | supersedes m1-providers D27 |
@@ -851,6 +876,39 @@ files, not this one.
 | easy | high | [fix-test-process-leaks D8](decisions/fix-test-process-leaks.md) | Preserve incoming integration decisions | locked by docs/loop/decisions/fix-sc31-first-shell-race.md |
 | easy | high | [fix-test-process-leaks D11](decisions/fix-test-process-leaks.md) | Scope every suite subprocess, including transport commands | assumed — autonomous |
 | easy | high for the observed result; no claim of eliminating the unrelated load sensitivity | [fix-test-process-leaks D12](decisions/fix-test-process-leaks.md) | Retain the runner's existing isolated-rerun policy | locked by scripts/suite.ts |
+| easy (records and specs are reviewable). | high | [m3-vault D1](decisions/m3-vault.md) | Follow the unattended design workflow without human asks | locked by docs/loop/LOOP.md |
+| easy (no public contract). | high | [m3-vault D2](decisions/m3-vault.md) | Use omp task implementers with Gemini review when Opus is unavailable | locked by docs/loop/LOOP.md |
+| easy | high | [m3-vault D3](decisions/m3-vault.md) | Select all relevant observable gray areas | assumed — autonomous |
+| easy | high | [m3-vault D16](decisions/m3-vault.md) | The baseline verification gate passes with one reported flaky file | assumed — autonomous |
+| easy | high | [m3-vault D17](decisions/m3-vault.md) | Build four disjoint components in one implementation wave | assumed — autonomous |
+| easy | high | [m3-vault D18](decisions/m3-vault.md) | Keep a failing-before privacy regression on the real API path | assumed — autonomous |
+| easy | high | [m3-vault D22](decisions/m3-vault.md) | Repair module seams and invalid fixture oracles without narrowing parser/search contracts | assumed — autonomous |
+| easy | high | [m3-vault D23](decisions/m3-vault.md) | Assemble audited components before accepting cross-component behavior | assumed — autonomous |
+| easy | high | [m3-vault D27](decisions/m3-vault.md) | Avoid Bun's observed asymmetric-matcher mutation when reusing API payloads | assumed — autonomous |
+| easy | high | [m3-vault D28](decisions/m3-vault.md) | Stop and serially integrate the overlapping discovery correction before commit | assumed — autonomous |
+| easy | high | [m3-vault D31](decisions/m3-vault.md) | Verify every copied resume command through an owned executable | locked by docs/quirk/specs/2026-10-27-m3-vault/logic.md |
+| easy | high | [m3-vault D33](decisions/m3-vault.md) | Preserve expected deletion target kinds across the Worker boundary | assumed — autonomous |
+| easy | high | [m3-vault D34](decisions/m3-vault.md) | Land the core slice and queue explicit parity completion | locked by the operator note in this conversation |
+| easy | high | [m3-vault D36](decisions/m3-vault.md) | Tool results cannot also enter uncapped conversation text | assumed — autonomous |
+| easy | high | [m3-vault D37](decisions/m3-vault.md) | Preserve semantic assertions instead of stale warning and catalog copies | assumed — autonomous |
+| easy | high | [m3-vault D39](decisions/m3-vault.md) | Use an explicit owned executable, not PATH, for packaged resume proof | locked by docs/loop/LOOP.md isolated-state rule |
+| easy | high | [m3-vault D40](decisions/m3-vault.md) | Clear the local index through its declared local-only API | locked by the existing public clearSearchIndex declaration |
+| easy | high | [m3-vault D42](decisions/m3-vault.md) | Packaged core UI and owned provider execution have direct evidence | locked by docs/loop/LOOP.md verification requirements |
+| easy | high | [m3-vault D43](decisions/m3-vault.md) | Final affected verification runs on the operator's16-core host | locked by the latest operator test-host instruction |
+| easy | high | [m3-vault D44](decisions/m3-vault.md) | Preserve external resume and landed session naming after the first land conflict | locked by docs/loop/LOOP.md step7.3 and m1-agent-status-scripting decisions |
+| easy | high | [m3-vault D45](decisions/m3-vault.md) | Parse real module syntax rather than regex-match embedded native text | locked by the public-only plugin boundary and the operator's blocking-findings-only instruction |
+| easy | high | [m3-vault D47](decisions/m3-vault.md) | Keep the independent shared UI contributions in the account catch-up | locked by the independent Vault/account public UI contracts |
+| easy | high | [m3-vault D48](decisions/m3-vault.md) | External history resume obeys required account preparation | locked by m3-accounts required-preparation and home-provenance decisions |
+| easy | high | [m3-vault D49](decisions/m3-vault.md) | Use the landed frozen-install typecheck lifecycle | locked by the landed workspace/typecheck lifecycle |
+| easy | high | [m3-vault D50](decisions/m3-vault.md) | Recheck the merged UI with startup credential owners absent | locked by LOOP.md test-state isolation and core UI verification |
+| easy | high | [m3-vault D51](decisions/m3-vault.md) | Follow the landed inline hook-settings contract without a forwarding pin | locked by the landed launch-hook contract and behavior-based test policy |
+| easy | high | [m3-vault D52](decisions/m3-vault.md) | Separate replay-boundary proof from terminal echo and startup timing | assumed — autonomous, preserving the blocking consumer stream invariant |
+| easy | high | [m3-vault D53](decisions/m3-vault.md) | Retain pane menus without widening the core landing | locked by the independent public UI contracts and operator-authorized core scope |
+| easy | high | [m3-vault D54](decisions/m3-vault.md) | Preserve this claimed feature across an incoming snapshot without Vault | locked by this claimed core task and LOOP.md ownership rules |
+| easy | high | [m3-vault D55](decisions/m3-vault.md) | Restore the complete public graph, not just compiling plugin files | locked by the public-only plugin boundary and existing verified core contracts |
+| easy | high | [m3-vault D56](decisions/m3-vault.md) | Keep fresh restored-runtime proof separate from stale snapshots | locked by verification-before-completion and test-state isolation |
+| easy | high | [m3-vault D57](decisions/m3-vault.md) | Keep the landed dock/palette and canonical PTY fix alongside Vault | locked by the landed additive UI/PTY contracts and configured runner policy |
+| easy | high | [m3-vault D58](decisions/m3-vault.md) | Keep editor-hosted tabs separate from terminal pane ownership | locked by the landed hosted-view lifecycle and terminal ownership contracts |
 | easy | high | [m1-agent-status D5](decisions/m1-agent-status.md) | Every hook source in the doc gets a normalizer with Orca's event mapping | locked by research/orca-features/agent-status.md |
 | easy | high | [m1-agent-status D8](decisions/m1-agent-status.md) | Installers merge only their own entries, keep the file byte-identical on a rerun, and never write a file they can't parse | locked by research/orca-features/agent-status.md |
 | easy | high | [m1-agent-status D9](decisions/m1-agent-status.md) | Claude's settings file lists only the events the installed Claude knows | locked by research/orca-features/agent-status.md |
