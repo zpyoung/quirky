@@ -277,5 +277,16 @@
 - **Revisit if:** remote verification exposes another lease/owner lifecycle incompatibility
 - **Source:** locked by docs/loop/decisions/m6-orchestration-core.md
 
+## D26: Accept the recovered boundary only after remote verification
+- **Question:** the large local combined run was not green after the concurrent orchestration merge
+- **Options:** infer success from a native smoke; change deadlines; use the prescribed isolated remote suite for the complete recovered boundary
+- **Chose:** run structured, loops and orchestration through scripts/suite.ts on the recovered committed source. All20files passed, zero failures and no flaky retries. Keep all existing condition deadlines. The two deterministic deactivation failures were fixed and exercised separately; the earlier local failed run remains recorded rather than relabeled.
+- **Why:** this verifies the union of loop admission, native lease identity, durable receipt replay and owner cleanup under the repository's required runner, including the actual plugin/API consumers.
+- **Evidence:** bg43 `bun scripts/suite.ts plugins/quirky.structured plugins/quirky.loops plugins/quirky.orchestration`:20/20, suite-result ok:true/flaky:[],51.53seconds. Recovered checkpoint24c6e028; typecheck bg38 exit0, guard tests bg41 10/0, shutdown bg39 2/0 and native smoke bg34 pass.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** authoritative land's full merged-tree gate fails
+- **Source:** locked by docs/loop/LOOP.md
+
 ## Progress
-Reconciled orchestration/loop merge is ready to commit as a recovery checkpoint. Scoped guarded-send10/0 and shutdown2/0 regressions pass, typecheck passes, and native CLI smoke passes. The broad local run was156/23 (not green); run the three relevant directories on the prescribed remote suite after committing, then detach and retry authoritative land only after its result is handled. No worker remains active. Preserve D24/D25 contracts and do not drop native leases/receipts or loop guards. Full merged-tree controller must still pass before item completion; native-only scenarios remain pending.
+Recovered merge checkpoint24c6e028 is committed and published to lane5; remote structured/loops/orchestration gate20/20 passes without flaky retries. All workers and verification jobs have returned. Commit this observed evidence, detach, and retry authoritative queue.ts land m5-loops-core without an outer deadline; only its successful full merged-tree gate completes the item. Preserve earlier failed-run evidence, the night-mode review waiver and pending native-only scenarios. Source and shared core types are complete; no preset implementation was added on this branch.
