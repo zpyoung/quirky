@@ -1619,6 +1619,18 @@
       ],
       "status": "todo",
       "early": true
+    },
+    {
+      "id": "m7-ledger-remote-host-flows",
+      "milestone": "M7",
+      "title": "Build unimplemented SSH-host ledger workspace ownership/routing, remote import/evidence and selected-runtime availability from ledger.md after public host registration/incarnation lookup, remote repo/workspace identity and generation-fenced filesystem/execution APIs exist. Current ledger roots are local; never dereference SSH paths locally, invent synthetic generations or fall back to local reads. Preserve independent local ledger behavior and existing remote automation owner boundaries. Block if the public host prerequisite remains absent; this is unbuilt functionality, not verification/review/debugging.",
+      "docs": [
+        "ledger.md"
+      ],
+      "deps": [
+        "m7-sweep-automation-completion"
+      ],
+      "status": "todo"
     }
   ]
 }
