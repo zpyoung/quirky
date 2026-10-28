@@ -204,7 +204,7 @@ async function linkWorkspace(env: TasksEnv, target: ItemTarget, selector: string
   if (!worktree || typeof worktree.id !== 'string' || typeof worktree.name !== 'string' || worktree.repoId !== source.repo.id || worktree.kind !== 'git') {
     invalid(env, 'The workspace must belong to the matching registered Git repository.')
   }
-  const link = linkValue(target, source, { id: worktree.id, name: worktree.name })
+  const link = linkValue(target, source.source, { id: worktree.id, name: worktree.name })
   env.update((state) => { state.links[targetLinkKey(target)] = link })
   return { kind: 'linked', target, ...link }
 }
@@ -312,7 +312,7 @@ async function createFromComposer(
       activate: true
     }))
     if (created.worktree.repoId !== source.repo.id) throw new Error('The new workspace belongs to a different repository.')
-    const link = linkValue(target, source, created.worktree)
+    const link = linkValue(target, source.source, created.worktree)
     env.update((state) => { state.links[targetLinkKey(target)] = link })
     if (current?.requestId === request.requestId) setComposer(env, session, null)
     return { kind: 'created', target, worktree: created.record.worktree, setup: created.record.setup, warnings: created.record.warnings ?? [] }

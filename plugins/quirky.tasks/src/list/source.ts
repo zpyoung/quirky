@@ -124,7 +124,7 @@ export function issueSourceMatchesTarget(source: ResolvedRepoSource, target: Ite
 export function errorReason(error: unknown): string | undefined {
   const outer = object(error)
   const data = object(outer?.data)
-  return text(data?.reason) ?? text(outer?.reason)
+  return text(data?.reason) ?? text(outer?.reason) ?? undefined
 }
 
 export function messageOf(error: unknown): string {

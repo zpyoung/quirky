@@ -206,7 +206,7 @@ async function targetOf(env: TasksEnv, params: RecordValue, caller: PluginCaller
 function projectHost(env: TasksEnv, target: ItemTarget): string | undefined {
   if (target.host) return target.host
   const project = env.read().navigation.project
-  if (project?.id === target.projectId && project.host) return project.host
+  if (project && project.id === target.projectId && project.host) return project.host
   if (!target.url) return undefined
   try {
     return new URL(target.url).host
@@ -460,7 +460,7 @@ async function editRepositoryIssue(env: TasksEnv, target: ItemTarget, changes: I
   const changed = Object.keys(providerChanges).some((key) => !['worktree', 'number'].includes(key))
   if (!changed) return { item: current, changed: false, partial: false }
   const item = mapTaskItem(await env.context.call(`${HOSTING}updateIssue`, providerChanges), target)
-  if (!item) throw env.context.error('unknown', 'GitHub accepted the issue update but did not return the requested issue.')
+  if (!item) throw env.context.error('conflict', 'GitHub accepted the issue update but did not return the requested issue.')
   return { item, changed: true, partial: false }
 }
 
@@ -489,7 +489,7 @@ async function issueComment(env: TasksEnv, params: RecordValue, caller: PluginCa
       body
     }))
     const id = positiveInteger(result?.commentId)
-    if (id === null) throw env.context.error('unknown', 'GitHub accepted the Project issue comment but returned no comment identity.')
+    if (id === null) throw env.context.error('conflict', 'GitHub accepted the Project issue comment but returned no comment identity.')
     return {
       source: 'project',
       comment: { id, issueNumber: target.number, body: typeof result?.body === 'string' ? result.body : body, author: null, createdAt: null, updatedAt: null, url: null, kind: 'issue' }
@@ -501,7 +501,7 @@ async function issueComment(env: TasksEnv, params: RecordValue, caller: PluginCa
     body
   }))
   const comment = mapComment(result, target.number)
-  if (!comment) throw env.context.error('unknown', 'GitHub accepted the issue comment but returned an invalid comment record.')
+  if (!comment) throw env.context.error('conflict', 'GitHub accepted the issue comment but returned an invalid comment record.')
   return { source: 'repository', comment }
 }
 
@@ -666,7 +666,7 @@ async function createIssue(env: TasksEnv, params: RecordValue): Promise<RecordVa
     assignees
   }))
   const item = mapTaskItem(raw, { worktree: repo.worktree, kind: 'issue', number: positiveInteger(raw?.number) ?? 0, ...(nonEmptyString(raw?.url) ? { url: nonEmptyString(raw?.url) ?? undefined } : {}) })
-  if (!raw || !item) throw env.context.error('unknown', 'GitHub created an issue but did not return a valid issue record.')
+  if (!raw || !item) throw env.context.error('conflict', 'GitHub created an issue but did not return a valid issue record.')
   const warning = typeof raw.bodySaveWarning === 'string' ? raw.bodySaveWarning : undefined
   env.update((state) => {
     state.issueDraft = warning
@@ -697,7 +697,7 @@ async function createIssue(env: TasksEnv, params: RecordValue): Promise<RecordVa
   }
 }
 
-function identityFromUrl(value: string): Pick<ItemTarget, 'host' | 'owner' | 'repo'> | undefined {
+function identityFromUrl(value: string): { host: string; owner: string; repo: string } | undefined {
   try {
     const url = new URL(value)
     const match = /^\/([^/]+)\/([^/]+)\/issues\/[1-9][0-9]*\/?$/.exec(url.pathname)
