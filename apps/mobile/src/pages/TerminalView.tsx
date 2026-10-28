@@ -5,6 +5,7 @@ import { Terminal } from '@xterm/xterm'
 import '@xterm/xterm/css/xterm.css'
 import type { MobileTerminalState, PtySnapshot, PtySubscription, Session } from '@quirky/protocol'
 import type { MobilePageBridge } from '../contracts'
+import { dispatchTerminalLink } from './terminal-links'
 import { errorMessage } from './components'
 
 export type PhoneTerminalLease = MobileTerminalState & { controlledByCaller: boolean }
@@ -28,6 +29,7 @@ type Props = {
   textScale: number
   onLease(lease: PhoneTerminalLease | null): void
   onRestored(): void
+  onDesktopLink(url: string): Promise<void>
 }
 
 function boundedDimensions(cols: number, rows: number): { cols: number; rows: number } {
@@ -45,7 +47,7 @@ function decodeReplay(base64: string): Uint8Array {
 }
 
 export const TerminalView = forwardRef<TerminalViewHandle, Props>(function TerminalView({
-  bridge, session, connected, canDrive, displayMode, lease, textScale, onLease, onRestored
+  bridge, session, connected, canDrive, displayMode, lease, textScale, onLease, onRestored, onDesktopLink
 }, forwardedRef) {
   const host = useRef<HTMLDivElement>(null)
   const terminal = useRef<Terminal | null>(null)
@@ -55,6 +57,8 @@ export const TerminalView = forwardRef<TerminalViewHandle, Props>(function Termi
   const connectedRef = useRef(false)
   const canDriveRef = useRef(false)
   const modeRef = useRef(displayMode)
+  const desktopLinkRef = useRef(onDesktopLink)
+  desktopLinkRef.current = onDesktopLink
   const mountedRef = useRef(false)
   const textScaleRef = useRef(textScale)
   const pageActive = connected && bridge.state.phase === 'connected' &&
@@ -117,12 +121,12 @@ export const TerminalView = forwardRef<TerminalViewHandle, Props>(function Termi
     const container = host.current
     if (!container) return
     const openLink = (uri: string) => {
-      if (bridge.init.preferences.terminalLinkMode !== 'phone') {
-        setStreamError('Desktop browser links are unavailable. Choose Open on phone in Terminal settings.')
-        return
-      }
-      void bridge.native.openExternal(uri).catch((cause) => {
+      void dispatchTerminalLink(uri, bridge.init.preferences.terminalLinkMode, {
+        openExternal: (url) => bridge.native.openExternal(url),
+        openChromeWatch: (url) => desktopLinkRef.current(url)
+      }).catch((cause) => {
         if (mountedRef.current) setStreamError(errorMessage(cause, 'Could not open the terminal link.'))
+        else console.error('Could not open a terminal link after leaving the terminal.', cause)
       })
     }
     const current = new Terminal({
@@ -295,15 +299,17 @@ export const TerminalView = forwardRef<TerminalViewHandle, Props>(function Termi
   }, [bridge, session.id, session.status, session.restorable, connected, fit, scaleViewer, refreshLease, onRestored])
 
   return (
-    <div className="qp-terminal-wrap" aria-label={`Terminal ${session.title}`}>
-      <div className="qp-terminal-status">
-        <span className={`qp-status-dot${live && connected ? '' : ' qp-status-dot--stale'}`} aria-hidden="true" />
-        <span>{snapshotLabel}</span>
-        <span className="qp-terminal-status__fill" />
-        <span>{live ? 'Live' : connected ? 'Read-only' : 'Stale'}</span>
-      </div>
-      <div className="qp-terminal-screen" ref={host} onClick={() => terminal.current?.focus()} />
+    <>
       {streamError && <div className="qp-terminal-stale" role="alert">{streamError}</div>}
-    </div>
+      <div className="qp-terminal-wrap" aria-label={`Terminal ${session.title}`}>
+        <div className="qp-terminal-status">
+          <span className={`qp-status-dot${live && connected ? '' : ' qp-status-dot--stale'}`} aria-hidden="true" />
+          <span>{snapshotLabel}</span>
+          <span className="qp-terminal-status__fill" />
+          <span>{live ? 'Live' : connected ? 'Read-only' : 'Stale'}</span>
+        </div>
+        <div className="qp-terminal-screen" ref={host} onClick={() => terminal.current?.focus()} />
+      </div>
+    </>
   )
 })
