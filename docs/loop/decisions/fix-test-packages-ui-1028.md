@@ -92,7 +92,7 @@
 - **Question:** Does a test-only repair require a new feature spec, product changelog entry or native status reset?
 - **Options:** invent a product behavior change; document the repaired test contracts and leave native acceptance unchanged
 - **Chose:** this decision log is the repair documentation; no new feature spec, product changelog claim, native scenario reset or new test/review follow-up item
-- **Why:** no production code changed. Gallery inventory and literal CSS copies were incidental assertions, while meaningful CLI/daemon/window behavior remains tested. The five tests pass locally, with the existing React act/deactivation warnings and the deliberately canceled SC-31 pending waiter visible; no pristine-output claim is made. Linux/Windows and native OS UI were not exercised
+- **Why:** at the initial five-file stage, no production code changed. Gallery inventory and literal CSS copies were incidental assertions, while meaningful CLI/daemon/window behavior remained tested. The five tests passed locally, with React act/deactivation warnings and the deliberately canceled SC-31 pending waiter visible; no pristine-output claim was made. Linux/Windows native shells and OS UI were not exercised. D16–D19 record the later source-level shell-composition repair and its documentation.
 - **Evidence:** five-file repair scope; local gallery5/theme3/routing8/CLI4 passing; incoming fix-test-scripts-1028, fix-test-packages-daemon-1028 and fix-native-sa-browser-agent-1028 decisions read in full and retained
 - **Reversibility:** easy
 - **Confidence:** high
@@ -176,5 +176,49 @@
 - **Revisit if:** focused remote checks reveal another genuine owning path
 - **Source:** assumed — autonomous
 
+## D17: Preserve the active view's input identity and restore canonical tool focus
+- **Question:** Why did the composed shell lose an active view's mount and fail panel-focus reporting?
+- **Options:** suppress remounts for real input changes; memoize another history authority; render the canonical active-view input and reuse the existing focus region
+- **Chose:** MainArea renders layout.view.input or its exact auxiliary route; viewTabs remain selection history. ToolShell's semantic aside uses useRegion('panel'), retaining the existing handler and HTMLElement ref contract
+- **Why:** decoded history entries change object identity on focus/layout broadcasts, while the host preserves the active view's equivalent input identity. PluginSlot correctly remounts on actual input changes and must not be weakened. The new tool container lacked the old panel-region handler. Reusing the handler fixes both pointer and public focus paths without new state, aliases, casts or API changes
+- **Evidence:** d364986e source slice; MainArea.tsx, ToolShell.tsx and useRegion.ts; existing layout-shell focus/DOM-retention regressions now pass; final guarded draft-retention proof D19
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** actual input changes stop refreshing content or a focus-only transition loses embedded state
+- **Source:** supersedes fix-test-packages-ui-1028 D9 (initial test-only documentation boundary); locked by ui-shell-slots SC7
+
+## D18: Build genuine trusted fixture clusters instead of weakening plugin admission
+- **Question:** Why did adding declared dependencies alone leave the new shell fixtures broken?
+- **Options:** allow reserved installed IDs or add method/settings fallbacks; load every provider; use a small genuine built-in root with all consumed owners
+- **Chose:** optional builtinPluginsDir in the existing test helper, preserving one-argument callers; real repo/worktree/CLI/sidebar-extras/Ask owners in a tracked temporary built-in root. Navigation's view-only session fixture belongs to that trusted root. Ask registration uses the real worktree-bound CLI connection and requestId; key events carry their actual KeyK code
+- **Why:** installed quirky.* IDs are correctly rejected by manifest admission. Worktrees consumes the sidebar-extras separator setting, so its real owner must be present. No production admission, method alias, setting fallback, timeout or session authority changes are justified. Listener teardown asserts no callbacks after unload, not the absence of legitimate transitions during unload
+- **Evidence:** manifest.ts:266-267; WorktreesSection.tsx:34-38; window-env.ts options and existing callers checked after LSP references reported no server; shell-navigation/attention helpers; plugin-host-unit listener regression; canonical two-file check2/2/no flakes15.76s
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** a fixture activates an unrelated provider or consumes another undeclared owner
+- **Source:** assumed — autonomous
+
+## D19: Require clean composed acceptance and an actual retained-draft surface before retrying land
+- **Question:** Is the final source integration verified, rather than merely compiling or passing the old snapshot?
+- **Options:** reuse the pre-cutover pass; disclose failed gates but stop; require repaired remote/UI evidence
+- **Chose:** final remote packages/ui plus scripts gate43/43files,0fail,flaky:[],42.47s; full typecheck/UIlint/root/mobile/desktop exit0,47.26s; full build exit0,24.99s; fresh guarded draft-focus pass
+- **Why:** the initial composition and intermediate failed gates remain recorded, but the final gate is clean. The real rebuilt six-slot UI retains draft-survives-tool-focus while opening Details, focusing its input and returning to the center. The last focus action was OBSERVED and screenshots show the retained input/status and selected view. Initial fill's NO_EFFECT classifier anomaly is retained in the report, not hidden. This is application web evidence, not native OS acceptance or a new formal cross-family review of the integration fix batch
+- **Evidence:** .quirk/build-loop/fix-test-packages-ui-1028/final-remote-acceptance.txt; final typecheck/build outputs; .quirk/using-apps-like-a-user/runs/20261028T223645-5e22/report.md and obs-6/7.png directly inspected by parent; existing shell logic SC7 and technical mount/focus contract updated after the smoke
+- **Reversibility:** easy
+- **Confidence:** high for exercised composed paths; earlier viewport/native-notification limits remain D11
+- **Revisit if:** canonical merge-result typecheck or a later consumer path fails
+- **Source:** assumed — autonomous
+
+## D20: Keep integration ownership and runtime cleanup explicit
+- **Question:** How were continuation edits and final private proof resources bounded?
+- **Options:** conceal reused worker state or leave owned processes alive; assign exact scopes and retain cleanup evidence
+- **Chose:** initial three composition components were isolated, audited and merged, then their trees removed. The later two-file fixture continuation was explicitly reassigned to the parent tree after its old tree was removed; parent owned the other disjoint source/helper/unit edits. No isolated-tree claim is made for that continuation. Both old and fresh proof runtimes and every owned browser/worker/check are stopped
+- **Why:** final focus browser report has no kept-open session or cleanup error; named ui-repair24-focus exited0 after daemon and PTY shutdown, with runtime.json and pty.pid absent. The initial proof has the same teardown receipts. No real profile, unrelated window, protected loop path or shared queue/index was edited manually
+- **Evidence:** scope audits and component commits d364986e/08e88aae/bf21d6bf; explicit continuation assignment; final report state_left; service exit0 and teardown marker check; original user .serena untouched
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** an owned child or out-of-scope edit is identified
+- **Source:** locked by operator resource directive
+
 ## Progress
-Required land-retry integration repair in progress on build/fix-test-packages-ui-1028 after mergeb591f182. Initial five-file repair and its pre-cutover evidence remain committed, but the composed remote31-file suite failed seven files (D16); do not claim the current merge is ready. Three isolated repair components are active. Stable selected-view input and tool-region focus source slice has returned; host/report/activity test migration and new navigation/attention fixture repair remain active. After the writer barrier, audit/integrate, run every test through the remote canonical runner, run typecheck/build and a fresh private draft-retention UI smoke, update existing shell documentation, stop owned runtime, commit, detach and retry canonical absolute queue land. No original runtime/browser remains alive; the prior guard partial classifications and final single-file flake remain recorded.
+Ready for canonical landing retry. Initial six failures repaired; required conflict merge b591f182 preserved the new shell, and all seven composed failures are now repaired. Source keeps canonical active-view input and tool focus; genuine trusted fixtures preserve reserved-ID admission and Ask ownership. Final remote UI+scripts43/43files/no flakes, full typecheck47.26s and build24.99s pass. Actual retained-draft six-slot UI proof passes; prior gallery passes, main dialog/Ask partial-tool limits and historical hook-timeout retry remain explicit. Existing shell logic documents mount/focus invariants. One bounded initial cross-family review was completed; integration fix-batch assurance is the real remote/typing/build/UI evidence, not a fabricated later review. All workers, browsers, CLIs and both private daemon/PTY services stopped; component trees removed. Commit final scoped changes/docs, detach and retry the canonical absolute queue.ts land. Remove owned scratch only after authoritative success; handle no second item.

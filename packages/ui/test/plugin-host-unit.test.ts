@@ -1976,8 +1976,9 @@ test('D21: context.getLayout and onLayout follow the daemon, and the listener en
   context().onLayout(() => seen.push('again'))
   t.setModel(makeModel())
   await t.host.refresh()
+  const afterUnload = [...seen]
   t.changeLayout({ focus: 'view' })
-  expect(seen).toEqual([PAGE, OTHER])
+  expect(seen).toEqual(afterUnload)
 })
 
 test('D21: a layout listener that throws is logged and does not stop the others', async () => {

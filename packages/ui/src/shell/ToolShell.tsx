@@ -730,7 +730,7 @@ export function ToolShell({ geometry, sizes, onResizePreview, onResizeCommit }: 
           onMove={move}
         />
       ))}
-      <div className="tool-shell__panels" {...panelRegion}>
+      <aside className="tool-shell__panels" {...panelRegion}>
         {uniqueOpened.map(({ entry, slot }) => (
           <section className={`tool-shell__panel tool-shell__panel--${slot}`} data-tool-panel={entry.id} key={entry.id}>
             <ToolPanelFrame title={entry.title} onMinimize={() => close(slot)}>
@@ -738,7 +738,7 @@ export function ToolShell({ geometry, sizes, onResizePreview, onResizeCommit }: 
             </ToolPanelFrame>
           </section>
         ))}
-      </div>
+      </aside>
       {openSlots['left-top'] && openSlots['left-bottom'] && (
         <ResizeHandle
           label="Resize left tool split"

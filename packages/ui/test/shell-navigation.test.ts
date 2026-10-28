@@ -1,5 +1,5 @@
 import { afterEach, expect, test } from 'bun:test'
-import { mkdirSync, symlinkSync } from 'node:fs'
+import { symlinkSync } from 'node:fs'
 import { basename, join, resolve } from 'node:path'
 import { makeTempDir } from '../../daemon/test/plugins/fixtures'
 import { bootWindow, closeWindows, installUiPlugin, provide, type WindowEnv } from './fixtures/window-env'
@@ -10,11 +10,6 @@ const PANEL = 'panel:acme.nav/details'
 const COMMAND = 'command:acme.nav/open-secondary'
 
 function writeNavigationPlugin(installed: string, interceptSearch = false): void {
-  mkdirSync(installed, { recursive: true })
-  // The real quirky.worktree manifest declares quirky.repo and quirky.cli dependencies.
-  for (const id of ['quirky.repo', 'quirky.worktree', 'quirky.cli']) {
-    symlinkSync(resolve(import.meta.dir, '../../../plugins', id), join(installed, id))
-  }
   installUiPlugin(
     installed,
     'acme.nav',
@@ -34,12 +29,21 @@ function writeNavigationPlugin(installed: string, interceptSearch = false): void
       `context.provide(${JSON.stringify(COMMAND)}, () => context.openView(${JSON.stringify(SECONDARY)}, { source: 'palette' }))`
     ].join('\n')
   )
+}
+
+function navigationBuiltinPlugins(): string {
+  const builtins = makeTempDir('ui-shell-navigation-builtins-')
+  // Installed quirky.* IDs are reserved; these are genuine built-ins with quirky.worktree's dependencies.
+  for (const id of ['quirky.repo', 'quirky.worktree', 'quirky.cli', 'quirky.sidebar-extras', 'quirky.ask']) {
+    symlinkSync(resolve(import.meta.dir, '../../../plugins', id), join(builtins, id))
+  }
   installUiPlugin(
-    installed,
+    builtins,
     'quirky.session',
     { view: [{ id: 'worktree', title: 'Session worktree' }] },
     provide('view:quirky.session/worktree', `element.textContent = 'session worktree ' + JSON.stringify(props.input ?? null)`)
   )
+  return builtins
 }
 
 afterEach(closeWindows)
@@ -61,7 +65,7 @@ function typeInto(input: HTMLInputElement, value: string): void {
 }
 
 test('view tabs preserve each opened input and closing a tab mutates only that exact window', async () => {
-  const env = await bootWindow(writeNavigationPlugin)
+  const env = await bootWindow(writeNavigationPlugin, { builtinPluginsDir: navigationBuiltinPlugins() })
   const otherWindow = await env.harness.connect('ui', 'second window')
   await otherWindow.callAny('events.subscribe', {})
   const otherConnId = await otherWindow.callAny('ui.window.self', {}) as { connId: number }
@@ -97,7 +101,7 @@ test('view tabs preserve each opened input and closing a tab mutates only that e
 })
 
 test('⌘K search exposes effective commands, tools, views, and canonical worktrees with keyboard actions', async () => {
-  const env = await bootWindow(writeNavigationPlugin)
+  const env = await bootWindow(writeNavigationPlugin, { builtinPluginsDir: navigationBuiltinPlugins() })
   const projectPath = makeTempDir('ui-shell-search-project-')
   const projectName = basename(projectPath)
   await env.agent.callAny('quirky.repo/add', { path: projectPath, folder: true })
@@ -105,7 +109,7 @@ test('⌘K search exposes effective commands, tools, views, and canonical worktr
   const projectWorktree = worktrees.find((worktree) => worktree.name === projectName)
   expect(projectWorktree).toBeDefined()
 
-  const shortcut = new KeyboardEvent('keydown', { key: 'k', metaKey: true, bubbles: true, cancelable: true })
+  const shortcut = new KeyboardEvent('keydown', { key: 'k', code: 'KeyK', metaKey: true, bubbles: true, cancelable: true })
   window.dispatchEvent(shortcut)
   await env.win.waitFor(() => env.win.host.getState().layout.palette === true)
   expect(text(env)).toContain('Command palette')
@@ -136,8 +140,11 @@ test('⌘K search exposes effective commands, tools, views, and canonical worktr
 })
 
 test('an active contributed Mod+K binding keeps priority over the search fallback', async () => {
-  const env = await bootWindow((installed) => writeNavigationPlugin(installed, true))
-  window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', metaKey: true, bubbles: true, cancelable: true }))
+  const env = await bootWindow(
+    (installed) => writeNavigationPlugin(installed, true),
+    { builtinPluginsDir: navigationBuiltinPlugins() }
+  )
+  window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', code: 'KeyK', metaKey: true, bubbles: true, cancelable: true }))
   await env.win.waitFor(() => env.win.host.getState().layout.view?.id === SECONDARY)
   expect(env.win.host.getState().layout.view?.input).toEqual({ source: 'palette' })
   expect(env.win.host.getState().layout.palette).not.toBe(true)

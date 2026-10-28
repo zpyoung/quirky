@@ -1,6 +1,6 @@
 import { afterEach, expect, test } from 'bun:test'
-import { mkdirSync, symlinkSync } from 'node:fs'
-import { basename, join, resolve } from 'node:path'
+import { symlinkSync } from 'node:fs'
+import { join, resolve } from 'node:path'
 import { QuirkyClient, type Ask, type AskSpec, type Repo, type Worktree } from '@quirky/protocol'
 import { rpcUrl } from '@quirky/protocol/node'
 import { makeTempDir } from '../../daemon/test/plugins/fixtures'
@@ -11,11 +11,6 @@ const CURRENT_VIEW = 'view:acme.attention/current'
 const INBOX = 'host:inbox'
 
 function writeAttentionPlugin(installed: string): void {
-  mkdirSync(installed, { recursive: true })
-  // The real quirky.worktree manifest declares quirky.repo and quirky.cli dependencies.
-  for (const id of ['quirky.repo', 'quirky.worktree', 'quirky.cli', 'quirky.ask']) {
-    symlinkSync(resolve(import.meta.dir, '../../../plugins', id), join(installed, id))
-  }
   installUiPlugin(
     installed,
     'acme.attention',
@@ -24,10 +19,19 @@ function writeAttentionPlugin(installed: string): void {
   )
 }
 
+function attentionBuiltinPlugins(): string {
+  const builtins = makeTempDir('ui-shell-attention-builtins-')
+  // Real quirky.* plugins must be discovered as built-ins; installed quirky.* IDs are reserved.
+  for (const id of ['quirky.repo', 'quirky.worktree', 'quirky.cli', 'quirky.sidebar-extras', 'quirky.ask']) {
+    symlinkSync(resolve(import.meta.dir, '../../../plugins', id), join(builtins, id))
+  }
+  return builtins
+}
+
 afterEach(closeWindows)
 
 async function bootAttention() {
-  const env = await bootWindow(writeAttentionPlugin)
+  const env = await bootWindow(writeAttentionPlugin, { builtinPluginsDir: attentionBuiltinPlugins() })
   const currentPath = makeTempDir('ui-shell-attention-current-')
   const otherPath = makeTempDir('ui-shell-attention-other-')
   const [currentRepo, otherRepo] = await Promise.all([
