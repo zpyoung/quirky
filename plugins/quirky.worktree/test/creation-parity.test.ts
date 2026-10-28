@@ -89,11 +89,23 @@ describe('worktree create parity boundaries', () => {
     })
   })
 
-  test('unsupported recipe and tab selections and invalid launch values refuse before creating a worktree', async () => {
-    const { dir, repo } = await startRepo()
+  test('invalid recipe/tab selections and valid VM recipes fail before canonical worktree mutation', async () => {
+    const { dir, repo } = await startRepo({
+      'a.txt': 'one\n',
+      'orca.yaml': [
+        'defaultTabs:',
+        '  - title: Build',
+        '    command: pnpm build',
+        'environmentRecipes:',
+        '  - id: devbox',
+        '    name: Development VM',
+        '    create: vm create',
+        '    checkoutMode: provisioned-root'
+      ].join('\n') + '\n'
+    })
     for (const unsupported of [
-      { environmentRecipe: 'node' },
-      { defaultTabs: ['terminal'] },
+      { environmentRecipe: 'missing' },
+      { defaultTabs: ['2'] },
       { agent: 'claude', model: '' },
       { agent: 'claude', model: 'model-name', options: { effort: 42 } }
     ]) {
@@ -101,6 +113,11 @@ describe('worktree create parity boundaries', () => {
       expect(refused.code).toBe(RpcErrorCode.InvalidParams)
       expect(worktreeCount(dir)).toBe(1)
     }
+
+    const vmOwnerMissing = await failure(create({ repo: repo.id, name: 'vm-owner-missing', environmentRecipe: 'devbox' }))
+    expect(vmOwnerMissing.code).toBe(RpcErrorCode.Conflict)
+    expect(vmOwnerMissing.message).toMatch(/provisioned-root VM lifecycle.*refusing to substitute/i)
+    expect(worktreeCount(dir)).toBe(1)
 
     const launchUnavailable = await failure(create({
       repo: repo.id,

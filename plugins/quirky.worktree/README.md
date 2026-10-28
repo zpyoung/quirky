@@ -24,23 +24,23 @@ quirky worktree reorder-projects --projects '["repo_web","repo_api"]'
 
 Only non-primary Git worktrees discovered with `createdBy: "external"` are external. The global default is `hide`; each project's `externalVisibility` may be `show`, `hide`, or `inherit`. Hidden rows remain on disk and in the review inbox. The inbox can show a project's worktrees, keep that project hidden, or suppress its review line without deleting anything.
 
-Use `quirky.worktree/projectMetadata({repo})`, `setProjectMetadata({repo,identity?,externalVisibility?})`, `externalInbox({})`, and `suppressExternalInbox({repo,suppressed})`. `quirky worktree project-show <repo>` and `project-set <repo> --external-worktree-visibility show|hide|inherit` share those methods. Project icon, color, tracker key, and display name are stored under the owning project authority; the checkout path and branch are unchanged.
+Use `quirky.worktree/projectMetadata({repo})`, `setProjectMetadata({repo,identity?,externalVisibility?})`, `externalInbox({})`, and `suppressExternalInbox({repo,suppressed})`. Project Settings and `quirky worktree project-set <repo>` use the same owner. Project icons are safe plain-text emoji/symbols; tracker project defaults are saved only after the authenticated hosting provider resolves a credential-free HTTPS project URL. Provider failures do not mutate identity metadata.
 
 ## References, statuses, and workspace board
 
 `linkReference({worktree,url,label?})` accepts absolute HTTP or HTTPS references, persists them independently of branch/path, and displays them as text rather than executing them. `references({worktree})` reads them and `unlinkReference({worktree,reference})` removes one by stable ID. The workspace details dialog has the same link/unlink controls.
 
-`statusDefinitions({})` reads the built-ins and custom definitions; `setStatusDefinitions({statuses})` requires the four built-in IDs and refuses to remove a status that a workspace still uses. The sidebar's Workspace board and status-group lanes use those persisted labels and colors. `quirky worktree status-list` and `status-set --statuses '<json>'` are the scriptable forms.
+`statusDefinitions({})` reads the built-ins and custom definitions; `setStatusDefinitions({statuses})` requires the four built-in IDs and refuses to remove a status that a workspace still uses. Status labels, colors and safe text icons persist into the board and status-group lanes. The sidebar's Workspace statuses editor and `quirky worktree status-set --statuses '<json>'` use the same API.
 
 ## Navigation and Open in
 
-Opening a card records durable worktree history. `navigate({worktree,target?})`, `navigationBack({})`, `navigationForward({})`, `navigationMove({direction})`, `navigationIndex({index})`, and `openIn({worktree,target})` are the common API behind card clicks, the workspace menu, and CLI commands `back`, `forward`, `previous`, `next`, `index`, and `open-in`. Supported targets are the existing terminal workspace view and the public Git changes view. Stale history entries are skipped; when multiple windows are connected, navigation refuses because the public API cannot target one window exactly.
+Opening a card records durable history for that exact kernel UI connection. `navigate({worktree,target?,window?})`, `navigationBack({window?})`, `navigationForward({window?})`, `navigationMove({direction,window?})`, `navigationIndex({index,window?})`, and `openIn({worktree,target,window?})` share one API across the UI and CLI. `window` is a live numeric `connId`, never a native auxiliary ID. Omitted window preserves singleton behavior and refuses when multiple windows are connected. CLI commands `back`, `forward`, `previous`, `next`, `index`, and `open-in` accept `--window <connId>`.
 
 Keyboard controls are Mod+Alt+Left/Right for history, Mod+Shift+Up/Down for previous/next, and Mod+1…9 for index selection. They do not intercept typing in editable fields.
 
 ## Reversible sleep and wake
 
-`quirky.worktree/sleepPreview({worktree,withDescendants?})` checks the exact selected subtree and whether its active workspace view can be closed without affecting an unrelated window. `sleep` closes that exact view through public `ui.view.close` when a single-window layout identifies it, then persists visibility metadata. It never closes a session, kills a terminal or agent, deletes history, or starts a replacement process; live work continues in the background. When multiple windows or unreadable UI state make the target view ambiguous, sleep refuses with an explicit UI-lifecycle blocker. `wake` restores visibility without starting a process. Clicking a sleeping card wakes it before opening its session view.
+`quirky.worktree/sleepPreview({worktree,withDescendants?,window?})` checks the exact selected subtree and exact selected window view. `sleep` closes only the inspected view through `ui.window.view.close({connId,expectedView})`, so a concurrently selected replacement view is never closed, then persists visibility metadata. It never closes a session, kills a terminal or agent, deletes history, or starts a replacement process; live work continues in the background. Omitted `window` is compatible only with a singleton window; CLI `sleep-preview` and `sleep` accept `--window <connId>`. `wake` restores visibility without starting a process.
 
 ```sh
 quirky worktree sleep-preview id:wt_parent --with-descendants
@@ -48,7 +48,7 @@ quirky worktree sleep id:wt_parent --with-descendants
 quirky worktree wake id:wt_parent --with-descendants
 ```
 
-Sleep state and change timestamps survive daemon restart. The public UI API does not expose independent per-window layouts or close routes, so the plugin refuses ambiguous multi-window view closure rather than redirecting unrelated windows.
+Sleep state and change timestamps survive daemon restart. Exact `ui.window.state`, `ui.window.view.open`, and compare-and-close routes isolate each live `connId`; stale, missing, or ambiguous identities refuse rather than redirecting another window.
 
 ## Cleanup preview and removal
 
@@ -65,11 +65,11 @@ quirky worktree cleanup-remove --selection '[{"worktreeId":"wt_id","fingerprint"
 
 Every selected row is re-previewed immediately before canonical, non-forced removal. The operation never bypasses archive hooks, Git locks, dirty checks, branch preservation, or runtime-liveness checks. It reports each row independently; one refusal does not mark other rows successful.
 
-The public evidence supports blockers for primary and folder workspaces, pins, active and recently visible workspaces, live terminals and agents, unknown runtime liveness, dirty editor buffers, Git registration/status errors and locks, dirty files, unpushed commits, unknown bases, descendants, and dismissed suggestions. Missing required session, editor, UI or sidebar-visit evidence remains an explicit unknown/error blocker.
+Cleanup evidence includes every live window's exact layout, the terminal owner's durable pane/session bindings, `quirky.session/list`, editor buffers/close requests, sidebar visits, and Git state. Missing or malformed evidence remains a blocker; each evidence snapshot contributes to the fingerprint and is re-read before canonical non-forced removal.
 
 ## Evidence limits
 
-The plugin now owns the archived timestamp, but neither public `Repo` nor `Worktree` provides host connectivity or generic volatile-local-context evidence. `cleanupContext.volatile` and `cleanupContext.remoteConnected` therefore remain `null`; the classifier does not invent remote-disconnected or volatile-context blockers, and unknown runtime evidence never proves process death. Cleanup still rechecks current evidence through canonical non-forced removal.
+Local cleanup context is false for a registered local repo owner only when that repo evidence is present. Remote worktree rows without an authoritative host stamp remain `null` and blocked. Volatile context is derived conservatively from the public terminal workspace plus exact session status: live or unknown context blocks; no screen or missing route is treated as proof of inactivity.
  
 ## Creation parity limits
 
@@ -84,9 +84,9 @@ quirky wt project-set api --shared-directories '[".env.local"]'
 
 Project Settings and `quirky wt project-set --shared-directories '[".env.local","config/private"]'` store per-project shared paths. The existing carry owner validates and links those ignored directories together with `EffectiveHooks.sharedDirectories`. Add Project and project Worktree Location expose the public native `desktop.folder.pick` dialog; cancellation keeps the typed draft, and shells without the picker return a conflict instead of imitating it in the browser.
 
-Default tabs and environment recipes remain unsupported by the current public owners (`quirky.repo/hooks` reports both); create API/CLI requests are explicitly refused before creating a worktree. A prepared-checkout pool and host runs remain separate flows and are not represented by local clones or fallback execution.
+Configured `defaultTabs` are parsed from the selected commit, validated before create, and composed through `quirky.terminal/newTab` with `activate:false`; command text shares setup trust, and exact tab colors are set through the terminal owner. A bounded pool of at most three detached, locked preparations expires after five minutes, is hidden from ordinary worktree lists only while its exact recorded lock identity is intact, and is claimed by canonical create only for an exact repo/base/owner match. `environmentRecipes` are parsed but valid VM lifecycle requests still require a separate runtime/attachment owner and are refused rather than run as local shell commands. `worktree host-list` reports authenticated peer IDs/revisions/fingerprints; explicit remote create still requires an authoritative create channel and refuses without local fallback.
 
-Paired-phone origin filters have their own authoritative producer and consumer. They do not establish desktop-client or host identity for this sidebar. Generic per-window workspace layouts/close routes remain unavailable; sleep and navigation refuse ambiguous multiple-window routing rather than affecting an unrelated window.
+Paired-phone creator IDs remain authoritative only for caller-relative paired-device evidence. Desktop creator/client identity stays unknown when no stable authenticated client identity producer is available; a socket or UI window connection ID is not treated as a device identity.
 ## Issue-derived startup prompts
 
 Creating a GitHub issue worktree with an agent passes the raw issue URL through `quirky.worktree/create` to the public `quirky.session/create` API. That issue-derived prompt is left as a draft by default. `submitPrompt` can explicitly override the default; generic user-written prompts retain the session API's existing submitted default.

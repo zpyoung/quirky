@@ -13,6 +13,24 @@ const stringFlag = (args: CliArgs, flag: string): string | undefined => {
   const value = args.flags[flag]
   return typeof value === 'string' ? value : undefined
 }
+function windowFlag(args: CliArgs, ctx: CliContext): number | undefined {
+  const value = args.flags.window
+  const window = typeof value === 'number'
+    ? value
+    : typeof value === 'string' && /^[1-9][0-9]*$/.test(value)
+      ? Number(value)
+      : undefined
+  if (value === undefined) return undefined
+  if (window === undefined || !Number.isSafeInteger(window) || window < 1) {
+    throw ctx.usage('--window must be a positive live UI connection ID')
+  }
+  return window
+}
+
+function windowParams(args: CliArgs, ctx: CliContext): Record<string, number> {
+  const window = windowFlag(args, ctx)
+  return window === undefined ? {} : { window }
+}
 
 /** `--on` and `--off` as one boolean: true, false, or undefined when neither was given; both is a usage error. */
 function toggle(args: CliArgs, ctx: CliContext, on: string, off: string): boolean | undefined {
@@ -40,6 +58,8 @@ type WorktreeCreateReceipt = WorktreeCreateResult & {
   creationReceipt?: {
     sparsePaths: string[]
     sharedDirectories?: string[]
+    preparedCheckout?: boolean
+    defaultTabs?: Array<{ title: string; tab: string; session: string }>
     main: MainUpdateReceipt
     agentLaunch?: { sessionId: string; launchSettings: { summary: string } | null }
   }
@@ -160,6 +180,8 @@ function createNotes(result: WorktreeCreateReceipt, agent: string | undefined): 
   if (result.worktree.pushTarget) lines.push(`push target: ${result.worktree.pushTarget.remoteName}/${result.worktree.pushTarget.branchName}`)
   const receipt = result.creationReceipt
   if (receipt?.sparsePaths.length) lines.push(`sparse checkout: ${receipt.sparsePaths.join(', ')}`)
+  if (receipt?.preparedCheckout) lines.push('checkout: claimed the exact prepared repo/base checkout')
+  if (receipt?.defaultTabs?.length) lines.push(`default tabs: ${receipt.defaultTabs.map((tab) => `${tab.title} (${tab.session})`).join(', ')}`)
   if (receipt?.sharedDirectories?.length) lines.push(`shared directories: ${receipt.sharedDirectories.join(', ')}`)
   if (receipt?.main.status === 'fast-forwarded') lines.push(`main: fast-forwarded to ${receipt.main.to}`)
   else if (receipt?.main.status === 'already-current') lines.push('main: already at the selected base')
@@ -213,6 +235,17 @@ const named: CliModule['commands'] = {
           )
         : 'no workspace origins'
     )
+  },
+  async 'host-list'(_args, ctx) {
+    const result = await ctx.call('quirky.worktree/availableHosts') as {
+      hosts: Array<{ id: string; label: string; available: boolean; capabilities: string[] }>
+    }
+    ctx.out.result(result, () => result.hosts.length
+      ? ctx.format.table(
+          ['HOST ID', 'LABEL', 'AVAILABLE', 'CAPABILITIES'],
+          result.hosts.map((host) => [host.id, host.label, host.available ? 'yes' : 'no', host.capabilities.join(', ') || '-'])
+        )
+      : 'no authenticated remote hosts')
   },
 
   async set(args, ctx) {
@@ -303,7 +336,8 @@ const named: CliModule['commands'] = {
       ['options', selection.options],
       ['sparsePaths', sparsePaths],
       ['environmentRecipe', stringFlag(args, 'environment-recipe')],
-      ['defaultTabs', defaultTabs]
+      ['defaultTabs', defaultTabs],
+      ['host', stringFlag(args, 'host')],
     ]
     const params: Record<string, unknown> = { createdBy: 'cli', ...Object.fromEntries(optional.filter(([, value]) => value !== undefined)) }
     if (noParent) params.noParent = true
@@ -316,6 +350,19 @@ const named: CliModule['commands'] = {
 
     const result = (await ctx.call('quirky.worktree/create', params)) as WorktreeCreateReceipt
     ctx.out.result(result, () => [worktreeRecord(ctx, result.worktree), ...createNotes(result, stringFlag(args, 'agent'))].join('\n'))
+  },
+  async prefetch(args, ctx) {
+    const [repo] = args.positionals as [string]
+    if (!repo) throw ctx.usage('a project selector is required')
+    const base = stringFlag(args, 'base')
+    const result = await ctx.call('quirky.worktree/prefetchCreate', { repo, ...(base === undefined ? {} : { base }) }) as {
+      prepared: boolean
+      base: string
+      reason?: string
+    }
+    ctx.out.result(result, () => result.prepared
+      ? `prepared a locked checkout of ${result.base}`
+      : `checkout not prepared: ${result.reason ?? 'preparation is unavailable'}`)
   },
 
   async rm(args, ctx) {
@@ -467,14 +514,14 @@ const named: CliModule['commands'] = {
   async 'status-list'(_args, ctx) {
     const statuses = await ctx.call('quirky.worktree/statusDefinitions')
     ctx.out.result(statuses, () => ctx.format.table(
-      ['ID', 'LABEL', 'COLOR'],
-      (statuses as Array<{ id: string; label: string; color: string }>).map((status) => [status.id, status.label, status.color])
+      ['ID', 'LABEL', 'COLOR', 'ICON'],
+      (statuses as Array<{ id: string; label: string; color: string; icon?: string }>).map((status) => [status.id, status.label, status.color, status.icon ?? '-'])
     ))
   },
 
   async 'status-set'(args, ctx) {
     const statuses = jsonFlag(args, ctx, 'statuses')
-    if (!Array.isArray(statuses)) throw ctx.usage('--statuses must be a JSON array of {id,label,color} rows')
+    if (!Array.isArray(statuses)) throw ctx.usage('--statuses must be a JSON array of {id,label,color,icon?} rows')
     const updated = await ctx.call('quirky.worktree/setStatusDefinitions', { statuses })
     ctx.out.result(updated, () => `saved ${(updated as unknown[]).length} workspace statuses`)
   },
@@ -509,37 +556,37 @@ const named: CliModule['commands'] = {
     ctx.out.result(result, () => archivedAt === null ? `unarchived ${worktree}` : `archived ${worktree}`)
   },
 
-  async back(_args, ctx) {
-    const result = await ctx.call('quirky.worktree/navigationBack')
+  async back(args, ctx) {
+    const result = await ctx.call('quirky.worktree/navigationBack', windowParams(args, ctx))
     ctx.out.result(result, () => `navigated back to ${(result as { worktreeId: string }).worktreeId}`)
   },
 
-  async forward(_args, ctx) {
-    const result = await ctx.call('quirky.worktree/navigationForward')
+  async forward(args, ctx) {
+    const result = await ctx.call('quirky.worktree/navigationForward', windowParams(args, ctx))
     ctx.out.result(result, () => `navigated forward to ${(result as { worktreeId: string }).worktreeId}`)
   },
 
-  async previous(_args, ctx) {
-    const result = await ctx.call('quirky.worktree/navigationMove', { direction: 'previous' })
+  async previous(args, ctx) {
+    const result = await ctx.call('quirky.worktree/navigationMove', { direction: 'previous', ...windowParams(args, ctx) })
     ctx.out.result(result, () => `opened previous workspace ${(result as { worktreeId: string }).worktreeId}`)
   },
 
-  async next(_args, ctx) {
-    const result = await ctx.call('quirky.worktree/navigationMove', { direction: 'next' })
+  async next(args, ctx) {
+    const result = await ctx.call('quirky.worktree/navigationMove', { direction: 'next', ...windowParams(args, ctx) })
     ctx.out.result(result, () => `opened next workspace ${(result as { worktreeId: string }).worktreeId}`)
   },
 
   async index(args, ctx) {
     const [raw] = args.positionals as [string]
     const index = Number(raw)
-    const result = await ctx.call('quirky.worktree/navigationIndex', { index })
+    const result = await ctx.call('quirky.worktree/navigationIndex', { index, ...windowParams(args, ctx) })
     ctx.out.result(result, () => `opened workspace ${index}: ${(result as { worktreeId: string }).worktreeId}`)
   },
 
   async 'open-in'(args, ctx) {
     const [worktree] = args.positionals as [string]
     const target = stringFlag(args, 'target') ?? 'terminal'
-    const result = await ctx.call('quirky.worktree/openIn', { worktree, target })
+    const result = await ctx.call('quirky.worktree/openIn', { worktree, target, ...windowParams(args, ctx) })
     ctx.out.result(result, () => `opened ${worktree} in ${target}`)
   },
 
@@ -548,7 +595,8 @@ const named: CliModule['commands'] = {
     const withDescendants = args.flags['with-descendants'] === true
     const preview = (await ctx.call('quirky.worktree/sleepPreview', {
       worktree,
-      ...(withDescendants ? { withDescendants: true } : {})
+      ...(withDescendants ? { withDescendants: true } : {}),
+      ...windowParams(args, ctx)
     })) as { worktrees: Array<{ name: string; sleeping: boolean; allowed: boolean; blockers: { code: string; detail: string }[] }> }
     ctx.out.result(preview, () => ctx.format.table(
       ['WORKTREE', 'SLEEPING', 'ALLOWED', 'BLOCKERS'],
@@ -566,7 +614,8 @@ const named: CliModule['commands'] = {
     const withDescendants = args.flags['with-descendants'] === true
     const result = (await ctx.call('quirky.worktree/sleep', {
       worktree,
-      ...(withDescendants ? { withDescendants: true } : {})
+      ...(withDescendants ? { withDescendants: true } : {}),
+      ...windowParams(args, ctx)
     })) as { worktrees: WorktreeSleepState[] }
     ctx.out.result(result, () => `slept ${result.worktrees.map((row) => row.worktreeId).join(', ')}`)
   },

@@ -13,7 +13,7 @@ export function WorktreeBoard({ worktrees, statuses, open, setStatus }: Worktree
     <section className="worktree-board" aria-label="Workspace board">
       {statuses.map((status) => (
         <section className="worktree-board-column" key={status.id} aria-label={`${status.label} workspaces`} style={{ borderColor: status.color }}>
-          <h3>{status.label}</h3>
+          <h3>{status.icon && <span className="status-icon" aria-label={`${status.label} icon`}>{status.icon}</span>} {status.label}</h3>
           <ul className="worktree-list">
             {worktrees.filter((worktree) => worktree.status === status.id).map((worktree) => (
               <li className="worktree-board-card" key={worktree.id}>
@@ -21,7 +21,7 @@ export function WorktreeBoard({ worktrees, statuses, open, setStatus }: Worktree
                 <label>
                   Move to status
                   <select aria-label={`Move ${worktree.name} to status`} value={status.id} onChange={(event) => setStatus(worktree, event.currentTarget.value)}>
-                    {statuses.map((candidate) => <option key={candidate.id} value={candidate.id}>{candidate.label}</option>)}
+                    {statuses.map((candidate) => <option key={candidate.id} value={candidate.id}>{candidate.icon ? `${candidate.icon} ` : ''}{candidate.label}</option>)}
                   </select>
                 </label>
               </li>

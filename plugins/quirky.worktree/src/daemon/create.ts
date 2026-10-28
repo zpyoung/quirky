@@ -27,6 +27,9 @@ import { projectPreference } from './project'
 import { dataRunnerPath, gitRunnerPath, runHookInDaemon, runnerCommand, writeRunner, type HookTarget } from './hooks-run'
 import { birthtimeOf, groupRepoId, listProject } from './list'
 import { InvalidNameError, NoFreeNameError, branchName as joinBranch, normalizePrefix, sanitizeName, walkCandidates } from './naming'
+import { claimPreparedCheckout, prepareCheckout, type PrepareResult } from './prepared'
+import { openWindowView, preflightCreateWindow, type SelectedWindow } from './window'
+import { requireAvailableHost } from './hosts'
 import { pickGeneratedName } from './names'
 import type { KeyedQueue } from './queue'
 import { filesystemIdentitySource, instanceIdFor } from './identity'
@@ -51,6 +54,8 @@ export type CreateParams = {
   branch?: string
   branchName?: string
   base?: string
+  /** Exact authenticated peer ID; never a display label and never falls back locally. */
+  host?: string
   /** GitHub #number or credential-free HTTPS PR/issue URL; resolved again by the daemon. */
   github?: string
   issueCommand?: 'run' | 'skip'
@@ -70,16 +75,27 @@ export type CreateParams = {
   options?: Record<string, string | boolean>
   sparsePaths?: string[]
   keepMain?: boolean
-  /** Recognized for an explicit unsupported response; no current public owner applies this choice. */
+  /** Selected VM recipe from quirky.yaml; Orca's VM lifecycle owner is not a local shell command. */
   environmentRecipe?: string
-  /** Recognized for an explicit unsupported response; no current public owner applies this choice. */
+  /** One-based defaultTabs template indexes, e.g. ["1", "2"]; omitted selects every configured tab. */
   defaultTabs?: string[]
   /** Overrides the default submit behavior for an initial agent prompt. */
   submitPrompt?: boolean
   allowLocalBaseFallback?: boolean
   activate?: boolean
+  window?: number
   createdBy?: WorktreeCreatedBy
   automationProvenanceRequest?: WorktreeAutomationProvenanceRequest
+}
+type DefaultTabTemplate = { title?: string; color?: string; command?: string }
+type DefaultTabsTrust = { text: string; hash: string; trusted: boolean; changed: boolean } | null
+type EnvironmentRecipe = { id: string; name: string; create: string; checkoutMode?: 'orca-worktree' | 'provisioned-root' }
+type CreateHooks = EffectiveHooks & {
+  defaultTabs?: DefaultTabTemplate[]
+  defaultTabsTrust?: DefaultTabsTrust
+  defaultTabsRunCommands?: boolean
+  environmentRecipes?: EnvironmentRecipe[]
+  environmentRecipeDiagnostics?: Array<{ index: number; field?: string; message: string }>
 }
 
 /** A setup or agent start that is waiting for a Setup terminal to exit. */
@@ -91,6 +107,8 @@ export type CreateEnv = FolderEnv & {
   subscribe(listener: (event: QuirkyEvent) => void | Promise<void>): () => void
   getSetting(name: string): unknown
   dataDir: string
+  /** The one daemon instance that owns this bounded preparation pool. */
+  preparationOwnerId: string
   worktreesRoot(): string
   worktreeDirName(repo: Repo): Promise<string>
   resolveRepo(selector: string): Promise<Repo>
@@ -123,6 +141,8 @@ type CreateReceipt = {
   sparsePaths: string[]
   sharedDirectories: string[]
   main: MainUpdateReceipt
+  preparedCheckout: boolean
+  defaultTabs?: Array<{ title: string; tab: string; session: string }>
   agentLaunch?: { sessionId: string; launchSettings: LaunchSettings | null }
 }
 
@@ -130,6 +150,7 @@ type CreateResult = WorktreeCreateResult & { creationReceipt: CreateReceipt }
 
 const MAIN_NOT_REQUESTED: MainUpdateReceipt = { status: 'not-requested' }
 const MAX_SPARSE_PATHS = 100
+const MAX_DEFAULT_TABS = 100
 const RESERVED_LAUNCH_OPTIONS = new Set(['model', '__proto__', 'constructor', 'prototype'])
 
 function normalizeSparsePaths(env: CreateEnv, value: unknown): string[] | undefined {
@@ -162,11 +183,24 @@ function normalizeSparsePaths(env: CreateEnv, value: unknown): string[] | undefi
 }
 
 function normalizeCreateChoices(env: CreateEnv, params: CreateParams): CreateParams {
-  if (params.environmentRecipe !== undefined) {
-    throw env.fail('invalid-params', 'environment recipes are unsupported: quirky.repo/hooks reports them as unsupported and no public recipe owner is available')
+  if (params.environmentRecipe !== undefined &&
+    (typeof params.environmentRecipe !== 'string' || !/^[a-z0-9][a-z0-9._-]{0,63}$/.test(params.environmentRecipe))) {
+    throw env.fail('invalid-params', 'environmentRecipe must be a valid configured recipe ID')
+  }
+  if (params.host !== undefined && (typeof params.host !== 'string' || params.host.trim() === '' || params.host !== params.host.trim())) {
+    throw env.fail('invalid-params', 'host must be an exact authenticated peer ID')
+  }
+  if (params.window !== undefined && (typeof params.window !== 'number' || !Number.isSafeInteger(params.window) || params.window < 1)) {
+    throw env.fail('invalid-params', 'window must be a positive live UI connection ID')
   }
   if (params.defaultTabs !== undefined) {
-    throw env.fail('invalid-params', 'default tabs are unsupported: quirky.repo/hooks reports them as unsupported and no public tab-composition owner is available')
+    if (!Array.isArray(params.defaultTabs) || params.defaultTabs.length > MAX_DEFAULT_TABS ||
+      !params.defaultTabs.every((index) => typeof index === 'string' && /^[1-9][0-9]*$/.test(index))) {
+      throw env.fail('invalid-params', `defaultTabs must be a list of one-based template indexes (at most ${MAX_DEFAULT_TABS})`)
+    }
+    if (new Set(params.defaultTabs).size !== params.defaultTabs.length) {
+      throw env.fail('invalid-params', 'defaultTabs cannot select the same template more than once')
+    }
   }
   if (params.keepMain !== undefined && typeof params.keepMain !== 'boolean') {
     throw env.fail('invalid-params', 'keepMain must be a boolean')
@@ -201,6 +235,80 @@ function normalizeCreateChoices(env: CreateEnv, params: CreateParams): CreatePar
   else normalized.options = options
   if (params.sparsePaths !== undefined) normalized.sparsePaths = normalizeSparsePaths(env, params.sparsePaths)!
   return normalized
+}
+type DefaultTabsPlan = { tabs: DefaultTabTemplate[]; runCommands: boolean }
+
+function defaultTabsPlan(env: CreateEnv, params: CreateParams, hooks: CreateHooks | null): DefaultTabsPlan {
+  const templates = hooks?.defaultTabs ?? []
+  const selected = params.defaultTabs === undefined
+    ? templates
+    : params.defaultTabs.map((raw) => {
+        const index = Number(raw)
+        const template = templates[index - 1]
+        if (!Number.isSafeInteger(index) || !template) {
+          throw env.fail('invalid-params', `defaultTabs selection "${raw}" does not identify a configured template`)
+        }
+        return template
+      })
+  if (params.defaultTabs !== undefined && templates.length === 0 && selected.length > 0) {
+    throw env.fail('invalid-params', 'defaultTabs selection requires configured default terminal tabs')
+  }
+  return {
+    tabs: selected,
+    runCommands: hooks?.defaultTabsRunCommands === true && params.setup !== 'skip'
+  }
+}
+
+function preflightEnvironmentRecipe(
+  env: CreateEnv,
+  repo: Repo,
+  hooks: CreateHooks | null,
+  params: CreateParams,
+  ref?: string
+): void {
+  const id = params.environmentRecipe
+  if (id === undefined) return
+  const recipe = hooks?.environmentRecipes?.find((candidate) => candidate.id === id)
+  if (!recipe) {
+    const detail = hooks?.environmentRecipeDiagnostics?.map((diagnostic) => diagnostic.message).join(' ') ?? ''
+    throw env.fail('invalid-params', `environmentRecipe "${id}" is not a valid recipe in the selected project configuration.${detail ? ` ${detail}` : ''}`)
+  }
+  const checkoutMode = recipe.checkoutMode ?? 'orca-worktree'
+  throw reasoned(
+    env,
+    'conflict',
+    'environment-recipe-owner-unavailable',
+    `Environment recipe "${recipe.name}" is a ${checkoutMode} VM lifecycle recipe. Its authoritative runtime/attachment owner is not available through the worktree or terminal public APIs; refusing to substitute a local shell command.${ref ? ` Selected ref: ${ref}.` : ''}`,
+    { repo: repo.id, recipe: recipe.id, checkoutMode }
+  )
+}
+
+function decideDefaultTabs(
+  env: CreateEnv,
+  repo: Repo,
+  hooks: CreateHooks | null,
+  plan: DefaultTabsPlan,
+  params: CreateParams,
+  hooksRef?: string
+): void {
+  if (!plan.runCommands || !plan.tabs.some((tab) => Boolean(tab.command?.trim()))) return
+  const trust = hooks?.defaultTabsTrust
+  const explicitPinMismatch = params.trustSetup === true && params.trustSetupHash !== undefined && params.trustSetupHash !== trust?.hash
+  if (!trust || explicitPinMismatch || (!trust.trusted && params.trustSetup !== true)) {
+    const file = hooks?.file ?? 'quirky.yaml'
+    const lead = explicitPinMismatch
+      ? `The setup/default-tab commands in ${file} do not match the hash supplied for this create`
+      : trust?.changed
+        ? `The setup/default-tab commands in ${file} changed since they were last trusted`
+        : `The setup/default-tab commands in ${file} have not been trusted`
+    throw reasoned(
+      env,
+      'conflict',
+      'hooks-untrusted',
+      `${lead}:\n${trust?.text ?? 'The trusted command snapshot is unavailable.'}\nPass --trust-setup --trust-setup-hash ${trust?.hash ?? ''} to run these commands once, or trust the setup hooks for ${labelOf(repo)}.`,
+      { repo: repo.id, kind: 'setup', source: file, script: trust?.text ?? '', hash: trust?.hash ?? '', changed: trust?.changed ?? false, ...(hooksRef !== undefined ? { ref: hooksRef } : {}) }
+    )
+  }
 }
 
 async function preflightAgentSelection(env: CreateEnv, params: CreateParams): Promise<void> {
@@ -458,6 +566,49 @@ function rootOf(env: CreateEnv, repo: Repo, settings: ProjectSettings): string {
   const expanded = expandHome(location)
   return resolveRealPath(isAbsolute(expanded) ? expanded : resolve(repo.path, expanded))
 }
+export async function prefetchWorktreeCreateBase(
+  env: CreateEnv,
+  params: { repo: string; base?: string }
+): Promise<PrepareResult & { repoId: string; base: string }> {
+  if (typeof params.repo !== 'string' || params.repo.trim() === '') throw env.fail('invalid-params', 'repo must be a project selector')
+  if (params.base !== undefined && (typeof params.base !== 'string' || params.base.trim() === '')) {
+    throw env.fail('invalid-params', 'base must be a non-empty ref when supplied')
+  }
+  const repo = await env.resolveRepo(params.repo)
+  if (repo.kind !== 'git') throw env.fail('invalid-params', 'prepared worktree creation requires a Git project')
+  const details = await env.call('quirky.repo/show', { repo: repo.id }) as RepoDetails
+  let base: ResolvedBase
+  try {
+    base = await resolveBase(repo.path, {
+      requested: params.base,
+      saved: details.settings.defaultBase,
+      allowLocalFallback: false,
+      log: env.log
+    })
+  } catch (error) {
+    if (error instanceof BaseError) {
+      if (error.reason === 'not-found') throw env.fail('invalid-params', error.message)
+      throw reasoned(env, 'conflict', error.reason, error.message, error.data)
+    }
+    throw error
+  }
+  const baseOid = await gitApi().resolveCommit(repo.path, base.fullRef)
+  if (baseOid === null) throw env.fail('conflict', `Base ref "${base.shortRef}" no longer resolves to a commit.`)
+  const reposValue = await env.call('quirky.repo/list')
+  if (!Array.isArray(reposValue)) throw env.fail('conflict', 'The canonical repo owner returned an invalid project inventory.')
+  const repos = reposValue as Repo[]
+  const prepared = await env.queue.run(repo.id, () =>
+    env.queue.run('prepared-worktree-pool', () => prepareCheckout(
+      { store: env.store, ownerId: env.preparationOwnerId, log: env.log },
+      repos,
+      repo,
+      rootOf(env, repo, details.settings),
+      base.fullRef,
+      baseOid
+    ))
+  )
+  return { ...prepared, repoId: repo.id, base: base.shortRef }
+}
 
 /** The branch prefix the settings ask for, or null for none; a custom prefix git rejects is refused. */
 async function branchPrefix(env: CreateEnv, repo: Repo): Promise<string | null> {
@@ -499,7 +650,7 @@ async function findBranch(env: CreateEnv, repo: Repo, input: string): Promise<Br
 type SetupDecision = 'run' | 'skip' | 'none'
 
 /** Whether setup runs for this create, refusing an undecided "ask" project and an untrusted shared script. */
-function decideSetup(env: CreateEnv, repo: Repo, settings: ProjectSettings, hooks: EffectiveHooks, params: CreateParams, hooksRef?: string): SetupDecision {
+function decideSetup(env: CreateEnv, repo: Repo, settings: ProjectSettings, hooks: CreateHooks, params: CreateParams, hooksRef?: string): SetupDecision {
   const setup = hooks.setup
   if (!setup) return 'none'
   const choice = params.setup ?? 'inherit'
@@ -530,7 +681,7 @@ type IssueCommandDecision = 'run' | 'skip' | 'none'
 function decideIssueCommand(
   env: CreateEnv,
   repo: Repo,
-  hooks: EffectiveHooks,
+  hooks: CreateHooks,
   params: CreateParams,
   source: GitHubWorktreeSource | null,
   hooksRef?: string
@@ -558,13 +709,16 @@ function decideIssueCommand(
 type Created = {
   worktree: Worktree
   rootPath: string
-  hooks: EffectiveHooks | null
+  hooks: CreateHooks | null
   decision: SetupDecision
   source: GitHubWorktreeSource | null
   issueCommandDecision: IssueCommandDecision
   warnings: string[]
   sparsePaths: string[]
   sharedDirectories: string[]
+  defaultTabs: DefaultTabTemplate[]
+  runDefaultTabCommands: boolean
+  preparedCheckout: boolean
   mainUpdate: MainUpdateReceipt
   baseFallback?: ResolvedBase['fallback']
 }
@@ -584,6 +738,17 @@ export async function createWorkspace(env: CreateEnv, params: CreateParams, iden
   const createdBy = params.createdBy ?? 'api'
   if (params.parent !== undefined && params.noParent === true) throw env.fail('invalid-params', 'parent and noParent cannot be used together')
   if (params.branch !== undefined && params.branchName !== undefined) throw env.fail('invalid-params', 'pass either a branch or a branch name, not both')
+  if (params.host !== undefined) {
+    const host = await requireAvailableHost(env.call, env.fail, params.host)
+    throw reasoned(
+      env,
+      'conflict',
+      'remote-worktree-create-unavailable',
+      `Peer "${host.label}" is authenticated and available, but no exact remote worktree-create owner exists. Refusing local fallback.`,
+      { hostId: host.id, pairingRevision: host.pairingRevision, fingerprint: host.fingerprint }
+    )
+  }
+  const selectedWindow = params.activate === true ? await preflightCreateWindow(env, params.window) : null
   const target = await resolveTarget(env, params, identity)
   let automationProvenance: WorktreeAutomationProvenance | undefined
   if (provenanceRequest) {
@@ -608,16 +773,23 @@ export async function createWorkspace(env: CreateEnv, params: CreateParams, iden
   else created = await env.queue.run(target.repo.id, () => createGit(env, target.repo, params, createdBy, parentId, origin, automationProvenance))
 
   env.changed({ repoId: created.worktree.repoId, worktreeId: created.worktree.id })
-  return finish(env, created, params)
+  return finish(env, created, params, selectedWindow)
 }
 
 async function createFolder(env: CreateEnv, target: Target, params: CreateParams, createdBy: WorktreeCreatedBy, parentId: string | null, origin: WorktreeOriginCreator): Promise<Created> {
-  let hooks: EffectiveHooks | null = null
+  let hooks: CreateHooks | null = null
   let decision: SetupDecision = 'none'
+  let tabs: DefaultTabsPlan
   if ('repo' in target) {
-    const details = (await env.call('quirky.repo/show', { repo: target.repo.id })) as RepoDetails
+    const details = (await env.call('quirky.repo/show', { repo: target.repo.id })) as RepoDetails & { hooks: CreateHooks }
     hooks = details.hooks
+    tabs = defaultTabsPlan(env, params, hooks)
+    preflightEnvironmentRecipe(env, target.repo, hooks, params)
     decision = decideSetup(env, target.repo, details.settings, hooks, params)
+    decideDefaultTabs(env, target.repo, hooks, tabs, params)
+  } else {
+    tabs = defaultTabsPlan(env, params, null)
+    if (params.environmentRecipe !== undefined) throw env.fail('invalid-params', 'environmentRecipe requires a configured Git project')
   }
   const repoId = 'repo' in target ? target.repo.id : groupRepoId(target.group.id)
   const worktree = await createFolderWorkspace(env, target, {
@@ -639,6 +811,9 @@ async function createFolder(env: CreateEnv, target: Target, params: CreateParams
     warnings: [],
     sparsePaths: [],
     sharedDirectories: [],
+    defaultTabs: tabs.tabs,
+    runDefaultTabCommands: tabs.runCommands,
+    preparedCheckout: false,
     mainUpdate: MAIN_NOT_REQUESTED
   }
 }
@@ -729,15 +904,19 @@ async function createGit(
   const startRef = pullPlan?.startRef ?? existing?.fullRef ?? base!.fullRef
   const hooksRef = pullPlan?.hooksRef ?? await git.resolveCommit(repo.path, startRef)
   if (hooksRef === null) throw env.fail('invalid-params', `Base ref "${existing?.branch ?? base!.shortRef}" was not found.`)
-  let hooks: EffectiveHooks
+  let hooks: CreateHooks
+  let tabsPlan: DefaultTabsPlan
   let decision: SetupDecision
   let issueCommandDecision: IssueCommandDecision
   let sparsePatterns: string[] = []
   try {
     if (params.sparsePaths !== undefined) sparsePatterns = await validateSparseTreePaths(env, repo.path, hooksRef, params.sparsePaths)
-    hooks = (await env.call('quirky.repo/hooks', { repo: repo.id, ref: hooksRef })) as EffectiveHooks
+    hooks = (await env.call('quirky.repo/hooks', { repo: repo.id, ref: hooksRef })) as CreateHooks
+    tabsPlan = defaultTabsPlan(env, params, hooks)
+    preflightEnvironmentRecipe(env, repo, hooks, params, hooksRef)
     decision = decideSetup(env, repo, settings, hooks, params, hooksRef)
     issueCommandDecision = decideIssueCommand(env, repo, hooks, params, source, hooksRef)
+    decideDefaultTabs(env, repo, hooks, tabsPlan, params, hooksRef)
   } catch (error) {
     if (pullPlan) await restorePullRef(repo.path, pullPlan).catch((cleanupError) => env.log(`could not restore GitHub pull ref after a refused create: ${messageOf(cleanupError)}`))
     throw error
@@ -755,6 +934,7 @@ async function createGit(
   let durable = false
   let pushRemoteAdded = false
   let branchConfig: Map<string, string[]> | null = null
+  let preparedCheckout = false
   const retire = () => {
     if (generated === null) return
     for (const name of new Set([generated, placed ?? generated])) env.store.run('INSERT OR IGNORE INTO retired_names (repo_id, name) VALUES (?, ?)', repo.id, name)
@@ -852,9 +1032,26 @@ async function createGit(
 
     if (pullPlan || mode === 'new' || mode === 'tracking') branchConfig = await snapshotBranchConfig(repo.path, branch)
     if (pullPlan) pushRemoteAdded = await addPushRemote(repo.path, pullPlan)
-    await addWorktree(env, repo, { mode, branch, folder, start: hooksRef, existing })
-    worktreeAdded = true
-    branchCreated = mode === 'new' || mode === 'tracking'
+    const canClaimPrepared = pullPlan === null && mode === 'new' && sparsePatterns.length === 0 && base !== null
+    if (canClaimPrepared) {
+      preparedCheckout = await env.queue.run('prepared-worktree-pool', () => claimPreparedCheckout(
+        { store: env.store, ownerId: env.preparationOwnerId, log: env.log },
+        repo,
+        root,
+        base!.fullRef,
+        hooksRef,
+        branch,
+        folder
+      ))
+    }
+    if (preparedCheckout) {
+      worktreeAdded = true
+      branchCreated = true
+    } else {
+      await addWorktree(env, repo, { mode, branch, folder, start: hooksRef, existing })
+      worktreeAdded = true
+      branchCreated = mode === 'new' || mode === 'tracking'
+    }
     if (sparsePatterns.length > 0) await setSparseCheckout(folder, sparsePatterns)
 
     if (pullPlan) await configurePullBranch(repo.path, pullPlan)
@@ -920,6 +1117,9 @@ async function createGit(
       warnings,
       sparsePaths: params.sparsePaths ?? [],
       sharedDirectories: linkedSharedDirectories,
+      defaultTabs: tabsPlan.tabs,
+      runDefaultTabCommands: tabsPlan.runCommands,
+      preparedCheckout,
       mainUpdate,
       ...(base?.fallback ? { baseFallback: base.fallback } : {})
     }
@@ -1068,6 +1268,41 @@ type ObjectRecord = Record<string, unknown>
 function objectRecord(value: unknown): ObjectRecord | null {
   return typeof value === 'object' && value !== null && !Array.isArray(value) ? value as ObjectRecord : null
 }
+async function openDefaultTabs(
+  env: CreateEnv,
+  created: Created,
+  warnings: string[]
+): Promise<Array<{ title: string; tab: string; session: string }>> {
+  const opened: Array<{ title: string; tab: string; session: string }> = []
+  for (const [index, template] of created.defaultTabs.entries()) {
+    const title = template.title?.trim() || `Tab ${index + 1}`
+    try {
+      const value = objectRecord(await env.call('quirky.terminal/newTab', {
+        workspace: created.worktree.id,
+        cwd: created.worktree.path,
+        ...(template.title ? { title: template.title } : {}),
+        ...(created.runDefaultTabCommands && template.command?.trim() ? { command: template.command.trim() } : {}),
+        activate: false
+      }))
+      const workspace = objectRecord(value?.workspace)
+      if (workspace?.id !== created.worktree.id || typeof value?.tab !== 'string' || value.tab === '' ||
+        typeof value.session !== 'string' || value.session === '') {
+        throw new Error('quirky.terminal/newTab returned an incomplete workspace, tab, or session identity')
+      }
+      if (template.color) {
+        try {
+          await env.call('quirky.terminal/setTabColor', { tab: value.tab, color: template.color })
+        } catch (error) {
+          warnings.push(`could not set the default tab color for ${title}: ${messageOf(error)}`)
+        }
+      }
+      opened.push({ title, tab: value.tab, session: value.session })
+    } catch (error) {
+      warnings.push(`could not open default tab "${title}" for ${created.worktree.path}: ${messageOf(error)}`)
+    }
+  }
+  return opened
+}
 
 
 
@@ -1141,7 +1376,7 @@ async function runIssueCommand(
 }
 
 /** Steps 12 to 14: setup, the agent, and opening the view. */
-async function finish(env: CreateEnv, created: Created, params: CreateParams): Promise<CreateResult> {
+async function finish(env: CreateEnv, created: Created, params: CreateParams, selectedWindow: SelectedWindow | null): Promise<CreateResult> {
   const { worktree, hooks, warnings } = created
   const result: CreateResult = {
     worktree,
@@ -1150,9 +1385,14 @@ async function finish(env: CreateEnv, created: Created, params: CreateParams): P
     creationReceipt: {
       sparsePaths: created.sparsePaths,
       sharedDirectories: created.sharedDirectories,
+      preparedCheckout: created.preparedCheckout,
       main: created.mainUpdate
     },
     ...(created.baseFallback ? { baseFallback: created.baseFallback } : {})
+  }
+  if (created.defaultTabs.length > 0) {
+    const opened = await openDefaultTabs(env, created, warnings)
+    if (opened.length > 0) result.creationReceipt.defaultTabs = opened
   }
   const script = hooks?.setup?.text
   const runs = created.decision === 'run' && script !== undefined
@@ -1197,10 +1437,14 @@ async function finish(env: CreateEnv, created: Created, params: CreateParams): P
   }
 
   if (params.activate === true) {
-    try {
-      await env.call('ui.view.open', { id: SESSION_VIEW, input: { worktree: worktree.id } })
-    } catch (error) {
-      warnings.push(`could not open ${worktree.name}: ${messageOf(error)}`)
+    if (!selectedWindow) {
+      warnings.push(`could not open ${worktree.name}: no connected UI window was available`)
+    } else {
+      try {
+        await openWindowView(env, selectedWindow.connId, SESSION_VIEW, { worktree: worktree.id })
+      } catch (error) {
+        warnings.push(`could not open ${worktree.name}: ${messageOf(error)}`)
+      }
     }
   }
   return result

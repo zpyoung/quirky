@@ -176,6 +176,12 @@ function setup(layout: UiLayout = { view: null, panel: null, sidebar: true, focu
     async call(method: string, params: Record<string, unknown> = {}) {
       calls.push({ method, params })
       switch (method) {
+        case 'ui.window.self':
+          return { connId: 1 }
+        case 'quirky.worktree/availableHosts':
+          return { hosts: [] }
+        case 'quirky.worktree/prefetchCreate':
+          return { prepared: false, reason: 'test-only optimization path' }
         case 'quirky.agents/options':
           return {
             agent: params.agent,
