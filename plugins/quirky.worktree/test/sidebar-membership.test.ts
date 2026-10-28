@@ -179,8 +179,23 @@ describe('canonical worktree project-group membership', () => {
     expect(cliSet).toMatchObject({ code: 0, stderr: '' })
     expect(JSON.parse(cliSet.stdout)).toMatchObject({ displayName: 'CLI fix', projectGroupId: result.group.id })
 
-    const cleared = (await call(client, 'quirky.worktree/set', { worktree: selected.id, projectGroupId: null })) as CanonicalWorktree
-    expect(cleared.projectGroupId).toBeNull()
+    const beforeRestart = await worktreeById(client, selected.id)
+    const { client: restartedClient } = await t!.restart()
+    const persisted = await worktreeById(restartedClient, selected.id)
+    expect(persisted).toEqual(beforeRestart)
+    expect(persisted).toMatchObject({
+      id: selected.id,
+      path: before.path,
+      repoId: repo.id,
+      parentId: parent.id,
+      groupId: before.groupId,
+      instanceId: before.instanceId,
+      displayName: 'CLI fix',
+      projectGroupId: result.group.id
+    })
+
+    const cleared = (await call(restartedClient, 'quirky.worktree/set', { worktree: selected.id, projectGroupId: null })) as CanonicalWorktree
+    expect(cleared).toEqual({ ...persisted, projectGroupId: null })
   })
 
   test('generated set flags move and clear only project-group membership', async () => {
