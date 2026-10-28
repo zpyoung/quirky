@@ -55,5 +55,16 @@
 - **Revisit if:** other platforms are authorized or Chrome stops honoring those isolated test boundaries
 - **Source:** deferred: platform
 
+## D6: Preserve the existing dependent import-UI item
+- **Question:** Does this engine item also own import menus, source rows, file picker, badges and toast flows?
+- **Options:** duplicate their implementation here; preserve the existing named queue slice
+- **Chose:** preserve `sa-browser-profile-import-ui` (todo, depends on profiles-settings and extras). This item supplies real API/CLI import methods and JSON-cookie byte-source contracts; no new import UI. Existing UI validators may recognize imported metadata, while visible capability remains honest. Retain `tab profile set --pane`; page-level selection uses distinct `tab profile set-page`.
+- **Why:** canonical queue already assigns the full UI integration to that dependent item. Current pane CLI owns its command words; duplicate registrations would conflict.
+- **Evidence:** git show build/roadmap:docs/loop/queue.json exact two-item projection; current quirky-plugin.json CLI profileSet; BrowserExtrasSurface confirmed no UI edits had occurred before steering.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** queue ownership is explicitly changed
+- **Source:** locked by docs/loop/queue.json
+
 ## Progress
-Claimed exactly sa-browser-agent-extras on lane5; new branch build/sa-browser-agent-extras. Current requirements/locked decisions read, single scout returned, no suite/review/dogfood run. Combined spec, cookie/dependency types and method vocabulary ready to commit. Next: dispatch max3 disjoint isolated implementers, integrate all, real-path smoke/typecheck, one roadmap catchup/decision reconciliation, canonical land. Inherited .serena remains untouched.
+Claimed exactly sa-browser-agent-extras on lane5. Shared contracts committed c18fa91b; three disjoint workers active under /tmp/quirky-browser-extras-lane5-bvwnJ2/{cookies,runtime,surface}, each expected HEAD c18fa91b. Parent owns docs/package/lock and obsolete C5 command restrictions. Import UI scope corrected by D6 before worker UI edits; no suite/review/dogfood run. Next: await all workers in this turn, authoritative scope/HEAD audit, integrate, real-path smoke/typecheck, one roadmap catchup/reconcile and canonical land. Inherited .serena untouched.
