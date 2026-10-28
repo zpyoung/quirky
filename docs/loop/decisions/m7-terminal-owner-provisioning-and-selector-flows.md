@@ -66,5 +66,16 @@
 - **Revisit if:** Authorized identity or supported callback-capable SDK becomes available.
 - **Source:** deferred: platform
 
+## D7: Consume a genuine authenticated UI installation identity in a second wave
+- **Question:** Can durable desktop provenance proceed once the owner component supplies a real producer?
+- **Options:** Keep all UI origins unknown; infer from connId; consume the committed authenticated installation UUID.
+- **Chose:** Initial full-token UI hello carries a persisted UUID; kernel stamps PluginCaller.desktopClientId and returns it from exact ui.window.self. A second workspace-only component stores this against the new filesystem instance and uses exact current-client identity for known-other-client filters. Old unknowns, phone identities and reused instances remain distinct. This is UI installation identity, not machine/hardware identity.
+- **Why:** The producer is now genuine source rather than a proposed contract. The consumer has a semantic dependency on committed producer source and can ship independently of remote-host mirrors and VM provisioning.
+- **Evidence:** c2825141 protocol plugins.ts:326-327 and window-routes.ts:4; integrated2c9fe15e. All first-wave component HEAD/scope/hash audits passed before parent commits.
+- **Reversibility:** medium
+- **Confidence:** high for source contract; runtime proof pending
+- **Revisit if:** Authenticated hello or storage lifetime cannot distinguish actual client installations.
+- **Source:** assumed — autonomous
+
 ## Progress
 Claimed after repeated canonical busy waits. Branch created from current roadmap. Read predecessor complete disposition/decisions and locked roadmap/architecture. One scout returned source map. Combined spec/shared types ready for contract commit, then three isolated component implementers. No suites/reviews/full-app dogfood authorized; narrow developer smoke and typecheck before landing. Every unbuilt flow must get exact final disposition and at most one implementation-only successor.

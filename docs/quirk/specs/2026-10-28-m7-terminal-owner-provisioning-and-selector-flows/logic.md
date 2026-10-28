@@ -1,6 +1,8 @@
 # Owner provisioning and workspace-view selectors
 
 ## Status & amendments
+**Amendment 2026-10-28:** First-wave source now supplies the genuine optional UI installation producer: initial full-token `role:ui` hello carries a persisted localStorage UUID, kernel validates and stamps `PluginCaller.desktopClientId`, and `ui.window.self` returns that same field for its connection. This identifies the authenticated UI installation, not hardware or an OS account. A second serialized workspace component consumes this committed contract to persist exact-instance creator provenance and classify known other UI clients; legacy unknown origins remain unknown. It does not invent remote host mirrors/connectivity or VM attachment authority.
+
 Approved autonomously 2026-10-28 under the authoritative build/roadmap LOOP. Combined logic and technical specification. No person, research swarm, separate review, suite or full-app dogfood gate. Every inherited remaining flow is accounted for below; unsupported refusal is not completion.
 
 ## Goal and conceptual model
@@ -51,3 +53,6 @@ No additional scope. Owner grant: confirmed full-owner CLI credential separate f
 
 ## Self-review
 Purpose, consumers, observable boundary, constraints, success bar and scope are resolved autonomously. Authentication, selectors, ambiguity, unknown state, native prerequisites and VM-versus-command semantics are explicit. No open asks, stubs or promises of unrelated parity. Final disposition must enumerate shipped and unbuilt scenario portions with exercised evidence and limits.
+
+### Second-wave provenance consumer contract
+The shared producer is committed in component c2825141, integrated at2c9fe15e. `PluginCaller.desktopClientId?:string` is set only by authenticated UI hello; `WindowRoute.desktopClientId?:string` comes from exact self connection. Workspace source stores it against the actual new worktree instance, never accepts a creator ID from create params, and exposes safe creator provenance for filters. A caller without producer cannot classify other clients. Reused paths/old rows/phone IDs must not inherit a desktop ID. Scope is plugins/quirky.worktree/** and plugins/quirky.repo/** only, including UI/API/CLI tests and docs. No schema/control primitive outside that component changes. This is a genuine semantic dependency on the producer, so it is a second wave, not overlap-only serialization.
