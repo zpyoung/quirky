@@ -154,6 +154,28 @@
 - **Revisit if:** the committed fix does not close the actual U01 scenario.
 - **Source:** assumed — autonomous
 
+## D15: Consume the saved-selector fix and retain the guarded UI partial verdict
+- **Question:** does the actual corrected web surface satisfy U01, and can the automation verdict be labeled pass?
+- **Options:** manufacture a trailing OBSERVED action; silently call visual evidence a pass; preserve the guard's tool-limited partial with exact evidence.
+- **Chose:** consumed539aa1c9 as008f2722 and rebuilt. Run20261028T100152-a007 used web/yours/unattended with no overrides. It visibly loaded pat/4, showed saved Task before choices loaded, discovered Bug/Task without disabled Archived, changed to Bug, retained Bug after Board→Table with unloaded choices, and retained Bug after closing/reopening Tasks. Final reopen was UNSETTLED; stable observation18 did not change the guard's last-act requirement, so pass_without_effect refused pass. Recorded partial under LOOP's explicit tool-limit rule, not an app failure or formal UI pass.
+- **Why:** screenshot evidence establishes the visible saved-value correction, but cannot override the deterministic guard. Refresh on unchanged data returned NO_EFFECT, not proof of a network reload. No extra mutation/unrelated trailing action was used to game status.
+- **Evidence:** .quirk/using-apps-like-a-user/runs/20261028T100152-a007/report.json; observations7/8/12/14/18; actual pass_without_effect output. End closed the browser with no kept-open windows; frontmost restore to baseline com.apple.SecurityAgent failed desktop_command_failed. Owned daemon97798 exited0 and its temporary root was confirmed absent.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** a future guard supports settling an UNSETTLED act through observation, or the real UI fails the saved-value scenario.
+- **Source:** locked by docs/loop/LOOP.md
+
+## D16: Route the unchanged numbered-page completeness finding to its active sweep owner
+- **Question:** plugin-validator flags workItemPage incomplete status lost by Tasks; is that introduced by these changes?
+- **Options:** expand this item into numbered-REST list work; suppress the finding; preserve it and route to m7-sweep-hosting.
+- **Chose:** static source evidence confirms the producer can return partial:true/truncated:true without errors and the consumer currently reads only errors/count. Both paths are unchanged here and explicitly excluded from this item's cursor-search cutover. Recorded MEDIUM in BLOCKERS and sent the exact evidence to active lane8; do not claim its resolution or turn it into a local source rewrite.
+- **Why:** the request names the two deferred API flows; inventing a third flow would collide with the sweep owner. This is not a false-positive dismissal: the bounded plugin validation reports FAIL for that wider consumer issue while reporting matching54hosting/28Tasks public method/CLI declarations and correct type discovery/owner semantics.
+- **Evidence:** ParityPluginValidation report; plugins/quirky.tasks/src/list/methods.ts:279-301; plugins/quirky.hosting/src/task-page.ts:91-103,171-180; combined spec Scope and non-goals; /tmp/quirky-lane8-hosting-parity-reply.md.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** lane8 supplies its committed correction or these changes are shown to introduce the issue.
+- **Source:** assumed — autonomous
+
 ## Progress
 
-Consumed production and independent test commits through36601fba. Actual generated CLI type discovery/case-insensitive name change/provider readback and search/count passed. Packaged macOS build passed22UI modules29plugins; nonfatal missing icon/release-base warnings are not packaging-artwork proof. First integrated5-file regression run52pass11fail; minimal repeated-cursor source guard applied, two disjoint fixture repair agents dispatched with no checks/commits (consumer fixture returned, hosting fixture pending). Await lane8 committed selector fix before U01. Next run affected owning checks, actual web flow, affected suites/scripts/typecheck, catch up and land. No review clearance claimed.
+Production/regressions through008f2722 plus canonical catch-up merge (queue-only changes, no incoming decision logs). Cursor/account regression3pass15asserts, GH34ownership4pass46asserts, TasksuserProject1pass7asserts; actual CLI passed; second build22UI modules29plugins passed. U01 actual web run is tool-limited partial with visible saved Bug persistence, recorded D15; browser/owned daemon stopped and home removed. Affected125-file suite plus scripts/typecheck pipeline bg12 is still running. Next: consume gate result, one final cross-family review over the stable branch, fix accepted blockers, update evidence and land. No model-review clearance claimed yet.
