@@ -78,6 +78,6 @@ Verification commands: bun test plugins/quirky.hosting/test/search-batch.test.ts
 
 ## Status & amendments
 
-Status: Autonomous design accepted under LOOP.md; self-reviewed for scope, examples and error consistency. Combined logic/technical spec under night-mode one-spec rule; no separate spec review. Existing public contracts are committed before implementers start.
+Status: Implemented; public API/CLI and consumer regression gates exercised, ready for normal integration land. Exact receipts and final review adjudication are in [decisions D18–D19](../../../loop/decisions/m4-hosting-api-github-parity.md#d18-accept-the-exercised-affected-gate-without-relabeling-earlier-failures). U01 evidence is explicitly separated: lane8-reported guarded PASS and lane6's independent tool-limited partial, not an invented local pass. Combined logic/technical specification under LOOP's one-spec rule; public contracts remained unchanged.
 
 **Amendments:** 2026-10-28 — initial combined specification. Coordination from lane8 supplies already-committed implementations of both exact gaps, consumed without duplicate rewriting. Correct the speculative combined-variable batch ceiling to the source's GraphQL document limit and existing runner request bounds; all acceptance behavior remains required.

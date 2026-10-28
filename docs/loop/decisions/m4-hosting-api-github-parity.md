@@ -176,6 +176,39 @@
 - **Revisit if:** lane8 supplies its committed correction or these changes are shown to introduce the issue.
 - **Source:** assumed — autonomous
 
+## D17: Keep lane8's fresh U01 PASS distinct from lane6's tool-limited run
+- **Question:** lane8 reports guarded U01 closure passing on the same committed selector fix; repeat it or retain both evidence records?
+- **Options:** repeat UI work; relabel lane6 partial as pass; accept the reported closure separately while keeping local evidence exact.
+- **Chose:** user coordination reports rebuilt guarded run20261028T095840-a759 PASS: saved Bug cold, choose Task, Board→Table visibly Task before focus. It uses539aa1c9 already consumed here. Preserve that as lane8-reported acceptance and retain lane6's independent visible persistence/partial verdict unchanged. No third dogfood run.
+- **Why:** reported observations are ground truth; repeating a passed cross-lane scenario is unnecessary and risks conflicting source ownership. Both prove the same saved-current-value path, with different tool verdicts transparently named.
+- **Evidence:** lane8 user interjection naming539aa1c9 and closure20261028T095840-a759; lane6 report20261028T100152-a007 and observations14/18; second local build output.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** the reported closure is contradicted by the actual integrated surface.
+- **Source:** assumed — autonomous
+
+## D18: Accept the exercised affected gate without relabeling earlier failures
+- **Question:** what verification establishes this candidate's API/CLI/build acceptance?
+- **Options:** use lane8's reports alone; rerun the whole repository suite locally; run the required affected packages and leave whole-suite integration to queue land.
+- **Chose:** the parent affected gate exited0:125remote files125passed0failed, suite ok:true/flaky:[], scripts68pass0fail576assertions, typecheck0 after596frozen installs across610packages unchanged. Included hosting, Tasks and consumer reviews/worktree/git directories. Keep the earlier52/11 local run and Tasks20s timeout as historical failures, not hidden passes.
+- **Why:** the repaired owning regressions and actual CLI exercise changed behavior; broader consumer files ensure integration compatibility without competing whole-suite runs on this Mac. Script-suite red output is its intentional flaky/broken fixture scenarios; outer scripts68/0 and command0 are the result.
+- **Evidence:** bg12 output artifact://83 (1229.56s); /tmp/quirky-lane6-parity-tekogA/verification.json; actual CLI smoke and post-selector build output; scoped post-fix test outputs.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** normal queue land's merge-result checks fail.
+- **Source:** locked by docs/loop/LOOP.md
+
+## D19: Reject C1 after the exact pending-overlap API experiment disproves its premise
+- **Question:** final cross-family correctness lens claims new reads can join an old generation's pending promise; add an extra generation check?
+- **Options:** blindly add redundant source logic; accept only static reasoning; exercise the exact disputed overlap and adjudicate against the complete key.
+- **Chose:** no source change. Full-independence Gemini standard-depth promote/refute Round1 returned C NEEDS_FIXES (C1 HIGH/LOW), S PASS and X PASS, zero limitations/questions/exclusions. Reject C1: pageKey contains env.cacheKey, which includes scope-generation advanced synchronously by env.invalidate. The actual public API smoke held OLD_HELD, mutated the issue, and completed FRESH_WHILE_OLD_PENDING while the old promise was still held; releasing it then returned OLD_HELD only to the original caller.
+- **Why:** refute explicitly asserted pageKey lacks generation, but missed env.ts's composed generation field. Both source and runtime contradict that premise. A redundant check would not fix a demonstrated bug. Raw GateResults remain unchanged; this is parent adjudication, not three machine PASS verdicts.
+- **Evidence:** review/C.gate.json, C.refute.json and C.manifest.json; S/X gate/manifest records; item-search.ts:389-397 and env.ts:99-114,236-247; review-C1-smoke.ts actual exit0/3.52s output; review/adjudication.json under /tmp/quirky-lane6-parity-tekogA. Reviewed11source/test files; artifact hash445a1e90024db976c8a71e949053d0cdde7561fd586f95ce13bd7ff12c575e87.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** a public API reproduction returns an old held result to a post-invalidation caller.
+- **Source:** assumed — autonomous
+
 ## Progress
 
-Production/regressions through008f2722 plus canonical catch-up merge (queue-only changes, no incoming decision logs). Cursor/account regression3pass15asserts, GH34ownership4pass46asserts, TasksuserProject1pass7asserts; actual CLI passed; second build22UI modules29plugins passed. U01 actual web run is tool-limited partial with visible saved Bug persistence, recorded D15; browser/owned daemon stopped and home removed. Affected125-file suite plus scripts/typecheck pipeline bg12 is still running. Next: consume gate result, one final cross-family review over the stable branch, fix accepted blockers, update evidence and land. No model-review clearance claimed yet.
+Candidate is ready for normal queue land after committing this evidence. Source/regressions through008f2722, docs throughad1fe883, one canonical queue-only catch-up complete. Required affected125-file suite, scripts68/0 and typecheck passed; CLI/type/cursor acceptance and corrected build exercised. U01 has lane8-reported guarded PASS and independent lane6 tool-limited partial with visible saved-value persistence; browser/daemon/homes cleaned. Final cross-family Round1 complete, sole C1 rejected with exact runtime disproof, no accepted blocker or fix batch. Incidental unchanged numbered-page completeness finding remains documented/routed, not silently fixed or cleared. No running subagents/jobs/services. Next: commit final evidence, detach, canonical queue.ts land m4-hosting-api-github-parity; on land failure follow its exact repair path, otherwise archive scratch evidence and end this one-item iteration without a whole-queue completion sentinel.
