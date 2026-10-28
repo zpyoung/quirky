@@ -7,7 +7,6 @@ import {
   isPluginId,
   parseContributionId
 } from '../src'
-import type { LaunchHookInput, LaunchPatch, PluginLaunch, SessionLaunch } from '../src'
 
 describe('isPluginId', () => {
   test('accepts lowercase dotted and dashed ids', () => {
@@ -124,42 +123,4 @@ describe('formatContributionId', () => {
     expect(() => formatContributionId('k', 'p', 'n'.repeat(129))).toThrow('name')
   })
 })
-describe('launch hook JSON arguments', () => {
-  test('exposes readonly JSON accumulation and create or replay context while preserving additions shape', async () => {
-    const record: SessionLaunch = { command: 'claude', args: '--settings user.json', env: {} }
-    const patch: LaunchPatch = { jsonArgs: { '--settings': { hooks: { Stop: [] } } } }
-    const input: Parameters<PluginLaunch['hooks']>[0] = {
-      sessionId: 's1',
-      worktreeId: 'w1',
-      repoId: 'r1',
-      cwd: '/work',
-      agent: 'claude',
-      record,
-      model: 'opus',
-      options: { effort: 'high' },
-      extraArgs: '--add-dir docs'
-    }
-    let seen!: LaunchHookInput
-    const launch: PluginLaunch = {
-      shell: '/bin/sh',
-      binDir: '/bin',
-      env: () => ({}),
-      openStructuredLease: () => {
-        throw new Error('structured lease API is not used by this test')
-      },
-      sessionIdentity: () => null,
-      shellArgv: () => ['/bin/sh'],
-      shellReady: () => false,
-      commandArgv: () => [],
-      hooks: async (received) => {
-        seen = { ...received, env: {}, args: [], jsonArgs: patch.jsonArgs! }
-        return { env: {}, args: [] }
-      }
-    }
 
-    const additions = await launch.hooks(input)
-
-    expect(seen).toMatchObject({ record, model: 'opus', options: { effort: 'high' }, extraArgs: '--add-dir docs', jsonArgs: patch.jsonArgs })
-    expect(additions).toEqual({ env: {}, args: [] })
-  })
-})

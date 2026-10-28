@@ -382,5 +382,17 @@
 - **Revisit if:** the original destination reappears; preserve both rather than overwrite.
 - **Source:** assumed — autonomous
 
+## D35: Recover the advanced roadmap without losing profiles or design
+- **Question:** How is the controller's merge-conflict rejection recovered?
+- **Options:** choose one feature's files wholesale; compose both current public contracts on the item branch.
+- **Chose:** merge current build/roadmap on the item branch, compose profile admission with design cancellation, retain both registration groups and all complete independent regression scenarios, then rerun changed-source checks before resubmitting.
+- **Why:** incoming profiles/settings own complete asynchronous admission, isolated profile switching and canonical close-hook validation. Design mode must use those seams, not overwrite them. Incoming Watch Find counts literal eligible text occurrences.
+- **Evidence:** IncomingRoadmapLocks read all6changed decision logs: sa-browser-profiles-settings, m4-editor-drop-open-in-place, m5-automations-dispatch, m5-automations-ui, m6-heimdall-core and m6-orchestration-ui. No incoming source supplies clipboard transfer, Native capture, dropped-source paths or acknowledged native storage deletion.
+- **Constraints:** preserve reject-before-Session clear/remove behavior and fresh UUID Native testing; one public openLink routing owner and current-model click settings; background structured sessions do not adopt hidden terminals or auto-focus. Preserve exact new-target/session challenge and headless bringToFront.
+- **Reversibility:** medium
+- **Confidence:** incoming locks inspected; composed-source checks and canonical result remain required.
+- **Revisit if:** the merged source violates admission/target ownership or loses either feature's tests.
+- **Source:** locked by incoming decision logs and LOOP.md land-conflict recovery
+
 ## Progress
 Source submission is complete. Dependency readiness is true; authoritative roadmap and incoming locks are merged. The clean8db98e52 gate passed Browser9remote+3Mac files, scripts68/0/570, types and full build; finalebad5509 keyboard source passed types/build and its new public regression. D32 retains the anomalous full-file timeout for the required canonical merge-result gate. Actual reports prove all3design flows, delivery success/refusal, repeated copy, immediateS/menu PNG, toolbar feedback/cancellation and no passive-wheel console error. Residual Watch-to-host ordinary clipboard transfer is explicit under existing D23 ownership; Native-only acceptance remains pending. All owned UI runtimes and source workers have stopped. Next: commit these evidence-only docs, detach and run canonical land; do not claim integration acceptance before that result. Afterward archive raw reports/gates, restore preserved .serena and remove owned temporary homes.

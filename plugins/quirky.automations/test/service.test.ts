@@ -182,4 +182,17 @@ describe('automation scheduler service', () => {
     await fixture.service.tick()
     expect(fixture.service.runs({ automationId: 'due-on-start', limit: 10 }).runs).toHaveLength(1)
   })
+
+  test('definition metadata keeps exact JSON byte bounds and rejects oversized edits', async () => {
+    const fixture = makeFixture(Date.parse('2026-10-27T08:00:00.000Z'))
+    const atLimit = { text: 'x'.repeat(64 * 1024 - 11) }
+    expect(Buffer.byteLength(JSON.stringify(atLimit))).toBe(64 * 1024)
+    const created = await fixture.service.create({
+      name: 'Core bounds', prompt: 'Check', agentId: 'codex', projectId: 'repo', timezone: 'UTC',
+      rrule: 'FREQ=DAILY;BYHOUR=9;BYMINUTE=0', enabled: false, sourceContext: atLimit
+    })
+    const oversized = { text: atLimit.text + 'x' }
+    await expect(fixture.service.edit({ id: created.id, runContext: oversized })).rejects.toThrow()
+  })
+
 })

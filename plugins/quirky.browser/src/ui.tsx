@@ -3,6 +3,7 @@ import type { UiPluginContext } from '@quirky/protocol'
 import type { PaneTab } from './pane-contract'
 import { setLiveDesignPageKeys, type DesignAction } from './design-window/DesignWindow'
 import { BrowserPaneWindow, focusBrowserAddress, focusBrowserFind, focusedBrowserPane, runFocusedBrowserDesign } from './window/BrowserPaneWindow'
+import { registerPreferencesUi } from './preferences-ui'
 
 const PAGE_VIEW = 'view:quirky.browser/page'
 const WORKTREE_VIEW = 'view:quirky.session/worktree'
@@ -124,6 +125,7 @@ function commandHandlers(context: UiPluginContext): Record<string, BrowserComman
 
 export function activate(context: UiPluginContext): void {
   deactivateCurrent?.()
+  registerPreferencesUi(context)
   context.provide(PAGE_VIEW, (element: HTMLElement, props: { input?: unknown }) => {
     const root = createRoot(element)
     root.render(<BrowserPaneWindow context={context} input={props.input} />)

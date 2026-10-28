@@ -12,7 +12,8 @@ import { pathsFromDrop, readWorktreePathsDrop, resolveWorktreeDropPaths, WORKTRE
 import { trackKittyFlags } from './kitty'
 import { PathChecker, createFileLinkProvider } from './link-provider'
 import { LinkPopover, type PopoverItem } from './LinkPopover'
-import { decideLinkClick, relativeWithinRoot, type LinkKind } from './links'
+import { decideLinkClick, decideTaskLinkClick, hasCommandModifier, relativeWithinRoot, type LinkKind } from './links'
+import { createTaskLinkProvider, openTaskTerminal } from './task-links'
 import { resolveKeyAction } from './keys'
 import { createOsc52Base64, createOsc52Provider, createOsc52QueryGuard } from './osc52'
 import { planPaste, runPaste } from './paste'
@@ -27,6 +28,7 @@ import { MobileDriverOverlay } from './MobileDriverOverlay'
 
 /** The most characters a search query may have. */
 export const MAX_SEARCH_QUERY = 1000
+const LINK_CLICK_SETTING_KEYS = ['link-click', 'link-middle-click'] as const
 
 const SEARCH_DECORATIONS = {
   matchBackground: '#5c4a00',
@@ -290,6 +292,10 @@ export function TerminalPaneView(props: TerminalPaneProps) {
     const screen = screenRef.current
     if (!host || !screen) return
     const initial = latest.current.settings
+    const linkClickSettings = {
+      'link-click': initial['link-click'],
+      'link-middle-click': initial['link-middle-click']
+    }
     const colorSource = themeSource ?? host.ownerDocument.documentElement
     const colors = readTerminalColors(colorSource)
     const alpha = (settingsNow: PaneSettings) => settingsNow['background-opacity']
@@ -336,6 +342,32 @@ export function TerminalPaneView(props: TerminalPaneProps) {
         .call('quirky.terminal/openExternal', reveal ? { target, reveal: true } : { target })
         .catch((error: unknown) => context.toast('Could not open link', messageOf(error)))
     }
+    const openUrlTarget = (target: string, event?: Pick<MouseEvent, 'metaKey' | 'ctrlKey' | 'shiftKey'>) => {
+      if (!/^https?:/i.test(target)) {
+        openTarget(target, false)
+        return
+      }
+      const workspaceId = latest.current.workspaceId
+      const ownerId = workspaceId?.replace(/^id:/, '')
+      if (!ownerId || ownerId === 'floating') {
+        openTarget(target, false)
+        return
+      }
+      const params = {
+        url: target,
+        worktree: `id:${ownerId}`,
+        ...(event && hasCommandModifier(event) ? { modifier: true } : {}),
+        ...(event?.shiftKey ? { shift: true } : {})
+      }
+      void context.call('quirky.browser/openLink', params).catch((error: unknown) => {
+        if (typeof error === 'object' && error !== null && 'code' in error && error.code === RpcErrorCode.MethodNotFound) {
+          void context.call('quirky.terminal/openExternal', { target })
+            .catch((fallbackError: unknown) => context.toast('Could not open link', messageOf(fallbackError)))
+          return
+        }
+        context.toast('Could not open link', messageOf(error))
+      })
+    }
     const openPathTarget = async (target: string, line: number | null, column: number | null) => {
       const workspaceId = latest.current.workspaceId
       if (!workspaceId || workspaceId === 'floating') {
@@ -374,7 +406,7 @@ export function TerminalPaneView(props: TerminalPaneProps) {
       const items: PopoverItem[] =
         kind === 'url'
           ? [
-              { label: 'Open', run: () => openTarget(target, false) },
+              { label: 'Open', run: (event) => openUrlTarget(target, event) },
               { label: 'Copy Link', run: () => copyText(target) }
             ]
           : [
@@ -386,15 +418,39 @@ export function TerminalPaneView(props: TerminalPaneProps) {
     }
     const activateLink = (kind: LinkKind, target: string, event: MouseEvent, line: number | null = null, column: number | null = null) => {
       if (term.hasSelection()) return
-      const action = decideLinkClick(kind, event, latest.current.settings)
+      // The window model can update before deferred plugin events or React props.
+      for (const key of LINK_CLICK_SETTING_KEYS) {
+        linkClickSettings[key] = latest.current.settings[key]
+        try {
+          const value = context.getSetting(key)
+          if (value === 'actions' || value === 'open' || value === 'terminal') linkClickSettings[key] = value
+        } catch {
+          // A disabled setting retains the owning pane's effective default.
+        }
+      }
+      const action = decideLinkClick(kind, event, linkClickSettings)
       if (action === 'none') return
       event.preventDefault()
       if (action === 'popover') showPopover(kind, target, event)
       else if (action === 'open') {
         if (kind === 'path') void openPathTarget(target, line, column)
-        else openTarget(target, false)
+        else openUrlTarget(target, event)
       } else if (action === 'reveal') openTarget(target, true)
-      else copyText(target)
+    }
+    const activateTaskLink = (event: MouseEvent, taskId: string) => {
+      if (term.hasSelection()) return
+      const action = decideTaskLinkClick(event, navigator.platform)
+      if (action === 'none') return
+      event.preventDefault()
+      if (action === 'open') {
+        void openTaskTerminal(context, taskId)
+        return
+      }
+      setPopover({
+        x: event.clientX,
+        y: event.clientY,
+        items: [{ label: 'Open task terminal', run: () => void openTaskTerminal(context, taskId) }]
+      })
     }
     const activateUri = (event: MouseEvent, uri: string) => {
       if (/^file:/i.test(uri)) {
@@ -422,6 +478,12 @@ export function TerminalPaneView(props: TerminalPaneProps) {
         cwd: () => latest.current.cwd,
         hover: setHint,
         activate: (event, link) => activateLink('path', link.path, event, link.line, link.column)
+      })
+    )
+    const taskLinkProvider = term.registerLinkProvider(
+      createTaskLinkProvider(term, {
+        hover: setHint,
+        activate: activateTaskLink
       })
     )
 
@@ -790,6 +852,7 @@ export function TerminalPaneView(props: TerminalPaneProps) {
       host.removeEventListener('dragover', onDragOver)
       host.removeEventListener('drop', onDrop)
       linkProvider.dispose()
+      taskLinkProvider.dispose()
       kitty.dispose()
       disableWebgl()
       guarded(() => term.dispose(), undefined)

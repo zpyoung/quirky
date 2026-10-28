@@ -5,26 +5,26 @@
     {
       "id": "SC-17-native",
       "title": "In an isolated Quirky profile with a disposable fake-agent history fixture, Resume in Worktree opens the intended terminal tab and transfers native keyboard focus to that pane without activating an unrelated window.",
-      "status": "pending",
-      "lastRun": null,
-      "report": null,
-      "summary": null
+      "status": "blocked",
+      "lastRun": "2026-10-28",
+      "report": "/Users/zpyoung/orca/workspaces/quirky/native-qa/.quirk/using-apps-like-a-user/runs/20261028T052954-caea/report.md",
+      "summary": "Seen working: Resume in Worktree opened the fixture's --resume tab and typed text reached it, but the harness never certified a keystroke act as OBSERVED."
     },
     {
       "id": "SC-18-native-reveal",
       "title": "Reveal Log for a disposable local history fixture selects that exact transcript in Finder; Open Working Directory opens its original existing directory, with no launch of a different session or log.",
-      "status": "pending",
-      "lastRun": null,
-      "report": null,
-      "summary": null
+      "status": "blocked",
+      "lastRun": "2026-10-28",
+      "report": "/Users/zpyoung/orca/workspaces/quirky/native-qa/.quirk/using-apps-like-a-user/runs/20261028T052954-caea/report.md",
+      "summary": "Seen working: Reveal Log selected exactly the fixture transcript and Open Working Directory opened the original folder, but the effects land in Finder so the harness can't certify them."
     },
     {
       "id": "SC-18-native-clipboard",
       "title": "Copy Resume Command, Session ID, Log Path and full First Prompt place the selected fixture's complete literal text on the macOS clipboard; verify spaces/apostrophes/metacharacters and restore the prior clipboard afterwards.",
-      "status": "pending",
-      "lastRun": null,
-      "report": null,
-      "summary": null
+      "status": "fail",
+      "lastRun": "2026-10-28",
+      "report": "/Users/zpyoung/orca/workspaces/quirky/native-qa/.quirk/using-apps-like-a-user/runs/20261028T052000-37e6/report.md",
+      "summary": "Copy Resume Command and Copy Session ID copy the exact text, but Copy Log Path is cut off in the row menu (accessibility tree only) and no Copy First Prompt is visible."
     }
   ]
 }

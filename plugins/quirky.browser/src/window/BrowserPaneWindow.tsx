@@ -12,6 +12,7 @@ import type { NativeBrowserHandle, NativeBrowserRequest, NativeBrowserState, UiP
 import type { PaneCommand, PaneDownload, PaneFrame, PanePrompt, PaneState, PaneTab, PaneViewport } from '../pane-contract'
 import { acceptLatestFrame, isTextInputKey, nativePreviewNavigationUrl, nativePreviewReportUrl, paneForView, pointerToFramePoint } from './model'
 import { DesignWindow, type DesignAction } from '../design-window/DesignWindow'
+import { BrowserImportHint, BrowserProfileMenu } from '../preferences-window/BrowserProfileMenu'
 
 const WORKTREE_VIEW = 'view:quirky.session/worktree'
 const SEARCH_ENGINES = ['google', 'duckduckgo', 'bing', 'kagi'] as const
@@ -949,6 +950,7 @@ export function BrowserPaneWindow({ context, input }: { context: UiPluginContext
         <details className="qbp-details">
           <summary aria-label="Browser menu">Browser menu</summary>
           <div className="qbp-menu-popover" role="menu">
+            <BrowserProfileMenu context={context} pane={pane ?? undefined} inline onError={(text) => setMessage({ text, kind: 'error' })} />
             {pane?.mode === 'watch'
               ? <button type="button" role="menuitem" onClick={() => void control('hardReload')}>Hard Reload</button>
               : pane?.mode === 'native'
@@ -985,6 +987,7 @@ export function BrowserPaneWindow({ context, input }: { context: UiPluginContext
             <span className="qbp-muted">Search engine: {settings.searchEngine}</span>
           </div>
         </details>
+        <BrowserImportHint context={context} pane={pane ?? undefined} onError={(text) => setMessage({ text, kind: 'error' })} />
         <details className="qbp-details">
           <summary aria-label="Browser history">History</summary>
           <div className="qbp-menu-popover qbp-history" role="menu" aria-label="Recent browser history">

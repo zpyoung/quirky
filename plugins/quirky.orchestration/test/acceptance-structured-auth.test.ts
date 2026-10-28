@@ -1,4 +1,4 @@
-import { chmodSync, existsSync, writeFileSync, appendFileSync } from 'node:fs'
+import { chmodSync, existsSync, readFileSync, writeFileSync, appendFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { expect, test } from 'bun:test'
 import type { Session } from '@quirky/protocol'
@@ -25,6 +25,8 @@ await import(${JSON.stringify(LAUNCH_AGENT)})
 await import(${JSON.stringify(native.executable)})
 `, { mode: 0o755 })
     chmodSync(codex, 0o755)
+    await e2e.call('quirky.agents/refresh', {})
+    await e2e.call('quirky.agents/setEnabled', { agent: 'codex', enabled: true })
 
     const session = await e2e.call('quirky.structured/create', {
       agent: 'codex',

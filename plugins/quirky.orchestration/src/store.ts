@@ -1,4 +1,4 @@
-import type { StoreMigration } from '@quirky/protocol'
+import type { PluginStore, StoreMigration } from '@quirky/protocol'
 
 /** The core's private database. Worker-owned migrations append after this v1 step. */
 export const migrations: StoreMigration[] = [
@@ -169,3 +169,34 @@ export const migrations: StoreMigration[] = [
     CREATE INDEX pointer_operations_phase ON pointer_operations(phase, updated_at);
   `
 ]
+
+export const policyMigration: StoreMigration = `
+  CREATE TABLE orchestration_policy (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    nested_worker_max_depth INTEGER NOT NULL
+  );
+  INSERT INTO orchestration_policy (id, nested_worker_max_depth) VALUES (1, 1);
+`
+export function readNestedWorkerMaxDepth(store: PluginStore): number {
+  const row = store.get<{ nested_worker_max_depth: unknown }>(
+    'SELECT nested_worker_max_depth FROM orchestration_policy WHERE id = 1'
+  )
+  const value = row?.nested_worker_max_depth
+  if (typeof value === 'number' && Number.isSafeInteger(value) && value >= 1) return value
+  if (!store.readOnly) {
+    if (row) {
+      store.run('UPDATE orchestration_policy SET nested_worker_max_depth = 1 WHERE id = 1')
+    } else {
+      store.run('INSERT OR IGNORE INTO orchestration_policy (id, nested_worker_max_depth) VALUES (1, 1)')
+    }
+  }
+  return 1
+}
+
+export function saveNestedWorkerMaxDepth(store: PluginStore, value: number): void {
+  store.run(
+    `INSERT INTO orchestration_policy (id, nested_worker_max_depth) VALUES (1, ?)
+     ON CONFLICT(id) DO UPDATE SET nested_worker_max_depth = excluded.nested_worker_max_depth`,
+    value
+  )
+}

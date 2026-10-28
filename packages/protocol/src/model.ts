@@ -260,6 +260,8 @@ export type Session = {
   worktreeId: string
   cwd: string
   title: string
+  /** Background work is not auto-adopted into terminal tabs; an explicit session view can still show it. */
+  background?: boolean
   status: SessionStatus
   createdAt: number
   lastActivityAt: number

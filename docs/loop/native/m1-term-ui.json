@@ -5,42 +5,42 @@
     {
       "id": "SC-38",
       "title": "Dropping files from Finder onto a pane types their shell-escaped paths at the cursor without Enter",
-      "status": "pending",
-      "lastRun": null,
-      "report": null,
-      "summary": null
+      "status": "blocked",
+      "lastRun": "2026-10-28",
+      "report": "/Users/zpyoung/orca/workspaces/quirky/native-qa/.quirk/using-apps-like-a-user/runs/20261028T045314-56e5/report.md",
+      "summary": "Finder-to-pane drop is a drag between two app windows, and the harness drags only within one window."
     },
     {
       "id": "SC-37",
       "title": "Text copied in another macOS app pastes into a pane with ⌘V, bracketed only when the program asked for it",
-      "status": "pending",
-      "lastRun": null,
-      "report": null,
-      "summary": null
+      "status": "fail",
+      "lastRun": "2026-10-28",
+      "report": "/Users/zpyoung/orca/workspaces/quirky/native-qa/.quirk/using-apps-like-a-user/runs/20261028T045314-56e5/report.md",
+      "summary": "Cmd+V never pastes: Quirky toasts 'Could not paste ... user denied permission' or WebKit shows its own Paste callout, and nothing reaches the pane."
     },
     {
       "id": "SC-41",
       "title": "⌘-clicking a URL in a pane opens it in the system browser, and Reveal in Finder on a file link shows it in Finder",
-      "status": "pending",
-      "lastRun": null,
-      "report": null,
-      "summary": null
+      "status": "blocked",
+      "lastRun": "2026-10-28",
+      "report": "/Users/zpyoung/orca/workspaces/quirky/native-qa/.quirk/using-apps-like-a-user/runs/20261028T050053-496e/report.md",
+      "summary": "The harness can't Cmd-click. The popover's Open sent the exact URL to the system browser and Reveal in Finder selected notes.txt, both confirmed only by screen capture."
     },
     {
       "id": "SC-61",
       "title": "In the desktop window, ⌘R renames the tab and never reloads the webview; under Terminal first ⌘T reaches the terminal and opens no tab",
-      "status": "pending",
-      "lastRun": null,
-      "report": null,
-      "summary": null
+      "status": "pass",
+      "lastRun": "2026-10-28",
+      "report": "/Users/zpyoung/orca/workspaces/quirky/native-qa/.quirk/using-apps-like-a-user/runs/20261028T044103-060f/report.md",
+      "summary": "App first: Cmd+T opens a tab and Cmd+R opens the rename field with no reload; Terminal first: Cmd+T and Cmd+Shift+T open no tab and Cmd+D still splits."
     },
     {
       "id": "SC-75",
       "title": "In the desktop window, visible panes render with WebGL (at most 12 contexts) and the memory probe at the typical-day workload stays within budget",
-      "status": "pending",
-      "lastRun": null,
-      "report": null,
-      "summary": null
+      "status": "blocked",
+      "lastRun": "2026-10-28",
+      "report": "/Users/zpyoung/orca/workspaces/quirky/native-qa/.quirk/using-apps-like-a-user/runs/20261028T045314-56e5/report.md",
+      "summary": "No in-window report of WebGL contexts or mounted xterms, and the memory probe isn't in this worktree."
     }
   ]
 }
